@@ -1,0 +1,31 @@
+gisaxs_toolkit/               <-- 主项目文件夹
+│
+├── main.py                   <-- 主程序入口（加载 UI、启动主窗口）
+├── mainwindow.ui            <-- Qt Designer 设计的主界面
+├── resources/               <-- 存放图标、图片等资源文件
+│   └── icons/
+│
+├── ui/                      <-- 转换后的 UI Python 脚本
+│   └── mainwindow_ui.py     <-- 使用 `pyuic5` 转换的 UI 文件（由 mainwindow.ui 生成）
+│
+├── data/                    <-- 用户数据或示例数据，可为空
+│   ├── example_images/
+│   └── example_gisaxs/
+│
+├── core/                    <-- 核心功能模块
+│   ├── image_processing.py  <-- 图像预处理、掩膜、归一化等
+│   ├── traditional_fit.py   <-- 传统拟合方法（如 Guinier、Porod 等）
+│   ├── ml_model.py          <-- ML 模型定义、训练和预测
+│   ├── dataset_builder.py   <-- 构建 trainset 的逻辑
+│   └── utils.py             <-- 常用工具函数（如单位转换、路径处理等）
+│
+├── model/                   <-- 存放机器学习模型文件（如 .h5, .pt, .pkl）
+│
+├── config/                  <-- 存储配置文件、超参数等
+│   └── default_config.yaml
+│
+├── logs/                    <-- 日志输出目录（自动生成）
+│
+├── requirements.txt         <-- Python 依赖包列表
+├── README.md                <-- 项目介绍
+└── setup.py                 <-- 如果你计划将它打包成一个库或应用（可选）
