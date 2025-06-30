@@ -44,7 +44,7 @@
       <property name="widgetResizable">
        <bool>true</bool>
       </property>
-      <widget class="QWidget" name="scrollAreaWidgetContents">
+      <widget class="QWidget" name="mainAreaWidgetContents">
        <property name="geometry">
         <rect>
          <x>0</x>
@@ -55,7 +55,7 @@
        </property>
        <layout class="QVBoxLayout" name="verticalLayout">
         <item>
-         <widget class="QPushButton" name="pushButton">
+         <widget class="QPushButton" name="trainsetBuildButton">
           <property name="enabled">
            <bool>true</bool>
           </property>
@@ -77,7 +77,7 @@
          </widget>
         </item>
         <item>
-         <spacer name="verticalSpacer">
+         <spacer name="mainAreaSpacer">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
           </property>
@@ -102,9 +102,9 @@
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>-1527</y>
+         <y>-1566</y>
          <width>884</width>
-         <height>2457</height>
+         <height>2496</height>
         </rect>
        </property>
        <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -119,10 +119,10 @@
           <property name="currentIndex">
            <number>0</number>
           </property>
-          <widget class="QWidget" name="page_3">
+          <widget class="QWidget" name="trainsetBuildPage">
            <layout class="QVBoxLayout" name="verticalLayout_6">
             <item>
-             <widget class="QGroupBox" name="beamParameters">
+             <widget class="QGroupBox" name="beamParametersBox">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                 <horstretch>0</horstretch>
@@ -240,7 +240,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QGroupBox" name="detectorParameters">
+             <widget class="QGroupBox" name="detectorParametersBox">
               <property name="maximumSize">
                <size>
                 <width>16777215</width>
@@ -257,7 +257,7 @@
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_3">
                <item>
-                <widget class="QWidget" name="widget_2" native="true">
+                <widget class="QWidget" name="detectorParametersSub_1" native="true">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                    <horstretch>0</horstretch>
@@ -333,7 +333,7 @@
                    </widget>
                   </item>
                   <item>
-                   <spacer name="horizontalSpacer_4">
+                   <spacer name="detectorParametersHorizontalSpacer_1">
                     <property name="orientation">
                      <enum>Qt::Horizontal</enum>
                     </property>
@@ -393,7 +393,7 @@
                    </widget>
                   </item>
                   <item>
-                   <spacer name="horizontalSpacer_5">
+                   <spacer name="detectorParametersHorizontalSpacer_2">
                     <property name="orientation">
                      <enum>Qt::Horizontal</enum>
                     </property>
@@ -409,7 +409,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QWidget" name="widget" native="true">
+                <widget class="QWidget" name="detectorParametersSub_2" native="true">
                  <property name="minimumSize">
                   <size>
                    <width>100</width>
@@ -418,7 +418,7 @@
                  </property>
                  <layout class="QHBoxLayout" name="horizontalLayout_3">
                   <item>
-                   <widget class="QGroupBox" name="groupBox">
+                   <widget class="QGroupBox" name="detVerticalBox">
                     <property name="title">
                      <string>Det. Vertical (X-axis)</string>
                     </property>
@@ -474,7 +474,7 @@
                       </widget>
                      </item>
                      <item row="2" column="0">
-                      <widget class="QLabel" name="pixelSizeXLabel_2">
+                      <widget class="QLabel" name="beamCenterXLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -499,7 +499,7 @@
                       </widget>
                      </item>
                      <item row="0" column="3">
-                      <spacer name="horizontalSpacer_3">
+                      <spacer name="detVerticalSpacer">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
@@ -531,7 +531,7 @@
                       </widget>
                      </item>
                      <item row="1" column="1">
-                      <widget class="QLineEdit" name="NbinsXValue_2">
+                      <widget class="QLineEdit" name="pixelSizeXValue">
                        <property name="minimumSize">
                         <size>
                          <width>95</width>
@@ -550,7 +550,7 @@
                       </widget>
                      </item>
                      <item row="2" column="1">
-                      <widget class="QLineEdit" name="NbinsXValue_11">
+                      <widget class="QLineEdit" name="beamCenterXValue">
                        <property name="minimumSize">
                         <size>
                          <width>95</width>
@@ -572,13 +572,13 @@
                    </widget>
                   </item>
                   <item>
-                   <widget class="QGroupBox" name="groupBox_2">
+                   <widget class="QGroupBox" name="detParallelBox">
                     <property name="title">
                      <string>Det. Parallel (Y-axis)</string>
                     </property>
                     <layout class="QGridLayout" name="gridLayout_3">
                      <item row="4" column="0">
-                      <widget class="QLabel" name="pixelSizeXLabel_3">
+                      <widget class="QLabel" name="beamCenterYLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -628,7 +628,7 @@
                       </widget>
                      </item>
                      <item row="1" column="1">
-                      <widget class="QLineEdit" name="pixelSizeYValue_3">
+                      <widget class="QLineEdit" name="pixelSizeYValue">
                        <property name="minimumSize">
                         <size>
                          <width>95</width>
@@ -672,7 +672,7 @@
                       </widget>
                      </item>
                      <item row="4" column="1">
-                      <widget class="QLineEdit" name="NbinsXValue_6">
+                      <widget class="QLineEdit" name="beamCenterYValue">
                        <property name="minimumSize">
                         <size>
                          <width>95</width>
@@ -710,7 +710,7 @@
                       </widget>
                      </item>
                      <item row="0" column="3">
-                      <spacer name="horizontalSpacer_2">
+                      <spacer name="detParallelSpacer">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
@@ -754,7 +754,7 @@
              </widget>
             </item>
             <item>
-             <widget class="QGroupBox" name="sampleParameters">
+             <widget class="QGroupBox" name="sampleParametersBox">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                 <horstretch>0</horstretch>
@@ -777,7 +777,7 @@
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_5">
                <item>
-                <widget class="QGroupBox" name="groupBox_4">
+                <widget class="QGroupBox" name="sampleParametersParticleBox">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
                    <horstretch>0</horstretch>
@@ -881,7 +881,7 @@
                    </widget>
                   </item>
                   <item>
-                   <widget class="QStackedWidget" name="particleStackedWidget">
+                   <widget class="QStackedWidget" name="sampleParametersParticleStackedWidget">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                       <horstretch>0</horstretch>
@@ -891,10 +891,10 @@
                     <property name="currentIndex">
                      <number>1</number>
                     </property>
-                    <widget class="QWidget" name="page">
+                    <widget class="QWidget" name="particleSpherePage">
                      <layout class="QHBoxLayout" name="horizontalLayout_5">
                       <item>
-                       <widget class="QGroupBox" name="sphereGroupBox">
+                       <widget class="QGroupBox" name="particleSphereBox">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                           <horstretch>0</horstretch>
@@ -927,7 +927,7 @@
                         </property>
                         <layout class="QGridLayout" name="gridLayout_4">
                          <item row="1" column="3">
-                          <widget class="QLineEdit" name="sphereRmaxValue">
+                          <widget class="QLineEdit" name="particleSphereRmaxValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -946,7 +946,7 @@
                           </widget>
                          </item>
                          <item row="5" column="3">
-                          <widget class="QLineEdit" name="sphereRminValue_11">
+                          <widget class="QLineEdit" name="particleSphereSigmaMaxRValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -965,7 +965,7 @@
                           </widget>
                          </item>
                          <item row="2" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_11">
+                          <widget class="QComboBox" name="particleSphereDistTypeRCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -996,7 +996,7 @@
                           </widget>
                          </item>
                          <item row="2" column="0">
-                          <widget class="QLabel" name="sphereRbinsLabel_11">
+                          <widget class="QLabel" name="particleSphereDistTypeRLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1024,7 +1024,7 @@
                           </widget>
                          </item>
                          <item row="0" column="3">
-                          <widget class="QLineEdit" name="sphereDeltaValue">
+                          <widget class="QLineEdit" name="particleSphereDeltaValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1043,7 +1043,7 @@
                           </widget>
                          </item>
                          <item row="1" column="1">
-                          <widget class="QLineEdit" name="sphereRminValue">
+                          <widget class="QLineEdit" name="particleSphereRminValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1062,7 +1062,7 @@
                           </widget>
                          </item>
                          <item row="5" column="0">
-                          <widget class="QLabel" name="sphereRminLabel_12">
+                          <widget class="QLabel" name="particleSphereSigmaMinRLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1090,7 +1090,7 @@
                           </widget>
                          </item>
                          <item row="5" column="1">
-                          <widget class="QLineEdit" name="sphereRminValue_12">
+                          <widget class="QLineEdit" name="particleSphereSigmaMinRValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1109,7 +1109,7 @@
                           </widget>
                          </item>
                          <item row="0" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox">
+                          <widget class="QComboBox" name="particleSphereCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1145,7 +1145,7 @@
                           </widget>
                          </item>
                          <item row="3" column="0" colspan="6">
-                          <widget class="QFrame" name="sphereDiver">
+                          <widget class="QFrame" name="particleSphereDiver">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1167,7 +1167,7 @@
                           </widget>
                          </item>
                          <item row="0" column="0">
-                          <widget class="QLabel" name="sphereMaterialsPresetLabel">
+                          <widget class="QLabel" name="particleSphereMaterialsPresetLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1192,7 +1192,7 @@
                           </widget>
                          </item>
                          <item row="0" column="2">
-                          <widget class="QLabel" name="sphereDeltaLabel">
+                          <widget class="QLabel" name="particleSphereDeltaLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1220,7 +1220,7 @@
                           </widget>
                          </item>
                          <item row="1" column="2">
-                          <widget class="QLabel" name="sphereRmaxLabel">
+                          <widget class="QLabel" name="particleSphereLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1248,7 +1248,7 @@
                           </widget>
                          </item>
                          <item row="1" column="0">
-                          <widget class="QLabel" name="sphereRminLabel">
+                          <widget class="QLabel" name="particleSphereRminLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1276,7 +1276,7 @@
                           </widget>
                          </item>
                          <item row="5" column="2">
-                          <widget class="QLabel" name="sphereRminLabel_13">
+                          <widget class="QLabel" name="particleSphereSigmaMaxRLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1304,7 +1304,7 @@
                           </widget>
                          </item>
                          <item row="4" column="0">
-                          <widget class="QLabel" name="sphereRminLabel_11">
+                          <widget class="QLabel" name="particleSpherePolydispersityLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1332,7 +1332,7 @@
                           </widget>
                          </item>
                          <item row="4" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_4">
+                          <widget class="QComboBox" name="particleSpherePolydispersityCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1353,7 +1353,7 @@
                           </widget>
                          </item>
                          <item row="6" column="0">
-                          <widget class="QLabel" name="sphereRbinsLabel_12">
+                          <widget class="QLabel" name="particleSphereDistTypeSigmaRLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1381,7 +1381,7 @@
                           </widget>
                          </item>
                          <item row="0" column="4">
-                          <widget class="QLabel" name="sphereBetaLabel">
+                          <widget class="QLabel" name="particleSphereBetaLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1409,7 +1409,7 @@
                           </widget>
                          </item>
                          <item row="1" column="4">
-                          <widget class="QLabel" name="sphereRbinsLabel">
+                          <widget class="QLabel" name="particleSphereRbinsLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1437,7 +1437,7 @@
                           </widget>
                          </item>
                          <item row="6" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_12">
+                          <widget class="QComboBox" name="particleSphereDistTypeSigmaRCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1468,7 +1468,7 @@
                           </widget>
                          </item>
                          <item row="0" column="5">
-                          <widget class="QLineEdit" name="sphereBetaValue">
+                          <widget class="QLineEdit" name="particleSphereBetaValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1487,7 +1487,7 @@
                           </widget>
                          </item>
                          <item row="1" column="5">
-                          <widget class="QLineEdit" name="sphereRbinsValue">
+                          <widget class="QLineEdit" name="particleSphereRbinsValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1506,7 +1506,7 @@
                           </widget>
                          </item>
                          <item row="6" column="5">
-                          <widget class="QPushButton" name="particleAddButton_3">
+                          <widget class="QPushButton" name="particleSphereShowButton">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1529,10 +1529,10 @@
                       </item>
                      </layout>
                     </widget>
-                    <widget class="QWidget" name="page_2">
+                    <widget class="QWidget" name="particleEllipsoidPage">
                      <layout class="QVBoxLayout" name="verticalLayout_10">
                       <item>
-                       <widget class="QGroupBox" name="sphereGroupBox_2">
+                       <widget class="QGroupBox" name="particleEllipsoidBox">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                           <horstretch>0</horstretch>
@@ -1565,7 +1565,7 @@
                         </property>
                         <layout class="QGridLayout" name="gridLayout_6">
                          <item row="13" column="2">
-                          <widget class="QLabel" name="sphereRminLabel_10">
+                          <widget class="QLabel" name="particleEllipsoidCovMaxLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1593,7 +1593,7 @@
                           </widget>
                          </item>
                          <item row="4" column="0">
-                          <widget class="QLabel" name="sphereRbinsLabel_7">
+                          <widget class="QLabel" name="particleEllipsoidDistTypeHLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1621,7 +1621,7 @@
                           </widget>
                          </item>
                          <item row="0" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_2">
+                          <widget class="QComboBox" name="particleEllipsoidMaterialsPresetCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1657,7 +1657,7 @@
                           </widget>
                          </item>
                          <item row="0" column="0">
-                          <widget class="QLabel" name="ellipsoidMaterialsPresetLabel_2">
+                          <widget class="QLabel" name="particleEllipsoidMaterialsPresetLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1682,7 +1682,7 @@
                           </widget>
                          </item>
                          <item row="11" column="0">
-                          <widget class="QLabel" name="sphereRminLabel_7">
+                          <widget class="QLabel" name="particleEllipsoidSigmaMinHLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1710,7 +1710,7 @@
                           </widget>
                          </item>
                          <item row="3" column="1">
-                          <widget class="QLineEdit" name="sphereRminValue_3">
+                          <widget class="QLineEdit" name="particleEllipsoidHMinValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1729,7 +1729,7 @@
                           </widget>
                          </item>
                          <item row="1" column="2">
-                          <widget class="QLabel" name="sphereRmaxLabel_2">
+                          <widget class="QLabel" name="particleEllipsoidRMaxLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1757,7 +1757,7 @@
                           </widget>
                          </item>
                          <item row="2" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_6">
+                          <widget class="QComboBox" name="particleEllipsoidDistTypeCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1788,7 +1788,7 @@
                           </widget>
                          </item>
                          <item row="3" column="5">
-                          <widget class="QLineEdit" name="sphereRbinsValue_3">
+                          <widget class="QLineEdit" name="particleEllipsoidHBinsValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1807,7 +1807,7 @@
                           </widget>
                          </item>
                          <item row="11" column="2">
-                          <widget class="QLabel" name="sphereRminLabel_8">
+                          <widget class="QLabel" name="particleEllipsoidSigmaMaxHLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1835,7 +1835,7 @@
                           </widget>
                          </item>
                          <item row="0" column="2">
-                          <widget class="QLabel" name="sphereDeltaLabel_2">
+                          <widget class="QLabel" name="particleEllipsoidDeltaLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1863,7 +1863,7 @@
                           </widget>
                          </item>
                          <item row="0" column="3">
-                          <widget class="QLineEdit" name="sphereDeltaValue_2">
+                          <widget class="QLineEdit" name="particleEllipsoidDeltaValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1882,7 +1882,7 @@
                           </widget>
                          </item>
                          <item row="1" column="4">
-                          <widget class="QLabel" name="sphereRbinsLabel_2">
+                          <widget class="QLabel" name="particleEllipsoidRBinsLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -1910,7 +1910,7 @@
                           </widget>
                          </item>
                          <item row="8" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_3">
+                          <widget class="QComboBox" name="particleEllipsoidPolydispersityCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1931,7 +1931,7 @@
                           </widget>
                          </item>
                          <item row="4" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_7">
+                          <widget class="QComboBox" name="particleEllipsoidDistTypeHCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1962,7 +1962,7 @@
                           </widget>
                          </item>
                          <item row="1" column="1">
-                          <widget class="QLineEdit" name="sphereRminValue_2">
+                          <widget class="QLineEdit" name="particleEllipsoidRMinValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -1981,7 +1981,7 @@
                           </widget>
                          </item>
                          <item row="12" column="0">
-                          <widget class="QLabel" name="sphereRbinsLabel_9">
+                          <widget class="QLabel" name="particleEllipsoidDistTypeSigmaHLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2009,7 +2009,7 @@
                           </widget>
                          </item>
                          <item row="2" column="0">
-                          <widget class="QLabel" name="sphereRbinsLabel_6">
+                          <widget class="QLabel" name="particleEllipsoidDistTypeRLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2037,7 +2037,7 @@
                           </widget>
                          </item>
                          <item row="0" column="4">
-                          <widget class="QLabel" name="sphereBetaLabel_2">
+                          <widget class="QLabel" name="particleEllipsoidBetaLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2065,7 +2065,7 @@
                           </widget>
                          </item>
                          <item row="11" column="1">
-                          <widget class="QLineEdit" name="sphereRminValue_7">
+                          <widget class="QLineEdit" name="particleEllipsoidSigmaMinHValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2084,7 +2084,7 @@
                           </widget>
                          </item>
                          <item row="10" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_8">
+                          <widget class="QComboBox" name="particleEllipsoidDistTypeSigmaRCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2115,7 +2115,7 @@
                           </widget>
                          </item>
                          <item row="8" column="0">
-                          <widget class="QLabel" name="sphereRminLabel_4">
+                          <widget class="QLabel" name="particleEllipsoidPolydispersityLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2143,7 +2143,7 @@
                           </widget>
                          </item>
                          <item row="1" column="0">
-                          <widget class="QLabel" name="sphereRminLabel_2">
+                          <widget class="QLabel" name="particleEllipsoidRMinLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2171,7 +2171,7 @@
                           </widget>
                          </item>
                          <item row="10" column="0">
-                          <widget class="QLabel" name="sphereRbinsLabel_8">
+                          <widget class="QLabel" name="particleEllipsoidDistTypeSigmaRLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2199,7 +2199,7 @@
                           </widget>
                          </item>
                          <item row="1" column="3">
-                          <widget class="QLineEdit" name="sphereRmaxValue_2">
+                          <widget class="QLineEdit" name="particleEllipsoidRMaxValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2218,7 +2218,7 @@
                           </widget>
                          </item>
                          <item row="3" column="2">
-                          <widget class="QLabel" name="sphereRmaxLabel_3">
+                          <widget class="QLabel" name="particleEllipsoidHMaxLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2246,7 +2246,7 @@
                           </widget>
                          </item>
                          <item row="3" column="4">
-                          <widget class="QLabel" name="sphereRbinsLabel_3">
+                          <widget class="QLabel" name="particleEllipsoidHBinsLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2274,7 +2274,7 @@
                           </widget>
                          </item>
                          <item row="7" column="0" colspan="6">
-                          <widget class="QFrame" name="particleDiver">
+                          <widget class="QFrame" name="particleEllipsoidDiver">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2296,7 +2296,7 @@
                           </widget>
                          </item>
                          <item row="9" column="0">
-                          <widget class="QLabel" name="sphereRminLabel_5">
+                          <widget class="QLabel" name="particleEllipsoidSigmaMinRLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2324,7 +2324,7 @@
                           </widget>
                          </item>
                          <item row="12" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_9">
+                          <widget class="QComboBox" name="particleEllipsoidDistTypeSigmaHCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2355,7 +2355,7 @@
                           </widget>
                          </item>
                          <item row="3" column="3">
-                          <widget class="QLineEdit" name="sphereRminValue_4">
+                          <widget class="QLineEdit" name="particleEllipsoidHMaxValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2374,7 +2374,7 @@
                           </widget>
                          </item>
                          <item row="1" column="5">
-                          <widget class="QLineEdit" name="sphereRbinsValue_2">
+                          <widget class="QLineEdit" name="particleEllipsoidRBinsValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2393,7 +2393,7 @@
                           </widget>
                          </item>
                          <item row="11" column="3">
-                          <widget class="QLineEdit" name="sphereRminValue_8">
+                          <widget class="QLineEdit" name="particleEllipsoidSigmaMaxHValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2412,7 +2412,7 @@
                           </widget>
                          </item>
                          <item row="3" column="0">
-                          <widget class="QLabel" name="sphereRminLabel_3">
+                          <widget class="QLabel" name="particleEllipsoidHMinLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2440,7 +2440,7 @@
                           </widget>
                          </item>
                          <item row="13" column="0">
-                          <widget class="QLabel" name="sphereRminLabel_9">
+                          <widget class="QLabel" name="particleEllipsoidCovMinLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2468,7 +2468,7 @@
                           </widget>
                          </item>
                          <item row="0" column="5">
-                          <widget class="QLineEdit" name="sphereBetaValue_2">
+                          <widget class="QLineEdit" name="particleEllipsoidBetaValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2487,7 +2487,7 @@
                           </widget>
                          </item>
                          <item row="13" column="3">
-                          <widget class="QLineEdit" name="sphereRminValue_10">
+                          <widget class="QLineEdit" name="particleEllipsoidCovMaxValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2506,7 +2506,7 @@
                           </widget>
                          </item>
                          <item row="9" column="3">
-                          <widget class="QLineEdit" name="sphereRminValue_6">
+                          <widget class="QLineEdit" name="particleEllipsoidSigmaMaxRValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2525,7 +2525,7 @@
                           </widget>
                          </item>
                          <item row="9" column="2">
-                          <widget class="QLabel" name="sphereRminLabel_6">
+                          <widget class="QLabel" name="particleEllipsoidSigmaMaxRLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2553,7 +2553,7 @@
                           </widget>
                          </item>
                          <item row="13" column="1">
-                          <widget class="QLineEdit" name="sphereRminValue_9">
+                          <widget class="QLineEdit" name="particleEllipsoidCovMinValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2572,7 +2572,7 @@
                           </widget>
                          </item>
                          <item row="9" column="1">
-                          <widget class="QLineEdit" name="sphereRminValue_5">
+                          <widget class="QLineEdit" name="particleEllipsoidSigmaMinRValue">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2591,7 +2591,7 @@
                           </widget>
                          </item>
                          <item row="14" column="0">
-                          <widget class="QLabel" name="sphereRbinsLabel_10">
+                          <widget class="QLabel" name="particleEllipsoidDistTypeCovLabel">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2619,7 +2619,7 @@
                           </widget>
                          </item>
                          <item row="14" column="1">
-                          <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_10">
+                          <widget class="QComboBox" name="particleEllipsoidDistTypeCovCombox">
                            <property name="minimumSize">
                             <size>
                              <width>95</width>
@@ -2650,7 +2650,7 @@
                           </widget>
                          </item>
                          <item row="14" column="5" alignment="Qt::AlignRight">
-                          <widget class="QPushButton" name="particleAddButton_2">
+                          <widget class="QPushButton" name="particleEllipsoidShowButton">
                            <property name="sizePolicy">
                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                              <horstretch>0</horstretch>
@@ -2676,7 +2676,7 @@
                    </widget>
                   </item>
                   <item>
-                   <widget class="QWidget" name="widget_4" native="true">
+                   <widget class="QWidget" name="particleAddParticleWidget" native="true">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -2704,7 +2704,7 @@
                       </widget>
                      </item>
                      <item>
-                      <spacer name="horizontalSpacer_9">
+                      <spacer name="particleAddParticleSpacer">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
@@ -2723,7 +2723,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QGroupBox" name="groupBox_3">
+                <widget class="QGroupBox" name="sampleParameterSubstrateBox">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
                    <horstretch>0</horstretch>
@@ -3001,7 +3001,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="2" column="2">
-                   <widget class="QWidget" name="widget_5" native="true">
+                   <widget class="QWidget" name="substrateRoughnessSigmaWidget" native="true">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -3060,7 +3060,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="2" column="3">
-                   <widget class="QWidget" name="widget_6" native="true">
+                   <widget class="QWidget" name="substrateRoughnessHurstWidget" native="true">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -3119,7 +3119,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="2" column="4">
-                   <widget class="QWidget" name="widget_7" native="true">
+                   <widget class="QWidget" name="substrateRoughnessEpsilonWidget" native="true">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -3184,7 +3184,7 @@ p, li { white-space: pre-wrap; }
                 </widget>
                </item>
                <item>
-                <widget class="QGroupBox" name="groupBox_5">
+                <widget class="QGroupBox" name="sampleParameterInterferenceFunctionBox">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
                    <horstretch>0</horstretch>
@@ -3202,10 +3202,10 @@ p, li { white-space: pre-wrap; }
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_11">
                   <item>
-                   <widget class="QWidget" name="widget_8" native="true">
+                   <widget class="QWidget" name="InterferenceFunctionTypeWidget" native="true">
                     <layout class="QHBoxLayout" name="horizontalLayout_7">
                      <item>
-                      <widget class="QLabel" name="substratePresetLabel_2">
+                      <widget class="QLabel" name="InterferenceFunctionTypeLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3230,7 +3230,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item>
-                      <widget class="QComboBox" name="substratePresetLabelCombox_2">
+                      <widget class="QComboBox" name="InterferenceFunctionTypeComBox">
                        <property name="minimumSize">
                         <size>
                          <width>100</width>
@@ -3256,7 +3256,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item>
-                      <spacer name="horizontalSpacer_10">
+                      <spacer name="InterferenceFunctionTypeSpacer">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
@@ -3272,7 +3272,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item>
-                   <widget class="QStackedWidget" name="stackedWidget">
+                   <widget class="QStackedWidget" name="InterferenceFunctionStackedWidgets">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -3280,363 +3280,364 @@ p, li { white-space: pre-wrap; }
                      </size>
                     </property>
                     <property name="currentIndex">
-                     <number>1</number>
+                     <number>0</number>
                     </property>
-                    <widget class="QWidget" name="page_5">
+                    <widget class="QWidget" name="InterferenceFunction1DParacrystalPage">
                      <layout class="QVBoxLayout" name="verticalLayout_12">
                       <item>
-                       <widget class="QGroupBox" name="groupBox_6">
+                       <widget class="QGroupBox" name="InterferenceFunction1DParacrystalBox">
                         <property name="title">
                          <string>1D paracrystal</string>
                         </property>
+                        <layout class="QGridLayout" name="gridLayout_17">
+                         <item row="0" column="0">
+                          <widget class="QLabel" name="InterferenceFunction1DParacrystalDMinLabel">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="minimumSize">
+                            <size>
+                             <width>90</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>90</width>
+                             <height>16777215</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>D_min [nm]:</string>
+                           </property>
+                           <property name="alignment">
+                            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="1">
+                          <widget class="QLineEdit" name="InterferenceFunction1DParacrystalDMinValue">
+                           <property name="minimumSize">
+                            <size>
+                             <width>95</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>95</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>1.000</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="2">
+                          <widget class="QLabel" name="InterferenceFunction1DParacrystalDMaxLabel">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="minimumSize">
+                            <size>
+                             <width>90</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>90</width>
+                             <height>16777215</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>D_max [nm]:</string>
+                           </property>
+                           <property name="alignment">
+                            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="3">
+                          <widget class="QLineEdit" name="InterferenceFunction1DParacrystalDMaxValue">
+                           <property name="minimumSize">
+                            <size>
+                             <width>95</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>95</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>1.000</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="4">
+                          <spacer name="InterferenceFunction1DParacrystalSpacer">
+                           <property name="orientation">
+                            <enum>Qt::Horizontal</enum>
+                           </property>
+                           <property name="sizeHint" stdset="0">
+                            <size>
+                             <width>292</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </spacer>
+                         </item>
+                         <item row="1" column="0">
+                          <widget class="QLabel" name="InterferenceFunction1DParacrystalDistTypeDLabel">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="minimumSize">
+                            <size>
+                             <width>90</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>90</width>
+                             <height>16777215</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>Dist. Type [D]:</string>
+                           </property>
+                           <property name="alignment">
+                            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="1" column="1">
+                          <widget class="QComboBox" name="InterferenceFunction1DParacrystalDistTypeDCombox">
+                           <property name="minimumSize">
+                            <size>
+                             <width>95</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>95</width>
+                             <height>16777215</height>
+                            </size>
+                           </property>
+                           <item>
+                            <property name="text">
+                             <string>Uniform</string>
+                            </property>
+                           </item>
+                           <item>
+                            <property name="text">
+                             <string>Gaussian</string>
+                            </property>
+                           </item>
+                           <item>
+                            <property name="text">
+                             <string>Log-normal</string>
+                            </property>
+                           </item>
+                          </widget>
+                         </item>
+                         <item row="2" column="0">
+                          <widget class="QLabel" name="InterferenceFunction1DParacrystalSigmaMinDLabel">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="minimumSize">
+                            <size>
+                             <width>90</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>90</width>
+                             <height>16777215</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>σ_min [D]:</string>
+                           </property>
+                           <property name="alignment">
+                            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="2" column="1">
+                          <widget class="QLineEdit" name="InterferenceFunction1DParacrystalSigmaMinDValue">
+                           <property name="minimumSize">
+                            <size>
+                             <width>95</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>95</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>0.01</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="2" column="2">
+                          <widget class="QLabel" name="InterferenceFunction1DParacrystalSigmaMaxDLabel">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="minimumSize">
+                            <size>
+                             <width>90</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>90</width>
+                             <height>16777215</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>σ_max [D]:</string>
+                           </property>
+                           <property name="alignment">
+                            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="2" column="3">
+                          <widget class="QLineEdit" name="InterferenceFunction1DParacrystalSigmaMaxDValue">
+                           <property name="minimumSize">
+                            <size>
+                             <width>95</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>95</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>0.5</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="3" column="0">
+                          <widget class="QLabel" name="InterferenceFunction1DParacrystalDistTypeSigmaDLabel">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="minimumSize">
+                            <size>
+                             <width>90</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>90</width>
+                             <height>16777215</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>Dist. Type [σ_D]:</string>
+                           </property>
+                           <property name="alignment">
+                            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="3" column="1">
+                          <widget class="QComboBox" name="InterferenceFunction1DParacrystalDistTypeSigmaDCombox">
+                           <property name="minimumSize">
+                            <size>
+                             <width>95</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="maximumSize">
+                            <size>
+                             <width>95</width>
+                             <height>16777215</height>
+                            </size>
+                           </property>
+                           <item>
+                            <property name="text">
+                             <string>Uniform</string>
+                            </property>
+                           </item>
+                           <item>
+                            <property name="text">
+                             <string>Gaussian</string>
+                            </property>
+                           </item>
+                           <item>
+                            <property name="text">
+                             <string>Log-normal</string>
+                            </property>
+                           </item>
+                          </widget>
+                         </item>
+                         <item row="3" column="5">
+                          <widget class="QPushButton" name="InterferenceFunction1DParacrystalShowButton">
+                           <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                             <horstretch>0</horstretch>
+                             <verstretch>0</verstretch>
+                            </sizepolicy>
+                           </property>
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>25</height>
+                            </size>
+                           </property>
+                           <property name="layoutDirection">
+                            <enum>Qt::LeftToRight</enum>
+                           </property>
+                           <property name="text">
+                            <string>Show</string>
+                           </property>
+                          </widget>
+                         </item>
+                        </layout>
                        </widget>
                       </item>
                      </layout>
                     </widget>
                     <widget class="QWidget" name="page_6">
-                     <layout class="QGridLayout" name="gridLayout_7">
-                      <item row="0" column="3">
-                       <widget class="QLineEdit" name="substrateRoughnessSigmaValue_2">
-                        <property name="minimumSize">
-                         <size>
-                          <width>95</width>
-                          <height>20</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>1.000</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="1" column="1">
-                       <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_13">
-                        <property name="minimumSize">
-                         <size>
-                          <width>95</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <item>
-                         <property name="text">
-                          <string>Uniform</string>
-                         </property>
-                        </item>
-                        <item>
-                         <property name="text">
-                          <string>Gaussian</string>
-                         </property>
-                        </item>
-                        <item>
-                         <property name="text">
-                          <string>Log-normal</string>
-                         </property>
-                        </item>
-                       </widget>
-                      </item>
-                      <item row="0" column="2">
-                       <widget class="QLabel" name="substrateRoughnessSigmaLabel_2">
-                        <property name="sizePolicy">
-                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                         </sizepolicy>
-                        </property>
-                        <property name="minimumSize">
-                         <size>
-                          <width>90</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>90</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>D_max [nm]:</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="1" column="0">
-                       <widget class="QLabel" name="sphereRbinsLabel_13">
-                        <property name="sizePolicy">
-                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                         </sizepolicy>
-                        </property>
-                        <property name="minimumSize">
-                         <size>
-                          <width>90</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>90</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>Dist. Type [D]:</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="2" column="2">
-                       <widget class="QLabel" name="sphereRminLabel_15">
-                        <property name="sizePolicy">
-                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                         </sizepolicy>
-                        </property>
-                        <property name="minimumSize">
-                         <size>
-                          <width>90</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>90</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>σ_max [D]:</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="3" column="4" alignment="Qt::AlignRight">
-                       <widget class="QPushButton" name="particleAddButton_4">
-                        <property name="sizePolicy">
-                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                         </sizepolicy>
-                        </property>
-                        <property name="minimumSize">
-                         <size>
-                          <width>0</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="layoutDirection">
-                         <enum>Qt::LeftToRight</enum>
-                        </property>
-                        <property name="text">
-                         <string>Show</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="0" column="4">
-                       <spacer name="horizontalSpacer_11">
-                        <property name="orientation">
-                         <enum>Qt::Horizontal</enum>
-                        </property>
-                        <property name="sizeHint" stdset="0">
-                         <size>
-                          <width>40</width>
-                          <height>20</height>
-                         </size>
-                        </property>
-                       </spacer>
-                      </item>
-                      <item row="2" column="1">
-                       <widget class="QLineEdit" name="sphereRminValue_13">
-                        <property name="minimumSize">
-                         <size>
-                          <width>95</width>
-                          <height>20</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>0.01</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="3" column="1">
-                       <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_14">
-                        <property name="minimumSize">
-                         <size>
-                          <width>95</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <item>
-                         <property name="text">
-                          <string>Uniform</string>
-                         </property>
-                        </item>
-                        <item>
-                         <property name="text">
-                          <string>Gaussian</string>
-                         </property>
-                        </item>
-                        <item>
-                         <property name="text">
-                          <string>Log-normal</string>
-                         </property>
-                        </item>
-                       </widget>
-                      </item>
-                      <item row="2" column="3">
-                       <widget class="QLineEdit" name="sphereRminValue_14">
-                        <property name="minimumSize">
-                         <size>
-                          <width>95</width>
-                          <height>20</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>0.5</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="0" column="0">
-                       <widget class="QLabel" name="substrateRoughnessSigmaLabel_3">
-                        <property name="sizePolicy">
-                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                         </sizepolicy>
-                        </property>
-                        <property name="minimumSize">
-                         <size>
-                          <width>90</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>90</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>D_min [nm]:</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="2" column="0">
-                       <widget class="QLabel" name="sphereRminLabel_14">
-                        <property name="sizePolicy">
-                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                         </sizepolicy>
-                        </property>
-                        <property name="minimumSize">
-                         <size>
-                          <width>90</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>90</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>σ_min [D]:</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="0" column="1">
-                       <widget class="QLineEdit" name="substrateRoughnessSigmaValue_3">
-                        <property name="minimumSize">
-                         <size>
-                          <width>95</width>
-                          <height>20</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>1.000</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="3" column="0">
-                       <widget class="QLabel" name="sphereRbinsLabel_14">
-                        <property name="sizePolicy">
-                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                         </sizepolicy>
-                        </property>
-                        <property name="minimumSize">
-                         <size>
-                          <width>90</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>90</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>Dist. Type [σ_D]:</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                     </layout>
+                     <layout class="QGridLayout" name="gridLayout_7"/>
                     </widget>
                    </widget>
                   </item>
@@ -3669,7 +3670,7 @@ p, li { white-space: pre-wrap; }
              </widget>
             </item>
             <item>
-             <widget class="QGroupBox" name="beamParameters_2">
+             <widget class="QGroupBox" name="preProcessingBox">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                 <horstretch>0</horstretch>
@@ -3692,7 +3693,7 @@ p, li { white-space: pre-wrap; }
               </property>
               <layout class="QGridLayout" name="gridLayout_8">
                <item row="2" column="0">
-                <widget class="QGroupBox" name="beamParameters_5">
+                <widget class="QGroupBox" name="preProcessingOthersBox">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                    <horstretch>0</horstretch>
@@ -3715,7 +3716,7 @@ p, li { white-space: pre-wrap; }
                  </property>
                  <layout class="QGridLayout" name="gridLayout_11">
                   <item row="5" column="0">
-                   <widget class="QCheckBox" name="checkBox_4">
+                   <widget class="QCheckBox" name="OthersCropEdgeCheckBox">
                     <property name="text">
                      <string>Crop edge</string>
                     </property>
@@ -3725,7 +3726,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="8" column="1">
-                   <spacer name="horizontalSpacer_18">
+                   <spacer name="OthersSpacer_1">
                     <property name="orientation">
                      <enum>Qt::Horizontal</enum>
                     </property>
@@ -3738,7 +3739,7 @@ p, li { white-space: pre-wrap; }
                    </spacer>
                   </item>
                   <item row="0" column="0">
-                   <widget class="QCheckBox" name="checkBox">
+                   <widget class="QCheckBox" name="OthersAddMaskCheckBox">
                     <property name="text">
                      <string>Add Mask</string>
                     </property>
@@ -3748,7 +3749,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="2" column="0">
-                   <widget class="QCheckBox" name="checkBox_2">
+                   <widget class="QCheckBox" name="OthersLogarizationCheckBox">
                     <property name="text">
                      <string>Logarization</string>
                     </property>
@@ -3758,10 +3759,10 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="7" column="0">
-                   <widget class="QWidget" name="widget_11" native="true">
+                   <widget class="QWidget" name="OthersCropEdgeWidget" native="true">
                     <layout class="QGridLayout" name="gridLayout_12">
                      <item row="1" column="3">
-                      <widget class="QLabel" name="substratePresetLabel_16">
+                      <widget class="QLabel" name="OthersCropEdgeDownMaxLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3789,7 +3790,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="2" column="3">
-                      <widget class="QLabel" name="substratePresetLabel_17">
+                      <widget class="QLabel" name="OthersCropEdgeLeftMaxLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3817,7 +3818,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="3" column="4">
-                      <widget class="QLineEdit" name="sphereRminValue_28">
+                      <widget class="QLineEdit" name="OthersCropEdgeRightMaxValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3842,7 +3843,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="3" column="5">
-                      <widget class="QLabel" name="sphereRbinsLabel_18">
+                      <widget class="QLabel" name="OthersCropEdgeDistTypeRightLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3870,7 +3871,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="2">
-                      <widget class="QLineEdit" name="sphereRminValue_24">
+                      <widget class="QLineEdit" name="OthersCropEdgeUpMinValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3895,7 +3896,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="2" column="4">
-                      <widget class="QLineEdit" name="sphereRminValue_27">
+                      <widget class="QLineEdit" name="OthersCropEdgeLeftMaxValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3920,7 +3921,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="2" column="2">
-                      <widget class="QLineEdit" name="sphereRminValue_25">
+                      <widget class="QLineEdit" name="OthersCropEdgeLeftMinValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3945,7 +3946,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="1" column="4">
-                      <widget class="QLineEdit" name="sphereRminValue_26">
+                      <widget class="QLineEdit" name="OthersCropEdgeDownMaxValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3970,7 +3971,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="0">
-                      <widget class="QLabel" name="substratePresetLabel_14">
+                      <widget class="QLabel" name="OthersCropEdgeUpMinLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -3998,7 +3999,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="1" column="0">
-                      <widget class="QLabel" name="substratePresetLabel_11">
+                      <widget class="QLabel" name="OthersCropEdgeDownMinLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4026,7 +4027,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="4">
-                      <widget class="QLineEdit" name="sphereRminValue_22">
+                      <widget class="QLineEdit" name="OthersCropEdgeUpMaxValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4051,7 +4052,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="1" column="2">
-                      <widget class="QLineEdit" name="sphereRminValue_23">
+                      <widget class="QLineEdit" name="OthersCropEdgeDownMinValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4076,7 +4077,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="5">
-                      <widget class="QLabel" name="sphereRbinsLabel_15">
+                      <widget class="QLabel" name="OthersCropEdgeDistTypeUpLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4104,7 +4105,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="2" column="5">
-                      <widget class="QLabel" name="sphereRbinsLabel_17">
+                      <widget class="QLabel" name="OthersCropEdgeDistTypeLeftLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4132,7 +4133,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="3">
-                      <widget class="QLabel" name="substratePresetLabel_12">
+                      <widget class="QLabel" name="OthersCropEdgeUpMaxLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4160,7 +4161,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="1" column="5">
-                      <widget class="QLabel" name="sphereRbinsLabel_16">
+                      <widget class="QLabel" name="OthersCropEdgeDistTypeDownLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4188,7 +4189,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="2" column="0">
-                      <widget class="QLabel" name="substratePresetLabel_13">
+                      <widget class="QLabel" name="OthersCropEdgeLeftMinLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4216,7 +4217,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="3" column="0">
-                      <widget class="QLabel" name="substratePresetLabel_15">
+                      <widget class="QLabel" name="OthersCropEdgeRightMinLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4244,7 +4245,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="3" column="2">
-                      <widget class="QLineEdit" name="sphereRminValue_21">
+                      <widget class="QLineEdit" name="OthersCropEdgeRightMinValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4269,7 +4270,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="3" column="3">
-                      <widget class="QLabel" name="substratePresetLabel_18">
+                      <widget class="QLabel" name="OthersCropEdgeRightMaxLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4297,7 +4298,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="6">
-                      <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_15">
+                      <widget class="QComboBox" name="OthersCropEdgeDistTypeUpCombox">
                        <property name="minimumSize">
                         <size>
                          <width>95</width>
@@ -4328,7 +4329,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="1" column="6">
-                      <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_16">
+                      <widget class="QComboBox" name="OthersCropEdgeDistTypeDownCombox">
                        <property name="minimumSize">
                         <size>
                          <width>95</width>
@@ -4359,7 +4360,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="2" column="6">
-                      <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_17">
+                      <widget class="QComboBox" name="OthersCropEdgeDeistTypeLeftCombox">
                        <property name="minimumSize">
                         <size>
                          <width>95</width>
@@ -4390,7 +4391,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="3" column="6">
-                      <widget class="QComboBox" name="sphereMaterialsPresetLabelCombox_18">
+                      <widget class="QComboBox" name="OthersCropEdgeDistTypeRightCombox">
                        <property name="minimumSize">
                         <size>
                          <width>95</width>
@@ -4424,7 +4425,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="8" column="7">
-                   <spacer name="horizontalSpacer_19">
+                   <spacer name="OthersSpacer_2">
                     <property name="orientation">
                      <enum>Qt::Horizontal</enum>
                     </property>
@@ -4440,10 +4441,10 @@ p, li { white-space: pre-wrap; }
                    </spacer>
                   </item>
                   <item row="4" column="0">
-                   <widget class="QWidget" name="widget_12" native="true">
+                   <widget class="QWidget" name="OthersNormalizeWidget" native="true">
                     <layout class="QGridLayout" name="gridLayout_13">
                      <item row="0" column="0">
-                      <widget class="QLabel" name="substratePresetLabel_21">
+                      <widget class="QLabel" name="OthersNormalizeMinimumLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4471,7 +4472,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="3">
-                      <widget class="QLabel" name="substratePresetLabel_23">
+                      <widget class="QLabel" name="OthersNormalizeMaxmumLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4499,7 +4500,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="2">
-                      <widget class="QLineEdit" name="sphereRminValue_30">
+                      <widget class="QLineEdit" name="OthersNormalizeMinimumValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4524,7 +4525,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="4">
-                      <widget class="QLineEdit" name="sphereRminValue_34">
+                      <widget class="QLineEdit" name="OthersNormalizeMaxmumValue">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4549,7 +4550,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item row="0" column="5">
-                      <spacer name="horizontalSpacer_17">
+                      <spacer name="OthersNormalizeSpacer">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
@@ -4565,7 +4566,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="8" column="6">
-                   <widget class="QPushButton" name="particleAddButton_7">
+                   <widget class="QPushButton" name="OthersShowButton">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                       <horstretch>0</horstretch>
@@ -4587,7 +4588,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="3" column="0">
-                   <widget class="QCheckBox" name="checkBox_3">
+                   <widget class="QCheckBox" name="OthersNormalizeCheckBox">
                     <property name="text">
                      <string>Normalize</string>
                     </property>
@@ -4597,17 +4598,17 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="1" column="0">
-                   <widget class="QWidget" name="widget_13" native="true">
+                   <widget class="QWidget" name="OthersAddMaskWidget" native="true">
                     <layout class="QGridLayout" name="gridLayout_14">
                      <item row="0" column="0">
-                      <widget class="QPushButton" name="pushButton_2">
+                      <widget class="QPushButton" name="OthersAddMaskChooseFileButton">
                        <property name="text">
                         <string>Choose File</string>
                        </property>
                       </widget>
                      </item>
                      <item row="0" column="1">
-                      <spacer name="horizontalSpacer_20">
+                      <spacer name="OthersAddMaskSpacer">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
@@ -4620,7 +4621,7 @@ p, li { white-space: pre-wrap; }
                       </spacer>
                      </item>
                      <item row="1" column="0">
-                      <widget class="QPushButton" name="pushButton_3">
+                      <widget class="QPushButton" name="OthersAddMaskUserDefinedButton">
                        <property name="text">
                         <string>User-defined</string>
                        </property>
@@ -4633,7 +4634,7 @@ p, li { white-space: pre-wrap; }
                 </widget>
                </item>
                <item row="0" column="0">
-                <widget class="QGroupBox" name="beamParameters_3">
+                <widget class="QGroupBox" name="preProcessingFocusRegionBox">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                    <horstretch>0</horstretch>
@@ -4656,10 +4657,10 @@ p, li { white-space: pre-wrap; }
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_13">
                   <item>
-                   <widget class="QWidget" name="widget_9" native="true">
+                   <widget class="QWidget" name="FocusRegionTypeWidget" native="true">
                     <layout class="QHBoxLayout" name="horizontalLayout_8">
                      <item>
-                      <widget class="QLabel" name="substratePresetLabel_3">
+                      <widget class="QLabel" name="FocusRegionTypeLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -4687,7 +4688,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item>
-                      <widget class="QComboBox" name="substratePresetLabelCombox_3">
+                      <widget class="QComboBox" name="FocusRegionTypeCombox">
                        <property name="minimumSize">
                         <size>
                          <width>100</width>
@@ -4718,7 +4719,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item>
-                      <spacer name="horizontalSpacer_13">
+                      <spacer name="FocusRegionTypeSpacer">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
@@ -4734,33 +4735,14 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item>
-                   <widget class="QStackedWidget" name="stackedWidget_2">
+                   <widget class="QStackedWidget" name="FocusRegionStackedWidget">
                     <property name="currentIndex">
                      <number>0</number>
                     </property>
-                    <widget class="QWidget" name="page_7">
+                    <widget class="QWidget" name="FocusRegionQPage">
                      <layout class="QGridLayout" name="gridLayout_9">
-                      <item row="0" column="7">
-                       <widget class="QLineEdit" name="sphereRminValue_15">
-                        <property name="minimumSize">
-                         <size>
-                          <width>95</width>
-                          <height>20</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>3</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="1" column="8" alignment="Qt::AlignRight">
-                       <widget class="QPushButton" name="particleAddButton_5">
+                      <item row="1" column="1">
+                       <widget class="QLabel" name="FocusRegionQzMinLabel">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -4769,20 +4751,26 @@ p, li { white-space: pre-wrap; }
                         </property>
                         <property name="minimumSize">
                          <size>
-                          <width>0</width>
+                          <width>90</width>
                           <height>25</height>
                          </size>
                         </property>
-                        <property name="layoutDirection">
-                         <enum>Qt::LeftToRight</enum>
+                        <property name="maximumSize">
+                         <size>
+                          <width>90</width>
+                          <height>16777215</height>
+                         </size>
                         </property>
                         <property name="text">
-                         <string>Show</string>
+                         <string>qz_min [nm-1]:</string>
+                        </property>
+                        <property name="alignment">
+                         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
                         </property>
                        </widget>
                       </item>
                       <item row="0" column="1">
-                       <widget class="QLabel" name="substratePresetLabel_4">
+                       <widget class="QLabel" name="FocusRegionQrMinLabel">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -4810,7 +4798,7 @@ p, li { white-space: pre-wrap; }
                        </widget>
                       </item>
                       <item row="0" column="4">
-                       <widget class="QLabel" name="substratePresetLabel_5">
+                       <widget class="QLabel" name="FocusRegionQrMaxLabel">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -4837,27 +4825,30 @@ p, li { white-space: pre-wrap; }
                         </property>
                        </widget>
                       </item>
-                      <item row="0" column="2">
-                       <widget class="QLineEdit" name="sphereRminValue_16">
+                      <item row="1" column="9" alignment="Qt::AlignRight">
+                       <widget class="QPushButton" name="FocusRegionQShowButton">
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
                         <property name="minimumSize">
                          <size>
-                          <width>95</width>
-                          <height>20</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
+                          <width>0</width>
                           <height>25</height>
                          </size>
                         </property>
+                        <property name="layoutDirection">
+                         <enum>Qt::LeftToRight</enum>
+                        </property>
                         <property name="text">
-                         <string>0.01</string>
+                         <string>Show</string>
                         </property>
                        </widget>
                       </item>
-                      <item row="1" column="1">
-                       <widget class="QLabel" name="substratePresetLabel_7">
+                      <item row="1" column="4">
+                       <widget class="QLabel" name="FocusRegionQzMaxLabel">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -4884,55 +4875,8 @@ p, li { white-space: pre-wrap; }
                         </property>
                        </widget>
                       </item>
-                      <item row="1" column="2">
-                       <widget class="QLineEdit" name="sphereRminValue_17">
-                        <property name="minimumSize">
-                         <size>
-                          <width>95</width>
-                          <height>20</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>95</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>0.01</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="1" column="4">
-                       <widget class="QLabel" name="substratePresetLabel_6">
-                        <property name="sizePolicy">
-                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                         </sizepolicy>
-                        </property>
-                        <property name="minimumSize">
-                         <size>
-                          <width>90</width>
-                          <height>25</height>
-                         </size>
-                        </property>
-                        <property name="maximumSize">
-                         <size>
-                          <width>90</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
-                        <property name="text">
-                         <string>qz_min [nm-1]:</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="1" column="7">
-                       <widget class="QLineEdit" name="sphereRminValue_18">
+                      <item row="0" column="7">
+                       <widget class="QLineEdit" name="FocusRegionQrMaxValue">
                         <property name="minimumSize">
                          <size>
                           <width>95</width>
@@ -4950,8 +4894,8 @@ p, li { white-space: pre-wrap; }
                         </property>
                        </widget>
                       </item>
-                      <item row="0" column="8">
-                       <spacer name="horizontalSpacer_12">
+                      <item row="0" column="9">
+                       <spacer name="FocusRegionQSpacer">
                         <property name="orientation">
                          <enum>Qt::Horizontal</enum>
                         </property>
@@ -4963,6 +4907,63 @@ p, li { white-space: pre-wrap; }
                         </property>
                        </spacer>
                       </item>
+                      <item row="0" column="2">
+                       <widget class="QLineEdit" name="FocusRegionQrMinValue">
+                        <property name="minimumSize">
+                         <size>
+                          <width>95</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                        <property name="maximumSize">
+                         <size>
+                          <width>95</width>
+                          <height>25</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>0.01</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="2">
+                       <widget class="QLineEdit" name="FocusRegionQzMinValue">
+                        <property name="minimumSize">
+                         <size>
+                          <width>95</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                        <property name="maximumSize">
+                         <size>
+                          <width>95</width>
+                          <height>25</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>0.01</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="7">
+                       <widget class="QLineEdit" name="FocusRegionQzMaxValue">
+                        <property name="minimumSize">
+                         <size>
+                          <width>95</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                        <property name="maximumSize">
+                         <size>
+                          <width>95</width>
+                          <height>25</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>3</string>
+                        </property>
+                       </widget>
+                      </item>
                      </layout>
                     </widget>
                     <widget class="QWidget" name="page_8"/>
@@ -4972,7 +4973,7 @@ p, li { white-space: pre-wrap; }
                 </widget>
                </item>
                <item row="1" column="0">
-                <widget class="QGroupBox" name="beamParameters_4">
+                <widget class="QGroupBox" name="preProcessingNoisingBox">
                  <property name="sizePolicy">
                   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                    <horstretch>0</horstretch>
@@ -4995,10 +4996,10 @@ p, li { white-space: pre-wrap; }
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_14">
                   <item>
-                   <widget class="QWidget" name="widget_10" native="true">
+                   <widget class="QWidget" name="NoisingTypeWidget" native="true">
                     <layout class="QHBoxLayout" name="horizontalLayout_9">
                      <item>
-                      <widget class="QLabel" name="substratePresetLabel_8">
+                      <widget class="QLabel" name="NoisingTypeLabel">
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
@@ -5026,7 +5027,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item>
-                      <widget class="QComboBox" name="substratePresetLabelCombox_4">
+                      <widget class="QComboBox" name="NoisingTypeCombox">
                        <property name="minimumSize">
                         <size>
                          <width>100</width>
@@ -5052,7 +5053,7 @@ p, li { white-space: pre-wrap; }
                       </widget>
                      </item>
                      <item>
-                      <spacer name="horizontalSpacer_14">
+                      <spacer name="NoisingTypeSpacer">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
@@ -5068,14 +5069,14 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item>
-                   <widget class="QStackedWidget" name="stackedWidget_3">
+                   <widget class="QStackedWidget" name="NoisingStackedWidget">
                     <property name="currentIndex">
                      <number>0</number>
                     </property>
-                    <widget class="QWidget" name="page_9">
+                    <widget class="QWidget" name="NoisingGaussianPage">
                      <layout class="QGridLayout" name="gridLayout_10">
                       <item row="0" column="7">
-                       <widget class="QLineEdit" name="sphereRminValue_19">
+                       <widget class="QLineEdit" name="NoisingGaussianSnrMaxValue">
                         <property name="minimumSize">
                          <size>
                           <width>95</width>
@@ -5094,7 +5095,7 @@ p, li { white-space: pre-wrap; }
                        </widget>
                       </item>
                       <item row="0" column="4">
-                       <widget class="QLabel" name="substratePresetLabel_10">
+                       <widget class="QLabel" name="NoisingGaussianSnrMaxLabel">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -5122,7 +5123,7 @@ p, li { white-space: pre-wrap; }
                        </widget>
                       </item>
                       <item row="0" column="2">
-                       <widget class="QLineEdit" name="sphereRminValue_20">
+                       <widget class="QLineEdit" name="NoisingGaussianSnrMinValue">
                         <property name="minimumSize">
                          <size>
                           <width>95</width>
@@ -5141,7 +5142,7 @@ p, li { white-space: pre-wrap; }
                        </widget>
                       </item>
                       <item row="0" column="8">
-                       <spacer name="horizontalSpacer_15">
+                       <spacer name="NoisingGaussianSpacer">
                         <property name="orientation">
                          <enum>Qt::Horizontal</enum>
                         </property>
@@ -5154,7 +5155,7 @@ p, li { white-space: pre-wrap; }
                        </spacer>
                       </item>
                       <item row="0" column="1">
-                       <widget class="QLabel" name="substratePresetLabel_9">
+                       <widget class="QLabel" name="NoisingGaussianSnrMinLabel">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -5182,7 +5183,7 @@ p, li { white-space: pre-wrap; }
                        </widget>
                       </item>
                       <item row="0" column="9">
-                       <widget class="QPushButton" name="particleAddButton_6">
+                       <widget class="QPushButton" name="NoisingGaussianShowButton">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -5205,7 +5206,7 @@ p, li { white-space: pre-wrap; }
                       </item>
                      </layout>
                     </widget>
-                    <widget class="QWidget" name="page_10"/>
+                    <widget class="QWidget" name="NoisingNonePage"/>
                    </widget>
                   </item>
                  </layout>
@@ -5237,7 +5238,7 @@ p, li { white-space: pre-wrap; }
              </widget>
             </item>
             <item>
-             <widget class="QGroupBox" name="beamParameters_6">
+             <widget class="QGroupBox" name="trainsetGenerateBox">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                 <horstretch>0</horstretch>
@@ -5260,10 +5261,10 @@ p, li { white-space: pre-wrap; }
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_15">
                <item>
-                <widget class="QWidget" name="widget_14" native="true">
+                <widget class="QWidget" name="trainsetGenerateWidget" native="true">
                  <layout class="QGridLayout" name="gridLayout_16">
                   <item row="0" column="4">
-                   <spacer name="horizontalSpacer_22">
+                   <spacer name="trainsetGenerateSpacer_1">
                     <property name="orientation">
                      <enum>Qt::Horizontal</enum>
                     </property>
@@ -5279,7 +5280,7 @@ p, li { white-space: pre-wrap; }
                    </spacer>
                   </item>
                   <item row="4" column="0">
-                   <widget class="QLabel" name="substratePresetLabel_22">
+                   <widget class="QLabel" name="trainsetGenerateFileNameLabel">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                       <horstretch>0</horstretch>
@@ -5307,7 +5308,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="4" column="1">
-                   <widget class="QLineEdit" name="lineEdit_3">
+                   <widget class="QLineEdit" name="trainsetGenerateFileNameValue">
                     <property name="maximumSize">
                      <size>
                       <width>100</width>
@@ -5320,7 +5321,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="0" column="3">
-                   <widget class="QPushButton" name="particleAddButton_9">
+                   <widget class="QPushButton" name="trainsetGenerateSelectFolderButton">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                       <horstretch>0</horstretch>
@@ -5342,14 +5343,14 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="0" column="1">
-                   <widget class="QLineEdit" name="lineEdit">
+                   <widget class="QLineEdit" name="trainsetGenerateSavePathValue">
                     <property name="text">
                      <string/>
                     </property>
                    </widget>
                   </item>
                   <item row="0" column="0">
-                   <widget class="QLabel" name="substratePresetLabel_19">
+                   <widget class="QLabel" name="trainsetGenerateSavePathLabel">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                       <horstretch>0</horstretch>
@@ -5377,7 +5378,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="1" column="0">
-                   <widget class="QLabel" name="substratePresetLabel_20">
+                   <widget class="QLabel" name="trainsetGenerateTrainsetNumberLabel">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                       <horstretch>0</horstretch>
@@ -5405,7 +5406,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="1" column="1">
-                   <widget class="QLineEdit" name="lineEdit_2">
+                   <widget class="QLineEdit" name="trainsetGenerateTrainsetNumberValue">
                     <property name="maximumSize">
                      <size>
                       <width>100</width>
@@ -5418,7 +5419,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="2" column="1">
-                   <widget class="QLineEdit" name="lineEdit_4">
+                   <widget class="QLineEdit" name="trainsetGenerateSaveEveryValue">
                     <property name="maximumSize">
                      <size>
                       <width>100</width>
@@ -5431,7 +5432,7 @@ p, li { white-space: pre-wrap; }
                    </widget>
                   </item>
                   <item row="2" column="0">
-                   <widget class="QLabel" name="substratePresetLabel_24">
+                   <widget class="QLabel" name="trainsetGenerateSaveEveryLabel">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                       <horstretch>0</horstretch>
@@ -5462,14 +5463,14 @@ p, li { white-space: pre-wrap; }
                 </widget>
                </item>
                <item>
-                <widget class="QStackedWidget" name="stackedWidget_4">
+                <widget class="QStackedWidget" name="trainsetGenerateStackedWidget">
                  <property name="currentIndex">
                   <number>0</number>
                  </property>
-                 <widget class="QWidget" name="page_11">
+                 <widget class="QWidget" name="trainsetGeneratePage">
                   <layout class="QGridLayout" name="gridLayout_15">
                    <item row="0" column="4">
-                    <spacer name="horizontalSpacer_21">
+                    <spacer name="trainsetGenerateSpacer_2">
                      <property name="orientation">
                       <enum>Qt::Horizontal</enum>
                      </property>
@@ -5482,7 +5483,7 @@ p, li { white-space: pre-wrap; }
                     </spacer>
                    </item>
                    <item row="0" column="0">
-                    <widget class="QPushButton" name="particleAddButton_8">
+                    <widget class="QPushButton" name="trainsetGenerateRunButton">
                      <property name="sizePolicy">
                       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                        <horstretch>0</horstretch>
@@ -5504,7 +5505,7 @@ p, li { white-space: pre-wrap; }
                     </widget>
                    </item>
                    <item row="0" column="1">
-                    <widget class="QPushButton" name="particleAddButton_10">
+                    <widget class="QPushButton" name="trainsetGenerateStopButton">
                      <property name="sizePolicy">
                       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                        <horstretch>0</horstretch>
@@ -5531,7 +5532,7 @@ p, li { white-space: pre-wrap; }
                 </widget>
                </item>
                <item>
-                <widget class="QProgressBar" name="progressBar">
+                <widget class="QProgressBar" name="trainsetGenerateProgressBar">
                  <property name="value">
                   <number>24</number>
                  </property>
