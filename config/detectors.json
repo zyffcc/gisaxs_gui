@@ -1,6 +1,38 @@
 {
   "Pilatus 2M": {
-    "pixel_size": [172,172],
-    "pixels": [1475, 1679]
+    "nbins_x": 1475,
+    "nbins_y": 1679,
+    "pixel_size_x": 172,
+    "pixel_size_y": 172,
+    "beam_center_x": 737,
+    "beam_center_y": 839,
+    "description": "Pilatus 2M detector"
+  },
+  "Pilatus 1M": {
+    "nbins_x": 981,
+    "nbins_y": 1043,
+    "pixel_size_x": 172,
+    "pixel_size_y": 172,
+    "beam_center_x": 490,
+    "beam_center_y": 521,
+    "description": "Pilatus 1M detector"
+  },
+  "Pilatus 8M": {
+    "nbins_x": 2463,
+    "nbins_y": 2527,
+    "pixel_size_x": 172,
+    "pixel_size_y": 172,
+    "beam_center_x": 1231,
+    "beam_center_y": 1263,
+    "description": "Pilatus 8M detector"
+  },
+  "Eiger 1M": {
+    "nbins_x": 1024,
+    "nbins_y": 1024,
+    "pixel_size_x": 75,
+    "pixel_size_y": 75,
+    "beam_center_x": 512,
+    "beam_center_y": 512,
+    "description": "Eiger 1M detector"
   }
 }

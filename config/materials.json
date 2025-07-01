@@ -1,4 +1,44 @@
 {
-  "gold": [1.7065e-05, 2.0640e-6],
-  "silicon": [2.8402e-06, 2.5265e-08]
+  "Au": {
+    "delta": 1.07065e-05,
+    "beta": 2.0640e-6,
+    "description": "Gold (Au)",
+    "density": 19.3,
+    "atomic_number": 79
+  },
+  "Silicon": {
+    "delta": 2.8402e-06,
+    "beta": 2.5265e-08,
+    "description": "Silicon (Si)",
+    "density": 2.33,
+    "atomic_number": 14
+  },
+  "Ag": {
+    "delta": 1.2345e-05,
+    "beta": 1.8765e-6,
+    "description": "Silver (Ag)",
+    "density": 10.49,
+    "atomic_number": 47
+  },
+  "Si": {
+    "delta": 2.8402e-06,
+    "beta": 2.5265e-08,
+    "description": "Silicon substrate",
+    "density": 2.33,
+    "atomic_number": 14
+  },
+  "SiO2": {
+    "delta": 1.5678e-06,
+    "beta": 5.4321e-09,
+    "description": "Silicon dioxide",
+    "density": 2.65,
+    "atomic_number": 10
+  },
+  "ITO": {
+    "delta": 3.4567e-06,
+    "beta": 1.2345e-08,
+    "description": "Indium tin oxide",
+    "density": 7.14,
+    "atomic_number": 50
+  }
 }

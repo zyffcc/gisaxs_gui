@@ -102,7 +102,7 @@
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>-1566</y>
+         <y>0</y>
          <width>884</width>
          <height>2496</height>
         </rect>
@@ -211,6 +211,25 @@
                  </property>
                  <property name="text">
                   <string>0.1</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="2">
+                <widget class="QLineEdit" name="angleValue">
+                 <property name="minimumSize">
+                  <size>
+                   <width>100</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>100</width>
+                   <height>25</height>
+                  </size>
+                 </property>
+                 <property name="text">
+                  <string>0.4</string>
                  </property>
                 </widget>
                </item>
