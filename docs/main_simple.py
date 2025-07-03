@@ -4,7 +4,6 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from ui.main_window import Ui_MainWindow  # 导入转换后的 UI 类
 from controllers import MainController
-from core.window_manager import window_manager
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -41,28 +40,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     
     def setup_window(self):
         """设置窗口属性"""
-        # 使用窗口管理器设置自适应窗口（使用配置中的默认值）
-        scale = window_manager.setup_adaptive_window(self)
+        # 设置合理的窗口大小
+        self.setMinimumSize(800, 600)
+        self.resize(1000, 700)
         
-        # 应用自适应字体
-        window_manager.apply_adaptive_font(self)
-        
-        # 存储缩放比例供其他组件使用
-        self.scale_factor = scale
-        
-        # 设置StackedWidget的自适应行为
-        self._setup_stacked_widget()
+        # 窗口居中显示
+        self.center_window()
     
-    def _setup_stacked_widget(self):
-        """设置StackedWidget的自适应行为"""
-        try:
-            from utils.layout_utils import LayoutUtils
-            if hasattr(self, 'mainWindowWidget'):
-                LayoutUtils.setup_adaptive_stacked_widget(self.mainWindowWidget)
-        except ImportError as e:
-            print(f"布局工具导入失败: {e}")
-        except Exception as e:
-            print(f"StackedWidget设置失败: {e}")
+    def center_window(self):
+        """窗口居中显示"""
+        desktop = QApplication.desktop()
+        screen = desktop.screenGeometry()
+        window = self.geometry()
+        x = (screen.width() - window.width()) // 2
+        y = (screen.height() - window.height()) // 2
+        self.move(x, y)
 
 
 def main():

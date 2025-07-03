@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>997</width>
-    <height>930</height>
+    <width>993</width>
+    <height>741</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -50,7 +50,7 @@
          <x>0</x>
          <y>0</y>
          <width>150</width>
-         <height>852</height>
+         <height>659</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -142,16 +142,16 @@
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>-60</y>
-         <width>816</width>
-         <height>2496</height>
+         <y>-1845</y>
+         <width>801</width>
+         <height>2504</height>
         </rect>
        </property>
        <layout class="QVBoxLayout" name="verticalLayout_2">
         <item>
          <widget class="QStackedWidget" name="mainWindowWidget">
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
@@ -164,7 +164,7 @@
             <item>
              <widget class="QGroupBox" name="beamParametersBox">
               <property name="sizePolicy">
-               <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+               <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
                </sizepolicy>
@@ -318,7 +318,7 @@
                <item>
                 <widget class="QWidget" name="detectorParametersSub_1" native="true">
                  <property name="sizePolicy">
-                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                  <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                    <horstretch>0</horstretch>
                    <verstretch>0</verstretch>
                   </sizepolicy>
@@ -326,7 +326,7 @@
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
-                   <height>30</height>
+                   <height>0</height>
                   </size>
                  </property>
                  <layout class="QHBoxLayout" name="horizontalLayout_2">
@@ -3003,8 +3003,8 @@
                      <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
 &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
 p, li { white-space: pre-wrap; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Semi-infinite&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'SimSun'; font-size:9pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt;&quot;&gt;Semi-infinite&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                     </property>
                    </widget>
                   </item>
@@ -5614,35 +5614,35 @@ p, li { white-space: pre-wrap; }
               </property>
               <layout class="QGridLayout" name="gridLayout_18">
                <item row="4" column="1" alignment="Qt::AlignHCenter">
-                <widget class="QLabel" name="label">
+                <widget class="QLabel" name="gisaxsPredictModuleSelectLabel">
                  <property name="text">
                   <string>Module Select:</string>
                  </property>
                 </widget>
                </item>
                <item row="3" column="1">
-                <widget class="QPushButton" name="pushButton_2">
+                <widget class="QPushButton" name="gisaxsPredictChooseFolderButton">
                  <property name="text">
                   <string>Choose Folder</string>
                  </property>
                 </widget>
                </item>
                <item row="2" column="1">
-                <widget class="QPushButton" name="pushButton">
+                <widget class="QPushButton" name="gisaxsPredictChooseGisaxsFileButton">
                  <property name="text">
                   <string>Choose GISAXS File</string>
                  </property>
                 </widget>
                </item>
                <item row="4" column="4">
-                <widget class="QLabel" name="label_2">
+                <widget class="QLabel" name="gisaxsPredictFrameworkLabel">
                  <property name="text">
                   <string>Framework:</string>
                  </property>
                 </widget>
                </item>
                <item row="2" column="5">
-                <spacer name="horizontalSpacer_2">
+                <spacer name="gisaxsPredictSpacer">
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
                  </property>
@@ -5655,7 +5655,7 @@ p, li { white-space: pre-wrap; }
                 </spacer>
                </item>
                <item row="4" column="5">
-                <widget class="QComboBox" name="comboBox_2">
+                <widget class="QComboBox" name="gisaxsPredictFrameworkCombox">
                  <item>
                   <property name="text">
                    <string>tensorflow 2.15.0</string>
@@ -5664,7 +5664,7 @@ p, li { white-space: pre-wrap; }
                 </widget>
                </item>
                <item row="0" column="1">
-                <widget class="QRadioButton" name="radioButton">
+                <widget class="QRadioButton" name="gisaxsPredictSingleFileRadioButton">
                  <property name="text">
                   <string>Single File</string>
                  </property>
@@ -5674,31 +5674,31 @@ p, li { white-space: pre-wrap; }
                 </widget>
                </item>
                <item row="3" column="2">
-                <widget class="QLineEdit" name="lineEdit_2">
+                <widget class="QLineEdit" name="gisaxsPredictChooseFolderValue">
                  <property name="text">
                   <string/>
                  </property>
                 </widget>
                </item>
                <item row="2" column="2">
-                <widget class="QLineEdit" name="lineEdit">
+                <widget class="QLineEdit" name="gisaxsPredictChooseGisaxsFileValue">
                  <property name="text">
                   <string/>
                  </property>
                 </widget>
                </item>
                <item row="0" column="2">
-                <widget class="QRadioButton" name="radioButton_2">
+                <widget class="QRadioButton" name="gisaxsPredictMultiFilesRadioButton">
                  <property name="text">
                   <string>Multi Files</string>
                  </property>
                 </widget>
                </item>
                <item row="4" column="2">
-                <widget class="QComboBox" name="comboBox"/>
+                <widget class="QComboBox" name="gisaxsPredictModuleSelectCombox"/>
                </item>
                <item row="5" column="1" alignment="Qt::AlignBottom">
-                <widget class="QPushButton" name="pushButton_3">
+                <widget class="QPushButton" name="gisaxsPredictPredictButton">
                  <property name="text">
                   <string>Predict</string>
                  </property>
@@ -5709,41 +5709,55 @@ p, li { white-space: pre-wrap; }
                  <property name="widgetResizable">
                   <bool>true</bool>
                  </property>
-                 <widget class="QWidget" name="scrollAreaWidgetContents">
+                 <widget class="QWidget" name="predictStatusScrollAreaWidgetContents">
                   <property name="geometry">
                    <rect>
                     <x>0</x>
                     <y>0</y>
-                    <width>652</width>
-                    <height>173</height>
+                    <width>623</width>
+                    <height>174</height>
                    </rect>
                   </property>
                   <layout class="QVBoxLayout" name="verticalLayout_17">
                    <item>
-                    <widget class="QTextBrowser" name="textBrowser"/>
+                    <widget class="QTextBrowser" name="predictStatusTextBrowser"/>
                    </item>
                   </layout>
                  </widget>
+                </widget>
+               </item>
+               <item row="3" column="4">
+                <widget class="QPushButton" name="gisaxsPredictExportFolderButton">
+                 <property name="text">
+                  <string>Export Folder:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="5">
+                <widget class="QLineEdit" name="gisaxsPredictExportFolderValue">
+                 <property name="text">
+                  <string/>
+                 </property>
                 </widget>
                </item>
               </layout>
              </widget>
             </item>
             <item>
-             <widget class="QWidget" name="widget_2" native="true">
+             <widget class="QWidget" name="gisaxsPredictImageShowWidget" native="true">
               <layout class="QVBoxLayout" name="verticalLayout_18">
                <item>
-                <widget class="QTabWidget" name="tabWidget">
+                <widget class="QTabWidget" name="gisaxsPredictImageShowTabWidget">
                  <property name="currentIndex">
-                  <number>0</number>
+                  <number>1</number>
                  </property>
-                 <widget class="QWidget" name="tab">
+                 <widget class="QWidget" name="gisaxsImageTab">
                   <attribute name="title">
-                   <string>Tab 1</string>
+                   <string>GISAXS</string>
                   </attribute>
                   <layout class="QGridLayout" name="gridLayout_19">
                    <item row="1" column="0">
-                    <spacer name="verticalSpacer">
+                    <spacer name="gisaxsImageGraphicsViewSpacer">
                      <property name="orientation">
                       <enum>Qt::Vertical</enum>
                      </property>
@@ -5756,7 +5770,7 @@ p, li { white-space: pre-wrap; }
                     </spacer>
                    </item>
                    <item row="0" column="0">
-                    <widget class="QGraphicsView" name="graphicsView">
+                    <widget class="QGraphicsView" name="gisaxsImageGraphicsView">
                      <property name="sizePolicy">
                       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                        <horstretch>0</horstretch>
@@ -5772,27 +5786,10 @@ p, li { white-space: pre-wrap; }
                     </widget>
                    </item>
                    <item row="0" column="1">
-                    <widget class="QWidget" name="widget_4" native="true">
+                    <widget class="QWidget" name="gisaxsImageParametersWidget" native="true">
                      <layout class="QGridLayout" name="gridLayout_20">
-                      <item row="7" column="1">
-                       <widget class="QPushButton" name="pushButton_5">
-                        <property name="text">
-                         <string>Export</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="0" column="3">
-                       <widget class="QDoubleSpinBox" name="doubleSpinBox_2"/>
-                      </item>
-                      <item row="3" column="0">
-                       <widget class="QCheckBox" name="checkBox_2">
-                        <property name="text">
-                         <string>Countour</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="0" column="0" alignment="Qt::AlignHCenter">
-                       <widget class="QLabel" name="label_3">
+                      <item row="1" column="0" alignment="Qt::AlignHCenter">
+                       <widget class="QLabel" name="gisaxsImageVminLabel">
                         <property name="maximumSize">
                          <size>
                           <width>1000</width>
@@ -5804,28 +5801,32 @@ p, li { white-space: pre-wrap; }
                         </property>
                        </widget>
                       </item>
-                      <item row="0" column="2" alignment="Qt::AlignHCenter">
-                       <widget class="QLabel" name="label_4">
-                        <property name="maximumSize">
-                         <size>
-                          <width>1000</width>
-                          <height>16777215</height>
-                         </size>
-                        </property>
+                      <item row="1" column="1">
+                       <widget class="QDoubleSpinBox" name="gisaxsImageVminValue"/>
+                      </item>
+                      <item row="3" column="2">
+                       <widget class="QPushButton" name="gisaxsImageZoomResetButton">
                         <property name="text">
-                         <string>Vmax:</string>
+                         <string>Reset</string>
                         </property>
                        </widget>
                       </item>
-                      <item row="7" column="0">
-                       <widget class="QPushButton" name="pushButton_4">
+                      <item row="4" column="0">
+                       <widget class="QCheckBox" name="gisaxsImageCountourCheckBox">
                         <property name="text">
-                         <string>Save</string>
+                         <string>Countour</string>
                         </property>
                        </widget>
                       </item>
-                      <item row="5" column="1" colspan="2">
-                       <widget class="QComboBox" name="comboBox_3">
+                      <item row="8" column="1">
+                       <widget class="QPushButton" name="gisaxsImageExportButton">
+                        <property name="text">
+                         <string>Export</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="6" column="1" colspan="2">
+                       <widget class="QComboBox" name="gisaxsImageColormapCombox">
                         <item>
                          <property name="text">
                           <string>Jet</string>
@@ -5833,29 +5834,21 @@ p, li { white-space: pre-wrap; }
                         </item>
                        </widget>
                       </item>
-                      <item row="1" column="3">
-                       <widget class="QCheckBox" name="checkBox">
+                      <item row="0" column="0">
+                       <widget class="QLabel" name="gisaxsImageColorScaleLabel">
+                        <property name="maximumSize">
+                         <size>
+                          <width>16777215</width>
+                          <height>20</height>
+                         </size>
+                        </property>
                         <property name="text">
-                         <string>AutoScale</string>
+                         <string>Color Scale:</string>
                         </property>
                        </widget>
                       </item>
-                      <item row="2" column="1">
-                       <widget class="QPushButton" name="pushButton_8">
-                        <property name="text">
-                         <string>Zoom-</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="2" column="0">
-                       <widget class="QPushButton" name="pushButton_7">
-                        <property name="text">
-                         <string>Zoom +</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item row="5" column="0" alignment="Qt::AlignHCenter">
-                       <widget class="QLabel" name="label_5">
+                      <item row="6" column="0" alignment="Qt::AlignHCenter">
+                       <widget class="QLabel" name="gisaxsImageColormapLabel">
                         <property name="maximumSize">
                          <size>
                           <width>16777215</width>
@@ -5867,25 +5860,32 @@ p, li { white-space: pre-wrap; }
                         </property>
                        </widget>
                       </item>
-                      <item row="1" column="2">
-                       <widget class="QPushButton" name="pushButton_6">
+                      <item row="8" column="0">
+                       <widget class="QPushButton" name="gisaxsImageSaveButton">
                         <property name="text">
-                         <string>Reset</string>
+                         <string>Save</string>
                         </property>
                        </widget>
                       </item>
-                      <item row="2" column="2">
-                       <widget class="QPushButton" name="pushButton_9">
+                      <item row="3" column="0">
+                       <widget class="QPushButton" name="gisaxsImageZoomInButton">
                         <property name="text">
-                         <string>Reset</string>
+                         <string>Zoom +</string>
                         </property>
                        </widget>
                       </item>
-                      <item row="0" column="1">
-                       <widget class="QDoubleSpinBox" name="doubleSpinBox"/>
+                      <item row="1" column="3">
+                       <widget class="QDoubleSpinBox" name="gisaxsImageVmaxValue"/>
                       </item>
-                      <item row="4" column="0" alignment="Qt::AlignHCenter">
-                       <widget class="QLabel" name="label_6">
+                      <item row="3" column="1">
+                       <widget class="QPushButton" name="gisaxsImageZoomOutButton">
+                        <property name="text">
+                         <string>Zoom -</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="4" column="1">
+                       <widget class="QLabel" name="gisaxsImageCountourLevelsLabel">
                         <property name="maximumSize">
                          <size>
                           <width>16777215</width>
@@ -5897,18 +5897,243 @@ p, li { white-space: pre-wrap; }
                         </property>
                        </widget>
                       </item>
-                      <item row="4" column="1" colspan="2">
-                       <widget class="QLineEdit" name="lineEdit_3"/>
+                      <item row="4" column="2">
+                       <widget class="QLineEdit" name="gisaxsImageCountourLevelsValue"/>
+                      </item>
+                      <item row="1" column="2" alignment="Qt::AlignHCenter">
+                       <widget class="QLabel" name="gisaxsImageVmaxLabel">
+                        <property name="maximumSize">
+                         <size>
+                          <width>1000</width>
+                          <height>16777215</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>Vmax:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="2" column="0">
+                       <widget class="QCheckBox" name="gisaxsImageAutoScaleCheckBox">
+                        <property name="text">
+                         <string>AutoScale</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="2" column="1">
+                       <widget class="QPushButton" name="gisaxsImageAutoScaleResetButton">
+                        <property name="text">
+                         <string>Reset</string>
+                        </property>
+                       </widget>
                       </item>
                      </layout>
                     </widget>
                    </item>
                   </layout>
                  </widget>
-                 <widget class="QWidget" name="tab_2">
+                 <widget class="QWidget" name="predict2dImageTab">
                   <attribute name="title">
-                   <string>Tab 2</string>
+                   <string>Predict-2D</string>
                   </attribute>
+                  <layout class="QGridLayout" name="gridLayout_22">
+                   <item row="2" column="0">
+                    <spacer name="predict2dSpacer">
+                     <property name="orientation">
+                      <enum>Qt::Vertical</enum>
+                     </property>
+                     <property name="sizeHint" stdset="0">
+                      <size>
+                       <width>20</width>
+                       <height>40</height>
+                      </size>
+                     </property>
+                    </spacer>
+                   </item>
+                   <item row="0" column="0">
+                    <widget class="QGraphicsView" name="predict2dGraphicsView">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                       <horstretch>0</horstretch>
+                       <verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="minimumSize">
+                      <size>
+                       <width>400</width>
+                       <height>300</height>
+                      </size>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="0" column="1">
+                    <widget class="QWidget" name="predict2dParameterWidget" native="true">
+                     <layout class="QGridLayout" name="gridLayout_21">
+                      <item row="6" column="0" alignment="Qt::AlignHCenter">
+                       <widget class="QLabel" name="predict2dColormapLabel">
+                        <property name="maximumSize">
+                         <size>
+                          <width>16777215</width>
+                          <height>23</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>Colormap:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="2" alignment="Qt::AlignHCenter">
+                       <widget class="QLabel" name="predict2dVmaxLabel">
+                        <property name="maximumSize">
+                         <size>
+                          <width>1000</width>
+                          <height>16777215</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>Vmax:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="3" column="0">
+                       <widget class="QPushButton" name="predict2dZoomInButton">
+                        <property name="text">
+                         <string>Zoom +</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="4" column="0">
+                       <widget class="QCheckBox" name="predict2dCountourCheckBox">
+                        <property name="text">
+                         <string>Countour</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="8" column="1">
+                       <widget class="QPushButton" name="predict2dExportButton">
+                        <property name="text">
+                         <string>Export</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="8" column="0">
+                       <widget class="QPushButton" name="predict2SaveButton">
+                        <property name="text">
+                         <string>Save</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="0" column="0">
+                       <widget class="QLabel" name="predict2dColorScaleLabel">
+                        <property name="maximumSize">
+                         <size>
+                          <width>16777215</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>Color Scale:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="2" column="0">
+                       <widget class="QCheckBox" name="predict2dAutoScaleCheckBox">
+                        <property name="text">
+                         <string>AutoScale</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="3" column="1">
+                       <widget class="QPushButton" name="predict2dZoomOutButton">
+                        <property name="text">
+                         <string>Zoom-</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="2" column="1">
+                       <widget class="QPushButton" name="predict2dAutoScaleResetButton">
+                        <property name="text">
+                         <string>Reset</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="3">
+                       <widget class="QDoubleSpinBox" name="predict2dVmaxValue"/>
+                      </item>
+                      <item row="1" column="0" alignment="Qt::AlignHCenter">
+                       <widget class="QLabel" name="predict2dVminLabel">
+                        <property name="maximumSize">
+                         <size>
+                          <width>1000</width>
+                          <height>16777215</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>Vmin:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="3" column="2">
+                       <widget class="QPushButton" name="predict2dZoomResetButton">
+                        <property name="text">
+                         <string>Reset</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="4" column="2">
+                       <widget class="QLineEdit" name="predict2dCountourLevelsValue"/>
+                      </item>
+                      <item row="4" column="1">
+                       <widget class="QLabel" name="predict2dCountourLevelsLabel">
+                        <property name="maximumSize">
+                         <size>
+                          <width>16777215</width>
+                          <height>23</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>Levels:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="1">
+                       <widget class="QDoubleSpinBox" name="predict2dVminValue"/>
+                      </item>
+                      <item row="6" column="1" colspan="2">
+                       <widget class="QComboBox" name="predict2dLabelCombox">
+                        <item>
+                         <property name="text">
+                          <string>Jet</string>
+                         </property>
+                        </item>
+                       </widget>
+                      </item>
+                      <item row="9" column="0" colspan="4">
+                       <widget class="QTextBrowser" name="predict2dTextBrowser">
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="minimumSize">
+                         <size>
+                          <width>0</width>
+                          <height>0</height>
+                         </size>
+                        </property>
+                        <property name="maximumSize">
+                         <size>
+                          <width>16777215</width>
+                          <height>50</height>
+                         </size>
+                        </property>
+                       </widget>
+                      </item>
+                     </layout>
+                    </widget>
+                   </item>
+                  </layout>
                  </widget>
                 </widget>
                </item>
@@ -5930,12 +6155,24 @@ p, li { white-space: pre-wrap; }
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>997</width>
-     <height>21</height>
+     <width>993</width>
+     <height>23</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuSetting">
+    <property name="title">
+     <string>Setting</string>
+    </property>
+    <addaction name="actionDisplay"/>
+   </widget>
+   <addaction name="menuSetting"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionDisplay">
+   <property name="text">
+    <string>Display</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>
