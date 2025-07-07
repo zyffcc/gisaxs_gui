@@ -5,6 +5,8 @@ from .detector_controller import DetectorController
 from .sample_controller import SampleController
 from .preprocessing_controller import PreprocessingController
 from .trainset_controller import TrainsetController
+from .fitting_controller import FittingController
+from .classification_controller import ClassificationController
 
 __all__ = [
     'MainController',
@@ -12,5 +14,7 @@ __all__ = [
     'DetectorController',
     'SampleController',
     'PreprocessingController',
-    'TrainsetController'
+    'TrainsetController',
+    'FittingController',
+    'ClassificationController'
 ]

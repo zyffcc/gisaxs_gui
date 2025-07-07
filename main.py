@@ -37,7 +37,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except ImportError:
             # 如果settings_dialog不存在，显示提示
             from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.information(self, "提示", "显示设置功能正在开发中...")
+            QMessageBox.information(self, "提示", "显示设s置功能正在开发中...")
     
     def setup_window(self):
         """设置窗口属性"""
