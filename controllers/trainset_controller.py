@@ -1,5 +1,5 @@
 """
-训练集生成控制器 - 管理GISAXS训练集的生成过程
+训练集生成控制器 - 管理GISAXS训练集的生成过程，包含所有相关的子模块参数
 """
 
 import os
@@ -11,9 +11,12 @@ import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
 
+# 导入全局参数管理器
+from core.global_params import GlobalParameterManager
+
 
 class TrainsetController(QObject):
-    """训练集生成控制器"""
+    """训练集生成控制器，包含光束、探测器、样品和预处理参数管理"""
     
     # 信号定义
     parameters_changed = pyqtSignal(str, dict)
@@ -28,50 +31,279 @@ class TrainsetController(QObject):
         self.ui = ui
         self.parent = parent
         
-        # 生成状态
-        self.is_generating = False
-        self.generation_thread = None
-        self.stop_requested = False
+        # 获取全局参数管理器实例
+        self.global_params = GlobalParameterManager()
         
-        # 默认参数
-        self.default_parameters = {
-            'file_name': 'gisaxs_trainset',
+        # 训练集生成相关参数
+        self.generation_params = {
             'save_path': '',
-            'trainset_number': 1000,
-            'save_every': 100,
-            'batch_size': 10,
+            'filename': 'trainset',
+            'total_number': 1000,
+            'save_interval': 100,
+            'current_index': 0
         }
         
-        # 进度跟踪
-        self.current_progress = 0
-        self.total_samples = 0
+        # 子模块参数
+        self.beam_params = self._init_beam_params()
+        self.detector_params = self._init_detector_params()
+        self.sample_params = self._init_sample_params()
+        self.preprocessing_params = self._init_preprocessing_params()
         
-        # 设置信号连接
+        # 从全局参数管理器同步参数到控制器
+        self._sync_from_global_params()
+        
+        # 初始化探测器预设
+        self._load_detector_presets()
+        
+        # 生成控制
+        self.is_generating = False
+        self.generation_thread = None
+        self.generation_timer = QTimer()
+        self.generation_timer.timeout.connect(self._update_generation_progress)
+        
+        # 设置连接
         self._setup_connections()
     
+    def _init_beam_params(self):
+        """初始化光束参数"""
+        return {
+            'wavelength': 0.1,  # nm
+            'grazing_angle': 0.4,  # degrees
+        }
+        
+    def _init_detector_params(self):
+        """初始化探测器参数"""
+        return {
+            'preset': 'Pilatus 2M',
+            'distance': 2000,  # mm
+            'nbins_x': 1475,
+            'nbins_y': 1475,
+            'pixel_size_x': 172,  # μm
+            'pixel_size_y': 172,  # μm
+            'beam_center_x': 50,  # bin
+            'beam_center_y': 50,  # bin
+        }
+        
+    def _init_sample_params(self):
+        """初始化样品参数"""
+        return {
+            'particle_shape': 'Sphere',
+            'particle_size': 10.0,  # nm
+            'size_distribution': 0.1,
+            'material': 'Gold',
+            'substrate': 'Silicon'
+        }
+        
+    def _init_preprocessing_params(self):
+        """初始化预处理参数"""
+        return {
+            'focus_region': {
+                'type': 'q',
+                'qr_min': 0.01,
+                'qr_max': 3.0,
+                'qz_min': 0.01,
+                'qz_max': 3.0,
+            },
+            'noising': {
+                'type': 'Gaussian',
+                'snr_min': 80,
+                'snr_max': 130,
+            },
+            'others': {
+                'crop_edge': True,
+                'add_mask': True,
+                'normalize': True,
+                'logarization': True,
+            }
+        }
+
     def _setup_connections(self):
         """设置信号连接"""
-        # 文件名和路径
-        self.ui.trainsetGenerateFileNameValue.textChanged.connect(self._emit_parameters_changed)
+        # 训练集生成相关连接
+        if hasattr(self.ui, 'trainsetGenerateFileNameValue'):
+            self.ui.trainsetGenerateFileNameValue.textChanged.connect(self._on_generation_params_changed)
         
-        # 训练集数量
-        self.ui.trainsetGenerateTrainsetNumberValue.textChanged.connect(self._on_trainset_number_changed)
+        if hasattr(self.ui, 'trainsetGenerateTrainsetNumberValue'):
+            self.ui.trainsetGenerateTrainsetNumberValue.textChanged.connect(self._on_trainset_number_changed)
         
-        # 保存间隔
-        self.ui.trainsetGenerateSaveEveryValue.textChanged.connect(self._emit_parameters_changed)
+        if hasattr(self.ui, 'trainsetGenerateSaveEveryValue'):
+            self.ui.trainsetGenerateSaveEveryValue.textChanged.connect(self._on_generation_params_changed)
         
-        # 按钮
-        self.ui.trainsetGenerateSelectFolderButton.clicked.connect(self._select_save_folder)
-        self.ui.trainsetGenerateRunButton.clicked.connect(self._start_generation)
-        self.ui.trainsetGenerateStopButton.clicked.connect(self._stop_generation)
+        # 按钮连接
+        if hasattr(self.ui, 'trainsetGenerateSelectFolderButton'):
+            self.ui.trainsetGenerateSelectFolderButton.clicked.connect(self._select_save_folder)
+        if hasattr(self.ui, 'trainsetGenerateRunButton'):
+            self.ui.trainsetGenerateRunButton.clicked.connect(self._start_generation)
+        if hasattr(self.ui, 'trainsetGenerateStopButton'):
+            self.ui.trainsetGenerateStopButton.clicked.connect(self._stop_generation)
+            self.ui.trainsetGenerateStopButton.setEnabled(False)
+            
+        # 光束参数连接
+        self._setup_beam_connections()
         
-        # 初始状态设置
-        self.ui.trainsetGenerateStopButton.setEnabled(False)
+        # 探测器参数连接
+        self._setup_detector_connections()
+        
+        # 样品参数连接
+        self._setup_sample_connections()
+        
+        # 预处理参数连接
+        self._setup_preprocessing_connections()
+        
+    def _setup_beam_connections(self):
+        """设置光束参数连接"""
+        if hasattr(self.ui, 'wavelengthValue'):
+            self.ui.wavelengthValue.textChanged.connect(self._on_beam_params_changed)
+        if hasattr(self.ui, 'angleValue'):
+            self.ui.angleValue.textChanged.connect(self._on_beam_params_changed)
+            
+    def _setup_detector_connections(self):
+        """设置探测器参数连接"""
+        if hasattr(self.ui, 'detectorPresetCombox'):
+            self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
+        
+        # 非关键参数 - 不会触发自动切换到User-defined
+        if hasattr(self.ui, 'distanceValue'):
+            self.ui.distanceValue.textChanged.connect(self._on_detector_params_changed)
+        if hasattr(self.ui, 'beamCenterXValue'):
+            self.ui.beamCenterXValue.textChanged.connect(self._on_detector_params_changed)
+        if hasattr(self.ui, 'beamCenterYValue'):
+            self.ui.beamCenterYValue.textChanged.connect(self._on_detector_params_changed)
+        
+        # 关键参数 - 会触发自动切换到User-defined的逻辑
+        if hasattr(self.ui, 'NbinsXValue'):
+            self.ui.NbinsXValue.textChanged.connect(self._on_detector_critical_params_changed)
+        if hasattr(self.ui, 'NbinsYValue'):
+            self.ui.NbinsYValue.textChanged.connect(self._on_detector_critical_params_changed)
+        if hasattr(self.ui, 'pixelSizeXValue'):
+            self.ui.pixelSizeXValue.textChanged.connect(self._on_detector_critical_params_changed)
+        if hasattr(self.ui, 'pixelSizeYValue'):
+            self.ui.pixelSizeYValue.textChanged.connect(self._on_detector_critical_params_changed)
+            
+    def _setup_sample_connections(self):
+        """设置样品参数连接"""
+        if hasattr(self.ui, 'particleShapeInitValue'):
+            self.ui.particleShapeInitValue.currentTextChanged.connect(self._on_sample_params_changed)
+        if hasattr(self.ui, 'particleSizeValue'):
+            self.ui.particleSizeValue.textChanged.connect(self._on_sample_params_changed)
+        if hasattr(self.ui, 'materialCombox'):
+            self.ui.materialCombox.currentTextChanged.connect(self._on_sample_params_changed)
+            
+    def _setup_preprocessing_connections(self):
+        """设置预处理参数连接"""
+        if hasattr(self.ui, 'focusRegionTypeCombox'):
+            self.ui.focusRegionTypeCombox.currentTextChanged.connect(self._on_preprocessing_params_changed)
+        if hasattr(self.ui, 'noisingTypeCombox'):
+            self.ui.noisingTypeCombox.currentTextChanged.connect(self._on_preprocessing_params_changed)
+        if hasattr(self.ui, 'OthersCropEdgeCheckBox'):
+            self.ui.OthersCropEdgeCheckBox.toggled.connect(self._on_preprocessing_params_changed)
     
+    def _sync_from_global_params(self):
+        """从全局参数管理器同步参数到控制器"""
+        try:
+            # 同步光束参数
+            beam_params = self.global_params.get_module_parameters('beam')
+            if beam_params:
+                self.beam_params.update(beam_params)
+            
+            # 同步探测器参数
+            detector_params = self.global_params.get_module_parameters('detector')
+            if detector_params:
+                self.detector_params.update(detector_params)
+            
+            # 同步样品参数
+            sample_params = self.global_params.get_module_parameters('sample')
+            if sample_params:
+                self.sample_params.update(sample_params)
+            
+            # 同步预处理参数
+            preprocessing_params = self.global_params.get_module_parameters('preprocessing')
+            if preprocessing_params:
+                self.preprocessing_params.update(preprocessing_params)
+                
+            # 更新UI显示
+            self._update_ui_from_params()
+            
+        except Exception as e:
+            print(f"从全局参数管理器同步参数失败: {e}")
+    
+    def _update_ui_from_params(self):
+        """根据当前参数更新UI显示"""
+        try:
+            # 更新光束参数UI
+            if hasattr(self.ui, 'wavelengthValue'):
+                self.ui.wavelengthValue.setText(str(self.beam_params.get('wavelength', 0.1)))
+            if hasattr(self.ui, 'angleValue'):
+                self.ui.angleValue.setText(str(self.beam_params.get('grazing_angle', 0.4)))
+            
+            # 更新探测器参数UI
+            if hasattr(self.ui, 'detectorDistanceValue'):
+                self.ui.detectorDistanceValue.setText(str(self.detector_params.get('distance', 2000)))
+            if hasattr(self.ui, 'detectorPixelXValue'):
+                self.ui.detectorPixelXValue.setText(str(self.detector_params.get('pixel_size_x', 172)))
+            if hasattr(self.ui, 'detectorPixelYValue'):
+                self.ui.detectorPixelYValue.setText(str(self.detector_params.get('pixel_size_y', 172)))
+            
+            # 更新样品参数UI
+            if hasattr(self.ui, 'particleShapeInitValue'):
+                particle_shape = self.sample_params.get('particle_shape', 'Sphere')
+                index = self.ui.particleShapeInitValue.findText(particle_shape)
+                if index >= 0:
+                    self.ui.particleShapeInitValue.setCurrentIndex(index)
+                # 切换到对应的页面
+                self._switch_particle_page(particle_shape)
+                    
+            if hasattr(self.ui, 'particleSizeValue'):
+                self.ui.particleSizeValue.setText(str(self.sample_params.get('particle_size', 10.0)))
+                
+            if hasattr(self.ui, 'materialCombox'):
+                material = self.sample_params.get('material', 'Gold')
+                index = self.ui.materialCombox.findText(material)
+                if index >= 0:
+                    self.ui.materialCombox.setCurrentIndex(index)
+            
+            # 更新预处理参数UI
+            if hasattr(self.ui, 'focusRegionTypeCombox'):
+                focus_type = self.preprocessing_params.get('focus_region', {}).get('type', 'q')
+                index = self.ui.focusRegionTypeCombox.findText(focus_type)
+                if index >= 0:
+                    self.ui.focusRegionTypeCombox.setCurrentIndex(index)
+                    
+            if hasattr(self.ui, 'noisingTypeCombox'):
+                noising_type = self.preprocessing_params.get('noising', {}).get('type', 'Gaussian')
+                index = self.ui.noisingTypeCombox.findText(noising_type)
+                if index >= 0:
+                    self.ui.noisingTypeCombox.setCurrentIndex(index)
+                    
+            if hasattr(self.ui, 'OthersCropEdgeCheckBox'):
+                crop_edge = self.preprocessing_params.get('others', {}).get('crop_edge', True)
+                self.ui.OthersCropEdgeCheckBox.setChecked(crop_edge)
+                
+        except Exception as e:
+            print(f"更新UI显示失败: {e}")
+
     def initialize(self):
         """初始化训练集生成参数"""
-        self.set_parameters(self.default_parameters)
+        # 设置默认参数
+        default_params = {
+            'generation': {
+                'file_name': 'trainset',
+                'save_path': '',
+                'trainset_number': 1000,
+                'save_every': 100
+            },
+            'beam': self.beam_params,
+            'detector': self.detector_params,
+            'sample': self.sample_params,
+            'preprocessing': self.preprocessing_params
+        }
+        self.set_parameters(default_params)
         self._update_ui_state()
+        
+        # 初始化时设置默认粒子形状页面
+        if hasattr(self.ui, 'particleShapeInitValue'):
+            default_shape = self.ui.particleShapeInitValue.currentText() or 'Sphere'
+            self._switch_particle_page(default_shape)
     
     def _select_save_folder(self):
         """选择保存文件夹"""
@@ -86,14 +318,41 @@ class TrainsetController(QObject):
         
         if folder_path:
             self.ui.trainsetGenerateSavePathValue.setText(folder_path)
+            # 同步到全局参数管理器
+            self.global_params.set_parameter('trainset', 'save_path', folder_path)
             self._emit_parameters_changed()
     
     def _on_trainset_number_changed(self):
         """训练集数量改变处理"""
         try:
             number = int(self.ui.trainsetGenerateTrainsetNumberValue.text())
+            # 同步到全局参数管理器
+            self.global_params.set_parameter('trainset', 'trainset_number', number)
             # 更新预计时间显示等
             self._update_generation_estimation()
+        except ValueError:
+            pass
+        
+        self._emit_parameters_changed()
+    
+    def _on_generation_params_changed(self):
+        """训练集生成参数改变处理"""
+        try:
+            # 同步文件名
+            if hasattr(self.ui, 'trainsetGenerateFileNameValue'):
+                filename = self.ui.trainsetGenerateFileNameValue.text()
+                self.global_params.set_parameter('trainset', 'file_name', filename)
+            
+            # 同步保存路径
+            if hasattr(self.ui, 'trainsetGenerateSavePathValue'):
+                save_path = self.ui.trainsetGenerateSavePathValue.text()
+                self.global_params.set_parameter('trainset', 'save_path', save_path)
+            
+            # 同步保存间隔
+            if hasattr(self.ui, 'trainsetGenerateSaveEveryValue'):
+                save_every = int(self.ui.trainsetGenerateSaveEveryValue.text())
+                self.global_params.set_parameter('trainset', 'save_every', save_every)
+                
         except ValueError:
             pass
         
@@ -353,25 +612,67 @@ class TrainsetController(QObject):
             return {}
     
     def get_parameters(self):
-        """获取当前训练集生成参数"""
+        """获取所有参数（包含所有子模块）"""
         try:
-            parameters = {
-                'file_name': self.ui.trainsetGenerateFileNameValue.text(),
-                'save_path': self.ui.trainsetGenerateSavePathValue.text(),
-                'trainset_number': int(self.ui.trainsetGenerateTrainsetNumberValue.text()),
-                'save_every': int(self.ui.trainsetGenerateSaveEveryValue.text()),
+            generation_params = {
+                'file_name': self.ui.trainsetGenerateFileNameValue.text() if hasattr(self.ui, 'trainsetGenerateFileNameValue') else '',
+                'save_path': self.ui.trainsetGenerateSavePathValue.text() if hasattr(self.ui, 'trainsetGenerateSavePathValue') else '',
+                'trainset_number': int(self.ui.trainsetGenerateTrainsetNumberValue.text()) if hasattr(self.ui, 'trainsetGenerateTrainsetNumberValue') else 1000,
+                'save_every': int(self.ui.trainsetGenerateSaveEveryValue.text()) if hasattr(self.ui, 'trainsetGenerateSaveEveryValue') else 100,
             }
-            return parameters
         except (ValueError, AttributeError):
-            return self.default_parameters.copy()
+            generation_params = self.generation_params.copy()
+            
+        return {
+            'generation': generation_params,
+            'beam': self.beam_params.copy(),
+            'detector': self.detector_params.copy(),
+            'sample': self.sample_params.copy(),
+            'preprocessing': self.preprocessing_params.copy()
+        }
     
     def set_parameters(self, parameters):
-        """设置训练集生成参数"""
-        if 'file_name' in parameters:
-            self.ui.trainsetGenerateFileNameValue.setText(parameters['file_name'])
-        
-        if 'save_path' in parameters:
-            self.ui.trainsetGenerateSavePathValue.setText(parameters['save_path'])
+        """设置所有参数（包含所有子模块）"""
+        # 设置训练集生成参数
+        if 'generation' in parameters:
+            gen_params = parameters['generation']
+            if 'file_name' in gen_params and hasattr(self.ui, 'trainsetGenerateFileNameValue'):
+                self.ui.trainsetGenerateFileNameValue.setText(gen_params['file_name'])
+            if 'save_path' in gen_params and hasattr(self.ui, 'trainsetGenerateSavePathValue'):
+                self.ui.trainsetGenerateSavePathValue.setText(gen_params['save_path'])
+            if 'trainset_number' in gen_params and hasattr(self.ui, 'trainsetGenerateTrainsetNumberValue'):
+                self.ui.trainsetGenerateTrainsetNumberValue.setText(str(gen_params['trainset_number']))
+            if 'save_every' in gen_params and hasattr(self.ui, 'trainsetGenerateSaveEveryValue'):
+                self.ui.trainsetGenerateSaveEveryValue.setText(str(gen_params['save_every']))
+                
+        # 设置光束参数
+        if 'beam' in parameters:
+            self.beam_params.update(parameters['beam'])
+            if hasattr(self.ui, 'wavelengthValue'):
+                self.ui.wavelengthValue.setText(str(self.beam_params['wavelength']))
+            if hasattr(self.ui, 'angleValue'):
+                self.ui.angleValue.setText(str(self.beam_params['grazing_angle']))
+                
+        # 设置探测器参数
+        if 'detector' in parameters:
+            self.detector_params.update(parameters['detector'])
+            self._update_detector_ui()
+            
+        # 设置样品参数
+        if 'sample' in parameters:
+            self.sample_params.update(parameters['sample'])
+            if hasattr(self.ui, 'particleShapeInitValue'):
+                self.ui.particleShapeInitValue.setCurrentText(self.sample_params['particle_shape'])
+            if hasattr(self.ui, 'particleSizeValue'):
+                self.ui.particleSizeValue.setText(str(self.sample_params['particle_size']))
+                
+        # 设置预处理参数
+        if 'preprocessing' in parameters:
+            self.preprocessing_params.update(parameters['preprocessing'])
+            if hasattr(self.ui, 'focusRegionTypeCombox'):
+                self.ui.focusRegionTypeCombox.setCurrentText(self.preprocessing_params['focus_region']['type'])
+            if hasattr(self.ui, 'noisingTypeCombox'):
+                self.ui.noisingTypeCombox.setCurrentText(self.preprocessing_params['noising']['type'])
         
         if 'trainset_number' in parameters:
             self.ui.trainsetGenerateTrainsetNumberValue.setText(str(parameters['trainset_number']))
@@ -418,8 +719,29 @@ class TrainsetController(QObject):
             return False, f"参数验证错误: {str(e)}"
     
     def reset_to_defaults(self):
-        """重置为默认参数"""
-        self.set_parameters(self.default_parameters)
+        """重置所有参数到默认值"""
+        # 重置子模块参数
+        self.beam_params = self._init_beam_params()
+        self.detector_params = self._init_detector_params()
+        self.sample_params = self._init_sample_params()
+        self.preprocessing_params = self._init_preprocessing_params()
+        
+        # 重置训练集生成参数
+        default_generation_params = {
+            'generation': {
+                'file_name': 'trainset',
+                'save_path': '',
+                'trainset_number': 1000,
+                'save_every': 100
+            },
+            'beam': self.beam_params,
+            'detector': self.detector_params,
+            'sample': self.sample_params,
+            'preprocessing': self.preprocessing_params
+        }
+        
+        self.set_parameters(default_generation_params)
+        self.status_updated.emit("训练集参数已重置为默认值")
     
     def _update_ui_state(self):
         """更新UI状态"""
@@ -438,6 +760,13 @@ class TrainsetController(QObject):
         for widget in input_widgets:
             widget.setEnabled(not self.is_generating)
     
+    def _update_generation_progress(self):
+        """更新生成进度（定时器回调）"""
+        if self.is_generating and hasattr(self, 'current_progress'):
+            # 这个方法会被定时器调用，用于定期更新UI
+            # 实际的进度更新是在生成线程中完成的
+            pass
+    
     def _emit_parameters_changed(self):
         """发出参数改变信号"""
         parameters = self.get_parameters()
@@ -451,3 +780,412 @@ class TrainsetController(QObject):
             'total_samples': self.total_samples,
             'stop_requested': self.stop_requested,
         }
+    
+    def _on_beam_params_changed(self):
+        """光束参数改变处理"""
+        try:
+            if hasattr(self.ui, 'wavelengthValue'):
+                self.beam_params['wavelength'] = float(self.ui.wavelengthValue.text())
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('beam', 'wavelength', self.beam_params['wavelength'])
+                
+            if hasattr(self.ui, 'angleValue'):
+                self.beam_params['grazing_angle'] = float(self.ui.angleValue.text())
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('beam', 'grazing_angle', self.beam_params['grazing_angle'])
+                
+            self._emit_parameters_changed()
+        except ValueError:
+            pass
+    
+    def _load_detector_presets(self):
+        """从配置文件加载探测器预设并更新ComboBox"""
+        try:
+            import os
+            detector_config_file = os.path.join('config', 'detectors.json')
+            
+            if os.path.exists(detector_config_file):
+                with open(detector_config_file, 'r', encoding='utf-8') as f:
+                    self.detector_presets = json.load(f)
+                print(f"✓ 已加载探测器配置: {len(self.detector_presets)} 个预设")
+            else:
+                # 如果文件不存在，使用默认配置
+                self.detector_presets = {
+                    "Pilatus 2M": {
+                        "nbins_x": 1475, "nbins_y": 1679,
+                        "pixel_size_x": 172, "pixel_size_y": 172,
+                        "beam_center_x": 737, "beam_center_y": 839
+                    },
+                    "Pilatus 1M": {
+                        "nbins_x": 981, "nbins_y": 1043,
+                        "pixel_size_x": 172, "pixel_size_y": 172,
+                        "beam_center_x": 490, "beam_center_y": 521
+                    }
+                }
+                print("⚠ 探测器配置文件不存在，使用默认配置")
+            
+            # 更新ComboBox
+            self._update_detector_preset_combobox()
+            
+        except Exception as e:
+            print(f"加载探测器配置失败: {e}")
+            self.detector_presets = {}
+    
+    def _update_detector_preset_combobox(self):
+        """更新探测器预设ComboBox"""
+        if not hasattr(self.ui, 'detectorPresetCombox'):
+            return
+            
+        try:
+            # 暂时断开信号（安全方式）
+            try:
+                self.ui.detectorPresetCombox.currentTextChanged.disconnect()
+            except TypeError:
+                # 如果没有连接信号，会抛出TypeError，这是正常的
+                pass
+            
+            # 清空现有选项
+            self.ui.detectorPresetCombox.clear()
+            
+            # 添加从配置文件加载的预设
+            for preset_name in self.detector_presets.keys():
+                self.ui.detectorPresetCombox.addItem(preset_name)
+                print(f"  添加预设: {preset_name}")
+            
+            # 最后添加User-defined选项
+            self.ui.detectorPresetCombox.addItem("User-defined")
+            print(f"  添加选项: User-defined")
+            
+            # 设置默认选择第一个预设
+            if self.detector_presets:
+                self.ui.detectorPresetCombox.setCurrentIndex(0)
+                first_preset = list(self.detector_presets.keys())[0]
+                print(f"✓ 默认探测器预设: {first_preset}")
+                
+                # 加载第一个预设的参数
+                self._load_preset_parameters(first_preset)
+            
+            # 重新连接信号
+            self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
+            
+        except Exception as e:
+            print(f"更新探测器预设ComboBox失败: {e}")
+            # 重新连接信号（确保不会丢失连接）
+            try:
+                self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
+            except:
+                pass
+            
+    def _on_detector_preset_changed(self, preset_name):
+        """探测器预设改变处理"""
+        try:
+            if preset_name == 'User-defined':
+                # 用户自定义模式，不更改当前参数值，只更新预设标记
+                self.detector_params['preset'] = preset_name
+                self.global_params.set_parameter('detector', 'preset', preset_name)
+                print("✓ 切换到用户自定义模式")
+                return
+            
+            # 检查是否是有效预设
+            if preset_name in self.detector_presets:
+                preset_config = self.detector_presets[preset_name]
+                
+                # 更新detector_params（合并所有参数）
+                self.detector_params.update(preset_config)
+                self.detector_params['preset'] = preset_name
+                
+                # 更新UI显示（会自动断开和重连信号）
+                self._update_detector_ui()
+                
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('detector', 'preset', preset_name)
+                for key, value in preset_config.items():
+                    # 跳过描述字段
+                    if key != 'description':
+                        self.global_params.set_parameter('detector', key, value)
+                
+                self._emit_parameters_changed()
+                print(f"✓ 探测器预设已切换到: {preset_name}")
+            else:
+                print(f"⚠ 未知的探测器预设: {preset_name}")
+            
+        except Exception as e:
+            print(f"探测器预设切换失败: {e}")
+            
+    def _on_detector_params_changed(self):
+        """探测器非关键参数改变处理（距离、光束中心）"""
+        try:
+            if hasattr(self.ui, 'distanceValue'):
+                self.detector_params['distance'] = float(self.ui.distanceValue.text())
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('detector', 'distance', self.detector_params['distance'])
+                
+            if hasattr(self.ui, 'beamCenterXValue'):
+                self.detector_params['beam_center_x'] = float(self.ui.beamCenterXValue.text())
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('detector', 'beam_center_x', self.detector_params['beam_center_x'])
+                
+            if hasattr(self.ui, 'beamCenterYValue'):
+                self.detector_params['beam_center_y'] = float(self.ui.beamCenterYValue.text())
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('detector', 'beam_center_y', self.detector_params['beam_center_y'])
+                
+            self._emit_parameters_changed()
+        except ValueError:
+            pass
+    
+    def _on_detector_critical_params_changed(self):
+        """探测器关键参数改变处理（Nbins和像素大小），会触发自动切换到User-defined"""
+        try:
+            # 更新参数值
+            if hasattr(self.ui, 'NbinsXValue'):
+                self.detector_params['nbins_x'] = int(self.ui.NbinsXValue.text())
+                self.global_params.set_parameter('detector', 'nbins_x', self.detector_params['nbins_x'])
+                
+            if hasattr(self.ui, 'NbinsYValue'):
+                self.detector_params['nbins_y'] = int(self.ui.NbinsYValue.text())
+                self.global_params.set_parameter('detector', 'nbins_y', self.detector_params['nbins_y'])
+                
+            if hasattr(self.ui, 'pixelSizeXValue'):
+                self.detector_params['pixel_size_x'] = float(self.ui.pixelSizeXValue.text())
+                self.global_params.set_parameter('detector', 'pixel_size_x', self.detector_params['pixel_size_x'])
+                
+            if hasattr(self.ui, 'pixelSizeYValue'):
+                self.detector_params['pixel_size_y'] = float(self.ui.pixelSizeYValue.text())
+                self.global_params.set_parameter('detector', 'pixel_size_y', self.detector_params['pixel_size_y'])
+            
+            # 检查是否需要切换到User-defined
+            self._check_and_switch_to_user_defined()
+                
+            self._emit_parameters_changed()
+        except ValueError:
+            pass
+    
+    def _check_and_switch_to_user_defined(self):
+        """检查当前参数是否与预设匹配，如果不匹配则切换到User-defined"""
+        current_nbins_x = self.detector_params.get('nbins_x')
+        current_nbins_y = self.detector_params.get('nbins_y')
+        current_pixel_x = self.detector_params.get('pixel_size_x')
+        current_pixel_y = self.detector_params.get('pixel_size_y')
+        
+        # 获取当前预设
+        current_preset = self.detector_params.get('preset', '')
+        
+        # 如果已经是User-defined，不需要检查
+        if current_preset == 'User-defined':
+            return
+        
+        # 检查当前参数是否与任何预设完全匹配
+        for preset_name, preset_config in self.detector_presets.items():
+            if (current_nbins_x == preset_config.get('nbins_x') and
+                current_nbins_y == preset_config.get('nbins_y') and
+                current_pixel_x == preset_config.get('pixel_size_x') and
+                current_pixel_y == preset_config.get('pixel_size_y')):
+                
+                # 匹配某个预设，如果当前预设不是这个，则切换
+                if current_preset != preset_name:
+                    self._switch_to_preset(preset_name)
+                return
+        
+        # 不匹配任何预设，切换到User-defined
+        self._switch_to_user_defined()
+    
+    def _on_detector_nbins_changed(self):
+        """Nbins参数改变处理，自动切换到User-defined模式"""
+        try:
+            # 获取当前Nbins值
+            current_nbins_x = None
+            current_nbins_y = None
+            
+            if hasattr(self.ui, 'NbinsXValue'):
+                current_nbins_x = int(self.ui.NbinsXValue.text())
+                self.detector_params['nbins_x'] = current_nbins_x
+                self.global_params.set_parameter('detector', 'nbins_x', current_nbins_x)
+                
+            if hasattr(self.ui, 'NbinsYValue'):
+                current_nbins_y = int(self.ui.NbinsYValue.text())
+                self.detector_params['nbins_y'] = current_nbins_y
+                self.global_params.set_parameter('detector', 'nbins_y', current_nbins_y)
+            
+            # 检查当前的Nbins值是否与预设值匹配
+            if self._should_switch_to_user_defined(current_nbins_x, current_nbins_y):
+                self._switch_to_user_defined()
+                
+            self._emit_parameters_changed()
+        except ValueError:
+            pass
+    
+    def _should_switch_to_user_defined(self, nbins_x, nbins_y):
+        """检查是否应该切换到User-defined模式（基于Nbins值）"""
+        # 获取当前预设
+        current_preset = self.detector_params.get('preset', '')
+        
+        # 如果已经是User-defined，不需要切换
+        if current_preset == 'User-defined':
+            return False
+            
+        # 检查当前Nbins值是否与任何预设匹配
+        for preset_name, preset_config in self.detector_presets.items():
+            if (nbins_x == preset_config.get('nbins_x') and 
+                nbins_y == preset_config.get('nbins_y')):
+                # 如果匹配，但当前预设不是这个，则切换预设
+                if current_preset != preset_name:
+                    self._switch_to_preset(preset_name)
+                return False
+        
+        # 如果不匹配任何预设，需要切换到User-defined
+        return True
+    
+    def _switch_to_user_defined(self):
+        """切换到User-defined模式"""
+        if hasattr(self.ui, 'detectorPresetCombox'):
+            # 暂时断开信号连接，避免循环触发
+            self.ui.detectorPresetCombox.currentTextChanged.disconnect()
+            
+            # 设置为User-defined
+            index = self.ui.detectorPresetCombox.findText('User-defined')
+            if index >= 0:
+                self.ui.detectorPresetCombox.setCurrentIndex(index)
+                self.detector_params['preset'] = 'User-defined'
+                self.global_params.set_parameter('detector', 'preset', 'User-defined')
+                print("✓ 由于Nbins值不匹配预设，自动切换到User-defined模式")
+            
+            # 重新连接信号
+            self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
+    
+    def _switch_to_preset(self, preset_name):
+        """切换到指定的预设"""
+        if hasattr(self.ui, 'detectorPresetCombox'):
+            # 暂时断开信号连接，避免循环触发
+            self.ui.detectorPresetCombox.currentTextChanged.disconnect()
+            
+            # 设置预设
+            index = self.ui.detectorPresetCombox.findText(preset_name)
+            if index >= 0:
+                self.ui.detectorPresetCombox.setCurrentIndex(index)
+                self.detector_params['preset'] = preset_name
+                self.global_params.set_parameter('detector', 'preset', preset_name)
+                print(f"✓ 由于Nbins值匹配，自动切换到预设: {preset_name}")
+            
+            # 重新连接信号
+            self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
+            
+    def _on_sample_params_changed(self):
+        """样品参数改变处理"""
+        try:
+            if hasattr(self.ui, 'particleShapeInitValue'):
+                self.sample_params['particle_shape'] = self.ui.particleShapeInitValue.currentText()
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('sample', 'particle_shape', self.sample_params['particle_shape'])
+                
+                # 根据粒子形状切换页面
+                self._switch_particle_page(self.sample_params['particle_shape'])
+                
+            if hasattr(self.ui, 'particleSizeValue'):
+                self.sample_params['particle_size'] = float(self.ui.particleSizeValue.text())
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('sample', 'particle_size', self.sample_params['particle_size'])
+                
+            if hasattr(self.ui, 'materialCombox'):
+                self.sample_params['material'] = self.ui.materialCombox.currentText()
+                # 同步到全局参数管理器
+                self.global_params.set_parameter('sample', 'material', self.sample_params['material'])
+                
+            self._emit_parameters_changed()
+        except ValueError:
+            pass
+    
+    def _switch_particle_page(self, particle_shape):
+        """根据粒子形状切换对应的页面"""
+        if not hasattr(self.ui, 'sampleParametersParticleStackedWidget'):
+            return
+            
+        try:
+            # 定义形状与页面索引的映射
+            shape_to_index = {
+                'Sphere': 0,
+                'Ellipsoid': 1,
+                'Cylinder': 0,  # 如果没有Cylinder页面，暂时使用Sphere页面
+                'None': 0
+            }
+            
+            # 获取对应的页面索引
+            page_index = shape_to_index.get(particle_shape, 0)
+            
+            # 切换到对应页面
+            self.ui.sampleParametersParticleStackedWidget.setCurrentIndex(page_index)
+            
+            print(f"✓ 切换粒子形状页面: {particle_shape} -> 页面索引 {page_index}")
+            
+        except Exception as e:
+            print(f"切换粒子形状页面失败: {e}")
+            
+    def _on_preprocessing_params_changed(self):
+        """预处理参数改变处理"""
+        if hasattr(self.ui, 'focusRegionTypeCombox'):
+            self.preprocessing_params['focus_region']['type'] = self.ui.focusRegionTypeCombox.currentText()
+            # 同步到全局参数管理器
+            self.global_params.set_parameter('preprocessing', 'focus_region', self.preprocessing_params['focus_region'])
+            
+        if hasattr(self.ui, 'noisingTypeCombox'):
+            self.preprocessing_params['noising']['type'] = self.ui.noisingTypeCombox.currentText()
+            # 同步到全局参数管理器
+            self.global_params.set_parameter('preprocessing', 'noising', self.preprocessing_params['noising'])
+            
+        if hasattr(self.ui, 'OthersCropEdgeCheckBox'):
+            self.preprocessing_params['others']['crop_edge'] = self.ui.OthersCropEdgeCheckBox.isChecked()
+            # 同步到全局参数管理器
+            self.global_params.set_parameter('preprocessing', 'others', self.preprocessing_params['others'])
+            
+        self._emit_parameters_changed()
+        
+    def _update_detector_ui(self):
+        """更新探测器UI显示，暂时断开信号连接避免循环触发"""
+        try:
+            # 断开关键参数的信号连接
+            critical_widgets = []
+            if hasattr(self.ui, 'NbinsXValue'):
+                self.ui.NbinsXValue.textChanged.disconnect()
+                critical_widgets.append(('NbinsXValue', self._on_detector_critical_params_changed))
+            if hasattr(self.ui, 'NbinsYValue'):
+                self.ui.NbinsYValue.textChanged.disconnect()
+                critical_widgets.append(('NbinsYValue', self._on_detector_critical_params_changed))
+            if hasattr(self.ui, 'pixelSizeXValue'):
+                self.ui.pixelSizeXValue.textChanged.disconnect()
+                critical_widgets.append(('pixelSizeXValue', self._on_detector_critical_params_changed))
+            if hasattr(self.ui, 'pixelSizeYValue'):
+                self.ui.pixelSizeYValue.textChanged.disconnect()
+                critical_widgets.append(('pixelSizeYValue', self._on_detector_critical_params_changed))
+            
+            # 更新UI控件值
+            if hasattr(self.ui, 'NbinsXValue'):
+                self.ui.NbinsXValue.setText(str(self.detector_params.get('nbins_x', 1475)))
+            if hasattr(self.ui, 'NbinsYValue'):
+                self.ui.NbinsYValue.setText(str(self.detector_params.get('nbins_y', 1679)))
+            if hasattr(self.ui, 'pixelSizeXValue'):
+                self.ui.pixelSizeXValue.setText(str(self.detector_params.get('pixel_size_x', 172)))
+            if hasattr(self.ui, 'pixelSizeYValue'):
+                self.ui.pixelSizeYValue.setText(str(self.detector_params.get('pixel_size_y', 172)))
+            if hasattr(self.ui, 'distanceValue'):
+                self.ui.distanceValue.setText(str(self.detector_params.get('distance', 2000)))
+            if hasattr(self.ui, 'beamCenterXValue'):
+                self.ui.beamCenterXValue.setText(str(self.detector_params.get('beam_center_x', 737)))
+            if hasattr(self.ui, 'beamCenterYValue'):
+                self.ui.beamCenterYValue.setText(str(self.detector_params.get('beam_center_y', 839)))
+            
+            # 重新连接关键参数的信号
+            for widget_name, handler in critical_widgets:
+                widget = getattr(self.ui, widget_name)
+                widget.textChanged.connect(handler)
+                
+        except Exception as e:
+            print(f"更新探测器UI失败: {e}")
+            # 确保信号连接不会丢失
+            self._setup_detector_connections()
+    
+    def _update_generation_progress(self):
+        """更新生成进度（定时器回调）"""
+        if self.is_generating and hasattr(self, 'current_progress'):
+            # 这个方法会被定时器调用，用于定期更新UI
+            # 实际的进度更新是在生成线程中完成的
+            pass

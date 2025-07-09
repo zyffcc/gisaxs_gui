@@ -1,0 +1,83 @@
+{
+    "beam": {
+        "wavelength": 0.15,
+        "grazing_angle": 0.4,
+        "beam_size_x": 0.1,
+        "beam_size_y": 0.1,
+        "flux": 1000000000000.0,
+        "polarization": "horizontal"
+    },
+    "detector": {
+        "preset": "Pilatus 1M",
+        "distance": 2000.0,
+        "nbins_x": 981,
+        "nbins_y": 1043,
+        "pixel_size_x": 172,
+        "pixel_size_y": 172,
+        "beam_center_x": 50.0,
+        "beam_center_y": 50.0,
+        "exposure_time": 1.0,
+        "dark_current": 0.1,
+        "readout_noise": 5.0
+    },
+    "sample": {
+        "particle_shape": "Ellipsoid",
+        "particle_size": 10.0,
+        "size_distribution": 0.1,
+        "material": "Au",
+        "substrate": "Silicon",
+        "thickness": 100.0,
+        "roughness": 1.0,
+        "density": 0.5,
+        "orientation": "random",
+        "sphere": {
+            "r_min": 3.0,
+            "r_max": 20.0,
+            "delta": 5e-06,
+            "beta": 2e-07,
+            "r_bins": 150,
+            "sigma_min_r": 0.05,
+            "sigma_max_r": 0.15,
+            "dist_type_r": "normal"
+        }
+    },
+    "preprocessing": {
+        "focus_region": {
+            "type": "q",
+            "qr_min": 0.01,
+            "qr_max": 3.0,
+            "qz_min": 0.01,
+            "qz_max": 3.0
+        },
+        "noising": {
+            "type": "Gaussian",
+            "snr_min": 80,
+            "snr_max": 130
+        },
+        "others": {
+            "crop_edge": true,
+            "add_mask": true,
+            "normalize": true,
+            "logarization": true
+        }
+    },
+    "trainset": {
+        "file_name": "trainset",
+        "save_path": "",
+        "trainset_number": 1000,
+        "save_every": 100,
+        "batch_size": 10
+    },
+    "fitting": {},
+    "gisaxs_predict": {},
+    "classification": {},
+    "system": {
+        "calculation_method": "DWBA",
+        "approximation": "Born",
+        "substrate_layers": 1,
+        "max_iterations": 1000,
+        "convergence_threshold": 1e-06,
+        "parallel_processing": true,
+        "num_threads": 4
+    }
+}

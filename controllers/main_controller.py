@@ -7,14 +7,11 @@ import os
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 
-from .beam_controller import BeamController
-from .detector_controller import DetectorController
-from .sample_controller import SampleController
-from .preprocessing_controller import PreprocessingController
 from .trainset_controller import TrainsetController
 from .fitting_controller import FittingController
 from .classification_controller import ClassificationController
 from .gisaxs_predict_controller import GisaxsPredictController
+from core.global_params import global_params
 
 
 class MainController(QObject):
@@ -29,15 +26,14 @@ class MainController(QObject):
         self.ui = ui
         self.parent = parent
         
-        # 初始化子控制器
-        self.beam_controller = BeamController(ui, self)
-        self.detector_controller = DetectorController(ui, self)
-        self.sample_controller = SampleController(ui, self)
-        self.preprocessing_controller = PreprocessingController(ui, self)
+        # 初始化四个主页面控制器
         self.trainset_controller = TrainsetController(ui, self)
         self.fitting_controller = FittingController(ui, self)
         self.classification_controller = ClassificationController(ui, self)
         self.gisaxs_predict_controller = GisaxsPredictController(ui, self)
+        
+        # 注册控制器到全局参数管理器
+        self._register_controllers()
         
         # 当前项目参数
         self.current_parameters = {}
@@ -45,8 +41,26 @@ class MainController(QObject):
         # 设置界面连接
         self._setup_connections()
         
+        # 设置按钮样式
+        self._setup_button_styles()
+        
         # 初始化界面
         self._initialize_ui()
+        
+        # 注册UI控件到全局参数系统
+        self._register_ui_controls()
+    
+    def _register_controllers(self):
+        """注册控制器到全局参数管理器"""
+        try:
+            # 注册主要的控制器到全局参数管理器
+            global_params.register_controller('trainset', self.trainset_controller)
+            global_params.register_controller('fitting', self.fitting_controller)
+            global_params.register_controller('classification', self.classification_controller)
+            global_params.register_controller('gisaxs_predict', self.gisaxs_predict_controller)
+            print("✓ 主控制器：子控制器注册完成")
+        except Exception as e:
+            print(f"主控制器：子控制器注册失败: {e}")
     
     def _setup_connections(self):
         """设置信号连接"""
@@ -56,28 +70,8 @@ class MainController(QObject):
         self.ui.cutAndFittingButton.clicked.connect(self._switch_to_cut_fitting)
         self.ui.ClassficationButton.clicked.connect(self._switch_to_classification)
         
-        # 连接子控制器信号
-        self.beam_controller.parameters_changed.connect(self._on_parameters_changed)
-        self.detector_controller.parameters_changed.connect(self._on_parameters_changed)
-        self.sample_controller.parameters_changed.connect(self._on_parameters_changed)
-        self.preprocessing_controller.parameters_changed.connect(self._on_parameters_changed)
-        
-        # 连接新控制器信号
-        self.fitting_controller.parameters_changed.connect(self._on_parameters_changed)
-        self.fitting_controller.status_updated.connect(self.status_updated)
-        self.fitting_controller.progress_updated.connect(self.progress_updated)
-        
-        self.classification_controller.parameters_changed.connect(self._on_parameters_changed)
-        self.classification_controller.status_updated.connect(self.status_updated)
-        self.classification_controller.progress_updated.connect(self.progress_updated)
-        self.classification_controller.classification_completed.connect(self._on_classification_completed)
-        
-        # 连接GISAXS预测控制器信号
-        self.gisaxs_predict_controller.parameters_changed.connect(self._on_parameters_changed)
-        self.gisaxs_predict_controller.status_updated.connect(self.status_updated)
-        self.gisaxs_predict_controller.progress_updated.connect(self.progress_updated)
-        
-        # 连接训练集生成信号
+        # 连接主页面控制器信号
+        self.trainset_controller.parameters_changed.connect(self._on_parameters_changed)
         self.trainset_controller.generation_started.connect(
             lambda: self.status_updated.emit("训练集生成开始...")
         )
@@ -85,18 +79,38 @@ class MainController(QObject):
             lambda: self.status_updated.emit("训练集生成完成！")
         )
         self.trainset_controller.progress_updated.connect(self.progress_updated)
+        
+        self.fitting_controller.parameters_changed.connect(
+            lambda params: self._on_parameters_changed("拟合参数", params)
+        )
+        self.fitting_controller.status_updated.connect(self.status_updated)
+        self.fitting_controller.progress_updated.connect(self.progress_updated)
+        
+        self.classification_controller.parameters_changed.connect(
+            lambda params: self._on_parameters_changed("分类参数", params)
+        )
+        self.classification_controller.status_updated.connect(self.status_updated)
+        self.classification_controller.progress_updated.connect(self.progress_updated)
+        self.classification_controller.classification_completed.connect(self._on_classification_completed)
+        
+        self.gisaxs_predict_controller.parameters_changed.connect(
+            lambda params: self._on_parameters_changed("GISAXS预测参数", params)
+        )
+        self.gisaxs_predict_controller.status_updated.connect(self.status_updated)
+        self.gisaxs_predict_controller.progress_updated.connect(self.progress_updated)
+        self.trainset_controller.progress_updated.connect(self.progress_updated)
     
     def _initialize_ui(self):
         """初始化界面状态"""
-        # 设置默认页面 - 根据新的UI结构，页面索引发生了变化
-        # 按钮顺序：cutAndFitting(0), gisaxsPredict(1), trainsetBuild(2), classification(3)
-        self.ui.mainWindowWidget.setCurrentIndex(2)  # 默认显示训练集构建页面
+        # 设置默认页面 - 根据实际UI结构修正页面索引
+        # 实际页面顺序：trainsetBuild(0), gisaxsPredict(1), gisaxsFitting(2), classification(3)
+        # 按钮顺序：cutAndFitting, gisaxsPredict, trainsetBuild, classification
+        self.ui.mainWindowWidget.setCurrentIndex(2)  # 默认显示Cut Fitting页面
         
-        # 初始化各个控制器
-        self.beam_controller.initialize()
-        self.detector_controller.initialize()
-        self.sample_controller.initialize()
-        self.preprocessing_controller.initialize()
+        # 设置初始按钮状态
+        self._update_button_states(0)  # 默认选中Cut Fitting按钮
+        
+        # 初始化四个主页面控制器
         self.trainset_controller.initialize()
         self.fitting_controller.initialize()
         self.classification_controller.initialize()
@@ -105,10 +119,63 @@ class MainController(QObject):
         # 更新状态
         self.status_updated.emit("GISAXS Toolkit 就绪")
     
+    def _register_ui_controls(self):
+        """自动注册UI控件到全局参数系统"""
+        print("=== 开始注册UI控件到全局参数系统 ===")
+        
+        try:
+            from PyQt5.QtWidgets import QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QSlider
+            
+            # 获取所有支持的控件类型
+            supported_types = (QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QSlider)
+            registered_count = 0
+            
+            # 递归搜索UI中的所有控件
+            def register_widget_recursively(widget, prefix=""):
+                nonlocal registered_count
+                
+                # 检查当前控件
+                if isinstance(widget, supported_types):
+                    # 生成控件ID
+                    object_name = getattr(widget, 'objectName', lambda: '')()
+                    if object_name:
+                        control_id = f"{prefix}{object_name}" if prefix else object_name
+                        
+                        # 注册控件
+                        global_params.register_control(control_id, widget)
+                        registered_count += 1
+                        print(f"  ✓ 注册控件: {control_id} ({type(widget).__name__})")
+                
+                # 递归检查子控件
+                if hasattr(widget, 'children'):
+                    for child in widget.children():
+                        if hasattr(child, 'metaObject'):  # 确保是QWidget
+                            register_widget_recursively(child, prefix)
+            
+            # 从主窗口开始注册
+            register_widget_recursively(self.ui)
+            
+            print(f"✓ UI控件注册完成，共注册 {registered_count} 个控件")
+            
+            # 连接控件值变化信号到参数同步
+            global_params.ui.control_value_changed.connect(self._on_control_value_changed)
+            
+        except Exception as e:
+            print(f"UI控件注册失败: {e}")
+    
+    def _on_control_value_changed(self, control_id: str, value):
+        """当UI控件值发生变化时的回调"""
+        # 可以在这里添加控件值变化的处理逻辑
+        # 例如：自动保存到参数系统、验证输入等
+        print(f"控件 '{control_id}' 值已更新为: {value}")
+    
     def _switch_to_cut_fitting(self):
         """切换到Cut Fitting页面"""
-        self.ui.mainWindowWidget.setCurrentIndex(0)  # Cut Fitting是第0页
+        self.ui.mainWindowWidget.setCurrentIndex(2)  # Cut Fitting是第2页(gisaxsFittingPage)
         self.status_updated.emit("切换到Cut Fitting模式")
+        
+        # 更新按钮状态
+        self._update_button_states(0)
         
         # 确保控制器已初始化
         if not self.fitting_controller._initialized:
@@ -119,19 +186,28 @@ class MainController(QObject):
         self.ui.mainWindowWidget.setCurrentIndex(1)  # GISAXS Predict是第1页
         self.status_updated.emit("切换到GISAXS预测模式")
         
+        # 更新按钮状态
+        self._update_button_states(1)
+        
         # 确保控制器已初始化
         if not self.gisaxs_predict_controller._initialized:
             self.gisaxs_predict_controller.initialize()
     
     def _switch_to_trainset_build(self):
         """切换到训练集构建页面"""
-        self.ui.mainWindowWidget.setCurrentIndex(2)  # Trainset Build是第2页
+        self.ui.mainWindowWidget.setCurrentIndex(0)  # Trainset Build是第0页(trainsetBuildPage)
         self.status_updated.emit("切换到训练集构建模式")
+        
+        # 更新按钮状态
+        self._update_button_states(2)
         
     def _switch_to_classification(self):
         """切换到Classification页面"""
         self.ui.mainWindowWidget.setCurrentIndex(3)  # Classification是第3页
         self.status_updated.emit("切换到Classification模式")
+        
+        # 更新按钮状态
+        self._update_button_states(3)
         
         # 确保控制器已初始化
         if not self.classification_controller._initialized:
@@ -145,11 +221,9 @@ class MainController(QObject):
     def get_all_parameters(self):
         """获取所有模块的参数"""
         return {
-            'beam': self.beam_controller.get_parameters(),
-            'detector': self.detector_controller.get_parameters(),
-            'sample': self.sample_controller.get_parameters(),
-            'preprocessing': self.preprocessing_controller.get_parameters(),
             'trainset': self.trainset_controller.get_parameters(),
+            'fitting': self.fitting_controller.get_parameters(),
+            'classification': self.classification_controller.get_parameters(),
             'gisaxs_predict': self.gisaxs_predict_controller.get_parameters()
         }
     
@@ -159,17 +233,13 @@ class MainController(QObject):
             with open(file_path, 'r', encoding='utf-8') as f:
                 parameters = json.load(f)
             
-            # 分发参数到各个控制器
-            if 'beam' in parameters:
-                self.beam_controller.set_parameters(parameters['beam'])
-            if 'detector' in parameters:
-                self.detector_controller.set_parameters(parameters['detector'])
-            if 'sample' in parameters:
-                self.sample_controller.set_parameters(parameters['sample'])
-            if 'preprocessing' in parameters:
-                self.preprocessing_controller.set_parameters(parameters['preprocessing'])
+            # 分发参数到各个主页面控制器
             if 'trainset' in parameters:
                 self.trainset_controller.set_parameters(parameters['trainset'])
+            if 'fitting' in parameters:
+                self.fitting_controller.set_parameters(parameters['fitting'])
+            if 'classification' in parameters:
+                self.classification_controller.set_parameters(parameters['classification'])
             if 'gisaxs_predict' in parameters:
                 self.gisaxs_predict_controller.set_parameters(parameters['gisaxs_predict'])
             
@@ -199,19 +269,18 @@ class MainController(QObject):
         """验证所有参数的有效性"""
         validation_results = []
         
-        # 验证各个模块
+        # 验证四个主页面模块
         modules = [
-            ('光束参数', self.beam_controller),
-            ('探测器参数', self.detector_controller),
-            ('样品参数', self.sample_controller),
-            ('预处理参数', self.preprocessing_controller),
             ('训练集参数', self.trainset_controller),
+            ('拟合参数', self.fitting_controller),
+            ('分类参数', self.classification_controller),
             ('GISAXS预测参数', self.gisaxs_predict_controller)
         ]
         
         for name, controller in modules:
-            is_valid, message = controller.validate_parameters()
-            validation_results.append((name, is_valid, message))
+            if hasattr(controller, 'validate_parameters'):
+                is_valid, message = controller.validate_parameters()
+                validation_results.append((name, is_valid, message))
         
         return validation_results
     
@@ -242,11 +311,9 @@ class MainController(QObject):
     
     def reset_all_parameters(self):
         """重置所有参数到默认值"""
-        self.beam_controller.reset_to_defaults()
-        self.detector_controller.reset_to_defaults()
-        self.sample_controller.reset_to_defaults()
-        self.preprocessing_controller.reset_to_defaults()
         self.trainset_controller.reset_to_defaults()
+        self.fitting_controller.reset_to_defaults()
+        self.classification_controller.reset_to_defaults()
         self.gisaxs_predict_controller.reset_to_defaults()
         
         self.status_updated.emit("所有参数已重置为默认值")
@@ -257,3 +324,106 @@ class MainController(QObject):
         
         # 可以在这里添加结果显示逻辑
         # 例如：更新UI显示分类结果统计信息
+    
+    def _setup_button_styles(self):
+        """设置导航按钮样式"""
+        button_style = """
+        QPushButton {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 12px 16px;
+            color: #495057;
+            margin: 2px;
+        }
+        
+        QPushButton:hover {
+            background-color: #e9ecef;
+            border-color: #adb5bd;
+            color: #212529;
+        }
+        
+        QPushButton:pressed {
+            background-color: #dee2e6;
+            border-color: #6c757d;
+            border-style: inset;
+            color: #212529;
+        }
+        
+        QPushButton:checked {
+            background-color: #007bff;
+            color: white;
+            border-color: #0056b3;
+        }
+        
+        QPushButton:disabled {
+            background-color: #e9ecef;
+            color: #6c757d;
+            border-color: #dee2e6;
+        }
+        """
+        
+        # 应用样式到所有导航按钮
+        navigation_buttons = [
+            self.ui.cutAndFittingButton,
+            self.ui.gisaxsPredictButton,
+            self.ui.trainsetBuildButton,
+            self.ui.ClassficationButton
+        ]
+        
+        for button in navigation_buttons:
+            if hasattr(button, 'setStyleSheet'):
+                button.setStyleSheet(button_style)
+                button.setCheckable(True)  # 使按钮可以保持选中状态
+                
+        # 设置按钮组管理
+        self._setup_button_group()
+    
+    def _setup_button_group(self):
+        """设置按钮组管理，确保只有一个按钮被选中"""
+        from PyQt5.QtWidgets import QButtonGroup
+        
+        self.navigation_button_group = QButtonGroup()
+        
+        # 添加所有导航按钮到按钮组
+        if hasattr(self.ui, 'cutAndFittingButton'):
+            self.navigation_button_group.addButton(self.ui.cutAndFittingButton, 0)
+        if hasattr(self.ui, 'gisaxsPredictButton'):
+            self.navigation_button_group.addButton(self.ui.gisaxsPredictButton, 1)
+        if hasattr(self.ui, 'trainsetBuildButton'):
+            self.navigation_button_group.addButton(self.ui.trainsetBuildButton, 2)
+        if hasattr(self.ui, 'ClassficationButton'):
+            self.navigation_button_group.addButton(self.ui.ClassficationButton, 3)
+        
+        # 设置互斥选择
+        self.navigation_button_group.setExclusive(True)
+        
+        # 连接按钮组信号
+        self.navigation_button_group.buttonClicked.connect(self._on_navigation_button_clicked)
+    
+    def _on_navigation_button_clicked(self, button):
+        """处理导航按钮点击"""
+        button_id = self.navigation_button_group.id(button)
+        
+        # 根据按钮ID切换页面
+        if button_id == 0:
+            self._switch_to_cut_fitting()
+        elif button_id == 1:
+            self._switch_to_gisaxs_predict()
+        elif button_id == 2:
+            self._switch_to_trainset_build()
+        elif button_id == 3:
+            self._switch_to_classification()
+    
+    def _update_button_states(self, active_index):
+        """更新按钮状态，确保只有当前页面的按钮被选中"""
+        navigation_buttons = [
+            self.ui.cutAndFittingButton,
+            self.ui.gisaxsPredictButton,
+            self.ui.trainsetBuildButton,
+            self.ui.ClassficationButton
+        ]
+        
+        for i, button in enumerate(navigation_buttons):
+            if hasattr(button, 'setChecked'):
+                button.setChecked(i == active_index)
