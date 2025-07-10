@@ -7,7 +7,6 @@ import json
 import os
 from datetime import datetime
 
-
 class GISAXSUtils:
     """GISAXS相关的工具函数"""
     
@@ -85,7 +84,6 @@ class GISAXSUtils:
         """对数正态尺寸分布"""
         return (1 / (r * sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((np.log(r) - np.log(r_mean)) / sigma)**2)
 
-
 class FileUtils:
     """文件操作工具函数"""
     
@@ -125,7 +123,6 @@ class FileUtils:
         except Exception as e:
             print(f"创建目录失败: {e}")
             return False
-
 
 class ValidationUtils:
     """参数验证工具函数"""
@@ -168,7 +165,6 @@ class ValidationUtils:
             return False, "目录没有写入权限"
         
         return True, "有效"
-
 
 class MathUtils:
     """数学计算工具函数"""
@@ -223,7 +219,6 @@ class MathUtils:
         
         return data + noise
 
-
 class PlotUtils:
     """绘图工具函数"""
     
@@ -250,6 +245,9 @@ class PlotUtils:
         try:
             import matplotlib.pyplot as plt
             
+            # 垂直翻转图像数据以修正显示方向
+            data = np.flipud(data)
+            
             fig, ax = plt.subplots(figsize=(10, 8))
             im = ax.imshow(data, origin='lower', aspect='auto', cmap='hot')
             ax.set_title(title)
@@ -263,7 +261,6 @@ class PlotUtils:
         except ImportError:
             print("matplotlib未安装，无法创建绘图")
             return None, None
-
 
 # 导出主要工具类
 __all__ = [
