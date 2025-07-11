@@ -31,330 +31,6 @@ except ImportError:
     H5PY_AVAILABLE = False
 
 
-class IndependentMatplotlibWindow(QMainWindow):
-    """独立的matplotlib窗口，支持完整的交互操作和视图保持"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("GISAXS Image Viewer - Independent Window")
-        self.setGeometry(100, 100, 900, 700)
-        
-        # 创建中央widget
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        # 创建布局
-        layout = QVBoxLayout(central_widget)
-        
-        # 创建matplotlib图形
-        self.figure = Figure(figsize=(10, 8), dpi=100)
-        self.canvas = FigureCanvas(self.figure)
-        self.toolbar = NavigationToolbar(self.canvas, self)
-        
-        # 添加到布局
-        layout.addWidget(self.toolbar)
-        layout.addWidget(self.canvas)
-        
-        # 创建axes
-        self.ax = self.figure.add_subplot(111)
-        self.current_image = None
-        self.colorbar = None
-        
-        # 存储视图状态
-        self.current_xlim = None
-        self.current_ylim = None
-        self.last_image_shape = None
-        
-        # 连接视图变化事件
-        self.ax.callbacks.connect('xlim_changed', self._on_xlim_changed)
-        self.ax.callbacks.connect('ylim_changed', self._on_ylim_changed)
-    
-    def _on_xlim_changed(self, ax):
-        """X轴范围改变时的回调"""
-        self.current_xlim = ax.get_xlim()
-    
-    def _on_ylim_changed(self, ax):
-        """Y轴范围改变时的回调"""
-        self.current_ylim = ax.get_ylim()
-    
-    def update_image(self, image_data, vmin=None, vmax=None, use_log=True):
-        """更新独立窗口中的图像，保持用户的视图焦点，支持自定义颜色范围和线性/对数切换"""
-        try:
-            # 检查图像尺寸是否改变
-            current_shape = image_data.shape
-            shape_changed = (self.last_image_shape is None or 
-                           self.last_image_shape != current_shape)
-            
-            if shape_changed:
-                # 图像尺寸改变了，重置视图
-                self.current_xlim = None
-                self.current_ylim = None
-                self.last_image_shape = current_shape
-            
-            # 保存轴限制 - 备份当前视图状态
-            saved_xlim = self.current_xlim
-            saved_ylim = self.current_ylim
-            preserve_view = (not shape_changed and saved_xlim is not None and saved_ylim is not None)
-            
-            # 暂时断开视图变化回调
-            try:
-                xlim_cid = None
-                ylim_cid = None
-                
-                try:
-                    for cid, func in self.ax.callbacks.callbacks['xlim_changed'].items():
-                        if func.func == self._on_xlim_changed:
-                            xlim_cid = cid
-                            break
-                    for cid, func in self.ax.callbacks.callbacks['ylim_changed'].items():
-                        if func.func == self._on_ylim_changed:
-                            ylim_cid = cid
-                            break
-                    
-                    if xlim_cid is not None:
-                        self.ax.callbacks.disconnect(xlim_cid)
-                    if ylim_cid is not None:
-                        self.ax.callbacks.disconnect(ylim_cid)
-                        
-                except (AttributeError, KeyError):
-                    try:
-                        self.ax.callbacks.disconnect('xlim_changed', self._on_xlim_changed)
-                        self.ax.callbacks.disconnect('ylim_changed', self._on_ylim_changed)
-                    except TypeError:
-                        pass
-                        
-            except Exception:
-                pass
-            
-            # 安全地移除旧的colorbar
-            if self.colorbar is not None:
-                try:
-                    self.colorbar.remove()
-                except Exception:
-                    pass
-                finally:
-                    self.colorbar = None
-            
-            # 清除axes
-            self.ax.clear()
-            
-            # 根据模式处理图像数据
-            if use_log:
-                safe_data = np.where(image_data > 0, image_data, 0.001)
-                processed_data = np.log(safe_data, dtype=np.float32)
-                scale_text = "Log Scale"
-                colorbar_label = "Log Intensity"
-            else:
-                processed_data = image_data.astype(np.float32)
-                scale_text = "Linear Scale"
-                colorbar_label = "Intensity"
-            
-            # 如果没有提供vmin/vmax，则自动计算
-            if vmin is None or vmax is None:
-                auto_vmin = np.percentile(processed_data, 1)
-                auto_vmax = np.percentile(processed_data, 99)
-                vmin = vmin if vmin is not None else auto_vmin
-                vmax = vmax if vmax is not None else auto_vmax
-            
-            # 垂直翻转图像数据以修正显示方向
-            processed_data = np.flipud(processed_data)
-            
-            # 显示图像，使用指定的颜色范围
-            self.current_image = self.ax.imshow(processed_data, cmap='viridis', aspect='equal', 
-                                              origin='lower', interpolation='nearest',
-                                              vmin=vmin, vmax=vmax)
-            
-            # 设置标题
-            self.ax.set_title(f'GISAXS Image ({scale_text}) - {image_data.shape[1]}×{image_data.shape[0]}\nVmin: {vmin:.3f}, Vmax: {vmax:.3f}')
-            
-            # 创建新的颜色条
-            try:
-                self.colorbar = self.figure.colorbar(self.current_image, ax=self.ax)
-                self.colorbar.set_label(colorbar_label)
-            except Exception:
-                self.colorbar = None
-            
-            # 先进行布局调整
-            self.figure.tight_layout()
-            
-            # 在所有布局操作完成后，设置/恢复视图范围
-            if preserve_view:
-                self.ax.set_xlim(saved_xlim)
-                self.ax.set_ylim(saved_ylim)
-                self.current_xlim = saved_xlim
-                self.current_ylim = saved_ylim
-            else:
-                # 设置为默认的全图显示
-                self.ax.set_xlim(-0.5, processed_data.shape[1] - 0.5)
-                self.ax.set_ylim(-0.5, processed_data.shape[0] - 0.5)
-                self.current_xlim = self.ax.get_xlim()
-                self.current_ylim = self.ax.get_ylim()
-            
-            # 重新连接视图变化回调
-            try:
-                self.ax.callbacks.connect('xlim_changed', self._on_xlim_changed)
-                self.ax.callbacks.connect('ylim_changed', self._on_ylim_changed)
-            except Exception:
-                pass
-            
-            # 刷新画布
-            self.canvas.draw()
-            
-            # 最终验证：确保视图没有被canvas刷新影响
-            if preserve_view:
-                def final_view_check():
-                    current_xlim_after_draw = self.ax.get_xlim()
-                    current_ylim_after_draw = self.ax.get_ylim()
-                    if (abs(current_xlim_after_draw[0] - saved_xlim[0]) > 0.01 or 
-                        abs(current_xlim_after_draw[1] - saved_xlim[1]) > 0.01 or
-                        abs(current_ylim_after_draw[0] - saved_ylim[0]) > 0.01 or 
-                        abs(current_ylim_after_draw[1] - saved_ylim[1]) > 0.01):
-                        self.ax.set_xlim(saved_xlim)
-                        self.ax.set_ylim(saved_ylim)
-                        self.current_xlim = saved_xlim
-                        self.current_ylim = saved_ylim
-                        self.canvas.draw_idle()
-                
-                QTimer.singleShot(50, final_view_check)
-            
-        except Exception as e:
-            print(f"Independent window update error: {e}")
-    
-    def closeEvent(self, event):
-        """窗口关闭事件"""
-        # 清理colorbar
-        if self.colorbar is not None:
-            try:
-                self.colorbar.remove()
-            except Exception:
-                pass
-            finally:
-                self.colorbar = None
-        
-        # 清理图形
-        try:
-            self.figure.clear()
-        except Exception:
-            pass
-        
-        super().closeEvent(event)
-
-
-class AsyncImageLoader(QThread):
-    """异步图像加载线程"""
-    
-    image_loaded = pyqtSignal(np.ndarray, str)  # 图像数据, 文件路径
-    progress_updated = pyqtSignal(int, str)  # 进度, 状态信息
-    error_occurred = pyqtSignal(str)  # 错误信息
-    
-    def __init__(self):
-        super().__init__()
-        self.file_path = None
-        self.stack_count = 1
-    
-    def load_image(self, file_path, stack_count=1):
-        """开始加载图像"""
-        self.file_path = file_path
-        self.stack_count = stack_count
-        self.start()
-    
-    def run(self):
-        """在线程中运行图像加载"""
-        try:
-            if not FABIO_AVAILABLE:
-                self.error_occurred.emit("fabio library is required for CBF file processing")
-                return
-            
-            self.progress_updated.emit(10, "开始加载文件...")
-            
-            file_ext = os.path.splitext(self.file_path)[1].lower()
-            
-            if file_ext != '.cbf':
-                self.error_occurred.emit("目前只支持CBF文件格式")
-                return
-            
-            if self.stack_count == 1:
-                # 单文件加载
-                self.progress_updated.emit(50, "加载单个CBF文件...")
-                image_data = self._load_single_cbf_file(self.file_path)
-            else:
-                # 多文件叠加
-                self.progress_updated.emit(30, f"加载并叠加 {self.stack_count} 个文件...")
-                image_data = self._load_multiple_cbf_files(self.file_path, self.stack_count)
-            
-            if image_data is not None:
-                self.progress_updated.emit(90, "处理图像数据...")
-                self.image_loaded.emit(image_data, self.file_path)
-                self.progress_updated.emit(100, "加载完成")
-            else:
-                self.error_occurred.emit("加载图像数据失败")
-                
-        except Exception as e:
-            self.error_occurred.emit(f"加载图像时出错: {str(e)}")
-    
-    def _load_single_cbf_file(self, cbf_file):
-        """加载单个CBF文件"""
-        try:
-            cbf_image = fabio.open(cbf_file)
-            data = cbf_image.data
-            
-            if data.dtype != np.float32:
-                data = data.astype(np.float32, copy=False)
-            
-            return data
-            
-        except Exception as e:
-            print(f"Error loading single CBF file: {e}")
-            return None
-    
-    def _load_multiple_cbf_files(self, start_file, stack_count):
-        """加载并叠加多个CBF文件"""
-        try:
-            file_dir = os.path.dirname(start_file)
-            base_name = os.path.basename(start_file)
-            
-            cbf_files = [f for f in os.listdir(file_dir) if f.lower().endswith('.cbf')]
-            cbf_files.sort()
-            
-            try:
-                start_index = cbf_files.index(base_name)
-            except ValueError:
-                print(f"Start file not found: {base_name}")
-                return None
-            
-            available_files = len(cbf_files) - start_index
-            if stack_count > available_files:
-                print(f"Requested {stack_count} files, only {available_files} available")
-                return None
-            
-            summed_data = None
-            files_to_stack = cbf_files[start_index:start_index + stack_count]
-            
-            for i, file_name in enumerate(files_to_stack):
-                file_path = os.path.join(file_dir, file_name)
-                progress = 40 + int((i / len(files_to_stack)) * 40)
-                self.progress_updated.emit(progress, f"处理文件 {i+1}/{len(files_to_stack)}: {file_name}")
-                
-                try:
-                    cbf_image = fabio.open(file_path)
-                    data = cbf_image.data.astype(np.float32, copy=False) if cbf_image.data.dtype != np.float32 else cbf_image.data
-                    
-                    if summed_data is None:
-                        summed_data = data.copy() if data.dtype == np.float32 else data.astype(np.float32)
-                    else:
-                        summed_data += data
-                        
-                except Exception as e:
-                    print(f"Error processing file {file_name}: {e}")
-                    continue
-            
-            return summed_data
-            
-        except Exception as e:
-            print(f"Error loading multiple CBF files: {e}")
-            return None
-
-
 class FittingController(QObject):
     """Cut Fitting控制器，处理GISAXS数据的裁剪和拟合"""
     
@@ -582,21 +258,6 @@ class FittingController(QObject):
             'fitting_params': {}
         }
     
-    def get_parameters(self):
-        """获取当前参数"""
-        return self.current_parameters.copy()
-        
-    def set_parameters(self, parameters):
-        """设置参数"""
-        self.current_parameters.update(parameters)
-        self.parameters_changed.emit(self.current_parameters)
-    
-    def get_imported_file(self):
-        """获取导入的GISAXS文件路径"""
-        return self.current_parameters.get('imported_gisaxs_file', '')
-    
-    # ========== 图像导入和处理方法 ==========
-    
     def _import_gisaxs_file(self):
         """导入GISAXS文件"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -713,8 +374,6 @@ class FittingController(QObject):
             self.status_updated.emit(f"Import value processing error: {str(e)}")
             QMessageBox.critical(self.main_window, "处理错误", f"处理导入文件路径时出错:\n{str(e)}")
     
-    # ========== Stack 处理方法 ==========
-    
     def _on_stack_value_changed(self):
         """当Stack值改变时的处理（回车触发）"""
         try:
@@ -804,8 +463,6 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Display update error: {str(e)}")
     
-    # ========== 图像显示和处理方法 ==========
-    
     def _show_image(self):
         """显示图像"""
         try:
@@ -860,6 +517,135 @@ class FittingController(QObject):
         """图像加载错误处理"""
         QMessageBox.critical(self.main_window, "图像加载错误", error_message)
     
+    def _calculate_vmin_vmax(self, image_data, use_log=True):
+        """计算图像的Vmin和Vmax值（1%和99%分位数）"""
+        try:
+            if use_log:
+                safe_data = np.where(image_data > 0, image_data, 0.001)
+                log_data = np.log(safe_data)
+                vmin = np.percentile(log_data, 1)
+                vmax = np.percentile(log_data, 99)
+            else:
+                vmin = np.percentile(image_data, 1)
+                vmax = np.percentile(image_data, 99)
+            
+            return vmin, vmax
+        except Exception:
+            return None, None
+    
+    def _update_vmin_vmax_ui(self, vmin, vmax):
+        """更新UI中的Vmin和Vmax值"""
+        try:
+            if vmin is not None and vmax is not None:
+                if hasattr(self.ui, 'gisaxsInputVminValue'):
+                    self.ui.gisaxsInputVminValue.setValue(float(vmin))
+                if hasattr(self.ui, 'gisaxsInputVmaxValue'):
+                    self.ui.gisaxsInputVmaxValue.setValue(float(vmax))
+                
+                self._current_vmin = vmin
+                self._current_vmax = vmax
+                self._refresh_vmin_vmax_display()
+        except Exception:
+            pass
+    
+    def _get_vmin_vmax_from_ui(self):
+        """从UI获取当前的Vmin和Vmax值"""
+        try:
+            vmin = None
+            vmax = None
+            
+            if hasattr(self.ui, 'gisaxsInputVminValue'):
+                vmin = self.ui.gisaxsInputVminValue.value()
+            if hasattr(self.ui, 'gisaxsInputVmaxValue'):
+                vmax = self.ui.gisaxsInputVmaxValue.value()
+                
+            return vmin, vmax
+        except Exception:
+            return None, None
+    
+    def _is_auto_scale_enabled(self):
+        """检查AutoScale是否被启用"""
+        try:
+            if hasattr(self.ui, 'gisaxsInputAutoScaleCheckBox'):
+                return self.ui.gisaxsInputAutoScaleCheckBox.isChecked()
+            return True
+        except Exception:
+            return True
+    
+    def _is_log_mode_enabled(self):
+        """检查是否启用Log模式"""
+        try:
+            if hasattr(self.ui, 'gisaxsInputIntLogCheckBox'):
+                return self.ui.gisaxsInputIntLogCheckBox.isChecked()
+            return True
+        except Exception:
+            return True
+    
+    def _on_auto_scale_changed(self):
+        """AutoScale复选框状态改变时的处理"""
+        try:
+            is_enabled = self._is_auto_scale_enabled()
+            self.status_updated.emit(f"AutoScale {'enabled' if is_enabled else 'disabled'}")
+            
+            if is_enabled and self.current_stack_data is not None:
+                is_log = self._is_log_mode_enabled()
+                vmin, vmax = self._calculate_vmin_vmax(self.current_stack_data, use_log=is_log)
+                if vmin is not None and vmax is not None:
+                    self._update_vmin_vmax_ui(vmin, vmax)
+                    self._refresh_image_display()
+        except Exception as e:
+            self.status_updated.emit(f"AutoScale change error: {str(e)}")
+    
+    def _on_vmin_value_changed(self):
+        """Vmin值改变时的处理"""
+        try:
+            vmin, vmax = self._get_vmin_vmax_from_ui()
+            if vmin is not None:
+                self._current_vmin = vmin
+                if self.current_stack_data is not None:
+                    self._refresh_image_display()
+        except Exception:
+            pass
+    
+    def _on_vmax_value_changed(self):
+        """Vmax值改变时的处理"""
+        try:
+            vmin, vmax = self._get_vmin_vmax_from_ui()
+            if vmax is not None:
+                self._current_vmax = vmax
+                if self.current_stack_data is not None:
+                    self._refresh_image_display()
+        except Exception:
+            pass
+    
+    def _on_auto_show_changed(self):
+        """AutoShow选项改变时的处理"""
+        auto_show = hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
+        self.status_updated.emit(f"AutoShow {'enabled' if auto_show else 'disabled'}")
+    
+    def _on_log_changed(self):
+        """Log选项改变时的处理 - 支持线性/对数切换"""
+        try:
+            is_log = self._is_log_mode_enabled()
+            
+            # 刷新Vmin/Vmax控件的显示格式
+            self._refresh_vmin_vmax_display()
+            
+            # 如果当前有图像数据，重新计算vmin/vmax并更新显示
+            if self.current_stack_data is not None:
+                if self._is_auto_scale_enabled():
+                    vmin, vmax = self._calculate_vmin_vmax(self.current_stack_data, use_log=is_log)
+                    if vmin is not None and vmax is not None:
+                        self._update_vmin_vmax_ui(vmin, vmax)
+                
+                # 重新显示图像
+                self._refresh_image_display()
+                
+            self.status_updated.emit(f"*** DISPLAY MODE CHANGED TO: {'LOG' if is_log else 'LINEAR'} ***")
+                
+        except Exception as e:
+            self.status_updated.emit(f"Log mode change error: {str(e)}")
+    
     def _display_image(self, image_data):
         """显示图像数据"""
         try:
@@ -886,6 +672,42 @@ class FittingController(QObject):
             
         except Exception as e:
             self.status_updated.emit(f"Display error: {str(e)}")
+    
+    def _handle_color_scale(self, image_data):
+        """处理颜色标尺逻辑"""
+        try:
+            is_auto_scale = self._is_auto_scale_enabled()
+            is_first_image = not self._has_displayed_image
+            is_log = self._is_log_mode_enabled()
+            
+            if is_first_image:
+                # 第一次显示图像，无论AutoScale状态如何都自动计算
+                vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
+                if vmin is not None and vmax is not None:
+                    self._update_vmin_vmax_ui(vmin, vmax)
+                self._has_displayed_image = True
+                
+            elif is_auto_scale:
+                # 不是第一次显示且AutoScale启用，重新计算
+                vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
+                if vmin is not None and vmax is not None:
+                    self._update_vmin_vmax_ui(vmin, vmax)
+                    
+            else:
+                # 不是第一次显示且AutoScale未启用，使用UI中现有的值
+                vmin, vmax = self._get_vmin_vmax_from_ui()
+                self._current_vmin = vmin
+                self._current_vmax = vmax
+                
+        except Exception:
+            # 如果出错，回退到自动计算
+            try:
+                is_log = self._is_log_mode_enabled()
+                vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
+                if vmin is not None and vmax is not None:
+                    self._update_vmin_vmax_ui(vmin, vmax)
+            except Exception:
+                pass
     
     def _update_graphics_view(self, image_data):
         """更新GraphicsView中的图像显示"""
@@ -1046,215 +868,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Independent window error: {str(e)}")
     
-    # ========== 颜色标尺和显示模式控制 ==========
-    
-    def _calculate_vmin_vmax(self, image_data, use_log=True):
-        """计算图像的Vmin和Vmax值（1%和99%分位数）"""
-        try:
-            if use_log:
-                safe_data = np.where(image_data > 0, image_data, 0.001)
-                log_data = np.log(safe_data)
-                vmin = np.percentile(log_data, 1)
-                vmax = np.percentile(log_data, 99)
-            else:
-                vmin = np.percentile(image_data, 1)
-                vmax = np.percentile(image_data, 99)
-            
-            return vmin, vmax
-        except Exception:
-            return None, None
-    
-    def _update_vmin_vmax_ui(self, vmin, vmax):
-        """更新UI中的Vmin和Vmax值"""
-        try:
-            if vmin is not None and vmax is not None:
-                if hasattr(self.ui, 'gisaxsInputVminValue'):
-                    self.ui.gisaxsInputVminValue.setValue(float(vmin))
-                if hasattr(self.ui, 'gisaxsInputVmaxValue'):
-                    self.ui.gisaxsInputVmaxValue.setValue(float(vmax))
-                
-                self._current_vmin = vmin
-                self._current_vmax = vmax
-                self._refresh_vmin_vmax_display()
-        except Exception:
-            pass
-    
-    def _get_vmin_vmax_from_ui(self):
-        """从UI获取当前的Vmin和Vmax值"""
-        try:
-            vmin = None
-            vmax = None
-            
-            if hasattr(self.ui, 'gisaxsInputVminValue'):
-                vmin = self.ui.gisaxsInputVminValue.value()
-            if hasattr(self.ui, 'gisaxsInputVmaxValue'):
-                vmax = self.ui.gisaxsInputVmaxValue.value()
-                
-            return vmin, vmax
-        except Exception:
-            return None, None
-    
-    def _handle_color_scale(self, image_data):
-        """处理颜色标尺逻辑"""
-        try:
-            is_auto_scale = self._is_auto_scale_enabled()
-            is_first_image = not self._has_displayed_image
-            is_log = self._is_log_mode_enabled()
-            
-            if is_first_image:
-                # 第一次显示图像，无论AutoScale状态如何都自动计算
-                vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
-                if vmin is not None and vmax is not None:
-                    self._update_vmin_vmax_ui(vmin, vmax)
-                self._has_displayed_image = True
-                
-            elif is_auto_scale:
-                # 不是第一次显示且AutoScale启用，重新计算
-                vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
-                if vmin is not None and vmax is not None:
-                    self._update_vmin_vmax_ui(vmin, vmax)
-                    
-            else:
-                # 不是第一次显示且AutoScale未启用，使用UI中现有的值
-                vmin, vmax = self._get_vmin_vmax_from_ui()
-                self._current_vmin = vmin
-                self._current_vmax = vmax
-                
-        except Exception:
-            # 如果出错，回退到自动计算
-            try:
-                is_log = self._is_log_mode_enabled()
-                vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
-                if vmin is not None and vmax is not None:
-                    self._update_vmin_vmax_ui(vmin, vmax)
-            except Exception:
-                pass
-    
-    def _is_auto_scale_enabled(self):
-        """检查AutoScale是否被启用"""
-        try:
-            if hasattr(self.ui, 'gisaxsInputAutoScaleCheckBox'):
-                return self.ui.gisaxsInputAutoScaleCheckBox.isChecked()
-            return True
-        except Exception:
-            return True
-    
-    def _is_log_mode_enabled(self):
-        """检查是否启用Log模式"""
-        try:
-            if hasattr(self.ui, 'gisaxsInputIntLogCheckBox'):
-                return self.ui.gisaxsInputIntLogCheckBox.isChecked()
-            return True
-        except Exception:
-            return True
-    
-    def _on_auto_scale_changed(self):
-        """AutoScale复选框状态改变时的处理"""
-        try:
-            is_enabled = self._is_auto_scale_enabled()
-            self.status_updated.emit(f"AutoScale {'enabled' if is_enabled else 'disabled'}")
-            
-            if is_enabled and self.current_stack_data is not None:
-                is_log = self._is_log_mode_enabled()
-                vmin, vmax = self._calculate_vmin_vmax(self.current_stack_data, use_log=is_log)
-                if vmin is not None and vmax is not None:
-                    self._update_vmin_vmax_ui(vmin, vmax)
-                    self._refresh_image_display()
-        except Exception as e:
-            self.status_updated.emit(f"AutoScale change error: {str(e)}")
-    
-    def _on_vmin_value_changed(self):
-        """Vmin值改变时的处理"""
-        try:
-            vmin, vmax = self._get_vmin_vmax_from_ui()
-            if vmin is not None:
-                self._current_vmin = vmin
-                if self.current_stack_data is not None:
-                    self._refresh_image_display()
-        except Exception:
-            pass
-    
-    def _on_vmax_value_changed(self):
-        """Vmax值改变时的处理"""
-        try:
-            vmin, vmax = self._get_vmin_vmax_from_ui()
-            if vmax is not None:
-                self._current_vmax = vmax
-                if self.current_stack_data is not None:
-                    self._refresh_image_display()
-        except Exception:
-            pass
-    
-    def _on_auto_show_changed(self):
-        """AutoShow选项改变时的处理"""
-        auto_show = hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
-        self.status_updated.emit(f"AutoShow {'enabled' if auto_show else 'disabled'}")
-    
-    def _on_log_changed(self):
-        """Log选项改变时的处理 - 支持线性/对数切换"""
-        try:
-            is_log = self._is_log_mode_enabled()
-            
-            # 刷新Vmin/Vmax控件的显示格式
-            self._refresh_vmin_vmax_display()
-            
-            # 如果当前有图像数据，重新计算vmin/vmax并更新显示
-            if self.current_stack_data is not None:
-                if self._is_auto_scale_enabled():
-                    vmin, vmax = self._calculate_vmin_vmax(self.current_stack_data, use_log=is_log)
-                    if vmin is not None and vmax is not None:
-                        self._update_vmin_vmax_ui(vmin, vmax)
-                
-                # 重新显示图像
-                self._refresh_image_display()
-                
-            self.status_updated.emit(f"*** DISPLAY MODE CHANGED TO: {'LOG' if is_log else 'LINEAR'} ***")
-                
-        except Exception as e:
-            self.status_updated.emit(f"Log mode change error: {str(e)}")
-    
-    # ========== 拟合相关方法 ==========
-        
-    def _start_fitting(self):
-        """开始拟合"""
-        if not self.current_parameters.get('imported_gisaxs_file'):
-            QMessageBox.warning(
-                self.parent,
-                "警告", 
-                "请先选择GISAXS文件！"
-            )
-            return
-            
-        try:
-            self.status_updated.emit("开始Cut Fitting处理...")
-            self.progress_updated.emit(0)
-            
-            # TODO: 实现实际的拟合逻辑
-            self._run_fitting_process()
-            
-            self.progress_updated.emit(100)
-            self.status_updated.emit("Cut Fitting处理完成！")
-            
-        except Exception as e:
-            QMessageBox.critical(
-                self.parent,
-                "错误",
-                f"Cut Fitting处理时出错:\n{str(e)}"
-            )
-            
-    def _run_fitting_process(self):
-        """运行拟合过程"""
-        # TODO: 实现具体的拟合算法
-        # 这里应该包含：
-        # 1. 数据裁剪
-        # 2. 预处理
-        # 3. 拟合计算
-        # 4. 结果输出
-        pass
-        
-    def _reset_fitting(self):
-        """重置拟合参数"""
-        self._set_default_parameters()
-        self._initialize_ui()
-        self.status_updated.emit("已重置Cut Fitting参数")
-        self.parameters_changed.emit(self.current_parameters)
+    def get_imported_file(self):
+        """获取导入的GISAXS文件路径"""
+        return self.current_parameters.get('imported_gisaxs_file', '')
+```

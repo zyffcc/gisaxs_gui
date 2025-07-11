@@ -3,92 +3,21 @@ GISAXS Predict 控制器 - 处理GISAXS数据的预测功能
 """
 
 import os
-import threading
-import time
-from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimer
+from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 
-# 全局标志，避免重复检查
-_TENSORFLOW_CHECKED = False
-_TENSORFLOW_AVAILABLE = False
-_TENSORFLOW_MODULE = None
+# 尝试导入所需的库
+try:
+    import tensorflow as tf
+    TENSORFLOW_AVAILABLE = True
+except ImportError:
+    TENSORFLOW_AVAILABLE = False
 
-def check_tensorflow_availability():
-    """检查TensorFlow可用性，但不立即导入"""
-    global _TENSORFLOW_CHECKED, _TENSORFLOW_AVAILABLE
-    if not _TENSORFLOW_CHECKED:
-        try:
-            import importlib.util
-            spec = importlib.util.find_spec("tensorflow")
-            _TENSORFLOW_AVAILABLE = spec is not None
-        except ImportError:
-            _TENSORFLOW_AVAILABLE = False
-        _TENSORFLOW_CHECKED = True
-    return _TENSORFLOW_AVAILABLE
-
-
-class TensorFlowLoader(QThread):
-    """TensorFlow异步加载线程"""
-    
-    # 信号定义
-    progress_updated = pyqtSignal(int, str)  # 进度，消息
-    loading_completed = pyqtSignal(bool, str)  # 成功/失败，消息
-    
-    def __init__(self):
-        super().__init__()
-        self.should_stop = False
-        
-    def run(self):
-        """在后台线程中加载TensorFlow"""
-        global _TENSORFLOW_MODULE
-        
-        try:
-            # 模拟加载步骤，提供详细进度反馈
-            steps = [
-                (10, "检查TensorFlow安装..."),
-                (30, "加载TensorFlow核心模块..."),
-                (50, "初始化TensorFlow会话..."),
-                (70, "配置GPU设备..."),
-                (90, "加载预训练模型..."),
-                (100, "TensorFlow初始化完成")
-            ]
-            
-            for progress, message in steps:
-                if self.should_stop:
-                    return
-                    
-                self.progress_updated.emit(progress, message)
-                
-                if progress == 30:  # 实际加载TensorFlow
-                    import tensorflow as tf
-                    _TENSORFLOW_MODULE = tf
-                    
-                    # 配置TensorFlow
-                    # 禁用GPU内存增长警告
-                    gpus = tf.config.experimental.list_physical_devices('GPU')
-                    if gpus:
-                        try:
-                            for gpu in gpus:
-                                tf.config.experimental.set_memory_growth(gpu, True)
-                        except RuntimeError:
-                            pass
-                    
-                    # 设置日志级别，减少输出
-                    tf.get_logger().setLevel('ERROR')
-                
-                # 模拟加载时间
-                time.sleep(0.5)
-            
-            self.loading_completed.emit(True, "TensorFlow加载成功")
-            
-        except ImportError as e:
-            self.loading_completed.emit(False, f"TensorFlow未安装: {str(e)}")
-        except Exception as e:
-            self.loading_completed.emit(False, f"TensorFlow加载失败: {str(e)}")
-    
-    def stop_loading(self):
-        """停止加载"""
-        self.should_stop = True
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
 
 
 class GisaxsPredictController(QObject):
@@ -115,21 +44,6 @@ class GisaxsPredictController(QObject):
         
         # 初始化标志
         self._initialized = False
-        
-        # TensorFlow相关状态
-        self._tensorflow_loaded = False
-        self._tensorflow_loading = False
-        self._tensorflow_loader = None
-        self._tensorflow_available = None
-        
-        # 检查TensorFlow可用性（但不加载）
-        self._check_tensorflow_availability()
-        
-    def _check_tensorflow_availability(self):
-        """检查TensorFlow可用性"""
-        self._tensorflow_available = check_tensorflow_availability()
-        if not self._tensorflow_available:
-            self.status_updated.emit("注意: TensorFlow未安装，预测功能将不可用")
         
     def initialize(self):
         """初始化控制器"""
@@ -187,8 +101,11 @@ class GisaxsPredictController(QObject):
         
     def _check_dependencies(self):
         """检查所需的依赖库"""
-        # TensorFlow状态已在初始化时检查
-        pass
+        if not TENSORFLOW_AVAILABLE:
+            self.status_updated.emit("Warning: TensorFlow not available. TensorFlow predictions will be disabled.")
+            
+        if not TORCH_AVAILABLE:
+            self.status_updated.emit("Warning: PyTorch not available. PyTorch predictions will be disabled.")
         
     def _set_default_parameters(self):
         """设置默认参数"""
@@ -262,89 +179,6 @@ class GisaxsPredictController(QObject):
         
     def _run_gisaxs_predict(self):
         """运行GISAXS预测"""
-        # 首先检查TensorFlow状态
-        if not self._tensorflow_available:
-            QMessageBox.warning(
-                self.main_window,
-                "依赖错误",
-                "TensorFlow未安装或不可用，无法进行预测。\n请安装TensorFlow后重试。"
-            )
-            return
-            
-        # 如果TensorFlow正在加载，提示用户等待
-        if self._tensorflow_loading:
-            QMessageBox.information(
-                self.main_window,
-                "正在加载",
-                "TensorFlow正在后台加载中，请稍候..."
-            )
-            return
-            
-        # 如果TensorFlow未加载，开始异步加载
-        if not self._tensorflow_loaded:
-            self._start_tensorflow_loading()
-            return
-            
-        # TensorFlow已加载，继续执行预测
-        self._execute_prediction()
-        
-    def _start_tensorflow_loading(self):
-        """开始异步加载TensorFlow"""
-        if self._tensorflow_loading:
-            return
-            
-        self._tensorflow_loading = True
-        
-        # 禁用预测按钮
-        if hasattr(self.ui, 'gisaxsPredictPredictButton'):
-            self.ui.gisaxsPredictPredictButton.setEnabled(False)
-            self.ui.gisaxsPredictPredictButton.setText("加载中...")
-        
-        # 创建加载线程
-        self._tensorflow_loader = TensorFlowLoader()
-        self._tensorflow_loader.progress_updated.connect(self._on_tensorflow_progress)
-        self._tensorflow_loader.loading_completed.connect(self._on_tensorflow_loaded)
-        
-        # 启动加载
-        self.status_updated.emit("开始加载TensorFlow...")
-        self._tensorflow_loader.start()
-        
-    def _on_tensorflow_progress(self, progress, message):
-        """TensorFlow加载进度更新"""
-        self.status_updated.emit(f"TensorFlow加载进度 {progress}%: {message}")
-        self.progress_updated.emit(progress)
-        
-    def _on_tensorflow_loaded(self, success, message):
-        """TensorFlow加载完成"""
-        self._tensorflow_loading = False
-        
-        # 恢复预测按钮
-        if hasattr(self.ui, 'gisaxsPredictPredictButton'):
-            self.ui.gisaxsPredictPredictButton.setEnabled(True)
-            self.ui.gisaxsPredictPredictButton.setText("开始预测")
-        
-        if success:
-            self._tensorflow_loaded = True
-            self.status_updated.emit("TensorFlow加载完成，可以开始预测")
-            self.progress_updated.emit(0)  # 重置进度条
-            
-            # 自动开始预测（如果用户刚才点击了预测按钮）
-            QTimer.singleShot(500, self._execute_prediction)
-        else:
-            self.status_updated.emit(f"TensorFlow加载失败: {message}")
-            QMessageBox.critical(
-                self.main_window,
-                "加载失败",
-                f"TensorFlow加载失败:\n{message}\n\n请检查TensorFlow安装或重新安装。"
-            )
-            
-        # 清理加载器
-        if self._tensorflow_loader:
-            self._tensorflow_loader.deleteLater()
-            self._tensorflow_loader = None
-            
-    def _execute_prediction(self):
-        """执行实际的预测逻辑"""
         # 获取当前参数
         self._update_parameters_from_ui()
         

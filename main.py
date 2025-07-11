@@ -80,25 +80,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if hasattr(self, 'mainWindowWidget'):
                 LayoutUtils.setup_adaptive_stacked_widget(self.mainWindowWidget)
         except ImportError as e:
-            print(f"布局工具导入失败: {e}")
+            # 布局工具导入失败，使用默认设置
+            pass
         except Exception as e:
-            print(f"StackedWidget设置失败: {e}")
+            # StackedWidget设置失败，使用默认设置
+            pass
     
     def closeEvent(self, event):
         """窗口关闭事件 - 确保参数保存"""
         try:
-            print("正在保存参数...")
             global_params.force_save_parameters()
-            print("✓ 程序关闭前参数已保存")
             event.accept()
         except Exception as e:
-            print(f"关闭时保存参数失败: {e}")
+            # 参数保存失败，仍然允许关闭
             event.accept()
     
     def initialize_parameter_system(self):
         """初始化全局参数系统"""
-        print("=== 初始化GISAXS参数系统 ===")
-        
         # 全局参数管理器已经通过导入自动创建
         # 参数管理器在初始化时会自动加载用户参数（如果存在）
         # 这里只需要确认系统已经正确初始化
@@ -108,15 +106,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             detector_params = global_params.get_module_parameters('detector')
             
             if beam_params and detector_params:
-                print(f"✓ 参数系统已正确初始化")
-                print(f"✓ 当前波长: {global_params.get_parameter('beam', 'wavelength')} nm")
-                print(f"✓ 探测器距离: {global_params.get_parameter('detector', 'distance')} mm")
+                # 参数系统已正确初始化
+                pass
             else:
-                print("⚠ 参数系统初始化不完整，使用默认参数")
+                # 参数系统初始化不完整，使用默认参数
+                pass
                 
         except Exception as e:
-            print(f"参数系统初始化警告: {e}")
-            print("使用内置默认参数")
+            # 参数系统初始化警告，使用内置默认参数
+            pass
     
     def get_software_parameters(self):
         """提供给外部调用的参数获取方法"""
