@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1081</width>
-    <height>877</height>
+    <width>1052</width>
+    <height>883</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -50,7 +50,7 @@
          <x>0</x>
          <y>0</y>
          <width>150</width>
-         <height>799</height>
+         <height>805</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -6348,8 +6348,8 @@ p, li { white-space: pre-wrap; }
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>869</width>
-                <height>780</height>
+                <width>852</width>
+                <height>769</height>
                </rect>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_26">
@@ -6376,35 +6376,6 @@ p, li { white-space: pre-wrap; }
                   <string>GISAXS Input</string>
                  </property>
                  <layout class="QGridLayout" name="gridLayout_23">
-                  <item row="1" column="0">
-                   <widget class="QLabel" name="gisaxsInputStackLabel">
-                    <property name="minimumSize">
-                     <size>
-                      <width>0</width>
-                      <height>20</height>
-                     </size>
-                    </property>
-                    <property name="maximumSize">
-                     <size>
-                      <width>16777215</width>
-                      <height>20</height>
-                     </size>
-                    </property>
-                    <property name="text">
-                     <string>Stack:</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="0" column="2" colspan="3">
-                   <widget class="QLineEdit" name="gisaxsInputImportButtonValue"/>
-                  </item>
-                  <item row="5" column="3" alignment="Qt::AlignHCenter">
-                   <widget class="QLabel" name="gisaxsInputCutLineParallelLabel">
-                    <property name="text">
-                     <string>Parallel.</string>
-                    </property>
-                   </widget>
-                  </item>
                   <item row="4" column="0">
                    <widget class="QLabel" name="gisaxsInputCutLineLabel">
                     <property name="minimumSize">
@@ -6421,6 +6392,71 @@ p, li { white-space: pre-wrap; }
                     </property>
                     <property name="text">
                      <string>Cut line:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="2" column="0">
+                   <widget class="QLabel" name="gisaxsInputColorScaleLabel">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                    <property name="maximumSize">
+                     <size>
+                      <width>16777215</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                    <property name="text">
+                     <string>Color Scale:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="0">
+                   <widget class="QPushButton" name="gisaxsInputImportButton">
+                    <property name="minimumSize">
+                     <size>
+                      <width>50</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                    <property name="text">
+                     <string>Import GISAXS</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="6" column="4">
+                   <widget class="QPushButton" name="gisaxsInputCenterAutoFindingButton">
+                    <property name="minimumSize">
+                     <size>
+                      <width>50</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                    <property name="text">
+                     <string>Auto Finding</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="7" column="3">
+                   <widget class="QPushButton" name="gisaxsInputExportButton">
+                    <property name="minimumSize">
+                     <size>
+                      <width>50</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                    <property name="text">
+                     <string>Export</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="3" column="0" alignment="Qt::AlignHCenter">
+                   <widget class="QLabel" name="gisaxsInputVminLabel">
+                    <property name="text">
+                     <string>Vmin:</string>
                     </property>
                    </widget>
                   </item>
@@ -6475,23 +6511,20 @@ p, li { white-space: pre-wrap; }
                     </layout>
                    </widget>
                   </item>
-                  <item row="5" column="4">
-                   <widget class="QDoubleSpinBox" name="gisaxsInputCutLineParallelValue"/>
-                  </item>
-                  <item row="3" column="4">
-                   <widget class="QDoubleSpinBox" name="gisaxsInputVmaxValue"/>
-                  </item>
-                  <item row="3" column="0" alignment="Qt::AlignHCenter">
-                   <widget class="QLabel" name="gisaxsInputVminLabel">
-                    <property name="text">
-                     <string>Vmin:</string>
+                  <item row="0" column="5" rowspan="8">
+                   <widget class="QGraphicsView" name="gisaxsInputGraphicsView">
+                    <property name="maximumSize">
+                     <size>
+                      <width>300</width>
+                      <height>16777215</height>
+                     </size>
                     </property>
-                   </widget>
-                  </item>
-                  <item row="6" column="0">
-                   <widget class="QLabel" name="gisaxsInputCenterLabel">
-                    <property name="text">
-                     <string>Center:</string>
+                    <property name="styleSheet">
+                     <string notr="true">QGraphicsView {
+    background: transparent;
+    border: 1px solid #888888; 
+    border-radius: 4px;  
+}</string>
                     </property>
                    </widget>
                   </item>
@@ -6521,113 +6554,17 @@ p, li { white-space: pre-wrap; }
                     </layout>
                    </widget>
                   </item>
-                  <item row="5" column="0" alignment="Qt::AlignHCenter">
-                   <widget class="QLabel" name="gisaxsInputCutLineVerticalLabel">
-                    <property name="text">
-                     <string>Vertical.</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="6" column="4">
-                   <widget class="QPushButton" name="gisaxsInputCenterAutoFindingButton">
-                    <property name="minimumSize">
-                     <size>
-                      <width>50</width>
-                      <height>0</height>
-                     </size>
-                    </property>
-                    <property name="text">
-                     <string>Auto Finding</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="7" column="2">
-                   <widget class="QPushButton" name="gisaxsInputExportButton">
-                    <property name="minimumSize">
-                     <size>
-                      <width>50</width>
-                      <height>0</height>
-                     </size>
-                    </property>
-                    <property name="text">
-                     <string>Export</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="3" column="2">
-                   <widget class="QDoubleSpinBox" name="gisaxsInputVminValue"/>
-                  </item>
-                  <item row="0" column="0">
-                   <widget class="QPushButton" name="gisaxsInputImportButton">
-                    <property name="minimumSize">
-                     <size>
-                      <width>50</width>
-                      <height>0</height>
-                     </size>
-                    </property>
-                    <property name="text">
-                     <string>Import GISAXS</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="3" column="3" alignment="Qt::AlignHCenter">
-                   <widget class="QLabel" name="gisaxsInputVmaxLabel">
-                    <property name="text">
-                     <string>Vmax:</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="7" column="0">
-                   <widget class="QPushButton" name="gisaxsInputCutButton">
-                    <property name="minimumSize">
-                     <size>
-                      <width>50</width>
-                      <height>0</height>
-                     </size>
-                    </property>
-                    <property name="text">
-                     <string>Cut</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="2" column="0">
-                   <widget class="QLabel" name="gisaxsInputColorScaleLabel">
-                    <property name="minimumSize">
-                     <size>
-                      <width>0</width>
-                      <height>20</height>
-                     </size>
-                    </property>
-                    <property name="maximumSize">
-                     <size>
-                      <width>16777215</width>
-                      <height>20</height>
-                     </size>
-                    </property>
-                    <property name="text">
-                     <string>Color Scale:</string>
-                    </property>
-                   </widget>
+                  <item row="5" column="4">
+                   <widget class="QDoubleSpinBox" name="gisaxsInputCutLineParallelValue"/>
                   </item>
                   <item row="5" column="2">
                    <widget class="QDoubleSpinBox" name="gisaxsInputCutLineVerticalValue"/>
                   </item>
-                  <item row="0" column="5" rowspan="8">
-                   <widget class="QGraphicsView" name="gisaxsInputGraphicsView">
-                    <property name="maximumSize">
-                     <size>
-                      <width>300</width>
-                      <height>16777215</height>
-                     </size>
-                    </property>
-                    <property name="styleSheet">
-                     <string notr="true">QGraphicsView {
-    background: transparent;
-    border: 1px solid #888888; 
-    border-radius: 4px;  
-}</string>
-                    </property>
-                   </widget>
+                  <item row="3" column="4">
+                   <widget class="QDoubleSpinBox" name="gisaxsInputVmaxValue"/>
+                  </item>
+                  <item row="3" column="2">
+                   <widget class="QDoubleSpinBox" name="gisaxsInputVminValue"/>
                   </item>
                   <item row="2" column="2" colspan="3">
                    <widget class="QWidget" name="gisaxsInputColorScaleWidget" native="true">
@@ -6675,6 +6612,82 @@ p, li { white-space: pre-wrap; }
                     </layout>
                    </widget>
                   </item>
+                  <item row="7" column="2">
+                   <widget class="QPushButton" name="gisaxsInputCutButton">
+                    <property name="minimumSize">
+                     <size>
+                      <width>50</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                    <property name="text">
+                     <string>Cut</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="2" colspan="3">
+                   <widget class="QLineEdit" name="gisaxsInputImportButtonValue"/>
+                  </item>
+                  <item row="3" column="3" alignment="Qt::AlignHCenter">
+                   <widget class="QLabel" name="gisaxsInputVmaxLabel">
+                    <property name="text">
+                     <string>Vmax:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="5" column="0" alignment="Qt::AlignHCenter">
+                   <widget class="QLabel" name="gisaxsInputCutLineVerticalLabel">
+                    <property name="text">
+                     <string>Vertical.</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="0">
+                   <widget class="QLabel" name="gisaxsInputStackLabel">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                    <property name="maximumSize">
+                     <size>
+                      <width>16777215</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                    <property name="text">
+                     <string>Stack:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="5" column="3" alignment="Qt::AlignHCenter">
+                   <widget class="QLabel" name="gisaxsInputCutLineParallelLabel">
+                    <property name="text">
+                     <string>Parallel.</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="6" column="0">
+                   <widget class="QLabel" name="gisaxsInputCenterLabel">
+                    <property name="text">
+                     <string>Center:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="7" column="0">
+                   <widget class="QPushButton" name="gisaxsInputDetectorParaButton">
+                    <property name="minimumSize">
+                     <size>
+                      <width>50</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                    <property name="text">
+                     <string>Detector Para.</string>
+                    </property>
+                   </widget>
+                  </item>
                  </layout>
                 </widget>
                </item>
@@ -6701,29 +6714,6 @@ p, li { white-space: pre-wrap; }
                   <string>Fitting</string>
                  </property>
                  <layout class="QGridLayout" name="gridLayout_24">
-                  <item row="1" column="0">
-                   <widget class="QPushButton" name="fitImport1dFileButton">
-                    <property name="minimumSize">
-                     <size>
-                      <width>50</width>
-                      <height>0</height>
-                     </size>
-                    </property>
-                    <property name="text">
-                     <string>Import 1D File</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="0" column="0">
-                   <widget class="QCheckBox" name="fitCurrentDataCheckBox">
-                    <property name="text">
-                     <string>Current Data</string>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="1" column="1" colspan="2">
-                   <widget class="QLineEdit" name="fitImport1dFileValue"/>
-                  </item>
                   <item row="2" column="0">
                    <widget class="QWidget" name="fitParticleWidget_1" native="true">
                     <layout class="QVBoxLayout" name="verticalLayout_20">
@@ -6824,26 +6814,58 @@ p, li { white-space: pre-wrap; }
                         <layout class="QGridLayout" name="gridLayout_26">
                          <item row="2" column="0">
                           <widget class="QLabel" name="fitParticleCylinderSigmaRLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [R]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="7" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderDValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderDValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="8" column="0">
                           <widget class="QLabel" name="fitParticleCylinderSigmaDLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [D]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderRValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderRValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="4" column="0">
                           <widget class="QLabel" name="fitParticleCylinderSigmahLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [h]</string>
                            </property>
@@ -6851,32 +6873,78 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="9" column="0">
                           <widget class="QLabel" name="fitParticleCylinderBGLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>BG</string>
                            </property>
                           </widget>
                          </item>
                          <item row="10" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaResValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaResValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="9" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderBGValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderBGValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="2" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaRValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaRValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="0" column="0">
                           <widget class="QLabel" name="fitParticleCylinderIntLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>Int.</string>
                            </property>
                           </widget>
                          </item>
                          <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderIntValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderIntValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="1" column="0">
                           <widget class="QLabel" name="fitParticleCylinderRLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>R [nm]</string>
                            </property>
@@ -6884,16 +6952,35 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="3" column="0">
                           <widget class="QLabel" name="fitParticleCylinderhLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>h [nm]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="8" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaDValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaDValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="10" column="0">
                           <widget class="QLabel" name="fitParticleCylinderSigmaResLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [Res.]</string>
                            </property>
@@ -6901,16 +6988,36 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="7" column="0">
                           <widget class="QLabel" name="fitParticleCylinderDLabel_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>D [nm]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="3" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderhValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderhValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="4" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmahValue_1"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmahValue_1">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                         </layout>
                        </widget>
@@ -6923,7 +7030,7 @@ p, li { white-space: pre-wrap; }
                    <widget class="QGraphicsView" name="fitGraphicsView">
                     <property name="minimumSize">
                      <size>
-                      <width>300</width>
+                      <width>400</width>
                       <height>0</height>
                      </size>
                     </property>
@@ -6939,6 +7046,325 @@ p, li { white-space: pre-wrap; }
     border: 1px solid #888888; 
     border-radius: 4px;  
 }</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="2" column="2">
+                   <widget class="QWidget" name="fitParticleWidget_3" native="true">
+                    <layout class="QVBoxLayout" name="verticalLayout_22">
+                     <item>
+                      <widget class="QComboBox" name="fitParticleShapeCombox_3">
+                       <item>
+                        <property name="text">
+                         <string>Sphere</string>
+                        </property>
+                       </item>
+                       <item>
+                        <property name="text">
+                         <string>None</string>
+                        </property>
+                       </item>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QStackedWidget" name="fitParticleStackWidget_3">
+                       <property name="currentIndex">
+                        <number>1</number>
+                       </property>
+                       <widget class="QWidget" name="fitParticleSpherePage_3">
+                        <layout class="QGridLayout" name="gridLayout_29">
+                         <item row="2" column="0">
+                          <widget class="QLabel" name="fitParticleSphereSigmaRLabel_3">
+                           <property name="text">
+                            <string>σ [R]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="6" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaResValue_3"/>
+                         </item>
+                         <item row="6" column="0">
+                          <widget class="QLabel" name="fitParticleSphereSigmaResLabel_3">
+                           <property name="text">
+                            <string>σ [Res.]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="4" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaDValue_3"/>
+                         </item>
+                         <item row="0" column="0">
+                          <widget class="QLabel" name="fitParticleSphereIntLabel_3">
+                           <property name="text">
+                            <string>Int.</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereIntValue_3"/>
+                         </item>
+                         <item row="2" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaRValue_3"/>
+                         </item>
+                         <item row="3" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereDValue_3"/>
+                         </item>
+                         <item row="1" column="0">
+                          <widget class="QLabel" name="fitParticleSphereRLabel_3">
+                           <property name="text">
+                            <string>R [nm]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="5" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereBGValue_3"/>
+                         </item>
+                         <item row="3" column="0">
+                          <widget class="QLabel" name="fitParticleSphereDLabel_3">
+                           <property name="text">
+                            <string>D [nm]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="1" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereRValue_3"/>
+                         </item>
+                         <item row="4" column="0">
+                          <widget class="QLabel" name="fitParticleSphereSigmaDLabel_3">
+                           <property name="text">
+                            <string>σ [D]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="5" column="0">
+                          <widget class="QLabel" name="fitParticleSphereBGLabel_3">
+                           <property name="text">
+                            <string>BG</string>
+                           </property>
+                          </widget>
+                         </item>
+                        </layout>
+                       </widget>
+                       <widget class="QWidget" name="fitParticleCylinderPage_3">
+                        <layout class="QGridLayout" name="gridLayout_30">
+                         <item row="2" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderSigmaRLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>σ [R]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="7" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderDValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="8" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderSigmaDLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>σ [D]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="1" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderRValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="4" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderSigmahLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>σ [h]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="9" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderBGLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>BG</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="10" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaResValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="9" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderBGValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="2" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaRValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderIntLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>Int.</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="0" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderIntValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="1" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderRLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>R [nm]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="3" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderhLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>h [nm]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="8" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaDValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="10" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderSigmaResLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>σ [Res.]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="7" column="0">
+                          <widget class="QLabel" name="fitParticleCylinderDLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                           <property name="text">
+                            <string>D [nm]</string>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="3" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderhValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                         <item row="4" column="1">
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmahValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
+                         </item>
+                        </layout>
+                       </widget>
+                      </widget>
+                     </item>
+                    </layout>
+                   </widget>
+                  </item>
+                  <item row="0" column="0">
+                   <widget class="QCheckBox" name="fitCurrentDataCheckBox">
+                    <property name="text">
+                     <string>Current Data</string>
                     </property>
                    </widget>
                   </item>
@@ -7042,26 +7468,58 @@ p, li { white-space: pre-wrap; }
                         <layout class="QGridLayout" name="gridLayout_28">
                          <item row="2" column="0">
                           <widget class="QLabel" name="fitParticleCylinderSigmaRLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [R]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="7" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderDValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderDValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="8" column="0">
                           <widget class="QLabel" name="fitParticleCylinderSigmaDLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [D]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderRValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderRValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="4" column="0">
                           <widget class="QLabel" name="fitParticleCylinderSigmahLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [h]</string>
                            </property>
@@ -7069,32 +7527,78 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="9" column="0">
                           <widget class="QLabel" name="fitParticleCylinderBGLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>BG</string>
                            </property>
                           </widget>
                          </item>
                          <item row="10" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaResValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaResValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="9" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderBGValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderBGValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="2" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaRValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaRValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="0" column="0">
                           <widget class="QLabel" name="fitParticleCylinderIntLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>Int.</string>
                            </property>
                           </widget>
                          </item>
                          <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderIntValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderIntValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="1" column="0">
                           <widget class="QLabel" name="fitParticleCylinderRLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>R [nm]</string>
                            </property>
@@ -7102,16 +7606,35 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="3" column="0">
                           <widget class="QLabel" name="fitParticleCylinderhLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>h [nm]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="8" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaDValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaDValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="10" column="0">
                           <widget class="QLabel" name="fitParticleCylinderSigmaResLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [Res.]</string>
                            </property>
@@ -7119,16 +7642,36 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="7" column="0">
                           <widget class="QLabel" name="fitParticleCylinderDLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>D [nm]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="3" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderhValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderhValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="4" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmahValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmahValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                         </layout>
                        </widget>
@@ -7137,196 +7680,44 @@ p, li { white-space: pre-wrap; }
                     </layout>
                    </widget>
                   </item>
-                  <item row="2" column="2">
-                   <widget class="QWidget" name="fitParticleWidget_3" native="true">
-                    <layout class="QVBoxLayout" name="verticalLayout_22">
+                  <item row="1" column="1" colspan="2">
+                   <widget class="QLineEdit" name="fitImport1dFileValue"/>
+                  </item>
+                  <item row="1" column="0">
+                   <widget class="QPushButton" name="fitImport1dFileButton">
+                    <property name="minimumSize">
+                     <size>
+                      <width>50</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                    <property name="text">
+                     <string>Import 1D File</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="1" colspan="2">
+                   <widget class="QWidget" name="widget" native="true">
+                    <layout class="QHBoxLayout" name="horizontalLayout_13">
                      <item>
-                      <widget class="QComboBox" name="fitParticleShapeCombox_3">
-                       <item>
-                        <property name="text">
-                         <string>Sphere</string>
-                        </property>
-                       </item>
-                       <item>
-                        <property name="text">
-                         <string>None</string>
-                        </property>
-                       </item>
+                      <widget class="QCheckBox" name="fitLogXCheckBox">
+                       <property name="text">
+                        <string>Log-x</string>
+                       </property>
                       </widget>
                      </item>
                      <item>
-                      <widget class="QStackedWidget" name="fitParticleStackWidget_3">
-                       <property name="currentIndex">
-                        <number>1</number>
+                      <widget class="QCheckBox" name="fitLogYCheckBox">
+                       <property name="text">
+                        <string>Log-y</string>
                        </property>
-                       <widget class="QWidget" name="fitParticleSpherePage_3">
-                        <layout class="QGridLayout" name="gridLayout_29">
-                         <item row="2" column="0">
-                          <widget class="QLabel" name="fitParticleSphereSigmaRLabel_3">
-                           <property name="text">
-                            <string>σ [R]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="6" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaResValue_3"/>
-                         </item>
-                         <item row="6" column="0">
-                          <widget class="QLabel" name="fitParticleSphereSigmaResLabel_3">
-                           <property name="text">
-                            <string>σ [Res.]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="4" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaDValue_3"/>
-                         </item>
-                         <item row="0" column="0">
-                          <widget class="QLabel" name="fitParticleSphereIntLabel_3">
-                           <property name="text">
-                            <string>Int.</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereIntValue_3"/>
-                         </item>
-                         <item row="2" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaRValue_3"/>
-                         </item>
-                         <item row="3" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereDValue_3"/>
-                         </item>
-                         <item row="1" column="0">
-                          <widget class="QLabel" name="fitParticleSphereRLabel_3">
-                           <property name="text">
-                            <string>R [nm]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="5" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereBGValue_3"/>
-                         </item>
-                         <item row="3" column="0">
-                          <widget class="QLabel" name="fitParticleSphereDLabel_3">
-                           <property name="text">
-                            <string>D [nm]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereRValue_3"/>
-                         </item>
-                         <item row="4" column="0">
-                          <widget class="QLabel" name="fitParticleSphereSigmaDLabel_3">
-                           <property name="text">
-                            <string>σ [D]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="5" column="0">
-                          <widget class="QLabel" name="fitParticleSphereBGLabel_3">
-                           <property name="text">
-                            <string>BG</string>
-                           </property>
-                          </widget>
-                         </item>
-                        </layout>
-                       </widget>
-                       <widget class="QWidget" name="fitParticleCylinderPage_3">
-                        <layout class="QGridLayout" name="gridLayout_30">
-                         <item row="2" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderSigmaRLabel_3">
-                           <property name="text">
-                            <string>σ [R]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="7" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderDValue_3"/>
-                         </item>
-                         <item row="8" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderSigmaDLabel_3">
-                           <property name="text">
-                            <string>σ [D]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderRValue_3"/>
-                         </item>
-                         <item row="4" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderSigmahLabel_3">
-                           <property name="text">
-                            <string>σ [h]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="9" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderBGLabel_3">
-                           <property name="text">
-                            <string>BG</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="10" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaResValue_3"/>
-                         </item>
-                         <item row="9" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderBGValue_3"/>
-                         </item>
-                         <item row="2" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaRValue_3"/>
-                         </item>
-                         <item row="0" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderIntLabel_3">
-                           <property name="text">
-                            <string>Int.</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderIntValue_3"/>
-                         </item>
-                         <item row="1" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderRLabel_3">
-                           <property name="text">
-                            <string>R [nm]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="3" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderhLabel_3">
-                           <property name="text">
-                            <string>h [nm]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="8" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmaDValue_3"/>
-                         </item>
-                         <item row="10" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderSigmaResLabel_3">
-                           <property name="text">
-                            <string>σ [Res.]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="7" column="0">
-                          <widget class="QLabel" name="fitParticleCylinderDLabel_3">
-                           <property name="text">
-                            <string>D [nm]</string>
-                           </property>
-                          </widget>
-                         </item>
-                         <item row="3" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderhValue_3"/>
-                         </item>
-                         <item row="4" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleCylinderSigmahValue_3"/>
-                         </item>
-                        </layout>
-                       </widget>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QCheckBox" name="fitNormCheckBox">
+                       <property name="text">
+                        <string>Norm</string>
+                       </property>
                       </widget>
                      </item>
                     </layout>
@@ -7620,7 +8011,7 @@ p, li { white-space: pre-wrap; }
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1081</width>
+     <width>1052</width>
      <height>21</height>
     </rect>
    </property>

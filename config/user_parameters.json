@@ -1,6 +1,6 @@
 {
     "beam": {
-        "wavelength": 0.15,
+        "wavelength": 0.1045,
         "grazing_angle": 0.4,
         "beam_size_x": 0.1,
         "beam_size_y": 0.1,
@@ -9,13 +9,13 @@
     },
     "detector": {
         "preset": "Pilatus 1M",
-        "distance": 2000.0,
+        "distance": 2565.0,
         "nbins_x": 981,
         "nbins_y": 1043,
-        "pixel_size_x": 172,
-        "pixel_size_y": 172,
-        "beam_center_x": 50.0,
-        "beam_center_y": 50.0,
+        "pixel_size_x": 172.0,
+        "pixel_size_y": 172.0,
+        "beam_center_x": 300.0,
+        "beam_center_y": 300.0,
         "exposure_time": 1.0,
         "dark_current": 0.1,
         "readout_noise": 5.0
@@ -66,9 +66,42 @@
         "save_path": "",
         "trainset_number": 1000,
         "save_every": 100,
-        "batch_size": 10
+        "batch_size": 10,
+        "detector": {
+            "preset": "Pilatus 2M",
+            "distance": 2565.0,
+            "nbins_x": 1475,
+            "nbins_y": 1475,
+            "pixel_size_x": 172,
+            "pixel_size_y": 172,
+            "beam_center_x": 50.0,
+            "beam_center_y": 50.0
+        }
     },
-    "fitting": {},
+    "fitting": {
+        "detector": {
+            "distance": 2565.0,
+            "pixel_size_x": 172.0,
+            "pixel_size_y": 172.0,
+            "beam_center_x": 791.7,
+            "beam_center_y": 368.0,
+            "show_q_axis": false
+        },
+        "last_session": {
+            "last_opened_file": "D:/PythonCode/gisaxs_gui/Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00014.cbf",
+            "last_directory": "D:/PythonCode/gisaxs_gui/Experiment_data",
+            "stack_count": 1,
+            "center_vertical": 506.0,
+            "center_parallel": 767.79,
+            "cutline_vertical": 20.0,
+            "cutline_parallel": 1180.0,
+            "auto_show": true,
+            "log_mode": true,
+            "auto_scale": true,
+            "vmin": -6.907755374908447,
+            "vmax": 4.143134593963623
+        }
+    },
     "gisaxs_predict": {},
     "classification": {},
     "system": {

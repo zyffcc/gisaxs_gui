@@ -5,9 +5,8 @@
 
 import json
 import os
-import atexit
 from typing import Dict, Any, Optional
-from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QSlider
 import threading
 
@@ -53,6 +52,7 @@ class UIControlManager(QObject):
         """当连接的控件信号触发时，更新缓存的值并发出通知信号"""
         self._control_values[control_id] = value
         self.control_value_changed.emit(control_id, value)
+        # 禁用自动同步到参数系统，改为各模块独立管理
         # print(f"Control '{control_id}' value changed to: {value}") # for debugging
 
     def _update_cached_value(self, control_id: str):
@@ -183,12 +183,6 @@ class GlobalParameterManager(QObject):
         
         # 加载用户上次使用的参数
         self._load_user_parameters()
-        
-        # 设置自动保存
-        self._setup_auto_save()
-        
-        # 注册退出时保存参数
-        atexit.register(self._save_user_parameters)
     
     def _init_default_parameters(self):
         """初始化默认参数"""
@@ -250,7 +244,28 @@ class GlobalParameterManager(QObject):
                 'save_path': '',
                 'trainset_number': 1000,
                 'save_every': 100,
-                'batch_size': 10
+                'batch_size': 10,
+                # Trainset模块专用探测器参数
+                'detector': {
+                    'preset': 'Pilatus 2M',
+                    'distance': 2000,  # mm
+                    'nbins_x': 1475,
+                    'nbins_y': 1475,
+                    'pixel_size_x': 172,  # μm
+                    'pixel_size_y': 172,  # μm
+                    'beam_center_x': 737,  # bin
+                    'beam_center_y': 737,  # bin
+                }
+            },
+            'fitting': {
+                # Fitting模块专用探测器参数 (用于Q轴坐标转换)
+                'detector': {
+                    'distance': 2565.0,  # mm
+                    'pixel_size_x': 172.0,  # μm
+                    'pixel_size_y': 172.0,  # μm
+                    'beam_center_x': 791.0,  # bin (Q轴转换用)
+                    'beam_center_y': 368.0,  # bin (Q轴转换用)
+                }
             },
             'system': {
                 'calculation_method': 'DWBA',
@@ -537,14 +552,6 @@ class GlobalParameterManager(QObject):
             print(f"✓ 用户参数已保存到: {self.user_params_file}")
         except Exception as e:
             print(f"保存用户参数失败: {e}")
-    
-    def _setup_auto_save(self):
-        """设置自动保存定时器"""
-        self.auto_save_timer = QTimer()
-        self.auto_save_timer.timeout.connect(self._save_user_parameters)
-        self.auto_save_timer.start(30000)  # 每30秒自动保存一次
-        print("✓ 自动保存已启用（每30秒）")
-    
     def reset_to_initial_parameters(self):
         """重置到初始默认参数"""
         try:
@@ -572,8 +579,8 @@ class GlobalParameterManager(QObject):
         except Exception as e:
             print(f"重置参数失败: {e}")
     
-    def force_save_parameters(self):
-        """强制保存当前参数"""
+    def save_user_parameters(self):
+        """保存当前用户参数"""
         self._save_user_parameters()
     
     # === UI控件管理便捷方法 ===

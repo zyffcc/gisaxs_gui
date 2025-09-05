@@ -26,7 +26,10 @@ class MainController(QObject):
         self.ui = ui
         self.parent = parent
         
-        # 初始化四个主页面控制器
+        # 快速初始化基础组件
+        self.current_parameters = {}
+        
+        # 创建控制器（但不立即初始化）
         self.trainset_controller = TrainsetController(ui, self)
         self.fitting_controller = FittingController(ui, self)
         self.classification_controller = ClassificationController(ui, self)
@@ -35,20 +38,89 @@ class MainController(QObject):
         # 注册控制器到全局参数管理器
         self._register_controllers()
         
-        # 当前项目参数
-        self.current_parameters = {}
-        
         # 设置界面连接
         self._setup_connections()
         
         # 设置按钮样式
         self._setup_button_styles()
         
-        # 初始化界面
-        self._initialize_ui()
-        
-        # 注册UI控件到全局参数系统
-        self._register_ui_controls()
+        # 延迟初始化其他组件
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(200, self._delayed_controller_initialization)
+
+    def _delayed_controller_initialization(self):
+        """延迟初始化控制器和其他耗时组件"""
+        try:
+            print("开始延迟初始化控制器...")
+            
+            # 初始化界面
+            self._initialize_ui()
+            
+            # 注册UI控件到全局参数系统（可能耗时）
+            self._register_ui_controls()
+            
+            # 初始化控制器（可能耗时）
+            self.trainset_controller.initialize()
+            self.fitting_controller.initialize()
+            self.classification_controller.initialize()
+            self.gisaxs_predict_controller.initialize()
+            
+            # 延迟加载上次会话状态（避免启动时立即加载文件）
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(1000, self._load_last_session)
+            
+            print("✓ 控制器延迟初始化完成")
+            
+        except Exception as e:
+            print(f"控制器延迟初始化失败: {e}")
+    
+    def _load_last_session(self):
+        """加载上次会话状态（异步，不阻塞启动）"""
+        try:
+            # 获取fitting模块的上次会话数据
+            fitting_session = global_params.get_parameter('fitting', 'last_session', {})
+            
+            if fitting_session:
+                # 如果有上次打开的文件，通知fitting控制器恢复
+                last_file = fitting_session.get('last_opened_file')
+                if last_file and os.path.exists(last_file):
+                    # 异步恢复会话，确保UI已完全初始化
+                    print(f"准备恢复上次会话: {os.path.basename(last_file)}")
+                    
+                    # 延迟恢复，让用户先看到界面
+                    from PyQt5.QtCore import QTimer
+                    QTimer.singleShot(2000, lambda: self._restore_session_async(fitting_session))
+                else:
+                    print("上次会话文件不存在，跳过恢复")
+            else:
+                print("没有上次会话数据")
+        except Exception as e:
+            print(f"加载上次会话失败: {e}")
+    
+    def _restore_session_async(self, fitting_session):
+        """异步恢复会话"""
+        try:
+            self.fitting_controller.restore_session(fitting_session)
+            print("✓ 上次会话已恢复")
+        except Exception as e:
+            print(f"恢复会话失败: {e}")
+
+    def save_current_session(self):
+        """保存当前会话状态"""
+        try:
+            # 保存fitting模块的会话状态
+            fitting_session = self.fitting_controller.get_session_data()
+            if fitting_session:
+                global_params.set_parameter('fitting', 'last_session', fitting_session)
+                global_params.save_user_parameters()
+                print("✓ 当前会话已保存")
+        except Exception as e:
+            print(f"保存当前会话失败: {e}")
+
+    def save_session_on_close(self):
+        """程序关闭时保存会话"""
+        self.save_current_session()
+        print("✓ 程序关闭时会话已保存")
     
     def _register_controllers(self):
         """注册控制器到全局参数管理器"""
@@ -120,7 +192,7 @@ class MainController(QObject):
         self.status_updated.emit("GISAXS Toolkit 就绪")
     
     def _register_ui_controls(self):
-        """自动注册UI控件到全局参数系统"""
+        """自动注册UI控件到全局参数系统（优化版）"""
         print("=== 开始注册UI控件到全局参数系统 ===")
         
         try:
@@ -130,9 +202,20 @@ class MainController(QObject):
             supported_types = (QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QSlider)
             registered_count = 0
             
-            # 递归搜索UI中的所有控件
-            def register_widget_recursively(widget, prefix=""):
+            # 预定义关键控件名称，优先注册
+            priority_controls = [
+                'gisaxsInputImportButtonValue', 'gisaxsInputStackValue',
+                'gisaxsInputCenterVerticalValue', 'gisaxsInputCenterParallelValue',
+                'gisaxsInputCutLineVerticalValue', 'gisaxsInputCutLineParallelValue',
+                'gisaxsInputVminValue', 'gisaxsInputVmaxValue'
+            ]
+            
+            # 递归搜索UI中的所有控件（优化版）
+            def register_widget_recursively(widget, prefix="", max_depth=6):
                 nonlocal registered_count
+                
+                if max_depth <= 0:  # 限制递归深度
+                    return
                 
                 # 检查当前控件
                 if isinstance(widget, supported_types):
@@ -144,16 +227,19 @@ class MainController(QObject):
                         # 注册控件
                         global_params.register_control(control_id, widget)
                         registered_count += 1
-                        print(f"  ✓ 注册控件: {control_id} ({type(widget).__name__})")
+                        
+                        # 只对优先控件输出日志
+                        if object_name in priority_controls:
+                            print(f"  ✓ 注册关键控件: {control_id} ({type(widget).__name__})")
                 
-                # 递归检查子控件
+                # 递归检查子控件（优化：检查所有子控件但限制深度）
                 if hasattr(widget, 'children'):
                     for child in widget.children():
                         if hasattr(child, 'metaObject'):  # 确保是QWidget
-                            register_widget_recursively(child, prefix)
+                            register_widget_recursively(child, prefix, max_depth - 1)
             
-            # 从主窗口开始注册
-            register_widget_recursively(self.ui)
+            # 从主窗口开始注册（增加深度）
+            register_widget_recursively(self.ui, "", 6)
             
             print(f"✓ UI控件注册完成，共注册 {registered_count} 个控件")
             
@@ -180,6 +266,10 @@ class MainController(QObject):
         # 确保控制器已初始化
         if not self.fitting_controller._initialized:
             self.fitting_controller.initialize()
+    
+    def handle_window_close(self):
+        """处理窗口关闭事件"""
+        self.save_session_on_close()
     
     def _switch_to_gisaxs_predict(self):
         """切换到GISAXS预测页面"""

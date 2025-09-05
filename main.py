@@ -21,23 +21,76 @@ from utils.parameter_access import (
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
+        import time
+        self._startup_time = time.time()
+        
         self.setupUi(self)
         self.setWindowTitle("GISAXS Toolkit")
         
-        # 初始化全局参数系统
-        self.initialize_parameter_system()
+        # 设置初始状态栏消息
+        if hasattr(self, 'statusbar'):
+            self.statusbar.showMessage("界面已就绪，正在初始化组件...")
         
-        # 初始化菜单管理器
-        self.menu_manager = MenuManager(self)
-        
-        # 初始化主控制器
-        self.main_controller = MainController(self, self)
-        
-        # 连接菜单信号
-        self.connect_menu_signals()
-        
-        # 设置窗口属性
+        # 快速初始化：仅设置基本UI
         self.setup_window()
+        
+        ui_ready_time = time.time() - self._startup_time
+        print(f"✓ UI界面就绪用时: {ui_ready_time:.2f}秒")
+        
+        # 延迟初始化标志
+        self._initialization_completed = False
+        
+        # 延迟初始化其他组件
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, self._delayed_initialization)
+    
+    def _delayed_initialization(self):
+        """延迟初始化非关键组件"""
+        import time
+        try:
+            # 更新状态栏
+            if hasattr(self, 'statusbar'):
+                self.statusbar.showMessage("正在初始化参数系统...")
+            
+            # 初始化全局参数系统
+            self.initialize_parameter_system()
+            
+            # 更新状态栏
+            if hasattr(self, 'statusbar'):
+                self.statusbar.showMessage("正在初始化菜单...")
+            
+            # 初始化菜单管理器
+            self.menu_manager = MenuManager(self)
+            
+            # 更新状态栏
+            if hasattr(self, 'statusbar'):
+                self.statusbar.showMessage("正在初始化控制器...")
+            
+            # 初始化主控制器
+            self.main_controller = MainController(self, self)
+            
+            # 连接菜单信号
+            self.connect_menu_signals()
+            
+            # 标记初始化完成
+            self._initialization_completed = True
+            
+            # 计算总启动时间
+            total_time = time.time() - self._startup_time
+            print(f"✓ 总启动用时: {total_time:.2f}秒")
+            
+            # 更新状态栏
+            if hasattr(self, 'statusbar'):
+                self.statusbar.showMessage(f"GISAXS Toolkit 就绪 (启动用时: {total_time:.1f}s)")
+            
+            print("✓ 延迟初始化完成")
+            
+        except Exception as e:
+            print(f"延迟初始化失败: {e}")
+            # 即使失败也要标记完成，避免界面卡死
+            self._initialization_completed = True
+            if hasattr(self, 'statusbar'):
+                self.statusbar.showMessage("初始化完成（部分功能可能不可用）")
     
     def connect_menu_signals(self):
         """连接菜单信号"""
@@ -87,33 +140,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             pass
     
     def closeEvent(self, event):
-        """窗口关闭事件 - 确保参数保存"""
+        """窗口关闭事件 - 通过主控制器统一保存会话"""
         try:
-            global_params.force_save_parameters()
+            # 通过主控制器统一保存当前会话
+            if hasattr(self, 'main_controller'):
+                self.main_controller.handle_window_close()
+            
             event.accept()
         except Exception as e:
             # 参数保存失败，仍然允许关闭
+            print(f"关闭时保存会话失败: {e}")
             event.accept()
     
     def initialize_parameter_system(self):
         """初始化全局参数系统"""
         # 全局参数管理器已经通过导入自动创建
         # 参数管理器在初始化时会自动加载用户参数（如果存在）
-        # 这里只需要确认系统已经正确初始化
+        # 具体的UI同步由各个控制器负责
         try:
             # 检查参数系统是否正常工作
             beam_params = global_params.get_module_parameters('beam')
             detector_params = global_params.get_module_parameters('detector')
             
             if beam_params and detector_params:
-                # 参数系统已正确初始化
-                pass
+                print("✓ 全局参数系统初始化成功")
             else:
-                # 参数系统初始化不完整，使用默认参数
-                pass
+                print("⚠ 参数系统初始化不完整，使用默认参数")
                 
         except Exception as e:
-            # 参数系统初始化警告，使用内置默认参数
+            print(f"⚠ 参数系统初始化警告: {e}")
             pass
     
     def get_software_parameters(self):

@@ -73,15 +73,16 @@ class TrainsetController(QObject):
         
     def _init_detector_params(self):
         """初始化探测器参数"""
+        # 从Trainset模块专用参数读取当前值，而不是使用硬编码默认值
         return {
-            'preset': 'Pilatus 2M',
-            'distance': 2000,  # mm
-            'nbins_x': 1475,
-            'nbins_y': 1475,
-            'pixel_size_x': 172,  # μm
-            'pixel_size_y': 172,  # μm
-            'beam_center_x': 50,  # bin
-            'beam_center_y': 50,  # bin
+            'preset': self.global_params.get_parameter('trainset', 'detector.preset', 'Pilatus 2M'),
+            'distance': self.global_params.get_parameter('trainset', 'detector.distance', 2000),  # mm
+            'nbins_x': self.global_params.get_parameter('trainset', 'detector.nbins_x', 1475),
+            'nbins_y': self.global_params.get_parameter('trainset', 'detector.nbins_y', 1475),
+            'pixel_size_x': self.global_params.get_parameter('trainset', 'detector.pixel_size_x', 172),  # μm
+            'pixel_size_y': self.global_params.get_parameter('trainset', 'detector.pixel_size_y', 172),  # μm
+            'beam_center_x': self.global_params.get_parameter('trainset', 'detector.beam_center_x', 737),  # bin
+            'beam_center_y': self.global_params.get_parameter('trainset', 'detector.beam_center_y', 737),  # bin
         }
         
     def _init_sample_params(self):
@@ -882,7 +883,7 @@ class TrainsetController(QObject):
             if preset_name == 'User-defined':
                 # 用户自定义模式，不更改当前参数值，只更新预设标记
                 self.detector_params['preset'] = preset_name
-                self.global_params.set_parameter('detector', 'preset', preset_name)
+                self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
                 print("✓ 切换到用户自定义模式")
                 return
             
@@ -898,11 +899,11 @@ class TrainsetController(QObject):
                 self._update_detector_ui()
                 
                 # 同步到全局参数管理器
-                self.global_params.set_parameter('detector', 'preset', preset_name)
+                self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
                 for key, value in preset_config.items():
                     # 跳过描述字段
                     if key != 'description':
-                        self.global_params.set_parameter('detector', key, value)
+                        self.global_params.set_parameter('trainset.detector', key, value)
                 
                 self._emit_parameters_changed()
                 print(f"✓ 探测器预设已切换到: {preset_name}")
@@ -917,18 +918,18 @@ class TrainsetController(QObject):
         try:
             if hasattr(self.ui, 'distanceValue'):
                 self.detector_params['distance'] = float(self.ui.distanceValue.text())
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('detector', 'distance', self.detector_params['distance'])
+                # 同步到Trainset模块专用参数
+                self.global_params.set_parameter('trainset', 'detector.distance', self.detector_params['distance'])
                 
             if hasattr(self.ui, 'beamCenterXValue'):
                 self.detector_params['beam_center_x'] = float(self.ui.beamCenterXValue.text())
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('detector', 'beam_center_x', self.detector_params['beam_center_x'])
+                # 同步到Trainset模块专用参数
+                self.global_params.set_parameter('trainset', 'detector.beam_center_x', self.detector_params['beam_center_x'])
                 
             if hasattr(self.ui, 'beamCenterYValue'):
                 self.detector_params['beam_center_y'] = float(self.ui.beamCenterYValue.text())
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('detector', 'beam_center_y', self.detector_params['beam_center_y'])
+                # 同步到Trainset模块专用参数
+                self.global_params.set_parameter('trainset', 'detector.beam_center_y', self.detector_params['beam_center_y'])
                 
             self._emit_parameters_changed()
         except ValueError:
@@ -940,19 +941,19 @@ class TrainsetController(QObject):
             # 更新参数值
             if hasattr(self.ui, 'NbinsXValue'):
                 self.detector_params['nbins_x'] = int(self.ui.NbinsXValue.text())
-                self.global_params.set_parameter('detector', 'nbins_x', self.detector_params['nbins_x'])
+                self.global_params.set_parameter('trainset.detector', 'nbins_x', self.detector_params['nbins_x'])
                 
             if hasattr(self.ui, 'NbinsYValue'):
                 self.detector_params['nbins_y'] = int(self.ui.NbinsYValue.text())
-                self.global_params.set_parameter('detector', 'nbins_y', self.detector_params['nbins_y'])
+                self.global_params.set_parameter('trainset.detector', 'nbins_y', self.detector_params['nbins_y'])
                 
             if hasattr(self.ui, 'pixelSizeXValue'):
                 self.detector_params['pixel_size_x'] = float(self.ui.pixelSizeXValue.text())
-                self.global_params.set_parameter('detector', 'pixel_size_x', self.detector_params['pixel_size_x'])
+                self.global_params.set_parameter('trainset.detector', 'pixel_size_x', self.detector_params['pixel_size_x'])
                 
             if hasattr(self.ui, 'pixelSizeYValue'):
                 self.detector_params['pixel_size_y'] = float(self.ui.pixelSizeYValue.text())
-                self.global_params.set_parameter('detector', 'pixel_size_y', self.detector_params['pixel_size_y'])
+                self.global_params.set_parameter('trainset.detector', 'pixel_size_y', self.detector_params['pixel_size_y'])
             
             # 检查是否需要切换到User-defined
             self._check_and_switch_to_user_defined()
@@ -1000,12 +1001,12 @@ class TrainsetController(QObject):
             if hasattr(self.ui, 'NbinsXValue'):
                 current_nbins_x = int(self.ui.NbinsXValue.text())
                 self.detector_params['nbins_x'] = current_nbins_x
-                self.global_params.set_parameter('detector', 'nbins_x', current_nbins_x)
+                self.global_params.set_parameter('trainset.detector', 'nbins_x', current_nbins_x)
                 
             if hasattr(self.ui, 'NbinsYValue'):
                 current_nbins_y = int(self.ui.NbinsYValue.text())
                 self.detector_params['nbins_y'] = current_nbins_y
-                self.global_params.set_parameter('detector', 'nbins_y', current_nbins_y)
+                self.global_params.set_parameter('trainset.detector', 'nbins_y', current_nbins_y)
             
             # 检查当前的Nbins值是否与预设值匹配
             if self._should_switch_to_user_defined(current_nbins_x, current_nbins_y):
@@ -1047,7 +1048,7 @@ class TrainsetController(QObject):
             if index >= 0:
                 self.ui.detectorPresetCombox.setCurrentIndex(index)
                 self.detector_params['preset'] = 'User-defined'
-                self.global_params.set_parameter('detector', 'preset', 'User-defined')
+                self.global_params.set_parameter('trainset.detector', 'preset', 'User-defined')
                 print("✓ 由于Nbins值不匹配预设，自动切换到User-defined模式")
             
             # 重新连接信号
@@ -1064,7 +1065,7 @@ class TrainsetController(QObject):
             if index >= 0:
                 self.ui.detectorPresetCombox.setCurrentIndex(index)
                 self.detector_params['preset'] = preset_name
-                self.global_params.set_parameter('detector', 'preset', preset_name)
+                self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
                 print(f"✓ 由于Nbins值匹配，自动切换到预设: {preset_name}")
             
             # 重新连接信号
