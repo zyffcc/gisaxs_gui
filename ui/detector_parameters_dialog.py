@@ -17,7 +17,7 @@ class DetectorParametersDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Detector Parameters")
-        self.setModal(True)
+        self.setModal(False)  # 改为非模态对话框，允许同时操作主界面
         self.resize(400, 350)
         
         # 参数字典

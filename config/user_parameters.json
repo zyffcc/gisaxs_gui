@@ -83,13 +83,15 @@
             "distance": 2565.0,
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
-            "beam_center_x": 791.7,
-            "beam_center_y": 368.0,
+            "beam_center_x": 791.7099999999999,
+            "beam_center_y": 368.12,
             "show_q_axis": false
         },
         "last_session": {
             "last_opened_file": "D:/PythonCode/gisaxs_gui/Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00014.cbf",
             "last_directory": "D:/PythonCode/gisaxs_gui/Experiment_data",
+            "last_1d_directory": "D:/PythonCode/gisaxs_gui/Experiment_SAXS_data",
+            "last_1d_file": "D:/PythonCode/gisaxs_gui/Experiment_SAXS_data/real_nano_HR.dat",
             "stack_count": 1,
             "center_vertical": 506.0,
             "center_parallel": 767.79,
@@ -99,7 +101,11 @@
             "log_mode": true,
             "auto_scale": true,
             "vmin": -6.907755374908447,
-            "vmax": 4.143134593963623
+            "vmax": 4.143134593963623,
+            "fit_current_data": false,
+            "fit_log_x": true,
+            "fit_log_y": true,
+            "fit_norm": false
         }
     },
     "gisaxs_predict": {},

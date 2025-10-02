@@ -780,9 +780,13 @@ class IndependentFitWindow(QMainWindow):
         self.figure = Figure(figsize=(10, 6), dpi=100)
         self.canvas = FigureCanvas(self.figure)
         self.toolbar = NavigationToolbar(self.canvas, self)
+
+        # 创建额外的控制按钮栏
+        control_layout = self._create_control_buttons()
         
         # 添加到布局
         layout.addWidget(self.toolbar)
+        layout.addLayout(control_layout)  # 额外的按钮栏
         layout.addWidget(self.canvas)
         
         # 创建axes
@@ -807,26 +811,63 @@ class IndependentFitWindow(QMainWindow):
         self.ax.grid(True, alpha=0.3)
         self.figure.tight_layout()
         self.canvas.draw()
+
+    def _create_control_buttons(self):
+        """创建额外的控制按钮"""
+        from PyQt5.QtWidgets import QHBoxLayout, QPushButton, QCheckBox, QLabel
         
-    def update_plot(self, x_coords, y_intensity, x_label, y_label, title, log_x=False, log_y=False, normalize=False):
-        """更新拟合结果图"""
+        control_layout = QHBoxLayout()
+        
+        # 添加标签
+        control_layout.addWidget(QLabel("Data Filter:"))
+        
+        # 只显示正值复选框
+        self.show_positive_cb = QCheckBox("Positive Only")
+        self.show_positive_cb.toggled.connect(self._on_show_positive_toggled)
+        control_layout.addWidget(self.show_positive_cb)
+        
+        return control_layout
+    
+    def _on_show_positive_toggled(self, checked):
+        pass # 目前仅占位，实际功能在update_plot中处理
+
+    def update_plot(self, x_coords, y_intensity, x_label, y_label, title, log_x=False, log_y=False, normalize=False, y_errors=None):
+        """更新拟合结果图，支持误差条"""
         try:
             # 数据预处理
             x_data = np.array(x_coords)
             y_data = np.array(y_intensity)
+            
+            # 处理误差条数据
+            err_data = None
+            if y_errors is not None:
+                err_data = np.array(y_errors)
             
             # 应用标准化处理
             if normalize:
                 max_intensity = np.max(y_data)
                 if max_intensity > 0:
                     y_data = y_data / max_intensity
+                    if err_data is not None:
+                        err_data = err_data / max_intensity
                     y_label = "Normalized Intensity"
             
             # 清除现有内容
             self.ax.clear()
             
-            # 使用共享绘图函数
-            FittingController._plot_cut_data_with_log_handling(self.ax, x_data, y_data, log_x, markersize=6, linewidth=2)
+            # 绘制数据，支持误差条
+            if err_data is not None:
+                # 有误差条时使用errorbar
+                self.ax.errorbar(x_data, y_data, yerr=err_data, fmt='o-', 
+                               markersize=4, linewidth=1.5, capsize=3, 
+                               alpha=0.8, label='Data with error bars')
+            else:
+                # 没有误差条时使用普通的plot，或使用共享绘图函数
+                try:
+                    FittingController._plot_cut_data_with_log_handling(self.ax, x_data, y_data, log_x, markersize=6, linewidth=2)
+                except:
+                    # 如果共享函数不可用，使用基本绘图
+                    self.ax.plot(x_data, y_data, 'o-', markersize=4, linewidth=1.5, alpha=0.8, label='Data')
             
             # 设置标签和标题
             self.ax.set_xlabel(x_label, fontsize=12)
@@ -848,10 +889,10 @@ class IndependentFitWindow(QMainWindow):
             self.ax.grid(True, alpha=0.4, linestyle='--')
             
             # 添加统计信息（位置：左下角）
-            stats_text = f'Points: {len(x_data)}\nMax: {np.max(y_data):.2e}\nMin: {np.min(y_data):.2e}'
-            self.ax.text(0.02, 0.02, stats_text, transform=self.ax.transAxes, 
-                        verticalalignment='bottom', fontsize=10, 
-                        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+            # stats_text = f'Points: {len(x_data)}\nMax: {np.max(y_data):.2e}\nMin: {np.min(y_data):.2e}'
+            # self.ax.text(0.02, 0.88, stats_text, transform=self.ax.transAxes, 
+            #             verticalalignment='bottom', fontsize=10, 
+            #             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
             
             # 调整布局
             self.figure.tight_layout()
@@ -874,6 +915,155 @@ class IndependentFitWindow(QMainWindow):
         except Exception:
             pass
         super().closeEvent(event)
+
+
+class UnifiedDisplayManager:
+    """统一的显示管理器，管理所有图形显示区域"""
+    
+    def __init__(self, controller):
+        self.controller = controller
+        self.ui = controller.ui
+        
+    def plot_1d_data(self, q, intensity, err=None, title="", source_info="", 
+                     log_x=False, log_y=False, normalize=False):
+        """统一的1D数据绘制方法"""
+        try:
+            # 数据预处理
+            plot_q = np.array(q)
+            plot_I = np.array(intensity)
+            plot_err = np.array(err) if err is not None else None
+            
+            # 标准化处理
+            if normalize and len(plot_I) > 0:
+                max_I = np.max(plot_I)
+                if max_I > 0:
+                    plot_I = plot_I / max_I
+                    if plot_err is not None:
+                        plot_err = plot_err / max_I
+            
+            # Log-Y预处理
+            if log_y and len(plot_I) > 0 and not np.all(plot_I > 0):
+                min_positive = np.min(plot_I[plot_I > 0]) if np.any(plot_I > 0) else 1e-10
+                plot_I = np.where(plot_I <= 0, min_positive, plot_I)
+                if plot_err is not None:
+                    plot_err = np.where(plot_I <= min_positive, min_positive * 0.1, plot_err)
+            
+            # 更新GUI内显示
+            self._update_gui_1d_display(plot_q, plot_I, plot_err, title, 
+                                       log_x, log_y, normalize)
+            
+            # 更新独立窗口显示
+            self._update_independent_1d_display(plot_q, plot_I, plot_err, title, 
+                                               log_x, log_y, normalize)
+            
+            # 更新状态
+            y_label = 'Intensity' + (' (normalized)' if normalize else '')
+            mode_str = f"Log-X: {log_x}, Log-Y: {log_y}, Norm: {normalize}"
+            self.controller.status_updated.emit(f"1D data displayed: {title} [{mode_str}]")
+            
+        except Exception as e:
+            self.controller.status_updated.emit(f"Failed to plot 1D data: {str(e)}")
+    
+    def _update_gui_1d_display(self, q, intensity, err, title, log_x, log_y, normalize):
+        """更新GUI内的1D数据显示"""
+        try:
+            if not hasattr(self.ui, 'fitGraphicsView') or not MATPLOTLIB_AVAILABLE:
+                return
+                
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+            
+            # 创建figure
+            figure = Figure(figsize=(8, 6))
+            canvas = FigureCanvas(figure)
+            ax = figure.add_subplot(111)
+            
+            # 使用统一的绘图逻辑
+            self._unified_plot_1d_data(ax, q, intensity, err, title, log_x, log_y, normalize)
+            
+            figure.tight_layout()
+            
+            # 强制画布绘制更新
+            canvas.draw()
+            
+            # 添加到场景
+            scene = self.controller._setup_fit_graphics_scene()
+            if scene is not None:
+                proxy_widget = scene.addWidget(canvas)
+                self.ui.fitGraphicsView.fitInView(proxy_widget)  # 移除KeepAspectRatio可能的影响
+                
+                # 保存引用
+                self.controller._current_fit_canvas = canvas
+                self.controller._current_fit_figure = figure
+                
+        except Exception as e:
+            self.controller.status_updated.emit(f"Failed to update GUI 1D display: {str(e)}")
+    
+    def _unified_plot_1d_data(self, ax, q, intensity, err, title, log_x, log_y, normalize):
+        """统一的1D数据绘图逻辑，同时适用于GUI内置和独立窗口"""
+        try:
+            # 绘制数据 - 使用与独立窗口相同的处理方式
+            if err is not None:
+                # 有误差条时使用errorbar
+                ax.errorbar(q, intensity, yerr=err, fmt='o-', 
+                           markersize=3, linewidth=1, capsize=2, 
+                           alpha=0.8, label='Data with error bars')
+            else:
+                # 使用与独立窗口相同的Log-X处理函数
+                FittingController._plot_cut_data_with_log_handling(
+                    ax, q, intensity, log_x, markersize=3, linewidth=1
+                )
+            
+            # 设置标签和标题
+            ax.set_xlabel('q (Å⁻¹)')
+            ax.set_ylabel('Intensity' + (' (normalized)' if normalize else ''))
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+            
+            # 设置坐标轴 - 与独立窗口保持一致
+            if log_x:
+                ax.set_xscale('log')
+            else:
+                ax.set_xscale('linear')
+                
+            if log_y:
+                ax.set_yscale('log')
+            else:
+                ax.set_yscale('linear')
+                
+        except Exception as e:
+            # 降级到基本绘图
+            if err is not None:
+                ax.errorbar(q, intensity, yerr=err, fmt='o-', markersize=3, linewidth=1, capsize=2)
+            else:
+                ax.plot(q, intensity, 'o-', markersize=3, linewidth=1)
+            ax.set_xlabel('q (Å⁻¹)')
+            ax.set_ylabel('Intensity' + (' (normalized)' if normalize else ''))
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+    
+    def _update_independent_1d_display(self, q, intensity, err, title, log_x, log_y, normalize):
+        """更新独立窗口的1D数据显示"""
+        try:
+            if (self.controller.independent_fit_window and 
+                hasattr(self.controller.independent_fit_window, 'update_plot')):
+                
+                y_label = 'Intensity' + (' (normalized)' if normalize else '')
+                self.controller.independent_fit_window.update_plot(
+                    q, intensity, 'q (Å⁻¹)', y_label, title,
+                    log_x, log_y, normalize, err
+                )
+                
+        except Exception as e:
+            self.controller.status_updated.emit(f"Failed to update independent 1D display: {str(e)}")
+    
+    def get_display_options(self):
+        """获取当前显示选项"""
+        return {
+            'log_x': hasattr(self.ui, 'fitLogXCheckBox') and self.ui.fitLogXCheckBox.isChecked(),
+            'log_y': hasattr(self.ui, 'fitLogYCheckBox') and self.ui.fitLogYCheckBox.isChecked(),
+            'normalize': hasattr(self.ui, 'fitNormCheckBox') and self.ui.fitNormCheckBox.isChecked()
+        }
 
 
 class AsyncImageLoader(QThread):
@@ -1026,6 +1216,10 @@ class FittingController(QObject):
         # 当前切割结果数据 (用于独立窗口显示)
         self.current_cut_data = None
         
+        # 1D数据导入相关
+        self.current_1d_data = None  # 存储导入的1D文件数据 {q, I, err}
+        self.current_1d_file_path = None  # 存储当前导入的1D文件路径
+        
         # 模式状态跟踪（避免重复转换）
         self._last_q_mode = None
         
@@ -1034,6 +1228,14 @@ class FittingController(QObject):
         self._figure_cache = None
         self._canvas_cache = None
         
+        # 拟合显示相关的场景管理
+        self._fit_graphics_scene = None
+        self._current_fit_canvas = None
+        self._current_fit_figure = None
+        
+        # 统一显示管理器
+        self._display_manager = UnifiedDisplayManager(self)
+        
         # 颜色标尺相关
         self._current_vmin = None
         self._current_vmax = None
@@ -1041,6 +1243,7 @@ class FittingController(QObject):
         
         # 初始化标志
         self._initialized = False
+        self._initializing = True  # 标记正在初始化中
         
         # 异步图像加载线程
         self.async_image_loader = AsyncImageLoader()
@@ -1051,15 +1254,21 @@ class FittingController(QObject):
         # 参数选择状态
         self.current_parameter_selection = None
         
+        # 探测器参数对话框
+        self.detector_params_dialog = None
+        
     def initialize(self):
         """初始化控制器"""
         if self._initialized:
             return
             
-        self._setup_connections()
+        # 先初始化UI状态（不触发信号）
         self._initialize_ui()
+        # 然后设置信号连接
+        self._setup_connections()
         # 会话管理已移到主控制器统一处理
         self._initialized = True
+        self._initializing = False  # 初始化完成
         
     def _setup_connections(self):
         """设置信号连接"""
@@ -1131,6 +1340,27 @@ class FittingController(QObject):
         if hasattr(self.ui, 'fitResetButton'):
             self.ui.fitResetButton.clicked.connect(self._reset_fitting)
             
+        # 连接fitImport1dFileButton按钮
+        if hasattr(self.ui, 'fitImport1dFileButton'):
+            self.ui.fitImport1dFileButton.clicked.connect(self._import_1d_file)
+            
+        # 连接fitImport1dFileValue文本框的回车事件
+        if hasattr(self.ui, 'fitImport1dFileValue'):
+            self.ui.fitImport1dFileValue.returnPressed.connect(self._on_1d_file_value_changed)
+            
+        # 连接拟合显示选项复选框
+        if hasattr(self.ui, 'fitCurrentDataCheckBox'):
+            self.ui.fitCurrentDataCheckBox.toggled.connect(self._on_current_data_checkbox_changed)
+            
+        if hasattr(self.ui, 'fitLogXCheckBox'):
+            self.ui.fitLogXCheckBox.toggled.connect(self._on_fit_display_option_changed)
+            
+        if hasattr(self.ui, 'fitLogYCheckBox'):
+            self.ui.fitLogYCheckBox.toggled.connect(self._on_fit_display_option_changed)
+            
+        if hasattr(self.ui, 'fitNormCheckBox'):
+            self.ui.fitNormCheckBox.toggled.connect(self._on_fit_display_option_changed)
+            
         # 连接Cut Line和Center参数控件的信号（逆向选择功能）
         self._connect_cutline_parameter_signals()
             
@@ -1193,6 +1423,9 @@ class FittingController(QObject):
         if hasattr(self.ui, 'gisaxsInputAutoScaleCheckBox'):
             self.ui.gisaxsInputAutoScaleCheckBox.setChecked(True)
             
+        # 初始化拟合相关复选框状态（阻塞信号避免触发方法调用）
+        self._initialize_fit_checkboxes()
+            
         # 初始化Vmin/Vmax值为0（稍后会在显示图像时自动计算）
         if hasattr(self.ui, 'gisaxsInputVminValue'):
             self.ui.gisaxsInputVminValue.setValue(0.0)
@@ -1253,8 +1486,83 @@ class FittingController(QObject):
         # 初始化Cut Line标签的单位
         self._update_cutline_labels_units()
         
+        # 初始化Q模式状态（避免第一次调用时误触发转换）
+        self._initialize_q_mode_state()
+        
         # 检查依赖库
         self._check_dependencies()
+    
+    def _initialize_fit_checkboxes(self):
+        """初始化拟合相关复选框状态（阻塞信号避免触发方法调用）"""
+        try:
+            # 初始化fitCurrentDataCheckBox（默认不勾选）
+            if hasattr(self.ui, 'fitCurrentDataCheckBox'):
+                self.ui.fitCurrentDataCheckBox.blockSignals(True)
+                self.ui.fitCurrentDataCheckBox.setChecked(False)
+                self.ui.fitCurrentDataCheckBox.blockSignals(False)
+            
+            # 初始化fitLogXCheckBox（默认不勾选）
+            if hasattr(self.ui, 'fitLogXCheckBox'):
+                self.ui.fitLogXCheckBox.blockSignals(True)
+                self.ui.fitLogXCheckBox.setChecked(False)
+                self.ui.fitLogXCheckBox.blockSignals(False)
+            
+            # 初始化fitLogYCheckBox（默认不勾选）
+            if hasattr(self.ui, 'fitLogYCheckBox'):
+                self.ui.fitLogYCheckBox.blockSignals(True)
+                self.ui.fitLogYCheckBox.setChecked(False)
+                self.ui.fitLogYCheckBox.blockSignals(False)
+            
+            # 初始化fitNormCheckBox（默认不勾选）
+            if hasattr(self.ui, 'fitNormCheckBox'):
+                self.ui.fitNormCheckBox.blockSignals(True)
+                self.ui.fitNormCheckBox.setChecked(False)
+                self.ui.fitNormCheckBox.blockSignals(False)
+                
+        except Exception as e:
+            print(f"初始化拟合复选框失败: {e}")
+    
+    def _restore_fit_checkboxes(self, session_data):
+        """恢复拟合复选框状态（阻塞信号避免触发方法调用）"""
+        try:
+            # 恢复fitCurrentDataCheckBox
+            if hasattr(self.ui, 'fitCurrentDataCheckBox'):
+                self.ui.fitCurrentDataCheckBox.blockSignals(True)
+                self.ui.fitCurrentDataCheckBox.setChecked(session_data.get('fit_current_data', False))
+                self.ui.fitCurrentDataCheckBox.blockSignals(False)
+            
+            # 恢复fitLogXCheckBox
+            if hasattr(self.ui, 'fitLogXCheckBox'):
+                self.ui.fitLogXCheckBox.blockSignals(True)
+                self.ui.fitLogXCheckBox.setChecked(session_data.get('fit_log_x', False))
+                self.ui.fitLogXCheckBox.blockSignals(False)
+            
+            # 恢复fitLogYCheckBox
+            if hasattr(self.ui, 'fitLogYCheckBox'):
+                self.ui.fitLogYCheckBox.blockSignals(True)
+                self.ui.fitLogYCheckBox.setChecked(session_data.get('fit_log_y', False))
+                self.ui.fitLogYCheckBox.blockSignals(False)
+            
+            # 恢复fitNormCheckBox
+            if hasattr(self.ui, 'fitNormCheckBox'):
+                self.ui.fitNormCheckBox.blockSignals(True)
+                self.ui.fitNormCheckBox.setChecked(session_data.get('fit_norm', False))
+                self.ui.fitNormCheckBox.blockSignals(False)
+                
+        except Exception as e:
+            print(f"恢复拟合复选框状态失败: {e}")
+    
+    def _initialize_q_mode_state(self):
+        """初始化Q模式状态，避免第一次调用时误触发转换"""
+        try:
+            # 获取当前Q轴显示状态并设置为初始状态
+            current_q_mode = self._should_show_q_axis()
+            self._last_q_mode = current_q_mode
+            print(f"DEBUG: 初始化Q模式状态 = {current_q_mode}")
+        except Exception as e:
+            # 如果获取状态失败，默认设置为像素模式
+            self._last_q_mode = False
+            print(f"初始化Q模式状态失败，默认为像素模式: {e}")
         
     def _setup_smart_display(self, spinbox):
         """设置SpinBox的智能显示格式"""
@@ -1358,6 +1666,10 @@ class FittingController(QObject):
     def _on_parameter_display_changed(self):
         """参数显示立即更新（不更新图像）"""
         try:
+            # 如果正在初始化中，跳过处理
+            if getattr(self, '_initializing', True):
+                return
+                
             # 立即更新选择框显示，但不执行Cut操作
             center_x = 0
             center_y = 0
@@ -2228,17 +2540,26 @@ class FittingController(QObject):
             raise Exception(f"Plot data error: {str(e)}")
     
     def _on_fit_graphics_view_double_click(self, event):
-        """fitGraphicsView双击事件处理 - 打开独立拟合结果窗口"""
+        """fitGraphicsView双击事件处理 - 打开独立拟合结果窗口，显示当前GUI中显示的数据"""
         try:
             if not MATPLOTLIB_AVAILABLE:
                 QMessageBox.warning(self.main_window, "Missing Library",
                                   "matplotlib library is required for independent window.\nPlease install it using: pip install matplotlib")
                 return
             
-            # 如果没有切割数据，提示用户
-            if self.current_cut_data is None:
-                QMessageBox.information(self.main_window, "No Cut Data", "Please perform a cut operation first.")
-                return
+            # 检查当前fitCurrentDataCheckBox的状态，决定显示什么数据
+            is_current_data_checked = hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked()
+            
+            if is_current_data_checked:
+                # 显示Cut数据
+                if self.current_cut_data is None:
+                    QMessageBox.information(self.main_window, "No Cut Data", "Please perform a cut operation first.")
+                    return
+            else:
+                # 显示1D数据
+                if self.current_1d_data is None:
+                    QMessageBox.information(self.main_window, "No 1D Data", "Please import a 1D data file first.")
+                    return
             
             # 打开或显示独立拟合窗口
             self._show_independent_fit_window()
@@ -2255,8 +2576,11 @@ class FittingController(QObject):
                 # 连接状态更新信号
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
             
-            # 更新窗口中的拟合结果
-            if self.current_cut_data is not None:
+            # 根据当前状态更新窗口数据
+            is_current_data_checked = hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked()
+            
+            if is_current_data_checked and self.current_cut_data is not None:
+                # 显示Cut数据
                 self.independent_fit_window.update_plot(
                     self.current_cut_data['x_coords'],
                     self.current_cut_data['y_intensity'],
@@ -2266,6 +2590,24 @@ class FittingController(QObject):
                     log_x=self._is_fit_log_x_enabled(),
                     log_y=self._is_fit_log_y_enabled(),
                     normalize=self._is_fit_norm_enabled()
+                )
+            elif not is_current_data_checked and self.current_1d_data is not None:
+                # 显示1D数据
+                log_x = self._is_fit_log_x_enabled()
+                log_y = self._is_fit_log_y_enabled()
+                normalize = self._is_fit_norm_enabled()
+                
+                filename = os.path.basename(self.current_1d_data['file_path'])
+                title = f'1D SAXS Data: {filename}'
+                
+                self.independent_fit_window.update_plot(
+                    self.current_1d_data['q'], 
+                    self.current_1d_data['I'], 
+                    'q (Å⁻¹)', 
+                    'Intensity' + (' (normalized)' if normalize else ''),
+                    title,
+                    log_x, log_y, normalize, 
+                    self.current_1d_data.get('err')
                 )
             
             # 显示窗口并置于前台
@@ -2284,6 +2626,10 @@ class FittingController(QObject):
     def _on_cutline_parameters_changed(self):
         """当Cut Line参数改变时，更新图像中的选择框显示，并自动重新执行Cut操作（如果之前已有Cut结果）"""
         try:
+            # 如果正在初始化中，跳过处理
+            if getattr(self, '_initializing', True):
+                return
+                
             # 使用防抖动机制，避免频繁更新导致卡顿
             if not hasattr(self, '_cutline_update_timer'):
                 from PyQt5.QtCore import QTimer
@@ -2746,7 +3092,281 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Log mode change error: {str(e)}")
     
+    def _on_fit_display_option_changed(self):
+        """拟合显示选项改变时的处理"""
+        try:
+            # 如果正在初始化中，跳过处理
+            if getattr(self, '_initializing', True):
+                return
+                
+            # 检查fitCurrentDataCheckBox的状态
+            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
+                # fitCurrentDataCheckBox被勾选时，重新执行cut操作
+                self._perform_cut()
+                self.status_updated.emit("Fit display options changed - Cut results updated")
+            else:
+                # fitCurrentDataCheckBox未勾选时，更新1D数据显示（如果有的话）
+                if self.current_1d_data is not None:
+                    self._display_1d_data_in_fit_view()
+                    self.status_updated.emit("Fit display options changed - 1D data display updated")
+                else:
+                    self.status_updated.emit("Fit display options changed - no data to update")
+                
+        except Exception as e:
+            self.status_updated.emit(f"Fit display option change error: {str(e)}")
+    
+    def _on_current_data_checkbox_changed(self, checked):
+        """当fitCurrentDataCheckBox状态改变时的处理"""
+        try:
+            # 如果正在初始化中，跳过处理
+            if getattr(self, '_initializing', True):
+                return
+                
+            if checked:
+                # 勾选状态：显示Cut数据（如果有GISAXS数据的话）
+                if self.current_stack_data is not None:
+                    # 有GISAXS数据，执行Cut操作
+                    self._perform_cut()
+                    self.status_updated.emit("Current Data enabled - Cut operation performed")
+                else:
+                    # 没有GISAXS数据，显示提示
+                    self.status_updated.emit("Current Data enabled - No GISAXS data available for cut operation")
+            else:
+                # 不勾选状态：显示1D数据（如果有的话）
+                if self.current_1d_data is not None:
+                    # 有1D数据，显示1D数据
+                    self._display_1d_data_in_fit_view()
+                    self.status_updated.emit("Current Data disabled - 1D data displayed")
+                else:
+                    # 没有1D数据，清空显示区域
+                    self._clear_fit_graphics_view()
+                    self.status_updated.emit("Current Data disabled - No 1D data available")
+                    
+        except Exception as e:
+            self.status_updated.emit(f"Current Data checkbox change error: {str(e)}")
+    
     # ========== 拟合相关方法 ==========
+    
+    def _import_1d_file(self):
+        """导入1D数据文件（.dat或.txt格式）"""
+        try:
+            # 从会话数据获取上次使用的目录
+            from core.global_params import global_params
+            fitting_session = global_params.get_parameter('fitting', 'last_session', {})
+            last_1d_directory = fitting_session.get('last_1d_directory')
+            
+            # 确定起始目录
+            if last_1d_directory and os.path.exists(last_1d_directory):
+                start_directory = last_1d_directory
+            else:
+                start_directory = os.getcwd()  # 当前工作目录
+            
+            # 打开文件选择对话框
+            file_path, _ = QFileDialog.getOpenFileName(
+                self.main_window,
+                "Select 1D SAXS Data File",
+                start_directory,
+                "Data Files (*.dat *.txt);;All Files (*)"
+            )
+            
+            # 如果用户取消了选择
+            if not file_path:
+                return
+                
+            # 保存文件路径用于下次打开
+            self.current_1d_file_path = file_path
+            
+            # 保存目录到会话数据
+            current_directory = os.path.dirname(file_path)
+            fitting_session['last_1d_directory'] = current_directory
+            global_params.set_parameter('fitting', 'last_session', fitting_session)
+            
+            # 加载数据
+            self._load_1d_data(file_path)
+            
+        except Exception as e:
+            self.status_updated.emit(f"Failed to import 1D file: {str(e)}")
+            QMessageBox.critical(
+                self.main_window,
+                "Error",
+                f"Failed to import 1D file:\n{str(e)}"
+            )
+    
+    def _on_1d_file_value_changed(self):
+        """当fitImport1dFileValue文本框回车时的处理"""
+        try:
+            if not hasattr(self.ui, 'fitImport1dFileValue'):
+                return
+                
+            file_path_input = self.ui.fitImport1dFileValue.text().strip()
+            
+            if not file_path_input:
+                self.status_updated.emit("No file path entered")
+                return
+            
+            # 导入global_params
+            from core.global_params import global_params
+            
+            # 如果输入的不是绝对路径，尝试使用当前目录或之前的目录
+            if not os.path.isabs(file_path_input):
+                # 从会话数据获取上次使用的目录
+                fitting_session = global_params.get_parameter('fitting', 'last_session', {})
+                last_1d_directory = fitting_session.get('last_1d_directory')
+                
+                if last_1d_directory and os.path.exists(last_1d_directory):
+                    file_path_input = os.path.join(last_1d_directory, file_path_input)
+                else:
+                    file_path_input = os.path.join(os.getcwd(), file_path_input)
+            
+            # 验证文件是否存在
+            if not os.path.exists(file_path_input):
+                QMessageBox.warning(
+                    self.main_window,
+                    "File Not Found",
+                    f"File does not exist:\n{file_path_input}"
+                )
+                return
+            
+            # 验证文件扩展名
+            file_ext = os.path.splitext(file_path_input)[1].lower()
+            if file_ext not in ['.dat', '.txt']:
+                QMessageBox.warning(
+                    self.main_window,
+                    "Invalid File Type",
+                    f"Only .dat and .txt files are supported.\nSelected: {file_ext}"
+                )
+                return
+            
+            # 更新文本框显示完整路径
+            self.ui.fitImport1dFileValue.setText(file_path_input)
+            
+            # 保存文件路径
+            self.current_1d_file_path = file_path_input
+            
+            # 保存目录到会话数据
+            current_directory = os.path.dirname(file_path_input)
+            fitting_session = global_params.get_parameter('fitting', 'last_session', {})
+            fitting_session['last_1d_directory'] = current_directory
+            global_params.set_parameter('fitting', 'last_session', fitting_session)
+            
+            # 加载数据
+            self._load_1d_data(file_path_input)
+            
+        except Exception as e:
+            self.status_updated.emit(f"Failed to process 1D file path: {str(e)}")
+            QMessageBox.critical(
+                self.main_window,
+                "Error",
+                f"Failed to process 1D file path:\n{str(e)}"
+            )
+    
+    def _load_1d_data(self, file_path):
+        """加载1D数据文件"""
+        try:
+            # 导入加载函数
+            from utils.load_SAXS_data import load_xy_any
+            
+            # 加载数据
+            self.status_updated.emit(f"Loading 1D data from {os.path.basename(file_path)}...")
+            data = load_xy_any(file_path)
+            
+            # 提取q和I数组
+            q = data.q
+            I = data.I
+            err = getattr(data, 'err', None) if hasattr(data, 'err') else None
+            
+            # 存储数据
+            self.current_1d_data = {
+                'q': q,
+                'I': I,
+                'err': err,
+                'file_path': file_path
+            }
+            
+            # 自动取消fitCurrentDataCheckBox勾选状态
+            if hasattr(self.ui, 'fitCurrentDataCheckBox'):
+                self.ui.fitCurrentDataCheckBox.blockSignals(True)
+                self.ui.fitCurrentDataCheckBox.setChecked(False)
+                self.ui.fitCurrentDataCheckBox.blockSignals(False)
+            
+            # 更新fitImport1dFileValue显示（显示完整路径）
+            if hasattr(self.ui, 'fitImport1dFileValue'):
+                self.ui.fitImport1dFileValue.setText(file_path)
+            
+            # 显示数据
+            self._display_1d_data_in_fit_view()
+            
+            self.status_updated.emit(f"Successfully loaded 1D data: {os.path.basename(file_path)} ({len(q)} points)")
+            
+        except Exception as e:
+            self.status_updated.emit(f"Failed to load 1D data: {str(e)}")
+            QMessageBox.critical(
+                self.main_window,
+                "Error",
+                f"Failed to load 1D data from {os.path.basename(file_path)}:\n{str(e)}"
+            )
+    
+    def _display_1d_data_in_fit_view(self):
+        """在fitGraphicsView区域显示1D数据"""
+        if not self.current_1d_data:
+            return
+            
+        try:
+            # 获取数据
+            q = self.current_1d_data['q']
+            I = self.current_1d_data['I']
+            err = self.current_1d_data.get('err')
+            
+            # 获取显示选项
+            options = self._display_manager.get_display_options()
+            
+            # 创建标题
+            filename = os.path.basename(self.current_1d_data['file_path'])
+            title = f'1D SAXS Data: {filename}'
+            
+            # 使用统一显示管理器
+            self._display_manager.plot_1d_data(
+                q, I, err, title, "imported_file",
+                options['log_x'], options['log_y'], options['normalize']
+            )
+                
+        except Exception as e:
+            self.status_updated.emit(f"Failed to display 1D data: {str(e)}")
+    
+    def _setup_fit_graphics_scene(self):
+        """统一的fitGraphicsView场景设置方法"""
+        try:
+            if not hasattr(self.ui, 'fitGraphicsView'):
+                return None
+                
+            # 创建或复用场景
+            if not hasattr(self, '_fit_graphics_scene') or self._fit_graphics_scene is None:
+                self._fit_graphics_scene = QGraphicsScene()
+                self.ui.fitGraphicsView.setScene(self._fit_graphics_scene)
+            else:
+                # 清空现有内容但保持场景
+                self._fit_graphics_scene.clear()
+                
+            return self._fit_graphics_scene
+            
+        except Exception as e:
+            self.status_updated.emit(f"Failed to setup fit graphics scene: {str(e)}")
+            return None
+    
+    def _clear_fit_graphics_view(self):
+        """清空fitGraphicsView显示区域"""
+        try:
+            if not hasattr(self.ui, 'fitGraphicsView'):
+                return
+                
+            scene = self._setup_fit_graphics_scene()
+            if scene is not None:
+                scene.clear()
+                
+            self.status_updated.emit("Fit graphics view cleared")
+            
+        except Exception as e:
+            self.status_updated.emit(f"Failed to clear fit graphics view: {str(e)}")
         
     def _start_fitting(self):
         """开始拟合"""
@@ -2976,17 +3596,28 @@ class FittingController(QObject):
     def _show_detector_parameters(self):
         """显示探测器参数对话框"""
         try:
-            # 创建对话框
-            dialog = DetectorParametersDialog(self.main_window)
+            # 如果对话框已经存在且可见，则将其置于前台
+            if hasattr(self, 'detector_params_dialog') and self.detector_params_dialog is not None:
+                if self.detector_params_dialog.isVisible():
+                    self.detector_params_dialog.raise_()
+                    self.detector_params_dialog.activateWindow()
+                    return
+            
+            # 创建非模态对话框
+            self.detector_params_dialog = DetectorParametersDialog(self.main_window)
             
             # 连接参数改变信号
-            dialog.parameters_changed.connect(self._on_detector_parameters_changed)
+            self.detector_params_dialog.parameters_changed.connect(self._on_detector_parameters_changed)
             
-            # 显示对话框
-            result = dialog.exec_()
+            # 连接对话框关闭信号，用于清理资源
+            self.detector_params_dialog.finished.connect(self._on_detector_dialog_finished)
             
-            if result == dialog.Accepted:
-                self.status_updated.emit("探测器参数已更新")
+            # 显示非模态对话框
+            self.detector_params_dialog.show()
+            self.detector_params_dialog.raise_()
+            self.detector_params_dialog.activateWindow()
+            
+            self.status_updated.emit("探测器参数对话框已打开 - 可同时修改主界面参数")
             
         except Exception as e:
             self.status_updated.emit(f"显示探测器参数对话框失败: {str(e)}")
@@ -2995,6 +3626,14 @@ class FittingController(QObject):
                 "错误",
                 f"无法显示探测器参数对话框：{str(e)}"
             )
+            
+    def _on_detector_dialog_finished(self):
+        """探测器参数对话框关闭时的清理"""
+        try:
+            self.detector_params_dialog = None
+            self.status_updated.emit("探测器参数对话框已关闭")
+        except Exception as e:
+            self.status_updated.emit(f"清理探测器对话框失败: {str(e)}")
             
     def _on_detector_parameters_changed(self, parameters):
         """处理探测器参数改变"""
@@ -3027,6 +3666,13 @@ class FittingController(QObject):
             show_q_axis = self._should_show_q_axis()
             print(f"DEBUG: Q模式状态 = {show_q_axis}, 上次状态 = {getattr(self, '_last_q_mode', None)}")
             
+            # 如果是第一次调用，直接设置当前模式但不进行转换
+            if not hasattr(self, '_last_q_mode') or self._last_q_mode is None:
+                self._last_q_mode = show_q_axis
+                print(f"DEBUG: 首次初始化Q模式状态 = {show_q_axis}")
+                self.status_updated.emit(f"Q轴显示模式已设置: {'Q坐标' if show_q_axis else '像素坐标'}")
+                return
+            
             # 获取当前的数值
             if not hasattr(self.ui, 'gisaxsInputCenterVerticalValue') or not hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
                 return
@@ -3057,7 +3703,7 @@ class FittingController(QObject):
                 return
             
             # 检查当前参数是否已经是目标模式（避免重复转换）
-            if hasattr(self, '_last_q_mode') and self._last_q_mode == show_q_axis:
+            if self._last_q_mode == show_q_axis:
                 print("DEBUG: 模式未变化，跳过转换")
                 return
             
@@ -3297,6 +3943,8 @@ class FittingController(QObject):
             session_data = {
                 'last_opened_file': self.current_parameters.get('imported_gisaxs_file', ''),
                 'last_directory': os.path.dirname(self.current_parameters.get('imported_gisaxs_file', '')) if self.current_parameters.get('imported_gisaxs_file') else '',
+                'last_1d_directory': os.path.dirname(self.current_1d_file_path) if self.current_1d_file_path else None,
+                'last_1d_file': self.current_1d_file_path,
                 'stack_count': self.current_parameters.get('stack_count', 1),
                 'center_vertical': self.ui.gisaxsInputCenterVerticalValue.value() if hasattr(self.ui, 'gisaxsInputCenterVerticalValue') else 0.0,
                 'center_parallel': self.ui.gisaxsInputCenterParallelValue.value() if hasattr(self.ui, 'gisaxsInputCenterParallelValue') else 0.0,
@@ -3306,7 +3954,12 @@ class FittingController(QObject):
                 'log_mode': self.ui.gisaxsInputIntLogCheckBox.isChecked() if hasattr(self.ui, 'gisaxsInputIntLogCheckBox') else True,
                 'auto_scale': self.ui.gisaxsInputAutoScaleCheckBox.isChecked() if hasattr(self.ui, 'gisaxsInputAutoScaleCheckBox') else True,
                 'vmin': self._current_vmin if self._current_vmin is not None else 0.0,
-                'vmax': self._current_vmax if self._current_vmax is not None else 0.0
+                'vmax': self._current_vmax if self._current_vmax is not None else 0.0,
+                # 添加拟合选项状态保存
+                'fit_current_data': self.ui.fitCurrentDataCheckBox.isChecked() if hasattr(self.ui, 'fitCurrentDataCheckBox') else False,
+                'fit_log_x': self.ui.fitLogXCheckBox.isChecked() if hasattr(self.ui, 'fitLogXCheckBox') else False,
+                'fit_log_y': self.ui.fitLogYCheckBox.isChecked() if hasattr(self.ui, 'fitLogYCheckBox') else False,
+                'fit_norm': self.ui.fitNormCheckBox.isChecked() if hasattr(self.ui, 'fitNormCheckBox') else False
             }
             return session_data
         except Exception as e:
@@ -3358,8 +4011,30 @@ class FittingController(QObject):
             if hasattr(self.ui, 'gisaxsInputVmaxValue'):
                 self.ui.gisaxsInputVmaxValue.setValue(vmax)
             
+            # 恢复拟合选项状态（阻塞信号避免触发方法调用）
+            self._restore_fit_checkboxes(session_data)
+            
+            # 恢复1D文件导入路径（用于文件浏览器默认目录）
+            last_1d_directory = session_data.get('last_1d_directory')
+            if last_1d_directory and os.path.exists(last_1d_directory):
+                # 这里只是保存路径，不需要实际加载文件
+                pass
+            
+            # 恢复1D文件路径显示（如果存在的话）
+            last_1d_file = session_data.get('last_1d_file')
+            if last_1d_file and os.path.exists(last_1d_file):
+                self.current_1d_file_path = last_1d_file
+                if hasattr(self.ui, 'fitImport1dFileValue'):
+                    self.ui.fitImport1dFileValue.setText(last_1d_file)
+                
+                # 如果需要，可以选择重新加载1D数据（但这里我们只恢复路径显示）
+                # 实际的数据加载由用户手动触发
+            
             # 更新显示
             self._update_stack_display()
+            
+            # 重新初始化Q模式状态（避免恢复后误触发转换）
+            self._initialize_q_mode_state()
             
             # 如果AutoShow启用且有文件，自动显示
             if (session_data.get('auto_show', False) and 
@@ -3377,6 +4052,10 @@ class FittingController(QObject):
     def _perform_cut(self):
         """执行Cut操作 - gisaxsInputCutButton按钮的处理逻辑"""
         try:
+            # 0. 自动勾选fitCurrentDataCheckBox
+            if hasattr(self.ui, 'fitCurrentDataCheckBox'):
+                self.ui.fitCurrentDataCheckBox.setChecked(True)
+            
             # 1. 检查是否导入了图像数据
             if self.current_stack_data is None:
                 QMessageBox.warning(
@@ -3771,73 +4450,20 @@ class FittingController(QObject):
                                   "matplotlib library is required for plotting.\nPlease install it using: pip install matplotlib")
                 return
             
-            # 检查fitGraphicsView是否存在
-            if not hasattr(self.ui, 'fitGraphicsView'):
-                self.status_updated.emit("fitGraphicsView not found in UI")
-                return
+            # 获取显示选项
+            options = self._display_manager.get_display_options()
             
-            # 应用标准化处理
-            y_data = np.array(y_intensity)
-            if self._is_fit_norm_enabled():
-                max_intensity = np.max(y_data)
-                if max_intensity > 0:
-                    y_data = y_data / max_intensity
-                    y_label = "Normalized Intensity"
-            
-            # 创建图形
-            from matplotlib.figure import Figure
-            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-            from PyQt5.QtWidgets import QGraphicsScene
-            
-            # 清除现有内容
-            if not hasattr(self, '_fit_graphics_scene') or self._fit_graphics_scene is None:
-                self._fit_graphics_scene = QGraphicsScene()
-                self.ui.fitGraphicsView.setScene(self._fit_graphics_scene)
-            else:
-                self._fit_graphics_scene.clear()
-            
-            # 创建matplotlib图形
-            fig = Figure(figsize=(8, 6), dpi=80)
-            canvas = FigureCanvas(fig)
-            ax = fig.add_subplot(111)
-            
-            # 使用共享函数绘制数据
-            is_log_x = self._is_fit_log_x_enabled()
-            self._plot_cut_data_with_log_handling(ax, x_coords, y_data, is_log_x, markersize=4, linewidth=1.5)
-            
-            # 设置坐标轴
-            ax.set_xlabel(x_label)
-            ax.set_ylabel(y_label)
-            ax.set_title(title)
-            ax.grid(True, alpha=0.3)
-            
-            # 应用对数坐标设置
-            if is_log_x:
-                ax.set_xscale('log')
-            if self._is_fit_log_y_enabled():
-                ax.set_yscale('log')
-            
-            # 调整布局
-            fig.tight_layout()
-            
-            # 添加到场景
-            proxy_widget = self._fit_graphics_scene.addWidget(canvas)
-            
-            # 调整视图
-            self.ui.fitGraphicsView.fitInView(proxy_widget)
-            
-            # 同步更新独立拟合窗口（如果打开的话）
-            if self.independent_fit_window is not None and self.independent_fit_window.isVisible():
-                self.independent_fit_window.update_plot(
-                    self.current_cut_data['x_coords'],
-                    self.current_cut_data['y_intensity'],
-                    self.current_cut_data['x_label'],
-                    self.current_cut_data['y_label'],
-                    self.current_cut_data['title'],
-                    log_x=self._is_fit_log_x_enabled(),
-                    log_y=self._is_fit_log_y_enabled(),
-                    normalize=self._is_fit_norm_enabled()
+            # 使用统一显示管理器
+            # 注意：对于Cut数据，x_coords可能不是q，需要适配
+            if "q" in x_label.lower():
+                # 如果x轴是q，直接使用1D数据显示方法
+                self._display_manager.plot_1d_data(
+                    x_coords, y_intensity, None, title, "cut_data",
+                    options['log_x'], options['log_y'], options['normalize']
                 )
+            else:
+                # 如果x轴不是q，使用特殊处理（保持原有逻辑）
+                self._plot_cut_data_legacy(x_coords, y_intensity, x_label, y_label, title, options)
             
             self.status_updated.emit(f"Cut result plotted: {title}")
             
@@ -3848,6 +4474,71 @@ class FittingController(QObject):
                 "Plot Error",
                 f"Failed to plot cut result:\n{str(e)}"
             )
+    
+    def _plot_cut_data_legacy(self, x_coords, y_intensity, x_label, y_label, title, options):
+        """处理非q数据的Cut结果显示（保持原有逻辑）"""
+        try:
+            # 应用标准化处理
+            y_data = np.array(y_intensity)
+            if options['normalize']:
+                max_intensity = np.max(y_data)
+                if max_intensity > 0:
+                    y_data = y_data / max_intensity
+                    y_label = "Normalized Intensity"
+            
+            # 创建图形
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+            
+            # 使用统一的场景管理方法
+            scene = self._setup_fit_graphics_scene()
+            if scene is None:
+                return
+            
+            # 创建matplotlib图形
+            fig = Figure(figsize=(8, 6), dpi=80)
+            canvas = FigureCanvas(fig)
+            ax = fig.add_subplot(111)
+            
+            # 使用共享函数绘制数据
+            self._plot_cut_data_with_log_handling(ax, x_coords, y_data, options['log_x'], markersize=4, linewidth=1.5)
+            
+            # 设置坐标轴
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+
+            # 设置坐标轴linewidth
+            for axis in ['top', 'bottom', 'left', 'right']:
+                ax.spines[axis].set_linewidth(1.2)
+            
+            # 应用对数坐标设置
+            if options['log_x']:
+                ax.set_xscale('log')
+            if options['log_y']:
+                ax.set_yscale('log')
+            
+            # 调整布局
+            fig.tight_layout()
+            
+            # 添加到场景
+            proxy_widget = scene.addWidget(canvas)
+            self.ui.fitGraphicsView.fitInView(proxy_widget)
+            
+            # 如果独立拟合窗口存在且可见，也更新其显示
+            if self.independent_fit_window is not None and self.independent_fit_window.isVisible():
+                self.independent_fit_window.update_plot(
+                    x_coords, y_intensity, x_label, y_label, title,  
+                    log_x=options['log_x'],
+                    log_y=options['log_y'],
+                    normalize=options['normalize']
+                )
+            
+            self.status_updated.emit(f"Cut result plotted: {title}")
+            
+        except Exception as e:
+            self.status_updated.emit(f"Legacy plot cut data error: {str(e)}")
     
     def _is_fit_log_x_enabled(self):
         """检查是否启用X轴对数显示"""
@@ -3875,6 +4566,3 @@ class FittingController(QObject):
             return False
         except Exception:
             return False
-            
-        except Exception as e:
-            self.status_updated.emit(f"Failed to restore session: {str(e)}")
