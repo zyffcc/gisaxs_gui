@@ -1,0 +1,171 @@
+# 实验数据文件夹（节省云端空间）
+Experiment_data/
+Experiment_SAXS_data/
+
+# 但保留SAXSdata
+!SAXSdata/
+
+# Python相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 单元测试
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# 环境变量
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder项目设置
+.spyderproject
+.spyproject
+
+# Rope项目设置
+.ropeproject
+
+# mkdocs文档
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre类型检查器
+.pyre/
+
+# IDE相关
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统相关
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows相关
+desktop.ini
+$RECYCLE.BIN/
+
+# 临时文件
+*.tmp
+*.temp
+*.log
+*.bak
+*.backup
+
+# matplotlib缓存
+.matplotlib/
+
+# Qt相关
+*.qmlc
+*.jsc
+
+# 配置文件备份
+config/*.bak
+config/*~
+
+# 用户会话文件（可选，如果包含敏感信息）
+# config/user_parameters.json
+# config/user_settings.json
+
+# 测试输出
+test_output/
+test_results/
+
+# 文档生成
+docs/_build/
+
+# 数据分析结果（可选）
+results/
+output/
+plots/
+
+# 大型数据文件
+*.dat
+*.h5
+*.hdf5
+*.npy
+*.npz
+
+# 视频文件
+*.mp4
+*.avi
+*.mov
+
+# 压缩文件
+*.zip
+*.tar.gz
+*.rar
+*.7z
