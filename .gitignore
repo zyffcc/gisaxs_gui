@@ -2,8 +2,8 @@
 Experiment_data/
 Experiment_SAXS_data/
 
-# 但保留SAXSdata
-!SAXSdata/
+# 但保留TestSAXSdata
+!TestSAXSdata/
 
 # Python相关
 __pycache__/
@@ -153,7 +153,6 @@ output/
 plots/
 
 # 大型数据文件
-*.dat
 *.h5
 *.hdf5
 *.npy
