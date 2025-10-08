@@ -65,6 +65,11 @@ class MainController(QObject):
             self.classification_controller.initialize()
             self.gisaxs_predict_controller.initialize()
             
+            # 统一精度配置已禁用，由各个controller单独管理
+            # from PyQt5.QtCore import QTimer
+            # QTimer.singleShot(500, self._configure_control_precision)
+            # QTimer.singleShot(1500, self._force_precision_override)  # 再次强制覆盖
+            
             # 延迟加载上次会话状态（避免启动时立即加载文件）
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(1000, self._load_last_session)
@@ -517,3 +522,126 @@ class MainController(QObject):
         for i, button in enumerate(navigation_buttons):
             if hasattr(button, 'setChecked'):
                 button.setChecked(i == active_index)
+            button.setChecked(i == active_index)
+    
+    def _configure_control_precision(self):
+        """统一配置所有数值控件：无限范围，9位有效数字，去除尾随零"""
+        print("=== UNIFIED PRECISION CONFIGURATION (FORCE OVERRIDE) ===")
+        
+        # 获取所有QDoubleSpinBox控件
+        all_controls = []
+        for attr_name in dir(self.ui):
+            if attr_name.endswith('Value') and not attr_name.startswith('_'):
+                try:
+                    attr = getattr(self.ui, attr_name)
+                    if hasattr(attr, 'setDecimals'):  # 是QDoubleSpinBox
+                        all_controls.append(attr_name)
+                except AttributeError:
+                    pass
+        
+        print(f"Found {len(all_controls)} QDoubleSpinBox controls to configure")
+        
+        for control_name in all_controls:
+            control = getattr(self.ui, control_name)
+            
+            # 强制统一设置：无限范围，9位精度，智能显示
+            old_decimals = control.decimals()
+            old_range = (control.minimum(), control.maximum())
+            
+            control.setRange(float('-inf'), float('inf'))  # 无限范围
+            control.setDecimals(9)  # 最多9位有效数字
+            control.setSingleStep(0.001)  # 统一步长
+            
+            # 特殊要求：某些控件需要非负值
+            if ('Int' in control_name or 'R' in control_name or 'Sigma' in control_name or 
+                'Distance' in control_name or 'Wavelength' in control_name):
+                control.setMinimum(0.0)  # 强度、半径、标准差等不能为负
+            
+            # 强制设置智能显示格式（去除尾随零）
+            self._setup_smart_decimal_display(control)
+            
+            # 强制刷新当前值的显示
+            current_value = control.value()
+            control.setValue(current_value + 0.000000001)  # 微小变化触发更新
+            control.setValue(current_value)  # 恢复原值
+            
+            range_info = f"(-inf,inf)" if control.minimum() == float('-inf') else f"({control.minimum()},inf)"
+            print(f"FORCED {control_name}: old_decimals={old_decimals} -> 9, old_range={old_range} -> {range_info}")
+        
+        print(f"=== SUCCESSFULLY FORCED {len(all_controls)} CONTROLS WITH UNIFIED SETTINGS ===")
+    
+    def _force_precision_override(self):
+        """最终强制覆盖任何可能被其他代码修改的精度设置"""
+        print("=== FINAL FORCE OVERRIDE FOR PRECISION SETTINGS ===")
+        
+        # 再次确保所有控件都有正确的设置
+        for attr_name in dir(self.ui):
+            if attr_name.endswith('Value') and not attr_name.startswith('_'):
+                try:
+                    control = getattr(self.ui, attr_name)
+                    if hasattr(control, 'setDecimals'):
+                        current_decimals = control.decimals()
+                        if current_decimals != 9:
+                            print(f"FORCE FIXING {attr_name}: {current_decimals} -> 9")
+                            control.setDecimals(9)
+                            self._setup_smart_decimal_display(control)
+                            # 触发重新显示
+                            value = control.value()
+                            control.setValue(value + 0.000000001)
+                            control.setValue(value)
+                except Exception as e:
+                    print(f"Error in force override for {attr_name}: {e}")
+        
+        print("=== FINAL FORCE OVERRIDE COMPLETED ===")
+    
+    def _setup_smart_decimal_display(self, control):
+        """强制设置智能小数显示：9位有效数字，去除尾随零"""
+        from PyQt5.QtWidgets import QDoubleSpinBox
+        from PyQt5.QtCore import QLocale  
+        import types
+        
+        if not isinstance(control, QDoubleSpinBox):
+            return
+            
+        try:
+            # 强制确保9位小数设置
+            control.setDecimals(9)
+            
+            # 保存原始方法
+            original_method = control.textFromValue
+            
+            def smart_text_from_value(value):
+                """智能格式化：最多9位有效数字，去除尾随零"""
+                try:
+                    # 零值特殊处理
+                    if abs(value) < 1e-15:  # 更严格的零值判断
+                        return "0"
+                    
+                    # 整数特殊处理
+                    if abs(value - round(value)) < 1e-10:
+                        return str(int(round(value)))
+                    
+                    # 使用9位精度格式化并去除尾随零
+                    formatted = f"{value:.9f}".rstrip('0').rstrip('.')
+                    
+                    # 确保不返回空字符串或只有小数点
+                    if not formatted or formatted == '.':
+                        return "0"
+                        
+                    return formatted
+                    
+                except Exception:
+                    return f"{value:.9f}".rstrip('0').rstrip('.') or "0"
+            
+            # 强制替换textFromValue方法
+            control.textFromValue = types.MethodType(lambda self, value: smart_text_from_value(value), control)
+            
+            # 强制设置英文区域（确保小数点格式）
+            locale = QLocale(QLocale.English, QLocale.UnitedStates)
+            control.setLocale(locale)
+            
+            # 强制禁用键盘跟踪以避免输入时格式混乱
+            control.setKeyboardTracking(False)
+            
+        except Exception as e:
+            print(f"Error setting up smart display: {e}")

@@ -227,6 +227,12 @@ class PlotUtils:
         """设置GISAXS绘图样式"""
         try:
             import matplotlib.pyplot as plt
+            import warnings
+            
+            # 配置字体和警告
+            plt.rcParams['font.family'] = ['DejaVu Sans', 'SimHei', 'Arial', 'sans-serif']
+            plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+            warnings.filterwarnings('ignore', category=UserWarning, message='.*Glyph.*missing from font.*')
             
             plt.style.use('seaborn-v0_8')  # 或其他可用样式
             plt.rcParams['figure.figsize'] = (10, 8)
@@ -244,6 +250,12 @@ class PlotUtils:
         """创建2D图"""
         try:
             import matplotlib.pyplot as plt
+            import warnings
+            
+            # 配置字体和警告（确保每次调用都有正确配置）
+            plt.rcParams['font.family'] = ['DejaVu Sans', 'SimHei', 'Arial', 'sans-serif']
+            plt.rcParams['axes.unicode_minus'] = False
+            warnings.filterwarnings('ignore', category=UserWarning, message='.*Glyph.*missing from font.*')
             
             # 垂直翻转图像数据以修正显示方向
             data = np.flipud(data)

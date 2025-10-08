@@ -2,11 +2,26 @@
 
 import sys
 import os
+import warnings
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from ui.main_window import Ui_MainWindow  # 导入转换后的 UI 类
 from ui.menu_manager import MenuManager
 from controllers import MainController
 from core.window_manager import window_manager
+
+# 配置matplotlib（在所有其他导入之前）
+try:
+    import matplotlib
+    import matplotlib.pyplot as plt
+    
+    # 设置字体配置
+    plt.rcParams['font.family'] = ['DejaVu Sans', 'SimHei', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+    
+    # 过滤字体相关警告
+    warnings.filterwarnings('ignore', category=UserWarning, message='.*Glyph.*missing from font.*')
+except ImportError:
+    pass
 
 # 导入参数访问系统
 from core.global_params import global_params

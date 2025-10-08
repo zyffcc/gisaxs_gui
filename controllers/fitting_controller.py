@@ -11,6 +11,14 @@ from PyQt5.QtWidgets import QFileDialog, QMessageBox, QGraphicsScene, QVBoxLayou
 # 导入探测器参数对话框
 from ui.detector_parameters_dialog import DetectorParametersDialog
 
+# 导入模型参数管理器
+from config.model_parameters_manager import ModelParametersManager
+
+# 导入通用参数触发管理器
+from utils.universal_parameter_trigger_manager import UniversalParameterTriggerManager
+from PyQt5.QtWidgets import QShortcut
+from PyQt5.QtGui import QKeySequence
+
 # 尝试导入所需的库
 try:
     import fabio
@@ -23,7 +31,18 @@ try:
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
     from matplotlib.figure import Figure
+    import matplotlib.pyplot as plt
+    import warnings
+    
     matplotlib.use('Qt5Agg')  # 确保使用Qt5后端
+    
+    # 配置matplotlib字体和警告
+    plt.rcParams['font.family'] = ['DejaVu Sans', 'SimHei', 'Arial', 'sans-serif']
+    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+    
+    # 过滤字体相关警告
+    warnings.filterwarnings('ignore', category=UserWarning, message='.*Glyph.*missing from font.*')
+    
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
@@ -39,6 +58,7 @@ except ImportError:
 
 try:
     from scipy import ndimage
+    from scipy.optimize import least_squares
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
@@ -404,18 +424,12 @@ class IndependentMatplotlibWindow(QMainWindow):
                     qz_min, qz_max = qz_mesh.min(), qz_mesh.max()
                     q_extent = [qy_min, qy_max, qz_min, qz_max]
                     
-                    print(f"Using Q-space display:")
-                    print(f"  Data shape: {processed_data.shape}")
-                    print(f"  Q extent: [{qy_min:.3f}, {qy_max:.3f}, {qz_min:.3f}, {qz_max:.3f}]")
-                    
                     # 使用imshow显示Q轴坐标
                     self.current_image = self.ax.imshow(processed_data, cmap='viridis', aspect='equal', 
                                                       origin='lower', interpolation='nearest',
                                                       vmin=vmin, vmax=vmax, extent=q_extent)
-                    print(f"  Successfully created Q-space display")
                 else:
                     # 如果Q网格不可用，回退到普通extent
-                    print(f"  Warning: Q-mesh not available - using fallback extent")
                     self.current_image = self.ax.imshow(processed_data, cmap='viridis', aspect='equal', 
                                                       origin='lower', interpolation='nearest',
                                                       vmin=vmin, vmax=vmax, extent=extent)
@@ -463,7 +477,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                 if show_q_axis:
                     # Q轴模式：让matplotlib自动设置范围（由extent控制）
                     self.ax.autoscale()
-                    print(f"  Q-axis view auto-scaled")
+
                 else:
                     # 像素模式：设置为像素坐标范围
                     self.ax.set_xlim(-0.5, processed_data.shape[1] - 0.5)
@@ -500,25 +514,17 @@ class IndependentMatplotlibWindow(QMainWindow):
                 QTimer.singleShot(50, final_view_check)
             
         except Exception as e:
-            print(f"Independent window update error: {e}")
+            pass
     
     def _convert_q_to_pixel_coordinates(self, center_qy, center_qz, width_q, height_q):
         """将Q坐标转换为像素坐标"""
         try:
-            print(f"Converting Q to pixel coordinates:")
-            print(f"  Input Q coords: center_qy={center_qy:.6f}, center_qz={center_qz:.6f}")
-            print(f"  Input Q sizes: width_q={width_q:.6f}, height_q={height_q:.6f}")
-            
             # 获取缓存的Q空间网格
             qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
             
             if qy_mesh is None or qz_mesh is None:
-                print("  Warning: Q meshgrids not available, using defaults")
                 # 如果Q网格不可用，返回默认值
                 return {'center_x': 0, 'center_y': 0, 'width': 100, 'height': 100}
-            
-            print(f"  Q meshgrid shapes: qy={qy_mesh.shape}, qz={qz_mesh.shape}")
-            print(f"  Q ranges: qy=[{qy_mesh.min():.6f}, {qy_mesh.max():.6f}], qz=[{qz_mesh.min():.6f}, {qz_mesh.max():.6f}]")
             
             # 获取图像尺寸
             if hasattr(self, 'current_stack_data') and self.current_stack_data is not None:
@@ -526,21 +532,12 @@ class IndependentMatplotlibWindow(QMainWindow):
             else:
                 img_height, img_width = qy_mesh.shape
             
-            print(f"  Image size: {img_width}x{img_height}")
-            
-            # 创建像素坐标网格
-            pixel_x = np.arange(img_width)
-            pixel_y = np.arange(img_height)
-            
             # 找到最接近目标Q坐标的像素位置
-            # 对于中心点
             qy_diff = np.abs(qy_mesh - center_qy)
             qz_diff = np.abs(qz_mesh - center_qz)
             combined_diff = qy_diff + qz_diff
             center_idx = np.unravel_index(np.argmin(combined_diff), qy_mesh.shape)
             center_pixel_y, center_pixel_x = center_idx
-            
-            print(f"  Found center pixel: ({center_pixel_x}, {center_pixel_y})")
             
             # 计算Q空间到像素空间的比例因子
             qy_range = qy_mesh.max() - qy_mesh.min()
@@ -550,8 +547,6 @@ class IndependentMatplotlibWindow(QMainWindow):
             
             qy_to_pixel_ratio = pixel_x_range / qy_range
             qz_to_pixel_ratio = pixel_y_range / qz_range
-            
-            print(f"  Q to pixel ratios: qy={qy_to_pixel_ratio:.3f}, qz={qz_to_pixel_ratio:.3f}")
             
             # 转换宽度和高度
             width_pixel = width_q * qy_to_pixel_ratio
@@ -564,11 +559,9 @@ class IndependentMatplotlibWindow(QMainWindow):
                 'height': int(height_pixel)
             }
             
-            print(f"  Final pixel coords: {result}")
             return result
             
         except Exception as e:
-            print(f"Error converting Q to pixel coordinates: {e}")
             return {'center_x': 0, 'center_y': 0, 'width': 100, 'height': 100}
 
     def _update_cutline_labels_units(self):
@@ -597,8 +590,8 @@ class IndependentMatplotlibWindow(QMainWindow):
             if hasattr(self.ui, 'gisaxsInputCutLineParallelLabel'):
                 self.ui.gisaxsInputCutLineParallelLabel.setText(f"Parallel.{unit_suffix}")
                 
-        except Exception as e:
-            print(f"Error updating cutline labels: {e}")
+        except Exception:
+            pass
 
     def _should_show_q_axis(self):
         """检查是否应该显示Q轴"""
@@ -625,14 +618,7 @@ class IndependentMatplotlibWindow(QMainWindow):
             theta_in_deg = global_params.get_parameter('beam', 'grazing_angle', 0.4)
             wavelength = global_params.get_parameter('beam', 'wavelength', 0.1045)  # nm
             
-            # 调试信息
-            print(f"Q-axis calculation parameters:")
-            print(f"  Image shape: {width}x{height}")
-            print(f"  Pixel size: {pixel_size_x}x{pixel_size_y} μm")
-            print(f"  Beam center: ({beam_center_x}, {beam_center_y}) pixels")
-            print(f"  Distance: {distance} mm")
-            print(f"  Incident angle: {theta_in_deg}°")
-            print(f"  Wavelength: {wavelength} nm")
+            # Q-axis calculation parameters
             
             # 创建缓存键
             cache_key = f"{width}x{height}_{pixel_size_x}_{pixel_size_y}_{beam_center_x}_{beam_center_y}_{distance}_{theta_in_deg}_{wavelength}"
@@ -656,16 +642,12 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self._qy_mesh, self._qz_mesh = self._q_detector.get_qy_qz_meshgrids()
                 self._q_cache_key = cache_key
                 
-                print(f"Q-space cache updated for image shape {width}x{height}")
-                print(f"  Q-mesh shapes: qy={self._qy_mesh.shape}, qz={self._qz_mesh.shape}")
-                print(f"  Qy range: [{self._qy_mesh.min():.6f}, {self._qy_mesh.max():.6f}]")
-                print(f"  Qz range: [{self._qz_mesh.min():.6f}, {self._qz_mesh.max():.6f}]")
+
             
             _, _, extent = get_q_axis_labels_and_extents(self._q_detector)
             return extent
             
-        except Exception as e:
-            print(f"Error calculating Q-axis extent: {e}")
+        except Exception:
             # 返回默认像素坐标extent
             height, width = image_shape
             return [-0.5, width - 0.5, -0.5, height - 0.5]
@@ -829,7 +811,8 @@ class IndependentFitWindow(QMainWindow):
         return control_layout
     
     def _on_show_positive_toggled(self, checked):
-        pass # 目前仅占位，实际功能在update_plot中处理
+        """处理Positive Only复选框状态变化"""
+        self.status_updated.emit(f"Positive Only mode: {'enabled' if checked else 'disabled'}")
 
     def update_plot(self, x_coords, y_intensity, x_label, y_label, title, log_x=False, log_y=False, normalize=False, y_errors=None):
         """更新拟合结果图，支持误差条"""
@@ -1130,7 +1113,6 @@ class AsyncImageLoader(QThread):
             return data
             
         except Exception as e:
-            print(f"Error loading single CBF file: {e}")
             return None
     
     def _load_multiple_cbf_files(self, start_file, stack_count):
@@ -1145,12 +1127,10 @@ class AsyncImageLoader(QThread):
             try:
                 start_index = cbf_files.index(base_name)
             except ValueError:
-                print(f"Start file not found: {base_name}")
                 return None
             
             available_files = len(cbf_files) - start_index
             if stack_count > available_files:
-                print(f"Requested {stack_count} files, only {available_files} available")
                 return None
             
             summed_data = None
@@ -1171,13 +1151,11 @@ class AsyncImageLoader(QThread):
                         summed_data += data
                         
                 except Exception as e:
-                    print(f"Error processing file {file_name}: {e}")
                     continue
             
             return summed_data
             
         except Exception as e:
-            print(f"Error loading multiple CBF files: {e}")
             return None
 
 
@@ -1196,6 +1174,16 @@ class FittingController(QObject):
         self.parent = parent  # 这是主控制器
         # 获取主窗口引用
         self.main_window = parent.parent if hasattr(parent, 'parent') else None
+        
+        # 统一的数据存储器
+        self.q = None  # q坐标数据
+        self.I = None  # I强度数据 
+        self.I_fitting = None  # 拟合结果数据
+        
+        # 显示模式和数据源
+        self.display_mode = 'normal'  # 'normal' 或 'fitting'
+        self.data_source = None  # 'cut' 或 '1d' 
+        self.has_fitting_data = False  # 是否有拟合数据
         
         # 当前参数
         self.current_parameters = {}
@@ -1254,8 +1242,41 @@ class FittingController(QObject):
         # 参数选择状态
         self.current_parameter_selection = None
         
+        # 显示模式管理
+        self._display_mode = 'normal'  # 'normal' 或 'fitting'
+        self._has_fitting_data = False  # 是否有拟合数据
+        self._fitting_mode_active = False  # 是否处于拟合模式
+        
         # 探测器参数对话框
         self.detector_params_dialog = None
+        
+        # 模型参数管理器
+        self.model_params_manager = ModelParametersManager()
+        
+        # 通用参数触发管理器（直接使用 UniversalParameterTriggerManager，移除旧 FittingParameterTriggerManager 包装）
+        self.param_trigger_manager = UniversalParameterTriggerManager(self)
+        
+        # 简化的状态管理（移除缓存机制）
+        self._loading_parameters = False  # 标志：是否正在载入参数
+        self._initializing = False  # 标志：是否正在初始化
+        
+        # ==========================
+        # 参数去抖通用配置（统一交由 meta registry 管理）
+        # ==========================
+        # 去抖时间（毫秒），可根据体验调整
+        self._param_debounce_ms = 280
+        # 浮点比较相对+绝对容差
+        self._param_abs_eps = 1e-12
+        self._param_rel_eps = 1e-10
+        
+        # 自动K值优化状态
+        self._auto_k_enabled = False  # 是否启用自动K值优化
+        
+        # 粒子形状连接器
+        self._setup_particle_shape_connector()
+        
+        # 加载用户设置（包括auto-K状态）
+        self._load_auto_k_enabled()
         
     def initialize(self):
         """初始化控制器"""
@@ -1269,6 +1290,22 @@ class FittingController(QObject):
         # 会话管理已移到主控制器统一处理
         self._initialized = True
         self._initializing = False  # 初始化完成
+        # 注册调试快捷键
+        self._setup_meta_debug_shortcut()
+
+    def _setup_meta_debug_shortcut(self):
+        """注册 Ctrl+Alt+M 快捷键输出 meta 注册表快照。"""
+        try:
+            sc = QShortcut(QKeySequence("Ctrl+Alt+M"), self.ui)
+            def _dump():
+                snap = self.param_trigger_manager.debug_dump_meta(verbose=False)
+                self._add_fitting_message("==== META SNAPSHOT ====", "INFO")
+                for wid, data in snap.items():
+                    self._add_fitting_message(f"{wid}: {data}", "INFO")
+            sc.activated.connect(_dump)
+            self._add_fitting_message("Meta debug shortcut Ctrl+Alt+M registered", "INFO")
+        except Exception as e:
+            print(f"Failed to register meta debug shortcut: {e}")
         
     def _setup_connections(self):
         """设置信号连接"""
@@ -1306,12 +1343,8 @@ class FittingController(QObject):
         if hasattr(self.ui, 'gisaxsInputDisplayModePixel'):
             self.ui.gisaxsInputDisplayModePixel.toggled.connect(self._on_q_mode_changed)
             
-        # 连接Vmin/Vmax值变化
-        if hasattr(self.ui, 'gisaxsInputVminValue'):
-            self.ui.gisaxsInputVminValue.valueChanged.connect(self._on_vmin_value_changed)
-            
-        if hasattr(self.ui, 'gisaxsInputVmaxValue'):
-            self.ui.gisaxsInputVmaxValue.valueChanged.connect(self._on_vmax_value_changed)
+        # Vmin/Vmax值变化现在通过触发管理器处理
+        # 见 _connect_cutline_parameter_signals() 方法
             
         # 连接AutoFinding按钮
         if hasattr(self.ui, 'gisaxsInputCenterAutoFindingButton'):
@@ -1337,6 +1370,22 @@ class FittingController(QObject):
         if hasattr(self.ui, 'fitStartButton'):
             self.ui.fitStartButton.clicked.connect(self._start_fitting)
             
+        # 连接Clear Fitting按钮
+        if hasattr(self.ui, 'FittingClearFittingButton_2'):
+            self.ui.FittingClearFittingButton_2.clicked.connect(self._clear_fitting_data)
+            
+        # 连接拟合图的log相关复选框
+        if hasattr(self.ui, 'fitLogXCheckBox'):
+            self.ui.fitLogXCheckBox.toggled.connect(self._on_fit_log_changed)
+        if hasattr(self.ui, 'fitLogYCheckBox'):
+            self.ui.fitLogYCheckBox.toggled.connect(self._on_fit_log_changed)
+            
+        # 连接Normalize复选框
+        if hasattr(self.ui, 'OthersNormalizeCheckBox'):
+            self.ui.OthersNormalizeCheckBox.toggled.connect(self._on_normalize_changed)
+        if hasattr(self.ui, 'fitNormCheckBox'):
+            self.ui.fitNormCheckBox.toggled.connect(self._on_normalize_changed)
+            
         if hasattr(self.ui, 'fitResetButton'):
             self.ui.fitResetButton.clicked.connect(self._reset_fitting)
             
@@ -1348,18 +1397,21 @@ class FittingController(QObject):
         if hasattr(self.ui, 'fitImport1dFileValue'):
             self.ui.fitImport1dFileValue.returnPressed.connect(self._on_1d_file_value_changed)
             
+        # 连接FittingExportButton按钮
+        if hasattr(self.ui, 'FittingExportButton'):
+            self.ui.FittingExportButton.clicked.connect(self._export_fitting_data)
+            
+        # 连接FittingManualFittingButton按钮
+        if hasattr(self.ui, 'FittingManualFittingButton'):
+            self.ui.FittingManualFittingButton.clicked.connect(self._perform_manual_fitting)
+            
+        # 连接FittingAutoKButton按钮
+        if hasattr(self.ui, 'FittingAutoKButton'):
+            self.ui.FittingAutoKButton.clicked.connect(self._on_auto_k_button_clicked)
+            
         # 连接拟合显示选项复选框
         if hasattr(self.ui, 'fitCurrentDataCheckBox'):
             self.ui.fitCurrentDataCheckBox.toggled.connect(self._on_current_data_checkbox_changed)
-            
-        if hasattr(self.ui, 'fitLogXCheckBox'):
-            self.ui.fitLogXCheckBox.toggled.connect(self._on_fit_display_option_changed)
-            
-        if hasattr(self.ui, 'fitLogYCheckBox'):
-            self.ui.fitLogYCheckBox.toggled.connect(self._on_fit_display_option_changed)
-            
-        if hasattr(self.ui, 'fitNormCheckBox'):
-            self.ui.fitNormCheckBox.toggled.connect(self._on_fit_display_option_changed)
             
         # 连接Cut Line和Center参数控件的信号（逆向选择功能）
         self._connect_cutline_parameter_signals()
@@ -1367,39 +1419,60 @@ class FittingController(QObject):
         # 连接参数输入框的信号（如果存在的话）
         self._connect_parameter_widgets()
         
+        # 连接FittingTextBrowser和状态信息
+        self._setup_fitting_text_browser()
+        
     def _connect_cutline_parameter_signals(self):
-        """连接Cut Line和Center参数控件的信号，实现逆向选择功能"""
-        # 连接Center参数控件 - 使用多重信号实现立即显示+延迟更新
-        if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
-            # 立即显示参数变化
-            self.ui.gisaxsInputCenterVerticalValue.valueChanged.connect(self._on_parameter_display_changed)
-            # 延迟图像更新（仅在编辑完成或延迟后触发）
-            self.ui.gisaxsInputCenterVerticalValue.editingFinished.connect(self._on_cutline_parameters_immediate_update)
-            
-        if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
-            # 立即显示参数变化
-            self.ui.gisaxsInputCenterParallelValue.valueChanged.connect(self._on_parameter_display_changed)
-            # 延迟图像更新
-            self.ui.gisaxsInputCenterParallelValue.editingFinished.connect(self._on_cutline_parameters_immediate_update)
-            
-        # 连接Cut Line参数控件 - 同样的机制
-        if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
-            # 立即显示参数变化
-            self.ui.gisaxsInputCutLineVerticalValue.valueChanged.connect(self._on_parameter_display_changed)
-            # 延迟图像更新
-            self.ui.gisaxsInputCutLineVerticalValue.editingFinished.connect(self._on_cutline_parameters_immediate_update)
-            
-        if hasattr(self.ui, 'gisaxsInputCutLineParallelValue'):
-            # 立即显示参数变化
-            self.ui.gisaxsInputCutLineParallelValue.valueChanged.connect(self._on_parameter_display_changed)
-            # 延迟图像更新
-            self.ui.gisaxsInputCutLineParallelValue.editingFinished.connect(self._on_cutline_parameters_immediate_update)
+        """连接Cut Line/Center/Vmin/Vmax：使用 meta 去抖 & 持久化到 global_params (fitting.gisaxs_input.*)"""
+        from functools import partial
+        mapping = [
+            ('gisaxsInputCenterVerticalValue', 'center_vertical'),
+            ('gisaxsInputCenterParallelValue', 'center_parallel'),
+            ('gisaxsInputCutLineVerticalValue', 'cutline_vertical'),
+            ('gisaxsInputCutLineParallelValue', 'cutline_parallel'),
+            ('gisaxsInputVminValue', 'vmin'),
+            ('gisaxsInputVmaxValue', 'vmax'),
+        ]
+        for widget_name, param_key in mapping:
+            if not hasattr(self.ui, widget_name):
+                continue
+            w = getattr(self.ui, widget_name)
+            def _after_commit(info, value, p=param_key):
+                try:
+                    self._on_parameter_display_changed()
+                    self._add_fitting_message(f"Meta commit GISAXS {p} = {value}", "INFO")
+                except Exception:
+                    pass
+            meta = {
+                'persist': 'global_params',
+                'key_path': ('fitting', f'gisaxs_input.{param_key}'),
+                'trigger_fit': False,
+                'debounce_ms': self._param_debounce_ms,
+                'epsilon_abs': self._param_abs_eps,
+                'epsilon_rel': self._param_rel_eps,
+                'after_commit': _after_commit,
+            }
+            self.param_trigger_manager.register_parameter_widget(
+                widget=w,
+                widget_id=f'meta_gisaxs_{param_key}',
+                category='gisaxs_input',
+                immediate_handler=lambda v: None,
+                delayed_handler=None,
+                connect_signals=False,
+                meta=meta
+            )
+            try:
+                w.valueChanged.connect(partial(self.param_trigger_manager._on_meta_value_changed, f'meta_gisaxs_{param_key}'))
+            except Exception:
+                pass
     
     def _connect_parameter_widgets(self):
         """连接参数输入控件的信号"""
         # 这里可以根据UI文件中的具体控件来连接
         # 例如：裁剪区域参数、拟合参数等
-        pass
+        
+        # 重新设置粒子形状连接（确保在所有UI连接建立后）
+        self._setup_particle_connections()
         
     def _initialize_ui(self):
         """初始化界面状态"""
@@ -1520,7 +1593,7 @@ class FittingController(QObject):
                 self.ui.fitNormCheckBox.blockSignals(False)
                 
         except Exception as e:
-            print(f"初始化拟合复选框失败: {e}")
+            pass
     
     def _restore_fit_checkboxes(self, session_data):
         """恢复拟合复选框状态（阻塞信号避免触发方法调用）"""
@@ -1550,7 +1623,7 @@ class FittingController(QObject):
                 self.ui.fitNormCheckBox.blockSignals(False)
                 
         except Exception as e:
-            print(f"恢复拟合复选框状态失败: {e}")
+            pass
     
     def _initialize_q_mode_state(self):
         """初始化Q模式状态，避免第一次调用时误触发转换"""
@@ -1558,11 +1631,9 @@ class FittingController(QObject):
             # 获取当前Q轴显示状态并设置为初始状态
             current_q_mode = self._should_show_q_axis()
             self._last_q_mode = current_q_mode
-            print(f"DEBUG: 初始化Q模式状态 = {current_q_mode}")
         except Exception as e:
             # 如果获取状态失败，默认设置为像素模式
             self._last_q_mode = False
-            print(f"初始化Q模式状态失败，默认为像素模式: {e}")
         
     def _setup_smart_display(self, spinbox):
         """设置SpinBox的智能显示格式"""
@@ -1651,7 +1722,7 @@ class FittingController(QObject):
                 self._q_mode_timer.start(100)  # 100ms延迟
                 
         except Exception as e:
-            print(f"Q模式切换处理失败: {e}")
+            pass
     
     def _delayed_cut_update(self):
         """延迟执行Cut更新，避免频繁操作"""
@@ -1661,7 +1732,7 @@ class FittingController(QObject):
                 # 重新执行Cut操作以更新图像
                 self._execute_cut()
         except Exception as e:
-            print(f"延迟Cut更新失败: {e}")
+            pass
     
     def _on_parameter_display_changed(self):
         """参数显示立即更新（不更新图像）"""
@@ -1695,7 +1766,7 @@ class FittingController(QObject):
             self._trigger_delayed_cut_update()
             
         except Exception as e:
-            print(f"参数显示更新失败: {e}")
+            pass
     
     def _trigger_delayed_cut_update(self):
         """触发延迟的Cut更新"""
@@ -1711,7 +1782,7 @@ class FittingController(QObject):
             self._cut_update_timer.start(300)  # 300ms延迟更新图像
             
         except Exception as e:
-            print(f"延迟更新触发失败: {e}")
+            pass
     
     def _delayed_cut_image_update(self):
         """延迟执行Cut图像更新"""
@@ -1740,7 +1811,7 @@ class FittingController(QObject):
                 self.status_updated.emit(f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width}×{height})")
                 
         except Exception as e:
-            print(f"延迟Cut图像更新失败: {e}")
+            pass
     
     def _on_cutline_parameters_immediate_update(self):
         """编辑完成时立即更新（用于回车键或失去焦点）"""
@@ -1753,7 +1824,7 @@ class FittingController(QObject):
             self._delayed_cut_image_update()
             
         except Exception as e:
-            print(f"立即更新失败: {e}")
+            pass
     
     def _update_cutline_step_sizes(self):
         """根据当前模式更新Cut Line参数的步长"""
@@ -1814,7 +1885,7 @@ class FittingController(QObject):
                 self.ui.gisaxsInputCutLineParallelLabel.setText(f"Parallel.{unit_suffix}")
                 
         except Exception as e:
-            print(f"Error updating cutline labels: {e}")
+            pass
     
     def _should_show_q_axis(self):
         """检查是否应该显示Q轴"""
@@ -1867,7 +1938,6 @@ class FittingController(QObject):
             return None, None
             
         except Exception as e:
-            print(f"Error getting Q meshgrids: {e}")
             return None, None
         
     def _set_default_parameters(self):
@@ -2200,7 +2270,7 @@ class FittingController(QObject):
                 return
             
             # 使用异步加载
-            self.status_updated.emit("开始加载图像，请稍候...")
+            self.status_updated.emit("Please wait while the image starts loading...")
             self.async_image_loader.load_image(imported_file, stack_count)
             
         except Exception as e:
@@ -2209,22 +2279,22 @@ class FittingController(QObject):
     def _on_image_loaded(self, image_data, file_path):
         """图像加载完成"""
         try:
-            self.status_updated.emit(f"图像加载完成: {os.path.basename(file_path)}")
+            self.status_updated.emit(f"Image loading complete: {os.path.basename(file_path)}")
             self._display_image(image_data)
         except Exception as e:
-            self.status_updated.emit(f"显示图像时出错: {str(e)}")
+            self.status_updated.emit(f"Error while displaying image: {str(e)}")
     
     def _on_image_loading_progress(self, progress, status):
         """图像加载进度更新"""
         try:
-            self.status_updated.emit(f"图像加载中... {progress}% - {status}")
+            self.status_updated.emit(f"Image loading... {progress}% - {status}")
             self.progress_updated.emit(progress)
         except Exception as e:
-            self.status_updated.emit(f"进度更新错误: {str(e)}")
+            self.status_updated.emit(f"Progress update error: {str(e)}")
     
     def _on_image_loading_error(self, error_message):
         """图像加载错误处理"""
-        QMessageBox.critical(self.main_window, "图像加载错误", error_message)
+        QMessageBox.critical(self.main_window, "Image loading error", error_message)
     
     def _display_image(self, image_data):
         """显示图像数据"""
@@ -2395,7 +2465,7 @@ class FittingController(QObject):
                     height = pixel_coords['height']
                         
                 except Exception as e:
-                    self.status_updated.emit(f"Q空间参数更新失败: {str(e)}")
+                    self.status_updated.emit(f"Q-space parameter update failure: {str(e)}")
                     return
             else:
                 # 像素坐标模式：直接使用像素坐标
@@ -2540,88 +2610,46 @@ class FittingController(QObject):
             raise Exception(f"Plot data error: {str(e)}")
     
     def _on_fit_graphics_view_double_click(self, event):
-        """fitGraphicsView双击事件处理 - 打开独立拟合结果窗口，显示当前GUI中显示的数据"""
+        """fitGraphicsView双击事件处理 - 直接更新并显示独立窗口"""
         try:
             if not MATPLOTLIB_AVAILABLE:
                 QMessageBox.warning(self.main_window, "Missing Library",
                                   "matplotlib library is required for independent window.\nPlease install it using: pip install matplotlib")
                 return
             
-            # 检查当前fitCurrentDataCheckBox的状态，决定显示什么数据
-            is_current_data_checked = hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked()
+            # 检查数据可用性
+            if self.q is None or self.I is None:
+                QMessageBox.information(self.main_window, "No Data", "No data available for display.")
+                return
             
-            if is_current_data_checked:
-                # 显示Cut数据
-                if self.current_cut_data is None:
-                    QMessageBox.information(self.main_window, "No Cut Data", "Please perform a cut operation first.")
-                    return
-            else:
-                # 显示1D数据
-                if self.current_1d_data is None:
-                    QMessageBox.information(self.main_window, "No 1D Data", "Please import a 1D data file first.")
-                    return
+            # 创建或显示独立拟合窗口
+            if self.independent_fit_window is None or not self.independent_fit_window.isVisible():
+                self.independent_fit_window = IndependentFitWindow(self.main_window)
+                self.independent_fit_window.status_updated.connect(self.status_updated.emit)
+                # 连接Positive Only复选框到更新函数
+                self.independent_fit_window.show_positive_cb.toggled.connect(self._on_positive_only_changed)
+                
+                # 显示窗口
+                self.independent_fit_window.show()
+                self.independent_fit_window.raise_()
+                self.independent_fit_window.activateWindow()
             
-            # 打开或显示独立拟合窗口
-            self._show_independent_fit_window()
+            # 立即更新窗口内容（确保双击后直接显示完整内容）
+            mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
+            self._update_outside_window(mode)
+            
+            # 确保窗口获得焦点
+            if hasattr(self.independent_fit_window, 'canvas'):
+                self.independent_fit_window.canvas.setFocus()
+                # 强制刷新画布
+                self.independent_fit_window.canvas.draw()
+            
+            self.status_updated.emit(f"{mode.capitalize()} mode independent window updated")
             
         except Exception as e:
             self.status_updated.emit(f"Fit double-click error: {str(e)}")
-            
-    def _show_independent_fit_window(self):
-        """显示独立的拟合结果matplotlib窗口"""
-        try:
-            # 如果窗口不存在或已关闭，创建新窗口
-            if self.independent_fit_window is None or not self.independent_fit_window.isVisible():
-                self.independent_fit_window = IndependentFitWindow(self.main_window)
-                # 连接状态更新信号
-                self.independent_fit_window.status_updated.connect(self.status_updated.emit)
-            
-            # 根据当前状态更新窗口数据
-            is_current_data_checked = hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked()
-            
-            if is_current_data_checked and self.current_cut_data is not None:
-                # 显示Cut数据
-                self.independent_fit_window.update_plot(
-                    self.current_cut_data['x_coords'],
-                    self.current_cut_data['y_intensity'],
-                    self.current_cut_data['x_label'],
-                    self.current_cut_data['y_label'],
-                    self.current_cut_data['title'],
-                    log_x=self._is_fit_log_x_enabled(),
-                    log_y=self._is_fit_log_y_enabled(),
-                    normalize=self._is_fit_norm_enabled()
-                )
-            elif not is_current_data_checked and self.current_1d_data is not None:
-                # 显示1D数据
-                log_x = self._is_fit_log_x_enabled()
-                log_y = self._is_fit_log_y_enabled()
-                normalize = self._is_fit_norm_enabled()
-                
-                filename = os.path.basename(self.current_1d_data['file_path'])
-                title = f'1D SAXS Data: {filename}'
-                
-                self.independent_fit_window.update_plot(
-                    self.current_1d_data['q'], 
-                    self.current_1d_data['I'], 
-                    'q (Å⁻¹)', 
-                    'Intensity' + (' (normalized)' if normalize else ''),
-                    title,
-                    log_x, log_y, normalize, 
-                    self.current_1d_data.get('err')
-                )
-            
-            # 显示窗口并置于前台
-            self.independent_fit_window.show()
-            self.independent_fit_window.raise_()
-            self.independent_fit_window.activateWindow()
-            
-            # 设置焦点
-            self.independent_fit_window.canvas.setFocus()
-            
-            self.status_updated.emit("Independent fit window opened - Enhanced visualization of cut results")
-            
-        except Exception as e:
-            self.status_updated.emit(f"Independent fit window error: {str(e)}")
+    
+
     
     def _on_cutline_parameters_changed(self):
         """当Cut Line参数改变时，更新图像中的选择框显示，并自动重新执行Cut操作（如果之前已有Cut结果）"""
@@ -2642,7 +2670,7 @@ class FittingController(QObject):
             self._cutline_update_timer.start(150)  # 150ms延迟，适中的响应时间
             
         except Exception as e:
-            print(f"Cut Line参数变化处理失败: {e}")
+            pass
     
     def _delayed_cutline_update(self):
         """延迟执行Cut Line参数更新，减少卡顿"""
@@ -2853,7 +2881,7 @@ class FittingController(QObject):
                         # 如果Q网格不可用，回退到像素模式
                         show_q_axis = False
                 except Exception as e:
-                    print(f"Q-axis display error: {e}")
+                    pass
                     show_q_axis = False
             
             if not show_q_axis:
@@ -3011,21 +3039,11 @@ class FittingController(QObject):
     
     def _is_auto_scale_enabled(self):
         """检查AutoScale是否被启用"""
-        try:
-            if hasattr(self.ui, 'gisaxsInputAutoScaleCheckBox'):
-                return self.ui.gisaxsInputAutoScaleCheckBox.isChecked()
-            return True
-        except Exception:
-            return True
+        return self._get_checkbox_state('gisaxsInputAutoScaleCheckBox', True)
     
     def _is_log_mode_enabled(self):
         """检查是否启用Log模式"""
-        try:
-            if hasattr(self.ui, 'gisaxsInputIntLogCheckBox'):
-                return self.ui.gisaxsInputIntLogCheckBox.isChecked()
-            return True
-        except Exception:
-            return True
+        return self._get_checkbox_state('gisaxsInputIntLogCheckBox', True)
     
     def _on_auto_scale_changed(self):
         """AutoScale复选框状态改变时的处理"""
@@ -3105,9 +3123,11 @@ class FittingController(QObject):
                 self._perform_cut()
                 self.status_updated.emit("Fit display options changed - Cut results updated")
             else:
-                # fitCurrentDataCheckBox未勾选时，更新1D数据显示（如果有的话）
-                if self.current_1d_data is not None:
-                    self._display_1d_data_in_fit_view()
+                # fitCurrentDataCheckBox未勾选时，使用新的更新函数显示1D数据
+                if self.current_1d_data is not None and hasattr(self, 'q') and self.q is not None:
+                    mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
+                    self._update_GUI_image(mode)
+                    self._update_outside_window(mode)
                     self.status_updated.emit("Fit display options changed - 1D data display updated")
                 else:
                     self.status_updated.emit("Fit display options changed - no data to update")
@@ -3132,14 +3152,25 @@ class FittingController(QObject):
                     # 没有GISAXS数据，显示提示
                     self.status_updated.emit("Current Data enabled - No GISAXS data available for cut operation")
             else:
-                # 不勾选状态：显示1D数据（如果有的话）
+                # 不勾选状态：恢复到1D数据显示（如果有的话）
                 if self.current_1d_data is not None:
-                    # 有1D数据，显示1D数据
-                    self._display_1d_data_in_fit_view()
-                    self.status_updated.emit("Current Data disabled - 1D data displayed")
+                    # 恢复1D数据到q,I存储器
+                    self.q = self.current_1d_data['q']
+                    self.I = self.current_1d_data['I']
+                    self.data_source = '1d'
+                    self.display_mode = 'normal'
+                    
+                    # 强制更新显示
+                    self._update_GUI_image('normal')
+                    self._update_outside_window('normal')
+                    self.status_updated.emit("Current Data disabled - 1D data restored")
                 else:
                     # 没有1D数据，清空显示区域
                     self._clear_fit_graphics_view()
+                    # 同时清空外部窗口（如果存在）
+                    if hasattr(self, 'independent_fit_window') and self.independent_fit_window is not None and self.independent_fit_window.isVisible():
+                        self.independent_fit_window.ax.clear()
+                        self.independent_fit_window.canvas.draw()
                     self.status_updated.emit("Current Data disabled - No 1D data available")
                     
         except Exception as e:
@@ -3261,7 +3292,7 @@ class FittingController(QObject):
             )
     
     def _load_1d_data(self, file_path):
-        """加载1D数据文件"""
+        """导入1D文件 - 数据来源于1D图（1D模式）"""
         try:
             # 导入加载函数
             from utils.load_SAXS_data import load_xy_any
@@ -3270,68 +3301,41 @@ class FittingController(QObject):
             self.status_updated.emit(f"Loading 1D data from {os.path.basename(file_path)}...")
             data = load_xy_any(file_path)
             
-            # 提取q和I数组
-            q = data.q
-            I = data.I
-            err = getattr(data, 'err', None) if hasattr(data, 'err') else None
+            # 导入数据到 q,I 存储器
+            self.q = data.q
+            self.I = data.I
             
-            # 存储数据
+            # 存储原始数据用于兼容性
             self.current_1d_data = {
-                'q': q,
-                'I': I,
-                'err': err,
+                'q': data.q,
+                'I': data.I,
+                'err': getattr(data, 'err', None) if hasattr(data, 'err') else None,
                 'file_path': file_path
             }
             
-            # 自动取消fitCurrentDataCheckBox勾选状态
+            # 设置为1D模式，切换显示模式为normal
+            self.data_source = '1d'
+            self.display_mode = 'normal'
             if hasattr(self.ui, 'fitCurrentDataCheckBox'):
                 self.ui.fitCurrentDataCheckBox.blockSignals(True)
                 self.ui.fitCurrentDataCheckBox.setChecked(False)
                 self.ui.fitCurrentDataCheckBox.blockSignals(False)
             
-            # 更新fitImport1dFileValue显示（显示完整路径）
+            # 更新fitImport1dFileValue显示
             if hasattr(self.ui, 'fitImport1dFileValue'):
                 self.ui.fitImport1dFileValue.setText(file_path)
             
-            # 显示数据
-            self._display_1d_data_in_fit_view()
+            # 更新显示
+            self._update_GUI_image('normal')
+            self._update_outside_window('normal')
             
-            self.status_updated.emit(f"Successfully loaded 1D data: {os.path.basename(file_path)} ({len(q)} points)")
+            self.status_updated.emit(f"Successfully loaded 1D data: {os.path.basename(file_path)} ({len(self.q)} points)")
             
         except Exception as e:
             self.status_updated.emit(f"Failed to load 1D data: {str(e)}")
-            QMessageBox.critical(
-                self.main_window,
-                "Error",
-                f"Failed to load 1D data from {os.path.basename(file_path)}:\n{str(e)}"
-            )
+            QMessageBox.critical(self.main_window, "Error", f"Failed to load 1D data from {os.path.basename(file_path)}:\n{str(e)}")
     
-    def _display_1d_data_in_fit_view(self):
-        """在fitGraphicsView区域显示1D数据"""
-        if not self.current_1d_data:
-            return
-            
-        try:
-            # 获取数据
-            q = self.current_1d_data['q']
-            I = self.current_1d_data['I']
-            err = self.current_1d_data.get('err')
-            
-            # 获取显示选项
-            options = self._display_manager.get_display_options()
-            
-            # 创建标题
-            filename = os.path.basename(self.current_1d_data['file_path'])
-            title = f'1D SAXS Data: {filename}'
-            
-            # 使用统一显示管理器
-            self._display_manager.plot_1d_data(
-                q, I, err, title, "imported_file",
-                options['log_x'], options['log_y'], options['normalize']
-            )
-                
-        except Exception as e:
-            self.status_updated.emit(f"Failed to display 1D data: {str(e)}")
+
     
     def _setup_fit_graphics_scene(self):
         """统一的fitGraphicsView场景设置方法"""
@@ -3379,14 +3383,14 @@ class FittingController(QObject):
             return
             
         try:
-            self.status_updated.emit("开始Cut Fitting处理...")
+            self.status_updated.emit("Start Cut Fitting Processing...")
             self.progress_updated.emit(0)
             
             # TODO: 实现实际的拟合逻辑
             self._run_fitting_process()
             
             self.progress_updated.emit(100)
-            self.status_updated.emit("Cut Fitting处理完成！")
+            self.status_updated.emit("Cut Fitting processing complete!")
             
         except Exception as e:
             QMessageBox.critical(
@@ -3433,7 +3437,7 @@ class FittingController(QObject):
             return
             
         try:
-            self.status_updated.emit("正在自动寻找中心点...")
+            self.status_updated.emit("Searching for the center point automatically...")
             
             # 使用对数强度进行计算
             data = np.log10(np.maximum(self.current_stack_data, 1))
@@ -3512,10 +3516,10 @@ class FittingController(QObject):
                     if hasattr(self.ui, 'gisaxsInputCutLineParallelValue'):
                         self.ui.gisaxsInputCutLineParallelValue.setValue(cutline_width_q)
                     
-                    self.status_updated.emit(f"自动寻找完成 (Q坐标): Center({center_qy:.6f}, {center_qz:.6f}) nm⁻¹, CutLine({cutline_width_q:.6f}, {cutline_height_q:.6f}) nm⁻¹")
+                    self.status_updated.emit(f"Auto-search completion (Q-coordinate): Center({center_qy:.6f}, {center_qz:.6f}) nm⁻¹, CutLine({cutline_width_q:.6f}, {cutline_height_q:.6f}) nm⁻¹")
                     
                 except Exception as e:
-                    self.status_updated.emit(f"Q坐标转换失败，使用像素坐标: {str(e)}")
+                    self.status_updated.emit(f"Q-coordinate conversion failed, using pixel coordinates: {str(e)}")
                     # 回退到像素坐标模式
                     show_q_axis = False
                     
@@ -3617,23 +3621,23 @@ class FittingController(QObject):
             self.detector_params_dialog.raise_()
             self.detector_params_dialog.activateWindow()
             
-            self.status_updated.emit("探测器参数对话框已打开 - 可同时修改主界面参数")
+            self.status_updated.emit("Detector Parameters dialog box is open - main interface parameters can be modified at the same time")
             
         except Exception as e:
-            self.status_updated.emit(f"显示探测器参数对话框失败: {str(e)}")
+            self.status_updated.emit(f"Failed to display Detector Parameters dialog box: {str(e)}")
             QMessageBox.critical(
                 self.main_window,
-                "错误",
-                f"无法显示探测器参数对话框：{str(e)}"
+                "error",
+                f"Detector Parameters dialog box cannot be displayed: {str(e)}"
             )
             
     def _on_detector_dialog_finished(self):
         """探测器参数对话框关闭时的清理"""
         try:
             self.detector_params_dialog = None
-            self.status_updated.emit("探测器参数对话框已关闭")
+            self.status_updated.emit("The Detector Parameters dialog box is closed")
         except Exception as e:
-            self.status_updated.emit(f"清理探测器对话框失败: {str(e)}")
+            self.status_updated.emit(f"Failed to clear detector dialog: {str(e)}")
             
     def _on_detector_parameters_changed(self, parameters):
         """处理探测器参数改变"""
@@ -3653,24 +3657,22 @@ class FittingController(QObject):
                 
                 # 自动重新执行Cut操作
                 self._perform_cut()
-                self.status_updated.emit("探测器参数已更新，Cut结果已自动重新计算")
+                self.status_updated.emit("Detector parameters have been updated, Cut results have been automatically recalculated")
             else:
-                self.status_updated.emit("探测器参数已更新并保存")
+                self.status_updated.emit("Detector parameters updated and saved")
             
         except Exception as e:
-            self.status_updated.emit(f"处理探测器参数改变失败: {str(e)}")
+            self.status_updated.emit(f"Failure to process detector parameter change: {str(e)}")
     
     def _update_parameter_values_for_q_axis(self):
         """根据Q轴显示状态切换时转换参数数值并更新显示"""
         try:
             show_q_axis = self._should_show_q_axis()
-            print(f"DEBUG: Q模式状态 = {show_q_axis}, 上次状态 = {getattr(self, '_last_q_mode', None)}")
             
             # 如果是第一次调用，直接设置当前模式但不进行转换
             if not hasattr(self, '_last_q_mode') or self._last_q_mode is None:
                 self._last_q_mode = show_q_axis
-                print(f"DEBUG: 首次初始化Q模式状态 = {show_q_axis}")
-                self.status_updated.emit(f"Q轴显示模式已设置: {'Q坐标' if show_q_axis else '像素坐标'}")
+                self.status_updated.emit(f"Q-axis display mode is set: {'Q coordinate' if show_q_axis else 'Pixel coordinate'}")
                 return
             
             # 获取当前的数值
@@ -3687,41 +3689,36 @@ class FittingController(QObject):
             if hasattr(self.ui, 'gisaxsInputCutLineParallelValue'):
                 cutline_parallel = self.ui.gisaxsInputCutLineParallelValue.value()
             
-            print(f"DEBUG: 当前参数值 - CV:{center_vertical}, CP:{center_parallel}, CLV:{cutline_vertical}, CLP:{cutline_parallel}")
+
             
             # 检查是否有图像数据用于转换
             if self.current_stack_data is None:
-                print("DEBUG: 无图像数据，无法进行坐标转换")
-                self.status_updated.emit("无图像数据，无法进行坐标转换")
+                self.status_updated.emit("No image data, no coordinate conversion possible")
                 return
             
             # 创建detector用于坐标转换
             detector = self._get_detector_for_conversion()
             if detector is None:
-                print("DEBUG: 无法创建detector，坐标转换失败")
-                self.status_updated.emit("无法创建detector，坐标转换失败")
+                self.status_updated.emit("Unable to create detector, coordinate transformation failed")
                 return
             
             # 检查当前参数是否已经是目标模式（避免重复转换）
             if self._last_q_mode == show_q_axis:
-                print("DEBUG: 模式未变化，跳过转换")
                 return
             
             # 1. 转换Cut line和Center的四个数值
             if show_q_axis:
                 # Pixel -> Q-space转换
-                print("DEBUG: 执行 Pixel -> Q-space 转换")
+
                 new_center_parallel, new_center_vertical, new_cutline_parallel, new_cutline_vertical = \
                     self._convert_pixel_to_q_parameters(center_parallel, center_vertical, cutline_parallel, cutline_vertical, detector)
-                conversion_msg = "参数已从像素坐标转换为Q空间坐标"
+                conversion_msg = "Parameters have been converted from pixel coordinates to Q-space coordinates"
             else:
                 # Q-space -> Pixel转换
-                print("DEBUG: 执行 Q-space -> Pixel 转换")
+
                 new_center_parallel, new_center_vertical, new_cutline_parallel, new_cutline_vertical = \
                     self._convert_q_to_pixel_parameters(center_parallel, center_vertical, cutline_parallel, cutline_vertical, detector)
-                conversion_msg = "参数已从Q空间坐标转换为像素坐标"
-            
-            print(f"DEBUG: 转换后参数值 - CV:{new_center_vertical}, CP:{new_center_parallel}, CLV:{new_cutline_vertical}, CLP:{new_cutline_parallel}")
+                conversion_msg = "Parameters have been converted from Q-space coordinates to pixel coordinates"
             
             # 更新UI控件的值（暂时断开信号连接避免循环触发）
             self._temporarily_disconnect_parameter_signals()
@@ -3746,12 +3743,10 @@ class FittingController(QObject):
             # 记录当前模式，避免重复转换
             self._last_q_mode = show_q_axis
             
-            print(f"DEBUG: 转换完成，新模式状态 = {self._last_q_mode}")
             self.status_updated.emit(conversion_msg)
                 
         except Exception as e:
-            print(f"DEBUG: 模式切换和参数转换失败: {str(e)}")
-            self.status_updated.emit(f"模式切换和参数转换失败: {str(e)}")
+            self.status_updated.emit(f"Mode switching and parameter conversion failure: {str(e)}")
     
     def _get_detector_for_conversion(self):
         """获取用于坐标转换的detector对象"""
@@ -3785,7 +3780,7 @@ class FittingController(QObject):
             return detector
             
         except Exception as e:
-            self.status_updated.emit(f"创建detector失败: {str(e)}")
+            self.status_updated.emit(f"Failed to create detector: {str(e)}")
             return None
     
     def _convert_pixel_to_q_parameters(self, pixel_parallel, pixel_vertical, pixel_cutline_parallel, pixel_cutline_vertical, detector):
@@ -3808,7 +3803,7 @@ class FittingController(QObject):
             return center_qy, center_qz, q_cutline_parallel, q_cutline_vertical
             
         except Exception as e:
-            self.status_updated.emit(f"像素到Q空间转换失败: {str(e)}")
+            self.status_updated.emit(f"Pixel to Q-space conversion failed: {str(e)}")
             return pixel_parallel, pixel_vertical, pixel_cutline_parallel, pixel_cutline_vertical
     
     def _convert_q_to_pixel_parameters(self, q_parallel, q_vertical, q_cutline_parallel, q_cutline_vertical, detector):
@@ -3831,34 +3826,34 @@ class FittingController(QObject):
             return center_x, center_y, pixel_cutline_parallel, pixel_cutline_vertical
             
         except Exception as e:
-            self.status_updated.emit(f"Q空间到像素转换失败: {str(e)}")
+            self.status_updated.emit(f"Q-space to pixel conversion failed: {str(e)}")
             return q_parallel, q_vertical, q_cutline_parallel, q_cutline_vertical
     
     def _temporarily_disconnect_parameter_signals(self):
-        """暂时断开参数变化信号连接"""
+        """暂时断开参数显示变化信号连接（坐标转换期间避免触发显示更新）"""
         try:
             if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
-                self.ui.gisaxsInputCenterVerticalValue.valueChanged.disconnect()
+                self.ui.gisaxsInputCenterVerticalValue.valueChanged.disconnect(self._on_parameter_display_changed)
             if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
-                self.ui.gisaxsInputCenterParallelValue.valueChanged.disconnect()
+                self.ui.gisaxsInputCenterParallelValue.valueChanged.disconnect(self._on_parameter_display_changed)
             if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
-                self.ui.gisaxsInputCutLineVerticalValue.valueChanged.disconnect()
+                self.ui.gisaxsInputCutLineVerticalValue.valueChanged.disconnect(self._on_parameter_display_changed)
             if hasattr(self.ui, 'gisaxsInputCutLineParallelValue'):
-                self.ui.gisaxsInputCutLineParallelValue.valueChanged.disconnect()
+                self.ui.gisaxsInputCutLineParallelValue.valueChanged.disconnect(self._on_parameter_display_changed)
         except Exception:
             pass
     
     def _reconnect_parameter_signals(self):
-        """重新连接参数变化信号"""
+        """重新连接参数显示变化信号"""
         try:
             if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
-                self.ui.gisaxsInputCenterVerticalValue.valueChanged.connect(self._on_cutline_parameters_changed)
+                self.ui.gisaxsInputCenterVerticalValue.valueChanged.connect(self._on_parameter_display_changed)
             if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
-                self.ui.gisaxsInputCenterParallelValue.valueChanged.connect(self._on_cutline_parameters_changed)
+                self.ui.gisaxsInputCenterParallelValue.valueChanged.connect(self._on_parameter_display_changed)
             if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
-                self.ui.gisaxsInputCutLineVerticalValue.valueChanged.connect(self._on_cutline_parameters_changed)
+                self.ui.gisaxsInputCutLineVerticalValue.valueChanged.connect(self._on_parameter_display_changed)
             if hasattr(self.ui, 'gisaxsInputCutLineParallelValue'):
-                self.ui.gisaxsInputCutLineParallelValue.valueChanged.connect(self._on_cutline_parameters_changed)
+                self.ui.gisaxsInputCutLineParallelValue.valueChanged.connect(self._on_parameter_display_changed)
         except Exception:
             pass
     
@@ -3874,7 +3869,7 @@ class FittingController(QObject):
                 self._show_independent_window()
                 
         except Exception as e:
-            self.status_updated.emit(f"刷新显示失败: {str(e)}")
+            self.status_updated.emit(f"Refresh display failure: {str(e)}")
 
     def convert_parameters_to_q_space(self, pixel_center_x, pixel_center_y, pixel_width, pixel_height):
         """将像素参数转换为Q空间参数
@@ -3909,7 +3904,7 @@ class FittingController(QObject):
             return qy_center, qz_center, q_size_parallel, q_size_vertical
             
         except Exception as e:
-            self.status_updated.emit(f"Q空间转换失败: {str(e)}")
+            self.status_updated.emit(f"Q-space conversion failed: {str(e)}")
             return pixel_center_x, pixel_center_y, pixel_width, pixel_height
             
     def _calculate_image_center(self):
@@ -3932,7 +3927,6 @@ class FittingController(QObject):
             return float(vertical_center), float(parallel_center)
             
         except Exception as e:
-            print(f"计算图像中心失败: {e}")
             return 500.0, 500.0
 
     # ========== 会话管理方法 ==========
@@ -3963,7 +3957,6 @@ class FittingController(QObject):
             }
             return session_data
         except Exception as e:
-            print(f"Failed to get session data: {str(e)}")
             return {}
 
     def restore_session(self, session_data):
@@ -4050,25 +4043,16 @@ class FittingController(QObject):
     # ========== Cut功能相关方法 ==========
     
     def _perform_cut(self):
-        """执行Cut操作 - gisaxsInputCutButton按钮的处理逻辑"""
+        """执行Cut操作 - 数据来自二维图（Cut模式）"""
         try:
-            # 0. 自动勾选fitCurrentDataCheckBox
-            if hasattr(self.ui, 'fitCurrentDataCheckBox'):
-                self.ui.fitCurrentDataCheckBox.setChecked(True)
-            
             # 1. 检查是否导入了图像数据
             if self.current_stack_data is None:
-                QMessageBox.warning(
-                    self.main_window,
-                    "Warning",
-                    "Please import an image first."
-                )
+                QMessageBox.warning(self.main_window, "Warning", "Please import an image first.")
                 return
             
             # 2. 获取Cut Line参数
             vertical_value = 0.0
             parallel_value = 0.0
-            
             if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
                 vertical_value = self.ui.gisaxsInputCutLineVerticalValue.value()
             if hasattr(self.ui, 'gisaxsInputCutLineParallelValue'):
@@ -4076,236 +4060,370 @@ class FittingController(QObject):
             
             # 3. 检查参数是否为正数
             if vertical_value <= 0 or parallel_value <= 0:
-                QMessageBox.warning(
-                    self.main_window,
-                    "Warning",
-                    "Please select a valid region."
-                )
+                QMessageBox.warning(self.main_window, "Warning", "Please select a valid region.")
                 return
             
-            # 4. 确定切割模式
+            # 4. 执行切割并导入数据到 q,I 存储器
             if vertical_value <= parallel_value:
-                # 横切模式
                 self._perform_horizontal_cut(vertical_value, parallel_value)
                 self.status_updated.emit(f"Horizontal cut performed: Vertical={vertical_value:.2f}, Parallel={parallel_value:.2f}")
             else:
-                # 纵切模式
                 self._perform_vertical_cut(vertical_value, parallel_value)
                 self.status_updated.emit(f"Vertical cut performed: Vertical={vertical_value:.2f}, Parallel={parallel_value:.2f}")
+            
+            # 5. 设置为Cut模式，切换显示模式为normal
+            self.data_source = 'cut'
+            self.display_mode = 'normal'
+            if hasattr(self.ui, 'fitCurrentDataCheckBox'):
+                self.ui.fitCurrentDataCheckBox.setChecked(True)
+            
+            # 6. 更新显示
+            self._update_GUI_image('normal')
+            self._update_outside_window('normal')
                 
         except Exception as e:
             self.status_updated.emit(f"Cut operation failed: {str(e)}")
-            QMessageBox.critical(
-                self.main_window,
-                "Error",
-                f"Cut operation failed:\n{str(e)}"
-            )
+            QMessageBox.critical(self.main_window, "Error", f"Cut operation failed:\n{str(e)}")
+
+    def _update_GUI_image(self, mode):
+        """统一的GUI图像更新函数"""
+        try:
+            if not self._has_valid_data():
+                return
+                
+            # 获取显示选项
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            
+            # 处理数据
+            q_data = np.array(self.q)
+            I_data = np.array(self.I)
+            
+            # 应用归一化
+            if normalize:
+                I_data = self._normalize_intensity_data(I_data)
+            
+            # 创建图形
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+            
+            scene = self._setup_fit_graphics_scene()
+            if scene is None:
+                return
+            
+            fig = Figure(figsize=(10, 6), dpi=80)
+            canvas = FigureCanvas(fig)
+            ax = fig.add_subplot(111)
+            
+            # Normal模式下的特殊处理：处理负数q值
+            if mode == 'normal' and log_x:
+                # 分离正数和负数q值
+                positive_mask = q_data > 0
+                negative_mask = q_data < 0
+                zero_mask = q_data == 0
+                
+                # 绘制正数部分（蓝色点线图）
+                if np.any(positive_mask):
+                    ax.plot(q_data[positive_mask], I_data[positive_mask], 'o-', 
+                           color='blue', markersize=4, linewidth=1, alpha=0.8,
+                           label=f'{self.data_source.upper()} Data (q>0)' if self.data_source else 'Data (q>0)', zorder=2)
+                
+                # 绘制负数部分（红色点线图，使用|q|）
+                if np.any(negative_mask):
+                    ax.plot(np.abs(q_data[negative_mask]), I_data[negative_mask], 'o-', 
+                           color='red', markersize=4, linewidth=1, alpha=0.8,
+                           label=f'{self.data_source.upper()} Data (q<0, |q|)' if self.data_source else 'Data (q<0, |q|)', zorder=2)
+                
+                # 处理q=0的点（如果有）
+                if np.any(zero_mask):
+                    ax.plot(q_data[zero_mask], I_data[zero_mask], 'o', 
+                           color='green', markersize=6, alpha=0.8,
+                           label=f'{self.data_source.upper()} Data (q=0)' if self.data_source else 'Data (q=0)', zorder=3)
+            else:
+                # 其他情况：使用散点图
+                ax.scatter(q_data, I_data, s=30, alpha=0.7, color='blue', 
+                          label=f'{self.data_source.upper()} Data' if self.data_source else 'Data', zorder=2)
+            
+            # 如果是fitting模式且有拟合数据，绘制拟合曲线
+            if mode == 'fitting' and self.has_fitting_data and self.I_fitting is not None:
+                I_fitting_data = np.array(self.I_fitting)
+                # 拟合数据不应用归一化，保持原始值
+                
+                ax.plot(q_data, I_fitting_data, color='red', linewidth=2, 
+                       label='Fitting', zorder=3)
+            
+            # 设置标签和样式
+            ax.set_xlabel('q (Å⁻¹)' if not (mode == 'normal' and log_x and np.any(q_data < 0)) else '|q| (Å⁻¹)')
+            ax.set_ylabel('Normalized Intensity' if normalize else 'Intensity (a.u.)')
+            ax.set_title(f'{mode.capitalize()} Mode - {self.data_source.upper() if self.data_source else "Data"}')
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            
+            # 应用对数坐标
+            self._apply_log_scales(ax, log_x, log_y)
+            
+            fig.tight_layout()
+            
+            # 添加到场景
+            proxy_widget = scene.addWidget(canvas)
+            self.ui.fitGraphicsView.fitInView(proxy_widget)
+            
+            # 保存引用
+            self._current_fit_figure = fig
+            self._current_fit_canvas = canvas
+            
+        except Exception:
+            pass
+
+    def _update_outside_window(self, mode):
+        """统一的外部窗口更新函数"""
+        try:
+            if not hasattr(self, 'independent_fit_window') or self.independent_fit_window is None or not self.independent_fit_window.isVisible():
+                return
+                
+            if not self._has_valid_data():
+                return
+                
+            # 获取显示选项
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            
+            # 检查"Positive Only"复选框状态
+            positive_only = self._is_positive_only_enabled()
+            
+            # 处理数据
+            q_data = np.array(self.q)
+            I_data = np.array(self.I)
+            
+            # 如果启用"Positive Only"，过滤掉负数q值
+            if positive_only:
+                positive_mask = q_data > 0
+                q_data = q_data[positive_mask]
+                I_data = I_data[positive_mask]
+            
+            # 应用归一化
+            if normalize:
+                I_data = self._normalize_intensity_data(I_data)
+            
+            ax = self.independent_fit_window.ax
+            ax.clear()
+            
+            # Normal模式下的特殊处理：处理负数q值（仅当未启用positive_only时）
+            if mode == 'normal' and log_x and not positive_only:
+                # 分离正数和负数q值
+                positive_mask = q_data > 0
+                negative_mask = q_data < 0
+                zero_mask = q_data == 0
+                
+                # 绘制正数部分（蓝色点线图）
+                if np.any(positive_mask):
+                    ax.plot(q_data[positive_mask], I_data[positive_mask], 'o-', 
+                           color='blue', markersize=4, linewidth=1, alpha=0.8,
+                           label=f'{self.data_source.upper()} Data (q>0)' if self.data_source else 'Data (q>0)', zorder=2)
+                
+                # 绘制负数部分（红色点线图，使用|q|）
+                if np.any(negative_mask):
+                    ax.plot(np.abs(q_data[negative_mask]), I_data[negative_mask], 'o-', 
+                           color='red', markersize=4, linewidth=1, alpha=0.8,
+                           label=f'{self.data_source.upper()} Data (q<0, |q|)' if self.data_source else 'Data (q<0, |q|)', zorder=2)
+                
+                # 处理q=0的点（如果有）
+                if np.any(zero_mask):
+                    ax.plot(q_data[zero_mask], I_data[zero_mask], 'o', 
+                           color='green', markersize=6, alpha=0.8,
+                           label=f'{self.data_source.upper()} Data (q=0)' if self.data_source else 'Data (q=0)', zorder=3)
+            else:
+                # 其他情况：使用散点图
+                ax.scatter(q_data, I_data, s=30, alpha=0.7, color='blue', 
+                          label=f'{self.data_source.upper()} Data' if self.data_source else 'Data', zorder=2)
+            
+            # 如果是fitting模式且有拟合数据，绘制拟合曲线
+            if mode == 'fitting' and self.has_fitting_data and self.I_fitting is not None:
+                I_fitting_data = np.array(self.I_fitting)
+                
+                # 如果启用"Positive Only"，也需要过滤拟合数据
+                if positive_only:
+                    original_q = np.array(self.q)
+                    positive_mask = original_q > 0
+                    I_fitting_data = I_fitting_data[positive_mask]
+                
+                # 拟合数据不应用归一化，保持原始值
+                
+                ax.plot(q_data, I_fitting_data, color='red', linewidth=2.5, 
+                       label='Fitting', zorder=3)
+            
+            # 设置标签和样式
+            x_label = 'q (Å⁻¹)'
+            if mode == 'normal' and log_x and not positive_only and np.any(np.array(self.q) < 0):
+                x_label = '|q| (Å⁻¹)'
+            elif positive_only:
+                x_label = 'q (Å⁻¹) [Positive Only]'
+                
+            ax.set_xlabel(x_label)
+            ax.set_ylabel('Normalized Intensity' if normalize else 'Intensity (a.u.)')
+            ax.set_title(f'{mode.capitalize()} Mode - {self.data_source.upper() if self.data_source else "Data"}')
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            
+            # 设置坐标轴样式
+            for axis in ['top', 'bottom', 'left', 'right']:
+                ax.spines[axis].set_linewidth(1.2)
+            
+            # 应用对数坐标
+            self._apply_log_scales(ax, log_x, log_y)
+            
+            # 刷新显示
+            if hasattr(self.independent_fit_window, 'canvas'):
+                self.independent_fit_window.canvas.draw()
+                
+        except Exception:
+            pass
+    
+    def _get_cut_center_coordinates(self):
+        """获取切割区域的中心点坐标"""
+        center_x = 0.0
+        center_y = 0.0
+        
+        if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
+            center_x = self.ui.gisaxsInputCenterParallelValue.value()
+        if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
+            center_y = self.ui.gisaxsInputCenterVerticalValue.value()
+            
+        return center_x, center_y
+    
+    def _perform_cut_operation(self, vertical_value, parallel_value, cut_type: str):
+        """通用切割操作方法
+        
+        Args:
+            vertical_value: 垂直方向的切割参数
+            parallel_value: 平行方向的切割参数
+            cut_type: 切割类型，'horizontal' 或 'vertical'
+        """
+        try:
+            # 获取切割区域的中心点
+            center_x, center_y = self._get_cut_center_coordinates()
+            
+            # 检查是否为Q坐标模式
+            show_q_axis = self._should_show_q_axis()
+            
+            # 根据切割类型设置参数
+            if cut_type == 'horizontal':
+                q_mode_method = self._extract_horizontal_cut_q_mode
+                pixel_mode_method = self._extract_horizontal_cut_pixel_mode
+                pixel_to_q_method = self._convert_pixel_to_qy
+                x_label = r'$q_y$ (nm$^{-1}$)'
+                title = "Horizontal Cut"
+            elif cut_type == 'vertical':
+                q_mode_method = self._extract_vertical_cut_q_mode
+                pixel_mode_method = self._extract_vertical_cut_pixel_mode
+                pixel_to_q_method = self._convert_pixel_to_qz
+                x_label = r'$q_z$ (nm$^{-1}$)'
+                title = "Vertical Cut"
+            else:
+                raise Exception(f"Unknown cut type: {cut_type}")
+            
+            if show_q_axis:
+                # Q坐标模式：直接使用Q坐标
+                cut_data, q_coords = q_mode_method(
+                    center_x, center_y, vertical_value, parallel_value
+                )
+                x_coordinates = q_coords
+            else:
+                # 像素坐标模式：提取像素数据后转换为Q坐标
+                cut_data, pixel_coords = pixel_mode_method(
+                    center_x, center_y, vertical_value, parallel_value
+                )
+                # 转换像素坐标到Q坐标
+                x_coordinates = pixel_to_q_method(pixel_coords)
+            
+            # 绘制结果
+            self._plot_cut_result(x_coordinates, cut_data, x_label, "Intensity (a.u.)", title)
+            
+        except Exception as e:
+            raise Exception(f"{cut_type.capitalize()} cut failed: {str(e)}")
     
     def _perform_horizontal_cut(self, vertical_value, parallel_value):
         """执行横切操作"""
-        try:
-            # 获取切割区域的中心点
-            center_x = 0.0
-            center_y = 0.0
-            
-            if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
-                center_x = self.ui.gisaxsInputCenterParallelValue.value()
-            if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
-                center_y = self.ui.gisaxsInputCenterVerticalValue.value()
-            
-            # 检查是否为Q坐标模式
-            show_q_axis = self._should_show_q_axis()
-            
-            if show_q_axis:
-                # Q坐标模式：直接使用Q坐标
-                cut_data, q_coords = self._extract_horizontal_cut_q_mode(
-                    center_x, center_y, vertical_value, parallel_value
-                )
-                x_label = r'$q_y$ (nm$^{-1}$)'
-                x_coordinates = q_coords
-            else:
-                # 像素坐标模式：提取像素数据后转换为Q坐标
-                cut_data, pixel_coords = self._extract_horizontal_cut_pixel_mode(
-                    center_x, center_y, vertical_value, parallel_value
-                )
-                # 转换像素坐标到qy
-                x_coordinates = self._convert_pixel_to_qy(pixel_coords)
-                x_label = r'$q_y$ (nm$^{-1}$)'
-            
-            # 绘制结果
-            self._plot_cut_result(x_coordinates, cut_data, x_label, "Intensity (a.u.)", "Horizontal Cut")
-            
-        except Exception as e:
-            raise Exception(f"Horizontal cut failed: {str(e)}")
+        self._perform_cut_operation(vertical_value, parallel_value, 'horizontal')
     
     def _perform_vertical_cut(self, vertical_value, parallel_value):
         """执行纵切操作"""
+        self._perform_cut_operation(vertical_value, parallel_value, 'vertical')
+    
+    def _extract_cut_q_mode(self, center_qy, center_qz, height_q, width_q, cut_type: str):
+        """Q坐标模式下的通用数据提取方法
+        
+        Args:
+            center_qy, center_qz: Q空间中心坐标
+            height_q, width_q: Q空间区域尺寸
+            cut_type: 切割类型，'horizontal' 或 'vertical'
+        """
         try:
-            # 获取切割区域的中心点
-            center_x = 0.0
-            center_y = 0.0
+            # 获取Q网格
+            qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+            if qy_mesh is None or qz_mesh is None:
+                raise Exception("Q-space meshgrids not available")
             
-            if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
-                center_x = self.ui.gisaxsInputCenterParallelValue.value()
-            if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
-                center_y = self.ui.gisaxsInputCenterVerticalValue.value()
+            # 定义切割区域边界
+            qy_min = center_qy - width_q / 2
+            qy_max = center_qy + width_q / 2
+            qz_min = center_qz - height_q / 2
+            qz_max = center_qz + height_q / 2
             
-            # 检查是否为Q坐标模式
-            show_q_axis = self._should_show_q_axis()
+            # 创建区域掩码
+            mask = ((qy_mesh >= qy_min) & (qy_mesh <= qy_max) & 
+                    (qz_mesh >= qz_min) & (qz_mesh <= qz_max))
             
-            if show_q_axis:
-                # Q坐标模式：直接使用Q坐标
-                cut_data, q_coords = self._extract_vertical_cut_q_mode(
-                    center_x, center_y, vertical_value, parallel_value
-                )
-                x_label = r'$q_z$ (nm$^{-1}$)'
-                x_coordinates = q_coords
+            # 在区域内进行求和
+            region_data = np.where(mask, self.current_stack_data, 0)
+            
+            # 根据切割类型进行求和和坐标提取
+            if cut_type == 'horizontal':
+                # 沿纵向求和得到横向分布
+                intensity_sum = np.sum(region_data, axis=0)
+                q_line = qy_mesh[0, :]  # 取第一行的qy值
+            elif cut_type == 'vertical':
+                # 沿横向求和得到纵向分布
+                intensity_sum = np.sum(region_data, axis=1)
+                q_line = qz_mesh[:, 0]  # 取第一列的qz值
             else:
-                # 像素坐标模式：提取像素数据后转换为Q坐标
-                cut_data, pixel_coords = self._extract_vertical_cut_pixel_mode(
-                    center_x, center_y, vertical_value, parallel_value
-                )
-                # 转换像素坐标到qz
-                x_coordinates = self._convert_pixel_to_qz(pixel_coords)
-                x_label = r'$q_z$ (nm$^{-1}$)'
+                raise Exception(f"Unknown cut type: {cut_type}")
             
-            # 绘制结果
-            self._plot_cut_result(x_coordinates, cut_data, x_label, "Intensity (a.u.)", "Vertical Cut")
+            # 过滤有效数据点
+            valid_indices = intensity_sum > 0
+            if not np.any(valid_indices):
+                raise Exception("No valid data in the selected region")
+            
+            valid_q = q_line[valid_indices]
+            valid_intensity = intensity_sum[valid_indices]
+            
+            # 插值到50个点
+            q_interp = np.linspace(valid_q.min(), valid_q.max(), 50)
+            intensity_interp = np.interp(q_interp, valid_q, valid_intensity)
+            
+            return intensity_interp, q_interp
             
         except Exception as e:
-            raise Exception(f"Vertical cut failed: {str(e)}")
+            raise Exception(f"Q-mode {cut_type} cut extraction failed: {str(e)}")
     
     def _extract_horizontal_cut_q_mode(self, center_qy, center_qz, height_q, width_q):
         """Q坐标模式下的横切数据提取"""
-        try:
-            # 获取Q网格
-            qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
-            if qy_mesh is None or qz_mesh is None:
-                raise Exception("Q-space meshgrids not available")
-            
-            # 定义切割区域边界
-            qy_min = center_qy - width_q / 2
-            qy_max = center_qy + width_q / 2
-            qz_min = center_qz - height_q / 2
-            qz_max = center_qz + height_q / 2
-            
-            # 创建区域掩码
-            mask = ((qy_mesh >= qy_min) & (qy_mesh <= qy_max) & 
-                    (qz_mesh >= qz_min) & (qz_mesh <= qz_max))
-            
-            # 在区域内沿纵向求和
-            region_data = np.where(mask, self.current_stack_data, 0)
-            
-            # 沿纵向求和得到横向分布
-            horizontal_sum = np.sum(region_data, axis=0)
-            
-            # 获取对应的qy坐标
-            qy_line = qy_mesh[0, :]  # 取第一行的qy值
-            
-            # 过滤有效数据点
-            valid_indices = horizontal_sum > 0
-            if not np.any(valid_indices):
-                raise Exception("No valid data in the selected region")
-            
-            valid_qy = qy_line[valid_indices]
-            valid_intensity = horizontal_sum[valid_indices]
-            
-            # 插值到50个点
-            qy_interp = np.linspace(valid_qy.min(), valid_qy.max(), 50)
-            intensity_interp = np.interp(qy_interp, valid_qy, valid_intensity)
-            
-            return intensity_interp, qy_interp
-            
-        except Exception as e:
-            raise Exception(f"Q-mode horizontal cut extraction failed: {str(e)}")
+        return self._extract_cut_q_mode(center_qy, center_qz, height_q, width_q, 'horizontal')
     
     def _extract_vertical_cut_q_mode(self, center_qy, center_qz, height_q, width_q):
         """Q坐标模式下的纵切数据提取"""
-        try:
-            # 获取Q网格
-            qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
-            if qy_mesh is None or qz_mesh is None:
-                raise Exception("Q-space meshgrids not available")
-            
-            # 定义切割区域边界
-            qy_min = center_qy - width_q / 2
-            qy_max = center_qy + width_q / 2
-            qz_min = center_qz - height_q / 2
-            qz_max = center_qz + height_q / 2
-            
-            # 创建区域掩码
-            mask = ((qy_mesh >= qy_min) & (qy_mesh <= qy_max) & 
-                    (qz_mesh >= qz_min) & (qz_mesh <= qz_max))
-            
-            # 在区域内沿横向求和
-            region_data = np.where(mask, self.current_stack_data, 0)
-            
-            # 沿横向求和得到纵向分布
-            vertical_sum = np.sum(region_data, axis=1)
-            
-            # 获取对应的qz坐标
-            qz_line = qz_mesh[:, 0]  # 取第一列的qz值
-            
-            # 过滤有效数据点
-            valid_indices = vertical_sum > 0
-            if not np.any(valid_indices):
-                raise Exception("No valid data in the selected region")
-            
-            valid_qz = qz_line[valid_indices]
-            valid_intensity = vertical_sum[valid_indices]
-            
-            # 插值到50个点
-            qz_interp = np.linspace(valid_qz.min(), valid_qz.max(), 50)
-            intensity_interp = np.interp(qz_interp, valid_qz, valid_intensity)
-            
-            return intensity_interp, qz_interp
-            
-        except Exception as e:
-            raise Exception(f"Q-mode vertical cut extraction failed: {str(e)}")
+        return self._extract_cut_q_mode(center_qy, center_qz, height_q, width_q, 'vertical')
     
-    def _extract_horizontal_cut_pixel_mode(self, center_x, center_y, height, width):
-        """像素坐标模式下的横切数据提取"""
-        try:
-            img_height, img_width = self.current_stack_data.shape
-            
-            # 计算像素边界（注意图像坐标系统）
-            x_min = max(0, int(center_x - width / 2))
-            x_max = min(img_width, int(center_x + width / 2))
-            y_min = max(0, int(center_y - height / 2))
-            y_max = min(img_height, int(center_y + height / 2))
-            
-            # 由于显示时图像被flipud，需要调整y坐标
-            y_min_adj = img_height - 1 - y_max
-            y_max_adj = img_height - 1 - y_min
-            y_min_adj, y_max_adj = max(0, y_min_adj), min(img_height, y_max_adj)
-            
-            # 提取区域数据
-            region_data = self.current_stack_data[y_min_adj:y_max_adj+1, x_min:x_max+1]
-            
-            if region_data.size == 0:
-                raise Exception("Empty region selected")
-            
-            # 沿纵向求和得到横向分布
-            horizontal_sum = np.sum(region_data, axis=0)
-            
-            # 生成像素坐标
-            pixel_coords = np.arange(x_min, x_min + len(horizontal_sum))
-            
-            # 插值到50个点
-            if len(pixel_coords) > 1:
-                pixel_interp = np.linspace(pixel_coords.min(), pixel_coords.max(), 50)
-                intensity_interp = np.interp(pixel_interp, pixel_coords, horizontal_sum)
-            else:
-                pixel_interp = pixel_coords
-                intensity_interp = horizontal_sum
-            
-            return intensity_interp, pixel_interp
-            
-        except Exception as e:
-            raise Exception(f"Pixel-mode horizontal cut extraction failed: {str(e)}")
-    
-    def _extract_vertical_cut_pixel_mode(self, center_x, center_y, height, width):
-        """像素坐标模式下的纵切数据提取"""
+    def _extract_cut_pixel_mode(self, center_x, center_y, height, width, cut_type: str):
+        """像素坐标模式下的通用数据提取方法
+        
+        Args:
+            center_x, center_y: 中心坐标
+            height, width: 区域尺寸
+            cut_type: 切割类型，'horizontal' 或 'vertical'
+        """
         try:
             img_height, img_width = self.current_stack_data.shape
             
@@ -4326,117 +4444,124 @@ class FittingController(QObject):
             if region_data.size == 0:
                 raise Exception("Empty region selected")
             
-            # 沿横向求和得到纵向分布
-            vertical_sum = np.sum(region_data, axis=1)
-            
-            # 生成像素坐标（原始坐标，未翻转）
-            pixel_coords = np.arange(y_min, y_min + len(vertical_sum))
+            # 根据切割类型进行求和
+            if cut_type == 'horizontal':
+                # 沿纵向求和得到横向分布
+                intensity_sum = np.sum(region_data, axis=0)
+                pixel_coords = np.arange(x_min, x_min + len(intensity_sum))
+            elif cut_type == 'vertical':
+                # 沿横向求和得到纵向分布
+                intensity_sum = np.sum(region_data, axis=1)
+                pixel_coords = np.arange(y_min, y_min + len(intensity_sum))
+            else:
+                raise Exception(f"Unknown cut type: {cut_type}")
             
             # 插值到50个点
             if len(pixel_coords) > 1:
                 pixel_interp = np.linspace(pixel_coords.min(), pixel_coords.max(), 50)
-                intensity_interp = np.interp(pixel_interp, pixel_coords, vertical_sum)
+                intensity_interp = np.interp(pixel_interp, pixel_coords, intensity_sum)
             else:
                 pixel_interp = pixel_coords
-                intensity_interp = vertical_sum
+                intensity_interp = intensity_sum
             
             return intensity_interp, pixel_interp
             
         except Exception as e:
-            raise Exception(f"Pixel-mode vertical cut extraction failed: {str(e)}")
+            raise Exception(f"Pixel-mode {cut_type} cut extraction failed: {str(e)}")
+    
+    def _extract_horizontal_cut_pixel_mode(self, center_x, center_y, height, width):
+        """像素坐标模式下的横切数据提取"""
+        return self._extract_cut_pixel_mode(center_x, center_y, height, width, 'horizontal')
+    
+    def _extract_vertical_cut_pixel_mode(self, center_x, center_y, height, width):
+        """像素坐标模式下的纵切数据提取"""
+        return self._extract_cut_pixel_mode(center_x, center_y, height, width, 'vertical')
+    
+    def _get_detector_for_pixel_conversion(self):
+        """获取用于像素坐标转换的detector对象（统一方法）"""
+        try:
+            from utils.q_space_calculator import create_detector_from_image_and_params
+            from core.global_params import GlobalParameterManager
+            
+            global_params = GlobalParameterManager()
+            height, width = self.current_stack_data.shape
+            
+            # 获取探测器参数
+            pixel_size_x = global_params.get_parameter('fitting', 'detector.pixel_size_x', 172.0)
+            pixel_size_y = global_params.get_parameter('fitting', 'detector.pixel_size_y', 172.0)
+            beam_center_x = global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0)
+            beam_center_y = global_params.get_parameter('fitting', 'detector.beam_center_y', height / 2.0)
+            distance = global_params.get_parameter('fitting', 'detector.distance', 2565.0)
+            theta_in_deg = global_params.get_parameter('beam', 'grazing_angle', 0.4)
+            wavelength = global_params.get_parameter('beam', 'wavelength', 0.1045)
+            
+            return create_detector_from_image_and_params(
+                image_shape=(height, width),
+                pixel_size_x=pixel_size_x,
+                pixel_size_y=pixel_size_y,
+                beam_center_x=beam_center_x,
+                beam_center_y=beam_center_y,
+                distance=distance,
+                theta_in_deg=theta_in_deg,
+                wavelength=wavelength,
+                crop_params=None
+            )
+        except Exception:
+            return None
+    
+    def _convert_pixel_coords_to_q(self, pixel_coords, conversion_type: str):
+        """通用像素坐标到Q坐标转换方法
+        
+        Args:
+            pixel_coords: 像素坐标数组
+            conversion_type: 转换类型，'qy' 或 'qz'
+        """
+        try:
+            detector = self._get_detector_for_pixel_conversion()
+            if detector is None:
+                raise Exception("Failed to create detector")
+            
+            height, width = self.current_stack_data.shape
+            q_coords = []
+            
+            if conversion_type == 'qy':
+                # 转换到qy坐标（使用图像中心的y坐标）
+                center_y = height / 2.0
+                for px in pixel_coords:
+                    _, qy, _ = detector.pixel_to_q_space(px, center_y)
+                    q_coords.append(qy)
+            elif conversion_type == 'qz':
+                # 转换到qz坐标（使用图像中心的x坐标）
+                center_x = width / 2.0
+                for py in pixel_coords:
+                    _, _, qz = detector.pixel_to_q_space(center_x, py)
+                    q_coords.append(qz)
+            else:
+                raise Exception(f"Unknown conversion type: {conversion_type}")
+            
+            return np.array(q_coords)
+            
+        except Exception as e:
+            # 如果转换失败，返回归一化的像素坐标
+            self.status_updated.emit(f"Pixel to {conversion_type} conversion failed: {str(e)}")
+            return (pixel_coords - pixel_coords.mean()) / pixel_coords.std()
     
     def _convert_pixel_to_qy(self, pixel_coords):
         """将像素坐标转换为qy坐标"""
-        try:
-            from utils.q_space_calculator import create_detector_from_image_and_params
-            from core.global_params import GlobalParameterManager
-            
-            global_params = GlobalParameterManager()
-            height, width = self.current_stack_data.shape
-            
-            # 获取探测器参数
-            pixel_size_x = global_params.get_parameter('fitting', 'detector.pixel_size_x', 172.0)
-            pixel_size_y = global_params.get_parameter('fitting', 'detector.pixel_size_y', 172.0)
-            beam_center_x = global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0)
-            beam_center_y = global_params.get_parameter('fitting', 'detector.beam_center_y', height / 2.0)
-            distance = global_params.get_parameter('fitting', 'detector.distance', 2565.0)
-            theta_in_deg = global_params.get_parameter('beam', 'grazing_angle', 0.4)
-            wavelength = global_params.get_parameter('beam', 'wavelength', 0.1045)
-            
-            detector = create_detector_from_image_and_params(
-                image_shape=(height, width),
-                pixel_size_x=pixel_size_x,
-                pixel_size_y=pixel_size_y,
-                beam_center_x=beam_center_x,
-                beam_center_y=beam_center_y,
-                distance=distance,
-                theta_in_deg=theta_in_deg,
-                wavelength=wavelength,
-                crop_params=None
-            )
-            
-            # 转换坐标（使用图像中心的y坐标）
-            center_y = height / 2.0
-            qy_coords = []
-            for px in pixel_coords:
-                _, qy, _ = detector.pixel_to_q_space(px, center_y)
-                qy_coords.append(qy)
-            
-            return np.array(qy_coords)
-            
-        except Exception as e:
-            # 如果转换失败，返回归一化的像素坐标
-            self.status_updated.emit(f"Pixel to qy conversion failed: {str(e)}")
-            return (pixel_coords - pixel_coords.mean()) / pixel_coords.std()
+        return self._convert_pixel_coords_to_q(pixel_coords, 'qy')
     
     def _convert_pixel_to_qz(self, pixel_coords):
         """将像素坐标转换为qz坐标"""
-        try:
-            from utils.q_space_calculator import create_detector_from_image_and_params
-            from core.global_params import GlobalParameterManager
-            
-            global_params = GlobalParameterManager()
-            height, width = self.current_stack_data.shape
-            
-            # 获取探测器参数
-            pixel_size_x = global_params.get_parameter('fitting', 'detector.pixel_size_x', 172.0)
-            pixel_size_y = global_params.get_parameter('fitting', 'detector.pixel_size_y', 172.0)
-            beam_center_x = global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0)
-            beam_center_y = global_params.get_parameter('fitting', 'detector.beam_center_y', height / 2.0)
-            distance = global_params.get_parameter('fitting', 'detector.distance', 2565.0)
-            theta_in_deg = global_params.get_parameter('beam', 'grazing_angle', 0.4)
-            wavelength = global_params.get_parameter('beam', 'wavelength', 0.1045)
-            
-            detector = create_detector_from_image_and_params(
-                image_shape=(height, width),
-                pixel_size_x=pixel_size_x,
-                pixel_size_y=pixel_size_y,
-                beam_center_x=beam_center_x,
-                beam_center_y=beam_center_y,
-                distance=distance,
-                theta_in_deg=theta_in_deg,
-                wavelength=wavelength,
-                crop_params=None
-            )
-            
-            # 转换坐标（使用图像中心的x坐标）
-            center_x = width / 2.0
-            qz_coords = []
-            for py in pixel_coords:
-                _, _, qz = detector.pixel_to_q_space(center_x, py)
-                qz_coords.append(qz)
-            
-            return np.array(qz_coords)
-            
-        except Exception as e:
-            # 如果转换失败，返回归一化的像素坐标
-            self.status_updated.emit(f"Pixel to qz conversion failed: {str(e)}")
-            return (pixel_coords - pixel_coords.mean()) / pixel_coords.std()
+        return self._convert_pixel_coords_to_q(pixel_coords, 'qz')
     
     def _plot_cut_result(self, x_coords, y_intensity, x_label, y_label, title):
         """在fitGraphicsView中绘制切割结果"""
         try:
-            # 存储当前切割数据，用于独立窗口显示
+            # 导入数据到统一的 q,I 存储器
+            self.q = np.array(x_coords)
+            self.I = np.array(y_intensity)
+            
+            # 存储当前切割数据，用于兼容性
             self.current_cut_data = {
                 'x_coords': x_coords.copy() if hasattr(x_coords, 'copy') else list(x_coords),
                 'y_intensity': y_intensity.copy() if hasattr(y_intensity, 'copy') else list(y_intensity),
@@ -4540,29 +4665,2222 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Legacy plot cut data error: {str(e)}")
     
+    def _get_checkbox_state(self, checkbox_name: str, default_value: bool = False) -> bool:
+        """通用复选框状态检查方法"""
+        try:
+            if hasattr(self.ui, checkbox_name):
+                checkbox = getattr(self.ui, checkbox_name)
+                return checkbox.isChecked()
+            return default_value
+        except Exception:
+            return default_value
+    
     def _is_fit_log_x_enabled(self):
         """检查是否启用X轴对数显示"""
-        try:
-            if hasattr(self.ui, 'fitLogXCheckBox'):
-                return self.ui.fitLogXCheckBox.isChecked()
-            return False
-        except Exception:
-            return False
+        return self._get_checkbox_state('fitLogXCheckBox', False)
     
     def _is_fit_log_y_enabled(self):
         """检查是否启用Y轴对数显示"""
-        try:
-            if hasattr(self.ui, 'fitLogYCheckBox'):
-                return self.ui.fitLogYCheckBox.isChecked()
-            return False
-        except Exception:
-            return False
+        return self._get_checkbox_state('fitLogYCheckBox', False)
     
     def _is_fit_norm_enabled(self):
         """检查是否启用标准化"""
+        # 只检查fitNormCheckBox
+        return self._get_checkbox_state('fitNormCheckBox', False)
+    
+    def _is_positive_only_enabled(self):
+        """检查是否启用Positive Only模式（仅显示正数q值）"""
+        # 首先检查独立窗口中的复选框
+        if (hasattr(self, 'independent_fit_window') and 
+            self.independent_fit_window is not None and 
+            hasattr(self.independent_fit_window, 'show_positive_cb')):
+            return self.independent_fit_window.show_positive_cb.isChecked()
+        
+        # 如果独立窗口不存在，检查主窗口中的复选框
+        return self._get_checkbox_state('PositiveOnlyCheckBox', False)
+    
+    def _normalize_intensity_data(self, I_data):
+        """统一的强度数据归一化方法"""
+        if len(I_data) == 0:
+            return I_data
+        max_I = np.max(I_data)
+        if max_I > 0:
+            return I_data / max_I
+        return I_data
+    
+    def _apply_log_scales(self, ax, log_x=False, log_y=False):
+        """统一的对数坐标设置方法"""
+        if log_x:
+            ax.set_xscale('log')
+        if log_y:
+            ax.set_yscale('log')
+    
+    def _has_valid_data(self):
+        """检查是否有有效的q,I数据"""
+        return (hasattr(self, 'q') and hasattr(self, 'I') and 
+                self.q is not None and self.I is not None and 
+                len(self.q) > 0 and len(self.I) > 0)
+    
+    # =========================================================================
+    # FittingTextBrowser 状态信息显示
+    # =========================================================================
+    
+    def _setup_fitting_text_browser(self):
+        """设置FittingTextBrowser来显示状态信息"""
+        if hasattr(self.ui, 'FittingTextBrowser'):
+            # 连接status_updated信号到FittingTextBrowser
+            self.status_updated.connect(self._update_fitting_text_browser)
+            
+            # 初始化FittingTextBrowser
+            self.ui.FittingTextBrowser.clear()
+            self._add_fitting_message("Fitting Controller initialized", "INFO")
+
+    
+    def _update_fitting_text_browser(self, message: str):
+        """更新FittingTextBrowser显示状态信息"""
+        if hasattr(self.ui, 'FittingTextBrowser'):
+            self._add_fitting_message(message, "STATUS")
+    
+    def _add_fitting_message(self, message: str, msg_type: str = "INFO"):
+        """添加消息到FittingTextBrowser"""
+        if not hasattr(self.ui, 'FittingTextBrowser'):
+            return
+            
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        # 根据消息类型设置颜色
+        color_map = {
+            "INFO": "#2E86AB",      # 蓝色
+            "STATUS": "#28A745",    # 绿色  
+            "WARNING": "#FD7E14",   # 橙色
+            "ERROR": "#DC3545",     # 红色
+            "SUCCESS": "#198754",   # 深绿色
+            "PARTICLE": "#6F42C1"   # 紫色（粒子相关）
+        }
+        
+        color = color_map.get(msg_type, "#333333")
+        
+        # 格式化消息
+        formatted_message = f'<span style="color: {color};">[{timestamp}] {msg_type}: {message}</span>'
+        
+        # 添加到FittingTextBrowser
+        self.ui.FittingTextBrowser.append(formatted_message)
+        
+        # 自动滚动到底部
+        cursor = self.ui.FittingTextBrowser.textCursor()
+        cursor.movePosition(cursor.End)
+        self.ui.FittingTextBrowser.setTextCursor(cursor)
+    
+    def _add_fitting_warning(self, message: str):
+        """添加警告消息"""
+        self._add_fitting_message(message, "WARNING")
+    
+    def _add_fitting_error(self, message: str):
+        """添加错误消息"""
+        self._add_fitting_message(message, "ERROR")
+    
+    def _add_fitting_success(self, message: str):
+        """添加成功消息"""
+        self._add_fitting_message(message, "SUCCESS")
+    
+    def _add_particle_message(self, message: str):
+        """添加粒子相关消息"""
+        self._add_fitting_message(message, "PARTICLE")
+    
+    def clear_fitting_messages(self):
+        """清空FittingTextBrowser"""
+        if hasattr(self.ui, 'FittingTextBrowser'):
+            self.ui.FittingTextBrowser.clear()
+            self._add_fitting_message("Messages cleared", "INFO")
+    
+    def get_fitting_messages(self) -> str:
+        """获取FittingTextBrowser的所有内容"""
+        if hasattr(self.ui, 'FittingTextBrowser'):
+            return self.ui.FittingTextBrowser.toPlainText()
+        return ""
+    
+    def save_fitting_log(self, filepath: str) -> bool:
+        """保存拟合日志到文件"""
         try:
-            if hasattr(self.ui, 'fitNormCheckBox'):
-                return self.ui.fitNormCheckBox.isChecked()
+            content = self.get_fitting_messages()
+            if content:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                self._add_fitting_success(f"Fitting log saved to: {filepath}")
+                return True
+            else:
+                self._add_fitting_warning("No messages to save")
+                return False
+        except Exception as e:
+            self._add_fitting_error(f"Failed to save fitting log: {str(e)}")
             return False
-        except Exception:
+    
+    # =========================================================================
+    # 粒子形状连接器 - 管理现有的粒子形状页面
+    # =========================================================================
+    
+    def _setup_particle_shape_connector(self):
+        """设置粒子形状连接器"""
+        # 页面配置 - 方便添加新的形状和页面
+        self.particle_shape_configs = {
+            1: {  # Widget 1
+                'combobox': 'fitParticleShapeCombox_1',
+                'stack_widget': 'fitParticleStackWidget_1',
+                'pages': {
+                    0: {'name': 'Sphere', 'page_index': 0},
+                    1: {'name': 'Cylinder', 'page_index': 1},
+                    2: {'name': 'None', 'page_index': 0}  # None使用第一页但禁用控件
+                }
+            },
+            2: {  # Widget 2
+                'combobox': 'fitParticleShapeCombox_2',
+                'stack_widget': 'fitParticleStackWidget_2',
+                'pages': {
+                    0: {'name': 'Sphere', 'page_index': 0},
+                    1: {'name': 'Cylinder', 'page_index': 1},
+                    2: {'name': 'None', 'page_index': 0}
+                }
+            },
+            3: {  # Widget 3
+                'combobox': 'fitParticleShapeCombox_3',
+                'stack_widget': 'fitParticleStackWidget_3', 
+                'pages': {
+                    0: {'name': 'Sphere', 'page_index': 0},
+                    1: {'name': 'Cylinder', 'page_index': 1},
+                    2: {'name': 'None', 'page_index': 0}
+                }
+            }
+        }
+        
+        # 控件类型定义 - 方便添加新的参数控件
+        self.particle_control_types = {
+            'Sphere': ['Int', 'R', 'SigmaR', 'D', 'SigmaD', 'BG'],
+            'Cylinder': ['Int', 'R', 'SigmaR', 'h', 'Sigmah', 'D', 'SigmaD', 'BG']
+        }
+        
+        # 设置连接
+        self._setup_particle_connections()
+        
+        # 设置参数控件连接
+        self._setup_particle_parameter_connections()
+        
+        # 设置全局拟合参数连接
+        self._setup_global_parameter_connections()
+        
+        # 设置所有参数控件的数値范围
+        self._setup_parameter_ranges()
+        
+        # 初始化粒子状态（根据模型参数设置）
+        self._initialize_particle_states()
+        
+        # 初始化全局参数状态
+        self._initialize_global_parameters()
+        
+        self._add_fitting_success("Particle Shape Connector initialized")
+    
+    def _setup_particle_connections(self):
+        """设置所有粒子形状连接"""
+        for widget_id, config in self.particle_shape_configs.items():
+            if hasattr(self.ui, config['combobox']):
+                combobox = getattr(self.ui, config['combobox'])
+                
+                # 连接ComboBox到页面切换函数
+                combobox.currentIndexChanged.connect(
+                    lambda index, wid=widget_id: self._on_particle_shape_changed(wid, index)
+                )
+                
+                self._add_fitting_message(f"Connected Particle Widget {widget_id}: {config['combobox']} -> {config['stack_widget']}", "INFO")
+    
+    def _setup_parameter_ranges(self):
+        """设置所有参数控件的数值范围为实数域"""
+        # 设置一个很大的范围来覆盖实数域（Python float的范围）
+        min_value = -1e10  # 负一百亿
+        max_value = 1e10   # 正一百亿
+        decimals = 2       # 2位小数精度
+        
+        # 参数控件计数器
+        widgets_set = 0
+        
+        # 设置粒子参数控件范围
+        for widget_id in self.particle_shape_configs.keys():
+            # 球形参数控件
+            sphere_mapping = self._get_parameter_widget_mapping(widget_id, 'Sphere')
+            for param_key, widget_name in sphere_mapping.items():
+                if hasattr(self.ui, widget_name):
+                    widget = getattr(self.ui, widget_name)
+                    widget.setRange(min_value, max_value)
+                    # 为BG和Int参数设置6位精度
+                    if 'BG' in widget_name or 'Int' in widget_name:
+                        widget.setDecimals(6)
+                        widget.setSingleStep(0.0001)
+                    else:
+                        widget.setDecimals(decimals)
+                        widget.setSingleStep(0.01)  # 设置单步大小
+                    widgets_set += 1
+                    
+            # 圆柱形参数控件
+            cylinder_mapping = self._get_parameter_widget_mapping(widget_id, 'Cylinder')
+            for param_key, widget_name in cylinder_mapping.items():
+                if hasattr(self.ui, widget_name):
+                    widget = getattr(self.ui, widget_name)
+                    widget.setRange(min_value, max_value)
+                    # 为BG和Int参数设置6位精度
+                    if 'BG' in widget_name or 'Int' in widget_name:
+                        widget.setDecimals(6)
+                        widget.setSingleStep(0.0001)
+                    else:
+                        widget.setDecimals(decimals)
+                        widget.setSingleStep(0.01)  # 设置单步大小
+                    widgets_set += 1
+        
+        # 设置全局拟合参数控件范围
+        if hasattr(self.ui, 'fitSigmaResValue'):
+            self.ui.fitSigmaResValue.setRange(min_value, max_value)
+            self.ui.fitSigmaResValue.setDecimals(4)  # sigma_res设置4位精度
+            self.ui.fitSigmaResValue.setSingleStep(0.01)  # sigma通常是小数值
+            widgets_set += 1
+            
+        if hasattr(self.ui, 'fitKValue'):
+            self.ui.fitKValue.setRange(min_value, max_value)
+            self.ui.fitKValue.setDecimals(4)  # k值设置4位精度
+            self.ui.fitKValue.setSingleStep(0.1)  # k值通常接近1
+            widgets_set += 1
+        
+        self._add_fitting_success(f"Set ranges for {widgets_set} parameter widgets: [{min_value}, {max_value}] with {decimals} decimals")
+    
+    def _setup_particle_parameter_connections(self):
+        """设置粒子参数控件的信号连接（迁移到 meta 去抖 + 持久化 + 拟合触发）"""
+        from functools import partial
+        for widget_id in self.particle_shape_configs.keys():
+            for shape_name in ('Sphere', 'Cylinder'):
+                mapping = self._get_parameter_widget_mapping(widget_id, shape_name)
+                shape_lower = shape_name.lower()
+                for param_key, widget_name in mapping.items():
+                    if not hasattr(self.ui, widget_name):
+                        continue
+                    w = getattr(self.ui, widget_name)
+                    def _after_commit(info, value, wid=widget_id, shp=shape_lower, p=param_key):
+                        try:
+                            self._add_particle_message(f"Meta commit {wid}.{shp}.{p} = {value}")
+                            # 逻辑：参数变化后触发一维拟合曲线更新（等同手动拟合按钮）
+                            # 条件：若当前有可用数据 (cut 或 1d)；如果没有数据则忽略
+                            has_data = (hasattr(self, 'current_cut_data') and self.current_cut_data is not None) or \
+                                       (hasattr(self, 'current_1d_data') and self.current_1d_data is not None)
+                            if has_data:
+                                # 进入拟合模式或保持当前模式下刷新 1D 曲线
+                                self._perform_manual_fitting()
+                        except Exception:
+                            pass
+                    meta = {
+                        'persist': 'model_particle',
+                        'particle_id': f'particle_{widget_id}',
+                        'shape': shape_lower,
+                        'param': param_key,
+                        'trigger_fit': True,
+                        'debounce_ms': self._param_debounce_ms,
+                        'epsilon_abs': self._param_abs_eps,
+                        'epsilon_rel': self._param_rel_eps,
+                        'after_commit': _after_commit,
+                    }
+                    self.param_trigger_manager.register_parameter_widget(
+                        widget=w,
+                        widget_id=f'meta_particle_{widget_id}_{shape_lower}_{param_key}',
+                        category='fitting_particles',
+                        immediate_handler=lambda v: None,
+                        delayed_handler=None,
+                        connect_signals=False,
+                        meta=meta
+                    )
+                    try:
+                        w.valueChanged.connect(partial(self.param_trigger_manager._on_meta_value_changed, f'meta_particle_{widget_id}_{shape_lower}_{param_key}'))
+                    except Exception:
+                        pass
+    
+    def _setup_global_parameter_connections(self):
+        """设置全局拟合参数控件的信号连接（meta 去抖）"""
+        from functools import partial
+        mapping = [
+            ('fitSigmaResValue', 'sigma_res'),
+            ('fitKValue', 'k_value'),
+        ]
+        for widget_name, param_key in mapping:
+            if not hasattr(self.ui, widget_name):
+                continue
+            w = getattr(self.ui, widget_name)
+            def _after_commit(info, value, p=param_key):
+                try:
+                    self._add_particle_message(f"Meta commit global {p} = {value}")
+                    has_data = (hasattr(self, 'current_cut_data') and self.current_cut_data is not None) or \
+                               (hasattr(self, 'current_1d_data') and self.current_1d_data is not None)
+                    if has_data:
+                        self._perform_manual_fitting()
+                except Exception:
+                    pass
+            meta = {
+                'persist': 'model_global',
+                'param': param_key,
+                'trigger_fit': True,
+                'debounce_ms': self._param_debounce_ms,
+                'epsilon_abs': self._param_abs_eps,
+                'epsilon_rel': self._param_rel_eps,
+                'after_commit': _after_commit,
+            }
+            self.param_trigger_manager.register_parameter_widget(
+                widget=w,
+                widget_id=f'meta_global_{param_key}',
+                category='fitting_global',
+                immediate_handler=lambda v: None,
+                delayed_handler=None,
+                connect_signals=False,
+                meta=meta
+            )
+            try:
+                w.valueChanged.connect(partial(self.param_trigger_manager._on_meta_value_changed, f'meta_global_{param_key}'))
+            except Exception:
+                pass
+            self._add_fitting_message(f"Connected (meta) {widget_name}", "INFO")
+
+    
+    def _initialize_global_parameters(self):
+        """根据模型参数初始化全局拟合参数"""
+        try:
+            # 初始化 sigma_res
+            if hasattr(self.ui, 'fitSigmaResValue'):
+                saved_value = self.model_params_manager.get_global_parameter('fitting', 'sigma_res', 0.1)
+                self.ui.fitSigmaResValue.blockSignals(True)
+                self.ui.fitSigmaResValue.setValue(saved_value)
+                self.ui.fitSigmaResValue.blockSignals(False)
+                self._add_fitting_message(f"Initialized fitSigmaResValue to {saved_value}", "INFO")
+            
+            # 初始化 k_value
+            if hasattr(self.ui, 'fitKValue'):
+                saved_value = self.model_params_manager.get_global_parameter('fitting', 'k_value', 1.0)
+                self.ui.fitKValue.blockSignals(True)
+                self.ui.fitKValue.setValue(saved_value)
+                self.ui.fitKValue.blockSignals(False)
+                self._add_fitting_message(f"Initialized fitKValue to {saved_value}", "INFO")
+                
+        except Exception as e:
+            self._add_fitting_error(f"Failed to initialize global parameters: {e}")
+    
+    def _initialize_particle_states(self):
+        """根据模型参数初始化粒子状态：直接从JSON读取"""
+        try:
+            # 设置初始化标志，避免触发保存
+            self._initializing = True
+            
+            for widget_id in self.particle_shape_configs.keys():
+                particle_id = f"particle_{widget_id}"
+                
+                # 从JSON获取保存的形状和启用状态
+                saved_shape = self.model_params_manager.get_particle_shape('fitting', particle_id)
+                is_enabled = self.model_params_manager.get_particle_enabled('fitting', particle_id)
+                
+                self._add_fitting_message(f"Initializing {particle_id}: shape={saved_shape}, enabled={is_enabled}", "INFO")
+                
+                # 设置ComboBox选择（不触发信号处理函数）
+                config = self.particle_shape_configs[widget_id]
+                if hasattr(self.ui, config['combobox']):
+                    combobox = getattr(self.ui, config['combobox'])
+                    
+                    # 找到对应的combo index
+                    combo_index = None
+                    for index, page_config in config['pages'].items():
+                        if page_config['name'] == saved_shape:
+                            combo_index = index
+                            break
+                    
+                    if combo_index is not None:
+                        # 暂时断开信号连接
+                        combobox.blockSignals(True)
+                        combobox.setCurrentIndex(combo_index)
+                        combobox.blockSignals(False)
+                        
+                        # 设置页面
+                        page_config = config['pages'][combo_index]
+                        self._switch_particle_page(widget_id, page_config, saved_shape)
+                        
+                        # 根据启用状态设置控件
+                        if not is_enabled or saved_shape == 'None':
+                            # 冻结控件
+                            self._freeze_particle_controls(widget_id)
+                            self._add_fitting_message(f"{particle_id} controls frozen (disabled/None)", "INFO")
+                        else:
+                            # 解冻控件并加载参数
+                            self._unfreeze_particle_controls(widget_id, saved_shape)
+                            self._load_particle_parameters_from_json(widget_id, saved_shape)
+                            self._add_fitting_message(f"{particle_id} controls active with {saved_shape} parameters", "INFO")
+                
+        except Exception as e:
+            self._add_fitting_error(f"Failed to initialize particle states: {e}")
+            import traceback
+            self._add_fitting_error(f"Traceback: {traceback.format_exc()}")
+        finally:
+            # 重置初始化标志
+            self._initializing = False
+    
+    def _set_particle_page_and_state(self, widget_id: int, combo_index: int, shape_name: str):
+        """设置粒子页面和状态（初始化时使用，不保存到模型参数）"""
+        config = self.particle_shape_configs[widget_id]
+        page_config = config['pages'][combo_index]
+        
+        if hasattr(self.ui, config['stack_widget']):
+            stack_widget = getattr(self.ui, config['stack_widget'])
+            
+            # 切换页面
+            stack_widget.setCurrentIndex(page_config['page_index'])
+            
+            # 处理控件状态
+            if shape_name == 'None':
+                self._set_particle_none_state(widget_id)
+            else:
+                self._set_particle_active_state(widget_id, shape_name)
+    
+    def _load_particle_parameters(self, widget_id: int, shape_name: str):
+        """从模型参数加载粒子参数到UI控件"""
+        if shape_name == 'None':
+            return
+            
+        try:
+            particle_id = f"particle_{widget_id}"
+            shape_lower = shape_name.lower()
+            
+            # 获取参数映射
+            param_mapping = self._get_parameter_widget_mapping(widget_id, shape_name)
+            
+            # 从模型参数获取值并设置到控件
+            for param_key, widget_name in param_mapping.items():
+                if hasattr(self.ui, widget_name):
+                    widget = getattr(self.ui, widget_name)
+                    
+                    # 从模型参数获取值
+                    value = self.model_params_manager.get_particle_parameter(
+                        'fitting', particle_id, shape_lower, param_key
+                    )
+                    
+                    if value is not None:
+                        # 暂时断开信号以避免触发保存
+                        widget.blockSignals(True)
+                        widget.setValue(value)
+                        widget.blockSignals(False)
+                        
+                        self._add_particle_message(f"Loaded {param_key}={value} for particle {widget_id} ({shape_name})")
+                    else:
+                        self._add_particle_message(f"No value found for {param_key} in particle {widget_id} ({shape_name})")
+                        
+        except Exception as e:
+            self._add_fitting_error(f"Failed to load parameters for particle {widget_id}: {e}")
+    
+    def _get_parameter_widget_mapping(self, widget_id: int, shape_name: str) -> dict:
+        """获取参数到控件的映射关系"""
+        mapping = {}
+        
+        if shape_name == 'Sphere':
+            mapping = {
+                'intensity': f'fitParticleSphereIntValue_{widget_id}',
+                'radius': f'fitParticleSphereRValue_{widget_id}',
+                'sigma_radius': f'fitParticleSphereSigmaRValue_{widget_id}',
+                'diameter': f'fitParticleSphereDValue_{widget_id}',
+                'sigma_diameter': f'fitParticleSphereSigmaDValue_{widget_id}',
+                'background': f'fitParticleSphereBGValue_{widget_id}'
+            }
+        elif shape_name == 'Cylinder':
+            mapping = {
+                'intensity': f'fitParticleCylinderIntValue_{widget_id}',
+                'radius': f'fitParticleCylinderRValue_{widget_id}',
+                'sigma_radius': f'fitParticleCylinderSigmaRValue_{widget_id}',
+                'height': f'fitParticleCylinderhValue_{widget_id}',
+                'sigma_height': f'fitParticleCylinderSigmahValue_{widget_id}',
+                'diameter': f'fitParticleCylinderDValue_{widget_id}',
+                'sigma_diameter': f'fitParticleCylinderSigmaDValue_{widget_id}',
+                'background': f'fitParticleCylinderBGValue_{widget_id}'
+            }
+        
+        return mapping
+    
+    def _on_particle_shape_changed(self, widget_id: int, combo_index: int):
+        """处理粒子形状改变事件 - 重构版本：直接操作JSON"""
+        config = self.particle_shape_configs[widget_id]
+        page_config = config['pages'][combo_index]
+        
+        if hasattr(self.ui, config['stack_widget']):
+            stack_widget = getattr(self.ui, config['stack_widget'])
+            shape_name = page_config['name']
+            
+            # 获取当前形状状态
+            particle_id = f"particle_{widget_id}"
+            current_shape = self.model_params_manager.get_particle_shape('fitting', particle_id)
+            
+            # 检查是否真的需要切换
+            if current_shape == shape_name:
+                self._add_particle_message(f"⚠️ Particle {widget_id} already in {shape_name} state, skipping")
+                return
+            
+            self._add_particle_message(f"🔄 Particle {widget_id} shape changing: {current_shape} -> {shape_name}")
+            
+            # 1. 更新JSON中的形状和启用状态
+            if shape_name == 'None':
+                # 切换到None：设置为disabled状态
+                self.model_params_manager.set_particle_shape('fitting', particle_id, 'None')
+                self.model_params_manager.set_particle_enabled('fitting', particle_id, False)
+                self._add_particle_message(f"💾 Saved {particle_id} as None (disabled)")
+            else:
+                # 切换到具体形状：设置为enabled状态
+                self.model_params_manager.set_particle_shape('fitting', particle_id, shape_name)
+                self.model_params_manager.set_particle_enabled('fitting', particle_id, True)
+                self._add_particle_message(f"� Saved {particle_id} as {shape_name} (enabled)")
+            
+            # 保存JSON文件
+            self.model_params_manager.save_parameters()
+            
+            # 2. 切换UI页面
+            self._switch_particle_page(widget_id, page_config, shape_name)
+            
+            # 3. 处理控件状态和参数加载
+            if shape_name == 'None':
+                # None状态：冻结所有控件
+                self._freeze_particle_controls(widget_id)
+                self._add_particle_message(f"❄️ Particle {widget_id} controls frozen (None state)")
+            else:
+                # 具体形状：解冻控件并加载参数
+                self._unfreeze_particle_controls(widget_id, shape_name)
+                self._load_particle_parameters_from_json(widget_id, shape_name)
+                self._add_particle_message(f"🔓 Particle {widget_id} controls unfrozen ({shape_name} state)")
+    
+    def _switch_particle_page(self, widget_id: int, page_config: dict, shape_name: str):
+        """切换粒子页面"""
+        config = self.particle_shape_configs[widget_id]
+        if hasattr(self.ui, config['stack_widget']):
+            stack_widget = getattr(self.ui, config['stack_widget'])
+            target_page_index = page_config['page_index']
+            current_page_index = stack_widget.currentIndex()
+            
+            self._add_particle_message(f"🔄 Switching page: {current_page_index} -> {target_page_index} for {shape_name}")
+            
+            # 强制页面切换（处理相同索引的情况）
+            if target_page_index == current_page_index:
+                # 临时切换到不同页面再切回来，确保UI刷新
+                temp_page_index = 1 if target_page_index == 0 else 0
+                stack_widget.setCurrentIndex(temp_page_index)
+                from PyQt5.QtWidgets import QApplication
+                QApplication.processEvents()
+                stack_widget.setCurrentIndex(target_page_index)
+                self._add_particle_message(f"🔄 Forced refresh: temp({temp_page_index}) -> {target_page_index}")
+            else:
+                stack_widget.setCurrentIndex(target_page_index)
+            
+            # 验证页面切换成功
+            final_page_index = stack_widget.currentIndex()
+            if final_page_index == target_page_index:
+                self._add_particle_message(f"✅ Page switch confirmed: {final_page_index}")
+            else:
+                self._add_particle_message(f"❌ Page switch failed! Expected {target_page_index}, got {final_page_index}")
+    
+    def _freeze_particle_controls(self, widget_id: int):
+        """冻结粒子的所有控件（None状态）"""
+        for shape_name in ['Sphere', 'Cylinder']:
+            param_mapping = self._get_parameter_widget_mapping(widget_id, shape_name)
+            for param_key, widget_name in param_mapping.items():
+                if hasattr(self.ui, widget_name):
+                    widget = getattr(self.ui, widget_name)
+                    widget.setEnabled(False)
+    
+    def _unfreeze_particle_controls(self, widget_id: int, active_shape: str):
+        """解冻粒子控件（激活特定形状，冻结其他形状）"""
+        for shape_name in ['Sphere', 'Cylinder']:
+            param_mapping = self._get_parameter_widget_mapping(widget_id, shape_name)
+            is_active = (shape_name == active_shape)
+            
+            for param_key, widget_name in param_mapping.items():
+                if hasattr(self.ui, widget_name):
+                    widget = getattr(self.ui, widget_name)
+                    widget.setEnabled(is_active)
+    
+    def _load_particle_parameters_from_json(self, widget_id: int, shape_name: str):
+        """从JSON直接加载粒子参数到UI"""
+        try:
+            # 设置载入标志，防止触发保存
+            self._loading_parameters = True
+            
+            particle_id = f"particle_{widget_id}"
+            shape_params = self.model_params_manager.get_particle_parameter('fitting', particle_id, shape_name.lower())
+            
+            if not shape_params:
+                self._add_particle_message(f"⚠️ No parameters found in JSON for {particle_id}.{shape_name}")
+                return
+            
+            # 获取参数映射
+            param_mapping = self._get_parameter_widget_mapping(widget_id, shape_name)
+            loaded_count = 0
+            
+            # 直接设置参数到UI控件
+            for param_key, widget_name in param_mapping.items():
+                if param_key in shape_params and hasattr(self.ui, widget_name):
+                    widget = getattr(self.ui, widget_name)
+                    value = shape_params[param_key]
+                    widget.setValue(value)
+                    loaded_count += 1
+                    self._add_particle_message(f"📥 Loaded {param_key}={value} for {particle_id}.{shape_name}")
+            
+            self._add_particle_message(f"✅ Loaded {loaded_count} parameters from JSON for {particle_id}.{shape_name}")
+            
+        except Exception as e:
+            self._add_fitting_error(f"Failed to load parameters from JSON: {e}")
+        finally:
+            # 重置载入标志
+            self._loading_parameters = False
+    
+
+    
+
+    
+
+    
+
+    
+    def set_particle_shape(self, widget_id: int, shape_name: str):
+        """
+        程序化设置粒子形状
+        
+        Args:
+            widget_id: 粒子编号 (1, 2, 3)
+            shape_name: 形状名称 ('Sphere', 'Cylinder', 'None')
+        """
+        config = self.particle_shape_configs.get(widget_id)
+        if not config:
+            self._add_fitting_warning(f"Particle Widget {widget_id} not found")
             return False
+        
+        # 找到对应的combo index
+        combo_index = None
+        for index, page_config in config['pages'].items():
+            if page_config['name'] == shape_name:
+                combo_index = index
+                break
+        
+        if combo_index is None:
+            self._add_fitting_warning(f"Shape {shape_name} not found for particle widget {widget_id}")
+            return False
+        
+        # 设置ComboBox
+        if hasattr(self.ui, config['combobox']):
+            combobox = getattr(self.ui, config['combobox'])
+            combobox.setCurrentIndex(combo_index)
+            return True
+        
+        return False
+    
+    def get_particle_shape(self, widget_id: int) -> str:
+        """
+        获取粒子当前形状
+        
+        Args:
+            widget_id: 粒子编号 (1, 2, 3)
+            
+        Returns:
+            当前形状名称
+        """
+        config = self.particle_shape_configs.get(widget_id)
+        if not config:
+            return 'None'
+        
+        if hasattr(self.ui, config['combobox']):
+            combobox = getattr(self.ui, config['combobox'])
+            current_index = combobox.currentIndex()
+            
+            page_config = config['pages'].get(current_index)
+            if page_config:
+                return page_config['name']
+        
+        return 'None'
+    
+    def get_particles_status(self) -> dict:
+        """获取所有粒子的当前状态"""
+        status = {}
+        for widget_id in self.particle_shape_configs.keys():
+            status[widget_id] = self.get_particle_shape(widget_id)
+        return status
+    
+    def reset_all_particles(self):
+        """重置所有粒子为None状态"""
+        for widget_id in self.particle_shape_configs.keys():
+            self.set_particle_shape(widget_id, 'None')
+        self._add_fitting_success("All particles reset to None state")
+    
+    def add_new_particle_shape(self, shape_name: str, control_types: list):
+        """
+        添加新的粒子形状配置 - 方便扩展
+        
+        Args:
+            shape_name: 形状名称，如 'Ellipsoid'
+            control_types: 控件类型列表，如 ['Int', 'Ra', 'Rb', 'Rc', 'D', 'BG']
+        """
+        self.particle_control_types[shape_name] = control_types
+        
+        # 为每个widget添加新的页面配置
+        for widget_id in self.particle_shape_configs.keys():
+            pages = self.particle_shape_configs[widget_id]['pages']
+            new_index = len(pages) - 1  # None总是最后一个，所以新形状插在倒数第二
+            
+            # 重新排列索引，把None移到最后
+            none_config = pages.pop(len(pages) - 1)  # 移除None
+            
+            # 添加新形状
+            pages[new_index] = {
+                'name': shape_name,
+                'page_index': new_index,  # 假设新页面索引等于配置索引
+            }
+            
+            # 重新添加None
+            pages[len(pages)] = none_config
+        
+        self._add_fitting_success(f"Added new particle shape: {shape_name} with {len(control_types)} controls")
+        self._add_fitting_warning("Note: You need to add corresponding UI pages and ComboBox items manually")
+    
+    def get_all_particle_parameters(self) -> dict:
+        """获取所有粒子的完整参数信息"""
+        return self.model_params_manager.get_all_particles('fitting')
+    
+    def save_particle_parameters(self) -> bool:
+        """手动保存粒子参数到文件"""
+        return self.model_params_manager.save_parameters()
+    
+    def reload_particle_parameters(self) -> bool:
+        """重新加载粒子参数并更新UI"""
+        success = self.model_params_manager.load_parameters()
+        if success:
+            self._initialize_particle_states()
+            self._initialize_global_parameters()
+            self._add_fitting_success("Particle and global parameters reloaded from file")
+        else:
+            self._add_fitting_error("Failed to reload particle parameters")
+        return success
+    
+    def export_particle_parameters(self, filepath: str) -> bool:
+        """导出粒子参数到指定文件"""
+        try:
+            import shutil
+            shutil.copy2(self.model_params_manager.config_file, filepath)
+            self._add_fitting_success(f"Particle parameters exported to: {filepath}")
+            return True
+        except Exception as e:
+            self._add_fitting_error(f"Failed to export parameters: {e}")
+            return False
+    
+    def import_particle_parameters(self, filepath: str) -> bool:
+        """从指定文件导入粒子参数"""
+        try:
+            import shutil
+            shutil.copy2(filepath, self.model_params_manager.config_file)
+            success = self.reload_particle_parameters()
+            if success:
+                self._add_fitting_success(f"Particle parameters imported from: {filepath}")
+            return success
+        except Exception as e:
+            self._add_fitting_error(f"Failed to import parameters: {e}")
+            return False
+    
+    def get_global_parameter(self, param: str) -> float:
+        """获取全局拟合参数值"""
+        return self.model_params_manager.get_global_parameter('fitting', param, 0.0)
+    
+    def set_global_parameter(self, param: str, value: float) -> bool:
+        """设置全局拟合参数值"""
+        success = self.model_params_manager.set_global_parameter('fitting', param, value)
+        if success:
+            # 更新UI控件（如果存在）
+            if param == 'sigma_res' and hasattr(self.ui, 'fitSigmaResValue'):
+                self.ui.fitSigmaResValue.blockSignals(True)
+                self.ui.fitSigmaResValue.setValue(value)
+                self.ui.fitSigmaResValue.blockSignals(False)
+            elif param == 'k_value' and hasattr(self.ui, 'fitKValue'):
+                self.ui.fitKValue.blockSignals(True)
+                self.ui.fitKValue.setValue(value)
+                self.ui.fitKValue.blockSignals(False)
+            
+            # 保存参数
+            self.model_params_manager.save_parameters()
+        return success
+    
+    def get_all_global_parameters(self) -> dict:
+        """获取所有全局拟合参数"""
+        return self.model_params_manager.get_all_global_parameters('fitting')
+    
+    def reset_global_parameters(self):
+        """重置全局参数为默认值"""
+        self.set_global_parameter('sigma_res', 0.1)
+        self.set_global_parameter('k_value', 1.0)
+        self._add_fitting_success("Global parameters reset to default values")
+    
+    # ================================
+    # 用户设置管理
+    # ================================
+    
+    def _save_auto_k_enabled(self):
+        """保存auto-K按钮状态到用户设置"""
+        try:
+            from core.user_settings import user_settings
+            user_settings.set('_auto_k_enabled', self._auto_k_enabled)
+            user_settings.save_settings()
+        except Exception as e:
+            print(f"Failed to save auto-K setting: {e}")
+    
+    def _load_auto_k_enabled(self):
+        """从用户设置加载auto-K按钮状态"""
+        try:
+            from core.user_settings import user_settings
+            self._auto_k_enabled = user_settings.get('_auto_k_enabled', False)
+            self._update_auto_k_button_style()
+        except Exception as e:
+            print(f"Failed to load auto-K setting: {e}")
+            self._auto_k_enabled = False
+    
+    def _update_auto_k_button_style(self):
+        """更新auto-K按钮的视觉状态"""
+        if hasattr(self.ui, 'FittingAutoKButton'):
+            if self._auto_k_enabled:
+                self.ui.FittingAutoKButton.setStyleSheet(
+                    "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }"
+                )
+                self.ui.FittingAutoKButton.setText("<-Auto-K: ON")
+            else:
+                self.ui.FittingAutoKButton.setStyleSheet("")
+                self.ui.FittingAutoKButton.setText("<-Auto-K: OFF")
+    
+    def _on_auto_k_button_clicked(self):
+        """处理auto-K按钮点击事件"""
+        # 切换状态
+        self._auto_k_enabled = not self._auto_k_enabled
+        
+        # 保存状态
+        self._save_auto_k_enabled()
+        
+        # 更新按钮样式
+        self._update_auto_k_button_style()
+        
+        # 添加状态信息
+        status = "enabled" if self._auto_k_enabled else "disabled"
+        self._add_fitting_message(f"Auto K-value optimization {status}")
+        
+        # 如果启用了auto-K且当前有拟合数据，立即执行一次优化
+        if self._auto_k_enabled and hasattr(self, 'I') and hasattr(self, 'I_fitting'):
+            if self.I is not None and self.I_fitting is not None:
+                self._optimize_k_value()
+    
+    def _optimize_k_value(self):
+        """简单稳定的K值优化：基于原始数据的解析解"""
+        try:
+            if not hasattr(self, 'I') or not hasattr(self, 'I_fitting') or \
+               self.I is None or self.I_fitting is None:
+                self._add_fitting_error("No fitting data available for K-value optimization")
+                return
+            
+            # 验证数据形状和有效性
+            if self.I.size == 0 or self.I_fitting.size == 0:
+                self._add_fitting_error("Empty data arrays for K-value optimization")
+                return
+                
+            if self.I.shape != self.I_fitting.shape:
+                self._add_fitting_error(f"Data shape mismatch: I{self.I.shape} vs I_fitting{self.I_fitting.shape}")
+                return
+            
+            # 检查数据中是否有NaN或无穷值
+            if np.any(~np.isfinite(self.I)) or np.any(~np.isfinite(self.I_fitting)):
+                self._add_fitting_error("Data contains NaN or infinite values")
+                return
+            
+            # 获取当前K值
+            current_k = self.get_global_parameter('k_value')
+            self._add_fitting_message(f"Starting K-value optimization from {current_k:.6f}...")
+            
+            # 步骤1：从拟合数据中提取基函数
+            k_safe = max(abs(current_k), 1e-12)  # 避免除零
+            I_base = self.I_fitting / k_safe
+            
+            # 步骤2：计算最优K值的解析解
+            # 最小化 ||k * I_base - I_exp||^2 对k求导 = 0  
+            # 解得: k_opt = (I_base · I_exp) / (I_base · I_base)
+            I_exp_flat = self.I.flatten()
+            I_base_flat = I_base.flatten()
+            
+            # 过滤掉无效值
+            valid_mask = np.isfinite(I_exp_flat) & np.isfinite(I_base_flat) & (I_base_flat != 0)
+            
+            if not np.any(valid_mask):
+                self._add_fitting_error("No valid data points for K optimization")
+                return
+            
+            I_exp_valid = I_exp_flat[valid_mask]
+            I_base_valid = I_base_flat[valid_mask]
+            
+            # 计算解析解
+            numerator = np.dot(I_base_valid, I_exp_valid)
+            denominator = np.dot(I_base_valid, I_base_valid)
+            
+            if denominator <= 1e-12:
+                self._add_fitting_error("Base function has zero norm, cannot optimize K")
+                return
+            
+            k_opt = numerator / denominator
+            
+            # 确保K值为正
+            if k_opt <= 0:
+                # 使用非负最小二乘
+                try:
+                    from scipy.optimize import nnls
+                    # 将问题重新表述为 A*k = b，其中 A = I_base_valid.reshape(-1,1), b = I_exp_valid
+                    A = I_base_valid.reshape(-1, 1)
+                    b = I_exp_valid
+                    k_nnls, residual = nnls(A, b)
+                    k_opt = k_nnls[0] if len(k_nnls) > 0 else 1.0
+                    optimization_method = "NNLS"
+                except ImportError:
+                    self._add_fitting_warning("scipy.optimize.nnls not available, using absolute value of analytical solution")
+                    k_opt = abs(k_opt)
+                    optimization_method = "Analytical (abs)"
+            else:
+                optimization_method = "Analytical"
+            
+            # 验证优化结果
+            if not np.isfinite(k_opt) or k_opt <= 0:
+                self._add_fitting_error(f"Invalid optimized K-value: {k_opt}")
+                return
+            
+            # 计算优化前后的残差
+            residual_before = np.sum((current_k * I_base_valid - I_exp_valid) ** 2)
+            residual_after = np.sum((k_opt * I_base_valid - I_exp_valid) ** 2)
+            
+            # 步骤3：更新拟合数据
+            self.I_fitting = k_opt * I_base
+            
+            # 步骤4：保存K值到参数系统
+            success = self.set_global_parameter('k_value', k_opt)
+            if not success:
+                self._add_fitting_error("Failed to set optimized K-value")
+                return
+            
+            # 步骤5：同步更新UI控件中的K值显示
+            if hasattr(self.ui, 'fitKValue'):
+                # 临时阻止信号，避免触发递归优化
+                self.ui.fitKValue.blockSignals(True)
+                self.ui.fitKValue.setValue(k_opt)
+                self.ui.fitKValue.blockSignals(False)
+                self._add_fitting_message(f"UI K-value updated to {k_opt:.6f}")
+            
+            # 步骤6：更新显示
+            self._update_GUI_image('fitting')
+            self._update_outside_window('fitting')
+            
+            # 记录优化结果
+            improvement = ((residual_before - residual_after) / max(residual_before, 1e-12)) * 100
+            
+            self._add_fitting_success(
+                f"K-value optimized ({optimization_method}): {current_k:.6f} → {k_opt:.6f}"
+            )
+            self._add_fitting_success(
+                f"Residual improvement: {improvement:.2f}% "
+                f"({residual_before:.6e} → {residual_after:.6e})"
+            )
+            
+            # 添加数据状态信息
+            data_info = f"Data range - I_exp: [{np.min(I_exp_valid):.3e}, {np.max(I_exp_valid):.3e}], "
+            data_info += f"I_base: [{np.min(I_base_valid):.3e}, {np.max(I_base_valid):.3e}]"
+            self._add_fitting_message(data_info)
+            
+        except ImportError:
+            self._add_fitting_error("scipy.optimize.nnls not available, using analytical solution only")
+            # 回退到简单解析解，即使K可能为负
+        except Exception as e:
+            self._add_fitting_error(f"Error during K-value optimization: {e}")
+            # 确保K值被恢复
+            if 'current_k' in locals():
+                self.set_global_parameter('k_value', current_k)
+    
+    # ================================
+    # 参数缓存管理
+    # ================================
+    
+
+    
+
+    def _on_parameter_editing_finished(self, widget_id: int, shape: str, param: str):
+        """当参数编辑完成时的回调方法 - 保存参数并根据模式决定是否触发拟合更新"""
+        try:
+            # 如果正在载入参数或初始化，跳过处理
+            if self._loading_parameters or self._initializing:
+                return
+            
+            # 获取当前参数值
+            param_mapping = self._get_parameter_widget_mapping(widget_id, shape)
+            widget_name = param_mapping.get(param)
+            
+            if widget_name and hasattr(self.ui, widget_name):
+                widget = getattr(self.ui, widget_name)
+                current_value = widget.value()
+                
+                # 保存参数到JSON
+                particle_id = f"particle_{widget_id}"
+                success = self.model_params_manager.set_particle_parameter('fitting', particle_id, shape.lower(), param, current_value)
+                
+                if success:
+                    self.model_params_manager.save_parameters()
+                    self._add_particle_message(f"💾 Saved to JSON: {particle_id}.{shape.lower()}.{param} = {current_value}")
+                else:
+                    self._add_fitting_error(f"Failed to save parameter: {particle_id}.{shape.lower()}.{param} = {current_value}")
+            
+            # 检查当前是否处于拟合模式
+            is_fitting_mode = self._is_in_fitting_mode()
+            
+            if is_fitting_mode:
+                self._add_particle_message(f"🔄 Fitting mode: Auto-updating after {shape}.{param} edit finished")
+                # 触发手动拟合更新
+                self._perform_manual_fitting()
+            else:
+                self._add_particle_message(f"📝 Normal mode: Parameter {shape}.{param} edit finished (saved only)")
+                
+        except Exception as e:
+            self._add_fitting_error(f"Failed to handle parameter editing finished: {e}")
+    
+    def _on_global_parameter_editing_finished(self, param_name: str):
+        """当全局参数编辑完成时的回调方法 - 保存参数并根据模式决定是否触发拟合更新"""
+        try:
+            # 如果正在载入参数或初始化，跳过处理
+            if self._loading_parameters or self._initializing:
+                return
+            
+            # 获取当前参数值并保存
+            current_value = None
+            if param_name == 'sigma_res' and hasattr(self.ui, 'fitSigmaResValue'):
+                current_value = self.ui.fitSigmaResValue.value()
+            elif param_name == 'k_value' and hasattr(self.ui, 'fitKValue'):
+                current_value = self.ui.fitKValue.value()
+            
+            if current_value is not None:
+                # 保存全局参数到JSON
+                success = self.model_params_manager.set_global_parameter('fitting', param_name, current_value)
+                
+                if success:
+                    self.model_params_manager.save_parameters()
+                    self._add_particle_message(f"💾 Saved global parameter to JSON: {param_name} = {current_value}")
+                else:
+                    self._add_fitting_error(f"Failed to save global parameter: {param_name} = {current_value}")
+            
+            # 检查当前是否处于拟合模式
+            is_fitting_mode = self._is_in_fitting_mode()
+            
+            if is_fitting_mode:
+                self._add_particle_message(f"🔄 Fitting mode: Auto-updating after global {param_name} edit finished")
+                # 触发手动拟合更新
+                self._perform_manual_fitting()
+            else:
+                self._add_particle_message(f"📝 Normal mode: Global parameter {param_name} edit finished (saved only)")
+                
+        except Exception as e:
+            self._add_fitting_error(f"Failed to handle global parameter editing finished: {e}")
+    
+    def _is_in_fitting_mode(self) -> bool:
+        """检查当前是否处于拟合模式"""
+        return hasattr(self, '_fitting_mode_active') and self._fitting_mode_active
+    
+
+    
+
+    
+    # ================================
+    # 数据导出功能
+    # ================================
+    
+    def _export_fitting_data(self):
+        """导出Fitting界面图形数据"""
+        try:
+            import numpy as np
+            
+            # 检查fitGraphicsView是否为空
+            if not hasattr(self.ui, 'fitGraphicsView') or self.ui.fitGraphicsView is None:
+                self._add_fitting_error("fitGraphicsView is not available")
+                return
+            
+            # 检查图形视图是否有绘图数据
+            scene = self.ui.fitGraphicsView.scene()
+            if scene is None or len(scene.items()) == 0:
+                self._add_fitting_error("No plot data available to export")
+                return
+            
+            # 根据fitCurrentDataCheckBox的状态确定导出数据源
+            x_data = None
+            y_data = None
+            data_name = ""
+            
+            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
+                # 导出Cut数据
+                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
+                    # Cut数据格式: {'x_coords': [...], 'y_intensity': [...], ...}
+                    x_data = np.array(self.current_cut_data['x_coords'])
+                    y_data = np.array(self.current_cut_data['y_intensity'])
+                    data_name = "Cut_Data"
+                else:
+                    self._add_fitting_error("No Cut data available to export")
+                    return
+            else:
+                # 导出1D文件数据
+                if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
+                    # 1D数据格式: {'q': [...], 'I': [...], 'err': [...], ...}
+                    x_data = np.array(self.current_1d_data['q'])
+                    y_data = np.array(self.current_1d_data['I'])
+                    data_name = "1D_File_Data"
+                else:
+                    self._add_fitting_error("No 1D file data available to export")
+                    return
+            
+            # 弹出文件保存对话框
+            filename, _ = QFileDialog.getSaveFileName(
+                None,
+                f"Export {data_name}",
+                f"{data_name}.txt",
+                "Text Files (*.txt);;CSV Files (*.csv);;All Files (*)"
+            )
+            
+            if not filename:
+                return  # 用户取消了保存
+            
+            # 确保数据长度一致
+            min_length = min(len(x_data), len(y_data))
+            x_data = x_data[:min_length]
+            y_data = y_data[:min_length]
+            
+            # 按列排列数据并保存
+            combined_data = np.column_stack([x_data, y_data])
+            
+            # 根据文件扩展名选择保存格式
+            if filename.lower().endswith('.csv'):
+                np.savetxt(filename, combined_data, delimiter=',', 
+                          header='X,Y', comments='', fmt='%.6e')
+            else:
+                np.savetxt(filename, combined_data, delimiter='\t', 
+                          header='X\tY', comments='', fmt='%.6e')
+            
+            self._add_fitting_success(f"{data_name} exported successfully to: {filename}")
+            
+        except Exception as e:
+            self._add_fitting_error(f"Export failed: {str(e)}")
+
+    
+    def _perform_manual_fitting(self):
+        """执行手动拟合计算"""
+        try:
+            from utils.fitting import make_mixed_model, params_template
+            
+            # 1. 判断粒子形状ComboBox的状态
+            active_shapes = []
+            shape_configs = []
+            
+            for i in range(1, 4):  # 检查三个ComboBox
+                combobox_name = f'fitParticleShapeCombox_{i}'
+                if hasattr(self.ui, combobox_name):
+                    combobox = getattr(self.ui, combobox_name)
+                    current_text = combobox.currentText()
+                    if current_text and current_text.lower() != 'none':
+                        active_shapes.append(current_text.lower())
+                        shape_configs.append(i)
+            
+            if not active_shapes:
+                self._add_fitting_error("No active particle shapes selected for fitting")
+                return
+            
+            self._add_fitting_success(f"Active shapes: {active_shapes}")
+            
+            # 2. 获取q值数组
+            q_data = None
+            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
+                # 使用Cut数据的q值
+                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
+                    q_data = np.array(self.current_cut_data['x_coords'])
+                else:
+                    self._add_fitting_error("No Cut data available for fitting")
+                    return
+            else:
+                # 使用1D文件数据的q值
+                if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
+                    q_data = np.array(self.current_1d_data['q'])
+                else:
+                    self._add_fitting_error("No 1D file data available for fitting")
+                    return
+            
+            # 3. 创建混合模型
+            model_func = make_mixed_model(active_shapes)
+            param_names = params_template(active_shapes)
+            
+            self._add_fitting_success(f"Created model with parameters: {param_names}")
+            
+            # 4. 获取当前参数值
+            params = []
+            for i, shape in enumerate(active_shapes, 1):
+                shape_idx = shape_configs[i-1]  # 对应的shape配置索引
+                
+                if shape == 'sphere':
+                    # Sphere参数：Int, R, sigma_R, D, sigma_D, BG
+                    int_param = self._get_particle_parameter(shape_idx, 'Int', 1.0)
+                    r_param = self._get_particle_parameter(shape_idx, 'R', 10.0)
+                    sigma_r_param = self._get_particle_parameter(shape_idx, 'sigma_R', 0.1)
+                    d_param = self._get_particle_parameter(shape_idx, 'D', 100.0)
+                    sigma_d_param = self._get_particle_parameter(shape_idx, 'sigma_D', 0.1)
+                    bg_param = self._get_particle_parameter(shape_idx, 'BG', 0.0)
+                    
+                    # 检查结构因子条件
+                    if d_param == 0 or sigma_d_param == 0:
+                        self._add_fitting_success(f"Shape {i} ({shape}): Structure factor disabled (D={d_param}, sigma_D={sigma_d_param})")
+                    else:
+                        self._add_fitting_success(f"Shape {i} ({shape}): Structure factor enabled (D={d_param}, sigma_D={sigma_d_param})")
+                    
+                    self._add_fitting_success(f"Shape {i} ({shape}): BG={bg_param}")
+                    params.extend([int_param, r_param, sigma_r_param, d_param, sigma_d_param, bg_param])
+                    
+                elif shape == 'cylinder':
+                    # Cylinder参数：Int, R, sigma_R, h, sigma_h, D, sigma_D, BG
+                    int_param = self._get_particle_parameter(shape_idx, 'Int', 1.0)
+                    r_param = self._get_particle_parameter(shape_idx, 'R', 10.0)
+                    sigma_r_param = self._get_particle_parameter(shape_idx, 'sigma_R', 0.1)
+                    h_param = self._get_particle_parameter(shape_idx, 'h', 20.0)
+                    sigma_h_param = self._get_particle_parameter(shape_idx, 'sigma_h', 0.1)
+                    d_param = self._get_particle_parameter(shape_idx, 'D', 100.0)
+                    sigma_d_param = self._get_particle_parameter(shape_idx, 'sigma_D', 0.1)
+                    bg_param = self._get_particle_parameter(shape_idx, 'BG', 0.0)
+                    
+                    # 检查结构因子条件
+                    if d_param == 0 or sigma_d_param == 0:
+                        self._add_fitting_success(f"Shape {i} ({shape}): Structure factor disabled (D={d_param}, sigma_D={sigma_d_param})")
+                    else:
+                        self._add_fitting_success(f"Shape {i} ({shape}): Structure factor enabled (D={d_param}, sigma_D={sigma_d_param})")
+                    
+                    self._add_fitting_success(f"Shape {i} ({shape}): BG={bg_param}")
+                    params.extend([int_param, r_param, sigma_r_param, h_param, sigma_h_param, d_param, sigma_d_param, bg_param])
+            
+            # 5. 添加全局参数：sigma_Res, k
+            # 优先从UI控件获取最新值
+            # (BG参数现在是每个particle独立的，已经在上面添加了)
+            
+            # 获取sigma_Res参数
+            if hasattr(self.ui, 'fitSigmaResValue'):
+                sigma_res_param = self.ui.fitSigmaResValue.value()
+            else:
+                sigma_res_param = self.get_global_parameter('sigma_res') if hasattr(self, 'get_global_parameter') else 0.1
+            
+            # 检查分辨率展宽条件
+            if sigma_res_param == 0:
+                self._add_fitting_success(f"Resolution smearing disabled (sigma_res={sigma_res_param})")
+            else:
+                self._add_fitting_success(f"Resolution smearing enabled (sigma_res={sigma_res_param})")
+            
+            # 获取k参数
+            if hasattr(self.ui, 'fitKValue'):
+                k_param = self.ui.fitKValue.value()
+            else:
+                k_param = self.get_global_parameter('k_value') if hasattr(self, 'get_global_parameter') else 1.0
+            
+            params.extend([sigma_res_param, k_param])
+            
+            # 显示详细的参数信息
+            param_dict = dict(zip(param_names, params))
+            self._add_fitting_success(f"Using parameters: {param_dict}")
+            
+            # 验证参数获取
+            self._validate_parameter_retrieval(active_shapes, shape_configs)
+            
+            # 6. 执行拟合计算
+            try:
+                # 计算拟合结果
+                fitting_result = model_func(q_data, *params)
+                self._add_fitting_success(f"Fitting calculation completed successfully")
+                
+                # 显示拟合结果的基本统计信息
+                result_stats = {
+                    'min': float(np.min(fitting_result)),
+                    'max': float(np.max(fitting_result)),
+                    'mean': float(np.mean(fitting_result)),
+                    'sum': float(np.sum(fitting_result))
+                }
+                self._add_fitting_success(f"Result stats: {result_stats}")
+                
+                # 存储拟合结果到 I_fitting
+                self.I_fitting = fitting_result
+                self.has_fitting_data = True
+                
+                # 切换显示模式为 Fitting with data
+                self.display_mode = 'fitting'
+                self._fitting_mode_active = True  # 设置拟合模式标志
+                
+                # 更新显示
+                self._update_GUI_image('fitting')
+                self._update_outside_window('fitting')
+                
+                # 如果启用了auto-K优化且有实验数据，执行K值优化
+                if self._auto_k_enabled and hasattr(self, 'I') and self.I is not None:
+                    try:
+                        self._optimize_k_value()
+                    except Exception as opt_error:
+                        self._add_fitting_error(f"Auto K-value optimization failed: {opt_error}")
+                
+            except Exception as calc_error:
+                self._add_fitting_error(f"Fitting calculation failed: {str(calc_error)}")
+                
+        except Exception as e:
+            self._add_fitting_error(f"Manual fitting failed: {str(e)}")
+    
+    def _store_fitting_data(self, q_data, intensity_data, active_shapes):
+        """存储拟合数据，不改变显示模式"""
+        try:
+            self._fitting_q_data = np.array(q_data)
+            self._fitting_intensity_data = np.array(intensity_data)
+            self._fitting_shapes = active_shapes.copy() if active_shapes else []
+            self._has_fitting_data = True
+            
+            # 更新GUI显示（内嵌图表）
+            self._update_gui_fitting_display()
+            
+        except Exception as e:
+            pass
+    
+    def _switch_to_fitting_display_mode(self):
+        """切换到拟合显示模式（仅在外部窗口成功打开时调用）"""
+        try:
+            self._display_mode = 'fitting'
+            self._fitting_mode_active = True
+            
+            # 更新GUI和外部窗口的显示
+            self._refresh_all_displays_for_fitting_mode()
+            
+        except Exception as e:
+            pass
+    
+    def _switch_to_normal_display_mode(self):
+        """切换到普通显示模式（Normal mode）"""
+        try:
+            self._display_mode = 'normal'
+            self._fitting_mode_active = False
+            
+            # 清除拟合相关数据（如果有的话）
+            self._fitting_q_data = None
+            self._fitting_intensity_data = None
+            self._fitting_shapes = []
+            self._has_fitting_data = False
+            
+        except Exception as e:
+            pass
+    
+    def _update_gui_fitting_display(self):
+        """更新GUI中的拟合显示（fitGraphicsView），保持当前显示模式"""
+        try:
+            if not hasattr(self, '_fitting_q_data') or self._fitting_q_data is None:
+                return
+                
+            # 在GUI中显示拟合结果，但不改变显示模式
+            self._plot_fitting_result(self._fitting_q_data, self._fitting_intensity_data, self._fitting_shapes)
+            
+        except Exception as e:
+            pass
+    
+    def _refresh_all_displays_for_fitting_mode(self):
+        """在拟合模式下刷新所有显示（GUI + 外部窗口）"""
+        try:
+            if not self._has_fitting_data:
+                return
+                
+            # 1. 刷新GUI显示
+            self._update_gui_fitting_display()
+            
+            # 2. 刷新外部窗口显示（如果存在且可见）
+            if (hasattr(self, 'independent_fit_window') and 
+                self.independent_fit_window is not None and 
+                self.independent_fit_window.isVisible()):
+                
+                self._refresh_external_window_fitting_display()
+                
+        except Exception as e:
+            pass
+    
+    def _refresh_external_window_fitting_display(self):
+        """刷新外部窗口的拟合显示"""
+        try:
+            if not self._has_fitting_data:
+                return
+                
+            # 获取当前显示选项
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            
+            # 获取原始数据
+            original_x_data = None
+            original_y_data = None
+            data_label = ""
+            
+            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
+                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
+                    original_x_data = np.array(self.current_cut_data['x_coords'])
+                    original_y_data = np.array(self.current_cut_data['y_intensity'])
+                    data_label = "Cut Data"
+            else:
+                if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
+                    original_x_data = np.array(self.current_1d_data['q'])
+                    original_y_data = np.array(self.current_1d_data['I'])
+                    data_label = "1D File Data"
+            
+            # 更新外部窗口显示
+            x_label = "q (Å⁻¹)"
+            y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
+            title = f'Manual Fitting Result - {", ".join(self._fitting_shapes)}'
+            
+            self._update_independent_window_with_fitting(
+                original_x_data, original_y_data, data_label,
+                self._fitting_q_data, self._fitting_intensity_data, self._fitting_shapes,
+                x_label, y_label, title,
+                log_x, log_y, normalize
+            )
+            
+        except Exception as e:
+            pass
+    
+    def _get_particle_parameter(self, shape_idx, param_name, default_value):
+        """获取指定粒子形状的参数值"""
+        try:
+            # 获取当前粒子的形状
+            current_shape = self.get_particle_shape(shape_idx)
+            if current_shape == 'None':
+                return default_value
+            
+            # 尝试从UI控件获取（优先从UI获取最新值）
+            control_name = self._get_ui_control_name(shape_idx, current_shape, param_name)
+            if control_name and hasattr(self.ui, control_name):
+                control = getattr(self.ui, control_name)
+                if hasattr(control, 'value'):
+                    value = control.value()
+                    return value
+                elif hasattr(control, 'text'):
+                    try:
+                        value = float(control.text())
+                        return value
+                    except ValueError:
+                        pass
+            
+            # 如果UI控件获取失败，尝试从model_params_manager获取
+            if hasattr(self, 'model_params_manager'):
+                particle_data = self.model_params_manager.get_particle('fitting', shape_idx)
+                if particle_data and param_name in particle_data:
+                    value = particle_data[param_name]
+                    return value
+            
+            # 返回默认值
+            return default_value
+            
+        except Exception as e:
+            return default_value
+    
+    def _get_ui_control_name(self, shape_idx, shape_name, param_name):
+        """根据形状和参数名获取UI控件名称"""
+        try:
+            # 参数名映射表
+            param_mapping = {
+                'Int': 'Int',
+                'R': 'R', 
+                'sigma_R': 'SigmaR',
+                'D': 'D',
+                'sigma_D': 'SigmaD',
+                'h': 'h',
+                'sigma_h': 'Sigmah',
+                'BG': 'BG'
+            }
+            
+            ui_param = param_mapping.get(param_name)
+            if ui_param:
+                return f'fitParticle{shape_name}{ui_param}Value_{shape_idx}'
+            else:
+                return None
+                
+        except Exception as e:
+            return None
+    
+    def _plot_fitting_result(self, q_data, intensity_data, active_shapes):
+        """在fitGraphicsView中绘制拟合结果"""
+        try:
+            if not hasattr(self.ui, 'fitGraphicsView'):
+                return
+            
+            if not MATPLOTLIB_AVAILABLE:
+                self._add_fitting_error("Matplotlib not available for plotting")
+                return
+            
+            # 获取显示选项
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            
+            # 获取原始数据点用于scatter显示
+            original_x_data = None
+            original_y_data = None
+            data_label = ""
+            
+            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
+                # 使用Cut数据
+                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
+                    original_x_data = np.array(self.current_cut_data['x_coords'])
+                    original_y_data = np.array(self.current_cut_data['y_intensity'])
+                    data_label = "Cut Data"
+            else:
+                # 使用1D文件数据
+                if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
+                    original_x_data = np.array(self.current_1d_data['q'])
+                    original_y_data = np.array(self.current_1d_data['I'])
+                    data_label = "1D File Data"
+            
+            # 创建图形
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+            
+            # 使用统一的场景管理方法
+            scene = self._setup_fit_graphics_scene()
+            if scene is None:
+                return
+            
+            # 创建matplotlib图形
+            fig = Figure(figsize=(10, 6), dpi=80)
+            canvas = FigureCanvas(fig)
+            ax = fig.add_subplot(111)
+            
+            # 应用标准化处理
+            fitting_y_data = np.array(intensity_data)  # 拟合数据不进行归一化
+            plot_original_y = original_y_data.copy() if original_y_data is not None else None
+            
+            if normalize and original_y_data is not None:
+                # 只对原始数据进行标准化，拟合数据保持原始
+                max_original = np.max(original_y_data)
+                if max_original > 0:
+                    plot_original_y = original_y_data / max_original
+                    # 拟合数据按照同样的比例缩放以保持相对关系
+                    fitting_y_data = fitting_y_data / max_original
+            
+            # 绘制原始数据点（scatter）
+            if original_x_data is not None and plot_original_y is not None:
+                ax.scatter(original_x_data, plot_original_y, 
+                          s=20, alpha=0.7, color='blue', 
+                          label=data_label, zorder=2)
+            
+            # 绘制拟合线
+            ax.plot(q_data, fitting_y_data, 
+                   color='red', linewidth=2, 
+                   label=f'Fitting ({", ".join(active_shapes)})', 
+                   zorder=3)
+            
+            # 设置标签和标题
+            x_label = "q (Å⁻¹)" if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
+            y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
+            title = f'Manual Fitting Result - {", ".join(active_shapes)}'
+            
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            
+            # 设置坐标轴样式
+            for axis in ['top', 'bottom', 'left', 'right']:
+                ax.spines[axis].set_linewidth(1.2)
+            
+            # 应用对数坐标设置
+            if log_x:
+                ax.set_xscale('log')
+            if log_y:
+                ax.set_yscale('log')
+            
+            # 调整布局
+            fig.tight_layout()
+            
+            # 添加到场景
+            proxy_widget = scene.addWidget(canvas)
+            self.ui.fitGraphicsView.fitInView(proxy_widget)
+            
+            # 保存当前的 figure 和 canvas 以便后续操作（如清除拟合线）
+            self._current_fit_figure = fig
+            self._current_fit_canvas = canvas
+            
+            # 存储拟合结果数据
+            if not hasattr(self, 'current_fitting_data'):
+                self.current_fitting_data = {}
+            
+            self.current_fitting_data = {
+                'q': q_data.copy(),
+                'I_fitted': intensity_data.copy(),
+                'shapes': active_shapes.copy(),
+                'title': title,
+                'original_x': original_x_data.copy() if original_x_data is not None else None,
+                'original_y': original_y_data.copy() if original_y_data is not None else None,
+                'data_label': data_label
+            }
+            
+            self._add_fitting_success(f"Fitting result plotted for shapes: {active_shapes}")
+            
+        except Exception as e:
+            self._add_fitting_error(f"Failed to plot fitting result: {str(e)}")
+    
+    def _show_fitting_in_external_window(self, q_data, intensity_data, active_shapes):
+        """在外置窗口中显示拟合结果，返回是否成功打开"""
+        try:
+            # 获取显示选项
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            
+            # 获取原始数据点
+            original_x_data = None
+            original_y_data = None
+            data_label = ""
+            
+            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
+                # 使用Cut数据
+                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
+                    original_x_data = np.array(self.current_cut_data['x_coords'])
+                    original_y_data = np.array(self.current_cut_data['y_intensity'])
+                    data_label = "Cut Data"
+            else:
+                # 使用1D文件数据
+                if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
+                    original_x_data = np.array(self.current_1d_data['q'])
+                    original_y_data = np.array(self.current_1d_data['I'])
+                    data_label = "1D File Data"
+            
+            # 创建或显示独立拟合窗口
+            if self.independent_fit_window is None or not self.independent_fit_window.isVisible():
+                self.independent_fit_window = IndependentFitWindow(self.main_window)
+                
+                # 连接信号
+                self.independent_fit_window.status_updated.connect(self.status_updated.emit)
+            
+            # 准备数据标题和标签
+            x_label = "q (Å⁻¹)" if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
+            y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
+            title = f'Manual Fitting Result - {", ".join(active_shapes)}'
+            
+            # 更新独立窗口的显示 - 使用自定义的拟合显示方法
+            self._update_independent_window_with_fitting(
+                original_x_data, original_y_data, data_label,
+                q_data, intensity_data, active_shapes,
+                x_label, y_label, title,
+                log_x, log_y, normalize
+            )
+            
+            # 显示窗口
+            self.independent_fit_window.show()
+            self.independent_fit_window.raise_()
+            self.independent_fit_window.activateWindow()
+            
+            # 设置焦点
+            if hasattr(self.independent_fit_window, 'canvas'):
+                self.independent_fit_window.canvas.setFocus()
+            
+            self._add_fitting_success(f"Fitting result displayed in external window")
+            return True  # 成功打开外部窗口
+            
+        except Exception as e:
+            self._add_fitting_error(f"Failed to show fitting in external window: {str(e)}")
+            return False  # 打开外部窗口失败
+    
+    def _update_independent_window_with_fitting(self, original_x, original_y, data_label,
+                                               fitting_x, fitting_y, shapes,
+                                               x_label, y_label, title,
+                                               log_x, log_y, normalize):
+        """更新独立窗口以显示拟合结果（原始数据点+拟合线）"""
+        try:
+            if not hasattr(self.independent_fit_window, 'ax'):
+                return
+            
+            ax = self.independent_fit_window.ax
+            ax.clear()
+            
+            # 应用标准化处理
+            plot_fitting_y = np.array(fitting_y)  # 拟合数据不进行归一化
+            plot_original_y = original_y.copy() if original_y is not None else None
+            
+            if normalize and original_y is not None:
+                # 只对原始数据进行标准化，拟合数据按同样比例缩放
+                max_original = np.max(original_y)
+                if max_original > 0:
+                    plot_original_y = original_y / max_original
+                    # 拟合数据按照同样的比例缩放以保持相对关系
+                    plot_fitting_y = fitting_y / max_original
+            
+            # 绘制原始数据点（scatter）
+            if original_x is not None and plot_original_y is not None:
+                ax.scatter(original_x, plot_original_y, 
+                          s=30, alpha=0.7, color='blue', 
+                          label=data_label, zorder=2)
+            
+            # 绘制拟合线
+            ax.plot(fitting_x, plot_fitting_y, 
+                   color='red', linewidth=2.5, 
+                   label=f'Fitting ({", ".join(shapes)})', 
+                   zorder=3)
+            
+            # 设置标签和样式
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            
+            # 设置坐标轴样式
+            for axis in ['top', 'bottom', 'left', 'right']:
+                ax.spines[axis].set_linewidth(1.2)
+            
+            # 应用对数坐标设置
+            if log_x:
+                ax.set_xscale('log')
+            if log_y:
+                ax.set_yscale('log')
+            
+            # 刷新显示
+            if hasattr(self.independent_fit_window, 'canvas'):
+                self.independent_fit_window.canvas.draw()
+            
+        except Exception as e:
+            self._add_fitting_error(f"Failed to update independent window with fitting: {str(e)}")
+    
+    def _validate_parameter_retrieval(self, active_shapes, shape_configs):
+        """验证参数获取是否正常工作"""
+        try:
+            self._add_fitting_success("=== Parameter Retrieval Validation ===")
+            
+            for i, shape in enumerate(active_shapes, 1):
+                shape_idx = shape_configs[i-1]
+                current_shape = self.get_particle_shape(shape_idx)
+                
+                self._add_fitting_success(f"Shape {i}: {shape} (widget {shape_idx}, actual: {current_shape})")
+                
+                if shape == 'sphere':
+                    params_to_check = [
+                        ('Int', 'fitParticleSphereIntValue'),
+                        ('R', 'fitParticleSphereRValue'),
+                        ('sigma_R', 'fitParticleSphereSigmaRValue'),
+                        ('D', 'fitParticleSphereDValue'),
+                        ('sigma_D', 'fitParticleSphereSigmaDValue'),
+                        ('BG', 'fitParticleSphereBGValue')
+                    ]
+                elif shape == 'cylinder':
+                    params_to_check = [
+                        ('Int', 'fitParticleCylinderIntValue'),
+                        ('R', 'fitParticleCylinderRValue'),
+                        ('sigma_R', 'fitParticleCylinderSigmaRValue'),
+                        ('h', 'fitParticleCylinderhValue'),
+                        ('sigma_h', 'fitParticleCylinderSigmahValue'),
+                        ('D', 'fitParticleCylinderDValue'),
+                        ('sigma_D', 'fitParticleCylinderSigmaDValue'),
+                        ('BG', 'fitParticleCylinderBGValue')
+                    ]
+                else:
+                    continue
+                
+                for param_name, base_control_name in params_to_check:
+                    control_name = f"{base_control_name}_{shape_idx}"
+                    
+                    if hasattr(self.ui, control_name):
+                        control = getattr(self.ui, control_name)
+                        if hasattr(control, 'value'):
+                            value = control.value()
+                            self._add_fitting_success(f"  ✓ {param_name}: {control_name} = {value}")
+                        else:
+                            self._add_fitting_error(f"  ✗ {param_name}: {control_name} has no 'value' method")
+                    else:
+                        self._add_fitting_error(f"  ✗ {param_name}: {control_name} not found in UI")
+            
+            # 检查全局参数
+            self._add_fitting_success("Global Parameters:")
+            if hasattr(self.ui, 'fitSigmaResValue'):
+                sigma_res = self.ui.fitSigmaResValue.value()
+                self._add_fitting_success(f"  ✓ sigma_res: fitSigmaResValue = {sigma_res}")
+            else:
+                self._add_fitting_error(f"  ✗ fitSigmaResValue not found")
+                
+            if hasattr(self.ui, 'fitKValue'):
+                k_value = self.ui.fitKValue.value()
+                self._add_fitting_success(f"  ✓ k_value: fitKValue = {k_value}")
+            else:
+                self._add_fitting_error(f"  ✗ fitKValue not found")
+            
+            self._add_fitting_success("=== Validation Complete ===")
+            
+        except Exception as e:
+            self._add_fitting_error(f"Parameter validation failed: {str(e)}")
+    
+    def _clear_fitting_data(self):
+        """清空fitting数据"""
+        try:
+            # 检查是否有I_fitting数据
+            if not hasattr(self, 'I_fitting') or self.I_fitting is None:
+                self.status_updated.emit("No fitting data to clear")
+                return
+            
+            # 删除I_fitting数据
+            self.I_fitting = None
+            self.has_fitting_data = False
+            
+            # 切换到正常模式
+            self.display_mode = 'normal'
+            self._fitting_mode_active = False  # 重置拟合模式标志
+            
+            # 更新显示（切换回正常模式）
+            self._update_GUI_image('normal')
+            self._update_outside_window('normal')
+            
+            self.status_updated.emit("Fitting data cleared")
+            
+        except Exception as e:
+            self.status_updated.emit(f"Error clearing fitting data: {str(e)}")
+    
+    def _force_update_gui_points_only(self):
+        """强制更新GUI显示，只显示数据点，清除所有拟合线"""
+        try:
+            if not hasattr(self.ui, 'fitGraphicsView'):
+                return
+                
+            # 检查是否有figure和canvas
+            if not hasattr(self, '_current_fit_figure') or self._current_fit_figure is None:
+                return
+                
+            if not hasattr(self, '_current_fit_canvas') or self._current_fit_canvas is None:
+                return
+            
+            # 获取当前数据
+            x_data, y_data, data_label = self._get_current_data_for_display()
+            if x_data is None or y_data is None:
+                return
+            
+            # 清除现有图形并重新绘制
+            self._current_fit_figure.clear()
+            ax = self._current_fit_figure.add_subplot(111)
+            
+            # 获取显示选项
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            
+            # 处理数据
+            plot_y = y_data.copy()
+            if normalize:
+                max_val = np.max(y_data)
+                if max_val > 0:
+                    plot_y = y_data / max_val
+            
+            # 绘制数据点
+            ax.scatter(x_data, plot_y, s=30, alpha=0.7, color='blue', 
+                      label=data_label, zorder=2)
+            
+            # 设置标签和样式
+            x_label = "q (Å⁻¹)"
+            y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
+            title = f'Data Points Only - {data_label}'
+            
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            
+            # 设置对数坐标
+            if log_x:
+                ax.set_xscale('log')
+            if log_y:
+                ax.set_yscale('log')
+                
+            # 强制刷新画布
+            self._current_fit_canvas.draw()
+            
+        except Exception as e:
+            # 静默处理错误，避免在没有拟合数据时产生噪音
+            pass
+    
+
+    def _update_fitting_plot_points_only(self):
+        """只显示数据点，不显示拟合曲线"""
+        try:
+            if not hasattr(self, 'current_cut_data') or self.current_cut_data is None:
+                return
+                
+            # 清除现有的图形
+            if hasattr(self.ui, 'fitGraphicsView') and hasattr(self, '_current_fit_figure') and self._current_fit_figure is not None:
+                self._current_fit_figure.clear()
+                ax = self._current_fit_figure.add_subplot(111)
+                
+                # 获取当前的log设置
+                log_x = self._get_checkbox_state('fitLogXCheckBox', False)
+                log_y = self._get_checkbox_state('fitLogYCheckBox', False)
+                
+                # 绘制数据点
+                cut_data = self.current_cut_data
+                # 支持两种字段名格式
+                x_data = None
+                y_data = None
+                if 'x_coords' in cut_data and 'y_intensity' in cut_data:
+                    x_data = cut_data['x_coords']
+                    y_data = cut_data['y_intensity']
+                elif 'x' in cut_data and 'y' in cut_data:
+                    x_data = cut_data['x']
+                    y_data = cut_data['y']
+                
+                if x_data is not None and y_data is not None:
+                    ax.scatter(x_data, y_data, c='blue', s=20, alpha=0.7, label='Data')
+                    
+                    # 设置坐标轴
+                    if log_x:
+                        ax.set_xscale('log')
+                    if log_y:
+                        ax.set_yscale('log')
+                    
+                    ax.set_xlabel('Q (Å⁻¹)')
+                    ax.set_ylabel('Intensity')
+                    ax.legend()
+                    ax.grid(True, alpha=0.3)
+                
+                # 刷新显示
+                if hasattr(self, '_current_fit_canvas') and self._current_fit_canvas is not None:
+                    self._current_fit_canvas.draw()
+                
+        except Exception as e:
+            pass
+    
+    def _on_fit_log_changed(self):
+        """处理Log-x/Log-y复选框变化"""
+        try:
+            mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
+            self._update_GUI_image(mode)
+            self._update_outside_window(mode)
+            self.status_updated.emit("Display log scale updated")
+        except Exception as e:
+            self.status_updated.emit(f"Error updating log scale: {str(e)}")
+
+    def _on_normalize_changed(self):
+        """处理Normalize复选框变化"""
+        try:
+            mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
+            self._update_GUI_image(mode)
+            self._update_outside_window(mode)
+            self.status_updated.emit("Normalize setting updated")
+        except Exception as e:
+            self.status_updated.emit(f"Error updating normalize setting: {str(e)}")
+
+    def _on_positive_only_changed(self):
+        """处理Positive Only复选框变化"""
+        try:
+            mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
+            self._update_outside_window(mode)  # 只更新外部窗口，主窗口不受影响
+            self.status_updated.emit("Positive Only setting updated")
+        except Exception as e:
+            self.status_updated.emit(f"Error updating Positive Only setting: {str(e)}")
+
+
+    
+
+    
+    def _update_fitting_plot(self):
+        """更新拟合图显示（包含拟合曲线）"""
+        try:
+            if not hasattr(self, 'fitting_data') or self.fitting_data is None:
+                return
+                
+            if hasattr(self.ui, 'fitGraphicsView') and hasattr(self, '_current_fit_figure') and self._current_fit_figure is not None:
+                self._current_fit_figure.clear()
+                ax = self._current_fit_figure.add_subplot(111)
+                
+                # 获取当前的log设置
+                log_x = self._get_checkbox_state('fitLogXCheckBox', False)
+                log_y = self._get_checkbox_state('fitLogYCheckBox', False)
+                
+                # 绘制数据点
+                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
+                    cut_data = self.current_cut_data
+                    if 'x' in cut_data and 'y' in cut_data:
+                        ax.scatter(cut_data['x'], cut_data['y'], c='blue', s=20, alpha=0.7, label='Data')
+                
+                # 绘制拟合曲线
+                fitting_data = self.fitting_data
+                if 'x' in fitting_data and 'y' in fitting_data:
+                    ax.plot(fitting_data['x'], fitting_data['y'], 'r-', linewidth=2, label='Fit')
+                
+                # 设置坐标轴
+                if log_x:
+                    ax.set_xscale('log')
+                if log_y:
+                    ax.set_yscale('log')
+                
+                ax.set_xlabel('Q (Å⁻¹)')
+                ax.set_ylabel('Intensity')
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                
+                # 刷新显示
+                if hasattr(self, '_current_fit_canvas') and self._current_fit_canvas is not None:
+                    self._current_fit_canvas.draw()
+                
+        except Exception as e:
+            pass
+    
+    def _update_fitting_mode_displays_without_line(self):
+        """在拟合模式下更新显示，只显示数据点，无拟合线"""
+        try:
+            # 1. 更新GUI显示 - 只显示数据点
+            self._update_gui_points_only()
+            
+            # 2. 更新外部窗口显示 - 只显示数据点
+            if (hasattr(self, 'independent_fit_window') and 
+                self.independent_fit_window is not None and 
+                self.independent_fit_window.isVisible()):
+                
+                self._update_external_window_points_only()
+                
+        except Exception as e:
+            pass
+    
+    def _update_gui_points_only(self):
+        """更新GUI显示，只显示数据点"""
+        try:
+            if not hasattr(self.ui, 'fitGraphicsView'):
+                return
+                
+            # 获取当前数据
+            x_data, y_data, data_label = self._get_current_data_for_display()
+            if x_data is None or y_data is None:
+                return
+                
+            # 获取显示选项
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            
+            # 在GUI中显示数据点
+            self._plot_data_points_only(x_data, y_data, data_label, log_x, log_y, normalize)
+            
+        except Exception as e:
+            pass
+    
+    def _update_external_window_points_only(self):
+        """更新外部窗口显示，只显示数据点"""
+        try:
+            if not hasattr(self.independent_fit_window, 'ax'):
+                return
+                
+            # 获取当前数据
+            x_data, y_data, data_label = self._get_current_data_for_display()
+            if x_data is None or y_data is None:
+                return
+                
+            # 获取显示选项
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            
+            ax = self.independent_fit_window.ax
+            ax.clear()
+            
+            # 处理数据
+            plot_y = y_data.copy()
+            if normalize:
+                max_val = np.max(y_data)
+                if max_val > 0:
+                    plot_y = y_data / max_val
+            
+            # 只绘制数据点
+            ax.scatter(x_data, plot_y, s=30, alpha=0.7, color='blue', 
+                      label=data_label, zorder=2)
+            
+            # 设置标签和样式（拟合模式风格）
+            x_label = "q (Å⁻¹)"
+            y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
+            title = f'Fitting Display Mode - {data_label}'
+            
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(y_label)
+            ax.set_title(title)
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            
+            # 设置坐标轴样式（与拟合模式一致）
+            for axis in ['top', 'bottom', 'left', 'right']:
+                ax.spines[axis].set_linewidth(1.2)
+            
+            # 设置对数坐标
+            if log_x:
+                ax.set_xscale('log')
+            if log_y:
+                ax.set_yscale('log')
+                
+            # 刷新画布
+            if hasattr(self.independent_fit_window, 'canvas'):
+                self.independent_fit_window.canvas.draw()
+                
+        except Exception as e:
+            pass
+    
+    def _get_current_data_for_display(self):
+        """获取当前要显示的数据"""
+        try:
+            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
+                # 使用Cut数据
+                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
+                    return (np.array(self.current_cut_data['x_coords']),
+                           np.array(self.current_cut_data['y_intensity']),
+                           "Cut Data")
+            else:
+                # 使用1D文件数据
+                if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
+                    return (np.array(self.current_1d_data['q']),
+                           np.array(self.current_1d_data['I']),
+                           "1D File Data")
+            
+            return None, None, ""
+            
+        except Exception as e:
+            return None, None, ""
+    
+    def _plot_data_points_only(self, x_data, y_data, data_label, log_x, log_y, normalize):
+        """在GUI中绘制仅数据点的图形"""
+        try:
+            if not hasattr(self.ui, 'fitGraphicsView'):
+                return
+                
+            # 使用现有的拟合图形界面
+            if hasattr(self, '_current_fit_figure') and self._current_fit_figure is not None:
+                self._current_fit_figure.clear()
+                ax = self._current_fit_figure.add_subplot(111)
+                
+                # 处理数据
+                plot_y = y_data.copy()
+                if normalize:
+                    max_val = np.max(y_data)
+                    if max_val > 0:
+                        plot_y = y_data / max_val
+                
+                # 绘制数据点
+                ax.scatter(x_data, plot_y, s=30, alpha=0.7, color='blue', 
+                          label=data_label, zorder=2)
+                
+                # 设置标签和样式
+                x_label = "q (Å⁻¹)"
+                y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
+                title = f'Fitting Display Mode - {data_label}'
+                
+                ax.set_xlabel(x_label)
+                ax.set_ylabel(y_label)
+                ax.set_title(title)
+                ax.grid(True, alpha=0.3)
+                ax.legend()
+                
+                # 设置对数坐标
+                if log_x:
+                    ax.set_xscale('log')
+                if log_y:
+                    ax.set_yscale('log')
+                    
+                # 刷新画布
+                if hasattr(self, '_current_fit_canvas') and self._current_fit_canvas is not None:
+                    self._current_fit_canvas.draw()
+                    
+        except Exception as e:
+            pass

@@ -1,0 +1,93 @@
+{
+    "fitting": {
+        "global_parameters": {
+            "sigma_res": 0.1,
+            "k_value": 1000.0
+        },
+        "particles": {
+            "particle_1": {
+                "shape": "Sphere",
+                "enabled": true,
+                "parameters": {
+                    "sphere": {
+                        "intensity": 0.0,
+                        "radius": 0.0,
+                        "sigma_radius": 0.0,
+                        "diameter": 0.0,
+                        "sigma_diameter": 0.0,
+                        "background": 0.0
+                    },
+                    "cylinder": {
+                        "intensity": 0.0,
+                        "radius": 0.0,
+                        "sigma_radius": 0.0,
+                        "height": 0.0,
+                        "sigma_height": 0.0,
+                        "diameter": 0.0,
+                        "sigma_diameter": 0.0,
+                        "background": 0.0
+                    }
+                }
+            },
+            "particle_2": {
+                "shape": "None",
+                "enabled": false,
+                "parameters": {
+                    "sphere": {
+                        "intensity": 0.0,
+                        "radius": 0.0,
+                        "sigma_radius": 0.0,
+                        "diameter": 0.0,
+                        "sigma_diameter": 0.0,
+                        "background": 0.0
+                    },
+                    "cylinder": {
+                        "intensity": 0.0,
+                        "radius": 0.0,
+                        "sigma_radius": 0.0,
+                        "height": 0.0,
+                        "sigma_height": 0.0,
+                        "diameter": 0.0,
+                        "sigma_diameter": 0.0,
+                        "background": 0.0
+                    }
+                }
+            },
+            "particle_3": {
+                "shape": "Cylinder",
+                "enabled": true,
+                "parameters": {
+                    "sphere": {
+                        "intensity": 0.0,
+                        "radius": 0.0,
+                        "sigma_radius": 0.0,
+                        "diameter": 0.0,
+                        "sigma_diameter": 0.0,
+                        "background": 0.0
+                    },
+                    "cylinder": {
+                        "intensity": 0.0,
+                        "radius": 0.0,
+                        "sigma_radius": 0.0,
+                        "height": 0.0,
+                        "sigma_height": 0.0,
+                        "diameter": 0.0,
+                        "sigma_diameter": 0.0,
+                        "background": 0.0
+                    }
+                }
+            }
+        }
+    },
+    "gisaxs_predict": {
+        "particles": {}
+    },
+    "classification": {
+        "particles": {}
+    },
+    "metadata": {
+        "version": "1.0",
+        "created": "2025-10-06",
+        "description": "Model parameters configuration for GISAXS GUI application"
+    }
+}

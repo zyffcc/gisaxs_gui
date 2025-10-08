@@ -7,6 +7,9 @@ import json
 import os
 from core.global_params import global_params
 
+# 导入探测器专用触发管理器
+from utils.detector_parameter_trigger_manager import DetectorParameterTriggerManager
+
 
 class DetectorParametersDialog(QDialog):
     """探测器参数对话框"""
@@ -22,6 +25,11 @@ class DetectorParametersDialog(QDialog):
         
         # 参数字典
         self.parameters = {}
+        
+        # 初始化触发管理器
+        self.param_trigger_manager = DetectorParameterTriggerManager(self)
+        
+    # 去抖由 meta 触发管理器统一处理
         
         # 初始化UI
         self._init_ui()
@@ -63,6 +71,21 @@ class DetectorParametersDialog(QDialog):
         self.wavelength_spinbox.setSingleStep(0.001)
         self.wavelength_spinbox.setValue(0.015)
         main_layout.addRow("Wavelength (nm):", self.wavelength_spinbox)
+        # Energy (keV) - 与波长互相换算: E(keV) = 1.239841984 / λ(nm)
+        self.energy_spinbox = QDoubleSpinBox()
+        self.energy_spinbox.setRange(0.1, 200.0)  # 覆盖常见能量范围
+        self.energy_spinbox.setDecimals(4)
+        self.energy_spinbox.setSingleStep(0.01)
+        self.energy_spinbox.setValue(1.239841984 / 0.015)  # 与默认波长匹配
+        main_layout.addRow("Energy (keV):", self.energy_spinbox)
+
+        # 关系提示标签（可选）
+        relation_label = QLabel("E (keV) = 1.239841984 / λ (nm)")
+        font = relation_label.font()
+        font.setPointSize(font.pointSize() - 1)
+        relation_label.setFont(font)
+        relation_label.setStyleSheet("color: #555;")
+        main_layout.addRow("", relation_label)
         
         # Beam Center X (pixels) - 步长0.01，显示两位小数
         self.beam_center_x_spinbox = QDoubleSpinBox()
@@ -132,27 +155,36 @@ class DetectorParametersDialog(QDialog):
         layout.addLayout(button_layout)
         
     def _connect_signals(self):
-        """连接信号"""
-        # 当参数变化时自动保存
-        self.distance_spinbox.valueChanged.connect(self._on_parameter_changed)
-        self.angle_spinbox.valueChanged.connect(self._on_parameter_changed)
-        self.wavelength_spinbox.valueChanged.connect(self._on_parameter_changed)
-        self.beam_center_x_spinbox.valueChanged.connect(self._on_parameter_changed)
-        self.beam_center_y_spinbox.valueChanged.connect(self._on_parameter_changed)
-        self.pixel_size_x_spinbox.valueChanged.connect(self._on_parameter_changed)
-        self.pixel_size_y_spinbox.valueChanged.connect(self._on_parameter_changed)
+        """连接信号（meta 去抖已在注册时完成，仅补充复选框）"""
+        detector_widgets = [
+            (self.distance_spinbox, 'distance'),
+            (self.angle_spinbox, 'angle'),
+            (self.wavelength_spinbox, 'wavelength'),
+            (self.beam_center_x_spinbox, 'beam_center_x'),
+            (self.beam_center_y_spinbox, 'beam_center_y'),
+            (self.pixel_size_x_spinbox, 'pixel_size_x'),
+            (self.pixel_size_y_spinbox, 'pixel_size_y'),
+        ]
+        for w, name in detector_widgets:
+            self.param_trigger_manager.register_detector_widget(w, name)
         self.show_q_axis_checkbox.toggled.connect(self._on_parameter_changed)
+        # 额外连接：波长/能量联动（不通过meta保存能量，只保存波长）
+        self._updating_energy_pair = False
+        self.wavelength_spinbox.valueChanged.connect(self._on_wavelength_changed_sync)
+        self.energy_spinbox.valueChanged.connect(self._on_energy_changed_sync)
         
     def _disconnect_signals(self):
         """断开信号连接"""
         try:
-            self.distance_spinbox.valueChanged.disconnect()
-            self.angle_spinbox.valueChanged.disconnect()
-            self.wavelength_spinbox.valueChanged.disconnect()
-            self.beam_center_x_spinbox.valueChanged.disconnect()
-            self.beam_center_y_spinbox.valueChanged.disconnect()
-            self.pixel_size_x_spinbox.valueChanged.disconnect()
-            self.pixel_size_y_spinbox.valueChanged.disconnect()
+            for sb in [self.distance_spinbox, self.angle_spinbox, self.wavelength_spinbox,
+                       self.beam_center_x_spinbox, self.beam_center_y_spinbox,
+                       self.pixel_size_x_spinbox, self.pixel_size_y_spinbox,
+                       getattr(self, 'energy_spinbox', None)]:
+                try:
+                    if sb is not None:
+                        sb.valueChanged.disconnect()
+                except Exception:
+                    pass
             self.show_q_axis_checkbox.toggled.disconnect()
         except Exception:
             pass  # 忽略断开连接的错误
@@ -176,6 +208,15 @@ class DetectorParametersDialog(QDialog):
             # 设置束流参数
             self.angle_spinbox.setValue(global_params.get_parameter('beam', 'grazing_angle', 0.4))
             self.wavelength_spinbox.setValue(global_params.get_parameter('beam', 'wavelength', 0.015))
+            # 同步能量显示
+            try:
+                wl = self.wavelength_spinbox.value()
+                if wl > 0:
+                    self.energy_spinbox.blockSignals(True)
+                    self.energy_spinbox.setValue(1.239841984 / wl)
+                    self.energy_spinbox.blockSignals(False)
+            except Exception:
+                pass
             
             # 设置显示选项 - 从fitting.detector中读取
             self.show_q_axis_checkbox.setChecked(global_params.get_parameter('fitting', 'detector.show_q_axis', False))
@@ -189,13 +230,33 @@ class DetectorParametersDialog(QDialog):
             self._connect_signals()
             
     def _on_parameter_changed(self):
-        """参数改变时的处理"""
+        """参数改变时的处理（用于复选框等非数值控件）"""
         # 自动保存到global_params
         self._save_parameters()
         
         # 发出参数改变信号
         params = self._get_current_parameters()
         self.parameters_changed.emit(params)
+    
+    def _on_parameter_changed_internal(self):
+        """内部参数变更处理（用于触发管理器）"""
+        # 发射信号通知外部，但不保存（保存由触发管理器处理）
+        params = self._get_current_parameters()
+        self.parameters_changed.emit(params)
+    
+    def _save_parameters_immediately(self):
+        """兼容旧接口：现在与延迟保存逻辑一致（已由去抖提交控制）"""
+        self._save_parameters()
+    
+    def _save_parameters_delayed(self):
+        """兼容旧接口：保留调用，实际逻辑由去抖调度"""
+        self._save_parameters()
+    
+    # 去抖逻辑已迁移到 meta；保留占位以兼容旧调用
+    def _on_detector_value_changed(self, *args, **kwargs):
+        pass
+    def _commit_detector_param(self, *args, **kwargs):
+        pass
         
     def _get_current_parameters(self):
         """获取当前参数值"""
@@ -203,12 +264,47 @@ class DetectorParametersDialog(QDialog):
             'distance': self.distance_spinbox.value(),
             'grazing_angle': self.angle_spinbox.value(),
             'wavelength': self.wavelength_spinbox.value(),
+            'energy': self.energy_spinbox.value(),  # 仅供外部查看，不单独持久化
             'beam_center_x': self.beam_center_x_spinbox.value(),
             'beam_center_y': self.beam_center_y_spinbox.value(),
             'pixel_size_x': self.pixel_size_x_spinbox.value(),
             'pixel_size_y': self.pixel_size_y_spinbox.value(),
             'show_q_axis': self.show_q_axis_checkbox.isChecked()
         }
+
+    # ===================== 波长/能量联动 =====================
+    def _on_wavelength_changed_sync(self):
+        if getattr(self, '_updating_energy_pair', False):
+            return
+        wl = self.wavelength_spinbox.value()
+        if wl <= 0:
+            return
+        try:
+            self._updating_energy_pair = True
+            energy = 1.239841984 / wl
+            self.energy_spinbox.blockSignals(True)
+            self.energy_spinbox.setValue(energy)
+            self.energy_spinbox.blockSignals(False)
+        finally:
+            self._updating_energy_pair = False
+
+    def _on_energy_changed_sync(self):
+        if getattr(self, '_updating_energy_pair', False):
+            return
+        energy = self.energy_spinbox.value()
+        if energy <= 0:
+            return
+        try:
+            wl = 1.239841984 / energy
+            # 限制在波长允许范围内
+            wl = max(self.wavelength_spinbox.minimum(), min(self.wavelength_spinbox.maximum(), wl))
+            self._updating_energy_pair = True
+            self.wavelength_spinbox.blockSignals(True)
+            self.wavelength_spinbox.setValue(wl)
+            self.wavelength_spinbox.blockSignals(False)
+            # 让 meta 去抖逻辑继续处理 wavelength 的持久化
+        finally:
+            self._updating_energy_pair = False
         
     def _save_parameters(self):
         """保存参数到配置文件"""
