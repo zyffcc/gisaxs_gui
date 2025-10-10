@@ -9,17 +9,10 @@ from ui.menu_manager import MenuManager
 from controllers import MainController
 from core.window_manager import window_manager
 
-# 配置matplotlib（在所有其他导入之前）
+# 配置matplotlib（尽量轻量，完整预热放到窗口显示后）
 try:
     import matplotlib
-    import matplotlib.pyplot as plt
-    
-    # 设置字体配置
-    plt.rcParams['font.family'] = ['DejaVu Sans', 'SimHei', 'Arial', 'sans-serif']
-    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-    
-    # 过滤字体相关警告
-    warnings.filterwarnings('ignore', category=UserWarning, message='.*Glyph.*missing from font.*')
+    # 延后重型子模块导入与字体缓存构建
 except ImportError:
     pass
 
@@ -42,15 +35,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.setWindowTitle("GISAXS Toolkit")
         
-        # 设置初始状态栏消息
+        # 设置初始状态栏消息（英文）
         if hasattr(self, 'statusbar'):
-            self.statusbar.showMessage("界面已就绪，正在初始化组件...")
+            self.statusbar.showMessage("UI ready. Initializing components...")
         
         # 快速初始化：仅设置基本UI
         self.setup_window()
         
         ui_ready_time = time.time() - self._startup_time
-        print(f"✓ UI界面就绪用时: {ui_ready_time:.2f}秒")
+        print(f"✓ UI ready in {ui_ready_time:.2f}s")
         
         # 延迟初始化标志
         self._initialization_completed = False
@@ -65,21 +58,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             # 更新状态栏
             if hasattr(self, 'statusbar'):
-                self.statusbar.showMessage("正在初始化参数系统...")
+                self.statusbar.showMessage("Initializing parameter system...")
             
             # 初始化全局参数系统
             self.initialize_parameter_system()
             
             # 更新状态栏
             if hasattr(self, 'statusbar'):
-                self.statusbar.showMessage("正在初始化菜单...")
+                self.statusbar.showMessage("Initializing menus...")
             
             # 初始化菜单管理器
             self.menu_manager = MenuManager(self)
             
             # 更新状态栏
             if hasattr(self, 'statusbar'):
-                self.statusbar.showMessage("正在初始化控制器...")
+                self.statusbar.showMessage("Initializing controllers...")
             
             # 初始化主控制器
             self.main_controller = MainController(self, self)
@@ -92,20 +85,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             
             # 计算总启动时间
             total_time = time.time() - self._startup_time
-            print(f"✓ 总启动用时: {total_time:.2f}秒")
+            print(f"✓ Startup complete in {total_time:.2f}s")
             
             # 更新状态栏
             if hasattr(self, 'statusbar'):
-                self.statusbar.showMessage(f"GISAXS Toolkit 就绪 (启动用时: {total_time:.1f}s)")
+                self.statusbar.showMessage(f"GISAXS Toolkit ready (startup: {total_time:.1f}s)")
             
-            print("✓ 延迟初始化完成")
+            print("✓ Deferred initialization finished")
             
         except Exception as e:
-            print(f"延迟初始化失败: {e}")
+            print(f"Deferred initialization failed: {e}")
             # 即使失败也要标记完成，避免界面卡死
             self._initialization_completed = True
             if hasattr(self, 'statusbar'):
-                self.statusbar.showMessage("初始化完成（部分功能可能不可用）")
+                self.statusbar.showMessage("Initialization finished (some features may be unavailable)")
     
     def connect_menu_signals(self):
         """连接菜单信号"""
@@ -207,6 +200,40 @@ def main():
     # 创建主窗口
     window = MainWindow()
     window.show()
+    
+    # 轻量预热：在窗口显示后构建字体缓存与绘图后端，避免首次绘图卡顿
+    try:
+        from PyQt5.QtCore import QTimer
+        def _matplotlib_warmup():
+            try:
+                import matplotlib
+                # 导入最小子模块并创建一次性Figure以触发font cache构建
+                from matplotlib.figure import Figure
+                from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+                fig = Figure(figsize=(1, 1))
+                _ = FigureCanvas(fig)
+                # 可选：设置常用rcParams（轻量）
+                import matplotlib.pyplot as plt
+                # 确保使用内置的 DejaVu 字体家族，避免缺失上标负号（superscript minus）等字形
+                try:
+                    fam = plt.rcParams.get('font.family', [])
+                    if not fam:
+                        plt.rcParams['font.family'] = ['DejaVu Sans', 'Arial', 'sans-serif']
+                    elif isinstance(fam, str):
+                        plt.rcParams['font.family'] = [fam, 'DejaVu Sans', 'Arial', 'sans-serif']
+                    else:
+                        # prepend DejaVu Sans if not present
+                        if 'DejaVu Sans' not in fam:
+                            plt.rcParams['font.family'] = ['DejaVu Sans'] + list(fam)
+                except Exception:
+                    pass
+                # 统一坐标轴负号渲染
+                plt.rcParams.setdefault('axes.unicode_minus', False)
+            except Exception:
+                pass
+        QTimer.singleShot(200, _matplotlib_warmup)
+    except Exception:
+        pass
     
     # 运行应用程序
     sys.exit(app.exec_())

@@ -3,5 +3,7 @@
   "window_width": 1157,
   "window_height": 848,
   "font_adjustment": 0,
-  "_auto_k_enabled": true
+  "_auto_k_enabled": true,
+  "fit.points_num": 100,
+  "fit.interp_method": "Spline"
 }

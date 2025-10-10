@@ -2,7 +2,7 @@
     "fitting": {
         "global_parameters": {
             "sigma_res": 0.001,
-            "k_value": 42135422.88900485
+            "k_value": 95583.3946039118
         },
         "particles": {
             "particle_1": {
@@ -11,43 +11,43 @@
                 "parameters": {
                     "sphere": {
                         "intensity": 1.0,
-                        "radius": 200.0,
-                        "sigma_radius": 0.0,
+                        "radius": 8.0,
+                        "sigma_radius": 0.48000000000000026,
                         "diameter": 0.0,
                         "sigma_diameter": 0.0,
                         "background": 0.0
                     },
                     "cylinder": {
-                        "intensity": 0.9998,
-                        "radius": 2.0,
-                        "sigma_radius": 0.88,
+                        "intensity": 5.0,
+                        "radius": 15.0,
+                        "sigma_radius": 1.1800000000000002,
                         "height": 11.83,
                         "sigma_height": 1.2,
                         "diameter": 80.0,
                         "sigma_diameter": 20.0,
-                        "background": 0.05
+                        "background": 0.0
                     }
                 }
             },
             "particle_2": {
-                "shape": "None",
-                "enabled": false,
+                "shape": "Sphere",
+                "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 20.0026,
-                        "radius": 20.0,
-                        "sigma_radius": 0.0,
-                        "diameter": 0.0,
-                        "sigma_diameter": 0.3,
-                        "background": 0.0795
+                        "intensity": 0.0,
+                        "radius": 5.129999999999997,
+                        "sigma_radius": 0.5,
+                        "diameter": 10.0,
+                        "sigma_diameter": 1.0,
+                        "background": -7e-05
                     },
                     "cylinder": {
                         "intensity": 30.0001,
-                        "radius": 7.299999999999992,
+                        "radius": 20.0,
                         "sigma_radius": 0.0,
                         "height": 15.0,
-                        "sigma_height": -0.03,
-                        "diameter": -0.01,
+                        "sigma_height": 0.0,
+                        "diameter": -0.03,
                         "sigma_diameter": 0.0,
                         "background": 0.0
                     }
