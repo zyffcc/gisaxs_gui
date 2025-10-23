@@ -12,7 +12,7 @@
                     "sphere": {
                         "intensity": 1.0,
                         "radius": 8.0,
-                        "sigma_radius": 0.48000000000000026,
+                        "sigma_radius": 0.48,
                         "diameter": 0.0,
                         "sigma_diameter": 0.0,
                         "background": 0.0
@@ -35,7 +35,7 @@
                 "parameters": {
                     "sphere": {
                         "intensity": 0.0,
-                        "radius": 5.129999999999997,
+                        "radius": 5.13,
                         "sigma_radius": 0.5,
                         "diameter": 10.0,
                         "sigma_diameter": 1.0,

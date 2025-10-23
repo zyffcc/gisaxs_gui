@@ -50,7 +50,7 @@
          <x>0</x>
          <y>0</y>
          <width>150</width>
-         <height>935</height>
+         <height>923</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -231,8 +231,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>736</width>
-                <height>2491</height>
+                <width>829</width>
+                <height>2692</height>
                </rect>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_25">
@@ -3054,10 +3054,13 @@
                        </property>
                        <property name="html">
                         <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
-&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;meta charset=&quot;utf-8&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
 p, li { white-space: pre-wrap; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Semi-infinite&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+hr { height: 1px; border-width: 0; }
+li.unchecked::marker { content: &quot;\2610&quot;; }
+li.checked::marker { content: &quot;\2612&quot;; }
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'.AppleSystemUIFont'; font-size:13pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt;&quot;&gt;Semi-infinite&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                        </property>
                       </widget>
                      </item>
@@ -5733,8 +5736,8 @@ p, li { white-space: pre-wrap; }
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>87</width>
-                   <height>87</height>
+                   <width>98</width>
+                   <height>96</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_17">
@@ -6370,9 +6373,9 @@ p, li { white-space: pre-wrap; }
               <property name="geometry">
                <rect>
                 <x>0</x>
-                <y>-157</y>
-                <width>1018</width>
-                <height>950</height>
+                <y>0</y>
+                <width>1024</width>
+                <height>947</height>
                </rect>
               </property>
               <layout class="QGridLayout" name="gridLayout_38">
@@ -6485,6 +6488,12 @@ p, li { white-space: pre-wrap; }
                   </item>
                   <item row="1" column="2" colspan="3">
                    <widget class="QWidget" name="gisaxsInputStackWidget" native="true">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>40</height>
+                     </size>
+                    </property>
                     <layout class="QHBoxLayout" name="horizontalLayout_11">
                      <item>
                       <widget class="QLineEdit" name="gisaxsInputStackValue">
@@ -6532,6 +6541,12 @@ p, li { white-space: pre-wrap; }
                      </item>
                      <item>
                       <widget class="QLabel" name="gisaxsInputStackDisplayLabel">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>25</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string/>
                        </property>
@@ -6562,6 +6577,12 @@ p, li { white-space: pre-wrap; }
                     <layout class="QHBoxLayout" name="horizontalLayout_10">
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QLabel" name="gisaxsInputCenterVerticalLabel">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string>Vertical.</string>
                        </property>
@@ -6579,6 +6600,12 @@ p, li { white-space: pre-wrap; }
                      </item>
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QLabel" name="gisaxsInputCenterParallelLabel">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string>Parallel.</string>
                        </property>
@@ -6639,9 +6666,21 @@ p, li { white-space: pre-wrap; }
                   </item>
                   <item row="2" column="2" colspan="3">
                    <widget class="QWidget" name="gisaxsInputColorScaleWidget" native="true">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>40</height>
+                     </size>
+                    </property>
                     <layout class="QHBoxLayout" name="horizontalLayout_12">
                      <item>
                       <widget class="QCheckBox" name="gisaxsInputAutoScaleCheckBox">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string>Auto Scale</string>
                        </property>
@@ -6652,6 +6691,12 @@ p, li { white-space: pre-wrap; }
                      </item>
                      <item>
                       <widget class="QCheckBox" name="gisaxsInputIntLogCheckBox">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string>Int. Log</string>
                        </property>
@@ -6662,6 +6707,12 @@ p, li { white-space: pre-wrap; }
                      </item>
                      <item>
                       <widget class="QCheckBox" name="gisaxsInputAutoShowCheckBox">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string>Auto Show</string>
                        </property>
@@ -6672,8 +6723,11 @@ p, li { white-space: pre-wrap; }
                        <property name="minimumSize">
                         <size>
                          <width>50</width>
-                         <height>0</height>
+                         <height>25</height>
                         </size>
+                       </property>
+                       <property name="layoutDirection">
+                        <enum>Qt::LeftToRight</enum>
                        </property>
                        <property name="text">
                         <string>Show ——→</string>
@@ -6793,14 +6847,21 @@ p, li { white-space: pre-wrap; }
                  </property>
                  <layout class="QGridLayout" name="gridLayout_24">
                   <item row="1" column="1" colspan="2">
-                   <widget class="QLineEdit" name="fitImport1dFileValue"/>
+                   <widget class="QLineEdit" name="fitImport1dFileValue">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </widget>
                   </item>
                   <item row="1" column="0">
                    <widget class="QPushButton" name="fitImport1dFileButton">
                     <property name="minimumSize">
                      <size>
                       <width>50</width>
-                      <height>0</height>
+                      <height>20</height>
                      </size>
                     </property>
                     <property name="text">
@@ -6964,6 +7025,12 @@ p, li { white-space: pre-wrap; }
                     <layout class="QVBoxLayout" name="verticalLayout_20">
                      <item>
                       <widget class="QComboBox" name="fitParticleShapeCombox_1">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <item>
                         <property name="text">
                          <string>Sphere</string>
@@ -7248,6 +7315,12 @@ p, li { white-space: pre-wrap; }
                     <layout class="QHBoxLayout" name="horizontalLayout_13">
                      <item>
                       <widget class="QCheckBox" name="fitLogXCheckBox">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string>Log-x</string>
                        </property>
@@ -7255,6 +7328,12 @@ p, li { white-space: pre-wrap; }
                      </item>
                      <item>
                       <widget class="QCheckBox" name="fitLogYCheckBox">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string>Log-y</string>
                        </property>
@@ -7262,6 +7341,12 @@ p, li { white-space: pre-wrap; }
                      </item>
                      <item>
                       <widget class="QCheckBox" name="fitNormCheckBox">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <property name="text">
                         <string>Norm</string>
                        </property>
@@ -7304,6 +7389,12 @@ p, li { white-space: pre-wrap; }
                     <layout class="QVBoxLayout" name="verticalLayout_21">
                      <item>
                       <widget class="QComboBox" name="fitParticleShapeCombox_2">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <item>
                         <property name="text">
                          <string>Sphere</string>
@@ -7336,16 +7427,35 @@ p, li { white-space: pre-wrap; }
                         <layout class="QGridLayout" name="gridLayout_27">
                          <item row="3" column="0">
                           <widget class="QLabel" name="fitParticleSphereDLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>D [nm]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="3" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereDValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereDValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="4" column="0">
                           <widget class="QLabel" name="fitParticleSphereSigmaDLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [D]</string>
                            </property>
@@ -7353,22 +7463,55 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="1" column="0">
                           <widget class="QLabel" name="fitParticleSphereRLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>R [nm]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="5" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereBGValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereBGValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereIntValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereIntValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="2" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaRValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaRValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="2" column="0">
                           <widget class="QLabel" name="fitParticleSphereSigmaRLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [R]</string>
                            </property>
@@ -7376,6 +7519,12 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="0" column="0">
                           <widget class="QLabel" name="fitParticleSphereIntLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>Int.</string>
                            </property>
@@ -7383,16 +7532,36 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="5" column="0">
                           <widget class="QLabel" name="fitParticleSphereBGLabel_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>BG</string>
                            </property>
                           </widget>
                          </item>
                          <item row="4" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaDValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaDValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereRValue_2"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereRValue_2">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                         </layout>
                        </widget>
@@ -7591,6 +7760,12 @@ p, li { white-space: pre-wrap; }
                   </item>
                   <item row="0" column="0">
                    <widget class="QCheckBox" name="fitCurrentDataCheckBox">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>20</height>
+                     </size>
+                    </property>
                     <property name="text">
                      <string>GISAXS Data</string>
                     </property>
@@ -7617,6 +7792,12 @@ p, li { white-space: pre-wrap; }
                     <layout class="QVBoxLayout" name="verticalLayout_22">
                      <item>
                       <widget class="QComboBox" name="fitParticleShapeCombox_3">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>20</height>
+                        </size>
+                       </property>
                        <item>
                         <property name="text">
                          <string>Sphere</string>
@@ -7642,39 +7823,99 @@ p, li { white-space: pre-wrap; }
                        <widget class="QWidget" name="fitParticleSpherePage_3">
                         <layout class="QGridLayout" name="gridLayout_29">
                          <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereRValue_3"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereRValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="5" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereBGValue_3"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereBGValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="1" column="0">
                           <widget class="QLabel" name="fitParticleSphereRLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>R [nm]</string>
                            </property>
                           </widget>
                          </item>
                          <item row="4" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaDValue_3"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaDValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereIntValue_3"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereIntValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="2" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaRValue_3"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereSigmaRValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="0" column="0">
                           <widget class="QLabel" name="fitParticleSphereIntLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>Int.</string>
                            </property>
                           </widget>
                          </item>
                          <item row="3" column="1">
-                          <widget class="QDoubleSpinBox" name="fitParticleSphereDValue_3"/>
+                          <widget class="QDoubleSpinBox" name="fitParticleSphereDValue_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </widget>
                          </item>
                          <item row="4" column="0">
                           <widget class="QLabel" name="fitParticleSphereSigmaDLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [D]</string>
                            </property>
@@ -7682,6 +7923,12 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="2" column="0">
                           <widget class="QLabel" name="fitParticleSphereSigmaRLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>σ [R]</string>
                            </property>
@@ -7689,6 +7936,12 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="3" column="0">
                           <widget class="QLabel" name="fitParticleSphereDLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>D [nm]</string>
                            </property>
@@ -7696,6 +7949,12 @@ p, li { white-space: pre-wrap; }
                          </item>
                          <item row="5" column="0">
                           <widget class="QLabel" name="fitParticleSphereBGLabel_3">
+                           <property name="minimumSize">
+                            <size>
+                             <width>0</width>
+                             <height>20</height>
+                            </size>
+                           </property>
                            <property name="text">
                             <string>BG</string>
                            </property>
@@ -8092,6 +8351,12 @@ p, li { white-space: pre-wrap; }
                         </item>
                         <item row="2" column="1">
                          <widget class="QWidget" name="fitFittingRegionValueWidget" native="true">
+                          <property name="minimumSize">
+                           <size>
+                            <width>0</width>
+                            <height>35</height>
+                           </size>
+                          </property>
                           <layout class="QHBoxLayout" name="horizontalLayout_14">
                            <item>
                             <widget class="QDoubleSpinBox" name="fitFittingRegionMinValue">
@@ -8100,6 +8365,12 @@ p, li { white-space: pre-wrap; }
                                <horstretch>0</horstretch>
                                <verstretch>0</verstretch>
                               </sizepolicy>
+                             </property>
+                             <property name="minimumSize">
+                              <size>
+                               <width>0</width>
+                               <height>20</height>
+                              </size>
                              </property>
                              <property name="maximumSize">
                               <size>
@@ -8358,8 +8629,8 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>302</width>
-                <height>805</height>
+                <width>335</width>
+                <height>826</height>
                </rect>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_27">
@@ -8557,7 +8828,7 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                    <rect>
                     <x>0</x>
                     <y>0</y>
-                    <width>282</width>
+                    <width>98</width>
                     <height>298</height>
                    </rect>
                   </property>
@@ -8613,7 +8884,7 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
      <x>0</x>
      <y>0</y>
      <width>1240</width>
-     <height>21</height>
+     <height>37</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuSetting">
