@@ -155,7 +155,7 @@ class DetectorParametersDialog(QDialog):
         layout.addLayout(button_layout)
         
     def _connect_signals(self):
-        """连接信号（meta 去抖已在注册时完成，仅补充复选框）"""
+        """连接信号（使用 meta 管理器自动连接，按 finished/changed 模式）"""
         detector_widgets = [
             (self.distance_spinbox, 'distance'),
             (self.angle_spinbox, 'angle'),
@@ -165,8 +165,10 @@ class DetectorParametersDialog(QDialog):
             (self.pixel_size_x_spinbox, 'pixel_size_x'),
             (self.pixel_size_y_spinbox, 'pixel_size_y'),
         ]
+        # 注册到 meta，并通过 connect_mode 选择连接模式
         for w, name in detector_widgets:
-            self.param_trigger_manager.register_detector_widget(w, name)
+            mode = 'changed' if name in ('beam_center_x', 'beam_center_y') else 'finished'
+            self.param_trigger_manager.register_detector_widget(w, name, connect_mode=mode)
         self.show_q_axis_checkbox.toggled.connect(self._on_parameter_changed)
         # 额外连接：波长/能量联动（不通过meta保存能量，只保存波长）
         self._updating_energy_pair = False

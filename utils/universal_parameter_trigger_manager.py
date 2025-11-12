@@ -77,6 +77,8 @@ class UniversalParameterTriggerManager(QObject):
         meta.setdefault('after_commit', None)  # callable(info, value)
         meta.setdefault('custom_persist', None)  # callable(info, value)
         meta.setdefault('category', category)
+        # 连接模式: 'changed' | 'finished' | 'external'（不自动连接）
+        connect_mode = meta.setdefault('connect_mode', 'changed')
 
         timer = QTimer()
         timer.setSingleShot(True)
@@ -90,8 +92,37 @@ class UniversalParameterTriggerManager(QObject):
             'timer': timer
         }
 
-        # 信号连接（只用 valueChanged）
-        widget.valueChanged.connect(lambda _v, wid=widget_id: self._on_meta_value_changed(wid))
+        # 根据信号连接模式连接
+        try:
+            if connect_mode == 'finished':
+                connected = False
+                # 优先使用编辑完成
+                if hasattr(widget, 'editingFinished'):
+                    try:
+                        widget.editingFinished.connect(lambda wid=widget_id: self._commit_meta_widget(wid))
+                        connected = True
+                    except Exception:
+                        pass
+                # 尝试回车提交（部分编辑类控件，如 QLineEdit）
+                if not connected and hasattr(widget, 'returnPressed'):
+                    try:
+                        widget.returnPressed.connect(lambda wid=widget_id: self._commit_meta_widget(wid))
+                        connected = True
+                    except Exception:
+                        pass
+                # 兜底：若没有完成类信号，退回 changed 去抖
+                if not connected and hasattr(widget, 'valueChanged'):
+                    widget.valueChanged.connect(lambda _v, wid=widget_id: self._on_meta_value_changed(wid))
+            elif connect_mode == 'external':
+                # 不自动连接，由外部自行连接
+                pass
+            else:
+                # 默认 changed 去抖
+                if hasattr(widget, 'valueChanged'):
+                    widget.valueChanged.connect(lambda _v, wid=widget_id: self._on_meta_value_changed(wid))
+        except Exception:
+            # 避免连接异常导致崩溃
+            pass
 
     def _on_meta_value_changed(self, widget_id: str):
         info = self._meta_registry.get(widget_id)
@@ -112,16 +143,40 @@ class UniversalParameterTriggerManager(QObject):
         info = self._meta_registry.get(widget_id)
         if not info:
             return
+        # 停止并清理去抖计时器，避免残留触发
+        try:
+            t = info.get('timer')
+            if t and t.isActive():
+                t.stop()
+        except Exception:
+            pass
+
         meta = info['meta']
-        pending = info['pending_value']
+        pending = info.get('pending_value')
+        # 在 finished 模式下，可能没有经过 valueChanged；此时直接读取控件当前值
         if pending is None:
-            return
-        old = info['last_value']
+            w = info.get('widget')
+            if w is None:
+                return
+            try:
+                pending = w.value() if hasattr(w, 'value') else None
+            except Exception:
+                pending = None
+            if pending is None:
+                return
+
+        old = info.get('last_value')
+        changed = True
         if old is not None:
             eps_abs = meta['epsilon_abs']
             eps_rel = meta['epsilon_rel']
             if abs(pending - old) <= (eps_abs + eps_rel * abs(old)):
-                return  # 未变化
+                changed = False  # 未变化
+
+        # 无论是否变化，都清空 pending，避免“只生效一次”的陈旧值干扰后续提交
+        info['pending_value'] = None
+        if not changed:
+            return
         # 持久化
         persisted_ok = self._persist_meta(info, pending)
         if persisted_ok:

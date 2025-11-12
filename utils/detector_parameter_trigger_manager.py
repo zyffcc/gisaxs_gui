@@ -13,8 +13,10 @@ class DetectorParameterTriggerManager(UniversalParameterTriggerManager):
         
         self.detector_dialog = detector_dialog
     
-    def register_detector_widget(self, widget, param_name: str):
-        """注册探测器参数控件 (meta 去抖 + global_params 持久化)"""
+    def register_detector_widget(self, widget, param_name: str, connect_mode: str = 'finished'):
+        """注册探测器参数控件 (meta 去抖 + global_params 持久化)
+        connect_mode: 'finished' | 'changed' | 'external'
+        """
         def _after_commit(info, value, p=param_name):
             try:
                 if hasattr(self.detector_dialog, '_on_parameter_changed_internal'):
@@ -30,6 +32,7 @@ class DetectorParameterTriggerManager(UniversalParameterTriggerManager):
             'epsilon_rel': 1e-10,
             'after_commit': _after_commit,
             'trigger_fit': False,
+            'connect_mode': connect_mode,
         }
         self.register_parameter_widget(
             widget=widget,
@@ -37,7 +40,7 @@ class DetectorParameterTriggerManager(UniversalParameterTriggerManager):
             category='detector_params',
             immediate_handler=lambda v: None,
             delayed_handler=None,
-            connect_signals=True,  # 让 meta 自行连接 valueChanged
+            connect_signals=True,
             meta=meta
         )
     

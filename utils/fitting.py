@@ -9,6 +9,7 @@ __all__ = [
     "structure_factor_1d",
     "gaussian_resolution_smear",
     "apply_scaling_factor",    # 应用缩放因子
+    "mixed_model_components",  # 分解各组分：粒子贡献、总BG、分辨率核
 ]
 
 # =========================
@@ -237,7 +238,7 @@ def make_mixed_model(
                 Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; D = params[idx+3]; sD = params[idx+4]; BG = params[idx+5]
                 idx += 6
                 P = sphere_form_factor_pd(q_arr, R, sR,
-                                          n_samples=pd_defaults["n_samples"],
+                                          n_samples=int(pd_defaults["n_samples"]),
                                           nsig=pd_defaults["nsig"])
                 
                 # 如果 D 或 sigma_D 为 0，不应用结构因子
@@ -255,8 +256,8 @@ def make_mixed_model(
                 idx += 8
                 P = cylinder_form_factor_pd(
                     q_arr, R, sR, h, sh,
-                    n_R=cyl_defaults["n_R"], n_h=cyl_defaults["n_h"],
-                    nsig=cyl_defaults["nsig"], n_orient=cyl_defaults["n_orient"]
+                    n_R=int(cyl_defaults["n_R"]), n_h=int(cyl_defaults["n_h"]),
+                    nsig=cyl_defaults["nsig"], n_orient=int(cyl_defaults["n_orient"])
                 )
                 
                 # 如果 D 或 sigma_D 为 0，不应用结构因子
@@ -278,5 +279,124 @@ def make_mixed_model(
         return apply_scaling_factor(I_smeared, k)
 
     # 给外部看得到的参数名（便于 GUI 提示）
-    f.param_names = template
+    f.param_names = template  # type: ignore[attr-defined]
     return f
+
+
+def mixed_model_components(
+        spec,
+        q,
+        params,
+        *,
+        pd_opts=None,
+        cyl_opts=None,
+        scale_resolution_to_total=True,
+    ):
+        """
+        给定 spec、q、完整参数列表 params（顺序同 params_template(spec)），返回：
+          {
+            'particles': [ {'shape': 'sphere'|'cylinder', 'index': i, 'I': np.ndarray}, ... ],
+            'BG_total': np.ndarray,
+            'resolution': np.ndarray
+          }
+
+        约定：
+        - 每个粒子的曲线为 Int_i * P_i(q) * S_i(q; D_i, sigma_Di)，若 D 或 sigma_D 为 0 则 S=1。
+        - BG_total = sum_i Int_i * BG_i（常数项，按 Int 加权）。
+        - 若 sigma_Res>0，则对每个粒子曲线分别做高斯展宽；BG_total 为常数不变。
+        - 最终所有曲线都乘以全局缩放因子 k。
+        - resolution 曲线为中心 0 的高斯核 exp(-0.5*(q/sigma_Res)^2)。为了可视化，默认将其幅度缩放到与总强度同量级：
+          若 scale_resolution_to_total=True，则乘以 max(I_total_smeared)；同时再乘以 k。
+        """
+        spec = [s.lower() for s in spec]
+        q_arr = np.asarray(q, dtype=float)
+        # 采样配置
+        pd_defaults = dict(nsig=4.0, n_samples=25)
+        if pd_opts:
+            pd_defaults.update(pd_opts)
+        cyl_defaults = dict(n_R=13, n_h=13, nsig=4.0, n_orient=24)
+        if cyl_opts:
+            cyl_defaults.update(cyl_opts)
+
+        # 解析参数
+        template = params_template(spec)
+        if len(params) != len(template):
+            raise ValueError(f"参数数量不匹配：需要 {len(template)}，给定 {len(params)}")
+
+        parts = []
+        idx = 0
+        BG_total = np.zeros_like(q_arr, dtype=float)
+
+        # 粒子贡献（未展宽）
+        raw_particles = []
+        for i, shape in enumerate(spec, 1):
+            if shape == "sphere":
+                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; D = params[idx+3]; sD = params[idx+4]; BG = params[idx+5]
+                idx += 6
+                P = sphere_form_factor_pd(q_arr, R, sR, n_samples=int(pd_defaults["n_samples"]), nsig=pd_defaults["nsig"])
+                S = np.ones_like(q_arr, dtype=float) if (D == 0 or sD == 0) else structure_factor_1d(q_arr, D, sD)
+                I_part = float(Int) * P * S
+                BG_total = BG_total + float(Int) * float(BG)
+                raw_particles.append(("sphere", i, I_part))
+            elif shape == "cylinder":
+                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; h = params[idx+3]; sh = params[idx+4]; D = params[idx+5]; sD = params[idx+6]; BG = params[idx+7]
+                idx += 8
+                P = cylinder_form_factor_pd(
+                    q_arr, R, sR, h, sh,
+                    n_R=int(cyl_defaults["n_R"]), n_h=int(cyl_defaults["n_h"]), nsig=cyl_defaults["nsig"], n_orient=int(cyl_defaults["n_orient"]) 
+                )
+                S = np.ones_like(q_arr, dtype=float) if (D == 0 or sD == 0) else structure_factor_1d(q_arr, D, sD)
+                I_part = float(Int) * P * S
+                BG_total = BG_total + float(Int) * float(BG)
+                raw_particles.append(("cylinder", i, I_part))
+            else:
+                raise ValueError(f"Unsupported shape: {shape}")
+
+        # 取出分辨率与缩放因子
+        sigma_Res = float(params[idx]); k = float(params[idx+1])
+
+        # 对每个粒子分别展宽（保持和总拟合一致的视感）
+        parts_smeared = []
+        if sigma_Res is not None and sigma_Res > 0:
+            for shape, i, I_part in raw_particles:
+                I_sm = gaussian_resolution_smear(q_arr, I_part, sigma_Res)
+                parts_smeared.append((shape, i, I_sm))
+        else:
+            parts_smeared = raw_particles
+
+        # 应用全局缩放因子 k
+        for shape, i, I_sm in parts_smeared:
+            parts.append({"shape": shape, "index": i, "I": apply_scaling_factor(I_sm, k)})
+
+        BG_curve = apply_scaling_factor(BG_total, k)
+
+        # 分辨率函数（显示用途）：exp(-0.5*(q/sigma)^2)
+        if sigma_Res is not None and sigma_Res > 0:
+            res_func = np.exp(-0.5 * (q_arr / sigma_Res) ** 2)
+        else:
+            res_func = np.zeros_like(q_arr, dtype=float)
+
+        # 若需要，将分辨率函数幅度缩放到与总强度同量级
+        if scale_resolution_to_total:
+            # 估计总强度（粒子+BG）并做同样的展宽
+            I_total_raw = np.zeros_like(q_arr, dtype=float)
+            for _, _, I_part in raw_particles:
+                I_total_raw += I_part
+            I_total_raw += BG_total
+            if sigma_Res is not None and sigma_Res > 0:
+                I_total_disp = gaussian_resolution_smear(q_arr, I_total_raw, sigma_Res)
+            else:
+                I_total_disp = I_total_raw
+            I_total_disp = apply_scaling_factor(I_total_disp, k)
+            amp = float(np.max(I_total_disp)) if I_total_disp.size else 1.0
+            res_curve = res_func * amp
+        else:
+            res_curve = res_func
+        # 也乘以全局 k 以符合“有个 k 保证一下 factor”的要求
+        res_curve = apply_scaling_factor(res_curve, k)
+
+        return {
+            'particles': parts,      # list of {shape,index,I}
+            'BG_total': BG_curve,    # ndarray
+            'resolution': res_curve, # ndarray
+        }

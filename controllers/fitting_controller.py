@@ -1033,6 +1033,14 @@ class UnifiedDisplayManager:
                 # 保存引用
                 self.controller._current_fit_canvas = canvas
                 self.controller._current_fit_figure = figure
+
+                # 在图形绘制完成后，如果处于log-x模式，调整ROI滑块/输入框的最小值到当前显示坐标轴的下限
+                try:
+                    if log_x and hasattr(self.controller, '_adjust_roi_bounds_for_log_x'):
+                        # 使用一个短延时，确保Qt将画布呈现后获取到最终xlim
+                        QTimer.singleShot(0, self.controller._adjust_roi_bounds_for_log_x)
+                except Exception:
+                    pass
                 
         except Exception as e:
             self.controller.status_updated.emit(f"Failed to update GUI 1D display: {str(e)}")
@@ -1277,6 +1285,15 @@ class FittingController(QObject):
         # 图像处理相关
         self.current_stack_data = None
         self.current_file_list = []
+        # 全局数据缓存（便于导出与复用）
+        self.data = None              # 当前显示（或最后加载）的单帧/合成数据
+        self.summed_data = None       # 若为堆叠叠加后的数据，则在此保存
+        self.cut = None               # 最近一次Cut的1D曲线 {'q':..., 'I':..., meta}
+        self.fitting = None           # 最近一次Fitting的1D曲线 {'q':..., 'I':..., meta}
+        # Q空间网格缓存（与当前图像及探测器参数一致时有效）
+        self.qy_matrix = None
+        self.qz_matrix = None
+        self.qr_matrix = None
         
         # 独立matplotlib窗口
         self.independent_window = None
@@ -1360,6 +1377,17 @@ class FittingController(QObject):
         self._display_mode = 'normal'  # 'normal' 或 'fitting'
         self._has_fitting_data = False  # 是否有拟合数据
         self._fitting_mode_active = False  # 是否处于拟合模式
+
+        # 统一信号模式配置（默认 finished，可按控件名覆盖为 changed）
+        self._default_signal_mode = 'finished'
+        self._signal_mode_overrides = {
+            # Fitting region 的滑块需要实时
+            'fitFittingRegionSlider': 'changed',
+            # Detector Para. 中的 Beam Center（若能识别到具体控件名，可在对话框创建后覆盖）
+            # 示例（待与对话框控件名对齐）:
+            # 'detectorBeamCenterX': 'changed',
+            # 'detectorBeamCenterY': 'changed',
+        }
         
         # 探测器参数对话框
         self.detector_params_dialog = None
@@ -1501,40 +1529,46 @@ class FittingController(QObject):
                 self.ui.fitDataPointsNumValue.setValue(int(max(10, self._points_num_current)))
             except Exception:
                 pass
-            # 使用 meta 注册：editingFinished 立即触发持久化，并更新稳定缓存
+            # 使用 meta 注册，并根据统一模式连接信号
             try:
                 def _dp_after_commit(info, value):
                     try:
                         self._points_num_current = int(value)
                     except Exception:
                         self._points_num_current = int(self._points_num_default)
-                    # 如果当前是 cut 模式，立刻按新点数重切一次
+                    # 记录变更前是否处于拟合模式
+                    was_fitting = self._is_in_fitting_mode() if hasattr(self, '_is_in_fitting_mode') else False
+
+                    # 根据数据源执行重切或重采样
                     if getattr(self, 'data_source', None) == 'cut':
                         self._perform_cut(points_override=int(self._points_num_current))
                     elif getattr(self, 'data_source', None) == '1d':
                         self._resample_1d(n_points=int(self._points_num_current))
 
+                    # 如果之前处于拟合模式，则重新执行拟合（_perform_manual_fitting内会设置拟合显示模式并刷新）
+                    if was_fitting:
+                        self._perform_manual_fitting()
+
+                mode = self._signal_mode_overrides.get('fitDataPointsNumValue', self._default_signal_mode)
                 self.param_trigger_manager.register_parameter_widget(
                     widget=self.ui.fitDataPointsNumValue,
                     widget_id='meta_fit_points_num',
                     category='fit_controls',
                     immediate_handler=lambda v: None,
                     delayed_handler=None,
-                    connect_signals=False,
+                    connect_signals=True,
                     meta={
                         'persist': 'global_params',
                         'key_path': ('fitting', 'fit.points_num'),
-                        'debounce_ms': 0,  # editingFinished 立即提交
+                        'debounce_ms': 0,
                         'epsilon_abs': 0,
                         'epsilon_rel': 0,
                         'after_commit': _dp_after_commit,
                         'trigger_fit': False,
+                        'connect_mode': mode,
                     }
                 )
-                # 只绑定 editingFinished 到 meta commit（避免滚轮 valueChanged 误触发）
-                self.ui.fitDataPointsNumValue.editingFinished.connect(
-                    lambda: self.param_trigger_manager._commit_meta_widget('meta_fit_points_num')
-                )
+                # 由 meta 管理器根据 connect_mode 自动连接
             except Exception:
                 # 回退到旧逻辑
                 self.ui.fitDataPointsNumValue.editingFinished.connect(self._on_points_num_finished)
@@ -1697,11 +1731,137 @@ class FittingController(QObject):
                 self.I_ROI = I[mask]
         # Redraw displays
         try:
-            # Update embedded main display in current mode
-            self._update_GUI_image(self.display_mode if hasattr(self, 'display_mode') else 'normal')
-            # Update fitting overlay if present
-            self._update_gui_fitting_display()
-            self._update_outside_window(self.display_mode)
+            # 仅当当前确实处于拟合模式时，才刷新拟合覆盖；避免在Normal模式下被动切换到Fitting
+            current_mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
+            if current_mode == 'fitting' or (hasattr(self, '_is_in_fitting_mode') and self._is_in_fitting_mode()):
+                self._update_gui_fitting_display()
+                current_mode = 'fitting'
+            # 按当前模式刷新主视图与外部窗口
+            self._update_GUI_image(current_mode)
+            self._update_outside_window(current_mode)
+        except Exception:
+            pass
+
+    # ---------------- ROI bounds adjustment for log-x -----------------
+    def _get_current_fit_axes(self):
+        """Try to get the current Matplotlib Axes used by the in-GUI 1D plot."""
+        try:
+            fig = getattr(self, '_current_fit_figure', None)
+            if fig is None:
+                return None
+            axes = getattr(fig, 'axes', None)
+            if not axes:
+                return None
+            return axes[0] if len(axes) > 0 else None
+        except Exception:
+            return None
+
+    def _compute_display_xmin_for_log(self) -> float:
+        """Compute a safe lower X bound to use when log-x is enabled.
+
+        Priority:
+        1) If current Axes exist, use its left xlim (must be > 0).
+        2) Else, use min positive finite q from current data (full q preferred).
+        3) Fallback to a tiny positive epsilon.
+        """
+        # 1) Try current axes xlim
+        try:
+            ax = self._get_current_fit_axes()
+            if ax is not None:
+                x0, _ = ax.get_xlim()
+                if np.isfinite(x0) and x0 > 0:
+                    return float(x0)
+        except Exception:
+            pass
+        # 2) Use data-based min positive q
+        try:
+            q_all = None
+            if self.q is not None:
+                q_all = np.asarray(self.q)
+            elif self.current_cut_data is not None and 'x_coords' in self.current_cut_data:
+                q_all = np.asarray(self.current_cut_data['x_coords'])
+            elif self.current_1d_data is not None and 'q' in self.current_1d_data:
+                q_all = np.asarray(self.current_1d_data['q'])
+            if q_all is not None and q_all.size > 0:
+                pos = q_all[np.isfinite(q_all) & (q_all > 0)]
+                if pos.size > 0:
+                    return float(np.min(pos))
+        except Exception:
+            pass
+        # 3) Fallback
+        return 1e-12
+
+    def _adjust_roi_bounds_for_log_x(self):
+        """When log-x is enabled, ensure ROI slider/spin ranges start from the displayed x-axis min (>0).
+
+        Also clamp current ROI values to the new bounds.
+        """
+        try:
+            log_x = self._is_fit_log_x_enabled()
+        except Exception:
+            log_x = False
+
+        if not hasattr(self.ui, 'fitFittingRegionSlider'):
+            return
+
+        try:
+            s = self.ui.fitFittingRegionSlider
+            # Determine full max from existing tracking or data
+            q_max = None
+            if self._q_full_max is not None:
+                q_max = float(self._q_full_max)
+            else:
+                try:
+                    q_all = np.asarray(self.q) if self.q is not None else None
+                    if q_all is not None and q_all.size > 0:
+                        q_max = float(np.nanmax(q_all[np.isfinite(q_all)]))
+                except Exception:
+                    q_max = None
+            if q_max is None:
+                return
+
+            if log_x:
+                xmin = self._compute_display_xmin_for_log()
+                # Ensure xmin < q_max
+                if not np.isfinite(xmin) or xmin <= 0 or xmin >= q_max:
+                    xmin = min(max(1e-12, (q_max * 1e-6)), q_max * 0.5)  # conservative fallback
+                new_min, new_max = float(xmin), float(q_max)
+            else:
+                # Restore to full valid data bounds if known
+                q_min = float(self._q_full_min) if self._q_full_min is not None else None
+                if q_min is None:
+                    try:
+                        q_all = np.asarray(self.q) if self.q is not None else None
+                        if q_all is not None and q_all.size > 0:
+                            q_min = float(np.nanmin(q_all[np.isfinite(q_all)]))
+                    except Exception:
+                        q_min = None
+                if q_min is None:
+                    return
+                new_min, new_max = float(q_min), float(q_max)
+
+            # Update control ranges and clamp current ROI values
+            self._updating_roi_controls = True
+            try:
+                s.setRangeF(new_min, new_max)
+                # Clamp current ROI values
+                if self._roi_min is None or self._roi_max is None:
+                    cur_min, cur_max = new_min, new_max
+                else:
+                    cur_min = max(new_min, min(float(self._roi_min), new_max))
+                    cur_max = max(cur_min, min(float(self._roi_max), new_max))
+                self._roi_min, self._roi_max = cur_min, cur_max
+                s.setMinValueF(cur_min)
+                s.setMaxValueF(cur_max)
+                # Update spinbox ranges to match
+                if hasattr(self.ui, 'fitFittingRegionMinValue'):
+                    self.ui.fitFittingRegionMinValue.setRange(new_min, new_max)
+                    self.ui.fitFittingRegionMinValue.setValue(cur_min)
+                if hasattr(self.ui, 'fitFittingRegionMaxValue'):
+                    self.ui.fitFittingRegionMaxValue.setRange(new_min, new_max)
+                    self.ui.fitFittingRegionMaxValue.setValue(cur_max)
+            finally:
+                self._updating_roi_controls = False
         except Exception:
             pass
 
@@ -1728,11 +1888,18 @@ class FittingController(QObject):
             user_settings.set('fit.points_num', int(n)); user_settings.save_settings()
         except Exception:
             pass
-        # Apply
-        if self.data_source == 'cut':
+        # 记录变更前是否处于拟合模式
+        was_fitting = self._is_in_fitting_mode() if hasattr(self, '_is_in_fitting_mode') else False
+
+        # Apply 重新切割/重采样
+        if getattr(self, 'data_source', None) == 'cut':
             self._perform_cut(points_override=n)
-        elif self.data_source == '1d':
+        elif getattr(self, 'data_source', None) == '1d':
             self._resample_1d(n_points=n)
+
+        # 如果之前在拟合模式，则重新进行拟合（_perform_manual_fitting会设置拟合显示并刷新）
+        if was_fitting:
+            self._perform_manual_fitting()
 
     def _on_interp_method_changed(self, method: str):
         meth = method or 'Linear'
@@ -1860,6 +2027,20 @@ class FittingController(QObject):
             self.ui.fitLogXCheckBox.toggled.connect(self._on_fit_log_changed)
         if hasattr(self.ui, 'fitLogYCheckBox'):
             self.ui.fitLogYCheckBox.toggled.connect(self._on_fit_log_changed)
+        
+        # 连接组件叠加显示复选框（若存在则即刻刷新拟合图）
+        for _name in [
+            'fitBGShowCheckBox',
+            'fitResShowCheckBox',
+            'fitParticle1ShowCheckBox',
+            'fitParticle2ShowCheckBox',
+            'fitParticle3ShowCheckBox',
+        ]:
+            if hasattr(self.ui, _name):
+                try:
+                    getattr(self.ui, _name).toggled.connect(self._on_component_checkbox_changed)
+                except Exception:
+                    pass
             
         # 连接Normalize复选框
         if hasattr(self.ui, 'OthersNormalizeCheckBox'):
@@ -1894,8 +2075,11 @@ class FittingController(QObject):
         if hasattr(self.ui, 'fitCurrentDataCheckBox'):
             self.ui.fitCurrentDataCheckBox.toggled.connect(self._on_current_data_checkbox_changed)
             
-        # 连接Cut Line和Center参数控件的信号（逆向选择功能）
-        self._connect_cutline_parameter_signals()
+        # 连接Cut Line和Center参数控件的信号（统一模式）
+        self._connect_cutline_parameter_signals(
+            mode=self._default_signal_mode,
+            overrides=self._signal_mode_overrides,
+        )
             
         # 连接参数输入框的信号（如果存在的话）
         self._connect_parameter_widgets()
@@ -1903,8 +2087,15 @@ class FittingController(QObject):
         # 连接FittingTextBrowser和状态信息
         self._setup_fitting_text_browser()
         
-    def _connect_cutline_parameter_signals(self):
-        """连接Cut Line/Center/Vmin/Vmax：使用 meta 去抖 & 持久化到 global_params (fitting.gisaxs_input.*)"""
+    def _connect_cutline_parameter_signals(self, mode: str = 'changed', overrides: dict = None):
+        """连接Cut Line/Center/Vmin/Vmax：使用 meta 去抖 & 持久化到 global_params
+        参数:
+            mode: 'changed' 或 'finished'。
+                  - 'changed': 实时 valueChanged/textChanged/currentTextChanged 触发 meta 去抖更新
+                  - 'finished': editingFinished/returnPressed 等提交时再持久化
+            overrides: 可选dict，键为控件对象名，值为该控件的模式('changed'|'finished')，用于覆盖全局 mode。
+        默认保持向后兼容：mode='changed'。
+        """
         from functools import partial
         mapping = [
             ('gisaxsInputCenterVerticalValue', 'center_vertical'),
@@ -1914,6 +2105,7 @@ class FittingController(QObject):
             ('gisaxsInputVminValue', 'vmin'),
             ('gisaxsInputVmaxValue', 'vmax'),
         ]
+        overrides = overrides or {}
         for widget_name, param_key in mapping:
             if not hasattr(self.ui, widget_name):
                 continue
@@ -1924,6 +2116,7 @@ class FittingController(QObject):
                     self._add_fitting_message(f"Meta commit GISAXS {p} = {value}", "INFO")
                 except Exception:
                     pass
+            widget_mode = overrides.get(widget_name, mode)
             meta = {
                 'persist': 'global_params',
                 'key_path': ('fitting', f'gisaxs_input.{param_key}'),
@@ -1932,6 +2125,7 @@ class FittingController(QObject):
                 'epsilon_abs': self._param_abs_eps,
                 'epsilon_rel': self._param_rel_eps,
                 'after_commit': _after_commit,
+                'connect_mode': widget_mode,
             }
             self.param_trigger_manager.register_parameter_widget(
                 widget=w,
@@ -1939,14 +2133,11 @@ class FittingController(QObject):
                 category='gisaxs_input',
                 immediate_handler=lambda v: None,
                 delayed_handler=None,
-                connect_signals=False,
+                connect_signals=True,
                 meta=meta
             )
-            try:
-                w.valueChanged.connect(partial(self.param_trigger_manager._on_meta_value_changed, f'meta_gisaxs_{param_key}'))
-            except Exception:
-                pass
-    
+            # 由 meta 管理器根据 connect_mode 自动连接，无需手动连接
+
     def _connect_parameter_widgets(self):
         """连接参数输入控件的信号"""
         # 这里可以根据UI文件中的具体控件来连接
@@ -2782,6 +2973,15 @@ class FittingController(QObject):
         try:
             # 存储当前数据
             self.current_stack_data = image_data
+            # 同步全局缓存，便于导出/后续计算
+            self.data = image_data
+            try:
+                sc = int(self.current_parameters.get('stack_count', 1))
+            except Exception:
+                sc = 1
+            self.summed_data = image_data if sc and sc > 1 else None
+            # 重新计算并缓存Q空间网格（qy, qz, qr）
+            self._compute_q_meshgrids_and_store()
             
             # 处理颜色标尺逻辑
             self._handle_color_scale(image_data)
@@ -2806,6 +3006,46 @@ class FittingController(QObject):
             
         except Exception as e:
             self.status_updated.emit(f"Display error: {str(e)}")
+
+    def _compute_q_meshgrids_and_store(self):
+        """根据当前图像及探测器参数计算并缓存 qy/qz/qr 网格。"""
+        try:
+            if self.current_stack_data is None:
+                return
+            from core.global_params import GlobalParameterManager
+            from utils.q_space_calculator import create_detector_from_image_and_params
+            global_params = GlobalParameterManager()
+            height, width = self.current_stack_data.shape
+            pixel_size_x = global_params.get_parameter('fitting', 'detector.pixel_size_x', 172.0)
+            pixel_size_y = global_params.get_parameter('fitting', 'detector.pixel_size_y', 172.0)
+            beam_center_x = global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0)
+            beam_center_y = global_params.get_parameter('fitting', 'detector.beam_center_y', height / 2.0)
+            distance = global_params.get_parameter('fitting', 'detector.distance', 2565.0)
+            theta_in_deg = global_params.get_parameter('beam', 'grazing_angle', 0.4)
+            wavelength = global_params.get_parameter('beam', 'wavelength', 0.1045)
+            detector = create_detector_from_image_and_params(
+                image_shape=(height, width),
+                pixel_size_x=pixel_size_x,
+                pixel_size_y=pixel_size_y,
+                beam_center_x=beam_center_x,
+                beam_center_y=beam_center_y,
+                distance=distance,
+                theta_in_deg=theta_in_deg,
+                wavelength=wavelength,
+                crop_params=None
+            )
+            qy_mesh, qz_mesh = detector.get_qy_qz_meshgrids()
+            self.qy_matrix = qy_mesh
+            self.qz_matrix = qz_mesh
+            try:
+                self.qr_matrix = np.sqrt(np.square(qy_mesh) + np.square(qz_mesh))
+            except Exception:
+                self.qr_matrix = None
+        except Exception:
+            # 失败则清空缓存，不中断主流程
+            self.qy_matrix = None
+            self.qz_matrix = None
+            self.qr_matrix = None
     
     def _update_graphics_view(self, image_data):
         """更新GraphicsView中的图像显示"""
@@ -3109,6 +3349,12 @@ class FittingController(QObject):
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
                 # 连接Positive Only复选框到更新函数
                 self.independent_fit_window.show_positive_cb.toggled.connect(self._on_positive_only_changed)
+                # 与主界面的“Positive Only”状态保持一致
+                try:
+                    if hasattr(self.ui, 'PositiveOnlyCheckBox'):
+                        self.independent_fit_window.show_positive_cb.setChecked(self.ui.PositiveOnlyCheckBox.isChecked())
+                except Exception:
+                    pass
                 
                 # 显示窗口
                 self.independent_fit_window.show()
@@ -3116,8 +3362,30 @@ class FittingController(QObject):
                 self.independent_fit_window.activateWindow()
             
             # 立即更新窗口内容（确保双击后直接显示完整内容）
-            mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
-            self._update_outside_window(mode)
+            # 修正策略：以当前显示模式为主；仅当“确实处于拟合模式”时才强制使用fitting
+            mode = (self.display_mode if hasattr(self, 'display_mode') else 'normal')
+            try:
+                if hasattr(self, '_is_in_fitting_mode') and callable(self._is_in_fitting_mode) and self._is_in_fitting_mode():
+                    mode = 'fitting'
+            except Exception:
+                pass
+            # 若没有可用的拟合数据，则强制回退到 normal 模式，避免以“空拟合”模式打开外置窗口
+            try:
+                has_fit = bool(getattr(self, 'has_fitting_data', False) and getattr(self, 'I_fitting', None) is not None)
+                if mode == 'fitting' and not has_fit:
+                    mode = 'normal'
+            except Exception:
+                pass
+
+            # 关键修正：若以拟合模式打开，先确保GUI中的拟合图刷新（同步内部状态与ROI/Normalize等），再刷新外部窗口
+            if mode == 'fitting':
+                try:
+                    self._update_gui_fitting_display()
+                except Exception:
+                    pass
+                self._update_outside_window('fitting')
+            else:
+                self._update_outside_window(mode)
             
             # 确保窗口获得焦点
             if hasattr(self.independent_fit_window, 'canvas'):
@@ -4169,6 +4437,11 @@ class FittingController(QObject):
             
             # 如果Q轴显示状态改变，需要转换现有的数值
             self._update_parameter_values_for_q_axis()
+            # 探测器相关参数修改后，重计算Q空间网格缓存
+            try:
+                self._compute_q_meshgrids_and_store()
+            except Exception:
+                pass
             
             # 检查是否已经有Cut结果数据，如果有则自动重新执行Cut操作
             if (self.current_cut_data is not None and 
@@ -4680,9 +4953,24 @@ class FittingController(QObject):
                 self._perform_vertical_cut(vertical_value, parallel_value, points_override=n_points_cut)
                 self.status_updated.emit(f"Vertical cut performed: Vertical={vertical_value:.2f}, Parallel={parallel_value:.2f}, Points={n_points_cut}")
             
-            # 5. 设置为Cut模式，切换显示模式为normal
+            # 5. 设置为Cut模式，切换显示模式为 normal，并显式退出拟合模式
             self.data_source = 'cut'
-            self.display_mode = 'normal'
+            # 统一切换到 Normal 模式，确保内部拟合状态标志被重置
+            try:
+                if hasattr(self, '_switch_to_normal_display_mode') and callable(self._switch_to_normal_display_mode):
+                    self._switch_to_normal_display_mode()
+                else:
+                    # 兜底：直接重置相关标志位
+                    self.display_mode = 'normal'
+                    if hasattr(self, '_display_mode'):
+                        self._display_mode = 'normal'
+                    if hasattr(self, '_fitting_mode_active'):
+                        self._fitting_mode_active = False
+                # 无论采用何种路径，保持对外的 display_mode 一致为 normal
+                self.display_mode = 'normal'
+            except Exception:
+                # 再次兜底，至少保证对外 display_mode 为 normal
+                self.display_mode = 'normal'
             if hasattr(self.ui, 'fitCurrentDataCheckBox'):
                 try:
                     self.ui.fitCurrentDataCheckBox.blockSignals(True)
@@ -4773,6 +5061,53 @@ class FittingController(QObject):
                           label=f'{self.data_source.upper()} Data' if self.data_source else 'Data', zorder=2)
             # ROI 辅助线
             self._draw_roi_guides_if_active(ax)
+
+            # 叠加组件曲线（BG、Res、Particles），使用虚线并基于最近一次拟合参数（仅在fitting模式显示）
+            try:
+                # 使用最新的复选框对象名称
+                show_bg = self._get_checkbox_state('fitBGShowCheckBox', False)
+                show_res = self._get_checkbox_state('fitResShowCheckBox', False)
+                show_p1 = self._get_checkbox_state('fitParticle1ShowCheckBox', False)
+                show_p2 = self._get_checkbox_state('fitParticle2ShowCheckBox', False)
+                show_p3 = self._get_checkbox_state('fitParticle3ShowCheckBox', False)
+                show_any = show_bg or show_res or show_p1 or show_p2 or show_p3
+            except Exception:
+                show_any = False
+
+            # 组件曲线归一化与数据一致
+            norm_divisor = norm_factor if normalize and norm_factor > 0 else None
+            if mode == 'fitting' and show_any:
+                shapes, params_list = self._get_last_fitting_spec_and_params()
+                if shapes and params_list:
+                    try:
+                        from utils.fitting import mixed_model_components
+                        comp = mixed_model_components(shapes, q_data, params_list)
+                        # BG
+                        if show_bg and comp.get('BG_total') is not None:
+                            y_bg = comp['BG_total'] / norm_divisor if norm_divisor else comp['BG_total']
+                            ax.plot(q_data, y_bg, linestyle='--', color='#666666', linewidth=1.5, label='bg', zorder=2)
+                        # Resolution function
+                        if show_res and comp.get('resolution') is not None:
+                            y_res = comp['resolution'] / norm_divisor if norm_divisor else comp['resolution']
+                            ax.plot(q_data, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
+                        # Particles
+                        particle_flags = {1: show_p1, 2: show_p2, 3: show_p3}
+                        colors = ['#1f77b4', '#2ca02c', '#ff7f0e']
+                        for item in comp.get('particles', []):
+                            idx = int(item.get('index', 0))
+                            if particle_flags.get(idx, False):
+                                yv = item.get('I')
+                                if yv is not None:
+                                    shape_name = str(item.get('shape', 'Particle')).capitalize()
+                                    color = colors[(idx-1) % len(colors)]
+                                    yv_plot = yv / norm_divisor if norm_divisor else yv
+                                    ax.plot(q_data, yv_plot, linestyle='--', color=color, linewidth=1.5, label=f'{shape_name} {idx}', zorder=2)
+                        # 刷新图例以包含新线
+                        ax.legend()
+                    except Exception:
+                        pass
+
+            #（组件叠加显示仅在 _plot_fitting_result 中实现，避免在普通更新路径重复绘制）
             
             # 如果是fitting模式且有拟合数据，绘制拟合曲线（按ROI对齐）
             if mode == 'fitting' and self.has_fitting_data and self.I_fitting is not None:
@@ -4823,9 +5158,6 @@ class FittingController(QObject):
             if not hasattr(self, 'independent_fit_window') or self.independent_fit_window is None or not self.independent_fit_window.isVisible():
                 return
                 
-            if not self._has_valid_data():
-                return
-                
             # 获取显示选项
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
@@ -4834,9 +5166,38 @@ class FittingController(QObject):
             # 检查"Positive Only"复选框状态
             positive_only = self._is_positive_only_enabled()
             
-            # 处理数据（使用ROI子集如果激活），并过滤非有限值
-            q_data, I_data = self._get_roi_active_arrays()
-            if q_data is None or I_data is None:
+            # 选择数据源，并应用ROI（如果激活）与有效性过滤
+            q_data = None
+            I_data = None
+            try:
+                if mode == 'normal':
+                    # Normal 模式：严格与内嵌视图一致，直接使用 self._get_roi_active_arrays()
+                    q_data, I_data = self._get_roi_active_arrays()
+                else:
+                    # Fitting 模式：遵循数据源选择（Current Cut 优先，其次 1D，再回退到全局）
+                    use_current_cut = hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked()
+                    if use_current_cut and getattr(self, 'current_cut_data', None) is not None:
+                        q_src = np.asarray(self.current_cut_data.get('x_coords', []))
+                        I_src = np.asarray(self.current_cut_data.get('y_intensity', []))
+                        if self._roi_active() and q_src.size > 0:
+                            mask = (q_src >= self._roi_min) & (q_src <= self._roi_max)
+                            if np.any(mask):
+                                q_src = q_src[mask]; I_src = I_src[mask]
+                        q_data, I_data = q_src, I_src
+                    elif getattr(self, 'current_1d_data', None) is not None:
+                        q_src = np.asarray(self.current_1d_data.get('q', []))
+                        I_src = np.asarray(self.current_1d_data.get('I', []))
+                        if self._roi_active() and q_src.size > 0:
+                            mask = (q_src >= self._roi_min) & (q_src <= self._roi_max)
+                            if np.any(mask):
+                                q_src = q_src[mask]; I_src = I_src[mask]
+                        q_data, I_data = q_src, I_src
+                    else:
+                        q_data, I_data = self._get_roi_active_arrays()
+            except Exception:
+                q_data, I_data = self._get_roi_active_arrays()
+
+            if q_data is None or I_data is None or len(q_data) == 0 or len(I_data) == 0:
                 return
             finite_mask = np.isfinite(q_data) & np.isfinite(I_data)
             q_data = q_data[finite_mask]
@@ -4889,6 +5250,48 @@ class FittingController(QObject):
                           label=f'{self.data_source.upper()} Data' if self.data_source else 'Data', zorder=2)
             # ROI 辅助线
             self._draw_roi_guides_if_active(ax)
+
+            # 叠加组件曲线（BG、Res、Particles），仅在fitting模式显示
+            try:
+                show_bg = self._get_checkbox_state('fitBGShowCheckBox', False)
+                show_res = self._get_checkbox_state('fitResShowCheckBox', False)
+                show_p1 = self._get_checkbox_state('fitParticle1ShowCheckBox', False)
+                show_p2 = self._get_checkbox_state('fitParticle2ShowCheckBox', False)
+                show_p3 = self._get_checkbox_state('fitParticle3ShowCheckBox', False)
+                show_any = show_bg or show_res or show_p1 or show_p2 or show_p3
+            except Exception:
+                show_any = False
+
+            if mode == 'fitting' and show_any:
+                shapes, params_list = self._get_last_fitting_spec_and_params()
+                if shapes and params_list:
+                    try:
+                        from utils.fitting import mixed_model_components
+                        comp = mixed_model_components(shapes, q_data, params_list)
+                        norm_divisor = norm_factor if normalize and norm_factor > 0 else None
+                        # BG
+                        if show_bg and comp.get('BG_total') is not None:
+                            y_bg = comp['BG_total'] / norm_divisor if norm_divisor else comp['BG_total']
+                            ax.plot(q_data, y_bg, linestyle='--', color='#666666', linewidth=1.5, label='bg', zorder=2)
+                        # Resolution function
+                        if show_res and comp.get('resolution') is not None:
+                            y_res = comp['resolution'] / norm_divisor if norm_divisor else comp['resolution']
+                            ax.plot(q_data, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
+                        # Particles
+                        particle_flags = {1: show_p1, 2: show_p2, 3: show_p3}
+                        colors = ['#1f77b4', '#2ca02c', '#ff7f0e']
+                        for item in comp.get('particles', []):
+                            idx = int(item.get('index', 0))
+                            if particle_flags.get(idx, False):
+                                yv = item.get('I')
+                                if yv is not None:
+                                    shape_name = str(item.get('shape', 'Particle')).capitalize()
+                                    color = colors[(idx-1) % len(colors)]
+                                    yv_plot = yv / norm_divisor if norm_divisor else yv
+                                    ax.plot(q_data, yv_plot, linestyle='--', color=color, linewidth=1.5, label=f'{shape_name} {idx}', zorder=2)
+                        ax.legend()
+                    except Exception:
+                        pass
             
             # 如果是fitting模式且有拟合数据，绘制拟合曲线（与数据对齐，并考虑Positive Only）
             if mode == 'fitting' and self.has_fitting_data and self.I_fitting is not None:
@@ -5281,6 +5684,23 @@ class FittingController(QObject):
                 'y_label': y_label,
                 'title': title
             }
+            # 统一的全局Cut缓存（q轴数据命名为q，便于导出与复用）
+            try:
+                import time
+                self.cut = {
+                    'q': x_arr.copy() if hasattr(x_arr, 'copy') else np.array(x_arr),
+                    'I': y_arr.copy() if hasattr(y_arr, 'copy') else np.array(y_arr),
+                    'meta': {
+                        'x_label': x_label,
+                        'y_label': y_label,
+                        'title': title,
+                        'timestamp': time.time(),
+                        'source': 'cut'
+                    }
+                }
+            except Exception:
+                # 若失败，至少保证基本结构
+                self.cut = {'q': x_arr, 'I': y_arr, 'meta': {'source': 'cut'}}
             
             if not is_matplotlib_available():
                 QMessageBox.warning(self.main_window, "Missing Library",
@@ -5797,10 +6217,18 @@ class FittingController(QObject):
                             has_data = (hasattr(self, 'current_cut_data') and self.current_cut_data is not None) or \
                                        (hasattr(self, 'current_1d_data') and self.current_1d_data is not None)
                             if has_data:
+                                # 修改拟合参数意味着用户意图进行拟合显示：先进入拟合模式
+                                try:
+                                    self.display_mode = 'fitting'
+                                    self._display_mode = 'fitting'
+                                    self._fitting_mode_active = True
+                                except Exception:
+                                    pass
                                 # 进入拟合模式或保持当前模式下刷新 1D 曲线
                                 self._perform_manual_fitting()
                         except Exception:
                             pass
+                    widget_mode = self._signal_mode_overrides.get(widget_name, self._default_signal_mode)
                     meta = {
                         'persist': 'model_particle',
                         'particle_id': f'particle_{widget_id}',
@@ -5811,6 +6239,7 @@ class FittingController(QObject):
                         'epsilon_abs': self._param_abs_eps,
                         'epsilon_rel': self._param_rel_eps,
                         'after_commit': _after_commit,
+                        'connect_mode': widget_mode,
                     }
                     self.param_trigger_manager.register_parameter_widget(
                         widget=w,
@@ -5818,13 +6247,10 @@ class FittingController(QObject):
                         category='fitting_particles',
                         immediate_handler=lambda v: None,
                         delayed_handler=None,
-                        connect_signals=False,
+                        connect_signals=True,
                         meta=meta
                     )
-                    try:
-                        w.valueChanged.connect(partial(self.param_trigger_manager._on_meta_value_changed, f'meta_particle_{widget_id}_{shape_lower}_{param_key}'))
-                    except Exception:
-                        pass
+                    # 由 meta 管理器根据 connect_mode 自动连接
     
     def _setup_global_parameter_connections(self):
         """设置全局拟合参数控件的信号连接（meta 去抖）"""
@@ -5843,9 +6269,17 @@ class FittingController(QObject):
                     has_data = (hasattr(self, 'current_cut_data') and self.current_cut_data is not None) or \
                                (hasattr(self, 'current_1d_data') and self.current_1d_data is not None)
                     if has_data:
+                        # 修改全局拟合参数同样视作拟合模式
+                        try:
+                            self.display_mode = 'fitting'
+                            self._display_mode = 'fitting'
+                            self._fitting_mode_active = True
+                        except Exception:
+                            pass
                         self._perform_manual_fitting()
                 except Exception:
                     pass
+            widget_mode = self._signal_mode_overrides.get(widget_name, self._default_signal_mode)
             meta = {
                 'persist': 'model_global',
                 'param': param_key,
@@ -5854,6 +6288,7 @@ class FittingController(QObject):
                 'epsilon_abs': self._param_abs_eps,
                 'epsilon_rel': self._param_rel_eps,
                 'after_commit': _after_commit,
+                'connect_mode': widget_mode,
             }
             self.param_trigger_manager.register_parameter_widget(
                 widget=w,
@@ -5861,14 +6296,11 @@ class FittingController(QObject):
                 category='fitting_global',
                 immediate_handler=lambda v: None,
                 delayed_handler=None,
-                connect_signals=False,
+                connect_signals=True,
                 meta=meta
             )
-            try:
-                w.valueChanged.connect(partial(self.param_trigger_manager._on_meta_value_changed, f'meta_global_{param_key}'))
-            except Exception:
-                pass
-            self._add_fitting_message(f"Connected (meta) {widget_name}", "INFO")
+            # 由 meta 管理器根据 connect_mode 自动连接
+            self._add_fitting_message(f"Connected (meta, mode={self._signal_mode_overrides.get(widget_name, self._default_signal_mode)}) {widget_name}", "INFO")
 
     
     def _initialize_global_parameters(self):
@@ -6541,6 +6973,18 @@ class FittingController(QObject):
                 self.ui.fitKValue.setValue(k_opt)
                 self.ui.fitKValue.blockSignals(False)
                 self._add_fitting_message(f"UI K-value updated to {k_opt:.6f}")
+
+            # 同步更新当前拟合元数据中的 k 值，确保叠加组件使用最新的 k
+            try:
+                if isinstance(getattr(self, 'fitting', None), dict):
+                    meta = self.fitting.get('meta') or {}
+                    params_meta = meta.get('params') or {}
+                    # params_template 末尾使用键名 'k'
+                    params_meta['k'] = float(k_opt)
+                    meta['params'] = params_meta
+                    self.fitting['meta'] = meta
+            except Exception:
+                pass
             
             # 步骤6：更新显示
             self._update_GUI_image('fitting')
@@ -6675,37 +7119,51 @@ class FittingController(QObject):
                 self._add_fitting_error("fitGraphicsView is not available")
                 return
             
-            # 检查图形视图是否有绘图数据
-            scene = self.ui.fitGraphicsView.scene()
-            if scene is None or len(scene.items()) == 0:
-                self._add_fitting_error("No plot data available to export")
+            # 构造可导出数据源选项
+            options = []
+            if getattr(self, 'cut', None) is not None:
+                options.append('Cut Data')
+            if getattr(self, 'fitting', None) is not None:
+                options.append('Fitting Data')
+            if getattr(self, 'current_1d_data', None) is not None:
+                options.append('1D File Data')
+            if not options:
+                self._add_fitting_error("No available data to export (need Cut, Fitting, or 1D data)")
                 return
-            
-            # 根据fitCurrentDataCheckBox的状态确定导出数据源
+
+            # 默认选项：优先Cut，其次Fitting，再次1D
+            default_index = 0
+            # 让用户选择要导出的数据类型
+            choice, ok = QInputDialog.getItem(
+                None,
+                "Select Data to Export",
+                "Data source:",
+                options,
+                default_index,
+                False
+            )
+            if not ok:
+                return
+
+            # 根据选择填充x/y
             x_data = None
             y_data = None
             data_name = ""
-            
-            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
-                # 导出Cut数据
-                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
-                    # Cut数据格式: {'x_coords': [...], 'y_intensity': [...], ...}
-                    x_data = np.array(self.current_cut_data['x_coords'])
-                    y_data = np.array(self.current_cut_data['y_intensity'])
-                    data_name = "Cut_Data"
-                else:
-                    self._add_fitting_error("No Cut data available to export")
-                    return
+            if choice == 'Cut Data' and self.cut is not None:
+                x_data = np.array(self.cut.get('q', []))
+                y_data = np.array(self.cut.get('I', []))
+                data_name = 'Cut_Data'
+            elif choice == 'Fitting Data' and self.fitting is not None:
+                x_data = np.array(self.fitting.get('q', []))
+                y_data = np.array(self.fitting.get('I', []))
+                data_name = 'Fitting_Data'
+            elif choice == '1D File Data' and self.current_1d_data is not None:
+                x_data = np.array(self.current_1d_data.get('q', []))
+                y_data = np.array(self.current_1d_data.get('I', []))
+                data_name = '1D_File_Data'
             else:
-                # 导出1D文件数据
-                if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
-                    # 1D数据格式: {'q': [...], 'I': [...], 'err': [...], ...}
-                    x_data = np.array(self.current_1d_data['q'])
-                    y_data = np.array(self.current_1d_data['I'])
-                    data_name = "1D_File_Data"
-                else:
-                    self._add_fitting_error("No 1D file data available to export")
-                    return
+                self._add_fitting_error("Selected data is not available to export")
+                return
             
             # 弹出文件保存对话框
             filename, _ = QFileDialog.getSaveFileName(
@@ -6743,7 +7201,7 @@ class FittingController(QObject):
     def _perform_manual_fitting(self):
         """执行手动拟合计算"""
         try:
-            from utils.fitting import make_mixed_model, params_template
+            from utils.fitting import make_mixed_model, params_template, mixed_model_components
             
             # 1. 判断粒子形状ComboBox的状态
             active_shapes = []
@@ -6879,6 +7337,26 @@ class FittingController(QObject):
                 # 存储拟合结果到 I_fitting
                 self.I_fitting = fitting_result
                 self.has_fitting_data = True
+                # 保持与另外一套状态标志同步
+                try:
+                    self._has_fitting_data = True
+                except Exception:
+                    pass
+                # 全局缓存：fitting 曲线（包含参数与形状信息）
+                try:
+                    import time
+                    self.fitting = {
+                        'q': np.array(q_data, copy=True),
+                        'I': np.array(fitting_result, copy=True),
+                        'meta': {
+                            'shapes': active_shapes,
+                            'params': param_dict,
+                            'timestamp': time.time(),
+                            'source': 'fitting'
+                        }
+                    }
+                except Exception:
+                    self.fitting = {'q': q_data, 'I': fitting_result, 'meta': {'source': 'fitting'}}
                 
                 # 切换显示模式为 Fitting with data
                 self.display_mode = 'fitting'
@@ -6918,7 +7396,9 @@ class FittingController(QObject):
     def _switch_to_fitting_display_mode(self):
         """切换到拟合显示模式（仅在外部窗口成功打开时调用）"""
         try:
+            # 同步更新显示模式（内部+对外）
             self._display_mode = 'fitting'
+            self.display_mode = 'fitting'
             self._fitting_mode_active = True
             
             # 更新GUI和外部窗口的显示
@@ -6930,7 +7410,9 @@ class FittingController(QObject):
     def _switch_to_normal_display_mode(self):
         """切换到普通显示模式（Normal mode）"""
         try:
+            # 同步更新显示模式（内部+对外）
             self._display_mode = 'normal'
+            self.display_mode = 'normal'
             self._fitting_mode_active = False
             
             # 清除拟合相关数据（如果有的话）
@@ -6938,6 +7420,12 @@ class FittingController(QObject):
             self._fitting_intensity_data = None
             self._fitting_shapes = []
             self._has_fitting_data = False
+            # 统一清理通用拟合状态，避免残留导致绘图逻辑误判
+            try:
+                self.has_fitting_data = False
+                self.I_fitting = None
+            except Exception:
+                pass
             
         except Exception as e:
             pass
@@ -6947,6 +7435,13 @@ class FittingController(QObject):
         try:
             if not hasattr(self, '_fitting_q_data') or self._fitting_q_data is None:
                 return
+            # 一旦更新拟合图像，则视为进入拟合模式（满足“更新了fitting图像就是fitting模式”的期望）
+            try:
+                self.display_mode = 'fitting'
+                self._display_mode = 'fitting'
+                self._fitting_mode_active = True
+            except Exception:
+                pass
                 
             # 在GUI中显示拟合结果，但不改变显示模式
             self._plot_fitting_result(self._fitting_q_data, self._fitting_intensity_data, self._fitting_shapes)
@@ -7124,11 +7619,13 @@ class FittingController(QObject):
             # 应用标准化处理
             fitting_y_data = np.array(intensity_data)  # 拟合数据不进行归一化
             plot_original_y = original_y_data.copy() if original_y_data is not None else None
+            norm_divisor = None
             
             if normalize and original_y_data is not None:
                 # 只对原始数据进行标准化，拟合数据保持原始
                 max_original = np.max(original_y_data)
                 if max_original > 0:
+                    norm_divisor = max_original
                     plot_original_y = original_y_data / max_original
                     # 拟合数据按照同样的比例缩放以保持相对关系
                     fitting_y_data = fitting_y_data / max_original
@@ -7199,6 +7696,93 @@ class FittingController(QObject):
             
         except Exception as e:
             self._add_fitting_error(f"Failed to plot fitting result: {str(e)}")
+
+    def _get_last_fitting_spec_and_params(self, fallback_shapes=None):
+        """返回 (shapes:list[str], params_in_order:list[float])。
+        优先读取 self.fitting['meta'] 中的 shapes 与 params（与当前显示拟合结果一致）。
+        若缺失则根据当前 UI 重新抓取参数作为后备。
+        """
+        try:
+            shapes = None; param_dict = None
+            if isinstance(getattr(self, 'fitting', None), dict):
+                meta = self.fitting.get('meta', {})
+                shapes = meta.get('shapes')
+                param_dict = meta.get('params')
+            if shapes and param_dict:
+                from utils.fitting import params_template
+                tmpl = params_template(shapes)
+                params_list = []
+                ok = True
+                for name in tmpl:
+                    if name in param_dict:
+                        params_list.append(float(param_dict[name]))
+                    else:
+                        ok = False; break
+                if ok:
+                    return shapes, params_list
+            # 回退到根据 UI 取参数
+            act_shapes = []
+            act_idx = []
+            for i in range(1, 4):
+                cb_name = f'fitParticleShapeCombox_{i}'
+                if hasattr(self.ui, cb_name):
+                    cb = getattr(self.ui, cb_name)
+                    txt = cb.currentText()
+                    if txt and txt.lower() != 'none':
+                        act_shapes.append(txt.lower()); act_idx.append(i)
+            if not act_shapes:
+                return (fallback_shapes, None) if fallback_shapes else (None, None)
+            # 逐形状按模板顺序取值
+            params_list = []
+            for j, s in enumerate(act_shapes, 1):
+                if s == 'sphere':
+                    params_list.extend([
+                        self._get_particle_parameter(act_idx[j-1], 'Int', 1.0),
+                        self._get_particle_parameter(act_idx[j-1], 'R', 10.0),
+                        self._get_particle_parameter(act_idx[j-1], 'sigma_R', 0.1),
+                        self._get_particle_parameter(act_idx[j-1], 'D', 100.0),
+                        self._get_particle_parameter(act_idx[j-1], 'sigma_D', 0.1),
+                        self._get_particle_parameter(act_idx[j-1], 'BG', 0.0),
+                    ])
+                elif s == 'cylinder':
+                    params_list.extend([
+                        self._get_particle_parameter(act_idx[j-1], 'Int', 1.0),
+                        self._get_particle_parameter(act_idx[j-1], 'R', 10.0),
+                        self._get_particle_parameter(act_idx[j-1], 'sigma_R', 0.1),
+                        self._get_particle_parameter(act_idx[j-1], 'h', 20.0),
+                        self._get_particle_parameter(act_idx[j-1], 'sigma_h', 0.1),
+                        self._get_particle_parameter(act_idx[j-1], 'D', 100.0),
+                        self._get_particle_parameter(act_idx[j-1], 'sigma_D', 0.1),
+                        self._get_particle_parameter(act_idx[j-1], 'BG', 0.0),
+                    ])
+            # 追加 sigma_Res, k
+            if hasattr(self.ui, 'fitSigmaResValue'):
+                sigma_res_val = float(self.ui.fitSigmaResValue.value())
+            else:
+                sigma_res_val = float(self.get_global_parameter('sigma_res')) if hasattr(self, 'get_global_parameter') else 0.0
+            if hasattr(self.ui, 'fitKValue'):
+                k_val = float(self.ui.fitKValue.value())
+            else:
+                k_val = float(self.get_global_parameter('k_value')) if hasattr(self, 'get_global_parameter') else 1.0
+            params_list.extend([sigma_res_val, k_val])
+            return act_shapes, [float(x) for x in params_list]
+        except Exception:
+            return (fallback_shapes, None) if fallback_shapes else (None, None)
+
+    def _on_component_checkbox_changed(self, *_):
+        """组件叠加显示选项变更时，根据模式决定是否刷新。
+
+        需求：Normal 模式下不触发任何重绘；仅在 Fitting 模式下刷新叠加组件显示。
+        """
+        try:
+            # 仅在拟合模式下响应这些复选框变化
+            if not self._is_in_fitting_mode():
+                return
+            # 在拟合模式下刷新显示；组件曲线会从最近拟合或UI参数获取
+            self._update_GUI_image('fitting')
+            self._update_outside_window('fitting')
+        except Exception:
+            pass
     
     def _show_fitting_in_external_window(self, q_data, intensity_data, active_shapes):
         """在外置窗口中显示拟合结果，返回是否成功打开"""
@@ -7531,6 +8115,11 @@ class FittingController(QObject):
             self._update_GUI_image(mode)
             self._update_outside_window(mode)
             self.status_updated.emit("Display log scale updated")
+            # 同时调整ROI的范围（log-x下将最小值设置为当前显示坐标轴的下限）
+            try:
+                QTimer.singleShot(0, self._adjust_roi_bounds_for_log_x)
+            except Exception:
+                self._adjust_roi_bounds_for_log_x()
         except Exception as e:
             self.status_updated.emit(f"Error updating log scale: {str(e)}")
 
@@ -7725,23 +8314,23 @@ class FittingController(QObject):
             if not hasattr(self.ui, 'fitGraphicsView'):
                 return
                 
-            # 使用现有的拟合图形界面
+            # Use the existing fitting GUI figure and canvas
             if hasattr(self, '_current_fit_figure') and self._current_fit_figure is not None:
                 self._current_fit_figure.clear()
                 ax = self._current_fit_figure.add_subplot(111)
                 
-                # 处理数据
+                # Processing data
                 plot_y = y_data.copy()
                 if normalize:
                     max_val = np.max(y_data)
                     if max_val > 0:
                         plot_y = y_data / max_val
                 
-                # 绘制数据点
+                # Plotting data points
                 ax.scatter(x_data, plot_y, s=30, alpha=0.7, color='blue', 
                           label=data_label, zorder=2)
                 
-                # 设置标签和样式
+                # Setting up labels and styles
                 x_label = "q (Å$^{-1}$)"
                 y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
                 title = f'Fitting Display Mode - {data_label}'
@@ -7752,13 +8341,13 @@ class FittingController(QObject):
                 ax.grid(True, alpha=0.3)
                 ax.legend()
                 
-                # 设置对数坐标
+                # Setting logarithmic coordinates
                 if log_x:
                     ax.set_xscale('log')
                 if log_y:
                     ax.set_yscale('log')
                     
-                # 刷新画布
+                # Refresh Canvas
                 if hasattr(self, '_current_fit_canvas') and self._current_fit_canvas is not None:
                     self._current_fit_canvas.draw()
                     
