@@ -9,17 +9,46 @@ import subprocess
 import sys
 
 def convert_ui_file(ui_path, py_path):
-    """转换单个UI文件"""
+    """转换单个UI文件
+
+    优先使用系统命令 `pyuic5`，若不可用或失败，则回退到
+    `python -m PyQt5.uic.pyuic` 使用当前解释器执行。
+    """
+    # 确保输出目录存在
+    out_dir = os.path.dirname(py_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    ui_name = os.path.basename(ui_path)
+    py_name = os.path.basename(py_path)
+
+    # 1) 首选: 直接调用 pyuic5
     try:
         cmd = ['pyuic5', '-x', ui_path, '-o', py_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        print(f"✓ {os.path.basename(ui_path)} -> {os.path.basename(py_path)}")
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print(f"✓ {ui_name} -> {py_name} (pyuic5)")
+        return True
+    except FileNotFoundError:
+        # pyuic5 不存在 -> 走回退方案
+        pass
+    except subprocess.CalledProcessError as e:
+        # pyuic5 存在但执行失败 -> 尝试回退方案
+        err = (e.stderr or '').strip()
+        print(f"⚠ 使用 pyuic5 转换失败: {ui_name} -> {py_name}: {err}")
+
+    # 2) 回退: 使用 python -m PyQt5.uic.pyuic
+    try:
+        cmd = [sys.executable, '-m', 'PyQt5.uic.pyuic', ui_path, '-o', py_path]
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print(f"✓ {ui_name} -> {py_name} (python -m PyQt5.uic.pyuic)")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"✗ 转换失败 {os.path.basename(ui_path)}: {e.stderr.strip()}")
+        err = (e.stderr or '').strip()
+        print(f"✗ 转换失败 {ui_name}: {err}")
         return False
     except FileNotFoundError:
-        print("✗ 未找到pyuic5命令，请安装: pip install PyQt5-tools")
+        # 当前解释器不可用或无法找到 python 命令（极少见于此上下文）
+        print("✗ 无法调用 Python 解释器或 PyQt5 未安装，请先安装 PyQt5: pip install PyQt5")
         return False
 
 def main():

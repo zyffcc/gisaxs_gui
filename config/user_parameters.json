@@ -89,23 +89,23 @@
             "wavelength": 0.1
         },
         "last_session": {
-            "last_opened_file": "D:/PythonCode/gisaxs_gui/TestSAXSdata\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
-            "last_directory": "D:/PythonCode/gisaxs_gui/TestSAXSdata",
+            "last_opened_file": "",
+            "last_directory": "",
             "last_1d_directory": null,
             "last_1d_file": null,
             "stack_count": 1,
-            "center_vertical": 505.0,
-            "center_parallel": 768.01,
+            "center_vertical": 0.0,
+            "center_parallel": 0.0,
             "cutline_vertical": 10.0,
-            "cutline_parallel": 1180.0,
-            "auto_show": true,
+            "cutline_parallel": 10.0,
+            "auto_show": false,
             "log_mode": true,
             "auto_scale": true,
-            "vmin": -6.907755374908447,
-            "vmax": 4.110873699188232,
-            "fit_current_data": true,
-            "fit_log_x": true,
-            "fit_log_y": true,
+            "vmin": 0.0,
+            "vmax": 0.0,
+            "fit_current_data": false,
+            "fit_log_x": false,
+            "fit_log_y": false,
             "fit_norm": false
         },
         "gisaxs_input": {
@@ -113,12 +113,23 @@
             "vmin": -6.91,
             "cutline_parallel": 1180.0,
             "cutline_vertical": 30.0,
-            "center_parallel": 768.01,
+            "center_parallel": 769.01,
             "center_vertical": 505.0
         }
     },
     "gisaxs_predict": {},
-    "classification": {},
+    "classification": {
+        "import_cache": {
+            "Particle 1": {
+                "path": "",
+                "rule": "*"
+            },
+            "p2": {
+                "path": "",
+                "rule": "*"
+            }
+        }
+    },
     "system": {
         "calculation_method": "DWBA",
         "approximation": "Born",
