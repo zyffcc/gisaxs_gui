@@ -120,12 +120,16 @@
     "gisaxs_predict": {},
     "classification": {
         "import_cache": {
-            "Particle 1": {
+            "Heat1": {
+                "path": "D:/PythonCode/gisaxs_gui/Experiment_data/Classify/数据/SAXS/Heat/Heat 1",
+                "rule": "*.txt"
+            },
+            "p3": {
                 "path": "",
                 "rule": "*"
             },
-            "p2": {
-                "path": "",
+            "p22": {
+                "path": "D:/PythonCode/gisaxs_gui/Experiment_data/Classify/数据/SAXS/Humidity/Humidity 1",
                 "rule": "*"
             }
         }
