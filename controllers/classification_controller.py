@@ -90,6 +90,11 @@ class ClassificationController(QObject):
         except Exception as e:
             print(f"[classification] restore import_cache failed: {e}")
         self._initialize_ui()
+        # 初始化后，若各类别已配置路径，则自动扫描一次以填充 Status（m/n）
+        try:
+            self._refresh_status_for_all_categories()
+        except Exception:
+            pass
         self._initialized = True
 
     def _setup_connections(self):
@@ -245,6 +250,38 @@ class ClassificationController(QObject):
             self._rebuild_table_grouped()
         except Exception:
             pass
+        # 若缓存中已有路径，自动扫描刷新 Status
+        try:
+            self._refresh_status_for_all_categories()
+        except Exception:
+            pass
+
+    def _refresh_status_for_all_categories(self):
+        """遍历所有类别：若配置了路径，则扫描文件以更新 Status 的 M 计数。
+        不加载数据，只建立文件列表（m 仍为已加载数量，通常为0）。
+        """
+        lw = getattr(self.ui, 'ClassificationImportListWidget', None)
+        if lw is None or lw.count() == 0:
+            return
+        current_row = lw.currentRow()
+        try:
+            for i in range(lw.count()):
+                name = lw.item(i).text()
+                cfg = self.import_cache.get(name, {})
+                path = cfg.get('path', '') or ''
+                rule = cfg.get('rule', '*') or '*'
+                if not path:
+                    continue
+                # 切换当前项以让扫描归属到该类别
+                lw.setCurrentRow(i)
+                self.current_item_name = name
+                self._scan_and_list_files(path, rule)
+        finally:
+            # 恢复选择并重建一次表格
+            if current_row is not None and current_row >= 0 and current_row < lw.count():
+                lw.setCurrentRow(current_row)
+                self.current_item_name = lw.item(current_row).text()
+            self._rebuild_table_grouped()
 
     # ---------------------------- 工具方法 ----------------------------
     def _get_current_name(self):
