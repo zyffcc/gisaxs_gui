@@ -829,7 +829,6 @@ class IndependentFitWindow(QMainWindow):
     def _create_control_buttons(self):
         """创建额外的控制按钮"""
         from PyQt5.QtWidgets import QHBoxLayout, QPushButton, QCheckBox, QLabel
-        
         control_layout = QHBoxLayout()
         
         # 添加标签
@@ -852,6 +851,7 @@ class IndependentFitWindow(QMainWindow):
             # 数据预处理
             x_data = np.array(x_coords)
             y_data = np.array(y_intensity)
+            
             
             # 处理误差条数据
             err_data = None
@@ -1378,6 +1378,11 @@ class FittingController(QObject):
         self._has_fitting_data = False  # 是否有拟合数据
         self._fitting_mode_active = False  # 是否处于拟合模式
 
+        # 载入模式：Single/Stack/In-situ（来自组合框）
+        self.load_mode = 'Single'
+        self._insitu_timer = None
+        self._insitu_last_file = None
+
         # 统一信号模式配置（默认 finished，可按控件名覆盖为 changed）
         self._default_signal_mode = 'finished'
         self._signal_mode_overrides = {
@@ -1437,6 +1442,18 @@ class FittingController(QObject):
         self._initializing = False  # 初始化完成
         # 注册调试快捷键
         self._setup_meta_debug_shortcut()
+        # 初始化完成后：再次根据当前组合框的实际值强制一次可见性（避免异步恢复导致的共存）
+        try:
+            if hasattr(self.ui, 'gisaxsInputModelCombox'):
+                mode_now = self.ui.gisaxsInputModelCombox.currentText()
+                self.load_mode = mode_now or getattr(self, 'load_mode', 'Single')
+                # 直接调用统一的可见性更新
+                self._update_stack_controls_visibility()
+                # 若为 In-situ，确保数值框隐藏
+                if self.load_mode == 'In-situ' and hasattr(self.ui, 'gisaxsInputStackValue'):
+                    self.ui.gisaxsInputStackValue.setVisible(False)
+        except Exception:
+            pass
 
     def _setup_meta_debug_shortcut(self):
         """注册 Ctrl+Alt+M 快捷键输出 meta 注册表快照。"""
@@ -1976,6 +1993,13 @@ class FittingController(QObject):
         # 连接AutoShow复选框
         if hasattr(self.ui, 'gisaxsInputAutoShowCheckBox'):
             self.ui.gisaxsInputAutoShowCheckBox.toggled.connect(self._on_auto_show_changed)
+        
+        # 连接载入模式组合框
+        if hasattr(self.ui, 'gisaxsInputModelCombox'):
+            try:
+                self.ui.gisaxsInputModelCombox.currentTextChanged.connect(self._on_load_mode_changed)
+            except Exception:
+                pass
             
         # 连接Log复选框
         if hasattr(self.ui, 'gisaxsInputIntLogCheckBox'):
@@ -2159,6 +2183,26 @@ class FittingController(QObject):
         # 清空stack显示标签
         if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
             self.ui.gisaxsInputStackDisplayLabel.setText("")
+        
+        # 初始化载入模式（从会话恢复）
+        if hasattr(self.ui, 'gisaxsInputModelCombox'):
+            try:
+                from core.global_params import GlobalParameterManager
+                gp = GlobalParameterManager()
+                last_mode = gp.get_parameter('fitting', 'gisaxs_input.load_mode', 'Single')
+                idx = self.ui.gisaxsInputModelCombox.findText(last_mode)
+                self.ui.gisaxsInputModelCombox.setCurrentIndex(idx if idx >= 0 else 0)
+                self.load_mode = self.ui.gisaxsInputModelCombox.currentText()
+            except Exception:
+                self.load_mode = 'Single'
+            # 关键修正：在UI完全初始化前，若为 In-situ，立即隐藏数值型 Stack 输入框，避免与专用 LineEdit 共存闪现
+            try:
+                if self.load_mode == 'In-situ' and hasattr(self.ui, 'gisaxsInputStackValue'):
+                    self.ui.gisaxsInputStackValue.setVisible(False)
+            except Exception:
+                pass
+            # 根据模式更新Stack输入框可见性
+            self._update_stack_controls_visibility()
             
         # 设置Log复选框默认选中
         if hasattr(self.ui, 'gisaxsInputIntLogCheckBox'):
@@ -2236,6 +2280,15 @@ class FittingController(QObject):
         
         # 检查依赖库
         self._check_dependencies()
+
+        # 若 In-situ 且自动显示，启动轮询
+        try:
+            if getattr(self, 'load_mode', 'Single') == 'In-situ' and self._is_auto_show_enabled():
+                self._start_insitu_timer()
+            # 初始化结束后直接执行一次严格的可见性修正（简化方案，避免双输入框共存）
+            self._enforce_insitu_visibility_once()
+        except Exception:
+            pass
     
     def _initialize_fit_checkboxes(self):
         """初始化拟合相关复选框状态（阻塞信号避免触发方法调用）"""
@@ -2372,30 +2425,6 @@ class FittingController(QObject):
         except Exception:
             return False
     
-    def _on_q_mode_changed(self):
-        """Q模式切换时的处理"""
-        try:
-            # 更新步长
-            self._update_cutline_step_sizes()
-            
-            # 立即更新参数显示（无论是否有Cut数据）
-            self._update_parameter_values_for_q_axis()
-            
-            # 如果有Cut数据，还需要更新图像显示（但添加防抖动机制）
-            if hasattr(self, '_cut_data') and self._cut_data is not None:
-                # 使用QTimer延迟执行，避免频繁更新
-                if not hasattr(self, '_q_mode_timer'):
-                    from PyQt5.QtCore import QTimer
-                    self._q_mode_timer = QTimer()
-                    self._q_mode_timer.setSingleShot(True)
-                    self._q_mode_timer.timeout.connect(self._delayed_cut_update)
-                
-                self._q_mode_timer.stop()
-                self._q_mode_timer.start(100)  # 100ms延迟
-                
-        except Exception as e:
-            pass
-    
     def _delayed_cut_update(self):
         """延迟执行Cut更新，避免频繁操作"""
         try:
@@ -2407,11 +2436,16 @@ class FittingController(QObject):
             pass
     
     def _on_parameter_display_changed(self):
-        """参数显示立即更新（不更新图像）"""
+        """参数显示立即更新（不触发图像重绘）"""
         try:
-            # 如果正在初始化中，跳过处理
-            if getattr(self, '_initializing', True):
+            # 初始化期间不更新
+            if getattr(self, '_initializing', False):
                 return
+            # 仅更新与堆栈/模式相关的显示标签
+            if hasattr(self, '_update_stack_display'):
+                self._update_stack_display()
+        except Exception:
+            pass
                 
             # 立即更新选择框显示，但不执行Cut操作
             center_x = 0
@@ -2801,37 +2835,34 @@ class FittingController(QObject):
             self.status_updated.emit(f"Stack value processing error: {str(e)}")
     
     def _update_stack_display(self):
-        """更新stack显示信息"""
+        """更新stack显示信息（根据 Single/Stack/In-situ 模式）"""
         try:
             imported_file = self.current_parameters.get('imported_gisaxs_file', '')
             if not imported_file:
                 return
-            
+
             file_ext = os.path.splitext(imported_file)[1].lower()
+            mode = getattr(self, 'load_mode', 'Single')
             stack_count = self.current_parameters.get('stack_count', 1)
-            
+
             if file_ext != '.cbf':
                 if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
-                    self.ui.gisaxsInputStackDisplayLabel.setText(f"Single File: {os.path.basename(imported_file)}")
+                    self.ui.gisaxsInputStackDisplayLabel.setText(f"File: {os.path.basename(imported_file)}")
                 return
-            
-            if stack_count == 1:
+
+            if mode == 'Single' or stack_count == 1:
                 if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
-                    self.ui.gisaxsInputStackDisplayLabel.setText(f"Single File: {os.path.basename(imported_file)}")
-            else:
+                    self.ui.gisaxsInputStackDisplayLabel.setText(f"Single: {os.path.basename(imported_file)}")
+                return
+
+            if mode == 'Stack':
                 file_dir = os.path.dirname(imported_file)
                 base_name = os.path.basename(imported_file)
-                
-                cbf_files = []
-                for file in os.listdir(file_dir):
-                    if file.lower().endswith('.cbf'):
-                        cbf_files.append(file)
+                cbf_files = [f for f in os.listdir(file_dir) if f.lower().endswith('.cbf')]
                 cbf_files.sort()
-                
                 try:
                     start_index = cbf_files.index(base_name)
                     available_files = len(cbf_files) - start_index
-                    
                     if stack_count > available_files:
                         if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
                             self.ui.gisaxsInputStackDisplayLabel.setText(f"Maximum available: {available_files}")
@@ -2840,14 +2871,33 @@ class FittingController(QObject):
                         end_file = cbf_files[start_index + stack_count - 1]
                         start_name = os.path.splitext(start_file)[0]
                         end_name = os.path.splitext(end_file)[0]
-                        
                         if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
-                            self.ui.gisaxsInputStackDisplayLabel.setText(f"{start_name} - {end_name}")
-                            
+                            self.ui.gisaxsInputStackDisplayLabel.setText(f"Stack: {start_name} - {end_name}")
                 except ValueError:
                     if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
                         self.ui.gisaxsInputStackDisplayLabel.setText("File not found in directory")
-                        
+                return
+
+            if mode == 'In-situ':
+                dir_path = os.path.dirname(imported_file)
+                sv = ''
+                try:
+                    if hasattr(self.ui, 'gisaxsInputStackValue'):
+                        sv = self.ui.gisaxsInputStackValue.text().strip()
+                except Exception:
+                    sv = ''
+                latest = self._find_latest_cbf(dir_path)
+                if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
+                    if sv == '' or sv.endswith('-'):
+                        self.ui.gisaxsInputStackDisplayLabel.setText(
+                            f"In-situ: latest -> {os.path.splitext(os.path.basename(latest or ''))[0]}"
+                        )
+                    elif '-' in sv:
+                        self.ui.gisaxsInputStackDisplayLabel.setText(f"In-situ range: {sv}")
+                    else:
+                        self.ui.gisaxsInputStackDisplayLabel.setText(f"In-situ index: {sv}")
+                return
+
         except Exception as e:
             self.status_updated.emit(f"Display update error: {str(e)}")
     
@@ -2897,16 +2947,18 @@ class FittingController(QObject):
                         # 不更新参数，保持原有设置
                         return  # 直接返回，不继续处理
             
-            # 同步Stack数值
+            # 同步Stack/范围值按载入模式
             if hasattr(self.ui, 'gisaxsInputStackValue'):
-                try:
-                    stack_text = self.ui.gisaxsInputStackValue.text().strip()
-                    if stack_text:
-                        stack_count = int(stack_text)
-                        self.current_parameters['stack_count'] = max(1, stack_count)
-                except ValueError:
-                    # 如果转换失败，使用默认值
+                sv = self.ui.gisaxsInputStackValue.text().strip()
+                if getattr(self, 'load_mode', 'Single') == 'Single':
                     self.current_parameters['stack_count'] = 1
+                elif self.load_mode == 'Stack':
+                    try:
+                        self.current_parameters['stack_count'] = max(1, int(sv or '1'))
+                    except Exception:
+                        self.current_parameters['stack_count'] = 1
+                elif self.load_mode == 'In-situ':
+                    self.current_parameters['insitu_range'] = sv
                     
         except Exception as e:
             self.status_updated.emit(f"Failed to sync UI parameters: {str(e)}")
@@ -2933,20 +2985,284 @@ class FittingController(QObject):
                                   "matplotlib library is required for image display.\nPlease install it using: pip install matplotlib")
                 return
             
-            # 处理文件并显示
+            # 处理文件并显示（按模式）
             file_ext = os.path.splitext(imported_file)[1].lower()
-            stack_count = self.current_parameters.get('stack_count', 1)
-            
             if file_ext != '.cbf':
                 self.status_updated.emit("Image display only supports CBF files currently")
                 return
-            
-            # 使用异步加载
-            self.status_updated.emit("Please wait while the image starts loading...")
-            self.async_image_loader.load_image(imported_file, stack_count)
+
+            mode = getattr(self, 'load_mode', 'Single')
+            if mode == 'Single':
+                self.status_updated.emit("Please wait while the image starts loading (Single)...")
+                self.async_image_loader.load_image(imported_file, 1)
+            elif mode == 'Stack':
+                stack_count = self.current_parameters.get('stack_count', 1)
+                self.status_updated.emit(f"Please wait while stacking {stack_count} files...")
+                self.async_image_loader.load_image(imported_file, stack_count)
+            else:
+                # In-situ 模式：根据范围选择目标文件
+                sv = ''
+                try:
+                    if hasattr(self.ui, 'gisaxsInputStackValue'):
+                        sv = self.ui.gisaxsInputStackValue.text().strip()
+                except Exception:
+                    sv = ''
+                dir_path = os.path.dirname(imported_file)
+                target = self._resolve_insitu_target(dir_path, imported_file, sv)
+                if not target:
+                    self.status_updated.emit("No CBF file found for In-situ mode")
+                    return
+                self._insitu_last_file = target
+                self._show_image_insitu(target)
             
         except Exception as e:
             self.status_updated.emit(f"Show image error: {str(e)}")
+
+    def _on_load_mode_changed(self, text: str):
+        """载入模式组合框改变回调"""
+        try:
+            self.load_mode = text or 'Single'
+            # 持久化
+            try:
+                from core.global_params import GlobalParameterManager
+                gp = GlobalParameterManager()
+                gp.set_parameter('fitting', 'gisaxs_input.load_mode', self.load_mode)
+            except Exception:
+                pass
+            # 控件可见性
+            self._update_stack_controls_visibility()
+            # 定时器管理
+            if self.load_mode == 'In-situ':
+                if self._is_auto_show_enabled():
+                    self._start_insitu_timer()
+            else:
+                self._stop_insitu_timer()
+            # 更新显示标签
+            self._update_stack_display()
+        except Exception:
+            pass
+
+    def _update_stack_controls_visibility(self):
+        """根据模式控制Stack输入框显示与否"""
+        try:
+            base_widget = getattr(self.ui, 'gisaxsInputStackValue', None)
+            try:
+                from PyQt5.QtWidgets import QLineEdit
+                from PyQt5.QtGui import QIntValidator, QRegularExpressionValidator
+                from PyQt5.QtCore import QRegularExpression
+                if self.load_mode == 'In-situ':
+                    # 隐藏原始控件（可能是数值型，不支持 1-）
+                    if base_widget is not None:
+                        base_widget.setVisible(False)
+                    # 创建或显示专用 In-situ LineEdit
+                    if not hasattr(self, '_insitu_lineedit') or self._insitu_lineedit is None:
+                        # 尝试使用与原控件同一父级
+                        parent = None
+                        try:
+                            parent = base_widget.parent() if base_widget is not None else self.ui.gisaxsInputStackDisplayLabel.parent()
+                        except Exception:
+                            parent = None
+                        from PyQt5.QtWidgets import QLineEdit as _QLE
+                        self._insitu_lineedit = _QLE(parent)
+                        # 放入父布局（如果存在）：插入到状态显示标签之前
+                        try:
+                            layout = parent.layout() if parent is not None else None
+                            if layout is not None:
+                                # 如果能定位到显示标签，则插入到它前面；否则追加
+                                try:
+                                    disp_label = getattr(self.ui, 'gisaxsInputStackDisplayLabel', None)
+                                    if disp_label is not None:
+                                        idx = layout.indexOf(disp_label)
+                                        if idx >= 0:
+                                            layout.insertWidget(idx, self._insitu_lineedit)
+                                        else:
+                                            layout.addWidget(self._insitu_lineedit)
+                                    else:
+                                        layout.addWidget(self._insitu_lineedit)
+                                except Exception:
+                                    layout.addWidget(self._insitu_lineedit)
+                        except Exception:
+                            pass
+                        # 验证器：允许 N | A-B | A-
+                        regex = QRegularExpression(r"^\s*(?:\d+|\d+\s*-\s*\d+|\d+\s*-)\s*$")
+                        self._insitu_lineedit.setValidator(QRegularExpressionValidator(regex, self._insitu_lineedit))
+                        # 默认值
+                        self._insitu_lineedit.setText('1-')
+                        self._insitu_lineedit.setPlaceholderText('e.g. 1-, 1-10, 5')
+                        # 信号连接：回车/编辑完成
+                        try:
+                            self._insitu_lineedit.returnPressed.connect(self._on_stack_value_changed)
+                            self._insitu_lineedit.editingFinished.connect(self._on_stack_value_changed)
+                        except Exception:
+                            pass
+                    self._insitu_lineedit.setVisible(True)
+                else:
+                    # 非 In-situ 模式：隐藏 LineEdit，恢复原控件
+                    if hasattr(self, '_insitu_lineedit') and self._insitu_lineedit is not None:
+                        self._insitu_lineedit.setVisible(False)
+                    if base_widget is not None:
+                        base_widget.setVisible(self.load_mode != 'Single')
+                        if self.load_mode == 'Stack':
+                            base_widget.setValidator(QIntValidator(1, 9999, base_widget))
+                            base_widget.setPlaceholderText('e.g. 5')
+                        else:
+                            base_widget.setValidator(None)
+                            base_widget.setPlaceholderText('')
+            except Exception:
+                # 缺少 PyQt5 环境时的容错
+                if base_widget is not None:
+                    base_widget.setVisible(self.load_mode != 'Single')
+            if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
+                self.ui.gisaxsInputStackDisplayLabel.setVisible(True)
+        except Exception:
+            pass
+
+    def _enforce_insitu_visibility_once(self):
+        """初始化结束后再执行一次严格的可见性修正，确保 In-situ 下不出现双输入框。"""
+        try:
+            mode = getattr(self, 'load_mode', 'Single')
+            base_widget = getattr(self.ui, 'gisaxsInputStackValue', None)
+            insitu_edit = getattr(self, '_insitu_lineedit', None)
+            if mode == 'In-situ':
+                if base_widget is not None:
+                    base_widget.setVisible(False)
+                if insitu_edit is not None:
+                    insitu_edit.setVisible(True)
+            elif mode == 'Stack':
+                if insitu_edit is not None:
+                    insitu_edit.setVisible(False)
+                if base_widget is not None:
+                    base_widget.setVisible(True)
+            else:
+                # Single
+                if insitu_edit is not None:
+                    insitu_edit.setVisible(False)
+                if base_widget is not None:
+                    base_widget.setVisible(False)
+        except Exception:
+            pass
+
+    # 移除复杂的守护定时器逻辑，保持简单直接的可见性修正
+
+    def _is_auto_show_enabled(self) -> bool:
+        return hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
+
+    def _start_insitu_timer(self):
+        try:
+            if self._insitu_timer is None:
+                from PyQt5.QtCore import QTimer
+                self._insitu_timer = QTimer()
+                self._insitu_timer.setSingleShot(False)
+                self._insitu_timer.timeout.connect(self._insitu_poll_latest)
+            self._insitu_timer.start(2000)
+        except Exception:
+            pass
+
+    def _stop_insitu_timer(self):
+        try:
+            if self._insitu_timer is not None:
+                self._insitu_timer.stop()
+        except Exception:
+            pass
+
+    def _insitu_poll_latest(self):
+        try:
+            if self.load_mode != 'In-situ':
+                return
+            imported_file = self.current_parameters.get('imported_gisaxs_file', '')
+            if not imported_file:
+                return
+            dir_path = os.path.dirname(imported_file)
+            latest = self._find_latest_cbf(dir_path)
+            if latest and latest != self._insitu_last_file:
+                sv = ''
+                try:
+                    if hasattr(self.ui, 'gisaxsInputStackValue'):
+                        sv = self.ui.gisaxsInputStackValue.text().strip()
+                except Exception:
+                    sv = ''
+                if (sv.endswith('-') or sv.strip() == '' or sv.strip().endswith('-')) and self._is_auto_show_enabled():
+                    self._insitu_last_file = latest
+                    self._show_image_insitu(latest)
+        except Exception:
+            pass
+
+    def _get_stack_value_text(self) -> str:
+        try:
+            if getattr(self, 'load_mode', 'Single') == 'In-situ' and hasattr(self, '_insitu_lineedit') and self._insitu_lineedit is not None:
+                return self._insitu_lineedit.text().strip()
+            if hasattr(self.ui, 'gisaxsInputStackValue'):
+                return self.ui.gisaxsInputStackValue.text().strip()
+        except Exception:
+            pass
+        return ''
+
+    def _resolve_insitu_target(self, dir_path: str, imported_file: str, sv_text: str) -> str:
+        try:
+            files = [f for f in os.listdir(dir_path) if f.lower().endswith('.cbf')]
+            if not files:
+                return None
+            files.sort()
+            def _index_from_name(name: str):
+                base = os.path.splitext(name)[0]
+                import re
+                m = re.search(r'(\d+)$', base)
+                return int(m.group(1)) if m else None
+            indexed = [(fn, _index_from_name(fn)) for fn in files]
+            latest_file = files[-1]
+            t = (sv_text or '').strip()
+            if t == '':
+                return os.path.join(dir_path, latest_file)
+            if '-' in t:
+                parts = t.split('-')
+                try:
+                    a = int(parts[0]) if parts[0] != '' else None
+                except Exception:
+                    a = None
+                b = None
+                try:
+                    if len(parts) > 1 and parts[1] != '':
+                        b = int(parts[1])
+                except Exception:
+                    b = None
+                if b is None:
+                    return os.path.join(dir_path, latest_file)
+                for fn, idx in indexed:
+                    if idx == b:
+                        return os.path.join(dir_path, fn)
+                return os.path.join(dir_path, latest_file)
+            else:
+                try:
+                    n = int(t)
+                    for fn, idx in indexed:
+                        if idx == n:
+                            return os.path.join(dir_path, fn)
+                except Exception:
+                    pass
+                return os.path.join(dir_path, latest_file)
+        except Exception:
+            return None
+
+    def _find_latest_cbf(self, dir_path: str) -> str:
+        try:
+            files = [f for f in os.listdir(dir_path) if f.lower().endswith('.cbf')]
+            if not files:
+                return None
+            files.sort()
+            return os.path.join(dir_path, files[-1])
+        except Exception:
+            return None
+
+    def _show_image_insitu(self, target_path: str):
+        try:
+            if not target_path:
+                return
+            self.async_image_loader.load_image(target_path, 1)
+            if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
+                base = os.path.basename(target_path)
+                self.ui.gisaxsInputStackDisplayLabel.setText(f"In-situ: {os.path.splitext(base)[0]}")
+        except Exception:
+            pass
     
     def _on_image_loaded(self, image_data, file_path):
         """图像加载完成"""
@@ -3835,6 +4151,15 @@ class FittingController(QObject):
         """AutoShow选项改变时的处理"""
         auto_show = hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
         self.status_updated.emit(f"AutoShow {'enabled' if auto_show else 'disabled'}")
+        # In-situ 定时器控制
+        try:
+            if getattr(self, 'load_mode', 'Single') == 'In-situ':
+                if auto_show:
+                    self._start_insitu_timer()
+                else:
+                    self._stop_insitu_timer()
+        except Exception:
+            pass
     
     def _on_log_changed(self):
         """Log选项改变时的处理 - 支持线性/对数切换"""
@@ -4732,6 +5057,8 @@ class FittingController(QObject):
                 'last_1d_directory': os.path.dirname(self.current_1d_file_path) if self.current_1d_file_path else None,
                 'last_1d_file': self.current_1d_file_path,
                 'stack_count': self.current_parameters.get('stack_count', 1),
+                'load_mode': getattr(self, 'load_mode', 'Single'),
+                'insitu_range': self.current_parameters.get('insitu_range', ''),
                 'center_vertical': self.ui.gisaxsInputCenterVerticalValue.value() if hasattr(self.ui, 'gisaxsInputCenterVerticalValue') else 0.0,
                 'center_parallel': self.ui.gisaxsInputCenterParallelValue.value() if hasattr(self.ui, 'gisaxsInputCenterParallelValue') else 0.0,
                 'cutline_vertical': self.ui.gisaxsInputCutLineVerticalValue.value() if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue') else 10.0,
@@ -4762,11 +5089,34 @@ class FittingController(QObject):
                     self.ui.gisaxsInputImportButtonValue.setText(os.path.basename(last_file))
                 self.status_updated.emit(f"Restored last file: {os.path.basename(last_file)}")
             
+            # 恢复加载模式
+            mode = session_data.get('load_mode', getattr(self, 'load_mode', 'Single'))
+            self.load_mode = mode
+            if hasattr(self.ui, 'gisaxsInputModelCombox'):
+                try:
+                    # 更新下拉框选择（可能触发信号）
+                    index = self.ui.gisaxsInputModelCombox.findText(mode)
+                    if index >= 0:
+                        self.ui.gisaxsInputModelCombox.setCurrentIndex(index)
+                except Exception:
+                    pass
+            
             # 恢复Stack设置
             stack_count = session_data.get('stack_count', 1)
             if hasattr(self.ui, 'gisaxsInputStackValue'):
-                self.ui.gisaxsInputStackValue.setText(str(stack_count))
+                # In-situ 模式优先恢复范围文本
+                if mode == 'In-situ':
+                    insitu_range = session_data.get('insitu_range', '')
+                    if insitu_range:
+                        self.ui.gisaxsInputStackValue.setText(str(insitu_range))
+                    else:
+                        self.ui.gisaxsInputStackValue.setText(str(stack_count))
+                else:
+                    self.ui.gisaxsInputStackValue.setText(str(stack_count))
             self.current_parameters['stack_count'] = stack_count
+            if mode == 'In-situ':
+                # 保存恢复的范围到当前参数，便于显示和后续逻辑
+                self.current_parameters['insitu_range'] = session_data.get('insitu_range', '')
             
             # 恢复Center参数
             if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
@@ -4817,6 +5167,12 @@ class FittingController(QObject):
             
             # 更新显示
             self._update_stack_display()
+            # 根据模式调整输入框可见性
+            if hasattr(self.ui, 'gisaxsInputStackValue'):
+                try:
+                    self.ui.gisaxsInputStackValue.setVisible(self.load_mode != 'Single')
+                except Exception:
+                    pass
             
             # 重新初始化Q模式状态（避免恢复后误触发转换）
             self._initialize_q_mode_state()

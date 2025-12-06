@@ -15,7 +15,7 @@
                         "sigma_radius": 2.0,
                         "diameter": 8.0,
                         "sigma_diameter": 0.5,
-                        "background": -0.0001
+                        "background": -0.0006000000000000001
                     },
                     "cylinder": {
                         "intensity": 5.0,

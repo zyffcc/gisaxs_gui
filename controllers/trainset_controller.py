@@ -691,33 +691,33 @@ class TrainsetController(QObject):
             # 验证文件名
             file_name = params.get('file_name', '').strip()
             if not file_name:
-                return False, "文件名不能为空"
+                return False, "Filename cannot be empty."
             
             # 验证保存路径
             save_path = params.get('save_path', '').strip()
             if not save_path:
-                return False, "保存路径不能为空"
+                return False, "Save path cannot be empty."
             
             if not os.path.exists(save_path):
-                return False, "保存路径不存在"
+                return False, "Save path does not exist."
             
             if not os.access(save_path, os.W_OK):
-                return False, "保存路径没有写入权限"
+                return False, "Save path does not have write permission."
             
             # 验证训练集数量
             trainset_number = params.get('trainset_number', 0)
             if trainset_number <= 0 or trainset_number > 1000000:
-                return False, "训练集数量必须在1-1000000范围内"
+                return False, "Training set number must be between 1 and 1000000."
             
             # 验证保存间隔
             save_every = params.get('save_every', 0)
             if save_every <= 0 or save_every > trainset_number:
-                return False, "保存间隔必须大于0且不超过训练集总数"
+                return False, "Save interval must be greater than 0 and not exceed the total number of training sets."
             
-            return True, "训练集生成参数有效"
+            return True, "Training set generation parameters are valid"
             
         except Exception as e:
-            return False, f"参数验证错误: {str(e)}"
+            return False, f"Parameter validation error: {str(e)}"
     
     def reset_to_defaults(self):
         """重置所有参数到默认值"""
@@ -742,7 +742,7 @@ class TrainsetController(QObject):
         }
         
         self.set_parameters(default_generation_params)
-        self.status_updated.emit("训练集参数已重置为默认值")
+        self.status_updated.emit("Training set parameters have been reset to default values")
     
     def _update_ui_state(self):
         """更新UI状态"""
@@ -823,17 +823,17 @@ class TrainsetController(QObject):
                         "beam_center_x": 490, "beam_center_y": 521
                     }
                 }
-                print("⚠ 探测器配置文件不存在，使用默认配置")
+                print("Detector configuration file not found, using default configuration")
             
             # 更新ComboBox
             self._update_detector_preset_combobox()
             
         except Exception as e:
-            print(f"加载探测器配置失败: {e}")
+            print(f"Failed to load detector configuration: {e}")
             self.detector_presets = {}
     
     def _update_detector_preset_combobox(self):
-        """更新探测器预设ComboBox"""
+        """Update detector preset ComboBox"""
         if not hasattr(self.ui, 'detectorPresetCombox'):
             return
             
