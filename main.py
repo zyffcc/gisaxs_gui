@@ -41,6 +41,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         # 快速初始化：仅设置基本UI
         self.setup_window()
+        # 插入可左右拖动的分割器
+        self._install_splitter()
+        # 尝试恢复分割器比例
+        self._restore_splitter_sizes()
         
         ui_ready_time = time.time() - self._startup_time
         print(f"✓ UI ready in {ui_ready_time:.2f}s")
@@ -146,6 +150,79 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception as e:
             # StackedWidget设置失败，使用默认设置
             pass
+
+    def _install_splitter(self):
+        """在中央区域为侧边栏与主内容添加可调整比例的分割器（不改 .ui）。"""
+        try:
+            from PyQt5.QtWidgets import QSplitter
+            from PyQt5.QtCore import Qt
+
+            # 中央部件已有水平布局，包含侧边栏与主内容
+            if not hasattr(self, 'horizontalLayout') or not hasattr(self, 'sideBarScrollArea') or not hasattr(self, 'mainContentWidget'):
+                return
+
+            # 如果已经安装过分割器则跳过
+            # 通过检查父子关系或类型来判断
+            if isinstance(self.sideBarScrollArea.parentWidget(), QSplitter) and isinstance(self.mainContentWidget.parentWidget(), QSplitter):
+                return
+
+            splitter = QSplitter(self.centralwidget)
+            splitter.setOrientation(Qt.Horizontal)
+            splitter.setHandleWidth(6)
+
+            # 解除原布局中的控件占位并加入分割器
+            # 从布局中移除元素但不删除控件
+            idx = self.horizontalLayout.indexOf(self.sideBarScrollArea)
+            if idx != -1:
+                self.horizontalLayout.takeAt(idx)
+            idx = self.horizontalLayout.indexOf(self.mainContentWidget)
+            if idx != -1:
+                self.horizontalLayout.takeAt(idx)
+
+            splitter.addWidget(self.sideBarScrollArea)
+            splitter.addWidget(self.mainContentWidget)
+
+            # 侧边栏当前是固定150宽度（minimum/maximum都为150），为了允许拖动，
+            # 放宽最大宽度并保留最小宽度以保证最小显示。
+            try:
+                self.sideBarScrollArea.setMaximumWidth(16777215)
+                self.mainAreaWidgetContents.setMaximumWidth(16777215)
+            except Exception:
+                pass
+
+            # 设置初始比例：侧边栏150，主内容其余
+            # 使用总宽度的近似值来初始化
+            total = max(self.width(), 800)
+            sidebar = 150
+            main = max(total - sidebar, 400)
+            splitter.setSizes([sidebar, main])
+
+            # 将分割器加入到原有水平布局
+            self.horizontalLayout.addWidget(splitter)
+            # 记住分割器引用
+            self._main_splitter = splitter
+
+            # 允许两个面板都可拉伸
+            splitter.setStretchFactor(0, 0)  # 保持侧边栏最小占比
+            splitter.setStretchFactor(1, 1)  # 主内容随窗口扩展
+
+        except Exception as e:
+            # 分割器安装失败则忽略，不影响原布局
+            print(f"Install splitter failed: {e}")
+
+    def _restore_splitter_sizes(self):
+        """从用户设置恢复分割器比例。"""
+        try:
+            from core.user_settings import user_settings
+            sizes = user_settings.get('main_splitter_sizes', None)
+            if sizes and hasattr(self, '_main_splitter'):
+                # 验证为两个整数
+                if isinstance(sizes, (list, tuple)) and len(sizes) == 2:
+                    s0 = max(50, int(sizes[0]))
+                    s1 = max(100, int(sizes[1]))
+                    self._main_splitter.setSizes([s0, s1])
+        except Exception:
+            pass
     
     def closeEvent(self, event):
         """窗口关闭事件 - 通过主控制器统一保存会话"""
@@ -153,6 +230,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # 通过主控制器统一保存当前会话
             if hasattr(self, 'main_controller'):
                 self.main_controller.handle_window_close()
+            # 保存分割器比例到用户设置
+            try:
+                if hasattr(self, '_main_splitter'):
+                    sizes = self._main_splitter.sizes()
+                    from core.user_settings import user_settings
+                    user_settings.set('main_splitter_sizes', sizes)
+                    user_settings.save_settings()
+            except Exception:
+                pass
             
             event.accept()
         except Exception as e:

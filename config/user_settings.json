@@ -1,9 +1,13 @@
 {
   "enable_adaptive_scaling": true,
-  "window_width": 1157,
-  "window_height": 848,
+  "window_width": 1400,
+  "window_height": 900,
   "font_adjustment": 0,
   "_auto_k_enabled": true,
   "fit.points_num": 100,
-  "fit.interp_method": "Spline"
+  "fit.interp_method": "Spline",
+  "main_splitter_sizes": [
+    210,
+    1624
+  ]
 }

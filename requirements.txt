@@ -1,0 +1,7 @@
+PyQt5>=5.15
+matplotlib
+numpy
+scipy
+h5py
+fabio
+tensorflow

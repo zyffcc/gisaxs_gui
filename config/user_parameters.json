@@ -83,53 +83,49 @@
             "distance": 2565.0,
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
-            "beam_center_x": 791.5799999999999,
+            "beam_center_x": 791.58,
             "beam_center_y": 368.12,
             "show_q_axis": false,
             "wavelength": 0.1
         },
         "last_session": {
-            "last_opened_file": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata/jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
-            "last_directory": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata",
+            "last_opened_file": "",
+            "last_directory": "",
             "last_1d_directory": null,
             "last_1d_file": null,
             "stack_count": 1,
-            "load_mode": "In-situ",
-            "insitu_range": "1",
-            "center_vertical": 505.0,
-            "center_parallel": 768.01,
-            "cutline_vertical": 20.0,
-            "cutline_parallel": 1180.0,
-            "auto_show": true,
+            "load_mode": "Single",
+            "insitu_range": "",
+            "center_vertical": 0.0,
+            "center_parallel": 0.0,
+            "cutline_vertical": 10.0,
+            "cutline_parallel": 10.0,
+            "auto_show": false,
             "log_mode": true,
             "auto_scale": true,
-            "vmin": -6.907755374908447,
-            "vmax": 4.110873699188232,
-            "fit_current_data": true,
-            "fit_log_x": true,
-            "fit_log_y": true,
+            "vmin": 0.0,
+            "vmax": 0.0,
+            "fit_current_data": false,
+            "fit_log_x": false,
+            "fit_log_y": false,
             "fit_norm": false
         },
         "gisaxs_input": {
             "vmax": 4.11,
             "vmin": -6.91,
-            "cutline_parallel": 1180.0,
+            "cutline_parallel": 1181.0,
             "cutline_vertical": 30.0,
             "center_parallel": 769.01,
             "center_vertical": 505.0,
-            "load_mode": "In-situ"
+            "load_mode": "Single"
         }
     },
     "gisaxs_predict": {},
     "classification": {
         "import_cache": {
-            "p1": {
-                "path": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata",
-                "rule": "*.dat"
-            },
-            "p2": {
-                "path": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata",
-                "rule": "test_1d_data.dat"
+            "particle-1": {
+                "path": "E:/PythonCode/gisaxs_gui/TestSAXSdata",
+                "rule": "*"
             }
         }
     },
