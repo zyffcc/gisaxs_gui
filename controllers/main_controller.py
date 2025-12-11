@@ -146,6 +146,11 @@ class MainController(QObject):
         self.ui.gisaxsPredictButton.clicked.connect(self._switch_to_gisaxs_predict)
         self.ui.cutAndFittingButton.clicked.connect(self._switch_to_cut_fitting)
         self.ui.ClassficationButton.clicked.connect(self._switch_to_classification)
+        # 直接打开独立的WAXS窗口
+        try:
+            self.ui.WAXSButton.clicked.connect(self._open_waxs_standalone)
+        except Exception:
+            pass
         
         # 连接主页面控制器信号
         self.trainset_controller.parameters_changed.connect(self._on_parameters_changed)
@@ -195,6 +200,18 @@ class MainController(QObject):
         
         # 更新状态
         self.status_updated.emit("GISAXS Toolkit 就绪")
+
+    def _open_waxs_standalone(self):
+        """直接打开独立的 WAXS/WAXS.py 窗口。"""
+        try:
+            from WAXS.WAXS import MainWindow as WAXSMainWindow
+            self._waxs_window = WAXSMainWindow()
+            self._waxs_window.show()
+            self.status_updated.emit("WAXS独立窗口已打开")
+        except Exception as e:
+            QMessageBox.warning(self.parent if isinstance(self.parent, QMainWindow) else None,
+                                "WAXS", f"无法打开WAXS窗口: {e}")
+            print(f"打开WAXS独立窗口失败: {e}")
     
     def _register_ui_controls(self):
         """自动注册UI控件到全局参数系统（优化版）"""

@@ -161,9 +161,12 @@
          </widget>
         </item>
         <item>
-         <widget class="QWidget" name="fitKwidget" native="true">
+         <widget class="QPushButton" name="WAXSButton">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
           <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
             <horstretch>0</horstretch>
             <verstretch>0</verstretch>
            </sizepolicy>
@@ -174,13 +177,9 @@
             <height>60</height>
            </size>
           </property>
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>30</height>
-           </size>
+          <property name="text">
+           <string>WAXS</string>
           </property>
-          <layout class="QGridLayout" name="gridLayout_32"/>
          </widget>
         </item>
         <item>
@@ -230,7 +229,7 @@
               <property name="geometry">
                <rect>
                 <x>0</x>
-                <y>-553</y>
+                <y>0</y>
                 <width>1098</width>
                 <height>2486</height>
                </rect>
@@ -5733,7 +5732,7 @@ p, li { white-space: pre-wrap; }
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>98</width>
+                   <width>87</width>
                    <height>87</height>
                   </rect>
                  </property>
@@ -6371,7 +6370,7 @@ p, li { white-space: pre-wrap; }
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>1098</width>
+                <width>1018</width>
                 <height>879</height>
                </rect>
               </property>
@@ -8613,7 +8612,7 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>1098</width>
+                <width>370</width>
                 <height>1055</height>
                </rect>
               </property>
@@ -9101,7 +9100,7 @@ QListWidget::item:selected {
                    <rect>
                     <x>0</x>
                     <y>0</y>
-                    <width>1078</width>
+                    <width>350</width>
                     <height>298</height>
                    </rect>
                   </property>
