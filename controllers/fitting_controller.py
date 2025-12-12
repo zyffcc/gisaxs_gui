@@ -78,7 +78,7 @@ class IndependentMatplotlibWindow(QMainWindow):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("GISAXS Image Viewer - Independent Window (框选模式: 右键激活)")
+        self.setWindowTitle("GISAXS Image Viewer - Independent Window (Selection Mode: Right-click to activate)")
         self.setGeometry(100, 100, 900, 700)
         
         # 创建中央widget

@@ -89,25 +89,25 @@
             "wavelength": 0.1
         },
         "last_session": {
-            "last_opened_file": "",
-            "last_directory": "",
+            "last_opened_file": "D:/PythonCode/gisaxs_gui/TestSAXSdata\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
+            "last_directory": "D:/PythonCode/gisaxs_gui/TestSAXSdata",
             "last_1d_directory": null,
             "last_1d_file": null,
             "stack_count": 1,
             "load_mode": "Single",
             "insitu_range": "",
-            "center_vertical": 0.0,
-            "center_parallel": 0.0,
-            "cutline_vertical": 10.0,
-            "cutline_parallel": 10.0,
-            "auto_show": false,
+            "center_vertical": 505.0,
+            "center_parallel": 768.01,
+            "cutline_vertical": 20.0,
+            "cutline_parallel": 1180.0,
+            "auto_show": true,
             "log_mode": true,
             "auto_scale": true,
-            "vmin": 0.0,
-            "vmax": 0.0,
-            "fit_current_data": false,
-            "fit_log_x": false,
-            "fit_log_y": false,
+            "vmin": -6.907755374908447,
+            "vmax": 4.110873699188232,
+            "fit_current_data": true,
+            "fit_log_x": true,
+            "fit_log_y": true,
             "fit_norm": false
         },
         "gisaxs_input": {
@@ -124,7 +124,11 @@
     "classification": {
         "import_cache": {
             "particle-1": {
-                "path": "E:/PythonCode/gisaxs_gui/TestSAXSdata",
+                "path": "D:/PythonCode/gisaxs_gui/TestSAXSdata",
+                "rule": "*.dat"
+            },
+            "particle-2": {
+                "path": "",
                 "rule": "*"
             }
         }

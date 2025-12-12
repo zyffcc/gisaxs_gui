@@ -30,8 +30,8 @@
                 }
             },
             "particle_2": {
-                "shape": "None",
-                "enabled": false,
+                "shape": "Cylinder",
+                "enabled": true,
                 "parameters": {
                     "sphere": {
                         "intensity": 0.0,

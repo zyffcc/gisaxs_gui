@@ -1,3 +1,7 @@
+import os
+# Ensure Matplotlib uses a Qt backend compatible with PyQt5
+os.environ.setdefault('MPLBACKEND', 'Qt5Agg')
+
 # main.py
 
 import sys
