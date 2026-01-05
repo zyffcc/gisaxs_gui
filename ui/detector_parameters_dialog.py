@@ -227,7 +227,7 @@ class DetectorParametersDialog(QDialog):
             self._connect_signals()
             
         except Exception as e:
-            print(f"加载探测器参数失败: {e}")
+            print(f"Failed to load detector parameters: {e}")
             # 确保重新连接信号
             self._connect_signals()
             
@@ -336,7 +336,7 @@ class DetectorParametersDialog(QDialog):
             print("✓ Detector parameters saved successfully")
             
         except Exception as e:
-            print(f"保存探测器参数失败: {e}")
+            print(f"Failed to save detector parameters: {e}")
             
     def _apply_parameters(self):
         """应用参数"""

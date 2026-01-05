@@ -51,7 +51,7 @@ class MainController(QObject):
     def _delayed_controller_initialization(self):
         """延迟初始化控制器和其他耗时组件"""
         try:
-            print("开始延迟初始化控制器...")
+            print("Master Controller: Starting delayed initialization of controllers...")
             
             # 初始化界面
             self._initialize_ui()
@@ -74,10 +74,10 @@ class MainController(QObject):
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(1000, self._load_last_session)
             
-            print("✓ 控制器延迟初始化完成")
+            print("Master Controller: Controllers delayed initialization complete")
             
         except Exception as e:
-            print(f"控制器延迟初始化失败: {e}")
+            print(f"Master Controller: Controllers delayed initialization failed: {e}")
     
     def _load_last_session(self):
         """加载上次会话状态（异步，不阻塞启动）"""
@@ -89,26 +89,26 @@ class MainController(QObject):
                 # 如果有上次打开的文件，通知fitting控制器恢复
                 last_file = fitting_session.get('last_opened_file')
                 if last_file and os.path.exists(last_file):
-                    # 异步恢复会话，确保UI已完全初始化
-                    print(f"准备恢复上次会话: {os.path.basename(last_file)}")
+                    # Restore session asynchronously to ensure UI is fully initialized
+                    print(f"Preparing to restore last session: {os.path.basename(last_file)}")
                     
                     # 延迟恢复，让用户先看到界面
                     from PyQt5.QtCore import QTimer
                     QTimer.singleShot(2000, lambda: self._restore_session_async(fitting_session))
                 else:
-                    print("上次会话文件不存在，跳过恢复")
+                    print("Master Controller: Last session file does not exist, skipping restore")
             else:
-                print("没有上次会话数据")
+                print("Master Controller: No last session data found")
         except Exception as e:
-            print(f"加载上次会话失败: {e}")
+            print(f"Master Controller: Failed to load last session: {e}")
     
     def _restore_session_async(self, fitting_session):
         """异步恢复会话"""
         try:
             self.fitting_controller.restore_session(fitting_session)
-            print("✓ 上次会话已恢复")
+            print("Master Controller: Last session restored")
         except Exception as e:
-            print(f"恢复会话失败: {e}")
+            print(f"Master Controller: Failed to restore session: {e}")
 
     def save_current_session(self):
         """保存当前会话状态"""
@@ -118,14 +118,14 @@ class MainController(QObject):
             if fitting_session:
                 global_params.set_parameter('fitting', 'last_session', fitting_session)
                 global_params.save_user_parameters()
-                print("✓ 当前会话已保存")
+                print("Master Controller: Current session saved")
         except Exception as e:
-            print(f"保存当前会话失败: {e}")
+            print(f"Master Controller: Failed to save current session: {e}")
 
     def save_session_on_close(self):
         """程序关闭时保存会话"""
         self.save_current_session()
-        print("✓ 程序关闭时会话已保存")
+        print("Master Controller: Session saved on close")
     
     def _register_controllers(self):
         """注册控制器到全局参数管理器"""
@@ -135,9 +135,9 @@ class MainController(QObject):
             global_params.register_controller('fitting', self.fitting_controller)
             global_params.register_controller('classification', self.classification_controller)
             global_params.register_controller('gisaxs_predict', self.gisaxs_predict_controller)
-            print("✓ 主控制器：子控制器注册完成")
+            print("Master Controller: Sub-controller registration complete")
         except Exception as e:
-            print(f"主控制器：子控制器注册失败: {e}")
+            print(f"Master Controller: Sub-controller registration failed: {e}")
     
     def _setup_connections(self):
         """设置信号连接"""
@@ -155,28 +155,28 @@ class MainController(QObject):
         # 连接主页面控制器信号
         self.trainset_controller.parameters_changed.connect(self._on_parameters_changed)
         self.trainset_controller.generation_started.connect(
-            lambda: self.status_updated.emit("训练集生成开始...")
+            lambda: self.status_updated.emit("Trainset generation started...")
         )
         self.trainset_controller.generation_finished.connect(
-            lambda: self.status_updated.emit("训练集生成完成！")
+            lambda: self.status_updated.emit("Trainset generation completed!")
         )
         self.trainset_controller.progress_updated.connect(self.progress_updated)
         
         self.fitting_controller.parameters_changed.connect(
-            lambda params: self._on_parameters_changed("拟合参数", params)
+            lambda params: self._on_parameters_changed("Fitting parameters", params)
         )
         self.fitting_controller.status_updated.connect(self.status_updated)
         self.fitting_controller.progress_updated.connect(self.progress_updated)
         
         self.classification_controller.parameters_changed.connect(
-            lambda params: self._on_parameters_changed("分类参数", params)
+            lambda params: self._on_parameters_changed("Classification parameters", params)
         )
         self.classification_controller.status_updated.connect(self.status_updated)
         self.classification_controller.progress_updated.connect(self.progress_updated)
         self.classification_controller.classification_completed.connect(self._on_classification_completed)
         
         self.gisaxs_predict_controller.parameters_changed.connect(
-            lambda params: self._on_parameters_changed("GISAXS预测参数", params)
+            lambda params: self._on_parameters_changed("GISAXS prediction parameters", params)
         )
         self.gisaxs_predict_controller.status_updated.connect(self.status_updated)
         self.gisaxs_predict_controller.progress_updated.connect(self.progress_updated)
@@ -199,7 +199,7 @@ class MainController(QObject):
         self.gisaxs_predict_controller.initialize()
         
         # 更新状态
-        self.status_updated.emit("GISAXS Toolkit 就绪")
+        self.status_updated.emit("GISAXS Toolkit ready")
 
     def _open_waxs_standalone(self):
         """直接打开独立的 WAXS/WAXS.py 窗口。"""
@@ -207,15 +207,15 @@ class MainController(QObject):
             from WAXS.WAXS import MainWindow as WAXSMainWindow
             self._waxs_window = WAXSMainWindow()
             self._waxs_window.show()
-            self.status_updated.emit("WAXS独立窗口已打开")
+            self.status_updated.emit("WAXS standalone window opened")
         except Exception as e:
             QMessageBox.warning(self.parent if isinstance(self.parent, QMainWindow) else None,
-                                "WAXS", f"无法打开WAXS窗口: {e}")
-            print(f"打开WAXS独立窗口失败: {e}")
+                                "WAXS", f"Failed to open WAXS window: {e}")
+            print(f"Failed to open WAXS standalone window: {e}")
     
     def _register_ui_controls(self):
         """自动注册UI控件到全局参数系统（优化版）"""
-        print("=== 开始注册UI控件到全局参数系统 ===")
+        print("=== Starting registration of UI controls to global parameter system ===")
         
         try:
             from PyQt5.QtWidgets import QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QSlider
@@ -252,7 +252,7 @@ class MainController(QObject):
                         
                         # 只对优先控件输出日志
                         if object_name in priority_controls:
-                            print(f"  ✓ 注册关键控件: {control_id} ({type(widget).__name__})")
+                            print(f"Registered key control: {control_id} ({type(widget).__name__})")
                 
                 # 递归检查子控件（优化：检查所有子控件但限制深度）
                 if hasattr(widget, 'children'):
@@ -263,24 +263,24 @@ class MainController(QObject):
             # 从主窗口开始注册（增加深度）
             register_widget_recursively(self.ui, "", 6)
             
-            print(f"✓ UI控件注册完成，共注册 {registered_count} 个控件")
+            print(f"UI controls registration completed, total {registered_count} controls registered")
             
             # 连接控件值变化信号到参数同步
             global_params.ui.control_value_changed.connect(self._on_control_value_changed)
             
         except Exception as e:
-            print(f"UI控件注册失败: {e}")
+            print(f"Failed to register UI controls: {e}")
     
     def _on_control_value_changed(self, control_id: str, value):
         """当UI控件值发生变化时的回调"""
         # 可以在这里添加控件值变化的处理逻辑
         # 例如：自动保存到参数系统、验证输入等
-        print(f"控件 '{control_id}' 值已更新为: {value}")
+        print(f"Control '{control_id}' value updated to: {value}")
     
     def _switch_to_cut_fitting(self):
         """切换到Cut Fitting页面"""
         self.ui.mainWindowWidget.setCurrentIndex(2)  # Cut Fitting是第2页(gisaxsFittingPage)
-        self.status_updated.emit("切换到Cut Fitting模式")
+        self.status_updated.emit("Switched to Cut Fitting mode")
         
         # 更新按钮状态
         self._update_button_states(0)
@@ -296,7 +296,7 @@ class MainController(QObject):
     def _switch_to_gisaxs_predict(self):
         """切换到GISAXS预测页面"""
         self.ui.mainWindowWidget.setCurrentIndex(1)  # GISAXS Predict是第1页
-        self.status_updated.emit("切换到GISAXS预测模式")
+        self.status_updated.emit("Switched to GISAXS prediction mode")
         
         # 更新按钮状态
         self._update_button_states(1)
@@ -308,7 +308,7 @@ class MainController(QObject):
     def _switch_to_trainset_build(self):
         """切换到训练集构建页面"""
         self.ui.mainWindowWidget.setCurrentIndex(0)  # Trainset Build是第0页(trainsetBuildPage)
-        self.status_updated.emit("切换到训练集构建模式")
+        self.status_updated.emit("Switched to Trainset Build mode")
         
         # 更新按钮状态
         self._update_button_states(2)
@@ -316,7 +316,7 @@ class MainController(QObject):
     def _switch_to_classification(self):
         """切换到Classification页面"""
         self.ui.mainWindowWidget.setCurrentIndex(3)  # Classification是第3页
-        self.status_updated.emit("切换到Classification模式")
+        self.status_updated.emit("Switched to Classification mode")
         
         # 更新按钮状态
         self._update_button_states(3)
@@ -328,7 +328,7 @@ class MainController(QObject):
     def _on_parameters_changed(self, module_name, parameters):
         """当参数发生改变时的处理"""
         self.current_parameters[module_name] = parameters
-        self.status_updated.emit(f"{module_name}参数已更新")
+        self.status_updated.emit(f"{module_name} parameters updated")
     
     def get_all_parameters(self):
         """获取所有模块的参数"""
@@ -355,11 +355,11 @@ class MainController(QObject):
             if 'gisaxs_predict' in parameters:
                 self.gisaxs_predict_controller.set_parameters(parameters['gisaxs_predict'])
             
-            self.status_updated.emit(f"参数从 {file_path} 加载成功")
+            self.status_updated.emit(f"Parameters loaded from {file_path} successfully")
             return True
             
         except Exception as e:
-            self.status_updated.emit(f"参数加载失败: {str(e)}")
+            self.status_updated.emit(f"Failed to load parameters: {str(e)}")
             return False
     
     def save_parameters_to_file(self, file_path):
@@ -370,11 +370,11 @@ class MainController(QObject):
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(parameters, f, indent=4, ensure_ascii=False)
             
-            self.status_updated.emit(f"参数保存到 {file_path} 成功")
+            self.status_updated.emit(f"Parameters saved to {file_path} successfully")
             return True
             
         except Exception as e:
-            self.status_updated.emit(f"参数保存失败: {str(e)}")
+            self.status_updated.emit(f"Failed to save parameters: {str(e)}")
             return False
     
     def validate_all_parameters(self):
@@ -383,10 +383,10 @@ class MainController(QObject):
         
         # 验证四个主页面模块
         modules = [
-            ('训练集参数', self.trainset_controller),
-            ('拟合参数', self.fitting_controller),
-            ('分类参数', self.classification_controller),
-            ('GISAXS预测参数', self.gisaxs_predict_controller)
+            ('Trainset parameters', self.trainset_controller),
+            ('Fitting parameters', self.fitting_controller),
+            ('Classification parameters', self.classification_controller),
+            ('GISAXS prediction parameters', self.gisaxs_predict_controller)
         ]
         
         for name, controller in modules:
@@ -406,8 +406,8 @@ class MainController(QObject):
         if valid_count == total_count:
             QMessageBox.information(
                 self.parent, 
-                "参数验证", 
-                "所有参数验证通过！"
+                "Parameter Validation", 
+                "All parameters are valid!"
             )
         else:
             error_messages = []
@@ -417,22 +417,22 @@ class MainController(QObject):
             
             QMessageBox.warning(
                 self.parent,
-                "参数验证失败",
-                "以下参数存在问题:\n\n" + "\n".join(error_messages)
+                "Parameter Validation Failed",
+                "The following parameters have issues:\n\n" + "\n".join(error_messages)
             )
     
     def reset_all_parameters(self):
-        """重置所有参数到默认值"""
+        """Reset all parameters to default values"""
         self.trainset_controller.reset_to_defaults()
         self.fitting_controller.reset_to_defaults()
         self.classification_controller.reset_to_defaults()
         self.gisaxs_predict_controller.reset_to_defaults()
         
-        self.status_updated.emit("所有参数已重置为默认值")
+        self.status_updated.emit("All parameters have been reset to default values")
     
     def _on_classification_completed(self, results):
-        """分类完成时的处理"""
-        self.status_updated.emit(f"分类完成，处理了 {len(results)} 个项目")
+        """Handle classification completion"""
+        self.status_updated.emit(f"Classification completed, processed {len(results)} items")
         
         # 可以在这里添加结果显示逻辑
         # 例如：更新UI显示分类结果统计信息

@@ -226,7 +226,7 @@ class TrainsetController(QObject):
             self._update_ui_from_params()
             
         except Exception as e:
-            print(f"从全局参数管理器同步参数失败: {e}")
+            print(f"Failed to synchronize parameters from the global parameter manager: {e}")
     
     def _update_ui_from_params(self):
         """根据当前参数更新UI显示"""
@@ -281,7 +281,7 @@ class TrainsetController(QObject):
                 self.ui.OthersCropEdgeCheckBox.setChecked(crop_edge)
                 
         except Exception as e:
-            print(f"更新UI显示失败: {e}")
+            print(f"Failed to update UI display: {e}")
 
     def initialize(self):
         """初始化训练集生成参数"""
@@ -313,7 +313,7 @@ class TrainsetController(QObject):
         
         folder_path = QFileDialog.getExistingDirectory(
             main_window,
-            "选择训练集保存文件夹",
+            "Select the training set save folder",
             os.path.expanduser("~")
         )
         
@@ -360,17 +360,17 @@ class TrainsetController(QObject):
         self._emit_parameters_changed()
     
     def _update_generation_estimation(self):
-        """更新生成时间估算"""
+        """Update generation time estimation"""
         try:
             trainset_number = int(self.ui.trainsetGenerateTrainsetNumberValue.text())
             # 假设每个样本需要0.1秒生成
             estimated_time = trainset_number * 0.1
             
-            # 更新界面显示（如果有相关的标签的话）
+            # Update UI string if there's a related label
             if estimated_time < 60:
-                time_str = f"预计时间: {estimated_time:.1f} 秒"
+                time_str = f"Estimated time: {estimated_time:.1f} s"
             else:
-                time_str = f"预计时间: {estimated_time/60:.1f} 分钟"
+                time_str = f"Estimated time: {estimated_time/60:.1f} min"
                 
             self.status_updated.emit(time_str)
             
@@ -385,20 +385,20 @@ class TrainsetController(QObject):
         # 验证参数
         is_valid, error_message = self.validate_parameters()
         if not is_valid:
-            QMessageBox.warning(main_window, "参数错误", error_message)
+            QMessageBox.warning(main_window, "Parameter Validation Error", error_message)
             return
         
         # 获取所有参数
         all_parameters = self._get_all_system_parameters()
         if not all_parameters:
-            QMessageBox.warning(main_window, "参数错误", "无法获取系统参数，请检查各模块设置")
+            QMessageBox.warning(main_window, "Parameter Error", "Unable to retrieve system parameters, please check the settings of each module")
             return
         
         # 确认开始生成
         reply = QMessageBox.question(
             main_window,
-            "确认生成",
-            f"即将生成 {self.ui.trainsetGenerateTrainsetNumberValue.text()} 个训练样本。\n是否继续？",
+            "Confirm Generation",
+            f"About to generate {self.ui.trainsetGenerateTrainsetNumberValue.text()} training samples.\nContinue?",
             QMessageBox.Yes | QMessageBox.No
         )
         
@@ -424,7 +424,7 @@ class TrainsetController(QObject):
         """停止训练集生成"""
         if self.is_generating:
             self.stop_requested = True
-            self.status_updated.emit("正在停止生成...")
+            self.status_updated.emit("Stopping generation...")
     
     def _generation_worker(self, parameters):
         """训练集生成工作线程"""
@@ -468,7 +468,7 @@ class TrainsetController(QObject):
                 
                 # 状态更新
                 if generated_count % 10 == 0:
-                    self.status_updated.emit(f"已生成 {generated_count}/{trainset_number} 个样本")
+                    self.status_updated.emit(f"Generated {generated_count}/{trainset_number} samples")
                 
                 # 模拟计算时间
                 time.sleep(0.01)
@@ -481,7 +481,7 @@ class TrainsetController(QObject):
             self._on_generation_completed(generated_count, trainset_number)
             
         except Exception as e:
-            self.generation_error.emit(f"生成过程中发生错误: {str(e)}")
+            self.generation_error.emit(f"Error during generation: {str(e)}")
         finally:
             self.is_generating = False
             self._update_ui_state()
@@ -592,9 +592,9 @@ class TrainsetController(QObject):
     def _on_generation_completed(self, generated_count, total_requested):
         """生成完成处理"""
         if self.stop_requested:
-            self.status_updated.emit(f"生成已停止，共生成 {generated_count} 个样本")
+            self.status_updated.emit(f"Generation stopped. Generated {generated_count} samples in total")
         else:
-            self.status_updated.emit(f"生成完成！共生成 {generated_count} 个样本")
+            self.status_updated.emit(f"Generation completed! Generated {generated_count} samples in total")
         
         self.progress_updated.emit(100)
         self.generation_finished.emit()
@@ -609,7 +609,7 @@ class TrainsetController(QObject):
                 # 如果没有主控制器，则返回空参数
                 return {}
         except Exception as e:
-            print(f"获取系统参数错误: {e}")
+            print(f"Failed to retrieve system parameters: {e}")
             return {}
     
     def get_parameters(self):
@@ -771,7 +771,7 @@ class TrainsetController(QObject):
     def _emit_parameters_changed(self):
         """发出参数改变信号"""
         parameters = self.get_parameters()
-        self.parameters_changed.emit("训练集参数", parameters)
+        self.parameters_changed.emit("Trainset Parameters", parameters)
     
     def get_generation_status(self):
         """获取生成状态信息"""
@@ -808,7 +808,7 @@ class TrainsetController(QObject):
             if os.path.exists(detector_config_file):
                 with open(detector_config_file, 'r', encoding='utf-8') as f:
                     self.detector_presets = json.load(f)
-                print(f"✓ 已加载探测器配置: {len(self.detector_presets)} 个预设")
+                print(f"✓ Loaded detector configuration: {len(self.detector_presets)} presets")
             else:
                 # 如果文件不存在，使用默认配置
                 self.detector_presets = {
@@ -838,7 +838,7 @@ class TrainsetController(QObject):
             return
             
         try:
-            # 暂时断开信号（安全方式）
+            # Temporarily disconnect signals (safe way)
             try:
                 self.ui.detectorPresetCombox.currentTextChanged.disconnect()
             except TypeError:
@@ -851,17 +851,17 @@ class TrainsetController(QObject):
             # 添加从配置文件加载的预设
             for preset_name in self.detector_presets.keys():
                 self.ui.detectorPresetCombox.addItem(preset_name)
-                print(f"  添加预设: {preset_name}")
+                print(f"  Added preset: {preset_name}")
             
-            # 最后添加User-defined选项
+            # Finally add User-defined option
             self.ui.detectorPresetCombox.addItem("User-defined")
-            print(f"  添加选项: User-defined")
+            print(f"  Added option: User-defined")
             
             # 设置默认选择第一个预设
             if self.detector_presets:
                 self.ui.detectorPresetCombox.setCurrentIndex(0)
                 first_preset = list(self.detector_presets.keys())[0]
-                print(f"✓ 默认探测器预设: {first_preset}")
+                print(f"✓ Default detector preset: {first_preset}")
                 
                 # 加载第一个预设的参数
                 self._load_preset_parameters(first_preset)
@@ -870,7 +870,7 @@ class TrainsetController(QObject):
             self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
             
         except Exception as e:
-            print(f"更新探测器预设ComboBox失败: {e}")
+            print(f"Failed to update detector preset ComboBox: {e}")
             # 重新连接信号（确保不会丢失连接）
             try:
                 self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
@@ -884,7 +884,7 @@ class TrainsetController(QObject):
                 # 用户自定义模式，不更改当前参数值，只更新预设标记
                 self.detector_params['preset'] = preset_name
                 self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
-                print("✓ 切换到用户自定义模式")
+                print("Switch to user-defined mode")
                 return
             
             # 检查是否是有效预设
@@ -906,15 +906,15 @@ class TrainsetController(QObject):
                         self.global_params.set_parameter('trainset.detector', key, value)
                 
                 self._emit_parameters_changed()
-                print(f"✓ 探测器预设已切换到: {preset_name}")
+                print(f"✓ Detector preset switched to: {preset_name}")
             else:
-                print(f"⚠ 未知的探测器预设: {preset_name}")
+                print(f"⚠ Unknown detector preset: {preset_name}")
             
         except Exception as e:
-            print(f"探测器预设切换失败: {e}")
+            print(f"Failed to switch detector preset: {e}")
             
     def _on_detector_params_changed(self):
-        """探测器非关键参数改变处理（距离、光束中心）"""
+        """Handle changes to non-critical detector parameters (distance, beam center)"""
         try:
             if hasattr(self.ui, 'distanceValue'):
                 self.detector_params['distance'] = float(self.ui.distanceValue.text())
@@ -1049,7 +1049,7 @@ class TrainsetController(QObject):
                 self.ui.detectorPresetCombox.setCurrentIndex(index)
                 self.detector_params['preset'] = 'User-defined'
                 self.global_params.set_parameter('trainset.detector', 'preset', 'User-defined')
-                print("✓ 由于Nbins值不匹配预设，自动切换到User-defined模式")
+                print("Switch to user-defined mode due to Nbins value mismatch")
             
             # 重新连接信号
             self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
@@ -1066,7 +1066,7 @@ class TrainsetController(QObject):
                 self.ui.detectorPresetCombox.setCurrentIndex(index)
                 self.detector_params['preset'] = preset_name
                 self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
-                print(f"✓ 由于Nbins值匹配，自动切换到预设: {preset_name}")
+                print(f"✓ Due to Nbins value matching, automatically switched to preset: {preset_name}")
             
             # 重新连接信号
             self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
@@ -1116,10 +1116,10 @@ class TrainsetController(QObject):
             # 切换到对应页面
             self.ui.sampleParametersParticleStackedWidget.setCurrentIndex(page_index)
             
-            print(f"✓ 切换粒子形状页面: {particle_shape} -> 页面索引 {page_index}")
+            print(f"Switched particle shape page: {particle_shape} -> page index {page_index}")
             
         except Exception as e:
-            print(f"切换粒子形状页面失败: {e}")
+            print(f"Failed to switch particle shape page: {e}")
             
     def _on_preprocessing_params_changed(self):
         """预处理参数改变处理"""
@@ -1180,7 +1180,7 @@ class TrainsetController(QObject):
                 widget.textChanged.connect(handler)
                 
         except Exception as e:
-            print(f"更新探测器UI失败: {e}")
+            print(f"Failed to update detector UI: {e}")
             # 确保信号连接不会丢失
             self._setup_detector_connections()
     

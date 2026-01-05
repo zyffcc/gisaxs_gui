@@ -281,7 +281,7 @@ class GlobalParameterManager(QObject):
     def register_controller(self, name: str, controller):
         """注册控制器"""
         self._controllers[name] = controller
-        print(f"✓ 已注册控制器: {name}")
+        print(f"Registered Controller: {name}")
     
     def get_parameter(self, module: str, param_name: str, default=None):
         """获取单个参数
@@ -343,7 +343,7 @@ class GlobalParameterManager(QObject):
                 self.parameter_changed.emit(module, param_name, value)
                 
         except Exception as e:
-            print(f"设置参数失败: {module}.{param_name} = {value}, 错误: {e}")
+            print(f"Parameter setup failed: {module}.{param_name} = {value}, Error: {e}")
     
     def get_module_parameters(self, module: str) -> Dict[str, Any]:
         """获取整个模块的参数
@@ -388,9 +388,9 @@ class GlobalParameterManager(QObject):
                     params = controller.get_parameters()
                     if isinstance(params, dict):
                         self.set_module_parameters(module, params)
-                        print(f"✓ 已从 {module} 控制器更新参数")
+                        print(f"✓ Parameters updated from {module} controller")
                 except Exception as e:
-                    print(f"从 {module} 控制器获取参数失败: {e}")
+                    print(f"Failed to get parameters from {module} controller: {e}")
     
     def sync_to_controller(self, module: str):
         """同步参数到对应的控制器
@@ -404,9 +404,9 @@ class GlobalParameterManager(QObject):
                 try:
                     params = self.get_module_parameters(module)
                     controller.set_parameters(params)
-                    print(f"✓ 已同步参数到 {module} 控制器")
+                    print(f"✓ Parameters synced to {module} controller")
                 except Exception as e:
-                    print(f"同步参数到 {module} 控制器失败: {e}")
+                    print(f"Failed to sync parameters to {module} controller: {e}")
     
     def sync_all_from_controllers(self):
         """从所有已注册的控制器同步参数"""
@@ -427,9 +427,9 @@ class GlobalParameterManager(QObject):
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(self._parameters, f, indent=4, ensure_ascii=False)
-            print(f"✓ 参数已保存到: {file_path}")
+            print(f"✓ Parameters have been saved to: {file_path}")
         except Exception as e:
-            print(f"保存参数失败: {e}")
+            print(f"Failed to save parameters: {e}")
     
     def load_parameters(self, file_path: str):
         """从文件加载参数
@@ -449,14 +449,14 @@ class GlobalParameterManager(QObject):
                     else:
                         self._parameters[module] = params
                 
-                print(f"✓ 参数已从文件加载: {file_path}")
+                print(f"✓ Parameters have been loaded from: {file_path}")
                 
                 # 同步到所有控制器
                 self.sync_all_to_controllers()
             else:
-                print(f"参数文件不存在: {file_path}")
+                print(f"Parameter file does not exist: {file_path}")
         except Exception as e:
-            print(f"加载参数失败: {e}")
+            print(f"Failed to load parameters: {e}")
     
     def get_physics_parameters(self) -> Dict[str, Any]:
         """获取物理计算所需的所有参数
@@ -494,15 +494,15 @@ class GlobalParameterManager(QObject):
                 temp_manager._init_default_parameters()
                 self._parameters[module] = temp_manager._parameters[module]
                 self.parameters_updated.emit(module, self.get_module_parameters(module))
-                print(f"✓ {module} 模块参数已重置为默认值")
+                print(f"✓ {module} module parameters have been reset to default values")
         else:
             self._init_default_parameters()
             self.sync_all_to_controllers()
-            print("✓ 所有参数已重置为默认值")
+            print("✓ All parameters have been reset to default values")
     
     def print_all_parameters(self):
         """打印所有参数（用于调试）"""
-        print("\n=== 全局参数状态 ===")
+        print("\n=== Global Parameter State ===")
         for module, params in self._parameters.items():
             print(f"\n[{module.upper()}]")
             self._print_dict(params, indent=2)
@@ -522,9 +522,9 @@ class GlobalParameterManager(QObject):
             if not os.path.exists(self.default_params_file):
                 with open(self.default_params_file, 'w', encoding='utf-8') as f:
                     json.dump(self._parameters, f, indent=4, ensure_ascii=False)
-                print(f"✓ 默认参数已保存到: {self.default_params_file}")
+                print(f"✓ Default parameters have been saved to: {self.default_params_file}")
         except Exception as e:
-            print(f"保存默认参数失败: {e}")
+            print(f"Failed to save default parameters: {e}")
     
     def _load_user_parameters(self):
         """加载用户上次使用的参数"""
@@ -538,20 +538,20 @@ class GlobalParameterManager(QObject):
                     if module in self._parameters and isinstance(params, dict):
                         self._parameters[module].update(params)
                 
-                print(f"✓ 已加载用户参数: {self.user_params_file}")
+                print(f"✓ User parameters have been loaded from: {self.user_params_file}")
             else:
-                print("首次启动，使用默认参数")
+                print("First launch, using default parameters")
         except Exception as e:
-            print(f"加载用户参数失败，使用默认参数: {e}")
+            print(f"Failed to load user parameters, using default parameters: {e}")
     
     def _save_user_parameters(self):
         """保存用户当前参数"""
         try:
             with open(self.user_params_file, 'w', encoding='utf-8') as f:
                 json.dump(self._parameters, f, indent=4, ensure_ascii=False)
-            print(f"✓ 用户参数已保存到: {self.user_params_file}")
+            print(f"✓ User parameters have been saved to: {self.user_params_file}")
         except Exception as e:
-            print(f"保存用户参数失败: {e}")
+            print(f"Failed to save user parameters: {e}")
     def reset_to_initial_parameters(self):
         """重置到初始默认参数"""
         try:
@@ -560,11 +560,11 @@ class GlobalParameterManager(QObject):
                     default_params = json.load(f)
                 
                 self._parameters = default_params
-                print("✓ 参数已重置为初始默认值")
+                print("✓ Parameters have been reset to initial default values")
             else:
                 # 如果默认参数文件不存在，重新初始化
                 self._init_default_parameters()
-                print("✓ 参数已重置为内置默认值")
+                print("✓ Parameters have been reset to built-in default values")
             
             # 同步到所有控制器
             self.sync_all_to_controllers()
@@ -577,7 +577,7 @@ class GlobalParameterManager(QObject):
             self._save_user_parameters()
             
         except Exception as e:
-            print(f"重置参数失败: {e}")
+            print(f"Failed to reset parameters: {e}")
     
     def save_user_parameters(self):
         """保存当前用户参数"""

@@ -28,101 +28,103 @@ class SettingsDialog(QDialog):
     
     def init_ui(self):
         """初始化界面"""
-        self.setWindowTitle("显示设置")
+        self.setWindowTitle("Display Settings")
         self.setModal(True)
         self.resize(350, 250)
-        
+
         layout = QVBoxLayout()
-        
+
         # 分辨率设置组
-        resolution_group = QGroupBox("窗口大小")
+        resolution_group = QGroupBox("Window Size")
         resolution_layout = QFormLayout()
-        
+
         # 窗口大小预设
         self.resolution_combo = QComboBox()
         self.resolution_combo.addItems([
-            "800 x 600 (小)",
-            "1000 x 700 (中等)",
-            "1200 x 800 (大)",
-            "1400 x 900 (超大)",
-            "自定义"
+            "800 x 600 (Small)",
+            "1000 x 700 (Medium)",
+            "1200 x 800 (Large)",
+            "1400 x 900 (Extra Large)",
+            "Custom",
         ])
         self.resolution_combo.currentTextChanged.connect(self.on_resolution_changed)
-        resolution_layout.addRow("窗口大小:", self.resolution_combo)
-        
+        resolution_layout.addRow("Window size:", self.resolution_combo)
+
         # 自定义分辨率
         custom_layout = QHBoxLayout()
         self.width_spin = QSpinBox()
         self.width_spin.setRange(600, 2400)
         self.width_spin.setValue(1000)
         self.width_spin.setSuffix(" px")
-        
+
         self.times_label = QLabel("×")  # 保存引用以便控制可见性
-        
+
         self.height_spin = QSpinBox()
         self.height_spin.setRange(400, 1600)
         self.height_spin.setValue(700)
         self.height_spin.setSuffix(" px")
-        
+
         custom_layout.addWidget(self.width_spin)
         custom_layout.addWidget(self.times_label)
         custom_layout.addWidget(self.height_spin)
-        
-        resolution_layout.addRow("自定义大小:", custom_layout)
-        
+
+        resolution_layout.addRow("Custom size:", custom_layout)
+
         # 初始时隐藏自定义设置
         self.width_spin.setVisible(False)
         self.height_spin.setVisible(False)
         self.times_label.setVisible(False)
-        
+
         resolution_group.setLayout(resolution_layout)
         layout.addWidget(resolution_group)
-        
+
         # 显示设置组
-        display_group = QGroupBox("显示设置")
+        display_group = QGroupBox("Display")
         display_layout = QFormLayout()
-        
+
         # 启用自适应
-        self.adaptive_cb = QCheckBox("启用自适应缩放")
-        self.adaptive_cb.setToolTip("根据屏幕分辨率和DPI自动调整窗口和字体大小")
+        self.adaptive_cb = QCheckBox("Enable adaptive scaling")
+        self.adaptive_cb.setToolTip(
+            "Automatically adjust window and font size based on screen resolution and DPI"
+        )
         display_layout.addRow(self.adaptive_cb)
-        
+
         # 字体大小调整
         self.font_spin = QSpinBox()
         self.font_spin.setRange(-3, 3)
-        self.font_spin.setSuffix(" 级")
-        self.font_spin.setToolTip("调整字体大小（-3到+3级）")
+        self.font_spin.setSuffix(" levels")
+        self.font_spin.setToolTip("Adjust font size (-3 to +3 levels)")
         self.font_spin.valueChanged.connect(self.on_font_changed)
-        display_layout.addRow("字体大小:", self.font_spin)
-        
+        display_layout.addRow("Font size:", self.font_spin)
+
         display_group.setLayout(display_layout)
         layout.addWidget(display_group)
-        
+
         # 按钮
         button_layout = QHBoxLayout()
-        
-        self.apply_button = QPushButton("应用")
+
+        self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(self.apply_settings)
         button_layout.addWidget(self.apply_button)
-        
+
         button_layout.addStretch()
-        
-        self.cancel_button = QPushButton("取消")
+
+        self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(self.cancel_button)
-        
-        self.ok_button = QPushButton("确定")
+
+        self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self.accept_settings)
         self.ok_button.setDefault(True)
         button_layout.addWidget(self.ok_button)
-        
+
         layout.addLayout(button_layout)
-        
+
         self.setLayout(layout)
     
     def on_resolution_changed(self, text):
         """分辨率选择改变时的处理"""
-        is_custom = text == "自定义"
+        is_custom = text == "Custom"
         self.width_spin.setVisible(is_custom)
         self.height_spin.setVisible(is_custom)
         self.times_label.setVisible(is_custom)
@@ -177,18 +179,18 @@ class SettingsDialog(QDialog):
             # 保存设置到文件
             user_settings.save_settings()
             
-            QMessageBox.information(self, "设置已应用", "窗口大小和字体设置已立即生效。")
+            QMessageBox.information(self, "Settings Applied", "Window size and font settings have been applied.")
         else:
-            QMessageBox.information(self, "提示", "自适应模式下的设置需要重启应用程序后生效。")
+            QMessageBox.information(self, "Note", "Settings in adaptive mode will take effect after restarting the application.")
     
     def load_settings(self):
         """加载当前设置"""
         # 加载自适应设置
         self.adaptive_cb.setChecked(user_settings.is_adaptive_enabled())
-        
+
         # 加载字体设置
         self.font_spin.setValue(user_settings.get_font_adjustment())
-        
+
         # 加载当前窗口大小
         if self.parent_window:
             current_size = self.parent_window.size()
@@ -199,20 +201,20 @@ class SettingsDialog(QDialog):
             width, height = user_settings.get_window_size()
             self.width_spin.setValue(width)
             self.height_spin.setValue(height)
-        
+
         # 根据当前大小选择对应的预设
         width, height = self.width_spin.value(), self.height_spin.value()
         if width == 800 and height == 600:
-            self.resolution_combo.setCurrentText("800 x 600 (小)")
+            self.resolution_combo.setCurrentText("800 x 600 (Small)")
         elif width == 1000 and height == 700:
-            self.resolution_combo.setCurrentText("1000 x 700 (中等)")
+            self.resolution_combo.setCurrentText("1000 x 700 (Medium)")
         elif width == 1200 and height == 800:
-            self.resolution_combo.setCurrentText("1200 x 800 (大)")
+            self.resolution_combo.setCurrentText("1200 x 800 (Large)")
         elif width == 1400 and height == 900:
-            self.resolution_combo.setCurrentText("1400 x 900 (超大)")
+            self.resolution_combo.setCurrentText("1400 x 900 (Extra Large)")
         else:
-            self.resolution_combo.setCurrentText("自定义")
-            self.on_resolution_changed("自定义")
+            self.resolution_combo.setCurrentText("Custom")
+            self.on_resolution_changed("Custom")
     
     def accept_settings(self):
         """确定并关闭对话框"""
@@ -223,8 +225,8 @@ class SettingsDialog(QDialog):
             # 自适应设置发生改变，需要重启
             reply = QMessageBox.question(
                 self,
-                "需要重启",
-                "自适应设置已更改，需要重启应用程序才能生效。是否现在重启？",
+                "Restart required",
+                "Adaptive mode has changed, a restart is required to take effect. Restart now?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.Yes
             )
@@ -258,7 +260,7 @@ class SettingsDialog(QDialog):
         
         # 保存到文件
         user_settings.save_settings()
-    
+
     def restart_application(self):
         """重启应用程序"""
         import os

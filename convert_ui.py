@@ -32,9 +32,9 @@ def convert_ui_file(ui_path, py_path):
         # pyuic5 不存在 -> 走回退方案
         pass
     except subprocess.CalledProcessError as e:
-        # pyuic5 存在但执行失败 -> 尝试回退方案
+        # pyuic5 exists but failed -> try fallback
         err = (e.stderr or '').strip()
-        print(f"⚠ 使用 pyuic5 转换失败: {ui_name} -> {py_name}: {err}")
+        print(f"⚠ Conversion with pyuic5 failed: {ui_name} -> {py_name}: {err}")
 
     # 2) 回退: 使用 python -m PyQt5.uic.pyuic
     try:
@@ -44,15 +44,15 @@ def convert_ui_file(ui_path, py_path):
         return True
     except subprocess.CalledProcessError as e:
         err = (e.stderr or '').strip()
-        print(f"✗ 转换失败 {ui_name}: {err}")
+        print(f"✗ Conversion failed {ui_name}: {err}")
         return False
     except FileNotFoundError:
-        # 当前解释器不可用或无法找到 python 命令（极少见于此上下文）
-        print("✗ 无法调用 Python 解释器或 PyQt5 未安装，请先安装 PyQt5: pip install PyQt5")
+        # Python interpreter unavailable or PyQt5 not installed
+        print("✗ Unable to call Python interpreter or PyQt5 is not installed. Please install PyQt5: pip install PyQt5")
         return False
 
 def main():
-    print("🔄 GISAXS UI文件转换")
+    print("🔄 GISAXS UI file conversion")
     print("-" * 30)
     
     # 根据您的实际文件结构定义转换列表
@@ -69,13 +69,13 @@ def main():
             if convert_ui_file(ui_file, py_file):
                 success += 1
         else:
-            print(f"⚠ 跳过不存在的文件: {ui_file}")
+            print(f"⚠ Skipping non-existent file: {ui_file}")
     
     print("-" * 30)
-    print(f"📊 完成: {success}/{total} 成功")
+    print(f"📊 Done: {success}/{total} succeeded")
     
     if success == total and total > 0:
-        print("🎉 所有UI文件转换成功！")
+        print("🎉 All UI files converted successfully!")
 
 if __name__ == "__main__":
     main()

@@ -49,34 +49,34 @@ class PageManager:
                 self._setup_trainset_page(current_widget)
             
             # 每个页面现在都有自己的ScrollArea，只需要基本的设置
-            print(f"✓ 切换到页面 {index}，页面布局已优化")
+            print(f"✓ Switched to page {index}, page layout optimized")
             
         except Exception as e:
-            print(f"页面布局调整失败: {e}")
+            print(f"Page layout adjustment failed: {e}")
     
     def _setup_fitting_page(self, page_widget):
         """设置Cut Fitting页面"""
         # Cut Fitting页面有自己的ScrollArea，只需基本设置
         page_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        print("✓ Cut Fitting页面设置完成")
+        print("✓ Cut Fitting page setup completed")
     
     def _setup_predict_page(self, page_widget):
         """设置GISAXS预测页面"""
         # GISAXS预测页面保持原有布局，不需要ScrollArea调整
         page_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        print("✓ GISAXS预测页面设置完成")
+        print("✓ GISAXS Predict page setup completed")
         
     def _setup_trainset_page(self, page_widget):
         """设置训练集构建页面"""
         # 训练集页面有自己的ScrollArea，只需基本设置
         page_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        print("✓ 训练集构建页面设置完成")
+        print("✓ Training Set Construction Page Settings Complete")
         
     def _setup_classification_page(self, page_widget):
         """设置Classification页面"""
         # Classification页面有自己的ScrollArea，只需基本设置
         page_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        print("✓ Classification页面设置完成")
+        print("✓ Classification page setup completed")
 
     def switch_to_page(self, page_index):
         """切换到指定页面"""

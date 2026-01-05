@@ -1242,7 +1242,7 @@ class ImageLayout(QWidget):
                         f.write(f"{x[i]}\t{y[i]}\n")
                 QMessageBox.information(self, "Export Success", "Integral data has been exported successfully!")
         except:
-            QMessageBox.warning(self, "Warning", "未能导出数据", QMessageBox.Ok)
+            QMessageBox.warning(self, "Warning", "Failed to export data", QMessageBox.Ok)
 
     def update_output_folder(self):
         folder_path = self.textbox_outputdir.text()
@@ -1857,7 +1857,7 @@ class BatchProcessor(QWidget):
             else:
                 QMessageBox.warning(self, "Warning", "Please batch-process 1D curves or import in-situ file first.", QMessageBox.Ok)
         except:
-            QMessageBox.warning(self, "Warning", "请先进行一维曲线的批量处理或导入原位数据文件！", QMessageBox.Ok)
+            QMessageBox.warning(self, "Warning", "Please batch-process 1D curves or import in-situ file first.", QMessageBox.Ok)
 
     def export_integral_data(self):
         try:

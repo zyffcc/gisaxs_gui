@@ -2,7 +2,7 @@
     "fitting": {
         "global_parameters": {
             "sigma_res": -0.0099,
-            "k_value": 59747.413800892326
+            "k_value": 66811.45153703724
         },
         "particles": {
             "particle_1": {
@@ -30,7 +30,7 @@
                 }
             },
             "particle_2": {
-                "shape": "Cylinder",
+                "shape": "Sphere",
                 "enabled": true,
                 "parameters": {
                     "sphere": {

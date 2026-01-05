@@ -2689,7 +2689,7 @@ class FittingController(QObject):
                 self.ui.gisaxsInputImportButtonValue.setText(file_name)
                 
             # 发送状态更新信号
-            self.status_updated.emit(f"已导入GISAXS文件: {os.path.basename(file_path)}")
+            self.status_updated.emit(f"Imported GISAXS file: {os.path.basename(file_path)}")
             self.parameters_changed.emit(self.current_parameters)
             
             # 触发主控制器保存会话
@@ -2710,12 +2710,12 @@ class FittingController(QObject):
         """验证导入的GISAXS文件"""
         try:
             if not os.path.exists(file_path):
-                QMessageBox.warning(self.main_window, "文件错误", f"文件不存在: {file_path}")
+                QMessageBox.warning(self.main_window, "File Error", f"File does not exist: {file_path}")
                 return False
             
             file_size = os.path.getsize(file_path)
             if file_size == 0:
-                QMessageBox.warning(self.main_window, "文件错误", "文件为空")
+                QMessageBox.warning(self.main_window, "File Error", "File is empty")
                 return False
             
             file_ext = os.path.splitext(file_path)[1].lower()
@@ -2724,19 +2724,19 @@ class FittingController(QObject):
             if file_ext not in supported_extensions:
                 reply = QMessageBox.question(
                     self.main_window,
-                    "文件格式警告",
-                    f"文件格式 '{file_ext}' 可能不被支持。\n支持的格式: {', '.join(supported_extensions)}\n\n是否继续导入？",
+                    "File Format Warning",
+                    f"The file extension '{file_ext}' may not be supported.\nSupported formats: {', '.join(supported_extensions)}\n\nContinue import?",
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.No
                 )
                 if reply == QMessageBox.No:
                     return False
             
-            self.status_updated.emit(f"文件验证通过 - {os.path.basename(file_path)}")
+            self.status_updated.emit(f"File validation passed - {os.path.basename(file_path)}")
             return True
             
         except Exception as e:
-            QMessageBox.critical(self.main_window, "文件验证错误", f"验证文件时出错:\n{str(e)}")
+            QMessageBox.critical(self.main_window, "File Validation Error", f"Error validating file:\n{str(e)}")
             return False
     
     def _on_import_value_changed(self):
@@ -2748,7 +2748,7 @@ class FittingController(QObject):
             file_path_input = self.ui.gisaxsInputImportButtonValue.text().strip()
             
             if not file_path_input:
-                self.status_updated.emit("请输入有效的文件路径")
+                self.status_updated.emit("Please enter a valid file path")
                 return
             
             # 如果输入的只是文件名，尝试使用当前目录或之前的目录
@@ -2762,8 +2762,8 @@ class FittingController(QObject):
             
             # 验证文件是否存在
             if not os.path.exists(file_path_input):
-                self.status_updated.emit(f"文件不存在: {os.path.basename(file_path_input)}")
-                QMessageBox.warning(self.main_window, "文件错误", f"文件不存在:\n{file_path_input}")
+                self.status_updated.emit(f"File does not exist: {os.path.basename(file_path_input)}")
+                QMessageBox.warning(self.main_window, "File Error", f"File does not exist:\n{file_path_input}")
                 return
             
             # 更新参数
@@ -2775,7 +2775,7 @@ class FittingController(QObject):
             
             # 验证文件
             if self._validate_imported_file(file_path_input):
-                self.status_updated.emit(f"已更新GISAXS文件: {file_name}")
+                self.status_updated.emit(f"Updated GISAXS file: {file_name}")
                 self.parameters_changed.emit(self.current_parameters)
                 
                 # 触发主控制器保存会话
@@ -2788,11 +2788,11 @@ class FittingController(QObject):
                 if hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked():
                     self._show_image()
                 else:
-                    self.status_updated.emit(f"文件已更新，点击Show按钮显示图像")
+                    self.status_updated.emit("File updated. Click 'Show' to display the image")
             
         except Exception as e:
             self.status_updated.emit(f"Import value processing error: {str(e)}")
-            QMessageBox.critical(self.main_window, "处理错误", f"处理导入文件路径时出错:\n{str(e)}")
+            QMessageBox.critical(self.main_window, "Processing Error", f"Error handling the imported file path:\n{str(e)}")
     
     # ========== Stack 处理方法 ==========
     
