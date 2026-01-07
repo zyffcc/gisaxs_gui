@@ -73,13 +73,12 @@
             "distance": 2565.0,
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
-            "beam_center_x": 791.62,
-            "beam_center_y": 368.0,
-            "show_q_axis": false
+            "beam_center_x": 791.0,
+            "beam_center_y": 368.0
         },
         "last_session": {
-            "last_opened_file": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata/jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
-            "last_directory": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata",
+            "last_opened_file": "",
+            "last_directory": "",
             "last_1d_directory": null,
             "last_1d_file": null,
             "stack_count": 1,
@@ -98,17 +97,14 @@
             "fit_log_x": false,
             "fit_log_y": false,
             "fit_norm": false
-        },
-        "gisaxs_input": {
-            "cutline_vertical": 50.0
         }
     },
     "gisaxs_predict": {},
     "classification": {
         "import_cache": {
             "P2": {
-                "path": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata",
-                "rule": "*.dat"
+                "path": "",
+                "rule": "*"
             },
             "Particle 1": {
                 "path": "",
