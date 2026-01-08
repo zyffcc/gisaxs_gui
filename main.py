@@ -124,9 +124,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             dialog = SettingsDialog(self)
             dialog.exec_()
         except ImportError:
-            # 如果settings_dialog不存在，显示提示
+            # If settings_dialog is missing, show a notice
             from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.information(self, "提示", "显示设s置功能正在开发中...")
+            QMessageBox.information(self, "Information", "Display settings are under development...")
     
     def setup_window(self):
         """设置窗口属性"""
@@ -246,8 +246,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             
             event.accept()
         except Exception as e:
-            # 参数保存失败，仍然允许关闭
-            print(f"关闭时保存会话失败: {e}")
+            # Even if saving fails, still allow closing
+            print(f"Failed to save session on close: {e}")
             event.accept()
     
     def initialize_parameter_system(self):
@@ -261,12 +261,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             detector_params = global_params.get_module_parameters('detector')
             
             if beam_params and detector_params:
-                print("✓ 全局参数系统初始化成功")
+                print("✓ Global parameter system initialized successfully")
             else:
-                print("⚠ 参数系统初始化不完整，使用默认参数")
+                print("⚠ Parameter system initialization incomplete, using default parameters")
                 
         except Exception as e:
-            print(f"⚠ 参数系统初始化警告: {e}")
+            print(f"⚠ Parameter system initialization warning: {e}")
             pass
     
     def get_software_parameters(self):

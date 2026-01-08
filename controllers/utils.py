@@ -95,7 +95,7 @@ class FileUtils:
                 json.dump(data, f, indent=indent, ensure_ascii=False)
             return True
         except Exception as e:
-            print(f"保存JSON文件失败: {e}")
+            print(f"Failed to save JSON file: {e}")
             return False
     
     @staticmethod
@@ -105,7 +105,7 @@ class FileUtils:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"加载JSON文件失败: {e}")
+            print(f"Failed to load JSON file: {e}")
             return None
     
     @staticmethod
@@ -121,50 +121,50 @@ class FileUtils:
             os.makedirs(directory_path, exist_ok=True)
             return True
         except Exception as e:
-            print(f"创建目录失败: {e}")
+            print(f"Failed to create directory: {e}")
             return False
 
 class ValidationUtils:
     """参数验证工具函数"""
     
     @staticmethod
-    def validate_range(value, min_val, max_val, name="参数"):
-        """验证数值范围"""
+    def validate_range(value, min_val, max_val, name="Parameter"):
+        """Validate numeric range"""
         if value < min_val or value > max_val:
-            return False, f"{name}必须在{min_val}-{max_val}范围内"
-        return True, "有效"
+            return False, f"{name} must be in the range {min_val}-{max_val}"
+        return True, "Valid"
     
     @staticmethod
-    def validate_positive(value, name="参数"):
-        """验证正数"""
+    def validate_positive(value, name="Parameter"):
+        """Validate positive value"""
         if value <= 0:
-            return False, f"{name}必须大于0"
-        return True, "有效"
+            return False, f"{name} must be greater than 0"
+        return True, "Valid"
     
     @staticmethod
     def validate_file_path(file_path, check_exists=True):
-        """验证文件路径"""
+        """Validate file path"""
         if not file_path:
-            return False, "文件路径不能为空"
+            return False, "File path cannot be empty"
         
         if check_exists and not os.path.exists(file_path):
-            return False, "文件不存在"
+            return False, "File does not exist"
         
-        return True, "有效"
+        return True, "Valid"
     
     @staticmethod
     def validate_directory_path(dir_path, check_writable=True):
-        """验证目录路径"""
+        """Validate directory path"""
         if not dir_path:
-            return False, "目录路径不能为空"
+            return False, "Directory path cannot be empty"
         
         if not os.path.exists(dir_path):
-            return False, "目录不存在"
+            return False, "Directory does not exist"
         
         if check_writable and not os.access(dir_path, os.W_OK):
-            return False, "目录没有写入权限"
+            return False, "No write permission to the directory"
         
-        return True, "有效"
+        return True, "Valid"
 
 class MathUtils:
     """数学计算工具函数"""
@@ -242,7 +242,7 @@ class PlotUtils:
             
             return True
         except ImportError:
-            print("matplotlib未安装，无法设置绘图样式")
+            print("matplotlib is not installed; cannot set plot style")
             return False
     
     @staticmethod
@@ -271,7 +271,7 @@ class PlotUtils:
             
             return fig, ax
         except ImportError:
-            print("matplotlib未安装，无法创建绘图")
+            print("matplotlib is not installed; cannot create plot")
             return None, None
 
 # 导出主要工具类

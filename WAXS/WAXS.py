@@ -17,6 +17,164 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.patches import Wedge
 from matplotlib.lines import Line2D
+import h5py
+from pathlib import Path
+import re
+
+def load_image_matrix(
+    file_path,
+    frame_idx: int = 0,
+    dataset_path: str = "/entry/instrument/detector/data",
+    dist_path: str = "/entry/instrument/detector/translation/distance",
+    mask_path: str = "/entry/instrument/detector/pixel_mask",
+    lmbda_x: int = 516,
+    lmbda_y: int = 1556,
+):
+    """
+    Load a 2D intensity matrix from either an image file (tif/tiff/png/jpg/etc.)
+    or an P03-style NXs module file (and its m-series siblings), returning the
+    final stitched image matrix as float32 with NaNs for empty regions.
+
+    - Image files: uses cv2 to read (any depth), returns the raw matrix.
+    - NXs files: detects the exact m-series prefix based on `file_path`, reads
+      each module first/selected frame, applies P03 translation, composes onto
+      a canvas, and returns the transposed + vertically flipped matrix
+      (`grid_show`) consistent with typical GISAXS display.
+
+    Parameters
+    - file_path: str or Path, path to image or .nxs file
+    - frame_idx: int, which frame to read if dataset is 3D (default: 0)
+    - dataset_path, dist_path, mask_path: HDF5 dataset paths
+    - lmbda_x, lmbda_y: expected module dimensions (x=516, y=1556)
+
+    Returns
+    - np.ndarray (float32), 2D matrix. For NXs, NaNs indicate padding/empty.
+    """
+
+    p = Path(file_path)
+    ext = p.suffix.lower()
+
+    # --- Branch: image file ---
+    image_exts = {".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp"}
+    if ext in image_exts:
+        im = cv2.imread(str(p), cv2.IMREAD_ANYDEPTH)
+        if im is None:
+            # fallback
+            im = cv2.imread(str(p), cv2.IMREAD_UNCHANGED)
+        if im is None:
+            raise ValueError(f"Failed to read image file: {p}")
+        # Ensure 2D grayscale for downstream processing
+        if im.ndim == 3 and im.shape[2] == 3:
+            im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        elif im.ndim == 3 and im.shape[2] == 4:
+            im = cv2.cvtColor(im, cv2.COLOR_BGRA2GRAY)
+        return im.astype(np.float32)
+
+    # --- Branch: NXs file ---
+    if ext != ".nxs":
+        raise ValueError(f"Unsupported file type: {p.suffix}. Only image or .nxs supported.")
+
+    base_name = p.name
+    folder = p.parent
+
+    # Detect suffix like "_m09.nxs" or "m09.nxs" and derive exact prefix before the m-part
+    m_match = re.search(r"_m(\d+)\.nxs$", base_name, re.IGNORECASE)
+    sep = ""
+    prefix = None
+    if m_match:
+        sep = "_"
+        prefix = base_name[:m_match.start()]  # before "_mNN.nxs"
+    else:
+        m2 = re.search(r"m(\d+)\.nxs$", base_name, re.IGNORECASE)
+        if m2:
+            sep = ""
+            prefix = base_name[:m2.start()]   # before "mNN.nxs"
+
+    ordered_paths = []
+    if prefix is not None:
+        glob_pat = f"{prefix}{sep}m*.nxs"
+        series = []
+        for fp in folder.glob(glob_pat):
+            mm = re.search(r"m(\d+)\.nxs$", fp.name, re.IGNORECASE)
+            if mm:
+                series.append((int(mm.group(1)), fp))
+        if series:
+            series.sort(key=lambda x: x[0])
+            ordered_paths = [pp for _, pp in series]
+
+    # Fallback: no series detected -> use the single file
+    if not ordered_paths:
+        ordered_paths = [p]
+
+    # Read modules
+    modules = []  # each: {img, trans_x, trans_y, mask}
+    for mp in ordered_paths:
+        with h5py.File(str(mp), "r") as f:
+            dset = f[dataset_path]
+            # 3D: (frames, H, W) or 2D: (H, W)
+            if dset.ndim == 3:
+                img = dset[frame_idx].astype(np.float32)
+            elif dset.ndim == 2:
+                img = dset[()].astype(np.float32)
+            else:
+                raise ValueError(f"Unexpected dataset ndim {dset.ndim} in {mp.name}")
+
+            # translations (P03 style): trans_x = dist[1], trans_y = dist[0]
+            if dist_path in f:
+                dist = list(f[dist_path])
+                trans_x = int(dist[1])
+                trans_y = int(dist[0])
+            else:
+                trans_x = 0
+                trans_y = 0
+
+            # optional mask
+            msk = f[mask_path][()] if mask_path in f else None
+
+        # Orient image to (x,y) = (516,1556)
+        if img.shape == (lmbda_y, lmbda_x):
+            img_xy = img.T  # (1556,516) -> (516,1556)
+            msk_xy = msk.T if msk is not None and msk.shape == img.shape else msk
+        elif img.shape == (lmbda_x, lmbda_y):
+            img_xy = img
+            msk_xy = msk
+        else:
+            raise ValueError(
+                f"{mp.name}: unexpected module shape {img.shape}. "
+                f"Expected {(lmbda_y, lmbda_x)} or {(lmbda_x, lmbda_y)}."
+            )
+
+        modules.append(dict(img=img_xy, trans_x=trans_x, trans_y=trans_y, mask=msk_xy))
+
+    # Shift to non-negative coordinates if any negative translations
+    min_tx = min(m["trans_x"] for m in modules)
+    min_ty = min(m["trans_y"] for m in modules)
+    shift_x = -min_tx if min_tx < 0 else 0
+    shift_y = -min_ty if min_ty < 0 else 0
+    for m in modules:
+        m["sx"] = m["trans_x"] + shift_x
+        m["sy"] = m["trans_y"] + shift_y
+
+    # Canvas size (x-first): pos = module_size + trans
+    size_x = 0
+    size_y = 0
+    for m in modules:
+        pos_x = lmbda_x + m["sx"]
+        pos_y = lmbda_y + m["sy"]
+        size_x = int(pos_x) if pos_x > size_x else int(size_x)
+        size_y = int(pos_y) if pos_y > size_y else int(size_y)
+
+    # Compose
+    grid = np.full((size_x, size_y), np.nan, dtype=np.float32)
+    for m in modules:
+        x0, y0 = int(m["sx"]), int(m["sy"])
+        grid[x0:x0 + lmbda_x, y0:y0 + lmbda_y] = m["img"]
+
+    # Display-friendly orientation: transpose then flip vertically
+    grid_show = grid.T  # (size_y, size_x)
+    grid_show = np.flipud(grid_show)
+
+    return grid_show
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -263,6 +421,9 @@ class ImageWidget(QWidget):
         # 设置当前窗口状态
         self.windowstate = 0
 
+        # 当前帧索引（用于 NXS 文件），0-based；默认 0
+        self.frame_idx = 0
+
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             url = event.mimeData().urls()[0]
@@ -274,15 +435,20 @@ class ImageWidget(QWidget):
     def dropEvent(self, event):
         url = event.mimeData().urls()[0]
         file_path = url.toLocalFile()
-        self.file_name = file_path
-        self.update_image()
+        # 通过 ImageLayout 统一更新，这样会自动刷新帧号选择器等状态
+        if hasattr(self, 'image_layout') and self.image_layout is not None:
+            self.image_layout.update_image(file_path)
+        else:
+            self.file_name = file_path
+            self.update_image()
 
     def update_image(self):
         if self.file_name:
             # 读取图像并规范化
             cb_min = float(self.textbox_min.text())
             cb_max = float(self.textbox_max.text())
-            im = cv2.imread(self.file_name, cv2.IMREAD_ANYDEPTH)
+            # 统一读取：图片或 NXS（支持 frame_idx）
+            im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
 
             mask = (im >= self.threshold_max) | (im < self.threshold_min)
             img_norm = im.copy()
@@ -343,7 +509,8 @@ class ImageWidget(QWidget):
             threshold_min = float(self.threshold_min)
             threshold_max = float(self.threshold_max)
 
-            im = cv2.imread(self.file_name, cv2.IMREAD_ANYDEPTH)
+            # 统一读取：图片或 NXS（支持 frame_idx）
+            im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
             img_norm = im.copy()
             img_norm = img_norm.astype(float)
 
@@ -452,7 +619,7 @@ class ImageWidget(QWidget):
             self.fig.savefig(temp_file.name, dpi=300)
             plt.close(self.fig)  # 关闭绘图窗口
 
-            # 读取临时文件
+            # 读取临时文件并保持颜色
             color_values = cv2.imread(temp_file.name, cv2.IMREAD_COLOR)
 
             # 缩放图像以适应窗口
@@ -461,7 +628,7 @@ class ImageWidget(QWidget):
             if window_height <= 1 or window_width <= 1:
                 return
             scale = min(window_height / height, window_width / width)
-            resized = cv2.resize(color_values, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_NEAREST)
+            resized = cv2.resize(color_values, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_AREA)
 
             # 显示图像
             pixmap = self.to_qimage(resized)
@@ -488,6 +655,10 @@ class ImageWidget(QWidget):
         self.numbin = parameter.numbin_value
 
     def on_resize(self, event):
+        # 在 1D 显示时避免自动刷新覆盖
+        if getattr(self, 'windowstate', 0) == 3:
+            event.accept()
+            return
         if self.image_layout.rb1.isChecked():
             self.update_image()
         if self.image_layout.rb2.isChecked():
@@ -495,6 +666,9 @@ class ImageWidget(QWidget):
         event.accept()
 
     def on_resize_timeout(self):
+        # 在 1D 显示时避免自动刷新覆盖
+        if getattr(self, 'windowstate', 0) == 3:
+            return
         self.Cut()
     # def wheelEvent(self, event):
     #     # 获取当前的鼠标位置
@@ -556,7 +730,8 @@ class ImageWidget(QWidget):
     def int_region(self, cb_min, cb_max, x_center, y_center):
 
         # 读取图像并规范化
-        im = cv2.imread(self.file_name, cv2.IMREAD_ANYDEPTH)
+        # im = cv2.imread(self.file_name, cv2.IMREAD_ANYDEPTH)
+        im = load_image_matrix(self.file_name)
         img_norm = im.copy()
         img_norm[img_norm > cb_max] = cb_max
         img_norm[img_norm < cb_min] = cb_min
@@ -665,7 +840,7 @@ class ImageWidget(QWidget):
 
 
         #
-        im = cv2.imread(self.file_name, cv2.IMREAD_ANYDEPTH)
+        im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
         im = cv2.flip(im, 0)
         # 确定扇形区域的布尔掩码
         mask = (r >= inner_radius) & (r <= outer_radius) & (theta >= start_angle) & (theta <= end_angle)
@@ -809,7 +984,7 @@ class ImageWidget(QWidget):
         self.fig.savefig(temp_file.name, dpi=300)
         plt.close(self.fig)  # 关闭绘图窗口
 
-        # 读取临时文件
+        # 读取临时文件并保持颜色
         color_values = cv2.imread(temp_file.name, cv2.IMREAD_COLOR)
 
         # 缩放图像以适应窗口
@@ -818,7 +993,7 @@ class ImageWidget(QWidget):
         if window_height <= 1 or window_width <= 1:
             return
         scale = min(window_height / height, window_width / width)
-        resized = cv2.resize(color_values, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_NEAREST)
+        resized = cv2.resize(color_values, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_AREA)
 
         # 显示图像
         pixmap = self.to_qimage(resized)
@@ -873,7 +1048,7 @@ class ImageWidget(QWidget):
                 cb_min = float(self.textbox_min.text())
                 cb_max = float(self.textbox_max.text())
                 # 获取image
-                im = cv2.imread(self.file_name, cv2.IMREAD_ANYDEPTH)
+                im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
                 img_norm = im.copy()
                 img_norm[img_norm > cb_max] = cb_max
                 img_norm[img_norm < cb_min] = cb_min
@@ -909,8 +1084,19 @@ class ImageLayout(QWidget):
         self.button = QPushButton('Select File', self)
         self.button.setFixedWidth(200)
         self.button.setFixedHeight(30)
-        # self.button.move(20, 20)
         self.button.clicked.connect(self.select_file)
+
+        # 帧号输入（仅 NXS 可用）
+        self.label_no = QLabel('No.')
+        self.label_no.setFixedWidth(30)
+        self.textbox_frameNo = QLineEdit(self)
+        self.textbox_frameNo.setFixedWidth(100)
+        self.textbox_frameNo.setFixedHeight(20)
+        self.textbox_frameNo.setEnabled(False)  # 默认禁用
+        self.textbox_frameNo.setPlaceholderText('1-N')
+        self.textbox_frameNo.setToolTip('Select frame number (enabled for NXS)')
+        self.textbox_frameNo.editingFinished.connect(self.on_frame_no_changed)
+        self.frame_count = 1
 
         try:
             value = float(settings.value('textbox_min', '0'))
@@ -1029,6 +1215,8 @@ class ImageLayout(QWidget):
         self.flip.toggled.connect(self.update_image_finished)
 
         self.image_widget.setStyleSheet("border: 2px solid #808080; border-radius: 5px;")
+        # 批处理时的文件名后缀（如帧号），为空则不追加
+        self.batch_suffix = ""
         # 创建布局
 
         radio_buttons_layout = QHBoxLayout()
@@ -1036,8 +1224,22 @@ class ImageLayout(QWidget):
         radio_buttons_layout.addWidget(self.rb2)
 
         layout = QGridLayout(self)
-        layout.addWidget(QLabel('File name:'), 0, 0)
-        layout.addWidget(self.button, 0, 1)
+
+        # 顶部两列容器：左（文件名标签+选择按钮），右（No. + 输入框）
+        w_file = QWidget()
+        h1 = QHBoxLayout(w_file)
+        h1.setContentsMargins(0,0,0,0)
+        h1.addWidget(QLabel('File name:'))
+        h1.addWidget(self.button)
+
+        w_no = QWidget()
+        h2 = QHBoxLayout(w_no)
+        h2.setContentsMargins(0,0,0,0)
+        h2.addWidget(self.label_no)
+        h2.addWidget(self.textbox_frameNo)
+
+        layout.addWidget(w_file, 0, 0)
+        layout.addWidget(w_no, 0, 1)
         layout.addWidget(QLabel('Colorbar_min:'), 1, 0)
         layout.addWidget(self.textbox_min, 1, 1)
         layout.addWidget(QLabel('Colorbar_max:'), 2, 0)
@@ -1065,6 +1267,41 @@ class ImageLayout(QWidget):
         # 设置原位数据处理窗台码
         self.insitustate = 0
 
+    def _detect_nxs_frame_count(self, file_name: str) -> int:
+        count = 1
+        try:
+            with h5py.File(file_name, 'r') as f:
+                if '/entry/instrument/detector/data' in f:
+                    dset = f['/entry/instrument/detector/data']
+                    if dset.ndim == 3:
+                        count = int(dset.shape[0])
+        except Exception:
+            pass
+        return count
+
+    def _update_frame_selector_for(self, file_name: str):
+        suffix = Path(file_name).suffix.lower()
+        if suffix == '.nxs':
+            self.frame_count = self._detect_nxs_frame_count(file_name)
+            self.textbox_frameNo.setEnabled(True)
+            self.textbox_frameNo.setPlaceholderText(f'1-{self.frame_count}')
+            self.textbox_frameNo.setToolTip(f'Frame No. range: 1 to {self.frame_count}')
+            # 默认到 1
+            if not self.textbox_frameNo.text():
+                self.textbox_frameNo.setText('1')
+            try:
+                val = int(float(self.textbox_frameNo.text()))
+            except Exception:
+                val = 1
+            if val < 1 or val > self.frame_count:
+                val = 1
+            self.image_widget.frame_idx = val - 1
+        else:
+            self.textbox_frameNo.setEnabled(False)
+            self.textbox_frameNo.setPlaceholderText('1-N')
+            self.textbox_frameNo.setToolTip('Select frame number (enabled for NXS)')
+            self.image_widget.frame_idx = 0
+
     def on_radio_button_toggled(self):
         if self.radioButtonRadial.isChecked():
             self.comboBox.clear()
@@ -1074,6 +1311,9 @@ class ImageLayout(QWidget):
             self.comboBox.addItems(['Theta'])
 
     def update_image_finished(self):
+        # 在 1D 显示时避免自动刷新覆盖
+        if getattr(self.image_widget, 'windowstate', 0) == 3:
+            return
         if self.rb1.isChecked():
             self.image_widget.update_image()
         if self.rb2.isChecked():
@@ -1087,12 +1327,17 @@ class ImageLayout(QWidget):
         # 打开文件选择器对话框
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        file_name, _ = QFileDialog.getOpenFileName(self, 'Select File', '', 'TIFF Files (*.tif *.tiff);;All Files (*)', options=options)
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, 'Select File', '',
+            'Images (*.tif *.tiff *.png *.jpg *.jpeg *.bmp);;NXS (*.nxs);;All Files (*)',
+            options=options)
         if file_name:
             try:
                 self.file_name = file_name
                 # 更新图像
                 self.update_image(self.file_name)
+                # 更新帧选择器（针对 NXS）
+                self._update_frame_selector_for(self.file_name)
                 if not self.textbox_startAngle.text():
                     self.textbox_startAngle.setText('-180')
                 if not self.textbox_endAngle.text():
@@ -1126,11 +1371,38 @@ class ImageLayout(QWidget):
 
         # self.image_widget.file_name = self.file_name
         self.image_widget.file_name = file_name
+        # 根据文件类型更新帧选择器状态
+        self._update_frame_selector_for(file_name)
         if self.rb1.isChecked():
             # 调用ImageWidget的update_image()方法
             self.image_widget.update_image()
         if self.rb2.isChecked():
             # 调用ImageWidget的Cut()方法
+            self.image_widget.Cut()
+
+    def on_frame_no_changed(self):
+        # 仅在启用时响应
+        if not self.textbox_frameNo.isEnabled():
+            return
+        try:
+            val = int(float(self.textbox_frameNo.text()))
+        except Exception:
+            val = 1
+        # 限制到范围 1..frame_count
+        if val < 1:
+            val = 1
+        if val > self.frame_count:
+            val = self.frame_count
+        # 回写规范化值
+        self.textbox_frameNo.setText(str(val))
+        # 更新 ImageWidget 的帧索引（0-based）并刷新显示
+        self.image_widget.frame_idx = val - 1
+        # 避免在 1D 显示（windowstate==3）时被自动刷新覆盖
+        if getattr(self.image_widget, 'windowstate', 0) == 3:
+            return
+        if self.rb1.isChecked():
+            self.image_widget.update_image()
+        elif self.rb2.isChecked():
             self.image_widget.Cut()
 
     def select_outputdir(self):
@@ -1193,6 +1465,11 @@ class ImageLayout(QWidget):
             os.makedirs(image_folder_path, exist_ok=True)
             file_path = os.path.join(image_folder_path, folder_name + '.jpg')
 
+        # 批处理时追加后缀（如帧号）
+        if getattr(self, 'batch_suffix', ""):
+            base, ext = os.path.splitext(file_path)
+            file_path = f"{base}_{self.batch_suffix}{ext}"
+
         if self.image_widget.windowstate == 3: #判断当前图窗是否为一维图像
             # file_path = os.path.join(self.output_folder, os.path.splitext(os.path.basename(self.file_name))[0] + '.jpg')
             self.image_widget.fig.savefig(file_path, dpi=300)
@@ -1202,7 +1479,7 @@ class ImageLayout(QWidget):
             # 读取图像并规范化
             cb_min = float(self.textbox_min.text())
             cb_max = float(self.textbox_max.text())
-            im = cv2.imread(file_name, cv2.IMREAD_ANYDEPTH)
+            im = load_image_matrix(file_name)
             img_norm = im.copy()
             img_norm[img_norm > cb_max] = cb_max
             img_norm[img_norm < cb_min] = cb_min
@@ -1242,7 +1519,7 @@ class ImageLayout(QWidget):
                         f.write(f"{x[i]}\t{y[i]}\n")
                 QMessageBox.information(self, "Export Success", "Integral data has been exported successfully!")
         except:
-            QMessageBox.warning(self, "Warning", "未能导出数据", QMessageBox.Ok)
+            QMessageBox.warning(self, "Warning", "Failed to export data", QMessageBox.Ok)
 
     def update_output_folder(self):
         folder_path = self.textbox_outputdir.text()
@@ -1501,7 +1778,7 @@ class BatchProcessor(QWidget):
 
         self.pattern_label = QLabel("Filename pattern:")
         self.pattern_input = QLineEdit()
-        self.pattern_input.setText('*.tif')
+        self.pattern_input.setText('*.nxs')
         self.process_button = QPushButton("Batch Process")
         self.hotmap_button = QPushButton("In-situ Heatmap Preview")
 
@@ -1666,76 +1943,148 @@ class BatchProcessor(QWidget):
 
         output = []
         output_bk = []
-        # 遍历符合条件的文件并进行处理
-        for i, filepath in enumerate(file_list):
 
-            if self.stop_flag:
-                self.progress_bar.setValue(0)
-                QMessageBox.warning(self, 'Warning', 'The process was stopped by the user.')
-                return
+        # 如果包含 .nxs，则基于帧维度处理（第一维）
+        nxs_files = [f for f in file_list if f.lower().endswith('.nxs')]
+        if nxs_files:
+            rep = nxs_files[0]
+            # 检测帧数
+            frame_count = self.image_layout._detect_nxs_frame_count(rep)
+            if frame_count < 1:
+                frame_count = 1
 
-            filename = os.path.basename(filepath)
+            for fi in range(frame_count):
 
-            # 设置image_widget的filename并调用Cut()、update_image()和export_image()
-            self.filename = filepath
-            self.image_widget.update_batch_processor_filename()
-            self.image_layout.update_batch_processor_filename()
-
-            # 如果一维被勾选上
-            if self.export_curve_check.isChecked():
-                try:
-                    x, y = self.export_integral_data()
-                    if i == 0:
-                        output.append(x)
-                    output.append(y)
-
-                except:
-                    QMessageBox.warning(self, "Warning", "Integration aborted!", QMessageBox.Ok)
-                    self.image_layout.insitustate = 0
+                if self.stop_flag:
+                    self.progress_bar.setValue(0)
+                    QMessageBox.warning(self, 'Warning', 'The process was stopped by the user.')
                     return
 
-            # 如果二维导出被勾选上
-            if self.export_image_check.isChecked():
-                if self.image_layout.rb2.isChecked():
-                    self.image_widget.Cut()
-                if self.image_layout.rb1.isChecked():
-                    self.image_widget.update_image()
-                self.image_layout.export_image()
+                # 设置代表文件与帧索引
+                self.filename = rep
+                self.image_widget.file_name = rep
+                self.image_widget.frame_idx = fi
+                # 设置批处理文件名后缀（帧号 1-based）
+                self.image_layout.batch_suffix = f"f{fi+1:04d}"
+
+                # 一维导出
+                if self.export_curve_check.isChecked():
+                    try:
+                        x, y = self.export_integral_data()
+                        if fi == 0:
+                            output.append(x)
+                        output.append(y)
+                    except:
+                        QMessageBox.warning(self, "Warning", "Integration aborted!", QMessageBox.Ok)
+                        self.image_layout.insitustate = 0
+                        self.image_layout.batch_suffix = ""
+                        return
+
+                # 二维导出
+                if self.export_image_check.isChecked():
+                    if self.image_layout.rb2.isChecked():
+                        self.image_widget.Cut()
+                    if self.image_layout.rb1.isChecked():
+                        self.image_widget.update_image()
+                    self.image_layout.export_image()
+
+                # 进度（按帧）
+                progress = (fi + 1) / frame_count * 100
+                self.progress_bar.setValue(int(round(progress)))
+                QCoreApplication.processEvents()
+
+                plt.close('all')
+                fig, ax = plt.subplots()
+                if self.background_removal_check.isChecked() and self.x_bg is not None:
+                    x, y = self.export_integral_data()
+                    idx = [np.abs(x - xi).argmin() for xi in self.x_bg]
+                    y_bg = y[idx]
+                    interp_spline = make_interp_spline(self.x_bg, y_bg, k=2)
+                    y_bg_interp = interp_spline(x)
+                    y_corrected = y - y_bg_interp
+                    if fi == 0:
+                        output_bk.append(x)
+                    output_bk.append(y_corrected)
+                    ax.clear()
+                    ax.plot(x, y_corrected)
+                    ax.set_title(f'Frame {fi + 1}')
+                    fig.canvas.draw()
+                    plt.pause(0.001)
+
+            # 清理后缀
+            self.image_layout.batch_suffix = ""
+
+        else:
+            # 遍历符合条件的文件并进行处理（普通图片按文件顺序）
+            for i, filepath in enumerate(file_list):
+
+                if self.stop_flag:
+                    self.progress_bar.setValue(0)
+                    QMessageBox.warning(self, 'Warning', 'The process was stopped by the user.')
+                    return
+
+                filename = os.path.basename(filepath)
+
+                # 设置image_widget的filename并调用Cut()、update_image()和export_image()
+                self.filename = filepath
+                self.image_widget.update_batch_processor_filename()
+                self.image_layout.update_batch_processor_filename()
+
+                # 如果一维被勾选上
+                if self.export_curve_check.isChecked():
+                    try:
+                        x, y = self.export_integral_data()
+                        if i == 0:
+                            output.append(x)
+                        output.append(y)
+
+                    except:
+                        QMessageBox.warning(self, "Warning", "Integration aborted!", QMessageBox.Ok)
+                        self.image_layout.insitustate = 0
+                        return
+
+                # 如果二维导出被勾选上
+                if self.export_image_check.isChecked():
+                    if self.image_layout.rb2.isChecked():
+                        self.image_widget.Cut()
+                    if self.image_layout.rb1.isChecked():
+                        self.image_widget.update_image()
+                    self.image_layout.export_image()
 
 
-            # 更新进度条
-            progress = (i + 1) / total_files * 100
-            self.progress_bar.setValue(int(round(progress)))
-            # 强制处理未处理的事件，以便更新界面
-            QCoreApplication.processEvents()
+                # 更新进度条
+                progress = (i + 1) / total_files * 100
+                self.progress_bar.setValue(int(round(progress)))
+                # 强制处理未处理的事件，以便更新界面
+                QCoreApplication.processEvents()
 
-            plt.close('all')
-            fig, ax = plt.subplots()
-            # 扣背底循环
-            if self.background_removal_check.isChecked() and self.x_bg is not None:
-                x, y = self.export_integral_data()
-                # 搜索self.x_bg在x中对应的索引
-                idx = [np.abs(x - xi).argmin() for xi in self.x_bg]
-                # 获取对应的y值
-                y_bg = y[idx]
-                # 使用样条插值
-                interp_spline = make_interp_spline(self.x_bg, y_bg, k=2)
-                y_bg_interp = interp_spline(x)
-                # 扣除背景曲线，得到扣除背景后的曲线
-                y_corrected = y - y_bg_interp
-                # 导出数据
-                if i == 0:
-                    output_bk.append(x)
-                output_bk.append(y_corrected)
+                plt.close('all')
+                fig, ax = plt.subplots()
+                # 扣背底循环
+                if self.background_removal_check.isChecked() and self.x_bg is not None:
+                    x, y = self.export_integral_data()
+                    # 搜索self.x_bg在x中对应的索引
+                    idx = [np.abs(x - xi).argmin() for xi in self.x_bg]
+                    # 获取对应的y值
+                    y_bg = y[idx]
+                    # 使用样条插值
+                    interp_spline = make_interp_spline(self.x_bg, y_bg, k=2)
+                    y_bg_interp = interp_spline(x)
+                    # 扣除背景曲线，得到扣除背景后的曲线
+                    y_corrected = y - y_bg_interp
+                    # 导出数据
+                    if i == 0:
+                        output_bk.append(x)
+                    output_bk.append(y_corrected)
 
-                # 清空Axes并绘制新的数据
-                ax.clear()
-                ax.plot(x, y_corrected)
-                ax.set_title('Iteration %d' % (i + 1))
-                # 刷新画布
-                fig.canvas.draw()
-                # 保证窗口能够响应事件
-                plt.pause(0.001)
+                    # 清空Axes并绘制新的数据
+                    ax.clear()
+                    ax.plot(x, y_corrected)
+                    ax.set_title('Iteration %d' % (i + 1))
+                    # 刷新画布
+                    fig.canvas.draw()
+                    # 保证窗口能够响应事件
+                    plt.pause(0.001)
 
 
         # 显示窗口
@@ -1857,7 +2206,7 @@ class BatchProcessor(QWidget):
             else:
                 QMessageBox.warning(self, "Warning", "Please batch-process 1D curves or import in-situ file first.", QMessageBox.Ok)
         except:
-            QMessageBox.warning(self, "Warning", "请先进行一维曲线的批量处理或导入原位数据文件！", QMessageBox.Ok)
+            QMessageBox.warning(self, "Warning", "Please batch-process 1D curves or import in-situ file first.", QMessageBox.Ok)
 
     def export_integral_data(self):
         try:
@@ -1868,6 +2217,10 @@ class BatchProcessor(QWidget):
             image_folder_path = os.path.join(self.image_layout.output_folder, '1D')
             os.makedirs(image_folder_path, exist_ok=True)
             file_path = os.path.join(image_folder_path, folder_name + '.jpg')
+            # 批处理时追加后缀（如帧号）
+            if getattr(self.image_layout, 'batch_suffix', ""):
+                base, ext = os.path.splitext(file_path)
+                file_path = f"{base}_{self.image_layout.batch_suffix}{ext}"
 
             x, y = self.image_widget.calculate_integral()
             self.image_widget.fig.savefig(file_path, dpi=300) #导出一维图片的jpg格式

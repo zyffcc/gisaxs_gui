@@ -17,7 +17,7 @@ class MenuManager(QObject):
     def setup_menus(self):
         """设置所有菜单"""
         self.create_parameters_menu()
-        print("✓ 菜单系统已初始化")
+        print("The menu system has been initialized.")
     
     def create_parameters_menu(self):
         """创建参数菜单"""
@@ -59,10 +59,10 @@ class MenuManager(QObject):
                 self.main_window.actionLoadParams.triggered.connect(self.load_parameters)
                 parameters_menu.addAction(self.main_window.actionLoadParams)
             
-            print("✓ 参数菜单已创建")
+            print("✓ Parameter menu created")
             
         except Exception as e:
-            print(f"创建参数菜单失败: {e}")
+            print(f"Failed to create parameter menu: {e}")
     
     def reset_parameters(self):
         """重置所有参数为初始默认值"""
@@ -70,8 +70,8 @@ class MenuManager(QObject):
             # 确认对话框
             reply = QMessageBox.question(
                 self.main_window, 
-                '确认重置', 
-                '确定要重置所有参数为初始默认值吗？\n这将覆盖您的当前设置。',
+                'Confirm Reset', 
+                'Are you sure you want to reset all parameters to their initial default values?\nThis will overwrite your current settings.',
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
@@ -83,21 +83,21 @@ class MenuManager(QObject):
                 # 显示成功消息
                 QMessageBox.information(
                     self.main_window, 
-                    '重置完成', 
-                    '所有参数已重置为初始默认值！'
+                    'Reset complete', 
+                    'All parameters have been reset to their initial default values!'
                 )
                 
-                print("✓ 用户手动重置参数完成")
+                print("✓ User manually reset parameters")
             else:
-                print("用户取消了参数重置")
+                print("User canceled parameter reset")
                 
         except Exception as e:
             QMessageBox.warning(
                 self.main_window, 
-                '重置失败', 
-                f'参数重置失败：{str(e)}'
+                'Reset Failed', 
+                f'Failed to reset parameters: {str(e)}'
             )
-            print(f"参数重置失败: {e}")
+            print(f"Failed to reset parameters: {e}")
     
     def save_parameters(self):
         """手动保存参数"""
@@ -105,27 +105,27 @@ class MenuManager(QObject):
             # 打开文件保存对话框
             file_path, _ = QFileDialog.getSaveFileName(
                 self.main_window,
-                '保存参数文件',
+                'Save Parameters File',
                 'config/my_parameters.json',
-                'JSON文件 (*.json);;所有文件 (*)'
+                'JSON Files (*.json);;All Files (*)'
             )
             
             if file_path:
                 global_params.save_parameters(file_path)
                 QMessageBox.information(
                     self.main_window, 
-                    '保存成功', 
-                    f'参数已保存到：{file_path}'
+                    'Saved', 
+                    f'Parameters have been saved to: {file_path}'
                 )
-                print(f"✓ 用户手动保存参数到: {file_path}")
+                print(f"✓ User manually saved parameters to: {file_path}")
             
         except Exception as e:
             QMessageBox.warning(
                 self.main_window, 
-                '保存失败', 
-                f'参数保存失败：{str(e)}'
+                'Save Failed', 
+                f'Failed to save parameters: {str(e)}'
             )
-            print(f"参数保存失败: {e}")
+            print(f"Failed to save parameters: {e}")
     
     def load_parameters(self):
         """手动加载参数"""
@@ -133,24 +133,24 @@ class MenuManager(QObject):
             # 打开文件选择对话框
             file_path, _ = QFileDialog.getOpenFileName(
                 self.main_window,
-                '加载参数文件',
+                'Load Parameters File',
                 'config/',
-                'JSON文件 (*.json);;所有文件 (*)'
+                'JSON Files (*.json);;All Files (*)'
             )
             
             if file_path:
                 global_params.load_parameters(file_path)
                 QMessageBox.information(
                     self.main_window, 
-                    '加载成功', 
-                    f'参数已从文件加载：{file_path}'
+                    'Loaded', 
+                    f'Parameters have been loaded from: {file_path}'
                 )
-                print(f"✓ 用户手动加载参数从: {file_path}")
+                print(f"✓ User manually loaded parameters from: {file_path}")
             
         except Exception as e:
             QMessageBox.warning(
                 self.main_window, 
-                '加载失败', 
-                f'参数加载失败：{str(e)}'
+                'Load Failed', 
+                f'Failed to load parameters: {str(e)}'
             )
-            print(f"参数加载失败: {e}")
+            print(f"Failed to load parameters: {e}")

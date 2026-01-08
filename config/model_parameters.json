@@ -2,7 +2,7 @@
     "fitting": {
         "global_parameters": {
             "sigma_res": -0.0099,
-            "k_value": 59747.413800892326
+            "k_value": 16350.93455082129
         },
         "particles": {
             "particle_1": {
@@ -46,7 +46,7 @@
                         "radius": 20.0,
                         "sigma_radius": 0.0,
                         "height": 15.0,
-                        "sigma_height": 0.0,
+                        "sigma_height": 0.04,
                         "diameter": -0.03,
                         "sigma_diameter": 0.0,
                         "background": 0.0

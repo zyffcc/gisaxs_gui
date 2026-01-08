@@ -392,29 +392,29 @@ def get_scattering_setup() -> Dict[str, Any]:
 
 # 使用示例（可以删除）
 if __name__ == "__main__":
-    # 使用示例
-    print("=== 参数访问示例 ===")
-    
-    # 1. 获取所有软件参数
+    # Usage examples
+    print("=== Parameter Access Examples ===")
+
+    # 1. Get all software parameters
     all_params = get_all_software_params()
-    print(f"所有参数模块: {list(all_params.keys())}")
-    
-    # 2. 获取物理计算参数
+    print(f"All parameter modules: {list(all_params.keys())}")
+
+    # 2. Get physics calculation parameters
     physics_params = get_physics_params_for_calculation()
-    print(f"物理计算模块: {list(physics_params.keys())}")
-    
-    # 3. 通过路径获取参数
+    print(f"Physics calculation modules: {list(physics_params.keys())}")
+
+    # 3. Get parameter by path
     wavelength = get_param_by_path('beam.wavelength')
-    print(f"波长: {wavelength}")
-    
-    # 4. 获取散射设置
+    print(f"Wavelength: {wavelength}")
+
+    # 4. Get scattering setup
     geometry = get_scattering_setup()
-    print(f"散射几何: {geometry}")
-    
-    # 5. 快速访问
-    print(f"快速获取波长: {get_wavelength()}")
-    print(f"快速获取粒子尺寸: {get_particle_size()}")
-    
-    # 6. 验证参数
+    print(f"Scattering geometry: {geometry}")
+
+    # 5. Quick access
+    print(f"Quick wavelength: {get_wavelength()}")
+    print(f"Quick particle size: {get_particle_size()}")
+
+    # 6. Validate parameters
     validation = validate_params_for_physics()
-    print(f"参数验证: {validation}")
+    print(f"Parameter validation: {validation}")

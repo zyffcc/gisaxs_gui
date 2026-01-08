@@ -1,6 +1,6 @@
 {
     "beam": {
-        "wavelength": 0.1116,
+        "wavelength": 0.1,
         "grazing_angle": 0.4,
         "beam_size_x": 0.1,
         "beam_size_y": 0.1,
@@ -8,38 +8,28 @@
         "polarization": "horizontal"
     },
     "detector": {
-        "preset": "Pilatus 1M",
-        "distance": 2565.0,
-        "nbins_x": 981,
-        "nbins_y": 1043,
-        "pixel_size_x": 172.0,
-        "pixel_size_y": 172.0,
-        "beam_center_x": 300.0,
-        "beam_center_y": 300.0,
+        "preset": "Pilatus 2M",
+        "distance": 2000,
+        "nbins_x": 1475,
+        "nbins_y": 1475,
+        "pixel_size_x": 172,
+        "pixel_size_y": 172,
+        "beam_center_x": 737,
+        "beam_center_y": 737,
         "exposure_time": 1.0,
         "dark_current": 0.1,
         "readout_noise": 5.0
     },
     "sample": {
-        "particle_shape": "Ellipsoid",
+        "particle_shape": "Sphere",
         "particle_size": 10.0,
         "size_distribution": 0.1,
-        "material": "Au",
+        "material": "Gold",
         "substrate": "Silicon",
         "thickness": 100.0,
         "roughness": 1.0,
         "density": 0.5,
-        "orientation": "random",
-        "sphere": {
-            "r_min": 3.0,
-            "r_max": 20.0,
-            "delta": 5e-06,
-            "beta": 2e-07,
-            "r_bins": 150,
-            "sigma_min_r": 0.05,
-            "sigma_max_r": 0.15,
-            "dist_type_r": "normal"
-        }
+        "orientation": "random"
     },
     "preprocessing": {
         "focus_region": {
@@ -69,12 +59,12 @@
         "batch_size": 10,
         "detector": {
             "preset": "Pilatus 2M",
-            "distance": 2565.0,
+            "distance": 2000.0,
             "nbins_x": 1475,
             "nbins_y": 1475,
             "pixel_size_x": 172,
             "pixel_size_y": 172,
-            "beam_center_x": 50.0,
+            "beam_center_x": 737.0,
             "beam_center_y": 50.0
         }
     },
@@ -83,51 +73,40 @@
             "distance": 2565.0,
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
-            "beam_center_x": 791.58,
-            "beam_center_y": 368.12,
-            "show_q_axis": false,
-            "wavelength": 0.1
+            "beam_center_x": 791.0,
+            "beam_center_y": 368.0
         },
         "last_session": {
-            "last_opened_file": "D:/PythonCode/gisaxs_gui/TestSAXSdata\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
-            "last_directory": "D:/PythonCode/gisaxs_gui/TestSAXSdata",
+            "last_opened_file": "",
+            "last_directory": "",
             "last_1d_directory": null,
             "last_1d_file": null,
             "stack_count": 1,
             "load_mode": "Single",
             "insitu_range": "",
-            "center_vertical": 505.0,
-            "center_parallel": 768.01,
-            "cutline_vertical": 20.0,
-            "cutline_parallel": 1180.0,
-            "auto_show": true,
+            "center_vertical": 0.0,
+            "center_parallel": 0.0,
+            "cutline_vertical": 10.0,
+            "cutline_parallel": 10.0,
+            "auto_show": false,
             "log_mode": true,
             "auto_scale": true,
-            "vmin": -6.907755374908447,
-            "vmax": 4.110873699188232,
-            "fit_current_data": true,
-            "fit_log_x": true,
-            "fit_log_y": true,
+            "vmin": 0.0,
+            "vmax": 0.0,
+            "fit_current_data": false,
+            "fit_log_x": false,
+            "fit_log_y": false,
             "fit_norm": false
-        },
-        "gisaxs_input": {
-            "vmax": 4.11,
-            "vmin": -6.91,
-            "cutline_parallel": 1181.0,
-            "cutline_vertical": 30.0,
-            "center_parallel": 769.01,
-            "center_vertical": 505.0,
-            "load_mode": "Single"
         }
     },
     "gisaxs_predict": {},
     "classification": {
         "import_cache": {
-            "particle-1": {
-                "path": "D:/PythonCode/gisaxs_gui/TestSAXSdata",
-                "rule": "*.dat"
+            "P2": {
+                "path": "",
+                "rule": "*"
             },
-            "particle-2": {
+            "Particle 1": {
                 "path": "",
                 "rule": "*"
             }

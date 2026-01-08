@@ -24,7 +24,7 @@ class LayoutUtils:
             lambda index: LayoutUtils._on_page_changed(stacked_widget, index)
         )
         
-        print("✓ StackedWidget已配置为自适应模式（每页面独立ScrollArea）")
+    print("✓ StackedWidget configured for adaptive mode (each page has its own ScrollArea)")
     
     @staticmethod
     def _on_page_changed(stacked_widget, index):
@@ -45,18 +45,18 @@ class LayoutUtils:
                 }
                 
                 page_name = page_names.get(index, f"Page {index}")
-                print(f"✓ 切换到 {page_name} 页面 (索引: {index})")
+                print(f"✓ Switched to {page_name} page (index: {index})")
                 
         except Exception as e:
-            print(f"页面切换处理失败: {e}")
+            print(f"Page switch handling failed: {e}")
     
     # 为了向后兼容，保留一些原有方法的简化版本
     @staticmethod
     def _restore_full_scroll_area(stacked_widget):
         """向后兼容：页面滚动区域已独立，无需特殊处理"""
-        print("ℹ️  每个页面都有独立ScrollArea，无需调整主滚动区域")
+    print("ℹ️  Each page has its own ScrollArea; no need to adjust the main scroll area")
     
     @staticmethod
     def _compress_scroll_area_for_predict(stacked_widget):
         """向后兼容：页面滚动区域已独立，无需特殊处理"""
-        print("ℹ️  每个页面都有独立ScrollArea，无需压缩主滚动区域")
+    print("ℹ️  Each page has its own ScrollArea; no need to compress the main scroll area")
