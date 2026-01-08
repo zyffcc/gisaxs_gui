@@ -97,9 +97,25 @@
             "fit_log_x": false,
             "fit_log_y": false,
             "fit_norm": false
+        },
+        "gisaxs_input": {
+            "load_mode": "Single"
         }
     },
-    "gisaxs_predict": {},
+    "gisaxs_predict": {
+        "framework": "tensorflow 2.15.0",
+        "mode": "single_file",
+        "input_file": "E:/PythonCode/gisaxs_gui/TestSAXSdata\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
+        "input_folder": "E:/PythonCode/gisaxs_gui/TestSAXSdata",
+        "export_path": "",
+        "stack_value": "1",
+        "range_value": "2",
+        "showing_value": "5",
+        "auto_scale": true,
+        "vmin": -1.0,
+        "vmax": 31.0,
+        "colormap": "viridis"
+    },
     "classification": {
         "import_cache": {
             "P2": {

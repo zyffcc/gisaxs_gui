@@ -267,6 +267,20 @@ class GlobalParameterManager(QObject):
                     'beam_center_y': 368.0,  # bin (Q轴转换用)
                 }
             },
+            'gisaxs_predict': {
+                'framework': 'tensorflow 2.15.0',
+                'mode': 'single',
+                'input_file': '',
+                'input_folder': '',
+                'export_path': '',
+                'stack_value': '1',
+                'range_value': '',
+                'showing_value': '',
+                'auto_scale': True,
+                'vmin': None,
+                'vmax': None,
+                'colormap': 'viridis'
+            },
             'system': {
                 'calculation_method': 'DWBA',
                 'approximation': 'Born',

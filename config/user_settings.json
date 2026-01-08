@@ -7,7 +7,7 @@
   "fit.points_num": 100,
   "fit.interp_method": "Spline",
   "main_splitter_sizes": [
-    157,
-    1219
+    209,
+    1625
   ]
 }
