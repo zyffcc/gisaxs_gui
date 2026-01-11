@@ -1,4 +1,4 @@
-"""GISAXS Predict 控制器 - 处理GISAXS数据的展示功能."""
+"""GISAXS Predict controller responsible for displaying GISAXS data."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from .fitting_controller import AsyncImageLoader, is_matplotlib_available, is_fa
 
 
 class GisaxsPredictController(QObject):
-    """GISAXS预测控制器，处理GISAXS数据导入、展示与预测。"""
+    """GISAXS prediction controller handling data import, display, and prediction."""
 
     status_updated = pyqtSignal(str)
     progress_updated = pyqtSignal(int)
@@ -248,7 +248,7 @@ class GisaxsPredictController(QObject):
     # 文件与模式处理
     # ------------------------------------------------------------------
     def _choose_gisaxs_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self.main_window, "选择GISAXS文件夹", "")
+        folder = QFileDialog.getExistingDirectory(self.main_window, "Select GISAXS Folder", "")
         if not folder:
             return
         self.current_parameters["input_folder"] = folder
@@ -259,7 +259,7 @@ class GisaxsPredictController(QObject):
     def _choose_gisaxs_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self.main_window,
-            "选择GISAXS文件",
+            "Select GISAXS File",
             self.current_parameters.get("input_folder", ""),
             "GISAXS Files (*.cbf);;All Files (*)",
         )
@@ -269,7 +269,7 @@ class GisaxsPredictController(QObject):
     def _choose_export_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self.main_window,
-            "选择导出文件夹",
+            "Select Export Folder",
             self.current_parameters.get("export_path", ""),
         )
         if not folder:
@@ -277,7 +277,7 @@ class GisaxsPredictController(QObject):
         self.current_parameters["export_path"] = folder
         self._set_line_edit("gisaxsPredictExportFolderValue", folder)
         self._persist_parameters()
-        self._append_status_message(f"已选择导出文件夹: {folder}")
+        self._append_status_message(f"Export folder selected: {folder}")
 
     def _handle_file_line_edit_committed(self) -> None:
         widget = getattr(self.ui, "gisaxsPredictChooseGisaxsFileValue", None)
@@ -295,14 +295,14 @@ class GisaxsPredictController(QObject):
         if os.path.exists(candidate):
             self._handle_new_file_selection(candidate)
             return
-        self._append_status_message(f"无法找到文件: {text}", level="WARN")
+        self._append_status_message(f"Unable to locate file: {text}", level="WARN")
 
     def _handle_new_file_selection(self, file_path: str) -> None:
         if not os.path.exists(file_path):
-            QMessageBox.warning(self.main_window, "文件不存在", file_path)
+            QMessageBox.warning(self.main_window, "File Not Found", file_path)
             return
         if not file_path.lower().endswith(".cbf"):
-            QMessageBox.warning(self.main_window, "格式不支持", "目前仅支持CBF文件。")
+            QMessageBox.warning(self.main_window, "Unsupported Format", "Only CBF files are supported.")
             return
 
         folder = os.path.dirname(file_path)
@@ -356,14 +356,14 @@ class GisaxsPredictController(QObject):
                 index_to_file[idx] = full
 
             if not entries:
-                self._append_status_message("当前文件夹内没有可解析编号的CBF文件", level="WARN")
+                self._append_status_message("No numbered CBF files detected in the current folder", level="WARN")
 
             self._folder_entries = entries
             self._index_to_file = index_to_file
             self._available_indices = sorted(index_to_file.keys())
             self._update_range_tooltip()
         except Exception as exc:
-            self._append_status_message(f"扫描文件夹失败: {exc}", level="ERROR")
+            self._append_status_message(f"Failed to scan folder: {exc}", level="ERROR")
 
     def _extract_index(self, file_name: str) -> Optional[int]:
         match = re.search(r"(\d+)(?=\.cbf$)", file_name, re.IGNORECASE)
@@ -376,9 +376,9 @@ class GisaxsPredictController(QObject):
 
     def _update_range_tooltip(self) -> None:
         if not self._available_indices:
-            tooltip = "尚未检测到可用编号"
+            tooltip = "No valid indices detected yet"
         else:
-            tooltip = f"可用编号范围: {self._available_indices[0]} - {self._available_indices[-1]}"
+            tooltip = f"Available index range: {self._available_indices[0]} - {self._available_indices[-1]}"
 
         label = getattr(self.ui, "gisaxsPredictStackLabel", None)
         line_edit = getattr(self.ui, "gisaxsPredictStackValue", None)
@@ -447,10 +447,10 @@ class GisaxsPredictController(QObject):
         try:
             index = int(text)
         except ValueError:
-            self._append_status_message("Showing Value需要输入有效编号", level="WARN")
+            self._append_status_message("Showing Value must be a valid index", level="WARN")
             return
         if index not in self._index_to_file:
-            self._append_status_message("编号不在可选范围内", level="WARN")
+            self._append_status_message("Index is outside the available range", level="WARN")
             return
         self.current_parameters["showing_value"] = str(index)
         self._persist_parameters()
@@ -496,7 +496,7 @@ class GisaxsPredictController(QObject):
             if self._available_indices:
                 indices = [self._available_indices[0]]
             else:
-                self._append_status_message("没有可用的Multi File编号", level="WARN")
+                self._append_status_message("No Multi File indices available", level="WARN")
                 return
 
         self._sequence_indices = indices
@@ -512,13 +512,13 @@ class GisaxsPredictController(QObject):
     # ------------------------------------------------------------------
     def _start_image_loading(self, file_path: str, stack_count: int, context: Dict[str, object]) -> None:
         if not os.path.exists(file_path):
-            QMessageBox.warning(self.main_window, "文件不存在", file_path)
+            QMessageBox.warning(self.main_window, "File Not Found", file_path)
             return
         if not is_fabio_available():
             QMessageBox.warning(
                 self.main_window,
-                "缺少依赖",
-                "需要安装fabio库以读取CBF文件。请运行 pip install fabio",
+                "Missing Dependency",
+                "Install the fabio package to read CBF files (pip install fabio)",
             )
             return
 
@@ -535,17 +535,17 @@ class GisaxsPredictController(QObject):
 
         loader.load_image(file_path, stack_count)
         self._latest_display_request = request_id
-        self._append_status_message(f"加载 {os.path.basename(file_path)} (Stack={stack_count}) ...")
+        self._append_status_message(f"Loading {os.path.basename(file_path)} (Stack={stack_count}) ...")
 
     def _on_loader_progress(self, request_id: int, progress: int, message: str) -> None:
         if request_id != self._latest_display_request:
             return
-        self.status_updated.emit(f"图像加载 {progress}%: {message}")
+        self.status_updated.emit(f"Image loading {progress}%: {message}")
         self.progress_updated.emit(progress)
 
     def _on_loader_error(self, request_id: int, error: str) -> None:
         if request_id == self._latest_display_request:
-            QMessageBox.critical(self.main_window, "图像加载失败", error)
+            QMessageBox.critical(self.main_window, "Image Load Failed", error)
             self.status_updated.emit(error)
         self._cleanup_loader(request_id)
 
@@ -563,7 +563,7 @@ class GisaxsPredictController(QObject):
             return
 
         self._current_image = image_data.astype(np.float32, copy=False)
-        self._append_status_message(f"图像加载完成: {os.path.basename(file_path)}")
+        self._append_status_message(f"Image loaded: {os.path.basename(file_path)}")
 
         if context.get("mode") == "multi_files" and context.get("index") is not None:
             self.current_parameters["showing_value"] = str(context["index"])
@@ -602,7 +602,7 @@ class GisaxsPredictController(QObject):
         self._zoom_reset()
 
         cmap_name = self.current_parameters.get("colormap", "")
-        self.status_updated.emit(f"显示完成 (vmin={vmin:.3f}, vmax={vmax:.3f}, cmap={cmap_name})")
+        self.status_updated.emit(f"Display complete (vmin={vmin:.3f}, vmax={vmax:.3f}, cmap={cmap_name})")
         self._persist_parameters()
 
     def _auto_scale_values(self, image: np.ndarray) -> Tuple[float, float]:
@@ -707,7 +707,7 @@ class GisaxsPredictController(QObject):
         if not self._validate_parameters():
             return
         try:
-            self.status_updated.emit("开始GISAXS预测...")
+            self.status_updated.emit("Starting GISAXS prediction...")
             self.progress_updated.emit(0)
             mode = self.current_parameters.get("mode", "single_file")
             results = self._predict_single_file() if mode == "single_file" else self._predict_multi_files()
@@ -715,10 +715,10 @@ class GisaxsPredictController(QObject):
                 self._save_results(results)
                 self.prediction_completed.emit(results)
                 self.progress_updated.emit(100)
-                self.status_updated.emit("GISAXS预测完成！")
+                self.status_updated.emit("GISAXS prediction finished!")
         except Exception as exc:  # pragma: no cover - runtime safety
-            QMessageBox.critical(self.main_window, "预测错误", str(exc))
-            self.status_updated.emit(f"GISAXS预测错误: {exc}")
+            QMessageBox.critical(self.main_window, "Prediction Error", str(exc))
+            self.status_updated.emit(f"GISAXS prediction error: {exc}")
 
     def _update_parameters_from_ui(self) -> None:
         combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
@@ -733,22 +733,22 @@ class GisaxsPredictController(QObject):
     def _validate_parameters(self) -> bool:
         export_path = self.current_parameters.get("export_path")
         if not export_path:
-            QMessageBox.warning(self.main_window, "参数错误", "请选择导出文件夹")
+            QMessageBox.warning(self.main_window, "Invalid Parameters", "Please choose an export folder")
             return False
         if not os.path.exists(export_path):
-            QMessageBox.warning(self.main_window, "路径错误", f"导出路径不存在: {export_path}")
+            QMessageBox.warning(self.main_window, "Path Error", f"Export path does not exist: {export_path}")
             return False
 
         mode = self.current_parameters.get("mode", "single_file")
         if mode == "single_file":
             file_path = self.current_parameters.get("input_file")
             if not file_path or not os.path.exists(file_path):
-                QMessageBox.warning(self.main_window, "参数错误", "请选择有效的输入文件")
+                QMessageBox.warning(self.main_window, "Invalid Parameters", "Please select a valid input file")
                 return False
         else:
             folder = self.current_parameters.get("input_folder")
             if not folder or not os.path.exists(folder):
-                QMessageBox.warning(self.main_window, "参数错误", "请选择有效的文件夹")
+                QMessageBox.warning(self.main_window, "Invalid Parameters", "Please select a valid folder")
                 return False
         return True
 
@@ -756,7 +756,7 @@ class GisaxsPredictController(QObject):
         file_path = self.current_parameters.get("input_file")
         if not file_path:
             return None
-        self.status_updated.emit(f"处理文件: {os.path.basename(file_path)}")
+        self.status_updated.emit(f"Processing file: {os.path.basename(file_path)}")
         self.progress_updated.emit(25)
         results = {
             "file": file_path,
@@ -773,7 +773,7 @@ class GisaxsPredictController(QObject):
             return None
         files = [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if f.lower().endswith(".cbf")]
         if not files:
-            self._append_status_message("没有找到可预测的CBF文件", level="WARN")
+            self._append_status_message("No CBF files available for prediction", level="WARN")
             return None
         results = {
             "folder": folder,
@@ -794,7 +794,7 @@ class GisaxsPredictController(QObject):
         file_path = os.path.join(export_path, f"gisaxs_prediction_results_{timestamp}.json")
         with open(file_path, "w", encoding="utf-8") as fh:
             json.dump(results, fh, indent=2, ensure_ascii=False)
-        self._append_status_message(f"结果已保存: {file_path}")
+        self._append_status_message(f"Results saved: {file_path}")
 
     # ------------------------------------------------------------------
     # UI 辅助方法

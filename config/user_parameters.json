@@ -77,8 +77,8 @@
             "beam_center_y": 368.0
         },
         "last_session": {
-            "last_opened_file": "",
-            "last_directory": "",
+            "last_opened_file": "E:/PythonCode/gisaxs_gui/TestSAXSdata/jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
+            "last_directory": "E:/PythonCode/gisaxs_gui/TestSAXSdata",
             "last_1d_directory": null,
             "last_1d_file": null,
             "stack_count": 1,
