@@ -169,3 +169,6 @@ plots/
 *.tar.gz
 *.rar
 *.7z
+
+# 模型文件
+modules/*
