@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QCheckBox,
     QDoubleSpinBox,
+    QFrame,
 )
 
 try:  # matplotlib is optional for colormap rendering
@@ -37,6 +38,13 @@ except Exception:  # pragma: no cover - optional dependency
 
 from core.global_params import global_params
 from .fitting_controller import AsyncImageLoader, is_matplotlib_available, is_fabio_available
+from .multifile_predict_results import (
+    MultiFilePredictResultsWidget,
+    MultiFilePredictManager,
+    PredictResult,
+    PredictStatus,
+    ExportDialog
+)
 
 
 class GisaxsPredictController(QObject):
@@ -116,6 +124,11 @@ class GisaxsPredictController(QObject):
         self._predict_curve_controls: Dict[str, object] = {}
         self._current_step_index: int = 0
 
+        # 多文件预测相关
+        self._multifile_results_widget: Optional[MultiFilePredictResultsWidget] = None
+        self._multifile_manager: Optional[MultiFilePredictManager] = None
+        self._multifile_prediction_active: bool = False
+
         # 读取全局参数
         self._set_default_parameters()
         self._load_saved_parameters()
@@ -142,6 +155,8 @@ class GisaxsPredictController(QObject):
         self._initialize_modules_ui()
         # 初始化模型状态指示灯与快捷键
         self._init_model_status_ui()
+        # 初始化多文件预测UI
+        self._setup_multifile_ui()
         self._initialized = True
 
     def _setup_display_resources(self) -> None:
@@ -461,6 +476,292 @@ class GisaxsPredictController(QObject):
         if btn_import:
             btn_import.setEnabled(True)
 
+    def _setup_multifile_ui(self) -> None:
+        """重新设计多文件预测UI布局 - 改进的侧边栏设计"""
+        try:
+            # 获取gisaxsPredictImageShowWidget，这是主要的图像显示容器
+            image_show_widget = getattr(self.ui, "gisaxsPredictImageShowWidget", None)
+            if image_show_widget is None:
+                self._append_status_message("Cannot find gisaxsPredictImageShowWidget", level="ERROR")
+                return
+            
+            # 清空原有布局并重新创建
+            old_layout = image_show_widget.layout()
+            if old_layout:
+                # 保存原有的TabWidget
+                tab_widget = getattr(self.ui, "gisaxsPredictImageShowTabWidget", None)
+                if tab_widget:
+                    old_layout.removeWidget(tab_widget)
+            
+            # 创建新的整体布局 - 使用水平分割器
+            main_layout = QHBoxLayout(image_show_widget)
+            main_layout.setContentsMargins(0, 0, 0, 0)
+            main_layout.setSpacing(0)  # 无间距，提供更多空间
+            
+            # 左侧：图像显示区域（原有TabWidget）
+            if tab_widget:
+                tab_widget.setParent(image_show_widget)
+                main_layout.addWidget(tab_widget, stretch=7)  # 占70%的空间
+            
+            # 右侧：创建多文件预测控制面板（侧边栏设计）
+            control_panel = QWidget()
+            control_panel.setMaximumWidth(500)
+            control_panel.setMinimumWidth(350)
+            control_panel.setStyleSheet("""
+                QWidget {
+                    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0,
+                                              stop: 0 #f8f9fa, stop: 1 #e9ecef);
+                    border-left: 2px solid #6c757d;
+                }
+            """)
+            
+            # 侧边栏主布局
+            sidebar_layout = QVBoxLayout(control_panel)
+            sidebar_layout.setContentsMargins(10, 8, 10, 8)
+            sidebar_layout.setSpacing(8)
+            
+            # === 1. 当前文件显示区域 ===
+            current_file_frame = QFrame()
+            current_file_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+            current_file_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #ffffff;
+                    border: 1px solid #ced4da;
+                    border-radius: 6px;
+                    margin: 2px;
+                }
+            """)
+            
+            current_file_layout = QVBoxLayout(current_file_frame)
+            current_file_layout.setContentsMargins(8, 6, 8, 6)
+            current_file_layout.setSpacing(4)
+            
+            # 当前文件标题
+            current_file_title = QLabel("Current File")
+            current_file_title.setStyleSheet("""
+                QLabel {
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #495057;
+                    border-bottom: 1px solid #dee2e6;
+                    padding-bottom: 3px;
+                    margin-bottom: 3px;
+                }
+            """)
+            current_file_layout.addWidget(current_file_title)
+            
+            # 当前文件内容
+            self._current_file_label = QLabel("No file selected")
+            self._current_file_label.setStyleSheet("""
+                QLabel {
+                    background-color: #f8f9fa;
+                    border: 1px solid #e9ecef;
+                    border-radius: 4px;
+                    padding: 8px;
+                    font-size: 10px;
+                    color: #6c757d;
+                    font-family: 'Consolas', 'Courier New', monospace;
+                }
+            """)
+            self._current_file_label.setWordWrap(True)
+            self._current_file_label.setFixedHeight(50)
+            current_file_layout.addWidget(self._current_file_label)
+            
+            sidebar_layout.addWidget(current_file_frame)
+            
+            # === 2. 多文件结果列表区域 ===
+            results_frame = QFrame()
+            results_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+            results_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #ffffff;
+                    border: 1px solid #ced4da;
+                    border-radius: 6px;
+                    margin: 2px;
+                }
+            """)
+            
+            results_layout = QVBoxLayout(results_frame)
+            results_layout.setContentsMargins(8, 6, 8, 6)
+            results_layout.setSpacing(4)
+            
+            # 结果列表标题
+            results_title = QLabel("Multi-File Results")
+            results_title.setStyleSheet("""
+                QLabel {
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #495057;
+                    border-bottom: 1px solid #dee2e6;
+                    padding-bottom: 3px;
+                    margin-bottom: 3px;
+                }
+            """)
+            results_layout.addWidget(results_title)
+            
+            # 创建多文件结果列表组件
+            self._multifile_results_widget = MultiFilePredictResultsWidget(parent=results_frame)
+            self._multifile_results_widget.setStyleSheet("""
+                MultiFilePredictResultsWidget {
+                    border: none;
+                    background-color: transparent;
+                }
+            """)
+            results_layout.addWidget(self._multifile_results_widget)
+            
+            sidebar_layout.addWidget(results_frame, stretch=1)  # 占用大部分垂直空间
+            
+            # === 3. 快捷操作按钮区域 ===
+            actions_frame = QFrame()
+            actions_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+            actions_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #ffffff;
+                    border: 1px solid #ced4da;
+                    border-radius: 6px;
+                    margin: 2px;
+                }
+            """)
+            
+            actions_layout = QVBoxLayout(actions_frame)
+            actions_layout.setContentsMargins(8, 6, 8, 6)
+            actions_layout.setSpacing(6)
+            
+            # 操作标题
+            actions_title = QLabel("Quick Actions")
+            actions_title.setStyleSheet("""
+                QLabel {
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #495057;
+                    border-bottom: 1px solid #dee2e6;
+                    padding-bottom: 3px;
+                    margin-bottom: 3px;
+                }
+            """)
+            actions_layout.addWidget(actions_title)
+            
+            # 按钮布局
+            buttons_layout = QHBoxLayout()
+            buttons_layout.setSpacing(8)
+            
+            # 清空按钮
+            clear_button = QPushButton("Clear All")
+            clear_button.setFixedHeight(28)
+            clear_button.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 #fd7e7d, stop: 1 #e74c3c);
+                    color: white;
+                    border: 1px solid #c0392b;
+                    border-radius: 4px;
+                    padding: 4px 10px;
+                    font-weight: bold;
+                    font-size: 9px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 #e74c3c, stop: 1 #c0392b);
+                }
+                QPushButton:pressed {
+                    background-color: #a93226;
+                }
+            """)
+            clear_button.clicked.connect(self._clear_multifile_results)
+            buttons_layout.addWidget(clear_button)
+            
+            # 导出按钮  
+            export_all_button = QPushButton("Export All")
+            export_all_button.setFixedHeight(28)
+            export_all_button.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 #5dade2, stop: 1 #3498db);
+                    color: white;
+                    border: 1px solid #2980b9;
+                    border-radius: 4px;
+                    padding: 4px 10px;
+                    font-weight: bold;
+                    font-size: 9px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                              stop: 0 #3498db, stop: 1 #2980b9);
+                }
+                QPushButton:pressed {
+                    background-color: #21618c;
+                }
+            """)
+            export_all_button.clicked.connect(self._export_all_results)
+            buttons_layout.addWidget(export_all_button)
+            
+            actions_layout.addLayout(buttons_layout)
+            
+            sidebar_layout.addWidget(actions_frame)
+            
+            # 将侧边栏控制面板添加到主布局
+            main_layout.addWidget(control_panel, stretch=3)  # 占30%的空间
+            
+            # 初始隐藏控制面板（只在多文件模式时显示）
+            control_panel.setVisible(False)
+            self._multifile_control_panel = control_panel
+            
+            # 连接信号
+            self._multifile_results_widget.result_selected.connect(self._on_multifile_result_selected)
+            self._multifile_results_widget.result_double_clicked.connect(self._on_multifile_result_selected)  # 双击也调用相同处理
+            self._multifile_results_widget.export_requested.connect(self._on_multifile_export_requested)
+            
+            # 创建多文件管理器
+            if self._multifile_manager is None:
+                self._multifile_manager = MultiFilePredictManager(self)
+                self._multifile_manager.prediction_started.connect(self._on_multifile_prediction_started)
+                self._multifile_manager.prediction_completed.connect(self._on_multifile_prediction_completed)
+                self._multifile_manager.result_updated.connect(self._on_multifile_result_updated)
+                self._multifile_manager.progress_updated.connect(self._on_multifile_progress_updated)
+            
+            self._append_status_message("Multi-file UI initialized with redesigned sidebar layout", level="INFO")
+            
+        except Exception as e:
+            self._append_status_message(f"Failed to setup multi-file UI: {e}", level="ERROR")
+
+    def _clear_multifile_results(self) -> None:
+        """清空所有多文件结果"""
+        if self._multifile_results_widget:
+            self._multifile_results_widget.clear_all_results()
+            
+    def _export_all_results(self) -> None:
+        """导出所有结果"""
+        if self._multifile_results_widget:
+            all_results = self._multifile_results_widget.get_all_results()
+            if all_results:
+                self._on_multifile_export_requested(all_results)
+
+    def _adjust_predict_layout_for_mode(self, mode: str) -> None:
+        """根据模式调整预测布局"""
+        # 显示/隐藏多文件控制面板
+        if hasattr(self, '_multifile_control_panel'):
+            self._multifile_control_panel.setVisible(mode == "multi_files")
+        
+        # 更新当前文件标签的可见性
+        if hasattr(self, '_current_file_label'):
+            if mode == "multi_files":
+                self._current_file_label.setVisible(True)
+                if not self._current_file_label.text() or self._current_file_label.text() == "Current: No file selected":
+                    self._current_file_label.setText("No file selected")
+            else:
+                self._current_file_label.setVisible(False)
+
+    def _update_current_file_display(self, file_path: str) -> None:
+        """更新当前文件显示"""
+        if hasattr(self, '_current_file_label'):
+            if file_path:
+                file_name = os.path.basename(file_path)
+                self._current_file_label.setText(f"Viewing: {file_name}")
+                self._current_file_label.setToolTip(file_path)
+            else:
+                self._current_file_label.setText("No file selected")
+                self._current_file_label.setToolTip("")
+
     def _connect_line_edit(self, name: str, slot) -> None:
         widget = getattr(self.ui, name, None)
         if widget is None:
@@ -717,6 +1018,13 @@ class GisaxsPredictController(QObject):
             every_label.setVisible(mode == "multi_files")
         if every_value:
             every_value.setVisible(mode == "multi_files")
+
+        # 显示/隐藏多文件结果列表
+        if self._multifile_results_widget:
+            self._multifile_results_widget.setVisible(mode == "multi_files")
+        
+        # 在多文件模式下调整布局
+        self._adjust_predict_layout_for_mode(mode)
 
     def _sync_pending_text_fields(self) -> None:
         """Apply user-typed values without triggering loads."""
@@ -1515,6 +1823,9 @@ class GisaxsPredictController(QObject):
             inner_tabs = None
         if inner_tabs is None:
             inner_tabs = QTabWidget(pred_page)
+            # 限制tabs的最大宽度，防止其超出图像显示区域
+            inner_tabs.setMaximumWidth(800)  # 设置最大宽度
+            inner_tabs.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
             layout.addWidget(inner_tabs)
         self._predict_tabs = inner_tabs
         return inner_tabs
@@ -1871,6 +2182,7 @@ class GisaxsPredictController(QObject):
         self._rerender_predict_view()
 
     def _on_predict_export_clicked(self) -> None:
+        """导出预测结果 - 支持单文件和多文件模式"""
         export_path = self.current_parameters.get("export_path")
         if not export_path:
             QMessageBox.warning(self.main_window, "Export Path", "Please choose an export folder first.")
@@ -1879,6 +2191,15 @@ class GisaxsPredictController(QObject):
             QMessageBox.warning(self.main_window, "Export Path", f"Export folder not found: {export_path}")
             return
 
+        # 检查当前模式
+        mode = self.current_parameters.get("mode", "single_file")
+        
+        if mode == "multi_files" and self._multifile_results_widget:
+            # 多文件模式：触发多文件导出界面
+            self._multifile_results_widget.onExportClicked()
+            return
+
+        # 单文件模式：使用原有逻辑
         spec = None
         tabs = getattr(self, "_predict_tabs", None)
         try:
@@ -2932,16 +3253,21 @@ class GisaxsPredictController(QObject):
                 self.progress_updated.emit(100)
                 self.status_updated.emit("GISAXS prediction finished!")
             else:
-                # Multi-files placeholder: process first showing file
+                # Multi-files: use new queue-based processing
                 results = self._predict_multi_files()
-                if results:
-                    self._save_results(results)
-                    self.prediction_completed.emit(results)
-                    self.progress_updated.emit(100)
-                    self.status_updated.emit("GISAXS prediction finished!")
+                if results and results.get("processing_started"):
+                    # 不需要等待完成，处理在后台进行
+                    # progress和completion信号会由multifile_manager发出
+                    pass
+                else:
+                    self.progress_updated.emit(0)
+                    self.status_updated.emit("Failed to start multi-file prediction")
         except Exception as exc:  # pragma: no cover - runtime safety
             QMessageBox.critical(self.main_window, "Prediction Error", str(exc))
             self.status_updated.emit(f"GISAXS prediction error: {exc}")
+            # 重置多文件预测状态
+            if self._multifile_prediction_active:
+                self._on_multifile_prediction_completed()
 
     def _update_parameters_from_ui(self) -> None:
         combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
@@ -2991,23 +3317,404 @@ class GisaxsPredictController(QObject):
         return results
 
     def _predict_multi_files(self) -> Optional[Dict[str, object]]:
+        """多文件预测 - 使用新的队列处理系统"""
         folder = self.current_parameters.get("input_folder")
         if not folder:
+            self._append_status_message("No input folder selected", level="WARN")
             return None
-        files = [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if f.lower().endswith(".cbf")]
+            
+        # 获取文件列表
+        try:
+            files = []
+            for f in sorted(os.listdir(folder)):
+                if f.lower().endswith(('.cbf', '.tif', '.tiff')):
+                    files.append(os.path.join(folder, f))
+        except Exception as e:
+            self._append_status_message(f"Error scanning folder: {e}", level="ERROR")
+            return None
+            
         if not files:
-            self._append_status_message("No CBF files available for prediction", level="WARN")
+            self._append_status_message("No compatible image files found in folder", level="WARN")
             return None
-        results = {
+
+        # 应用范围过滤
+        range_text = self.current_parameters.get("range_value", "")
+        if range_text:
+            try:
+                indices = self._parse_range_text(range_text)
+                if indices:
+                    # 确保索引在有效范围内
+                    indices = [i for i in indices if 0 <= i < len(files)]
+                    files = [files[i] for i in indices]
+            except Exception as e:
+                self._append_status_message(f"Error parsing range: {e}", level="WARN")
+
+        if not files:
+            self._append_status_message("No files selected by range", level="WARN") 
+            return None
+
+        # 清空现有结果并添加新的待处理项目
+        if self._multifile_results_widget:
+            self._multifile_results_widget.clearResults()
+            
+            # 添加所有文件到结果列表
+            for file_path in files:
+                self._multifile_results_widget.addPredictResult(file_path)
+
+        # 开始批量预测
+        if self._multifile_manager:
+            self._multifile_prediction_active = True
+            self._multifile_manager.start_batch_prediction(files, self._predict_single_file_for_batch)
+            
+        # 立即返回，实际处理将在后台进行
+        return {
             "folder": folder,
             "total_files": len(files),
-            "processed_files": len(files),
-            "predictions": [],
-            "average_confidence": 0.92,
-            "total_processing_time": len(files) * 1.2,
+            "processing_started": True
         }
-        self.progress_updated.emit(80)
-        return results
+
+    def _predict_single_file_for_batch(self, file_path: str) -> Dict[str, object]:
+        """为批量处理执行单文件预测"""
+        try:
+            # 临时设置当前文件用于预测
+            old_file = self.current_parameters.get("input_file", "")
+            self.current_parameters["input_file"] = file_path
+            
+            # 执行实际预测逻辑（这里需要调用真正的预测代码）
+            result = self._execute_single_file_prediction(file_path)
+            
+            # 恢复原来的文件设置
+            self.current_parameters["input_file"] = old_file
+            
+            return result
+            
+        except Exception as e:
+            # 恢复原来的文件设置
+            if 'old_file' in locals():
+                self.current_parameters["input_file"] = old_file
+            raise e
+
+    def _execute_single_file_prediction(self, file_path: str) -> Dict[str, object]:
+        """执行单个文件的预测逻辑 - 真正调用预测流程"""
+        try:
+            # 保存原有参数和状态
+            old_input_file = self.current_parameters.get("input_file", "")
+            old_mode = self.current_parameters.get("mode", "single_file")
+            old_current_image = self._current_image
+            
+            # 临时设置为单文件模式
+            self.current_parameters["input_file"] = file_path
+            self.current_parameters["mode"] = "single_file"
+            
+            # 加载图像（使用同步方法）
+            image_data = self._load_cbf_file_sync(file_path)
+            
+            if image_data is None:
+                raise Exception(f"Failed to load image: {file_path}")
+            
+            # 设置当前图像
+            self._current_image = image_data
+            
+            # 执行真正的预测流程（与单文件相同）
+            # 1. 预处理
+            inp = self._preprocess_for_module(self._current_image)
+            if inp is None:
+                raise Exception("Preprocessing failed")
+                
+            # 2. 模型预测
+            outs = self._predict_with_current_model(inp)
+            if not outs:
+                raise Exception("Prediction failed")
+                
+            # 恢复原有参数和状态
+            self.current_parameters["input_file"] = old_input_file
+            self.current_parameters["mode"] = old_mode
+            self._current_image = old_current_image
+            
+            # 返回结果（只包含预测数据，预处理步骤按需计算）
+            return {
+                "file": file_path,
+                "prediction_data": outs  # 真正的预测结果
+            }
+            
+        except Exception as e:
+            # 确保恢复原有参数和状态
+            if 'old_input_file' in locals():
+                self.current_parameters["input_file"] = old_input_file
+            if 'old_mode' in locals():
+                self.current_parameters["mode"] = old_mode
+            if 'old_current_image' in locals():
+                self._current_image = old_current_image
+            raise e
+
+    def _on_multifile_result_selected(self, result: PredictResult) -> None:
+        """多文件结果选中处理 - 双击显示单文件结果"""
+        if result.status != PredictStatus.COMPLETED or not result.prediction_data:
+            # 如果结果还未完成，只更新当前文件显示
+            self._update_current_file_display(result.file_path)
+            return
+            
+        try:
+            # 更新当前文件显示
+            self._update_current_file_display(result.file_path)
+            
+            # 获取预测结果数据
+            prediction_data = result.prediction_data.get("prediction_data", {})
+            
+            if prediction_data:
+                # 临时加载当前图像以支持预处理显示（按需计算）
+                try:
+                    temp_image = self._load_cbf_file_sync(result.file_path)
+                    if temp_image is not None:
+                        # 临时设置当前图像用于预处理显示
+                        old_current_image = self._current_image
+                        self._current_image = temp_image
+                        
+                        # 使用标准显示方法（会实时计算预处理步骤）
+                        self._display_prediction(prediction_data)
+                        
+                        # 恢复原来的图像
+                        self._current_image = old_current_image
+                    else:
+                        # 如果无法加载图像，仅显示预测结果（无预处理tab）
+                        self._current_image = None
+                        self._display_prediction(prediction_data)
+                except Exception as e:
+                    # 如果图像加载失败，仍然显示预测结果
+                    self._append_status_message(f"Could not load image for preprocessing display: {e}", level="WARN")
+                    self._current_image = None
+                    self._display_prediction(prediction_data)
+                
+                # 设置当前参数
+                self.current_parameters["input_file"] = result.file_path
+                
+                # 切换到Predict-2D tab
+                self._set_predict_main_tab("Predict-2D")
+                
+                # 更新状态
+                self._append_status_message(f"Displaying results for: {os.path.basename(result.file_path)}", level="INFO")
+            else:
+                self._append_status_message(f"No prediction data available for: {os.path.basename(result.file_path)}", level="WARN")
+                
+        except Exception as e:
+            self._append_status_message(f"Error displaying result: {e}", level="ERROR")
+
+    def _on_multifile_export_requested(self, config: dict, results: List[PredictResult]) -> None:
+        """多文件导出请求处理"""
+        if not results:
+            QMessageBox.information(self.main_window, "Export", "No results to export.")
+            return
+            
+        export_path = self.current_parameters.get("export_path")
+        if not export_path:
+            QMessageBox.warning(self.main_window, "Export Path", "Please choose an export folder first.")
+            return
+            
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # 过滤只导出已完成的结果
+            completed_results = [r for r in results if r.status == PredictStatus.COMPLETED]
+            if not completed_results:
+                QMessageBox.information(self.main_window, "Export", "No completed results to export.")
+                return
+            
+            # 导出JSONL格式
+            if config.get('jsonl', False):
+                self._export_results_jsonl(completed_results, export_path, timestamp)
+                
+            # 导出JPG图像
+            if config.get('jpg', False):
+                self._export_results_jpg(completed_results, export_path, timestamp)
+                
+            # 导出ASCII 1D曲线
+            if config.get('ascii', False):
+                self._export_results_ascii(completed_results, export_path, timestamp)
+                
+            self._append_status_message(f"Export completed to {export_path}", level="INFO")
+            
+        except Exception as e:
+            QMessageBox.critical(self.main_window, "Export Error", f"Export failed: {e}")
+            self._append_status_message(f"Export error: {e}", level="ERROR")
+
+    def _on_multifile_prediction_started(self) -> None:
+        """多文件预测开始"""
+        self._multifile_prediction_active = True
+        # 禁用Predict按钮
+        btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
+        if btn:
+            btn.setEnabled(False)
+            btn.setText("Predicting...")
+
+    def _on_multifile_prediction_completed(self) -> None:
+        """多文件预测完成"""
+        self._multifile_prediction_active = False
+        # 重新启用Predict按钮
+        btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
+        if btn:
+            btn.setEnabled(True)
+            btn.setText("Predict")
+            
+        self._append_status_message("Multi-file prediction completed!", level="INFO")
+
+    def _on_multifile_result_updated(self, index: int, update_data: dict) -> None:
+        """多文件预测结果更新"""
+        if self._multifile_results_widget:
+            self._multifile_results_widget.updatePredictResult(index, **update_data)
+
+    def _on_multifile_progress_updated(self, completed: int, total: int) -> None:
+        """多文件预测进度更新"""
+        if self._multifile_results_widget:
+            self._multifile_results_widget.updateProgress(completed, total)
+        
+        # 更新主进度条
+        if total > 0:
+            progress = int((completed / total) * 100)
+            self.progress_updated.emit(progress)
+
+    def _export_results_jsonl(self, results: List[PredictResult], export_path: str, timestamp: str) -> None:
+        """导出JSONL格式结果"""
+        jsonl_path = os.path.join(export_path, f"prediction_results_{timestamp}.jsonl")
+        
+        with open(jsonl_path, 'w', encoding='utf-8') as f:
+            for i, result in enumerate(results):
+                record = {
+                    "index": i,
+                    "filename": result.file_name,
+                    "filepath": result.file_path,
+                    "timestamp": result.start_time.isoformat() if result.start_time else None,
+                    "processing_time": result.processing_time,
+                    "confidence": result.confidence,
+                    "prediction_data": self._serialize_prediction_data(result.prediction_data)
+                }
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
+
+    def _export_results_jpg(self, results: List[PredictResult], export_path: str, timestamp: str) -> None:
+        """导出JPG图像到文件夹"""
+        jpg_folder = os.path.join(export_path, f"prediction_images_{timestamp}")
+        os.makedirs(jpg_folder, exist_ok=True)
+        
+        for i, result in enumerate(results):
+            if not result.prediction_data:
+                continue
+                
+            # 导出2D结果图像
+            prediction_data = result.prediction_data.get("prediction_data", {})
+            hr_data = prediction_data.get("hr")
+            
+            if isinstance(hr_data, np.ndarray):
+                # 创建图像
+                image_path = os.path.join(jpg_folder, f"{result.file_name}_{i:04d}_hr.jpg")
+                self._save_array_as_image(hr_data, image_path)
+
+    def _export_results_ascii(self, results: List[PredictResult], export_path: str, timestamp: str) -> None:
+        """导出ASCII 1D曲线数据"""
+        ascii_path = os.path.join(export_path, f"prediction_curves_{timestamp}.txt")
+        
+        # 收集所有1D数据
+        all_h_data = []
+        all_r_data = []
+        headers = []
+        
+        for i, result in enumerate(results):
+            if not result.prediction_data:
+                continue
+                
+            prediction_data = result.prediction_data.get("prediction_data", {})
+            h_data = prediction_data.get("h")
+            r_data = prediction_data.get("r")
+            
+            if isinstance(h_data, np.ndarray):
+                all_h_data.append(h_data)
+                headers.append(f"{result.file_name}_h")
+                
+            if isinstance(r_data, np.ndarray):
+                all_r_data.append(r_data)
+                headers.append(f"{result.file_name}_r")
+        
+        # 写入文件
+        if all_h_data or all_r_data:
+            with open(ascii_path, 'w', encoding='utf-8') as f:
+                # 写入头部
+                f.write("# Prediction 1D Curves Export\n")
+                f.write(f"# Generated: {timestamp}\n")
+                f.write("# Columns: " + " | ".join(headers) + "\n")
+                f.write("# Index\t" + "\t".join(headers) + "\n")
+                
+                # 确定最大长度
+                max_len = 0
+                all_data = all_h_data + all_r_data
+                if all_data:
+                    max_len = max(len(data) for data in all_data)
+                
+                # 写入数据
+                for i in range(max_len):
+                    line = [str(i)]
+                    for data in all_data:
+                        if i < len(data):
+                            line.append(f"{data[i]:.6g}")
+                        else:
+                            line.append("NaN")
+                    f.write("\t".join(line) + "\n")
+
+    def _serialize_prediction_data(self, prediction_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """序列化预测数据为JSON兼容格式"""
+        if not prediction_data:
+            return None
+            
+        try:
+            serialized = {}
+            inner_data = prediction_data.get("prediction_data", {})
+            
+            for key, value in inner_data.items():
+                if isinstance(value, np.ndarray):
+                    # 2D数组只保存形状信息
+                    if value.ndim > 1:
+                        serialized[key] = {
+                            "type": "array_2d",
+                            "shape": list(value.shape),
+                            "dtype": str(value.dtype)
+                        }
+                    else:
+                        # 1D数组保存完整数据
+                        serialized[key] = value.tolist()
+                else:
+                    serialized[key] = value
+                    
+            return serialized
+        except Exception:
+            return {"error": "Failed to serialize prediction data"}
+
+    def _load_cbf_file_sync(self, file_path: str) -> Optional[np.ndarray]:
+        """同步加载CBF文件"""
+        try:
+            import fabio
+            cbf_image = fabio.open(file_path)
+            data = cbf_image.data
+            
+            if data.dtype != np.float32:
+                data = data.astype(np.float32, copy=False)
+            
+            return data
+        except Exception as e:
+            self._append_status_message(f"Failed to load CBF file {file_path}: {e}", level="ERROR")
+            return None
+
+    def _save_array_as_image(self, array: np.ndarray, image_path: str) -> None:
+        """将数组保存为图像文件"""
+        try:
+            # 标准化数组到0-255范围
+            if array.dtype != np.uint8:
+                array_norm = (array - array.min()) / (array.max() - array.min()) * 255
+                array = array_norm.astype(np.uint8)
+                
+            # 创建QImage并保存
+            height, width = array.shape
+            qimage = QImage(array.data, width, height, width, QImage.Format_Grayscale8)
+            qimage.save(image_path, "JPEG", 90)
+            
+        except Exception as e:
+            self._append_status_message(f"Failed to save image {image_path}: {e}", level="WARN")
 
     def _save_results(self, results: Dict[str, object]) -> None:
         export_path = self.current_parameters.get("export_path")

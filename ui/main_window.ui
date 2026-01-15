@@ -6191,7 +6191,7 @@ p, li { white-space: pre-wrap; }
                     </property>
                    </widget>
                   </item>
-                  <item row="0" column="1">
+                  <item row="0" column="1" rowspan="3">
                    <widget class="QWidget" name="predict2dParameterWidget" native="true">
                     <layout class="QGridLayout" name="gridLayout_21">
                      <item row="0" column="0">
@@ -6207,39 +6207,11 @@ p, li { white-space: pre-wrap; }
                        </property>
                       </widget>
                      </item>
-                     <item row="1" column="4">
+                     <item row="1" column="3">
                       <widget class="QDoubleSpinBox" name="predict2dVmaxValue"/>
                      </item>
                      <item row="1" column="1">
                       <widget class="QDoubleSpinBox" name="predict2dVminValue"/>
-                     </item>
-                     <item row="8" column="0" colspan="6">
-                      <widget class="QTextBrowser" name="predict2dTextBrowser">
-                       <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                         <horstretch>0</horstretch>
-                         <verstretch>0</verstretch>
-                        </sizepolicy>
-                       </property>
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>0</height>
-                        </size>
-                       </property>
-                       <property name="maximumSize">
-                        <size>
-                         <width>16777215</width>
-                         <height>50</height>
-                        </size>
-                       </property>
-                       <property name="styleSheet">
-                        <string notr="true">QTextBrowser {
-    background: transparent;
-    border: none;
-}</string>
-                       </property>
-                      </widget>
                      </item>
                      <item row="2" column="1">
                       <widget class="QCheckBox" name="predict2dLogScaleCheckBox">
@@ -6357,7 +6329,14 @@ p, li { white-space: pre-wrap; }
                        </property>
                       </widget>
                      </item>
-                     <item row="1" column="5">
+                     <item row="6" column="0">
+                      <widget class="QPushButton" name="predict2dExportButton">
+                       <property name="text">
+                        <string>Export</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="1" column="4">
                       <spacer name="horizontalSpacer_2">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
@@ -6386,12 +6365,18 @@ p, li { white-space: pre-wrap; }
                        </item>
                       </widget>
                      </item>
-                     <item row="6" column="0">
-                      <widget class="QPushButton" name="predict2dExportButton">
-                       <property name="text">
-                        <string>Export</string>
+                     <item row="7" column="3">
+                      <spacer name="predict2dSpacer_2">
+                       <property name="orientation">
+                        <enum>Qt::Vertical</enum>
                        </property>
-                      </widget>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>40</height>
+                        </size>
+                       </property>
+                      </spacer>
                      </item>
                     </layout>
                    </widget>
