@@ -1,7 +1,7 @@
-PyQt5>=5.15
+# python=3.11.9
+tensorflow = 2.15.0
 matplotlib
 numpy
 scipy
 h5py
 fabio
-tensorflow
