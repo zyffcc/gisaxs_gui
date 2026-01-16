@@ -65,10 +65,6 @@ class MainController(QObject):
             self.classification_controller.initialize()
             self.gisaxs_predict_controller.initialize()
             
-            # 统一精度配置已禁用，由各个controller单独管理
-            # from PyQt5.QtCore import QTimer
-            # QTimer.singleShot(500, self._configure_control_precision)
-            # QTimer.singleShot(1500, self._force_precision_override)  # 再次强制覆盖
             
             # 延迟加载上次会话状态（避免启动时立即加载文件）
             from PyQt5.QtCore import QTimer

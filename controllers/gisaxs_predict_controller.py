@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
     QFrame,
+    QDialog,
 )
 
 try:  # matplotlib is optional for colormap rendering
@@ -85,6 +86,7 @@ class GisaxsPredictController(QObject):
         self._current_pixmap: Optional[QPixmap] = None
         self._current_image: Optional[np.ndarray] = None
         self._view_zoom_steps = 0
+         
 
         # Predict-2D view state
         self._predict_scene: Optional[QGraphicsScene] = None
@@ -477,68 +479,45 @@ class GisaxsPredictController(QObject):
             btn_import.setEnabled(True)
 
     def _setup_multifile_ui(self) -> None:
-        """重新设计多文件预测UI布局 - 改进的侧边栏设计"""
+        """初始化多文件预测的外置窗口，不改动主窗口布局"""
         try:
-            # 获取gisaxsPredictImageShowWidget，这是主要的图像显示容器
-            image_show_widget = getattr(self.ui, "gisaxsPredictImageShowWidget", None)
-            if image_show_widget is None:
-                self._append_status_message("Cannot find gisaxsPredictImageShowWidget", level="ERROR")
+            if getattr(self, "_multifile_window", None) is not None:
                 return
-            
-            # 清空原有布局并重新创建
-            old_layout = image_show_widget.layout()
-            if old_layout:
-                # 保存原有的TabWidget
-                tab_widget = getattr(self.ui, "gisaxsPredictImageShowTabWidget", None)
-                if tab_widget:
-                    old_layout.removeWidget(tab_widget)
-            
-            # 创建新的整体布局 - 使用水平分割器
-            main_layout = QHBoxLayout(image_show_widget)
-            main_layout.setContentsMargins(0, 0, 0, 0)
-            main_layout.setSpacing(0)  # 无间距，提供更多空间
-            
-            # 左侧：图像显示区域（原有TabWidget）
-            if tab_widget:
-                tab_widget.setParent(image_show_widget)
-                main_layout.addWidget(tab_widget, stretch=7)  # 占70%的空间
-            
-            # 右侧：创建多文件预测控制面板（侧边栏设计）
-            control_panel = QWidget()
-            control_panel.setMaximumWidth(500)
-            control_panel.setMinimumWidth(350)
-            control_panel.setStyleSheet("""
-                QWidget {
-                    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0,
-                                              stop: 0 #f8f9fa, stop: 1 #e9ecef);
-                    border-left: 2px solid #6c757d;
-                }
-            """)
-            
-            # 侧边栏主布局
-            sidebar_layout = QVBoxLayout(control_panel)
-            sidebar_layout.setContentsMargins(10, 8, 10, 8)
-            sidebar_layout.setSpacing(8)
-            
+
+            # 创建一个无模式的外置对话框，独立显示多文件结果
+            win = QDialog(self.main_window)
+            win.setWindowTitle("Multi-File Results")
+            win.setModal(False)
+            win.setMinimumSize(420, 600)
+            try:
+                win.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+            except Exception:
+                pass
+
+            outer = QVBoxLayout(win)
+            outer.setContentsMargins(10, 8, 10, 8)
+            outer.setSpacing(8)
+
             # === 1. 当前文件显示区域 ===
-            current_file_frame = QFrame()
+            current_file_frame = QFrame(win)
             current_file_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
-            current_file_frame.setStyleSheet("""
+            current_file_frame.setStyleSheet(
+                """
                 QFrame {
                     background-color: #ffffff;
                     border: 1px solid #ced4da;
                     border-radius: 6px;
                     margin: 2px;
                 }
-            """)
-            
+                """
+            )
             current_file_layout = QVBoxLayout(current_file_frame)
             current_file_layout.setContentsMargins(8, 6, 8, 6)
             current_file_layout.setSpacing(4)
-            
-            # 当前文件标题
-            current_file_title = QLabel("Current File")
-            current_file_title.setStyleSheet("""
+
+            current_file_title = QLabel("Current File", current_file_frame)
+            current_file_title.setStyleSheet(
+                """
                 QLabel {
                     font-weight: bold;
                     font-size: 11px;
@@ -547,12 +526,13 @@ class GisaxsPredictController(QObject):
                     padding-bottom: 3px;
                     margin-bottom: 3px;
                 }
-            """)
+                """
+            )
             current_file_layout.addWidget(current_file_title)
-            
-            # 当前文件内容
-            self._current_file_label = QLabel("No file selected")
-            self._current_file_label.setStyleSheet("""
+
+            self._current_file_label = QLabel("No file selected", current_file_frame)
+            self._current_file_label.setStyleSheet(
+                """
                 QLabel {
                     background-color: #f8f9fa;
                     border: 1px solid #e9ecef;
@@ -562,32 +542,33 @@ class GisaxsPredictController(QObject):
                     color: #6c757d;
                     font-family: 'Consolas', 'Courier New', monospace;
                 }
-            """)
+                """
+            )
             self._current_file_label.setWordWrap(True)
             self._current_file_label.setFixedHeight(50)
             current_file_layout.addWidget(self._current_file_label)
-            
-            sidebar_layout.addWidget(current_file_frame)
-            
+            outer.addWidget(current_file_frame)
+
             # === 2. 多文件结果列表区域 ===
-            results_frame = QFrame()
+            results_frame = QFrame(win)
             results_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
-            results_frame.setStyleSheet("""
+            results_frame.setStyleSheet(
+                """
                 QFrame {
                     background-color: #ffffff;
                     border: 1px solid #ced4da;
                     border-radius: 6px;
                     margin: 2px;
                 }
-            """)
-            
+                """
+            )
             results_layout = QVBoxLayout(results_frame)
             results_layout.setContentsMargins(8, 6, 8, 6)
             results_layout.setSpacing(4)
-            
-            # 结果列表标题
-            results_title = QLabel("Multi-File Results")
-            results_title.setStyleSheet("""
+
+            results_title = QLabel("Multi-File Results", results_frame)
+            results_title.setStyleSheet(
+                """
                 QLabel {
                     font-weight: bold;
                     font-size: 11px;
@@ -596,40 +577,42 @@ class GisaxsPredictController(QObject):
                     padding-bottom: 3px;
                     margin-bottom: 3px;
                 }
-            """)
+                """
+            )
             results_layout.addWidget(results_title)
-            
-            # 创建多文件结果列表组件
+
             self._multifile_results_widget = MultiFilePredictResultsWidget(parent=results_frame)
-            self._multifile_results_widget.setStyleSheet("""
+            self._multifile_results_widget.setStyleSheet(
+                """
                 MultiFilePredictResultsWidget {
                     border: none;
                     background-color: transparent;
                 }
-            """)
+                """
+            )
             results_layout.addWidget(self._multifile_results_widget)
-            
-            sidebar_layout.addWidget(results_frame, stretch=1)  # 占用大部分垂直空间
-            
+            outer.addWidget(results_frame, stretch=1)
+
             # === 3. 快捷操作按钮区域 ===
-            actions_frame = QFrame()
+            actions_frame = QFrame(win)
             actions_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
-            actions_frame.setStyleSheet("""
+            actions_frame.setStyleSheet(
+                """
                 QFrame {
                     background-color: #ffffff;
                     border: 1px solid #ced4da;
                     border-radius: 6px;
                     margin: 2px;
                 }
-            """)
-            
+                """
+            )
             actions_layout = QVBoxLayout(actions_frame)
             actions_layout.setContentsMargins(8, 6, 8, 6)
             actions_layout.setSpacing(6)
-            
-            # 操作标题
-            actions_title = QLabel("Quick Actions")
-            actions_title.setStyleSheet("""
+
+            actions_title = QLabel("Quick Actions", actions_frame)
+            actions_title.setStyleSheet(
+                """
                 QLabel {
                     font-weight: bold;
                     font-size: 11px;
@@ -638,79 +621,28 @@ class GisaxsPredictController(QObject):
                     padding-bottom: 3px;
                     margin-bottom: 3px;
                 }
-            """)
+                """
+            )
             actions_layout.addWidget(actions_title)
-            
-            # 按钮布局
+
             buttons_layout = QHBoxLayout()
             buttons_layout.setSpacing(8)
-            
-            # 清空按钮
-            clear_button = QPushButton("Clear All")
+            clear_button = QPushButton("Clear All", actions_frame)
             clear_button.setFixedHeight(28)
-            clear_button.setStyleSheet("""
-                QPushButton {
-                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                              stop: 0 #fd7e7d, stop: 1 #e74c3c);
-                    color: white;
-                    border: 1px solid #c0392b;
-                    border-radius: 4px;
-                    padding: 4px 10px;
-                    font-weight: bold;
-                    font-size: 9px;
-                }
-                QPushButton:hover {
-                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                              stop: 0 #e74c3c, stop: 1 #c0392b);
-                }
-                QPushButton:pressed {
-                    background-color: #a93226;
-                }
-            """)
             clear_button.clicked.connect(self._clear_multifile_results)
-            buttons_layout.addWidget(clear_button)
-            
-            # 导出按钮  
-            export_all_button = QPushButton("Export All")
+            export_all_button = QPushButton("Export All", actions_frame)
             export_all_button.setFixedHeight(28)
-            export_all_button.setStyleSheet("""
-                QPushButton {
-                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                              stop: 0 #5dade2, stop: 1 #3498db);
-                    color: white;
-                    border: 1px solid #2980b9;
-                    border-radius: 4px;
-                    padding: 4px 10px;
-                    font-weight: bold;
-                    font-size: 9px;
-                }
-                QPushButton:hover {
-                    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                              stop: 0 #3498db, stop: 1 #2980b9);
-                }
-                QPushButton:pressed {
-                    background-color: #21618c;
-                }
-            """)
             export_all_button.clicked.connect(self._export_all_results)
+            buttons_layout.addWidget(clear_button)
             buttons_layout.addWidget(export_all_button)
-            
             actions_layout.addLayout(buttons_layout)
-            
-            sidebar_layout.addWidget(actions_frame)
-            
-            # 将侧边栏控制面板添加到主布局
-            main_layout.addWidget(control_panel, stretch=3)  # 占30%的空间
-            
-            # 初始隐藏控制面板（只在多文件模式时显示）
-            control_panel.setVisible(False)
-            self._multifile_control_panel = control_panel
-            
+            outer.addWidget(actions_frame)
+
             # 连接信号
             self._multifile_results_widget.result_selected.connect(self._on_multifile_result_selected)
-            self._multifile_results_widget.result_double_clicked.connect(self._on_multifile_result_selected)  # 双击也调用相同处理
+            self._multifile_results_widget.result_double_clicked.connect(self._on_multifile_result_selected)
             self._multifile_results_widget.export_requested.connect(self._on_multifile_export_requested)
-            
+
             # 创建多文件管理器
             if self._multifile_manager is None:
                 self._multifile_manager = MultiFilePredictManager(self)
@@ -718,9 +650,11 @@ class GisaxsPredictController(QObject):
                 self._multifile_manager.prediction_completed.connect(self._on_multifile_prediction_completed)
                 self._multifile_manager.result_updated.connect(self._on_multifile_result_updated)
                 self._multifile_manager.progress_updated.connect(self._on_multifile_progress_updated)
-            
-            self._append_status_message("Multi-file UI initialized with redesigned sidebar layout", level="INFO")
-            
+
+            # 初始不显示，仅在切换到 multi_files 模式时显示
+            self._multifile_window = win
+            self._append_status_message("Multi-file external window initialized", level="INFO")
+
         except Exception as e:
             self._append_status_message(f"Failed to setup multi-file UI: {e}", level="ERROR")
 
@@ -738,9 +672,21 @@ class GisaxsPredictController(QObject):
 
     def _adjust_predict_layout_for_mode(self, mode: str) -> None:
         """根据模式调整预测布局"""
-        # 显示/隐藏多文件控制面板
-        if hasattr(self, '_multifile_control_panel'):
-            self._multifile_control_panel.setVisible(mode == "multi_files")
+        # 显示/隐藏外置的多文件窗口
+        try:
+            win = getattr(self, "_multifile_window", None)
+            if win is not None:
+                if mode == "multi_files":
+                    win.show()
+                    try:
+                        win.raise_()
+                        win.activateWindow()
+                    except Exception:
+                        pass
+                else:
+                    win.hide()
+        except Exception:
+            pass
         
         # 更新当前文件标签的可见性
         if hasattr(self, '_current_file_label'):
@@ -1823,9 +1769,11 @@ class GisaxsPredictController(QObject):
             inner_tabs = None
         if inner_tabs is None:
             inner_tabs = QTabWidget(pred_page)
-            # 限制tabs的最大宽度，防止其超出图像显示区域
-            inner_tabs.setMaximumWidth(800)  # 设置最大宽度
-            inner_tabs.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+            # 允许横向扩展，不限制最大宽度，避免挤压父容器
+            try:
+                inner_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            except Exception:
+                pass
             layout.addWidget(inner_tabs)
         self._predict_tabs = inner_tabs
         return inner_tabs
@@ -1840,9 +1788,11 @@ class GisaxsPredictController(QObject):
                     w.deleteLater()
             for spec in self._predict_tab_specs:
                 page = QWidget()
-                page.setMinimumHeight(0)
-                page.setMaximumHeight(0)
-                page.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+                # 不要将页面最大高度设为0，保持可扩展的尺寸策略
+                try:
+                    page.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                except Exception:
+                    pass
                 tabs.addTab(page, str(spec.get("title", "Panel")))
         finally:
             del blocker
@@ -1955,8 +1905,12 @@ class GisaxsPredictController(QObject):
             try:
                 row_count = (len(btns) + cols - 1) // cols
                 row_h = btns[0].sizeHint().height() if btns else 24
+                # 仅设置最小高度，允许父布局根据可用空间扩展
                 page.setMinimumHeight(row_count * (row_h + 6) + 4)
-                page.setMaximumHeight(row_count * (row_h + 6) + 10)
+                try:
+                    page.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                except Exception:
+                    pass
             except Exception:
                 pass
             self._step_buttons = btns

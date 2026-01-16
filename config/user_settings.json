@@ -3,7 +3,7 @@
   "window_width": 1400,
   "window_height": 900,
   "font_adjustment": 0,
-  "_auto_k_enabled": false,
+  "_auto_k_enabled": true,
   "fit.points_num": 100,
   "fit.interp_method": "Spline",
   "main_splitter_sizes": [

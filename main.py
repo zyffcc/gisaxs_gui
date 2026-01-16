@@ -84,6 +84,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             
             # 初始化主控制器
             self.main_controller = MainController(self, self)
+
+            
             
             # 连接菜单信号
             self.connect_menu_signals()
@@ -91,6 +93,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # 标记初始化完成
             self._initialization_completed = True
             
+
             # 计算总启动时间
             total_time = time.time() - self._startup_time
             print(f"✓ Startup complete in {total_time:.2f}s")

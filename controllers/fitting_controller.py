@@ -4,10 +4,29 @@ Cut Fitting 控制器 - 处理GISAXS数据的裁剪和拟合功能
 
 import os
 import json
+from collections import defaultdict
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint
-from PyQt5.QtWidgets import (QFileDialog, QMessageBox, QGraphicsScene, QVBoxLayout, QWidget, QMainWindow,
-                             QMenu, QAction, QTextBrowser, QSizePolicy, QDialog, QInputDialog)
+from PyQt5.QtWidgets import (
+    QFileDialog,
+    QMessageBox,
+    QGraphicsScene,
+    QVBoxLayout,
+    QWidget,
+    QMainWindow,
+    QMenu,
+    QAction,
+    QTextBrowser,
+    QSizePolicy,
+    QDialog,
+    QInputDialog,
+    QComboBox,
+    QStackedWidget,
+    QGridLayout,
+    QLabel,
+    QDoubleSpinBox,
+    QCheckBox,
+)
 
 # 导入探测器参数对话框
 from ui.detector_parameters_dialog import DetectorParametersDialog
@@ -1377,6 +1396,27 @@ class FittingController(QObject):
         self._display_mode = 'normal'  # 'normal' 或 'fitting'
         self._has_fitting_data = False  # 是否有拟合数据
         self._fitting_mode_active = False  # 是否处于拟合模式
+        self._last_active_particle_ids = []  # 记录最近一次拟合时的粒子顺序
+        self._particle_widgets = {}
+        self._particle_parameter_meta_ids = defaultdict(list)
+        self._recycled_particle_ids = []
+        self._particle_widget_style_template = ''
+        self._particle_widget_style_source_name = ''
+        self._particle_widget_style_fallback = (
+            "#fitParticleWidget_TEMPLATE {\n"
+            "  border: 1px solid rgba(0,0,0,0.12);\n"
+            "  border-radius: 12px;\n"
+            "  padding: 8px;\n"
+            "  outline: 6px solid rgba(0,0,0,0.03);\n"
+            "  outline-offset: -6px;\n"
+            "}"
+        )
+        self._particle_container_layout = None
+        self._particle_add_button = None
+        self._particle_show_checkboxes = {}
+        self._dynamic_show_layout = None
+        self._dynamic_show_container = None
+        self._particle_checkbox_host_name = ''
 
         # 载入模式：Single/Stack/In-situ（来自组合框）
         self.load_mode = 'Single'
@@ -2053,13 +2093,7 @@ class FittingController(QObject):
             self.ui.fitLogYCheckBox.toggled.connect(self._on_fit_log_changed)
         
         # 连接组件叠加显示复选框（若存在则即刻刷新拟合图）
-        for _name in [
-            'fitBGShowCheckBox',
-            'fitResShowCheckBox',
-            'fitParticle1ShowCheckBox',
-            'fitParticle2ShowCheckBox',
-            'fitParticle3ShowCheckBox',
-        ]:
+        for _name in ['fitBGShowCheckBox', 'fitResShowCheckBox']:
             if hasattr(self.ui, _name):
                 try:
                     getattr(self.ui, _name).toggled.connect(self._on_component_checkbox_changed)
@@ -5420,14 +5454,12 @@ class FittingController(QObject):
 
             # 叠加组件曲线（BG、Res、Particles），使用虚线并基于最近一次拟合参数（仅在fitting模式显示）
             try:
-                # 使用最新的复选框对象名称
                 show_bg = self._get_checkbox_state('fitBGShowCheckBox', False)
                 show_res = self._get_checkbox_state('fitResShowCheckBox', False)
-                show_p1 = self._get_checkbox_state('fitParticle1ShowCheckBox', False)
-                show_p2 = self._get_checkbox_state('fitParticle2ShowCheckBox', False)
-                show_p3 = self._get_checkbox_state('fitParticle3ShowCheckBox', False)
-                show_any = show_bg or show_res or show_p1 or show_p2 or show_p3
+                particle_flags = self._get_particle_sequence_flags()
+                show_any = show_bg or show_res or any(particle_flags.values())
             except Exception:
+                particle_flags = {}
                 show_any = False
 
             # 组件曲线归一化与数据一致
@@ -5447,17 +5479,19 @@ class FittingController(QObject):
                             y_res = comp['resolution'] / norm_divisor if norm_divisor else comp['resolution']
                             ax.plot(q_data, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
                         # Particles
-                        particle_flags = {1: show_p1, 2: show_p2, 3: show_p3}
-                        colors = ['#1f77b4', '#2ca02c', '#ff7f0e']
+                        colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b']
                         for item in comp.get('particles', []):
                             idx = int(item.get('index', 0))
                             if particle_flags.get(idx, False):
                                 yv = item.get('I')
                                 if yv is not None:
                                     shape_name = str(item.get('shape', 'Particle')).capitalize()
-                                    color = colors[(idx-1) % len(colors)]
+                                    widget_id = self._sequence_index_to_widget_id(idx)
+                                    color_key = widget_id if widget_id is not None else idx
+                                    color = colors[(color_key - 1) % len(colors)] if color_key else colors[(idx-1) % len(colors)]
                                     yv_plot = yv / norm_divisor if norm_divisor else yv
-                                    ax.plot(q_data, yv_plot, linestyle='--', color=color, linewidth=1.5, label=f'{shape_name} {idx}', zorder=2)
+                                    label_id = f"{shape_name} {widget_id}" if widget_id is not None else f"{shape_name} {idx}"
+                                    ax.plot(q_data, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
                         # 刷新图例以包含新线
                         ax.legend()
                     except Exception:
@@ -5611,11 +5645,10 @@ class FittingController(QObject):
             try:
                 show_bg = self._get_checkbox_state('fitBGShowCheckBox', False)
                 show_res = self._get_checkbox_state('fitResShowCheckBox', False)
-                show_p1 = self._get_checkbox_state('fitParticle1ShowCheckBox', False)
-                show_p2 = self._get_checkbox_state('fitParticle2ShowCheckBox', False)
-                show_p3 = self._get_checkbox_state('fitParticle3ShowCheckBox', False)
-                show_any = show_bg or show_res or show_p1 or show_p2 or show_p3
+                particle_flags = self._get_particle_sequence_flags()
+                show_any = show_bg or show_res or any(particle_flags.values())
             except Exception:
+                particle_flags = {}
                 show_any = False
 
             if mode == 'fitting' and show_any:
@@ -5634,17 +5667,19 @@ class FittingController(QObject):
                             y_res = comp['resolution'] / norm_divisor if norm_divisor else comp['resolution']
                             ax.plot(q_data, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
                         # Particles
-                        particle_flags = {1: show_p1, 2: show_p2, 3: show_p3}
-                        colors = ['#1f77b4', '#2ca02c', '#ff7f0e']
+                        colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b']
                         for item in comp.get('particles', []):
                             idx = int(item.get('index', 0))
                             if particle_flags.get(idx, False):
                                 yv = item.get('I')
                                 if yv is not None:
                                     shape_name = str(item.get('shape', 'Particle')).capitalize()
-                                    color = colors[(idx-1) % len(colors)]
+                                    widget_id = self._sequence_index_to_widget_id(idx)
+                                    color_key = widget_id if widget_id is not None else idx
+                                    color = colors[(color_key - 1) % len(colors)] if color_key else colors[(idx-1) % len(colors)]
                                     yv_plot = yv / norm_divisor if norm_divisor else yv
-                                    ax.plot(q_data, yv_plot, linestyle='--', color=color, linewidth=1.5, label=f'{shape_name} {idx}', zorder=2)
+                                    label_id = f"{shape_name} {widget_id}" if widget_id is not None else f"{shape_name} {idx}"
+                                    ax.plot(q_data, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
                         ax.legend()
                     except Exception:
                         pass
@@ -6427,36 +6462,9 @@ class FittingController(QObject):
     
     def _setup_particle_shape_connector(self):
         """设置粒子形状连接器"""
-        # 页面配置 - 方便添加新的形状和页面
-        self.particle_shape_configs = {
-            1: {  # Widget 1
-                'combobox': 'fitParticleShapeCombox_1',
-                'stack_widget': 'fitParticleStackWidget_1',
-                'pages': {
-                    0: {'name': 'Sphere', 'page_index': 0},
-                    1: {'name': 'Cylinder', 'page_index': 1},
-                    2: {'name': 'None', 'page_index': 0}  # None使用第一页但禁用控件
-                }
-            },
-            2: {  # Widget 2
-                'combobox': 'fitParticleShapeCombox_2',
-                'stack_widget': 'fitParticleStackWidget_2',
-                'pages': {
-                    0: {'name': 'Sphere', 'page_index': 0},
-                    1: {'name': 'Cylinder', 'page_index': 1},
-                    2: {'name': 'None', 'page_index': 0}
-                }
-            },
-            3: {  # Widget 3
-                'combobox': 'fitParticleShapeCombox_3',
-                'stack_widget': 'fitParticleStackWidget_3', 
-                'pages': {
-                    0: {'name': 'Sphere', 'page_index': 0},
-                    1: {'name': 'Cylinder', 'page_index': 1},
-                    2: {'name': 'None', 'page_index': 0}
-                }
-            }
-        }
+        self._initialize_particle_ui_registry()
+        if not getattr(self, 'particle_shape_configs', None):
+            self.particle_shape_configs = {}
         
         # 控件类型定义 - 方便添加新的参数控件
         self.particle_control_types = {
@@ -6484,9 +6492,433 @@ class FittingController(QObject):
         
         self._add_fitting_success("Particle Shape Connector initialized")
     
-    def _setup_particle_connections(self):
-        """设置所有粒子形状连接"""
-        for widget_id, config in self.particle_shape_configs.items():
+    def _iter_particle_widget_ids(self):
+        """返回当前粒子widget的编号列表（按升序）。"""
+        return sorted(self.particle_shape_configs.keys()) if getattr(self, 'particle_shape_configs', None) else []
+
+    def _collect_active_particles(self):
+        """收集当前激活的粒子形状及其widget编号。"""
+        active_shapes = []
+        widget_order = []
+        for widget_id in self._iter_particle_widget_ids():
+            combo_name = f'fitParticleShapeCombox_{widget_id}'
+            if not hasattr(self.ui, combo_name):
+                continue
+            combobox = getattr(self.ui, combo_name)
+            current_text = combobox.currentText().strip() if combobox.currentText() else ''
+            if current_text and current_text.lower() != 'none':
+                active_shapes.append(current_text.lower())
+                widget_order.append(widget_id)
+        return active_shapes, widget_order
+
+    def _get_particle_sequence_flags(self):
+        """返回最近一次拟合顺序中，各组件是否需要显示。"""
+        flags = {}
+        sequence = getattr(self, '_last_active_particle_ids', []) or []
+        for idx, widget_id in enumerate(sequence, 1):
+            checkbox_name = f'fitParticle{widget_id}ShowCheckBox'
+            flags[idx] = self._get_checkbox_state(checkbox_name, False)
+        return flags
+
+    def _sequence_index_to_widget_id(self, seq_index: int):
+        sequence = getattr(self, '_last_active_particle_ids', []) or []
+        if 1 <= seq_index <= len(sequence):
+            return sequence[seq_index - 1]
+        return None
+
+    def _initialize_particle_ui_registry(self):
+        """解析UI中的粒子控件容器、现有widget以及新增按钮。"""
+        try:
+            if hasattr(self.ui, 'scrollAreaWidgetContents'):
+                self._particle_scroll_container = self.ui.scrollAreaWidgetContents
+                self._particle_container_layout = self._particle_scroll_container.layout()
+        except Exception:
+            self._particle_scroll_container = None
+            self._particle_container_layout = None
+
+        add_button = None
+        for name in ('addModelButton', 'fitAddModelButton', 'pushButton'):
+            if hasattr(self.ui, name):
+                add_button = getattr(self.ui, name)
+                break
+        if add_button:
+            self._particle_add_button = add_button
+            if not add_button.toolTip():
+                add_button.setToolTip("Add particle model")
+            if not getattr(add_button, '_particle_handler_connected', False):
+                add_button.clicked.connect(self._on_add_particle_clicked)
+                add_button._particle_handler_connected = True
+
+        self._prepare_dynamic_show_checkbox_area()
+
+        self.particle_shape_configs = {}
+        idx = 1
+        while hasattr(self.ui, f'fitParticleWidget_{idx}') and hasattr(self.ui, f'fitParticleShapeCombox_{idx}'):
+            self._register_existing_particle_widget(idx)
+            idx += 1
+        self._next_particle_candidate = idx
+
+    def _prepare_dynamic_show_checkbox_area(self):
+        if self._dynamic_show_layout is not None:
+            return
+
+        preferred_names = ('ParticlesNumWidget', 'fitParticlesNumWidget')
+        for name in preferred_names:
+            host = getattr(self.ui, name, None)
+            if isinstance(host, QWidget):
+                layout = host.layout()
+                if layout is None:
+                    layout = QVBoxLayout(host)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setSpacing(4)
+                self._dynamic_show_container = host
+                self._dynamic_show_layout = layout
+                self._particle_checkbox_host_name = name
+                return
+
+        host_widget = getattr(self.ui, 'fitFittingShowWidget', None)
+        if host_widget is None:
+            return
+        base_layout = host_widget.layout()
+        if base_layout is None:
+            from PyQt5.QtWidgets import QGridLayout
+            base_layout = QGridLayout(host_widget)
+
+        self._dynamic_show_container = QWidget(host_widget)
+        layout = QVBoxLayout(self._dynamic_show_container)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(4)
+        self._dynamic_show_layout = layout
+        self._particle_checkbox_host_name = 'fitFittingShowWidget'
+
+        # 将额外区域插入到最下方（若为网格则追加一行）
+        if hasattr(base_layout, 'addWidget'):
+            if hasattr(base_layout, 'rowCount'):
+                row_index = base_layout.rowCount()
+                try:
+                    base_layout.addWidget(self._dynamic_show_container, row_index, 0, 1, 2)
+                    return
+                except Exception:
+                    pass
+            base_layout.addWidget(self._dynamic_show_container)
+
+    def _register_existing_particle_widget(self, widget_id: int):
+        widget = getattr(self.ui, f'fitParticleWidget_{widget_id}', None)
+        if widget is None:
+            return
+        self._particle_widgets[widget_id] = widget
+        if not self._particle_widget_style_template:
+            self._particle_widget_style_template = widget.styleSheet()
+            self._particle_widget_style_source_name = widget.objectName() or ''
+        self._apply_particle_widget_style(widget, widget_id)
+        self.particle_shape_configs[widget_id] = self._build_particle_config(widget_id)
+        self._install_particle_context_menu(widget, widget_id)
+
+        checkbox = getattr(self.ui, f'fitParticle{widget_id}ShowCheckBox', None)
+        if checkbox is not None:
+            self._register_particle_show_checkbox(widget_id, checkbox)
+
+    def _build_particle_config(self, widget_id: int) -> dict:
+        return {
+            'combobox': f'fitParticleShapeCombox_{widget_id}',
+            'stack_widget': f'fitParticleStackWidget_{widget_id}',
+            'pages': {
+                0: {'name': 'Sphere', 'page_index': 0},
+                1: {'name': 'Cylinder', 'page_index': 1},
+                2: {'name': 'None', 'page_index': 0},
+            }
+        }
+
+    def _register_particle_show_checkbox(self, widget_id: int, checkbox: QCheckBox = None):
+        if checkbox is None:
+            checkbox = self._create_particle_show_checkbox(widget_id)
+        if checkbox is None:
+            return None
+        checkbox_name = checkbox.objectName() or f'fitParticle{widget_id}ShowCheckBox'
+        checkbox.setObjectName(checkbox_name)
+        checkbox.setProperty('particleCheckboxId', widget_id)
+        if not hasattr(self.ui, checkbox_name):
+            setattr(self.ui, checkbox_name, checkbox)
+        if widget_id not in self._particle_show_checkboxes:
+            checkbox.toggled.connect(self._on_component_checkbox_changed)
+        checkbox.setText(checkbox.text() or f'Particle {widget_id}')
+        self._particle_show_checkboxes[widget_id] = checkbox
+        return checkbox
+
+    def _create_particle_show_checkbox(self, widget_id: int):
+        self._prepare_dynamic_show_checkbox_area()
+        parent = self._dynamic_show_container or getattr(self.ui, 'fitFittingShowWidget', None)
+        if parent is None:
+            return None
+        checkbox = QCheckBox(f'Particle {widget_id}', parent)
+        checkbox.setObjectName(f'fitParticle{widget_id}ShowCheckBox')
+        checkbox.setProperty('particleCheckboxId', widget_id)
+        if self._dynamic_show_layout is not None:
+            self._insert_particle_checkbox_widget(checkbox, widget_id)
+        elif hasattr(parent, 'layout') and parent.layout() is not None:
+            parent.layout().addWidget(checkbox)
+        return checkbox
+
+    def _insert_particle_checkbox_widget(self, checkbox: QCheckBox, widget_id: int):
+        layout = self._dynamic_show_layout
+        if layout is None:
+            return
+        can_insert = hasattr(layout, 'insertWidget')
+        inserted = False
+        for pos in range(layout.count()):
+            item = layout.itemAt(pos)
+            if item is None:
+                continue
+            existing = item.widget()
+            if existing is None:
+                continue
+            existing_id = existing.property('particleCheckboxId')
+            if existing_id is None:
+                continue
+            if widget_id < existing_id and can_insert:
+                layout.insertWidget(pos, checkbox)
+                inserted = True
+                break
+        if not inserted:
+            layout.addWidget(checkbox)
+
+    def _create_particle_widget(self, widget_id: int) -> QWidget:
+        parent = getattr(self, '_particle_scroll_container', getattr(self.ui, 'scrollAreaWidgetContents', self.ui))
+        container = QWidget(parent)
+        container.setObjectName(f'fitParticleWidget_{widget_id}')
+        container.setMinimumSize(180, 300)
+
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        combo = QComboBox(container)
+        combo.setObjectName(f'fitParticleShapeCombox_{widget_id}')
+        combo.addItems(['Sphere', 'Cylinder', 'None'])
+        layout.addWidget(combo)
+
+        stack = QStackedWidget(container)
+        stack.setObjectName(f'fitParticleStackWidget_{widget_id}')
+        layout.addWidget(stack)
+
+        sphere_page = QWidget(stack)
+        sphere_grid = QGridLayout(sphere_page)
+        sphere_grid.setContentsMargins(0, 0, 0, 0)
+        sphere_fields = [
+            ('Int.', f'fitParticleSphereIntValue_{widget_id}'),
+            ('R [nm]', f'fitParticleSphereRValue_{widget_id}'),
+            ('σ [R]', f'fitParticleSphereSigmaRValue_{widget_id}'),
+            ('D [nm]', f'fitParticleSphereDValue_{widget_id}'),
+            ('σ [D]', f'fitParticleSphereSigmaDValue_{widget_id}'),
+            ('BG', f'fitParticleSphereBGValue_{widget_id}'),
+        ]
+        for row, (label_text, name) in enumerate(sphere_fields):
+            label = QLabel(label_text, sphere_page)
+            value = QDoubleSpinBox(sphere_page)
+            value.setObjectName(name)
+            value.setDecimals(6)
+            sphere_grid.addWidget(label, row, 0)
+            sphere_grid.addWidget(value, row, 1)
+        stack.addWidget(sphere_page)
+
+        cylinder_page = QWidget(stack)
+        cyl_grid = QGridLayout(cylinder_page)
+        cyl_grid.setContentsMargins(0, 0, 0, 0)
+        cylinder_fields = [
+            ('Int.', f'fitParticleCylinderIntValue_{widget_id}'),
+            ('R [nm]', f'fitParticleCylinderRValue_{widget_id}'),
+            ('σ [R]', f'fitParticleCylinderSigmaRValue_{widget_id}'),
+            ('h [nm]', f'fitParticleCylinderhValue_{widget_id}'),
+            ('σ [h]', f'fitParticleCylinderSigmahValue_{widget_id}'),
+            ('D [nm]', f'fitParticleCylinderDValue_{widget_id}'),
+            ('σ [D]', f'fitParticleCylinderSigmaDValue_{widget_id}'),
+            ('BG', f'fitParticleCylinderBGValue_{widget_id}'),
+        ]
+        for row, (label_text, name) in enumerate(cylinder_fields):
+            label = QLabel(label_text, cylinder_page)
+            value = QDoubleSpinBox(cylinder_page)
+            value.setObjectName(name)
+            value.setDecimals(6)
+            cyl_grid.addWidget(label, row, 0)
+            cyl_grid.addWidget(value, row, 1)
+        stack.addWidget(cylinder_page)
+        stack.setCurrentIndex(0)
+
+        self._register_ui_children(container)
+        self._apply_particle_widget_style(container, widget_id)
+        return container
+
+    def _apply_particle_widget_style(self, widget: QWidget, widget_id: int):
+        if widget is None:
+            return
+        template = self._particle_widget_style_template or self._particle_widget_style_fallback
+        if not template:
+            return
+        target_selector = f'#fitParticleWidget_{widget_id}'
+        source_name = self._particle_widget_style_source_name
+        style = template
+        if source_name and f'#{source_name}' in template:
+            style = template.replace(f'#{source_name}', target_selector)
+        elif 'fitParticleWidget_TEMPLATE' in template:
+            style = template.replace('fitParticleWidget_TEMPLATE', f'fitParticleWidget_{widget_id}')
+        widget.setStyleSheet(style)
+
+    def _register_ui_children(self, widget: QWidget):
+        if widget is None:
+            return
+        for child in widget.findChildren(QWidget):
+            name = child.objectName()
+            if name:
+                setattr(self.ui, name, child)
+        name = widget.objectName()
+        if name:
+            setattr(self.ui, name, widget)
+
+    def _on_add_particle_clicked(self):
+        try:
+            widget_id = self._allocate_particle_id()
+            particle_key = f'particle_{widget_id}'
+            self.model_params_manager.ensure_particle_entry('fitting', particle_key, shape='Sphere')
+            new_widget = self._create_particle_widget(widget_id)
+            self._attach_particle_widget(new_widget, widget_id)
+            self._add_fitting_success(f"Particle {widget_id} added")
+        except Exception as e:
+            self._add_fitting_error(f"Failed to add particle widget: {e}")
+
+    def _allocate_particle_id(self) -> int:
+        if self._recycled_particle_ids:
+            self._recycled_particle_ids.sort()
+            return self._recycled_particle_ids.pop(0)
+        candidate = getattr(self, '_next_particle_candidate', 1)
+        while candidate in self.particle_shape_configs:
+            candidate += 1
+        self._next_particle_candidate = candidate + 1
+        return candidate
+
+    def _attach_particle_widget(self, widget: QWidget, widget_id: int):
+        if widget is None:
+            return
+        if self._particle_container_layout is not None and self._particle_add_button is not None:
+            index = self._particle_container_layout.indexOf(self._particle_add_button)
+            if index == -1:
+                self._particle_container_layout.addWidget(widget)
+            else:
+                self._particle_container_layout.insertWidget(index, widget)
+        elif self._particle_container_layout is not None:
+            self._particle_container_layout.addWidget(widget)
+
+        self._particle_widgets[widget_id] = widget
+        self.particle_shape_configs[widget_id] = self._build_particle_config(widget_id)
+        self._install_particle_context_menu(widget, widget_id)
+        self._register_particle_show_checkbox(widget_id)
+
+        self._setup_particle_connections([widget_id])
+        self._setup_particle_parameter_connections([widget_id])
+        self._setup_parameter_ranges([widget_id])
+        self._initialize_particle_states([widget_id])
+
+    def _install_particle_context_menu(self, widget: QWidget, widget_id: int):
+        if widget is None:
+            return
+        widget.setProperty('particle_id', widget_id)
+        widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        try:
+            widget.customContextMenuRequested.connect(self._handle_particle_context_menu_request)
+        except Exception:
+            pass
+
+    def _handle_particle_context_menu_request(self, pos: QPoint):
+        widget = self.sender()
+        if widget is None:
+            return
+        widget_id = widget.property('particle_id')
+        if widget_id is None:
+            return
+        global_pos = widget.mapToGlobal(pos)
+        self._show_particle_context_menu(int(widget_id), global_pos)
+
+    def _show_particle_context_menu(self, widget_id: int, global_pos: QPoint):
+        menu = QMenu(self.ui)
+        remove_action = menu.addAction('Remove Particle')
+        if len(self._iter_particle_widget_ids()) <= 1:
+            remove_action.setEnabled(False)
+        action = menu.exec_(global_pos)
+        if action == remove_action:
+            self._remove_particle_widget(widget_id)
+
+    def _remove_particle_widget(self, widget_id: int):
+        if widget_id not in self.particle_shape_configs:
+            return
+        if len(self._iter_particle_widget_ids()) <= 1:
+            self._add_fitting_warning('At least one particle widget must remain')
+            return
+
+        widget = self._particle_widgets.pop(widget_id, None)
+        if widget is not None:
+            try:
+                widget.customContextMenuRequested.disconnect(self._handle_particle_context_menu_request)
+            except Exception:
+                pass
+            if self._particle_container_layout is not None:
+                self._particle_container_layout.removeWidget(widget)
+            widget.setParent(None)
+            widget.deleteLater()
+
+        checkbox = self._particle_show_checkboxes.pop(widget_id, None)
+        if checkbox is not None:
+            checkbox.setParent(None)
+            checkbox.deleteLater()
+            cb_name = checkbox.objectName()
+            if cb_name and hasattr(self.ui, cb_name):
+                delattr(self.ui, cb_name)
+
+        meta_ids = self._particle_parameter_meta_ids.pop(widget_id, [])
+        for meta_id in meta_ids:
+            try:
+                self.param_trigger_manager.unregister_widget(meta_id)
+            except Exception:
+                pass
+
+        self._cleanup_particle_ui_attributes(widget_id)
+        self.particle_shape_configs.pop(widget_id, None)
+        self._recycled_particle_ids.append(widget_id)
+        self.model_params_manager.remove_particle('fitting', f'particle_{widget_id}')
+        self.model_params_manager.save_parameters()
+        self._last_active_particle_ids = [wid for wid in self._last_active_particle_ids if wid != widget_id]
+
+        try:
+            self._update_GUI_image('fitting' if self._is_in_fitting_mode() else 'normal')
+        except Exception:
+            pass
+        self._add_fitting_success(f"Particle {widget_id} removed")
+
+    def _cleanup_particle_ui_attributes(self, widget_id: int):
+        names = [
+            f'fitParticleWidget_{widget_id}',
+            f'fitParticleShapeCombox_{widget_id}',
+            f'fitParticleStackWidget_{widget_id}',
+        ]
+        for shape in ('Sphere', 'Cylinder'):
+            mapping = self._get_parameter_widget_mapping(widget_id, shape)
+            names.extend(mapping.values())
+        for name in names:
+            if hasattr(self.ui, name):
+                try:
+                    attr = getattr(self.ui, name)
+                    if hasattr(attr, 'deleteLater'):
+                        attr.deleteLater()
+                except Exception:
+                    pass
+                try:
+                    delattr(self.ui, name)
+                except Exception:
+                    pass
+
+    def _setup_particle_connections(self, widget_ids=None):
+        """设置粒子形状连接，可指定widget列表"""
+        widget_ids = widget_ids or self._iter_particle_widget_ids()
+        for widget_id in widget_ids:
+            config = self.particle_shape_configs[widget_id]
             if hasattr(self.ui, config['combobox']):
                 combobox = getattr(self.ui, config['combobox'])
                 
@@ -6497,8 +6929,8 @@ class FittingController(QObject):
                 
                 self._add_fitting_message(f"Connected Particle Widget {widget_id}: {config['combobox']} -> {config['stack_widget']}", "INFO")
     
-    def _setup_parameter_ranges(self):
-        """设置所有参数控件的数值范围为实数域"""
+    def _setup_parameter_ranges(self, widget_ids=None):
+        """设置参数控件的数值范围为实数域，可限定粒子"""
         # 设置一个很大的范围来覆盖实数域（Python float的范围）
         min_value = -1e10  # 负一百亿
         max_value = 1e10   # 正一百亿
@@ -6508,7 +6940,8 @@ class FittingController(QObject):
         widgets_set = 0
         
         # 设置粒子参数控件范围
-        for widget_id in self.particle_shape_configs.keys():
+        widget_ids = widget_ids or self._iter_particle_widget_ids()
+        for widget_id in widget_ids:
             # 球形参数控件
             sphere_mapping = self._get_parameter_widget_mapping(widget_id, 'Sphere')
             for param_key, widget_name in sphere_mapping.items():
@@ -6518,10 +6951,10 @@ class FittingController(QObject):
                     # 为BG和Int参数设置6位精度
                     if 'BG' in widget_name or 'Int' in widget_name:
                         widget.setDecimals(6)
-                        widget.setSingleStep(0.0001)
+                        widget.setSingleStep(0.1)
                     else:
                         widget.setDecimals(decimals)
-                        widget.setSingleStep(0.01)  # 设置单步大小
+                        widget.setSingleStep(0.1)  # 设置单步大小
                     widgets_set += 1
                     
             # 圆柱形参数控件
@@ -6533,17 +6966,17 @@ class FittingController(QObject):
                     # 为BG和Int参数设置6位精度
                     if 'BG' in widget_name or 'Int' in widget_name:
                         widget.setDecimals(6)
-                        widget.setSingleStep(0.0001)
+                        widget.setSingleStep(0.1)
                     else:
                         widget.setDecimals(decimals)
-                        widget.setSingleStep(0.01)  # 设置单步大小
+                        widget.setSingleStep(0.1)  # 设置单步大小
                     widgets_set += 1
         
         # 设置全局拟合参数控件范围
         if hasattr(self.ui, 'fitSigmaResValue'):
             self.ui.fitSigmaResValue.setRange(min_value, max_value)
             self.ui.fitSigmaResValue.setDecimals(6)  # Br 可能非常小
-            self.ui.fitSigmaResValue.setSingleStep(0.0001)
+            self.ui.fitSigmaResValue.setSingleStep(0.1)
             widgets_set += 1
 
         if hasattr(self.ui, 'fitNuResValue'):
@@ -6555,7 +6988,7 @@ class FittingController(QObject):
         if hasattr(self.ui, 'fitIntResValue'):
             self.ui.fitIntResValue.setRange(min_value, max_value)
             self.ui.fitIntResValue.setDecimals(6)
-            self.ui.fitIntResValue.setSingleStep(0.0001)
+            self.ui.fitIntResValue.setSingleStep(0.01)
             widgets_set += 1
             
         if hasattr(self.ui, 'fitKValue'):
@@ -6566,10 +6999,11 @@ class FittingController(QObject):
         
         self._add_fitting_success(f"Set ranges for {widgets_set} parameter widgets: [{min_value}, {max_value}] with {decimals} decimals")
     
-    def _setup_particle_parameter_connections(self):
+    def _setup_particle_parameter_connections(self, widget_ids=None):
         """设置粒子参数控件的信号连接（迁移到 meta 去抖 + 持久化 + 拟合触发）"""
         from functools import partial
-        for widget_id in self.particle_shape_configs.keys():
+        widget_ids = widget_ids or self._iter_particle_widget_ids()
+        for widget_id in widget_ids:
             for shape_name in ('Sphere', 'Cylinder'):
                 mapping = self._get_parameter_widget_mapping(widget_id, shape_name)
                 shape_lower = shape_name.lower()
@@ -6609,15 +7043,17 @@ class FittingController(QObject):
                         'after_commit': _after_commit,
                         'connect_mode': widget_mode,
                     }
+                    meta_id = f'meta_particle_{widget_id}_{shape_lower}_{param_key}'
                     self.param_trigger_manager.register_parameter_widget(
                         widget=w,
-                        widget_id=f'meta_particle_{widget_id}_{shape_lower}_{param_key}',
+                        widget_id=meta_id,
                         category='fitting_particles',
                         immediate_handler=lambda v: None,
                         delayed_handler=None,
                         connect_signals=True,
                         meta=meta
                     )
+                    self._particle_parameter_meta_ids[widget_id].append(meta_id)
                     # 由 meta 管理器根据 connect_mode 自动连接
     
     def _setup_global_parameter_connections(self):
@@ -6711,13 +7147,14 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Failed to initialize global parameters: {e}")
     
-    def _initialize_particle_states(self):
-        """根据模型参数初始化粒子状态：直接从JSON读取"""
+    def _initialize_particle_states(self, widget_ids=None):
+        """根据模型参数初始化粒子状态：直接从JSON读取，可限定粒子"""
         try:
             # 设置初始化标志，避免触发保存
             self._initializing = True
             
-            for widget_id in self.particle_shape_configs.keys():
+            target_ids = widget_ids or self._iter_particle_widget_ids()
+            for widget_id in target_ids:
                 particle_id = f"particle_{widget_id}"
                 
                 # 从JSON获取保存的形状和启用状态
@@ -7045,13 +7482,13 @@ class FittingController(QObject):
     def get_particles_status(self) -> dict:
         """获取所有粒子的当前状态"""
         status = {}
-        for widget_id in self.particle_shape_configs.keys():
+        for widget_id in self._iter_particle_widget_ids():
             status[widget_id] = self.get_particle_shape(widget_id)
         return status
     
     def reset_all_particles(self):
         """重置所有粒子为None状态"""
-        for widget_id in self.particle_shape_configs.keys():
+        for widget_id in self._iter_particle_widget_ids():
             self.set_particle_shape(widget_id, 'None')
         self._add_fitting_success("All particles reset to None state")
     
@@ -7066,7 +7503,7 @@ class FittingController(QObject):
         self.particle_control_types[shape_name] = control_types
         
         # 为每个widget添加新的页面配置
-        for widget_id in self.particle_shape_configs.keys():
+        for widget_id in self._iter_particle_widget_ids():
             pages = self.particle_shape_configs[widget_id]['pages']
             new_index = len(pages) - 1  # None总是最后一个，所以新形状插在倒数第二
             
@@ -7594,23 +8031,14 @@ class FittingController(QObject):
             from utils.fitting import make_mixed_model, params_template, mixed_model_components
             
             # 1. 判断粒子形状ComboBox的状态
-            active_shapes = []
-            shape_configs = []
-            
-            for i in range(1, 4):  # 检查三个ComboBox
-                combobox_name = f'fitParticleShapeCombox_{i}'
-                if hasattr(self.ui, combobox_name):
-                    combobox = getattr(self.ui, combobox_name)
-                    current_text = combobox.currentText()
-                    if current_text and current_text.lower() != 'none':
-                        active_shapes.append(current_text.lower())
-                        shape_configs.append(i)
+            active_shapes, shape_configs = self._collect_active_particles()
             
             if not active_shapes:
                 self._add_fitting_error("No active particle shapes selected for fitting")
                 return
             
             self._add_fitting_success(f"Active shapes: {active_shapes}")
+            self._last_active_particle_ids = shape_configs.copy()
             
             # 2. 获取q值数组
             q_data = None
@@ -8126,17 +8554,10 @@ class FittingController(QObject):
                 if ok:
                     return shapes, params_list
             # 回退到根据 UI 取参数
-            act_shapes = []
-            act_idx = []
-            for i in range(1, 4):
-                cb_name = f'fitParticleShapeCombox_{i}'
-                if hasattr(self.ui, cb_name):
-                    cb = getattr(self.ui, cb_name)
-                    txt = cb.currentText()
-                    if txt and txt.lower() != 'none':
-                        act_shapes.append(txt.lower()); act_idx.append(i)
+            act_shapes, act_idx = self._collect_active_particles()
             if not act_shapes:
                 return (fallback_shapes, None) if fallback_shapes else (None, None)
+            self._last_active_particle_ids = act_idx.copy()
             # 逐形状按模板顺序取值
             params_list = []
             for j, s in enumerate(act_shapes, 1):

@@ -2,6 +2,7 @@
 模型参数管理器
 负责管理所有模型相关参数的加载、保存和访问
 """
+import copy
 import json
 import os
 from typing import Dict, Any, Optional
@@ -59,86 +60,22 @@ class ModelParametersManager(QObject):
     
     def _create_default_parameters(self):
         """创建默认参数"""
+        particles = {
+            f"particle_{idx}": self._build_default_particle_entry(
+                shape="Sphere" if idx == 1 else "None"
+            )
+            for idx in (1, 2, 3)
+        }
+        # particle_1 默认启用，其余保持禁用
+        particles["particle_1"]["enabled"] = True
+
         self._parameters = {
             "fitting": {
                 "global_parameters": {
                     "sigma_res": 0.1,
                     "k_value": 1.0
                 },
-                "particles": {
-                    "particle_1": {
-                        "shape": "Sphere",
-                        "enabled": True,
-                        "parameters": {
-                            "sphere": {
-                                "intensity": 1.0,
-                                "radius": 10.0,
-                                "sigma_radius": 0.1,
-                                "diameter": 20.0,
-                                "sigma_diameter": 0.1,
-                                "background": 0.0
-                            },
-                            "cylinder": {
-                                "intensity": 1.0,
-                                "radius": 10.0,
-                                "sigma_radius": 0.1,
-                                "height": 20.0,
-                                "sigma_height": 0.1,
-                                "diameter": 20.0,
-                                "sigma_diameter": 0.1,
-                                "background": 0.0
-                            }
-                        }
-                    },
-                    "particle_2": {
-                        "shape": "None",
-                        "enabled": False,
-                        "parameters": {
-                            "sphere": {
-                                "intensity": 1.0,
-                                "radius": 10.0,
-                                "sigma_radius": 0.1,
-                                "diameter": 20.0,
-                                "sigma_diameter": 0.1,
-                                "background": 0.0
-                            },
-                            "cylinder": {
-                                "intensity": 1.0,
-                                "radius": 10.0,
-                                "sigma_radius": 0.1,
-                                "height": 20.0,
-                                "sigma_height": 0.1,
-                                "diameter": 20.0,
-                                "sigma_diameter": 0.1,
-                                "background": 0.0
-                            }
-                        }
-                    },
-                    "particle_3": {
-                        "shape": "None",
-                        "enabled": False,
-                        "parameters": {
-                            "sphere": {
-                                "intensity": 1.0,
-                                "radius": 10.0,
-                                "sigma_radius": 0.1,
-                                "diameter": 20.0,
-                                "sigma_diameter": 0.1,
-                                "background": 0.0
-                            },
-                            "cylinder": {
-                                "intensity": 1.0,
-                                "radius": 10.0,
-                                "sigma_radius": 0.1,
-                                "height": 20.0,
-                                "sigma_height": 0.1,
-                                "diameter": 20.0,
-                                "sigma_diameter": 0.1,
-                                "background": 0.0
-                            }
-                        }
-                    }
-                }
+                "particles": particles
             },
             "gisaxs_predict": {
                 "particles": {}
@@ -153,6 +90,37 @@ class ModelParametersManager(QObject):
             }
         }
     
+    def _build_default_shape_parameters(self) -> Dict[str, Dict[str, float]]:
+        """生成形状默认参数，供粒子初始化与扩展使用"""
+        return {
+            "sphere": {
+                "intensity": 1.0,
+                "radius": 10.0,
+                "sigma_radius": 0.1,
+                "diameter": 20.0,
+                "sigma_diameter": 0.1,
+                "background": 0.0
+            },
+            "cylinder": {
+                "intensity": 1.0,
+                "radius": 10.0,
+                "sigma_radius": 0.1,
+                "height": 20.0,
+                "sigma_height": 0.1,
+                "diameter": 20.0,
+                "sigma_diameter": 0.1,
+                "background": 0.0
+            }
+        }
+
+    def _build_default_particle_entry(self, shape: str = "None", parameters: Dict[str, Dict[str, float]] = None) -> Dict[str, Any]:
+        """构造一个粒子的默认配置。"""
+        return {
+            "shape": shape,
+            "enabled": shape != "None",
+            "parameters": copy.deepcopy(parameters) if parameters else self._build_default_shape_parameters()
+        }
+
     def get_parameter(self, section: str, key: str = None, default: Any = None) -> Any:
         """获取参数值"""
         try:
@@ -221,11 +189,7 @@ class ModelParametersManager(QObject):
             if 'particles' not in self._parameters[module]:
                 self._parameters[module]['particles'] = {}
             if particle_id not in self._parameters[module]['particles']:
-                self._parameters[module]['particles'][particle_id] = {
-                    'shape': 'None',
-                    'enabled': False,
-                    'parameters': {}
-                }
+                self._parameters[module]['particles'][particle_id] = self._build_default_particle_entry()
             if 'parameters' not in self._parameters[module]['particles'][particle_id]:
                 self._parameters[module]['particles'][particle_id]['parameters'] = {}
             if shape.lower() not in self._parameters[module]['particles'][particle_id]['parameters']:
@@ -291,16 +255,48 @@ class ModelParametersManager(QObject):
             if 'particles' not in self._parameters[module]:
                 self._parameters[module]['particles'] = {}
             if particle_id not in self._parameters[module]['particles']:
-                self._parameters[module]['particles'][particle_id] = {
-                    'shape': 'None',
-                    'enabled': False,
-                    'parameters': {}
-                }
+                self._parameters[module]['particles'][particle_id] = self._build_default_particle_entry()
             
             self._parameters[module]['particles'][particle_id]['enabled'] = enabled
             return True
         except Exception as e:
             print(f"Failed to set particle enabled state: {e}")
+            return False
+
+    def ensure_particle_entry(self, module: str, particle_id: str, shape: str = 'None') -> Dict[str, Any]:
+        """确保指定粒子存在，不存在时使用默认值创建。"""
+        if module not in self._parameters:
+            self._parameters[module] = {'particles': {}, 'global_parameters': {}}
+        particles = self._parameters[module].setdefault('particles', {})
+        if particle_id not in particles:
+            particles[particle_id] = self._build_default_particle_entry(shape=shape)
+            self.parameters_changed.emit(f"{module}.particles", particles)
+            self.save_parameters()
+        return particles[particle_id]
+
+    def add_particle(self, module: str, particle_id: str, shape: str = 'Sphere', parameters: Dict[str, Any] = None) -> Dict[str, Any]:
+        """新增粒子配置，可指定初始形状与参数。"""
+        entry = self._build_default_particle_entry(shape=shape, parameters=parameters)
+        if module not in self._parameters:
+            self._parameters[module] = {'particles': {}, 'global_parameters': {}}
+        particles = self._parameters[module].setdefault('particles', {})
+        particles[particle_id] = entry
+        self.parameters_changed.emit(f"{module}.particles", particles)
+        self.save_parameters()
+        return entry
+
+    def remove_particle(self, module: str, particle_id: str) -> bool:
+        """删除指定粒子配置。"""
+        try:
+            particles = self._parameters.get(module, {}).get('particles', {})
+            if particle_id in particles:
+                particles.pop(particle_id)
+                self.parameters_changed.emit(f"{module}.particles", particles)
+                self.save_parameters()
+                return True
+            return False
+        except Exception as e:
+            print(f"Failed to remove particle {module}.{particle_id}: {e}")
             return False
     
     def get_all_particles(self, module: str) -> Dict[str, Any]:

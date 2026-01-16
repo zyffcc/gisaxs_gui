@@ -216,7 +216,7 @@
           </sizepolicy>
          </property>
          <property name="currentIndex">
-          <number>1</number>
+          <number>2</number>
          </property>
          <widget class="QWidget" name="trainsetBuildPage">
           <layout class="QVBoxLayout" name="verticalLayout_6">
@@ -6420,7 +6420,7 @@ p, li { white-space: pre-wrap; }
               <property name="geometry">
                <rect>
                 <x>0</x>
-                <y>0</y>
+                <y>-194</y>
                 <width>1270</width>
                 <height>1005</height>
                </rect>
@@ -7064,7 +7064,7 @@ p, li { white-space: pre-wrap; }
                           <widget class="QWidget" name="fitParticleWidget_1" native="true">
                            <property name="minimumSize">
                             <size>
-                             <width>180</width>
+                             <width>230</width>
                              <height>300</height>
                             </size>
                            </property>
@@ -7370,7 +7370,7 @@ p, li { white-space: pre-wrap; }
                           <widget class="QWidget" name="fitParticleWidget_2" native="true">
                            <property name="minimumSize">
                             <size>
-                             <width>180</width>
+                             <width>230</width>
                              <height>300</height>
                             </size>
                            </property>
@@ -7760,7 +7760,7 @@ p, li { white-space: pre-wrap; }
                           <widget class="QWidget" name="fitParticleWidget_3" native="true">
                            <property name="minimumSize">
                             <size>
-                             <width>180</width>
+                             <width>230</width>
                              <height>300</height>
                             </size>
                            </property>
@@ -8165,6 +8165,19 @@ p, li { white-space: pre-wrap; }
                            </property>
                           </widget>
                          </item>
+                         <item>
+                          <spacer name="horizontalSpacer_7">
+                           <property name="orientation">
+                            <enum>Qt::Horizontal</enum>
+                           </property>
+                           <property name="sizeHint" stdset="0">
+                            <size>
+                             <width>40</width>
+                             <height>20</height>
+                            </size>
+                           </property>
+                          </spacer>
+                         </item>
                         </layout>
                        </widget>
                       </widget>
@@ -8408,32 +8421,6 @@ p, li { white-space: pre-wrap; }
                        </property>
                        <layout class="QGridLayout" name="gridLayout_40">
                         <item row="2" column="0">
-                         <widget class="QCheckBox" name="fitResShowCheckBox">
-                          <property name="sizePolicy">
-                           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-                            <horstretch>0</horstretch>
-                            <verstretch>0</verstretch>
-                           </sizepolicy>
-                          </property>
-                          <property name="text">
-                           <string>Res. Function</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="2" column="1">
-                         <widget class="QCheckBox" name="fitParticle2ShowCheckBox">
-                          <property name="sizePolicy">
-                           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-                            <horstretch>0</horstretch>
-                            <verstretch>0</verstretch>
-                           </sizepolicy>
-                          </property>
-                          <property name="text">
-                           <string>Particle 2</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="1" column="0">
                          <widget class="QCheckBox" name="fitBGShowCheckBox">
                           <property name="sizePolicy">
                            <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
@@ -8446,37 +8433,95 @@ p, li { white-space: pre-wrap; }
                           </property>
                          </widget>
                         </item>
-                        <item row="1" column="1">
-                         <widget class="QCheckBox" name="fitParticle1ShowCheckBox">
-                          <property name="sizePolicy">
-                           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-                            <horstretch>0</horstretch>
-                            <verstretch>0</verstretch>
-                           </sizepolicy>
-                          </property>
-                          <property name="text">
-                           <string>Particle 1</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="3" column="1">
-                         <widget class="QCheckBox" name="fitParticle3ShowCheckBox">
-                          <property name="sizePolicy">
-                           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-                            <horstretch>0</horstretch>
-                            <verstretch>0</verstretch>
-                           </sizepolicy>
-                          </property>
-                          <property name="text">
-                           <string>Particle 3</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="0" column="0" colspan="2">
+                        <item row="0" column="0" colspan="3">
                          <widget class="QLabel" name="fitDisplayOptionsLabel">
                           <property name="text">
                            <string>Options displayed in the figure:</string>
                           </property>
+                         </widget>
+                        </item>
+                        <item row="3" column="0">
+                         <widget class="QCheckBox" name="fitResShowCheckBox">
+                          <property name="sizePolicy">
+                           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                            <horstretch>0</horstretch>
+                            <verstretch>0</verstretch>
+                           </sizepolicy>
+                          </property>
+                          <property name="text">
+                           <string>Res. Function</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item row="4" column="0">
+                         <spacer name="verticalSpacer_3">
+                          <property name="orientation">
+                           <enum>Qt::Vertical</enum>
+                          </property>
+                          <property name="sizeHint" stdset="0">
+                           <size>
+                            <width>20</width>
+                            <height>40</height>
+                           </size>
+                          </property>
+                         </spacer>
+                        </item>
+                        <item row="1" column="0">
+                         <spacer name="verticalSpacer_4">
+                          <property name="orientation">
+                           <enum>Qt::Vertical</enum>
+                          </property>
+                          <property name="sizeHint" stdset="0">
+                           <size>
+                            <width>20</width>
+                            <height>40</height>
+                           </size>
+                          </property>
+                         </spacer>
+                        </item>
+                        <item row="1" column="1" rowspan="4" colspan="2">
+                         <widget class="QWidget" name="ParticlesNumWidget" native="true">
+                          <layout class="QVBoxLayout" name="verticalLayout_26">
+                           <item>
+                            <widget class="QCheckBox" name="fitParticle1ShowCheckBox">
+                             <property name="sizePolicy">
+                              <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                               <horstretch>0</horstretch>
+                               <verstretch>0</verstretch>
+                              </sizepolicy>
+                             </property>
+                             <property name="text">
+                              <string>Particle 1</string>
+                             </property>
+                            </widget>
+                           </item>
+                           <item>
+                            <widget class="QCheckBox" name="fitParticle2ShowCheckBox">
+                             <property name="sizePolicy">
+                              <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                               <horstretch>0</horstretch>
+                               <verstretch>0</verstretch>
+                              </sizepolicy>
+                             </property>
+                             <property name="text">
+                              <string>Particle 2</string>
+                             </property>
+                            </widget>
+                           </item>
+                           <item>
+                            <widget class="QCheckBox" name="fitParticle3ShowCheckBox">
+                             <property name="sizePolicy">
+                              <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                               <horstretch>0</horstretch>
+                               <verstretch>0</verstretch>
+                              </sizepolicy>
+                             </property>
+                             <property name="text">
+                              <string>Particle 3</string>
+                             </property>
+                            </widget>
+                           </item>
+                          </layout>
                          </widget>
                         </item>
                        </layout>

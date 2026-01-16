@@ -229,8 +229,8 @@ def make_mixed_model(
     返回的函数签名固定：f(q, *params)，参数顺序见 params_template(spec)。
     """
     spec = [s.lower() for s in spec]
-    if not (1 <= len(spec) <= 3):
-        raise ValueError("spec 长度必须是 1~3。")
+    if len(spec) < 1:
+        raise ValueError("spec 至少需要一个粒子形状。")
 
     # 采样配置
     pd_defaults = dict(nsig=4.0, n_samples=25)
