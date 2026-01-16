@@ -58,6 +58,26 @@ def gaussian_resolution_smear(q, I, sigma_res):
     conv = np.convolve(Ipad, kern, mode="same")
     return conv[pad:-pad]
 
+
+def _resolution_peak(q, width, exponent):
+    """GISAXS-Fit 风格的分辨率峰：1 / (1 + (|q|/width)^exponent)。"""
+    q_arr = np.abs(np.asarray(q, dtype=float))
+    width = float(width)
+    exponent = float(exponent)
+    if width <= 0 or exponent <= 0:
+        return np.ones_like(q_arr, dtype=float)
+    denom = np.maximum(width, 1e-30)
+    ratio = q_arr / denom
+    return 1.0 / (1.0 + np.power(ratio, exponent))
+
+
+def _resolution_component(q, width, exponent, intensity):
+    """返回 Int * resolution_peak，若强度<=0则为零。"""
+    intensity = float(intensity)
+    if not np.isfinite(intensity) or intensity == 0:
+        return np.zeros_like(np.asarray(q, dtype=float))
+    return intensity * _resolution_peak(q, width, exponent)
+
 # =========================
 #  Form factors
 # =========================
@@ -178,7 +198,7 @@ def params_template(spec):
     每个组分的顺序：
       Sphere:   Int, R, sigma_R, D, sigma_D, BG
       Cylinder: Int, R, sigma_R, h, sigma_h, D, sigma_D, BG
-    结尾统一追加：sigma_Res, k
+    结尾统一追加：sigma_Res(=Br), nu_Res(=Nu), int_Res, k
     """
     names = []
     for i, shape in enumerate(spec, 1):
@@ -188,7 +208,7 @@ def params_template(spec):
             names += [f"Int{i}", f"R{i}", f"sigma_R{i}", f"h{i}", f"sigma_h{i}", f"D{i}", f"sigma_D{i}", f"BG{i}"]
         else:
             raise ValueError(f"Unsupported shape: {shape}")
-    names += ["sigma_Res", "k"]
+    names += ["sigma_Res", "nu_Res", "int_Res", "k"]
     return names
 
 def make_mixed_model(
@@ -199,8 +219,7 @@ def make_mixed_model(
 ):
     """
     根据 spec(list[str]) 生成 f(q,*params)：
-      I(q) = sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_Di) + BG
-      -> 再做高斯分辨率展宽（sigma_Res）
+    I(q) = sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_Di) + BG + I_res * R(q; Br, Nu)
 
     spec 例子：
       ["sphere"]
@@ -273,10 +292,10 @@ def make_mixed_model(
             else:
                 raise ValueError(f"Unsupported shape: {shape}")
 
-        sigma_Res = params[idx]; k = params[idx+1]
-        I = I_mix + BG_total  # 散射信号 + 总背景
-        I_smeared = gaussian_resolution_smear(q_arr, I, sigma_Res)
-        return apply_scaling_factor(I_smeared, k)
+        sigma_Res = params[idx]; nu_Res = params[idx+1]; int_Res = params[idx+2]; k = params[idx+3]
+        resolution = _resolution_component(q_arr, sigma_Res, nu_Res, int_Res)
+        I_total = I_mix + BG_total + resolution
+        return apply_scaling_factor(I_total, k)
 
     # 给外部看得到的参数名（便于 GUI 提示）
     f.param_names = template  # type: ignore[attr-defined]
@@ -303,10 +322,9 @@ def mixed_model_components(
         约定：
         - 每个粒子的曲线为 Int_i * P_i(q) * S_i(q; D_i, sigma_Di)，若 D 或 sigma_D 为 0 则 S=1。
         - BG_total = sum_i Int_i * BG_i（常数项，按 Int 加权）。
-        - 若 sigma_Res>0，则对每个粒子曲线分别做高斯展宽；BG_total 为常数不变。
-        - 最终所有曲线都乘以全局缩放因子 k。
-        - resolution 曲线为中心 0 的高斯核 exp(-0.5*(q/sigma_Res)^2)。为了可视化，默认将其幅度缩放到与总强度同量级：
-          若 scale_resolution_to_total=True，则乘以 max(I_total_smeared)；同时再乘以 k。
+                - 分辨率曲线使用 GISAXS-Fit 形式：I_res * [1 / (1 + (|q|/Br)^Nu)]。
+                - 最终所有曲线都乘以全局缩放因子 k。
+                - scale_resolution_to_total 参数保留以保持签名兼容，目前不再调整分辨率幅度。
         """
         spec = [s.lower() for s in spec]
         q_arr = np.asarray(q, dtype=float)
@@ -353,47 +371,17 @@ def mixed_model_components(
                 raise ValueError(f"Unsupported shape: {shape}")
 
         # 取出分辨率与缩放因子
-        sigma_Res = float(params[idx]); k = float(params[idx+1])
+        sigma_Res = float(params[idx]); nu_Res = float(params[idx+1]); int_Res = float(params[idx+2]); k = float(params[idx+3])
 
-        # 对每个粒子分别展宽（保持和总拟合一致的视感）
-        parts_smeared = []
-        if sigma_Res is not None and sigma_Res > 0:
-            for shape, i, I_part in raw_particles:
-                I_sm = gaussian_resolution_smear(q_arr, I_part, sigma_Res)
-                parts_smeared.append((shape, i, I_sm))
-        else:
-            parts_smeared = raw_particles
-
-        # 应用全局缩放因子 k
-        for shape, i, I_sm in parts_smeared:
-            parts.append({"shape": shape, "index": i, "I": apply_scaling_factor(I_sm, k)})
+        # 组件曲线直接乘以 k（新分辨率模型无需再对粒子做高斯展宽）
+        for shape, i, I_part in raw_particles:
+            parts.append({"shape": shape, "index": i, "I": apply_scaling_factor(I_part, k)})
 
         BG_curve = apply_scaling_factor(BG_total, k)
 
-        # 分辨率函数（显示用途）：exp(-0.5*(q/sigma)^2)
-        if sigma_Res is not None and sigma_Res > 0:
-            res_func = np.exp(-0.5 * (q_arr / sigma_Res) ** 2)
-        else:
-            res_func = np.zeros_like(q_arr, dtype=float)
-
-        # 若需要，将分辨率函数幅度缩放到与总强度同量级
-        if scale_resolution_to_total:
-            # 估计总强度（粒子+BG）并做同样的展宽
-            I_total_raw = np.zeros_like(q_arr, dtype=float)
-            for _, _, I_part in raw_particles:
-                I_total_raw += I_part
-            I_total_raw += BG_total
-            if sigma_Res is not None and sigma_Res > 0:
-                I_total_disp = gaussian_resolution_smear(q_arr, I_total_raw, sigma_Res)
-            else:
-                I_total_disp = I_total_raw
-            I_total_disp = apply_scaling_factor(I_total_disp, k)
-            amp = float(np.max(I_total_disp)) if I_total_disp.size else 1.0
-            res_curve = res_func * amp
-        else:
-            res_curve = res_func
-        # 也乘以全局 k 以符合“有个 k 保证一下 factor”的要求
-        res_curve = apply_scaling_factor(res_curve, k)
+        # 分辨率曲线
+        res_curve_raw = _resolution_component(q_arr, sigma_Res, nu_Res, int_Res)
+        res_curve = apply_scaling_factor(res_curve_raw, k)
 
         return {
             'particles': parts,      # list of {shape,index,I}

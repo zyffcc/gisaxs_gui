@@ -6542,8 +6542,20 @@ class FittingController(QObject):
         # 设置全局拟合参数控件范围
         if hasattr(self.ui, 'fitSigmaResValue'):
             self.ui.fitSigmaResValue.setRange(min_value, max_value)
-            self.ui.fitSigmaResValue.setDecimals(4)  # sigma_res设置4位精度
-            self.ui.fitSigmaResValue.setSingleStep(0.01)  # sigma通常是小数值
+            self.ui.fitSigmaResValue.setDecimals(6)  # Br 可能非常小
+            self.ui.fitSigmaResValue.setSingleStep(0.0001)
+            widgets_set += 1
+
+        if hasattr(self.ui, 'fitNuResValue'):
+            self.ui.fitNuResValue.setRange(min_value, max_value)
+            self.ui.fitNuResValue.setDecimals(4)
+            self.ui.fitNuResValue.setSingleStep(0.1)
+            widgets_set += 1
+
+        if hasattr(self.ui, 'fitIntResValue'):
+            self.ui.fitIntResValue.setRange(min_value, max_value)
+            self.ui.fitIntResValue.setDecimals(6)
+            self.ui.fitIntResValue.setSingleStep(0.0001)
             widgets_set += 1
             
         if hasattr(self.ui, 'fitKValue'):
@@ -6613,6 +6625,8 @@ class FittingController(QObject):
         from functools import partial
         mapping = [
             ('fitSigmaResValue', 'sigma_res'),
+            ('fitNuResValue', 'nu_res'),
+            ('fitIntResValue', 'int_res'),
             ('fitKValue', 'k_value'),
         ]
         for widget_name, param_key in mapping:
@@ -6669,6 +6683,22 @@ class FittingController(QObject):
                 self.ui.fitSigmaResValue.setValue(saved_value)
                 self.ui.fitSigmaResValue.blockSignals(False)
                 self._add_fitting_message(f"Initialized fitSigmaResValue to {saved_value}", "INFO")
+
+            # 初始化 nu_res
+            if hasattr(self.ui, 'fitNuResValue'):
+                saved_value = self.model_params_manager.get_global_parameter('fitting', 'nu_res', 5.0)
+                self.ui.fitNuResValue.blockSignals(True)
+                self.ui.fitNuResValue.setValue(saved_value)
+                self.ui.fitNuResValue.blockSignals(False)
+                self._add_fitting_message(f"Initialized fitNuResValue to {saved_value}", "INFO")
+
+            # 初始化 int_res
+            if hasattr(self.ui, 'fitIntResValue'):
+                saved_value = self.model_params_manager.get_global_parameter('fitting', 'int_res', 0.0)
+                self.ui.fitIntResValue.blockSignals(True)
+                self.ui.fitIntResValue.setValue(saved_value)
+                self.ui.fitIntResValue.blockSignals(False)
+                self._add_fitting_message(f"Initialized fitIntResValue to {saved_value}", "INFO")
             
             # 初始化 k_value
             if hasattr(self.ui, 'fitKValue'):
@@ -7427,6 +7457,10 @@ class FittingController(QObject):
             current_value = None
             if param_name == 'sigma_res' and hasattr(self.ui, 'fitSigmaResValue'):
                 current_value = self.ui.fitSigmaResValue.value()
+            elif param_name == 'nu_res' and hasattr(self.ui, 'fitNuResValue'):
+                current_value = self.ui.fitNuResValue.value()
+            elif param_name == 'int_res' and hasattr(self.ui, 'fitIntResValue'):
+                current_value = self.ui.fitIntResValue.value()
             elif param_name == 'k_value' and hasattr(self.ui, 'fitKValue'):
                 current_value = self.ui.fitKValue.value()
             
@@ -7644,29 +7678,44 @@ class FittingController(QObject):
                     self._add_fitting_success(f"Shape {i} ({shape}): BG={bg_param}")
                     params.extend([int_param, r_param, sigma_r_param, h_param, sigma_h_param, d_param, sigma_d_param, bg_param])
             
-            # 5. 添加全局参数：sigma_Res, k
-            # 优先从UI控件获取最新值
-            # (BG参数现在是每个particle独立的，已经在上面添加了)
-            
-            # 获取sigma_Res参数
+            # 5. 添加全局分辨率与缩放参数：sigma_Res、nu_Res、int_Res、k
+            # 优先从UI控件获取最新值（BG参数为粒子级别，已在上面添加）
+
+            # 获取 sigma_Res (Br)
             if hasattr(self.ui, 'fitSigmaResValue'):
                 sigma_res_param = self.ui.fitSigmaResValue.value()
             else:
                 sigma_res_param = self.get_global_parameter('sigma_res') if hasattr(self, 'get_global_parameter') else 0.1
-            
-            # 检查分辨率展宽条件
-            if sigma_res_param == 0:
-                self._add_fitting_success(f"Resolution smearing disabled (sigma_res={sigma_res_param})")
+
+            # 获取 nu_Res (Lorentzian阶数)
+            if hasattr(self.ui, 'fitNuResValue'):
+                nu_res_param = self.ui.fitNuResValue.value()
             else:
-                self._add_fitting_success(f"Resolution smearing enabled (sigma_res={sigma_res_param})")
-            
-            # 获取k参数
+                nu_res_param = self.get_global_parameter('nu_res') if hasattr(self, 'get_global_parameter') else 5.0
+
+            # 获取 int_Res (Lorentzian幅度)
+            if hasattr(self.ui, 'fitIntResValue'):
+                int_res_param = self.ui.fitIntResValue.value()
+            else:
+                int_res_param = self.get_global_parameter('int_res') if hasattr(self, 'get_global_parameter') else 0.0
+
+            # 获取 k (全局缩放)
             if hasattr(self.ui, 'fitKValue'):
                 k_param = self.ui.fitKValue.value()
             else:
                 k_param = self.get_global_parameter('k_value') if hasattr(self, 'get_global_parameter') else 1.0
-            
-            params.extend([sigma_res_param, k_param])
+
+            # 输出诊断信息
+            if sigma_res_param == 0 or int_res_param == 0:
+                self._add_fitting_success(
+                    f"Lorentzian resolution component disabled (sigma_res={sigma_res_param}, int_res={int_res_param})"
+                )
+            else:
+                self._add_fitting_success(
+                    f"Lorentzian resolution active: sigma_res={sigma_res_param}, nu_res={nu_res_param}, int_res={int_res_param}"
+                )
+
+            params.extend([sigma_res_param, nu_res_param, int_res_param, k_param])
             
             # 显示详细的参数信息
             param_dict = dict(zip(param_names, params))
