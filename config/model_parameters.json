@@ -42,7 +42,7 @@
                         "background": -7e-05
                     },
                     "cylinder": {
-                        "intensity": 30.0001,
+                        "intensity": 29.9999,
                         "radius": 20.0,
                         "sigma_radius": 0.0,
                         "height": 15.0,

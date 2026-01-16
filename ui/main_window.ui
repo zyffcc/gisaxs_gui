@@ -230,7 +230,7 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>1098</width>
+                <width>736</width>
                 <height>2491</height>
                </rect>
               </property>
@@ -6207,38 +6207,8 @@ p, li { white-space: pre-wrap; }
                        </property>
                       </widget>
                      </item>
-                     <item row="1" column="3">
-                      <widget class="QDoubleSpinBox" name="predict2dVmaxValue"/>
-                     </item>
                      <item row="1" column="1">
                       <widget class="QDoubleSpinBox" name="predict2dVminValue"/>
-                     </item>
-                     <item row="2" column="1">
-                      <widget class="QCheckBox" name="predict2dLogScaleCheckBox">
-                       <property name="text">
-                        <string>LogScale</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="5" column="0" alignment="Qt::AlignHCenter">
-                      <widget class="QLabel" name="predict2dColormapLabel">
-                       <property name="maximumSize">
-                        <size>
-                         <width>16777215</width>
-                         <height>23</height>
-                        </size>
-                       </property>
-                       <property name="text">
-                        <string>Colormap:</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="2" column="2">
-                      <widget class="QPushButton" name="predict2dAutoScaleResetButton">
-                       <property name="text">
-                        <string>Reset</string>
-                       </property>
-                      </widget>
                      </item>
                      <item row="1" column="0" alignment="Qt::AlignHCenter">
                       <widget class="QLabel" name="predict2dVminLabel">
@@ -6272,31 +6242,6 @@ p, li { white-space: pre-wrap; }
                        </property>
                       </widget>
                      </item>
-                     <item row="1" column="2" alignment="Qt::AlignHCenter">
-                      <widget class="QLabel" name="predict2dVmaxLabel">
-                       <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-                         <horstretch>0</horstretch>
-                         <verstretch>0</verstretch>
-                        </sizepolicy>
-                       </property>
-                       <property name="minimumSize">
-                        <size>
-                         <width>50</width>
-                         <height>0</height>
-                        </size>
-                       </property>
-                       <property name="maximumSize">
-                        <size>
-                         <width>1000</width>
-                         <height>16777215</height>
-                        </size>
-                       </property>
-                       <property name="text">
-                        <string>Vmax:</string>
-                       </property>
-                      </widget>
-                     </item>
                      <item row="3" column="2">
                       <widget class="QPushButton" name="predict2dZoomResetButton">
                        <property name="sizePolicy">
@@ -6322,17 +6267,78 @@ p, li { white-space: pre-wrap; }
                        </property>
                       </widget>
                      </item>
-                     <item row="3" column="0">
-                      <widget class="QPushButton" name="predict2dZoomInButton">
+                     <item row="9" column="3">
+                      <spacer name="predict2dSpacer_2">
+                       <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                       </property>
+                       <property name="sizeHint" stdset="0">
+                        <size>
+                         <width>20</width>
+                         <height>40</height>
+                        </size>
+                       </property>
+                      </spacer>
+                     </item>
+                     <item row="3" column="1">
+                      <widget class="QPushButton" name="predict2dZoomOutButton">
                        <property name="text">
-                        <string>Zoom +</string>
+                        <string>Zoom-</string>
                        </property>
                       </widget>
                      </item>
-                     <item row="6" column="0">
-                      <widget class="QPushButton" name="predict2dExportButton">
+                     <item row="2" column="1">
+                      <widget class="QCheckBox" name="predict2dLogScaleCheckBox">
                        <property name="text">
-                        <string>Export</string>
+                        <string>LogScale</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="5" column="0" alignment="Qt::AlignHCenter">
+                      <widget class="QLabel" name="predict2dColormapLabel">
+                       <property name="maximumSize">
+                        <size>
+                         <width>16777215</width>
+                         <height>23</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>Colormap:</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="7" column="0" colspan="2">
+                      <widget class="QWidget" name="widget_6" native="true"/>
+                     </item>
+                     <item row="2" column="2">
+                      <widget class="QPushButton" name="predict2dAutoScaleResetButton">
+                       <property name="text">
+                        <string>Reset</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="1" column="2" alignment="Qt::AlignHCenter">
+                      <widget class="QLabel" name="predict2dVmaxLabel">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="minimumSize">
+                        <size>
+                         <width>50</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>1000</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>Vmax:</string>
                        </property>
                       </widget>
                      </item>
@@ -6349,10 +6355,20 @@ p, li { white-space: pre-wrap; }
                        </property>
                       </spacer>
                      </item>
-                     <item row="3" column="1">
-                      <widget class="QPushButton" name="predict2dZoomOutButton">
+                     <item row="1" column="3">
+                      <widget class="QDoubleSpinBox" name="predict2dVmaxValue"/>
+                     </item>
+                     <item row="3" column="0">
+                      <widget class="QPushButton" name="predict2dZoomInButton">
                        <property name="text">
-                        <string>Zoom-</string>
+                        <string>Zoom +</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="6" column="0">
+                      <widget class="QPushButton" name="predict2dExportButton">
+                       <property name="text">
+                        <string>Export</string>
                        </property>
                       </widget>
                      </item>
@@ -6365,18 +6381,15 @@ p, li { white-space: pre-wrap; }
                        </item>
                       </widget>
                      </item>
-                     <item row="7" column="3">
-                      <spacer name="predict2dSpacer_2">
-                       <property name="orientation">
-                        <enum>Qt::Vertical</enum>
-                       </property>
-                       <property name="sizeHint" stdset="0">
+                     <item row="8" column="0" colspan="4">
+                      <widget class="QWidget" name="predict2dParameter1dpartWidget" native="true">
+                       <property name="minimumSize">
                         <size>
-                         <width>20</width>
-                         <height>40</height>
+                         <width>0</width>
+                         <height>30</height>
                         </size>
                        </property>
-                      </spacer>
+                      </widget>
                      </item>
                     </layout>
                    </widget>
@@ -6408,7 +6421,7 @@ p, li { white-space: pre-wrap; }
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>1098</width>
+                <width>1018</width>
                 <height>883</height>
                </rect>
               </property>
@@ -8650,7 +8663,7 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>1098</width>
+                <width>384</width>
                 <height>1056</height>
                </rect>
               </property>
@@ -9138,7 +9151,7 @@ QListWidget::item:selected {
                    <rect>
                     <x>0</x>
                     <y>0</y>
-                    <width>1078</width>
+                    <width>364</width>
                     <height>298</height>
                    </rect>
                   </property>

@@ -2018,9 +2018,10 @@ class GisaxsPredictController(QObject):
         if not controls:
             return
 
-        for w in controls.values():
-            if hasattr(w, "setVisible"):
-                w.setVisible(is_curve)
+        # 显示/隐藏整个1D参数部分
+        curve_widget = getattr(self.ui, "predict2dParameter1dpartWidget", None)
+        if curve_widget is not None:
+            curve_widget.setVisible(is_curve)
 
         if not is_curve:
             return
@@ -2046,15 +2047,16 @@ class GisaxsPredictController(QObject):
     def _ensure_predict_curve_controls(self) -> Dict[str, object]:
         if self._predict_curve_controls:
             return self._predict_curve_controls
-        parent = getattr(self.ui, "predict2dParameterWidget", None)
-        layout = getattr(self.ui, "gridLayout_21", None)
-        if parent is None or layout is None:
+        parent = getattr(self.ui, "predict2dParameter1dpartWidget", None)
+        if parent is None:
             return {}
 
-        container = QWidget(parent)
-        grid = QGridLayout(container)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(6)
+        # 检查是否已经有布局，如果没有则创建一个
+        grid = parent.layout()
+        if grid is None:
+            grid = QGridLayout(parent)
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setSpacing(6)
 
         logx = QCheckBox("Log X")
         logy = QCheckBox("Log Y")
@@ -2081,9 +2083,6 @@ class GisaxsPredictController(QObject):
         grid.addWidget(QLabel("Y max"), 2, 2)
         grid.addWidget(ymax, 2, 3)
 
-        # Place curve controls on their own row to avoid clashing with existing widgets
-        layout.addWidget(container, 7, 0, 1, 6)
-
         logx.toggled.connect(self._on_predict_curve_control_changed)
         logy.toggled.connect(self._on_predict_curve_control_changed)
         autoscale.toggled.connect(self._on_predict_curve_control_changed)
@@ -2098,12 +2097,9 @@ class GisaxsPredictController(QObject):
             "xmax": xmax,
             "ymin": ymin,
             "ymax": ymax,
-            "container": container,
         }
         # Hide initially until a curve is shown
-        for w in [container, *self._predict_curve_controls.values()]:
-            if hasattr(w, "setVisible"):
-                w.setVisible(False)
+        parent.setVisible(False)
         return self._predict_curve_controls
 
     def _on_predict_curve_control_changed(self) -> None:

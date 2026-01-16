@@ -107,15 +107,15 @@
     "gisaxs_predict": {
         "framework": "tensorflow 2.15.0",
         "mode": "single_file",
-        "input_file": "E:/P03_Yufeng/11020093/raw/timescans/jg_gisaxs_4nm_old_15ml_insitu_03_00001/p2m\\jg_gisaxs_4nm_old_15ml_insitu_03_00001_00381.cbf",
+        "input_file": "E:/P03_Yufeng/11020093/raw/timescans/jg_gisaxs_4nm_old_15ml_insitu_03_00001/p2m\\jg_gisaxs_4nm_old_15ml_insitu_03_00001_00384.cbf",
         "input_folder": "E:/P03_Yufeng/11020093/raw/timescans/jg_gisaxs_4nm_old_15ml_insitu_03_00001/p2m",
         "export_path": "C:/Users/zhaiyufe/Downloads",
         "stack_value": "5",
         "range_value": "380-385",
-        "showing_value": "381",
+        "showing_value": "384",
         "auto_scale": true,
         "vmin": -5.0,
-        "vmax": 83.37999999988824,
+        "vmax": 82.0,
         "colormap": "viridis",
         "module_name": "",
         "module_model_path": "",
@@ -129,8 +129,8 @@
         "predict_curve_ymin": null,
         "predict_curve_ymax": null,
         "predict_auto_scale": true,
-        "predict_vmin": -5.826779842376709,
-        "predict_vmax": -1.288334846496582
+        "predict_vmin": -6.0,
+        "predict_vmax": -1.231696605682373
     },
     "classification": {
         "import_cache": {
