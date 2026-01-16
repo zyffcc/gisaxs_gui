@@ -135,12 +135,12 @@
     "classification": {
         "import_cache": {
             "P2": {
-                "path": "",
-                "rule": "*"
+                "path": "F:/GiXSgui/GISAXS",
+                "rule": "jg_gisaxs_4nm_old_15ml_insitu_03_00001_00317.cbf"
             },
             "Particle 1": {
-                "path": "",
-                "rule": "*"
+                "path": "F:/GiXSgui/1DSAXS/Heat 1",
+                "rule": "*.txt"
             }
         }
     },

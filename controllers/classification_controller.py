@@ -13,11 +13,13 @@ import os
 import io
 import fnmatch
 import time
+import re
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Tuple
 
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, Qt
+from PyQt5.QtCore import QThreadPool, QRunnable, QEvent, QTimer
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QFileDialog, QMessageBox, QInputDialog, QMenu,
@@ -74,6 +76,17 @@ class ClassificationController(QObject):
         self._feature_crop_shape_2d: Optional[Tuple[int, int]] = None
         self._loaded_model = None
         self._last_embedding: Optional[np.ndarray] = None
+        # Display panel state
+        self._image_auto_scale: bool = True
+        self._image_log_scale: bool = False
+        self._image_vmin: Optional[float] = None
+        self._image_vmax: Optional[float] = None
+        self._curve_log_y: bool = False
+        self._category_show_index: Dict[str, int] = {}
+        self._image_cmap_name: str = 'jet'
+        self._external_window = None
+        self._dr_window = None
+        self._last_preview_index: Optional[int] = None
 
     # ---------------------------- 初始化与连接 ----------------------------
     def initialize(self):
@@ -81,6 +94,16 @@ class ClassificationController(QObject):
             return
 
         self._setup_connections()
+        # Build classification panel with 1D/2D display controls
+        try:
+            self._setup_classification_panel()
+        except Exception:
+            pass
+        # Prepare table headers/columns
+        try:
+            self._ensure_table_headers()
+        except Exception:
+            pass
         # 优先恢复缓存，再初始化UI，避免默认项覆盖
         try:
             params = global_params.get_module_parameters('classification')
@@ -111,6 +134,7 @@ class ClassificationController(QObject):
         # 降维
         dim_method = getattr(self.ui, 'DimensionalityReductionMethodCombox', None)
         dim_start = getattr(self.ui, 'DimensionalityReductionStartButton', None)
+        dim_show = getattr(self.ui, 'DimensionalityReductionShowResultButton', None)
 
         # 分类
         clf_method = getattr(self.ui, 'ClassificationMethodCombox', None)
@@ -159,7 +183,23 @@ class ClassificationController(QObject):
         if dim_method is not None:
             dim_method.currentTextChanged.connect(self._on_dim_method_changed)
         if dim_start is not None:
-            dim_start.clicked.connect(self._on_dim_start_clicked)
+            dim_start.clicked.connect(self._on_dim_start_clicked_async)
+            # create status indicator label next to start button if possible
+            try:
+                parent = dim_start.parent()
+                if parent is not None and parent.layout() is not None:
+                    from PyQt5.QtWidgets import QLabel
+                    self._dr_status_label = QLabel('●')
+                    self._dr_status_label.setFixedWidth(14)
+                    self._dr_status_label.setToolTip('DR status')
+                    parent.layout().addWidget(self._dr_status_label)
+                    self._set_dr_status_color('brown')
+                else:
+                    self._dr_status_label = None
+            except Exception:
+                self._dr_status_label = None
+        if dim_show is not None:
+            dim_show.clicked.connect(self._on_dim_show_clicked)
 
         # 分类
         if clf_method is not None:
@@ -170,6 +210,8 @@ class ClassificationController(QObject):
             clf_save.clicked.connect(self._on_clf_save_clicked)
         if clf_load is not None:
             clf_load.clicked.connect(self._on_clf_load_clicked)
+
+        # Classification preview external window removed per request.
 
     def _initialize_ui(self):
         """初始化 Import UI 默认项与默认缓存"""
@@ -218,6 +260,84 @@ class ClassificationController(QObject):
             path_edit.setText(self._get_cached('path', ''))
         self._refresh_labels()
         self._sync_dynamic_attributes()
+
+    def _setup_classification_panel(self):
+        """Create 1D/2D display controls inside ClassificationPanelWidget."""
+        panel = getattr(self.ui, 'ClassificationPanelWidget', None)
+        if panel is None:
+            return
+        from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QCheckBox, QDoubleSpinBox, QComboBox, QFormLayout
+        # Initialize layout
+        if panel.layout() is None:
+            layout = QVBoxLayout(panel)
+            panel.setLayout(layout)
+        else:
+            layout = panel.layout()
+        # Clear existing
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        # Info label
+        info_label = QLabel('Current: —')
+        layout.addWidget(info_label)
+        self._panel_info_label = info_label
+        # 2D controls
+        gb2d = QGroupBox('2D Controls')
+        gb2d_layout = QFormLayout()
+        gb2d.setLayout(gb2d_layout)
+        cb_auto = QCheckBox('Auto Scale (0.5–99.5%)')
+        cb_auto.setChecked(True)
+        cb_auto.toggled.connect(self._on_image_auto_scale_toggled)
+        cb_log = QCheckBox('Log Scale')
+        cb_log.setChecked(False)
+        cb_log.toggled.connect(self._on_image_log_scale_toggled)
+        sp_vmin = QDoubleSpinBox(); sp_vmin.setDecimals(4); sp_vmin.setMinimum(-1e12); sp_vmin.setMaximum(1e12); sp_vmin.setSingleStep(0.1); sp_vmin.setValue(0.0)
+        sp_vmax = QDoubleSpinBox(); sp_vmax.setDecimals(4); sp_vmax.setMinimum(-1e12); sp_vmax.setMaximum(1e12); sp_vmax.setSingleStep(0.1); sp_vmax.setValue(1.0)
+        # Trigger vmin/vmax updates on Enter (editingFinished), not on every change
+        sp_vmin.editingFinished.connect(self._on_image_vmin_editing_finished)
+        sp_vmax.editingFinished.connect(self._on_image_vmax_editing_finished)
+        sp_vmin.setEnabled(False)
+        sp_vmax.setEnabled(False)
+        # Colormap selector
+        cb_cmap = QComboBox()
+        cb_cmap.addItems(['jet', 'gray', 'viridis', 'plasma', 'magma', 'inferno', 'turbo'])
+        cb_cmap.setCurrentText(self._image_cmap_name)
+        cb_cmap.currentTextChanged.connect(self._on_image_cmap_changed)
+        # Arrange compactly for 300px width
+        gb2d_layout.addRow(cb_auto, cb_log)
+        gb2d_layout.addRow(QLabel('Colormap'), cb_cmap)
+        gb2d_layout.addRow(QLabel('vmin'), sp_vmin)
+        gb2d_layout.addRow(QLabel('vmax'), sp_vmax)
+        layout.addWidget(gb2d)
+        # 1D controls
+        gb1d = QGroupBox('1D Controls')
+        gb1d_layout = QHBoxLayout()
+        gb1d.setLayout(gb1d_layout)
+        cb_logy = QCheckBox('Log Y')
+        cb_logy.setChecked(False)
+        cb_logy.toggled.connect(self._on_curve_logy_toggled)
+        gb1d_layout.addWidget(cb_logy)
+        layout.addWidget(gb1d)
+        # Store references
+        self._panel_widgets = {
+            '2d_auto': cb_auto,
+            '2d_log': cb_log,
+            'vmin': sp_vmin,
+            'vmax': sp_vmax,
+            '1d_logy': cb_logy,
+            'cmap': cb_cmap,
+        }
+
+    def _update_panel_info(self, category: str):
+        try:
+            indices = [i for i, s in enumerate(self.samples) if s.category == category]
+            total = len(indices)
+            show_idx = self._category_show_index.get(category, 1)
+            self._panel_info_label.setText(f"Current: {category} (showing {show_idx}/{total})")
+        except Exception:
+            pass
 
     def _rebuild_list_from_cache(self):
         """根据 import_cache 重建列表条目"""
@@ -454,7 +574,7 @@ class ClassificationController(QObject):
             self.main_window,
             'Select File',
             '',
-            'All Files (*);;Images (*.png *.jpg *.jpeg *.tif *.tiff);;Text (*.txt *.dat);;HDF5 (*.h5 *.hdf5)'
+            'All Files (*);;CBF (*.cbf);;Images (*.png *.jpg *.jpeg *.tif *.tiff *.cbf);;Text (*.txt *.dat);;HDF5 (*.h5 *.hdf5)'
         )
         if file_path:
             path_edit = self.ui.ClassificationImportFolderPathValue
@@ -514,7 +634,7 @@ class ClassificationController(QObject):
         ext = ext.lower()
         if ext in ('.dat', '.txt'):
             return '1D'
-        if ext in ('.edf', '.tif', '.tiff'):
+        if ext in ('.edf', '.tif', '.tiff', '.cbf'):
             return '2D'
         return None
 
@@ -522,13 +642,43 @@ class ClassificationController(QObject):
         if not path:
             return
         files: List[str] = []
+        # Optional: support numeric index range rules for CBF files like "1-10" or "range: 5-12"
+        def _parse_cbf_rule_indices(text: str) -> Optional[set]:
+            if not text:
+                return None
+            s = (text or '').strip().lower()
+            if s.startswith('range:'):
+                s = s[len('range:'):].strip()
+            m = re.fullmatch(r"(\d+)\s*(?:-\s*(\d+))?", s)
+            if not m:
+                return None
+            start = int(m.group(1))
+            end = int(m.group(2)) if m.group(2) else start
+            if end < start:
+                start, end = end, start
+            return set(range(start, end + 1))
+        cbf_indices = _parse_cbf_rule_indices(rule)
+        def _extract_cbf_index(name: str) -> Optional[int]:
+            m = re.search(r"(\d+)(?=\.cbf$)", name, re.IGNORECASE)
+            if not m:
+                return None
+            try:
+                return int(m.group(1))
+            except Exception:
+                return None
         if os.path.isdir(path):
             for root, _, names in os.walk(path):
                 for n in names:
                     f = os.path.join(root, n)
-                    dtype = self._allowed_extension(os.path.splitext(n)[1])
+                    ext = os.path.splitext(n)[1]
+                    dtype = self._allowed_extension(ext)
                     if dtype is None:
                         continue
+                    # If rule specifies numeric range and file is CBF, filter by index
+                    if cbf_indices is not None and ext.lower() == '.cbf':
+                        idx = _extract_cbf_index(n)
+                        if idx is None or idx not in cbf_indices:
+                            continue
                     if rule and (('*' in rule) or ('?' in rule)):
                         if not fnmatch.fnmatch(n, rule):
                             continue
@@ -570,6 +720,8 @@ class ClassificationController(QObject):
                 data_type=dtype,
                 category=current_category,
             ))
+        # Reset showing index for this category
+        self._category_show_index[current_category] = 1
         self._rebuild_table_grouped()
         self.log(f"[Import] Category '{current_category}': listed {len(new_files)} files. Cache reset for this category.")
 
@@ -594,9 +746,30 @@ class ClassificationController(QObject):
             pass
         self._preview_category_row(row)
 
+    def _on_preview_index_entered(self, category: str, edit):
+        text = (edit.text() or '').strip()
+        try:
+            pos = int(text)
+        except ValueError:
+            self.log('[Preview] Invalid index.')
+            return
+        indices = [i for i, s in enumerate(self.samples) if s.category == category]
+        if not indices:
+            return
+        if pos < 1 or pos > len(indices):
+            self.log(f"[Preview] Index out of range 1-{len(indices)}")
+            return
+        self._category_show_index[category] = pos
+        self.show_sample(indices[pos - 1])
+
     # ---------------------------- 数据读取 ----------------------------
     def _on_import_clicked(self):
         table = self.ui.ClassificationImportTableWidget
+        try:
+            table.setColumnCount(6)
+            self._ensure_table_headers()
+        except Exception:
+            pass
         lw = getattr(self.ui, 'ClassificationImportListWidget', None)
         if table.rowCount() == 0:
             self.log('[Import] No categories to import.')
@@ -623,18 +796,65 @@ class ClassificationController(QObject):
             self.log(f"[Import] Category '{cat}' has no files.")
             self._rebuild_table_grouped()
             return
-        for i in indices:
-            s = self.samples[i]
-            if (s.preprocessed_data is not None) or (s.raw_data is not None):
-                continue
-            ok = self._load_sample_data(s)
+        # Multithread import using QThreadPool with queued signals
+        pool = QThreadPool.globalInstance()
+        pool.setMaxThreadCount(max(2, pool.maxThreadCount()))
+
+        class _ImportSignals(QObject):
+            result = pyqtSignal(int, bool, str)  # idx, ok, filename
+
+        class _ImportTask(QRunnable):
+            def __init__(self, controller, idx):
+                super().__init__()
+                self.controller = controller
+                self.idx = idx
+                self.signals = _ImportSignals()
+            def run(self):
+                ok = False
+                name = ''
+                try:
+                    s = self.controller.samples[self.idx]
+                    name = s.file_name
+                    if (s.preprocessed_data is None) and (s.raw_data is None):
+                        ok = bool(self.controller._load_sample_data(s))
+                    else:
+                        ok = True
+                except Exception:
+                    ok = False
+                # Emit back to main thread
+                try:
+                    self.signals.result.emit(self.idx, ok, name)
+                except Exception:
+                    pass
+
+        remaining = [i for i in indices if (self.samples[i].preprocessed_data is None and self.samples[i].raw_data is None)]
+        if not remaining:
+            self.log(f"[Import] [{cat}] No new files to import.")
+            return
+        self.log(f"[Import] [{cat}] Starting threaded import of {len(remaining)} files...")
+        self.progress_updated.emit(0)
+        loaded_ref = {'ok': loaded_files, 'fail': failed, 'done': 0}
+
+        def _on_result(idx: int, ok: bool, fname: str):
+            # main-thread UI updates
             if ok:
-                loaded_files += 1
+                loaded_ref['ok'] += 1
+                self.log(f"[Import] [{cat}] Loaded {loaded_ref['ok']}/{total_files}: {fname}")
             else:
-                failed += 1
-            self._rebuild_table_grouped()
-            self.log(f"[Import] [{cat}] Loaded {loaded_files}/{total_files}: {s.file_name}" if ok else f"[Import] [{cat}] Failed: {s.file_name}")
-        self.log(f"[Import] [{cat}] Done: {loaded_files} loaded, {failed} failed.")
+                loaded_ref['fail'] += 1
+                self.log(f"[Import] [{cat}] Failed: {fname}")
+            loaded_ref['done'] += 1
+            pct = int(loaded_ref['done'] * 100 / len(remaining))
+            self.progress_updated.emit(pct)
+            if loaded_ref['done'] % max(1, len(remaining)//10) == 0 or loaded_ref['done'] >= len(remaining):
+                self._rebuild_table_grouped()
+            if loaded_ref['done'] >= len(remaining):
+                self.log(f"[Import] [{cat}] Done: {loaded_ref['ok']} loaded, {loaded_ref['fail']} failed.")
+
+        for i in remaining:
+            task = _ImportTask(self, i)
+            task.signals.result.connect(_on_result)
+            pool.start(task)
 
     def _load_sample_data(self, sample: Sample) -> bool:
         try:
@@ -691,6 +911,17 @@ class ClassificationController(QObject):
                     import imageio
                 img = imageio.imread(path)
                 return np.array(img, dtype=float)
+            elif ext == '.cbf':
+                try:
+                    import fabio
+                except Exception:
+                    self.log('[Import] fabio is required to read CBF. Please install "fabio".')
+                    return None
+                cbf_image = fabio.open(path)
+                data = getattr(cbf_image, 'data', None)
+                if data is None:
+                    return None
+                return np.array(data, dtype=float)
             elif ext == '.edf':
                 self.log('[Import] EDF reading not implemented, skipping.')
                 return None
@@ -704,10 +935,19 @@ class ClassificationController(QObject):
 
     # ---------------------------- 预览 ----------------------------
     def _preview_category_row(self, row: int):
-        idx = self._row_to_index.get(row)
-        if idx is None:
+        table = getattr(self.ui, 'ClassificationImportTableWidget', None)
+        if table is None:
             return
-        self.show_sample(idx)
+        it = table.item(row, 0)
+        if it is None:
+            return
+        category = (it.text() or '').strip()
+        indices = [i for i, s in enumerate(self.samples) if s.category == category]
+        if not indices:
+            return
+        pos = self._category_show_index.get(category, 1)
+        pos = max(1, min(pos, len(indices)))
+        self.show_sample(indices[pos - 1])
 
     def _to_qpixmap_from_1d(self, arr2: np.ndarray) -> Optional[QPixmap]:
         try:
@@ -715,7 +955,10 @@ class ClassificationController(QObject):
             matplotlib.use('Agg')
             import matplotlib.pyplot as plt
             fig, ax = plt.subplots(figsize=(3, 2), dpi=120)
-            ax.plot(arr2[:, 0], arr2[:, 1], lw=1.0)
+            if self._curve_log_y:
+                ax.semilogy(arr2[:, 0], arr2[:, 1], lw=1.0)
+            else:
+                ax.plot(arr2[:, 0], arr2[:, 1], lw=1.0)
             ax.set_xlabel('q')
             ax.set_ylabel('I')
             ax.grid(True, alpha=0.3)
@@ -732,23 +975,103 @@ class ClassificationController(QObject):
 
     def _to_qpixmap_from_2d(self, img: np.ndarray) -> Optional[QPixmap]:
         try:
-            m = img
-            m = m - np.nanmin(m)
-            vmax = np.nanmax(m) or 1.0
-            m = (m / vmax * 255.0).clip(0, 255).astype(np.uint8)
-            if m.ndim == 2:
-                h, w = m.shape
-                qimg = QImage(m.data, w, h, w, QImage.Format_Grayscale8)
+            m = img.astype(float)
+            if self._image_log_scale:
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    m = np.log1p(np.maximum(m, 0))
+            # Determine vmin/vmax
+            if self._image_auto_scale:
+                try:
+                    vmin = float(np.nanpercentile(m, 0.5))
+                    vmax = float(np.nanpercentile(m, 99.5))
+                except Exception:
+                    vmin = float(np.nanmin(m))
+                    vmax = float(np.nanmax(m))
+                # Reflect auto-computed values in controls (without toggling auto)
+                try:
+                    self._update_vmin_vmax_controls(vmin, vmax, auto=True)
+                except Exception:
+                    pass
             else:
-                h, w, c = m.shape
-                if c == 3:
-                    qimg = QImage(m.data, w, h, w * 3, QImage.Format_RGB888)
+                # Manual mode: use stored values, or current spinboxes, or fallback to data min/max
+                if self._image_vmin is not None and self._image_vmax is not None:
+                    vmin = float(self._image_vmin)
+                    vmax = float(self._image_vmax)
                 else:
-                    qimg = QImage(m.data, w, h, w * 4, QImage.Format_RGBA8888)
-            return QPixmap.fromImage(qimg.copy())
+                    try:
+                        sp_vmin = self._panel_widgets.get('vmin') if hasattr(self, '_panel_widgets') else None
+                        sp_vmax = self._panel_widgets.get('vmax') if hasattr(self, '_panel_widgets') else None
+                        vmin = float(sp_vmin.value()) if sp_vmin is not None else float(np.nanmin(m))
+                        vmax = float(sp_vmax.value()) if sp_vmax is not None else float(np.nanmax(m))
+                    except Exception:
+                        vmin = float(np.nanmin(m))
+                        vmax = float(np.nanmax(m))
+                try:
+                    self._update_vmin_vmax_controls(vmin, vmax, auto=False)
+                except Exception:
+                    pass
+            if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
+                vmin = float(np.nanmin(m))
+                vmax = float(np.nanmax(m))
+                if vmax <= vmin:
+                    vmax = vmin + 1e-9
+            with np.errstate(invalid='ignore'):
+                norm = (m - vmin) / (vmax - vmin)
+            norm = np.clip(norm, 0.0, 1.0)
+            # Apply colormap
+            cmap_name = (self._image_cmap_name or 'jet').lower()
+            if cmap_name in ('gray', 'grey'):
+                mm = (norm * 255.0).astype(np.uint8)
+                if mm.ndim == 3:
+                    # collapse to grayscale by first channel if needed
+                    mm = mm[..., 0]
+                h, w = mm.shape[:2]
+                qimg = QImage(mm.data, w, h, w, QImage.Format_Grayscale8)
+                return QPixmap.fromImage(qimg.copy())
+            else:
+                try:
+                    import matplotlib
+                    matplotlib.use('Agg')
+                    import matplotlib.cm as cm
+                    cmap = cm.get_cmap(cmap_name)
+                except Exception:
+                    cmap = None
+                if cmap is not None:
+                    rgb = (cmap(norm)[..., :3] * 255.0).astype(np.uint8)
+                    h, w = rgb.shape[:2]
+                    qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
+                    return QPixmap.fromImage(qimg.copy())
+                else:
+                    mm = (norm * 255.0).astype(np.uint8)
+                    h, w = mm.shape[:2]
+                    qimg = QImage(mm.data, w, h, w, QImage.Format_Grayscale8)
+                    return QPixmap.fromImage(qimg.copy())
         except Exception as e:
             self.log(f"[Preview] 2D image error: {e}")
             return None
+
+    def _update_vmin_vmax_controls(self, vmin: float, vmax: float, auto: bool):
+        # Update vmin/vmax spin boxes and auto checkbox without recursive refreshes
+        if not hasattr(self, '_panel_widgets'):
+            return
+        sp_vmin = self._panel_widgets.get('vmin')
+        sp_vmax = self._panel_widgets.get('vmax')
+        cb_auto = self._panel_widgets.get('2d_auto')
+        if sp_vmin is None or sp_vmax is None or cb_auto is None:
+            return
+        try:
+            sp_vmin.blockSignals(True)
+            sp_vmax.blockSignals(True)
+            cb_auto.blockSignals(True)
+            # keep user-chosen auto state; only reflect enable/disable based on controller state
+            sp_vmin.setEnabled(not self._image_auto_scale)
+            sp_vmax.setEnabled(not self._image_auto_scale)
+            sp_vmin.setValue(float(vmin))
+            sp_vmax.setValue(float(vmax))
+        finally:
+            sp_vmin.blockSignals(False)
+            sp_vmax.blockSignals(False)
+            cb_auto.blockSignals(False)
 
     def show_sample(self, index: int) -> None:
         if index < 0 or index >= len(self.samples):
@@ -773,6 +1096,12 @@ class ClassificationController(QObject):
             scene.addPixmap(pix)
             gv.setScene(scene)
             gv.fitInView(scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+            self._last_preview_index = index
+        # Update panel info
+        try:
+            self._update_panel_info(sample.category)
+        except Exception:
+            pass
 
     # ---------------------------- 降维 ----------------------------
     def _on_dim_method_changed(self, text: str):
@@ -794,6 +1123,16 @@ class ClassificationController(QObject):
             spin.setValue(15)
 
     def _on_dim_start_clicked(self):
+        pass
+
+    def _set_dr_status_color(self, color: str):
+        try:
+            if getattr(self, '_dr_status_label', None) is not None:
+                self._dr_status_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+        except Exception:
+            pass
+
+    def _on_dim_start_clicked_async(self):
         method = self.ui.DimensionalityReductionMethodCombox.currentText()
         val = self.ui.DimensionalityReductionTargetDimValue.value()
         X = self._build_feature_matrix()
@@ -801,35 +1140,402 @@ class ClassificationController(QObject):
             self.log('[DR] No data to process. Ensure files are imported.')
             return
         self.log(f"[DR] Method={method}, X shape={X.shape}")
-        try:
-            if method == 'PCA':
-                from sklearn.decomposition import PCA
-                n = max(1, min(val, X.shape[1]))
-                model = PCA(n_components=n, random_state=0)
-                emb = model.fit_transform(X)
-                self.log(f"[DR] PCA explained variance sum={model.explained_variance_ratio_.sum():.3f}")
-            elif method == 't-SNE':
-                from sklearn.manifold import TSNE
-                model = TSNE(n_components=2, perplexity=float(val), random_state=0, init='pca', learning_rate='auto')
-                emb = model.fit_transform(X)
-            elif method == 'UMAP':
+
+        pool = QThreadPool.globalInstance()
+
+        class _DRSignals(QObject):
+            finished = pyqtSignal(bool, object)  # ok, embedding or None
+
+        class _DRTask(QRunnable):
+            def __init__(self, method, val, X):
+                super().__init__()
+                self.m = method; self.v = val; self.X = X
+                self.signals = _DRSignals()
+            def run(self):
+                ok = False; emb = None
                 try:
-                    from umap import UMAP
+                    if self.m == 'PCA':
+                        from sklearn.decomposition import PCA
+                        n = max(1, min(self.v, self.X.shape[1]))
+                        model = PCA(n_components=n, random_state=0)
+                        emb = model.fit_transform(self.X)
+                    elif self.m == 't-SNE':
+                        from sklearn.manifold import TSNE
+                        model = TSNE(n_components=2, perplexity=float(self.v), random_state=0, init='pca', learning_rate='auto')
+                        emb = model.fit_transform(self.X)
+                    elif self.m == 'UMAP':
+                        try:
+                            from umap import UMAP
+                        except Exception:
+                            self.signals.finished.emit(False, None)
+                            return
+                        model = UMAP(n_components=2, n_neighbors=int(self.v), random_state=0)
+                        emb = model.fit_transform(self.X)
+                    else:
+                        self.signals.finished.emit(False, None)
+                        return
+                    ok = True
+                except Exception as e:
+                    ok = False
+                try:
+                    self.signals.finished.emit(ok, emb)
                 except Exception:
-                    self.log('[DR] umap-learn is not installed.')
-                    return
-                model = UMAP(n_components=2, n_neighbors=int(val), random_state=0)
-                emb = model.fit_transform(X)
-            else:
-                self.log('[DR] Unknown method.')
+                    pass
+
+        def _on_finished(ok: bool, emb_obj):
+            self._set_dr_status_color('green' if ok else 'red')
+            if not ok or emb_obj is None:
+                self.log('[DR] Error or no embedding produced.')
                 return
-            for i, s in enumerate(self.samples):
-                if i < len(emb):
-                    s.embedding = np.array(emb[i])
-            self._last_embedding = emb
-            self.log(f"[DR] Done. Embedding shape={emb.shape}")
+            try:
+                emb = np.array(emb_obj)
+                self._last_embedding = emb
+                for i, s in enumerate(self.samples):
+                    if i < len(emb):
+                        s.embedding = np.array(emb[i])
+                self.log(f"[DR] Done. Embedding shape={emb.shape}")
+            except Exception as e:
+                self.log(f"[DR] Finish update error: {e}")
+
+        self._set_dr_status_color('brown')
+        task = _DRTask(method, val, X)
+        task.signals.finished.connect(_on_finished)
+        pool.start(task)
+
+    def _on_dim_show_clicked(self):
+        emb = getattr(self, '_last_embedding', None)
+        if emb is None:
+            self.log('[DR] No embedding to show.')
+            return
+        if emb.ndim == 1:
+            emb = emb.reshape(-1, 1)
+        try:
+            self._open_dr_result_window(emb)
         except Exception as e:
-            self.log(f"[DR] Error: {e}")
+            self.log(f"[DR] Show error: {e}")
+
+    def _open_dr_result_window(self, emb: np.ndarray):
+        from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QMenu, QTextEdit, QGroupBox, QLabel, QCheckBox, QComboBox
+        from PyQt5.QtWidgets import QSpinBox
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.figure import Figure
+        import numpy as np
+        import matplotlib.cm as cm
+
+        class DRWindow(QMainWindow):
+            def __init__(self, controller, emb):
+                super().__init__(controller.main_window)
+                self.c = controller
+                self.setWindowTitle('DR Result')
+                central = QWidget(); v = QVBoxLayout(central); self.setCentralWidget(central)
+                # Controls: dims + color mode
+                gb_ctrl = QGroupBox('View Controls')
+                form = QFormLayout(gb_ctrl)
+                self.sp_x = QSpinBox(); self.sp_x.setMinimum(1); self.sp_x.setMaximum(max(2, emb.shape[1])); self.sp_x.setValue(1)
+                self.sp_y = QSpinBox(); self.sp_y.setMinimum(1); self.sp_y.setMaximum(max(2, emb.shape[1])); self.sp_y.setValue(min(2, emb.shape[1]))
+                self.cb_color_seq = QCheckBox('Color by index (sequence)')
+                self.cb_color_seq.setChecked(False)
+                self.cb_cmap = QComboBox(); self.cb_cmap.addItems(['viridis','plasma','magma','inferno','turbo','jet','rainbow'])
+                # Reset view button
+                from PyQt5.QtWidgets import QPushButton
+                self.btn_reset = QPushButton('Reset View')
+                self.btn_reset.clicked.connect(self._reset_view)
+                form.addRow(QLabel('x-dim'), self.sp_x)
+                form.addRow(QLabel('y-dim'), self.sp_y)
+                form.addRow(QLabel('Index colormap'), self.cb_cmap)
+                form.addRow(self.cb_color_seq)
+                form.addRow(self.btn_reset)
+                v.addWidget(gb_ctrl)
+                # Canvas
+                self.fig = Figure(figsize=(5, 4)); self.canvas = FigureCanvas(self.fig)
+                v.addWidget(self.canvas)
+                self.ax = self.fig.add_subplot(111)
+                # Ensure canvas captures key events (for ESC)
+                try:
+                    self.canvas.setFocusPolicy(Qt.StrongFocus)
+                    self.canvas.setFocus()
+                except Exception:
+                    pass
+                self.info = QTextEdit(); self.info.setReadOnly(True); v.addWidget(self.info)
+                self.selected = set()
+                self.emb = emb
+                self.scatter = None
+                self.highlight = None
+                self._blink_on = True
+                self.anim_timer = QTimer(self)
+                self.anim_timer.setInterval(400)
+                self.anim_timer.timeout.connect(self._toggle_blink)
+                # Interaction state for pan
+                self._panning = False
+                self._pan_start = None  # (xdata, ydata, xlim, ylim)
+                self._xlim = None
+                self._ylim = None
+                self._first_draw = True
+                # events
+                self.sp_x.valueChanged.connect(self._redraw)
+                self.sp_y.valueChanged.connect(self._redraw)
+                self.cb_color_seq.toggled.connect(self._redraw)
+                self.cb_cmap.currentTextChanged.connect(self._redraw)
+                self.canvas.mpl_connect('button_press_event', self._on_mouse_press)
+                self.canvas.mpl_connect('button_release_event', self._on_mouse_release)
+                self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
+                self.canvas.mpl_connect('scroll_event', self._on_scroll)
+                self.canvas.mpl_connect('key_press_event', self._on_key)
+                self._redraw()
+                # Auto scale on first open so users don't need to click Reset
+                try:
+                    self._reset_view()
+                except Exception:
+                    pass
+                self._first_draw = False
+
+            def _current_xy(self):
+                xdim = max(1, min(self.sp_x.value(), self.emb.shape[1])) - 1
+                ydim = max(1, min(self.sp_y.value(), self.emb.shape[1])) - 1
+                if xdim == ydim:
+                    ydim = (ydim + 1) % self.emb.shape[1]
+                xs = self.emb[:, xdim]
+                ys = self.emb[:, ydim]
+                return xs, ys
+
+            def _colors(self, n):
+                if self.cb_color_seq.isChecked():
+                    cmap = cm.get_cmap(self.cb_cmap.currentText())
+                    return cmap(np.linspace(0, 1, n))
+                # color by category
+                cats = [s.category for s in self.c.samples[:n]]
+                uniq = {c: i for i, c in enumerate(sorted(set(cats)))}
+                palette = cm.get_cmap('tab20')
+                return [palette(uniq[c] % palette.N) for c in cats]
+
+            def _redraw(self):
+                self.ax.clear()
+                xs, ys = self._current_xy()
+                cols = self._colors(len(xs))
+                self.scatter = self.ax.scatter(xs, ys, s=20, c=cols)
+                # draw highlight overlay if selection exists
+                if self.selected:
+                    sel_idx = np.array(sorted(self.selected), dtype=int)
+                    hx = xs[sel_idx]
+                    hy = ys[sel_idx]
+                    self.highlight = self.ax.scatter(hx, hy, s=80, facecolors='none', edgecolors='yellow', linewidths=2)
+                    if not self.anim_timer.isActive():
+                        self.anim_timer.start()
+                else:
+                    self.highlight = None
+                    if self.anim_timer.isActive():
+                        self.anim_timer.stop()
+                self.ax.set_xlabel(f'x-dim={self.sp_x.value()}')
+                self.ax.set_ylabel(f'y-dim={self.sp_y.value()}')
+                # preserve current limits across redraw
+                if self._xlim is not None and self._ylim is not None:
+                    try:
+                        self.ax.set_xlim(self._xlim)
+                        self.ax.set_ylim(self._ylim)
+                    except Exception:
+                        pass
+                else:
+                    # On initial draw, compute padded limits for visibility
+                    try:
+                        pad_x = (np.max(xs) - np.min(xs)) * 0.05 or 1.0
+                        pad_y = (np.max(ys) - np.min(ys)) * 0.05 or 1.0
+                        self._xlim = [float(np.min(xs) - pad_x), float(np.max(xs) + pad_x)]
+                        self._ylim = [float(np.min(ys) - pad_y), float(np.max(ys) + pad_y)]
+                        self.ax.set_xlim(self._xlim)
+                        self.ax.set_ylim(self._ylim)
+                    except Exception:
+                        self.ax.relim(); self.ax.autoscale_view()
+                self.fig.tight_layout()
+                self.canvas.draw_idle()
+
+            def _on_mouse_press(self, event):
+                if event.button == 3:
+                    self._show_menu(event)
+                elif event.button == 1:
+                    # select nearest point
+                    if event.xdata is None or event.ydata is None:
+                        return
+                    xs, ys = self._current_xy()
+                    d = np.hypot(xs - event.xdata, ys - event.ydata)
+                    i = int(np.argmin(d))
+                    mods = event.guiEvent.modifiers()
+                    if mods & Qt.ControlModifier:
+                        if i in self.selected:
+                            self.selected.remove(i)
+                        else:
+                            self.selected.add(i)
+                    else:
+                        self.selected = {i}
+                    self._update_info()
+                    self._redraw()
+                elif event.button == 2:
+                    # middle button: start panning
+                    if event.xdata is None or event.ydata is None:
+                        return
+                    self._panning = True
+                    self._pan_start = (event.xdata, event.ydata, list(self.ax.get_xlim()), list(self.ax.get_ylim()))
+
+            def _on_mouse_release(self, event):
+                if event.button == 2:
+                    self._panning = False
+                    self._pan_start = None
+
+            def _on_mouse_move(self, event):
+                if not self._panning or self._pan_start is None:
+                    return
+                if event.xdata is None or event.ydata is None:
+                    return
+                x0, y0, xlim, ylim = self._pan_start
+                dx = event.xdata - x0
+                dy = event.ydata - y0
+                self._xlim = [xlim[0] - dx, xlim[1] - dx]
+                self._ylim = [ylim[0] - dy, ylim[1] - dy]
+                self.ax.set_xlim(self._xlim)
+                self.ax.set_ylim(self._ylim)
+                self.canvas.draw_idle()
+
+            def _on_scroll(self, event):
+                # zoom around cursor
+                if event.xdata is None or event.ydata is None:
+                    return
+                # Scroll up (step>0) should zoom in (reduce span)
+                scale = (1/1.2) if event.step > 0 else 1.2
+                xlim = list(self.ax.get_xlim())
+                ylim = list(self.ax.get_ylim())
+                cx, cy = event.xdata, event.ydata
+                new_w = (xlim[1] - xlim[0]) * scale
+                new_h = (ylim[1] - ylim[0]) * scale
+                self._xlim = [cx - new_w/2, cx + new_w/2]
+                self._ylim = [cy - new_h/2, cy + new_h/2]
+                self.ax.set_xlim(self._xlim)
+                self.ax.set_ylim(self._ylim)
+                self.canvas.draw_idle()
+
+            def _reset_view(self):
+                xs, ys = self._current_xy()
+                try:
+                    pad_x = (np.max(xs) - np.min(xs)) * 0.05 or 1.0
+                    pad_y = (np.max(ys) - np.min(ys)) * 0.05 or 1.0
+                    self._xlim = [float(np.min(xs) - pad_x), float(np.max(xs) + pad_x)]
+                    self._ylim = [float(np.min(ys) - pad_y), float(np.max(ys) + pad_y)]
+                except Exception:
+                    self._xlim = None; self._ylim = None
+                if self._xlim and self._ylim:
+                    self.ax.set_xlim(self._xlim)
+                    self.ax.set_ylim(self._ylim)
+                self.canvas.draw_idle()
+
+            def _on_key(self, event):
+                if event.key == 'escape':
+                    self.selected.clear()
+                    self._update_info()
+                    self._redraw()
+
+            def keyPressEvent(self, e):
+                # Qt-level ESC handling to ensure reliability
+                try:
+                    from PyQt5.QtCore import Qt as _Qt
+                    if e.key() == _Qt.Key_Escape:
+                        self.selected.clear()
+                        self._update_info()
+                        self._redraw()
+                        e.accept()
+                        return
+                except Exception:
+                    pass
+                super().keyPressEvent(e)
+
+            def _update_info(self):
+                lines = []
+                for i in sorted(self.selected):
+                    s = self.c.samples[i]
+                    lines.append(f"[{i}] {s.category} - {s.file_name}\n{s.file_path}")
+                self.info.setPlainText('\n'.join(lines))
+
+            def _toggle_blink(self):
+                if self.highlight is None:
+                    return
+                self._blink_on = not self._blink_on
+                try:
+                    self.highlight.set_edgecolor('yellow' if self._blink_on else 'orange')
+                    self.canvas.draw_idle()
+                except Exception:
+                    pass
+
+            def _show_menu(self, event):
+                menu = QMenu(self)
+                act_info = menu.addAction('Show Info')
+                act_del = menu.addAction('Delete from group')
+                act_move = menu.addAction('Move to moved/')
+                act_copy = menu.addAction('Copy to moved/')
+                a = menu.exec_(self.mapToGlobal(self.canvas.pos()))
+                if a == act_info:
+                    self._update_info()
+                elif a in (act_del, act_move, act_copy):
+                    self._apply_action(a == act_del, a == act_move, a == act_copy)
+
+            def _apply_action(self, do_del, do_move, do_copy):
+                import os, shutil
+                sel = sorted(self.selected)
+                if not sel:
+                    return
+                if do_del:
+                    for i in reversed(sel):
+                        # remove from controller and embedding
+                        if 0 <= i < len(self.c.samples):
+                            self.c.samples.pop(i)
+                        try:
+                            self.emb = np.delete(self.emb, i, axis=0)
+                        except Exception:
+                            pass
+                    self.c._rebuild_table_grouped()
+                    self.c.log(f"[DR] Deleted {len(sel)} samples from group.")
+                    self.selected.clear(); self._redraw()
+                else:
+                    for i in sel:
+                        s = self.c.samples[i]
+                        folder = os.path.dirname(s.file_path)
+                        moved = os.path.join(folder, 'moved')
+                        os.makedirs(moved, exist_ok=True)
+                        target = os.path.join(moved, s.file_name)
+                        if do_move:
+                            try:
+                                shutil.move(s.file_path, target)
+                                s.file_path = target
+                                s.file_name = os.path.basename(target)
+                            except Exception as e:
+                                self.c.log(f"[DR] Move failed: {e}")
+                        elif do_copy:
+                            try:
+                                shutil.copy2(s.file_path, target)
+                                self.c.samples.append(Sample(
+                                    file_path=target,
+                                    file_name=os.path.basename(target),
+                                    data_type=s.data_type,
+                                    category=s.category,
+                                ))
+                            except Exception as e:
+                                self.c.log(f"[DR] Copy failed: {e}")
+                    self.c._rebuild_table_grouped()
+                    self.c.log(f"[DR] {'Moved' if do_move else 'Copied'} {len(sel)} samples to moved/.")
+
+        # Reuse single DR window instance
+        try:
+            if self._dr_window is None:
+                self._dr_window = DRWindow(self, emb)
+            else:
+                # Update embedding and redraw in existing window
+                self._dr_window.emb = emb
+                # Update spinbox ranges according to new emb dims
+                self._dr_window.sp_x.setMaximum(max(2, emb.shape[1]))
+                self._dr_window.sp_y.setMaximum(max(2, emb.shape[1]))
+                # keep current limits if set
+                self._dr_window._redraw()
+            self._dr_window.show()
+            self._dr_window.raise_()
+            self._dr_window.activateWindow()
+        except Exception as e:
+            self.log(f"[DR] Window error: {e}")
 
     def _build_feature_matrix(self) -> Optional[np.ndarray]:
         if not self.samples:
@@ -1002,6 +1708,11 @@ class ClassificationController(QObject):
         - Status 显示 Loaded m/n
         """
         table = self.ui.ClassificationImportTableWidget
+        # Ensure headers/columns
+        try:
+            self._ensure_table_headers()
+        except Exception:
+            pass
         lw = getattr(self.ui, 'ClassificationImportListWidget', None)
         table.setRowCount(0)
         self._row_to_index.clear()
@@ -1038,16 +1749,64 @@ class ClassificationController(QObject):
             it_status = QTableWidgetItem(status_text)
             it_status.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             table.setItem(row, 3, it_status)
+            # Shape（只读）
+            shapes: List[str] = []
+            for i in indices:
+                d = self.samples[i].preprocessed_data if self.samples[i].preprocessed_data is not None else self.samples[i].raw_data
+                if d is None:
+                    continue
+                if self.samples[i].data_type == '1D':
+                    shapes.append(f"[{d.shape[0]}]")
+                else:
+                    if d.ndim == 2:
+                        shapes.append(f"[{d.shape[0]},{d.shape[1]}]")
+                    elif d.ndim == 3:
+                        shapes.append(f"[{d.shape[0]},{d.shape[1]},{d.shape[2]}]")
+            shape_text = ' '.join(sorted(set(shapes))) if shapes else ''
+            it_shape = QTableWidgetItem(shape_text)
+            it_shape.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            table.setItem(row, 4, it_shape)
             # 预处理摘要（只读）
             pp_descs = {self.samples[i].preprocessing_desc for i in indices if self.samples[i].preprocessing_desc}
             pp_text = ','.join(sorted(pp_descs)) if pp_descs else ''
             it_pp = QTableWidgetItem(pp_text)
             it_pp.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            table.setItem(row, 4, it_pp)
-            # 预览按钮
+            table.setItem(row, 5, it_pp)
+            # 预览输入框+按钮
+            from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QPushButton
+            cell = QWidget()
+            hb = QHBoxLayout(cell)
+            hb.setContentsMargins(0, 0, 0, 0)
+            le = QLineEdit()
+            le.setPlaceholderText(f"1-{max(1, total)}")
+            try:
+                le.setText(str(self._category_show_index.get(category, 1)))
+            except Exception:
+                pass
+            le.returnPressed.connect(lambda c=category, e=le: self._on_preview_index_entered(c, e))
             btn = QPushButton('Show')
             btn.clicked.connect(lambda _, r=row: self._preview_category_row(r))
-            table.setCellWidget(row, 5, btn)
+            hb.addWidget(le)
+            hb.addWidget(btn)
+            table.setCellWidget(row, 5, cell)
+
+    def _ensure_table_headers(self):
+        table = getattr(self.ui, 'ClassificationImportTableWidget', None)
+        if table is None:
+            return
+        from PyQt5.QtWidgets import QHeaderView
+        table.setColumnCount(6)
+        table.setHorizontalHeaderLabels(['Category', 'Type', 'Category', 'Status', 'Shape', 'Preview'])
+        try:
+            header = table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        except Exception:
+            pass
 
     def _on_item_renamed(self, item):
         """重命名：迁移缓存 + 同步样本类别名 + 重建聚合表。"""
@@ -1170,4 +1929,94 @@ class ClassificationController(QObject):
             # _on_item_renamed 会被触发并负责重建表格
         finally:
             self._in_table_item_changed = False
+
+    # ---------------------------- Panel control handlers ----------------------------
+    def _on_image_auto_scale_toggled(self, value: bool):
+        self._image_auto_scale = bool(value)
+        try:
+            # enable/disable vmin/vmax inputs when auto on/off
+            if hasattr(self, '_panel_widgets'):
+                self._panel_widgets['vmin'].setEnabled(not self._image_auto_scale)
+                self._panel_widgets['vmax'].setEnabled(not self._image_auto_scale)
+        except Exception:
+            pass
+        self._refresh_current_preview()
+
+    def _on_image_log_scale_toggled(self, value: bool):
+        self._image_log_scale = bool(value)
+        self._refresh_current_preview()
+
+    def _on_image_vmin_changed(self, value: float):
+        self._image_vmin = float(value)
+        # If user adjusts vmin/vmax, disable auto to apply manual range
+        try:
+            if self._image_auto_scale and hasattr(self, '_panel_widgets'):
+                self._panel_widgets['2d_auto'].setChecked(False)
+            self._image_auto_scale = False
+        except Exception:
+            self._image_auto_scale = False
+        self._refresh_current_preview()
+
+    def _on_image_vmax_changed(self, value: float):
+        self._image_vmax = float(value)
+        # If user adjusts vmin/vmax, disable auto to apply manual range
+        try:
+            if self._image_auto_scale and hasattr(self, '_panel_widgets'):
+                self._panel_widgets['2d_auto'].setChecked(False)
+            self._image_auto_scale = False
+        except Exception:
+            self._image_auto_scale = False
+        self._refresh_current_preview()
+
+    def _on_image_vmin_editing_finished(self):
+        try:
+            sp = self._panel_widgets.get('vmin') if hasattr(self, '_panel_widgets') else None
+            if sp is not None:
+                self._on_image_vmin_changed(float(sp.value()))
+        except Exception:
+            pass
+
+    def _on_image_vmax_editing_finished(self):
+        try:
+            sp = self._panel_widgets.get('vmax') if hasattr(self, '_panel_widgets') else None
+            if sp is not None:
+                self._on_image_vmax_changed(float(sp.value()))
+        except Exception:
+            pass
+
+    def _on_curve_logy_toggled(self, value: bool):
+        self._curve_log_y = bool(value)
+        self._refresh_current_preview()
+
+    def _on_image_cmap_changed(self, name: str):
+        self._image_cmap_name = str(name)
+        self._refresh_current_preview()
+
+    def _on_image_dim_x_changed(self, value: int):
+        self._image_dim_x = int(value)
+        self._refresh_current_preview()
+
+    def _on_image_dim_y_changed(self, value: int):
+        self._image_dim_y = int(value)
+        self._refresh_current_preview()
+
+    def _refresh_current_preview(self):
+        try:
+            table = getattr(self.ui, 'ClassificationImportTableWidget', None)
+            if table is None:
+                # Fallback: refresh last shown sample
+                if self._last_preview_index is not None:
+                    self.show_sample(self._last_preview_index)
+                return
+            r = table.currentRow()
+            if r is None or r < 0:
+                # Fallback to last shown sample
+                if self._last_preview_index is not None:
+                    self.show_sample(self._last_preview_index)
+                return
+            self._preview_category_row(r)
+        except Exception:
+            pass
+
+    # Classification external preview removed.
 
