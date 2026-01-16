@@ -216,7 +216,7 @@
           </sizepolicy>
          </property>
          <property name="currentIndex">
-          <number>2</number>
+          <number>1</number>
          </property>
          <widget class="QWidget" name="trainsetBuildPage">
           <layout class="QVBoxLayout" name="verticalLayout_6">
@@ -230,7 +230,7 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>736</width>
+                <width>1270</width>
                 <height>2491</height>
                </rect>
               </property>
@@ -5715,8 +5715,8 @@ p, li { white-space: pre-wrap; }
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>98</width>
-                   <height>87</height>
+                   <width>1161</width>
+                   <height>108</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_17">
@@ -8765,7 +8765,7 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>384</width>
+                <width>1270</width>
                 <height>1056</height>
                </rect>
               </property>
@@ -9253,7 +9253,7 @@ QListWidget::item:selected {
                    <rect>
                     <x>0</x>
                     <y>0</y>
-                    <width>98</width>
+                    <width>1250</width>
                     <height>298</height>
                    </rect>
                   </property>
