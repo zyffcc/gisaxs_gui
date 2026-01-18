@@ -119,6 +119,13 @@ class ClassificationController(QObject):
         except Exception:
             pass
         self._initialized = True
+        # 初始化时确保降维控件状态与当前方法一致（隐藏/显示 nNeighborsWidget 等）
+        try:
+            dim_method = getattr(self.ui, 'DimensionalityReductionMethodCombox', None)
+            if dim_method is not None:
+                self._on_dim_method_changed(dim_method.currentText())
+        except Exception:
+            pass
 
     def _setup_connections(self):
         """连接 Classification 页面相关控件（Import/降维/分类）。"""
@@ -1105,22 +1112,57 @@ class ClassificationController(QObject):
 
     # ---------------------------- 降维 ----------------------------
     def _on_dim_method_changed(self, text: str):
-        label = getattr(self.ui, 'DimensionalityReductionTargetDimLabel', None)
-        spin = getattr(self.ui, 'DimensionalityReductionTargetDimValue', None)
-        if label is None or spin is None:
+        # 输出维度控件（Target Dim）
+        td_label = getattr(self.ui, 'DimensionalityReductionTargetDimLabel', None)
+        td_spin = getattr(self.ui, 'DimensionalityReductionTargetDimValue', None)
+        # 参数控件（t-SNE 的 perplexity / UMAP 的 n_neighbors）
+        n_widget = getattr(self.ui, 'nNeighborsWidget', None)
+        n_label = getattr(self.ui, 'DimensionalityReductionNNeighborLabel', None)
+        n_spin = getattr(self.ui, 'DimensionalityReductionNNeighborValue', None)
+        if td_label is None or td_spin is None:
             return
+
+        # Target Dim 始终表示输出 embedding 维度
+        td_label.setText('Target Dim')
+
         if text == 'PCA':
-            label.setText('Target Dim')
-            spin.setRange(1, 10)
-            spin.setValue(2)
+            # PCA 只需要目标维度，不需要 nNeighborsWidget
+            td_spin.setRange(1, 50)
+            if td_spin.value() < 1:
+                td_spin.setValue(2)
+            if n_widget is not None:
+                n_widget.setVisible(False)
         elif text == 't-SNE':
-            label.setText('Perplexity')
-            spin.setRange(5, 200)
-            spin.setValue(30)
+            # t-SNE: 上面 Target Dim 设输出维度；右侧小控件用作 perplexity
+            td_spin.setRange(2, 20)
+            if td_spin.value() < 2:
+                td_spin.setValue(2)
+            if n_widget is not None:
+                n_widget.setVisible(True)
+            if n_label is not None:
+                n_label.setText('Perplexity')
+            if n_spin is not None:
+                n_spin.setRange(5, 200)
+                if n_spin.value() < 5:
+                    n_spin.setValue(30)
         elif text == 'UMAP':
-            label.setText('n_neighbors')
-            spin.setRange(2, 200)
-            spin.setValue(15)
+            # UMAP: Target Dim = 输出维度；右侧小控件用作 n_neighbors
+            td_spin.setRange(2, 20)
+            if td_spin.value() < 2:
+                td_spin.setValue(2)
+            if n_widget is not None:
+                n_widget.setVisible(True)
+            if n_label is not None:
+                n_label.setText('n_neighbors')
+            if n_spin is not None:
+                n_spin.setRange(2, 200)
+                if n_spin.value() < 2:
+                    n_spin.setValue(15)
+        else:
+            # 其他未知方法：显示 Target Dim，隐藏 nNeighborsWidget
+            td_spin.setRange(1, 50)
+            if n_widget is not None:
+                n_widget.setVisible(False)
 
     def _on_dim_start_clicked(self):
         pass
@@ -1134,7 +1176,12 @@ class ClassificationController(QObject):
 
     def _on_dim_start_clicked_async(self):
         method = self.ui.DimensionalityReductionMethodCombox.currentText()
-        val = self.ui.DimensionalityReductionTargetDimValue.value()
+        # 输出维度（Target Dim）
+        td_spin = getattr(self.ui, 'DimensionalityReductionTargetDimValue', None)
+        out_dim = int(td_spin.value()) if td_spin is not None else 2
+        # 方法特定参数：t-SNE 的 perplexity / UMAP 的 n_neighbors
+        n_spin = getattr(self.ui, 'DimensionalityReductionNNeighborValue', None)
+        param_val = int(n_spin.value()) if n_spin is not None else out_dim
         X = self._build_feature_matrix()
         if X is None:
             self.log('[DR] No data to process. Ensure files are imported.')
@@ -1147,30 +1194,74 @@ class ClassificationController(QObject):
             finished = pyqtSignal(bool, object)  # ok, embedding or None
 
         class _DRTask(QRunnable):
-            def __init__(self, method, val, X):
+            def __init__(self, method, param_val, out_dim, X):
                 super().__init__()
-                self.m = method; self.v = val; self.X = X
+                # m: 方法名；p: 方法特定参数（PCA: 忽略；t-SNE: perplexity；UMAP: n_neighbors）
+                # out_dim: 输出 embedding 维度
+                self.m = method; self.p = param_val; self.out_dim = out_dim; self.X = X
                 self.signals = _DRSignals()
             def run(self):
                 ok = False; emb = None
                 try:
+                    n_samples, n_features = self.X.shape
+                    max_components = max(1, min(n_samples, n_features))
+                    # 输出维度：统一由 out_dim 控制
+                    target_dim = int(self.out_dim) if self.out_dim else 2
+                    target_dim = int(max(1, min(target_dim, max_components)))
+
                     if self.m == 'PCA':
                         from sklearn.decomposition import PCA
-                        n = max(1, min(self.v, self.X.shape[1]))
-                        model = PCA(n_components=n, random_state=0)
-                        emb = model.fit_transform(self.X)
+                        # 如果样本数太少（<2），不跑真正的 PCA，直接返回前 target_dim 个特征
+                        if n_samples < 2:
+                            emb = self.X[:, :target_dim]
+                        else:
+                            model = PCA(n_components=target_dim, random_state=0)
+                            emb = model.fit_transform(self.X)
                     elif self.m == 't-SNE':
                         from sklearn.manifold import TSNE
-                        model = TSNE(n_components=2, perplexity=float(self.v), random_state=0, init='pca', learning_rate='auto')
-                        emb = model.fit_transform(self.X)
+                        # t-SNE: p 为 perplexity
+                        if n_samples <= 1:
+                            # 样本太少，直接退化成取前 target_dim 个特征
+                            emb = self.X[:, :target_dim]
+                        else:
+                            try:
+                                perp = float(self.p)
+                            except Exception:
+                                perp = 30.0
+                            max_perp = max(1.0, n_samples - 1e-3)
+                            perp = max(1.0, min(perp, max_perp))
+                            n_comp = max(2, target_dim)
+                            model = TSNE(
+                                n_components=n_comp,
+                                perplexity=perp,
+                                random_state=0,
+                                init='pca',
+                                learning_rate='auto'
+                            )
+                            emb = model.fit_transform(self.X)
                     elif self.m == 'UMAP':
                         try:
                             from umap import UMAP
                         except Exception:
                             self.signals.finished.emit(False, None)
                             return
-                        model = UMAP(n_components=2, n_neighbors=int(self.v), random_state=0)
-                        emb = model.fit_transform(self.X)
+                        if n_samples <= 2:
+                            # 样本特别少，退化成取前 target_dim 个特征
+                            emb = self.X[:, :target_dim]
+                        else:
+                            # UMAP: p 为 n_neighbors
+                            try:
+                                n_neighbors = int(self.p)
+                            except Exception:
+                                n_neighbors = 15
+                            n_neighbors = max(2, min(n_neighbors, n_samples - 1))
+                            n_comp = max(2, target_dim)
+                            model = UMAP(
+                                n_components=n_comp,
+                                n_neighbors=n_neighbors,
+                                random_state=0
+                            )
+                            emb = model.fit_transform(self.X)
                     else:
                         self.signals.finished.emit(False, None)
                         return
@@ -1198,7 +1289,7 @@ class ClassificationController(QObject):
                 self.log(f"[DR] Finish update error: {e}")
 
         self._set_dr_status_color('brown')
-        task = _DRTask(method, val, X)
+        task = _DRTask(method, param_val, out_dim, X)
         task.signals.finished.connect(_on_finished)
         pool.start(task)
 

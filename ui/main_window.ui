@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1372</width>
-    <height>797</height>
+    <width>1368</width>
+    <height>790</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -50,7 +50,7 @@
          <x>0</x>
          <y>0</y>
          <width>150</width>
-         <height>719</height>
+         <height>708</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -230,8 +230,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>1270</width>
-                <height>2491</height>
+                <width>773</width>
+                <height>2486</height>
                </rect>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_25">
@@ -3055,8 +3055,8 @@
                         <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
 &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
 p, li { white-space: pre-wrap; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Semi-infinite&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'SimSun'; font-size:9pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt;&quot;&gt;Semi-infinite&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                        </property>
                       </widget>
                      </item>
@@ -5715,8 +5715,8 @@ p, li { white-space: pre-wrap; }
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>834</width>
-                   <height>88</height>
+                   <width>87</width>
+                   <height>87</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_17">
@@ -6420,7 +6420,7 @@ p, li { white-space: pre-wrap; }
               <property name="geometry">
                <rect>
                 <x>0</x>
-                <y>-194</y>
+                <y>0</y>
                 <width>1018</width>
                 <height>1005</height>
                </rect>
@@ -8810,8 +8810,8 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>1143</width>
-                <height>1056</height>
+                <width>1139</width>
+                <height>1073</height>
                </rect>
               </property>
               <layout class="QVBoxLayout" name="verticalLayout_27">
@@ -8850,7 +8850,7 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                         </size>
                        </property>
                        <property name="text">
-                        <string>Classify</string>
+                        <string>Classify - Creat Model</string>
                        </property>
                       </widget>
                      </item>
@@ -8896,13 +8896,6 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                         </size>
                        </property>
                        <layout class="QGridLayout" name="gridLayout_44">
-                        <item row="0" column="1">
-                         <widget class="QLineEdit" name="ClassificationKNnnNneighborsValue">
-                          <property name="text">
-                           <string>5</string>
-                          </property>
-                         </widget>
-                        </item>
                         <item row="0" column="0">
                          <widget class="QLabel" name="ClassificationKNnnNneighborsLabel">
                           <property name="minimumSize">
@@ -8913,6 +8906,13 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                           </property>
                           <property name="text">
                            <string>n_neighbors:</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item row="0" column="1">
+                         <widget class="QLineEdit" name="ClassificationKNnnNneighborsValue">
+                          <property name="text">
+                           <string>5</string>
                           </property>
                          </widget>
                         </item>
@@ -8961,110 +8961,6 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                     </layout>
                    </widget>
                   </item>
-                  <item row="1" column="0">
-                   <widget class="QGroupBox" name="DimensionalityReductionGroupBox">
-                    <property name="styleSheet">
-                     <string notr="true">QGroupBox {
-    font: bold 10pt &quot;Microsoft YaHei&quot;;
-}</string>
-                    </property>
-                    <property name="title">
-                     <string>Dimensionality Reduction</string>
-                    </property>
-                    <layout class="QGridLayout" name="gridLayout_31">
-                     <item row="0" column="1" colspan="2">
-                      <widget class="QComboBox" name="DimensionalityReductionMethodCombox">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                       <item>
-                        <property name="text">
-                         <string>PCA</string>
-                        </property>
-                       </item>
-                       <item>
-                        <property name="text">
-                         <string>t-SNE</string>
-                        </property>
-                       </item>
-                       <item>
-                        <property name="text">
-                         <string>UMAP</string>
-                        </property>
-                       </item>
-                      </widget>
-                     </item>
-                     <item row="0" column="0">
-                      <widget class="QLabel" name="DimensionalityReductionMethodLabel">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                       <property name="text">
-                        <string>Method:</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="2" column="0">
-                      <widget class="QPushButton" name="DimensionalityReductionStartButton">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                       <property name="text">
-                        <string>Start</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="1" column="1">
-                      <widget class="QSpinBox" name="DimensionalityReductionTargetDimValue">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                       <property name="value">
-                        <number>2</number>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="1" column="0">
-                      <widget class="QLabel" name="DimensionalityReductionTargetDimLabel">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                       <property name="text">
-                        <string>Target Dim.</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="2" column="2">
-                      <widget class="QPushButton" name="DimensionalityReductionShowResultButton">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                       <property name="text">
-                        <string>Show Result</string>
-                       </property>
-                      </widget>
-                     </item>
-                    </layout>
-                   </widget>
-                  </item>
                   <item row="0" column="0">
                    <widget class="QGroupBox" name="ClassificationImportGroupBox">
                     <property name="minimumSize">
@@ -9082,26 +8978,6 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                      <string>Import</string>
                     </property>
                     <layout class="QGridLayout" name="gridLayout_36">
-                     <item row="1" column="0">
-                      <widget class="QLabel" name="ClassificationImportRuleLabel">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                       <property name="text">
-                        <string>Rule 1:</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="0" column="0">
-                      <widget class="QPushButton" name="ClassificationImportFolderPathLabel">
-                       <property name="text">
-                        <string>Folder</string>
-                       </property>
-                      </widget>
-                     </item>
                      <item row="3" column="0" colspan="4">
                       <widget class="QTableWidget" name="ClassificationImportTableWidget">
                        <property name="minimumSize">
@@ -9135,36 +9011,6 @@ QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }</string>
                          <string>Preview</string>
                         </property>
                        </column>
-                      </widget>
-                     </item>
-                     <item row="1" column="2">
-                      <widget class="QLineEdit" name="ClassificationImportRuleValue">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                       <property name="text">
-                        <string>*</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="0" column="2">
-                      <widget class="QLineEdit" name="ClassificationImportFolderPathValue">
-                       <property name="minimumSize">
-                        <size>
-                         <width>0</width>
-                         <height>25</height>
-                        </size>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="2" column="0">
-                      <widget class="QPushButton" name="ClassificationImportImportButton">
-                       <property name="text">
-                        <string>Import</string>
-                       </property>
                       </widget>
                      </item>
                      <item row="0" column="3" rowspan="3">
@@ -9266,6 +9112,94 @@ QListWidget::item:selected {
                        </layout>
                       </widget>
                      </item>
+                     <item row="2" column="0" colspan="3">
+                      <widget class="QWidget" name="ImportClassifyWidget" native="true">
+                       <layout class="QHBoxLayout" name="horizontalLayout_21">
+                        <item>
+                         <widget class="QPushButton" name="ClassificationImportImportButton">
+                          <property name="text">
+                           <string>Import</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QPushButton" name="ClassificationImportClassifyButton">
+                          <property name="text">
+                           <string>Classsify</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <spacer name="horizontalSpacer_8">
+                          <property name="orientation">
+                           <enum>Qt::Horizontal</enum>
+                          </property>
+                          <property name="sizeHint" stdset="0">
+                           <size>
+                            <width>40</width>
+                            <height>20</height>
+                           </size>
+                          </property>
+                         </spacer>
+                        </item>
+                       </layout>
+                      </widget>
+                     </item>
+                     <item row="1" column="0" colspan="3">
+                      <widget class="QWidget" name="widget_10" native="true">
+                       <layout class="QHBoxLayout" name="horizontalLayout_22">
+                        <item>
+                         <widget class="QLabel" name="ClassificationImportRuleLabel">
+                          <property name="minimumSize">
+                           <size>
+                            <width>0</width>
+                            <height>25</height>
+                           </size>
+                          </property>
+                          <property name="text">
+                           <string>Rule 1:</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QLineEdit" name="ClassificationImportRuleValue">
+                          <property name="minimumSize">
+                           <size>
+                            <width>0</width>
+                            <height>25</height>
+                           </size>
+                          </property>
+                          <property name="text">
+                           <string>*</string>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </widget>
+                     </item>
+                     <item row="0" column="0">
+                      <widget class="QWidget" name="widget_11" native="true">
+                       <layout class="QHBoxLayout" name="horizontalLayout_23">
+                        <item>
+                         <widget class="QPushButton" name="ClassificationImportFolderPathLabel">
+                          <property name="text">
+                           <string>Folder</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QLineEdit" name="ClassificationImportFolderPathValue">
+                          <property name="minimumSize">
+                           <size>
+                            <width>0</width>
+                            <height>25</height>
+                           </size>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </widget>
+                     </item>
                     </layout>
                    </widget>
                   </item>
@@ -9339,6 +9273,154 @@ QListWidget::item:selected {
                     </layout>
                    </widget>
                   </item>
+                  <item row="1" column="0">
+                   <widget class="QGroupBox" name="DimensionalityReductionGroupBox">
+                    <property name="styleSheet">
+                     <string notr="true">QGroupBox {
+    font: bold 10pt &quot;Microsoft YaHei&quot;;
+}</string>
+                    </property>
+                    <property name="title">
+                     <string>Dimensionality Reduction</string>
+                    </property>
+                    <layout class="QGridLayout" name="gridLayout_31">
+                     <item row="2" column="2">
+                      <widget class="QPushButton" name="DimensionalityReductionShowResultButton">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>25</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>Show Result</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="2" column="0">
+                      <widget class="QPushButton" name="DimensionalityReductionStartButton">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>25</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>Start</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="0" column="0">
+                      <widget class="QLabel" name="DimensionalityReductionMethodLabel">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>25</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>Method:</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item row="0" column="1" colspan="2">
+                      <widget class="QComboBox" name="DimensionalityReductionMethodCombox">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>25</height>
+                        </size>
+                       </property>
+                       <item>
+                        <property name="text">
+                         <string>PCA</string>
+                        </property>
+                       </item>
+                       <item>
+                        <property name="text">
+                         <string>t-SNE</string>
+                        </property>
+                       </item>
+                       <item>
+                        <property name="text">
+                         <string>UMAP</string>
+                        </property>
+                       </item>
+                      </widget>
+                     </item>
+                     <item row="1" column="2">
+                      <widget class="QWidget" name="nNeighborsWidget" native="true">
+                       <layout class="QHBoxLayout" name="horizontalLayout_19">
+                        <item>
+                         <widget class="QLabel" name="DimensionalityReductionNNeighborLabel">
+                          <property name="minimumSize">
+                           <size>
+                            <width>0</width>
+                            <height>25</height>
+                           </size>
+                          </property>
+                          <property name="text">
+                           <string>n Neighbors</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QSpinBox" name="DimensionalityReductionNNeighborValue">
+                          <property name="minimumSize">
+                           <size>
+                            <width>0</width>
+                            <height>25</height>
+                           </size>
+                          </property>
+                          <property name="value">
+                           <number>2</number>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </widget>
+                     </item>
+                     <item row="1" column="1">
+                      <widget class="QWidget" name="TargetDimwidget" native="true">
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                       <layout class="QHBoxLayout" name="horizontalLayout_20">
+                        <item>
+                         <widget class="QLabel" name="DimensionalityReductionTargetDimLabel">
+                          <property name="minimumSize">
+                           <size>
+                            <width>0</width>
+                            <height>25</height>
+                           </size>
+                          </property>
+                          <property name="text">
+                           <string>Target Dim.</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QSpinBox" name="DimensionalityReductionTargetDimValue">
+                          <property name="minimumSize">
+                           <size>
+                            <width>0</width>
+                            <height>25</height>
+                           </size>
+                          </property>
+                          <property name="value">
+                           <number>2</number>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </widget>
+                     </item>
+                    </layout>
+                   </widget>
+                  </item>
                  </layout>
                 </widget>
                </item>
@@ -9364,7 +9446,7 @@ QListWidget::item:selected {
                    <rect>
                     <x>0</x>
                     <y>0</y>
-                    <width>1123</width>
+                    <width>1119</width>
                     <height>298</height>
                    </rect>
                   </property>
@@ -9423,8 +9505,8 @@ QListWidget::item:selected {
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1372</width>
-     <height>21</height>
+     <width>1368</width>
+     <height>23</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuSetting">
