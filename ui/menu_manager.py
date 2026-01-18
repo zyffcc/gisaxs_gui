@@ -1,5 +1,5 @@
 """
-菜单管理器 - 负责创建和管理主窗口的菜单系统
+Menu Manager - responsible for creating and managing the main window menu system
 """
 
 from PyQt5.QtWidgets import QMenuBar, QMenu, QAction, QMessageBox, QFileDialog
@@ -8,19 +8,19 @@ from core.global_params import global_params
 
 
 class MenuManager(QObject):
-    """菜单管理器，负责创建和管理主窗口的菜单"""
+    """Menu manager, responsible for creating and managing the main window menus"""
     
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
         
     def setup_menus(self):
-        """设置所有菜单"""
+        """Set up all menus"""
         self.create_parameters_menu()
         print("The menu system has been initialized.")
     
     def create_parameters_menu(self):
-        """创建参数菜单"""
+        """Create Parameters menu"""
         try:
             # 获取或创建菜单栏
             menubar = self.main_window.menuBar()
@@ -28,34 +28,37 @@ class MenuManager(QObject):
             # 查找或创建Parameters菜单
             parameters_menu = None
             for action in menubar.actions():
-                if action.text() == '参数(&P)' or action.text() == 'Parameters':
+                if action.text() in ('参数(&P)', 'Parameters', 'Parameters (&P)'):
+                    # Normalize menu text to English
+                    if action.text() != 'Parameters (&P)':
+                        action.setText('Parameters (&P)')
                     parameters_menu = action.menu()
                     break
             
             if parameters_menu is None:
-                parameters_menu = menubar.addMenu('参数(&P)')
+                parameters_menu = menubar.addMenu('Parameters (&P)')
             
             # 添加Reset菜单项
             if not hasattr(self.main_window, 'actionReset'):
-                self.main_window.actionReset = QAction('重置参数(&R)', self.main_window)
+                self.main_window.actionReset = QAction('Reset Parameters (&R)', self.main_window)
                 self.main_window.actionReset.setShortcut('Ctrl+R')
-                self.main_window.actionReset.setStatusTip('重置所有参数为初始默认值')
+                self.main_window.actionReset.setStatusTip('Reset all parameters to their initial default values')
                 self.main_window.actionReset.triggered.connect(self.reset_parameters)
                 parameters_menu.addAction(self.main_window.actionReset)
             
             # 添加保存参数菜单项
             if not hasattr(self.main_window, 'actionSaveParams'):
-                self.main_window.actionSaveParams = QAction('保存参数(&S)', self.main_window)
+                self.main_window.actionSaveParams = QAction('Save Parameters (&S)', self.main_window)
                 self.main_window.actionSaveParams.setShortcut('Ctrl+S')
-                self.main_window.actionSaveParams.setStatusTip('立即保存当前参数')
+                self.main_window.actionSaveParams.setStatusTip('Save the current parameters immediately')
                 self.main_window.actionSaveParams.triggered.connect(self.save_parameters)
                 parameters_menu.addAction(self.main_window.actionSaveParams)
             
             # 添加加载参数菜单项
             if not hasattr(self.main_window, 'actionLoadParams'):
-                self.main_window.actionLoadParams = QAction('加载参数(&L)', self.main_window)
+                self.main_window.actionLoadParams = QAction('Load Parameters (&L)', self.main_window)
                 self.main_window.actionLoadParams.setShortcut('Ctrl+L')
-                self.main_window.actionLoadParams.setStatusTip('从文件加载参数')
+                self.main_window.actionLoadParams.setStatusTip('Load parameters from a file')
                 self.main_window.actionLoadParams.triggered.connect(self.load_parameters)
                 parameters_menu.addAction(self.main_window.actionLoadParams)
             
@@ -65,7 +68,7 @@ class MenuManager(QObject):
             print(f"Failed to create parameter menu: {e}")
     
     def reset_parameters(self):
-        """重置所有参数为初始默认值"""
+        """Reset all parameters to their initial default values"""
         try:
             # 确认对话框
             reply = QMessageBox.question(
@@ -100,7 +103,7 @@ class MenuManager(QObject):
             print(f"Failed to reset parameters: {e}")
     
     def save_parameters(self):
-        """手动保存参数"""
+        """Manually save parameters"""
         try:
             # 打开文件保存对话框
             file_path, _ = QFileDialog.getSaveFileName(
@@ -128,7 +131,7 @@ class MenuManager(QObject):
             print(f"Failed to save parameters: {e}")
     
     def load_parameters(self):
-        """手动加载参数"""
+        """Manually load parameters"""
         try:
             # 打开文件选择对话框
             file_path, _ = QFileDialog.getOpenFileName(

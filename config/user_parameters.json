@@ -141,6 +141,10 @@
             "p1": {
                 "path": "F:/GiXSgui/1DSAXS/Heat 1",
                 "rule": "*.txt"
+            },
+            "p3": {
+                "path": "F:/GiXSgui/1DSAXS/Humidity 1",
+                "rule": "10p_3.txt"
             }
         }
     },

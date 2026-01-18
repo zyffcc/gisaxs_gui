@@ -136,6 +136,7 @@ class ClassificationController(QObject):
         rule_edit = getattr(self.ui, 'ClassificationImportRuleValue', None)
         path_edit = getattr(self.ui, 'ClassificationImportFolderPathValue', None)
         import_btn = getattr(self.ui, 'ClassificationImportImportButton', None)
+        import_clf_btn = getattr(self.ui, 'ClassificationImportClassifyButton', None)
         table = getattr(self.ui, 'ClassificationImportTableWidget', None)
 
         # 降维
@@ -177,6 +178,8 @@ class ClassificationController(QObject):
 
         if import_btn is not None:
             import_btn.clicked.connect(self._on_import_clicked)
+        if import_clf_btn is not None:
+            import_clf_btn.clicked.connect(self._on_import_classify_clicked)
         if table is not None:
             table.cellClicked.connect(self._on_table_cell_clicked)
             # 允许从表格选择同步到上方列表；允许在表格编辑类别名
@@ -1174,6 +1177,26 @@ class ClassificationController(QObject):
         except Exception:
             pass
 
+    def _set_import_clf_button_state(self, ready: bool, running: bool = False):
+        """Update ClassificationImportClassifyButton color to indicate model state.
+
+        - running=True: red
+        - ready=True and not running: green
+        - otherwise: default/grey
+        """
+        btn = getattr(self.ui, 'ClassificationImportClassifyButton', None)
+        if btn is None:
+            return
+        try:
+            if running:
+                btn.setStyleSheet("background-color: #d32f2f; color: white;")
+            elif ready:
+                btn.setStyleSheet("background-color: #4caf50; color: white;")
+            else:
+                btn.setStyleSheet("")
+        except Exception:
+            pass
+
     def _on_dim_start_clicked_async(self):
         method = self.ui.DimensionalityReductionMethodCombox.currentText()
         # 输出维度（Target Dim）
@@ -1326,6 +1349,8 @@ class ClassificationController(QObject):
                 self.sp_y = QSpinBox(); self.sp_y.setMinimum(1); self.sp_y.setMaximum(max(2, emb.shape[1])); self.sp_y.setValue(min(2, emb.shape[1]))
                 self.cb_color_seq = QCheckBox('Color by index (sequence)')
                 self.cb_color_seq.setChecked(False)
+                self.cb_show_decision = QCheckBox('Show decision boundary')
+                self.cb_show_decision.setChecked(False)
                 self.cb_cmap = QComboBox(); self.cb_cmap.addItems(['viridis','plasma','magma','inferno','turbo','jet','rainbow'])
                 # Reset view button
                 from PyQt5.QtWidgets import QPushButton
@@ -1335,6 +1360,7 @@ class ClassificationController(QObject):
                 form.addRow(QLabel('y-dim'), self.sp_y)
                 form.addRow(QLabel('Index colormap'), self.cb_cmap)
                 form.addRow(self.cb_color_seq)
+                form.addRow(self.cb_show_decision)
                 form.addRow(self.btn_reset)
                 v.addWidget(gb_ctrl)
                 # Canvas
@@ -1366,6 +1392,7 @@ class ClassificationController(QObject):
                 self.sp_x.valueChanged.connect(self._redraw)
                 self.sp_y.valueChanged.connect(self._redraw)
                 self.cb_color_seq.toggled.connect(self._redraw)
+                self.cb_show_decision.toggled.connect(self._redraw)
                 self.cb_cmap.currentTextChanged.connect(self._redraw)
                 self.canvas.mpl_connect('button_press_event', self._on_mouse_press)
                 self.canvas.mpl_connect('button_release_event', self._on_mouse_release)
@@ -1403,6 +1430,9 @@ class ClassificationController(QObject):
                 self.ax.clear()
                 xs, ys = self._current_xy()
                 cols = self._colors(len(xs))
+                # 先画决策边界（若有分类器且用户勾选）
+                self._draw_decision_boundary(xs, ys)
+                # 再画散点
                 self.scatter = self.ax.scatter(xs, ys, s=20, c=cols)
                 # draw highlight overlay if selection exists
                 if self.selected:
@@ -1438,6 +1468,67 @@ class ClassificationController(QObject):
                         self.ax.relim(); self.ax.autoscale_view()
                 self.fig.tight_layout()
                 self.canvas.draw_idle()
+
+            def _draw_decision_boundary(self, xs, ys):
+                # 仅在有分类器且用户勾选时绘制
+                if not self.cb_show_decision.isChecked():
+                    return
+                model = getattr(self.c, '_loaded_model', None)
+                if not isinstance(model, dict):
+                    return
+                if model.get('feature_space') != 'embedding':
+                    return
+                clf = model.get('clf', None)
+                if clf is None:
+                    return
+                try:
+                    emb = self.emb
+                    D = emb.shape[1]
+                    emb_dim = int(model.get('embedding_dim', D))
+                    if D != emb_dim:
+                        return
+                    # 当前 x/y 维度索引
+                    xdim = max(1, min(self.sp_x.value(), D)) - 1
+                    ydim = max(1, min(self.sp_y.value(), D)) - 1
+                    if xdim == ydim:
+                        ydim = (ydim + 1) % D
+
+                    # 在当前坐标范围内生成网格
+                    xlim = self.ax.get_xlim() if self._xlim is None else self._xlim
+                    ylim = self.ax.get_ylim() if self._ylim is None else self._ylim
+                    gx = np.linspace(xlim[0], xlim[1], 100)
+                    gy = np.linspace(ylim[0], ylim[1], 100)
+                    XX, YY = np.meshgrid(gx, gy)
+                    base = emb.mean(axis=0)
+                    grid_points = []
+                    for xv, yv in zip(XX.ravel(), YY.ravel()):
+                        v = base.copy()
+                        v[xdim] = xv
+                        v[ydim] = yv
+                        grid_points.append(v)
+                    grid_points = np.stack(grid_points, axis=0)
+
+                    try:
+                        Z = clf.predict(grid_points)
+                    except Exception:
+                        return
+
+                    labels_unique = model.get('labels_unique', None)
+                    if labels_unique is None or len(labels_unique) == 0:
+                        return
+                    # 将标签映射到整数
+                    label_to_int = {lab: i for i, lab in enumerate(labels_unique)}
+                    Z_int = np.vectorize(label_to_int.get)(Z)
+                    Z_int = Z_int.reshape(XX.shape)
+
+                    from matplotlib.colors import ListedColormap
+                    # 使用 tab20 的前 N 个颜色
+                    palette = cm.get_cmap('tab20')
+                    colors = [palette(i % palette.N) for i in range(len(labels_unique))]
+                    cmap = ListedColormap(colors)
+                    self.ax.contourf(XX, YY, Z_int, alpha=0.15, cmap=cmap, levels=np.arange(len(labels_unique)+1)-0.5)
+                except Exception:
+                    return
 
             def _on_mouse_press(self, event):
                 if event.button == 3:
@@ -1538,10 +1629,72 @@ class ClassificationController(QObject):
 
             def _update_info(self):
                 lines = []
+                # 检查是否有可用于 embedding 空间的分类器
+                model = getattr(self.c, '_loaded_model', None)
+                clf = None
+                labels_unique = None
+                has_clf = False
+                if isinstance(model, dict) and model.get('feature_space') == 'embedding':
+                    clf = model.get('clf', None)
+                    labels_unique = model.get('labels_unique', None)
+                    try:
+                        D = self.emb.shape[1]
+                        emb_dim = int(model.get('embedding_dim', D))
+                        has_clf = clf is not None and D == emb_dim
+                    except Exception:
+                        has_clf = False
+
                 for i in sorted(self.selected):
+                    if not (0 <= i < len(self.c.samples)):
+                        continue
                     s = self.c.samples[i]
-                    lines.append(f"[{i}] {s.category} - {s.file_name}\n{s.file_path}")
-                self.info.setPlainText('\n'.join(lines))
+                    base = f"[{i}] {s.category} - {s.file_name}\n{s.file_path}"
+                    extra = []
+                    # 若存在分类器，给出该点在当前 embedding 空间中的预测结果（即所在分类区域）
+                    if has_clf and 0 <= i < self.emb.shape[0]:
+                        try:
+                            vec = self.emb[i].reshape(1, -1)
+                            pred = clf.predict(vec)[0]
+                            extra.append(f"Classifier region: {pred}")
+                            # 若样本已存有 predicted_label 或真实类别，可一并显示
+                            if s.predicted_label is not None:
+                                extra.append(f"Stored predicted: {s.predicted_label}")
+                            if s.category:
+                                extra.append(f"True category: {s.category}")
+                            # 若支持概率输出，则给出每类概率
+                            try:
+                                if hasattr(clf, 'predict_proba'):
+                                    proba = clf.predict_proba(vec)[0]
+                                    # 使用分类器内部的 classes_ 顺序与概率列对齐
+                                    try:
+                                        classes = getattr(clf, 'classes_', None)
+                                    except Exception:
+                                        classes = None
+
+                                    if classes is not None and len(classes) == len(proba):
+                                        labels_for_proba = classes
+                                    elif labels_unique is not None and len(labels_unique) == len(proba):
+                                        # 回退：若 classes_ 不可用，则退回到保存的 labels_unique
+                                        labels_for_proba = labels_unique
+                                    else:
+                                        # 最后兜底：用索引作为标签
+                                        labels_for_proba = [str(i) for i in range(len(proba))]
+
+                                    prob_str = ", ".join(
+                                        f"{str(lab)}={float(p):.2f}" for lab, p in zip(labels_for_proba, proba)
+                                    )
+                                    extra.append(f"Probabilities: {prob_str}")
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+
+                    text = base
+                    if extra:
+                        text += "\n" + "\n".join(extra)
+                    lines.append(text)
+
+                self.info.setPlainText('\n\n'.join(lines))
 
             def _toggle_blink(self):
                 if self.highlight is None:
@@ -1689,12 +1842,20 @@ class ClassificationController(QObject):
             edit.setText('1.0')
 
     def _on_clf_start_clicked(self):
+        """Start classification training on DR feature space in a background thread."""
         method = self.ui.ClassificationMethodCombox.currentText()
         param_text = self.ui.ClassificationKNnnNneighborsValue.text().strip()
+
+        # 需要先有 DR 特征空间（仅作为开关，实际会在任务中重新按当前参数计算一次 DR）
+        if getattr(self, '_last_embedding', None) is None:
+            self.log('[CLS] No DR embedding available. Please run DR first.')
+            return
+
         X_all = self._build_feature_matrix()
         if X_all is None or X_all.shape[0] == 0:
             self.log('[CLS] No data to process. Ensure files are imported.')
             return
+
         # 仅使用有数据且类别非空的样本
         cats = np.array([s.category if (s.category and s.category.strip()) else '' for s in self.samples])
         has_data = np.array([(s.preprocessed_data is not None) or (s.raw_data is not None) for s in self.samples])
@@ -1702,54 +1863,231 @@ class ClassificationController(QObject):
         if not np.any(mask):
             self.log('[CLS] No labeled samples with data found.')
             return
-        X = X_all[mask]
-        y = cats[mask]
-        labels_unique = np.unique(y)
+
+        labels_unique = np.unique(cats[mask])
         if len(labels_unique) == 0:
             self.log('[CLS] No category labels found.')
             return
-        try:
-            from sklearn.model_selection import train_test_split
-            # 仅在各类样本数>=2时启用分层抽样
-            counts = {lab: int(np.sum(y == lab)) for lab in labels_unique}
-            can_stratify = len(labels_unique) > 1 and all(c >= 2 for c in counts.values())
-            strat = y if can_stratify else None
-            Xtr, Xte, ytr, yte, idx_tr, idx_te = train_test_split(
-                X, y, np.arange(len(y)), test_size=0.2, random_state=0, stratify=strat
-            )
-            if method == 'KNN':
-                from sklearn.neighbors import KNeighborsClassifier
-                n = int(float(param_text) if param_text else 5)
-                clf = KNeighborsClassifier(n_neighbors=max(1, n))
-            elif method == 'SVM':
-                from sklearn.svm import SVC
-                C = float(param_text) if param_text else 1.0
-                clf = SVC(C=C, kernel='rbf', probability=True)
-            else:
-                self.log('[CLS] Unknown method.')
+
+        # 当前 DR 配置
+        dr_method_widget = getattr(self.ui, 'DimensionalityReductionMethodCombox', None)
+        dr_method = dr_method_widget.currentText() if dr_method_widget is not None else 'PCA'
+        td_spin = getattr(self.ui, 'DimensionalityReductionTargetDimValue', None)
+        n_spin = getattr(self.ui, 'DimensionalityReductionNNeighborValue', None)
+        target_dim = int(td_spin.value()) if td_spin is not None else 2
+        dr_param = int(n_spin.value()) if n_spin is not None else target_dim
+
+        pool = QThreadPool.globalInstance()
+
+        class _ClfSignals(QObject):
+            finished = pyqtSignal(bool, object)  # ok, payload or error
+
+        class _ClfTask(QRunnable):
+            def __init__(self, X_all, cats, mask, method, param_text, dr_method, target_dim, dr_param):
+                super().__init__()
+                self.X_all = X_all
+                self.cats = cats
+                self.mask = mask
+                self.method = method
+                self.param_text = param_text
+                self.dr_method = dr_method
+                self.target_dim = max(1, int(target_dim) if target_dim else 2)
+                self.dr_param = dr_param
+                self.signals = _ClfSignals()
+
+            def run(self):
+                import traceback
+                ok = False
+                payload = {}
+                try:
+                    X = self.X_all
+                    n_samples, n_features = X.shape
+                    from sklearn.model_selection import train_test_split
+
+                    # 根据 DR 方法在后台重新计算一次特征空间（用于分类 + 未来 transform）
+                    dr_model = None
+                    emb = None
+                    dr_type = self.dr_method
+                    tdim = max(1, min(self.target_dim, min(n_samples, n_features)))
+
+                    if dr_type == 'PCA':
+                        from sklearn.decomposition import PCA
+                        dr_model = PCA(n_components=tdim, random_state=0)
+                        emb = dr_model.fit_transform(X)
+                    elif dr_type == 'UMAP':
+                        try:
+                            from umap import UMAP
+                        except Exception:
+                            payload = {'error': 'UMAP is not available. Please install umap-learn.'}
+                            self.signals.finished.emit(False, payload)
+                            return
+                        try:
+                            n_neighbors = int(self.dr_param)
+                        except Exception:
+                            n_neighbors = 15
+                        n_neighbors = max(2, min(n_neighbors, max(2, n_samples - 1)))
+                        dr_model = UMAP(n_components=max(2, tdim), n_neighbors=n_neighbors, random_state=0)
+                        emb = dr_model.fit_transform(X)
+                    elif dr_type == 't-SNE':
+                        from sklearn.manifold import TSNE
+                        if n_samples <= 1:
+                            emb = X[:, :tdim]
+                        else:
+                            try:
+                                perp = float(self.dr_param)
+                            except Exception:
+                                perp = 30.0
+                            max_perp = max(1.0, n_samples - 1e-3)
+                            perp = max(1.0, min(perp, max_perp))
+                            dr_model = None  # t-SNE 无稳定 transform
+                            emb = TSNE(
+                                n_components=max(2, tdim),
+                                perplexity=perp,
+                                random_state=0,
+                                init='pca',
+                                learning_rate='auto'
+                            ).fit_transform(X)
+                    else:
+                        # 无 DR：直接使用原始特征
+                        dr_type = 'none'
+                        emb = X
+
+                    if emb is None:
+                        payload = {'error': 'Failed to build feature space for classification.'}
+                        self.signals.finished.emit(False, payload)
+                        return
+
+                    X_emb = emb[self.mask]
+                    y = self.cats[self.mask]
+                    labels_unique = np.unique(y)
+                    counts = {lab: int(np.sum(y == lab)) for lab in labels_unique}
+                    can_stratify = len(labels_unique) > 1 and all(c >= 2 for c in counts.values())
+                    strat = y if can_stratify else None
+                    Xtr, Xte, ytr, yte = train_test_split(
+                        X_emb, y, test_size=0.2, random_state=0, stratify=strat
+                    )
+
+                    if self.method == 'KNN':
+                        from sklearn.neighbors import KNeighborsClassifier
+                        try:
+                            n = int(float(self.param_text) if self.param_text else 5)
+                        except Exception:
+                            n = 5
+                        clf = KNeighborsClassifier(n_neighbors=max(1, n))
+                    elif self.method == 'SVM':
+                        from sklearn.svm import SVC
+                        from sklearn.calibration import CalibratedClassifierCV
+                        try:
+                            C = float(self.param_text) if self.param_text else 1.0
+                        except Exception:
+                            C = 1.0
+                        # 若每个类别样本数足够，则使用外部概率校准；否则退回 SVC 内置概率
+                        try:
+                            # counts 和 labels_unique 在上方已计算
+                            min_count = min(counts.values()) if counts else 0
+                        except Exception:
+                            min_count = 0
+                        if min_count >= 3 and len(labels_unique) > 1:
+                            n_folds = min(3, min_count)
+                            base_svc = SVC(C=C, kernel='rbf', probability=False)
+                            clf = CalibratedClassifierCV(base_svc, cv=n_folds, method='sigmoid')
+                        else:
+                            # 数据太少时，使用 SVC(probability=True) 避免交叉验证报错
+                            clf = SVC(C=C, kernel='rbf', probability=True)
+                    else:
+                        payload = {'error': 'Unknown classification method.'}
+                        self.signals.finished.emit(False, payload)
+                        return
+
+                    clf.fit(Xtr, ytr)
+                    from sklearn.metrics import accuracy_score, confusion_matrix
+                    ypred = clf.predict(Xte)
+                    acc = accuracy_score(yte, ypred)
+                    cm = confusion_matrix(yte, ypred, labels=labels_unique)
+
+                    # 对所有已标注样本做预测
+                    all_pred = clf.predict(X_emb)
+                    masked_indices = np.where(self.mask)[0]
+
+                    payload = {
+                        'clf': clf,
+                        'acc': float(acc),
+                        'cm': cm,
+                        'labels_unique': labels_unique,
+                        'all_pred': all_pred,
+                        'masked_indices': masked_indices,
+                        'emb': emb,
+                        'dr_type': dr_type,
+                        'dr_model': dr_model,
+                        'dr_params': {
+                            'target_dim': int(tdim),
+                            'param': self.dr_param,
+                        },
+                    }
+                    ok = True
+                except Exception:
+                    payload = {'error': traceback.format_exc()}
+                    ok = False
+                try:
+                    self.signals.finished.emit(ok, payload)
+                except Exception:
+                    pass
+
+        def _on_finished(ok: bool, payload):
+            self._set_import_clf_button_state(ready=False, running=False)
+            if not ok or not isinstance(payload, dict):
+                msg = payload.get('error') if isinstance(payload, dict) else 'Unknown error.'
+                self.log(f"[CLS] Training failed: {msg}")
                 return
-            clf.fit(Xtr, ytr)
-            from sklearn.metrics import accuracy_score, confusion_matrix
-            ypred = clf.predict(Xte)
-            acc = accuracy_score(yte, ypred)
-            cm = confusion_matrix(yte, ypred, labels=labels_unique)
-            self.log(f"[CLS] {method} accuracy={acc:.3f}")
-            self.log(f"[CLS] Confusion matrix labels={list(labels_unique)}")
-            self.log(f"[CLS] Confusion matrix=\n{cm}")
-            # 对所有样本做预测（仅对mask内样本）
-            all_pred = clf.predict(X)
-            masked_indices = np.where(mask)[0]
-            for j, i_global in enumerate(masked_indices):
-                self.samples[i_global].predicted_label = str(all_pred[j])
-            self._loaded_model = {
-                'clf': clf,
-                'method': method,
-                'param': param_text,
-                'feature_crop_shape_2d': self._feature_crop_shape_2d,
-            }
-            self.classification_completed.emit({'accuracy': float(acc)})
-        except Exception as e:
-            self.log(f"[CLS] Error: {e}")
+
+            try:
+                clf = payload['clf']
+                acc = payload['acc']
+                cm = payload['cm']
+                labels_unique = payload['labels_unique']
+                all_pred = payload['all_pred']
+                masked_indices = payload['masked_indices']
+                emb = np.array(payload['emb'])
+
+                # 更新 embedding 到控制器（供 DRWindow 使用）
+                self._last_embedding = emb
+                for i, s in enumerate(self.samples):
+                    if i < len(emb):
+                        s.embedding = np.array(emb[i])
+
+                # 写入预测标签
+                for j, i_global in enumerate(masked_indices):
+                    self.samples[i_global].predicted_label = str(all_pred[j])
+
+                # 日志
+                self.log(f"[CLS] {method} accuracy={acc:.3f}")
+                self.log(f"[CLS] Confusion matrix labels={list(labels_unique)}")
+                self.log(f"[CLS] Confusion matrix=\n{cm}")
+
+                # 保存可复现的模型和 DR 信息
+                self._loaded_model = {
+                    'clf': clf,
+                    'method': method,
+                    'param': param_text,
+                    'feature_crop_shape_2d': self._feature_crop_shape_2d,
+                    'dr_type': payload.get('dr_type', dr_method),
+                    'dr_params': payload.get('dr_params', {}),
+                    'dr_model': payload.get('dr_model', None),
+                    'feature_space': 'embedding',
+                    'embedding_dim': int(emb.shape[1]),
+                    'labels_unique': labels_unique,
+                }
+
+                self._set_import_clf_button_state(ready=True, running=False)
+                self.classification_completed.emit({'accuracy': float(acc)})
+            except Exception as e:
+                self.log(f"[CLS] Error on finish: {e}")
+
+        # 启动后台训练
+        self._set_import_clf_button_state(ready=False, running=True)
+        task = _ClfTask(X_all, cats, mask, method, param_text, dr_method, target_dim, dr_param)
+        task.signals.finished.connect(_on_finished)
+        pool.start(task)
 
     def _on_clf_save_clicked(self):
         if not self._loaded_model:
@@ -1773,6 +2111,47 @@ class ClassificationController(QObject):
             import joblib
             self._loaded_model = joblib.load(path)
             self.log(f"[CLS] Model loaded from {path}")
+
+            # 恢复分类方法与参数
+            try:
+                method = self._loaded_model.get('method', None)
+                param = self._loaded_model.get('param', '')
+                clf_method = getattr(self.ui, 'ClassificationMethodCombox', None)
+                clf_param_edit = getattr(self.ui, 'ClassificationKNnnNneighborsValue', None)
+                if clf_method is not None and method is not None:
+                    idx = clf_method.findText(method)
+                    if idx >= 0:
+                        clf_method.setCurrentIndex(idx)
+                if clf_param_edit is not None:
+                    clf_param_edit.setText(str(param))
+            except Exception:
+                pass
+
+            # 恢复 DR 区域设置
+            try:
+                dr_type = self._loaded_model.get('dr_type', None)
+                dr_params = self._loaded_model.get('dr_params', {})
+                dr_method_widget = getattr(self.ui, 'DimensionalityReductionMethodCombox', None)
+                td_spin = getattr(self.ui, 'DimensionalityReductionTargetDimValue', None)
+                n_spin = getattr(self.ui, 'DimensionalityReductionNNeighborValue', None)
+                if dr_method_widget is not None and dr_type is not None:
+                    idx = dr_method_widget.findText(dr_type)
+                    if idx >= 0:
+                        dr_method_widget.setCurrentIndex(idx)
+                        # 触发一次范围/可见性更新
+                        self._on_dim_method_changed(dr_type)
+                if td_spin is not None and 'target_dim' in dr_params:
+                    td_spin.setValue(int(dr_params['target_dim']))
+                if n_spin is not None and 'param' in dr_params:
+                    try:
+                        n_spin.setValue(int(dr_params['param']))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # 有模型在内存中，标记 ImportClassify 按钮为可用（绿）
+            self._set_import_clf_button_state(ready=True, running=False)
         except Exception as e:
             self.log(f"[CLS] Load failed: {e}")
 
@@ -1790,6 +2169,116 @@ class ClassificationController(QObject):
         if table is not None:
             table.setRowCount(0)
         self.log('[Reset] Classification page reset.')
+
+    def _on_import_classify_clicked(self):
+        """使用已训练/加载的模型对当前类别的新样本进行分类，并在需要时更新 DR embedding。
+
+        要求：
+        - 内存中存在 _loaded_model；
+        - 若 dr_type 为 t-SNE，则仅提示不支持对新样本 transform；
+        - 若 dr_type 为 PCA/UMAP/none，则利用 dr_model 或原始特征进行预测，
+          并在 PCA/UMAP 情况下更新 _last_embedding 以便 DRWindow 显示。"""
+        if not self._loaded_model:
+            self.log('[CLS] No trained model in memory. Please train or load first.')
+            return
+
+        clf = self._loaded_model.get('clf', None)
+        if clf is None:
+            self.log('[CLS] Loaded model is invalid (no classifier).')
+            return
+
+        dr_type = self._loaded_model.get('dr_type', 'none')
+        dr_model = self._loaded_model.get('dr_model', None)
+
+        # 当前类别
+        lw = getattr(self.ui, 'ClassificationImportListWidget', None)
+        current_category = lw.currentItem().text() if (lw is not None and lw.currentItem() is not None) else None
+        if not current_category:
+            self.log('[CLS] Please select a category in the list.')
+            return
+
+        # 构建特征矩阵，并建立“特征行 -> 样本索引”映射
+        X_all = self._build_feature_matrix()
+        if X_all is None or X_all.shape[0] == 0:
+            self.log('[CLS] No data available to classify. Please import data first.')
+            return
+
+        # 有数据的样本索引（顺序与 _build_feature_matrix 中堆叠顺序一致）
+        valid_indices = []
+        for idx, s in enumerate(self.samples):
+            if (s.preprocessed_data is not None) or (s.raw_data is not None):
+                valid_indices.append(idx)
+        if not valid_indices:
+            self.log('[CLS] No loaded samples to classify.')
+            return
+        if len(valid_indices) != X_all.shape[0]:
+            try:
+                self.log('[CLS] Warning: feature matrix and sample mapping size differ; classification may be unreliable.')
+            except Exception:
+                pass
+
+        # 属于当前类别的行位置（在特征矩阵中的行号）
+        cat_row_indices = [row for row, idx in enumerate(valid_indices)
+                           if self.samples[idx].category == current_category]
+        if not cat_row_indices:
+            self.log(f"[CLS] Category '{current_category}' has no loaded samples to classify.")
+            return
+
+        import numpy as _np
+
+        if dr_type == 't-SNE':
+            self.log('[CLS] Current model uses t-SNE DR. Applying to new samples is not supported (no transform). Please retrain with PCA/UMAP.')
+            return
+
+        # 根据 DR 类型构造用于分类和可视化的特征
+        if dr_type in ('PCA', 'UMAP') and dr_model is not None:
+            try:
+                X_emb_all = dr_model.transform(X_all)
+            except Exception as e:
+                self.log(f"[CLS] DR transform failed on new data: {e}")
+                return
+            X_for_clf = X_emb_all
+            # 更新 embedding 以便 DRWindow 展示
+            self._last_embedding = _np.array(X_emb_all)
+            # 按 valid_indices 映射回样本；若映射长度不一致则退化到旧策略
+            if len(valid_indices) == len(X_emb_all):
+                for row, idx in enumerate(valid_indices):
+                    if idx < len(self.samples):
+                        self.samples[idx].embedding = _np.array(X_emb_all[row])
+            else:
+                for i, s in enumerate(self.samples):
+                    if i < len(X_emb_all):
+                        s.embedding = _np.array(X_emb_all[i])
+        else:
+            # 无 DR：直接在原始特征空间分类
+            X_for_clf = X_all
+
+        # 取出当前类别对应的特征行
+        X_cat = X_for_clf[cat_row_indices]
+        try:
+            y_pred = clf.predict(X_cat)
+        except Exception as e:
+            self.log(f"[CLS] Predict failed on new data: {e}")
+            return
+
+        # 将预测结果写回对应样本
+        for idx_local, row in enumerate(cat_row_indices):
+            if row < len(valid_indices):
+                idx_global = valid_indices[row]
+                if idx_global < len(self.samples):
+                    self.samples[idx_global].predicted_label = str(y_pred[idx_local])
+
+        self.log(f"[CLS] Applied model to category '{current_category}', classified {len(cat_row_indices)} samples.")
+
+        # 若我们刚刚更新了 embedding，可选择自动打开 DR 结果窗口
+        try:
+            if getattr(self, '_last_embedding', None) is not None and dr_type in ('PCA', 'UMAP'):
+                emb = self._last_embedding
+                if emb.ndim == 1:
+                    emb = emb.reshape(-1, 1)
+                self._open_dr_result_window(emb)
+        except Exception:
+            pass
 
     # ---------------------------- 覆盖增强：同步类别重建/重命名/删除 ----------------------------
     def _rebuild_table_grouped(self):
