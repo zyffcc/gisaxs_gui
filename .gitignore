@@ -156,7 +156,6 @@ plots/
 # 大型数据文件
 *.h5
 *.hdf5
-*.npy
 *.npz
 
 # 视频文件
@@ -170,5 +169,3 @@ plots/
 *.rar
 *.7z
 
-# 模型文件
-modules/*

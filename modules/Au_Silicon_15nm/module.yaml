@@ -1,0 +1,64 @@
+id: Au_Silicon_15nm
+name: "Gold on Silicon 15nm (DESY P03)"
+framework: tensorflow
+version: "1.15.0"
+model:
+  format: keras
+  # model_path: 允许为空，首次使用需要选择
+  model_path: "C:/Users/zhaiyufe/Downloads/Au_ff_h2_0to15_savedmodel"
+preprocess:
+  entry: preprocess:run
+  # Ordered steps for modular preprocessing; you can change order as needed.
+  steps:
+    - crop
+    - resize
+    - set_invalid
+    - cut_columns
+    - log_and_normalize
+    - mask
+    - cut_columns
+    - cut_rows
+  params:
+    crop:
+      left: 800
+      up: 800
+      down: 450
+      right: 250
+    resize: [256, 256]
+    # Replace NaN/negative before log
+    set_invalid:
+      nan: -1
+      negative: -1
+    # Vertical cut: first 20 columns set to -1
+    cut_columns:
+      start: 0
+      end: 20
+      value: -1
+    # Bottom band removal: rows 240..256 set to -1
+    cut_rows:
+      start: 240
+      end: 256
+      value: -1
+    mask: 
+      apply: true
+      path: "assets/mask.npy"
+      resize: [256, 256]
+      crop_mask:
+        left: 0
+        up: 0
+        down: 0
+        right: 0
+      mask_value: -1
+io:
+  input_type: "cbf"
+  stack_axis: 0
+  input_shape: [1, 256, 256, 1]
+outputs:
+  - name: "hr distribution"
+    shape: [30, 30]
+  - name: "h distribution"
+    shape: [30]
+  - name: "r distribution"
+    shape: [30]
+
+  
