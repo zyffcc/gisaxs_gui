@@ -1,6 +1,6 @@
 {
     "beam": {
-        "wavelength": 0.155,
+        "wavelength": 0.1,
         "grazing_angle": 0.4,
         "beam_size_x": 0.1,
         "beam_size_y": 0.1,
@@ -74,9 +74,7 @@
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
             "beam_center_x": 791.0,
-            "beam_center_y": 368.0,
-            "show_q_axis": false,
-            "wavelength": 0.155
+            "beam_center_y": 368.0
         },
         "last_session": {
             "last_opened_file": "",
@@ -99,26 +97,24 @@
             "fit_log_x": false,
             "fit_log_y": false,
             "fit_norm": false
-        },
-        "gisaxs_input": {
-            "load_mode": "Single"
         }
     },
     "gisaxs_predict": {
         "framework": "tensorflow 2.15.0",
-        "mode": "multi_files",
-        "input_file": "E:/P03_Yufeng/11020093/raw/timescans/jg_gisaxs_4nm_old_15ml_insitu_03_00001/p2m\\jg_gisaxs_4nm_old_15ml_insitu_03_00001_00386.cbf",
-        "input_folder": "E:/P03_Yufeng/11020093/raw/timescans/jg_gisaxs_4nm_old_15ml_insitu_03_00001/p2m",
-        "export_path": "C:/Users/zhaiyufe/Downloads",
-        "stack_value": "10",
-        "range_value": "380-385",
-        "showing_value": "380",
+        "mode": "single_file",
+        "input_file": "/Users/zhaiyf/Downloads/GiXSgui/GISAXS/jg_gisaxs_4nm_old_15ml_insitu_03_00001_00385.cbf",
+        "input_folder": "/Users/zhaiyf/Downloads/GiXSgui/GISAXS",
+        "export_path": "",
+        "stack_value": "1",
+        "range_value": "1",
+        "showing_value": "385",
         "auto_scale": true,
         "vmin": -1.0,
         "vmax": 18.0,
         "colormap": "viridis",
-        "module_name": "",
-        "module_model_path": "",
+        "predict_auto_scale": true,
+        "predict_vmin": null,
+        "predict_vmax": null,
         "gisaxs_log_scale": false,
         "predict_log_scale": false,
         "predict_curve_logx": false,
@@ -128,23 +124,18 @@
         "predict_curve_xmax": null,
         "predict_curve_ymin": null,
         "predict_curve_ymax": null,
-        "predict_auto_scale": true,
-        "predict_vmin": 4.351139068603516e-06,
-        "predict_vmax": 0.06732177734375
+        "module_name": "",
+        "module_model_path": ""
     },
     "classification": {
         "import_cache": {
             "P2": {
-                "path": "F:/GiXSgui/GISAXS",
-                "rule": "jg_gisaxs_4nm_old_15ml_insitu_03_00001_00317.cbf"
+                "path": "",
+                "rule": "*"
             },
-            "p1": {
-                "path": "F:/GiXSgui/1DSAXS/Heat 1",
-                "rule": "*.txt"
-            },
-            "p3": {
-                "path": "F:/GiXSgui/1DSAXS/Humidity 1",
-                "rule": "10p_3.txt"
+            "Particle 1": {
+                "path": "",
+                "rule": "*"
             }
         }
     },

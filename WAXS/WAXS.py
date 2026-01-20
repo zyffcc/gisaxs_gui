@@ -444,38 +444,45 @@ class ImageWidget(QWidget):
 
     def update_image(self):
         if self.file_name:
-            # 读取图像并规范化
+            # 读取图像（支持 NXS 帧）并使用 Matplotlib 直接按 vmin/vmax 显示（不做 0..255 规范化）
             cb_min = float(self.textbox_min.text())
             cb_max = float(self.textbox_max.text())
-            # 统一读取：图片或 NXS（支持 frame_idx）
             im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
 
-            mask = (im >= self.threshold_max) | (im < self.threshold_min)
-            img_norm = im.copy()
-            img_norm[img_norm > cb_max] = cb_max
-            img_norm[img_norm < cb_min] = cb_min
-            im_norm = cv2.normalize(img_norm, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-            im_norm[mask] = 0
-            if self.image_layout.flip.isChecked():
-                im_norm = cv2.flip(im_norm, 0)
+            # 掩蔽坏点/超阈值区域，避免影响色域
+            bad_mask = (im >= self.threshold_max) | (im < self.threshold_min) | np.isnan(im)
+            A = np.ma.masked_array(im, mask=bad_mask)
 
-            # 缩放图像以适应窗口
-            height, width = im_norm.shape
+            # 翻转（仅显示层面）；load_image_matrix 已按显示方向翻转，这里跟随 UI 的 Flip
+            if self.image_layout.flip.isChecked():
+                A = np.flipud(A)
+
+            # 用 Matplotlib 画到临时画布并转换为 QLabel 的像素图
+            fig, ax = plt.subplots()
+            imshow_obj = ax.imshow(A, cmap='jet', vmin=cb_min, vmax=cb_max, aspect='equal')
+            fig.colorbar(imshow_obj)
+            ax.set_xticks([]); ax.set_yticks([])
+
+            temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            fig.savefig(temp_file.name, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+
+            color_values = cv2.imread(temp_file.name, cv2.IMREAD_COLOR)
+
+            height, width = color_values.shape[:2]
             window_height, window_width = self.label.height(), self.label.width()
             if window_height <= 1 or window_width <= 1:
+                temp_file.close(); os.unlink(temp_file.name)
                 return
             scale = min(window_height / height, window_width / width)
-            resized = cv2.resize(im_norm, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_NEAREST)
-            # 使用Jet颜色映射
-            color_map = cv2.applyColorMap(resized, cv2.COLORMAP_JET)
+            resized = cv2.resize(color_values, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_AREA)
 
-            # 显示图像
-            pixmap = self.to_qimage(color_map)
+            pixmap = self.to_qimage(resized)
             self.label.setPixmap(pixmap)
-            # pixmap_offset = self.image_offset - self.label.rect().topLeft()
-            # self.label.setPixmap(pixmap)
-            # self.label.move(pixmap_offset)
             self.size_label.setText(f'pixels: {im.shape[1]} x {im.shape[0]} file: {os.path.basename(self.file_name)}')
+
+            temp_file.close()
+            os.unlink(temp_file.name)
 
             self.windowstate = 1
 
@@ -502,37 +509,22 @@ class ImageWidget(QWidget):
             pixel_y = float(self.pixel_y)
             lamda = float(self.lamda)
 
-            # 读取图像并规范化
+            # 颜色条范围
             cb_min = float(self.textbox_min.text())
             cb_max = float(self.textbox_max.text())
 
             threshold_min = float(self.threshold_min)
             threshold_max = float(self.threshold_max)
 
-            # 统一读取：图片或 NXS（支持 frame_idx）
-            im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
-            img_norm = im.copy()
-            img_norm = img_norm.astype(float)
+            # 统一读取：图片或 NXS（支持 frame_idx），使用原始强度
+            im = load_image_matrix(self.file_name, frame_idx=self.frame_idx).astype(float)
 
-            # Create mask for regions above threshold_max and below threshold_min
-            mask_max = np.zeros_like(img_norm, dtype=np.uint8)
-            mask_max[img_norm > threshold_max] = 255
-
-            mask_min = np.zeros_like(img_norm, dtype=np.uint8)
-            mask_min[img_norm < threshold_min] = 255
-
-            mask = cv2.bitwise_or(mask_max, mask_min)
-            img_norm[mask == 255] = 0
-
-            img_norm[img_norm > cb_max] = cb_max
-            img_norm[img_norm < cb_min] = cb_min
-
-            im_norm = cv2.normalize(img_norm, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-
-            im_norm = cv2.flip(im_norm, 0)
-
-            # 读取文件
-            A = im_norm
+            # 掩蔽坏点/超阈值区域
+            bad_mask = (im > threshold_max) | (im < threshold_min) | np.isnan(im)
+            A = np.ma.masked_array(im, mask=bad_mask)
+            # 按需翻转显示
+            if self.image_layout.flip.isChecked():
+                A = np.flipud(A)
 
             # 参数设置
             sz = np.shape(A)
@@ -579,11 +571,10 @@ class ImageWidget(QWidget):
             # 创建掩码数组
             A_masked = np.ma.masked_where(np.isnan(A), A)
 
-            # 绘制pcolor图像
-
+            # 绘制 pcolor 图像（直接用 vmin/vmax 控制色域）
 
             self.fig, ax = plt.subplots()
-            pcolor = ax.pcolormesh(Qr, Qz, A_masked, cmap='jet', shading='auto')
+            pcolor = ax.pcolormesh(Qr, Qz, A_masked, cmap='jet', shading='auto', vmin=cb_min, vmax=cb_max)
             self.fig.colorbar(pcolor)
             ax.set_xlabel('Qr')
             ax.set_ylabel('Qz')
@@ -730,13 +721,11 @@ class ImageWidget(QWidget):
     def int_region(self, cb_min, cb_max, x_center, y_center):
 
         # 读取图像并规范化
-        # im = cv2.imread(self.file_name, cv2.IMREAD_ANYDEPTH)
         im = load_image_matrix(self.file_name)
-        img_norm = im.copy()
-        img_norm[img_norm > cb_max] = cb_max
-        img_norm[img_norm < cb_min] = cb_min
-        im_norm = cv2.normalize(img_norm, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-        im_norm = cv2.flip(im_norm, 0)
+        # 掩蔽坏点 + NaN
+        bad_mask = (im >= self.threshold_max) | (im < self.threshold_min) | np.isnan(im)
+        A = np.ma.masked_array(im, mask=bad_mask)
+        A = np.flipud(A)  # ROI 选择图保持原有的翻转显示
 
         # fig, ax = plt.subplots()
         # ax.imshow(im_norm)
@@ -744,12 +733,12 @@ class ImageWidget(QWidget):
         # 创建图像窗口
         if self.image_fig is None or not plt.fignum_exists(self.image_fig.number):
             self.image_fig, axx = plt.subplots()
-            axx.imshow(im_norm)
+            axx.imshow(A, cmap='jet', vmin=cb_min, vmax=cb_max)
 
         else:
             self.image_fig.clf()
             axx = self.image_fig.add_subplot(111)
-            axx.imshow(im_norm)
+            axx.imshow(A, cmap='jet', vmin=cb_min, vmax=cb_max)
             plt.draw()
 
         # 用于存储鼠标点击位置
@@ -796,7 +785,7 @@ class ImageWidget(QWidget):
         # 关闭图像窗口并返回结果
         # plt.close(fig)
         # ret = msg_box.exec_()
-        return im_norm, start_angle, end_angle, inner_radius, outer_radius
+        return np.asarray(A.filled(np.nan)), start_angle, end_angle, inner_radius, outer_radius
 
     # 将笛卡尔坐标系下的图像转换为极坐标系下的图像
     def cart2pol(self, image, center):
@@ -1475,32 +1464,21 @@ class ImageLayout(QWidget):
             self.image_widget.fig.savefig(file_path, dpi=300)
             return
         if self.rb1.isChecked():
-
-            # 读取图像并规范化
+            # 使用 Matplotlib 直接导出（不做 255 规范化）
             cb_min = float(self.textbox_min.text())
             cb_max = float(self.textbox_max.text())
-            im = load_image_matrix(file_name)
-            img_norm = im.copy()
-            img_norm[img_norm > cb_max] = cb_max
-            img_norm[img_norm < cb_min] = cb_min
-            im_norm = cv2.normalize(img_norm, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-
+            im = load_image_matrix(file_name, frame_idx=self.image_widget.frame_idx)
+            bad_mask = (im >= self.image_widget.threshold_max) | (im < self.image_widget.threshold_min) | np.isnan(im)
+            A = np.ma.masked_array(im, mask=bad_mask)
             if self.flip.isChecked():
-                im_norm = cv2.flip(im_norm, 0)
+                A = np.flipud(A)
 
-            # 创建 jet colormap 并将规范化后的图像映射到 colormap 上
-            cmap = cm.get_cmap('jet')
-            rgba_img = cmap(im_norm / 255.0)
-
-            # 将 RGBA 图像转换为 BGR 图像，便于用 OpenCV 保存为 jpg 格式
-            bgr_img = np.uint8(rgba_img[:, :, :3] * 255)
-            rgb_img = bgr_img[..., ::-1]
-
-            # 获取用户选择的文件名并拼接文件路径
-            # file_path = os.path.join(self.output_folder, os.path.splitext(os.path.basename(self.file_name))[0] + '.jpg')
-
-            # 保存 BGR 图像为 jpg 格式
-            cv2.imwrite(file_path, rgb_img)
+            fig, ax = plt.subplots()
+            img = ax.imshow(A, cmap='jet', vmin=cb_min, vmax=cb_max, aspect='equal')
+            fig.colorbar(img)
+            ax.set_xticks([]); ax.set_yticks([])
+            fig.savefig(file_path, dpi=300, bbox_inches='tight')
+            plt.close(fig)
 
         if self.rb2.isChecked():
 
