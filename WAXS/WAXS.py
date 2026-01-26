@@ -70,9 +70,16 @@ def load_image_matrix(
             im = cv2.cvtColor(im, cv2.COLOR_BGRA2GRAY)
         return im.astype(np.float32)
 
+    # --- Branch: ctxti text file ---
+    if ext == ".ctxti":
+        arr = np.loadtxt(str(p))
+        if arr.ndim == 1:
+            arr = np.atleast_2d(arr)
+        return arr.astype(np.float32)
+
     # --- Branch: NXs file ---
     if ext != ".nxs":
-        raise ValueError(f"Unsupported file type: {p.suffix}. Only image or .nxs supported.")
+        raise ValueError(f"Unsupported file type: {p.suffix}. Only image, .ctxti or .nxs supported.")
 
     base_name = p.name
     folder = p.parent
@@ -452,6 +459,8 @@ class ImageWidget(QWidget):
             # 掩蔽坏点/超阈值区域，避免影响色域
             bad_mask = (im >= self.threshold_max) | (im < self.threshold_min) | np.isnan(im)
             A = np.ma.masked_array(im, mask=bad_mask)
+            # 记录当前视图对应的原始数据（未翻转），供 ROI/积分使用
+            self.last_normal_image_raw = A.filled(np.nan)
 
             # 翻转（仅显示层面）；load_image_matrix 已按显示方向翻转，这里跟随 UI 的 Flip
             if self.image_layout.flip.isChecked():
@@ -485,6 +494,7 @@ class ImageWidget(QWidget):
             os.unlink(temp_file.name)
 
             self.windowstate = 1
+            self.current_view_is_cut = False
 
     def to_qimage(self, img): #转化为Qpixmap
         if len(img.shape) == 2:
@@ -522,14 +532,13 @@ class ImageWidget(QWidget):
             # 掩蔽坏点/超阈值区域
             bad_mask = (im > threshold_max) | (im < threshold_min) | np.isnan(im)
             A = np.ma.masked_array(im, mask=bad_mask)
-            # 按需翻转显示
-            if self.image_layout.flip.isChecked():
-                A = np.flipud(A)
+            # 显示翻转仅用于输出图像，原始阵列保持未翻转以便 ROI/积分一致
 
             # 参数设置
             sz = np.shape(A)
             sz_1 = sz[1]
             sz_2 = sz[0]
+            # 原始算法在 Q 映射中将中心 Y 转换为自下而上的坐标系
             y_Center = sz_2 - y_Center
             Qr, Qz = np.meshgrid(np.arange(1, sz_1 + 1), np.arange(1, sz_2 + 1))
 
@@ -568,19 +577,31 @@ class ImageWidget(QWidget):
             A[indices[0], indices[1] - 1] = np.where((indices[1] > 0) & (Qy[indices[0], indices[1] - 1] < 0), np.nan,
                                                      A[indices[0], indices[1] - 1])
 
-            # 创建掩码数组
+            # 记录 cut 后用于积分/ROI 的原始阵列（包含 NaN）以及对应的 Qr/Qz 网格
+            self.last_cut_image_raw = np.array(A, copy=True)
+            try:
+                self.last_cut_qr = np.array(Qr, copy=True)
+                self.last_cut_qz = np.array(Qz, copy=True)
+            except Exception:
+                self.last_cut_qr = None
+                self.last_cut_qz = None
+
+            # 创建掩码数组（原始坐标系）
             A_masked = np.ma.masked_where(np.isnan(A), A)
 
-            # 绘制 pcolor 图像（直接用 vmin/vmax 控制色域）
+            # 绘制 pcolor 图像（直接用 vmin/vmax 控制色域）；按 Flip 设置决定显示是否上下颠倒
 
             self.fig, ax = plt.subplots()
-            pcolor = ax.pcolormesh(Qr, Qz, A_masked, cmap='jet', shading='auto', vmin=cb_min, vmax=cb_max)
+            if self.image_layout.flip.isChecked():
+                # Flip 仅影响显示：反转 Y 轴
+                pcolor = ax.pcolormesh(Qr, Qz, A_masked, cmap='jet', shading='auto', vmin=cb_min, vmax=cb_max)
+                ax.invert_yaxis()
+            else:
+                pcolor = ax.pcolormesh(Qr, Qz, A_masked, cmap='jet', shading='auto', vmin=cb_min, vmax=cb_max)
             self.fig.colorbar(pcolor)
             ax.set_xlabel('Qr')
             ax.set_ylabel('Qz')
             ax.set_aspect('equal')
-            if not self.image_layout.flip.isChecked():
-                plt.gca().invert_yaxis()
             # 设置横纵坐标显示范围
             if float(self.parameter.Qr_min.text()) == -121:
                 Qr_min = None
@@ -630,7 +651,10 @@ class ImageWidget(QWidget):
             temp_file.close()
             os.unlink(temp_file.name)
 
+            # 记录 cut 后用于积分/ROI 的原始阵列（未翻转）
+            self.last_cut_image_raw = np.array(A, copy=True)
             self.windowstate = 2
+            self.current_view_is_cut = True
 
     def update_parameters(self, parameter):
 
@@ -650,17 +674,15 @@ class ImageWidget(QWidget):
         if getattr(self, 'windowstate', 0) == 3:
             event.accept()
             return
-        if self.image_layout.rb1.isChecked():
-            self.update_image()
-        if self.image_layout.rb2.isChecked():
-            self.resize_timer.start(300)  # 设置等待时间，单位为毫秒
-        event.accept()
-
+            pcolor = ax.pcolormesh(Qr, Qz, A_masked, cmap='jet', shading='auto', vmin=cb_min, vmax=cb_max)
     def on_resize_timeout(self):
         # 在 1D 显示时避免自动刷新覆盖
         if getattr(self, 'windowstate', 0) == 3:
             return
-        self.Cut()
+            # 根据 Flip 状态设置显示方向（与原始代码一致：未 Flip 时倒置显示）
+            if not self.image_layout.flip.isChecked():
+                plt.gca().invert_yaxis()
+            # 记录 cut 后用于积分/ROI 的原始阵列（未翻转）
     # def wheelEvent(self, event):
     #     # 获取当前的鼠标位置
     #     mouse_pos = event.pos()
@@ -720,12 +742,15 @@ class ImageWidget(QWidget):
 
     def int_region(self, cb_min, cb_max, x_center, y_center):
 
-        # 读取图像并规范化
-        im = load_image_matrix(self.file_name)
+        # 根据当前视图选择源数据（原始坐标系，不做翻转）：cut 视图优先
+        base = getattr(self, 'last_cut_image_raw', None) if getattr(self, 'current_view_is_cut', False) else getattr(self, 'last_normal_image_raw', None)
+        if base is None:
+            base = load_image_matrix(self.file_name)
         # 掩蔽坏点 + NaN
-        bad_mask = (im >= self.threshold_max) | (im < self.threshold_min) | np.isnan(im)
-        A = np.ma.masked_array(im, mask=bad_mask)
-        A = np.flipud(A)  # ROI 选择图保持原有的翻转显示
+        bad_mask = (base >= self.threshold_max) | (base < self.threshold_min) | np.isnan(base)
+        A = np.ma.masked_array(base, mask=bad_mask)
+        # 按 UI 的 Flip 设置进行显示翻转，仅影响显示
+        A_disp = np.flipud(A) if getattr(self.image_layout, 'flip', None) and self.image_layout.flip.isChecked() else A
 
         # fig, ax = plt.subplots()
         # ax.imshow(im_norm)
@@ -733,46 +758,101 @@ class ImageWidget(QWidget):
         # 创建图像窗口
         if self.image_fig is None or not plt.fignum_exists(self.image_fig.number):
             self.image_fig, axx = plt.subplots()
-            axx.imshow(A, cmap='jet', vmin=cb_min, vmax=cb_max)
+            axx.imshow(A_disp, cmap='jet', vmin=cb_min, vmax=cb_max)
 
         else:
             self.image_fig.clf()
             axx = self.image_fig.add_subplot(111)
-            axx.imshow(A, cmap='jet', vmin=cb_min, vmax=cb_max)
+            axx.imshow(A_disp, cmap='jet', vmin=cb_min, vmax=cb_max)
             plt.draw()
+
+        # 右键设置中心：在图上点击右键后，将 Center X/Y 设置为点击位置，并同步到参数框
+        def _on_right_click(event):
+            nonlocal x_center, y_center
+            if event.button == 3 and event.inaxes is axx and event.xdata is not None and event.ydata is not None:
+                # 显示坐标（已 flipud），转换到原始行坐标
+                x_clicked = float(event.xdata)
+                y_clicked = float(event.ydata)
+                if getattr(self.image_layout, 'flip', None) and self.image_layout.flip.isChecked():
+                    y_raw = float(A_disp.shape[0]) - y_clicked
+                else:
+                    y_raw = y_clicked
+                # 更新本次 ROI 选择中心
+                x_center = x_clicked
+                y_center = y_raw
+                # 同步到 UI 与模型
+                try:
+                    if hasattr(self, 'parameter') and self.parameter is not None:
+                        self.parameter.x_Center.setText(str(round(x_center, 2)))
+                        self.parameter.y_Center.setText(str(round(y_center, 2)))
+                    self.x_Center = x_center
+                    self.y_Center = y_center
+                except Exception:
+                    pass
+                # 在图上标记新的中心
+                axx.plot([x_clicked], [y_clicked], marker='x', color='yellow', markersize=8, mew=2)
+                plt.draw()
+
+        cid = self.image_fig.canvas.mpl_connect('button_press_event', _on_right_click)
 
         # 用于存储鼠标点击位置
         points = []
 
+        # 辅助函数：安全获取一次点击；若用户取消/窗口关闭/无点返回，则返回 None
+        def _safe_ginput_once():
+            try:
+                pts = plt.ginput(1, timeout=0)  # 与 Qt 集成下，不设超时，交给事件循环
+            except Exception:
+                return None
+            if not pts:
+                return None
+            return pts[0]
+
+        start_angle = end_angle = inner_radius = outer_radius = None
+        # 显示坐标中的中心（用于绘制），原始坐标中的中心（用于计算）
+        if getattr(self.image_layout, 'flip', None) and self.image_layout.flip.isChecked():
+            y_center_disp = float(A_disp.shape[0]) - float(y_center)
+        else:
+            y_center_disp = float(y_center)
+
         for i in range(4):
-            # 获取鼠标点击位置
-            point = plt.ginput(1)[0]
-            x, y = int(point[0]), int(point[1])
-            points.append((x, y))
+            # 获取鼠标点击位置（允许用户取消，不视为错误）
+            point = _safe_ginput_once()
+            if point is None:
+                # 取消选择：不弹出报错，直接返回 None 让调用方静默退出
+                return None
+
+            x_d, y_d = int(round(point[0])), int(round(point[1]))
+            # 转换到原始坐标系
+            if getattr(self.image_layout, 'flip', None) and self.image_layout.flip.isChecked():
+                y_r = int(round(A_disp.shape[0] - y_d))
+            else:
+                y_r = y_d
+            points.append((x_r := x_d, y_r))
 
             if i == 0 or i == 1:
-                # 绘制直线
-                axx.add_line(Line2D([x, x_center], [y, y_center], color='red'))
+                # 绘制直线（使用显示坐标中心）
+                axx.add_line(Line2D([x_d, int(round(x_center))], [y_d, int(round(y_center_disp))], color='red'))
                 plt.draw()  # 强制刷新图像
             else:
                 # 计算起始和终止角度
-                start_angle = np.arctan2(points[0][1] - y_center, points[0][0] - x_center)
-                end_angle = np.arctan2(points[1][1] - y_center, points[1][0] - x_center)
+                start_angle = np.arctan2(points[0][1] - float(y_center), points[0][0] - float(x_center))
+                end_angle = np.arctan2(points[1][1] - float(y_center), points[1][0] - float(x_center))
                 if i == 2:
-                    # 计算内半径和外半径
-                    inner_radius = np.sqrt((points[2][0] - x_center) ** 2 + (points[2][1] - y_center) ** 2)
+                    # 计算内半径
+                    inner_radius = np.sqrt((points[2][0] - float(x_center)) ** 2 + (points[2][1] - float(y_center)) ** 2)
                     # 绘制扇形区域
-                    wedge = Wedge((x_center, y_center), inner_radius, math.degrees(start_angle),
+                    wedge = Wedge((float(x_center), float(y_center_disp)), inner_radius, math.degrees(start_angle),
                                   math.degrees(end_angle),
                                   width=2)
                     axx.add_patch(wedge)
                     plt.draw()  # 强制刷新图像
                 if i == 3:
-                    outer_radius = np.sqrt((points[3][0] - x_center) ** 2 + (points[3][1] - y_center) ** 2)
+                    outer_radius = np.sqrt((points[3][0] - float(x_center)) ** 2 + (points[3][1] - float(y_center)) ** 2)
                     # 绘制扇形区域
-                    wedge = Wedge((x_center, y_center), outer_radius, math.degrees(start_angle),
+                    wedge = Wedge((float(x_center), float(y_center_disp)), outer_radius, math.degrees(start_angle),
                                   math.degrees(end_angle),
-                                  width=outer_radius-inner_radius)
+                                  width=outer_radius - (inner_radius if inner_radius is not None else 0))
                     wedge.set_alpha(0.5)
                     axx.add_patch(wedge)
                     plt.draw()  # 强制刷新图像
@@ -785,7 +865,7 @@ class ImageWidget(QWidget):
         # 关闭图像窗口并返回结果
         # plt.close(fig)
         # ret = msg_box.exec_()
-        return np.asarray(A.filled(np.nan)), start_angle, end_angle, inner_radius, outer_radius
+        return np.asarray(A_disp.filled(np.nan)), start_angle, end_angle, inner_radius, outer_radius
 
     # 将笛卡尔坐标系下的图像转换为极坐标系下的图像
     def cart2pol(self, image, center):
@@ -813,12 +893,11 @@ class ImageWidget(QWidget):
         :param num_bins: 径向积分的点数
         :return: (radial_profile, angular_profile)，径向积分和角向积分
         """
-
-        num_bins = int(num_bins)
-        # 将角度转换为弧度
+        # 与坐标网格一致：直接使用传入的 image 作为掩膜依据，避免与翻转阵列不一致
+        im = np.array(image, copy=True)
         start_angle = math.radians(start_angle)
         end_angle = math.radians(end_angle)
-
+        
         # 构造一个极坐标网格
         height, width = image.shape[:2]
         y, x = np.ogrid[:height, :width]
@@ -827,42 +906,54 @@ class ImageWidget(QWidget):
         r = np.hypot(x, y)
         theta = np.arctan2(y, x)
 
-
-        #
-        im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
-        im = cv2.flip(im, 0)
+        # 不做额外翻转，确保与 r/theta 网格一致
         # 确定扇形区域的布尔掩码
         mask = (r >= inner_radius) & (r <= outer_radius) & (theta >= start_angle) & (theta <= end_angle)
 
         if start_angle >= end_angle:
             mask = (r >= inner_radius) & (r <= outer_radius) & ((theta >= start_angle) | (theta <= end_angle))
             end_angle = end_angle + 2 * np.pi
-        mask = mask & (im >= self.threshold_min)
-        mask = mask & (im <= self.threshold_max)
+        # 结合阈值与有效数据（排除 NaN），确保空区不计入统计
+        mask = mask & np.isfinite(im) & (im >= self.threshold_min) & (im <= self.threshold_max)
         # print(im)
-
+        print("1")
         # plt.imshow(mask.astype(np.float64), cmap='gray')
         # plt.show()
         # 计算径向积分
         rbin_edges = np.linspace(inner_radius, outer_radius, num_bins + 1)
         rbin_centers = 0.5 * (rbin_edges[1:] + rbin_edges[:-1])
+        print("2")
+        # 同时计算计数，用于将空 bin 标记为 NaN，实现绘图断开
+        counts_r, _ = np.histogram(r[mask], bins=rbin_edges)
         radial_profile, _ = np.histogram(r[mask], bins=rbin_edges, weights=image[mask].astype(np.float64))
         radial_profile = radial_profile.astype(np.float64) / np.diff(rbin_edges)
+        radial_profile[counts_r == 0] = np.nan
 
+        print("2/3")
         # 计算角向积分
         thetabin_edges = np.linspace(start_angle, end_angle, num_bins + 1)
         thetabin_centers_radians = 0.5 * (thetabin_edges[1:] + thetabin_edges[:-1])
         thetabin_centers_degrees = np.degrees(thetabin_centers_radians)
+        counts_t, _ = np.histogram(theta[mask], bins=thetabin_edges)
         angular_profile, _ = np.histogram(theta[mask], bins=thetabin_edges, weights=image[mask].astype(np.float64))
         angular_profile = angular_profile.astype(np.float64) / np.diff(thetabin_edges)
+        angular_profile[counts_t == 0] = np.nan
 
+        print("Radial and angular integration completed.")
         # 定义滑动窗口的大小
         window_size = 5
         # 定义滑动窗口的权重
         window = np.ones(window_size) / window_size
         # 对angular_profile进行滑动平均
-        smoothed_angular_profile = np.convolve(angular_profile, window, mode='same')
-        smoothed_radial_profile = np.convolve(radial_profile, window, mode='same')
+        # 若存在缺口（NaN），避免跨缺口平滑，保持断开
+        if np.any(np.isnan(angular_profile)):
+            smoothed_angular_profile = angular_profile.copy()
+        else:
+            smoothed_angular_profile = np.convolve(angular_profile, window, mode='same')
+        if np.any(np.isnan(radial_profile)):
+            smoothed_radial_profile = radial_profile.copy()
+        else:
+            smoothed_radial_profile = np.convolve(radial_profile, window, mode='same')
 
         # 绘制图像
         self.fig, ax = plt.subplots()
@@ -1012,6 +1103,60 @@ class ImageWidget(QWidget):
             if self.image_layout.radioButtonAngular.isChecked():
                 if index == 0:
                     return thetabin_centers_degrees, smoothed_angular_profile
+
+    def azimuth_profile_from_cut(self, qr, qz, I, qmin, qmax, n_chi=360, mask=None, mode="mean"):
+        """
+        Azimuthal profile in Q-space for cut-mode.
+        qr, qz, I: 2D arrays (same shape) from cut result
+        qmin, qmax: q-range to integrate
+        n_chi: number of chi bins
+        mask: boolean array, True for valid pixels (optional)
+        mode: "sum" for integration, "mean" for average intensity
+        Returns (centers_deg, prof, cnt)
+        """
+        qr = np.asarray(qr)
+        qz = np.asarray(qz)
+        I  = np.asarray(I)
+
+        q = np.sqrt(qr**2 + qz**2)
+        # Chi definition aligned to pixel ROI: 0 along +Qr (right),
+        # upper half (-180..0), lower half (0..180)
+        chi = -np.degrees(np.arctan2(qz, qr))
+        chi = ((chi + 180.0) % 360.0) - 180.0
+
+        # Normalize input image to plain ndarray, fill masked with NaN
+        if np.ma.isMaskedArray(I):
+            I = I.filled(np.nan)
+        valid = np.isfinite(q) & np.isfinite(chi) & np.isfinite(I)
+        valid &= (q >= qmin) & (q <= qmax)
+        if mask is not None:
+            valid &= mask
+
+        chi_v = chi[valid].ravel()
+        I_v   = I[valid].ravel()
+
+        # Histogram across full chi range [-180, 180]
+        edges = np.linspace(-180.0, 180.0, int(n_chi) + 1)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+
+        # If no valid pixels, return empty arrays to avoid flat lines
+        if chi_v.size == 0:
+            return centers, np.zeros_like(centers), np.zeros_like(centers, dtype=int)
+        sum_I, _ = np.histogram(chi_v, bins=edges, weights=I_v)
+        cnt, _   = np.histogram(chi_v, bins=edges)
+
+        if mode == "sum":
+            prof = sum_I
+        elif mode == "mean":
+            prof = sum_I / np.maximum(cnt, 1)
+        else:
+            raise ValueError("mode must be 'sum' or 'mean'")
+
+        # Mark empty bins as NaN to avoid misleading flat zero segments
+        prof = np.asarray(prof, dtype=float)
+        prof[cnt == 0] = np.nan
+
+        return centers, prof, cnt
         if self.image_layout.comboBox2.currentIndex() == 1:
             if self.image_layout.radioButtonRadial.isChecked():
                 if index == 0 :
@@ -1036,13 +1181,23 @@ class ImageWidget(QWidget):
             if self.file_name:
                 cb_min = float(self.textbox_min.text())
                 cb_max = float(self.textbox_max.text())
-                # 获取image
-                im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
-                img_norm = im.copy()
-                img_norm[img_norm > cb_max] = cb_max
-                img_norm[img_norm < cb_min] = cb_min
-                # im_norm = cv2.normalize(img_norm, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-                image = cv2.flip(img_norm, 0)
+                # 根据 Original/Cut 选项选择源数据：Original 强制使用原始图像；Cut 使用切换后的 Q 映射图
+                if getattr(self.image_layout, 'rb1', None) and self.image_layout.rb1.isChecked():
+                    base = getattr(self, 'last_normal_image_raw', None)
+                elif getattr(self.image_layout, 'rb2', None) and self.image_layout.rb2.isChecked():
+                    base = getattr(self, 'last_cut_image_raw', None)
+                else:
+                    base = getattr(self, 'last_normal_image_raw', None)
+                if base is None:
+                    base = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
+                # Normalize to ndarray and keep NaN for invalid pixels
+                image = np.array(base, copy=True)
+                if np.ma.isMaskedArray(image):
+                    image = image.filled(np.nan)
+                # 保留 NaN，仅对有限值做 vmin/vmax 截断
+                finite_mask = np.isfinite(image)
+                image[finite_mask & (image > cb_max)] = cb_max
+                image[finite_mask & (image < cb_min)] = cb_min
 
                 # 获取所有参数值
                 center = [float(self.x_Center), float(self.y_Center)]
@@ -1050,10 +1205,109 @@ class ImageWidget(QWidget):
                 end_angle = float(self.image_layout.textbox_endAngle.text())
                 inner_radius = float(self.image_layout.textbox_innerRadius.text())
                 outer_radius = float(self.image_layout.textbox_outerRadius.text())
-                num_bins = self.numbin
-                # 调用 radial_integral() 函数计算径向积分和角向积分
-                x, y = self.radial_integral(image, center, start_angle, end_angle, inner_radius,
-                                                                  outer_radius, num_bins)
+                try:
+                    num_bins = max(1, int(self.numbin))
+                except (TypeError, ValueError):
+                    num_bins = 500
+                print(f"Calculating integral with center={center}, start_angle={start_angle}, "
+                      f"end_angle={end_angle}, inner_radius={inner_radius}, outer_radius={outer_radius}, num_bins={num_bins}")
+                # 分支：径向或方位角积分
+                if self.image_layout.radioButtonRadial.isChecked():
+                    x, y = self.radial_integral(image, center, start_angle, end_angle, inner_radius, outer_radius, num_bins)
+                else:
+                    # Azimuthal integration
+                    if getattr(self.image_layout, 'rb2', None) and self.image_layout.rb2.isChecked():
+                        # Cut 模式：在 Q 空间按 q 范围积分
+                        qr = getattr(self, 'last_cut_qr', None)
+                        qz = getattr(self, 'last_cut_qz', None)
+                        if qr is None or qz is None:
+                            # 回退：若未缓存 Q 网格，则临时计算一次（不刷新 UI）
+                            try:
+                                # 触发一次 Cut 以生成 Q 网格（不改变窗口显示时机）
+                                self.Cut()
+                                qr = getattr(self, 'last_cut_qr', None)
+                                qz = getattr(self, 'last_cut_qz', None)
+                            except Exception:
+                                qr = None; qz = None
+                        if qr is None or qz is None:
+                            # 无法进行 Q 空间积分，回退到像素空间角向
+                            x, y = self.radial_integral(image, center, start_angle, end_angle, inner_radius, outer_radius, num_bins)
+                        else:
+                            # Q-space chi (azimuth) and q-magnitude
+                            q_mag = np.sqrt(qr**2 + qz**2)
+                            # Align chi to pixel ROI convention:
+                            # 0 along +Qr, upper half (-180..0), lower half (0..180)
+                            chi = -np.degrees(np.arctan2(qz, qr))
+                            # Normalize chi and input angles into [-180, 180)
+                            chi = ((chi + 180.0) % 360.0) - 180.0
+                            cs = ((float(start_angle) + 180.0) % 360.0) - 180.0
+                            ce = ((float(end_angle) + 180.0) % 360.0) - 180.0
+                            # Build chi-sector mask in Q-space (degrees, -180..180)
+                            if cs <= ce:
+                                mask_chi = (chi >= cs) & (chi <= ce)
+                            else:
+                                # sector crosses the -180/180 boundary
+                                mask_chi = (chi >= cs) | (chi <= ce)
+                            # Pixel radial selection for ROI thickness only (do not use tt for angle)
+                            h, w = image.shape[:2]
+                            yy, xx = np.ogrid[:h, :w]
+                            xx = xx.astype(np.float64) - float(center[0])
+                            yy = yy.astype(np.float64) - float(center[1])
+                            rr = np.hypot(xx, yy)
+                            mask_rr = (rr >= float(inner_radius)) & (rr <= float(outer_radius))
+                            # ROI mask used to estimate q-range robustly via percentiles
+                            valid_img = np.isfinite(image)
+                            valid_q = np.isfinite(q_mag)
+                            roi_mask = mask_rr & mask_chi & valid_q & valid_img
+                            if np.any(roi_mask):
+                                # Robust qmin/qmax from ROI distribution
+                                qmin = float(np.nanpercentile(q_mag[roi_mask], 5))
+                                qmax = float(np.nanpercentile(q_mag[roi_mask], 95))
+                                if not np.isfinite(qmin) or not np.isfinite(qmax) or qmin == qmax:
+                                    qmin = float(np.nanmin(q_mag[roi_mask]))
+                                    qmax = float(np.nanmax(q_mag[roi_mask]))
+                            else:
+                                # Fallback: global finite q range
+                                finite_all = np.isfinite(q_mag)
+                                qmin = float(np.nanpercentile(q_mag[finite_all], 5))
+                                qmax = float(np.nanpercentile(q_mag[finite_all], 95))
+                            if qmin > qmax:
+                                qmin, qmax = qmax, qmin
+                            # Final mask in Q-space (consistency with integration space)
+                            mask_q = (q_mag >= qmin) & (q_mag <= qmax) & mask_chi & np.isfinite(image)
+                            # Include intensity threshold limits
+                            mask_q &= (image >= float(self.threshold_min)) & (image <= float(self.threshold_max))
+                            centers_deg, prof, cnt = self.azimuth_profile_from_cut(qr, qz, image, qmin, qmax, n_chi=num_bins, mask=mask_q, mode="mean")
+
+                        # 绘制并回传
+                        self.fig, ax = plt.subplots()
+                        if self.image_layout.comboBox2.currentIndex() == 0:
+                            ax.semilogy(centers_deg, prof)
+                        else:
+                            ax.plot(centers_deg, prof)
+                        ax.set_xlabel('Theta')
+                        ax.set_ylabel('Intensity' + (' (Log Scale)' if self.image_layout.comboBox2.currentIndex() == 0 else ''))
+                        ax.set_title('Azimuth Profile (Q-space)')
+
+                        temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                        self.fig.savefig(temp_file.name, dpi=300)
+                        plt.close(self.fig)
+                        color_values = cv2.imread(temp_file.name, cv2.IMREAD_COLOR)
+                        window_height, window_width = self.label.height(), self.label.width()
+                        height, width = color_values.shape[:2]
+                        if window_height > 1 and window_width > 1:
+                            scale = min(window_height / height, window_width / width)
+                            resized = cv2.resize(color_values, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_AREA)
+                            pixmap = self.to_qimage(resized)
+                            self.label.setPixmap(pixmap)
+                            self.size_label.setText(f'1D image — file: {os.path.basename(self.file_name)}')
+                        temp_file.close(); os.unlink(temp_file.name)
+                        self.windowstate = 3
+                        x, y = centers_deg, prof
+                    else:
+                        # Original 模式：像素空间的角向积分（与现有逻辑一致）
+                        x, y = self.radial_integral(image, center, start_angle, end_angle, inner_radius, outer_radius, num_bins)
+                print("Integral calculation completed.")
                 # mask = (x >= float(self.batch_processor.background_min.text())) & (x <= float(self.batch_processor.background_max.text()))
                 # x_selected = x[mask]
                 # y_selected = y[mask]
@@ -1368,6 +1622,31 @@ class ImageLayout(QWidget):
         if self.rb2.isChecked():
             # 调用ImageWidget的Cut()方法
             self.image_widget.Cut()
+        # 确保 ROI 文本框有默认值（兼容拖拽加载等路径）
+        try:
+            if not self.textbox_startAngle.text():
+                self.textbox_startAngle.setText('-180')
+            if not self.textbox_endAngle.text():
+                self.textbox_endAngle.setText('180')
+            if not self.textbox_innerRadius.text():
+                self.textbox_innerRadius.setText('0')
+            if not self.textbox_outerRadius.text():
+                # 用图像尺寸的半对角线作为较大的默认外半径
+                # 若当前还没有图像，退化为 1000
+                try:
+                    base = getattr(self.image_widget, 'last_cut_image_raw', None) if getattr(self.image_widget, 'current_view_is_cut', False) else getattr(self.image_widget, 'last_normal_image_raw', None)
+                    if base is None and self.image_widget.file_name:
+                        base = load_image_matrix(self.image_widget.file_name, frame_idx=self.image_widget.frame_idx)
+                    if base is not None:
+                        h, w = base.shape[:2]
+                        default_or = int((h**2 + w**2) ** 0.5 / 2)
+                    else:
+                        default_or = 1000
+                except Exception:
+                    default_or = 1000
+                self.textbox_outerRadius.setText(str(default_or))
+        except Exception:
+            pass
 
     def on_frame_no_changed(self):
         # 仅在启用时响应
@@ -1409,8 +1688,11 @@ class ImageLayout(QWidget):
             x_center = self.image_widget.x_Center
             y_center = self.image_widget.y_Center
             try:
-                im_norm, start_angle, end_angle, inner_radius, outer_radius = self.image_widget.int_region(cb_min, cb_max,
-                                                                                                           x_center, y_center)
+                result = self.image_widget.int_region(cb_min, cb_max, x_center, y_center)
+                # 用户取消 ROI 选择时，返回 None，静默退出，不弹框
+                if not result:
+                    return
+                im_norm, start_angle, end_angle, inner_radius, outer_radius = result
                 if start_angle is not None and end_angle is not None and inner_radius is not None and outer_radius is not None:
                     self.textbox_startAngle.setText(str(round(math.degrees(start_angle), 2)))
                     self.textbox_endAngle.setText(str(round(math.degrees(end_angle), 2)))
@@ -1423,7 +1705,8 @@ class ImageLayout(QWidget):
                 QMessageBox.warning(self, "Error", "Invalid input values. Please check and try again.")
             except Exception as e:
                 print("Error:", e)
-                QMessageBox.warning(self, "Error", "An unknown error occurred. Please retry.")
+                # 降低不必要的弹窗干扰：记录日志，避免频繁弹窗
+                QMessageBox.warning(self, "Error", "ROI selection failed. Please try again.")
     # def export_image(self):
     #     if self.output_folder:
     #         # 获取用户选择的文件名并拼接文件路径
@@ -1580,7 +1863,11 @@ class Parameter(QWidget):
         self.Qz_max_value = float(self.Qz_max.text())
         self.threshold_min_value = float(self.threshold_min.text())
         self.threshold_max_value = float(self.threshold_max.text())
-        self.numbin_value = float(self.numbin.text())
+        try:
+            self.numbin_value = int(float(self.numbin.text()))
+        except ValueError:
+            self.numbin_value = 500
+            self.numbin.setText(str(self.numbin_value))
 
         # 绑定文本框的输入与类属性
         self.Angle_incidence.editingFinished.connect(
@@ -1717,7 +2004,7 @@ class Parameter(QWidget):
             self.Qz_max_value = float(self.Qz_max.text())
             self.threshold_min_value = float(self.threshold_min.text())
             self.threshold_max_value = float(self.threshold_max.text())
-            self.numbin_value = float(self.numbin.text())
+            self.numbin_value = max(1, int(float(self.numbin.text())))
 
             self.image_widget.update_parameters(self)
         except:
@@ -1736,7 +2023,12 @@ class Parameter(QWidget):
 
     def update_value(self, key, text):
         try:
-            value = float(text) if text != '' else 0.0
+            if key == 'numbin':
+                value = int(float(text)) if text != '' else 0
+                if value < 1:
+                    value = 1
+            else:
+                value = float(text) if text != '' else 0.0
         except ValueError:
             value = getattr(self, key + '_value', 0.0)
         setattr(self, key + '_value', value)
@@ -1921,6 +2213,7 @@ class BatchProcessor(QWidget):
 
         output = []
         output_bk = []
+        header_cols = []  # names for each Y column
 
         # 如果包含 .nxs，则基于帧维度处理（第一维）
         nxs_files = [f for f in file_list if f.lower().endswith('.nxs')]
@@ -1952,6 +2245,10 @@ class BatchProcessor(QWidget):
                         if fi == 0:
                             output.append(x)
                         output.append(y)
+                        # Add header name for this frame
+                        base_name = os.path.splitext(os.path.basename(rep))[0]
+                        suffix = getattr(self.image_layout, 'batch_suffix', f"f{fi+1:04d}")
+                        header_cols.append(f"{base_name}_{suffix}")
                     except:
                         QMessageBox.warning(self, "Warning", "Integration aborted!", QMessageBox.Ok)
                         self.image_layout.insitustate = 0
@@ -2015,6 +2312,8 @@ class BatchProcessor(QWidget):
                         if i == 0:
                             output.append(x)
                         output.append(y)
+                        # Add header name for this file
+                        header_cols.append(os.path.splitext(os.path.basename(filepath))[0])
 
                     except:
                         QMessageBox.warning(self, "Warning", "Integration aborted!", QMessageBox.Ok)
@@ -2077,7 +2376,8 @@ class BatchProcessor(QWidget):
             # 转换output为numpy矩阵
             output_matrix = np.column_stack(output)
             # 保存矩阵为txt文件
-            np.savetxt(file_path, output_matrix, fmt='%.6f', delimiter=' ')
+            header_line = "q/chi " + " ".join(header_cols) if header_cols else "q/chi"
+            np.savetxt(file_path, output_matrix, fmt='%.6f', delimiter=' ', header=header_line, comments='# ')
             self.output_matrix = output_matrix
             self.insitu_txt_label.setText(file_path)
         self.image_layout.insitustate = 0
@@ -2091,7 +2391,8 @@ class BatchProcessor(QWidget):
             # 转换output为numpy矩阵
             output_bk_matrix = np.column_stack(output_bk)
             # 保存矩阵为txt文件
-            np.savetxt(file_path, output_bk_matrix, fmt='%.6f', delimiter=' ')
+            header_line_bk = "q/chi " + " ".join(header_cols) if header_cols else "q/chi"
+            np.savetxt(file_path, output_bk_matrix, fmt='%.6f', delimiter=' ', header=header_line_bk, comments='# ')
             self.output_matrix_bk = output_bk_matrix
             # self.insitu_txt_label.setText(file_path)
 
@@ -2191,6 +2492,20 @@ class BatchProcessor(QWidget):
             # 创建 1D 文件夹
             self.image_layout.file_name = self.filename
             self.image_widget.file_name = self.filename
+            # Invalidate cached images/grids so each batch item reloads correctly
+            if hasattr(self.image_widget, 'last_normal_image_raw'):
+                self.image_widget.last_normal_image_raw = None
+            if hasattr(self.image_widget, 'last_cut_image_raw'):
+                self.image_widget.last_cut_image_raw = None
+            if hasattr(self.image_widget, 'last_cut_qr'):
+                self.image_widget.last_cut_qr = None
+            if hasattr(self.image_widget, 'last_cut_qz'):
+                self.image_widget.last_cut_qz = None
+            # Align view flag to current mode so calculate_integral chooses correctly
+            try:
+                self.image_widget.current_view_is_cut = bool(self.image_layout.rb2.isChecked())
+            except Exception:
+                self.image_widget.current_view_is_cut = False
             folder_name = os.path.splitext(os.path.basename(self.image_layout.file_name))[0]
             image_folder_path = os.path.join(self.image_layout.output_folder, '1D')
             os.makedirs(image_folder_path, exist_ok=True)
@@ -2336,37 +2651,58 @@ class BackgroundRemover:
         self.dragging_point = None
 
     def validate_input(self):
-        if self.xmin is not None and self.xmax is not None:
-            if self.xmin >= self.xmax or self.xmin > np.max(self.x) or self.xmax < np.min(self.x):
-                raise ValueError("Invalid input: x must be in the range [xmin, xmax].")
-            mask = (self.x >= self.xmin) & (self.x <= self.xmax)
-            self.x = self.x[mask]
-            self.y = self.y[mask]
-        elif self.xmin is not None or self.xmax is not None:
-            raise ValueError("Both xmin and xmax must be provided or both must be None.")
+        try:
+            if not self.file_name:
+                return
 
-    def plot_initial_data(self):
-        self.validate_input()
-        self.ax.plot(self.x, self.y, label='Original Data')
-        self.background_points.append((self.x[0], self.y[0]))
-        self.background_points.append((self.x[-1], self.y[-1]))
-        # 创建和存储所有的红点
-        for point in self.background_points:
-            dot, = self.ax.plot(point[0], point[1], 'ro')
-            self.background_dots.append(dot)
-        self.ax.legend()
+            # 读色域范围
+            cb_min = float(self.textbox_min.text())
+            cb_max = float(self.textbox_max.text())
 
-    def on_left_click(self, event):
-        if event.inaxes != self.ax:
+            # 选择当前视图源数据（cut 优先）；若无缓存则现读
+            base = getattr(self, 'last_cut_image_raw', None) if getattr(self, 'current_view_is_cut', False) else getattr(self, 'last_normal_image_raw', None)
+            if base is None:
+                base = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
+            image = np.array(base, copy=True)
+            # 仅裁剪有限值，保留 NaN 作为空区
+            finite_mask = np.isfinite(image)
+            image[finite_mask & (image > cb_max)] = cb_max
+            image[finite_mask & (image < cb_min)] = cb_min
+
+            # 保障 ROI 文本框有值；若为空则填入合理默认
+            sa_txt = (self.image_layout.textbox_startAngle.text() or '-180')
+            ea_txt = (self.image_layout.textbox_endAngle.text() or '180')
+            ir_txt = (self.image_layout.textbox_innerRadius.text() or '0')
+            or_txt = self.image_layout.textbox_outerRadius.text()
+            if not or_txt:
+                try:
+                    h, w = image.shape[:2]
+                    or_txt = str(int((h**2 + w**2) ** 0.5 / 2))
+                except Exception:
+                    or_txt = '1000'
+
+            # 解析 ROI 参数
+            start_angle = float(sa_txt)
+            end_angle = float(ea_txt)
+            inner_radius = float(ir_txt)
+            outer_radius = float(or_txt)
+
+            # 积分点数
+            try:
+                num_bins = int(self.numbin)
+            except Exception:
+                num_bins = 500
+
+            # 中心坐标
+            center = [float(self.x_Center), float(self.y_Center)]
+
+            # 执行积分并显示 1D 曲线
+            x, y = self.radial_integral(image, center, start_angle, end_angle, inner_radius, outer_radius, num_bins)
+            return x, y
+        except Exception as e:
+            # 避免静默失败，打印调试信息但不弹窗
+            print('[Integrate] Failed:', repr(e))
             return
-        x = event.xdata
-        # Get the nearest y value to the clicked x value
-        idx = np.abs(self.x - x).argmin()
-        y = self.y[idx]
-        self.background_points.append((x, y))
-        self.background_dots.append(self.ax.plot(x, y, 'ro')[0])
-        self.update_background()
-
     def on_right_click(self, event):
         if event.inaxes != self.ax:
             return

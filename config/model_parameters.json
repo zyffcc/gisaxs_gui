@@ -2,7 +2,7 @@
     "fitting": {
         "global_parameters": {
             "sigma_res": 0.20199999999999999,
-            "k_value": 1732.4380347476908,
+            "k_value": 2171.7210685027967,
             "int_res": 20.0,
             "nu_res": 6.6000000000000005
         },
@@ -36,9 +36,9 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 10.0,
+                        "intensity": 7.0,
                         "radius": 10.0,
-                        "sigma_radius": 2.0,
+                        "sigma_radius": 3.0,
                         "diameter": 20.0,
                         "sigma_diameter": 0.1,
                         "background": 0.0
@@ -60,9 +60,9 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "radius": 49.699999999999996,
-                        "sigma_radius": 10.0,
-                        "intensity": 10.0
+                        "radius": 4.0,
+                        "sigma_radius": 1.0,
+                        "intensity": 5.0
                     },
                     "cylinder": {
                         "sigma_radius": -0.1
