@@ -3,6 +3,13 @@ import cv2
 import os
 import numpy as np
 import tempfile
+"""Ensure Matplotlib uses a Qt-compatible backend when running standalone.
+This avoids WXAgg conflicts if MPLBACKEND is set in the environment."""
+try:
+    import matplotlib as _mpl
+    _mpl.use('Qt5Agg', force=True)
+except Exception:
+    pass
 from scipy.interpolate import make_interp_spline
 import glob
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QLabel, \
@@ -20,6 +27,11 @@ from matplotlib.lines import Line2D
 import h5py
 from pathlib import Path
 import re
+import json
+try:
+    import fabio
+except ImportError:
+    fabio = None
 
 def load_image_matrix(
     file_path,
@@ -77,9 +89,36 @@ def load_image_matrix(
             arr = np.atleast_2d(arr)
         return arr.astype(np.float32)
 
+    # --- Branch: EDF file ---
+    if ext == ".edf":
+        if fabio is None:
+            raise ImportError("fabio is required to read .edf files. Install with 'pip install fabio'.")
+        try:
+            edf = fabio.open(str(p))
+            im = edf.data
+        except Exception as e:
+            raise ValueError(f"Failed to read EDF file: {p}: {e}")
+        if im is None:
+            raise ValueError(f"Empty EDF data in: {p}")
+        # Ensure float32
+        return np.asarray(im, dtype=np.float32)
+
+    # --- Branch: CBF file ---
+    if ext == ".cbf":
+        if fabio is None:
+            raise ImportError("fabio is required to read .cbf files. Install with 'pip install fabio'.")
+        try:
+            cbf = fabio.open(str(p))
+            im = cbf.data
+        except Exception as e:
+            raise ValueError(f"Failed to read CBF file: {p}: {e}")
+        if im is None:
+            raise ValueError(f"Empty CBF data in: {p}")
+        return np.asarray(im, dtype=np.float32)
+
     # --- Branch: NXs file ---
     if ext != ".nxs":
-        raise ValueError(f"Unsupported file type: {p.suffix}. Only image, .ctxti or .nxs supported.")
+        raise ValueError(f"Unsupported file type: {p.suffix}. Only image, .ctxti, .edf or .nxs supported.")
 
     base_name = p.name
     folder = p.parent
@@ -916,20 +955,19 @@ class ImageWidget(QWidget):
         # 结合阈值与有效数据（排除 NaN），确保空区不计入统计
         mask = mask & np.isfinite(im) & (im >= self.threshold_min) & (im <= self.threshold_max)
         # print(im)
-        print("1")
+  
         # plt.imshow(mask.astype(np.float64), cmap='gray')
         # plt.show()
         # 计算径向积分
         rbin_edges = np.linspace(inner_radius, outer_radius, num_bins + 1)
         rbin_centers = 0.5 * (rbin_edges[1:] + rbin_edges[:-1])
-        print("2")
+
         # 同时计算计数，用于将空 bin 标记为 NaN，实现绘图断开
         counts_r, _ = np.histogram(r[mask], bins=rbin_edges)
         radial_profile, _ = np.histogram(r[mask], bins=rbin_edges, weights=image[mask].astype(np.float64))
         radial_profile = radial_profile.astype(np.float64) / np.diff(rbin_edges)
         radial_profile[counts_r == 0] = np.nan
 
-        print("2/3")
         # 计算角向积分
         thetabin_edges = np.linspace(start_angle, end_angle, num_bins + 1)
         thetabin_centers_radians = 0.5 * (thetabin_edges[1:] + thetabin_edges[:-1])
@@ -1321,6 +1359,7 @@ class ImageLayout(QWidget):
         super().__init__(parent)
 
         self.file_name = file_name
+        self.parameter = parameter
         settings = QSettings('mycompany', 'myapp')
 
         # 添加按钮和文本框控件
@@ -1466,6 +1505,19 @@ class ImageLayout(QWidget):
         radio_buttons_layout.addWidget(self.rb1)
         radio_buttons_layout.addWidget(self.rb2)
 
+        # Second-row container: Save/Import parameters aligned left
+        self.button_saveParams = QPushButton('Save Parameters', self)
+        self.button_importParams = QPushButton('Import Parameters', self)
+        params_row = QWidget()
+        params_layout = QHBoxLayout(params_row)
+        params_layout.setContentsMargins(0,0,0,0)
+        params_layout.addWidget(self.button_saveParams)
+        params_layout.addWidget(self.button_importParams)
+        params_layout.addStretch(1)
+        # Connect signals after creation
+        self.button_saveParams.clicked.connect(self.save_parameters)
+        self.button_importParams.clicked.connect(self.import_parameters)
+
         layout = QGridLayout(self)
 
         # 顶部两列容器：左（文件名标签+选择按钮），右（No. + 输入框）
@@ -1483,29 +1535,30 @@ class ImageLayout(QWidget):
 
         layout.addWidget(w_file, 0, 0)
         layout.addWidget(w_no, 0, 1)
-        layout.addWidget(QLabel('Colorbar_min:'), 1, 0)
-        layout.addWidget(self.textbox_min, 1, 1)
-        layout.addWidget(QLabel('Colorbar_max:'), 2, 0)
-        layout.addWidget(self.textbox_max, 2, 1)
-        layout.addWidget(self.button_output, 3, 0)
-        layout.addWidget(self.image_widget, 0, 2, 11, 1)
-        layout.addLayout(radio_buttons_layout, 4, 0)
-        layout.addWidget(self.flip, 4, 1)
-        layout.addWidget(self.button_intRegion, 5, 0)
-        layout.addWidget(self.button_integer, 5, 1)
-        layout.addWidget(self.textbox_startAngle,6, 0)
-        layout.addWidget(self.textbox_endAngle,6,1)
-        layout.addWidget(self.textbox_innerRadius,7,0)
-        layout.addWidget(self.textbox_outerRadius,7,1)
-        layout.addWidget(QLabel('X-axis unit:'), 8, 0)
-        layout.addWidget(self.comboBox, 8, 1)
-        layout.addWidget(QLabel('Y-axis scale:'), 9, 0)
-        layout.addWidget(self.comboBox2, 9, 1)
-        layout.addWidget(self.radioButtonRadial, 10, 0)
-        layout.addWidget(self.radioButtonAngular, 10, 1)
-        layout.addWidget(self.export_1D, 3, 1)
-        layout.addWidget(self.button_outputdir, 11, 0)
-        layout.addWidget(self.textbox_outputdir, 11, 1, 1, 2)
+        layout.addWidget(params_row, 1, 0, 1, 2)
+        layout.addWidget(QLabel('Colorbar_min:'), 2, 0)
+        layout.addWidget(self.textbox_min, 2, 1)
+        layout.addWidget(QLabel('Colorbar_max:'), 3, 0)
+        layout.addWidget(self.textbox_max, 3, 1)
+        layout.addWidget(self.button_output, 4, 0)
+        layout.addWidget(self.image_widget, 0, 2, 12, 1)
+        layout.addLayout(radio_buttons_layout, 5, 0)
+        layout.addWidget(self.flip, 5, 1)
+        layout.addWidget(self.button_intRegion, 6, 0)
+        layout.addWidget(self.button_integer, 6, 1)
+        layout.addWidget(self.textbox_startAngle,7, 0)
+        layout.addWidget(self.textbox_endAngle,7,1)
+        layout.addWidget(self.textbox_innerRadius,8,0)
+        layout.addWidget(self.textbox_outerRadius,8,1)
+        layout.addWidget(QLabel('X-axis unit:'), 9, 0)
+        layout.addWidget(self.comboBox, 9, 1)
+        layout.addWidget(QLabel('Y-axis scale:'), 10, 0)
+        layout.addWidget(self.comboBox2, 10, 1)
+        layout.addWidget(self.radioButtonRadial, 11, 0)
+        layout.addWidget(self.radioButtonAngular, 11, 1)
+        layout.addWidget(self.export_1D, 4, 1)
+        layout.addWidget(self.button_outputdir, 12, 0)
+        layout.addWidget(self.textbox_outputdir, 12, 1, 1, 2)
 
         # 设置原位数据处理窗台码
         self.insitustate = 0
@@ -1572,7 +1625,7 @@ class ImageLayout(QWidget):
         options |= QFileDialog.DontUseNativeDialog
         file_name, _ = QFileDialog.getOpenFileName(
             self, 'Select File', '',
-            'Images (*.tif *.tiff *.png *.jpg *.jpeg *.bmp);;NXS (*.nxs);;All Files (*)',
+            'Images (*.tif *.tiff *.png *.jpg *.jpeg *.bmp);;CBF (*.cbf);;EDF (*.edf);;NXS (*.nxs);;All Files (*)',
             options=options)
         if file_name:
             try:
@@ -1795,6 +1848,142 @@ class ImageLayout(QWidget):
 
     def update_batch_processor_filename(self):
         self.file_name = self.batch_processor.filename
+
+    def save_parameters(self):
+        try:
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+            file_path, _ = QFileDialog.getSaveFileName(self, 'Save Parameters', '', 'JSON Files (*.json);;All Files (*)', options=options)
+            if not file_path:
+                return
+            data = {
+                'imageLayout': {
+                    'mode': 'Cut' if self.rb2.isChecked() else 'Original',
+                    'flip': bool(self.flip.isChecked()),
+                    'colorbar_min': self.textbox_min.text(),
+                    'colorbar_max': self.textbox_max.text(),
+                    'roi': {
+                        'startAngle': self.textbox_startAngle.text(),
+                        'endAngle': self.textbox_endAngle.text(),
+                        'innerRadius': self.textbox_innerRadius.text(),
+                        'outerRadius': self.textbox_outerRadius.text(),
+                    },
+                    'x_axis_unit_index': int(self.comboBox.currentIndex()),
+                    'y_axis_scale_index': int(self.comboBox2.currentIndex()),
+                    'integration_mode': 'Azimuthal' if self.radioButtonAngular.isChecked() else 'Radial',
+                    'output_folder': self.textbox_outputdir.text(),
+                    'frame_no': self.textbox_frameNo.text(),
+                },
+                'parameter': {
+                    'Angle_incidence': self.parameter.Angle_incidence.text(),
+                    'x_Center': self.parameter.x_Center.text(),
+                    'y_Center': self.parameter.y_Center.text(),
+                    'distance': self.parameter.distance.text(),
+                    'pixel_x': self.parameter.pixel_x.text(),
+                    'pixel_y': self.parameter.pixel_y.text(),
+                    'lamda': self.parameter.lamda.text(),
+                    'Qr_min': self.parameter.Qr_min.text(),
+                    'Qr_max': self.parameter.Qr_max.text(),
+                    'Qz_min': self.parameter.Qz_min.text(),
+                    'Qz_max': self.parameter.Qz_max.text(),
+                    'threshold_min': self.parameter.threshold_min.text(),
+                    'threshold_max': self.parameter.threshold_max.text(),
+                    'numbin': self.parameter.numbin.text(),
+                },
+                'batch': {
+                    'folder_path': self.batch_processor.folder_path_label.text() if hasattr(self, 'batch_processor') else '',
+                    'pattern': self.batch_processor.pattern_input.text() if hasattr(self, 'batch_processor') else '',
+                    'export_images': bool(self.batch_processor.export_image_check.isChecked()) if hasattr(self, 'batch_processor') else False,
+                    'export_curves': bool(self.batch_processor.export_curve_check.isChecked()) if hasattr(self, 'batch_processor') else False,
+                    'background_removal': bool(self.batch_processor.background_removal_check.isChecked()) if hasattr(self, 'batch_processor') else False,
+                    'background_init_img': self.batch_processor.background_init_img.text() if hasattr(self, 'batch_processor') else '',
+                    'background_min': self.batch_processor.background_min.text() if hasattr(self, 'batch_processor') else '',
+                    'background_max': self.batch_processor.background_max.text() if hasattr(self, 'batch_processor') else '',
+                    'insitu_file': self.batch_processor.insitu_txt_label.text() if hasattr(self, 'batch_processor') else '',
+                }
+            }
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            QMessageBox.information(self, 'Saved', 'Parameters saved successfully.')
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Failed to save parameters: {e}')
+
+    def import_parameters(self):
+        try:
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+            file_path, _ = QFileDialog.getOpenFileName(self, 'Import Parameters', '', 'JSON Files (*.json);;All Files (*)', options=options)
+            if not file_path:
+                return
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            il = data.get('imageLayout', {})
+            # Mode
+            mode = il.get('mode', 'Original')
+            if mode == 'Cut':
+                self.rb2.setChecked(True)
+            else:
+                self.rb1.setChecked(True)
+            # Flip
+            self.flip.setChecked(bool(il.get('flip', False)))
+            # Colorbar
+            self.textbox_min.setText(str(il.get('colorbar_min', self.textbox_min.text())))
+            self.textbox_max.setText(str(il.get('colorbar_max', self.textbox_max.text())))
+            # ROI
+            roi = il.get('roi', {})
+            self.textbox_startAngle.setText(str(roi.get('startAngle', self.textbox_startAngle.text())))
+            self.textbox_endAngle.setText(str(roi.get('endAngle', self.textbox_endAngle.text())))
+            self.textbox_innerRadius.setText(str(roi.get('innerRadius', self.textbox_innerRadius.text())))
+            self.textbox_outerRadius.setText(str(roi.get('outerRadius', self.textbox_outerRadius.text())))
+            self.update_rigionValues()
+            # Axes
+            xa_idx = int(il.get('x_axis_unit_index', self.comboBox.currentIndex()))
+            ya_idx = int(il.get('y_axis_scale_index', self.comboBox2.currentIndex()))
+            self.comboBox.setCurrentIndex(xa_idx)
+            self.comboBox2.setCurrentIndex(ya_idx)
+            # Integration mode
+            integ_mode = il.get('integration_mode', 'Radial')
+            if integ_mode == 'Azimuthal':
+                self.radioButtonAngular.setChecked(True)
+            else:
+                self.radioButtonRadial.setChecked(True)
+            # Output folder and frame
+            self.textbox_outputdir.setText(il.get('output_folder', self.textbox_outputdir.text()))
+            self.update_output_folder()
+            self.textbox_frameNo.setText(il.get('frame_no', self.textbox_frameNo.text()))
+            self.on_frame_no_changed()
+
+            # Parameter panel
+            prm = data.get('parameter', {})
+            def _set(param_widget, key):
+                val = prm.get(key)
+                if val is not None:
+                    getattr(self.parameter, key).setText(str(val))
+            for k in ['Angle_incidence','x_Center','y_Center','distance','pixel_x','pixel_y','lamda',
+                      'Qr_min','Qr_max','Qz_min','Qz_max','threshold_min','threshold_max','numbin']:
+                _set(self.parameter, k)
+            # Push into image_widget
+            self.parameter.update_image_widget()
+
+            # Batch panel
+            bt = data.get('batch', {})
+            if hasattr(self, 'batch_processor'):
+                self.batch_processor.folder_path_label.setText(bt.get('folder_path', self.batch_processor.folder_path_label.text()))
+                self.batch_processor.pattern_input.setText(bt.get('pattern', self.batch_processor.pattern_input.text()))
+                self.batch_processor.export_image_check.setChecked(bool(bt.get('export_images', self.batch_processor.export_image_check.isChecked())))
+                self.batch_processor.export_curve_check.setChecked(bool(bt.get('export_curves', self.batch_processor.export_curve_check.isChecked())))
+                self.batch_processor.background_removal_check.setChecked(bool(bt.get('background_removal', self.batch_processor.background_removal_check.isChecked())))
+                self.batch_processor.background_init_img.setText(bt.get('background_init_img', self.batch_processor.background_init_img.text()))
+                self.batch_processor.background_min.setText(bt.get('background_min', self.batch_processor.background_min.text()))
+                self.batch_processor.background_max.setText(bt.get('background_max', self.batch_processor.background_max.text()))
+                if bt.get('insitu_file'):
+                    self.batch_processor.insitu_txt_label.setText(bt.get('insitu_file'))
+
+            # Refresh image view
+            self.update_image_finished()
+            QMessageBox.information(self, 'Imported', 'Parameters imported successfully.')
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Failed to import parameters: {e}')
 
 class Parameter(QWidget):
     def __init__(self, parent=None, image_widget = None):
