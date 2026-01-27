@@ -15,7 +15,7 @@ import glob
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QLabel, \
     QLineEdit, QVBoxLayout, QSizePolicy, QGridLayout, QWidget, QRadioButton, QButtonGroup, \
     QFileSystemModel, QTreeView, QHBoxLayout, QSplitter, QDesktopWidget, QMessageBox, QComboBox, \
-    QFrame, QCheckBox, QProgressBar, QMenu, QMenuBar, QAction, QTextEdit, QDialog
+    QFrame, QCheckBox, QProgressBar, QMenu, QMenuBar, QAction, QTextEdit, QDialog, QInputDialog
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QTransform, QMovie
 from PyQt5.QtCore import QSize, Qt, QRect, QPoint, QDir, QTimer, QCoreApplication, QEventLoop,\
     QSettings, QThread, pyqtSignal, QResource
@@ -1280,6 +1280,8 @@ class ImageWidget(QWidget):
                             chi = ((chi + 180.0) % 360.0) - 180.0
                             cs = ((float(start_angle) + 180.0) % 360.0) - 180.0
                             ce = ((float(end_angle) + 180.0) % 360.0) - 180.0
+
+                            print(f"cs={cs}, ce={ce}")
                             # Build chi-sector mask in Q-space (degrees, -180..180)
                             if cs <= ce:
                                 mask_chi = (chi >= cs) & (chi <= ce)
@@ -2243,6 +2245,7 @@ class BatchProcessor(QWidget):
 
         self.export_image_check = QCheckBox("Export images")
         self.export_curve_check = QCheckBox("Export 1D curves")
+        self.convert_format_check = QCheckBox("Convert file format")
         self.background_removal_check = QCheckBox("Background subtraction")
         self.background_init_img = QLineEdit()
         self.background_init_img.setPlaceholderText('init_img')
@@ -2281,6 +2284,7 @@ class BatchProcessor(QWidget):
         check_layout.addWidget(QLabel("Select export types:"))
         check_layout.addWidget(self.export_image_check)
         check_layout.addWidget(self.export_curve_check)
+        check_layout.addWidget(self.convert_format_check)
         check_layout.addWidget(self.background_removal_check)
         check_layout.addWidget(QLabel("Background parameters:"))
         check_layout.addWidget(self.background_init_img)
@@ -2363,6 +2367,19 @@ class BatchProcessor(QWidget):
         if not file_list:
             QMessageBox.warning(self, "Warning", "No matching files found.")
             return
+
+        # If conversion is requested, ask for target format upfront
+        self.convert_choice = None
+        if self.convert_format_check.isChecked():
+            items = [
+                "TIFF (default)",
+                "EDF",
+                "CBF",
+            ]
+            choice, ok = QInputDialog.getItem(self, "Select target format", "Format:", items, 0, False)
+            if not ok:
+                return
+            self.convert_choice = choice
 
         total_files = len(file_list)
         # 开启原位处理状态码
@@ -2452,6 +2469,16 @@ class BatchProcessor(QWidget):
                         self.image_widget.update_image()
                     self.image_layout.export_image()
 
+                # 文件格式转换（每帧）
+                if self.convert_choice:
+                    try:
+                        im = load_image_matrix(rep, frame_idx=fi)
+                        base_name = os.path.splitext(os.path.basename(rep))[0]
+                        suffix = getattr(self.image_layout, 'batch_suffix', f"f{fi+1:04d}")
+                        self._convert_and_save(im, f"{base_name}_{suffix}")
+                    except Exception as e:
+                        QMessageBox.warning(self, "Warning", f"Conversion failed for frame {fi+1}: {e}")
+
                 # 进度（按帧）
                 progress = (fi + 1) / frame_count * 100
                 self.progress_bar.setValue(int(round(progress)))
@@ -2516,6 +2543,15 @@ class BatchProcessor(QWidget):
                     if self.image_layout.rb1.isChecked():
                         self.image_widget.update_image()
                     self.image_layout.export_image()
+
+                # 文件格式转换（按文件）
+                if self.convert_choice:
+                    try:
+                        im = load_image_matrix(filepath)
+                        base_name = os.path.splitext(os.path.basename(filepath))[0]
+                        self._convert_and_save(im, base_name)
+                    except Exception as e:
+                        QMessageBox.warning(self, "Warning", f"Conversion failed for {os.path.basename(filepath)}: {e}")
 
 
                 # 更新进度条
@@ -2588,6 +2624,105 @@ class BatchProcessor(QWidget):
         self.image_layout.insitustate = 0
 
         plt.close()
+
+    def _ensure_converted_dir(self):
+        out_dir = os.path.join(self.image_layout.output_folder, 'converted')
+        if not os.path.isdir(out_dir):
+            os.makedirs(out_dir, exist_ok=True)
+        return out_dir
+
+    def _to_uint_scaled(self, image: np.ndarray, bits: int):
+        arr = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
+        if arr.dtype.kind in ('i', 'u'):
+            # Already integer; scale only if needed to target width
+            if bits == 8:
+                info = np.iinfo(np.uint8)
+                arr = np.clip(arr, info.min, info.max).astype(np.uint8)
+            else:
+                info = np.iinfo(np.uint16)
+                arr = np.clip(arr, info.min, info.max).astype(np.uint16)
+            return arr
+        arr = arr.astype(np.float32, copy=False)
+        vmin = float(np.min(arr))
+        vmax = float(np.max(arr))
+        if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
+            norm = np.zeros_like(arr, dtype=np.float32)
+        else:
+            norm = (arr - vmin) / (vmax - vmin)
+        if bits == 8:
+            return np.rint(norm * 255.0).astype(np.uint8)
+        else:
+            return np.rint(norm * 65535.0).astype(np.uint16)
+
+    def _prepare_tiff_default(self, image: np.ndarray):
+        # If already 8/16-bit integer, keep dtype; otherwise scale to 16-bit
+        if image.dtype == np.uint8 or image.dtype == np.int8:
+            return image.astype(np.uint8)
+        if image.dtype == np.uint16 or image.dtype == np.int16:
+            return image.astype(np.uint16)
+        if image.dtype.kind in ('i', 'u'):
+            # Map larger integers into uint16 range
+            info16 = np.iinfo(np.uint16)
+            arr = np.clip(image, 0, info16.max)
+            return arr.astype(np.uint16)
+        # Float types -> scale to 16-bit
+        return self._to_uint_scaled(image, 16)
+
+    def _convert_and_save(self, image: np.ndarray, base_name: str):
+        out_dir = self._ensure_converted_dir()
+        choice = self.convert_choice or "TIFF (default)"
+        if "CBF" in choice.upper():
+            # Write as CBF via fabio
+            try:
+                from fabio.cbfimage import CbfImage as _Cbf
+            except Exception:
+                try:
+                    from fabio.cbfimage import cbfimage as _Cbf
+                except Exception:
+                    _Cbf = None
+            if _Cbf is None:
+                raise ImportError("fabio.cbfimage is required to write CBF files.")
+            img16 = self._to_uint_scaled(image, 16)
+            out_path = os.path.join(out_dir, f"{base_name}.cbf")
+            try:
+                try:
+                    obj = _Cbf(data=img16)
+                except TypeError:
+                    obj = _Cbf()
+                    obj.data = img16
+                obj.write(out_path)
+            except Exception as e:
+                raise RuntimeError(f"CBF write failed: {e}")
+            return
+
+        # Otherwise write as TIFF
+        if "EDF" in choice.upper():
+            if fabio is None:
+                raise ImportError("fabio is required to write .edf files. Install with 'pip install fabio'.")
+            try:
+                from fabio.edfimage import EdfImage as _Edf
+            except Exception:
+                _Edf = None
+            if _Edf is None:
+                raise ImportError("fabio.edfimage is required to write EDF files.")
+            arr = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+            out_path = os.path.join(out_dir, f"{base_name}.edf")
+            try:
+                try:
+                    obj = _Edf(data=arr)
+                except TypeError:
+                    obj = _Edf()
+                    obj.data = arr
+                obj.write(out_path)
+            except Exception as e:
+                raise RuntimeError(f"EDF write failed: {e}")
+        else:
+            # Default: write a Fit2D-friendly TIFF (uint16, no compression)
+            arr = self._prepare_tiff_default(image)
+            out_path = os.path.join(out_dir, f"{base_name}.tif")
+            ok = cv2.imwrite(out_path, arr)
+            if not ok:
+                raise RuntimeError("cv2.imwrite failed for TIFF")
 
     # def on_click(self, event):
     #    The code is dedicated to the beloved Sherry, as a token of affection from Yufeng. 2023-04-29
