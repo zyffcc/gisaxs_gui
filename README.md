@@ -84,7 +84,7 @@ python main.py
 - Import GIWAXS images, perform 1D signal integration, and batch export curves.
 
 ## Supported Formats
-- Images: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`, `.bmp`
+- Images: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`, `.bmp`, `.edf`, `.cbf`
 - Text: `.ctxti` (2D numeric arrays)
 - P03 NXS (module series): `.nxs` with automatic module stitching and frame selection
 
@@ -99,4 +99,4 @@ python main.py
 - If batch 1D outputs look repeated, verify the pattern and that files match.
 
 ## License
-Proprietary, all rights reserved by the project owner.
+MIT License — see [LICENSE](LICENSE).
