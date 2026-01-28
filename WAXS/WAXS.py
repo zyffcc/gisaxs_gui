@@ -317,7 +317,7 @@ class MainWindow(QMainWindow):
                 - Import images by double-clicking .tif on the left, using the file chooser, or drag-and-drop.
                 - Adjust Colorbar_min and Colorbar_max. Default colormap is jet.
                 - Coordinate display: default is pixel. Use "Cut" to switch to Qxy/Qz.
-                - Export: choose an output folder, then click "Export JPG".
+                - Export: choose an output folder, then click "Export Image".
                 - Cut view range: set Qr_min, Qr_max, Qz_min, Qz_max. Set -121 for no limit.
                 - Mask bad pixels/gaps: use Mask_min and Mask_max to zero out values outside the range.
 
@@ -402,6 +402,71 @@ class HelpDialog(QDialog):
         layout.addWidget(self.text_edit)
         self.setLayout(layout)
 
+class ExportImageDialog(QDialog):
+    """
+    Dialog to choose export folder and image format.
+    Shows current output folder with a Change… button and a format selector.
+    """
+    def __init__(self, current_folder: str, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("Export Image")
+        self.resize(480, 160)
+
+        # Folder row
+        self.folder_label = QLabel("Export folder:")
+        self.folder_edit = QLineEdit(current_folder)
+        self.browse_btn = QPushButton("Change…")
+        folder_row = QWidget()
+        h = QHBoxLayout(folder_row)
+        h.setContentsMargins(0,0,0,0)
+        h.addWidget(self.folder_label)
+        h.addWidget(self.folder_edit, 1)
+        h.addWidget(self.browse_btn)
+
+        # Format row
+        self.format_label = QLabel("Format:")
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(["JPG", "PNG", "TIFF"])  # default JPG first
+        fmt_row = QWidget()
+        h2 = QHBoxLayout(fmt_row)
+        h2.setContentsMargins(0,0,0,0)
+        h2.addWidget(self.format_label)
+        h2.addWidget(self.format_combo)
+        h2.addStretch(1)
+
+        # Buttons row
+        self.ok_btn = QPushButton("Export")
+        self.cancel_btn = QPushButton("Cancel")
+        btn_row = QWidget()
+        h3 = QHBoxLayout(btn_row)
+        h3.setContentsMargins(0,0,0,0)
+        h3.addStretch(1)
+        h3.addWidget(self.ok_btn)
+        h3.addWidget(self.cancel_btn)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(folder_row)
+        layout.addWidget(fmt_row)
+        layout.addWidget(btn_row)
+
+        self.browse_btn.clicked.connect(self._choose_folder)
+        self.ok_btn.clicked.connect(self.accept)
+        self.cancel_btn.clicked.connect(self.reject)
+
+    def _choose_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, 'Select Output Folder', self.folder_edit.text() or os.getcwd())
+        if folder:
+            self.folder_edit.setText(folder)
+
+    @property
+    def selected_folder(self) -> str:
+        return self.folder_edit.text().strip()
+
+    @property
+    def selected_format(self) -> str:
+        return self.format_combo.currentText()
+
 class ImageWidget(QWidget):
     def __init__(self, parent=None, file_name=None, textbox_min=None, textbox_max=None, Angle_incidence=None, x_Center=None,
                   y_Center=None, distance=None, pixel_x=None, pixel_y=None, lamda=None, threshold_min=None, threshold_max=None):
@@ -470,6 +535,35 @@ class ImageWidget(QWidget):
         # 当前帧索引（用于 NXS 文件），0-based；默认 0
         self.frame_idx = 0
 
+    def compute_auto_limits(self, log_on: bool):
+        """
+        计算 0.5/99.5 百分位自动色条范围，基于线性强度（阈值与 NaN 已掩蔽）。
+        若 log_on，则返回 log10 映射后的上下限。
+        返回 (cb_min, cb_max) 或 None。
+        """
+        try:
+            # 优先使用 cut 视图的原始阵列，否则使用 normal 视图的原始阵列
+            base = getattr(self, 'last_cut_image_raw', None) if getattr(self, 'current_view_is_cut', False) else getattr(self, 'last_normal_image_raw', None)
+            if base is None:
+                # 回退：加载当前帧并应用阈值掩蔽
+                im = load_image_matrix(self.file_name, frame_idx=self.frame_idx)
+                bad_mask = (im >= self.threshold_max) | (im < self.threshold_min) | np.isnan(im)
+                A = np.ma.masked_array(im, mask=bad_mask)
+                base = A.filled(np.nan)
+            vals = np.asarray(base).ravel()
+            vals = vals[np.isfinite(vals)]
+            if vals.size == 0:
+                return None
+            pmin, pmax = np.percentile(vals, [0.5, 99.5])
+            if log_on:
+                pmin = max(float(pmin), 1e-6)
+                pmax = max(float(pmax), pmin + 1e-9)
+                return float(np.log10(pmin)), float(np.log10(pmax))
+            else:
+                return float(pmin), float(pmax)
+        except Exception:
+            return None
+
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             url = event.mimeData().urls()[0]
@@ -505,9 +599,44 @@ class ImageWidget(QWidget):
             if self.image_layout.flip.isChecked():
                 A = np.flipud(A)
 
+            # 可选的对数显示与色系
+            cmap_name = getattr(self.image_layout, 'cmapCombo', None).currentText() if getattr(self.image_layout, 'cmapCombo', None) else 'jet'
+
+            # Auto: 使用 0.5/99.5 百分位自动计算色条范围（基于线性强度，显示为 log 时做相同变换）
+            auto_on = bool(getattr(self.image_layout, 'autoCheck', None) and self.image_layout.autoCheck.isChecked())
+            log_on = bool(getattr(self.image_layout, 'logCheck', None) and self.image_layout.logCheck.isChecked())
+            if auto_on:
+                try:
+                    vals = A.compressed() if np.ma.isMaskedArray(A) else np.ravel(A)
+                    vals = vals[np.isfinite(vals)]
+                    if vals.size > 0:
+                        pmin, pmax = np.percentile(vals, [0.5, 99.5])
+                        if log_on:
+                            # 避免 log 负值/零
+                            pmin = max(pmin, 1e-6)
+                            pmax = max(pmax, pmin + 1e-9)
+                            cb_min = np.log10(pmin)
+                            cb_max = np.log10(pmax)
+                        else:
+                            cb_min, cb_max = float(pmin), float(pmax)
+                        # 退化处理
+                        if not np.isfinite(cb_min) or not np.isfinite(cb_max) or cb_min == cb_max:
+                            mn, mx = (np.min(vals), np.max(vals)) if vals.size > 0 else (cb_min, cb_max)
+                            if log_on:
+                                mn = max(mn, 1e-6)
+                                mx = max(mx, mn + 1e-9)
+                                cb_min, cb_max = np.log10(mn), np.log10(mx)
+                            else:
+                                cb_min, cb_max = float(mn), float(mx)
+                except Exception:
+                    pass
+
+            if log_on:
+                A = np.ma.log10(A.astype(float) + 1e-6)
+
             # 用 Matplotlib 画到临时画布并转换为 QLabel 的像素图
             fig, ax = plt.subplots()
-            imshow_obj = ax.imshow(A, cmap='jet', vmin=cb_min, vmax=cb_max, aspect='equal')
+            imshow_obj = ax.imshow(A, cmap=cmap_name, vmin=cb_min, vmax=cb_max, aspect='equal')
             fig.colorbar(imshow_obj)
             ax.set_xticks([]); ax.set_yticks([])
 
@@ -628,15 +757,46 @@ class ImageWidget(QWidget):
             # 创建掩码数组（原始坐标系）
             A_masked = np.ma.masked_where(np.isnan(A), A)
 
+            # 根据 Auto 选项计算色条范围
+            auto_on = bool(getattr(self.image_layout, 'autoCheck', None) and self.image_layout.autoCheck.isChecked())
+            log_on = bool(getattr(self.image_layout, 'logCheck', None) and self.image_layout.logCheck.isChecked())
+            if auto_on:
+                try:
+                    vals = A_masked.compressed() if np.ma.isMaskedArray(A_masked) else np.ravel(A_masked)
+                    vals = vals[np.isfinite(vals)]
+                    if vals.size > 0:
+                        pmin, pmax = np.percentile(vals, [0.5, 99.5])
+                        if log_on:
+                            pmin = max(pmin, 1e-6)
+                            pmax = max(pmax, pmin + 1e-9)
+                            cb_min = np.log10(pmin)
+                            cb_max = np.log10(pmax)
+                        else:
+                            cb_min, cb_max = float(pmin), float(pmax)
+                        if not np.isfinite(cb_min) or not np.isfinite(cb_max) or cb_min == cb_max:
+                            mn, mx = (np.min(vals), np.max(vals)) if vals.size > 0 else (cb_min, cb_max)
+                            if log_on:
+                                mn = max(mn, 1e-6)
+                                mx = max(mx, mn + 1e-9)
+                                cb_min, cb_max = np.log10(mn), np.log10(mx)
+                            else:
+                                cb_min, cb_max = float(mn), float(mx)
+                except Exception:
+                    pass
+
             # 绘制 pcolor 图像（直接用 vmin/vmax 控制色域）；按 Flip 设置决定显示是否上下颠倒
 
             self.fig, ax = plt.subplots()
+            cmap_name = getattr(self.image_layout, 'cmapCombo', None).currentText() if getattr(self.image_layout, 'cmapCombo', None) else 'jet'
+            A_plot = A_masked
+            if log_on:
+                A_plot = np.ma.log10(A_masked.astype(float) + 1e-6)
             if self.image_layout.flip.isChecked():
                 # Flip 仅影响显示：反转 Y 轴
-                pcolor = ax.pcolormesh(Qr, Qz, A_masked, cmap='jet', shading='auto', vmin=cb_min, vmax=cb_max)
+                pcolor = ax.pcolormesh(Qr, Qz, A_plot, cmap=cmap_name, shading='auto', vmin=cb_min, vmax=cb_max)
                 ax.invert_yaxis()
             else:
-                pcolor = ax.pcolormesh(Qr, Qz, A_masked, cmap='jet', shading='auto', vmin=cb_min, vmax=cb_max)
+                pcolor = ax.pcolormesh(Qr, Qz, A_plot, cmap=cmap_name, shading='auto', vmin=cb_min, vmax=cb_max)
             self.fig.colorbar(pcolor)
             ax.set_xlabel('Qr')
             ax.set_ylabel('Qz')
@@ -795,14 +955,18 @@ class ImageWidget(QWidget):
         # ax.imshow(im_norm)
 
         # 创建图像窗口
+        cmap_name = getattr(self.image_layout, 'cmapCombo', None).currentText() if getattr(self.image_layout, 'cmapCombo', None) else 'jet'
+        A_disp_plot = A_disp
+        if getattr(self.image_layout, 'logCheck', None) and self.image_layout.logCheck.isChecked():
+            A_disp_plot = np.ma.log10(A_disp.astype(float) + 1e-6)
         if self.image_fig is None or not plt.fignum_exists(self.image_fig.number):
             self.image_fig, axx = plt.subplots()
-            axx.imshow(A_disp, cmap='jet', vmin=cb_min, vmax=cb_max)
+            axx.imshow(A_disp_plot, cmap=cmap_name, vmin=cb_min, vmax=cb_max)
 
         else:
             self.image_fig.clf()
             axx = self.image_fig.add_subplot(111)
-            axx.imshow(A_disp, cmap='jet', vmin=cb_min, vmax=cb_max)
+            axx.imshow(A_disp_plot, cmap=cmap_name, vmin=cb_min, vmax=cb_max)
             plt.draw()
 
         # 右键设置中心：在图上点击右键后，将 Center X/Y 设置为点击位置，并同步到参数框
@@ -1400,7 +1564,7 @@ class ImageLayout(QWidget):
         self.textbox_max.setFixedHeight(20)
         # self.textbox_max.setText('800')
 
-        self.button_output = QPushButton('Export Image (JPG)', self)
+        self.button_output = QPushButton('Export Image', self)
         self.button_output.setFixedWidth(200)
         self.button_output.setFixedHeight(30)
 
@@ -1507,18 +1671,32 @@ class ImageLayout(QWidget):
         radio_buttons_layout.addWidget(self.rb1)
         radio_buttons_layout.addWidget(self.rb2)
 
-        # Second-row container: Save/Import parameters aligned left
+        # Second-row container: Save/Import parameters aligned left + display controls
         self.button_saveParams = QPushButton('Save Parameters', self)
         self.button_importParams = QPushButton('Import Parameters', self)
+        # Add Log toggle and Colormap selector
+        self.logCheck = QCheckBox('Log')
+        self.cmapCombo = QComboBox()
+        self.cmapCombo.addItems(['jet', 'viridis', 'plasma', 'inferno', 'magma', 'gray', 'turbo'])
+        # Auto color scale based on 0.5/99.5 percentiles
+        self.autoCheck = QCheckBox('Auto')
         params_row = QWidget()
         params_layout = QHBoxLayout(params_row)
         params_layout.setContentsMargins(0,0,0,0)
         params_layout.addWidget(self.button_saveParams)
         params_layout.addWidget(self.button_importParams)
+        params_layout.addSpacing(12)
+        params_layout.addWidget(self.logCheck)
+        params_layout.addWidget(QLabel('Colormap:'))
+        params_layout.addWidget(self.cmapCombo)
+        params_layout.addWidget(self.autoCheck)
         params_layout.addStretch(1)
         # Connect signals after creation
         self.button_saveParams.clicked.connect(self.save_parameters)
         self.button_importParams.clicked.connect(self.import_parameters)
+        self.logCheck.toggled.connect(self.update_image_finished)
+        self.cmapCombo.currentTextChanged.connect(self.update_image_finished)
+        self.autoCheck.toggled.connect(self.update_image_finished)
 
         layout = QGridLayout(self)
 
@@ -1612,6 +1790,17 @@ class ImageLayout(QWidget):
         # 在 1D 显示时避免自动刷新覆盖
         if getattr(self.image_widget, 'windowstate', 0) == 3:
             return
+        # 若启用 Auto，则先计算并同步到文本框，确保 ROI/导出使用一致的 vmin/vmax
+        try:
+            if getattr(self, 'autoCheck', None) and self.autoCheck.isChecked():
+                log_on = bool(getattr(self, 'logCheck', None) and self.logCheck.isChecked())
+                limits = self.image_widget.compute_auto_limits(log_on)
+                if limits:
+                    mn, mx = limits
+                    self.textbox_min.setText(str(round(mn, 6)))
+                    self.textbox_max.setText(str(round(mx, 6)))
+        except Exception:
+            pass
         if self.rb1.isChecked():
             self.image_widget.update_image()
         if self.rb2.isChecked():
@@ -1671,6 +1860,17 @@ class ImageLayout(QWidget):
         self.image_widget.file_name = file_name
         # 根据文件类型更新帧选择器状态
         self._update_frame_selector_for(file_name)
+        # 若启用 Auto，先计算并同步文本框的 vmin/vmax，再刷新视图
+        try:
+            if getattr(self, 'autoCheck', None) and self.autoCheck.isChecked():
+                log_on = bool(getattr(self, 'logCheck', None) and self.logCheck.isChecked())
+                limits = self.image_widget.compute_auto_limits(log_on)
+                if limits:
+                    mn, mx = limits
+                    self.textbox_min.setText(str(round(mn, 6)))
+                    self.textbox_max.setText(str(round(mx, 6)))
+        except Exception:
+            pass
         if self.rb1.isChecked():
             # 调用ImageWidget的update_image()方法
             self.image_widget.update_image()
@@ -1723,6 +1923,17 @@ class ImageLayout(QWidget):
         # 避免在 1D 显示（windowstate==3）时被自动刷新覆盖
         if getattr(self.image_widget, 'windowstate', 0) == 3:
             return
+        # 若启用 Auto，随帧号变化先同步文本框的 vmin/vmax
+        try:
+            if getattr(self, 'autoCheck', None) and self.autoCheck.isChecked():
+                log_on = bool(getattr(self, 'logCheck', None) and self.logCheck.isChecked())
+                limits = self.image_widget.compute_auto_limits(log_on)
+                if limits:
+                    mn, mx = limits
+                    self.textbox_min.setText(str(round(mn, 6)))
+                    self.textbox_max.setText(str(round(mx, 6)))
+        except Exception:
+            pass
         if self.rb1.isChecked():
             self.image_widget.update_image()
         elif self.rb2.isChecked():
@@ -1775,53 +1986,160 @@ class ImageLayout(QWidget):
     #         QMessageBox.warning(self, '提示', '请先选择导出文件夹！')
 
     def export_image(self):
-        # 获取用户选择的文件名
+        # 打开导出对话框，显示并可修改导出目录与格式
         self.update_output_folder()
-        file_name = self.file_name
-
-        if not file_name:
+        if not self.file_name:
             return
 
-        # 获取用户选择的文件名并拼接文件路径
-        if self.insitustate == 0:
-            file_path = os.path.join(self.output_folder, os.path.splitext(os.path.basename(self.file_name))[0] + '.jpg')
+        dlg = ExportImageDialog(self.textbox_outputdir.text(), parent=self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        # 同步导出目录
+        out_dir = dlg.selected_folder or os.getcwd()
+        self.textbox_outputdir.setText(out_dir)
+        self.update_output_folder()
+
+        ext_map = {"JPG": ".jpg", "PNG": ".png", "TIFF": ".tif"}
+        ext = ext_map.get(dlg.selected_format, ".jpg")
+
+        base_name = os.path.splitext(os.path.basename(self.file_name))[0]
         if self.insitustate == 1:
-            # 创建 image 文件夹
-            folder_name = os.path.splitext(os.path.basename(file_name))[0]
             image_folder_path = os.path.join(self.output_folder, 'image')
             os.makedirs(image_folder_path, exist_ok=True)
-            file_path = os.path.join(image_folder_path, folder_name + '.jpg')
+            file_path = os.path.join(image_folder_path, base_name + ext)
+        else:
+            file_path = os.path.join(self.output_folder, base_name + ext)
 
         # 批处理时追加后缀（如帧号）
         if getattr(self, 'batch_suffix', ""):
-            base, ext = os.path.splitext(file_path)
-            file_path = f"{base}_{self.batch_suffix}{ext}"
+            b, old_ext = os.path.splitext(file_path)
+            file_path = f"{b}_{self.batch_suffix}{old_ext}"
 
-        if self.image_widget.windowstate == 3: #判断当前图窗是否为一维图像
-            # file_path = os.path.join(self.output_folder, os.path.splitext(os.path.basename(self.file_name))[0] + '.jpg')
+        cmap_name = self.cmapCombo.currentText() if hasattr(self, 'cmapCombo') else 'jet'
+        cb_min = float(self.textbox_min.text())
+        cb_max = float(self.textbox_max.text())
+        log_enabled = bool(getattr(self, 'logCheck', None) and self.logCheck.isChecked())
+        auto_on = bool(getattr(self, 'autoCheck', None) and self.autoCheck.isChecked())
+
+        # 若为 1D 视图，直接保存当前 figure
+        if getattr(self.image_widget, 'windowstate', 0) == 3 and self.image_widget.fig is not None:
             self.image_widget.fig.savefig(file_path, dpi=300)
             return
+
+        # 2D 视图：重新渲染，包含坐标轴与 colorbar
         if self.rb1.isChecked():
-            # 使用 Matplotlib 直接导出（不做 255 规范化）
-            cb_min = float(self.textbox_min.text())
-            cb_max = float(self.textbox_max.text())
-            im = load_image_matrix(file_name, frame_idx=self.image_widget.frame_idx)
+            im = load_image_matrix(self.file_name, frame_idx=self.image_widget.frame_idx)
             bad_mask = (im >= self.image_widget.threshold_max) | (im < self.image_widget.threshold_min) | np.isnan(im)
             A = np.ma.masked_array(im, mask=bad_mask)
             if self.flip.isChecked():
                 A = np.flipud(A)
-
+            # Auto percentile for Original export
+            if auto_on:
+                try:
+                    vals = A.compressed() if np.ma.isMaskedArray(A) else np.ravel(A)
+                    vals = vals[np.isfinite(vals)]
+                    if vals.size > 0:
+                        pmin, pmax = np.percentile(vals, [0.5, 99.5])
+                        if log_enabled:
+                            pmin = max(pmin, 1e-6)
+                            pmax = max(pmax, pmin + 1e-9)
+                            cb_min = np.log10(pmin)
+                            cb_max = np.log10(pmax)
+                        else:
+                            cb_min, cb_max = float(pmin), float(pmax)
+                except Exception:
+                    pass
+            if log_enabled:
+                A = np.ma.log10(A.astype(float) + 1e-6)
             fig, ax = plt.subplots()
-            img = ax.imshow(A, cmap='jet', vmin=cb_min, vmax=cb_max, aspect='equal')
+            img = ax.imshow(A, cmap=cmap_name, vmin=cb_min, vmax=cb_max, aspect='equal')
             fig.colorbar(img)
-            ax.set_xticks([]); ax.set_yticks([])
+            ax.set_xlabel('X (pixel)')
+            ax.set_ylabel('Y (pixel)')
             fig.savefig(file_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
+        elif self.rb2.isChecked():
+            # 与 Cut 一致的 Q 映射导出
+            Angle_incidence = float(self.parameter.Angle_incidence.text())
+            x_Center = float(self.parameter.x_Center.text())
+            y_Center = float(self.parameter.y_Center.text())
+            distance = float(self.parameter.distance.text())
+            pixel_x = float(self.parameter.pixel_x.text())
+            pixel_y = float(self.parameter.pixel_y.text())
+            lamda = float(self.parameter.lamda.text())
 
-        if self.rb2.isChecked():
+            im = load_image_matrix(self.file_name, frame_idx=self.image_widget.frame_idx).astype(float)
+            bad_mask = (im > float(self.parameter.threshold_max.text())) | (im < float(self.parameter.threshold_min.text())) | np.isnan(im)
+            A = np.ma.masked_array(im, mask=bad_mask)
 
-            # file_path = os.path.join(self.output_folder, os.path.splitext(os.path.basename(self.file_name))[0] + '.jpg')
-            self.image_widget.fig.savefig(file_path, dpi=300)
+            sz = np.shape(A)
+            sz_1 = sz[1]
+            sz_2 = sz[0]
+            yC = sz_2 - y_Center
+            Qr, Qz = np.meshgrid(np.arange(1, sz_1 + 1), np.arange(1, sz_2 + 1))
+            Qr = Qr - x_Center
+            Qz = (sz_2 - yC) - Qz
+            Qr = Qr * pixel_x * 1e-6
+            Qz = Qz * pixel_y * 1e-6
+            Qxx = Qr
+            Qr = np.arctan(Qr / (distance * 1e-3)) / 2
+            Qz = np.arctan(Qz / np.sqrt((distance * 1e-3) ** 2 + Qxx ** 2))
+            Theta_f = Qr
+            Alpha_f = Qz
+            Alpha_i = Angle_incidence * np.pi / 180
+            Qx = 2 * np.pi / lamda * (np.cos(2 * Theta_f) * np.cos(Alpha_f) - np.cos(Alpha_i))
+            Qy = 2 * np.pi / lamda * (np.sin(2 * Theta_f) * np.cos(Alpha_f))
+            Qz = 2 * np.pi / lamda * (np.sin(Alpha_f) + np.sin(Alpha_i))
+            Qr = np.sign(Qy) * np.sqrt(Qx ** 2 + Qy ** 2)
+            diff_Qy = np.diff(np.sign(Qy), axis=1)
+            indices = np.where(diff_Qy != 0)
+            A = A.astype(float)
+            A[indices[0], indices[1]] = np.nan
+            A[indices[0], indices[1] + 1] = np.where(Qy[indices[0], indices[1] + 1] > 0, np.nan,
+                                                     A[indices[0], indices[1] + 1])
+            A[indices[0], indices[1] - 1] = np.where((indices[1] > 0) & (Qy[indices[0], indices[1] - 1] < 0), np.nan,
+                                                     A[indices[0], indices[1] - 1])
+            A_masked = np.ma.masked_where(np.isnan(A), A)
+            # Auto percentile for Cut export
+            if auto_on:
+                try:
+                    vals = A_masked.compressed() if np.ma.isMaskedArray(A_masked) else np.ravel(A_masked)
+                    vals = vals[np.isfinite(vals)]
+                    if vals.size > 0:
+                        pmin, pmax = np.percentile(vals, [0.5, 99.5])
+                        if log_enabled:
+                            pmin = max(pmin, 1e-6)
+                            pmax = max(pmax, pmin + 1e-9)
+                            cb_min = np.log10(pmin)
+                            cb_max = np.log10(pmax)
+                        else:
+                            cb_min, cb_max = float(pmin), float(pmax)
+                except Exception:
+                    pass
+            A_plot = A_masked
+            if log_enabled:
+                A_plot = np.ma.log10(A_masked.astype(float) + 1e-6)
+            fig, ax = plt.subplots()
+            pcolor = ax.pcolormesh(Qr, Qz, A_plot, cmap=cmap_name, shading='auto', vmin=cb_min, vmax=cb_max)
+            if self.flip.isChecked():
+                ax.invert_yaxis()
+            fig.colorbar(pcolor)
+            ax.set_xlabel('Qr')
+            ax.set_ylabel('Qz')
+            ax.set_aspect('equal')
+            # axis ranges
+            try:
+                Qr_min = None if float(self.parameter.Qr_min.text()) == -121 else float(self.parameter.Qr_min.text())
+                Qr_max = None if float(self.parameter.Qr_max.text()) == -121 else float(self.parameter.Qr_max.text())
+                Qz_min = None if float(self.parameter.Qz_min.text()) == -121 else float(self.parameter.Qz_min.text())
+                Qz_max = None if float(self.parameter.Qz_max.text()) == -121 else float(self.parameter.Qz_max.text())
+            except Exception:
+                Qr_min = Qr_max = Qz_min = Qz_max = None
+            ax.set_xlim(Qr_min, Qr_max)
+            ax.set_ylim(Qz_min, Qz_max)
+            fig.savefig(file_path, dpi=300)
+            plt.close(fig)
 
     def export_integral_data(self):
         try:
