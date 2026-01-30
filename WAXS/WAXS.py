@@ -152,6 +152,20 @@ def load_image_matrix(
     if not ordered_paths:
         ordered_paths = [p]
 
+    # ordered_paths 已经得到
+    first_mp = ordered_paths[0]
+    with h5py.File(str(first_mp), "r") as f:
+        dset0 = f[dataset_path]
+        if dset0.ndim == 3:
+            H0, W0 = dset0.shape[1], dset0.shape[2]
+        elif dset0.ndim == 2:
+            H0, W0 = dset0.shape
+        else:
+            raise ValueError(f"Unexpected dataset ndim {dset0.ndim} in {first_mp.name}")
+
+    # 期望模块尺寸定义为 (x,y) = (H,W)
+    lmbda_x, lmbda_y = int(H0), int(W0)
+    print(f"Detected module size: (x,y)=({lmbda_x},{lmbda_y})")
     # Read modules
     modules = []  # each: {img, trans_x, trans_y, mask}
     for mp in ordered_paths:
@@ -176,7 +190,7 @@ def load_image_matrix(
 
             # optional mask
             msk = f[mask_path][()] if mask_path in f else None
-
+        
         # Orient image to (x,y) = (516,1556)
         if img.shape == (lmbda_y, lmbda_x):
             img_xy = img.T  # (1556,516) -> (516,1556)
@@ -405,13 +419,13 @@ class HelpDialog(QDialog):
 class ExportImageDialog(QDialog):
     """
     Dialog to choose export folder and image format.
-    Shows current output folder with a Change… button and a format selector.
+    In batch mode, optionally show checkboxes to export 1D/2D.
     """
-    def __init__(self, current_folder: str, parent=None):
+    def __init__(self, current_folder: str, parent=None, show_mode_options: bool = False, init_export_1d: bool = False, init_export_2d: bool = True):
         super().__init__(parent)
 
-        self.setWindowTitle("Export Image")
-        self.resize(480, 160)
+        self.setWindowTitle("Export")
+        self.resize(520, 200)
 
         # Folder row
         self.folder_label = QLabel("Export folder:")
@@ -435,6 +449,18 @@ class ExportImageDialog(QDialog):
         h2.addWidget(self.format_combo)
         h2.addStretch(1)
 
+        # Optional: export mode options (only meaningful in batch)
+        self.chk_export_1d = QCheckBox("Export 1D (image)")
+        self.chk_export_2d = QCheckBox("Export 2D (image)")
+        self.chk_export_1d.setChecked(bool(init_export_1d))
+        self.chk_export_2d.setChecked(bool(init_export_2d))
+        mode_row = QWidget()
+        h_mode = QHBoxLayout(mode_row)
+        h_mode.setContentsMargins(0,0,0,0)
+        h_mode.addWidget(self.chk_export_1d)
+        h_mode.addWidget(self.chk_export_2d)
+        h_mode.addStretch(1)
+
         # Buttons row
         self.ok_btn = QPushButton("Export")
         self.cancel_btn = QPushButton("Cancel")
@@ -449,6 +475,8 @@ class ExportImageDialog(QDialog):
         layout.addWidget(folder_row)
         layout.addWidget(fmt_row)
         layout.addWidget(btn_row)
+        if show_mode_options:
+            layout.insertWidget(2, mode_row)  # place after format row
 
         self.browse_btn.clicked.connect(self._choose_folder)
         self.ok_btn.clicked.connect(self.accept)
@@ -466,6 +494,14 @@ class ExportImageDialog(QDialog):
     @property
     def selected_format(self) -> str:
         return self.format_combo.currentText()
+
+    @property
+    def selected_export_1d(self) -> bool:
+        return bool(self.chk_export_1d.isChecked())
+
+    @property
+    def selected_export_2d(self) -> bool:
+        return bool(self.chk_export_2d.isChecked())
 
 class ImageWidget(QWidget):
     def __init__(self, parent=None, file_name=None, textbox_min=None, textbox_max=None, Angle_incidence=None, x_Center=None,
@@ -798,8 +834,8 @@ class ImageWidget(QWidget):
             else:
                 pcolor = ax.pcolormesh(Qr, Qz, A_plot, cmap=cmap_name, shading='auto', vmin=cb_min, vmax=cb_max)
             self.fig.colorbar(pcolor)
-            ax.set_xlabel('Qr')
-            ax.set_ylabel('Qz')
+            ax.set_xlabel(r'$q_r\ (\mathrm{\AA}^{-1})$')
+            ax.set_ylabel(r'$q_z\ (\mathrm{\AA}^{-1})$')
             ax.set_aspect('equal')
             # 设置横纵坐标显示范围
             if float(self.parameter.Qr_min.text()) == -121:
@@ -1265,6 +1301,7 @@ class ImageWidget(QWidget):
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         self.fig.savefig(temp_file.name, dpi=300)
         plt.close(self.fig)  # 关闭绘图窗口
+        
 
         # 读取临时文件并保持颜色
         color_values = cv2.imread(temp_file.name, cv2.IMREAD_COLOR)
@@ -1287,10 +1324,12 @@ class ImageWidget(QWidget):
         os.unlink(temp_file.name)
 
         self.windowstate = 3
-
-        if self.image_layout.comboBox2.currentIndex() == 0:
+        print(self.image_layout.comboBox2.currentIndex())
+        if self.image_layout.comboBox2.currentIndex() == 0 or self.image_layout.comboBox2.currentIndex() == 1:
+            
             if self.image_layout.radioButtonRadial.isChecked():
                 if index == 0 :
+                    print(q.shape, smoothed_radial_profile.shape)
                     return q, smoothed_radial_profile
                 if index == 1:
                     return twoTheta, smoothed_radial_profile
@@ -1305,7 +1344,8 @@ class ImageWidget(QWidget):
             if self.image_layout.radioButtonAngular.isChecked():
                 if index == 0:
                     return thetabin_centers_degrees, smoothed_angular_profile
-
+            
+    
     def azimuth_profile_from_cut(self, qr, qz, I, qmin, qmax, n_chi=360, mask=None, mode="mean"):
         """
         Azimuthal profile in Q-space for cut-mode.
@@ -1407,6 +1447,7 @@ class ImageWidget(QWidget):
                 end_angle = float(self.image_layout.textbox_endAngle.text())
                 inner_radius = float(self.image_layout.textbox_innerRadius.text())
                 outer_radius = float(self.image_layout.textbox_outerRadius.text())
+                
                 try:
                     num_bins = max(1, int(self.numbin))
                 except (TypeError, ValueError):
@@ -1416,6 +1457,7 @@ class ImageWidget(QWidget):
                 # 分支：径向或方位角积分
                 if self.image_layout.radioButtonRadial.isChecked():
                     x, y = self.radial_integral(image, center, start_angle, end_angle, inner_radius, outer_radius, num_bins)
+                    
                 else:
                     # Azimuthal integration
                     if getattr(self.image_layout, 'rb2', None) and self.image_layout.rb2.isChecked():
@@ -1434,6 +1476,7 @@ class ImageWidget(QWidget):
                         if qr is None or qz is None:
                             # 无法进行 Q 空间积分，回退到像素空间角向
                             x, y = self.radial_integral(image, center, start_angle, end_angle, inner_radius, outer_radius, num_bins)
+                            
                         else:
                             # Q-space chi (azimuth) and q-magnitude
                             q_mag = np.sqrt(qr**2 + qz**2)
@@ -1507,6 +1550,7 @@ class ImageWidget(QWidget):
                             self.size_label.setText(f'1D image — file: {os.path.basename(self.file_name)}')
                         temp_file.close(); os.unlink(temp_file.name)
                         self.windowstate = 3
+                        
                         x, y = centers_deg, prof
                     else:
                         # Original 模式：像素空间的角向积分（与现有逻辑一致）
@@ -1515,7 +1559,7 @@ class ImageWidget(QWidget):
                 # mask = (x >= float(self.batch_processor.background_min.text())) & (x <= float(self.batch_processor.background_max.text()))
                 # x_selected = x[mask]
                 # y_selected = y[mask]
-
+                
                 return x, y
         except:
             return
@@ -1599,7 +1643,7 @@ class ImageLayout(QWidget):
         self.textbox_outerRadius.setFixedWidth(200)
         self.textbox_outerRadius.setFixedHeight(20)
         self.textbox_outerRadius.setPlaceholderText('outer radius')
-        self.export_1D = QPushButton("Export 1D (txt)", self)
+        self.export_1D = QPushButton("Export 1D (csv)", self)
 
         # 创建下拉菜单和按钮
         self.comboBox = QComboBox()
@@ -1742,6 +1786,11 @@ class ImageLayout(QWidget):
 
         # 设置原位数据处理窗台码
         self.insitustate = 0
+        # 缓存批处理导出设置（首次弹窗后复用）
+        self._last_export_format = None
+        self._last_export_folder = None
+        self._last_export_curve = None
+        self._last_export_image = None
 
     def _detect_nxs_frame_count(self, file_name: str) -> int:
         count = 1
@@ -1857,6 +1906,8 @@ class ImageLayout(QWidget):
         # 更新ImageWidget的file_name属性
 
         # self.image_widget.file_name = self.file_name
+        # 同步更新布局自身的文件名，确保导出/批处理等使用最新文件
+        self.file_name = file_name
         self.image_widget.file_name = file_name
         # 根据文件类型更新帧选择器状态
         self._update_frame_selector_for(file_name)
@@ -1986,22 +2037,55 @@ class ImageLayout(QWidget):
     #         QMessageBox.warning(self, '提示', '请先选择导出文件夹！')
 
     def export_image(self):
-        # 打开导出对话框，显示并可修改导出目录与格式
+        # 打开导出对话框（批处理时仅第一次弹窗），显示并可修改导出目录与格式
         self.update_output_folder()
         if not self.file_name:
+            print("No file loaded for export.")
             return
 
-        dlg = ExportImageDialog(self.textbox_outputdir.text(), parent=self)
-        if dlg.exec_() != QDialog.Accepted:
-            return
+        # 批处理：若已有最近一次的格式与目录，直接复用，避免每次弹窗
+        use_cached = bool(getattr(self, '_last_export_format', None) and getattr(self, '_last_export_folder', None))
+        if self.insitustate == 1 and use_cached:
+            selected_folder = self._last_export_folder
+            selected_format = self._last_export_format
+            selected_export_1d = bool(self._last_export_curve)
+            selected_export_2d = bool(self._last_export_image)
+        else:
+            # In batch, show mode options; in single, hide them
+            show_opts = bool(self.insitustate == 1)
+            init_1d = False
+            init_2d = True
+            # Initialize from batch processor if present
+            if show_opts and hasattr(self, 'batch_processor'):
+                try:
+                    init_1d = bool(self.batch_processor.export_curve_check.isChecked())
+                    init_2d = bool(self.batch_processor.export_image_check.isChecked())
+                except Exception:
+                    pass
+            dlg = ExportImageDialog(self.textbox_outputdir.text(), parent=self, show_mode_options=show_opts, init_export_1d=init_1d, init_export_2d=init_2d)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+            # 记录用户选择，供批处理复用
+            selected_folder = dlg.selected_folder or os.getcwd()
+            selected_format = dlg.selected_format
+            selected_export_1d = dlg.selected_export_1d if show_opts else False
+            selected_export_2d = dlg.selected_export_2d if show_opts else True
+            self._last_export_folder = selected_folder
+            self._last_export_format = selected_format
+            self._last_export_curve = selected_export_1d
+            self._last_export_image = selected_export_2d
+
+        # Sync batch processor checkboxes to dialog selections for consistency
+        # Note: dialog 1D option controls 1D image export during this run only;
+        # batch data export remains governed by the panel's Export 1D Curves checkbox.
 
         # 同步导出目录
-        out_dir = dlg.selected_folder or os.getcwd()
+        out_dir = selected_folder or os.getcwd()
         self.textbox_outputdir.setText(out_dir)
         self.update_output_folder()
 
         ext_map = {"JPG": ".jpg", "PNG": ".png", "TIFF": ".tif"}
-        ext = ext_map.get(dlg.selected_format, ".jpg")
+        ext = ext_map.get(selected_format, ".jpg")
 
         base_name = os.path.splitext(os.path.basename(self.file_name))[0]
         if self.insitustate == 1:
@@ -2027,8 +2111,8 @@ class ImageLayout(QWidget):
             self.image_widget.fig.savefig(file_path, dpi=300)
             return
 
-        # 2D 视图：重新渲染，包含坐标轴与 colorbar
-        if self.rb1.isChecked():
+        # 依据选择：导出 2D 图像
+        if selected_export_2d and self.rb1.isChecked():
             im = load_image_matrix(self.file_name, frame_idx=self.image_widget.frame_idx)
             bad_mask = (im >= self.image_widget.threshold_max) | (im < self.image_widget.threshold_min) | np.isnan(im)
             A = np.ma.masked_array(im, mask=bad_mask)
@@ -2059,7 +2143,7 @@ class ImageLayout(QWidget):
             ax.set_ylabel('Y (pixel)')
             fig.savefig(file_path, dpi=300, bbox_inches='tight')
             plt.close(fig)
-        elif self.rb2.isChecked():
+        elif selected_export_2d and self.rb2.isChecked():
             # 与 Cut 一致的 Q 映射导出
             Angle_incidence = float(self.parameter.Angle_incidence.text())
             x_Center = float(self.parameter.x_Center.text())
@@ -2125,8 +2209,8 @@ class ImageLayout(QWidget):
             if self.flip.isChecked():
                 ax.invert_yaxis()
             fig.colorbar(pcolor)
-            ax.set_xlabel('Qr')
-            ax.set_ylabel('Qz')
+            ax.set_xlabel(r'$q_r\ (\mathrm{\AA}^{-1})$')
+            ax.set_ylabel(r'$q_z\ (\mathrm{\AA}^{-1})$')
             ax.set_aspect('equal')
             # axis ranges
             try:
@@ -2141,19 +2225,82 @@ class ImageLayout(QWidget):
             fig.savefig(file_path, dpi=300)
             plt.close(fig)
 
+        # 若选择导出 1D 图像，则计算积分并绘制 q/I 或 chi/I 曲线
+        if self.insitustate == 1 and selected_export_1d:
+            try:
+                x, y = self.image_widget.calculate_integral()
+                if x is not None and y is not None:
+                    # 1D 图像保存路径
+                    base_name = os.path.splitext(os.path.basename(self.file_name))[0]
+                    if self.insitustate == 1:
+                        image_folder_path = os.path.join(self.output_folder, 'image')
+                        os.makedirs(image_folder_path, exist_ok=True)
+                        file_path_1d = os.path.join(image_folder_path, base_name + '_1D' + ext)
+                    else:
+                        file_path_1d = os.path.join(self.output_folder, base_name + '_1D' + ext)
+
+                    # 绘制 1D 图
+                    fig1d, ax1d = plt.subplots()
+                    if self.comboBox2.currentIndex() == 0:
+                        ax1d.semilogy(x, y)
+                        ylabel = 'Intensity (Log Scale)'
+                    else:
+                        ax1d.plot(x, y)
+                        ylabel = 'Intensity'
+                    if self.radioButtonRadial.isChecked():
+                        unit_idx = self.comboBox.currentIndex()
+                        xlabels = ['q', '2Theta', 'Pixel', 'q', '2Theta', 'Pixel']
+                        xlabel = xlabels[unit_idx] if unit_idx < len(xlabels) else 'x'
+                    else:
+                        xlabel = 'Chi'
+                    ax1d.set_xlabel(xlabel)
+                    ax1d.set_ylabel(ylabel)
+                    ax1d.set_title('1D Curve')
+                    fig1d.savefig(file_path_1d, dpi=300)
+                    plt.close(fig1d)
+            except Exception:
+                pass
+
+
     def export_integral_data(self):
         try:
             x, y = self.image_widget.calculate_integral()
-            if x is not None and y is not None:
-                file_name = os.path.join(self.output_folder,
-                                         os.path.splitext(os.path.basename(self.file_name))[0] + '.txt')
-                print(file_name)
-                with open(file_name, 'a') as f:
+            print(f"Integral data calculated: {len(x) if x is not None else 0} points.")
+            if x is None or y is None:
+                return None, None
+            # Per-file 1D curve export (q-I) into 1D folder
+            try:
+                print("Starting export of 1D curves...")
+                out_dir_1d = os.path.join(self.output_folder, '1D')
+                os.makedirs(out_dir_1d, exist_ok=True)
+                print(f"Exporting 1D curves to folder: {out_dir_1d}")
+                # Choose base name: prefer current layout file, else widget file
+                cur_path = self.file_name or getattr(self.image_widget, 'file_name', None)
+                base = os.path.splitext(os.path.basename(cur_path))[0] if cur_path else 'curve'
+                # Append batch suffix if present (e.g., frame number)
+                suffix = getattr(self, 'batch_suffix', '')
+                if suffix:
+                    base = f"{base}_{suffix}"
+                file_name = os.path.join(out_dir_1d, base + '.csv')
+                print(f"Exporting 1D curve to: {file_name}")
+                with open(file_name, 'w', encoding='utf-8') as f:
+                    f.write('q/chi,I\n')
                     for i in range(len(x)):
-                        f.write(f"{x[i]}\t{y[i]}\n")
-                QMessageBox.information(self, "Export Success", "Integral data has been exported successfully!")
-        except:
-            QMessageBox.warning(self, "Warning", "Failed to export data", QMessageBox.Ok)
+                        xi = float(x[i]) if np.isfinite(x[i]) else np.nan
+                        yi = float(y[i]) if np.isfinite(y[i]) else np.nan
+                        f.write(f"{xi},{yi}\n")
+                # Notify only in non-batch usage to avoid many popups
+                if getattr(self, 'insitustate', 0) != 1:
+                    QMessageBox.information(self, "Export Success", "1D curve has been exported successfully!")
+            except Exception:
+                # Silent in batch; warn in single
+                if getattr(self, 'insitustate', 0) != 1:
+                    QMessageBox.warning(self, "Warning", "Failed to export 1D curve", QMessageBox.Ok)
+            return x, y
+        except Exception:
+            if getattr(self, 'insitustate', 0) != 1:
+                QMessageBox.warning(self, "Warning", "Failed to integrate", QMessageBox.Ok)
+            return None, None
 
     def update_output_folder(self):
         folder_path = self.textbox_outputdir.text()
@@ -2670,6 +2817,15 @@ class BatchProcessor(QWidget):
         # Reset the stop flag
         self.reset_stop_flag()
 
+        # Reset cached export selections for this batch run so the dialog appears once per run
+        try:
+            self.image_layout._last_export_format = None
+            self.image_layout._last_export_folder = None
+            self.image_layout._last_export_curve = None
+            self.image_layout._last_export_image = None
+        except Exception:
+            pass
+
         folder_path = self.folder_path_label.text()
         if not os.path.isdir(folder_path):
             QMessageBox.warning(self, "Warning", "Please select a valid folder.")
@@ -2910,32 +3066,46 @@ class BatchProcessor(QWidget):
         # 显示窗口
         plt.show()
 
-        # 如果一维被勾选上，导出txt数据
+        # 如果一维被勾选上，导出 CSV 数据
         if self.export_curve_check.isChecked():
             # 定义 1D 文件夹
             image_folder_path = os.path.join(self.image_layout.output_folder, '1D')
-            file_path = os.path.join(image_folder_path, 'output.txt')
+            os.makedirs(image_folder_path, exist_ok=True)
+            file_path = os.path.join(image_folder_path, 'output.csv')
 
-            # 转换output为numpy矩阵
-            output_matrix = np.column_stack(output)
-            # 保存矩阵为txt文件
-            header_line = "q/chi " + " ".join(header_cols) if header_cols else "q/chi"
-            np.savetxt(file_path, output_matrix, fmt='%.6f', delimiter=' ', header=header_line, comments='# ')
+            # 转换output为numpy矩阵（对齐长度并强制为浮点）
+            def _to_float_1d(arr):
+                a = np.asarray(arr, dtype=float)
+                return a.ravel()
+            cols = [ _to_float_1d(c) for c in output ]
+            max_len = max((len(c) for c in cols), default=0)
+            padded = [ np.pad(c, (0, max_len - len(c)), mode='constant', constant_values=np.nan) for c in cols ]
+            output_matrix = np.column_stack(padded).astype(float)
+            # 保存矩阵为 CSV 文件
+            header_line = ','.join(['q/chi'] + header_cols) if header_cols else 'q/chi'
+            np.savetxt(file_path, output_matrix, fmt='%.6f', delimiter=',', header=header_line, comments='')
             self.output_matrix = output_matrix
             self.insitu_txt_label.setText(file_path)
         self.image_layout.insitustate = 0
         # QMessageBox.information(None, "完成", "已完成！")
-        # 如果一维被勾选上，导出txt数据
+        # 背景扣除后的 CSV 数据
         if self.background_removal_check.isChecked():
             # 定义 1D 文件夹
             image_folder_path = os.path.join(self.image_layout.output_folder, '1D')
-            file_path = os.path.join(image_folder_path, 'output_subBk.txt')
+            os.makedirs(image_folder_path, exist_ok=True)
+            file_path = os.path.join(image_folder_path, 'output_subBk.csv')
 
-            # 转换output为numpy矩阵
-            output_bk_matrix = np.column_stack(output_bk)
-            # 保存矩阵为txt文件
-            header_line_bk = "q/chi " + " ".join(header_cols) if header_cols else "q/chi"
-            np.savetxt(file_path, output_bk_matrix, fmt='%.6f', delimiter=' ', header=header_line_bk, comments='# ')
+            # 转换output为numpy矩阵（对齐长度并强制为浮点）
+            def _to_float_1d(arr):
+                a = np.asarray(arr, dtype=float)
+                return a.ravel()
+            cols_bk = [ _to_float_1d(c) for c in output_bk ]
+            max_len_bk = max((len(c) for c in cols_bk), default=0)
+            padded_bk = [ np.pad(c, (0, max_len_bk - len(c)), mode='constant', constant_values=np.nan) for c in cols_bk ]
+            output_bk_matrix = np.column_stack(padded_bk).astype(float)
+            # 保存矩阵为 CSV 文件
+            header_line_bk = ','.join(['q/chi'] + header_cols) if header_cols else 'q/chi'
+            np.savetxt(file_path, output_bk_matrix, fmt='%.6f', delimiter=',', header=header_line_bk, comments='')
             self.output_matrix_bk = output_bk_matrix
             # self.insitu_txt_label.setText(file_path)
 
