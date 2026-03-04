@@ -210,6 +210,18 @@ class ClassificationController(QObject):
                 self._dr_status_label = None
         if dim_show is not None:
             dim_show.clicked.connect(self._on_dim_show_clicked)
+        else:
+            # UI has no Show button; add one next to Start at runtime
+            try:
+                parent = dim_start.parent() if dim_start is not None else None
+                if parent is not None and parent.layout() is not None:
+                    from PyQt5.QtWidgets import QPushButton
+                    self._dr_show_btn = QPushButton('Show')
+                    self._dr_show_btn.setToolTip('Show DR result')
+                    self._dr_show_btn.clicked.connect(self._on_dim_show_clicked)
+                    parent.layout().addWidget(self._dr_show_btn)
+            except Exception:
+                pass
 
         # 分类
         if clf_method is not None:
@@ -1308,6 +1320,13 @@ class ClassificationController(QObject):
                     if i < len(emb):
                         s.embedding = np.array(emb[i])
                 self.log(f"[DR] Done. Embedding shape={emb.shape}")
+                # Auto-open DR window when finished (Show button not present in UI)
+                try:
+                    if emb.ndim == 1:
+                        emb = emb.reshape(-1, 1)
+                    self._open_dr_result_window(emb)
+                except Exception:
+                    pass
             except Exception as e:
                 self.log(f"[DR] Finish update error: {e}")
 
