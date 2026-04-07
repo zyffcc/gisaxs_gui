@@ -18,13 +18,15 @@ A Windows-friendly GUI for GISAXS/GIWAXS data processing: cut & fitting, CNN-bas
   - GIWAXS data import, signal integration, and batch processing.
 
 ## Installation
-Recommended: Anaconda on Windows (Python 3.10/3.11).
+Recommended environment: **Windows + Python 3.10/3.11**.
+You can install dependencies with either **Conda** or a local **`.env` virtual environment**.
 
+### Option 1: Conda (recommended)
 ```bash
 # clone your project repo then
 cd gisaxs_gui
 
-# optional: create a new environment
+# create and activate a new environment
 conda create -n GISAXS python=3.11 -y
 conda activate GISAXS
 
@@ -32,8 +34,29 @@ conda activate GISAXS
 pip install -r requirements.txt
 ```
 
+### Option 2: No conda — use `.env`
+```bash
+# clone your project repo then
+cd gisaxs_gui
+
+# create a local virtual environment named .env
+py -3.11 -m venv .env
+# or: python -m venv .env
+
+# if PowerShell blocks activation, run this once in the current terminal
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+# activate the environment
+.\.env\Scripts\Activate.ps1
+
+# install dependencies
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
 Notes:
 - TensorFlow 2.15 is pinned for Windows/Python 3.11 compatibility.
+- If you use `.env`, activate it again each time you open a new terminal before running `python main.py`.
 - If you have a GPU build of TensorFlow/CUDA, install it separately as needed.
 
 ## Quick Start
