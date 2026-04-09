@@ -780,6 +780,7 @@ class IndependentFitWindow(QMainWindow):
     
     # 状态更新信号
     status_updated = pyqtSignal(str)
+    display_unit_changed = pyqtSignal(str)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -847,7 +848,7 @@ class IndependentFitWindow(QMainWindow):
 
     def _create_control_buttons(self):
         """创建额外的控制按钮"""
-        from PyQt5.QtWidgets import QHBoxLayout, QPushButton, QCheckBox, QLabel
+        from PyQt5.QtWidgets import QHBoxLayout, QCheckBox, QLabel, QComboBox
         control_layout = QHBoxLayout()
         
         # 添加标签
@@ -857,12 +858,72 @@ class IndependentFitWindow(QMainWindow):
         self.show_positive_cb = QCheckBox("Positive Only")
         self.show_positive_cb.toggled.connect(self._on_show_positive_toggled)
         control_layout.addWidget(self.show_positive_cb)
+
+        # 只显示负值半轴，但横坐标显示为 |q|
+        self.show_negative_cb = QCheckBox("Negative Only")
+        self.show_negative_cb.toggled.connect(self._on_show_negative_toggled)
+        control_layout.addWidget(self.show_negative_cb)
+
+        control_layout.addSpacing(12)
+        control_layout.addWidget(QLabel("q Unit:"))
+
+        self.q_unit_combo = QComboBox()
+        self.q_unit_combo.addItem("Å⁻¹", "angstrom")
+        self.q_unit_combo.addItem("nm⁻¹", "nm")
+        self.q_unit_combo.setCurrentIndex(1)
+        self.q_unit_combo.currentTextChanged.connect(self._on_q_unit_changed)
+        control_layout.addWidget(self.q_unit_combo)
         
+        control_layout.addStretch(1)
         return control_layout
     
     def _on_show_positive_toggled(self, checked):
         """处理Positive Only复选框状态变化"""
+        if checked and hasattr(self, 'show_negative_cb') and self.show_negative_cb.isChecked():
+            self.show_negative_cb.blockSignals(True)
+            self.show_negative_cb.setChecked(False)
+            self.show_negative_cb.blockSignals(False)
         self.status_updated.emit(f"Positive Only mode: {'enabled' if checked else 'disabled'}")
+
+    def _on_show_negative_toggled(self, checked):
+        """处理Negative Only复选框状态变化"""
+        if checked and hasattr(self, 'show_positive_cb') and self.show_positive_cb.isChecked():
+            self.show_positive_cb.blockSignals(True)
+            self.show_positive_cb.setChecked(False)
+            self.show_positive_cb.blockSignals(False)
+        self.status_updated.emit(f"Negative Only mode: {'enabled' if checked else 'disabled'}")
+
+    def _get_q_unit_key(self):
+        """返回当前q轴显示单位。"""
+        try:
+            if hasattr(self, 'q_unit_combo'):
+                unit = self.q_unit_combo.currentData()
+                if isinstance(unit, str) and unit.lower() in ('angstrom', 'nm'):
+                    return unit.lower()
+        except Exception:
+            pass
+        return 'nm'
+
+    def _get_q_unit_scale_factor(self):
+        """将内部 nm^-1 数据转换为显示单位。"""
+        return 0.1 if self._get_q_unit_key() == 'angstrom' else 1.0
+
+    def _format_q_axis_label(self, filter_mode='all', absolute=False):
+        """根据当前单位与筛选模式生成q轴标签。"""
+        unit_text = 'nm$^{-1}$' if self._get_q_unit_key() == 'nm' else 'Å$^{-1}$'
+        base = '|q|' if absolute or filter_mode == 'negative' else 'q'
+        suffix = ''
+        if filter_mode == 'positive':
+            suffix = ' [Positive Only]'
+        elif filter_mode == 'negative':
+            suffix = ' [Negative Only]'
+        return f'{base} ({unit_text}){suffix}'
+
+    def _on_q_unit_changed(self, _text):
+        """处理q单位切换。"""
+        unit_text = 'nm^-1' if self._get_q_unit_key() == 'nm' else 'Angstrom^-1'
+        self.status_updated.emit(f"q unit changed to {unit_text}")
+        self.display_unit_changed.emit(unit_text)
 
     def update_plot(self, x_coords, y_intensity, x_label, y_label, title, log_x=False, log_y=False, normalize=False, y_errors=None):
         """更新拟合结果图，支持误差条"""
@@ -876,6 +937,39 @@ class IndependentFitWindow(QMainWindow):
             err_data = None
             if y_errors is not None:
                 err_data = np.array(y_errors)
+
+            is_q_axis = isinstance(x_label, str) and 'q' in x_label.lower()
+
+            # 应用独立窗口中的半轴筛选
+            if hasattr(self, 'show_positive_cb') and self.show_positive_cb.isChecked():
+                mask = x_data > 0
+                x_data = x_data[mask]
+                y_data = y_data[mask]
+                if err_data is not None:
+                    err_data = err_data[mask]
+            elif hasattr(self, 'show_negative_cb') and self.show_negative_cb.isChecked():
+                mask = x_data < 0
+                x_data = np.abs(x_data[mask])
+                y_data = y_data[mask]
+                if err_data is not None:
+                    err_data = err_data[mask]
+                if x_data.size > 0:
+                    sort_idx = np.argsort(x_data)
+                    x_data = x_data[sort_idx]
+                    y_data = y_data[sort_idx]
+                    if err_data is not None:
+                        err_data = err_data[sort_idx]
+
+            if is_q_axis:
+                x_data = x_data * self._get_q_unit_scale_factor()
+                if hasattr(self, 'show_positive_cb') and self.show_positive_cb.isChecked():
+                    x_label = self._format_q_axis_label(filter_mode='positive')
+                elif hasattr(self, 'show_negative_cb') and self.show_negative_cb.isChecked():
+                    x_label = self._format_q_axis_label(filter_mode='negative')
+                else:
+                    original_x = np.asarray(x_coords)
+                    has_negative = np.any(np.isfinite(original_x) & (original_x < 0))
+                    x_label = self._format_q_axis_label(absolute=(log_x and has_negative))
             
             # 应用标准化处理（按传入值）
             if normalize:
@@ -1067,20 +1161,23 @@ class UnifiedDisplayManager:
     def _unified_plot_1d_data(self, ax, q, intensity, err, title, log_x, log_y, normalize):
         """统一的1D数据绘图逻辑，同时适用于GUI内置和独立窗口"""
         try:
+            q_plot = self.controller._convert_q_values_for_display(q)
+
             # 绘制数据 - 使用与独立窗口相同的处理方式
             if err is not None:
                 # 有误差条时使用errorbar
-                ax.errorbar(q, intensity, yerr=err, fmt='o-', 
+                ax.errorbar(q_plot, intensity, yerr=err, fmt='o-', 
                            markersize=3, linewidth=1, capsize=2, 
                            alpha=0.8, label='Data with error bars')
             else:
                 # 使用与独立窗口相同的Log-X处理函数
                 FittingController._plot_cut_data_with_log_handling(
-                    ax, q, intensity, log_x, markersize=3, linewidth=1
+                    ax, q_plot, intensity, log_x, markersize=3, linewidth=1
                 )
             
             # 设置标签和标题（使用 mathtext 避免 superscript minus 字形问题；增大字号）
-            ax.set_xlabel('q (Å$^{-1}$)', fontsize=13)
+            has_negative = np.any(np.isfinite(np.asarray(q)) & (np.asarray(q) < 0))
+            ax.set_xlabel(self.controller._build_q_axis_label(absolute=(log_x and has_negative)), fontsize=13)
             ax.set_ylabel('Intensity' + (' (normalized)' if normalize else ''), fontsize=13)
             ax.set_title(title, fontsize=15)
             ax.grid(True, alpha=0.3)
@@ -1106,11 +1203,13 @@ class UnifiedDisplayManager:
                 
         except Exception as e:
             # 降级到基本绘图
+            q_plot = self.controller._convert_q_values_for_display(q)
             if err is not None:
-                ax.errorbar(q, intensity, yerr=err, fmt='o-', markersize=3, linewidth=1, capsize=2)
+                ax.errorbar(q_plot, intensity, yerr=err, fmt='o-', markersize=3, linewidth=1, capsize=2)
             else:
-                ax.plot(q, intensity, 'o-', markersize=3, linewidth=1)
-            ax.set_xlabel('q (Å$^{-1}$)', fontsize=13)
+                ax.plot(q_plot, intensity, 'o-', markersize=3, linewidth=1)
+            has_negative = np.any(np.isfinite(np.asarray(q)) & (np.asarray(q) < 0))
+            ax.set_xlabel(self.controller._build_q_axis_label(absolute=(log_x and has_negative)), fontsize=13)
             ax.set_ylabel('Intensity' + (' (normalized)' if normalize else ''), fontsize=13)
             ax.set_title(title, fontsize=15)
             ax.grid(True, alpha=0.3)
@@ -1122,8 +1221,11 @@ class UnifiedDisplayManager:
                 hasattr(self.controller.independent_fit_window, 'update_plot')):
                 
                 y_label = 'Intensity' + (' (normalized)' if normalize else '')
+                q_internal_nm = self.controller._convert_q_values_for_model(
+                    q, source=getattr(self.controller, 'data_source', None)
+                )
                 self.controller.independent_fit_window.update_plot(
-                    q, intensity, 'q (Å$^{-1}$)', y_label, title,
+                    q_internal_nm, intensity, self.controller._build_q_axis_label(), y_label, title,
                     log_x, log_y, normalize, err
                 )
                 
@@ -1326,6 +1428,7 @@ class FittingController(QObject):
         # 1D数据导入相关
         self.current_1d_data = None  # 存储导入的1D文件数据 {q, I, err}
         self.current_1d_file_path = None  # 存储当前导入的1D文件路径
+        self._imported_1d_q_unit = 'angstrom'  # 1D导入默认按 Å^-1 解释；拟合时会自动换算到 nm^-1
         
         # 模式状态跟踪（避免重复转换）
         self._last_q_mode = None
@@ -1538,9 +1641,13 @@ class FittingController(QObject):
         try:
             if not self._roi_active():
                 return
-            vmin, vmax = float(self._roi_min), float(self._roi_max)
-            ax.axvline(vmin, color='red', linestyle='--', linewidth=1.2, alpha=0.8)
-            ax.axvline(vmax, color='red', linestyle='--', linewidth=1.2, alpha=0.8)
+            q_bounds = self._convert_q_values_for_display(
+                np.array([float(self._roi_min), float(self._roi_max)], dtype=float),
+                source=getattr(self, 'data_source', None)
+            )
+            if q_bounds.size >= 2:
+                ax.axvline(float(q_bounds[0]), color='red', linestyle='--', linewidth=1.2, alpha=0.8)
+                ax.axvline(float(q_bounds[1]), color='red', linestyle='--', linewidth=1.2, alpha=0.8)
         except Exception:
             pass
 
@@ -2105,6 +2212,10 @@ class FittingController(QObject):
             self.ui.OthersNormalizeCheckBox.toggled.connect(self._on_normalize_changed)
         if hasattr(self.ui, 'fitNormCheckBox'):
             self.ui.fitNormCheckBox.toggled.connect(self._on_normalize_changed)
+
+        # 连接主界面的 Positive Only 复选框，使其与独立窗口同步
+        if hasattr(self.ui, 'PositiveOnlyCheckBox'):
+            self.ui.PositiveOnlyCheckBox.toggled.connect(self._on_positive_only_changed)
             
         if hasattr(self.ui, 'fitResetButton'):
             self.ui.fitResetButton.clicked.connect(self._reset_fitting)
@@ -3697,8 +3808,12 @@ class FittingController(QObject):
             if self.independent_fit_window is None or not self.independent_fit_window.isVisible():
                 self.independent_fit_window = IndependentFitWindow(self.main_window)
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
-                # 连接Positive Only复选框到更新函数
+                # 连接独立窗口中的半轴筛选按钮到刷新函数
                 self.independent_fit_window.show_positive_cb.toggled.connect(self._on_positive_only_changed)
+                if hasattr(self.independent_fit_window, 'show_negative_cb'):
+                    self.independent_fit_window.show_negative_cb.toggled.connect(self._on_positive_only_changed)
+                if hasattr(self.independent_fit_window, 'q_unit_combo'):
+                    self.independent_fit_window.q_unit_combo.currentTextChanged.connect(self._on_positive_only_changed)
                 # 与主界面的“Positive Only”状态保持一致
                 try:
                     if hasattr(self.ui, 'PositiveOnlyCheckBox'):
@@ -4418,7 +4533,8 @@ class FittingController(QObject):
                 'q': data.q,
                 'I': data.I,
                 'err': getattr(data, 'err', None) if hasattr(data, 'err') else None,
-                'file_path': file_path
+                'file_path': file_path,
+                'q_source_unit': self._imported_1d_q_unit
             }
             
             # 设置为1D模式，切换显示模式为normal
@@ -5394,11 +5510,20 @@ class FittingController(QObject):
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
+            filter_mode = self._get_independent_axis_filter_mode()
+            positive_only = (filter_mode == 'positive')
+            negative_only = (filter_mode == 'negative')
             
             # 处理数据（使用ROI子集如果激活）
             q_data, I_data = self._get_roi_active_arrays()
             if q_data is None or I_data is None:
                 return
+
+            q_data, q_plot, I_data, _ = self._filter_q_data_for_independent_display(q_data, I_data)
+            if q_data.size == 0 or I_data is None or I_data.size == 0:
+                return
+            q_data_display = self._convert_q_values_for_display(q_data)
+            q_plot = self._convert_q_values_for_display(q_plot)
             
             # 归一化（若启用）：使用同一归一化因子应用于实验数据与拟合数据，确保同一尺度
             norm_factor = 1.0
@@ -5422,7 +5547,7 @@ class FittingController(QObject):
             ax = fig.add_subplot(111)
             
             # Normal模式下的特殊处理：处理负数q值
-            if mode == 'normal' and log_x:
+            if mode == 'normal' and log_x and not positive_only and not negative_only:
                 # 分离正数和负数q值
                 positive_mask = q_data > 0
                 negative_mask = q_data < 0
@@ -5430,24 +5555,24 @@ class FittingController(QObject):
                 
                 # 绘制正数部分（蓝色点线图）
                 if np.any(positive_mask):
-                    ax.plot(q_data[positive_mask], I_data[positive_mask], 'o-', 
+                    ax.plot(q_data_display[positive_mask], I_data[positive_mask], 'o-', 
                            color='blue', markersize=4, linewidth=1, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q>0)' if self.data_source else 'Data (q>0)', zorder=2)
                 
                 # 绘制负数部分（红色点线图，使用|q|）
                 if np.any(negative_mask):
-                    ax.plot(np.abs(q_data[negative_mask]), I_data[negative_mask], 'o-', 
+                    ax.plot(np.abs(q_data_display[negative_mask]), I_data[negative_mask], 'o-', 
                            color='red', markersize=4, linewidth=1, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q<0, |q|)' if self.data_source else 'Data (q<0, |q|)', zorder=2)
                 
                 # 处理q=0的点（如果有）
                 if np.any(zero_mask):
-                    ax.plot(q_data[zero_mask], I_data[zero_mask], 'o', 
+                    ax.plot(q_data_display[zero_mask], I_data[zero_mask], 'o', 
                            color='green', markersize=6, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q=0)' if self.data_source else 'Data (q=0)', zorder=3)
             else:
                 # 其他情况：使用散点图
-                ax.scatter(q_data, I_data, s=30, alpha=0.7, color='blue', 
+                ax.scatter(q_plot, I_data, s=30, alpha=0.7, color='blue', 
                           label=f'{self.data_source.upper()} Data' if self.data_source else 'Data', zorder=2)
             # ROI 辅助线
             self._draw_roi_guides_if_active(ax)
@@ -5469,15 +5594,16 @@ class FittingController(QObject):
                 if shapes and params_list:
                     try:
                         from utils.fitting import mixed_model_components
-                        comp = mixed_model_components(shapes, q_data, params_list)
+                        q_model = self._convert_q_values_for_model(q_data, source=self.data_source)
+                        comp = mixed_model_components(shapes, q_model, params_list)
                         # BG
                         if show_bg and comp.get('BG_total') is not None:
                             y_bg = comp['BG_total'] / norm_divisor if norm_divisor else comp['BG_total']
-                            ax.plot(q_data, y_bg, linestyle='--', color='#666666', linewidth=1.5, label='bg', zorder=2)
+                            ax.plot(q_plot, y_bg, linestyle='--', color='#666666', linewidth=1.5, label='bg', zorder=2)
                         # Resolution function
                         if show_res and comp.get('resolution') is not None:
                             y_res = comp['resolution'] / norm_divisor if norm_divisor else comp['resolution']
-                            ax.plot(q_data, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
+                            ax.plot(q_plot, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
                         # Particles
                         colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b']
                         for item in comp.get('particles', []):
@@ -5491,7 +5617,7 @@ class FittingController(QObject):
                                     color = colors[(color_key - 1) % len(colors)] if color_key else colors[(idx-1) % len(colors)]
                                     yv_plot = yv / norm_divisor if norm_divisor else yv
                                     label_id = f"{shape_name} {widget_id}" if widget_id is not None else f"{shape_name} {idx}"
-                                    ax.plot(q_data, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
+                                    ax.plot(q_plot, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
                         # 刷新图例以包含新线
                         ax.legend()
                     except Exception:
@@ -5499,28 +5625,37 @@ class FittingController(QObject):
 
             #（组件叠加显示仅在 _plot_fitting_result 中实现，避免在普通更新路径重复绘制）
             
-            # 如果是fitting模式且有拟合数据，绘制拟合曲线（按ROI对齐）
+            # 如果是fitting模式且有拟合数据，绘制拟合曲线（按ROI与半轴筛选对齐）
             if mode == 'fitting' and self.has_fitting_data and self.I_fitting is not None:
-                # Align fitting curve with current q_data (which may be ROI subset)
                 I_fitting_arr = np.asarray(self.I_fitting)
                 q_full = np.asarray(self.q)
-                # Build mapping: select indices whose q are within ROI boundaries
+
+                mask_full = np.isfinite(q_full)
                 if self._roi_active():
-                    roi_mask_full = (q_full >= self._roi_min) & (q_full <= self._roi_max)
-                    if np.any(roi_mask_full) and roi_mask_full.sum() == len(q_data):
-                        I_fitting_data = I_fitting_arr[roi_mask_full]
-                    else:
-                        # Fallback: if sizes match already, use as-is
-                        I_fitting_data = I_fitting_arr[:len(q_data)]
-                else:
-                    I_fitting_data = I_fitting_arr[:len(q_data)]
-                if normalize and norm_factor > 0:
+                    mask_full &= (q_full >= self._roi_min) & (q_full <= self._roi_max)
+                if positive_only:
+                    mask_full &= (q_full > 0)
+                elif negative_only:
+                    mask_full &= (q_full < 0)
+
+                q_fit_raw = q_full[mask_full]
+                I_fitting_data = I_fitting_arr[mask_full]
+                _, q_fit_plot, I_fitting_data, _ = self._filter_q_data_for_independent_display(q_fit_raw, I_fitting_data)
+                q_fit_plot = self._convert_q_values_for_display(q_fit_plot)
+
+                if normalize and norm_factor > 0 and I_fitting_data.size > 0:
                     I_fitting_data = I_fitting_data / norm_factor
-                ax.plot(q_data, I_fitting_data, color='red', linewidth=2, 
-                       label='Fitting', zorder=3)
+
+                plot_len = min(len(q_fit_plot), len(I_fitting_data))
+                if plot_len > 0:
+                    ax.plot(q_fit_plot[:plot_len], I_fitting_data[:plot_len], color='red', linewidth=2, 
+                           label='Fitting', zorder=3)
             
             # 设置标签和样式
-            ax.set_xlabel('q (Å$^{-1}$)' if not (mode == 'normal' and log_x and np.any(q_data < 0)) else '|q| (Å$^{-1}$)')
+            x_label = self._build_q_axis_label(filter_mode=filter_mode)
+            if mode == 'normal' and log_x and not positive_only and not negative_only and np.any(q_data < 0):
+                x_label = self._build_q_axis_label(filter_mode='all', absolute=True)
+            ax.set_xlabel(x_label)
             ax.set_ylabel('Normalized Intensity' if normalize else 'Intensity (a.u.)')
             ax.set_title(f'{mode.capitalize()} Mode - {self.data_source.upper() if self.data_source else "Data"}')
             ax.grid(True, alpha=0.3)
@@ -5553,8 +5688,10 @@ class FittingController(QObject):
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
             
-            # 检查"Positive Only"复选框状态
-            positive_only = self._is_positive_only_enabled()
+            # 检查独立窗口中的半轴筛选状态
+            filter_mode = self._get_independent_axis_filter_mode()
+            positive_only = (filter_mode == 'positive')
+            negative_only = (filter_mode == 'negative')
             
             # 选择数据源，并应用ROI（如果激活）与有效性过滤
             q_data = None
@@ -5589,15 +5726,12 @@ class FittingController(QObject):
 
             if q_data is None or I_data is None or len(q_data) == 0 or len(I_data) == 0:
                 return
-            finite_mask = np.isfinite(q_data) & np.isfinite(I_data)
-            q_data = q_data[finite_mask]
-            I_data = I_data[finite_mask]
-            
-            # 如果启用"Positive Only"，过滤掉负数q值
-            if positive_only:
-                positive_mask = q_data > 0
-                q_data = q_data[positive_mask]
-                I_data = I_data[positive_mask]
+
+            q_data, q_plot, I_data, _ = self._filter_q_data_for_independent_display(q_data, I_data)
+            if q_data.size == 0 or I_data is None or I_data.size == 0:
+                return
+            q_data_display = self._convert_q_values_for_display(q_data)
+            q_plot = self._convert_q_values_for_display(q_plot)
             
             # 归一化（若启用）：使用同一归一化因子应用于实验数据与拟合数据
             norm_factor = 1.0
@@ -5610,8 +5744,8 @@ class FittingController(QObject):
             ax = self.independent_fit_window.ax
             ax.clear()
             
-            # Normal模式下的特殊处理：处理负数q值（仅当未启用positive_only时）
-            if mode == 'normal' and log_x and not positive_only:
+            # Normal模式下的特殊处理：处理负数q值（仅当未启用半轴筛选时）
+            if mode == 'normal' and log_x and not positive_only and not negative_only:
                 # 分离正数和负数q值
                 positive_mask = q_data > 0
                 negative_mask = q_data < 0
@@ -5619,24 +5753,24 @@ class FittingController(QObject):
                 
                 # 绘制正数部分（蓝色点线图）
                 if np.any(positive_mask):
-                    ax.plot(q_data[positive_mask], I_data[positive_mask], 'o-', 
+                    ax.plot(q_data_display[positive_mask], I_data[positive_mask], 'o-', 
                            color='blue', markersize=4, linewidth=1, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q>0)' if self.data_source else 'Data (q>0)', zorder=2)
                 
                 # 绘制负数部分（红色点线图，使用|q|）
                 if np.any(negative_mask):
-                    ax.plot(np.abs(q_data[negative_mask]), I_data[negative_mask], 'o-', 
+                    ax.plot(np.abs(q_data_display[negative_mask]), I_data[negative_mask], 'o-', 
                            color='red', markersize=4, linewidth=1, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q<0, |q|)' if self.data_source else 'Data (q<0, |q|)', zorder=2)
                 
                 # 处理q=0的点（如果有）
                 if np.any(zero_mask):
-                    ax.plot(q_data[zero_mask], I_data[zero_mask], 'o', 
+                    ax.plot(q_data_display[zero_mask], I_data[zero_mask], 'o', 
                            color='green', markersize=6, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q=0)' if self.data_source else 'Data (q=0)', zorder=3)
             else:
                 # 其他情况：使用散点图
-                ax.scatter(q_data, I_data, s=30, alpha=0.7, color='blue', 
+                ax.scatter(q_plot, I_data, s=30, alpha=0.7, color='blue', 
                           label=f'{self.data_source.upper()} Data' if self.data_source else 'Data', zorder=2)
             # ROI 辅助线
             self._draw_roi_guides_if_active(ax)
@@ -5656,16 +5790,17 @@ class FittingController(QObject):
                 if shapes and params_list:
                     try:
                         from utils.fitting import mixed_model_components
-                        comp = mixed_model_components(shapes, q_data, params_list)
+                        q_model = self._convert_q_values_for_model(q_data, source=self.data_source)
+                        comp = mixed_model_components(shapes, q_model, params_list)
                         norm_divisor = norm_factor if normalize and norm_factor > 0 else None
                         # BG
                         if show_bg and comp.get('BG_total') is not None:
                             y_bg = comp['BG_total'] / norm_divisor if norm_divisor else comp['BG_total']
-                            ax.plot(q_data, y_bg, linestyle='--', color='#666666', linewidth=1.5, label='bg', zorder=2)
+                            ax.plot(q_plot, y_bg, linestyle='--', color='#666666', linewidth=1.5, label='bg', zorder=2)
                         # Resolution function
                         if show_res and comp.get('resolution') is not None:
                             y_res = comp['resolution'] / norm_divisor if norm_divisor else comp['resolution']
-                            ax.plot(q_data, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
+                            ax.plot(q_plot, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
                         # Particles
                         colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b']
                         for item in comp.get('particles', []):
@@ -5679,37 +5814,43 @@ class FittingController(QObject):
                                     color = colors[(color_key - 1) % len(colors)] if color_key else colors[(idx-1) % len(colors)]
                                     yv_plot = yv / norm_divisor if norm_divisor else yv
                                     label_id = f"{shape_name} {widget_id}" if widget_id is not None else f"{shape_name} {idx}"
-                                    ax.plot(q_data, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
+                                    ax.plot(q_plot, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
                         ax.legend()
                     except Exception:
                         pass
             
-            # 如果是fitting模式且有拟合数据，绘制拟合曲线（与数据对齐，并考虑Positive Only）
+            # 如果是fitting模式且有拟合数据，绘制拟合曲线（与数据对齐，并考虑半轴筛选）
             if mode == 'fitting' and self.has_fitting_data and self.I_fitting is not None:
                 I_fitting_arr = np.asarray(self.I_fitting)
                 q_full = np.asarray(self.q)
-                # Build mask to align with displayed q_data (ROI + positive_only)
+                # Build mask to align with displayed q_data (ROI + axis filter)
                 mask_full = np.isfinite(q_full)
                 if self._roi_active():
                     mask_full &= (q_full >= self._roi_min) & (q_full <= self._roi_max)
                 if positive_only:
                     mask_full &= (q_full > 0)
+                elif negative_only:
+                    mask_full &= (q_full < 0)
+
+                q_fit_raw = q_full[mask_full]
                 I_fitting_data = I_fitting_arr[mask_full]
-                # Trim/pad safety: align length with q_data
-                if len(I_fitting_data) != len(q_data):
-                    I_fitting_data = I_fitting_data[:len(q_data)]
+                q_fit_raw, q_fit_plot, I_fitting_data, _ = self._filter_q_data_for_independent_display(q_fit_raw, I_fitting_data)
+                q_fit_plot = self._convert_q_values_for_display(q_fit_plot)
+
                 # 与实验数据使用相同归一化因子
-                if normalize and norm_factor > 0:
+                if normalize and norm_factor > 0 and I_fitting_data.size > 0:
                     I_fitting_data = I_fitting_data / norm_factor
-                ax.plot(q_data, I_fitting_data, color='red', linewidth=2.5, 
-                       label='Fitting', zorder=3)
+
+                # Trim/pad safety: align length with plotted q values
+                plot_len = min(len(q_fit_plot), len(I_fitting_data))
+                if plot_len > 0:
+                    ax.plot(q_fit_plot[:plot_len], I_fitting_data[:plot_len], color='red', linewidth=2.5, 
+                           label='Fitting', zorder=3)
             
             # 设置标签和样式
-            x_label = 'q (Å$^{-1}$)'
-            if mode == 'normal' and log_x and not positive_only and np.any(np.array(self.q) < 0):
-                x_label = '|q| (Å$^{-1}$)'
-            elif positive_only:
-                x_label = 'q (Å$^{-1}$) [Positive Only]'
+            x_label = self._build_q_axis_label(filter_mode=filter_mode)
+            if mode == 'normal' and log_x and not positive_only and not negative_only and np.any(np.array(self.q) < 0):
+                x_label = self._build_q_axis_label(filter_mode='all', absolute=True)
                 
             ax.set_xlabel(x_label)
             ax.set_ylabel('Normalized Intensity' if normalize else 'Intensity (a.u.)')
@@ -6073,7 +6214,8 @@ class FittingController(QObject):
                 'y_intensity': y_arr.copy() if hasattr(y_arr, 'copy') else list(y_arr),
                 'x_label': x_label,
                 'y_label': y_label,
-                'title': title
+                'title': title,
+                'q_source_unit': 'nm'
             }
             # 统一的全局Cut缓存（q轴数据命名为q，便于导出与复用）
             try:
@@ -6086,7 +6228,9 @@ class FittingController(QObject):
                         'y_label': y_label,
                         'title': title,
                         'timestamp': time.time(),
-                        'source': 'cut'
+                        'source': 'cut',
+                        'q_source_unit': 'nm',
+                        'q_model_unit': 'nm'
                     }
                 }
             except Exception:
@@ -6211,6 +6355,85 @@ class FittingController(QObject):
         """检查是否启用标准化"""
         # 只检查fitNormCheckBox
         return self._get_checkbox_state('fitNormCheckBox', False)
+
+    def _get_q_display_unit(self):
+        """获取当前q轴显示单位。默认使用 nm⁻¹。"""
+        try:
+            if (hasattr(self, 'independent_fit_window') and
+                self.independent_fit_window is not None and
+                hasattr(self.independent_fit_window, 'q_unit_combo')):
+                unit = self.independent_fit_window.q_unit_combo.currentData()
+                if isinstance(unit, str):
+                    unit = unit.lower()
+                    if unit in ('angstrom', 'nm'):
+                        return unit
+                text = str(self.independent_fit_window.q_unit_combo.currentText()).lower()
+                if 'ang' in text or 'å' in text or 'a^-1' in text:
+                    return 'angstrom'
+        except Exception:
+            pass
+        return 'nm'
+
+    def _get_q_source_unit(self, source=None):
+        """返回原始q数据的单位：Cut默认为 nm^-1，导入1D默认按 Å^-1。"""
+        try:
+            if isinstance(source, dict):
+                unit = str(source.get('q_source_unit', '')).lower()
+                if unit in ('nm', 'angstrom'):
+                    return unit
+                source = source.get('data_source')
+
+            if source is None:
+                source = getattr(self, 'data_source', None)
+
+            source_text = str(source or '').lower()
+            if 'cut' in source_text:
+                return 'nm'
+            if 'fit' in source_text and isinstance(getattr(self, 'fitting', None), dict):
+                meta = self.fitting.get('meta', {})
+                unit = str(meta.get('q_source_unit', '')).lower()
+                if unit in ('nm', 'angstrom'):
+                    return unit
+            if '1d' in source_text:
+                return getattr(self, '_imported_1d_q_unit', 'angstrom')
+        except Exception:
+            pass
+        return getattr(self, '_imported_1d_q_unit', 'angstrom')
+
+    def _get_q_display_scale(self):
+        """返回内部 nm^-1 数据到当前显示单位的缩放系数。"""
+        return 0.1 if self._get_q_display_unit() == 'angstrom' else 1.0
+
+    def _get_q_unit_label(self, mathtext: bool = True):
+        """获取当前显示用的q轴单位标签。"""
+        if self._get_q_display_unit() == 'nm':
+            return 'nm$^{-1}$' if mathtext else 'nm^-1'
+        return 'Å$^{-1}$' if mathtext else 'Angstrom^-1'
+
+    def _convert_q_values_for_model(self, q_values, source=None):
+        """将原始q数据换算到拟合模型使用的 nm^-1。"""
+        q_arr = np.asarray([] if q_values is None else q_values, dtype=float)
+        if q_arr.size == 0:
+            return q_arr
+        return q_arr * 10.0 if self._get_q_source_unit(source) == 'angstrom' else q_arr
+
+    def _convert_q_values_for_display(self, q_values, source=None):
+        """将原始q数据转换到当前显示单位。内部统一先换算到 nm^-1。"""
+        q_nm = self._convert_q_values_for_model(q_values, source=source)
+        if q_nm.size == 0:
+            return q_nm
+        return q_nm * self._get_q_display_scale()
+
+    def _build_q_axis_label(self, filter_mode: str = 'all', absolute: bool = False, mathtext: bool = True):
+        """构建带单位和筛选状态的q轴标签。"""
+        unit_label = self._get_q_unit_label(mathtext=mathtext)
+        base = '|q|' if absolute or filter_mode == 'negative' else 'q'
+        suffix = ''
+        if filter_mode == 'positive':
+            suffix = ' [Positive Only]'
+        elif filter_mode == 'negative':
+            suffix = ' [Negative Only]'
+        return f'{base} ({unit_label}){suffix}'
     
     def _is_positive_only_enabled(self):
         """检查是否启用Positive Only模式（仅显示正数q值）"""
@@ -6222,6 +6445,85 @@ class FittingController(QObject):
         
         # 如果独立窗口不存在，检查主窗口中的复选框
         return self._get_checkbox_state('PositiveOnlyCheckBox', False)
+
+    def _is_negative_only_enabled(self):
+        """检查是否启用Negative Only模式（仅显示负数半轴，横坐标显示为|q|）"""
+        return (
+            hasattr(self, 'independent_fit_window') and
+            self.independent_fit_window is not None and
+            hasattr(self.independent_fit_window, 'show_negative_cb') and
+            self.independent_fit_window.show_negative_cb.isChecked()
+        )
+
+    def _get_independent_axis_filter_mode(self):
+        """获取当前显示使用的半轴筛选模式。"""
+        if self._is_negative_only_enabled():
+            return 'negative'
+        if self._is_positive_only_enabled():
+            return 'positive'
+        return 'all'
+
+    def _sync_axis_filter_controls(self):
+        """同步主界面与独立窗口的半轴筛选状态。"""
+        if getattr(self, '_syncing_axis_filter', False):
+            return
+
+        self._syncing_axis_filter = True
+        try:
+            sender = self.sender()
+
+            if hasattr(self.ui, 'PositiveOnlyCheckBox') and sender is self.ui.PositiveOnlyCheckBox:
+                desired_positive = self.ui.PositiveOnlyCheckBox.isChecked()
+                if (hasattr(self, 'independent_fit_window') and
+                    self.independent_fit_window is not None and
+                    hasattr(self.independent_fit_window, 'show_positive_cb')):
+                    self.independent_fit_window.show_positive_cb.setChecked(desired_positive)
+                    if (not desired_positive and
+                        hasattr(self.independent_fit_window, 'show_negative_cb')):
+                        self.independent_fit_window.show_negative_cb.setChecked(False)
+            else:
+                if hasattr(self.ui, 'PositiveOnlyCheckBox'):
+                    positive_checked = (self._get_independent_axis_filter_mode() == 'positive')
+                    self.ui.PositiveOnlyCheckBox.blockSignals(True)
+                    self.ui.PositiveOnlyCheckBox.setChecked(positive_checked)
+                    self.ui.PositiveOnlyCheckBox.blockSignals(False)
+        finally:
+            self._syncing_axis_filter = False
+
+    def _filter_q_data_for_independent_display(self, q_data, y_data=None):
+        """根据独立窗口筛选选项处理q数据；Negative Only会将横坐标映射为|q|。"""
+        q_arr = np.asarray([] if q_data is None else q_data)
+        y_arr = None if y_data is None else np.asarray(y_data)
+
+        finite_mask = np.isfinite(q_arr)
+        if y_arr is not None:
+            finite_mask &= np.isfinite(y_arr)
+
+        q_arr = q_arr[finite_mask]
+        if y_arr is not None:
+            y_arr = y_arr[finite_mask]
+
+        filter_mode = self._get_independent_axis_filter_mode()
+        if filter_mode == 'positive':
+            axis_mask = q_arr > 0
+        elif filter_mode == 'negative':
+            axis_mask = q_arr < 0
+        else:
+            axis_mask = np.ones(q_arr.shape, dtype=bool)
+
+        q_raw = q_arr[axis_mask]
+        if y_arr is not None:
+            y_arr = y_arr[axis_mask]
+
+        q_plot = np.abs(q_raw) if filter_mode == 'negative' else np.array(q_raw, copy=True)
+        if q_plot.size > 0 and filter_mode == 'negative':
+            sort_idx = np.argsort(q_plot)
+            q_raw = q_raw[sort_idx]
+            q_plot = q_plot[sort_idx]
+            if y_arr is not None:
+                y_arr = y_arr[sort_idx]
+
+        return q_raw, q_plot, y_arr, filter_mode
     
     def _normalize_intensity_data(self, I_data):
         """统一的强度数据归一化方法"""
@@ -7935,6 +8237,128 @@ class FittingController(QObject):
     # ================================
     # 数据导出功能
     # ================================
+
+    def _get_fitting_parameter_comment_lines(self):
+        """生成导出文件表头中的拟合参数注释行（以 # 开头）。"""
+        lines = ["# Fitting Parameters Begin"]
+        try:
+            import re
+            from utils.fitting import params_template
+
+            shapes = []
+            param_dict = None
+            param_source = "current_ui_snapshot"
+            widget_ids = list(getattr(self, '_last_active_particle_ids', []) or [])
+
+            if isinstance(getattr(self, 'fitting', None), dict):
+                meta = self.fitting.get('meta', {})
+                fit_shapes = meta.get('shapes')
+                fit_params = meta.get('params')
+                if fit_shapes and fit_params:
+                    shapes = [str(shape).lower() for shape in fit_shapes]
+                    param_dict = {str(k): float(v) for k, v in dict(fit_params).items()}
+                    param_source = "last_fitting_result"
+
+            if not shapes:
+                shapes, widget_ids = self._collect_active_particles()
+
+            if not param_dict and shapes:
+                shape_list, params_list = self._get_last_fitting_spec_and_params(fallback_shapes=shapes)
+                if shape_list and params_list:
+                    shapes = list(shape_list)
+                    param_dict = {
+                        str(name): float(value)
+                        for name, value in zip(params_template(shapes), params_list)
+                    }
+
+            if not shapes or not param_dict:
+                lines.append("# Parameter Source: unavailable")
+                lines.append("# No fitting parameter snapshot available")
+                lines.append("# Fitting Parameters End")
+                return lines
+
+            template = params_template(shapes)
+            lines.append(f"# Parameter Source: {param_source}")
+            lines.append(f"# Active Shapes: {', '.join(shapes)}")
+
+            grouped_particle_params = {}
+            global_params = []
+            for template_name in template:
+                match = re.match(r'^(.*?)(\d+)$', str(template_name))
+                if match:
+                    param_base = match.group(1)
+                    particle_index = int(match.group(2))
+                    grouped_particle_params.setdefault(particle_index, []).append((template_name, param_base))
+                else:
+                    global_params.append(template_name)
+
+            for particle_index in sorted(grouped_particle_params.keys()):
+                shape = shapes[particle_index - 1] if particle_index - 1 < len(shapes) else 'unknown'
+                widget_id = widget_ids[particle_index - 1] if particle_index - 1 < len(widget_ids) else particle_index
+                lines.append(f"# Particle {particle_index}: widget_id={widget_id}, shape={shape}")
+                for template_name, _param_base in grouped_particle_params[particle_index]:
+                    if template_name in param_dict:
+                        lines.append(f"#   {template_name} = {float(param_dict[template_name]):.10g}")
+
+            if global_params:
+                lines.append("# Global Parameters:")
+                for template_name in global_params:
+                    if template_name in param_dict:
+                        lines.append(f"#   {template_name} = {float(param_dict[template_name]):.10g}")
+
+        except Exception as e:
+            lines.append(f"# Fitting parameter export error: {e}")
+
+        lines.append("# Fitting Parameters End")
+        return lines
+
+    def _build_export_header_lines(self, choice: str, data_name: str):
+        """构建导出文件的表头注释信息。"""
+        lines = []
+        try:
+            from datetime import datetime
+
+            q_source_kind = None
+            if choice == 'Cut Data':
+                q_source_kind = 'cut'
+            elif choice == '1D File Data':
+                q_source_kind = '1d'
+            elif choice == 'Fitting Data' and isinstance(getattr(self, 'fitting', None), dict):
+                q_source_kind = self.fitting.get('meta', {}).get('data_source', getattr(self, 'data_source', None))
+
+            lines.append("# GISAXS Toolkit Export")
+            lines.append(f"# Export Time: {datetime.now().isoformat(timespec='seconds')}")
+            lines.append(f"# Data Type: {choice}")
+            lines.append(f"# Export Name: {data_name}")
+            lines.append(f"# Display Mode: {getattr(self, 'display_mode', 'normal')}")
+            lines.append(f"# Log X: {self._is_fit_log_x_enabled()}")
+            lines.append(f"# Log Y: {self._is_fit_log_y_enabled()}")
+            lines.append(f"# Normalize: {self._is_fit_norm_enabled()}")
+            lines.append(f"# Axis Filter: {self._get_independent_axis_filter_mode()}")
+            lines.append(f"# Raw q Source Unit: {self._get_q_source_unit(q_source_kind)}")
+            lines.append("# Internal Model q Unit: nm^-1")
+            lines.append(f"# q Unit: {self._get_q_unit_label(mathtext=False)}")
+            lines.append(f"# X Column: {self._build_q_axis_label(filter_mode='all', mathtext=False)}")
+            lines.append("# Y Column: Intensity (a.u.)")
+
+            if self._roi_min is not None and self._roi_max is not None:
+                lines.append(f"# ROI Range: {float(self._roi_min):.10g} -> {float(self._roi_max):.10g}")
+
+            if choice == '1D File Data' and getattr(self, 'current_1d_data', None) is not None:
+                file_path = self.current_1d_data.get('file_path')
+                if file_path:
+                    lines.append(f"# 1D File: {file_path}")
+            elif choice == 'Cut Data' and getattr(self, 'cut', None) is not None:
+                cut_meta = self.cut.get('meta', {}) if isinstance(self.cut, dict) else {}
+                title = cut_meta.get('title')
+                if title:
+                    lines.append(f"# Cut Title: {title}")
+
+        except Exception:
+            pass
+
+        lines.extend(self._get_fitting_parameter_comment_lines())
+        return lines
     
     def _export_fitting_data(self):
         """导出Fitting界面图形数据"""
@@ -7976,18 +8400,22 @@ class FittingController(QObject):
             x_data = None
             y_data = None
             data_name = ""
+            q_source_kind = None
             if choice == 'Cut Data' and self.cut is not None:
                 x_data = np.array(self.cut.get('q', []))
                 y_data = np.array(self.cut.get('I', []))
                 data_name = 'Cut_Data'
+                q_source_kind = 'cut'
             elif choice == 'Fitting Data' and self.fitting is not None:
                 x_data = np.array(self.fitting.get('q', []))
                 y_data = np.array(self.fitting.get('I', []))
                 data_name = 'Fitting_Data'
+                q_source_kind = self.fitting.get('meta', {}).get('data_source', getattr(self, 'data_source', None))
             elif choice == '1D File Data' and self.current_1d_data is not None:
                 x_data = np.array(self.current_1d_data.get('q', []))
                 y_data = np.array(self.current_1d_data.get('I', []))
                 data_name = '1D_File_Data'
+                q_source_kind = '1d'
             else:
                 self._add_fitting_error("Selected data is not available to export")
                 return
@@ -8007,17 +8435,25 @@ class FittingController(QObject):
             min_length = min(len(x_data), len(y_data))
             x_data = x_data[:min_length]
             y_data = y_data[:min_length]
+
+            # 导出时让X列直接体现当前选择的q单位
+            x_data = self._convert_q_values_for_display(x_data, source=q_source_kind)
+            x_column_name = self._build_q_axis_label(filter_mode='all', mathtext=False)
+            y_column_name = 'Intensity (a.u.)'
             
             # 按列排列数据并保存
             combined_data = np.column_stack([x_data, y_data])
+            header_lines = self._build_export_header_lines(choice, data_name)
             
-            # 根据文件扩展名选择保存格式
-            if filename.lower().endswith('.csv'):
-                np.savetxt(filename, combined_data, delimiter=',', 
-                          header='X,Y', comments='', fmt='%.6e')
-            else:
-                np.savetxt(filename, combined_data, delimiter='\t', 
-                          header='X\tY', comments='', fmt='%.6e')
+            # 根据文件扩展名选择保存格式，并在表头写入以 # 开头的参数信息
+            delimiter = ',' if filename.lower().endswith('.csv') else '\t'
+            column_header = f'{x_column_name},{y_column_name}' if delimiter == ',' else f'{x_column_name}\t{y_column_name}'
+
+            with open(filename, 'w', encoding='utf-8', newline='\n') as f:
+                if header_lines:
+                    f.write('\n'.join(header_lines) + '\n')
+                f.write(column_header + '\n')
+                np.savetxt(f, combined_data, delimiter=delimiter, fmt='%.6e')
             
             self._add_fitting_success(f"{data_name} exported successfully to: {filename}")
             
@@ -8042,20 +8478,28 @@ class FittingController(QObject):
             
             # 2. 获取q值数组
             q_data = None
+            q_source_kind = None
             if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
-                # 使用Cut数据的q值
+                # 使用Cut数据的q值（内部Q计算为 nm^-1）
                 if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
                     q_data = np.array(self.current_cut_data['x_coords'])
+                    q_source_kind = 'cut'
                 else:
                     self._add_fitting_error("No Cut data available for fitting")
                     return
             else:
-                # 使用1D文件数据的q值
+                # 使用1D文件数据的q值（默认按 Å^-1 导入，再换算到 nm^-1 拟合）
                 if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
                     q_data = np.array(self.current_1d_data['q'])
+                    q_source_kind = '1d'
                 else:
                     self._add_fitting_error("No 1D file data available for fitting")
                     return
+
+            q_model = self._convert_q_values_for_model(q_data, source=q_source_kind)
+            self._add_fitting_success(
+                f"q converted to internal model unit nm^-1 (source={self._get_q_source_unit(q_source_kind)}, display={self._get_q_display_unit()})"
+            )
             
             # 3. 创建混合模型
             model_func = make_mixed_model(active_shapes)
@@ -8154,8 +8598,8 @@ class FittingController(QObject):
             
             # 6. 执行拟合计算
             try:
-                # 计算拟合结果
-                fitting_result = model_func(q_data, *params)
+                # 计算拟合结果（模型内部统一使用 q[nm^-1]，与 R/D/h[nm] 一致）
+                fitting_result = model_func(q_model, *params)
                 self._add_fitting_success(f"Fitting calculation completed successfully")
                 
                 # 显示拟合结果的基本统计信息
@@ -8185,7 +8629,10 @@ class FittingController(QObject):
                             'shapes': active_shapes,
                             'params': param_dict,
                             'timestamp': time.time(),
-                            'source': 'fitting'
+                            'source': 'fitting',
+                            'data_source': q_source_kind,
+                            'q_source_unit': self._get_q_source_unit(q_source_kind),
+                            'q_model_unit': 'nm'
                         }
                     }
                 except Exception:
@@ -8329,7 +8776,7 @@ class FittingController(QObject):
                     data_label = "1D File Data"
             
             # 更新外部窗口显示
-            x_label = "q (Å$^{-1}$)"
+            x_label = self._build_q_axis_label()
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Manual Fitting Result - {", ".join(self._fitting_shapes)}'
             
@@ -8379,27 +8826,21 @@ class FittingController(QObject):
             return default_value
     
     def _get_ui_control_name(self, shape_idx, shape_name, param_name):
-        """根据形状和参数名获取UI控件名称"""
+        """根据形状和参数名获取UI控件名称。"""
         try:
-            # 参数名映射表
-            param_mapping = {
-                'Int': 'Int',
-                'R': 'R', 
-                'sigma_R': 'SigmaR',
-                'D': 'D',
-                'sigma_D': 'SigmaD',
-                'h': 'h',
-                'sigma_h': 'Sigmah',
-                'BG': 'BG'
-            }
-            
-            ui_param = param_mapping.get(param_name)
-            if ui_param:
-                return f'fitParticle{shape_name}{ui_param}Value_{shape_idx}'
+            param_name = str(param_name)
+            if param_name.startswith('sigma_'):
+                rest = param_name[len('sigma_'):]
+                ui_param = 'Sigma' + ''.join(part[:1].upper() + part[1:] for part in rest.split('_') if part)
+            elif '_' in param_name:
+                ui_param = ''.join(part[:1].upper() + part[1:] for part in param_name.split('_') if part)
             else:
-                return None
-                
-        except Exception as e:
+                ui_param = param_name
+
+            candidate = f'fitParticle{shape_name}{ui_param}Value_{shape_idx}'
+            return candidate if hasattr(self.ui, candidate) else None
+
+        except Exception:
             return None
     
     def _plot_fitting_result(self, q_data, intensity_data, active_shapes):
@@ -8463,20 +8904,23 @@ class FittingController(QObject):
                     # 拟合数据按照同样的比例缩放以保持相对关系
                     fitting_y_data = fitting_y_data / max_original
             
+            original_x_plot = self._convert_q_values_for_display(original_x_data) if original_x_data is not None else None
+            fitting_x_plot = self._convert_q_values_for_display(q_data)
+
             # 绘制原始数据点（scatter）
-            if original_x_data is not None and plot_original_y is not None:
-                ax.scatter(original_x_data, plot_original_y, 
+            if original_x_plot is not None and plot_original_y is not None:
+                ax.scatter(original_x_plot, plot_original_y, 
                           s=20, alpha=0.7, color='blue', 
                           label=data_label, zorder=2)
             
             # 绘制拟合线
-            ax.plot(q_data, fitting_y_data, 
+            ax.plot(fitting_x_plot, fitting_y_data, 
                    color='red', linewidth=2, 
                    label=f'Fitting ({", ".join(active_shapes)})', 
                    zorder=3)
             
             # 设置标签和标题
-            x_label = "q (Å$^{-1}$)" if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
+            x_label = self._build_q_axis_label() if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Manual Fitting Result - {", ".join(active_shapes)}'
             
@@ -8533,16 +8977,19 @@ class FittingController(QObject):
     def _get_last_fitting_spec_and_params(self, fallback_shapes=None):
         """返回 (shapes:list[str], params_in_order:list[float])。
         优先读取 self.fitting['meta'] 中的 shapes 与 params（与当前显示拟合结果一致）。
-        若缺失则根据当前 UI 重新抓取参数作为后备。
+        若缺失则根据当前 UI 与参数模板自动抓取作为后备。
         """
         try:
-            shapes = None; param_dict = None
+            import re
+            from utils.fitting import params_template
+
+            shapes = None
+            param_dict = None
             if isinstance(getattr(self, 'fitting', None), dict):
                 meta = self.fitting.get('meta', {})
                 shapes = meta.get('shapes')
                 param_dict = meta.get('params')
             if shapes and param_dict:
-                from utils.fitting import params_template
                 tmpl = params_template(shapes)
                 params_list = []
                 ok = True
@@ -8550,47 +8997,61 @@ class FittingController(QObject):
                     if name in param_dict:
                         params_list.append(float(param_dict[name]))
                     else:
-                        ok = False; break
+                        ok = False
+                        break
                 if ok:
                     return shapes, params_list
-            # 回退到根据 UI 取参数
+
             act_shapes, act_idx = self._collect_active_particles()
             if not act_shapes:
                 return (fallback_shapes, None) if fallback_shapes else (None, None)
+
             self._last_active_particle_ids = act_idx.copy()
-            # 逐形状按模板顺序取值
+            tmpl = params_template(act_shapes)
             params_list = []
-            for j, s in enumerate(act_shapes, 1):
-                if s == 'sphere':
-                    params_list.extend([
-                        self._get_particle_parameter(act_idx[j-1], 'Int', 1.0),
-                        self._get_particle_parameter(act_idx[j-1], 'R', 10.0),
-                        self._get_particle_parameter(act_idx[j-1], 'sigma_R', 0.1),
-                        self._get_particle_parameter(act_idx[j-1], 'D', 100.0),
-                        self._get_particle_parameter(act_idx[j-1], 'sigma_D', 0.1),
-                        self._get_particle_parameter(act_idx[j-1], 'BG', 0.0),
-                    ])
-                elif s == 'cylinder':
-                    params_list.extend([
-                        self._get_particle_parameter(act_idx[j-1], 'Int', 1.0),
-                        self._get_particle_parameter(act_idx[j-1], 'R', 10.0),
-                        self._get_particle_parameter(act_idx[j-1], 'sigma_R', 0.1),
-                        self._get_particle_parameter(act_idx[j-1], 'h', 20.0),
-                        self._get_particle_parameter(act_idx[j-1], 'sigma_h', 0.1),
-                        self._get_particle_parameter(act_idx[j-1], 'D', 100.0),
-                        self._get_particle_parameter(act_idx[j-1], 'sigma_D', 0.1),
-                        self._get_particle_parameter(act_idx[j-1], 'BG', 0.0),
-                    ])
-            # 追加 sigma_Res, k
-            if hasattr(self.ui, 'fitSigmaResValue'):
-                sigma_res_val = float(self.ui.fitSigmaResValue.value())
-            else:
-                sigma_res_val = float(self.get_global_parameter('sigma_res')) if hasattr(self, 'get_global_parameter') else 0.0
-            if hasattr(self.ui, 'fitKValue'):
-                k_val = float(self.ui.fitKValue.value())
-            else:
-                k_val = float(self.get_global_parameter('k_value')) if hasattr(self, 'get_global_parameter') else 1.0
-            params_list.extend([sigma_res_val, k_val])
+
+            default_map = {
+                'Int': 1.0,
+                'R': 10.0,
+                'sigma_R': 0.1,
+                'D': 100.0,
+                'sigma_D': 0.1,
+                'h': 20.0,
+                'sigma_h': 0.1,
+                'BG': 0.0,
+                'sigma_Res': 0.1,
+                'nu_Res': 5.0,
+                'int_Res': 0.0,
+                'k': 1.0,
+            }
+            global_widget_map = {
+                'sigma_Res': ('fitSigmaResValue', 'sigma_res'),
+                'nu_Res': ('fitNuResValue', 'nu_res'),
+                'int_Res': ('fitIntResValue', 'int_res'),
+                'k': ('fitKValue', 'k_value'),
+            }
+
+            for template_name in tmpl:
+                match = re.match(r'^(.*?)(\d+)$', str(template_name))
+                if match:
+                    base_name = match.group(1)
+                    seq_index = int(match.group(2))
+                    widget_id = act_idx[seq_index - 1] if 1 <= seq_index <= len(act_idx) else None
+                    default_value = default_map.get(base_name, 0.0)
+                    if widget_id is None:
+                        params_list.append(float(default_value))
+                    else:
+                        params_list.append(float(self._get_particle_parameter(widget_id, base_name, default_value)))
+                else:
+                    widget_name, global_key = global_widget_map.get(str(template_name), (None, None))
+                    default_value = default_map.get(str(template_name), 0.0)
+                    if widget_name and hasattr(self.ui, widget_name):
+                        params_list.append(float(getattr(self.ui, widget_name).value()))
+                    elif global_key and hasattr(self, 'get_global_parameter'):
+                        params_list.append(float(self.get_global_parameter(global_key)))
+                    else:
+                        params_list.append(float(default_value))
+
             return act_shapes, [float(x) for x in params_list]
         except Exception:
             return (fallback_shapes, None) if fallback_shapes else (None, None)
@@ -8642,9 +9103,14 @@ class FittingController(QObject):
                 
                 # 连接信号
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
+                self.independent_fit_window.show_positive_cb.toggled.connect(self._on_positive_only_changed)
+                if hasattr(self.independent_fit_window, 'show_negative_cb'):
+                    self.independent_fit_window.show_negative_cb.toggled.connect(self._on_positive_only_changed)
+                if hasattr(self.independent_fit_window, 'q_unit_combo'):
+                    self.independent_fit_window.q_unit_combo.currentTextChanged.connect(self._on_positive_only_changed)
             
             # 准备数据标题和标签
-            x_label = "q (Å$^{-1}$)" if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
+            x_label = self._build_q_axis_label() if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Manual Fitting Result - {", ".join(active_shapes)}'
             
@@ -8686,7 +9152,7 @@ class FittingController(QObject):
             
             # 应用标准化处理
             plot_fitting_y = np.array(fitting_y)  # 拟合数据不进行归一化
-            plot_original_y = original_y.copy() if original_y is not None else None
+            plot_original_y = np.array(original_y, copy=True) if original_y is not None else None
             
             if normalize and original_y is not None:
                 # 只对原始数据进行标准化，拟合数据按同样比例缩放
@@ -8695,21 +9161,36 @@ class FittingController(QObject):
                     plot_original_y = original_y / max_original
                     # 拟合数据按照同样的比例缩放以保持相对关系
                     plot_fitting_y = fitting_y / max_original
+
+            filter_mode = self._get_independent_axis_filter_mode()
+            original_x_plot = original_x
+            fitting_x_plot = fitting_x
+            if original_x is not None and plot_original_y is not None:
+                _, original_x_plot, plot_original_y, filter_mode = self._filter_q_data_for_independent_display(original_x, plot_original_y)
+            if fitting_x is not None and plot_fitting_y is not None:
+                _, fitting_x_plot, plot_fitting_y, _ = self._filter_q_data_for_independent_display(fitting_x, plot_fitting_y)
+
+            original_x_plot = self._convert_q_values_for_display(original_x_plot)
+            fitting_x_plot = self._convert_q_values_for_display(fitting_x_plot)
             
             # 绘制原始数据点（scatter）
-            if original_x is not None and plot_original_y is not None:
-                ax.scatter(original_x, plot_original_y, 
+            if original_x is not None and plot_original_y is not None and len(original_x_plot) > 0:
+                ax.scatter(original_x_plot, plot_original_y, 
                           s=30, alpha=0.7, color='blue', 
                           label=data_label, zorder=2)
             
             # 绘制拟合线
-            ax.plot(fitting_x, plot_fitting_y, 
-                   color='red', linewidth=2.5, 
-                   label=f'Fitting ({", ".join(shapes)})', 
-                   zorder=3)
+            if fitting_x is not None and plot_fitting_y is not None and len(fitting_x_plot) > 0:
+                ax.plot(fitting_x_plot, plot_fitting_y, 
+                       color='red', linewidth=2.5, 
+                       label=f'Fitting ({", ".join(shapes)})', 
+                       zorder=3)
             
             # 设置标签和样式
-            ax.set_xlabel(x_label)
+            plot_x_label = x_label
+            if isinstance(x_label, str) and 'q' in x_label.lower():
+                plot_x_label = self._build_q_axis_label(filter_mode=filter_mode)
+            ax.set_xlabel(plot_x_label)
             ax.set_ylabel(y_label)
             ax.set_title(title)
             ax.grid(True, alpha=0.3)
@@ -8858,11 +9339,12 @@ class FittingController(QObject):
                     plot_y = y_data / max_val
             
             # 绘制数据点
-            ax.scatter(x_data, plot_y, s=30, alpha=0.7, color='blue', 
+            x_plot = self._convert_q_values_for_display(x_data)
+            ax.scatter(x_plot, plot_y, s=30, alpha=0.7, color='blue', 
                       label=data_label, zorder=2)
             
             # 设置标签和样式
-            x_label = "q (Å$^{-1}$)"
+            x_label = self._build_q_axis_label()
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Data Points Only - {data_label}'
             
@@ -8914,7 +9396,8 @@ class FittingController(QObject):
                     y_data = cut_data['y']
                 
                 if x_data is not None and y_data is not None:
-                    ax.scatter(x_data, y_data, c='blue', s=20, alpha=0.7, label='Data')
+                    x_plot = self._convert_q_values_for_display(x_data)
+                    ax.scatter(x_plot, y_data, c='blue', s=20, alpha=0.7, label='Data')
                     
                     # 设置坐标轴
                     if log_x:
@@ -8922,7 +9405,7 @@ class FittingController(QObject):
                     if log_y:
                         ax.set_yscale('log')
                     
-                    ax.set_xlabel('Q (Å$^{-1}$)')
+                    ax.set_xlabel(self._build_q_axis_label())
                     ax.set_ylabel('Intensity')
                     ax.legend()
                     ax.grid(True, alpha=0.3)
@@ -8960,13 +9443,18 @@ class FittingController(QObject):
             self.status_updated.emit(f"Error updating normalize setting: {str(e)}")
 
     def _on_positive_only_changed(self):
-        """处理Positive Only复选框变化"""
+        """处理主界面与独立窗口中的显示筛选/单位变化。"""
         try:
+            if getattr(self, '_syncing_axis_filter', False):
+                return
+
+            self._sync_axis_filter_controls()
             mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
-            self._update_outside_window(mode)  # 只更新外部窗口，主窗口不受影响
-            self.status_updated.emit("Positive Only setting updated")
+            self._update_GUI_image(mode)
+            self._update_outside_window(mode)
+            self.status_updated.emit("Display settings synced across main and independent views")
         except Exception as e:
-            self.status_updated.emit(f"Error updating Positive Only setting: {str(e)}")
+            self.status_updated.emit(f"Error updating display sync: {str(e)}")
 
 
     
@@ -8990,14 +9478,14 @@ class FittingController(QObject):
                 if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
                     cut_data = self.current_cut_data
                     if 'x_coords' in cut_data and 'y_intensity' in cut_data:
-                        ax.scatter(cut_data['x_coords'], cut_data['y_intensity'], c='blue', s=20, alpha=0.7, label='Data')
+                        ax.scatter(self._convert_q_values_for_display(cut_data['x_coords']), cut_data['y_intensity'], c='blue', s=20, alpha=0.7, label='Data')
                     elif 'x' in cut_data and 'y' in cut_data:
-                        ax.scatter(cut_data['x'], cut_data['y'], c='blue', s=20, alpha=0.7, label='Data')
+                        ax.scatter(self._convert_q_values_for_display(cut_data['x']), cut_data['y'], c='blue', s=20, alpha=0.7, label='Data')
 
                 # 绘制拟合曲线（从 self.fitting_data）
                 fitting_data = self.fitting_data
                 if isinstance(fitting_data, dict) and 'x' in fitting_data and 'y' in fitting_data:
-                    ax.plot(fitting_data['x'], fitting_data['y'], 'r-', linewidth=2, label='Fit')
+                    ax.plot(self._convert_q_values_for_display(fitting_data['x']), fitting_data['y'], 'r-', linewidth=2, label='Fit')
 
                 # 设置坐标轴
                 if log_x:
@@ -9005,7 +9493,7 @@ class FittingController(QObject):
                 if log_y:
                     ax.set_yscale('log')
 
-                ax.set_xlabel('Q (Å$^{-1}$)')
+                ax.set_xlabel(self._build_q_axis_label())
                 ax.set_ylabel('Intensity')
                 ax.legend()
                 ax.grid(True, alpha=0.3)
@@ -9080,13 +9568,18 @@ class FittingController(QObject):
                 max_val = np.max(y_data)
                 if max_val > 0:
                     plot_y = y_data / max_val
+
+            x_raw, x_plot, plot_y, filter_mode = self._filter_q_data_for_independent_display(x_data, plot_y)
+            x_plot = self._convert_q_values_for_display(x_plot)
+            if x_plot.size == 0 or plot_y is None or plot_y.size == 0:
+                return
             
             # 只绘制数据点
-            ax.scatter(x_data, plot_y, s=30, alpha=0.7, color='blue', 
+            ax.scatter(x_plot, plot_y, s=30, alpha=0.7, color='blue', 
                       label=data_label, zorder=2)
             
             # 设置标签和样式（拟合模式风格）
-            x_label = "q (Å$^{-1}$)"
+            x_label = self._build_q_axis_label(filter_mode=filter_mode)
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Fitting Display Mode - {data_label}'
             
@@ -9153,11 +9646,12 @@ class FittingController(QObject):
                         plot_y = y_data / max_val
                 
                 # Plotting data points
-                ax.scatter(x_data, plot_y, s=30, alpha=0.7, color='blue', 
+                x_plot = self._convert_q_values_for_display(x_data)
+                ax.scatter(x_plot, plot_y, s=30, alpha=0.7, color='blue', 
                           label=data_label, zorder=2)
                 
                 # Setting up labels and styles
-                x_label = "q (Å$^{-1}$)"
+                x_label = self._build_q_axis_label()
                 y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
                 title = f'Fitting Display Mode - {data_label}'
                 

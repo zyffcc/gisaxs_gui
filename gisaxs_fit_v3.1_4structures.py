@@ -1528,7 +1528,7 @@ class GisaxsModeler(PyQt5.QtWidgets.QMainWindow, Ui_MainWindow):
 
         for a in self.parameters:
             f.write(str(a[0]) + '\t' + str(a[1]) + '\t' + str(a[2]) + '\t' +
-                    str(a[3]) + '\t' + str(a[4]) + '\t' + str(a[5]) + str(a[6]) + '\n')
+                    str(a[3]) + '\t' + str(a[4]) + '\t' + str(a[5]) + '\n')
 
         f.close()
         print('Backup: saved latest parameters to {0}'.format(save_name))

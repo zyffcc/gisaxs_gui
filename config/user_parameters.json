@@ -80,13 +80,13 @@
         "last_session": {
             "last_opened_file": "D:/PythonCode/gisaxs_gui/TestSAXSdata\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
             "last_directory": "D:/PythonCode/gisaxs_gui/TestSAXSdata",
-            "last_1d_directory": null,
-            "last_1d_file": null,
+            "last_1d_directory": "C:/Users/zhaiyufe/Desktop",
+            "last_1d_file": "C:/Users/zhaiyufe/Desktop/2_2.5A_cut_yoneda_dpdack.dat",
             "stack_count": 1,
             "load_mode": "Single",
             "insitu_range": "",
             "center_vertical": 505.0,
-            "center_parallel": 768.01,
+            "center_parallel": 771.01,
             "cutline_vertical": 20.0,
             "cutline_parallel": 1180.0,
             "auto_show": false,
@@ -94,13 +94,13 @@
             "auto_scale": true,
             "vmin": 0.0,
             "vmax": 0.0,
-            "fit_current_data": true,
+            "fit_current_data": false,
             "fit_log_x": true,
             "fit_log_y": true,
             "fit_norm": false
         },
         "gisaxs_input": {
-            "center_parallel": -6.0
+            "center_parallel": 771.01
         }
     },
     "gisaxs_predict": {
