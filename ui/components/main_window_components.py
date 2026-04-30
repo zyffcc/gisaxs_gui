@@ -14,6 +14,7 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import (
     QAbstractButton,
     QCheckBox,
+    QFormLayout,
     QFrame,
     QGraphicsView,
     QGridLayout,
@@ -231,84 +232,160 @@ class DetectorPreviewCard(CardFrame):
         self.add_content(graphics_view, 1)
 
 
+class PlotCanvasArea(QFrame):
+    def __init__(self, graphics_view: QGraphicsView, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("plotCanvasContainer")
+        self.setProperty("previewSection", True)
+        self.setMinimumHeight(220)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        graphics_view.setMinimumSize(320, 220)
+        graphics_view.setMaximumSize(16777215, 16777215)
+        graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(graphics_view, 1)
+
+
+class FittingRegionControl(QGroupBox):
+    def __init__(self, ui, parent: QWidget | None = None):
+        super().__init__("Fitting Region", parent)
+        self.setObjectName("FittingRegionControl")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        for widget in (
+            ui.fitFittingRegionLabel,
+            ui.fitFittingRegionSlider,
+            ui.fitFittingRegionMinValue,
+            ui.fitFittingRegionMaxValue,
+        ):
+            _detach_from_parent_layout(widget)
+
+        layout = QGridLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setHorizontalSpacing(CARD_SPACING)
+        layout.setVerticalSpacing(FORM_ROW_SPACING)
+
+        ui.fitFittingRegionLabel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        ui.fitFittingRegionSlider.setMinimumHeight(28)
+        ui.fitFittingRegionSlider.setMaximumHeight(36)
+        ui.fitFittingRegionSlider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        normalize_input(ui.fitFittingRegionMinValue)
+        normalize_input(ui.fitFittingRegionMaxValue)
+
+        layout.addWidget(ui.fitFittingRegionLabel, 0, 0, 1, 2)
+        layout.addWidget(ui.fitFittingRegionSlider, 1, 0, 1, 2)
+        layout.addWidget(ui.fitFittingRegionMinValue, 2, 0)
+        layout.addWidget(ui.fitFittingRegionMaxValue, 2, 1)
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
+
+
+class PlotSamplingControl(QGroupBox):
+    def __init__(self, ui, parent: QWidget | None = None):
+        super().__init__("Sampling", parent)
+        self.setObjectName("PlotSamplingControl")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        for widget in (
+            ui.fitDataPointsNumLabel,
+            ui.fitDataPointsNumValue,
+            ui.fitInterpolationMethodLabel,
+            ui.fitInterpolationMethodValue,
+        ):
+            _detach_from_parent_layout(widget)
+
+        layout = QFormLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setHorizontalSpacing(CARD_SPACING)
+        layout.setVerticalSpacing(FORM_ROW_SPACING)
+        layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        layout.setRowWrapPolicy(QFormLayout.WrapLongRows)
+
+        for label in (ui.fitDataPointsNumLabel, ui.fitInterpolationMethodLabel):
+            label.setMinimumWidth(130)
+            label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        normalize_input(ui.fitDataPointsNumValue)
+        normalize_input(ui.fitInterpolationMethodValue)
+
+        layout.addRow(ui.fitDataPointsNumLabel, ui.fitDataPointsNumValue)
+        layout.addRow(ui.fitInterpolationMethodLabel, ui.fitInterpolationMethodValue)
+
+
+class PlotOptionsControl(QGroupBox):
+    def __init__(self, ui, parent: QWidget | None = None):
+        super().__init__("Display Options", parent)
+        self.setObjectName("PlotOptionsControl")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        checkboxes = (
+            ui.fitBGShowCheckBox,
+            ui.fitParticle1ShowCheckBox,
+            ui.fitResShowCheckBox,
+            ui.fitParticle2ShowCheckBox,
+            ui.fitParticle3ShowCheckBox,
+        )
+        for widget in (ui.fitDisplayOptionsLabel, *checkboxes):
+            _detach_from_parent_layout(widget)
+        ui.fitDisplayOptionsLabel.hide()
+
+        layout = QGridLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setHorizontalSpacing(CARD_SPACING)
+        layout.setVerticalSpacing(FORM_ROW_SPACING)
+        for checkbox in checkboxes:
+            normalize_checkbox(checkbox)
+
+        layout.addWidget(ui.fitBGShowCheckBox, 0, 0)
+        layout.addWidget(ui.fitParticle1ShowCheckBox, 0, 1)
+        layout.addWidget(ui.fitResShowCheckBox, 1, 0)
+        layout.addWidget(ui.fitParticle2ShowCheckBox, 1, 1)
+        layout.addWidget(ui.fitParticle3ShowCheckBox, 2, 1)
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
+
+
 class PlotPreviewCard(CardFrame):
-    def __init__(self, content: QWidget, graphics_view: QGraphicsView):
+    def __init__(self, ui, content: QWidget, graphics_view: QGraphicsView):
         super().__init__("Fitting Plot", "PlotPreviewCard")
-        self._build_plot_layout(content, graphics_view)
+        self._build_plot_layout(ui, content, graphics_view)
 
         self.setMinimumWidth(SECTION_MIN_WIDTH)
-        content.setMinimumSize(300, 320)
+        content.setMinimumSize(300, 520)
         content.setMaximumSize(16777215, 16777215)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(content, 1)
 
     @staticmethod
-    def _build_plot_layout(content: QWidget, graphics_view: QGraphicsView) -> None:
-        """Separate the plot canvas from the controls below it."""
+    def _build_plot_layout(ui, content: QWidget, graphics_view: QGraphicsView) -> None:
+        """Build explicit plot subcomponents to avoid dense-control overlap."""
         root_layout = content.layout()
         if root_layout is None:
             root_layout = QGridLayout(content)
 
-        fitting_region = content.findChild(QWidget, "fitFittingRegionwidget")
-        data_points = content.findChild(QWidget, "fitDataPointsNumWidget")
-        show_options = content.findChild(QWidget, "fitFittingShowWidget")
         controls = [
             graphics_view,
-            fitting_region,
-            data_points,
-            show_options,
+            content.findChild(QWidget, "fitFittingRegionwidget"),
+            content.findChild(QWidget, "fitDataPointsNumWidget"),
+            content.findChild(QWidget, "fitFittingShowWidget"),
         ]
         for widget in controls:
             if widget is not None:
                 _take_widget(root_layout, widget)
 
-        plot_canvas_container = QFrame(content)
-        plot_canvas_container.setObjectName("plotCanvasContainer")
-        plot_canvas_container.setProperty("previewSection", True)
-        plot_canvas_layout = QVBoxLayout(plot_canvas_container)
-        plot_canvas_layout.setContentsMargins(0, 0, 0, 0)
-        plot_canvas_layout.setSpacing(0)
-        graphics_view.setMinimumSize(320, 200)
-        graphics_view.setMaximumSize(16777215, 16777215)
-        graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        plot_canvas_layout.addWidget(graphics_view, 1)
-
-        if fitting_region is not None:
-            fitting_region.setMinimumHeight(72)
-            fitting_region.setMaximumHeight(118)
-            fitting_region.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-
-        plot_options_container = QFrame(content)
-        plot_options_container.setObjectName("plotOptionsContainer")
-        plot_options_container.setProperty("previewSection", True)
-        plot_options_layout = QGridLayout(plot_options_container)
-        plot_options_layout.setContentsMargins(0, 0, 0, 0)
-        plot_options_layout.setHorizontalSpacing(CARD_SPACING)
-        plot_options_layout.setVerticalSpacing(FORM_ROW_SPACING)
-
-        if data_points is not None:
-            data_points.setMaximumWidth(150)
-            data_points.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-            plot_options_layout.addWidget(data_points, 0, 0)
-
-        if show_options is not None:
-            show_options.setMinimumWidth(220)
-            show_options.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            plot_options_layout.addWidget(show_options, 0, 1)
-
-        plot_options_layout.setColumnStretch(0, 0)
-        plot_options_layout.setColumnStretch(1, 1)
-
         root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(10)
-        root_layout.addWidget(plot_canvas_container, 0, 0, 1, 1)
-        if fitting_region is not None:
-            root_layout.addWidget(fitting_region, 1, 0, 1, 1)
-        root_layout.addWidget(plot_options_container, 2, 0, 1, 1)
+        root_layout.setSpacing(CARD_SPACING)
+        root_layout.addWidget(PlotCanvasArea(graphics_view, content), 0, 0)
+        root_layout.addWidget(FittingRegionControl(ui, content), 1, 0)
+        root_layout.addWidget(PlotSamplingControl(ui, content), 2, 0)
+        root_layout.addWidget(PlotOptionsControl(ui, content), 3, 0)
         root_layout.setRowStretch(0, 1)
         root_layout.setRowStretch(1, 0)
         root_layout.setRowStretch(2, 0)
+        root_layout.setRowStretch(3, 0)
         root_layout.setColumnStretch(0, 1)
 
 
@@ -386,7 +463,7 @@ class GisaxsFittingWorkspace:
     def _build_preview_area(self) -> None:
         self.preview_splitter.addWidget(DetectorPreviewCard(self.ui.gisaxsInputGraphicsView))
         self.preview_splitter.addWidget(
-            PlotPreviewCard(self.ui.curvePlotControlWidget, self.ui.fitGraphicsView)
+            PlotPreviewCard(self.ui, self.ui.curvePlotControlWidget, self.ui.fitGraphicsView)
         )
         self.preview_splitter.addWidget(StatusCard(self.ui.FittingTextBrowser))
         self.preview_splitter.setStretchFactor(0, 2)
@@ -588,6 +665,14 @@ def _take_widget(layout, widget: QWidget) -> None:
     if index != -1:
         layout.takeAt(index)
     widget.setParent(None)
+
+
+def _detach_from_parent_layout(widget: QWidget) -> None:
+    parent = widget.parentWidget()
+    if parent is not None and parent.layout() is not None:
+        _take_widget(parent.layout(), widget)
+    else:
+        widget.setParent(None)
 
 
 def _configure_button(
