@@ -13,18 +13,14 @@ from typing import Iterable, Sequence
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import (
     QAbstractButton,
-    QComboBox,
-    QDoubleSpinBox,
+    QCheckBox,
     QFrame,
     QGraphicsView,
     QGridLayout,
     QGroupBox,
-    QHBoxLayout,
     QLabel,
-    QLineEdit,
     QScrollArea,
     QSizePolicy,
-    QSpinBox,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -32,6 +28,19 @@ from PyQt5.QtWidgets import (
 )
 
 from core.user_settings import user_settings
+from ui.layout_utils import (
+    BUTTON_HEIGHT,
+    CARD_MARGIN,
+    CARD_SPACING,
+    FORM_ROW_SPACING,
+    INPUT_WIDGET_TYPES,
+    SECTION_MIN_WIDTH,
+    make_scroll_area,
+    normalize_button,
+    normalize_checkbox,
+    normalize_input,
+    set_expanding_x,
+)
 from ui.style_loader import apply_main_window_styles
 
 
@@ -57,8 +66,9 @@ class NavigationSidebar(QWidget):
         for button in buttons:
             button.setParent(self)
             button.setProperty("navigationButton", True)
-            button.setMinimumHeight(38)
-            button.setMaximumHeight(44)
+            normalize_button(button, wide=True)
+            button.setMinimumHeight(BUTTON_HEIGHT + 6)
+            button.setMaximumHeight(BUTTON_HEIGHT + 12)
             layout.addWidget(button)
 
         layout.addStretch(1)
@@ -101,12 +111,12 @@ class CardFrame(QFrame):
         super().__init__(parent)
         self.setObjectName(object_name)
         self.setProperty("card", True)
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(SECTION_MIN_WIDTH)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.body_layout = QVBoxLayout(self)
-        self.body_layout.setContentsMargins(14, 12, 14, 14)
-        self.body_layout.setSpacing(10)
+        self.body_layout.setContentsMargins(CARD_MARGIN, 12, CARD_MARGIN, CARD_MARGIN)
+        self.body_layout.setSpacing(CARD_SPACING)
 
         self.title_label = QLabel(title, self)
         self.title_label.setObjectName(f"{object_name}Title")
@@ -130,8 +140,8 @@ class CutLineCard(CardFrame):
         super().__init__("Cut Line and Detector", "CutLineCard")
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
+        grid.setHorizontalSpacing(CARD_SPACING)
+        grid.setVerticalSpacing(FORM_ROW_SPACING)
         self.body_layout.addLayout(grid)
 
         widgets = [
@@ -180,12 +190,12 @@ class FittingControlsCard(CardFrame):
         for widget in widgets:
             _take_widget(ui.gridLayout_24, widget)
             widget.setMaximumWidth(16777215)
-            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            set_expanding_x(widget)
 
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(8)
+        grid.setHorizontalSpacing(CARD_SPACING)
+        grid.setVerticalSpacing(FORM_ROW_SPACING)
         self.body_layout.addLayout(grid)
         grid.addWidget(ui.fitCurrentDataCheckBox, 0, 0)
         grid.addWidget(ui.widget, 0, 1, 1, 2)
@@ -205,13 +215,15 @@ class ModelParameterCard(CardFrame):
         _take_widget(ui.gridLayout_24, ui.widget_7)
         ui.widget_7.setMaximumWidth(16777215)
         ui.widget_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.body_layout.addWidget(ui.widget_7, 1)
+        self.model_scroll_area = make_scroll_area(ui.widget_7, horizontal=True)
+        self.model_scroll_area.setObjectName("modelParametersScrollArea")
+        self.body_layout.addWidget(self.model_scroll_area, 1)
 
 
 class DetectorPreviewCard(CardFrame):
     def __init__(self, graphics_view: QGraphicsView):
         super().__init__("Detector Preview", "DetectorPreviewCard")
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(SECTION_MIN_WIDTH)
         graphics_view.setMinimumSize(320, 240)
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -224,7 +236,7 @@ class PlotPreviewCard(CardFrame):
         super().__init__("Fitting Plot", "PlotPreviewCard")
         self._build_plot_layout(content, graphics_view)
 
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(SECTION_MIN_WIDTH)
         content.setMinimumSize(300, 320)
         content.setMaximumSize(16777215, 16777215)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -270,19 +282,23 @@ class PlotPreviewCard(CardFrame):
         plot_options_container = QFrame(content)
         plot_options_container.setObjectName("plotOptionsContainer")
         plot_options_container.setProperty("previewSection", True)
-        plot_options_layout = QHBoxLayout(plot_options_container)
+        plot_options_layout = QGridLayout(plot_options_container)
         plot_options_layout.setContentsMargins(0, 0, 0, 0)
-        plot_options_layout.setSpacing(10)
+        plot_options_layout.setHorizontalSpacing(CARD_SPACING)
+        plot_options_layout.setVerticalSpacing(FORM_ROW_SPACING)
 
         if data_points is not None:
             data_points.setMaximumWidth(150)
             data_points.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-            plot_options_layout.addWidget(data_points, 0)
+            plot_options_layout.addWidget(data_points, 0, 0)
 
         if show_options is not None:
             show_options.setMinimumWidth(220)
             show_options.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            plot_options_layout.addWidget(show_options, 1)
+            plot_options_layout.addWidget(show_options, 0, 1)
+
+        plot_options_layout.setColumnStretch(0, 0)
+        plot_options_layout.setColumnStretch(1, 1)
 
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(10)
@@ -379,14 +395,9 @@ class GisaxsFittingWorkspace:
         for index in range(self.preview_splitter.count()):
             self.preview_splitter.setCollapsible(index, False)
 
-        self.preview_scroll_area = QScrollArea()
+        self.preview_scroll_area = make_scroll_area(self.preview_splitter, horizontal=True)
         self.preview_scroll_area.setObjectName("gisaxsPreviewScrollArea")
         self.preview_scroll_area.setMinimumWidth(420)
-        self.preview_scroll_area.setWidgetResizable(True)
-        self.preview_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.preview_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.preview_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.preview_scroll_area.setWidget(self.preview_splitter)
 
         self.page_splitter.addWidget(self.preview_scroll_area)
         self.page_splitter.setStretchFactor(0, 3)
@@ -414,7 +425,7 @@ class GisaxsFittingWorkspace:
         for name in expanding_actions:
             button = getattr(self.ui, name, None)
             if button is not None:
-                _configure_button(button, minimum_width=108, maximum_width=190, horizontal=QSizePolicy.Preferred)
+                _configure_button(button, minimum_width=108, maximum_width=220, horizontal=QSizePolicy.MinimumExpanding)
 
         for name in preferred_actions:
             button = getattr(self.ui, name, None)
@@ -423,15 +434,13 @@ class GisaxsFittingWorkspace:
 
         plus_button = getattr(self.ui, "pushButton", None)
         if plus_button is not None:
-            plus_button.setMinimumSize(30, 30)
-            plus_button.setMaximumSize(34, 34)
-            plus_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            normalize_button(plus_button, compact=True)
 
     def _configure_expanding_inputs(self) -> None:
-        input_types = (QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox)
-        for widget in self.ui.gisaxsFittingPage.findChildren(input_types):
-            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            widget.setMinimumWidth(max(widget.minimumWidth(), 72))
+        for widget in self.ui.gisaxsFittingPage.findChildren(INPUT_WIDGET_TYPES):
+            normalize_input(widget)
+        for checkbox in self.ui.gisaxsFittingPage.findChildren(QCheckBox):
+            normalize_checkbox(checkbox)
 
     def _install_page_splitter(self) -> None:
         layout = self.ui.verticalLayout_19
@@ -524,8 +533,8 @@ class MainShell(QSplitter):
     @staticmethod
     def _enforce_window_minimum_width(central_widget: QWidget) -> None:
         window = central_widget.window()
-        window.setMinimumWidth(1300)
-        QTimer.singleShot(0, lambda: window.setMinimumWidth(1300))
+        window.setMinimumSize(1300, 760)
+        QTimer.singleShot(0, lambda: window.setMinimumSize(1300, 760))
 
 
 class MainWindowComponents:
@@ -587,8 +596,7 @@ def _configure_button(
     maximum_width: int,
     horizontal=QSizePolicy.Preferred,
 ) -> None:
-    button.setMinimumHeight(30)
-    button.setMaximumHeight(36)
+    normalize_button(button, wide=horizontal == QSizePolicy.MinimumExpanding)
     button.setMinimumWidth(minimum_width)
     button.setMaximumWidth(maximum_width)
-    button.setSizePolicy(horizontal, QSizePolicy.Preferred)
+    button.setSizePolicy(horizontal, QSizePolicy.Fixed)
