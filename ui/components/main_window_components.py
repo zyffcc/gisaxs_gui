@@ -13,6 +13,11 @@ from typing import Iterable, Sequence
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractButton,
+    QFrame,
+    QGraphicsView,
+    QGridLayout,
+    QGroupBox,
+    QLabel,
     QScrollArea,
     QSizePolicy,
     QSplitter,
@@ -84,6 +89,243 @@ class ContentStack:
             print(f"Stacked widget adaptive setup skipped: {exc}")
 
 
+class CardFrame(QFrame):
+    """Modern card wrapper for existing generated widgets."""
+
+    def __init__(self, title: str, object_name: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName(object_name)
+        self.setProperty("card", True)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        self.body_layout = QVBoxLayout(self)
+        self.body_layout.setContentsMargins(14, 12, 14, 14)
+        self.body_layout.setSpacing(10)
+
+        self.title_label = QLabel(title, self)
+        self.title_label.setObjectName(f"{object_name}Title")
+        self.title_label.setProperty("cardTitle", True)
+        self.body_layout.addWidget(self.title_label)
+
+    def add_content(self, widget: QWidget, stretch: int = 0) -> None:
+        widget.setParent(self)
+        self.body_layout.addWidget(widget, stretch)
+
+
+class GisaxsInputCard(CardFrame):
+    def __init__(self, content: QGroupBox):
+        super().__init__("GISAXS Input", "GisaxsInputCard")
+        content.setTitle("")
+        self.add_content(content)
+
+
+class CutLineCard(CardFrame):
+    def __init__(self, ui):
+        super().__init__("Cut Line and Detector", "CutLineCard")
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        self.body_layout.addLayout(grid)
+
+        widgets = [
+            ui.gisaxsInputCutLineLabel,
+            ui.gisaxsInputCutLineVerticalLabel,
+            ui.gisaxsInputCutLineVerticalValue,
+            ui.gisaxsInputCutLineParallelLabel,
+            ui.gisaxsInputCutLineParallelValue,
+            ui.gisaxsInputCenterLabel,
+            ui.gisaxsInputCutLineCenterWidget,
+            ui.gisaxsInputCenterAutoFindingButton,
+            ui.gisaxsInputDetectorParaButton,
+            ui.gisaxsInputCutButton,
+        ]
+        for widget in widgets:
+            _take_widget(ui.gridLayout_23, widget)
+
+        grid.addWidget(ui.gisaxsInputCutLineLabel, 0, 0)
+        grid.addWidget(ui.gisaxsInputCutLineVerticalLabel, 1, 0)
+        grid.addWidget(ui.gisaxsInputCutLineVerticalValue, 1, 1)
+        grid.addWidget(ui.gisaxsInputCutLineParallelLabel, 1, 2)
+        grid.addWidget(ui.gisaxsInputCutLineParallelValue, 1, 3)
+        grid.addWidget(ui.gisaxsInputCenterLabel, 2, 0)
+        grid.addWidget(ui.gisaxsInputCutLineCenterWidget, 2, 1, 1, 2)
+        grid.addWidget(ui.gisaxsInputCenterAutoFindingButton, 2, 3)
+        grid.addWidget(ui.gisaxsInputDetectorParaButton, 3, 0)
+        grid.addWidget(ui.gisaxsInputCutButton, 3, 1)
+
+
+class FittingControlsCard(CardFrame):
+    def __init__(self, ui):
+        super().__init__("Fitting Controls", "FittingControlsCard")
+        widgets = [
+            ui.fitCurrentDataCheckBox,
+            ui.widget,
+            ui.fitImport1dFileButton,
+            ui.fitImport1dFileValue,
+            ui.fitMethodWidget,
+            ui.fitMethodWidget_2,
+            ui.widget_8,
+        ]
+        for widget in widgets:
+            _take_widget(ui.gridLayout_24, widget)
+            widget.setMaximumWidth(16777215)
+            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
+        self.body_layout.addLayout(grid)
+        grid.addWidget(ui.fitCurrentDataCheckBox, 0, 0)
+        grid.addWidget(ui.widget, 0, 1, 1, 2)
+        grid.addWidget(ui.fitImport1dFileButton, 1, 0)
+        grid.addWidget(ui.fitImport1dFileValue, 1, 1, 1, 2)
+        grid.addWidget(ui.fitMethodWidget, 2, 0, 1, 2)
+        grid.addWidget(ui.fitMethodWidget_2, 2, 2)
+        grid.addWidget(ui.widget_8, 3, 0, 1, 3)
+
+
+class ModelParameterCard(CardFrame):
+    def __init__(self, ui):
+        super().__init__("Model Parameters", "ModelParameterCard")
+        _take_widget(ui.gridLayout_24, ui.widget_7)
+        ui.widget_7.setMaximumWidth(16777215)
+        ui.widget_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.body_layout.addWidget(ui.widget_7, 1)
+
+
+class DetectorPreviewCard(CardFrame):
+    def __init__(self, graphics_view: QGraphicsView):
+        super().__init__("Detector Preview", "DetectorPreviewCard")
+        graphics_view.setMinimumSize(280, 240)
+        graphics_view.setMaximumSize(16777215, 16777215)
+        graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.add_content(graphics_view, 1)
+
+
+class PlotPreviewCard(CardFrame):
+    def __init__(self, content: QWidget, graphics_view: QGraphicsView):
+        super().__init__("Fitting Plot", "PlotPreviewCard")
+        content.setMinimumSize(320, 280)
+        content.setMaximumSize(16777215, 16777215)
+        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        graphics_view.setMinimumSize(280, 220)
+        graphics_view.setMaximumSize(16777215, 16777215)
+        graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.add_content(content, 1)
+
+
+class StatusCard(CardFrame):
+    def __init__(self, browser: QWidget):
+        super().__init__("Run Log", "FittingStatusCard")
+        browser.setMinimumHeight(90)
+        browser.setMaximumHeight(140)
+        self.add_content(browser)
+
+
+class GisaxsFittingWorkspace:
+    """Three-region layout for the cut/fitting page."""
+
+    SETTINGS_KEY = "gisaxs_fitting_splitter_sizes"
+
+    def __init__(self, ui):
+        self.ui = ui
+        self.page_splitter = QSplitter(Qt.Horizontal, ui.gisaxsFittingPage)
+        self.page_splitter.setObjectName("gisaxsFittingWorkspaceSplitter")
+        self.page_splitter.setHandleWidth(8)
+
+        self.preview_splitter = QSplitter(Qt.Vertical, self.page_splitter)
+        self.preview_splitter.setObjectName("gisaxsPreviewSplitter")
+        self.preview_splitter.setHandleWidth(8)
+
+        self._detach_preview_widgets()
+        self._relax_fixed_sizes()
+        self._install_page_splitter()
+        self._build_left_work_area()
+        self._build_preview_area()
+        self.restore_sizes()
+
+    def _detach_preview_widgets(self) -> None:
+        _take_widget(self.ui.gridLayout_23, self.ui.gisaxsInputGraphicsView)
+        _take_widget(self.ui.gridLayout_24, self.ui.curvePlotControlWidget)
+        _take_widget(self.ui.verticalLayout_19, self.ui.FittingTextBrowser)
+
+    def _relax_fixed_sizes(self) -> None:
+        self.ui.fitBox.setMinimumWidth(0)
+        self.ui.fitBox.setMaximumWidth(16777215)
+        self.ui.gisaxsInputBox.setMinimumWidth(0)
+        self.ui.gisaxsInputBox.setMaximumWidth(16777215)
+        self.ui.curvePlotControlWidget.setMinimumWidth(0)
+        self.ui.curvePlotControlWidget.setMaximumWidth(16777215)
+        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(520)
+        self.ui.gisaxsFittingPageScrollArea.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Expanding,
+        )
+
+    def _build_left_work_area(self) -> None:
+        self.work_area_contents = QWidget()
+        self.work_area_contents.setObjectName("gisaxsWorkAreaContents")
+        layout = QVBoxLayout(self.work_area_contents)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        layout.addWidget(GisaxsInputCard(self.ui.gisaxsInputBox))
+        layout.addWidget(CutLineCard(self.ui))
+        layout.addWidget(FittingControlsCard(self.ui))
+        layout.addWidget(ModelParameterCard(self.ui), 1)
+
+        self.ui.gisaxsFittingPageScrollArea.setWidget(self.work_area_contents)
+        self.page_splitter.addWidget(self.ui.gisaxsFittingPageScrollArea)
+
+    def _build_preview_area(self) -> None:
+        self.preview_splitter.addWidget(DetectorPreviewCard(self.ui.gisaxsInputGraphicsView))
+        self.preview_splitter.addWidget(
+            PlotPreviewCard(self.ui.curvePlotControlWidget, self.ui.fitGraphicsView)
+        )
+        self.preview_splitter.addWidget(StatusCard(self.ui.FittingTextBrowser))
+        self.preview_splitter.setStretchFactor(0, 2)
+        self.preview_splitter.setStretchFactor(1, 3)
+        self.preview_splitter.setStretchFactor(2, 0)
+
+        self.page_splitter.addWidget(self.preview_splitter)
+        self.page_splitter.setStretchFactor(0, 3)
+        self.page_splitter.setStretchFactor(1, 2)
+
+    def _install_page_splitter(self) -> None:
+        layout = self.ui.verticalLayout_19
+        _take_widget(layout, self.ui.gisaxsFittingPageScrollArea)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.page_splitter)
+
+    def restore_sizes(self) -> None:
+        sizes = user_settings.get(self.SETTINGS_KEY, None)
+        if isinstance(sizes, dict):
+            page_sizes = sizes.get("page")
+            preview_sizes = sizes.get("preview")
+            if isinstance(page_sizes, (list, tuple)) and len(page_sizes) == 2:
+                self.page_splitter.setSizes([max(520, int(page_sizes[0])), max(360, int(page_sizes[1]))])
+            if isinstance(preview_sizes, (list, tuple)) and len(preview_sizes) == 3:
+                self.preview_splitter.setSizes([max(220, int(preview_sizes[0])), max(260, int(preview_sizes[1])), max(80, int(preview_sizes[2]))])
+            return
+
+        self.page_splitter.setSizes([760, 460])
+        self.preview_splitter.setSizes([300, 360, 110])
+
+    def save_state(self) -> None:
+        user_settings.set(
+            self.SETTINGS_KEY,
+            {
+                "page": self.page_splitter.sizes(),
+                "preview": self.preview_splitter.sizes(),
+            },
+        )
+
+
 class MainShell(QSplitter):
     """Top-level resizable shell containing sidebar and main content."""
 
@@ -104,8 +346,8 @@ class MainShell(QSplitter):
         self._remove_from_layout(source_layout, sidebar_area)
         self._remove_from_layout(source_layout, content_widget)
 
-        sidebar_area.setMinimumWidth(140)
-        sidebar_area.setMaximumWidth(260)
+        sidebar_area.setMinimumWidth(180)
+        sidebar_area.setMaximumWidth(220)
         sidebar_area.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -126,10 +368,10 @@ class MainShell(QSplitter):
     def restore_sizes(self) -> None:
         sizes = user_settings.get(self.SETTINGS_KEY, None)
         if isinstance(sizes, (list, tuple)) and len(sizes) == 2:
-            self.setSizes([max(120, int(sizes[0])), max(400, int(sizes[1]))])
+            self.setSizes([max(180, int(sizes[0])), max(640, int(sizes[1]))])
             return
 
-        self.setSizes([160, 900])
+        self.setSizes([200, 1000])
 
     def save_sizes(self) -> None:
         user_settings.set(self.SETTINGS_KEY, self.sizes())
@@ -144,6 +386,7 @@ class MainWindowComponents:
         self._clear_generated_inline_styles(ui.centralwidget)
         self.sidebar = self._create_sidebar()
         self.content = ContentStack(ui.mainWindowWidget)
+        self.fitting_workspace = GisaxsFittingWorkspace(ui)
         self.shell = MainShell(
             ui.centralwidget,
             ui.horizontalLayout,
@@ -166,6 +409,7 @@ class MainWindowComponents:
         return sidebar
 
     def save_state(self) -> None:
+        self.fitting_workspace.save_state()
         self.shell.save_sizes()
 
     @staticmethod
@@ -178,3 +422,10 @@ class MainWindowComponents:
 def _walk_widgets(root: QWidget) -> Iterable[QWidget]:
     yield root
     yield from root.findChildren(QWidget)
+
+
+def _take_widget(layout, widget: QWidget) -> None:
+    index = layout.indexOf(widget)
+    if index != -1:
+        layout.takeAt(index)
+    widget.setParent(None)
