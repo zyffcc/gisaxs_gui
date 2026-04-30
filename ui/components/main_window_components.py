@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QGraphicsView,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QScrollArea,
     QSizePolicy,
@@ -153,6 +154,10 @@ class CutLineCard(CardFrame):
         grid.addWidget(ui.gisaxsInputCenterAutoFindingButton, 2, 3)
         grid.addWidget(ui.gisaxsInputDetectorParaButton, 3, 0)
         grid.addWidget(ui.gisaxsInputCutButton, 3, 1)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 0)
+        grid.setColumnStretch(3, 1)
 
 
 class FittingControlsCard(CardFrame):
@@ -184,6 +189,9 @@ class FittingControlsCard(CardFrame):
         grid.addWidget(ui.fitMethodWidget, 2, 0, 1, 2)
         grid.addWidget(ui.fitMethodWidget_2, 2, 2)
         grid.addWidget(ui.widget_8, 3, 0, 1, 3)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
 
 
 class ModelParameterCard(CardFrame):
@@ -208,14 +216,77 @@ class DetectorPreviewCard(CardFrame):
 class PlotPreviewCard(CardFrame):
     def __init__(self, content: QWidget, graphics_view: QGraphicsView):
         super().__init__("Fitting Plot", "PlotPreviewCard")
-        content.setMinimumSize(320, 280)
+        self._build_plot_layout(content, graphics_view)
+
+        content.setMinimumSize(300, 320)
         content.setMaximumSize(16777215, 16777215)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        graphics_view.setMinimumSize(280, 220)
-        graphics_view.setMaximumSize(16777215, 16777215)
-        graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(content, 1)
+
+    @staticmethod
+    def _build_plot_layout(content: QWidget, graphics_view: QGraphicsView) -> None:
+        """Separate the plot canvas from the controls below it."""
+        root_layout = content.layout()
+        if root_layout is None:
+            root_layout = QGridLayout(content)
+
+        fitting_region = content.findChild(QWidget, "fitFittingRegionwidget")
+        data_points = content.findChild(QWidget, "fitDataPointsNumWidget")
+        show_options = content.findChild(QWidget, "fitFittingShowWidget")
+        controls = [
+            graphics_view,
+            fitting_region,
+            data_points,
+            show_options,
+        ]
+        for widget in controls:
+            if widget is not None:
+                _take_widget(root_layout, widget)
+
+        plot_canvas_container = QFrame(content)
+        plot_canvas_container.setObjectName("plotCanvasContainer")
+        plot_canvas_container.setProperty("previewSection", True)
+        plot_canvas_layout = QVBoxLayout(plot_canvas_container)
+        plot_canvas_layout.setContentsMargins(0, 0, 0, 0)
+        plot_canvas_layout.setSpacing(0)
+        graphics_view.setMinimumSize(260, 180)
+        graphics_view.setMaximumSize(16777215, 16777215)
+        graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        plot_canvas_layout.addWidget(graphics_view, 1)
+
+        if fitting_region is not None:
+            fitting_region.setMinimumHeight(72)
+            fitting_region.setMaximumHeight(118)
+            fitting_region.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        plot_options_container = QFrame(content)
+        plot_options_container.setObjectName("plotOptionsContainer")
+        plot_options_container.setProperty("previewSection", True)
+        plot_options_layout = QHBoxLayout(plot_options_container)
+        plot_options_layout.setContentsMargins(0, 0, 0, 0)
+        plot_options_layout.setSpacing(10)
+
+        if data_points is not None:
+            data_points.setMaximumWidth(150)
+            data_points.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            plot_options_layout.addWidget(data_points, 0)
+
+        if show_options is not None:
+            show_options.setMinimumWidth(220)
+            show_options.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            plot_options_layout.addWidget(show_options, 1)
+
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(10)
+        root_layout.addWidget(plot_canvas_container, 0, 0, 1, 1)
+        if fitting_region is not None:
+            root_layout.addWidget(fitting_region, 1, 0, 1, 1)
+        root_layout.addWidget(plot_options_container, 2, 0, 1, 1)
+        root_layout.setRowStretch(0, 1)
+        root_layout.setRowStretch(1, 0)
+        root_layout.setRowStretch(2, 0)
+        root_layout.setColumnStretch(0, 1)
 
 
 class StatusCard(CardFrame):
@@ -236,16 +307,21 @@ class GisaxsFittingWorkspace:
         self.page_splitter = QSplitter(Qt.Horizontal, ui.gisaxsFittingPage)
         self.page_splitter.setObjectName("gisaxsFittingWorkspaceSplitter")
         self.page_splitter.setHandleWidth(8)
+        self.page_splitter.setChildrenCollapsible(False)
+        self.page_splitter.setOpaqueResize(True)
 
         self.preview_splitter = QSplitter(Qt.Vertical, self.page_splitter)
         self.preview_splitter.setObjectName("gisaxsPreviewSplitter")
         self.preview_splitter.setHandleWidth(8)
+        self.preview_splitter.setChildrenCollapsible(False)
+        self.preview_splitter.setOpaqueResize(True)
 
         self._detach_preview_widgets()
         self._relax_fixed_sizes()
         self._install_page_splitter()
         self._build_left_work_area()
         self._build_preview_area()
+        self._configure_button_responsiveness()
         self.restore_sizes()
 
     def _detach_preview_widgets(self) -> None:
@@ -295,6 +371,39 @@ class GisaxsFittingWorkspace:
         self.page_splitter.setStretchFactor(0, 3)
         self.page_splitter.setStretchFactor(1, 2)
 
+    def _configure_button_responsiveness(self) -> None:
+        expanding_actions = [
+            "gisaxsInputImportButton",
+            "gisaxsInputCenterAutoFindingButton",
+            "gisaxsInputDetectorParaButton",
+            "fitImport1dFileButton",
+            "FittingManualFittingButton",
+            "FittingAutoFittingButton",
+            "FittingClearFittingButton_2",
+            "FittingAutoKButton",
+        ]
+        preferred_actions = [
+            "gisaxsInputCutButton",
+            "gisaxsInputShowButton",
+            "FittingExportButton",
+        ]
+
+        for name in expanding_actions:
+            button = getattr(self.ui, name, None)
+            if button is not None:
+                _configure_button(button, minimum_width=108, maximum_width=190, horizontal=QSizePolicy.Preferred)
+
+        for name in preferred_actions:
+            button = getattr(self.ui, name, None)
+            if button is not None:
+                _configure_button(button, minimum_width=78, maximum_width=140, horizontal=QSizePolicy.Preferred)
+
+        plus_button = getattr(self.ui, "pushButton", None)
+        if plus_button is not None:
+            plus_button.setMinimumSize(30, 30)
+            plus_button.setMaximumSize(34, 34)
+            plus_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
     def _install_page_splitter(self) -> None:
         layout = self.ui.verticalLayout_19
         _take_widget(layout, self.ui.gisaxsFittingPageScrollArea)
@@ -342,6 +451,8 @@ class MainShell(QSplitter):
         super().__init__(Qt.Horizontal, parent or central_widget)
         self.setObjectName("mainShell")
         self.setHandleWidth(6)
+        self.setChildrenCollapsible(False)
+        self.setOpaqueResize(True)
 
         self._remove_from_layout(source_layout, sidebar_area)
         self._remove_from_layout(source_layout, content_widget)
@@ -429,3 +540,16 @@ def _take_widget(layout, widget: QWidget) -> None:
     if index != -1:
         layout.takeAt(index)
     widget.setParent(None)
+
+
+def _configure_button(
+    button: QAbstractButton,
+    minimum_width: int,
+    maximum_width: int,
+    horizontal=QSizePolicy.Preferred,
+) -> None:
+    button.setMinimumHeight(30)
+    button.setMaximumHeight(36)
+    button.setMinimumWidth(minimum_width)
+    button.setMaximumWidth(maximum_width)
+    button.setSizePolicy(horizontal, QSizePolicy.Fixed)

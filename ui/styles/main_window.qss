@@ -125,6 +125,19 @@ QGraphicsView {
     border-radius: 6px;
 }
 
+QFrame[previewSection="true"] {
+    background: #ffffff;
+    border: none;
+}
+
+QFrame#plotCanvasContainer {
+    min-height: 180px;
+}
+
+QFrame#plotOptionsContainer {
+    min-height: 82px;
+}
+
 QTextBrowser {
     background: #f8fafc;
     border: 1px solid #d8dee8;
