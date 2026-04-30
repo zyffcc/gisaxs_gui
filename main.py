@@ -9,6 +9,7 @@ import os
 import warnings
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from ui.main_window import Ui_MainWindow  # 导入转换后的 UI 类
+from ui.components import MainWindowComponents
 from ui.menu_manager import MenuManager
 from controllers import MainController
 from core.window_manager import window_manager
@@ -38,6 +39,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         self.setupUi(self)
         self.setWindowTitle("GISAXS Toolkit")
+        self.components = MainWindowComponents(self)
         
         # 设置初始状态栏消息（英文）
         if hasattr(self, 'statusbar'):
@@ -45,11 +47,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         # 快速初始化：仅设置基本UI
         self.setup_window()
-        # 插入可左右拖动的分割器
-        self._install_splitter()
-        # 尝试恢复分割器比例
-        self._restore_splitter_sizes()
-        
         ui_ready_time = time.time() - self._startup_time
         print(f"✓ UI ready in {ui_ready_time:.2f}s")
         
@@ -147,6 +144,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     
     def _setup_stacked_widget(self):
         """设置StackedWidget的自适应行为"""
+        if hasattr(self, 'components'):
+            return
         try:
             from utils.layout_utils import LayoutUtils
             if hasattr(self, 'mainWindowWidget'):
@@ -239,11 +238,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.main_controller.handle_window_close()
             # 保存分割器比例到用户设置
             try:
-                if hasattr(self, '_main_splitter'):
-                    sizes = self._main_splitter.sizes()
-                    from core.user_settings import user_settings
-                    user_settings.set('main_splitter_sizes', sizes)
-                    user_settings.save_settings()
+                if hasattr(self, 'components'):
+                    self.components.save_state()
             except Exception:
                 pass
             

@@ -481,7 +481,6 @@ class MainController(QObject):
         
         for button in navigation_buttons:
             if hasattr(button, 'setStyleSheet'):
-                button.setStyleSheet(button_style)
                 button.setCheckable(True)  # 使按钮可以保持选中状态
                 
         # 设置按钮组管理
