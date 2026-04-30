@@ -10,17 +10,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import (
     QAbstractButton,
+    QComboBox,
+    QDoubleSpinBox,
     QFrame,
     QGraphicsView,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -97,6 +101,7 @@ class CardFrame(QFrame):
         super().__init__(parent)
         self.setObjectName(object_name)
         self.setProperty("card", True)
+        self.setMinimumWidth(360)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.body_layout = QVBoxLayout(self)
@@ -206,7 +211,8 @@ class ModelParameterCard(CardFrame):
 class DetectorPreviewCard(CardFrame):
     def __init__(self, graphics_view: QGraphicsView):
         super().__init__("Detector Preview", "DetectorPreviewCard")
-        graphics_view.setMinimumSize(280, 240)
+        self.setMinimumWidth(360)
+        graphics_view.setMinimumSize(320, 240)
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -218,6 +224,7 @@ class PlotPreviewCard(CardFrame):
         super().__init__("Fitting Plot", "PlotPreviewCard")
         self._build_plot_layout(content, graphics_view)
 
+        self.setMinimumWidth(360)
         content.setMinimumSize(300, 320)
         content.setMaximumSize(16777215, 16777215)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -250,7 +257,7 @@ class PlotPreviewCard(CardFrame):
         plot_canvas_layout = QVBoxLayout(plot_canvas_container)
         plot_canvas_layout.setContentsMargins(0, 0, 0, 0)
         plot_canvas_layout.setSpacing(0)
-        graphics_view.setMinimumSize(260, 180)
+        graphics_view.setMinimumSize(320, 200)
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         plot_canvas_layout.addWidget(graphics_view, 1)
@@ -269,12 +276,12 @@ class PlotPreviewCard(CardFrame):
 
         if data_points is not None:
             data_points.setMaximumWidth(150)
-            data_points.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            data_points.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
             plot_options_layout.addWidget(data_points, 0)
 
         if show_options is not None:
             show_options.setMinimumWidth(220)
-            show_options.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            show_options.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             plot_options_layout.addWidget(show_options, 1)
 
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -315,6 +322,7 @@ class GisaxsFittingWorkspace:
         self.preview_splitter.setHandleWidth(8)
         self.preview_splitter.setChildrenCollapsible(False)
         self.preview_splitter.setOpaqueResize(True)
+        self.preview_splitter.setMinimumWidth(420)
 
         self._detach_preview_widgets()
         self._relax_fixed_sizes()
@@ -336,11 +344,13 @@ class GisaxsFittingWorkspace:
         self.ui.gisaxsInputBox.setMaximumWidth(16777215)
         self.ui.curvePlotControlWidget.setMinimumWidth(0)
         self.ui.curvePlotControlWidget.setMaximumWidth(16777215)
-        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(520)
+        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(640)
         self.ui.gisaxsFittingPageScrollArea.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Expanding,
         )
+        self.ui.gisaxsFittingPageScrollArea.setWidgetResizable(True)
+        self._configure_expanding_inputs()
 
     def _build_left_work_area(self) -> None:
         self.work_area_contents = QWidget()
@@ -366,10 +376,23 @@ class GisaxsFittingWorkspace:
         self.preview_splitter.setStretchFactor(0, 2)
         self.preview_splitter.setStretchFactor(1, 3)
         self.preview_splitter.setStretchFactor(2, 0)
+        for index in range(self.preview_splitter.count()):
+            self.preview_splitter.setCollapsible(index, False)
 
-        self.page_splitter.addWidget(self.preview_splitter)
+        self.preview_scroll_area = QScrollArea()
+        self.preview_scroll_area.setObjectName("gisaxsPreviewScrollArea")
+        self.preview_scroll_area.setMinimumWidth(420)
+        self.preview_scroll_area.setWidgetResizable(True)
+        self.preview_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.preview_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.preview_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.preview_scroll_area.setWidget(self.preview_splitter)
+
+        self.page_splitter.addWidget(self.preview_scroll_area)
         self.page_splitter.setStretchFactor(0, 3)
         self.page_splitter.setStretchFactor(1, 2)
+        self.page_splitter.setCollapsible(0, False)
+        self.page_splitter.setCollapsible(1, False)
 
     def _configure_button_responsiveness(self) -> None:
         expanding_actions = [
@@ -404,6 +427,12 @@ class GisaxsFittingWorkspace:
             plus_button.setMaximumSize(34, 34)
             plus_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
+    def _configure_expanding_inputs(self) -> None:
+        input_types = (QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox)
+        for widget in self.ui.gisaxsFittingPage.findChildren(input_types):
+            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            widget.setMinimumWidth(max(widget.minimumWidth(), 72))
+
     def _install_page_splitter(self) -> None:
         layout = self.ui.verticalLayout_19
         _take_widget(layout, self.ui.gisaxsFittingPageScrollArea)
@@ -417,13 +446,13 @@ class GisaxsFittingWorkspace:
             page_sizes = sizes.get("page")
             preview_sizes = sizes.get("preview")
             if isinstance(page_sizes, (list, tuple)) and len(page_sizes) == 2:
-                self.page_splitter.setSizes([max(520, int(page_sizes[0])), max(360, int(page_sizes[1]))])
+                self.page_splitter.setSizes([max(640, int(page_sizes[0])), max(420, int(page_sizes[1]))])
             if isinstance(preview_sizes, (list, tuple)) and len(preview_sizes) == 3:
-                self.preview_splitter.setSizes([max(220, int(preview_sizes[0])), max(260, int(preview_sizes[1])), max(80, int(preview_sizes[2]))])
+                self.preview_splitter.setSizes([max(260, int(preview_sizes[0])), max(320, int(preview_sizes[1])), max(90, int(preview_sizes[2]))])
             return
 
-        self.page_splitter.setSizes([760, 460])
-        self.preview_splitter.setSizes([300, 360, 110])
+        self.page_splitter.setSizes([760, 500])
+        self.preview_splitter.setSizes([300, 380, 110])
 
     def save_state(self) -> None:
         user_settings.set(
@@ -453,6 +482,7 @@ class MainShell(QSplitter):
         self.setHandleWidth(6)
         self.setChildrenCollapsible(False)
         self.setOpaqueResize(True)
+        self._enforce_window_minimum_width(central_widget)
 
         self._remove_from_layout(source_layout, sidebar_area)
         self._remove_from_layout(source_layout, content_widget)
@@ -460,12 +490,15 @@ class MainShell(QSplitter):
         sidebar_area.setMinimumWidth(180)
         sidebar_area.setMaximumWidth(220)
         sidebar_area.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        content_widget.setMinimumWidth(1060)
         content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.addWidget(sidebar_area)
         self.addWidget(content_widget)
         self.setStretchFactor(0, 0)
-        self.setStretchFactor(1, 1)
+        self.setStretchFactor(1, 5)
+        self.setCollapsible(0, False)
+        self.setCollapsible(1, False)
 
         source_layout.addWidget(self)
         self.restore_sizes()
@@ -479,14 +512,20 @@ class MainShell(QSplitter):
     def restore_sizes(self) -> None:
         sizes = user_settings.get(self.SETTINGS_KEY, None)
         if isinstance(sizes, (list, tuple)) and len(sizes) == 2:
-            self.setSizes([max(180, int(sizes[0])), max(640, int(sizes[1]))])
+            self.setSizes([max(180, int(sizes[0])), max(1060, int(sizes[1]))])
             return
 
-        self.setSizes([200, 1000])
+        self.setSizes([190, 1260])
 
     def save_sizes(self) -> None:
         user_settings.set(self.SETTINGS_KEY, self.sizes())
         user_settings.save_settings()
+
+    @staticmethod
+    def _enforce_window_minimum_width(central_widget: QWidget) -> None:
+        window = central_widget.window()
+        window.setMinimumWidth(1300)
+        QTimer.singleShot(0, lambda: window.setMinimumWidth(1300))
 
 
 class MainWindowComponents:
@@ -552,4 +591,4 @@ def _configure_button(
     button.setMaximumHeight(36)
     button.setMinimumWidth(minimum_width)
     button.setMaximumWidth(maximum_width)
-    button.setSizePolicy(horizontal, QSizePolicy.Fixed)
+    button.setSizePolicy(horizontal, QSizePolicy.Preferred)
