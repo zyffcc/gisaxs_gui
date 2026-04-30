@@ -1,0 +1,135 @@
+QMainWindow,
+QWidget#centralwidget {
+    background: #f4f6f8;
+    color: #20242a;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 9pt;
+}
+
+QScrollArea {
+    border: none;
+    background: transparent;
+}
+
+QWidget#mainContentWidget {
+    background: #ffffff;
+    border: 1px solid #d7dde5;
+}
+
+QWidget#navigationSidebar {
+    background: #eef2f6;
+}
+
+QPushButton[navigationButton="true"] {
+    background: #ffffff;
+    border: 1px solid #d6dde6;
+    border-radius: 4px;
+    color: #2f3946;
+    padding: 7px 10px;
+    text-align: left;
+}
+
+QPushButton[navigationButton="true"]:hover {
+    background: #f6f8fb;
+    border-color: #b8c3d0;
+}
+
+QPushButton[navigationButton="true"]:checked {
+    background: #dcecff;
+    border-color: #6aa1e6;
+    color: #163f73;
+    font-weight: 600;
+}
+
+QPushButton[navigationButton="true"]:disabled {
+    background: #edf0f4;
+    color: #8a95a3;
+}
+
+QPushButton {
+    min-height: 24px;
+    padding: 4px 10px;
+}
+
+QGroupBox {
+    font-weight: 600;
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    margin-top: 10px;
+    padding-top: 12px;
+    background: #ffffff;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 8px;
+    padding: 0 4px;
+}
+
+QLineEdit,
+QSpinBox,
+QDoubleSpinBox,
+QComboBox {
+    min-height: 22px;
+    border: 1px solid #c6cfdb;
+    border-radius: 3px;
+    padding: 2px 5px;
+    background: #ffffff;
+}
+
+QLineEdit:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QComboBox:focus {
+    border-color: #5f9ee5;
+}
+
+QGraphicsView {
+    background: transparent;
+    border: 1px solid #9aa6b4;
+    border-radius: 4px;
+}
+
+QTextBrowser {
+    background: #ffffff;
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    padding: 8px;
+}
+
+QListWidget {
+    background: #ffffff;
+    padding: 4px;
+}
+
+QListWidget::item {
+    padding: 4px 6px;
+}
+
+QListWidget::item:selected {
+    background: #dcecff;
+    color: #20242a;
+}
+
+QSplitter::handle {
+    background: #d7dde5;
+}
+
+QSplitter::handle:hover {
+    background: #b8c3d0;
+}
+
+QTabWidget::pane {
+    border: 1px solid #d8dee8;
+}
+
+QTabBar::tab {
+    background: #edf1f5;
+    border: 1px solid #d8dee8;
+    padding: 5px 10px;
+}
+
+QTabBar::tab:selected {
+    background: #ffffff;
+    border-bottom-color: #ffffff;
+}
