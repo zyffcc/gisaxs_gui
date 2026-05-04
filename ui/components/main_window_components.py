@@ -142,7 +142,7 @@ class GisaxsInputCard(CardFrame):
 class CutLineCard(CardFrame):
     def __init__(self, ui):
         super().__init__("Cut Line and Detector", "CutLineCard")
-        self.setMinimumHeight(160)
+        self.setMinimumHeight(230)
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(CARD_SPACING)
@@ -516,7 +516,7 @@ class GisaxsFittingWorkspace:
     """Three-region layout for the cut/fitting page."""
 
     SETTINGS_KEY = "gisaxs_fitting_splitter_sizes"
-    DEFAULT_WORK_SIZES = [760, 420]
+    DEFAULT_WORK_SIZES = [760, 680]
     DEFAULT_PREVIEW_SIZES = [300, 860, 160]
 
     def __init__(self, ui):
@@ -585,6 +585,7 @@ class GisaxsFittingWorkspace:
         gisaxs_card = GisaxsInputCard(self.ui.gisaxsInputBox)
         cut_line_card = CutLineCard(self.ui)
         fitting_controls_card = FittingControlsCard(self.ui)
+        model_parameters_card = ModelParameterCard(self.ui)
         fixed_layout.addWidget(gisaxs_card)
         fixed_layout.addWidget(cut_line_card)
         fixed_layout.addWidget(fitting_controls_card)
@@ -596,10 +597,15 @@ class GisaxsFittingWorkspace:
             + 2 * CARD_SPACING
         )
         self.fixed_controls_stack.setMinimumHeight(fixed_stack_min_height)
+        self.work_splitter.setMinimumHeight(
+            fixed_stack_min_height
+            + self.DEFAULT_WORK_SIZES[1]
+            + self.work_splitter.handleWidth()
+        )
         self.fixed_controls_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.work_splitter.addWidget(self.fixed_controls_stack)
-        self.work_splitter.addWidget(ModelParameterCard(self.ui))
+        self.work_splitter.addWidget(model_parameters_card)
         self.work_splitter.setStretchFactor(0, 0)
         self.work_splitter.setStretchFactor(1, 1)
         for index in range(self.work_splitter.count()):
