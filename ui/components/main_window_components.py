@@ -257,11 +257,20 @@ class PlotCanvasArea(QFrame):
 class SectionCard(QFrame):
     """Small card-style section with a QLabel title instead of QGroupBox title."""
 
-    def __init__(self, title: str, object_name: str, parent: QWidget | None = None):
+    def __init__(
+        self,
+        title: str,
+        object_name: str,
+        parent: QWidget | None = None,
+        fixed_height: int | None = None,
+    ):
         super().__init__(parent)
         self.setObjectName(object_name)
         self.setProperty("sectionCard", True)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed if fixed_height else QSizePolicy.Preferred)
+        if fixed_height is not None:
+            self.setMinimumHeight(fixed_height)
+            self.setMaximumHeight(fixed_height)
 
         self.section_layout = QVBoxLayout(self)
         self.section_layout.setContentsMargins(12, 10, 12, 12)
@@ -276,7 +285,7 @@ class SectionCard(QFrame):
 
 class FittingRegionControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Fitting Region", "FittingRegionControl", parent)
+        super().__init__("Fitting Region", "FittingRegionControl", parent, fixed_height=148)
 
         for widget in (
             ui.fitFittingRegionLabel,
@@ -309,7 +318,7 @@ class FittingRegionControl(SectionCard):
 
 class PlotSamplingControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Sampling", "PlotSamplingControl", parent)
+        super().__init__("Sampling", "PlotSamplingControl", parent, fixed_height=124)
 
         for widget in (
             ui.fitDataPointsNumLabel,
@@ -339,7 +348,7 @@ class PlotSamplingControl(SectionCard):
 
 class PlotOptionsControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Display Options", "PlotOptionsControl", parent)
+        super().__init__("Display Options", "PlotOptionsControl", parent, fixed_height=156)
 
         checkboxes = (
             ui.fitBGShowCheckBox,
@@ -375,7 +384,7 @@ class PlotPreviewCard(CardFrame):
         self._build_plot_layout(ui, content, graphics_view)
 
         self.setMinimumWidth(SECTION_MIN_WIDTH)
-        self.setMinimumHeight(420)
+        self.setMinimumHeight(760)
         content.setMinimumSize(300, 380)
         content.setMaximumSize(16777215, 16777215)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -408,6 +417,8 @@ class PlotPreviewCard(CardFrame):
         controls_layout.addWidget(FittingRegionControl(ui, controls_container))
         controls_layout.addWidget(PlotSamplingControl(ui, controls_container))
         controls_layout.addWidget(PlotOptionsControl(ui, controls_container))
+        controls_container.setMinimumHeight(452)
+        controls_container.setMaximumHeight(452)
 
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(CARD_SPACING)
@@ -434,7 +445,7 @@ class GisaxsFittingWorkspace:
 
     SETTINGS_KEY = "gisaxs_fitting_splitter_sizes"
     DEFAULT_WORK_SIZES = [760, 420]
-    DEFAULT_PREVIEW_SIZES = [300, 520, 160]
+    DEFAULT_PREVIEW_SIZES = [300, 860, 160]
 
     def __init__(self, ui):
         self.ui = ui
