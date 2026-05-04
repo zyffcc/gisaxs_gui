@@ -401,24 +401,18 @@ class PlotPreviewCard(CardFrame):
 
         controls_container = QWidget(content)
         controls_container.setObjectName("plotControlsContainer")
-        controls_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        controls_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         controls_layout = QVBoxLayout(controls_container)
         controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(CARD_SPACING)
         controls_layout.addWidget(FittingRegionControl(ui, controls_container))
         controls_layout.addWidget(PlotSamplingControl(ui, controls_container))
         controls_layout.addWidget(PlotOptionsControl(ui, controls_container))
-        controls_layout.addStretch(1)
-
-        controls_scroll_area = make_scroll_area(controls_container)
-        controls_scroll_area.setObjectName("plotControlsScrollArea")
-        controls_scroll_area.setMinimumHeight(130)
-        controls_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(CARD_SPACING)
         root_layout.addWidget(PlotCanvasArea(graphics_view, content), 0, 0)
-        root_layout.addWidget(controls_scroll_area, 1, 0)
+        root_layout.addWidget(controls_container, 1, 0)
         root_layout.setRowStretch(0, 1)
         root_layout.setRowStretch(1, 0)
         root_layout.setColumnStretch(0, 1)
@@ -439,7 +433,7 @@ class GisaxsFittingWorkspace:
     """Three-region layout for the cut/fitting page."""
 
     SETTINGS_KEY = "gisaxs_fitting_splitter_sizes"
-    DEFAULT_WORK_SIZES = [230, 230, 300, 420]
+    DEFAULT_WORK_SIZES = [760, 420]
     DEFAULT_PREVIEW_SIZES = [300, 520, 160]
 
     def __init__(self, ui):
@@ -467,7 +461,7 @@ class GisaxsFittingWorkspace:
         self.work_splitter.setOpaqueResize(True)
         self.work_splitter.setMinimumWidth(640)
         self.work_splitter.setMinimumHeight(
-            sum(self.DEFAULT_WORK_SIZES) + 3 * self.work_splitter.handleWidth()
+            sum(self.DEFAULT_WORK_SIZES) + self.work_splitter.handleWidth()
         )
         self.work_splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -500,14 +494,21 @@ class GisaxsFittingWorkspace:
         self._configure_expanding_inputs()
 
     def _build_left_work_area(self) -> None:
-        self.work_splitter.addWidget(GisaxsInputCard(self.ui.gisaxsInputBox))
-        self.work_splitter.addWidget(CutLineCard(self.ui))
-        self.work_splitter.addWidget(FittingControlsCard(self.ui))
+        self.fixed_controls_stack = QWidget()
+        self.fixed_controls_stack.setObjectName("gisaxsFixedControlsStack")
+        fixed_layout = QVBoxLayout(self.fixed_controls_stack)
+        fixed_layout.setContentsMargins(0, 0, 0, 0)
+        fixed_layout.setSpacing(CARD_SPACING)
+        fixed_layout.addWidget(GisaxsInputCard(self.ui.gisaxsInputBox))
+        fixed_layout.addWidget(CutLineCard(self.ui))
+        fixed_layout.addWidget(FittingControlsCard(self.ui))
+        fixed_layout.addStretch(1)
+        self.fixed_controls_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        self.work_splitter.addWidget(self.fixed_controls_stack)
         self.work_splitter.addWidget(ModelParameterCard(self.ui))
         self.work_splitter.setStretchFactor(0, 0)
-        self.work_splitter.setStretchFactor(1, 0)
-        self.work_splitter.setStretchFactor(2, 1)
-        self.work_splitter.setStretchFactor(3, 2)
+        self.work_splitter.setStretchFactor(1, 1)
         for index in range(self.work_splitter.count()):
             self.work_splitter.setCollapsible(index, False)
 
@@ -597,13 +598,11 @@ class GisaxsFittingWorkspace:
                 self.page_splitter.setSizes([max(640, int(page_sizes[0])), max(420, int(page_sizes[1]))])
             else:
                 self.page_splitter.setSizes([760, 500])
-            if isinstance(work_sizes, (list, tuple)) and len(work_sizes) == 4:
+            if isinstance(work_sizes, (list, tuple)) and len(work_sizes) == 2:
                 self.work_splitter.setSizes(
                     [
                         max(self.DEFAULT_WORK_SIZES[0], int(work_sizes[0])),
                         max(self.DEFAULT_WORK_SIZES[1], int(work_sizes[1])),
-                        max(self.DEFAULT_WORK_SIZES[2], int(work_sizes[2])),
-                        max(self.DEFAULT_WORK_SIZES[3], int(work_sizes[3])),
                     ]
                 )
             else:
