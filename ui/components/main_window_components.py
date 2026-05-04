@@ -18,7 +18,6 @@ from PyQt5.QtWidgets import (
     QFrame,
     QGraphicsView,
     QGridLayout,
-    QGroupBox,
     QLabel,
     QScrollArea,
     QSizePolicy,
@@ -130,7 +129,7 @@ class CardFrame(QFrame):
 
 
 class GisaxsInputCard(CardFrame):
-    def __init__(self, content: QGroupBox):
+    def __init__(self, content: QWidget):
         super().__init__("GISAXS Input", "GisaxsInputCard")
         content.setTitle("")
         self.add_content(content)
@@ -249,11 +248,29 @@ class PlotCanvasArea(QFrame):
         layout.addWidget(graphics_view, 1)
 
 
-class FittingRegionControl(QGroupBox):
-    def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Fitting Region", parent)
-        self.setObjectName("FittingRegionControl")
+class SectionCard(QFrame):
+    """Small card-style section with a QLabel title instead of QGroupBox title."""
+
+    def __init__(self, title: str, object_name: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName(object_name)
+        self.setProperty("sectionCard", True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        self.section_layout = QVBoxLayout(self)
+        self.section_layout.setContentsMargins(12, 10, 12, 12)
+        self.section_layout.setSpacing(CARD_SPACING)
+
+        self.title_label = QLabel(title, self)
+        self.title_label.setObjectName(f"{object_name}Title")
+        self.title_label.setProperty("sectionTitle", True)
+        self.title_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.section_layout.addWidget(self.title_label)
+
+
+class FittingRegionControl(SectionCard):
+    def __init__(self, ui, parent: QWidget | None = None):
+        super().__init__("Fitting Region", "FittingRegionControl", parent)
 
         for widget in (
             ui.fitFittingRegionLabel,
@@ -263,10 +280,11 @@ class FittingRegionControl(QGroupBox):
         ):
             _detach_from_parent_layout(widget)
 
-        layout = QGridLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout = QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setHorizontalSpacing(CARD_SPACING)
         layout.setVerticalSpacing(FORM_ROW_SPACING)
+        self.section_layout.addLayout(layout)
 
         ui.fitFittingRegionLabel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         ui.fitFittingRegionSlider.setMinimumHeight(28)
@@ -283,11 +301,9 @@ class FittingRegionControl(QGroupBox):
         layout.setColumnStretch(1, 1)
 
 
-class PlotSamplingControl(QGroupBox):
+class PlotSamplingControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Sampling", parent)
-        self.setObjectName("PlotSamplingControl")
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        super().__init__("Sampling", "PlotSamplingControl", parent)
 
         for widget in (
             ui.fitDataPointsNumLabel,
@@ -297,12 +313,13 @@ class PlotSamplingControl(QGroupBox):
         ):
             _detach_from_parent_layout(widget)
 
-        layout = QFormLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout = QFormLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setHorizontalSpacing(CARD_SPACING)
         layout.setVerticalSpacing(FORM_ROW_SPACING)
         layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         layout.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        self.section_layout.addLayout(layout)
 
         for label in (ui.fitDataPointsNumLabel, ui.fitInterpolationMethodLabel):
             label.setMinimumWidth(130)
@@ -314,11 +331,9 @@ class PlotSamplingControl(QGroupBox):
         layout.addRow(ui.fitInterpolationMethodLabel, ui.fitInterpolationMethodValue)
 
 
-class PlotOptionsControl(QGroupBox):
+class PlotOptionsControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Display Options", parent)
-        self.setObjectName("PlotOptionsControl")
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        super().__init__("Display Options", "PlotOptionsControl", parent)
 
         checkboxes = (
             ui.fitBGShowCheckBox,
@@ -331,10 +346,11 @@ class PlotOptionsControl(QGroupBox):
             _detach_from_parent_layout(widget)
         ui.fitDisplayOptionsLabel.hide()
 
-        layout = QGridLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout = QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setHorizontalSpacing(CARD_SPACING)
         layout.setVerticalSpacing(FORM_ROW_SPACING)
+        self.section_layout.addLayout(layout)
         for checkbox in checkboxes:
             normalize_checkbox(checkbox)
 

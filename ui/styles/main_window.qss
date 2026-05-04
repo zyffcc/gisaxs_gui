@@ -74,9 +74,21 @@ QFrame[card="true"] {
     border-radius: 8px;
 }
 
+QFrame[sectionCard="true"] {
+    background: #fbfcfe;
+    border: 1px solid #dce3ec;
+    border-radius: 7px;
+}
+
 QLabel[cardTitle="true"] {
     color: #263445;
     font-size: 10pt;
+    font-weight: 700;
+}
+
+QLabel[sectionTitle="true"] {
+    color: #3a4656;
+    font-size: 9pt;
     font-weight: 700;
 }
 
