@@ -180,7 +180,8 @@ class CutLineCard(CardFrame):
 class FittingControlsCard(CardFrame):
     def __init__(self, ui):
         super().__init__("Fitting Controls", "FittingControlsCard")
-        self.setMinimumHeight(220)
+        self.setMinimumHeight(330)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         widgets = [
             ui.fitCurrentDataCheckBox,
             ui.widget,
@@ -194,6 +195,15 @@ class FittingControlsCard(CardFrame):
             _take_widget(ui.gridLayout_24, widget)
             widget.setMaximumWidth(16777215)
             set_expanding_x(widget)
+        ui.fitMethodWidget.setMinimumHeight(120)
+        ui.fitMethodWidget.setMaximumHeight(120)
+        ui.fitMethodWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        ui.fitMethodWidget_2.setMinimumHeight(120)
+        ui.fitMethodWidget_2.setMaximumHeight(120)
+        ui.fitMethodWidget_2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        ui.widget_8.setMinimumHeight(48)
+        ui.widget_8.setMaximumHeight(48)
+        ui.widget_8.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
@@ -207,6 +217,12 @@ class FittingControlsCard(CardFrame):
         grid.addWidget(ui.fitMethodWidget, 2, 0, 1, 2)
         grid.addWidget(ui.fitMethodWidget_2, 2, 2)
         grid.addWidget(ui.widget_8, 3, 0, 1, 3)
+        grid.setRowMinimumHeight(2, 120)
+        grid.setRowMinimumHeight(3, 48)
+        grid.setRowStretch(0, 0)
+        grid.setRowStretch(1, 0)
+        grid.setRowStretch(2, 0)
+        grid.setRowStretch(3, 0)
         grid.setColumnStretch(0, 0)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(2, 1)
@@ -563,10 +579,20 @@ class GisaxsFittingWorkspace:
         fixed_layout = QVBoxLayout(self.fixed_controls_stack)
         fixed_layout.setContentsMargins(0, 0, 0, 0)
         fixed_layout.setSpacing(CARD_SPACING)
-        fixed_layout.addWidget(GisaxsInputCard(self.ui.gisaxsInputBox))
-        fixed_layout.addWidget(CutLineCard(self.ui))
-        fixed_layout.addWidget(FittingControlsCard(self.ui))
+        gisaxs_card = GisaxsInputCard(self.ui.gisaxsInputBox)
+        cut_line_card = CutLineCard(self.ui)
+        fitting_controls_card = FittingControlsCard(self.ui)
+        fixed_layout.addWidget(gisaxs_card)
+        fixed_layout.addWidget(cut_line_card)
+        fixed_layout.addWidget(fitting_controls_card)
         fixed_layout.addStretch(1)
+        fixed_stack_min_height = (
+            gisaxs_card.minimumHeight()
+            + cut_line_card.minimumHeight()
+            + fitting_controls_card.minimumHeight()
+            + 2 * CARD_SPACING
+        )
+        self.fixed_controls_stack.setMinimumHeight(fixed_stack_min_height)
         self.fixed_controls_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.work_splitter.addWidget(self.fixed_controls_stack)
