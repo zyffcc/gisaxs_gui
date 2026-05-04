@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QGraphicsView,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QScrollArea,
     QSizePolicy,
@@ -361,21 +362,44 @@ class PlotOptionsControl(SectionCard):
             _detach_from_parent_layout(widget)
         ui.fitDisplayOptionsLabel.hide()
 
-        layout = QGridLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setHorizontalSpacing(CARD_SPACING)
-        layout.setVerticalSpacing(FORM_ROW_SPACING)
-        self.section_layout.addLayout(layout)
+        options_contents = QWidget(self)
+        options_contents.setObjectName("fitParticlesNumWidget")
+        options_contents.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        options_layout = QVBoxLayout(options_contents)
+        options_layout.setContentsMargins(0, 0, 0, 0)
+        options_layout.setSpacing(FORM_ROW_SPACING)
+        ui.fitParticlesNumWidget = options_contents
+
         for checkbox in checkboxes:
             normalize_checkbox(checkbox)
 
-        layout.addWidget(ui.fitBGShowCheckBox, 0, 0)
-        layout.addWidget(ui.fitParticle1ShowCheckBox, 0, 1)
-        layout.addWidget(ui.fitResShowCheckBox, 1, 0)
-        layout.addWidget(ui.fitParticle2ShowCheckBox, 1, 1)
-        layout.addWidget(ui.fitParticle3ShowCheckBox, 2, 1)
-        layout.setColumnStretch(0, 1)
-        layout.setColumnStretch(1, 1)
+        self._add_option_row(options_layout, ui.fitBGShowCheckBox, ui.fitParticle1ShowCheckBox)
+        self._add_option_row(options_layout, ui.fitResShowCheckBox, ui.fitParticle2ShowCheckBox)
+        self._add_option_row(options_layout, None, ui.fitParticle3ShowCheckBox)
+
+        options_scroll_area = make_scroll_area(options_contents)
+        options_scroll_area.setObjectName("plotDisplayOptionsScrollArea")
+        options_scroll_area.setFrameShape(QFrame.NoFrame)
+        options_scroll_area.setMinimumHeight(78)
+        options_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.section_layout.addWidget(options_scroll_area, 1)
+
+    @staticmethod
+    def _add_option_row(layout: QVBoxLayout, left: QWidget | None, right: QWidget | None) -> None:
+        row = QWidget()
+        row.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(CARD_SPACING)
+        if left is not None:
+            row_layout.addWidget(left, 1)
+        else:
+            row_layout.addStretch(1)
+        if right is not None:
+            row_layout.addWidget(right, 1)
+        else:
+            row_layout.addStretch(1)
+        layout.addWidget(row)
 
 
 class PlotPreviewCard(CardFrame):
