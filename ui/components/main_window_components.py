@@ -131,8 +131,11 @@ class CardFrame(QFrame):
 class GisaxsInputCard(CardFrame):
     def __init__(self, content: QWidget):
         super().__init__("GISAXS Input", "GisaxsInputCard")
-        self.setMinimumHeight(160)
+        self.setMinimumHeight(260)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         content.setTitle("")
+        content.setMinimumHeight(200)
+        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.add_content(content)
 
 
