@@ -18,7 +18,6 @@ from PyQt5.QtWidgets import (
     QFrame,
     QGraphicsView,
     QGridLayout,
-    QHBoxLayout,
     QLabel,
     QScrollArea,
     QSizePolicy,
@@ -347,9 +346,45 @@ class PlotSamplingControl(SectionCard):
         layout.addRow(ui.fitInterpolationMethodLabel, ui.fitInterpolationMethodValue)
 
 
+class ParticleOptionsLayout(QVBoxLayout):
+    """Dynamic particle checkbox column used by the fitting controller."""
+
+    def addWidget(self, widget: QWidget, stretch: int = 0, alignment: Qt.Alignment = Qt.Alignment()) -> None:
+        super().addWidget(widget, stretch, alignment)
+        self._refresh_after_change(widget)
+
+    def insertWidget(
+        self,
+        index: int,
+        widget: QWidget,
+        stretch: int = 0,
+        alignment: Qt.Alignment = Qt.Alignment(),
+    ) -> None:
+        super().insertWidget(index, widget, stretch, alignment)
+        self._refresh_after_change(widget)
+
+    def _refresh_after_change(self, widget: QWidget | None = None) -> None:
+        if isinstance(widget, QCheckBox):
+            normalize_checkbox(widget)
+            if not widget.property("plotOptionGeometryHooked"):
+                widget.destroyed.connect(lambda _=None: QTimer.singleShot(0, self._refresh_after_change))
+                widget.setProperty("plotOptionGeometryHooked", True)
+
+        parent = self.parentWidget()
+        while parent is not None:
+            parent.updateGeometry()
+            parent.adjustSize()
+            if parent.objectName() == "PlotPreviewCard":
+                parent.setMinimumHeight(max(760, parent.sizeHint().height()))
+                parent.updateGeometry()
+                break
+            parent = parent.parentWidget()
+
+
 class PlotOptionsControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Display Options", "PlotOptionsControl", parent, fixed_height=156)
+        super().__init__("Display Options", "PlotOptionsControl", parent)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         checkboxes = (
             ui.fitBGShowCheckBox,
@@ -362,44 +397,40 @@ class PlotOptionsControl(SectionCard):
             _detach_from_parent_layout(widget)
         ui.fitDisplayOptionsLabel.hide()
 
-        options_contents = QWidget(self)
-        options_contents.setObjectName("fitParticlesNumWidget")
-        options_contents.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        options_layout = QVBoxLayout(options_contents)
-        options_layout.setContentsMargins(0, 0, 0, 0)
-        options_layout.setSpacing(FORM_ROW_SPACING)
-        ui.fitParticlesNumWidget = options_contents
-
         for checkbox in checkboxes:
             normalize_checkbox(checkbox)
 
-        self._add_option_row(options_layout, ui.fitBGShowCheckBox, ui.fitParticle1ShowCheckBox)
-        self._add_option_row(options_layout, ui.fitResShowCheckBox, ui.fitParticle2ShowCheckBox)
-        self._add_option_row(options_layout, None, ui.fitParticle3ShowCheckBox)
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(32)
+        grid.setVerticalSpacing(FORM_ROW_SPACING)
+        self.section_layout.addLayout(grid)
 
-        options_scroll_area = make_scroll_area(options_contents)
-        options_scroll_area.setObjectName("plotDisplayOptionsScrollArea")
-        options_scroll_area.setFrameShape(QFrame.NoFrame)
-        options_scroll_area.setMinimumHeight(78)
-        options_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.section_layout.addWidget(options_scroll_area, 1)
+        static_column = QWidget(self)
+        static_column.setObjectName("plotStaticOptionsColumn")
+        static_layout = QVBoxLayout(static_column)
+        static_layout.setContentsMargins(0, 0, 0, 0)
+        static_layout.setSpacing(FORM_ROW_SPACING)
+        static_layout.addWidget(ui.fitBGShowCheckBox)
+        static_layout.addWidget(ui.fitResShowCheckBox)
+        static_layout.addStretch(1)
 
-    @staticmethod
-    def _add_option_row(layout: QVBoxLayout, left: QWidget | None, right: QWidget | None) -> None:
-        row = QWidget()
-        row.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(CARD_SPACING)
-        if left is not None:
-            row_layout.addWidget(left, 1)
-        else:
-            row_layout.addStretch(1)
-        if right is not None:
-            row_layout.addWidget(right, 1)
-        else:
-            row_layout.addStretch(1)
-        layout.addWidget(row)
+        particle_column = QWidget(self)
+        particle_column.setObjectName("fitParticlesNumWidget")
+        particle_column.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        particle_layout = ParticleOptionsLayout(particle_column)
+        particle_layout.setContentsMargins(0, 0, 0, 0)
+        particle_layout.setSpacing(FORM_ROW_SPACING)
+        ui.fitParticlesNumWidget = particle_column
+
+        particle_layout.addWidget(ui.fitParticle1ShowCheckBox)
+        particle_layout.addWidget(ui.fitParticle2ShowCheckBox)
+        particle_layout.addWidget(ui.fitParticle3ShowCheckBox)
+
+        grid.addWidget(static_column, 0, 0)
+        grid.addWidget(particle_column, 0, 1)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
 
 
 class PlotPreviewCard(CardFrame):
@@ -441,8 +472,6 @@ class PlotPreviewCard(CardFrame):
         controls_layout.addWidget(FittingRegionControl(ui, controls_container))
         controls_layout.addWidget(PlotSamplingControl(ui, controls_container))
         controls_layout.addWidget(PlotOptionsControl(ui, controls_container))
-        controls_container.setMinimumHeight(452)
-        controls_container.setMaximumHeight(452)
 
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(CARD_SPACING)
