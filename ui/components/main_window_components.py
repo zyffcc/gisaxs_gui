@@ -131,6 +131,7 @@ class CardFrame(QFrame):
 class GisaxsInputCard(CardFrame):
     def __init__(self, content: QWidget):
         super().__init__("GISAXS Input", "GisaxsInputCard")
+        self.setMinimumHeight(160)
         content.setTitle("")
         self.add_content(content)
 
@@ -138,6 +139,7 @@ class GisaxsInputCard(CardFrame):
 class CutLineCard(CardFrame):
     def __init__(self, ui):
         super().__init__("Cut Line and Detector", "CutLineCard")
+        self.setMinimumHeight(160)
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(CARD_SPACING)
@@ -178,6 +180,7 @@ class CutLineCard(CardFrame):
 class FittingControlsCard(CardFrame):
     def __init__(self, ui):
         super().__init__("Fitting Controls", "FittingControlsCard")
+        self.setMinimumHeight(220)
         widgets = [
             ui.fitCurrentDataCheckBox,
             ui.widget,
@@ -212,6 +215,8 @@ class FittingControlsCard(CardFrame):
 class ModelParameterCard(CardFrame):
     def __init__(self, ui):
         super().__init__("Model Parameters", "ModelParameterCard")
+        self.setMinimumHeight(260)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         _take_widget(ui.gridLayout_24, ui.widget_7)
         ui.widget_7.setMaximumWidth(16777215)
         ui.widget_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -224,6 +229,7 @@ class DetectorPreviewCard(CardFrame):
     def __init__(self, graphics_view: QGraphicsView):
         super().__init__("Detector Preview", "DetectorPreviewCard")
         self.setMinimumWidth(SECTION_MIN_WIDTH)
+        self.setMinimumHeight(260)
         graphics_view.setMinimumSize(320, 240)
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -236,13 +242,13 @@ class PlotCanvasArea(QFrame):
         super().__init__(parent)
         self.setObjectName("plotCanvasContainer")
         self.setProperty("previewSection", True)
-        self.setMinimumHeight(220)
+        self.setMinimumHeight(260)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        graphics_view.setMinimumSize(320, 220)
+        graphics_view.setMinimumSize(320, 260)
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(graphics_view, 1)
@@ -369,7 +375,8 @@ class PlotPreviewCard(CardFrame):
         self._build_plot_layout(ui, content, graphics_view)
 
         self.setMinimumWidth(SECTION_MIN_WIDTH)
-        content.setMinimumSize(300, 520)
+        self.setMinimumHeight(420)
+        content.setMinimumSize(300, 380)
         content.setMaximumSize(16777215, 16777215)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -392,31 +399,48 @@ class PlotPreviewCard(CardFrame):
             if widget is not None:
                 _take_widget(root_layout, widget)
 
+        controls_container = QWidget(content)
+        controls_container.setObjectName("plotControlsContainer")
+        controls_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        controls_layout = QVBoxLayout(controls_container)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(CARD_SPACING)
+        controls_layout.addWidget(FittingRegionControl(ui, controls_container))
+        controls_layout.addWidget(PlotSamplingControl(ui, controls_container))
+        controls_layout.addWidget(PlotOptionsControl(ui, controls_container))
+        controls_layout.addStretch(1)
+
+        controls_scroll_area = make_scroll_area(controls_container)
+        controls_scroll_area.setObjectName("plotControlsScrollArea")
+        controls_scroll_area.setMinimumHeight(130)
+        controls_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(CARD_SPACING)
         root_layout.addWidget(PlotCanvasArea(graphics_view, content), 0, 0)
-        root_layout.addWidget(FittingRegionControl(ui, content), 1, 0)
-        root_layout.addWidget(PlotSamplingControl(ui, content), 2, 0)
-        root_layout.addWidget(PlotOptionsControl(ui, content), 3, 0)
+        root_layout.addWidget(controls_scroll_area, 1, 0)
         root_layout.setRowStretch(0, 1)
         root_layout.setRowStretch(1, 0)
-        root_layout.setRowStretch(2, 0)
-        root_layout.setRowStretch(3, 0)
         root_layout.setColumnStretch(0, 1)
 
 
 class StatusCard(CardFrame):
     def __init__(self, browser: QWidget):
         super().__init__("Run Log", "FittingStatusCard")
+        self.setMinimumHeight(120)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         browser.setMinimumHeight(90)
-        browser.setMaximumHeight(140)
-        self.add_content(browser)
+        browser.setMaximumHeight(16777215)
+        browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.add_content(browser, 1)
 
 
 class GisaxsFittingWorkspace:
     """Three-region layout for the cut/fitting page."""
 
     SETTINGS_KEY = "gisaxs_fitting_splitter_sizes"
+    DEFAULT_WORK_SIZES = [230, 230, 300, 420]
+    DEFAULT_PREVIEW_SIZES = [300, 520, 160]
 
     def __init__(self, ui):
         self.ui = ui
@@ -432,6 +456,20 @@ class GisaxsFittingWorkspace:
         self.preview_splitter.setChildrenCollapsible(False)
         self.preview_splitter.setOpaqueResize(True)
         self.preview_splitter.setMinimumWidth(420)
+        self.preview_splitter.setMinimumHeight(
+            sum(self.DEFAULT_PREVIEW_SIZES) + 2 * self.preview_splitter.handleWidth()
+        )
+
+        self.work_splitter = QSplitter(Qt.Vertical, ui.gisaxsFittingPage)
+        self.work_splitter.setObjectName("gisaxsMainWorkSplitter")
+        self.work_splitter.setHandleWidth(8)
+        self.work_splitter.setChildrenCollapsible(False)
+        self.work_splitter.setOpaqueResize(True)
+        self.work_splitter.setMinimumWidth(640)
+        self.work_splitter.setMinimumHeight(
+            sum(self.DEFAULT_WORK_SIZES) + 3 * self.work_splitter.handleWidth()
+        )
+        self.work_splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self._detach_preview_widgets()
         self._relax_fixed_sizes()
@@ -462,16 +500,23 @@ class GisaxsFittingWorkspace:
         self._configure_expanding_inputs()
 
     def _build_left_work_area(self) -> None:
+        self.work_splitter.addWidget(GisaxsInputCard(self.ui.gisaxsInputBox))
+        self.work_splitter.addWidget(CutLineCard(self.ui))
+        self.work_splitter.addWidget(FittingControlsCard(self.ui))
+        self.work_splitter.addWidget(ModelParameterCard(self.ui))
+        self.work_splitter.setStretchFactor(0, 0)
+        self.work_splitter.setStretchFactor(1, 0)
+        self.work_splitter.setStretchFactor(2, 1)
+        self.work_splitter.setStretchFactor(3, 2)
+        for index in range(self.work_splitter.count()):
+            self.work_splitter.setCollapsible(index, False)
+
         self.work_area_contents = QWidget()
         self.work_area_contents.setObjectName("gisaxsWorkAreaContents")
         layout = QVBoxLayout(self.work_area_contents)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
-
-        layout.addWidget(GisaxsInputCard(self.ui.gisaxsInputBox))
-        layout.addWidget(CutLineCard(self.ui))
-        layout.addWidget(FittingControlsCard(self.ui))
-        layout.addWidget(ModelParameterCard(self.ui), 1)
+        layout.setSpacing(0)
+        layout.addWidget(self.work_splitter)
 
         self.ui.gisaxsFittingPageScrollArea.setWidget(self.work_area_contents)
         self.page_splitter.addWidget(self.ui.gisaxsFittingPageScrollArea)
@@ -546,21 +591,45 @@ class GisaxsFittingWorkspace:
         sizes = user_settings.get(self.SETTINGS_KEY, None)
         if isinstance(sizes, dict):
             page_sizes = sizes.get("page")
+            work_sizes = sizes.get("work")
             preview_sizes = sizes.get("preview")
             if isinstance(page_sizes, (list, tuple)) and len(page_sizes) == 2:
                 self.page_splitter.setSizes([max(640, int(page_sizes[0])), max(420, int(page_sizes[1]))])
+            else:
+                self.page_splitter.setSizes([760, 500])
+            if isinstance(work_sizes, (list, tuple)) and len(work_sizes) == 4:
+                self.work_splitter.setSizes(
+                    [
+                        max(self.DEFAULT_WORK_SIZES[0], int(work_sizes[0])),
+                        max(self.DEFAULT_WORK_SIZES[1], int(work_sizes[1])),
+                        max(self.DEFAULT_WORK_SIZES[2], int(work_sizes[2])),
+                        max(self.DEFAULT_WORK_SIZES[3], int(work_sizes[3])),
+                    ]
+                )
+            else:
+                self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
             if isinstance(preview_sizes, (list, tuple)) and len(preview_sizes) == 3:
-                self.preview_splitter.setSizes([max(260, int(preview_sizes[0])), max(320, int(preview_sizes[1])), max(90, int(preview_sizes[2]))])
+                self.preview_splitter.setSizes(
+                    [
+                        max(self.DEFAULT_PREVIEW_SIZES[0], int(preview_sizes[0])),
+                        max(self.DEFAULT_PREVIEW_SIZES[1], int(preview_sizes[1])),
+                        max(self.DEFAULT_PREVIEW_SIZES[2], int(preview_sizes[2])),
+                    ]
+                )
+            else:
+                self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
             return
 
         self.page_splitter.setSizes([760, 500])
-        self.preview_splitter.setSizes([300, 380, 110])
+        self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
+        self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
 
     def save_state(self) -> None:
         user_settings.set(
             self.SETTINGS_KEY,
             {
                 "page": self.page_splitter.sizes(),
+                "work": self.work_splitter.sizes(),
                 "preview": self.preview_splitter.sizes(),
             },
         )

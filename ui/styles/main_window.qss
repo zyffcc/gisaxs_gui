@@ -143,7 +143,7 @@ QFrame[previewSection="true"] {
 }
 
 QFrame#plotCanvasContainer {
-    min-height: 180px;
+    min-height: 260px;
 }
 
 QFrame#plotOptionsContainer {
@@ -180,6 +180,7 @@ QSplitter::handle:hover {
 }
 
 QSplitter#gisaxsFittingWorkspaceSplitter::handle,
+QSplitter#gisaxsMainWorkSplitter::handle,
 QSplitter#gisaxsPreviewSplitter::handle {
     background: #d6dee9;
 }
