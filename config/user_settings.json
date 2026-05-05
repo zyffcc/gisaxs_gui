@@ -3,11 +3,26 @@
   "window_width": 1400,
   "window_height": 900,
   "font_adjustment": 0,
-  "_auto_k_enabled": true,
+  "_auto_k_enabled": false,
   "fit.points_num": 100,
   "fit.interp_method": "Spline",
   "main_splitter_sizes": [
-    150,
-    1226
-  ]
+    180,
+    1207
+  ],
+  "gisaxs_fitting_splitter_sizes": {
+    "page": [
+      712,
+      469
+    ],
+    "work": [
+      844,
+      680
+    ],
+    "preview": [
+      300,
+      860,
+      160
+    ]
+  }
 }

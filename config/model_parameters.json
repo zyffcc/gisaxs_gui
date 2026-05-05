@@ -2,8 +2,8 @@
     "fitting": {
         "global_parameters": {
             "sigma_res": -0.198,
-            "k_value": 0.002173381705924827,
-            "int_res": 0.98,
+            "k_value": 226.81289999999998,
+            "int_res": 0.94,
             "nu_res": 1.2000000000000002
         },
         "particles": {
@@ -36,40 +36,26 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 7.0,
+                        "intensity": 1.0,
                         "radius": 10.0,
-                        "sigma_radius": 3.0,
+                        "sigma_radius": 0.1,
                         "diameter": 20.0,
                         "sigma_diameter": 0.1,
                         "background": 0.0
                     },
                     "cylinder": {
-                        "intensity": 1.5,
-                        "radius": 19.3,
-                        "sigma_radius": 6.0,
-                        "height": 500.0,
-                        "sigma_height": 100.0,
+                        "intensity": 1.0,
+                        "radius": 10.0,
+                        "sigma_radius": 0.1,
+                        "height": 20.0,
+                        "sigma_height": 0.1,
                         "diameter": 20.0,
                         "sigma_diameter": 0.1,
                         "background": 0.0
                     }
                 }
             },
-            "particle_3": {
-                "shape": "Sphere",
-                "enabled": true,
-                "parameters": {
-                    "sphere": {
-                        "radius": 3.0,
-                        "sigma_radius": 1.0,
-                        "intensity": 10.399999999999979
-                    },
-                    "cylinder": {
-                        "sigma_radius": -0.1
-                    }
-                }
-            },
-            "particle_4": {
+            "particle_7": {
                 "shape": "Sphere",
                 "enabled": true,
                 "parameters": {
