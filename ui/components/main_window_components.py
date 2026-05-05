@@ -10,7 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, Qt, QUrl
+from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QAbstractButton,
     QCheckBox,
@@ -18,7 +19,9 @@ from PyQt5.QtWidgets import (
     QFrame,
     QGraphicsView,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QSplitter,
@@ -797,6 +800,61 @@ class MainShell(QSplitter):
         QTimer.singleShot(0, lambda: window.setMinimumSize(1300, 760))
 
 
+class PredictModelLibraryCard(QFrame):
+    """Small browser entry point for remotely hosted prediction models."""
+
+    MODEL_LIBRARY_URL = "https://syncandshare.desy.de/index.php/s/ZMF7r57KgefPS2W"
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("predictModelLibraryCard")
+        self.setProperty("card", True)
+        self.setMinimumHeight(118)
+        self.setMaximumHeight(136)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(CARD_MARGIN, 12, CARD_MARGIN, CARD_MARGIN)
+        layout.setSpacing(CARD_SPACING)
+
+        text_column = QWidget(self)
+        text_layout = QVBoxLayout(text_column)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(4)
+
+        title = QLabel("Model Library", text_column)
+        title.setObjectName("predictModelLibraryTitle")
+        title.setProperty("cardTitle", True)
+        text_layout.addWidget(title)
+
+        description = QLabel(
+            "Browse the shared DESY model repository, download a model, then use Model Import.",
+            text_column,
+        )
+        description.setObjectName("predictModelLibraryDescription")
+        description.setProperty("cardBody", True)
+        description.setWordWrap(True)
+        text_layout.addWidget(description)
+
+        url_label = QLabel(self.MODEL_LIBRARY_URL, text_column)
+        url_label.setObjectName("predictModelLibraryUrl")
+        url_label.setProperty("cardMeta", True)
+        url_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        text_layout.addWidget(url_label)
+
+        self.open_button = QPushButton("Browse Models", self)
+        self.open_button.setObjectName("gisaxsPredictBrowseModelLibraryButton")
+        self.open_button.setToolTip(self.MODEL_LIBRARY_URL)
+        normalize_button(self.open_button, wide=True)
+        self.open_button.clicked.connect(self.open_model_library)
+
+        layout.addWidget(text_column, 1)
+        layout.addWidget(self.open_button, 0, Qt.AlignVCenter)
+
+    def open_model_library(self) -> None:
+        QDesktopServices.openUrl(QUrl(self.MODEL_LIBRARY_URL))
+
+
 class MainWindowComponents:
     """Builds and owns the maintainable component hierarchy."""
 
@@ -806,6 +864,7 @@ class MainWindowComponents:
         self.sidebar = self._create_sidebar()
         self.content = ContentStack(ui.mainWindowWidget)
         self.fitting_workspace = GisaxsFittingWorkspace(ui)
+        self.predict_model_library = self._install_predict_model_library_card()
         self.shell = MainShell(
             ui.centralwidget,
             ui.horizontalLayout,
@@ -826,6 +885,22 @@ class MainWindowComponents:
         self.ui.sideBarScrollArea.setWidget(sidebar)
         self.ui.sideBarScrollArea.setWidgetResizable(True)
         return sidebar
+
+    def _install_predict_model_library_card(self) -> PredictModelLibraryCard | None:
+        layout = getattr(self.ui, "verticalLayout_16", None)
+        anchor = getattr(self.ui, "widget_2", None)
+        if layout is None or anchor is None:
+            return None
+        if self.ui.gisaxsPredictPage.findChild(QWidget, "predictModelLibraryCard") is not None:
+            return None
+
+        card = PredictModelLibraryCard(self.ui.gisaxsPredictPage)
+        insert_index = layout.indexOf(anchor)
+        if insert_index < 0:
+            layout.insertWidget(0, card)
+        else:
+            layout.insertWidget(insert_index + 1, card)
+        return card
 
     def save_state(self) -> None:
         self.fitting_workspace.save_state()

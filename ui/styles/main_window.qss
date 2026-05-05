@@ -92,6 +92,25 @@ QLabel[sectionTitle="true"] {
     font-weight: 700;
 }
 
+QLabel[cardBody="true"] {
+    color: #526070;
+}
+
+QLabel[cardMeta="true"] {
+    color: #4d6f9f;
+    font-size: 8pt;
+}
+
+QFrame#predictModelLibraryCard {
+    background: #ffffff;
+    border: 1px solid #d7dee8;
+    border-radius: 8px;
+}
+
+QPushButton#gisaxsPredictBrowseModelLibraryButton {
+    min-width: 132px;
+}
+
 QGroupBox {
     font-weight: 600;
     border: 1px solid #d7dee8;
