@@ -44,7 +44,7 @@ from ui.layout_utils import (
     normalize_input,
     set_expanding_x,
 )
-from ui.responsive_layout import apply_window_profile, current_profile
+from ui.responsive_layout import apply_density_profile, apply_window_profile, current_profile, scale_value
 from ui.style_loader import apply_main_window_styles
 
 
@@ -133,20 +133,22 @@ class CardFrame(QFrame):
 
 
 class GisaxsInputCard(CardFrame):
-    def __init__(self, content: QWidget):
+    def __init__(self, content: QWidget, profile=None):
         super().__init__("GISAXS Input", "GisaxsInputCard")
-        self.setMinimumHeight(260)
+        profile = profile or current_profile(content)
+        self.setMinimumHeight(scale_value(260, profile, 210))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         content.setTitle("")
-        content.setMinimumHeight(200)
+        content.setMinimumHeight(scale_value(200, profile, 165))
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.add_content(content)
 
 
 class CutLineCard(CardFrame):
-    def __init__(self, ui):
+    def __init__(self, ui, profile=None):
         super().__init__("Cut Line and Detector", "CutLineCard")
-        self.setMinimumHeight(230)
+        profile = profile or current_profile(ui.centralwidget)
+        self.setMinimumHeight(scale_value(230, profile, 185))
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(CARD_SPACING)
@@ -185,9 +187,12 @@ class CutLineCard(CardFrame):
 
 
 class FittingControlsCard(CardFrame):
-    def __init__(self, ui):
+    def __init__(self, ui, profile=None):
         super().__init__("Fitting Controls", "FittingControlsCard")
-        self.setMinimumHeight(330)
+        profile = profile or current_profile(ui.centralwidget)
+        method_height = scale_value(120, profile, 98)
+        res_height = scale_value(48, profile, 40)
+        self.setMinimumHeight(scale_value(330, profile, 270))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         widgets = [
             ui.fitCurrentDataCheckBox,
@@ -202,14 +207,14 @@ class FittingControlsCard(CardFrame):
             _take_widget(ui.gridLayout_24, widget)
             widget.setMaximumWidth(16777215)
             set_expanding_x(widget)
-        ui.fitMethodWidget.setMinimumHeight(120)
-        ui.fitMethodWidget.setMaximumHeight(120)
+        ui.fitMethodWidget.setMinimumHeight(method_height)
+        ui.fitMethodWidget.setMaximumHeight(method_height)
         ui.fitMethodWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        ui.fitMethodWidget_2.setMinimumHeight(120)
-        ui.fitMethodWidget_2.setMaximumHeight(120)
+        ui.fitMethodWidget_2.setMinimumHeight(method_height)
+        ui.fitMethodWidget_2.setMaximumHeight(method_height)
         ui.fitMethodWidget_2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        ui.widget_8.setMinimumHeight(48)
-        ui.widget_8.setMaximumHeight(48)
+        ui.widget_8.setMinimumHeight(res_height)
+        ui.widget_8.setMaximumHeight(res_height)
         ui.widget_8.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         grid = QGridLayout()
@@ -224,8 +229,8 @@ class FittingControlsCard(CardFrame):
         grid.addWidget(ui.fitMethodWidget, 2, 0, 1, 2)
         grid.addWidget(ui.fitMethodWidget_2, 2, 2)
         grid.addWidget(ui.widget_8, 3, 0, 1, 3)
-        grid.setRowMinimumHeight(2, 120)
-        grid.setRowMinimumHeight(3, 48)
+        grid.setRowMinimumHeight(2, method_height)
+        grid.setRowMinimumHeight(3, res_height)
         grid.setRowStretch(0, 0)
         grid.setRowStretch(1, 0)
         grid.setRowStretch(2, 0)
@@ -236,9 +241,10 @@ class FittingControlsCard(CardFrame):
 
 
 class ModelParameterCard(CardFrame):
-    def __init__(self, ui):
+    def __init__(self, ui, profile=None):
         super().__init__("Model Parameters", "ModelParameterCard")
-        self.setMinimumHeight(260)
+        profile = profile or current_profile(ui.centralwidget)
+        self.setMinimumHeight(scale_value(260, profile, 210))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         _take_widget(ui.gridLayout_24, ui.widget_7)
         ui.widget_7.setMaximumWidth(16777215)
@@ -249,11 +255,12 @@ class ModelParameterCard(CardFrame):
 
 
 class DetectorPreviewCard(CardFrame):
-    def __init__(self, graphics_view: QGraphicsView):
+    def __init__(self, graphics_view: QGraphicsView, profile=None):
         super().__init__("Detector Preview", "DetectorPreviewCard")
+        profile = profile or current_profile(graphics_view)
         self.setMinimumWidth(SECTION_MIN_WIDTH)
-        self.setMinimumHeight(260)
-        graphics_view.setMinimumSize(320, 240)
+        self.setMinimumHeight(scale_value(260, profile, 210))
+        graphics_view.setMinimumSize(scale_value(320, profile, 260), scale_value(240, profile, 190))
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -261,17 +268,18 @@ class DetectorPreviewCard(CardFrame):
 
 
 class PlotCanvasArea(QFrame):
-    def __init__(self, graphics_view: QGraphicsView, parent: QWidget | None = None):
+    def __init__(self, graphics_view: QGraphicsView, parent: QWidget | None = None, profile=None):
         super().__init__(parent)
+        profile = profile or current_profile(parent or graphics_view)
         self.setObjectName("plotCanvasContainer")
         self.setProperty("previewSection", True)
-        self.setMinimumHeight(260)
+        self.setMinimumHeight(scale_value(260, profile, 200))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        graphics_view.setMinimumSize(320, 260)
+        graphics_view.setMinimumSize(scale_value(320, profile, 260), scale_value(260, profile, 200))
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(graphics_view, 1)
@@ -286,14 +294,17 @@ class SectionCard(QFrame):
         object_name: str,
         parent: QWidget | None = None,
         fixed_height: int | None = None,
+        profile=None,
     ):
         super().__init__(parent)
+        profile = profile or current_profile(parent or self)
         self.setObjectName(object_name)
         self.setProperty("sectionCard", True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed if fixed_height else QSizePolicy.Preferred)
         if fixed_height is not None:
-            self.setMinimumHeight(fixed_height)
-            self.setMaximumHeight(fixed_height)
+            height = scale_value(fixed_height, profile, int(fixed_height * 0.78))
+            self.setMinimumHeight(height)
+            self.setMaximumHeight(height)
 
         self.section_layout = QVBoxLayout(self)
         self.section_layout.setContentsMargins(12, 10, 12, 12)
@@ -307,8 +318,9 @@ class SectionCard(QFrame):
 
 
 class FittingRegionControl(SectionCard):
-    def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Fitting Region", "FittingRegionControl", parent, fixed_height=148)
+    def __init__(self, ui, parent: QWidget | None = None, profile=None):
+        profile = profile or current_profile(parent or ui.centralwidget)
+        super().__init__("Fitting Region", "FittingRegionControl", parent, fixed_height=148, profile=profile)
 
         for widget in (
             ui.fitFittingRegionLabel,
@@ -325,8 +337,8 @@ class FittingRegionControl(SectionCard):
         self.section_layout.addLayout(layout)
 
         ui.fitFittingRegionLabel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        ui.fitFittingRegionSlider.setMinimumHeight(28)
-        ui.fitFittingRegionSlider.setMaximumHeight(36)
+        ui.fitFittingRegionSlider.setMinimumHeight(scale_value(28, profile, 24))
+        ui.fitFittingRegionSlider.setMaximumHeight(scale_value(36, profile, 30))
         ui.fitFittingRegionSlider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         normalize_input(ui.fitFittingRegionMinValue)
         normalize_input(ui.fitFittingRegionMaxValue)
@@ -340,8 +352,9 @@ class FittingRegionControl(SectionCard):
 
 
 class PlotSamplingControl(SectionCard):
-    def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Sampling", "PlotSamplingControl", parent, fixed_height=124)
+    def __init__(self, ui, parent: QWidget | None = None, profile=None):
+        profile = profile or current_profile(parent or ui.centralwidget)
+        super().__init__("Sampling", "PlotSamplingControl", parent, fixed_height=124, profile=profile)
 
         for widget in (
             ui.fitDataPointsNumLabel,
@@ -398,15 +411,16 @@ class ParticleOptionsLayout(QVBoxLayout):
             parent.updateGeometry()
             parent.adjustSize()
             if parent.objectName() == "PlotPreviewCard":
-                parent.setMinimumHeight(max(760, parent.sizeHint().height()))
+                base_min_height = getattr(parent, "_base_min_height", 760)
+                parent.setMinimumHeight(max(base_min_height, parent.sizeHint().height()))
                 parent.updateGeometry()
                 break
             parent = parent.parentWidget()
 
 
 class PlotOptionsControl(SectionCard):
-    def __init__(self, ui, parent: QWidget | None = None):
-        super().__init__("Display Options", "PlotOptionsControl", parent)
+    def __init__(self, ui, parent: QWidget | None = None, profile=None):
+        super().__init__("Display Options", "PlotOptionsControl", parent, profile=profile)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         checkboxes = (
@@ -457,20 +471,22 @@ class PlotOptionsControl(SectionCard):
 
 
 class PlotPreviewCard(CardFrame):
-    def __init__(self, ui, content: QWidget, graphics_view: QGraphicsView):
+    def __init__(self, ui, content: QWidget, graphics_view: QGraphicsView, profile=None):
         super().__init__("Fitting Plot", "PlotPreviewCard")
-        self._build_plot_layout(ui, content, graphics_view)
+        profile = profile or current_profile(content)
+        self._base_min_height = scale_value(760, profile, 620)
+        self._build_plot_layout(ui, content, graphics_view, profile)
 
         self.setMinimumWidth(SECTION_MIN_WIDTH)
-        self.setMinimumHeight(760)
-        content.setMinimumSize(300, 380)
+        self.setMinimumHeight(self._base_min_height)
+        content.setMinimumSize(scale_value(300, profile, 260), scale_value(380, profile, 300))
         content.setMaximumSize(16777215, 16777215)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(content, 1)
 
     @staticmethod
-    def _build_plot_layout(ui, content: QWidget, graphics_view: QGraphicsView) -> None:
+    def _build_plot_layout(ui, content: QWidget, graphics_view: QGraphicsView, profile) -> None:
         """Build explicit plot subcomponents to avoid dense-control overlap."""
         root_layout = content.layout()
         if root_layout is None:
@@ -492,13 +508,13 @@ class PlotPreviewCard(CardFrame):
         controls_layout = QVBoxLayout(controls_container)
         controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(CARD_SPACING)
-        controls_layout.addWidget(FittingRegionControl(ui, controls_container))
-        controls_layout.addWidget(PlotSamplingControl(ui, controls_container))
-        controls_layout.addWidget(PlotOptionsControl(ui, controls_container))
+        controls_layout.addWidget(FittingRegionControl(ui, controls_container, profile))
+        controls_layout.addWidget(PlotSamplingControl(ui, controls_container, profile))
+        controls_layout.addWidget(PlotOptionsControl(ui, controls_container, profile))
 
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(CARD_SPACING)
-        root_layout.addWidget(PlotCanvasArea(graphics_view, content), 0, 0)
+        root_layout.addWidget(PlotCanvasArea(graphics_view, content, profile), 0, 0)
         root_layout.addWidget(controls_container, 1, 0)
         root_layout.setRowStretch(0, 1)
         root_layout.setRowStretch(1, 0)
@@ -506,11 +522,12 @@ class PlotPreviewCard(CardFrame):
 
 
 class StatusCard(CardFrame):
-    def __init__(self, browser: QWidget):
+    def __init__(self, browser: QWidget, profile=None):
         super().__init__("Run Log", "FittingStatusCard")
-        self.setMinimumHeight(120)
+        profile = profile or current_profile(browser)
+        self.setMinimumHeight(scale_value(120, profile, 96))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        browser.setMinimumHeight(90)
+        browser.setMinimumHeight(scale_value(90, profile, 72))
         browser.setMaximumHeight(16777215)
         browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(browser, 1)
@@ -589,20 +606,15 @@ class GisaxsFittingWorkspace:
         fixed_layout = QVBoxLayout(self.fixed_controls_stack)
         fixed_layout.setContentsMargins(0, 0, 0, 0)
         fixed_layout.setSpacing(CARD_SPACING)
-        gisaxs_card = GisaxsInputCard(self.ui.gisaxsInputBox)
-        cut_line_card = CutLineCard(self.ui)
-        fitting_controls_card = FittingControlsCard(self.ui)
-        model_parameters_card = ModelParameterCard(self.ui)
+        gisaxs_card = GisaxsInputCard(self.ui.gisaxsInputBox, self.profile)
+        cut_line_card = CutLineCard(self.ui, self.profile)
+        fitting_controls_card = FittingControlsCard(self.ui, self.profile)
+        model_parameters_card = ModelParameterCard(self.ui, self.profile)
         fixed_layout.addWidget(gisaxs_card)
         fixed_layout.addWidget(cut_line_card)
         fixed_layout.addWidget(fitting_controls_card)
         fixed_layout.addStretch(1)
-        fixed_stack_min_height = (
-            gisaxs_card.minimumHeight()
-            + cut_line_card.minimumHeight()
-            + fitting_controls_card.minimumHeight()
-            + 2 * CARD_SPACING
-        )
+        fixed_stack_min_height = self._fixed_stack_min_height()
         self.fixed_controls_stack.setMinimumHeight(fixed_stack_min_height)
         self.work_splitter.setMinimumHeight(
             fixed_stack_min_height
@@ -629,11 +641,11 @@ class GisaxsFittingWorkspace:
         self.page_splitter.addWidget(self.ui.gisaxsFittingPageScrollArea)
 
     def _build_preview_area(self) -> None:
-        self.preview_splitter.addWidget(DetectorPreviewCard(self.ui.gisaxsInputGraphicsView))
+        self.preview_splitter.addWidget(DetectorPreviewCard(self.ui.gisaxsInputGraphicsView, self.profile))
         self.preview_splitter.addWidget(
-            PlotPreviewCard(self.ui, self.ui.curvePlotControlWidget, self.ui.fitGraphicsView)
+            PlotPreviewCard(self.ui, self.ui.curvePlotControlWidget, self.ui.fitGraphicsView, self.profile)
         )
-        self.preview_splitter.addWidget(StatusCard(self.ui.FittingTextBrowser))
+        self.preview_splitter.addWidget(StatusCard(self.ui.FittingTextBrowser, self.profile))
         self.preview_splitter.setStretchFactor(0, 2)
         self.preview_splitter.setStretchFactor(1, 3)
         self.preview_splitter.setStretchFactor(2, 0)
@@ -670,12 +682,22 @@ class GisaxsFittingWorkspace:
         for name in expanding_actions:
             button = getattr(self.ui, name, None)
             if button is not None:
-                _configure_button(button, minimum_width=108, maximum_width=220, horizontal=QSizePolicy.MinimumExpanding)
+                _configure_button(
+                    button,
+                    minimum_width=scale_value(108, self.profile, 88),
+                    maximum_width=scale_value(220, self.profile, 180),
+                    horizontal=QSizePolicy.MinimumExpanding,
+                )
 
         for name in preferred_actions:
             button = getattr(self.ui, name, None)
             if button is not None:
-                _configure_button(button, minimum_width=78, maximum_width=140, horizontal=QSizePolicy.Preferred)
+                _configure_button(
+                    button,
+                    minimum_width=scale_value(78, self.profile, 64),
+                    maximum_width=scale_value(140, self.profile, 116),
+                    horizontal=QSizePolicy.Preferred,
+                )
 
         plus_button = getattr(self.ui, "pushButton", None)
         if plus_button is not None:
@@ -754,12 +776,14 @@ class GisaxsFittingWorkspace:
         self.profile = profile
         self.DEFAULT_WORK_SIZES = list(profile.work_sizes)
         self.DEFAULT_PREVIEW_SIZES = list(profile.preview_sizes)
+        self._configure_button_responsiveness()
         self.preview_splitter.setMinimumWidth(profile.preview_min)
         self.preview_scroll_area.setMinimumWidth(profile.preview_min)
         self.work_splitter.setMinimumWidth(profile.workspace_min)
         self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(profile.workspace_min)
 
-        fixed_min = self.fixed_controls_stack.minimumHeight()
+        fixed_min = self._fixed_stack_min_height()
+        self.fixed_controls_stack.setMinimumHeight(fixed_min)
         self.work_splitter.setMinimumHeight(
             fixed_min + self.DEFAULT_WORK_SIZES[1] + self.work_splitter.handleWidth()
         )
@@ -769,6 +793,17 @@ class GisaxsFittingWorkspace:
         self.page_splitter.setSizes(list(profile.page_sizes))
         self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
         self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
+
+    def _fixed_stack_min_height(self) -> int:
+        card_names = ("GisaxsInputCard", "CutLineCard", "FittingControlsCard")
+        card_heights = [
+            widget.minimumHeight()
+            for name in card_names
+            if (widget := self.fixed_controls_stack.findChild(QWidget, name)) is not None
+        ]
+        if not card_heights:
+            return self.fixed_controls_stack.minimumHeight()
+        return sum(card_heights) + (len(card_heights) - 1) * CARD_SPACING
 
 
 class MainShell(QSplitter):
@@ -857,12 +892,13 @@ class PredictModelLibraryCard(QFrame):
 
     MODEL_LIBRARY_URL = "https://syncandshare.desy.de/index.php/s/ZMF7r57KgefPS2W"
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, parent: QWidget | None = None, profile=None):
         super().__init__(parent)
+        profile = profile or current_profile(parent)
         self.setObjectName("predictModelLibraryCard")
         self.setProperty("card", True)
-        self.setMinimumHeight(118)
-        self.setMaximumHeight(136)
+        self.setMinimumHeight(scale_value(118, profile, 96))
+        self.setMaximumHeight(scale_value(136, profile, 112))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         layout = QHBoxLayout(self)
@@ -926,6 +962,7 @@ class MainWindowComponents:
             profile=self.responsive_profile,
         )
         apply_main_window_styles(ui)
+        apply_density_profile(ui.centralwidget, self.responsive_profile)
         apply_window_profile(ui.centralwidget.window(), self.responsive_profile)
 
     def _create_sidebar(self) -> NavigationSidebar:
@@ -949,7 +986,7 @@ class MainWindowComponents:
         if self.ui.gisaxsPredictPage.findChild(QWidget, "predictModelLibraryCard") is not None:
             return None
 
-        card = PredictModelLibraryCard(self.ui.gisaxsPredictPage)
+        card = PredictModelLibraryCard(self.ui.gisaxsPredictPage, self.responsive_profile)
         insert_index = layout.indexOf(anchor)
         if insert_index < 0:
             layout.insertWidget(0, card)
@@ -963,9 +1000,11 @@ class MainWindowComponents:
 
     def apply_responsive_profile(self, profile) -> None:
         self.responsive_profile = profile
+        apply_density_profile(self.ui.centralwidget, profile)
         apply_window_profile(self.ui.centralwidget.window(), profile)
         self.fitting_workspace.apply_responsive_profile(profile)
         self.shell.apply_responsive_profile(profile)
+        apply_density_profile(self.ui.centralwidget, profile)
 
     @staticmethod
     def _clear_generated_inline_styles(root: QWidget) -> None:

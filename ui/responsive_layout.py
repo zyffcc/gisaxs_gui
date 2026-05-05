@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from PyQt5.QtCore import QRect, QSize
 from PyQt5.QtGui import QCursor
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QApplication, QAbstractButton, QCheckBox, QSizePolicy, QWidget
 
 from core.user_settings import user_settings
 
@@ -27,6 +27,7 @@ class ResponsiveProfile:
     work_sizes: tuple[int, int]
     preview_sizes: tuple[int, int, int]
     font_adjustment: int
+    density_scale: float
 
 
 PROFILES = {
@@ -45,6 +46,7 @@ PROFILES = {
         work_sizes=(760, 520),
         preview_sizes=(280, 700, 140),
         font_adjustment=-1,
+        density_scale=0.82,
     ),
     "standard": ResponsiveProfile(
         key="standard",
@@ -61,6 +63,7 @@ PROFILES = {
         work_sizes=(760, 680),
         preview_sizes=(300, 860, 160),
         font_adjustment=0,
+        density_scale=1.0,
     ),
     "spacious": ResponsiveProfile(
         key="spacious",
@@ -77,6 +80,7 @@ PROFILES = {
         work_sizes=(800, 760),
         preview_sizes=(340, 920, 180),
         font_adjustment=0,
+        density_scale=1.0,
     ),
     "wide": ResponsiveProfile(
         key="wide",
@@ -93,8 +97,68 @@ PROFILES = {
         work_sizes=(840, 840),
         preview_sizes=(380, 980, 200),
         font_adjustment=1,
+        density_scale=1.05,
     ),
 }
+
+
+def scale_value(value: int, profile: ResponsiveProfile, minimum: int | None = None) -> int:
+    scaled = int(round(value * profile.density_scale))
+    return max(minimum, scaled) if minimum is not None else scaled
+
+
+def apply_density_profile(root: QWidget, profile: ResponsiveProfile) -> None:
+    """Scale wrapper-owned control heights for the active screen profile."""
+    from ui.layout_utils import INPUT_WIDGET_TYPES, SMALL_BUTTON_WIDTH
+
+    button_min = scale_value(32, profile, 28)
+    button_max = scale_value(36, profile, 30)
+    input_min = scale_value(28, profile, 24)
+    input_max = scale_value(32, profile, 28)
+    checkbox_max = scale_value(34, profile, 28)
+    compact_width = scale_value(SMALL_BUTTON_WIDTH, profile, 30)
+
+    for button in root.findChildren(QAbstractButton):
+        if button.maximumWidth() <= SMALL_BUTTON_WIDTH + 4:
+            button.setMinimumSize(compact_width, button_min)
+            button.setMaximumSize(compact_width, button_max)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        else:
+            button.setMinimumHeight(button_min)
+            button.setMaximumHeight(button_max)
+            button.setSizePolicy(button.sizePolicy().horizontalPolicy(), QSizePolicy.Fixed)
+
+    for widget in root.findChildren(INPUT_WIDGET_TYPES):
+        widget.setMinimumHeight(input_min)
+        widget.setMaximumHeight(input_max)
+        widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    for checkbox in root.findChildren(QCheckBox):
+        checkbox.setMinimumHeight(input_min)
+        checkbox.setMaximumHeight(checkbox_max)
+        checkbox.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+
+    for name, base_min, min_floor, base_max in (
+        ("GisaxsInputCard", 260, 210, None),
+        ("CutLineCard", 230, 185, None),
+        ("FittingControlsCard", 330, 270, None),
+        ("ModelParameterCard", 260, 210, None),
+        ("DetectorPreviewCard", 260, 210, None),
+        ("plotCanvasContainer", 260, 200, None),
+        ("PlotPreviewCard", 760, 620, None),
+        ("FittingStatusCard", 120, 96, None),
+        ("predictModelLibraryCard", 118, 96, 136),
+        ("fitMethodWidget", 120, 98, 120),
+        ("fitMethodWidget_2", 120, 98, 120),
+        ("widget_8", 48, 40, 48),
+    ):
+        widget = root.findChild(QWidget, name)
+        if widget is None:
+            continue
+        widget.setMinimumHeight(scale_value(base_min, profile, min_floor))
+        if base_max is not None:
+            widget.setMaximumHeight(scale_value(base_max, profile, min_floor))
+        widget.updateGeometry()
 
 
 def available_screen_geometry(window: QWidget | None = None) -> QRect:
