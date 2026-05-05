@@ -44,6 +44,7 @@ from ui.layout_utils import (
     normalize_input,
     set_expanding_x,
 )
+from ui.responsive_layout import apply_window_profile, current_profile
 from ui.style_loader import apply_main_window_styles
 
 
@@ -522,8 +523,11 @@ class GisaxsFittingWorkspace:
     DEFAULT_WORK_SIZES = [760, 680]
     DEFAULT_PREVIEW_SIZES = [300, 860, 160]
 
-    def __init__(self, ui):
+    def __init__(self, ui, profile=None):
         self.ui = ui
+        self.profile = profile or current_profile(ui.centralwidget)
+        self.DEFAULT_WORK_SIZES = list(self.profile.work_sizes)
+        self.DEFAULT_PREVIEW_SIZES = list(self.profile.preview_sizes)
         self.page_splitter = QSplitter(Qt.Horizontal, ui.gisaxsFittingPage)
         self.page_splitter.setObjectName("gisaxsFittingWorkspaceSplitter")
         self.page_splitter.setHandleWidth(8)
@@ -535,7 +539,7 @@ class GisaxsFittingWorkspace:
         self.preview_splitter.setHandleWidth(8)
         self.preview_splitter.setChildrenCollapsible(False)
         self.preview_splitter.setOpaqueResize(True)
-        self.preview_splitter.setMinimumWidth(420)
+        self.preview_splitter.setMinimumWidth(self.profile.preview_min)
         self.preview_splitter.setMinimumHeight(
             sum(self.DEFAULT_PREVIEW_SIZES) + 2 * self.preview_splitter.handleWidth()
         )
@@ -545,7 +549,7 @@ class GisaxsFittingWorkspace:
         self.work_splitter.setHandleWidth(8)
         self.work_splitter.setChildrenCollapsible(False)
         self.work_splitter.setOpaqueResize(True)
-        self.work_splitter.setMinimumWidth(640)
+        self.work_splitter.setMinimumWidth(self.profile.workspace_min)
         self.work_splitter.setMinimumHeight(
             sum(self.DEFAULT_WORK_SIZES) + self.work_splitter.handleWidth()
         )
@@ -571,7 +575,7 @@ class GisaxsFittingWorkspace:
         self.ui.gisaxsInputBox.setMaximumWidth(16777215)
         self.ui.curvePlotControlWidget.setMinimumWidth(0)
         self.ui.curvePlotControlWidget.setMaximumWidth(16777215)
-        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(640)
+        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(self.profile.workspace_min)
         self.ui.gisaxsFittingPageScrollArea.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Expanding,
@@ -638,7 +642,7 @@ class GisaxsFittingWorkspace:
 
         self.preview_scroll_area = make_scroll_area(self.preview_splitter, horizontal=True)
         self.preview_scroll_area.setObjectName("gisaxsPreviewScrollArea")
-        self.preview_scroll_area.setMinimumWidth(420)
+        self.preview_scroll_area.setMinimumWidth(self.profile.preview_min)
 
         self.page_splitter.addWidget(self.preview_scroll_area)
         self.page_splitter.setStretchFactor(0, 3)
@@ -693,13 +697,23 @@ class GisaxsFittingWorkspace:
     def restore_sizes(self) -> None:
         sizes = user_settings.get(self.SETTINGS_KEY, None)
         if isinstance(sizes, dict):
+            if sizes.get("profile") != self.profile.key:
+                self.page_splitter.setSizes(list(self.profile.page_sizes))
+                self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
+                self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
+                return
             page_sizes = sizes.get("page")
             work_sizes = sizes.get("work")
             preview_sizes = sizes.get("preview")
             if isinstance(page_sizes, (list, tuple)) and len(page_sizes) == 2:
-                self.page_splitter.setSizes([max(640, int(page_sizes[0])), max(420, int(page_sizes[1]))])
+                self.page_splitter.setSizes(
+                    [
+                        max(self.profile.workspace_min, int(page_sizes[0])),
+                        max(self.profile.preview_min, int(page_sizes[1])),
+                    ]
+                )
             else:
-                self.page_splitter.setSizes([760, 500])
+                self.page_splitter.setSizes(list(self.profile.page_sizes))
             if isinstance(work_sizes, (list, tuple)) and len(work_sizes) == 2:
                 self.work_splitter.setSizes(
                     [
@@ -721,7 +735,7 @@ class GisaxsFittingWorkspace:
                 self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
             return
 
-        self.page_splitter.setSizes([760, 500])
+        self.page_splitter.setSizes(list(self.profile.page_sizes))
         self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
         self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
 
@@ -732,8 +746,29 @@ class GisaxsFittingWorkspace:
                 "page": self.page_splitter.sizes(),
                 "work": self.work_splitter.sizes(),
                 "preview": self.preview_splitter.sizes(),
+                "profile": self.profile.key,
             },
         )
+
+    def apply_responsive_profile(self, profile) -> None:
+        self.profile = profile
+        self.DEFAULT_WORK_SIZES = list(profile.work_sizes)
+        self.DEFAULT_PREVIEW_SIZES = list(profile.preview_sizes)
+        self.preview_splitter.setMinimumWidth(profile.preview_min)
+        self.preview_scroll_area.setMinimumWidth(profile.preview_min)
+        self.work_splitter.setMinimumWidth(profile.workspace_min)
+        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(profile.workspace_min)
+
+        fixed_min = self.fixed_controls_stack.minimumHeight()
+        self.work_splitter.setMinimumHeight(
+            fixed_min + self.DEFAULT_WORK_SIZES[1] + self.work_splitter.handleWidth()
+        )
+        self.preview_splitter.setMinimumHeight(
+            sum(self.DEFAULT_PREVIEW_SIZES) + 2 * self.preview_splitter.handleWidth()
+        )
+        self.page_splitter.setSizes(list(profile.page_sizes))
+        self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
+        self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
 
 
 class MainShell(QSplitter):
@@ -748,8 +783,10 @@ class MainShell(QSplitter):
         sidebar_area: QScrollArea,
         content_widget: QWidget,
         parent: QWidget | None = None,
+        profile=None,
     ):
         super().__init__(Qt.Horizontal, parent or central_widget)
+        self.profile = profile or current_profile(central_widget)
         self.setObjectName("mainShell")
         self.setHandleWidth(6)
         self.setChildrenCollapsible(False)
@@ -759,10 +796,10 @@ class MainShell(QSplitter):
         self._remove_from_layout(source_layout, sidebar_area)
         self._remove_from_layout(source_layout, content_widget)
 
-        sidebar_area.setMinimumWidth(180)
-        sidebar_area.setMaximumWidth(220)
+        sidebar_area.setMinimumWidth(self.profile.sidebar_min)
+        sidebar_area.setMaximumWidth(self.profile.sidebar_max)
         sidebar_area.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        content_widget.setMinimumWidth(1060)
+        content_widget.setMinimumWidth(self.profile.content_min)
         content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.addWidget(sidebar_area)
@@ -784,20 +821,35 @@ class MainShell(QSplitter):
     def restore_sizes(self) -> None:
         sizes = user_settings.get(self.SETTINGS_KEY, None)
         if isinstance(sizes, (list, tuple)) and len(sizes) == 2:
-            self.setSizes([max(180, int(sizes[0])), max(1060, int(sizes[1]))])
+            self.setSizes(
+                [
+                    max(self.profile.sidebar_min, int(sizes[0])),
+                    max(self.profile.content_min, int(sizes[1])),
+                ]
+            )
             return
 
-        self.setSizes([190, 1260])
+        self.setSizes([self.profile.sidebar_default, self.profile.content_min])
 
     def save_sizes(self) -> None:
         user_settings.set(self.SETTINGS_KEY, self.sizes())
         user_settings.save_settings()
 
+    def apply_responsive_profile(self, profile) -> None:
+        self.profile = profile
+        sidebar = self.widget(0)
+        content = self.widget(1)
+        sidebar.setMinimumWidth(profile.sidebar_min)
+        sidebar.setMaximumWidth(profile.sidebar_max)
+        content.setMinimumWidth(profile.content_min)
+        self.setSizes([profile.sidebar_default, profile.content_min])
+
     @staticmethod
     def _enforce_window_minimum_width(central_widget: QWidget) -> None:
         window = central_widget.window()
-        window.setMinimumSize(1300, 760)
-        QTimer.singleShot(0, lambda: window.setMinimumSize(1300, 760))
+        profile = current_profile(window)
+        apply_window_profile(window, profile)
+        QTimer.singleShot(0, lambda: apply_window_profile(window, profile))
 
 
 class PredictModelLibraryCard(QFrame):
@@ -860,18 +912,21 @@ class MainWindowComponents:
 
     def __init__(self, ui):
         self.ui = ui
+        self.responsive_profile = current_profile(ui.centralwidget)
         self._clear_generated_inline_styles(ui.centralwidget)
         self.sidebar = self._create_sidebar()
         self.content = ContentStack(ui.mainWindowWidget)
-        self.fitting_workspace = GisaxsFittingWorkspace(ui)
+        self.fitting_workspace = GisaxsFittingWorkspace(ui, self.responsive_profile)
         self.predict_model_library = self._install_predict_model_library_card()
         self.shell = MainShell(
             ui.centralwidget,
             ui.horizontalLayout,
             ui.sideBarScrollArea,
             ui.mainContentWidget,
+            profile=self.responsive_profile,
         )
         apply_main_window_styles(ui)
+        apply_window_profile(ui.centralwidget.window(), self.responsive_profile)
 
     def _create_sidebar(self) -> NavigationSidebar:
         buttons = [
@@ -905,6 +960,12 @@ class MainWindowComponents:
     def save_state(self) -> None:
         self.fitting_workspace.save_state()
         self.shell.save_sizes()
+
+    def apply_responsive_profile(self, profile) -> None:
+        self.responsive_profile = profile
+        apply_window_profile(self.ui.centralwidget.window(), profile)
+        self.fitting_workspace.apply_responsive_profile(profile)
+        self.shell.apply_responsive_profile(profile)
 
     @staticmethod
     def _clear_generated_inline_styles(root: QWidget) -> None:
