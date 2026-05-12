@@ -195,7 +195,7 @@ class MainController(QObject):
         self.gisaxs_predict_controller.initialize()
         
         # 更新状态
-        self.status_updated.emit("GISAXS Toolkit ready")
+        self.status_updated.emit("GIMaP ready")
 
     def _open_waxs_standalone(self):
         """直接打开独立的 WAXS/WAXS.py 窗口。"""

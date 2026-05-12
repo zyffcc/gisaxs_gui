@@ -1,4 +1,4 @@
-# GISAXS/GIWAXS Toolkit (GUI)
+# Grazing Incidence Mapping Package (GIMaP)
 
 A Windows-friendly GUI for GISAXS/GIWAXS data processing: cut & fitting, CNN-based prediction, dataset classification, and GIWAXS 1D integration. Supports single images and batch workflows with clear outputs.
 

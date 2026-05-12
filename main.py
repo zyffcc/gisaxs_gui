@@ -38,7 +38,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._startup_time = time.time()
         
         self.setupUi(self)
-        self.setWindowTitle("GISAXS Toolkit")
+        self.setWindowTitle("GIMaP")
         self.components = MainWindowComponents(self)
         
         # 设置初始状态栏消息（英文）
@@ -97,7 +97,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             
             # 更新状态栏
             if hasattr(self, 'statusbar'):
-                self.statusbar.showMessage(f"GISAXS Toolkit ready (startup: {total_time:.1f}s)")
+                self.statusbar.showMessage(f"GIMaP ready (startup: {total_time:.1f}s)")
             
             print("✓ Deferred initialization finished")
             
@@ -282,9 +282,9 @@ def main():
     app = QApplication(sys.argv)
     
     # 设置应用程序属性
-    app.setApplicationName("GISAXS Toolkit")
+    app.setApplicationName("GIMaP")
     app.setApplicationVersion("1.0.0")
-    app.setOrganizationName("GISAXS Lab")
+    app.setOrganizationName("GIMaP")
     
     # 创建主窗口
     window = MainWindow()

@@ -3670,9 +3670,9 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "GIMaP"))
         self.cutAndFittingButton.setText(_translate("MainWindow", "Cut &&  Fitting"))
-        self.gisaxsPredictButton.setText(_translate("MainWindow", "GISAXS Predict"))
+        self.gisaxsPredictButton.setText(_translate("MainWindow", "GIMaP Predict"))
         self.trainsetBuildButton.setText(_translate("MainWindow", "Trainset Build"))
         self.ClassficationButton.setText(_translate("MainWindow", "Classification"))
         self.WAXSButton.setText(_translate("MainWindow", "WAXS"))
@@ -3966,7 +3966,7 @@ class Ui_MainWindow(object):
         self.predict2dExportButton.setText(_translate("MainWindow", "Export"))
         self.predict2dLabelCombox.setItemText(0, _translate("MainWindow", "Jet"))
         self.gisaxsPredictImageShowTabWidget.setTabText(self.gisaxsPredictImageShowTabWidget.indexOf(self.predict2dImageTab), _translate("MainWindow", "Predict-2D"))
-        self.gisaxsInputBox.setTitle(_translate("MainWindow", "GISAXS Input"))
+        self.gisaxsInputBox.setTitle(_translate("MainWindow", "GIMaP Input"))
         self.gisaxsInputCutLineLabel.setText(_translate("MainWindow", "Cut line:"))
         self.gisaxsInputColorScaleLabel.setText(_translate("MainWindow", "Color Scale:"))
         self.gisaxsInputImportButton.setText(_translate("MainWindow", "Import GISAXS"))

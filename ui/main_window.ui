@@ -17,7 +17,7 @@
    </sizepolicy>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>GIMaP</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout">
@@ -112,7 +112,7 @@
            </size>
           </property>
           <property name="text">
-           <string>GISAXS Predict</string>
+           <string>GIMaP Predict</string>
           </property>
          </widget>
         </item>
@@ -6459,7 +6459,7 @@ p, li { white-space: pre-wrap; }
 }</string>
                  </property>
                  <property name="title">
-                  <string>GISAXS Input</string>
+                  <string>GIMaP Input</string>
                  </property>
                  <layout class="QGridLayout" name="gridLayout_23">
                   <item row="4" column="0">

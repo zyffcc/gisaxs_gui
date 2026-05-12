@@ -12,7 +12,7 @@ class DisplayConfig:
     """显示配置管理"""
     
     def __init__(self):
-        self.settings = QSettings("GISAXS Lab", "GISAXS Toolkit")
+        self.settings = QSettings("GIMaP", "GIMaP")
         self.config_file = "display_settings.json"
         self.load_config()
     

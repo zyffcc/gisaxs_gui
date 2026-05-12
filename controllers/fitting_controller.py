@@ -97,7 +97,7 @@ class IndependentMatplotlibWindow(QMainWindow):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("GISAXS Image Viewer - Independent Window (Selection Mode: Right-click to activate)")
+        self.setWindowTitle("GIMaP Image Viewer - Independent Window (Selection Mode: Right-click to activate)")
         self.setGeometry(100, 100, 900, 700)
         
         # 创建中央widget
@@ -180,7 +180,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         if event.button == 3:  # 右键
             if not self.selection_mode:
                 self.selection_mode = True
-                self.setWindowTitle("GISAXS Image Viewer - 框选模式激活 (拖拽选择区域, ESC退出)")
+                self.setWindowTitle("GIMaP Image Viewer - 框选模式激活 (拖拽选择区域, ESC退出)")
                 self.canvas.setCursor(Qt.CrossCursor)
                 self.status_updated.emit("Selection mode activated - Drag to select, Right-click again to exit")
             else:
@@ -265,7 +265,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                     
                     # 更新标题显示Q坐标信息
                     self.setWindowTitle(
-                        f"GISAXS Image Viewer - 已选择Q区域: "
+                        f"GIMaP Image Viewer - 已选择Q区域: "
                         f"中心({center_x:.6f}, {center_y:.6f}) nm⁻¹ "
                         f"尺寸({width:.6f}×{height:.6f}) nm⁻¹"
                     )
@@ -295,7 +295,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                     
                     # 更新标题显示选择信息（使用原始图像坐标）
                     self.setWindowTitle(
-                        f"GISAXS Image Viewer - 已选择区域: "
+                        f"GIMaP Image Viewer - 已选择区域: "
                         f"中心({selection_info['pixel_center_x']}, {selection_info['pixel_center_y']}) "
                         f"尺寸({selection_info['pixel_width']}×{selection_info['pixel_height']})"
                     )
@@ -338,7 +338,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         self.selection_mode = False
         self.selection_start = None
         self.canvas.unsetCursor()
-        self.setWindowTitle("GISAXS Image Viewer - Independent Window (右键激活框选)")
+        self.setWindowTitle("GIMaP Image Viewer - Independent Window (右键激活框选)")
         if self.selection_rect:
             self.selection_rect.remove()
             self.selection_rect = None
@@ -352,9 +352,9 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.canvas.draw_idle()
         self.current_selection = None
         if self.selection_mode:
-            self.setWindowTitle("GISAXS Image Viewer - 框选模式激活 (拖拽选择区域)")
+            self.setWindowTitle("GIMaP Image Viewer - 框选模式激活 (拖拽选择区域)")
         else:
-            self.setWindowTitle("GISAXS Image Viewer - Independent Window (右键激活框选)")
+            self.setWindowTitle("GIMaP Image Viewer - Independent Window (右键激活框选)")
     
     def update_image(self, image_data, vmin=None, vmax=None, use_log=True):
         """更新独立窗口中的图像，保持用户的视图焦点，支持自定义颜色范围和线性/对数切换"""
@@ -784,7 +784,7 @@ class IndependentFitWindow(QMainWindow):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("GISAXS Cut Analysis - Independent Fit Window")
+        self.setWindowTitle("GIMaP Cut Analysis - Independent Fit Window")
         self.setGeometry(150, 150, 800, 600)
         
         # 创建中央widget
@@ -841,7 +841,7 @@ class IndependentFitWindow(QMainWindow):
                     transform=self.ax.transAxes, fontsize=12, alpha=0.7)
         self.ax.set_xlabel('Position')
         self.ax.set_ylabel('Intensity')
-        self.ax.set_title('GISAXS Cut Analysis Results')
+        self.ax.set_title('GIMaP Cut Analysis Results')
         self.ax.grid(True, alpha=0.3)
         self.figure.tight_layout()
         self.canvas.draw()
@@ -1052,7 +1052,7 @@ class IndependentFitWindow(QMainWindow):
             self.canvas.draw()
             
             # 更新窗口标题
-            self.setWindowTitle(f"GISAXS Cut Analysis - {title}")
+            self.setWindowTitle(f"GIMaP Cut Analysis - {title}")
             
             self.status_updated.emit(f"Independent fit window updated: {title}")
             
@@ -3724,12 +3724,12 @@ class FittingController(QObject):
                 if self.independent_window and self.independent_window.isVisible():
                     if is_q_space:
                         self.independent_window.setWindowTitle(
-                            f"GISAXS Image Viewer - Q参数已更新: "
+                            f"GIMaP Image Viewer - Q参数已更新: "
                             f"Center({center_qy:.6f}, {center_qz:.6f}) nm⁻¹, Size({width_q:.6f}×{height_q:.6f}) nm⁻¹"
                         )
                     else:
                         self.independent_window.setWindowTitle(
-                            f"GISAXS Image Viewer - 参数已更新: "
+                            f"GIMaP Image Viewer - 参数已更新: "
                             f"Center({center_x}, {center_y}), Size({width}×{height})"
                         )
             else:
@@ -8326,7 +8326,7 @@ class FittingController(QObject):
             elif choice == 'Fitting Data' and isinstance(getattr(self, 'fitting', None), dict):
                 q_source_kind = self.fitting.get('meta', {}).get('data_source', getattr(self, 'data_source', None))
 
-            lines.append("# GISAXS Toolkit Export")
+            lines.append("# GIMaP Export")
             lines.append(f"# Export Time: {datetime.now().isoformat(timespec='seconds')}")
             lines.append(f"# Data Type: {choice}")
             lines.append(f"# Export Name: {data_name}")

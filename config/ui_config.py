@@ -14,7 +14,7 @@ class UIConfig:
     """UI配置管理类"""
     
     def __init__(self):
-        self.settings = QSettings("GISAXS Lab", "GISAXS Toolkit")
+        self.settings = QSettings("GIMaP", "GIMaP")
         self.screen_info = self.get_screen_info()
         
     def get_screen_info(self):

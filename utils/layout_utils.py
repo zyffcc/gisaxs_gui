@@ -39,7 +39,7 @@ class LayoutUtils:
                 # 根据页面索引显示切换信息
                 page_names = {
                     0: "Cut Fitting",
-                    1: "GISAXS Predict", 
+                    1: "GIMaP Predict", 
                     2: "Trainset Build",
                     3: "Classification"
                 }

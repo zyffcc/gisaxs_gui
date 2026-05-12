@@ -1,19 +1,19 @@
 {
   "enable_adaptive_scaling": true,
-  "window_width": 1400,
-  "window_height": 900,
+  "window_width": 1260,
+  "window_height": 810,
   "font_adjustment": -1,
   "_auto_k_enabled": false,
   "fit.points_num": 100,
   "fit.interp_method": "Spline",
   "main_splitter_sizes": [
     180,
-    1196
+    1171
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      725,
-      445
+      779,
+      360
     ],
     "work": [
       760,

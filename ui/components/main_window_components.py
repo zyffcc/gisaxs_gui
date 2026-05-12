@@ -83,7 +83,7 @@ class ContentStack:
 
     PAGES = (
         PageDefinition(0, "Trainset Build", "trainsetBuildPage"),
-        PageDefinition(1, "GISAXS Predict", "gisaxsPredictPage"),
+        PageDefinition(1, "GIMaP Predict", "gisaxsPredictPage"),
         PageDefinition(2, "Cut Fitting", "gisaxsFittingPage"),
         PageDefinition(3, "Classification", "classificationPage"),
     )
@@ -134,7 +134,7 @@ class CardFrame(QFrame):
 
 class GisaxsInputCard(CardFrame):
     def __init__(self, content: QWidget, profile=None):
-        super().__init__("GISAXS Input", "GisaxsInputCard")
+        super().__init__("GIMaP Input", "GisaxsInputCard")
         profile = profile or current_profile(content)
         self.setMinimumHeight(scale_value(260, profile, 210))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
