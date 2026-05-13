@@ -6758,7 +6758,7 @@ p, li { white-space: pre-wrap; }
                         <enum>Qt::LeftToRight</enum>
                        </property>
                        <property name="text">
-                        <string>Show ——→</string>
+                        <string>Show &gt;</string>
                        </property>
                       </widget>
                      </item>

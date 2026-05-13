@@ -8,12 +8,12 @@
   "fit.interp_method": "Spline",
   "main_splitter_sizes": [
     180,
-    1171
+    1067
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      779,
-      360
+      669,
+      366
     ],
     "work": [
       760,

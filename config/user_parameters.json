@@ -101,8 +101,9 @@
         },
         "gisaxs_input": {
             "center_parallel": 771.01,
-            "cutline_vertical": 22.0,
-            "cutline_parallel": 11.0
+            "cutline_vertical": 20.0,
+            "cutline_parallel": 11.0,
+            "vmax": 4.11
         }
     },
     "gisaxs_predict": {

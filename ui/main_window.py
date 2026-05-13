@@ -3978,7 +3978,7 @@ class Ui_MainWindow(object):
         self.gisaxsInputAutoScaleCheckBox.setText(_translate("MainWindow", "Auto Scale"))
         self.gisaxsInputIntLogCheckBox.setText(_translate("MainWindow", "Int. Log"))
         self.gisaxsInputAutoShowCheckBox.setText(_translate("MainWindow", "Auto Show"))
-        self.gisaxsInputShowButton.setText(_translate("MainWindow", "Show ——→"))
+        self.gisaxsInputShowButton.setText(_translate("MainWindow", "Show >"))
         self.gisaxsInputCutButton.setText(_translate("MainWindow", "Cut"))
         self.gisaxsInputVmaxLabel.setText(_translate("MainWindow", "Vmax:"))
         self.gisaxsInputCutLineVerticalLabel.setText(_translate("MainWindow", "Vertical."))

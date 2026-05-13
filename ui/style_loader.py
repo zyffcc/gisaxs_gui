@@ -12,4 +12,9 @@ def apply_main_window_styles(window) -> None:
     if not MAIN_WINDOW_QSS.exists():
         return
 
-    window.setStyleSheet(MAIN_WINDOW_QSS.read_text(encoding="utf-8"))
+    stylesheet = MAIN_WINDOW_QSS.read_text(encoding="utf-8")
+    chevron_path = (STYLE_DIR / "icons" / "chevron-down.svg").as_posix()
+    chevron_up_path = (STYLE_DIR / "icons" / "chevron-up.svg").as_posix()
+    stylesheet = stylesheet.replace("@CHEVRON_DOWN@", chevron_path)
+    stylesheet = stylesheet.replace("@CHEVRON_UP@", chevron_up_path)
+    window.setStyleSheet(stylesheet)
