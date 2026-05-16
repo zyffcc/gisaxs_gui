@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -15,8 +17,10 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSlider,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from core.user_settings import user_settings
@@ -27,6 +31,7 @@ from ui.responsive_layout import (
     current_profile,
     profile_summary,
 )
+from ui.style_loader import apply_main_window_styles
 
 
 class SettingsDialog(QDialog):
@@ -103,13 +108,20 @@ class SettingsDialog(QDialog):
         display_form.setHorizontalSpacing(14)
         display_form.setVerticalSpacing(10)
 
-        self.adaptive_font_cb = QCheckBox("Use breakpoint font recommendation", display_group)
-        display_form.addRow("", self.adaptive_font_cb)
-
-        self.font_spin = QSpinBox(display_group)
-        self.font_spin.setRange(-3, 3)
-        self.font_spin.setSuffix(" levels")
-        display_form.addRow("Manual font adjustment:", self.font_spin)
+        scale_row = QHBoxLayout()
+        self.font_scale_slider = QSlider(Qt.Horizontal, display_group)
+        self.font_scale_slider.setRange(80, 140)
+        self.font_scale_slider.setSingleStep(5)
+        self.font_scale_slider.setPageStep(10)
+        self.font_scale_slider.setTickPosition(QSlider.TicksBelow)
+        self.font_scale_slider.setTickInterval(10)
+        self.font_scale_label = QLabel(display_group)
+        self.font_scale_label.setMinimumWidth(48)
+        self.font_scale_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.font_scale_slider.valueChanged.connect(self._on_font_scale_changed)
+        scale_row.addWidget(self.font_scale_slider, 1)
+        scale_row.addWidget(self.font_scale_label)
+        display_form.addRow("UI font scale:", scale_row)
         root.addWidget(display_group)
 
         button_row = QHBoxLayout()
@@ -135,8 +147,8 @@ class SettingsDialog(QDialog):
         index = self.mode_combo.findData(mode)
         self.mode_combo.setCurrentIndex(index if index >= 0 else 0)
         self.resize_on_start_cb.setChecked(user_settings.get("responsive_resize_on_start", True))
-        self.adaptive_font_cb.setChecked(user_settings.get("responsive_font_enabled", True))
-        self.font_spin.setValue(user_settings.get_font_adjustment())
+        self.font_scale_slider.setValue(user_settings.get_visual_font_scale())
+        self._on_font_scale_changed(self.font_scale_slider.value())
 
         if self.parent_window is not None:
             size = self.parent_window.size()
@@ -163,24 +175,33 @@ class SettingsDialog(QDialog):
             return PROFILES[mode]
         return current_profile(self.parent_window)
 
-    def _apply_font(self, profile) -> None:
+    def _on_font_scale_changed(self, value: int) -> None:
+        self.font_scale_label.setText(f"{value}%")
+
+    def _apply_font(self) -> None:
         if self.parent_window is None:
             return
-        base_size = 9
-        adjustment = profile.font_adjustment if self.adaptive_font_cb.isChecked() else self.font_spin.value()
+        scale = self.font_scale_slider.value()
+        base_size = 9.0
         font = QFont(self.parent_window.font())
-        font.setPointSize(max(8, base_size + adjustment))
+        font.setPointSizeF(max(7.0, base_size * scale / 100.0))
+        app = QApplication.instance()
+        if app is not None:
+            app.setFont(font)
         self.parent_window.setFont(font)
-        user_settings.set_font_adjustment(adjustment)
+        for widget in self.parent_window.findChildren(QWidget):
+            widget.setFont(QFont(font))
+        user_settings.set_visual_font_scale(scale)
+        apply_main_window_styles(self.parent_window)
 
     def _save_settings(self) -> None:
         mode = self.mode_combo.currentData()
         user_settings.set("responsive_layout_mode", mode)
         user_settings.set("responsive_resize_on_start", self.resize_on_start_cb.isChecked())
-        user_settings.set("responsive_font_enabled", self.adaptive_font_cb.isChecked())
+        user_settings.set("responsive_font_enabled", False)
         user_settings.enable_adaptive_scaling(mode != "manual")
         user_settings.set_window_size(self.width_spin.value(), self.height_spin.value())
-        user_settings.set_font_adjustment(self.font_spin.value())
+        user_settings.set_visual_font_scale(self.font_scale_slider.value())
         user_settings.save_settings()
 
     def apply_settings(self) -> None:
@@ -192,9 +213,10 @@ class SettingsDialog(QDialog):
                 self.parent_window.resize(self.width_spin.value(), self.height_spin.value())
             else:
                 apply_window_profile(self.parent_window, profile)
-            self._apply_font(profile)
+            self._apply_font()
             if hasattr(self.parent_window, "components"):
                 self.parent_window.components.apply_responsive_profile(profile)
+                apply_main_window_styles(self.parent_window)
         self._on_mode_changed()
         QMessageBox.information(self, "Settings Applied", "Responsive display settings have been applied.")
 

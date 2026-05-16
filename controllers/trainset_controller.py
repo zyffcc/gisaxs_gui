@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
+from utils.path_utils import normalize_path
 
 # 导入全局参数管理器
 from core.global_params import GlobalParameterManager
@@ -318,6 +319,7 @@ class TrainsetController(QObject):
         )
         
         if folder_path:
+            folder_path = normalize_path(folder_path)
             self.ui.trainsetGenerateSavePathValue.setText(folder_path)
             # 同步到全局参数管理器
             self.global_params.set_parameter('trainset', 'save_path', folder_path)

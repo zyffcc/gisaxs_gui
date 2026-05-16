@@ -36,6 +36,7 @@ from config.model_parameters_manager import ModelParametersManager
 
 # 导入通用参数触发管理器
 from utils.universal_parameter_trigger_manager import UniversalParameterTriggerManager
+from utils.path_utils import normalize_path
 from PyQt5.QtWidgets import QShortcut
 from PyQt5.QtGui import QKeySequence
 
@@ -873,6 +874,17 @@ class IndependentFitWindow(QMainWindow):
         self.q_unit_combo.setCurrentIndex(1)
         self.q_unit_combo.currentTextChanged.connect(self._on_q_unit_changed)
         control_layout.addWidget(self.q_unit_combo)
+
+        control_layout.addSpacing(12)
+        control_layout.addWidget(QLabel("Y Range:"))
+
+        self.y_range_combo = QComboBox()
+        self.y_range_combo.addItem("Experiment", "experimental")
+        self.y_range_combo.addItem("Fit", "fitting")
+        self.y_range_combo.addItem("All", "all")
+        self.y_range_combo.setCurrentIndex(2)
+        self.y_range_combo.currentTextChanged.connect(self._on_y_range_changed)
+        control_layout.addWidget(self.y_range_combo)
         
         control_layout.addStretch(1)
         return control_layout
@@ -924,6 +936,27 @@ class IndependentFitWindow(QMainWindow):
         unit_text = 'nm^-1' if self._get_q_unit_key() == 'nm' else 'Angstrom^-1'
         self.status_updated.emit(f"q unit changed to {unit_text}")
         self.display_unit_changed.emit(unit_text)
+
+    def _on_y_range_changed(self, _text):
+        """处理Y轴范围策略切换。"""
+        mode = self._get_y_range_mode()
+        label = {
+            'experimental': 'experimental data',
+            'fitting': 'fitting data',
+            'all': 'all visible data',
+        }.get(mode, 'all visible data')
+        self.status_updated.emit(f"Y range based on {label}")
+
+    def _get_y_range_mode(self):
+        """返回当前Y轴范围策略。"""
+        try:
+            if hasattr(self, 'y_range_combo'):
+                mode = self.y_range_combo.currentData()
+                if mode in ('experimental', 'fitting', 'all'):
+                    return mode
+        except Exception:
+            pass
+        return 'all'
 
     def update_plot(self, x_coords, y_intensity, x_label, y_label, title, log_x=False, log_y=False, normalize=False, y_errors=None):
         """更新拟合结果图，支持误差条"""
@@ -1297,6 +1330,7 @@ class AsyncImageLoader(QThread):
         """加载单个CBF文件"""
         try:
             import fabio
+            cbf_file = normalize_path(cbf_file)
             cbf_image = fabio.open(cbf_file)
             data = cbf_image.data
             
@@ -1311,6 +1345,7 @@ class AsyncImageLoader(QThread):
     def _load_multiple_cbf_files(self, start_file, stack_count):
         """加载并叠加多个CBF文件"""
         try:
+            start_file = normalize_path(start_file)
             file_dir = os.path.dirname(start_file)
             base_name = os.path.basename(start_file)
             
@@ -2825,6 +2860,7 @@ class FittingController(QObject):
         )
         
         if file_path:
+            file_path = normalize_path(file_path)
             # 更新参数
             self.current_parameters['imported_gisaxs_file'] = file_path
             
@@ -2854,6 +2890,7 @@ class FittingController(QObject):
     def _validate_imported_file(self, file_path):
         """验证导入的GISAXS文件"""
         try:
+            file_path = normalize_path(file_path)
             if not os.path.exists(file_path):
                 QMessageBox.warning(self.main_window, "File Error", f"File does not exist: {file_path}")
                 return False
@@ -3814,6 +3851,8 @@ class FittingController(QObject):
                     self.independent_fit_window.show_negative_cb.toggled.connect(self._on_positive_only_changed)
                 if hasattr(self.independent_fit_window, 'q_unit_combo'):
                     self.independent_fit_window.q_unit_combo.currentTextChanged.connect(self._on_positive_only_changed)
+                if hasattr(self.independent_fit_window, 'y_range_combo'):
+                    self.independent_fit_window.y_range_combo.currentTextChanged.connect(self._on_positive_only_changed)
                 # 与主界面的“Positive Only”状态保持一致
                 try:
                     if hasattr(self.ui, 'PositiveOnlyCheckBox'):
@@ -4426,6 +4465,7 @@ class FittingController(QObject):
             # 如果用户取消了选择
             if not file_path:
                 return
+            file_path = normalize_path(file_path)
                 
             # 保存文件路径用于下次打开
             self.current_1d_file_path = file_path
@@ -5545,6 +5585,8 @@ class FittingController(QObject):
             fig = Figure(figsize=(9.6, 7.2), dpi=80)
             canvas = FigureCanvas(fig)
             ax = fig.add_subplot(111)
+            fitting_y_for_limits = None
+            extra_y_for_limits = []
             
             # Normal模式下的特殊处理：处理负数q值
             if mode == 'normal' and log_x and not positive_only and not negative_only:
@@ -5600,10 +5642,12 @@ class FittingController(QObject):
                         if show_bg and comp.get('BG_total') is not None:
                             y_bg = comp['BG_total'] / norm_divisor if norm_divisor else comp['BG_total']
                             ax.plot(q_plot, y_bg, linestyle='--', color='#666666', linewidth=1.5, label='bg', zorder=2)
+                            extra_y_for_limits.append(y_bg)
                         # Resolution function
                         if show_res and comp.get('resolution') is not None:
                             y_res = comp['resolution'] / norm_divisor if norm_divisor else comp['resolution']
                             ax.plot(q_plot, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
+                            extra_y_for_limits.append(y_res)
                         # Particles
                         colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b']
                         for item in comp.get('particles', []):
@@ -5618,6 +5662,7 @@ class FittingController(QObject):
                                     yv_plot = yv / norm_divisor if norm_divisor else yv
                                     label_id = f"{shape_name} {widget_id}" if widget_id is not None else f"{shape_name} {idx}"
                                     ax.plot(q_plot, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
+                                    extra_y_for_limits.append(yv_plot)
                         # 刷新图例以包含新线
                         ax.legend()
                     except Exception:
@@ -5648,6 +5693,7 @@ class FittingController(QObject):
 
                 plot_len = min(len(q_fit_plot), len(I_fitting_data))
                 if plot_len > 0:
+                    fitting_y_for_limits = I_fitting_data[:plot_len]
                     ax.plot(q_fit_plot[:plot_len], I_fitting_data[:plot_len], color='red', linewidth=2, 
                            label='Fitting', zorder=3)
             
@@ -5663,6 +5709,13 @@ class FittingController(QObject):
             
             # 应用对数坐标
             self._apply_log_scales(ax, log_x, log_y)
+            self._apply_fit_y_axis_limits(
+                ax,
+                experimental_y=I_data,
+                fitting_y=fitting_y_for_limits,
+                extra_y_values=extra_y_for_limits,
+                log_y=log_y,
+            )
             
             fig.tight_layout()
             
@@ -5693,36 +5746,8 @@ class FittingController(QObject):
             positive_only = (filter_mode == 'positive')
             negative_only = (filter_mode == 'negative')
             
-            # 选择数据源，并应用ROI（如果激活）与有效性过滤
-            q_data = None
-            I_data = None
-            try:
-                if mode == 'normal':
-                    # Normal 模式：严格与内嵌视图一致，直接使用 self._get_roi_active_arrays()
-                    q_data, I_data = self._get_roi_active_arrays()
-                else:
-                    # Fitting 模式：遵循数据源选择（Current Cut 优先，其次 1D，再回退到全局）
-                    use_current_cut = hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked()
-                    if use_current_cut and getattr(self, 'current_cut_data', None) is not None:
-                        q_src = np.asarray(self.current_cut_data.get('x_coords', []))
-                        I_src = np.asarray(self.current_cut_data.get('y_intensity', []))
-                        if self._roi_active() and q_src.size > 0:
-                            mask = (q_src >= self._roi_min) & (q_src <= self._roi_max)
-                            if np.any(mask):
-                                q_src = q_src[mask]; I_src = I_src[mask]
-                        q_data, I_data = q_src, I_src
-                    elif getattr(self, 'current_1d_data', None) is not None:
-                        q_src = np.asarray(self.current_1d_data.get('q', []))
-                        I_src = np.asarray(self.current_1d_data.get('I', []))
-                        if self._roi_active() and q_src.size > 0:
-                            mask = (q_src >= self._roi_min) & (q_src <= self._roi_max)
-                            if np.any(mask):
-                                q_src = q_src[mask]; I_src = I_src[mask]
-                        q_data, I_data = q_src, I_src
-                    else:
-                        q_data, I_data = self._get_roi_active_arrays()
-            except Exception:
-                q_data, I_data = self._get_roi_active_arrays()
+            # 与内嵌 Fitting Plot 使用完全相同的数据源和ROI子集，保持两处显示一致。
+            q_data, I_data = self._get_roi_active_arrays()
 
             if q_data is None or I_data is None or len(q_data) == 0 or len(I_data) == 0:
                 return
@@ -5743,6 +5768,8 @@ class FittingController(QObject):
             
             ax = self.independent_fit_window.ax
             ax.clear()
+            fitting_y_for_limits = None
+            extra_y_for_limits = []
             
             # Normal模式下的特殊处理：处理负数q值（仅当未启用半轴筛选时）
             if mode == 'normal' and log_x and not positive_only and not negative_only:
@@ -5797,10 +5824,12 @@ class FittingController(QObject):
                         if show_bg and comp.get('BG_total') is not None:
                             y_bg = comp['BG_total'] / norm_divisor if norm_divisor else comp['BG_total']
                             ax.plot(q_plot, y_bg, linestyle='--', color='#666666', linewidth=1.5, label='bg', zorder=2)
+                            extra_y_for_limits.append(y_bg)
                         # Resolution function
                         if show_res and comp.get('resolution') is not None:
                             y_res = comp['resolution'] / norm_divisor if norm_divisor else comp['resolution']
                             ax.plot(q_plot, y_res, linestyle='--', color='#8E44AD', linewidth=1.5, label='Res.', zorder=2)
+                            extra_y_for_limits.append(y_res)
                         # Particles
                         colors = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b']
                         for item in comp.get('particles', []):
@@ -5815,6 +5844,7 @@ class FittingController(QObject):
                                     yv_plot = yv / norm_divisor if norm_divisor else yv
                                     label_id = f"{shape_name} {widget_id}" if widget_id is not None else f"{shape_name} {idx}"
                                     ax.plot(q_plot, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
+                                    extra_y_for_limits.append(yv_plot)
                         ax.legend()
                     except Exception:
                         pass
@@ -5844,6 +5874,7 @@ class FittingController(QObject):
                 # Trim/pad safety: align length with plotted q values
                 plot_len = min(len(q_fit_plot), len(I_fitting_data))
                 if plot_len > 0:
+                    fitting_y_for_limits = I_fitting_data[:plot_len]
                     ax.plot(q_fit_plot[:plot_len], I_fitting_data[:plot_len], color='red', linewidth=2.5, 
                            label='Fitting', zorder=3)
             
@@ -5864,6 +5895,13 @@ class FittingController(QObject):
             
             # 应用对数坐标
             self._apply_log_scales(ax, log_x, log_y)
+            self._apply_fit_y_axis_limits(
+                ax,
+                experimental_y=I_data,
+                fitting_y=fitting_y_for_limits,
+                extra_y_values=extra_y_for_limits,
+                log_y=log_y,
+            )
             
             # 刷新显示
             if hasattr(self.independent_fit_window, 'canvas'):
@@ -6524,6 +6562,77 @@ class FittingController(QObject):
                 y_arr = y_arr[sort_idx]
 
         return q_raw, q_plot, y_arr, filter_mode
+
+    def _get_fit_y_range_mode(self):
+        """获取拟合图Y轴范围策略。独立窗口未打开时保持默认自动包含全部数据。"""
+        try:
+            if (hasattr(self, 'independent_fit_window') and
+                self.independent_fit_window is not None and
+                hasattr(self.independent_fit_window, '_get_y_range_mode')):
+                return self.independent_fit_window._get_y_range_mode()
+        except Exception:
+            pass
+        return 'all'
+
+    def _valid_y_values_for_limits(self, y_values, log_y=False):
+        """返回可用于设置Y轴范围的有限值。"""
+        try:
+            arr = np.asarray([] if y_values is None else y_values, dtype=float).ravel()
+            if arr.size == 0:
+                return arr
+            mask = np.isfinite(arr)
+            if log_y:
+                mask &= arr > 0
+            return arr[mask]
+        except Exception:
+            return np.asarray([], dtype=float)
+
+    def _apply_fit_y_axis_limits(self, ax, experimental_y=None, fitting_y=None,
+                                 extra_y_values=None, log_y=False):
+        """按独立窗口的Y Range策略设置拟合图Y轴范围。"""
+        try:
+            mode = self._get_fit_y_range_mode()
+            y_sources = []
+
+            if mode == 'experimental':
+                y_sources.append(experimental_y)
+            elif mode == 'fitting':
+                y_sources.append(fitting_y)
+            else:
+                y_sources.extend([experimental_y, fitting_y])
+                if extra_y_values:
+                    y_sources.extend(extra_y_values)
+
+            valid_parts = [
+                self._valid_y_values_for_limits(values, log_y=log_y)
+                for values in y_sources
+            ]
+            valid_parts = [values for values in valid_parts if values.size > 0]
+            if not valid_parts:
+                return
+
+            values = np.concatenate(valid_parts)
+            y_min = float(np.min(values))
+            y_max = float(np.max(values))
+            if not np.isfinite(y_min) or not np.isfinite(y_max):
+                return
+
+            if log_y:
+                if y_min <= 0 or y_max <= 0:
+                    return
+                if y_min == y_max:
+                    ax.set_ylim(y_min / 1.5, y_max * 1.5)
+                else:
+                    ax.set_ylim(y_min / 1.08, y_max * 1.08)
+                return
+
+            if y_min == y_max:
+                pad = abs(y_min) * 0.08 if y_min != 0 else 1.0
+            else:
+                pad = (y_max - y_min) * 0.05
+            ax.set_ylim(y_min - pad, y_max + pad)
+        except Exception:
+            pass
     
     def _normalize_intensity_data(self, I_data):
         """统一的强度数据归一化方法"""
@@ -8940,6 +9049,12 @@ class FittingController(QObject):
                 ax.set_xscale('log')
             if log_y:
                 ax.set_yscale('log')
+            self._apply_fit_y_axis_limits(
+                ax,
+                experimental_y=plot_original_y,
+                fitting_y=fitting_y_data,
+                log_y=log_y,
+            )
 
             # ROI 辅助线
             self._draw_roi_guides_if_active(ax)
@@ -9108,6 +9223,8 @@ class FittingController(QObject):
                     self.independent_fit_window.show_negative_cb.toggled.connect(self._on_positive_only_changed)
                 if hasattr(self.independent_fit_window, 'q_unit_combo'):
                     self.independent_fit_window.q_unit_combo.currentTextChanged.connect(self._on_positive_only_changed)
+                if hasattr(self.independent_fit_window, 'y_range_combo'):
+                    self.independent_fit_window.y_range_combo.currentTextChanged.connect(self._on_positive_only_changed)
             
             # 准备数据标题和标签
             x_label = self._build_q_axis_label() if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
@@ -9205,6 +9322,12 @@ class FittingController(QObject):
                 ax.set_xscale('log')
             if log_y:
                 ax.set_yscale('log')
+            self._apply_fit_y_axis_limits(
+                ax,
+                experimental_y=plot_original_y,
+                fitting_y=plot_fitting_y,
+                log_y=log_y,
+            )
             
             # 刷新显示
             if hasattr(self.independent_fit_window, 'canvas'):

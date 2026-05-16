@@ -12,6 +12,7 @@ from .fitting_controller import FittingController
 from .classification_controller import ClassificationController
 from .gisaxs_predict_controller import GisaxsPredictController
 from core.global_params import global_params
+from utils.path_utils import normalize_path
 
 
 class MainController(QObject):
@@ -338,6 +339,7 @@ class MainController(QObject):
     def load_parameters_from_file(self, file_path):
         """从文件加载参数"""
         try:
+            file_path = normalize_path(file_path)
             with open(file_path, 'r', encoding='utf-8') as f:
                 parameters = json.load(f)
             
@@ -361,6 +363,7 @@ class MainController(QObject):
     def save_parameters_to_file(self, file_path):
         """保存参数到文件"""
         try:
+            file_path = normalize_path(file_path)
             parameters = self.get_all_parameters()
             
             with open(file_path, 'w', encoding='utf-8') as f:

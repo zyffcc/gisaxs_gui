@@ -33,7 +33,8 @@ class UserSettings:
             "enable_adaptive_scaling": self.config.ENABLE_ADAPTIVE_SCALING,
             "window_width": self.config.DEFAULT_WIDTH,
             "window_height": self.config.DEFAULT_HEIGHT,
-            "font_adjustment": 0
+            "font_adjustment": 0,
+            "visual_font_scale": 100
         }
     
     def save_settings(self):
@@ -74,6 +75,14 @@ class UserSettings:
     def set_font_adjustment(self, adjustment):
         """设置字体调整值"""
         self.set("font_adjustment", adjustment)
+
+    def get_visual_font_scale(self):
+        """获取全局UI字体缩放百分比"""
+        return int(self.get("visual_font_scale", 100))
+
+    def set_visual_font_scale(self, scale):
+        """设置全局UI字体缩放百分比"""
+        self.set("visual_font_scale", int(scale))
     
     def enable_adaptive_scaling(self, enabled):
         """启用/禁用自适应缩放"""

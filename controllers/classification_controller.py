@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem, QPushButton, QGraphicsScene
 )
 from core.global_params import global_params  # 全局参数管理器，用于持久化到 user_parameters.json
+from utils.path_utils import normalize_path
 
 
 @dataclass
@@ -583,6 +584,7 @@ class ClassificationController(QObject):
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
         )
         if folder_path:
+            folder_path = normalize_path(folder_path)
             # 更新显示与缓存
             path_edit = self.ui.ClassificationImportFolderPathValue
             path_edit.setText(folder_path)
@@ -599,6 +601,7 @@ class ClassificationController(QObject):
             'All Files (*);;CBF (*.cbf);;Images (*.png *.jpg *.jpeg *.tif *.tiff *.cbf);;Text (*.txt *.dat);;HDF5 (*.h5 *.hdf5)'
         )
         if file_path:
+            file_path = normalize_path(file_path)
             path_edit = self.ui.ClassificationImportFolderPathValue
             rule_edit = self.ui.ClassificationImportRuleValue
             folder_path = os.path.dirname(file_path)
@@ -623,7 +626,7 @@ class ClassificationController(QObject):
 
     def _on_path_edited(self):
         path_edit = self.ui.ClassificationImportFolderPathValue
-        path = path_edit.text().strip()
+        path = normalize_path(path_edit.text())
         self._set_cached('path', path)
         if path:
             self._scan_and_list_files(path, self._get_cached('rule', '*'))
@@ -661,6 +664,7 @@ class ClassificationController(QObject):
         return None
 
     def _scan_and_list_files(self, path: str, rule: str):
+        path = normalize_path(path)
         if not path:
             return
         files: List[str] = []
@@ -2618,4 +2622,3 @@ class ClassificationController(QObject):
             pass
 
     # Classification external preview removed.
-

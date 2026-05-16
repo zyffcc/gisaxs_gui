@@ -32,6 +32,7 @@ try:
     import fabio
 except ImportError:
     fabio = None
+from utils.path_utils import normalize_path
 
 def load_image_matrix(
     file_path,
@@ -485,6 +486,7 @@ class ExportImageDialog(QDialog):
     def _choose_folder(self):
         folder = QFileDialog.getExistingDirectory(self, 'Select Output Folder', self.folder_edit.text() or os.getcwd())
         if folder:
+            folder = normalize_path(folder)
             self.folder_edit.setText(folder)
 
     @property
@@ -610,7 +612,7 @@ class ImageWidget(QWidget):
 
     def dropEvent(self, event):
         url = event.mimeData().urls()[0]
-        file_path = url.toLocalFile()
+        file_path = normalize_path(url.toLocalFile())
         # 通过 ImageLayout 统一更新，这样会自动刷新帧号选择器等状态
         if hasattr(self, 'image_layout') and self.image_layout is not None:
             self.image_layout.update_image(file_path)
@@ -1869,6 +1871,7 @@ class ImageLayout(QWidget):
             options=options)
         if file_name:
             try:
+                file_name = normalize_path(file_name)
                 self.file_name = file_name
                 # 更新图像
                 self.update_image(self.file_name)
@@ -1994,6 +1997,7 @@ class ImageLayout(QWidget):
         # 获取用户选择的导出目录路径
         folder_path = QFileDialog.getExistingDirectory(self, 'Select Output Folder')
         if folder_path:
+            folder_path = normalize_path(folder_path)
             self.output_folder = folder_path
             # 更新导出文件夹的路径文本框
             self.textbox_outputdir.setText(folder_path)
@@ -2323,6 +2327,7 @@ class ImageLayout(QWidget):
             file_path, _ = QFileDialog.getSaveFileName(self, 'Save Parameters', '', 'JSON Files (*.json);;All Files (*)', options=options)
             if not file_path:
                 return
+            file_path = normalize_path(file_path)
             data = {
                 'imageLayout': {
                     'mode': 'Cut' if self.rb2.isChecked() else 'Original',
@@ -2382,6 +2387,7 @@ class ImageLayout(QWidget):
             file_path, _ = QFileDialog.getOpenFileName(self, 'Import Parameters', '', 'JSON Files (*.json);;All Files (*)', options=options)
             if not file_path:
                 return
+            file_path = normalize_path(file_path)
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             il = data.get('imageLayout', {})
@@ -2802,6 +2808,7 @@ class BatchProcessor(QWidget):
 
         # 如果选择了文件，则读取该文件并将其解析为二维数组
         if file_name:
+            file_name = normalize_path(file_name)
             # 加载文本文件，并将数据存储在一个numpy数组中
             data = np.loadtxt(file_name)
             self.output_matrix = data
@@ -2810,6 +2817,7 @@ class BatchProcessor(QWidget):
     def select_folder(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder_path:
+            folder_path = normalize_path(folder_path)
             self.folder_path_label.setText(folder_path)
 
     def batch_process(self):
@@ -3725,5 +3733,3 @@ if __name__ == '__main__':
     QTimer.singleShot(1000, show_main_window)  # 1000毫秒后执行show_main_window()
 
     sys.exit(app.exec_())
-
-

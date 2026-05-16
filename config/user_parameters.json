@@ -92,8 +92,8 @@
             "auto_show": false,
             "log_mode": true,
             "auto_scale": true,
-            "vmin": 0.0,
-            "vmax": 0.0,
+            "vmin": -6.907755374908447,
+            "vmax": 4.110873699188232,
             "fit_current_data": true,
             "fit_log_x": true,
             "fit_log_y": true,
@@ -103,7 +103,8 @@
             "center_parallel": 771.01,
             "cutline_vertical": 20.0,
             "cutline_parallel": 11.0,
-            "vmax": 4.11
+            "vmax": 4.11,
+            "vmin": -6.71
         }
     },
     "gisaxs_predict": {

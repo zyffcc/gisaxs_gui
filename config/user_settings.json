@@ -1,19 +1,19 @@
 {
   "enable_adaptive_scaling": true,
-  "window_width": 1260,
-  "window_height": 810,
-  "font_adjustment": -1,
+  "window_width": 1296,
+  "window_height": 874,
+  "font_adjustment": -3,
   "_auto_k_enabled": false,
   "fit.points_num": 100,
   "fit.interp_method": "Spline",
   "main_splitter_sizes": [
     180,
-    1067
+    1050
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      669,
-      366
+      658,
+      360
     ],
     "work": [
       760,
@@ -28,5 +28,5 @@
   },
   "responsive_layout_mode": "compact",
   "responsive_resize_on_start": false,
-  "responsive_font_enabled": true
+  "responsive_font_enabled": false
 }

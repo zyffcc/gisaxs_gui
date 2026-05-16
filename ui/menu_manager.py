@@ -5,6 +5,7 @@ Menu Manager - responsible for creating and managing the main window menu system
 from PyQt5.QtWidgets import QMenuBar, QMenu, QAction, QMessageBox, QFileDialog
 from PyQt5.QtCore import Qt, QObject
 from core.global_params import global_params
+from utils.path_utils import normalize_path
 
 
 class MenuManager(QObject):
@@ -114,6 +115,7 @@ class MenuManager(QObject):
             )
             
             if file_path:
+                file_path = normalize_path(file_path)
                 global_params.save_parameters(file_path)
                 QMessageBox.information(
                     self.main_window, 
@@ -142,6 +144,7 @@ class MenuManager(QObject):
             )
             
             if file_path:
+                file_path = normalize_path(file_path)
                 global_params.load_parameters(file_path)
                 QMessageBox.information(
                     self.main_window, 

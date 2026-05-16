@@ -38,6 +38,7 @@ except Exception:  # pragma: no cover - optional dependency
     mpl_cm = None
 
 from core.global_params import global_params
+from utils.path_utils import normalize_path
 from .fitting_controller import AsyncImageLoader, is_matplotlib_available, is_fabio_available
 from .multifile_predict_results import (
     MultiFilePredictResultsWidget,
@@ -781,6 +782,7 @@ class GisaxsPredictController(QObject):
         folder = QFileDialog.getExistingDirectory(self.main_window, "Select GISAXS Folder", "")
         if not folder:
             return
+        folder = normalize_path(folder)
         self.current_parameters["input_folder"] = folder
         self._set_line_edit("gisaxsPredictChooseFolderValue", folder)
         self._scan_directory_for_cbf(folder)
@@ -794,6 +796,7 @@ class GisaxsPredictController(QObject):
             "GISAXS Files (*.cbf);;All Files (*)",
         )
         if file_path:
+            file_path = normalize_path(file_path)
             self._handle_new_file_selection(file_path)
 
     def _choose_export_folder(self) -> None:
@@ -804,6 +807,7 @@ class GisaxsPredictController(QObject):
         )
         if not folder:
             return
+        folder = normalize_path(folder)
         self.current_parameters["export_path"] = folder
         self._set_line_edit("gisaxsPredictExportFolderValue", folder)
         self._persist_parameters()
@@ -813,15 +817,15 @@ class GisaxsPredictController(QObject):
         widget = getattr(self.ui, "gisaxsPredictChooseGisaxsFileValue", None)
         if not widget:
             return
-        text = widget.text().strip()
+        text = normalize_path(widget.text())
         if not text:
             return
         if os.path.isabs(text) and os.path.exists(text):
             self._handle_new_file_selection(text)
             return
 
-        folder = self.current_parameters.get("input_folder", "")
-        candidate = os.path.join(folder, text) if folder else text
+        folder = normalize_path(self.current_parameters.get("input_folder", ""))
+        candidate = normalize_path(os.path.join(folder, text) if folder else text)
         if os.path.exists(candidate):
             self._handle_new_file_selection(candidate)
             return
@@ -834,6 +838,7 @@ class GisaxsPredictController(QObject):
         self._handle_file_line_edit_committed()
 
     def _handle_new_file_selection(self, file_path: str) -> None:
+        file_path = normalize_path(file_path)
         if not os.path.exists(file_path):
             QMessageBox.warning(self.main_window, "File Not Found", file_path)
             return
@@ -883,6 +888,7 @@ class GisaxsPredictController(QObject):
         self._trigger_data_reload()
 
     def _scan_directory_for_cbf(self, folder: str) -> None:
+        folder = normalize_path(folder)
         entries: List[Tuple[str, int]] = []
         index_to_file: Dict[int, str] = {}
 
@@ -2944,7 +2950,7 @@ class GisaxsPredictController(QObject):
                 QMessageBox.information(self.main_window, "Model Required", "Please select a Keras .keras model to proceed.")
                 # Do not set current model yet
                 return
-            model_path = file_path
+            model_path = normalize_path(file_path)
 
         # Persist chosen model path in session parameters (not writing back to YAML)
         abs_model = os.path.abspath(model_path)
@@ -2965,6 +2971,7 @@ class GisaxsPredictController(QObject):
         mask_path = spec.get("mask_path") if isinstance(spec, dict) else None
         if not isinstance(mask_path, str) or not mask_path:
             return
+        mask_path = normalize_path(mask_path)
         try:
             if os.path.isfile(mask_path) and mask_path.lower().endswith(".npy"):
                 self._current_mask = np.load(mask_path)
@@ -3015,7 +3022,7 @@ class GisaxsPredictController(QObject):
             )
             if not file_path:
                 return
-            model_path = os.path.abspath(file_path)
+            model_path = os.path.abspath(normalize_path(file_path))
             self.current_parameters["module_model_path"] = model_path
             self._current_module = spec
             self._current_module["model_path"] = model_path

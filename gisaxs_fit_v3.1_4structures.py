@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PyQt5 import uic
 from scipy.special import jv as bessel
+from utils.path_utils import normalize_path
 
 __VERSION__ = '3.1'
 
@@ -372,6 +373,7 @@ class GisaxsModeler(PyQt5.QtWidgets.QMainWindow, Ui_MainWindow):
                                                                directory=self.path,
                                                                filter="Data file (*.dat);;Data file log(values) ("
                                                                       "*.gen);;All files (*.*)")[0]
+        filename = normalize_path(filename)
         # print(filename)
         try:
             self.lineEdit_INPUT_DATA.setText(filename)
@@ -381,7 +383,7 @@ class GisaxsModeler(PyQt5.QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.filename_data = filename
         print('Set data file path: {0}'.format(self.filename_data))
-        self.path = os.path.dirname(str(filename))
+        self.path = os.path.dirname(filename)
         # self.read_input_data_file()
 
     def read_input_data_file(self):  # reads out data!!!
@@ -393,9 +395,7 @@ class GisaxsModeler(PyQt5.QtWidgets.QMainWindow, Ui_MainWindow):
         """
 
         try:
-            self.filename_data = str(self.lineEdit_INPUT_DATA.text())
-            if self.filename_data.startswith('file://'):
-                self.filename_data = self.filename_data[7:-2]
+            self.filename_data = normalize_path(self.lineEdit_INPUT_DATA.text())
             self.lineEdit_INPUT_DATA.setText(self.filename_data)
             print('Loading data: {0}'.format(self.filename_data))
             self.data = np.genfromtxt(self.filename_data, comments='#', missing_values=np.nan, delimiter='\t')
