@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QFrame,
     QDialog,
+    QTextBrowser,
 )
 
 try:  # matplotlib is optional for colormap rendering
@@ -119,6 +120,8 @@ class GisaxsPredictController(QObject):
         self._model_cancel_requested: bool = False
         self._model_loader_thread = None
         self._model_status_label: Optional[QLabel] = None
+        self._status_text_window: Optional[QDialog] = None
+        self._status_text_window_browser: Optional[QTextBrowser] = None
         self._cancel_shortcut: Optional[QShortcut] = None
         self._predict_tabs: Optional[QTabWidget] = None
         self._predict_panel: Optional[QWidget] = None
@@ -156,6 +159,7 @@ class GisaxsPredictController(QObject):
             return
 
         self._setup_display_resources()
+        self._setup_status_text_browser()
         self._setup_connections()
         self._initialize_ui()
         # 初始化模块选择和列表
@@ -184,6 +188,59 @@ class GisaxsPredictController(QObject):
             pview.setScene(self._predict_scene)
             pview.setTransformationAnchor(pview.AnchorUnderMouse)
             pview.setDragMode(pview.ScrollHandDrag)
+
+    def _setup_status_text_browser(self) -> None:
+        browser = getattr(self.ui, "predictStatusTextBrowser", None)
+        scroll_area = getattr(self.ui, "predictStatusScrollArea", None)
+        top_panel = getattr(self.ui, "widget_2", None)
+        if browser is None:
+            return
+
+        if top_panel is not None:
+            top_panel.setMaximumHeight(420)
+        if scroll_area is not None:
+            scroll_area.setMinimumHeight(160)
+        browser.setMinimumHeight(150)
+        browser.setOpenExternalLinks(False)
+        browser.setContextMenuPolicy(Qt.CustomContextMenu)
+        browser.customContextMenuRequested.connect(self._show_status_text_context_menu)
+
+    def _show_status_text_context_menu(self, pos) -> None:
+        browser = getattr(self.ui, "predictStatusTextBrowser", None)
+        if browser is None:
+            return
+        menu = browser.createStandardContextMenu(pos)
+        menu.addSeparator()
+        menu.addAction("Open in Separate Window", self._open_status_text_window)
+        menu.exec_(browser.mapToGlobal(pos))
+
+    def _open_status_text_window(self) -> None:
+        source = getattr(self.ui, "predictStatusTextBrowser", None)
+        if source is None:
+            return
+        if self._status_text_window is not None:
+            self._status_text_window.show()
+            self._status_text_window.raise_()
+            self._status_text_window.activateWindow()
+            return
+
+        win = QDialog(self.main_window)
+        win.setWindowTitle("Predict Log")
+        win.resize(900, 560)
+        layout = QVBoxLayout(win)
+        viewer = QTextBrowser(win)
+        viewer.setReadOnly(True)
+        viewer.setLineWrapMode(QTextBrowser.NoWrap)
+        viewer.setPlainText(source.toPlainText())
+        layout.addWidget(viewer)
+        self._status_text_window = win
+        self._status_text_window_browser = viewer
+        win.finished.connect(self._on_status_text_window_closed)
+        win.show()
+
+    def _on_status_text_window_closed(self) -> None:
+        self._status_text_window = None
+        self._status_text_window_browser = None
 
     def _set_predict_main_tab(self, target_label: str) -> None:
         tabs = getattr(self.ui, "gisaxsPredictImageShowTabWidget", None)
@@ -234,6 +291,7 @@ class GisaxsPredictController(QObject):
         try:
             framework_combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
             if framework_combo is not None:
+                self._populate_framework_combo(framework_combo)
                 idx = framework_combo.findText(self.current_parameters.get("framework", ""))
                 framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
 
@@ -1422,7 +1480,7 @@ class GisaxsPredictController(QObject):
                                                 f"Module preprocess output shape {arr.shape}")
                                         except Exception:
                                             pass
-                                        return np.expand_dims(arr.astype(np.float32, copy=False), axis=(0, -1))
+                                        return self._prepare_model_input(arr)
                                 except Exception as exc:
                                     self._append_status_message(f"Module preprocess failed: {exc}", level="ERROR")
                 # If anything fails, fall back to built-in pipeline below
@@ -1571,28 +1629,18 @@ class GisaxsPredictController(QObject):
                 self._append_status_message(f"Mask application failed: {exc}", level="ERROR")
                 return None
 
-        # Assemble input shape for model: (1, H, W, 1)
-        inp = img.astype(np.float32)
-        inp = np.expand_dims(inp, axis=(0, -1))
-        # Enforce io.input_shape if specified in module spec
+        return self._prepare_model_input(img)
+
+    def _prepare_model_input(self, image: np.ndarray) -> Optional[np.ndarray]:
+        inp = self._normalize_input_rank(image)
         io_shape = None
         try:
             io_shape = (self._current_module or {}).get("io_input_shape")
         except Exception:
             io_shape = None
-        if isinstance(io_shape, tuple) and len(io_shape) == 4:
-            th, tw = int(io_shape[1]), int(io_shape[2])
-            if (inp.shape[1], inp.shape[2]) != (th, tw):
-                try:
-                    import tensorflow as tf  # type: ignore
-                    t = tf.convert_to_tensor(inp, dtype=tf.float32)
-                    r = tf.image.resize(t, [th, tw], method='bilinear')
-                    inp = r.numpy()
-                except Exception:
-                    ys = np.linspace(0, inp.shape[1] - 1, th).astype(np.int32)
-                    xs = np.linspace(0, inp.shape[2] - 1, tw).astype(np.int32)
-                    inp = inp[:, ys][:, :, xs]
-            if tuple(inp.shape) != tuple(io_shape):
+        if isinstance(io_shape, tuple):
+            inp = self._coerce_array_to_shape(inp, io_shape)
+            if len(io_shape) == inp.ndim and tuple(inp.shape) != tuple(io_shape):
                 self._append_status_message(f"Preprocessing output shape {inp.shape} does not match io.input_shape {io_shape}", level="ERROR")
                 return None
         return inp
@@ -1603,63 +1651,11 @@ class GisaxsPredictController(QObject):
         out_image: Optional[np.ndarray] = None
         scalar_out: Optional[np.ndarray] = None
         # Coerce input to model's expected input shape if available
+        exp_shape = None
         try:
-            exp_shape = getattr(self._current_model, 'input_shape', None)
-            # Keras may return list for multi-input models
-            if isinstance(exp_shape, (list, tuple)):
-                if isinstance(exp_shape, list) and exp_shape:
-                    exp_shape = exp_shape[0]
-            if isinstance(exp_shape, (list, tuple)) and len(exp_shape) in (3, 4):
-                # exp_shape like (None, H, W, C) or (None, H, W)
-                batch_dim = 1
-                if len(exp_shape) == 4:
-                    _, H, W, C = exp_shape
-                    H = int(H) if isinstance(H, (int, np.integer)) else inp.shape[1]
-                    W = int(W) if isinstance(W, (int, np.integer)) else inp.shape[2]
-                    C = int(C) if isinstance(C, (int, np.integer)) else (inp.shape[3] if inp.ndim == 4 else 1)
-                    # Ensure NHWC
-                    x = inp
-                    if x.ndim == 2:
-                        x = np.expand_dims(x, axis=(0, -1))
-                    elif x.ndim == 3:
-                        x = np.expand_dims(x, axis=0)
-                    try:
-                        import tensorflow as tf  # type: ignore
-                        t = tf.convert_to_tensor(x, dtype=tf.float32)
-                        t = tf.image.resize(t, [H, W], method='bilinear')
-                        x = t.numpy()
-                    except Exception:
-                        ys = np.linspace(0, x.shape[1] - 1, H).astype(np.int32)
-                        xs = np.linspace(0, x.shape[2] - 1, W).astype(np.int32)
-                        x = x[:, ys][:, :, xs]
-                    # Match channels
-                    if x.shape[-1] != C:
-                        if C == 1:
-                            x = x[..., :1]
-                        elif x.shape[-1] == 1 and C > 1:
-                            x = np.repeat(x, C, axis=-1)
-                        else:
-                            x = x[..., :C]
-                    inp = x.astype(np.float32, copy=False)
-                else:  # len == 3: (None, H, W)
-                    _, H, W = exp_shape
-                    H = int(H) if isinstance(H, (int, np.integer)) else inp.shape[1]
-                    W = int(W) if isinstance(W, (int, np.integer)) else inp.shape[2]
-                    x = inp
-                    if x.ndim == 2:
-                        x = np.expand_dims(x, axis=0)
-                    elif x.ndim == 4 and x.shape[-1] == 1:
-                        x = x[..., 0]
-                    try:
-                        import tensorflow as tf  # type: ignore
-                        t = tf.convert_to_tensor(x[..., None], dtype=tf.float32)
-                        t = tf.image.resize(t, [H, W], method='bilinear')
-                        x = t.numpy()[:, :, :, 0]
-                    except Exception:
-                        ys = np.linspace(0, x.shape[1] - 1, H).astype(np.int32)
-                        xs = np.linspace(0, x.shape[2] - 1, W).astype(np.int32)
-                        x = x[:, ys][:, :, xs]
-                    inp = x.astype(np.float32, copy=False)
+            exp_shape = self._model_input_shape(self._current_model)
+            if isinstance(exp_shape, tuple):
+                inp = self._coerce_array_to_shape(inp, exp_shape)
             # Log effective shapes
             try:
                 self._append_status_message(f"Model expected input_shape={exp_shape}, sending {tuple(inp.shape)}")
@@ -1668,9 +1664,10 @@ class GisaxsPredictController(QObject):
         except Exception:
             # If anything goes wrong, proceed with original inp
             pass
+        predict_error = None
         try:
-            # Keras model path
-            import keras  # type: ignore
+            # Keras/tf.keras model path. Do not require top-level ``keras`` here:
+            # TensorFlow 2.13 installations often expose only ``tensorflow.keras``.
             if hasattr(self._current_model, 'predict'):
                 pred = self._current_model.predict(inp, verbose=0)
                 if isinstance(pred, (list, tuple)) and len(pred) > 0:
@@ -1699,7 +1696,8 @@ class GisaxsPredictController(QObject):
                         scalar_out = arr.squeeze()
             else:
                 raise Exception("Model has no predict method")
-        except Exception:
+        except Exception as exc:
+            predict_error = exc
             # Try TF SavedModel signature
             try:
                 import tensorflow as tf  # type: ignore
@@ -1708,8 +1706,11 @@ class GisaxsPredictController(QObject):
                     # Build input dict from structured input signature
                     sig = fn.structured_input_signature
                     # sig is (args, kwargs); use kwargs keys
-                    input_keys = list(sig[1].keys()) if isinstance(sig, tuple) and len(sig) > 1 else []
-                    t = tf.convert_to_tensor(inp, dtype=tf.float32)
+                    input_kwargs = sig[1] if isinstance(sig, tuple) and len(sig) > 1 and isinstance(sig[1], dict) else {}
+                    input_keys = list(input_kwargs.keys())
+                    input_spec = input_kwargs.get(input_keys[0]) if input_keys else None
+                    x = self._coerce_array_to_tensor_spec(inp, input_spec)
+                    t = tf.convert_to_tensor(x, dtype=getattr(input_spec, "dtype", tf.float32) if input_spec is not None else tf.float32)
                     if input_keys:
                         res = fn(**{input_keys[0]: t})
                     else:
@@ -1723,7 +1724,9 @@ class GisaxsPredictController(QObject):
                         else:
                             scalar_out = np.squeeze(tmp)
             except Exception as exc:
-                self._append_status_message(f"Prediction failed: {exc}", level="ERROR")
+                if predict_error is not None:
+                    self._append_status_message(f"Keras predict failed: {predict_error}", level="ERROR")
+                self._append_status_message(f"SavedModel prediction failed: {exc}", level="ERROR")
                 return None
 
         # If scalar output (e.g., two numbers), return as 'scalars'
@@ -1746,6 +1749,89 @@ class GisaxsPredictController(QObject):
         h_sum = np.sum(img2d, axis=0)
         r_sum = np.sum(img2d, axis=1)
         return {"hr": img2d, "h": h_sum, "r": r_sum}
+
+    def _coerce_array_to_tensor_spec(self, arr: np.ndarray, tensor_spec: object) -> np.ndarray:
+        """Best-effort NHWC reshape/resize for TensorFlow SavedModel signatures."""
+        shape = getattr(tensor_spec, "shape", None)
+        dims = None
+        try:
+            dims = shape.as_list() if shape is not None and hasattr(shape, "as_list") else list(shape)
+        except Exception:
+            dims = None
+        return self._coerce_array_to_shape(arr, tuple(dims)) if isinstance(dims, list) else np.asarray(arr, dtype=np.float32)
+
+    def _model_input_shape(self, model: object) -> Optional[Tuple[object, ...]]:
+        exp_shape = getattr(model, 'input_shape', None)
+        if isinstance(exp_shape, list) and exp_shape:
+            exp_shape = exp_shape[0]
+        if not isinstance(exp_shape, tuple):
+            try:
+                inputs = getattr(model, "inputs", None)
+                if inputs:
+                    shape = getattr(inputs[0], "shape", None)
+                    exp_shape = tuple(shape.as_list()) if hasattr(shape, "as_list") else tuple(shape)
+            except Exception:
+                exp_shape = None
+        return tuple(exp_shape) if isinstance(exp_shape, (list, tuple)) else None
+
+    def _normalize_input_rank(self, arr: np.ndarray) -> np.ndarray:
+        x = np.asarray(arr, dtype=np.float32)
+        while x.ndim > 4 and 1 in x.shape:
+            x = np.squeeze(x, axis=x.shape.index(1))
+        if x.ndim == 2:
+            return x[None, ..., None].astype(np.float32, copy=False)
+        if x.ndim == 3:
+            if x.shape[0] == 1:
+                return x[..., None].astype(np.float32, copy=False)
+            if x.shape[-1] in (1, 3):
+                return x[None, ...].astype(np.float32, copy=False)
+            return x[..., None].astype(np.float32, copy=False)
+        return x.astype(np.float32, copy=False)
+
+    def _coerce_array_to_shape(self, arr: np.ndarray, shape: Tuple[object, ...]) -> np.ndarray:
+        x = self._normalize_input_rank(arr)
+        if len(shape) == 4:
+            _, h, w, c = shape
+            target_h = int(h) if isinstance(h, (int, np.integer)) else (x.shape[1] if x.ndim >= 3 else x.shape[0])
+            target_w = int(w) if isinstance(w, (int, np.integer)) else (x.shape[2] if x.ndim >= 4 else x.shape[1])
+            target_c = int(c) if isinstance(c, (int, np.integer)) else (x.shape[-1] if x.ndim == 4 else 1)
+            if x.ndim != 4:
+                x = self._normalize_input_rank(x)
+            if x.ndim == 4:
+                x = self._resize_nhwc(x, target_h, target_w)
+                if x.shape[-1] != target_c:
+                    if target_c == 1:
+                        x = x[..., :1]
+                    elif x.shape[-1] == 1:
+                        x = np.repeat(x, target_c, axis=-1)
+                    else:
+                        x = x[..., :target_c]
+            return x.astype(np.float32, copy=False)
+
+        if len(shape) == 3:
+            _, h, w = shape
+            target_h = int(h) if isinstance(h, (int, np.integer)) else (x.shape[1] if x.ndim >= 3 else x.shape[0])
+            target_w = int(w) if isinstance(w, (int, np.integer)) else (x.shape[2] if x.ndim >= 3 else x.shape[1])
+            if x.ndim == 4 and x.shape[-1] == 1:
+                x = x[..., 0]
+            elif x.ndim == 2:
+                x = x[None, ...]
+            if x.ndim == 3:
+                x4 = self._resize_nhwc(x[..., None], target_h, target_w)
+                return x4[..., 0].astype(np.float32, copy=False)
+        return x.astype(np.float32, copy=False)
+
+    def _resize_nhwc(self, x: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
+        if x.ndim != 4 or (x.shape[1], x.shape[2]) == (target_h, target_w):
+            return x
+        try:
+            import tensorflow as tf  # type: ignore
+            t = tf.convert_to_tensor(x, dtype=tf.float32)
+            return tf.image.resize(t, [target_h, target_w], method='bilinear').numpy()
+        except Exception:
+            ys = np.linspace(0, x.shape[1] - 1, target_h).astype(np.int32)
+            xs = np.linspace(0, x.shape[2] - 1, target_w).astype(np.int32)
+            return x[:, ys][:, :, xs]
 
     def _get_or_create_predict2d_tabs(self) -> Optional[QTabWidget]:
         # Embed inner tabs inside the existing Predict-2D tab of the main tab widget
@@ -2669,6 +2755,21 @@ class GisaxsPredictController(QObject):
         except Exception:
             pass
         return super().eventFilter(obj, event)
+
+    def _populate_framework_combo(self, combo) -> None:
+        options = ["tensorflow 2.13.x", "tensorflow 2.14.x", "tensorflow 2.15.x", "tensorflow 2.16.x"]
+        try:
+            from importlib.metadata import version
+            installed = f"tensorflow {version('tensorflow')}"
+            if installed not in options:
+                options.insert(0, installed)
+            self.current_parameters["framework"] = installed
+        except Exception:
+            pass
+        blocker = QSignalBlocker(combo)
+        combo.clear()
+        combo.addItems(options)
+        del blocker
 
     def _initialize_modules_ui(self) -> None:
         self._refresh_modules()
@@ -3806,5 +3907,8 @@ class GisaxsPredictController(QObject):
     def _append_status_message(self, message: str, level: str = "INFO") -> None:
         self.status_updated.emit(message)
         browser = getattr(self.ui, "predictStatusTextBrowser", None)
+        line = f"[{level}] {message}"
         if browser is not None:
-            browser.append(f"[{level}] {message}")
+            browser.append(line)
+        if self._status_text_window_browser is not None:
+            self._status_text_window_browser.append(line)
