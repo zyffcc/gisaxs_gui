@@ -5,7 +5,7 @@ version: "1.15.0"
 model:
   format: keras
   # model_path: 允许为空，首次使用需要选择
-  model_path: "C:/Users/zhaiyufe/Downloads/Au_ff_h2_0to15_savedmodel"
+  model_path: "/Users/zhaiyf/Downloads/Au_Si_Model/Au_ff_h2_0to15_savedmodel/"
 preprocess:
   entry: preprocess:run
   # Ordered steps for modular preprocessing; you can change order as needed.

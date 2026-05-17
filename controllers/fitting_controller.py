@@ -148,6 +148,8 @@ class IndependentMatplotlibWindow(QMainWindow):
         self.selection_rect = None
         self.current_selection = None
         self.parameter_selection = None  # 新增：参数选择矩形
+        self.parameter_selection_center = None
+        self.parameter_selection_info = None
         
         # 设置窗口可以接收键盘焦点
         self.setFocusPolicy(Qt.StrongFocus)
@@ -519,6 +521,8 @@ class IndependentMatplotlibWindow(QMainWindow):
                 
                 self.current_xlim = self.ax.get_xlim()
                 self.current_ylim = self.ax.get_ylim()
+
+            self._redraw_parameter_selection()
             
             # 重新连接视图变化回调
             try:
@@ -713,40 +717,87 @@ class IndependentMatplotlibWindow(QMainWindow):
         super().closeEvent(event)
     
     def update_parameter_selection(self, center_v, center_p, cutline_v, cutline_p):
-        """根据参数更新选择框"""
-        if not self.current_image or center_v == 0 and center_p == 0 and cutline_v == 0 and cutline_p == 0:
+        """根据像素参数更新选择框（兼容旧调用）。"""
+        if center_v == 0 and center_p == 0 and cutline_v == 0 and cutline_p == 0:
             self.clear_parameter_selection()
             return
-            
-        # 计算选择框的边界
+
         x_start = center_p - cutline_p / 2
         x_end = center_p + cutline_p / 2
         y_start = center_v - cutline_v / 2
         y_end = center_v + cutline_v / 2
-        
-        # 确保在图像范围内
-        height, width = self.current_image.shape
-        x_start = max(0, min(width - 1, x_start))
-        x_end = max(0, min(width - 1, x_end))
-        y_start = max(0, min(height - 1, y_start))
-        y_end = max(0, min(height - 1, y_end))
-        
-        # 清除旧的参数选择框
-        self.clear_parameter_selection()
-        
-        # 创建新的参数选择框
-        if x_start != x_end and y_start != y_end:
+
+        self.set_parameter_selection({
+            'bounds': {
+                'x_min': x_start,
+                'x_max': x_end,
+                'y_min': y_start,
+                'y_max': y_end,
+            },
+            'pixel_center_x': center_p,
+            'pixel_center_y': center_v,
+            'pixel_width': cutline_p,
+            'pixel_height': cutline_v,
+            'is_q_space': False,
+            'is_parameter_based': True,
+        })
+
+    def set_parameter_selection(self, selection_info):
+        """使用共享selection_info更新独立窗口选择框。"""
+        self.parameter_selection_info = dict(selection_info) if selection_info else None
+        self._redraw_parameter_selection()
+        if self.canvas is not None:
+            self.canvas.draw_idle()
+
+    def _redraw_parameter_selection(self):
+        """在当前坐标系中重绘参数选择框。"""
+        try:
+            if self.parameter_selection is not None:
+                try:
+                    self.parameter_selection.remove()
+                except Exception:
+                    pass
+                finally:
+                    self.parameter_selection = None
+            if self.parameter_selection_center is not None:
+                try:
+                    self.parameter_selection_center.remove()
+                except Exception:
+                    pass
+                finally:
+                    self.parameter_selection_center = None
+
+            if not self.parameter_selection_info or self.ax is None:
+                return
+
+            bounds = self.parameter_selection_info.get('bounds', {})
+            x_min = bounds.get('x_min', 0)
+            x_max = bounds.get('x_max', 0)
+            y_min = bounds.get('y_min', 0)
+            y_max = bounds.get('y_max', 0)
+            if x_min == x_max or y_min == y_max:
+                return
+
             from matplotlib.patches import Rectangle
-            self.parameter_selection = Rectangle((x_start, y_start), 
-                                               x_end - x_start, y_end - y_start,
-                                               linewidth=2, edgecolor='blue', 
-                                               facecolor='none', linestyle='--',
-                                               alpha=0.8)
+            self.parameter_selection = Rectangle(
+                (x_min, y_min),
+                x_max - x_min,
+                y_max - y_min,
+                linewidth=2,
+                edgecolor='red',
+                facecolor='none',
+                alpha=0.85,
+            )
             self.ax.add_patch(self.parameter_selection)
-            self.canvas.draw()
+            center_lines = self.ax.plot((x_min + x_max) / 2, (y_min + y_max) / 2,
+                                        'r+', markersize=10, markeredgewidth=2)
+            self.parameter_selection_center = center_lines[0] if center_lines else None
+        except Exception:
+            pass
     
     def clear_parameter_selection(self):
         """清除参数选择框"""
+        self.parameter_selection_info = None
         if self.parameter_selection is not None:
             try:
                 self.parameter_selection.remove()
@@ -754,7 +805,14 @@ class IndependentMatplotlibWindow(QMainWindow):
                 pass
             finally:
                 self.parameter_selection = None
-                self.canvas.draw()
+        if self.parameter_selection_center is not None:
+            try:
+                self.parameter_selection_center.remove()
+            except Exception:
+                pass
+            finally:
+                self.parameter_selection_center = None
+        self.canvas.draw()
 
     def closeEvent(self, event):
         """窗口关闭事件"""
@@ -2624,9 +2682,7 @@ class FittingController(QObject):
             # 仅更新与堆栈/模式相关的显示标签
             if hasattr(self, '_update_stack_display'):
                 self._update_stack_display()
-        except Exception:
-            pass
-                
+
             # 立即更新选择框显示，但不执行Cut操作
             center_x = 0
             center_y = 0
@@ -3495,6 +3551,7 @@ class FittingController(QObject):
             if self.independent_window is not None and self.independent_window.isVisible():
                 is_log = self._is_log_mode_enabled()
                 self.independent_window.update_image(image_data, self._current_vmin, self._current_vmax, use_log=is_log)
+                self._sync_independent_window_selection()
             
             # 状态信息
             window_status = " (+ Independent window)" if (self.independent_window and self.independent_window.isVisible()) else ""
@@ -3547,7 +3604,10 @@ class FittingController(QObject):
     
     def _update_graphics_view(self, image_data):
         """更新GraphicsView中的图像显示"""
-        self._update_graphics_view_with_selection(image_data, None)
+        self._update_graphics_view_with_selection(
+            image_data,
+            getattr(self, 'current_parameter_selection', None)
+        )
     
     def _prepare_image_data_for_display(self, image_data):
         """根据当前显示模式准备图像数据"""
@@ -3582,6 +3642,7 @@ class FittingController(QObject):
                     self.independent_window.update_image(self.current_stack_data, 
                                                        self._current_vmin, self._current_vmax, 
                                                        use_log=is_log)
+                    self._sync_independent_window_selection()
         except Exception as e:
             self.status_updated.emit(f"Refresh display error: {str(e)}")
     
@@ -3623,6 +3684,7 @@ class FittingController(QObject):
                 self.independent_window.update_image(self.current_stack_data, 
                                                    self._current_vmin, self._current_vmax, 
                                                    use_log=is_log)
+                self._sync_independent_window_selection()
             
             # 显示窗口并置于前台
             self.independent_window.show()
@@ -3978,6 +4040,7 @@ class FittingController(QObject):
     
     def _create_selection_from_parameters(self, center_x, center_y, width, height):
         """根据参数创建选择区域信息"""
+        is_q_space = self._should_show_q_axis()
         # 计算选择区域的边界
         half_width = width / 2
         half_height = height / 2
@@ -4003,6 +4066,7 @@ class FittingController(QObject):
                 'y_min': y_min,
                 'y_max': y_max
             },
+            'is_q_space': is_q_space,
             'is_parameter_based': True  # 标记这是基于参数的选择
         }
         
@@ -4019,16 +4083,49 @@ class FittingController(QObject):
                 self._update_graphics_view_with_selection(self.current_stack_data, selection_info)
             
             # 在独立窗口中显示选择框
-            if self.independent_window is not None and self.independent_window.isVisible():
-                # 从selection_info中提取参数
-                center_v = selection_info.get('pixel_center_y', 0)
-                center_p = selection_info.get('pixel_center_x', 0) 
-                cutline_v = selection_info.get('pixel_height', 0)
-                cutline_p = selection_info.get('pixel_width', 0)
-                self.independent_window.update_parameter_selection(center_v, center_p, cutline_v, cutline_p)
+            self._sync_independent_window_selection()
             
         except Exception as e:
             self.status_updated.emit(f"Error updating parameter selection display: {str(e)}")
+
+    def _sync_independent_window_selection(self):
+        """将当前Detector preview的选择框同步到独立图像窗口。"""
+        try:
+            if self.independent_window is None or not self.independent_window.isVisible():
+                return
+            selection_info = getattr(self, 'current_parameter_selection', None)
+            if selection_info:
+                if hasattr(self.independent_window, 'set_parameter_selection'):
+                    self.independent_window.set_parameter_selection(selection_info)
+            else:
+                self.independent_window.clear_parameter_selection()
+        except Exception as e:
+            self.status_updated.emit(f"Error syncing independent window selection: {str(e)}")
+
+    def _refresh_current_parameter_selection_from_ui(self):
+        """从当前Cut Line控件重建共享选择框状态。"""
+        try:
+            if not all(hasattr(self.ui, name) for name in (
+                'gisaxsInputCenterParallelValue',
+                'gisaxsInputCenterVerticalValue',
+                'gisaxsInputCutLineParallelValue',
+                'gisaxsInputCutLineVerticalValue',
+            )):
+                return
+
+            center_x = self.ui.gisaxsInputCenterParallelValue.value()
+            center_y = self.ui.gisaxsInputCenterVerticalValue.value()
+            width = self.ui.gisaxsInputCutLineParallelValue.value()
+            height = self.ui.gisaxsInputCutLineVerticalValue.value()
+
+            if width > 0 and height > 0:
+                self.current_parameter_selection = self._create_selection_from_parameters(
+                    center_x, center_y, width, height
+                )
+            else:
+                self.current_parameter_selection = None
+        except Exception:
+            pass
     
     def _clear_parameter_selection(self):
         """清除参数选择框显示"""
@@ -4055,8 +4152,10 @@ class FittingController(QObject):
             if not hasattr(self.ui, 'gisaxsInputGraphicsView') or self.current_stack_data is None:
                 return
             
+            self.current_parameter_selection = selection_info
             # 重新刷新主窗口的图像显示，并添加选择矩形
             self._update_graphics_view_with_selection(self.current_stack_data, selection_info)
+            self._sync_independent_window_selection()
             
         except Exception as e:
             self.status_updated.emit(f"Error drawing selection on main view: {str(e)}")
@@ -5041,6 +5140,7 @@ class FittingController(QObject):
             
             # 2. 如果有二维图显示，更新二维图和外置窗口
             if hasattr(self, 'current_stack_data') and self.current_stack_data is not None:
+                self._refresh_current_parameter_selection_from_ui()
                 self._refresh_display_for_mode_change()
             
             # 3. 如果有cut data，更新一维Cut图
@@ -5167,6 +5267,7 @@ class FittingController(QObject):
     def _refresh_display_for_mode_change(self):
         """为模式切换刷新显示"""
         try:
+            self._refresh_current_parameter_selection_from_ui()
             # 刷新主窗口显示
             if hasattr(self, '_show_image'):
                 self._show_image()

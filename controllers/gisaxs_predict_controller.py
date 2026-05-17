@@ -8,10 +8,10 @@ import subprocess
 import re
 import json
 import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal, Qt, QSignalBlocker, QRectF, QEvent
+from PyQt5.QtCore import QObject, pyqtSignal, Qt, QSignalBlocker, QRectF, QEvent, QTimer
 from PyQt5.QtGui import QImage, QPixmap, QKeySequence
 from PyQt5.QtWidgets import (
     QFileDialog,
@@ -109,6 +109,10 @@ class GisaxsPredictController(QObject):
         self._modules_by_name: Dict[str, Dict[str, object]] = {}
         self._modules_by_id: Dict[str, Dict[str, object]] = {}
         self._current_module: Optional[Dict[str, object]] = None
+        self._module_edit_watch_timer: Optional[QTimer] = None
+        self._module_edit_watch_path: Optional[str] = None
+        self._module_edit_watch_mtime: Optional[float] = None
+        self._module_edit_watch_ticks: int = 0
         self._current_mask: Optional[np.ndarray] = None
         self._current_model: Optional[object] = None
         self._model_loading: bool = False
@@ -914,12 +918,16 @@ class GisaxsPredictController(QObject):
             self._append_status_message(f"Failed to scan folder: {exc}", level="ERROR")
 
     def _extract_index(self, file_name: str) -> Optional[int]:
-        match = re.search(r"(\d+)(?=\.cbf$)", file_name, re.IGNORECASE)
+        match = re.search(r"_(\d+)(?=\.cbf$)", file_name, re.IGNORECASE)
+        if not match:
+            match = re.search(r"(\d+)(?=\.cbf$)", file_name, re.IGNORECASE)
         if match:
             try:
                 return int(match.group(1))
             except ValueError:
                 return None
+        if file_name.lower().endswith(".cbf"):
+            return 1
         return None
 
     def _update_range_tooltip(self) -> None:
@@ -2672,13 +2680,15 @@ class GisaxsPredictController(QObject):
 
     def _refresh_modules(self) -> None:
         modules = self._scan_modules()
-        # Only repopulate if changed by names set
         new_names = sorted(modules.keys())
         old_names = sorted(self._modules_by_name.keys())
+        current_name = self.current_parameters.get("module_name", "")
+        self._modules_by_name = modules
+        self._modules_by_id = {m.get("id", name): m for name, m in modules.items()}
         if new_names != old_names:
-            self._modules_by_name = modules
-            self._modules_by_id = {m.get("id", name): m for name, m in modules.items()}
             self._populate_module_combo()
+        elif current_name and current_name in modules:
+            self._current_module = modules[current_name]
 
     def _modules_root(self) -> str:
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -2927,6 +2937,15 @@ class GisaxsPredictController(QObject):
                 combo.setCurrentIndex(idx2)
         del blocker
 
+    def _select_model_folder(self, start_dir: str = "") -> str:
+        folder = QFileDialog.getExistingDirectory(
+            self.main_window,
+            "Select TensorFlow SavedModel Folder",
+            start_dir or "",
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+        )
+        return os.path.abspath(normalize_path(folder)) if folder else ""
+
     def _on_module_selected(self, name: str) -> None:
         if not name:
             return
@@ -2939,18 +2958,11 @@ class GisaxsPredictController(QObject):
         # Ensure model path available
         model_path = spec.get("model_path") or self.current_parameters.get("module_model_path") or ""
         if not model_path or not os.path.exists(model_path):
-            # ask user to select a .keras
-            file_path, _ = QFileDialog.getOpenFileName(
-                self.main_window,
-                "Select Keras Model",
-                spec.get("folder", ""),
-                "Keras Model (*.keras);;All Files (*)",
-            )
-            if not file_path:
-                QMessageBox.information(self.main_window, "Model Required", "Please select a Keras .keras model to proceed.")
+            model_path = self._select_model_folder(spec.get("folder", ""))
+            if not model_path:
+                QMessageBox.information(self.main_window, "Model Required", "Please select a TensorFlow SavedModel folder to proceed.")
                 # Do not set current model yet
                 return
-            model_path = normalize_path(file_path)
 
         # Persist chosen model path in session parameters (not writing back to YAML)
         abs_model = os.path.abspath(model_path)
@@ -3000,8 +3012,50 @@ class GisaxsPredictController(QObject):
                 subprocess.Popen(["open", yaml_path])
             else:
                 subprocess.Popen(["xdg-open", yaml_path])
+            self._start_module_edit_watch(yaml_path)
         except Exception as exc:
             QMessageBox.warning(self.main_window, "Open Failed", f"Cannot open file:\n{yaml_path}\n\n{exc}")
+
+    def _start_module_edit_watch(self, yaml_path: str) -> None:
+        try:
+            self._module_edit_watch_mtime = os.path.getmtime(yaml_path)
+        except OSError:
+            self._module_edit_watch_mtime = None
+        self._module_edit_watch_path = yaml_path
+        self._module_edit_watch_ticks = 0
+        if self._module_edit_watch_timer is None:
+            self._module_edit_watch_timer = QTimer(self)
+            self._module_edit_watch_timer.timeout.connect(self._check_module_edit_watch)
+        self._module_edit_watch_timer.start(1000)
+        self._append_status_message("Watching module.yaml for saved edits...")
+
+    def _check_module_edit_watch(self) -> None:
+        path = self._module_edit_watch_path
+        if not path:
+            return
+        self._module_edit_watch_ticks += 1
+        if self._module_edit_watch_ticks > 300:
+            if self._module_edit_watch_timer:
+                self._module_edit_watch_timer.stop()
+            self._module_edit_watch_path = None
+            return
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return
+        if self._module_edit_watch_mtime is not None and mtime == self._module_edit_watch_mtime:
+            return
+
+        if self._module_edit_watch_timer:
+            self._module_edit_watch_timer.stop()
+        self._module_edit_watch_path = None
+        self._module_edit_watch_mtime = mtime
+        selected_name = self.current_parameters.get("module_name", "")
+        self._refresh_modules()
+        if selected_name and selected_name in self._modules_by_name:
+            self._current_module = self._modules_by_name[selected_name]
+            self._load_module_mask(self._current_module)
+        self._append_status_message("module.yaml saved; module settings reloaded.")
 
     def _on_model_import_clicked(self) -> None:
         # Ensure a module is selected
@@ -3013,16 +3067,9 @@ class GisaxsPredictController(QObject):
             return
         model_path = (spec.get("model_path") or self.current_parameters.get("module_model_path") or "") if isinstance(spec, dict) else ""
         if not model_path or not os.path.exists(model_path):
-            # prompt for .keras
-            file_path, _ = QFileDialog.getOpenFileName(
-                self.main_window,
-                "Select Keras Model",
-                spec.get("folder", "") if isinstance(spec, dict) else "",
-                "Keras Model (*.keras);;All Files (*)",
-            )
-            if not file_path:
+            model_path = self._select_model_folder(spec.get("folder", "") if isinstance(spec, dict) else "")
+            if not model_path:
                 return
-            model_path = os.path.abspath(normalize_path(file_path))
             self.current_parameters["module_model_path"] = model_path
             self._current_module = spec
             self._current_module["model_path"] = model_path
@@ -3300,9 +3347,14 @@ class GisaxsPredictController(QObject):
             try:
                 indices = self._parse_range_text(range_text)
                 if indices:
-                    # 确保索引在有效范围内
-                    indices = [i for i in indices if 0 <= i < len(files)]
-                    files = [files[i] for i in indices]
+                    self._scan_directory_for_cbf(folder)
+                    missing = [idx for idx in indices if idx not in self._index_to_file]
+                    files = [self._index_to_file[idx] for idx in indices if idx in self._index_to_file]
+                    if missing:
+                        missing_text = ", ".join(f"{idx:05d}" for idx in missing[:10])
+                        if len(missing) > 10:
+                            missing_text += ", ..."
+                        self._append_status_message(f"Range skipped missing CBF indices: {missing_text}", level="WARN")
             except Exception as e:
                 self._append_status_message(f"Error parsing range: {e}", level="WARN")
 
@@ -3541,10 +3593,26 @@ class GisaxsPredictController(QObject):
                     "filepath": result.file_path,
                     "timestamp": result.start_time.isoformat() if result.start_time else None,
                     "processing_time": result.processing_time,
-                    "confidence": result.confidence,
+                    "confidence": self._result_confidence(result),
                     "prediction_data": self._serialize_prediction_data(result.prediction_data)
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + '\n')
+
+    def _result_confidence(self, result: PredictResult) -> Optional[float]:
+        """Return confidence when older/newer prediction payloads provide it."""
+        value = getattr(result, "confidence", None)
+        if isinstance(value, (int, float)):
+            return float(value)
+        payload = result.prediction_data if isinstance(result.prediction_data, dict) else {}
+        value = payload.get("confidence")
+        if isinstance(value, (int, float)):
+            return float(value)
+        inner = payload.get("prediction_data")
+        if isinstance(inner, dict):
+            value = inner.get("confidence")
+            if isinstance(value, (int, float)):
+                return float(value)
+        return None
 
     def _export_results_jpg(self, results: List[PredictResult], export_path: str, timestamp: str) -> None:
         """导出JPG图像到文件夹"""
