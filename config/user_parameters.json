@@ -77,7 +77,7 @@
             "beam_center_y": 368.0
         },
         "last_session": {
-            "last_opened_file": "E:\\ExpData\\Yuxin\\lyx_cu_peo1_20pl_2p5fr_116_00002\\p2m\\lyx_cu_peo1_20pl_2p5fr_116_00002_00030.cbf",
+            "last_opened_file": "E:\\ExpData\\Yuxin\\lyx_cu_peo1_20pl_2p5fr_116_00002\\p2m\\lyx_cu_peo1_20pl_2p5fr_116_00002_00031.cbf",
             "last_directory": "E:\\ExpData\\Yuxin\\lyx_cu_peo1_20pl_2p5fr_116_00002\\p2m",
             "last_1d_directory": null,
             "last_1d_file": null,
@@ -93,9 +93,9 @@
             "auto_scale": true,
             "vmin": -6.907755374908447,
             "vmax": 1.3862943649291992,
-            "fit_current_data": false,
-            "fit_log_x": false,
-            "fit_log_y": false,
+            "fit_current_data": true,
+            "fit_log_x": true,
+            "fit_log_y": true,
             "fit_norm": false
         },
         "gisaxs_input": {

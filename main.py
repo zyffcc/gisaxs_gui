@@ -11,15 +11,8 @@ from PyQt5.QtWidgets import QApplication, QMainWindow
 from ui.main_window import Ui_MainWindow  # 导入转换后的 UI 类
 from ui.components import MainWindowComponents
 from ui.menu_manager import MenuManager
-from controllers import MainController
+from controllers.main_controller import MainController
 from core.window_manager import window_manager
-
-# 配置matplotlib（尽量轻量，完整预热放到窗口显示后）
-try:
-    import matplotlib
-    # 延后重型子模块导入与字体缓存构建
-except ImportError:
-    pass
 
 # 导入参数访问系统
 from core.global_params import global_params

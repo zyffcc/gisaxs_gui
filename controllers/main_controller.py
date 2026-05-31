@@ -7,10 +7,6 @@ import os
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 
-from .trainset_controller import TrainsetController
-from .fitting_controller import FittingController
-from .classification_controller import ClassificationController
-from .gisaxs_predict_controller import GisaxsPredictController
 from core.global_params import global_params
 from utils.path_utils import normalize_path
 
@@ -26,6 +22,12 @@ class MainController(QObject):
         super().__init__(parent)
         self.ui = ui
         self.parent = parent
+
+        # Defer controller module imports to reduce heavy import work at app module load.
+        from .trainset_controller import TrainsetController
+        from .fitting_controller import FittingController
+        from .classification_controller import ClassificationController
+        from .gisaxs_predict_controller import GisaxsPredictController
         
         # 快速初始化基础组件
         self.current_parameters = {}

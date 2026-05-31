@@ -33,11 +33,6 @@ from PyQt5.QtWidgets import (
     QTextBrowser,
 )
 
-try:  # matplotlib is optional for colormap rendering
-    from matplotlib import cm as mpl_cm
-except Exception:  # pragma: no cover - optional dependency
-    mpl_cm = None
-
 from core.global_params import global_params
 from utils.path_utils import normalize_path
 from .fitting_controller import AsyncImageLoader, is_matplotlib_available, is_fabio_available
@@ -69,6 +64,8 @@ class GisaxsPredictController(QObject):
         "coolwarm",
         "gray",
     ]
+
+    _mpl_cm = None
 
     def __init__(self, ui, parent=None) -> None:
         super().__init__(parent)
@@ -1355,7 +1352,8 @@ class GisaxsPredictController(QObject):
         norm = (data - vmin) / max(vmax - vmin, 1e-9)
         norm = np.nan_to_num(norm, nan=0.0, posinf=1.0, neginf=0.0)
 
-        if mpl_cm is None or not is_matplotlib_available():
+        mpl_cm = self._get_mpl_cm()
+        if mpl_cm is None:
             gray = (norm * 255).astype(np.uint8)
             rgba = np.dstack([gray, gray, gray, np.full_like(gray, 255)])
         else:
@@ -1366,6 +1364,17 @@ class GisaxsPredictController(QObject):
         bytes_per_line = rgba.strides[0]
         image_q = QImage(rgba.data, width, height, bytes_per_line, QImage.Format_RGBA8888)
         return QPixmap.fromImage(image_q.copy())
+
+    def _get_mpl_cm(self):
+        if not is_matplotlib_available():
+            return None
+        if self.__class__._mpl_cm is None:
+            try:
+                from matplotlib import cm as mpl_cm  # type: ignore
+                self.__class__._mpl_cm = mpl_cm
+            except Exception:
+                self.__class__._mpl_cm = False
+        return None if self.__class__._mpl_cm is False else self.__class__._mpl_cm
 
     # ------------------------------------------------------------------
     # Preprocessing & Prediction
