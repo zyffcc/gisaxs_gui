@@ -4,7 +4,9 @@ Cut Fitting 控制器 - 处理GISAXS数据的裁剪和拟合功能
 
 import os
 import json
-from collections import defaultdict
+import re
+import time
+from collections import OrderedDict, defaultdict
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint
 from PyQt5.QtWidgets import (
@@ -26,6 +28,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QDoubleSpinBox,
     QCheckBox,
+    QPushButton,
 )
 
 # 导入探测器参数对话框
@@ -135,6 +138,8 @@ class IndependentMatplotlibWindow(QMainWindow):
         self.current_xlim = None
         self.current_ylim = None
         self.last_image_shape = None
+        self._last_use_log = None
+        self._last_show_q_axis = None
         
         # Q空间缓存
         self._q_detector = None
@@ -363,6 +368,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         """更新独立窗口中的图像，保持用户的视图焦点，支持自定义颜色范围和线性/对数切换"""
         try:
             # 检查图像尺寸是否改变
+            t_total_update = time.perf_counter()
             current_shape = image_data.shape
             shape_changed = (self.last_image_shape is None or 
                            self.last_image_shape != current_shape)
@@ -380,6 +386,45 @@ class IndependentMatplotlibWindow(QMainWindow):
             saved_xlim = self.current_xlim
             saved_ylim = self.current_ylim
             preserve_view = (not shape_changed and saved_xlim is not None and saved_ylim is not None)
+            can_reuse_artist = (
+                self.current_image is not None and
+                not shape_changed and
+                self._last_use_log == bool(use_log) and
+                self._last_show_q_axis == self._should_show_q_axis()
+            )
+            if can_reuse_artist:
+                t_total = time.perf_counter()
+                if use_log:
+                    t0 = time.perf_counter()
+                    safe_data = np.where(image_data > 0, image_data, 0.001)
+                    processed_data = np.log(safe_data, dtype=np.float32)
+                    print(f"[Timing] log transform: {(time.perf_counter() - t0) * 1000:.2f} ms (independent window)")
+                else:
+                    processed_data = image_data.astype(np.float32)
+                if vmin is None or vmax is None:
+                    t0 = time.perf_counter()
+                    auto_vmin = np.percentile(processed_data, 1)
+                    auto_vmax = np.percentile(processed_data, 99)
+                    vmin = vmin if vmin is not None else auto_vmin
+                    vmax = vmax if vmax is not None else auto_vmax
+                    print(f"[Timing] autoscale calculation: {(time.perf_counter() - t0) * 1000:.2f} ms (independent window)")
+                processed_data = np.flipud(processed_data)
+                self.current_image.set_data(processed_data)
+                self.current_image.set_clim(vmin, vmax)
+                if self.colorbar is not None:
+                    try:
+                        self.colorbar.update_normal(self.current_image)
+                    except Exception:
+                        pass
+                if preserve_view:
+                    self.ax.set_xlim(saved_xlim)
+                    self.ax.set_ylim(saved_ylim)
+                self._redraw_parameter_selection()
+                render_start = time.perf_counter()
+                self.canvas.draw()
+                print(f"[Timing] Matplotlib rendering: {(time.perf_counter() - render_start) * 1000:.2f} ms (independent window)")
+                print(f"[Timing] independent window rendering: {(time.perf_counter() - t_total) * 1000:.2f} ms")
+                return
             
             # 暂时断开视图变化回调
             try:
@@ -425,8 +470,10 @@ class IndependentMatplotlibWindow(QMainWindow):
             
             # 根据模式处理图像数据
             if use_log:
+                t0 = time.perf_counter()
                 safe_data = np.where(image_data > 0, image_data, 0.001)
                 processed_data = np.log(safe_data, dtype=np.float32)
+                print(f"[Timing] log transform: {(time.perf_counter() - t0) * 1000:.2f} ms")
                 scale_text = "Log Scale"
                 colorbar_label = "Log Intensity"
             else:
@@ -436,10 +483,12 @@ class IndependentMatplotlibWindow(QMainWindow):
             
             # 如果没有提供vmin/vmax，则自动计算
             if vmin is None or vmax is None:
+                t0 = time.perf_counter()
                 auto_vmin = np.percentile(processed_data, 1)
                 auto_vmax = np.percentile(processed_data, 99)
                 vmin = vmin if vmin is not None else auto_vmin
                 vmax = vmax if vmax is not None else auto_vmax
+                print(f"[Timing] autoscale calculation: {(time.perf_counter() - t0) * 1000:.2f} ms (independent window)")
             
             # 垂直翻转图像数据以修正显示方向
             processed_data = np.flipud(processed_data)
@@ -532,7 +581,12 @@ class IndependentMatplotlibWindow(QMainWindow):
                 pass
             
             # 刷新画布
+            self._last_use_log = bool(use_log)
+            self._last_show_q_axis = show_q_axis
+            render_start = time.perf_counter()
             self.canvas.draw()
+            print(f"[Timing] Matplotlib rendering: {(time.perf_counter() - render_start) * 1000:.2f} ms (independent window)")
+            print(f"[Timing] independent window rendering: {(time.perf_counter() - t_total_update) * 1000:.2f} ms")
             
             # 最终验证：确保视图没有被canvas刷新影响
             if preserve_view:
@@ -1343,6 +1397,8 @@ class AsyncImageLoader(QThread):
         super().__init__()
         self.file_path = None
         self.stack_count = 1
+        self._image_cache = OrderedDict()
+        self._image_cache_limit = 8
     
     def load_image(self, file_path, stack_count=1):
         """开始加载图像"""
@@ -1364,7 +1420,18 @@ class AsyncImageLoader(QThread):
             if file_ext != '.cbf':
                 self.error_occurred.emit("Only CBF files are supported currently")
                 return
+
+            cache_key = (normalize_path(self.file_path), int(self.stack_count))
+            cached = self._image_cache.get(cache_key)
+            if cached is not None:
+                self._image_cache.move_to_end(cache_key)
+                self.progress_updated.emit(90, "Using cached image data...")
+                print(f"[Timing] fabio read: 0.00 ms (cache hit: {os.path.basename(self.file_path)})")
+                self.image_loaded.emit(cached, self.file_path)
+                self.progress_updated.emit(100, "Done")
+                return
             
+            read_start = time.perf_counter()
             if self.stack_count == 1:
                 # 单文件加载
                 self.progress_updated.emit(50, "Loading single CBF file...")
@@ -1373,8 +1440,13 @@ class AsyncImageLoader(QThread):
                 # 多文件叠加
                 self.progress_updated.emit(30, f"Loading and stacking {self.stack_count} files...")
                 image_data = self._load_multiple_cbf_files(self.file_path, self.stack_count)
-            
+            print(f"[Timing] fabio read: {(time.perf_counter() - read_start) * 1000:.2f} ms ({os.path.basename(self.file_path)})")
+
             if image_data is not None:
+                self._image_cache[cache_key] = image_data
+                self._image_cache.move_to_end(cache_key)
+                while len(self._image_cache) > self._image_cache_limit:
+                    self._image_cache.popitem(last=False)
                 self.progress_updated.emit(90, "Processing image data...")
                 self.image_loaded.emit(image_data, self.file_path)
                 self.progress_updated.emit(100, "Done")
@@ -1499,6 +1571,10 @@ class FittingController(QObject):
         # 图像处理相关
         self.current_stack_data = None
         self.current_file_list = []
+        self._folder_image_files = []
+        self._folder_image_index = -1
+        self._previous_image_button = None
+        self._next_image_button = None
         # 全局数据缓存（便于导出与复用）
         self.data = None              # 当前显示（或最后加载）的单帧/合成数据
         self.summed_data = None       # 若为堆叠叠加后的数据，则在此保存
@@ -1508,6 +1584,7 @@ class FittingController(QObject):
         self.qy_matrix = None
         self.qz_matrix = None
         self.qr_matrix = None
+        self._q_mesh_cache_key = None
         
         # 独立matplotlib窗口
         self.independent_window = None
@@ -1530,6 +1607,14 @@ class FittingController(QObject):
         self._graphics_scene = None
         self._figure_cache = None
         self._canvas_cache = None
+        self._preview_ax = None
+        self._preview_image_artist = None
+        self._preview_proxy_widget = None
+        self._preview_shape = None
+        self._preview_show_q_axis = None
+        self._preview_colorbar = None
+        self._image_display_cache = OrderedDict()
+        self._image_display_cache_limit = 12
 
         # 初始化用户设置与控件
         try:
@@ -1573,6 +1658,7 @@ class FittingController(QObject):
         # 颜色标尺相关
         self._current_vmin = None
         self._current_vmax = None
+        self._updating_color_scale_ui = False
         self._has_displayed_image = False  # 标记是否已经显示过图像
         
         # 初始化标志
@@ -1671,6 +1757,7 @@ class FittingController(QObject):
             
         # 先初始化UI状态（不触发信号）
         self._initialize_ui()
+        self._setup_folder_navigation_ui()
         # 然后设置信号连接
         self._setup_connections()
         # 会话管理已移到主控制器统一处理
@@ -1705,6 +1792,135 @@ class FittingController(QObject):
         except Exception as e:
             print(f"Failed to register meta debug shortcut: {e}")
     
+    def _setup_folder_navigation_ui(self):
+        """Add Previous/Next buttons beside the current GISAXS file field."""
+        try:
+            if self._previous_image_button is not None or not hasattr(self.ui, 'gridLayout_23'):
+                return
+
+            parent = getattr(self.ui, 'gisaxsInputBox', None)
+            self._previous_image_button = QPushButton("Previous", parent)
+            self._next_image_button = QPushButton("Next", parent)
+            self._previous_image_button.setObjectName("gisaxsInputPreviousImageButton")
+            self._next_image_button.setObjectName("gisaxsInputNextImageButton")
+            self._previous_image_button.setToolTip("No previous image")
+            self._next_image_button.setToolTip("No next image")
+            self._previous_image_button.setEnabled(False)
+            self._next_image_button.setEnabled(False)
+
+            self.ui.gridLayout_23.addWidget(self._previous_image_button, 0, 5, 1, 1)
+            self.ui.gridLayout_23.addWidget(self._next_image_button, 0, 6, 1, 1)
+        except Exception as e:
+            self.status_updated.emit(f"Failed to set up image navigation: {str(e)}")
+
+    def _supported_folder_image_extensions(self):
+        return ('.cbf',)
+
+    def _natural_sort_key(self, path):
+        name = os.path.basename(path)
+        return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', name)]
+
+    def _scan_folder_images_for_file(self, file_path):
+        """Scan the selected file's folder and update navigation state."""
+        try:
+            file_path = normalize_path(file_path)
+            if not file_path or not os.path.exists(file_path):
+                self._folder_image_files = []
+                self._folder_image_index = -1
+                self._update_folder_navigation_buttons()
+                self.status_updated.emit("File does not exist")
+                return
+
+            folder = os.path.dirname(file_path)
+            current_norm = os.path.normcase(os.path.abspath(file_path))
+            files = []
+            for name in os.listdir(folder):
+                candidate = os.path.join(folder, name)
+                if os.path.isfile(candidate) and os.path.splitext(name)[1].lower() in self._supported_folder_image_extensions():
+                    files.append(normalize_path(candidate))
+            files.sort(key=self._natural_sort_key)
+
+            self._folder_image_files = files
+            norm_files = [os.path.normcase(os.path.abspath(p)) for p in files]
+            self._folder_image_index = norm_files.index(current_norm) if current_norm in norm_files else -1
+            if self._folder_image_index < 0 and files:
+                self.status_updated.emit("Current image is not in the scanned folder list")
+            self._update_folder_navigation_buttons()
+        except Exception as e:
+            self._folder_image_files = []
+            self._folder_image_index = -1
+            self._update_folder_navigation_buttons()
+            self.status_updated.emit(f"Folder scan failed: {str(e)}")
+
+    def _update_folder_navigation_buttons(self):
+        try:
+            count = len(self._folder_image_files)
+            index = self._folder_image_index
+            has_previous = count > 1 and index > 0
+            has_next = count > 1 and 0 <= index < count - 1
+            if self._previous_image_button is not None:
+                self._previous_image_button.setEnabled(has_previous)
+                self._previous_image_button.setToolTip("Previous" if has_previous else "No previous image")
+            if self._next_image_button is not None:
+                self._next_image_button.setEnabled(has_next)
+                self._next_image_button.setToolTip("Next" if has_next else "No next image")
+        except Exception:
+            pass
+
+    def _show_previous_folder_image(self):
+        self._show_folder_image_at_offset(-1)
+
+    def _show_next_folder_image(self):
+        self._show_folder_image_at_offset(1)
+
+    def _show_folder_image_at_offset(self, offset):
+        try:
+            if not self._folder_image_files:
+                self.status_updated.emit("No previous image" if offset < 0 else "No next image")
+                self._update_folder_navigation_buttons()
+                return
+
+            current_file = self.current_parameters.get('imported_gisaxs_file', '')
+            if self._folder_image_index < 0 and current_file:
+                self._scan_folder_images_for_file(current_file)
+
+            target_index = self._folder_image_index + offset
+            if target_index < 0:
+                self.status_updated.emit("No previous image")
+                self._update_folder_navigation_buttons()
+                return
+            if target_index >= len(self._folder_image_files):
+                self.status_updated.emit("No next image")
+                self._update_folder_navigation_buttons()
+                return
+
+            self._select_folder_image(self._folder_image_files[target_index])
+        except Exception as e:
+            self.status_updated.emit(f"Image navigation failed: {str(e)}")
+
+    def _select_folder_image(self, file_path):
+        try:
+            file_path = normalize_path(file_path)
+            if not os.path.exists(file_path):
+                QMessageBox.warning(self.main_window, "File Error", f"File does not exist:\n{file_path}")
+                self._scan_folder_images_for_file(self.current_parameters.get('imported_gisaxs_file', ''))
+                return
+
+            self.current_parameters['imported_gisaxs_file'] = file_path
+            if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
+                self.ui.gisaxsInputImportButtonValue.setText(os.path.basename(file_path))
+
+            self._scan_folder_images_for_file(file_path)
+            self._update_stack_display()
+            self.parameters_changed.emit(self.current_parameters)
+            if hasattr(self.parent, 'save_current_session'):
+                self.parent.save_current_session()
+
+            self.status_updated.emit(f"Current image: {os.path.basename(file_path)}")
+            self._show_image()
+        except Exception as e:
+            QMessageBox.warning(self.main_window, "Image Navigation Error", f"Failed to load image:\n{str(e)}")
+
     # ---------------- ROI helpers for plotting -----------------
     def _roi_active(self) -> bool:
         return (
@@ -2217,6 +2433,11 @@ class FittingController(QObject):
         # 连接GISAXS导入相关按钮
         if hasattr(self.ui, 'gisaxsInputImportButton'):
             self.ui.gisaxsInputImportButton.clicked.connect(self._import_gisaxs_file)
+
+        if self._previous_image_button is not None:
+            self._previous_image_button.clicked.connect(self._show_previous_folder_image)
+        if self._next_image_button is not None:
+            self._next_image_button.clicked.connect(self._show_next_folder_image)
             
         # 连接导入文件输入框的回车事件
         if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
@@ -2254,6 +2475,11 @@ class FittingController(QObject):
             self.ui.gisaxsInputDisplayModeQ.toggled.connect(self._on_q_mode_changed)
         if hasattr(self.ui, 'gisaxsInputDisplayModePixel'):
             self.ui.gisaxsInputDisplayModePixel.toggled.connect(self._on_q_mode_changed)
+
+        if hasattr(self.ui, 'gisaxsInputVminValue'):
+            self.ui.gisaxsInputVminValue.editingFinished.connect(self._on_color_scale_value_committed)
+        if hasattr(self.ui, 'gisaxsInputVmaxValue'):
+            self.ui.gisaxsInputVmaxValue.editingFinished.connect(self._on_color_scale_value_committed)
             
         # Vmin/Vmax值变化现在通过触发管理器处理
         # 见 _connect_cutline_parameter_signals() 方法
@@ -2374,6 +2600,10 @@ class FittingController(QObject):
             w = getattr(self.ui, widget_name)
             def _after_commit(info, value, p=param_key):
                 try:
+                    if p in ('vmin', 'vmax'):
+                        self._on_color_scale_value_committed()
+                        self._add_fitting_message(f"Meta commit GISAXS {p} = {value}", "INFO")
+                        return
                     self._on_parameter_display_changed()
                     self._add_fitting_message(f"Meta commit GISAXS {p} = {value}", "INFO")
                 except Exception:
@@ -2910,7 +3140,7 @@ class FittingController(QObject):
         """导入GISAXS文件"""
         file_path, _ = QFileDialog.getOpenFileName(
             self.main_window,
-            "导入GISAXS文件",
+            "Import GISAXS",
             "",
             "GISAXS Files (*.tif *.tiff *.dat *.txt *.h5 *.hdf5 *.jpg *.png *.bmp *.cbf);;TIF Files (*.tif *.tiff);;Data Files (*.dat *.txt);;HDF5 Files (*.h5 *.hdf5 *cbf);;Image Files (*.jpg *.png *.bmp);;All Files (*)"
         )
@@ -2924,6 +3154,8 @@ class FittingController(QObject):
             if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
                 file_name = os.path.basename(file_path)
                 self.ui.gisaxsInputImportButtonValue.setText(file_name)
+
+            self._scan_folder_images_for_file(file_path)
                 
             # 发送状态更新信号
             self.status_updated.emit(f"Imported GISAXS file: {os.path.basename(file_path)}")
@@ -3013,6 +3245,7 @@ class FittingController(QObject):
             
             # 验证文件
             if self._validate_imported_file(file_path_input):
+                self._scan_folder_images_for_file(file_path_input)
                 self.status_updated.emit(f"Updated GISAXS file: {file_name}")
                 self.parameters_changed.emit(self.current_parameters)
                 
@@ -3211,6 +3444,14 @@ class FittingController(QObject):
             if not imported_file:
                 self.status_updated.emit("No file imported to show")
                 return
+
+            if not os.path.exists(imported_file):
+                self.status_updated.emit("File does not exist")
+                QMessageBox.warning(self.main_window, "File Error", f"File does not exist:\n{imported_file}")
+                self._scan_folder_images_for_file(imported_file)
+                return
+
+            self._scan_folder_images_for_file(imported_file)
             
             # 检查依赖库
             if not is_fabio_available():
@@ -3578,6 +3819,15 @@ class FittingController(QObject):
             distance = global_params.get_parameter('fitting', 'detector.distance', 2565.0)
             theta_in_deg = global_params.get_parameter('beam', 'grazing_angle', 0.4)
             wavelength = global_params.get_parameter('beam', 'wavelength', 0.1045)
+            cache_key = (
+                height, width,
+                float(pixel_size_x), float(pixel_size_y),
+                float(beam_center_x), float(beam_center_y),
+                float(distance), float(theta_in_deg), float(wavelength),
+            )
+            if self._q_mesh_cache_key == cache_key and self.qy_matrix is not None and self.qz_matrix is not None:
+                return
+            t0 = time.perf_counter()
             detector = create_detector_from_image_and_params(
                 image_shape=(height, width),
                 pixel_size_x=pixel_size_x,
@@ -3596,11 +3846,14 @@ class FittingController(QObject):
                 self.qr_matrix = np.sqrt(np.square(qy_mesh) + np.square(qz_mesh))
             except Exception:
                 self.qr_matrix = None
+            self._q_mesh_cache_key = cache_key
+            print(f"[Timing] q-space mesh calculation: {(time.perf_counter() - t0) * 1000:.2f} ms")
         except Exception:
             # 失败则清空缓存，不中断主流程
             self.qy_matrix = None
             self.qz_matrix = None
             self.qr_matrix = None
+            self._q_mesh_cache_key = None
     
     def _update_graphics_view(self, image_data):
         """更新GraphicsView中的图像显示"""
@@ -3613,15 +3866,28 @@ class FittingController(QObject):
         """根据当前显示模式准备图像数据"""
         try:
             is_log = self._is_log_mode_enabled()
-            
+            cache_key = (id(image_data), bool(is_log))
+            cached = self._image_display_cache.get(cache_key)
+            if cached is not None:
+                self._image_display_cache.move_to_end(cache_key)
+                if is_log:
+                    print("[Timing] log transform: 0.00 ms (cache hit)")
+                return cached, is_log
+
             if is_log:
+                t0 = time.perf_counter()
                 # Log模式：先过滤掉负值和零值，然后取对数
                 safe_data = np.where(image_data > 0, image_data, 0.001)
                 processed_data = np.log(safe_data, dtype=np.float32)
+                print(f"[Timing] log transform: {(time.perf_counter() - t0) * 1000:.2f} ms")
             else:
                 # 线性模式：直接使用原始数据
                 processed_data = image_data.astype(np.float32)
-            
+            self._image_display_cache[cache_key] = processed_data
+            self._image_display_cache.move_to_end(cache_key)
+            while len(self._image_display_cache) > self._image_display_cache_limit:
+                self._image_display_cache.popitem(last=False)
+
             return processed_data, is_log
             
         except Exception:
@@ -4160,6 +4426,126 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Error drawing selection on main view: {str(e)}")
     
+    def _downsample_for_preview(self, data, max_pixels=700_000):
+        try:
+            h, w = data.shape
+            pixels = max(1, h * w)
+            step = max(1, int(np.ceil(np.sqrt(pixels / max_pixels))))
+            return data[::step, ::step], step
+        except Exception:
+            return data, 1
+
+    def _preview_extent(self, image_shape, show_q_axis):
+        if show_q_axis:
+            qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+            if qy_mesh is not None and qz_mesh is not None:
+                return [qy_mesh.min(), qy_mesh.max(), qz_mesh.min(), qz_mesh.max()], True
+            return None, False
+        height, width = image_shape
+        return [-0.5, width - 0.5, -0.5, height - 0.5], False
+
+    def _draw_preview_selection(self, ax, selection_info):
+        try:
+            for artist in getattr(self, '_preview_selection_artists', []):
+                try:
+                    artist.remove()
+                except Exception:
+                    pass
+            self._preview_selection_artists = []
+            if not selection_info:
+                return
+            bounds = selection_info.get('bounds', {})
+            x_min = bounds.get('x_min', 0)
+            x_max = bounds.get('x_max', 0)
+            y_min = bounds.get('y_min', 0)
+            y_max = bounds.get('y_max', 0)
+            from matplotlib.patches import Rectangle
+            rect = Rectangle((x_min, y_min), x_max - x_min, y_max - y_min,
+                             linewidth=2, edgecolor='red', facecolor='none', alpha=0.8)
+            ax.add_patch(rect)
+            marker = ax.plot((x_min + x_max) / 2, (y_min + y_max) / 2,
+                             'r+', markersize=10, markeredgewidth=2)[0]
+            self._preview_selection_artists = [rect, marker]
+        except Exception:
+            pass
+
+    def _try_update_cached_preview(self, image_data, selection_info=None):
+        try:
+            if not is_matplotlib_available():
+                return False
+            t_total = time.perf_counter()
+            graphics_view = self.ui.gisaxsInputGraphicsView
+            processed_data, _ = self._prepare_image_data_for_display(image_data)
+            processed_data = np.flipud(processed_data)
+            preview_data, _ = self._downsample_for_preview(processed_data)
+            show_q_axis = self._should_show_q_axis()
+            extent, q_ok = self._preview_extent(image_data.shape, show_q_axis)
+            if show_q_axis and not q_ok:
+                show_q_axis = False
+                extent, _ = self._preview_extent(image_data.shape, False)
+            vmin = self._current_vmin if self._current_vmin is not None else np.min(processed_data)
+            vmax = self._current_vmax if self._current_vmax is not None else np.max(processed_data)
+            needs_create = (
+                self._figure_cache is None or self._canvas_cache is None or
+                self._preview_ax is None or self._preview_image_artist is None
+            )
+            mode_changed = self._preview_shape != image_data.shape or self._preview_show_q_axis != show_q_axis
+
+            if needs_create:
+                from matplotlib.figure import Figure
+                from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+                img_height, img_width = image_data.shape
+                aspect_ratio = img_width / img_height
+                base_size = 6
+                fig_width = max(base_size if aspect_ratio > 1 else base_size * aspect_ratio, 3)
+                fig_height = max(base_size / aspect_ratio if aspect_ratio > 1 else base_size, 2.5)
+                self._figure_cache = Figure(figsize=(fig_width, fig_height), dpi=72)
+                self._canvas_cache = FigureCanvas(self._figure_cache)
+                self._preview_ax = self._figure_cache.add_subplot(111)
+                if self._graphics_scene is None:
+                    self._graphics_scene = QGraphicsScene()
+                    graphics_view.setScene(self._graphics_scene)
+                else:
+                    self._graphics_scene.clear()
+                self._preview_proxy_widget = self._graphics_scene.addWidget(self._canvas_cache)
+
+            ax = self._preview_ax
+            if needs_create or mode_changed:
+                ax.clear()
+                self._preview_selection_artists = []
+                self._preview_image_artist = ax.imshow(preview_data, cmap='viridis', aspect='equal',
+                                                       origin='lower', interpolation='nearest',
+                                                       vmin=vmin, vmax=vmax, extent=extent)
+                if show_q_axis:
+                    ax.set_xlabel(r'$q_y$ (nm$^{-1}$)')
+                    ax.set_ylabel(r'$q_z$ (nm$^{-1}$)')
+                    ax.autoscale()
+                else:
+                    ax.set_xlabel('Pixels (Horizontal)')
+                    ax.set_ylabel('Pixels (Vertical)')
+                    ax.axis('off')
+                    ax.set_xlim(-0.5, image_data.shape[1] - 0.5)
+                    ax.set_ylim(-0.5, image_data.shape[0] - 0.5)
+                self._figure_cache.tight_layout(pad=0.05)
+            else:
+                self._preview_image_artist.set_data(preview_data)
+                self._preview_image_artist.set_extent(extent)
+                self._preview_image_artist.set_clim(vmin, vmax)
+
+            self._draw_preview_selection(ax, selection_info)
+            render_start = time.perf_counter()
+            self._canvas_cache.draw()
+            print(f"[Timing] Matplotlib rendering: {(time.perf_counter() - render_start) * 1000:.2f} ms (Detector Preview)")
+            if self._preview_proxy_widget is not None:
+                self._fit_view_to_item(graphics_view, self._preview_proxy_widget, keep_aspect=True)
+            self._preview_shape = image_data.shape
+            self._preview_show_q_axis = show_q_axis
+            print(f"[Timing] preview rendering: {(time.perf_counter() - t_total) * 1000:.2f} ms")
+            return True
+        except Exception as e:
+            self.status_updated.emit(f"Preview cache update failed: {str(e)}")
+            return False
+
     def _update_graphics_view_with_selection(self, image_data, selection_info=None):
         """更新GraphicsView中的图像显示，可选择性地添加选择矩形"""
         try:
@@ -4168,7 +4554,9 @@ class FittingController(QObject):
                 return
             
             graphics_view = self.ui.gisaxsInputGraphicsView
-            
+            if self._try_update_cached_preview(image_data, selection_info):
+                return
+
             # 使用预创建的scene，只需要清除内容
             if self._graphics_scene is None:
                 self._graphics_scene = QGraphicsScene()
@@ -4310,6 +4698,7 @@ class FittingController(QObject):
     def _calculate_vmin_vmax(self, image_data, use_log=True):
         """计算图像的Vmin和Vmax值（1%和99%分位数）"""
         try:
+            t0 = time.perf_counter()
             if use_log:
                 safe_data = np.where(image_data > 0, image_data, 0.001)
                 log_data = np.log(safe_data)
@@ -4318,7 +4707,8 @@ class FittingController(QObject):
             else:
                 vmin = np.percentile(image_data, 1)
                 vmax = np.percentile(image_data, 99)
-            
+
+            print(f"[Timing] autoscale calculation: {(time.perf_counter() - t0) * 1000:.2f} ms")
             return vmin, vmax
         except Exception:
             return None, None
@@ -4327,13 +4717,17 @@ class FittingController(QObject):
         """更新UI中的Vmin和Vmax值"""
         try:
             if vmin is not None and vmax is not None:
-                if hasattr(self.ui, 'gisaxsInputVminValue'):
-                    self.ui.gisaxsInputVminValue.setValue(float(vmin))
-                if hasattr(self.ui, 'gisaxsInputVmaxValue'):
-                    self.ui.gisaxsInputVmaxValue.setValue(float(vmax))
-                
-                self._current_vmin = vmin
-                self._current_vmax = vmax
+                self._updating_color_scale_ui = True
+                try:
+                    if hasattr(self.ui, 'gisaxsInputVminValue'):
+                        self.ui.gisaxsInputVminValue.setValue(float(vmin))
+                    if hasattr(self.ui, 'gisaxsInputVmaxValue'):
+                        self.ui.gisaxsInputVmaxValue.setValue(float(vmax))
+                finally:
+                    self._updating_color_scale_ui = False
+
+                self._current_vmin = float(vmin)
+                self._current_vmax = float(vmax)
                 self._refresh_vmin_vmax_display()
         except Exception:
             pass
@@ -4396,6 +4790,39 @@ class FittingController(QObject):
     def _is_log_mode_enabled(self):
         """检查是否启用Log模式"""
         return self._get_checkbox_state('gisaxsInputIntLogCheckBox', True)
+
+    def _on_color_scale_value_committed(self, *args):
+        """Apply manually edited vmin/vmax values to all image views."""
+        try:
+            if self._updating_color_scale_ui or getattr(self, '_initializing', False):
+                return
+
+            vmin, vmax = self._get_vmin_vmax_from_ui()
+            if vmin is None or vmax is None:
+                return
+
+            vmin = float(vmin)
+            vmax = float(vmax)
+            if not np.isfinite(vmin) or not np.isfinite(vmax):
+                self.status_updated.emit("Invalid color scale values")
+                return
+            if vmax <= vmin:
+                self.status_updated.emit("Invalid color scale: vmax must be greater than vmin")
+                return
+
+            if hasattr(self.ui, 'gisaxsInputAutoScaleCheckBox') and self.ui.gisaxsInputAutoScaleCheckBox.isChecked():
+                self.ui.gisaxsInputAutoScaleCheckBox.blockSignals(True)
+                self.ui.gisaxsInputAutoScaleCheckBox.setChecked(False)
+                self.ui.gisaxsInputAutoScaleCheckBox.blockSignals(False)
+
+            self._current_vmin = vmin
+            self._current_vmax = vmax
+            self._refresh_vmin_vmax_display()
+            if self.current_stack_data is not None:
+                self._refresh_image_display()
+            self.status_updated.emit(f"Color scale updated: Vmin={vmin:.3f}, Vmax={vmax:.3f}")
+        except Exception as e:
+            self.status_updated.emit(f"Color scale update error: {str(e)}")
     
     def _on_auto_scale_changed(self):
         """AutoScale复选框状态改变时的处理"""
@@ -5378,6 +5805,7 @@ class FittingController(QObject):
                 self.current_parameters['imported_gisaxs_file'] = last_file
                 if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
                     self.ui.gisaxsInputImportButtonValue.setText(os.path.basename(last_file))
+                self._scan_folder_images_for_file(last_file)
                 self.status_updated.emit(f"Restored last file: {os.path.basename(last_file)}")
             
             # 恢复加载模式
