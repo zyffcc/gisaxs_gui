@@ -8567,10 +8567,10 @@ class FittingController(QObject):
                 self.ui.FittingAutoKButton.setStyleSheet(
                     "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }"
                 )
-                self.ui.FittingAutoKButton.setText("<-Auto-K: ON")
+                self.ui.FittingAutoKButton.setText("Auto-K: ON")
             else:
                 self.ui.FittingAutoKButton.setStyleSheet("")
-                self.ui.FittingAutoKButton.setText("<-Auto-K: OFF")
+                self.ui.FittingAutoKButton.setText("Auto-K: OFF")
     
     def _on_auto_k_button_clicked(self):
         """处理auto-K按钮点击事件"""

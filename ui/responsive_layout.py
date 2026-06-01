@@ -114,8 +114,6 @@ def apply_density_profile(root: QWidget, profile: ResponsiveProfile) -> None:
     button_min = scale_value(32, profile, 28)
     button_max = scale_value(36, profile, 30)
     input_min = scale_value(28, profile, 24)
-    input_max = scale_value(32, profile, 28)
-    checkbox_max = scale_value(34, profile, 28)
     compact_width = scale_value(SMALL_BUTTON_WIDTH, profile, 30)
 
     for button in root.findChildren(QAbstractButton):
@@ -125,23 +123,23 @@ def apply_density_profile(root: QWidget, profile: ResponsiveProfile) -> None:
             button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         else:
             button.setMinimumHeight(button_min)
-            button.setMaximumHeight(button_max)
+            button.setMaximumHeight(16777215)
             button.setSizePolicy(button.sizePolicy().horizontalPolicy(), QSizePolicy.Fixed)
 
     for widget in root.findChildren(INPUT_WIDGET_TYPES):
         widget.setMinimumHeight(input_min)
-        widget.setMaximumHeight(input_max)
+        widget.setMaximumHeight(16777215)
         widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     for checkbox in root.findChildren(QCheckBox):
         checkbox.setMinimumHeight(input_min)
-        checkbox.setMaximumHeight(checkbox_max)
+        checkbox.setMaximumHeight(16777215)
         checkbox.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
     for name, base_min, min_floor, base_max in (
         ("GisaxsInputCard", 260, 210, None),
         ("CutLineCard", 230, 185, None),
-        ("FittingControlsCard", 330, 270, None),
+        ("FittingControlsCard", 760, 660, None),
         ("ModelParameterCard", 260, 210, None),
         ("DetectorPreviewCard", 260, 210, None),
         ("plotCanvasContainer", 260, 200, None),

@@ -1,33 +1,33 @@
 {
   "enable_adaptive_scaling": true,
-  "window_width": 1500,
-  "window_height": 900,
+  "window_width": 2252,
+  "window_height": 1353,
   "font_adjustment": -3,
+  "visual_font_scale": 90,
   "_auto_k_enabled": false,
   "fit.points_num": 300,
   "fit.interp_method": "Spline",
-  "main_splitter_sizes": [
-    208,
-    1260
-  ],
-  "gisaxs_fitting_splitter_sizes": {
-    "page": [
-      726,
-      500
-    ],
-    "work": [
-      885,
-      840
-    ],
-    "preview": [
-      380,
-      980,
-      200
-    ],
-    "profile": "wide"
-  },
   "responsive_layout_mode": "auto",
   "responsive_resize_on_start": false,
   "responsive_font_enabled": false,
-  "visual_font_scale": 80
+  "main_splitter_sizes": [
+    210,
+    2010
+  ],
+  "gisaxs_fitting_splitter_sizes": {
+    "page": [
+      1195,
+      781
+    ],
+    "work": [
+      1337,
+      840
+    ],
+    "preview": [
+      481,
+      953,
+      126
+    ],
+    "profile": "wide"
+  }
 }

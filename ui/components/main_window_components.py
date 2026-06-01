@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
-from PyQt5.QtCore import QTimer, Qt, QUrl
+from PyQt5.QtCore import QEvent, QTimer, Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QAbstractButton,
@@ -19,8 +19,10 @@ from PyQt5.QtWidgets import (
     QFrame,
     QGraphicsView,
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -189,12 +191,19 @@ class CutLineCard(CardFrame):
 class FittingControlsCard(CardFrame):
     def __init__(self, ui, profile=None):
         super().__init__("Fitting Controls", "FittingControlsCard")
-        profile = profile or current_profile(ui.centralwidget)
-        method_height = scale_value(120, profile, 98)
-        res_height = scale_value(48, profile, 40)
-        self.setMinimumHeight(scale_value(330, profile, 270))
+        self.ui = ui
+        self.profile = profile or current_profile(ui.centralwidget)
+        group_spacing = scale_value(14, self.profile, 10)
+        group_margin = scale_value(14, self.profile, 10)
+        group_top = scale_value(24, self.profile, 20)
+        self.setMinimumHeight(scale_value(760, self.profile, 660))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        widgets = [
+        self._managed_group_layouts = []
+        self._managed_buttons = []
+        self._managed_inputs = []
+        self._managed_spinboxes = []
+        self._managed_labels = []
+        containers = [
             ui.fitCurrentDataCheckBox,
             ui.widget,
             ui.fitImport1dFileButton,
@@ -203,41 +212,291 @@ class FittingControlsCard(CardFrame):
             ui.fitMethodWidget_2,
             ui.widget_8,
         ]
-        for widget in widgets:
-            _take_widget(ui.gridLayout_24, widget)
+        for widget in containers:
+            _detach_from_parent_layout(widget)
             widget.setMaximumWidth(16777215)
             set_expanding_x(widget)
-        ui.fitMethodWidget.setMinimumHeight(method_height)
-        ui.fitMethodWidget.setMaximumHeight(method_height)
-        ui.fitMethodWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        ui.fitMethodWidget_2.setMinimumHeight(method_height)
-        ui.fitMethodWidget_2.setMaximumHeight(method_height)
-        ui.fitMethodWidget_2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        ui.widget_8.setMinimumHeight(res_height)
-        ui.widget_8.setMaximumHeight(res_height)
-        ui.widget_8.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(CARD_SPACING)
-        grid.setVerticalSpacing(FORM_ROW_SPACING)
-        self.body_layout.addLayout(grid)
-        grid.addWidget(ui.fitCurrentDataCheckBox, 0, 0)
-        grid.addWidget(ui.widget, 0, 1, 1, 2)
-        grid.addWidget(ui.fitImport1dFileButton, 1, 0)
-        grid.addWidget(ui.fitImport1dFileValue, 1, 1, 1, 2)
-        grid.addWidget(ui.fitMethodWidget, 2, 0, 1, 2)
-        grid.addWidget(ui.fitMethodWidget_2, 2, 2)
-        grid.addWidget(ui.widget_8, 3, 0, 1, 3)
-        grid.setRowMinimumHeight(2, method_height)
-        grid.setRowMinimumHeight(3, res_height)
-        grid.setRowStretch(0, 0)
-        grid.setRowStretch(1, 0)
-        grid.setRowStretch(2, 0)
-        grid.setRowStretch(3, 0)
-        grid.setColumnStretch(0, 0)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(2, 1)
+        controls = [
+            ui.fitCurrentDataCheckBox,
+            ui.fitLogXCheckBox,
+            ui.fitLogYCheckBox,
+            ui.fitNormCheckBox,
+            ui.fitImport1dFileButton,
+            ui.fitImport1dFileValue,
+            ui.fitMethodLabel,
+            ui.fitMethodValue,
+            ui.FittingAutoFittingButton,
+            ui.fitKLabel,
+            ui.fitKValue,
+            ui.FittingAutoKButton,
+            ui.fitIntResLabel,
+            ui.fitIntResValue,
+            ui.fitSigmaResLabel,
+            ui.fitSigmaResValue,
+            ui.fitNuResLabel,
+            ui.fitNuResValue,
+            ui.FittingClearFittingButton_2,
+            ui.FittingManualFittingButton,
+            ui.FittingExportButton,
+        ]
+        for widget in controls:
+            _detach_from_parent_layout(widget)
+            widget.setParent(self)
+            widget.setMaximumWidth(16777215)
+
+        ui.fitIntResLabel.setText("Intensity (Res.)")
+        ui.fitMethodLabel.setText("Method:")
+        ui.fitKLabel.setText("k:")
+        ui.FittingAutoKButton.setText("Auto-K: OFF")
+        ui.fitMethodValue.setToolTip("Method selection is not implemented yet.")
+        self._method_notice_combo = ui.fitMethodValue
+        self._method_notice_queued = False
+        ui.fitMethodValue.installEventFilter(self)
+        ui.fitMethodValue.currentIndexChanged.connect(lambda _index: self._queue_method_notice())
+
+        self.fitExportPlotButton = QPushButton("Export Plot", self)
+        self.fitExportPlotButton.setObjectName("fitExportPlotButton")
+        self.fitExportPlotButton.clicked.connect(ui.FittingExportButton.click)
+
+        for button in (
+            ui.FittingClearFittingButton_2,
+            ui.FittingManualFittingButton,
+            ui.FittingExportButton,
+            ui.FittingAutoFittingButton,
+            ui.FittingAutoKButton,
+            self.fitExportPlotButton,
+        ):
+            self._managed_buttons.append(button)
+
+        for input_widget in (
+            ui.fitImport1dFileValue,
+            ui.fitMethodValue,
+            ui.fitKValue,
+            ui.fitIntResValue,
+            ui.fitSigmaResValue,
+            ui.fitNuResValue,
+        ):
+            self._managed_inputs.append(input_widget)
+
+        self._managed_spinboxes = [ui.fitKValue, ui.fitIntResValue, ui.fitSigmaResValue, ui.fitNuResValue]
+
+        data_options_group = self._make_group("Display Options")
+        data_layout = QHBoxLayout(data_options_group)
+        self._configure_group_layout(data_layout, group_margin, group_top, group_spacing)
+        for checkbox in (
+            ui.fitCurrentDataCheckBox,
+            ui.fitLogXCheckBox,
+            ui.fitLogYCheckBox,
+            ui.fitNormCheckBox,
+        ):
+            data_layout.addWidget(checkbox)
+        data_layout.addStretch(1)
+        data_layout.addWidget(self.fitExportPlotButton)
+
+        external_group = self._make_group("External 1D Data")
+        external_layout = QHBoxLayout(external_group)
+        self._configure_group_layout(external_layout, group_margin, group_top, group_spacing)
+        external_layout.addWidget(ui.fitImport1dFileButton, 0)
+        external_layout.addWidget(ui.fitImport1dFileValue, 1)
+
+        method_group = self._make_group("Auto Fitting / Method")
+        method_layout = QGridLayout(method_group)
+        self._configure_group_layout(method_layout, group_margin, group_top, group_spacing)
+        method_layout.addWidget(ui.fitMethodLabel, 0, 0, Qt.AlignRight | Qt.AlignVCenter)
+        method_layout.addWidget(ui.fitMethodValue, 0, 1)
+        method_layout.addWidget(ui.FittingAutoFittingButton, 0, 2)
+        self.methodInfoLabel = QLabel("Method selection is not implemented yet.", method_group)
+        self.methodInfoLabel.setObjectName("fitMethodInfoLabel")
+        self.methodInfoLabel.setStyleSheet("color: #2563eb;")
+        method_layout.addWidget(self.methodInfoLabel, 1, 1, 1, 2)
+        method_layout.setColumnStretch(1, 1)
+
+        k_group = self._make_group("Scaling Factor k")
+        k_layout = QGridLayout(k_group)
+        self._configure_group_layout(k_layout, group_margin, group_top, group_spacing)
+        self._managed_labels.append(ui.fitKLabel)
+        k_layout.addWidget(ui.fitKLabel, 0, 0, Qt.AlignRight | Qt.AlignVCenter)
+        k_layout.addWidget(ui.fitKValue, 0, 1)
+        k_layout.addWidget(ui.FittingAutoKButton, 1, 1)
+        self.kInfoLabel = QLabel(
+            "Scaling factor k amplifies the calculated fitting intensity.\n"
+            "Simple model: I_fit(q) = k x I_model(q).",
+            k_group,
+        )
+        self.kInfoLabel.setObjectName("fitKInfoLabel")
+        self.kInfoLabel.setWordWrap(True)
+        self.kInfoLabel.setToolTip(
+            "Scaling factor k\n"
+            "I_fit(q) = k * I_model(q)\n"
+            "Auto-K minimizes: sum_i [k * I_base(q_i) - I_exp(q_i)]^2\n"
+            "Analytical estimate: k = dot(I_base, I_exp) / dot(I_base, I_base)"
+        )
+        ui.fitKLabel.setToolTip(self.kInfoLabel.toolTip())
+        ui.fitKValue.setToolTip(self.kInfoLabel.toolTip())
+        ui.FittingAutoKButton.setToolTip(self.kInfoLabel.toolTip())
+        k_layout.addWidget(self.kInfoLabel, 2, 0, 1, 2)
+        k_layout.setColumnStretch(1, 1)
+        k_group.setMinimumHeight(scale_value(220, self.profile, 190))
+
+        resolution_group = self._make_group("Resolution Function")
+        resolution_layout = QGridLayout(resolution_group)
+        self._configure_group_layout(resolution_layout, group_margin, group_top, group_spacing)
+        for row, (label, value) in enumerate(
+            (
+                (ui.fitIntResLabel, ui.fitIntResValue),
+                (ui.fitSigmaResLabel, ui.fitSigmaResValue),
+                (ui.fitNuResLabel, ui.fitNuResValue),
+            )
+        ):
+            self._managed_labels.append(label)
+            label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            resolution_layout.addWidget(label, row, 0)
+            resolution_layout.addWidget(value, row, 1)
+        self.resolutionInfoLabel = QLabel(
+            "Adjust the instrumental resolution used during fitting.\n"
+            "These parameters control peak broadening and smoothing effects.",
+            resolution_group,
+        )
+        self.resolutionInfoLabel.setObjectName("fitResolutionInfoLabel")
+        self.resolutionInfoLabel.setWordWrap(True)
+        self.resolutionInfoLabel.setToolTip(
+            "Resolution component (conceptual):\n"
+            "R(q) = I_res / [1 + (q / sigma_res)^2]^nu\n"
+            "The fitting model receives sigma_res, nu_res, int_res, and k as global parameters."
+        )
+        for widget in (
+            ui.fitIntResLabel,
+            ui.fitIntResValue,
+            ui.fitSigmaResLabel,
+            ui.fitSigmaResValue,
+            ui.fitNuResLabel,
+            ui.fitNuResValue,
+        ):
+            widget.setToolTip(self.resolutionInfoLabel.toolTip())
+        resolution_layout.addWidget(self.resolutionInfoLabel, 3, 0, 1, 2)
+        resolution_layout.setColumnStretch(1, 1)
+        resolution_group.setMinimumHeight(scale_value(220, self.profile, 195))
+
+        actions_group = self._make_group("Fitting Actions")
+        actions_layout = QHBoxLayout(actions_group)
+        self._configure_group_layout(actions_layout, group_margin, group_top, group_spacing)
+        actions_layout.addWidget(ui.FittingClearFittingButton_2)
+        actions_layout.addWidget(ui.FittingManualFittingButton)
+        actions_layout.addWidget(ui.FittingExportButton)
+
+        parameter_row = QWidget(self)
+        parameter_row.setObjectName("fitParameterCardsRow")
+        parameter_layout = QHBoxLayout(parameter_row)
+        parameter_layout.setContentsMargins(0, 0, 0, 0)
+        parameter_layout.setSpacing(group_spacing)
+        parameter_layout.addWidget(k_group, 1)
+        parameter_layout.addWidget(resolution_group, 1)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(group_spacing)
+        self._main_controls_layout = layout
+        self.body_layout.addLayout(layout)
+        layout.addWidget(data_options_group)
+        layout.addWidget(external_group)
+        layout.addWidget(method_group)
+        layout.addWidget(parameter_row)
+        layout.addWidget(actions_group)
+        self.apply_responsive_profile(self.profile)
+
+    def _make_group(self, title: str) -> QGroupBox:
+        group = QGroupBox(title, self)
+        group.setObjectName(title.replace(" ", "").replace("/", "") + "Group")
+        group.setStyleSheet(
+            "QGroupBox {"
+            "border: 1px solid #d7dee8;"
+            "border-radius: 7px;"
+            "margin-top: 10px;"
+            "padding-top: 12px;"
+            "background: #ffffff;"
+            "}"
+            "QGroupBox::title {"
+            "subcontrol-origin: margin;"
+            "left: 8px;"
+            "padding: 0 4px;"
+            "}"
+        )
+        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        return group
+
+    def _configure_group_layout(self, layout, margin: int, top: int, spacing: int) -> None:
+        layout.setContentsMargins(margin, top, margin, margin)
+        if hasattr(layout, "setHorizontalSpacing"):
+            layout.setHorizontalSpacing(spacing)
+            layout.setVerticalSpacing(max(FORM_ROW_SPACING, spacing - 4))
+        else:
+            layout.setSpacing(spacing)
+        self._managed_group_layouts.append(layout)
+
+    def apply_responsive_profile(self, profile) -> None:
+        self.profile = profile
+        group_spacing = scale_value(14, profile, 10)
+        group_margin = scale_value(14, profile, 10)
+        group_top = scale_value(24, profile, 20)
+        self.setMinimumHeight(scale_value(760, profile, 660))
+        self.setMaximumHeight(16777215)
+
+        if hasattr(self, "_main_controls_layout"):
+            self._main_controls_layout.setSpacing(group_spacing)
+        for layout in self._managed_group_layouts:
+            layout.setContentsMargins(group_margin, group_top, group_margin, group_margin)
+            if hasattr(layout, "setHorizontalSpacing"):
+                layout.setHorizontalSpacing(group_spacing)
+                layout.setVerticalSpacing(max(FORM_ROW_SPACING, group_spacing - 4))
+            else:
+                layout.setSpacing(group_spacing)
+
+        button_width = scale_value(128, profile, 110)
+        input_height = BUTTON_HEIGHT + scale_value(4, profile, 4)
+        spinbox_width = scale_value(160, profile, 132)
+        label_width = scale_value(132, profile, 108)
+
+        for button in self._managed_buttons:
+            button.setMinimumHeight(input_height)
+            button.setMinimumWidth(button_width)
+            button.setMaximumHeight(16777215)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        for input_widget in self._managed_inputs:
+            input_widget.setMinimumHeight(input_height)
+            input_widget.setMaximumHeight(16777215)
+            input_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        for spinbox in self._managed_spinboxes:
+            spinbox.setMinimumWidth(spinbox_width)
+        for label in self._managed_labels:
+            label.setMinimumWidth(label_width)
+
+        k_group = self.findChild(QGroupBox, "ScalingFactorkGroup")
+        resolution_group = self.findChild(QGroupBox, "ResolutionFunctionGroup")
+        if k_group is not None:
+            k_group.setMinimumHeight(scale_value(220, profile, 190))
+        if resolution_group is not None:
+            resolution_group.setMinimumHeight(scale_value(240, profile, 210))
+        self.updateGeometry()
+
+    def _show_method_not_implemented(self) -> None:
+        self._method_notice_queued = False
+        QMessageBox.information(
+            self,
+            "Method",
+            "Method selection is not implemented yet.",
+        )
+
+    def _queue_method_notice(self) -> None:
+        if self._method_notice_queued:
+            return
+        self._method_notice_queued = True
+        QTimer.singleShot(0, self._show_method_not_implemented)
+
+    def eventFilter(self, obj, event):
+        if obj is getattr(self, "_method_notice_combo", None) and event.type() == QEvent.MouseButtonPress:
+            self._queue_method_notice()
+        return super().eventFilter(obj, event)
 
 
 class ModelParameterCard(CardFrame):
@@ -672,11 +931,11 @@ class GisaxsFittingWorkspace:
             "FittingAutoFittingButton",
             "FittingClearFittingButton_2",
             "FittingAutoKButton",
+            "FittingExportButton",
         ]
         preferred_actions = [
             "gisaxsInputCutButton",
             "gisaxsInputShowButton",
-            "FittingExportButton",
         ]
 
         for name in expanding_actions:
@@ -777,6 +1036,9 @@ class GisaxsFittingWorkspace:
         self.DEFAULT_WORK_SIZES = list(profile.work_sizes)
         self.DEFAULT_PREVIEW_SIZES = list(profile.preview_sizes)
         self._configure_button_responsiveness()
+        fitting_card = self.fixed_controls_stack.findChild(FittingControlsCard, "FittingControlsCard")
+        if fitting_card is not None:
+            fitting_card.apply_responsive_profile(profile)
         self.preview_splitter.setMinimumWidth(profile.preview_min)
         self.preview_scroll_area.setMinimumWidth(profile.preview_min)
         self.work_splitter.setMinimumWidth(profile.workspace_min)
