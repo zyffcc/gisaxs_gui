@@ -1,0 +1,13 @@
+{
+  "enable_adaptive_scaling": true,
+  "window_width": 1400,
+  "window_height": 900,
+  "font_adjustment": 0,
+  "visual_font_scale": 100,
+  "_auto_k_enabled": false,
+  "fit.points_num": 50,
+  "fit.interp_method": "Linear",
+  "responsive_layout_mode": "auto",
+  "responsive_resize_on_start": true,
+  "responsive_font_enabled": false
+}

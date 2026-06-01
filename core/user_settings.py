@@ -5,6 +5,7 @@
 
 import json
 import os
+import shutil
 import sys
 # 添加父目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,26 +17,82 @@ class UserSettings:
     
     def __init__(self, settings_file="config/user_settings.json"):
         self.settings_file = settings_file
+        self.default_settings_file = os.path.join("config", "default_user_settings.json")
         self.config = WindowConfig()
+        self._ensure_default_settings_file()
+        self._ensure_settings_file()
         self._settings = self.load_settings()
-    
-    def load_settings(self):
-        """从文件加载设置"""
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError):
-                pass
-        
-        # 返回默认设置
+
+    def _build_default_settings(self):
+        """构建默认设置。"""
         return {
             "enable_adaptive_scaling": self.config.ENABLE_ADAPTIVE_SCALING,
             "window_width": self.config.DEFAULT_WIDTH,
             "window_height": self.config.DEFAULT_HEIGHT,
             "font_adjustment": 0,
-            "visual_font_scale": 100
+            "visual_font_scale": 100,
+            "_auto_k_enabled": False,
+            "fit.points_num": 50,
+            "fit.interp_method": "Linear",
+            "responsive_layout_mode": "auto",
+            "responsive_resize_on_start": True,
+            "responsive_font_enabled": False
         }
+
+    def _load_default_settings(self):
+        """从默认模板加载设置，并补齐代码内默认键。"""
+        default_settings = self._build_default_settings()
+
+        if not os.path.exists(self.default_settings_file):
+            return default_settings
+
+        try:
+            with open(self.default_settings_file, 'r', encoding='utf-8') as f:
+                template_settings = json.load(f)
+            return {**default_settings, **template_settings}
+        except (json.JSONDecodeError, IOError):
+            return default_settings
+
+    def _ensure_default_settings_file(self):
+        """确保默认设置模板存在。"""
+        if os.path.exists(self.default_settings_file):
+            return
+
+        try:
+            with open(self.default_settings_file, 'w', encoding='utf-8') as f:
+                json.dump(self._build_default_settings(), f, indent=2, ensure_ascii=False)
+        except IOError:
+            pass
+
+    def _ensure_settings_file(self):
+        """首次运行时从默认设置模板复制用户设置。"""
+        if os.path.exists(self.settings_file):
+            return
+
+        try:
+            shutil.copy(self.default_settings_file, self.settings_file)
+        except IOError:
+            pass
+    
+    def load_settings(self):
+        """从文件加载设置"""
+        default_settings = self._load_default_settings()
+
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r', encoding='utf-8') as f:
+                    loaded_settings = json.load(f)
+
+                merged_settings = {**default_settings, **loaded_settings}
+                if merged_settings != loaded_settings:
+                    self._settings = merged_settings
+                    self.save_settings()
+
+                return merged_settings
+            except (json.JSONDecodeError, IOError):
+                pass
+        
+        return default_settings
     
     def save_settings(self):
         """保存设置到文件"""

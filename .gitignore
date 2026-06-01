@@ -137,9 +137,9 @@ $RECYCLE.BIN/
 config/*.bak
 config/*~
 
-# 用户会话文件（可选，如果包含敏感信息）
-# config/user_parameters.json
-# config/user_settings.json
+# 用户本地配置
+config/user_parameters.json
+config/user_settings.json
 
 # 测试输出
 test_output/

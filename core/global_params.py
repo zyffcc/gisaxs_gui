@@ -5,6 +5,7 @@
 
 import json
 import os
+import shutil
 from typing import Dict, Any, Optional
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QSlider
@@ -180,6 +181,9 @@ class GlobalParameterManager(QObject):
         
         # 保存默认参数到文件（首次运行时）
         self._save_default_parameters()
+
+        # 首次运行时从默认配置生成用户配置
+        self._ensure_user_parameters_file()
         
         # 加载用户上次使用的参数
         self._load_user_parameters()
@@ -539,6 +543,22 @@ class GlobalParameterManager(QObject):
                 print(f"✓ Default parameters have been saved to: {self.default_params_file}")
         except Exception as e:
             print(f"Failed to save default parameters: {e}")
+
+    def _ensure_user_parameters_file(self):
+        """首次运行时从默认参数文件生成用户参数文件。"""
+        try:
+            if os.path.exists(self.user_params_file):
+                return
+
+            if os.path.exists(self.default_params_file):
+                shutil.copy(self.default_params_file, self.user_params_file)
+            else:
+                with open(self.user_params_file, 'w', encoding='utf-8') as f:
+                    json.dump(self._parameters, f, indent=4, ensure_ascii=False)
+
+            print(f"✓ User parameters initialized from: {self.default_params_file}")
+        except Exception as e:
+            print(f"Failed to initialize user parameters: {e}")
     
     def _load_user_parameters(self):
         """加载用户上次使用的参数"""
