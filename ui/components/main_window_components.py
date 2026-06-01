@@ -320,17 +320,24 @@ class FittingControlsCard(CardFrame):
         k_layout.addWidget(ui.fitKValue, 0, 1)
         k_layout.addWidget(ui.FittingAutoKButton, 1, 1)
         self.kInfoLabel = QLabel(
-            "Scaling factor k amplifies the calculated fitting intensity.\n"
-            "Simple model: I_fit(q) = k x I_model(q).",
+            "Scaling factor <b>k</b> amplifies the calculated fitting intensity.<br>"
+            "Simple model: <i>I</i><sub>fit</sub>(q) = "
+            "k &middot; <i>I</i><sub>model</sub>(q).",
             k_group,
         )
         self.kInfoLabel.setObjectName("fitKInfoLabel")
+        self.kInfoLabel.setTextFormat(Qt.RichText)
         self.kInfoLabel.setWordWrap(True)
+        self._style_info_label(self.kInfoLabel)
         self.kInfoLabel.setToolTip(
-            "Scaling factor k\n"
-            "I_fit(q) = k * I_model(q)\n"
-            "Auto-K minimizes: sum_i [k * I_base(q_i) - I_exp(q_i)]^2\n"
-            "Analytical estimate: k = dot(I_base, I_exp) / dot(I_base, I_base)"
+            "<b>Scaling factor k</b><br>"
+            "<i>I</i><sub>fit</sub>(q) = k &middot; <i>I</i><sub>model</sub>(q)<br>"
+            "Auto-K minimizes:<br>"
+            "&Sigma;<sub>i</sub>[k &middot; <i>I</i><sub>base</sub>(q<sub>i</sub>) "
+            "- <i>I</i><sub>exp</sub>(q<sub>i</sub>)]<sup>2</sup><br>"
+            "Estimate:<br>"
+            "k = (&lt;<i>I</i><sub>base</sub>, <i>I</i><sub>exp</sub>&gt;) / "
+            "(&lt;<i>I</i><sub>base</sub>, <i>I</i><sub>base</sub>&gt;)"
         )
         ui.fitKLabel.setToolTip(self.kInfoLabel.toolTip())
         ui.fitKValue.setToolTip(self.kInfoLabel.toolTip())
@@ -354,16 +361,21 @@ class FittingControlsCard(CardFrame):
             resolution_layout.addWidget(label, row, 0)
             resolution_layout.addWidget(value, row, 1)
         self.resolutionInfoLabel = QLabel(
-            "Adjust the instrumental resolution used during fitting.\n"
+            "Adjust the instrumental resolution used during fitting.<br>"
             "These parameters control peak broadening and smoothing effects.",
             resolution_group,
         )
         self.resolutionInfoLabel.setObjectName("fitResolutionInfoLabel")
+        self.resolutionInfoLabel.setTextFormat(Qt.RichText)
         self.resolutionInfoLabel.setWordWrap(True)
+        self._style_info_label(self.resolutionInfoLabel)
         self.resolutionInfoLabel.setToolTip(
-            "Resolution component (conceptual):\n"
-            "R(q) = I_res / [1 + (q / sigma_res)^2]^nu\n"
-            "The fitting model receives sigma_res, nu_res, int_res, and k as global parameters."
+            "<b>Resolution component</b><br>"
+            "R(q) = <i>I</i><sub>res</sub> / "
+            "[1 + (q / &sigma;<sub>res</sub>)<sup>2</sup>]<sup>&nu;</sup><br>"
+            "The fitting model receives "
+            "&sigma;<sub>res</sub>, &nu;<sub>res</sub>, "
+            "<i>I</i><sub>res</sub>, and k as global parameters."
         )
         for widget in (
             ui.fitIntResLabel,
@@ -424,6 +436,19 @@ class FittingControlsCard(CardFrame):
         )
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return group
+
+    def _style_info_label(self, label: QLabel) -> None:
+        label.setStyleSheet(
+            "QLabel {"
+            "background: #eff6ff;"
+            "border: 1px solid #bfdbfe;"
+            "border-radius: 6px;"
+            "color: #1d4ed8;"
+            "padding: 6px 8px;"
+            "line-height: 135%;"
+            "}"
+        )
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def _configure_group_layout(self, layout, margin: int, top: int, spacing: int) -> None:
         layout.setContentsMargins(margin, top, margin, margin)

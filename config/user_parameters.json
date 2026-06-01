@@ -86,7 +86,7 @@
             "insitu_range": "",
             "center_vertical": 0.0,
             "center_parallel": 0.0,
-            "cutline_vertical": 9.0,
+            "cutline_vertical": 10.0,
             "cutline_parallel": 10.0,
             "auto_show": false,
             "log_mode": true,
