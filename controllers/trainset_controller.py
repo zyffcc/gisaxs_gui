@@ -1,4 +1,4 @@
-"""
+﻿"""
 训练集生成控制器 - 管理GISAXS训练集的生成过程，包含所有相关的子模块参数
 """
 
@@ -879,6 +879,30 @@ class TrainsetController(QObject):
             except:
                 pass
             
+    def _load_preset_parameters(self, preset_name):
+        """Load detector preset parameters into state, UI, and global settings."""
+        try:
+            if preset_name not in self.detector_presets:
+                print(f"Unknown detector preset: {preset_name}")
+                return
+
+            preset_config = self.detector_presets[preset_name]
+            self.detector_params.update(preset_config)
+            self.detector_params['preset'] = preset_name
+
+            self._update_detector_ui()
+
+            self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
+            for key, value in preset_config.items():
+                if key != 'description':
+                    self.global_params.set_parameter('trainset.detector', key, value)
+
+            self._emit_parameters_changed()
+            print(f"Loaded detector preset: {preset_name}")
+
+        except Exception as e:
+            print(f"Failed to load detector preset parameters: {e}")
+
     def _on_detector_preset_changed(self, preset_name):
         """探测器预设改变处理"""
         try:
@@ -1148,16 +1172,28 @@ class TrainsetController(QObject):
             # 断开关键参数的信号连接
             critical_widgets = []
             if hasattr(self.ui, 'NbinsXValue'):
-                self.ui.NbinsXValue.textChanged.disconnect()
+                try:
+                    self.ui.NbinsXValue.textChanged.disconnect(self._on_detector_critical_params_changed)
+                except TypeError:
+                    pass
                 critical_widgets.append(('NbinsXValue', self._on_detector_critical_params_changed))
             if hasattr(self.ui, 'NbinsYValue'):
-                self.ui.NbinsYValue.textChanged.disconnect()
+                try:
+                    self.ui.NbinsYValue.textChanged.disconnect(self._on_detector_critical_params_changed)
+                except TypeError:
+                    pass
                 critical_widgets.append(('NbinsYValue', self._on_detector_critical_params_changed))
             if hasattr(self.ui, 'pixelSizeXValue'):
-                self.ui.pixelSizeXValue.textChanged.disconnect()
+                try:
+                    self.ui.pixelSizeXValue.textChanged.disconnect(self._on_detector_critical_params_changed)
+                except TypeError:
+                    pass
                 critical_widgets.append(('pixelSizeXValue', self._on_detector_critical_params_changed))
             if hasattr(self.ui, 'pixelSizeYValue'):
-                self.ui.pixelSizeYValue.textChanged.disconnect()
+                try:
+                    self.ui.pixelSizeYValue.textChanged.disconnect(self._on_detector_critical_params_changed)
+                except TypeError:
+                    pass
                 critical_widgets.append(('pixelSizeYValue', self._on_detector_critical_params_changed))
             
             # 更新UI控件值

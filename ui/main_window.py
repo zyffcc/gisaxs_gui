@@ -2714,15 +2714,8 @@ class Ui_MainWindow(object):
         self.horizontalLayout_18 = QtWidgets.QHBoxLayout(self.scrollAreaWidgetContents)
         self.horizontalLayout_18.setObjectName("horizontalLayout_18")
         self.fitParticleWidget_1 = QtWidgets.QWidget(self.scrollAreaWidgetContents)
-        self.fitParticleWidget_1.setMinimumSize(QtCore.QSize(180, 300))
-        self.fitParticleWidget_1.setStyleSheet("#fitParticleWidget_1 {\n"
-"  border: 1px solid rgba(0,0,0,0.12);  /* 细外框 */\n"
-"  border-radius: 12px;                 /* 圆角大小可改 */\n"
-"  padding: 8px;                        /* 让内容不贴边 */\n"
-"  /* 伪“阴影”：用浅色外描边模拟（Qt 没有 box-shadow） */\n"
-"  outline: 6px solid rgba(0,0,0,0.03);\n"
-"  outline-offset: -6px;                /* 紧贴边缘 */\n"
-"}")
+        self.fitParticleWidget_1.setMinimumSize(QtCore.QSize(420, 0))
+        self.fitParticleWidget_1.setStyleSheet("")
         self.fitParticleWidget_1.setObjectName("fitParticleWidget_1")
         self.verticalLayout_20 = QtWidgets.QVBoxLayout(self.fitParticleWidget_1)
         self.verticalLayout_20.setObjectName("verticalLayout_20")
@@ -2848,15 +2841,8 @@ class Ui_MainWindow(object):
         self.verticalLayout_20.addWidget(self.fitParticleStackWidget_1)
         self.horizontalLayout_18.addWidget(self.fitParticleWidget_1)
         self.fitParticleWidget_2 = QtWidgets.QWidget(self.scrollAreaWidgetContents)
-        self.fitParticleWidget_2.setMinimumSize(QtCore.QSize(180, 300))
-        self.fitParticleWidget_2.setStyleSheet("#fitParticleWidget_2 {\n"
-"  border: 1px solid rgba(0,0,0,0.12);  /* 细外框 */\n"
-"  border-radius: 12px;                 /* 圆角大小可改 */\n"
-"  padding: 8px;                        /* 让内容不贴边 */\n"
-"  /* 伪“阴影”：用浅色外描边模拟（Qt 没有 box-shadow） */\n"
-"  outline: 6px solid rgba(0,0,0,0.03);\n"
-"  outline-offset: -6px;                /* 紧贴边缘 */\n"
-"}")
+        self.fitParticleWidget_2.setMinimumSize(QtCore.QSize(420, 0))
+        self.fitParticleWidget_2.setStyleSheet("")
         self.fitParticleWidget_2.setObjectName("fitParticleWidget_2")
         self.verticalLayout_21 = QtWidgets.QVBoxLayout(self.fitParticleWidget_2)
         self.verticalLayout_21.setObjectName("verticalLayout_21")
@@ -2995,15 +2981,8 @@ class Ui_MainWindow(object):
         self.verticalLayout_21.addWidget(self.fitParticleStackWidget_2)
         self.horizontalLayout_18.addWidget(self.fitParticleWidget_2)
         self.fitParticleWidget_3 = QtWidgets.QWidget(self.scrollAreaWidgetContents)
-        self.fitParticleWidget_3.setMinimumSize(QtCore.QSize(180, 300))
-        self.fitParticleWidget_3.setStyleSheet("#fitParticleWidget_3 {\n"
-"  border: 1px solid rgba(0,0,0,0.12);  /* 细外框 */\n"
-"  border-radius: 12px;                 /* 圆角大小可改 */\n"
-"  padding: 8px;                        /* 让内容不贴边 */\n"
-"  /* 伪“阴影”：用浅色外描边模拟（Qt 没有 box-shadow） */\n"
-"  outline: 6px solid rgba(0,0,0,0.03);\n"
-"  outline-offset: -6px;                /* 紧贴边缘 */\n"
-"}")
+        self.fitParticleWidget_3.setMinimumSize(QtCore.QSize(420, 0))
+        self.fitParticleWidget_3.setStyleSheet("")
         self.fitParticleWidget_3.setObjectName("fitParticleWidget_3")
         self.verticalLayout_22 = QtWidgets.QVBoxLayout(self.fitParticleWidget_3)
         self.verticalLayout_22.setObjectName("verticalLayout_22")
@@ -3966,7 +3945,7 @@ class Ui_MainWindow(object):
         self.predict2dExportButton.setText(_translate("MainWindow", "Export"))
         self.predict2dLabelCombox.setItemText(0, _translate("MainWindow", "Jet"))
         self.gisaxsPredictImageShowTabWidget.setTabText(self.gisaxsPredictImageShowTabWidget.indexOf(self.predict2dImageTab), _translate("MainWindow", "Predict-2D"))
-        self.gisaxsInputBox.setTitle(_translate("MainWindow", "GIMaP Input"))
+        self.gisaxsInputBox.setTitle(_translate("MainWindow", "GISAXS Image Input"))
         self.gisaxsInputCutLineLabel.setText(_translate("MainWindow", "Cut line:"))
         self.gisaxsInputColorScaleLabel.setText(_translate("MainWindow", "Color Scale:"))
         self.gisaxsInputImportButton.setText(_translate("MainWindow", "Import GISAXS"))

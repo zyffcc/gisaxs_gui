@@ -73,7 +73,8 @@ class ModelParametersManager(QObject):
             "fitting": {
                 "global_parameters": {
                     "sigma_res": 0.1,
-                    "k_value": 1.0
+                    "k_value": 1.0,
+                    "background": 0.0
                 },
                 "particles": particles
             },
@@ -98,8 +99,7 @@ class ModelParametersManager(QObject):
                 "radius": 10.0,
                 "sigma_radius": 0.1,
                 "diameter": 20.0,
-                "sigma_diameter": 0.1,
-                "background": 0.0
+                "sigma_diameter": 0.1
             },
             "cylinder": {
                 "intensity": 1.0,
@@ -108,8 +108,14 @@ class ModelParametersManager(QObject):
                 "height": 20.0,
                 "sigma_height": 0.1,
                 "diameter": 20.0,
-                "sigma_diameter": 0.1,
-                "background": 0.0
+                "sigma_diameter": 0.1
+            },
+            "vertical_cylinder": {
+                "intensity": 1.0,
+                "radius": 10.0,
+                "sigma_radius": 0.3,
+                "diameter": 20.0,
+                "sigma_diameter": 0.1
             }
         }
 

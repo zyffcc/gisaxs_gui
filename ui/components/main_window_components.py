@@ -14,7 +14,9 @@ from PyQt5.QtCore import QEvent, QTimer, Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QAbstractButton,
+    QBoxLayout,
     QCheckBox,
+    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QGraphicsView,
@@ -140,58 +142,415 @@ class CardFrame(QFrame):
         self.body_layout.addWidget(widget, stretch)
 
 
+class NoWheelDoubleSpinBox(QDoubleSpinBox):
+    def wheelEvent(self, e) -> None:
+        if e is not None:
+            e.ignore()
+
+
 class GisaxsInputCard(CardFrame):
-    def __init__(self, content: QWidget, profile=None):
-        super().__init__("GIMaP Input", "GisaxsInputCard")
-        profile = profile or current_profile(content)
-        self.setMinimumHeight(scale_value(260, profile, 210))
+    def __init__(self, ui, profile=None):
+        super().__init__("GISAXS Image Input", "GisaxsInputCard")
+        self.ui = ui
+        content = ui.gisaxsInputBox
+        profile = profile or current_profile(ui.centralwidget)
+        self.setMinimumHeight(scale_value(332, profile, 272))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         content.setTitle("")
-        content.setMinimumHeight(scale_value(200, profile, 165))
+        if hasattr(content, "setFlat"):
+            content.setFlat(True)
+        content.setMinimumHeight(scale_value(272, profile, 224))
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._rebuild_layout(content, profile)
         self.add_content(content)
+
+    def _rebuild_layout(self, content: QWidget, profile) -> None:
+        layout = content.layout()
+        if layout is None:
+            layout = QGridLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        if hasattr(layout, "setHorizontalSpacing"):
+            layout.setHorizontalSpacing(CARD_SPACING)
+            layout.setVerticalSpacing(FORM_ROW_SPACING)
+        else:
+            layout.setSpacing(CARD_SPACING)
+
+        self._detach_input_widgets()
+        self._rebuild_stack_widget(profile)
+
+        file_section = self._create_section_widget("File Input", content)
+        file_row = QHBoxLayout()
+        file_row.setContentsMargins(0, 0, 0, 0)
+        file_row.setSpacing(CARD_SPACING)
+        self._configure_file_controls(profile)
+        self.ui.gisaxsInputFileNavigationWidget = QWidget(file_section)
+        self.ui.gisaxsInputFileNavigationWidget.setObjectName("gisaxsInputFileNavigationWidget")
+        self.ui.gisaxsInputFileNavigationLayout = QHBoxLayout(self.ui.gisaxsInputFileNavigationWidget)
+        self.ui.gisaxsInputFileNavigationLayout.setContentsMargins(0, 0, 0, 0)
+        self.ui.gisaxsInputFileNavigationLayout.setSpacing(max(6, CARD_SPACING - 2))
+        self.ui.gisaxsInputFileNavigationWidget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        file_row.addWidget(self.ui.gisaxsInputImportButton, 0)
+        file_row.addWidget(self.ui.gisaxsInputImportButtonValue, 1)
+        file_row.addWidget(self.ui.gisaxsInputFileNavigationWidget, 0, Qt.AlignRight)
+        file_section.layout().addLayout(file_row)
+
+        mode_section = self._create_section_widget("Load Mode", content)
+        mode_grid = QGridLayout()
+        mode_grid.setContentsMargins(0, 0, 0, 0)
+        mode_grid.setHorizontalSpacing(CARD_SPACING)
+        mode_grid.setVerticalSpacing(max(4, FORM_ROW_SPACING - 2))
+        normalize_input(self.ui.gisaxsInputModelCombox)
+        self.ui.gisaxsInputModelCombox.setMinimumWidth(scale_value(110, profile, 92))
+        self.ui.gisaxsInputModelCombox.setMaximumWidth(scale_value(150, profile, 132))
+        self.ui.gisaxsInputModelCombox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        mode_grid.addWidget(self.ui.gisaxsInputModelCombox, 0, 0, Qt.AlignTop)
+        mode_grid.addWidget(self.ui.gisaxsInputStackWidget, 0, 1, Qt.AlignTop)
+        mode_grid.setColumnStretch(0, 0)
+        mode_grid.setColumnStretch(1, 1)
+        mode_section.layout().addLayout(mode_grid)
+
+        show_section = self._create_section_widget("Image Display", content)
+        show_row = QHBoxLayout()
+        show_row.setContentsMargins(0, 0, 0, 0)
+        show_row.setSpacing(CARD_SPACING)
+        self.ui.gisaxsInputAutoShowCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        show_row.addWidget(self.ui.gisaxsInputAutoShowCheckBox, 0)
+        show_row.addStretch(1)
+        show_row.addWidget(self.ui.gisaxsInputShowButton, 0)
+        show_section.layout().addLayout(show_row)
+
+        scale_section = self._create_section_widget("Display Range", content)
+        scale_grid = QGridLayout()
+        scale_grid.setContentsMargins(0, 0, 0, 0)
+        scale_grid.setHorizontalSpacing(CARD_SPACING)
+        scale_grid.setVerticalSpacing(FORM_ROW_SPACING)
+        self.ui.gisaxsInputAutoScaleCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputIntLogCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        normalize_input(self.ui.gisaxsInputVminValue)
+        normalize_input(self.ui.gisaxsInputVmaxValue)
+        self.ui.gisaxsInputVminLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.ui.gisaxsInputVmaxLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        scale_grid.addWidget(self.ui.gisaxsInputAutoScaleCheckBox, 0, 0)
+        scale_grid.addWidget(self.ui.gisaxsInputVminLabel, 0, 1)
+        scale_grid.addWidget(self.ui.gisaxsInputVminValue, 0, 2)
+        scale_grid.addWidget(self.ui.gisaxsInputVmaxLabel, 0, 3)
+        scale_grid.addWidget(self.ui.gisaxsInputVmaxValue, 0, 4)
+        scale_grid.addWidget(self.ui.gisaxsInputIntLogCheckBox, 0, 5)
+        scale_grid.setColumnStretch(6, 1)
+        scale_section.layout().addLayout(scale_grid)
+
+        layout.addWidget(file_section, 0, 0, 1, 4)
+        layout.addWidget(mode_section, 1, 0, 1, 4)
+        layout.addWidget(show_section, 2, 0, 1, 4)
+        layout.addWidget(scale_section, 3, 0, 1, 4)
+        layout.setColumnStretch(0, 0)
+        layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(2, 0)
+        layout.setColumnStretch(3, 0)
+
+    def _detach_input_widgets(self) -> None:
+        widgets = (
+            self.ui.gisaxsInputImportButton,
+            self.ui.gisaxsInputImportButtonValue,
+            self.ui.gisaxsInputModelCombox,
+            self.ui.gisaxsInputStackWidget,
+            self.ui.gisaxsInputColorScaleLabel,
+            self.ui.gisaxsInputAutoScaleCheckBox,
+            self.ui.gisaxsInputIntLogCheckBox,
+            self.ui.gisaxsInputAutoShowCheckBox,
+            self.ui.gisaxsInputShowButton,
+            self.ui.gisaxsInputVminLabel,
+            self.ui.gisaxsInputVminValue,
+            self.ui.gisaxsInputVmaxLabel,
+            self.ui.gisaxsInputVmaxValue,
+        )
+        for widget in widgets:
+            _detach_from_parent_layout(widget)
+        self.ui.gisaxsInputColorScaleLabel.hide()
+
+    def _rebuild_stack_widget(self, profile) -> None:
+        stack_layout = self.ui.gisaxsInputStackWidget.layout()
+        if isinstance(stack_layout, QBoxLayout):
+            _take_widget(stack_layout, self.ui.gisaxsInputStackValue)
+            _take_widget(stack_layout, self.ui.gisaxsInputStackDisplayLabel)
+            stack_layout.setDirection(QBoxLayout.TopToBottom)
+            stack_layout.setContentsMargins(0, 0, 0, 0)
+            stack_layout.setSpacing(max(4, CARD_SPACING - 2))
+
+        editor_widget = getattr(self.ui, 'gisaxsInputStackEditorWidget', None)
+        if editor_widget is None:
+            editor_widget = QWidget(self.ui.gisaxsInputStackWidget)
+            editor_widget.setObjectName('gisaxsInputStackEditorWidget')
+            editor_layout = QHBoxLayout(editor_widget)
+            editor_layout.setContentsMargins(0, 0, 0, 0)
+            editor_layout.setSpacing(max(4, CARD_SPACING - 2))
+            self.ui.gisaxsInputStackEditorWidget = editor_widget
+            self.ui.gisaxsInputStackEditorLayout = editor_layout
+        else:
+            editor_layout = getattr(self.ui, 'gisaxsInputStackEditorLayout', None)
+            if editor_layout is None:
+                editor_layout = QHBoxLayout(editor_widget)
+                editor_layout.setContentsMargins(0, 0, 0, 0)
+                editor_layout.setSpacing(max(4, CARD_SPACING - 2))
+                self.ui.gisaxsInputStackEditorLayout = editor_layout
+
+        if isinstance(editor_layout, QBoxLayout):
+            _take_widget(editor_layout, self.ui.gisaxsInputStackValue)
+
+        normalize_input(self.ui.gisaxsInputStackValue)
+        self.ui.gisaxsInputStackValue.setMinimumWidth(scale_value(120, profile, 96))
+        self.ui.gisaxsInputStackValue.setMaximumWidth(scale_value(156, profile, 136))
+        self.ui.gisaxsInputStackValue.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputStackDisplayLabel.setWordWrap(True)
+        self.ui.gisaxsInputStackDisplayLabel.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.ui.gisaxsInputStackDisplayLabel.setMinimumHeight(scale_value(36, profile, 30))
+        self.ui.gisaxsInputStackDisplayLabel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.ui.gisaxsInputStackDisplayLabel.setStyleSheet("color: #64748b;")
+        self.ui.gisaxsInputStackWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        if isinstance(stack_layout, QBoxLayout):
+            if isinstance(editor_layout, QBoxLayout):
+                editor_layout.addWidget(self.ui.gisaxsInputStackValue, 0, Qt.AlignLeft)
+            stack_layout.addWidget(editor_widget, 0)
+            stack_layout.addWidget(self.ui.gisaxsInputStackDisplayLabel, 0, Qt.AlignTop)
+            stack_layout.addStretch(1)
+
+    def _configure_file_controls(self, profile) -> None:
+        normalize_input(self.ui.gisaxsInputImportButtonValue)
+        self.ui.gisaxsInputImportButtonValue.setMinimumWidth(scale_value(260, profile, 220))
+        self.ui.gisaxsInputImportButtonValue.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    @staticmethod
+    def _create_section_widget(title: str, parent: QWidget) -> QWidget:
+        section = QWidget(parent)
+        section_layout = QVBoxLayout(section)
+        section_layout.setContentsMargins(0, 0, 0, 0)
+        section_layout.setSpacing(max(6, CARD_SPACING - 2))
+        label = QLabel(title, section)
+        label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
+        section_layout.addWidget(label)
+        return section
 
 
 class CutLineCard(CardFrame):
     def __init__(self, ui, profile=None):
         super().__init__("Cut Line and Detector", "CutLineCard")
-        profile = profile or current_profile(ui.centralwidget)
-        self.setMinimumHeight(scale_value(230, profile, 185))
-        grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(CARD_SPACING)
-        grid.setVerticalSpacing(FORM_ROW_SPACING)
-        self.body_layout.addLayout(grid)
+        self.ui = ui
+        self.profile = profile or current_profile(ui.centralwidget)
+        self.setMinimumHeight(scale_value(370, self.profile, 315))
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._managed_value_spinboxes = []
+        self._managed_step_spinboxes = []
+        self._managed_step_reset_buttons = []
+        self._managed_labels = []
+        self._managed_action_buttons = []
 
+        self._detach_generated_widgets()
+        self._rebuild_center_controls()
+
+        cutline_group = self._make_group("Cut Line")
+        cutline_layout = QGridLayout(cutline_group)
+        self._configure_group_layout(cutline_layout)
+
+        for col, text in enumerate(("Parameter", "Value", "Step", "Reset")):
+            header_label = QLabel(text, cutline_group)
+            header_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
+            cutline_layout.addWidget(header_label, 0, col)
+
+        rows = (
+            (ui.gisaxsInputCutLineVerticalLabel, ui.gisaxsInputCutLineVerticalValue, "Vertical (px)", "gisaxsInputCutLineVerticalStep", 1.0),
+            (ui.gisaxsInputCutLineParallelLabel, ui.gisaxsInputCutLineParallelValue, "Parallel (px)", "gisaxsInputCutLineParallelStep", 1.0),
+            (ui.gisaxsInputCenterVerticalLabel, ui.gisaxsInputCenterVerticalValue, "Center Vertical (px)", "gisaxsInputCenterVerticalStep", 1.0),
+            (ui.gisaxsInputCenterParallelLabel, ui.gisaxsInputCenterParallelValue, "Center Parallel (px)", "gisaxsInputCenterParallelStep", 1.0),
+        )
+
+        for row_index, (label, value_box, label_text, step_name, default_step) in enumerate(rows, 1):
+            label.setText(label_text)
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            normalize_input(value_box)
+            step_box, reset_button = self._create_step_controls(step_name, value_box, default_step)
+            cutline_layout.addWidget(label, row_index, 0)
+            cutline_layout.addWidget(value_box, row_index, 1)
+            cutline_layout.addWidget(step_box, row_index, 2)
+            cutline_layout.addWidget(reset_button, row_index, 3)
+            self._managed_labels.append(label)
+            self._managed_value_spinboxes.append(value_box)
+
+        unit_hint = QLabel("All cut geometry values use pixel units.", cutline_group)
+        unit_hint.setStyleSheet("color: #64748b;")
+        unit_hint.setWordWrap(True)
+        self._managed_labels.append(unit_hint)
+        cutline_layout.addWidget(unit_hint, 5, 0, 1, 3)
+        cutline_layout.addWidget(ui.gisaxsInputCenterAutoFindingButton, 5, 3)
+        cutline_layout.setColumnStretch(0, 0)
+        cutline_layout.setColumnStretch(1, 1)
+        cutline_layout.setColumnStretch(2, 0)
+        cutline_layout.setColumnStretch(3, 0)
+
+        detector_group = self._make_group("Detector and Cut")
+        detector_layout = QGridLayout(detector_group)
+        self._configure_group_layout(detector_layout)
+        detector_hint = QLabel(
+            "Configure detector parameters here before cutting the selected region.",
+            detector_group,
+        )
+        detector_hint.setObjectName("cutLineDetectorHintLabel")
+        detector_hint.setWordWrap(True)
+        self._style_info_label(detector_hint)
+        detector_layout.addWidget(ui.gisaxsInputDetectorParaButton, 0, 0)
+        detector_layout.addWidget(detector_hint, 0, 1)
+        detector_layout.addWidget(ui.gisaxsInputCutButton, 0, 2)
+        detector_layout.setColumnStretch(0, 0)
+        detector_layout.setColumnStretch(1, 1)
+        detector_layout.setColumnStretch(2, 0)
+
+        self._managed_action_buttons.extend(
+            [
+                ui.gisaxsInputCenterAutoFindingButton,
+                ui.gisaxsInputDetectorParaButton,
+                ui.gisaxsInputCutButton,
+            ]
+        )
+
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(scale_value(12, self.profile, 8))
+        content_layout.addWidget(cutline_group)
+        content_layout.addWidget(detector_group)
+        self.body_layout.addLayout(content_layout)
+        self._apply_responsive_profile()
+
+    def _detach_generated_widgets(self) -> None:
         widgets = [
-            ui.gisaxsInputCutLineLabel,
-            ui.gisaxsInputCutLineVerticalLabel,
-            ui.gisaxsInputCutLineVerticalValue,
-            ui.gisaxsInputCutLineParallelLabel,
-            ui.gisaxsInputCutLineParallelValue,
-            ui.gisaxsInputCenterLabel,
-            ui.gisaxsInputCutLineCenterWidget,
-            ui.gisaxsInputCenterAutoFindingButton,
-            ui.gisaxsInputDetectorParaButton,
-            ui.gisaxsInputCutButton,
+            self.ui.gisaxsInputCutLineLabel,
+            self.ui.gisaxsInputCutLineVerticalLabel,
+            self.ui.gisaxsInputCutLineVerticalValue,
+            self.ui.gisaxsInputCutLineParallelLabel,
+            self.ui.gisaxsInputCutLineParallelValue,
+            self.ui.gisaxsInputCenterLabel,
+            self.ui.gisaxsInputCenterAutoFindingButton,
+            self.ui.gisaxsInputDetectorParaButton,
+            self.ui.gisaxsInputCutButton,
+            self.ui.gisaxsInputCutLineCenterWidget,
         ]
         for widget in widgets:
-            _take_widget(ui.gridLayout_23, widget)
+            _detach_from_parent_layout(widget)
+        self.ui.gisaxsInputCutLineLabel.hide()
+        self.ui.gisaxsInputCenterLabel.hide()
 
-        grid.addWidget(ui.gisaxsInputCutLineLabel, 0, 0)
-        grid.addWidget(ui.gisaxsInputCutLineVerticalLabel, 1, 0)
-        grid.addWidget(ui.gisaxsInputCutLineVerticalValue, 1, 1)
-        grid.addWidget(ui.gisaxsInputCutLineParallelLabel, 1, 2)
-        grid.addWidget(ui.gisaxsInputCutLineParallelValue, 1, 3)
-        grid.addWidget(ui.gisaxsInputCenterLabel, 2, 0)
-        grid.addWidget(ui.gisaxsInputCutLineCenterWidget, 2, 1, 1, 2)
-        grid.addWidget(ui.gisaxsInputCenterAutoFindingButton, 2, 3)
-        grid.addWidget(ui.gisaxsInputDetectorParaButton, 3, 0)
-        grid.addWidget(ui.gisaxsInputCutButton, 3, 1)
-        grid.setColumnStretch(0, 0)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(2, 0)
-        grid.setColumnStretch(3, 1)
+    def _rebuild_center_controls(self) -> None:
+        center_layout = self.ui.gisaxsInputCutLineCenterWidget.layout()
+        if isinstance(center_layout, QBoxLayout):
+            for widget in (
+                self.ui.gisaxsInputCenterVerticalLabel,
+                self.ui.gisaxsInputCenterVerticalValue,
+                self.ui.gisaxsInputCenterParallelLabel,
+                self.ui.gisaxsInputCenterParallelValue,
+            ):
+                _take_widget(center_layout, widget)
+        self.ui.gisaxsInputCutLineCenterWidget.hide()
+
+    def _create_step_controls(self, object_name: str, value_spinbox: QDoubleSpinBox, default_step: float):
+        step_box = NoWheelDoubleSpinBox(self)
+        step_box.setObjectName(object_name)
+        step_box.setDecimals(4)
+        step_box.setRange(1e-4, 1e6)
+        step_box.setSingleStep(default_step)
+        step_box.setValue(default_step)
+        step_box.setProperty("defaultStepValue", default_step)
+        step_box.valueChanged.connect(lambda new_step, spin=value_spinbox: spin.setSingleStep(float(new_step)))
+        reset_button = QPushButton("Reset", self)
+        reset_button.setObjectName(f"{object_name}ResetButton")
+        reset_button.clicked.connect(lambda _checked=False, step=step_box: self._reset_step_spinbox(step))
+        setattr(self.ui, object_name, step_box)
+        setattr(self.ui, reset_button.objectName(), reset_button)
+        self._managed_step_spinboxes.append(step_box)
+        self._managed_step_reset_buttons.append(reset_button)
+        return step_box, reset_button
+
+    @staticmethod
+    def _reset_step_spinbox(step_spinbox: QDoubleSpinBox) -> None:
+        default_value = step_spinbox.property("defaultStepValue")
+        if default_value is None:
+            return
+        step_spinbox.setValue(float(default_value))
+
+    def _make_group(self, title: str) -> QGroupBox:
+        group = QGroupBox(title, self)
+        group.setObjectName(title.replace(" ", "") + "Group")
+        group.setStyleSheet(
+            "QGroupBox {"
+            "border: 1px solid #d7dee8;"
+            "border-radius: 7px;"
+            "margin-top: 10px;"
+            "padding-top: 12px;"
+            "background: #ffffff;"
+            "}"
+            "QGroupBox::title {"
+            "subcontrol-origin: margin;"
+            "left: 8px;"
+            "padding: 0 4px;"
+            "}"
+        )
+        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        return group
+
+    @staticmethod
+    def _style_info_label(label: QLabel) -> None:
+        label.setStyleSheet(
+            "QLabel {"
+            "background: #eff6ff;"
+            "border: 1px solid #bfdbfe;"
+            "border-radius: 6px;"
+            "color: #1d4ed8;"
+            "padding: 6px 8px;"
+            "line-height: 135%;"
+            "}"
+        )
+        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def _configure_group_layout(self, layout) -> None:
+        group_margin = scale_value(10, self.profile, 8)
+        group_top = scale_value(18, self.profile, 14)
+        group_spacing = scale_value(12, self.profile, 8)
+        layout.setContentsMargins(group_margin, group_top, group_margin, group_margin)
+        if hasattr(layout, "setHorizontalSpacing"):
+            layout.setHorizontalSpacing(group_spacing)
+            layout.setVerticalSpacing(max(FORM_ROW_SPACING, group_spacing - 4))
+        else:
+            layout.setSpacing(group_spacing)
+
+    def _apply_responsive_profile(self) -> None:
+        input_height = BUTTON_HEIGHT + scale_value(4, self.profile, 4)
+        value_width = scale_value(140, self.profile, 118)
+        step_width = scale_value(92, self.profile, 78)
+        reset_width = scale_value(88, self.profile, 76)
+        action_width = scale_value(132, self.profile, 108)
+        label_width = scale_value(156, self.profile, 132)
+
+        for label in self._managed_labels:
+            label.setMinimumWidth(label_width)
+        for spinbox in self._managed_value_spinboxes:
+            spinbox.setMinimumHeight(input_height)
+            spinbox.setMinimumWidth(value_width)
+            spinbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        for step_box in self._managed_step_spinboxes:
+            normalize_input(step_box)
+            step_box.setMinimumHeight(input_height)
+            step_box.setMinimumWidth(step_width)
+            step_box.setMaximumWidth(step_width)
+            step_box.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        for reset_button in self._managed_step_reset_buttons:
+            normalize_button(reset_button)
+            reset_button.setMinimumHeight(input_height)
+            reset_button.setMinimumWidth(reset_width)
+            reset_button.setMaximumWidth(reset_width)
+            reset_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        for button in self._managed_action_buttons:
+            normalize_button(button)
+            button.setMinimumHeight(input_height)
+            button.setMinimumWidth(action_width)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
 
 class FittingControlsCard(CardFrame):
@@ -199,15 +558,18 @@ class FittingControlsCard(CardFrame):
         super().__init__("Fitting Controls", "FittingControlsCard")
         self.ui = ui
         self.profile = profile or current_profile(ui.centralwidget)
-        group_spacing = scale_value(14, self.profile, 10)
-        group_margin = scale_value(14, self.profile, 10)
-        group_top = scale_value(24, self.profile, 20)
-        self.setMinimumHeight(scale_value(760, self.profile, 660))
+        group_spacing = scale_value(12, self.profile, 8)
+        group_margin = scale_value(10, self.profile, 8)
+        group_top = scale_value(18, self.profile, 14)
+        self.setMinimumHeight(scale_value(640, self.profile, 560))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._managed_group_layouts = []
         self._managed_buttons = []
         self._managed_inputs = []
         self._managed_spinboxes = []
+        self._managed_step_spinboxes = []
+        self._managed_step_reset_buttons = []
+        self._managed_secondary_action_buttons = []
         self._managed_labels = []
         containers = [
             ui.fitCurrentDataCheckBox,
@@ -254,6 +616,48 @@ class FittingControlsCard(CardFrame):
         ui.fitIntResLabel.setText("Intensity (Res.)")
         ui.fitMethodLabel.setText("Method:")
         ui.fitKLabel.setText("k:")
+        ui.fitBGLabel = QLabel("BG:", self)
+        ui.fitBGLabel.setObjectName("fitBGLabel")
+        ui.fitBGValue = QDoubleSpinBox(self)
+        ui.fitBGValue.setObjectName("fitBGValue")
+        ui.fitBGValue.setDecimals(6)
+        ui.fitBGValue.setRange(-1e10, 1e10)
+        ui.fitBGValue.setSingleStep(0.1)
+        ui.fitBGStep = NoWheelDoubleSpinBox(self)
+        ui.fitBGStep.setObjectName("fitBGStep")
+        ui.fitBGStep.setDecimals(6)
+        ui.fitBGStep.setRange(1e-9, 1e9)
+        ui.fitBGStep.setValue(0.1)
+        ui.fitBGStep.setProperty("defaultStepValue", 0.1)
+        ui.fitBGStep.valueChanged.connect(lambda value: ui.fitBGValue.setSingleStep(float(value)))
+        ui.fitKStep = NoWheelDoubleSpinBox(self)
+        ui.fitKStep.setObjectName("fitKStep")
+        ui.fitKStep.setDecimals(6)
+        ui.fitKStep.setRange(1e-9, 1e9)
+        ui.fitKStep.setValue(0.1)
+        ui.fitKStep.setProperty("defaultStepValue", 0.1)
+        ui.fitKStep.valueChanged.connect(lambda value: ui.fitKValue.setSingleStep(float(value)))
+        ui.fitIntResStep = NoWheelDoubleSpinBox(self)
+        ui.fitIntResStep.setObjectName("fitIntResStep")
+        ui.fitIntResStep.setDecimals(6)
+        ui.fitIntResStep.setRange(1e-9, 1e9)
+        ui.fitIntResStep.setValue(0.01)
+        ui.fitIntResStep.setProperty("defaultStepValue", 0.01)
+        ui.fitIntResStep.valueChanged.connect(lambda value: ui.fitIntResValue.setSingleStep(float(value)))
+        ui.fitSigmaResStep = NoWheelDoubleSpinBox(self)
+        ui.fitSigmaResStep.setObjectName("fitSigmaResStep")
+        ui.fitSigmaResStep.setDecimals(6)
+        ui.fitSigmaResStep.setRange(1e-9, 1e9)
+        ui.fitSigmaResStep.setValue(0.1)
+        ui.fitSigmaResStep.setProperty("defaultStepValue", 0.1)
+        ui.fitSigmaResStep.valueChanged.connect(lambda value: ui.fitSigmaResValue.setSingleStep(float(value)))
+        ui.fitNuResStep = NoWheelDoubleSpinBox(self)
+        ui.fitNuResStep.setObjectName("fitNuResStep")
+        ui.fitNuResStep.setDecimals(6)
+        ui.fitNuResStep.setRange(1e-9, 1e9)
+        ui.fitNuResStep.setValue(0.1)
+        ui.fitNuResStep.setProperty("defaultStepValue", 0.1)
+        ui.fitNuResStep.valueChanged.connect(lambda value: ui.fitNuResValue.setSingleStep(float(value)))
         ui.FittingAutoKButton.setText("Auto-K: OFF")
         ui.fitMethodValue.setToolTip("Method selection is not implemented yet.")
         self._method_notice_combo = ui.fitMethodValue
@@ -264,6 +668,8 @@ class FittingControlsCard(CardFrame):
         self.fitExportPlotButton = QPushButton("Export Plot", self)
         self.fitExportPlotButton.setObjectName("fitExportPlotButton")
         self.fitExportPlotButton.clicked.connect(ui.FittingExportButton.click)
+
+        self._managed_secondary_action_buttons.append(ui.FittingAutoKButton)
 
         for button in (
             ui.FittingClearFittingButton_2,
@@ -278,14 +684,21 @@ class FittingControlsCard(CardFrame):
         for input_widget in (
             ui.fitImport1dFileValue,
             ui.fitMethodValue,
+            ui.fitBGValue,
+            ui.fitBGStep,
             ui.fitKValue,
+            ui.fitKStep,
             ui.fitIntResValue,
+            ui.fitIntResStep,
             ui.fitSigmaResValue,
+            ui.fitSigmaResStep,
             ui.fitNuResValue,
+            ui.fitNuResStep,
         ):
             self._managed_inputs.append(input_widget)
 
-        self._managed_spinboxes = [ui.fitKValue, ui.fitIntResValue, ui.fitSigmaResValue, ui.fitNuResValue]
+        self._managed_spinboxes = [ui.fitBGValue, ui.fitKValue, ui.fitIntResValue, ui.fitSigmaResValue, ui.fitNuResValue]
+        self._managed_step_spinboxes = [ui.fitBGStep, ui.fitKStep, ui.fitIntResStep, ui.fitSigmaResStep, ui.fitNuResStep]
 
         data_options_group = self._make_group("Display Options")
         data_layout = QHBoxLayout(data_options_group)
@@ -318,21 +731,46 @@ class FittingControlsCard(CardFrame):
         method_layout.addWidget(self.methodInfoLabel, 1, 1, 1, 2)
         method_layout.setColumnStretch(1, 1)
 
-        k_group = self._make_group("Scaling Factor k")
-        k_layout = QGridLayout(k_group)
-        self._configure_group_layout(k_layout, group_margin, group_top, group_spacing)
-        self._managed_labels.append(ui.fitKLabel)
-        k_layout.addWidget(ui.fitKLabel, 0, 0, Qt.AlignRight | Qt.AlignVCenter)
-        k_layout.addWidget(ui.fitKValue, 0, 1)
-        k_layout.addWidget(ui.FittingAutoKButton, 1, 1)
+        global_group = self._make_group("Global Parameters")
+        global_layout = QGridLayout(global_group)
+        self._configure_group_layout(global_layout, group_margin, group_top, group_spacing)
+        for col, text in enumerate(("Parameter", "Value", "Step", "Reset")):
+            header_label = QLabel(text, global_group)
+            header_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
+            global_layout.addWidget(header_label, 0, col)
+
+        reset_buttons = {
+            ui.fitBGStep.objectName(): self._create_step_reset_button(global_group, ui.fitBGStep),
+            ui.fitIntResStep.objectName(): self._create_step_reset_button(global_group, ui.fitIntResStep),
+            ui.fitSigmaResStep.objectName(): self._create_step_reset_button(global_group, ui.fitSigmaResStep),
+            ui.fitNuResStep.objectName(): self._create_step_reset_button(global_group, ui.fitNuResStep),
+        }
+
+        parameter_rows = (
+            (ui.fitKLabel, ui.fitKValue, ui.fitKStep, "Scale Factor k"),
+            (ui.fitBGLabel, ui.fitBGValue, ui.fitBGStep, "Background"),
+            (ui.fitIntResLabel, ui.fitIntResValue, ui.fitIntResStep, "Resolution Intensity"),
+            (ui.fitSigmaResLabel, ui.fitSigmaResValue, ui.fitSigmaResStep, "Resolution Sigma"),
+            (ui.fitNuResLabel, ui.fitNuResValue, ui.fitNuResStep, "Resolution Nu"),
+        )
+        for row, (label, value, step, text) in enumerate(parameter_rows, 1):
+            label.setText(text)
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self._managed_labels.append(label)
+            global_layout.addWidget(label, row, 0)
+            global_layout.addWidget(value, row, 1)
+            global_layout.addWidget(step, row, 2)
+            reset_button = reset_buttons.get(step.objectName())
+            if reset_button is not None:
+                global_layout.addWidget(reset_button, row, 3)
+
+        global_layout.addWidget(ui.FittingAutoKButton, 1, 3)
+
         self.kInfoLabel = QLabel(
-            "Scaling factor <b>k</b> amplifies the calculated fitting intensity.<br>"
-            "Simple model: <i>I</i><sub>fit</sub>(q) = "
-            "k &middot; <i>I</i><sub>model</sub>(q).",
-            k_group,
+            "Model: I_fit(q) = BG + k * (sum(I_component(q)) + I_resolution(q))",
+            global_group,
         )
         self.kInfoLabel.setObjectName("fitKInfoLabel")
-        self.kInfoLabel.setTextFormat(Qt.RichText)
         self.kInfoLabel.setWordWrap(True)
         self._style_info_label(self.kInfoLabel)
         self.kInfoLabel.setToolTip(
@@ -348,34 +786,14 @@ class FittingControlsCard(CardFrame):
         ui.fitKLabel.setToolTip(self.kInfoLabel.toolTip())
         ui.fitKValue.setToolTip(self.kInfoLabel.toolTip())
         ui.FittingAutoKButton.setToolTip(self.kInfoLabel.toolTip())
-        k_layout.addWidget(self.kInfoLabel, 2, 0, 1, 2)
-        k_layout.setColumnStretch(1, 1)
-        k_group.setMinimumHeight(scale_value(220, self.profile, 190))
-
-        resolution_group = self._make_group("Resolution Function")
-        resolution_layout = QGridLayout(resolution_group)
-        self._configure_group_layout(resolution_layout, group_margin, group_top, group_spacing)
-        for row, (label, value) in enumerate(
-            (
-                (ui.fitIntResLabel, ui.fitIntResValue),
-                (ui.fitSigmaResLabel, ui.fitSigmaResValue),
-                (ui.fitNuResLabel, ui.fitNuResValue),
-            )
-        ):
-            self._managed_labels.append(label)
-            label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            resolution_layout.addWidget(label, row, 0)
-            resolution_layout.addWidget(value, row, 1)
-        self.resolutionInfoLabel = QLabel(
-            "Adjust the instrumental resolution used during fitting.<br>"
-            "These parameters control peak broadening and smoothing effects.",
-            resolution_group,
+        self.kInfoLabel.setToolTip(self.kInfoLabel.toolTip())
+        ui.fitBGLabel.setToolTip(
+            "Global Background\n"
+            "I_fit(q) = BG + k * sum(I_component(q)) + k * I_resolution(q)\n"
+            "BG is stored once and is not part of individual component cards."
         )
-        self.resolutionInfoLabel.setObjectName("fitResolutionInfoLabel")
-        self.resolutionInfoLabel.setTextFormat(Qt.RichText)
-        self.resolutionInfoLabel.setWordWrap(True)
-        self._style_info_label(self.resolutionInfoLabel)
-        self.resolutionInfoLabel.setToolTip(
+        ui.fitBGValue.setToolTip(ui.fitBGLabel.toolTip())
+        resolution_tooltip = (
             "<b>Resolution component</b><br>"
             "R(q) = <i>I</i><sub>res</sub> / "
             "[1 + (q / &sigma;<sub>res</sub>)<sup>2</sup>]<sup>&nu;</sup><br>"
@@ -386,15 +804,20 @@ class FittingControlsCard(CardFrame):
         for widget in (
             ui.fitIntResLabel,
             ui.fitIntResValue,
+            ui.fitIntResStep,
             ui.fitSigmaResLabel,
             ui.fitSigmaResValue,
+            ui.fitSigmaResStep,
             ui.fitNuResLabel,
             ui.fitNuResValue,
+            ui.fitNuResStep,
         ):
-            widget.setToolTip(self.resolutionInfoLabel.toolTip())
-        resolution_layout.addWidget(self.resolutionInfoLabel, 3, 0, 1, 2)
-        resolution_layout.setColumnStretch(1, 1)
-        resolution_group.setMinimumHeight(scale_value(220, self.profile, 195))
+            widget.setToolTip(resolution_tooltip)
+        global_layout.addWidget(self.kInfoLabel, 6, 0, 1, 4)
+        global_layout.setColumnStretch(1, 1)
+        global_layout.setColumnStretch(2, 0)
+        global_layout.setColumnStretch(3, 0)
+        global_group.setMinimumHeight(scale_value(238, self.profile, 210))
 
         actions_group = self._make_group("Fitting Actions")
         actions_layout = QHBoxLayout(actions_group)
@@ -403,14 +826,6 @@ class FittingControlsCard(CardFrame):
         actions_layout.addWidget(ui.FittingManualFittingButton)
         actions_layout.addWidget(ui.FittingExportButton)
 
-        parameter_row = QWidget(self)
-        parameter_row.setObjectName("fitParameterCardsRow")
-        parameter_layout = QHBoxLayout(parameter_row)
-        parameter_layout.setContentsMargins(0, 0, 0, 0)
-        parameter_layout.setSpacing(group_spacing)
-        parameter_layout.addWidget(k_group, 1)
-        parameter_layout.addWidget(resolution_group, 1)
-
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(group_spacing)
@@ -418,9 +833,9 @@ class FittingControlsCard(CardFrame):
         self.body_layout.addLayout(layout)
         layout.addWidget(data_options_group)
         layout.addWidget(external_group)
-        layout.addWidget(method_group)
-        layout.addWidget(parameter_row)
         layout.addWidget(actions_group)
+        layout.addWidget(method_group)
+        layout.addWidget(global_group)
         self.apply_responsive_profile(self.profile)
 
     def _make_group(self, title: str) -> QGroupBox:
@@ -456,6 +871,20 @@ class FittingControlsCard(CardFrame):
         )
         label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
+    def _create_step_reset_button(self, parent: QWidget, step_spinbox: QDoubleSpinBox) -> QPushButton:
+        button = QPushButton("Reset", parent)
+        button.setObjectName(f"{step_spinbox.objectName()}ResetButton")
+        button.clicked.connect(lambda _checked=False, spinbox=step_spinbox: self._reset_step_spinbox(spinbox))
+        self._managed_step_reset_buttons.append(button)
+        return button
+
+    @staticmethod
+    def _reset_step_spinbox(step_spinbox: QDoubleSpinBox) -> None:
+        default_value = step_spinbox.property("defaultStepValue")
+        if default_value is None:
+            return
+        step_spinbox.setValue(float(default_value))
+
     def _configure_group_layout(self, layout, margin: int, top: int, spacing: int) -> None:
         layout.setContentsMargins(margin, top, margin, margin)
         if hasattr(layout, "setHorizontalSpacing"):
@@ -465,12 +894,27 @@ class FittingControlsCard(CardFrame):
             layout.setSpacing(spacing)
         self._managed_group_layouts.append(layout)
 
+    def _apply_secondary_action_button_width(self, minimum_width: int, input_height: int) -> None:
+        buttons = [
+            *self._managed_step_reset_buttons,
+            *self._managed_secondary_action_buttons,
+        ]
+        if not buttons:
+            return
+
+        target_width = max(minimum_width, max(button.sizeHint().width() for button in buttons))
+        for button in buttons:
+            button.setMinimumHeight(input_height)
+            button.setMinimumWidth(target_width)
+            button.setMaximumWidth(target_width)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
     def apply_responsive_profile(self, profile) -> None:
         self.profile = profile
-        group_spacing = scale_value(14, profile, 10)
-        group_margin = scale_value(14, profile, 10)
-        group_top = scale_value(24, profile, 20)
-        self.setMinimumHeight(scale_value(760, profile, 660))
+        group_spacing = scale_value(12, profile, 8)
+        group_margin = scale_value(10, profile, 8)
+        group_top = scale_value(18, profile, 14)
+        self.setMinimumHeight(scale_value(640, profile, 560))
         self.setMaximumHeight(16777215)
 
         if hasattr(self, "_main_controls_layout"):
@@ -485,8 +929,10 @@ class FittingControlsCard(CardFrame):
 
         button_width = scale_value(128, profile, 110)
         input_height = BUTTON_HEIGHT + scale_value(4, profile, 4)
-        spinbox_width = scale_value(160, profile, 132)
-        label_width = scale_value(132, profile, 108)
+        spinbox_width = scale_value(138, profile, 118)
+        step_width = scale_value(92, profile, 78)
+        secondary_action_width = scale_value(88, profile, 76)
+        label_width = scale_value(128, profile, 112)
 
         for button in self._managed_buttons:
             button.setMinimumHeight(input_height)
@@ -499,15 +945,17 @@ class FittingControlsCard(CardFrame):
             input_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         for spinbox in self._managed_spinboxes:
             spinbox.setMinimumWidth(spinbox_width)
+            spinbox.setMaximumWidth(16777215)
+        for spinbox in self._managed_step_spinboxes:
+            spinbox.setMinimumWidth(step_width)
+            spinbox.setMaximumWidth(step_width)
+        self._apply_secondary_action_button_width(secondary_action_width, input_height)
         for label in self._managed_labels:
             label.setMinimumWidth(label_width)
 
-        k_group = self.findChild(QGroupBox, "ScalingFactorkGroup")
-        resolution_group = self.findChild(QGroupBox, "ResolutionFunctionGroup")
-        if k_group is not None:
-            k_group.setMinimumHeight(scale_value(220, profile, 190))
-        if resolution_group is not None:
-            resolution_group.setMinimumHeight(scale_value(240, profile, 210))
+        global_group = self.findChild(QGroupBox, "GlobalParametersGroup")
+        if global_group is not None:
+            global_group.setMinimumHeight(scale_value(238, profile, 210))
         self.updateGeometry()
 
     def _show_method_not_implemented(self) -> None:
@@ -534,14 +982,58 @@ class ModelParameterCard(CardFrame):
     def __init__(self, ui, profile=None):
         super().__init__("Model Parameters", "ModelParameterCard")
         profile = profile or current_profile(ui.centralwidget)
-        self.setMinimumHeight(scale_value(260, profile, 210))
+        self.setMinimumHeight(scale_value(220, profile, 180))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        add_button = getattr(ui, "pushButton", None)
+        if add_button is not None:
+            _detach_from_parent_layout(add_button)
+            add_button.setText("+ Add Component")
+            add_button.setMinimumWidth(scale_value(220, profile, 190))
+            add_button.setMaximumWidth(scale_value(320, profile, 280))
+            add_button.setMinimumHeight(scale_value(36, profile, 32))
+            add_button.setMaximumHeight(scale_value(40, profile, 36))
+            add_button.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
+
+            self.body_layout.removeWidget(self.title_label)
+            header = QWidget(self)
+            header.setObjectName("modelParametersHeader")
+            header.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            header_layout = QHBoxLayout(header)
+            header_layout.setContentsMargins(0, 0, 0, 0)
+            header_layout.setSpacing(CARD_SPACING)
+            self.title_label.setParent(header)
+            self.title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            header_layout.addWidget(self.title_label)
+            header_layout.addStretch(1)
+            header_layout.addWidget(add_button, 0, Qt.AlignRight)
+            self.body_layout.insertWidget(0, header)
+
         _take_widget(ui.gridLayout_24, ui.widget_7)
+        ui.widget_7.setMinimumWidth(0)
         ui.widget_7.setMaximumWidth(16777215)
         ui.widget_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.model_scroll_area = make_scroll_area(ui.widget_7, horizontal=True)
-        self.model_scroll_area.setObjectName("modelParametersScrollArea")
-        self.body_layout.addWidget(self.model_scroll_area, 1)
+        if ui.widget_7.layout() is not None:
+            ui.widget_7.layout().setContentsMargins(0, 0, 0, 0)
+            ui.widget_7.layout().setSpacing(0)
+        inner_scroll_area = getattr(ui, "scrollArea", None)
+        if inner_scroll_area is not None and ui.widget_7.layout() is not None:
+            _take_widget(ui.widget_7.layout(), inner_scroll_area)
+            content_widget = inner_scroll_area.takeWidget()
+            if content_widget is not None:
+                content_widget.setParent(ui.widget_7)
+                content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+                ui.widget_7.layout().addWidget(content_widget)
+            inner_scroll_area.deleteLater()
+        particle_layout = getattr(ui, "scrollAreaWidgetContents", None)
+        particle_layout = particle_layout.layout() if particle_layout is not None else None
+        if isinstance(particle_layout, QBoxLayout):
+            particle_layout.setDirection(QBoxLayout.TopToBottom)
+            particle_layout.setContentsMargins(0, 0, 0, 0)
+            particle_layout.setSpacing(scale_value(8, profile, 6))
+            particle_layout.setAlignment(Qt.AlignTop)
+            particle_layout.setStretch(0, 1)
+        self.body_layout.addWidget(ui.widget_7, 1)
 
 
 class DetectorPreviewCard(CardFrame):
@@ -896,7 +1388,7 @@ class GisaxsFittingWorkspace:
         fixed_layout = QVBoxLayout(self.fixed_controls_stack)
         fixed_layout.setContentsMargins(0, 0, 0, 0)
         fixed_layout.setSpacing(CARD_SPACING)
-        gisaxs_card = GisaxsInputCard(self.ui.gisaxsInputBox, self.profile)
+        gisaxs_card = GisaxsInputCard(self.ui, self.profile)
         cut_line_card = CutLineCard(self.ui, self.profile)
         fitting_controls_card = FittingControlsCard(self.ui, self.profile)
         model_parameters_card = ModelParameterCard(self.ui, self.profile)
@@ -991,7 +1483,11 @@ class GisaxsFittingWorkspace:
 
         plus_button = getattr(self.ui, "pushButton", None)
         if plus_button is not None:
-            normalize_button(plus_button, compact=True)
+            plus_button.setMinimumWidth(scale_value(220, self.profile, 190))
+            plus_button.setMaximumWidth(scale_value(320, self.profile, 280))
+            plus_button.setMinimumHeight(scale_value(36, self.profile, 32))
+            plus_button.setMaximumHeight(scale_value(40, self.profile, 36))
+            plus_button.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
 
     def _configure_expanding_inputs(self) -> None:
         for widget in self.ui.gisaxsFittingPage.findChildren(INPUT_WIDGET_TYPES):

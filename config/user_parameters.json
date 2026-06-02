@@ -73,37 +73,31 @@
             "distance": 2565.0,
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
-            "beam_center_x": 791.0,
-            "beam_center_y": 368.0
+            "beam_center_x": 791.5100000000007,
+            "beam_center_y": 368.0,
+            "show_q_axis": false
         },
         "last_session": {
-            "last_opened_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
+            "last_opened_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00008.cbf",
+            "imported_gisaxs_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00008.cbf",
             "last_directory": "D:\\PythonCode\\gisaxs_gui\\Experiment_data",
-            "last_1d_directory": null,
-            "last_1d_file": null,
-            "stack_count": 40,
-            "load_mode": "Stack",
+            "load_mode": "Single",
+            "display_mode": "normal",
+            "stack_value": "3",
+            "stack_count": 1,
             "insitu_range": "",
-            "center_vertical": 507.0,
-            "center_parallel": 717.99,
-            "cutline_vertical": 20.0,
-            "cutline_parallel": 1180.0,
-            "auto_show": true,
-            "log_mode": true,
-            "auto_scale": true,
-            "vmin": -6.907755374908447,
-            "vmax": 7.856319427490234,
             "fit_current_data": true,
             "fit_log_x": true,
             "fit_log_y": true,
-            "fit_norm": false
+            "fit_norm": false,
+            "auto_show": true
         },
         "gisaxs_input": {
             "vmax": 4.21,
-            "center_parallel": 4.0,
+            "center_parallel": 0.0,
             "cutline_vertical": 9.0,
             "cutline_parallel": 20.0,
-            "load_mode": "Stack"
+            "load_mode": "Single"
         }
     },
     "gisaxs_predict": {
@@ -140,5 +134,14 @@
         "convergence_threshold": 1e-06,
         "parallel_processing": true,
         "num_threads": 4
+    },
+    "trainset.detector": {
+        "preset": "Pilatus 2M",
+        "nbins_x": 1475,
+        "nbins_y": 1679,
+        "pixel_size_x": 172,
+        "pixel_size_y": 172,
+        "beam_center_x": 737,
+        "beam_center_y": 839
     }
 }

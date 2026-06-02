@@ -1,4 +1,4 @@
-# utils/fitting.py
+﻿# utils/fitting.py
 import numpy as np
 
 __all__ = [
@@ -6,6 +6,7 @@ __all__ = [
     "params_template",         # <- 给定 spec 返回参数名顺序
     "sphere_form_factor_pd",   # 单形状工具
     "cylinder_form_factor_pd", # 单形状工具（含各向平均）
+    "vertical_cylinder_form_factor_pd",
     "structure_factor_1d",
     "gaussian_resolution_smear",
     "apply_scaling_factor",    # 应用缩放因子
@@ -174,6 +175,24 @@ def cylinder_form_factor_pd(
             P += w_size * F2_avg
     return P
 
+
+def vertical_cylinder_form_factor_pd(q, R, sigma_R, n_samples=25, nsig=3.0):
+    """Reference GISAXS-Fit vertical cylinder/qz=0 form factor."""
+    from scipy.special import jv as bessel
+
+    q = np.asarray(q, dtype=float)
+    sigma_abs = float(R) * float(sigma_R)
+    Rs, W = _gaussian_grid(R, sigma_abs, nsig=nsig, n=int(n_samples) + 1, clip_min=0.0)
+    q_col = q[:, np.newaxis]
+    x = q_col * Rs
+    denom = np.where(np.abs(q_col) < 1e-30, 1e-30, q_col)
+    form = W * ((Rs * bessel(1, x) / denom) ** 2)
+    return np.sum(form, axis=1) * 1e-6
+
+
+def _shape_key(shape):
+    return str(shape).strip().lower().replace("-", "_").replace(" ", "_")
+
 # =========================
 #  Structure factor (1D)
 # =========================
@@ -194,21 +213,27 @@ def structure_factor_1d(q, D, sigma_D):
 # =========================
 def params_template(spec):
     """
-    给定 spec（如 ["sphere"], ["sphere","cylinder"], ...）返回参数名列表。
-    每个组分的顺序：
-      Sphere:   Int, R, sigma_R, D, sigma_D, BG
-      Cylinder: Int, R, sigma_R, h, sigma_h, D, sigma_D, BG
-    结尾统一追加：sigma_Res(=Br), nu_Res(=Nu), int_Res, k
+    Return the parameter-name order for a mixed model spec.
+
+    Per component:
+      Sphere:            Int, R, sigma_R, D, sigma_D
+      Cylinder:          Int, R, sigma_R, h, sigma_h, D, sigma_D
+      Vertical Cylinder: Int, R, sigma_R, D, sigma_D
+    Global tail:
+      BG, sigma_Res(=Br), nu_Res(=Nu), int_Res, k
     """
     names = []
     for i, shape in enumerate(spec, 1):
-        if shape.lower() == "sphere":
-            names += [f"Int{i}", f"R{i}", f"sigma_R{i}", f"D{i}", f"sigma_D{i}", f"BG{i}"]
-        elif shape.lower() == "cylinder":
-            names += [f"Int{i}", f"R{i}", f"sigma_R{i}", f"h{i}", f"sigma_h{i}", f"D{i}", f"sigma_D{i}", f"BG{i}"]
+        shape_key = _shape_key(shape)
+        if shape_key == "sphere":
+            names += [f"Int{i}", f"R{i}", f"sigma_R{i}", f"D{i}", f"sigma_D{i}"]
+        elif shape_key == "cylinder":
+            names += [f"Int{i}", f"R{i}", f"sigma_R{i}", f"h{i}", f"sigma_h{i}", f"D{i}", f"sigma_D{i}"]
+        elif shape_key == "vertical_cylinder":
+            names += [f"Int{i}", f"R{i}", f"sigma_R{i}", f"D{i}", f"sigma_D{i}"]
         else:
             raise ValueError(f"Unsupported shape: {shape}")
-    names += ["sigma_Res", "nu_Res", "int_Res", "k"]
+    names += ["BG", "sigma_Res", "nu_Res", "int_Res", "k"]
     return names
 
 def make_mixed_model(
@@ -228,7 +253,7 @@ def make_mixed_model(
 
     返回的函数签名固定：f(q, *params)，参数顺序见 params_template(spec)。
     """
-    spec = [s.lower() for s in spec]
+    spec = [_shape_key(s) for s in spec]
     if len(spec) < 1:
         raise ValueError("spec 至少需要一个粒子形状。")
 
@@ -250,12 +275,11 @@ def make_mixed_model(
         q_arr = np.asarray(q, dtype=float)
         idx = 0
         I_mix = np.zeros_like(q_arr, dtype=float)
-        BG_total = np.zeros_like(q_arr, dtype=float)
 
         for i, shape in enumerate(spec, 1):
             if shape == "sphere":
-                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; D = params[idx+3]; sD = params[idx+4]; BG = params[idx+5]
-                idx += 6
+                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; D = params[idx+3]; sD = params[idx+4]
+                idx += 5
                 P = sphere_form_factor_pd(q_arr, R, sR,
                                           n_samples=int(pd_defaults["n_samples"]),
                                           nsig=pd_defaults["nsig"])
@@ -268,11 +292,10 @@ def make_mixed_model(
                 
                 # 每个particle的贡献：Int加权的形状因子和背景
                 I_mix += Int * P * S
-                BG_total += Int * BG  # BG也按Int加权，Int=0时BG不贡献
 
             elif shape == "cylinder":
-                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; h = params[idx+3]; sh = params[idx+4]; D = params[idx+5]; sD = params[idx+6]; BG = params[idx+7]
-                idx += 8
+                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; h = params[idx+3]; sh = params[idx+4]; D = params[idx+5]; sD = params[idx+6]
+                idx += 7
                 P = cylinder_form_factor_pd(
                     q_arr, R, sR, h, sh,
                     n_R=int(cyl_defaults["n_R"]), n_h=int(cyl_defaults["n_h"]),
@@ -287,15 +310,27 @@ def make_mixed_model(
                 
                 # 每个particle的贡献：Int加权的形状因子和背景
                 I_mix += Int * P * S
-                BG_total += Int * BG  # BG也按Int加权，Int=0时BG不贡献
+
+            elif shape == "vertical_cylinder":
+                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; D = params[idx+3]; sD = params[idx+4]
+                idx += 5
+                P = vertical_cylinder_form_factor_pd(
+                    q_arr, R, sR,
+                    n_samples=int(pd_defaults["n_samples"]),
+                    nsig=3.0,
+                )
+                if D == 0 or sD == 0:
+                    S = np.ones_like(q_arr, dtype=float)
+                else:
+                    S = structure_factor_1d(q_arr, D, sD)
+                I_mix += Int * P * S
 
             else:
                 raise ValueError(f"Unsupported shape: {shape}")
 
-        sigma_Res = params[idx]; nu_Res = params[idx+1]; int_Res = params[idx+2]; k = params[idx+3]
+        BG = params[idx]; sigma_Res = params[idx+1]; nu_Res = params[idx+2]; int_Res = params[idx+3]; k = params[idx+4]
         resolution = _resolution_component(q_arr, sigma_Res, nu_Res, int_Res)
-        I_total = I_mix + BG_total + resolution
-        return apply_scaling_factor(I_total, k)
+        return float(BG) + apply_scaling_factor(I_mix + resolution, k)
 
     # 给外部看得到的参数名（便于 GUI 提示）
     f.param_names = template  # type: ignore[attr-defined]
@@ -321,12 +356,11 @@ def mixed_model_components(
 
         约定：
         - 每个粒子的曲线为 Int_i * P_i(q) * S_i(q; D_i, sigma_Di)，若 D 或 sigma_D 为 0 则 S=1。
-        - BG_total = sum_i Int_i * BG_i（常数项，按 Int 加权）。
-                - 分辨率曲线使用 GISAXS-Fit 形式：I_res * [1 / (1 + (|q|/Br)^Nu)]。
-                - 最终所有曲线都乘以全局缩放因子 k。
-                - scale_resolution_to_total 参数保留以保持签名兼容，目前不再调整分辨率幅度。
+        - BG_total is the single global background curve and is not k-scaled.
+        - Resolution uses I_res / (1 + (|q|/Br)^Nu) and is k-scaled.
+        - scale_resolution_to_total is kept for signature compatibility.
         """
-        spec = [s.lower() for s in spec]
+        spec = [_shape_key(s) for s in spec]
         q_arr = np.asarray(q, dtype=float)
         # 采样配置
         pd_defaults = dict(nsig=4.0, n_samples=25)
@@ -343,41 +377,48 @@ def mixed_model_components(
 
         parts = []
         idx = 0
-        BG_total = np.zeros_like(q_arr, dtype=float)
-
         # 粒子贡献（未展宽）
         raw_particles = []
         for i, shape in enumerate(spec, 1):
             if shape == "sphere":
-                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; D = params[idx+3]; sD = params[idx+4]; BG = params[idx+5]
-                idx += 6
+                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; D = params[idx+3]; sD = params[idx+4]
+                idx += 5
                 P = sphere_form_factor_pd(q_arr, R, sR, n_samples=int(pd_defaults["n_samples"]), nsig=pd_defaults["nsig"])
                 S = np.ones_like(q_arr, dtype=float) if (D == 0 or sD == 0) else structure_factor_1d(q_arr, D, sD)
                 I_part = float(Int) * P * S
-                BG_total = BG_total + float(Int) * float(BG)
                 raw_particles.append(("sphere", i, I_part))
             elif shape == "cylinder":
-                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; h = params[idx+3]; sh = params[idx+4]; D = params[idx+5]; sD = params[idx+6]; BG = params[idx+7]
-                idx += 8
+                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; h = params[idx+3]; sh = params[idx+4]; D = params[idx+5]; sD = params[idx+6]
+                idx += 7
                 P = cylinder_form_factor_pd(
                     q_arr, R, sR, h, sh,
                     n_R=int(cyl_defaults["n_R"]), n_h=int(cyl_defaults["n_h"]), nsig=cyl_defaults["nsig"], n_orient=int(cyl_defaults["n_orient"]) 
                 )
                 S = np.ones_like(q_arr, dtype=float) if (D == 0 or sD == 0) else structure_factor_1d(q_arr, D, sD)
                 I_part = float(Int) * P * S
-                BG_total = BG_total + float(Int) * float(BG)
                 raw_particles.append(("cylinder", i, I_part))
+            elif shape == "vertical_cylinder":
+                Int = params[idx]; R = params[idx+1]; sR = params[idx+2]; D = params[idx+3]; sD = params[idx+4]
+                idx += 5
+                P = vertical_cylinder_form_factor_pd(
+                    q_arr, R, sR,
+                    n_samples=int(pd_defaults["n_samples"]),
+                    nsig=3.0,
+                )
+                S = np.ones_like(q_arr, dtype=float) if (D == 0 or sD == 0) else structure_factor_1d(q_arr, D, sD)
+                I_part = float(Int) * P * S
+                raw_particles.append(("vertical_cylinder", i, I_part))
             else:
                 raise ValueError(f"Unsupported shape: {shape}")
 
         # 取出分辨率与缩放因子
-        sigma_Res = float(params[idx]); nu_Res = float(params[idx+1]); int_Res = float(params[idx+2]); k = float(params[idx+3])
+        BG = float(params[idx]); sigma_Res = float(params[idx+1]); nu_Res = float(params[idx+2]); int_Res = float(params[idx+3]); k = float(params[idx+4])
 
         # 组件曲线直接乘以 k（新分辨率模型无需再对粒子做高斯展宽）
         for shape, i, I_part in raw_particles:
             parts.append({"shape": shape, "index": i, "I": apply_scaling_factor(I_part, k)})
 
-        BG_curve = apply_scaling_factor(BG_total, k)
+        BG_curve = np.full_like(q_arr, BG, dtype=float)
 
         # 分辨率曲线
         res_curve_raw = _resolution_component(q_arr, sigma_Res, nu_Res, int_Res)
