@@ -124,6 +124,23 @@ class NoWheelDoubleSpinBox(QDoubleSpinBox):
 
 
 class CurrentPageHeightStackedWidget(QStackedWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.currentChanged.connect(lambda _index: QTimer.singleShot(0, self.sync_current_height))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.sync_current_height()
+
+    def sync_current_height(self):
+        current_widget = self.currentWidget()
+        hint = current_widget.sizeHint() if current_widget is not None else super().sizeHint()
+        height = max(1, hint.height())
+        self.setMinimumHeight(height)
+        self.setMaximumHeight(height)
+        self.updateGeometry()
+
     def sizeHint(self):
         current_widget = self.currentWidget()
         if current_widget is not None:
@@ -7431,7 +7448,7 @@ class FittingController(QObject):
 
         stack = CurrentPageHeightStackedWidget(container)
         stack.setObjectName(f'fitParticleStackWidget_{widget_id}')
-        stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         none_page = QWidget(stack)
         none_layout = QVBoxLayout(none_page)
         none_layout.setContentsMargins(4, 6, 4, 6)
@@ -7442,11 +7459,12 @@ class FittingController(QObject):
         stack.addWidget(none_page)
         for shape_name in COMPONENT_ORDER[1:]:
             stack.addWidget(self._create_particle_parameter_page(stack, widget_id, shape_name))
-        layout.addWidget(stack)
+        layout.addWidget(stack, 0)
         container.setMinimumSize(420, 0)
         container.setMaximumWidth(16777215)
-        container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._register_ui_children(container)
+        QTimer.singleShot(0, lambda widget=container: self._sync_particle_widget_height(widget))
 
     def _create_particle_parameter_page(self, parent: QWidget, widget_id: int, shape_name: str) -> QWidget:
         page = QWidget(parent)
@@ -7624,6 +7642,21 @@ class FittingController(QObject):
         self._initialize_particle_states([widget_id])
         self._schedule_model_parameters_region_refresh()
 
+    def _sync_particle_widget_height(self, widget: QWidget):
+        if widget is None:
+            return
+        for stack in widget.findChildren(CurrentPageHeightStackedWidget):
+            stack.sync_current_height()
+        layout = widget.layout()
+        if layout is not None:
+            layout.invalidate()
+            layout.activate()
+        height = max(1, widget.sizeHint().height())
+        widget.setMinimumHeight(height)
+        widget.setMaximumHeight(height)
+        widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        widget.updateGeometry()
+
     def _schedule_model_parameters_region_refresh(self):
         try:
             QTimer.singleShot(0, self._refresh_model_parameters_region_height)
@@ -7642,6 +7675,9 @@ class FittingController(QObject):
         if particle_container is not None:
             particle_container.updateGeometry()
             particle_container.adjustSize()
+            for widget in particle_container.findChildren(QWidget):
+                if widget.objectName().startswith('fitParticleWidget_'):
+                    self._sync_particle_widget_height(widget)
 
         if model_card is not None:
             base_min_height = model_card.property('baseMinHeight')
@@ -7650,9 +7686,10 @@ class FittingController(QObject):
                 model_card.setProperty('baseMinHeight', base_min_height)
             model_card.layout().activate() if model_card.layout() is not None else None
             model_card.updateGeometry()
-            model_card.adjustSize()
             model_min_height = max(int(base_min_height), model_card.sizeHint().height())
             model_card.setMinimumHeight(model_min_height)
+            model_card.setMaximumHeight(model_min_height)
+            model_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         else:
             model_min_height = 0
 
@@ -8206,12 +8243,12 @@ class FittingController(QObject):
             else:
                 stack_widget.setCurrentIndex(target_page_index)
 
+            if isinstance(stack_widget, CurrentPageHeightStackedWidget):
+                stack_widget.sync_current_height()
             stack_widget.updateGeometry()
-            stack_widget.adjustSize()
             parent_widget = stack_widget.parentWidget()
             if parent_widget is not None:
-                parent_widget.updateGeometry()
-                parent_widget.adjustSize()
+                self._sync_particle_widget_height(parent_widget)
             self._schedule_model_parameters_region_refresh()
 
             # ????????????

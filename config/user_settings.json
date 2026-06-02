@@ -3,33 +3,37 @@
   "window_width": 1566,
   "window_height": 900,
   "font_adjustment": -3,
-  "visual_font_scale": 100,
+  "visual_font_scale": 106,
   "_auto_k_enabled": false,
-  "fit.points_num": 100,
+  "fit.points_num": 98,
   "fit.interp_method": "Spline",
   "responsive_layout_mode": "auto",
   "responsive_resize_on_start": false,
   "responsive_font_enabled": false,
   "auto_detect_monitor_dpi": true,
   "adaptive_layout_enabled": true,
+  "manual_screen_resolution": "1280x720",
+  "layout_target_mode": "compact",
+  "layout_target_custom": "1280x720",
+  "auto_fit_layout_target": true,
   "main_splitter_sizes": [
-    190,
-    1186
+    180,
+    1076
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      740,
-      420
+      647,
+      403
     ],
     "work": [
-      1558,
-      743
+      1468,
+      812
     ],
     "preview": [
-      332,
-      828,
-      160
+      280,
+      700,
+      140
     ],
-    "profile": "normal"
+    "profile": "compact"
   }
 }

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from core.user_settings import user_settings
+from ui.responsive_layout import effective_ui_scale
 
 
 STYLE_DIR = Path(__file__).resolve().parent / "styles"
@@ -10,7 +10,7 @@ MAIN_WINDOW_QSS = STYLE_DIR / "main_window.qss"
 
 
 def _scaled_pt(base_size: float, scale_percent: int) -> str:
-    size = max(7.0, base_size * scale_percent / 100.0)
+    size = max(4.0, base_size * scale_percent / 100.0)
     return f"{size:.1f}pt"
 
 
@@ -19,7 +19,7 @@ def apply_main_window_styles(window) -> None:
     if not MAIN_WINDOW_QSS.exists():
         return
 
-    scale_percent = user_settings.get_visual_font_scale()
+    scale_percent = effective_ui_scale(window)
     stylesheet = MAIN_WINDOW_QSS.read_text(encoding="utf-8")
     chevron_path = (STYLE_DIR / "icons" / "chevron-down.svg").as_posix()
     chevron_up_path = (STYLE_DIR / "icons" / "chevron-up.svg").as_posix()

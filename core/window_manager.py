@@ -181,8 +181,12 @@ class WindowManager:
         if base_font_size is None:
             base_font_size = self.config.DEFAULT_FONT_SIZE
 
-        scale = user_settings.get_visual_font_scale() / 100.0
-        font_size = max(7.0, base_font_size * scale)
+        try:
+            from ui.responsive_layout import effective_ui_scale
+            scale = effective_ui_scale(window) / 100.0
+        except Exception:
+            scale = user_settings.get_visual_font_scale() / 100.0
+        font_size = max(4.0, base_font_size * scale)
 
         font = QFont()
         font.setPointSizeF(font_size)

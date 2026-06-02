@@ -38,7 +38,11 @@ class UserSettings:
             "responsive_resize_on_start": False,
             "responsive_font_enabled": False,
             "auto_detect_monitor_dpi": True,
-            "adaptive_layout_enabled": True
+            "adaptive_layout_enabled": True,
+            "manual_screen_resolution": "auto",
+            "layout_target_mode": "auto",
+            "layout_target_custom": "1920x1080",
+            "auto_fit_layout_target": True
         }
 
     def _load_default_settings(self):

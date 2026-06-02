@@ -1032,7 +1032,8 @@ class ModelParameterCard(CardFrame):
             particle_layout.setContentsMargins(0, 0, 0, 0)
             particle_layout.setSpacing(scale_value(8, profile, 6))
             particle_layout.setAlignment(Qt.AlignTop)
-            particle_layout.setStretch(0, 1)
+            for index in range(particle_layout.count()):
+                particle_layout.setStretch(index, 0)
         self.body_layout.addWidget(ui.widget_7, 1)
 
 
@@ -1360,6 +1361,7 @@ class GisaxsFittingWorkspace:
         self._build_left_work_area()
         self._build_preview_area()
         self._configure_button_responsiveness()
+        self._apply_page_overflow_policy()
         self.restore_sizes()
 
     def _detach_preview_widgets(self) -> None:
@@ -1500,13 +1502,65 @@ class GisaxsFittingWorkspace:
         _take_widget(layout, self.ui.gisaxsFittingPageScrollArea)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.page_splitter)
+        self.page_scroll_area = make_scroll_area(self.page_splitter, horizontal=True)
+        self.page_scroll_area.setObjectName("gisaxsWorkspaceHorizontalScrollArea")
+        layout.addWidget(self.page_scroll_area)
+
+    def _page_min_width(self) -> int:
+        return self.profile.workspace_min + self.profile.preview_min + self.page_splitter.handleWidth()
+
+    def _apply_page_overflow_policy(self) -> None:
+        min_width = self._page_min_width()
+        self.page_splitter.setMinimumWidth(min_width)
+        self.page_splitter.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
+        if hasattr(self, "page_scroll_area"):
+            self.page_scroll_area.setMinimumWidth(0)
+            self.page_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        QTimer.singleShot(0, self._set_page_sizes)
+
+    def _available_page_width(self) -> int:
+        if hasattr(self, "page_scroll_area") and self.page_scroll_area.viewport() is not None:
+            width = self.page_scroll_area.viewport().width()
+            if width > 0:
+                return width
+        width = self.ui.gisaxsFittingPage.width()
+        return width if width > 0 else self._page_min_width()
+
+    def _set_page_sizes(self, sizes: Sequence[int] | None = None) -> None:
+        available = max(1, self._available_page_width() - self.page_splitter.handleWidth())
+        left_min = self.profile.workspace_min
+        right_min = self.profile.preview_min
+
+        if available < left_min + right_min:
+            self.page_splitter.setSizes([left_min, right_min])
+            return
+
+        if sizes and len(sizes) == 2:
+            left = max(left_min, int(sizes[0]))
+            right = max(right_min, int(sizes[1]))
+        else:
+            left, right = self.profile.page_sizes
+            left = max(left_min, int(left))
+            right = max(right_min, int(right))
+
+        overflow = left + right - available
+        if overflow > 0:
+            reducible_left = max(0, left - left_min)
+            reduce_left = min(reducible_left, overflow)
+            left -= reduce_left
+            overflow -= reduce_left
+        if overflow > 0:
+            reducible_right = max(0, right - right_min)
+            reduce_right = min(reducible_right, overflow)
+            right -= reduce_right
+
+        self.page_splitter.setSizes([left, right])
 
     def restore_sizes(self) -> None:
         sizes = user_settings.get(self.SETTINGS_KEY, None)
         if isinstance(sizes, dict):
             if sizes.get("profile") != self.profile.key:
-                self.page_splitter.setSizes(list(self.profile.page_sizes))
+                self._set_page_sizes(self.profile.page_sizes)
                 self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
                 self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
                 return
@@ -1514,14 +1568,9 @@ class GisaxsFittingWorkspace:
             work_sizes = sizes.get("work")
             preview_sizes = sizes.get("preview")
             if isinstance(page_sizes, (list, tuple)) and len(page_sizes) == 2:
-                self.page_splitter.setSizes(
-                    [
-                        max(self.profile.workspace_min, int(page_sizes[0])),
-                        max(self.profile.preview_min, int(page_sizes[1])),
-                    ]
-                )
+                self._set_page_sizes(page_sizes)
             else:
-                self.page_splitter.setSizes(list(self.profile.page_sizes))
+                self._set_page_sizes(self.profile.page_sizes)
             if isinstance(work_sizes, (list, tuple)) and len(work_sizes) == 2:
                 self.work_splitter.setSizes(
                     [
@@ -1543,7 +1592,7 @@ class GisaxsFittingWorkspace:
                 self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
             return
 
-        self.page_splitter.setSizes(list(self.profile.page_sizes))
+        self._set_page_sizes(self.profile.page_sizes)
         self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
         self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
 
@@ -1570,6 +1619,7 @@ class GisaxsFittingWorkspace:
         self.preview_scroll_area.setMinimumWidth(profile.preview_min)
         self.work_splitter.setMinimumWidth(profile.workspace_min)
         self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(profile.workspace_min)
+        self._apply_page_overflow_policy()
 
         fixed_min = self._fixed_stack_min_height()
         self.fixed_controls_stack.setMinimumHeight(fixed_min)
@@ -1579,7 +1629,7 @@ class GisaxsFittingWorkspace:
         self.preview_splitter.setMinimumHeight(
             sum(self.DEFAULT_PREVIEW_SIZES) + 2 * self.preview_splitter.handleWidth()
         )
-        self.page_splitter.setSizes(list(profile.page_sizes))
+        self._set_page_sizes(profile.page_sizes)
         self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
         self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
 

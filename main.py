@@ -125,7 +125,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def setup_window(self):
         """设置窗口属性"""
         # 使用窗口管理器设置自适应窗口（使用配置中的默认值）
-        scale = window_manager.setup_adaptive_window(self)
+        if hasattr(self, 'components'):
+            scale = 1.0
+        else:
+            scale = window_manager.setup_adaptive_window(self)
         
         # 应用自适应字体
         window_manager.apply_adaptive_font(self)
