@@ -3,7 +3,7 @@
 窗口管理器 - 处理窗口定位和自适应缩放
 """
 
-from PyQt5.QtWidgets import QApplication, QDesktopWidget
+from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QCursor
 from PyQt5.QtCore import QRect
 import sys
@@ -30,12 +30,15 @@ class WindowManager:
     
     def get_mouse_screen_info(self):
         """获取鼠标所在屏幕的信息"""
+        app = QApplication.instance()
         cursor_pos = QCursor.pos()
-        screen_number = self.desktop.screenNumber(cursor_pos)
-        screen_geometry = self.desktop.screenGeometry(screen_number)
+        screen = app.screenAt(cursor_pos) if app is not None else None
+        if screen is None and app is not None:
+            screen = app.primaryScreen()
+        screen_geometry = screen.geometry() if screen is not None else QRect(0, 0, 1366, 768)
         
         return {
-            'screen_number': screen_number,
+            'screen': screen,
             'geometry': screen_geometry,
             'cursor_pos': cursor_pos
         }
@@ -52,7 +55,8 @@ class WindowManager:
         screen_geometry = screen_info['geometry']
         
         # 获取屏幕可用区域（排除任务栏等）
-        available_geometry = self.desktop.availableGeometry(screen_info['screen_number'])
+        screen = screen_info.get('screen')
+        available_geometry = screen.availableGeometry() if screen is not None else screen_geometry
         
         # 计算缩放比例（基于屏幕宽度，以1920为基准）
         width_scale = screen_geometry.width() / 1920.0
@@ -110,7 +114,9 @@ class WindowManager:
     
     def _center_window_on_primary_screen(self, window):
         """将窗口居中显示在主屏幕上"""
-        primary_screen = self.desktop.screenGeometry(0)
+        app = QApplication.instance()
+        screen = app.primaryScreen() if app is not None else None
+        primary_screen = screen.geometry() if screen is not None else QRect(0, 0, 1366, 768)
         window_geometry = window.geometry()
         
         # 计算居中位置
@@ -185,15 +191,21 @@ class WindowManager:
     def get_screen_dpi_info(self):
         """获取屏幕DPI信息"""
         screen_info = self.get_mouse_screen_info()
-        screen_number = screen_info['screen_number']
+        screen = screen_info.get('screen')
+        if screen is None:
+            return {
+                'physical_dpi': (96.0, 96.0),
+                'logical_dpi': (96.0, 96.0),
+                'scale_factor': 1.0
+            }
         
         # 获取物理DPI
-        physical_dpi_x = self.desktop.physicalDpiX()
-        physical_dpi_y = self.desktop.physicalDpiY()
+        physical_dpi_x = screen.physicalDotsPerInchX()
+        physical_dpi_y = screen.physicalDotsPerInchY()
         
         # 获取逻辑DPI
-        logical_dpi_x = self.desktop.logicalDpiX()
-        logical_dpi_y = self.desktop.logicalDpiY()
+        logical_dpi_x = screen.logicalDotsPerInchX()
+        logical_dpi_y = screen.logicalDotsPerInchY()
         
         return {
             'physical_dpi': (physical_dpi_x, physical_dpi_y),

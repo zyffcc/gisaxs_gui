@@ -34,6 +34,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.global_params import global_params
+from ui.responsive_layout import apply_density_profile, install_adaptive_window_profile
 from utils.path_utils import normalize_path
 from .fitting_controller import AsyncImageLoader, is_matplotlib_available, is_fabio_available
 from .multifile_predict_results import (
@@ -232,12 +233,23 @@ class GisaxsPredictController(QObject):
         layout.addWidget(viewer)
         self._status_text_window = win
         self._status_text_window_browser = viewer
+        install_adaptive_window_profile(
+            win,
+            lambda profile, screen, window=win: self._apply_floating_screen_profile(window, profile),
+            apply_window_minimum=False,
+        )
         win.finished.connect(self._on_status_text_window_closed)
         win.show()
 
     def _on_status_text_window_closed(self) -> None:
         self._status_text_window = None
         self._status_text_window_browser = None
+
+    def _apply_floating_screen_profile(self, window, profile) -> None:
+        try:
+            apply_density_profile(window, profile)
+        except Exception:
+            pass
 
     def _set_predict_main_tab(self, target_label: str) -> None:
         tabs = getattr(self.ui, "gisaxsPredictImageShowTabWidget", None)
@@ -557,6 +569,11 @@ class GisaxsPredictController(QObject):
             outer = QVBoxLayout(win)
             outer.setContentsMargins(10, 8, 10, 8)
             outer.setSpacing(8)
+            install_adaptive_window_profile(
+                win,
+                lambda profile, screen, window=win: self._apply_floating_screen_profile(window, profile),
+                apply_window_minimum=False,
+            )
 
             # === 1. 当前文件显示区域 ===
             current_file_frame = QFrame(win)

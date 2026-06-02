@@ -77,31 +77,33 @@
             "beam_center_y": 368.0
         },
         "last_session": {
-            "last_opened_file": "",
-            "last_directory": "",
+            "last_opened_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
+            "last_directory": "D:\\PythonCode\\gisaxs_gui\\Experiment_data",
             "last_1d_directory": null,
             "last_1d_file": null,
-            "stack_count": 1,
-            "load_mode": "Single",
+            "stack_count": 40,
+            "load_mode": "Stack",
             "insitu_range": "",
-            "center_vertical": 0.0,
-            "center_parallel": 0.0,
-            "cutline_vertical": 10.0,
-            "cutline_parallel": 10.0,
-            "auto_show": false,
+            "center_vertical": 507.0,
+            "center_parallel": 717.99,
+            "cutline_vertical": 20.0,
+            "cutline_parallel": 1180.0,
+            "auto_show": true,
             "log_mode": true,
             "auto_scale": true,
-            "vmin": 0.0,
-            "vmax": 0.0,
-            "fit_current_data": false,
-            "fit_log_x": false,
-            "fit_log_y": false,
+            "vmin": -6.907755374908447,
+            "vmax": 7.856319427490234,
+            "fit_current_data": true,
+            "fit_log_x": true,
+            "fit_log_y": true,
             "fit_norm": false
         },
         "gisaxs_input": {
             "vmax": 4.21,
             "center_parallel": 4.0,
-            "cutline_vertical": 9.0
+            "cutline_vertical": 9.0,
+            "cutline_parallel": 20.0,
+            "load_mode": "Stack"
         }
     },
     "gisaxs_predict": {

@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem, QPushButton, QGraphicsScene
 )
 from core.global_params import global_params  # 全局参数管理器，用于持久化到 user_parameters.json
+from ui.responsive_layout import apply_density_profile, install_adaptive_window_profile
 from utils.path_utils import normalize_path
 
 
@@ -1422,6 +1423,7 @@ class ClassificationController(QObject):
                 self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
                 self.canvas.mpl_connect('scroll_event', self._on_scroll)
                 self.canvas.mpl_connect('key_press_event', self._on_key)
+                install_adaptive_window_profile(self, self._apply_screen_profile, apply_window_minimum=False)
                 self._redraw()
                 # Auto scale on first open so users don't need to click Reset
                 try:
@@ -1429,6 +1431,9 @@ class ClassificationController(QObject):
                 except Exception:
                     pass
                 self._first_draw = False
+
+            def _apply_screen_profile(self, profile, screen):
+                apply_density_profile(self, profile)
 
             def _current_xy(self):
                 xdim = max(1, min(self.sp_x.value(), self.emb.shape[1])) - 1

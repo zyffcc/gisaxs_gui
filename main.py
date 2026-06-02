@@ -8,6 +8,7 @@ import sys
 import os
 import warnings
 from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.QtCore import Qt
 from ui.main_window import Ui_MainWindow  # 导入转换后的 UI 类
 from ui.components import MainWindowComponents
 from ui.menu_manager import MenuManager
@@ -272,6 +273,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
 def main():
     """主函数"""
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
     
     # 设置应用程序属性

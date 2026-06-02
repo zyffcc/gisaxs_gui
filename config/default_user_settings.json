@@ -8,6 +8,8 @@
   "fit.points_num": 50,
   "fit.interp_method": "Linear",
   "responsive_layout_mode": "auto",
-  "responsive_resize_on_start": true,
-  "responsive_font_enabled": false
+  "responsive_resize_on_start": false,
+  "responsive_font_enabled": false,
+  "auto_detect_monitor_dpi": true,
+  "adaptive_layout_enabled": true
 }

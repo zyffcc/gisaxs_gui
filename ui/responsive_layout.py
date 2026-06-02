@@ -1,11 +1,11 @@
-"""Screen-aware layout breakpoints for the PyQt main window."""
+"""Screen-aware layout profiles for top-level PyQt windows."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PyQt5.QtCore import QRect, QSize
-from PyQt5.QtGui import QCursor
+from PyQt5.QtCore import QObject, QEvent, QRect, QSize, QTimer, pyqtSignal
+from PyQt5.QtGui import QCursor, QScreen
 from PyQt5.QtWidgets import QApplication, QAbstractButton, QCheckBox, QSizePolicy, QWidget
 
 from core.user_settings import user_settings
@@ -48,9 +48,9 @@ PROFILES = {
         font_adjustment=-1,
         density_scale=0.82,
     ),
-    "standard": ResponsiveProfile(
-        key="standard",
-        label="Standard",
+    "normal": ResponsiveProfile(
+        key="normal",
+        label="Normal",
         min_window=QSize(1200, 760),
         preferred_window_ratio=0.92,
         sidebar_min=180,
@@ -62,23 +62,6 @@ PROFILES = {
         page_sizes=(760, 500),
         work_sizes=(760, 680),
         preview_sizes=(300, 860, 160),
-        font_adjustment=0,
-        density_scale=1.0,
-    ),
-    "spacious": ResponsiveProfile(
-        key="spacious",
-        label="Spacious",
-        min_window=QSize(1360, 820),
-        preferred_window_ratio=0.90,
-        sidebar_min=190,
-        sidebar_max=230,
-        sidebar_default=200,
-        content_min=1120,
-        workspace_min=700,
-        preview_min=460,
-        page_sizes=(860, 560),
-        work_sizes=(800, 760),
-        preview_sizes=(340, 920, 180),
         font_adjustment=0,
         density_scale=1.0,
     ),
@@ -101,9 +84,21 @@ PROFILES = {
     ),
 }
 
+PROFILE_ALIASES = {
+    "standard": "normal",
+    "spacious": "wide",
+    "manual": "normal",
+}
+
+
+def normalized_profile_key(key: str | None) -> str:
+    key = key or "auto"
+    return PROFILE_ALIASES.get(key, key)
+
 
 def scale_value(value: int, profile: ResponsiveProfile, minimum: int | None = None) -> int:
-    scaled = int(round(value * profile.density_scale))
+    ui_scale = max(0.8, min(user_settings.get_visual_font_scale() / 100.0, 1.4))
+    scaled = int(round(value * profile.density_scale * ui_scale))
     return max(minimum, scaled) if minimum is not None else scaled
 
 
@@ -159,37 +154,50 @@ def apply_density_profile(root: QWidget, profile: ResponsiveProfile) -> None:
         widget.updateGeometry()
 
 
-def available_screen_geometry(window: QWidget | None = None) -> QRect:
+def screen_for_window(window: QWidget | None = None) -> QScreen | None:
     app = QApplication.instance()
     if app is None:
-        return QRect(0, 0, 1366, 768)
+        return None
 
     screen = None
     if window is not None and window.windowHandle() is not None:
         screen = window.windowHandle().screen()
+    if screen is None and window is not None:
+        screen = app.screenAt(window.frameGeometry().center())
     if screen is None:
         screen = app.screenAt(QCursor.pos())
     if screen is None:
         screen = app.primaryScreen()
+    return screen
+
+
+def available_screen_geometry(window: QWidget | None = None) -> QRect:
+    screen = screen_for_window(window)
     return screen.availableGeometry() if screen is not None else QRect(0, 0, 1366, 768)
+
+
+def screen_dpi_scale(screen: QScreen | None) -> float:
+    if screen is None or not user_settings.get("auto_detect_monitor_dpi", True):
+        return 1.0
+    dpi = screen.logicalDotsPerInch()
+    return max(1.0, dpi / 96.0) if dpi > 0 else 1.0
 
 
 def profile_key_for_geometry(geometry: QRect) -> str:
     width = geometry.width()
-    height = geometry.height()
-    if width < 1400 or height < 820:
+    if width < 1400:
         return "compact"
-    if width < 1700 or height < 950:
-        return "standard"
-    if width < 2300:
-        return "spacious"
+    if width < 2200:
+        return "normal"
     return "wide"
 
 
 def current_profile(window: QWidget | None = None) -> ResponsiveProfile:
-    mode = user_settings.get("responsive_layout_mode", "auto")
+    mode = normalized_profile_key(user_settings.get("responsive_layout_mode", "auto"))
     if mode in PROFILES:
         return PROFILES[mode]
+    if not user_settings.get("adaptive_layout_enabled", True):
+        return PROFILES["normal"]
     return PROFILES[profile_key_for_geometry(available_screen_geometry(window))]
 
 
@@ -200,13 +208,18 @@ def clamp_size_to_screen(size: QSize, geometry: QRect, ratio: float) -> QSize:
     )
 
 
-def apply_window_profile(window: QWidget, profile: ResponsiveProfile | None = None) -> ResponsiveProfile:
+def apply_window_profile(
+    window: QWidget,
+    profile: ResponsiveProfile | None = None,
+    *,
+    resize_window: bool = False,
+) -> ResponsiveProfile:
     profile = profile or current_profile(window)
     geometry = available_screen_geometry(window)
     min_size = clamp_size_to_screen(profile.min_window, geometry, 0.98)
     window.setMinimumSize(min_size)
 
-    if user_settings.get("responsive_resize_on_start", True):
+    if resize_window:
         target = QSize(
             max(min_size.width(), int(geometry.width() * profile.preferred_window_ratio)),
             max(min_size.height(), int(geometry.height() * profile.preferred_window_ratio)),
@@ -223,3 +236,99 @@ def profile_summary(profile: ResponsiveProfile, geometry: QRect) -> str:
         f"profile minimum {profile.min_window.width()} x {profile.min_window.height()}, "
         f"applied minimum {effective.width()} x {effective.height()}"
     )
+
+
+def screen_summary(window: QWidget | None = None) -> str:
+    screen = screen_for_window(window)
+    geometry = screen.availableGeometry() if screen is not None else QRect(0, 0, 1366, 768)
+    scale = screen_dpi_scale(screen)
+    return f"{geometry.width()} x {geometry.height()} @ {int(round(scale * 100))}%"
+
+
+class AdaptiveWindowProfileController(QObject):
+    """Debounced per-window monitor/profile watcher."""
+
+    profileChanged = pyqtSignal(object, object)
+
+    def __init__(self, window: QWidget, callback=None, debounce_ms: int = 200, apply_window_minimum: bool = True):
+        super().__init__(window)
+        self.window = window
+        self.callback = callback
+        self.apply_window_minimum = apply_window_minimum
+        self._screen = None
+        self._profile_key = None
+        self._connected_screens = set()
+        self._screen_signal_handlers = []
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(debounce_ms)
+        self._timer.timeout.connect(self.refresh)
+        window.installEventFilter(self)
+        QTimer.singleShot(0, self._connect_window_handle)
+        QTimer.singleShot(0, self.refresh)
+
+    def eventFilter(self, watched, event):
+        if watched is self.window and event.type() in (QEvent.Move, QEvent.Resize, QEvent.Show):
+            self.schedule()
+        return super().eventFilter(watched, event)
+
+    def schedule(self) -> None:
+        self._timer.start()
+
+    def _connect_window_handle(self) -> None:
+        handle = self.window.windowHandle()
+        if handle is None:
+            QTimer.singleShot(50, self._connect_window_handle)
+            return
+        try:
+            handle.screenChanged.connect(self._on_screen_changed)
+        except TypeError:
+            pass
+        self._connect_screen(handle.screen())
+
+    def _connect_screen(self, screen: QScreen | None) -> None:
+        if screen is None or id(screen) in self._connected_screens:
+            return
+        self._connected_screens.add(id(screen))
+        for signal in (
+            screen.geometryChanged,
+            screen.availableGeometryChanged,
+            screen.logicalDotsPerInchChanged,
+        ):
+            try:
+                handler = lambda *args: self.schedule()
+                self._screen_signal_handlers.append(handler)
+                signal.connect(handler)
+            except TypeError:
+                pass
+
+    def _on_screen_changed(self, screen: QScreen) -> None:
+        self._connect_screen(screen)
+        self.schedule()
+
+    def refresh(self) -> None:
+        screen = screen_for_window(self.window)
+        self._connect_screen(screen)
+        profile = current_profile(self.window)
+        screen_changed = screen is not self._screen
+        profile_changed = profile.key != self._profile_key
+        if not screen_changed and not profile_changed:
+            return
+        self._screen = screen
+        self._profile_key = profile.key
+        if self.apply_window_minimum:
+            apply_window_profile(self.window, profile, resize_window=False)
+        if self.callback is not None:
+            self.callback(profile, screen)
+        self.profileChanged.emit(profile, screen)
+
+
+def install_adaptive_window_profile(
+    window: QWidget,
+    callback=None,
+    debounce_ms: int = 200,
+    apply_window_minimum: bool = True,
+):
+    controller = AdaptiveWindowProfileController(window, callback, debounce_ms, apply_window_minimum)
+    window._adaptive_profile_controller = controller
+    return controller

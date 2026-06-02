@@ -33,6 +33,7 @@ from PyQt5.QtWidgets import (
 
 # 导入探测器参数对话框
 from ui.detector_parameters_dialog import DetectorParametersDialog
+from ui.responsive_layout import apply_density_profile, install_adaptive_window_profile
 
 # 导入模型参数管理器
 from config.model_parameters_manager import ModelParametersManager
@@ -174,6 +175,10 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
             self.canvas.mpl_connect('button_release_event', self._on_mouse_release)
             self.canvas.mpl_connect('key_press_event', self._on_key_press)
+        install_adaptive_window_profile(self, self._apply_screen_profile, apply_window_minimum=False)
+
+    def _apply_screen_profile(self, profile, screen):
+        apply_density_profile(self, profile)
     
     def _on_xlim_changed(self, ax):
         """X轴范围改变时的回调"""
@@ -945,6 +950,10 @@ class IndependentFitWindow(QMainWindow):
         # 初始化空图
         if self.figure is not None and self.canvas is not None and self.ax is not None:
             self._setup_empty_plot()
+        install_adaptive_window_profile(self, self._apply_screen_profile, apply_window_minimum=False)
+
+    def _apply_screen_profile(self, profile, screen):
+        apply_density_profile(self, profile)
         
     def _setup_empty_plot(self):
         """设置初始空图"""

@@ -35,8 +35,10 @@ class UserSettings:
             "fit.points_num": 50,
             "fit.interp_method": "Linear",
             "responsive_layout_mode": "auto",
-            "responsive_resize_on_start": True,
-            "responsive_font_enabled": False
+            "responsive_resize_on_start": False,
+            "responsive_font_enabled": False,
+            "auto_detect_monitor_dpi": True,
+            "adaptive_layout_enabled": True
         }
 
     def _load_default_settings(self):

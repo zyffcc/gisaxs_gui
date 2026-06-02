@@ -46,7 +46,13 @@ from ui.layout_utils import (
     normalize_input,
     set_expanding_x,
 )
-from ui.responsive_layout import apply_density_profile, apply_window_profile, current_profile, scale_value
+from ui.responsive_layout import (
+    apply_density_profile,
+    apply_window_profile,
+    current_profile,
+    install_adaptive_window_profile,
+    scale_value,
+)
 from ui.style_loader import apply_main_window_styles
 
 
@@ -1250,7 +1256,8 @@ class MainWindowComponents:
         )
         apply_main_window_styles(ui)
         apply_density_profile(ui.centralwidget, self.responsive_profile)
-        apply_window_profile(ui.centralwidget.window(), self.responsive_profile)
+        apply_window_profile(ui.centralwidget.window(), self.responsive_profile, resize_window=True)
+        install_adaptive_window_profile(ui.centralwidget.window(), self._on_screen_profile_changed)
 
     def _create_sidebar(self) -> NavigationSidebar:
         buttons = [
@@ -1288,10 +1295,17 @@ class MainWindowComponents:
     def apply_responsive_profile(self, profile) -> None:
         self.responsive_profile = profile
         apply_density_profile(self.ui.centralwidget, profile)
-        apply_window_profile(self.ui.centralwidget.window(), profile)
+        apply_window_profile(self.ui.centralwidget.window(), profile, resize_window=False)
         self.fitting_workspace.apply_responsive_profile(profile)
         self.shell.apply_responsive_profile(profile)
         apply_density_profile(self.ui.centralwidget, profile)
+
+    def _on_screen_profile_changed(self, profile, screen) -> None:
+        if profile.key == self.responsive_profile.key:
+            apply_density_profile(self.ui.centralwidget, profile)
+            return
+        self.apply_responsive_profile(profile)
+        apply_main_window_styles(self.ui)
 
     @staticmethod
     def _clear_generated_inline_styles(root: QWidget) -> None:
