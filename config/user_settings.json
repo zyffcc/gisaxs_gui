@@ -18,16 +18,16 @@
   "auto_fit_layout_target": true,
   "main_splitter_sizes": [
     180,
-    1076
+    1600
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      647,
-      403
+      976,
+      598
     ],
     "work": [
-      1468,
-      812
+      1491,
+      817
     ],
     "preview": [
       280,
