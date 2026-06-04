@@ -5,7 +5,7 @@
   "font_adjustment": -3,
   "visual_font_scale": 106,
   "_auto_k_enabled": false,
-  "fit.points_num": 98,
+  "fit.points_num": 1000,
   "fit.interp_method": "Spline",
   "responsive_layout_mode": "auto",
   "responsive_resize_on_start": false,
@@ -18,12 +18,12 @@
   "auto_fit_layout_target": true,
   "main_splitter_sizes": [
     180,
-    1600
+    1716
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      976,
-      598
+      1048,
+      642
     ],
     "work": [
       1491,
