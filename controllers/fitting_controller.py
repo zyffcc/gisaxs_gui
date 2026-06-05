@@ -200,13 +200,16 @@ except ImportError:
 class IndependentMatplotlibWindow(QMainWindow):
     """No description."""
 
+    DEFAULT_TITLE = "GIMaP Image Viewer - Independent Window (right-click to select)"
+    SELECTION_TITLE = "GIMaP Image Viewer - Selection Mode (drag to select, Esc to exit)"
+
     # ???????????????????
     region_selected = pyqtSignal(dict)  # ?????????????
     status_updated = pyqtSignal(str)  # ?????????????
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("GIMaP Image Viewer - Independent Window (Selection Mode: Right-click to activate)")
+        self.setWindowTitle(self.DEFAULT_TITLE)
         self.setGeometry(100, 100, 900, 700)
 
         # ?????widget
@@ -297,7 +300,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         if event.button == 3:  # ???
             if not self.selection_mode:
                 self.selection_mode = True
-                self.setWindowTitle("GIMaP Image Viewer - ??????????(?????????, ESC????")
+                self.setWindowTitle(self.SELECTION_TITLE)
                 self.canvas.setCursor(Qt.CrossCursor)
                 self.status_updated.emit("Selection mode activated - Drag to select, Right-click again to exit")
             else:
@@ -412,9 +415,9 @@ class IndependentMatplotlibWindow(QMainWindow):
 
                     # ?????????????????????????????
                     self.setWindowTitle(
-                        f"GIMaP Image Viewer - ????????: "
-                        f"??({selection_info['pixel_center_x']}, {selection_info['pixel_center_y']}) "
-                        f"??({selection_info['pixel_width']}?{selection_info['pixel_height']})"
+                        f"GIMaP Image Viewer - Pixel selection: "
+                        f"center=({selection_info['pixel_center_x']}, {selection_info['pixel_center_y']}), "
+                        f"size=({selection_info['pixel_width']} x {selection_info['pixel_height']}) px"
                     )
 
                 self.current_selection = selection_info
@@ -455,7 +458,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         self.selection_mode = False
         self.selection_start = None
         self.canvas.unsetCursor()
-        self.setWindowTitle("GIMaP Image Viewer - Independent Window (?????????")
+        self.setWindowTitle(self.DEFAULT_TITLE)
         if self.selection_rect:
             self.selection_rect.remove()
             self.selection_rect = None
@@ -469,9 +472,9 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.canvas.draw_idle()
         self.current_selection = None
         if self.selection_mode:
-            self.setWindowTitle("GIMaP Image Viewer - ??????????(?????????)")
+            self.setWindowTitle(self.SELECTION_TITLE)
         else:
-            self.setWindowTitle("GIMaP Image Viewer - Independent Window (?????????")
+            self.setWindowTitle(self.DEFAULT_TITLE)
 
     def update_image(self, image_data, vmin=None, vmax=None, use_log=True):
         """No description."""
@@ -642,7 +645,10 @@ class IndependentMatplotlibWindow(QMainWindow):
 
             # ?????
             coord_info = "Q-space" if show_q_axis else "Pixel coordinates"
-            self.ax.set_title(f'GISAXS Image ({scale_text}) - {image_data.shape[1]}?{image_data.shape[0]} ({coord_info})\nVmin: {vmin:.3f}, Vmax: {vmax:.3f}')
+            self.ax.set_title(
+                f'GISAXS Image ({scale_text}) - {image_data.shape[1]} x {image_data.shape[0]} ({coord_info})\n'
+                f'Vmin: {vmin:.3f}, Vmax: {vmax:.3f}'
+            )
 
             # ???????????
             if show_q_axis:
@@ -772,7 +778,7 @@ class IndependentMatplotlibWindow(QMainWindow):
 
             if show_q_axis:
                 # Q???????????(nm??? ???
-                unit_suffix = " (nm???"
+                unit_suffix = " (nm^-1)"
             else:
                 # ??????????????(pixel) ???
                 unit_suffix = " (pixel)"
@@ -1062,7 +1068,7 @@ class IndependentFitWindow(QMainWindow):
     def _setup_empty_plot(self):
         """No description."""
         self.ax.clear()
-        self.ax.text(0.5, 0.5, 'Perform a cut operation to see results here\nDouble-click fitGraphicsView to open this window',
+        self.ax.text(0.5, 0.5, 'Perform a cut operation to see results here.\nDouble-click the Fitting Plot to open a larger window.',
                     horizontalalignment='center', verticalalignment='center',
                     transform=self.ax.transAxes, fontsize=12, alpha=0.7)
         self.ax.set_xlabel('Position')
@@ -1094,7 +1100,7 @@ class IndependentFitWindow(QMainWindow):
         control_layout.addWidget(QLabel("q Unit:"))
 
         self.q_unit_combo = QComboBox()
-        self.q_unit_combo.addItem("q (A^-1)", "angstrom")
+        self.q_unit_combo.addItem("q (Angstrom^-1)", "angstrom")
         self.q_unit_combo.addItem("q (nm^-1)", "nm")
         self.q_unit_combo.setCurrentIndex(1)
         self.q_unit_combo.currentTextChanged.connect(self._on_q_unit_changed)
@@ -1147,7 +1153,7 @@ class IndependentFitWindow(QMainWindow):
 
     def _format_q_axis_label(self, filter_mode='all', absolute=False):
         """No description."""
-        unit_text = 'nm$^{-1}$' if self._get_q_unit_key() == 'nm' else '?$^{-1}$'
+        unit_text = 'nm$^{-1}$' if self._get_q_unit_key() == 'nm' else r'$\AA^{-1}$'
         base = '|q|' if absolute or filter_mode == 'negative' else 'q'
         suffix = ''
         if filter_mode == 'positive':
@@ -1661,6 +1667,8 @@ class FittingController(QObject):
         self.q_ROI = None
         self.I_ROI = None
         self._updating_roi_controls = False
+        self._roi_controls_enabled = True
+        self._last_axis_filter_mode = 'all'
         self._slider_is_source = False
         self._points_num_default = 50
         self._points_num_current = 50
@@ -2037,6 +2045,8 @@ class FittingController(QObject):
 
     # ---------------- ROI helpers for plotting -----------------
     def _roi_active(self) -> bool:
+        if not getattr(self, '_roi_controls_enabled', True):
+            return False
         return (
             self._roi_min is not None and self._roi_max is not None and
             self._q_full_min is not None and self._q_full_max is not None and
@@ -2062,6 +2072,8 @@ class FittingController(QObject):
 
     def _draw_roi_guides_if_active(self, ax):
         try:
+            if not getattr(self, '_roi_controls_enabled', True):
+                return
             if not self._roi_active():
                 return
             q_bounds = self._convert_q_values_for_display(
@@ -2069,10 +2081,152 @@ class FittingController(QObject):
                 source=getattr(self, 'data_source', None)
             )
             if q_bounds.size >= 2:
+                try:
+                    if self._get_independent_axis_filter_mode() == 'negative':
+                        q_bounds = np.abs(q_bounds)
+                except Exception:
+                    pass
+                q_bounds = np.sort(q_bounds)
                 ax.axvline(float(q_bounds[0]), color='red', linestyle='--', linewidth=1.2, alpha=0.8)
                 ax.axvline(float(q_bounds[1]), color='red', linestyle='--', linewidth=1.2, alpha=0.8)
         except Exception:
             pass
+
+    def _current_q_has_negative_values(self) -> bool:
+        try:
+            q = np.asarray(self.q) if self.q is not None else None
+            if q is None or q.size == 0:
+                return False
+            return bool(np.any(np.isfinite(q) & (q < 0)))
+        except Exception:
+            return False
+
+    def _roi_editing_should_be_enabled(self) -> bool:
+        """ROI is ambiguous only when log-x folds positive and negative q together."""
+        try:
+            return not (
+                self._is_fit_log_x_enabled() and
+                self._current_q_has_negative_values() and
+                self._get_independent_axis_filter_mode() == 'all'
+            )
+        except Exception:
+            return True
+
+    def _set_roi_controls_enabled(self, enabled: bool):
+        self._roi_controls_enabled = bool(enabled)
+        for name in ('fitFittingRegionSlider', 'fitFittingRegionMinValue', 'fitFittingRegionMaxValue'):
+            try:
+                if hasattr(self.ui, name):
+                    widget = getattr(self.ui, name)
+                    widget.setEnabled(bool(enabled))
+                    if enabled:
+                        widget.setToolTip('')
+                    else:
+                        widget.setToolTip(
+                            'Log-X with both +q and -q is ambiguous. Select Positive Only or Negative Only first.'
+                        )
+            except Exception:
+                pass
+        try:
+            if hasattr(self.ui, 'fitRegionEditHintLabel'):
+                self.ui.fitRegionEditHintLabel.setVisible(not bool(enabled))
+        except Exception:
+            pass
+
+    def _get_roi_domain_bounds(self):
+        if self.q is None or self.I is None:
+            return None
+        q_all = np.asarray(self.q)
+        I_all = np.asarray(self.I)
+        valid = np.isfinite(q_all) & np.isfinite(I_all)
+        if not np.any(valid):
+            return None
+
+        q_valid = q_all[valid]
+        log_x = self._is_fit_log_x_enabled()
+        filter_mode = self._get_independent_axis_filter_mode()
+        if filter_mode == 'positive':
+            q_valid = q_valid[q_valid > 0]
+        elif filter_mode == 'negative':
+            q_valid = q_valid[q_valid < 0]
+        elif log_x and not self._current_q_has_negative_values():
+            q_valid = q_valid[q_valid > 0]
+
+        if q_valid.size == 0:
+            return None
+        return float(np.min(q_valid)), float(np.max(q_valid))
+
+    def _roi_controls_use_abs_negative(self) -> bool:
+        try:
+            return self._get_independent_axis_filter_mode() == 'negative'
+        except Exception:
+            return False
+
+    def _roi_data_to_control_range(self, q_min: float, q_max: float):
+        if self._roi_controls_use_abs_negative():
+            vals = np.sort(np.abs(np.array([q_min, q_max], dtype=float)))
+            return float(vals[0]), float(vals[1])
+        return float(q_min), float(q_max)
+
+    def _roi_data_to_control_values(self, q_min: float, q_max: float):
+        return self._roi_data_to_control_range(q_min, q_max)
+
+    def _roi_control_to_data_values(self, vmin: float, vmax: float):
+        if self._roi_controls_use_abs_negative():
+            lo, hi = sorted((abs(float(vmin)), abs(float(vmax))))
+            return -hi, -lo
+        return float(vmin), float(vmax)
+
+    def _nearest_roi_control_value(self, value: float):
+        try:
+            q = np.asarray(self.q) if self.q is not None else None
+            if q is None or q.size == 0:
+                return float(value)
+            finite = q[np.isfinite(q)]
+            if finite.size == 0:
+                return float(value)
+            if self._roi_controls_use_abs_negative():
+                finite = np.abs(finite[finite < 0])
+            if finite.size == 0:
+                return float(value)
+            return float(finite[np.argmin(np.abs(finite - value))])
+        except Exception:
+            return float(value)
+
+    def _sync_roi_controls_to_current_display(self, reset_to_domain: bool = False):
+        """Update ROI bounds/editability to match the current Fitting Plot display."""
+        enabled = self._roi_editing_should_be_enabled()
+        self._set_roi_controls_enabled(enabled)
+
+        bounds = self._get_roi_domain_bounds()
+        if bounds is None:
+            return
+        q_min, q_max = bounds
+
+        self._q_full_min, self._q_full_max = q_min, q_max
+        if reset_to_domain or self._roi_min is None or self._roi_max is None or not enabled:
+            self._roi_min, self._roi_max = q_min, q_max
+        else:
+            self._roi_min = max(q_min, min(float(self._roi_min), q_max))
+            self._roi_max = max(self._roi_min, min(float(self._roi_max), q_max))
+
+        self._updating_roi_controls = True
+        try:
+            control_min, control_max = self._roi_data_to_control_range(q_min, q_max)
+            control_roi_min, control_roi_max = self._roi_data_to_control_values(self._roi_min, self._roi_max)
+            if hasattr(self.ui, 'fitFittingRegionSlider'):
+                s = self.ui.fitFittingRegionSlider
+                s.setRangeF(control_min, control_max)
+                s.setMinValueF(control_roi_min)
+                s.setMaxValueF(control_roi_max)
+            if hasattr(self.ui, 'fitFittingRegionMinValue'):
+                self.ui.fitFittingRegionMinValue.setRange(control_min, control_max)
+                self.ui.fitFittingRegionMinValue.setValue(control_roi_min)
+            if hasattr(self.ui, 'fitFittingRegionMaxValue'):
+                self.ui.fitFittingRegionMaxValue.setRange(control_min, control_max)
+                self.ui.fitFittingRegionMaxValue.setValue(control_roi_max)
+        finally:
+            self._updating_roi_controls = False
 
     # ---------------- ROI & Interpolation Controls -----------------
     def _setup_fitting_region_controls(self):
@@ -2221,6 +2375,7 @@ class FittingController(QObject):
                 self.ui.fitFittingRegionMaxValue.setValue(self._roi_max)
         finally:
             self._updating_roi_controls = False
+        self._sync_roi_controls_to_current_display(reset_to_domain=force_full)
 
     def _on_roi_slider_changed_int(self, imin, imax):
         s = self.ui.fitFittingRegionSlider
@@ -2235,18 +2390,20 @@ class FittingController(QObject):
     def _on_roi_slider_changed(self, vmin: float, vmax: float):
         if self._updating_roi_controls:
             return
+        if not getattr(self, '_roi_controls_enabled', True):
+            self._sync_roi_controls_to_current_display(reset_to_domain=True)
+            return
         self._slider_is_source = True
         try:
-            q = np.asarray(self.q) if self.q is not None else None
-            if q is not None and q.size > 0:
-                vmin = float(q[np.argmin(np.abs(q - vmin))])
-                vmax = float(q[np.argmin(np.abs(q - vmax))])
-            # Constraints
-            lo = self._q_full_min if self._q_full_min is not None else vmin
-            hi = self._q_full_max if self._q_full_max is not None else vmax
-            vmin = max(lo, min(vmin, vmax))
-            vmax = min(hi, max(vmax, vmin))
-            self._roi_min, self._roi_max = vmin, vmax
+            vmin = self._nearest_roi_control_value(float(vmin))
+            vmax = self._nearest_roi_control_value(float(vmax))
+            control_min, control_max = self._roi_data_to_control_range(
+                self._q_full_min if self._q_full_min is not None else vmin,
+                self._q_full_max if self._q_full_max is not None else vmax,
+            )
+            vmin = max(control_min, min(vmin, vmax))
+            vmax = min(control_max, max(vmax, vmin))
+            self._roi_min, self._roi_max = self._roi_control_to_data_values(vmin, vmax)
             # Update spinboxes
             self._updating_roi_controls = True
             if hasattr(self.ui, 'fitFittingRegionMinValue'):
@@ -2262,22 +2419,27 @@ class FittingController(QObject):
     def _on_roi_spin_finished(self):
         if self._updating_roi_controls:
             return
+        if not getattr(self, '_roi_controls_enabled', True):
+            self._sync_roi_controls_to_current_display(reset_to_domain=True)
+            return
         vmin = float(self.ui.fitFittingRegionMinValue.value()) if hasattr(self.ui, 'fitFittingRegionMinValue') else self._roi_min
         vmax = float(self.ui.fitFittingRegionMaxValue.value()) if hasattr(self.ui, 'fitFittingRegionMaxValue') else self._roi_max
-        if self._q_full_min is not None:
-            vmin = max(self._q_full_min, vmin)
-        if self._q_full_max is not None:
-            vmax = min(self._q_full_max, vmax)
+        control_min, control_max = self._roi_data_to_control_range(
+            self._q_full_min if self._q_full_min is not None else vmin,
+            self._q_full_max if self._q_full_max is not None else vmax,
+        )
+        vmin = max(control_min, vmin)
+        vmax = min(control_max, vmax)
         if vmin > vmax:
             vmin, vmax = vmax, vmin
-        self._roi_min, self._roi_max = vmin, vmax
+        self._roi_min, self._roi_max = self._roi_control_to_data_values(vmin, vmax)
         # Update slider
         self._updating_roi_controls = True
         try:
             if hasattr(self.ui, 'fitFittingRegionSlider'):
                 s = self.ui.fitFittingRegionSlider
                 if self._q_full_min is not None and self._q_full_max is not None:
-                    s.setRangeF(self._q_full_min, self._q_full_max)
+                    s.setRangeF(control_min, control_max)
                 s.setMinValueF(vmin)
                 s.setMaxValueF(vmax)
         finally:
@@ -2303,11 +2465,12 @@ class FittingController(QObject):
     def _apply_roi_to_data_and_refresh(self):
         if self.q is None or self.I is None:
             return
+        self._sync_roi_controls_to_current_display(reset_to_domain=False)
         q = np.asarray(self.q); I = np.asarray(self.I)
         # Always drop non-finite pairs before ROI masking
         valid = np.isfinite(q) & np.isfinite(I)
         q = q[valid]; I = I[valid]
-        if self._roi_min is None or self._roi_max is None:
+        if not getattr(self, '_roi_controls_enabled', True) or self._roi_min is None or self._roi_max is None:
             self.q_ROI, self.I_ROI = q, I
         else:
             mask = (q >= self._roi_min) & (q <= self._roi_max)
@@ -2383,6 +2546,12 @@ class FittingController(QObject):
 
         Also clamp current ROI values to the new bounds.
         """
+        try:
+            self._sync_roi_controls_to_current_display(reset_to_domain=False)
+            return
+        except Exception:
+            pass
+
         try:
             log_x = self._is_fit_log_x_enabled()
         except Exception:
@@ -2612,10 +2781,12 @@ class FittingController(QObject):
 
         # ???GraphicsView??????
         if hasattr(self.ui, 'gisaxsInputGraphicsView'):
+            self.ui.gisaxsInputGraphicsView.setToolTip("Double-click to open a larger independent image window.")
             self.ui.gisaxsInputGraphicsView.mouseDoubleClickEvent = self._on_graphics_view_double_click
 
         # ???fitGraphicsView??????
         if hasattr(self.ui, 'fitGraphicsView'):
+            self.ui.fitGraphicsView.setToolTip("Double-click to open a larger independent fit window.")
             self.ui.fitGraphicsView.mouseDoubleClickEvent = self._on_fit_graphics_view_double_click
 
         # ????????????????I????????
@@ -2649,6 +2820,10 @@ class FittingController(QObject):
         # ????????? Positive Only ?????????????????
         if hasattr(self.ui, 'PositiveOnlyCheckBox'):
             self.ui.PositiveOnlyCheckBox.toggled.connect(self._on_positive_only_changed)
+        if hasattr(self.ui, 'fitRegionPositiveOnlyCheckBox'):
+            self.ui.fitRegionPositiveOnlyCheckBox.toggled.connect(self._on_positive_only_changed)
+        if hasattr(self.ui, 'fitRegionNegativeOnlyCheckBox'):
+            self.ui.fitRegionNegativeOnlyCheckBox.toggled.connect(self._on_positive_only_changed)
 
         if hasattr(self.ui, 'fitResetButton'):
             self.ui.fitResetButton.clicked.connect(self._reset_fitting)
@@ -3094,7 +3269,7 @@ class FittingController(QObject):
 
                 # ?????Cut???
                 self._perform_cut()
-                self.status_updated.emit(f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width}?{height})")
+                self.status_updated.emit(f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width} x {height})")
 
         except Exception as e:
             pass
@@ -4311,7 +4486,7 @@ class FittingController(QObject):
                 height = selection_info.get('pixel_height', 0)
 
                 self.status_updated.emit(
-                    f"Pixel region selected: Center({center_x}, {center_y}), Size({width}?{height})"
+                    f"Pixel region selected: Center({center_x}, {center_y}), Size({width} x {height})"
                 )
 
                 # ????????????????????
@@ -4372,7 +4547,7 @@ class FittingController(QObject):
 
             # ??????????????
             if updated_controls:
-                coord_mode = "Q???" if is_q_space else "??????"
+                coord_mode = "Q-space" if is_q_space else "pixel"
                 self.status_updated.emit(f"Updated Cut Line parameters ({coord_mode}): {', '.join(updated_controls)}")
                 # ????????????????????
                 if self.independent_window and self.independent_window.isVisible():
@@ -4471,10 +4646,8 @@ class FittingController(QObject):
                     self.independent_fit_window.q_unit_combo.currentTextChanged.connect(self._on_positive_only_changed)
                 if hasattr(self.independent_fit_window, 'y_range_combo'):
                     self.independent_fit_window.y_range_combo.currentTextChanged.connect(self._on_positive_only_changed)
-                # ??????????ositive Only???????????
                 try:
-                    if hasattr(self.ui, 'PositiveOnlyCheckBox'):
-                        self.independent_fit_window.show_positive_cb.setChecked(self.ui.PositiveOnlyCheckBox.isChecked())
+                    self._sync_axis_filter_controls()
                 except Exception:
                     pass
 
@@ -4586,10 +4759,10 @@ class FittingController(QObject):
 
                 # ???????Cut???
                 self._perform_cut()
-                self.status_updated.emit(f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width}?{height})")
+                self.status_updated.emit(f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width} x {height})")
             else:
                 # ??????????
-                self.status_updated.emit(f"Parameter selection: Center({center_x}, {center_y}), Size({width}?{height}) - Perform Cut to see results")
+                self.status_updated.emit(f"Parameter selection: Center({center_x}, {center_y}), Size({width} x {height}) - Perform Cut to see results")
 
         except Exception as e:
             self.status_updated.emit(f"Error updating parameter selection: {str(e)}")
@@ -4839,6 +5012,7 @@ class FittingController(QObject):
     def _update_graphics_view_with_selection(self, image_data, selection_info=None):
         """GraphicsView"""
         try:
+            self._expand_right_card('detectorPreviewCard')
             if not is_matplotlib_available():
                 self.status_updated.emit("matplotlib not available for image display")
                 return
@@ -5423,9 +5597,18 @@ class FittingController(QObject):
 
 
 
+    def _expand_right_card(self, card_attr: str) -> None:
+        try:
+            card = getattr(self.ui, card_attr, None)
+            if card is not None and hasattr(card, 'set_expanded'):
+                card.set_expanded(True)
+        except Exception:
+            pass
+
     def _setup_fit_graphics_scene(self):
         """itGraphicsView"""
         try:
+            self._expand_right_card('fittingPlotCard')
             if not hasattr(self.ui, 'fitGraphicsView'):
                 return None
 
@@ -5513,8 +5696,8 @@ class FittingController(QObject):
         except Exception as e:
             QMessageBox.critical(
                 self.parent,
-                "??",
-                f"Cut Fitting????????\n{str(e)}"
+                "Cut Fitting Error",
+                f"Cut fitting failed:\n{str(e)}"
             )
 
     def _run_fitting_process(self):
@@ -6667,7 +6850,7 @@ class FittingController(QObject):
                     if unit in ('angstrom', 'nm'):
                         return unit
                 text = str(self.independent_fit_window.q_unit_combo.currentText()).lower()
-                if 'ang' in text or '?' in text or 'a^-1' in text:
+                if 'ang' in text or 'a^-1' in text:
                     return 'angstrom'
         except Exception:
             pass
@@ -6707,7 +6890,7 @@ class FittingController(QObject):
         """No description."""
         if self._get_q_display_unit() == 'nm':
             return 'nm$^{-1}$' if mathtext else 'nm^-1'
-        return '?$^{-1}$' if mathtext else 'Angstrom^-1'
+        return r'$\AA^{-1}$' if mathtext else 'Angstrom^-1'
 
     def _convert_q_values_for_model(self, q_values, source=None):
         """No description."""
@@ -6736,23 +6919,30 @@ class FittingController(QObject):
 
     def _is_positive_only_enabled(self):
         """ositive Only????????????q"""
-        # ??????????????????
-        if (hasattr(self, 'independent_fit_window') and
-            self.independent_fit_window is not None and
-            hasattr(self.independent_fit_window, 'show_positive_cb')):
-            return self.independent_fit_window.show_positive_cb.isChecked()
-
-        # ???????????????????????????
-        return self._get_checkbox_state('PositiveOnlyCheckBox', False)
+        for owner, name in (
+            (self.ui, 'fitRegionPositiveOnlyCheckBox'),
+            (self.ui, 'PositiveOnlyCheckBox'),
+            (getattr(self, 'independent_fit_window', None), 'show_positive_cb'),
+        ):
+            try:
+                if owner is not None and hasattr(owner, name) and getattr(owner, name).isChecked():
+                    return True
+            except Exception:
+                pass
+        return False
 
     def _is_negative_only_enabled(self):
         """No description."""
-        return (
-            hasattr(self, 'independent_fit_window') and
-            self.independent_fit_window is not None and
-            hasattr(self.independent_fit_window, 'show_negative_cb') and
-            self.independent_fit_window.show_negative_cb.isChecked()
-        )
+        for owner, name in (
+            (self.ui, 'fitRegionNegativeOnlyCheckBox'),
+            (getattr(self, 'independent_fit_window', None), 'show_negative_cb'),
+        ):
+            try:
+                if owner is not None and hasattr(owner, name) and getattr(owner, name).isChecked():
+                    return True
+            except Exception:
+                pass
+        return False
 
     def _get_independent_axis_filter_mode(self):
         """No description."""
@@ -6770,22 +6960,43 @@ class FittingController(QObject):
         self._syncing_axis_filter = True
         try:
             sender = self.sender()
+            mode = self._get_independent_axis_filter_mode()
 
-            if hasattr(self.ui, 'PositiveOnlyCheckBox') and sender is self.ui.PositiveOnlyCheckBox:
-                desired_positive = self.ui.PositiveOnlyCheckBox.isChecked()
-                if (hasattr(self, 'independent_fit_window') and
-                    self.independent_fit_window is not None and
-                    hasattr(self.independent_fit_window, 'show_positive_cb')):
-                    self.independent_fit_window.show_positive_cb.setChecked(desired_positive)
-                    if (not desired_positive and
-                        hasattr(self.independent_fit_window, 'show_negative_cb')):
-                        self.independent_fit_window.show_negative_cb.setChecked(False)
-            else:
-                if hasattr(self.ui, 'PositiveOnlyCheckBox'):
-                    positive_checked = (self._get_independent_axis_filter_mode() == 'positive')
-                    self.ui.PositiveOnlyCheckBox.blockSignals(True)
-                    self.ui.PositiveOnlyCheckBox.setChecked(positive_checked)
-                    self.ui.PositiveOnlyCheckBox.blockSignals(False)
+            positive_widgets = [
+                (self.ui, 'fitRegionPositiveOnlyCheckBox'),
+                (self.ui, 'PositiveOnlyCheckBox'),
+                (getattr(self, 'independent_fit_window', None), 'show_positive_cb'),
+            ]
+            negative_widgets = [
+                (self.ui, 'fitRegionNegativeOnlyCheckBox'),
+                (getattr(self, 'independent_fit_window', None), 'show_negative_cb'),
+            ]
+
+            if sender is not None:
+                for owner, name in positive_widgets:
+                    if owner is not None and hasattr(owner, name) and sender is getattr(owner, name):
+                        mode = 'positive' if sender.isChecked() else 'all'
+                        break
+                for owner, name in negative_widgets:
+                    if owner is not None and hasattr(owner, name) and sender is getattr(owner, name):
+                        mode = 'negative' if sender.isChecked() else 'all'
+                        break
+
+            def _set_checked(owner, name, checked):
+                try:
+                    if owner is None or not hasattr(owner, name):
+                        return
+                    widget = getattr(owner, name)
+                    widget.blockSignals(True)
+                    widget.setChecked(bool(checked))
+                    widget.blockSignals(False)
+                except Exception:
+                    pass
+
+            for owner, name in positive_widgets:
+                _set_checked(owner, name, mode == 'positive')
+            for owner, name in negative_widgets:
+                _set_checked(owner, name, mode == 'negative')
         finally:
             self._syncing_axis_filter = False
 
@@ -9757,6 +9968,10 @@ class FittingController(QObject):
                     self.independent_fit_window.q_unit_combo.currentTextChanged.connect(self._on_positive_only_changed)
                 if hasattr(self.independent_fit_window, 'y_range_combo'):
                     self.independent_fit_window.y_range_combo.currentTextChanged.connect(self._on_positive_only_changed)
+                try:
+                    self._sync_axis_filter_controls()
+                except Exception:
+                    pass
 
             # ????????????
             x_label = self._build_q_axis_label() if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
@@ -10077,6 +10292,11 @@ class FittingController(QObject):
         """Log-x/Log-y"""
         try:
             mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
+            try:
+                self._sync_roi_controls_to_current_display(reset_to_domain=True)
+                self._apply_roi_to_data_and_refresh()
+            except Exception:
+                pass
             self._update_GUI_image(mode)
             self._update_outside_window(mode)
             self.status_updated.emit("Display log scale updated")
@@ -10104,7 +10324,15 @@ class FittingController(QObject):
             if getattr(self, '_syncing_axis_filter', False):
                 return
 
+            previous_mode = getattr(self, '_last_axis_filter_mode', 'all')
             self._sync_axis_filter_controls()
+            current_filter_mode = self._get_independent_axis_filter_mode()
+            self._last_axis_filter_mode = current_filter_mode
+            try:
+                self._sync_roi_controls_to_current_display(reset_to_domain=(previous_mode != current_filter_mode))
+                self._apply_roi_to_data_and_refresh()
+            except Exception:
+                pass
             mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
             self._update_GUI_image(mode)
             self._update_outside_window(mode)

@@ -186,8 +186,9 @@ def apply_density_profile(root: QWidget, profile: ResponsiveProfile) -> None:
         ("ModelParameterCard", 260, 210, None),
         ("DetectorPreviewCard", 260, 210, None),
         ("plotCanvasContainer", 260, 200, None),
-        ("PlotPreviewCard", 760, 620, None),
-        ("FittingStatusCard", 120, 96, None),
+        ("PlotPreviewCard", 360, 280, None),
+        ("FittingPlotControlsCard", 360, 300, None),
+        ("FittingStatusCard", 230, 176, None),
         ("predictModelLibraryCard", 118, 96, 136),
         ("fitMethodWidget", 120, 98, 120),
         ("fitMethodWidget_2", 120, 98, 120),
@@ -195,6 +196,9 @@ def apply_density_profile(root: QWidget, profile: ResponsiveProfile) -> None:
     ):
         widget = root.findChild(QWidget, name)
         if widget is None:
+            continue
+        toggle = widget.findChild(QAbstractButton, f"{name}ToggleButton")
+        if toggle is not None and hasattr(toggle, "isChecked") and not toggle.isChecked():
             continue
         widget.setMinimumHeight(scale_value(base_min, profile, min_floor))
         if base_max is not None:

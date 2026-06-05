@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
-from PyQt5.QtCore import QEvent, QTimer, Qt, QUrl
+from PyQt5.QtCore import QEvent, QSettings, QTimer, Qt, QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QAbstractButton,
@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QSplitter,
     QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -140,6 +141,98 @@ class CardFrame(QFrame):
     def add_content(self, widget: QWidget, stretch: int = 0) -> None:
         widget.setParent(self)
         self.body_layout.addWidget(widget, stretch)
+
+
+class CollapsibleCardFrame(QFrame):
+    """Card wrapper with a persistent collapse/expand header."""
+
+    SETTINGS_PREFIX = "cut_fitting/right_cards"
+
+    def __init__(
+        self,
+        title: str,
+        object_name: str,
+        parent: QWidget | None = None,
+        *,
+        default_expanded: bool = True,
+    ):
+        super().__init__(parent)
+        self._title = title
+        self._settings_key = f"{self.SETTINGS_PREFIX}/{object_name}/expanded"
+        self.setObjectName(object_name)
+        self.setProperty("card", True)
+        self.setMinimumWidth(SECTION_MIN_WIDTH)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        self.body_layout = QVBoxLayout(self)
+        self.body_layout.setContentsMargins(CARD_MARGIN, 8, CARD_MARGIN, CARD_MARGIN)
+        self.body_layout.setSpacing(CARD_SPACING)
+
+        self.header_widget = QWidget(self)
+        self.header_widget.setObjectName(f"{object_name}Header")
+        self.header_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        header_layout = QHBoxLayout(self.header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(8)
+
+        self.title_label = QLabel(title, self.header_widget)
+        self.title_label.setObjectName(f"{object_name}Title")
+        self.title_label.setProperty("cardTitle", True)
+        self.title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        self.header_button = QToolButton(self.header_widget)
+        self.header_button.setObjectName(f"{object_name}ToggleButton")
+        self.header_button.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self.header_button.setCheckable(True)
+        self.header_button.setAutoRaise(True)
+        self.header_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.header_button.toggled.connect(self.set_expanded)
+        header_layout.addWidget(self.title_label, 1)
+        header_layout.addWidget(self.header_button, 0, Qt.AlignRight)
+        self.body_layout.addWidget(self.header_widget)
+
+        self.content_widget = QWidget(self)
+        self.content_widget.setObjectName(f"{object_name}Content")
+        self.content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(CARD_SPACING)
+        self.body_layout.addWidget(self.content_widget, 1)
+
+        settings = QSettings()
+        expanded = settings.value(self._settings_key, default_expanded, type=bool)
+        self.header_button.blockSignals(True)
+        self.header_button.setChecked(bool(expanded))
+        self.header_button.blockSignals(False)
+        self.set_expanded(bool(expanded))
+
+    def add_content(self, widget: QWidget, stretch: int = 0) -> None:
+        widget.setParent(self.content_widget)
+        self.content_layout.addWidget(widget, stretch)
+
+    def set_expanded(self, expanded: bool) -> None:
+        expanded = bool(expanded)
+        self.header_button.setChecked(expanded)
+        self.header_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self.content_widget.setVisible(expanded)
+        QSettings().setValue(self._settings_key, expanded)
+        if expanded:
+            self.setMaximumHeight(16777215)
+            margins = self.body_layout.contentsMargins()
+            header_height = self.header_widget.sizeHint().height()
+            self.setMinimumHeight(max(header_height + margins.top() + margins.bottom(), self.sizeHint().height()))
+            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        else:
+            header_height = self.header_widget.sizeHint().height()
+            margins = self.body_layout.contentsMargins()
+            collapsed_height = header_height + margins.top() + margins.bottom()
+            self.setMinimumHeight(collapsed_height)
+            self.setMaximumHeight(collapsed_height)
+            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.updateGeometry()
+
+    def is_expanded(self) -> bool:
+        return self.header_button.isChecked()
 
 
 class NoWheelDoubleSpinBox(QDoubleSpinBox):
@@ -1037,12 +1130,19 @@ class ModelParameterCard(CardFrame):
         self.body_layout.addWidget(ui.widget_7, 1)
 
 
-class DetectorPreviewCard(CardFrame):
+class DetectorPreviewCard(CollapsibleCardFrame):
     def __init__(self, graphics_view: QGraphicsView, profile=None):
-        super().__init__("Detector Preview", "DetectorPreviewCard")
+        super().__init__("Detector Preview", "DetectorPreviewCard", default_expanded=True)
         profile = profile or current_profile(graphics_view)
         self.setMinimumWidth(SECTION_MIN_WIDTH)
         self.setMinimumHeight(scale_value(260, profile, 210))
+        hint = QLabel("Double-click the detector preview to open a larger independent image window.", self)
+        hint.setObjectName("DetectorPreviewDoubleClickHint")
+        hint.setProperty("cardMeta", True)
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #64748b;")
+        self.add_content(hint)
+        graphics_view.setToolTip("Double-click to open a larger independent image window.")
         graphics_view.setMinimumSize(scale_value(320, profile, 260), scale_value(240, profile, 190))
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -1103,7 +1203,7 @@ class SectionCard(QFrame):
 class FittingRegionControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None, profile=None):
         profile = profile or current_profile(parent or ui.centralwidget)
-        super().__init__("Fitting Region", "FittingRegionControl", parent, fixed_height=148, profile=profile)
+        super().__init__("Fitting Region", "FittingRegionControl", parent, profile=profile)
 
         for widget in (
             ui.fitFittingRegionLabel,
@@ -1126,18 +1226,62 @@ class FittingRegionControl(SectionCard):
         normalize_input(ui.fitFittingRegionMinValue)
         normalize_input(ui.fitFittingRegionMaxValue)
 
-        layout.addWidget(ui.fitFittingRegionLabel, 0, 0, 1, 2)
-        layout.addWidget(ui.fitFittingRegionSlider, 1, 0, 1, 2)
-        layout.addWidget(ui.fitFittingRegionMinValue, 2, 0)
-        layout.addWidget(ui.fitFittingRegionMaxValue, 2, 1)
+        filter_label = QLabel("Data Filter:", self)
+        filter_label.setObjectName("fitRegionDataFilterLabel")
+        filter_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+
+        filter_widget = QWidget(self)
+        filter_layout = QHBoxLayout(filter_widget)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        filter_layout.setSpacing(CARD_SPACING)
+        ui.fitRegionPositiveOnlyCheckBox = QCheckBox("Positive Only", filter_widget)
+        ui.fitRegionPositiveOnlyCheckBox.setObjectName("fitRegionPositiveOnlyCheckBox")
+        ui.fitRegionNegativeOnlyCheckBox = QCheckBox("Negative Only", filter_widget)
+        ui.fitRegionNegativeOnlyCheckBox.setObjectName("fitRegionNegativeOnlyCheckBox")
+        normalize_checkbox(ui.fitRegionPositiveOnlyCheckBox)
+        normalize_checkbox(ui.fitRegionNegativeOnlyCheckBox)
+        filter_layout.addWidget(ui.fitRegionPositiveOnlyCheckBox)
+        filter_layout.addWidget(ui.fitRegionNegativeOnlyCheckBox)
+        filter_layout.addStretch(1)
+
+        hint_label = QLabel(
+            "Select Positive Only or Negative Only to edit Fitting Region.",
+            self,
+        )
+        hint_label.setObjectName("fitRegionEditHintLabel")
+        hint_label.setWordWrap(True)
+        hint_label.setStyleSheet(
+            "QLabel {"
+            "background: #eff6ff;"
+            "border: 1px solid #bfdbfe;"
+            "border-radius: 6px;"
+            "color: #1d4ed8;"
+            "padding: 6px 8px;"
+            "line-height: 135%;"
+            "}"
+        )
+        hint_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        hint_label.setMinimumHeight(scale_value(42, profile, 34))
+        hint_label.setVisible(False)
+        ui.fitRegionEditHintLabel = hint_label
+
+        layout.addWidget(filter_label, 0, 0)
+        layout.addWidget(filter_widget, 0, 1)
+        layout.addWidget(hint_label, 1, 0, 1, 2)
+        layout.addWidget(ui.fitFittingRegionLabel, 2, 0, 1, 2)
+        layout.addWidget(ui.fitFittingRegionSlider, 3, 0, 1, 2)
+        layout.addWidget(ui.fitFittingRegionMinValue, 4, 0)
+        layout.addWidget(ui.fitFittingRegionMaxValue, 4, 1)
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 1)
+        self.setMinimumHeight(max(self.minimumHeight(), self.sizeHint().height() + scale_value(10, profile, 8)))
+        self.setMaximumHeight(16777215)
 
 
 class PlotSamplingControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None, profile=None):
         profile = profile or current_profile(parent or ui.centralwidget)
-        super().__init__("Sampling", "PlotSamplingControl", parent, fixed_height=124, profile=profile)
+        super().__init__("Sampling", "PlotSamplingControl", parent, profile=profile)
 
         for widget in (
             ui.fitDataPointsNumLabel,
@@ -1193,8 +1337,8 @@ class ParticleOptionsLayout(QVBoxLayout):
         while parent is not None:
             parent.updateGeometry()
             parent.adjustSize()
-            if parent.objectName() == "PlotPreviewCard":
-                base_min_height = getattr(parent, "_base_min_height", 760)
+            if parent.objectName() in ("PlotPreviewCard", "FittingPlotControlsCard"):
+                base_min_height = getattr(parent, "_base_min_height", parent.minimumHeight())
                 parent.setMinimumHeight(max(base_min_height, parent.sizeHint().height()))
                 parent.updateGeometry()
                 break
@@ -1253,64 +1397,87 @@ class PlotOptionsControl(SectionCard):
         grid.setColumnStretch(1, 1)
 
 
-class PlotPreviewCard(CardFrame):
+class PlotPreviewCard(CollapsibleCardFrame):
     def __init__(self, ui, content: QWidget, graphics_view: QGraphicsView, profile=None):
-        super().__init__("Fitting Plot", "PlotPreviewCard")
+        super().__init__("Fitting Plot", "PlotPreviewCard", default_expanded=True)
         profile = profile or current_profile(content)
-        self._base_min_height = scale_value(760, profile, 620)
-        self._build_plot_layout(ui, content, graphics_view, profile)
+        self._base_min_height = scale_value(360, profile, 280)
+        hint = QLabel("Double-click the fitting plot to open a larger independent fit window.", self)
+        hint.setObjectName("FittingPlotDoubleClickHint")
+        hint.setProperty("cardMeta", True)
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #64748b;")
+        self.add_content(hint)
+        graphics_view.setToolTip("Double-click to open a larger independent fit window.")
+        self._build_plot_layout(content, graphics_view, profile)
 
         self.setMinimumWidth(SECTION_MIN_WIDTH)
         self.setMinimumHeight(self._base_min_height)
-        content.setMinimumSize(scale_value(300, profile, 260), scale_value(380, profile, 300))
-        content.setMaximumSize(16777215, 16777215)
-        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(content, 1)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     @staticmethod
-    def _build_plot_layout(ui, content: QWidget, graphics_view: QGraphicsView, profile) -> None:
-        """Build explicit plot subcomponents to avoid dense-control overlap."""
+    def _build_plot_layout(content: QWidget, graphics_view: QGraphicsView, profile) -> None:
+        """Build only the plot canvas; controls live in FittingPlotControlsCard."""
         root_layout = content.layout()
         if root_layout is None:
             root_layout = QGridLayout(content)
 
-        controls = [
-            graphics_view,
+        _take_widget(root_layout, graphics_view)
+        plot_area = PlotCanvasArea(graphics_view, content, profile)
+        plot_area.setMinimumHeight(scale_value(320, profile, 260))
+        content.setMinimumSize(scale_value(300, profile, 260), scale_value(320, profile, 260))
+        content.setMaximumSize(16777215, 16777215)
+        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        root_layout.addWidget(plot_area, 0, 0)
+
+
+class FittingPlotControlsCard(CollapsibleCardFrame):
+    def __init__(self, ui, content: QWidget, profile=None):
+        super().__init__("Fitting Controls", "FittingPlotControlsCard", default_expanded=True)
+        profile = profile or current_profile(content)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setMinimumWidth(SECTION_MIN_WIDTH)
+
+        root_layout = content.layout()
+        if root_layout is None:
+            root_layout = QGridLayout(content)
+
+        for widget in (
             content.findChild(QWidget, "fitFittingRegionwidget"),
             content.findChild(QWidget, "fitDataPointsNumWidget"),
             content.findChild(QWidget, "fitFittingShowWidget"),
-        ]
-        for widget in controls:
+        ):
             if widget is not None:
                 _take_widget(root_layout, widget)
 
-        controls_container = QWidget(content)
+        controls_container = QWidget(self.content_widget)
         controls_container.setObjectName("plotControlsContainer")
-        controls_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        controls_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         controls_layout = QVBoxLayout(controls_container)
         controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(CARD_SPACING)
         controls_layout.addWidget(FittingRegionControl(ui, controls_container, profile))
         controls_layout.addWidget(PlotSamplingControl(ui, controls_container, profile))
         controls_layout.addWidget(PlotOptionsControl(ui, controls_container, profile))
-
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(CARD_SPACING)
-        root_layout.addWidget(PlotCanvasArea(graphics_view, content, profile), 0, 0)
-        root_layout.addWidget(controls_container, 1, 0)
-        root_layout.setRowStretch(0, 1)
-        root_layout.setRowStretch(1, 0)
-        root_layout.setColumnStretch(0, 1)
+        controls_container.setMinimumHeight(controls_container.sizeHint().height())
+        controls_container.setMaximumHeight(16777215)
+        self.add_content(controls_container)
+        self.setMinimumHeight(max(self.minimumHeight(), self.sizeHint().height()))
 
 
-class StatusCard(CardFrame):
+class StatusCard(CollapsibleCardFrame):
     def __init__(self, browser: QWidget, profile=None):
-        super().__init__("Run Log", "FittingStatusCard")
+        super().__init__("Run Log", "FittingStatusCard", default_expanded=True)
         profile = profile or current_profile(browser)
-        self.setMinimumHeight(scale_value(120, profile, 96))
+        self.body_layout.setContentsMargins(CARD_MARGIN, 6, CARD_MARGIN, 8)
+        self.content_layout.setSpacing(4)
+        browser_min_height = scale_value(180, profile, 140)
+        self.setMinimumHeight(scale_value(230, profile, 176))
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        browser.setMinimumHeight(scale_value(90, profile, 72))
+        browser.setMinimumHeight(browser_min_height)
         browser.setMaximumHeight(16777215)
         browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(browser, 1)
@@ -1321,28 +1488,16 @@ class GisaxsFittingWorkspace:
 
     SETTINGS_KEY = "gisaxs_fitting_splitter_sizes"
     DEFAULT_WORK_SIZES = [760, 680]
-    DEFAULT_PREVIEW_SIZES = [300, 860, 160]
 
     def __init__(self, ui, profile=None):
         self.ui = ui
         self.profile = profile or current_profile(ui.centralwidget)
         self.DEFAULT_WORK_SIZES = list(self.profile.work_sizes)
-        self.DEFAULT_PREVIEW_SIZES = list(self.profile.preview_sizes)
         self.page_splitter = QSplitter(Qt.Horizontal, ui.gisaxsFittingPage)
         self.page_splitter.setObjectName("gisaxsFittingWorkspaceSplitter")
         self.page_splitter.setHandleWidth(8)
         self.page_splitter.setChildrenCollapsible(False)
         self.page_splitter.setOpaqueResize(True)
-
-        self.preview_splitter = QSplitter(Qt.Vertical, self.page_splitter)
-        self.preview_splitter.setObjectName("gisaxsPreviewSplitter")
-        self.preview_splitter.setHandleWidth(8)
-        self.preview_splitter.setChildrenCollapsible(False)
-        self.preview_splitter.setOpaqueResize(True)
-        self.preview_splitter.setMinimumWidth(self.profile.preview_min)
-        self.preview_splitter.setMinimumHeight(
-            sum(self.DEFAULT_PREVIEW_SIZES) + 2 * self.preview_splitter.handleWidth()
-        )
 
         self.work_splitter = QSplitter(Qt.Vertical, ui.gisaxsFittingPage)
         self.work_splitter.setObjectName("gisaxsMainWorkSplitter")
@@ -1425,20 +1580,41 @@ class GisaxsFittingWorkspace:
         self.page_splitter.addWidget(self.ui.gisaxsFittingPageScrollArea)
 
     def _build_preview_area(self) -> None:
-        self.preview_splitter.addWidget(DetectorPreviewCard(self.ui.gisaxsInputGraphicsView, self.profile))
-        self.preview_splitter.addWidget(
-            PlotPreviewCard(self.ui, self.ui.curvePlotControlWidget, self.ui.fitGraphicsView, self.profile)
-        )
-        self.preview_splitter.addWidget(StatusCard(self.ui.FittingTextBrowser, self.profile))
-        self.preview_splitter.setStretchFactor(0, 2)
-        self.preview_splitter.setStretchFactor(1, 3)
-        self.preview_splitter.setStretchFactor(2, 0)
-        for index in range(self.preview_splitter.count()):
-            self.preview_splitter.setCollapsible(index, False)
+        self.right_panel = QWidget(self.page_splitter)
+        self.right_panel.setObjectName("gisaxsRightCollapsiblePanel")
+        self.right_panel.setMinimumWidth(self._preview_min_width())
+        self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        right_layout = QVBoxLayout(self.right_panel)
+        right_layout.setContentsMargins(12, 12, 12, 12)
+        right_layout.setSpacing(CARD_SPACING)
 
-        self.preview_scroll_area = make_scroll_area(self.preview_splitter, horizontal=True)
+        self.detector_preview_card = DetectorPreviewCard(self.ui.gisaxsInputGraphicsView, self.profile)
+        self.fitting_plot_card = PlotPreviewCard(
+            self.ui,
+            self.ui.curvePlotControlWidget,
+            self.ui.fitGraphicsView,
+            self.profile,
+        )
+        self.fitting_controls_card = FittingPlotControlsCard(
+            self.ui,
+            self.ui.curvePlotControlWidget,
+            self.profile,
+        )
+        self.run_log_card = StatusCard(self.ui.FittingTextBrowser, self.profile)
+        self.ui.detectorPreviewCard = self.detector_preview_card
+        self.ui.fittingPlotCard = self.fitting_plot_card
+        self.ui.fittingPlotControlsCard = self.fitting_controls_card
+        self.ui.runLogCard = self.run_log_card
+
+        right_layout.addWidget(self.detector_preview_card)
+        right_layout.addWidget(self.fitting_plot_card)
+        right_layout.addWidget(self.fitting_controls_card)
+        right_layout.addWidget(self.run_log_card)
+        right_layout.addStretch(1)
+
+        self.preview_scroll_area = make_scroll_area(self.right_panel, horizontal=True)
         self.preview_scroll_area.setObjectName("gisaxsPreviewScrollArea")
-        self.preview_scroll_area.setMinimumWidth(self.profile.preview_min)
+        self.preview_scroll_area.setMinimumWidth(self._preview_min_width())
 
         self.page_splitter.addWidget(self.preview_scroll_area)
         self.page_splitter.setStretchFactor(0, 3)
@@ -1502,34 +1678,31 @@ class GisaxsFittingWorkspace:
         _take_widget(layout, self.ui.gisaxsFittingPageScrollArea)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        self.page_scroll_area = make_scroll_area(self.page_splitter, horizontal=True)
-        self.page_scroll_area.setObjectName("gisaxsWorkspaceHorizontalScrollArea")
-        layout.addWidget(self.page_scroll_area)
+        layout.addWidget(self.page_splitter)
 
     def _page_min_width(self) -> int:
-        return self.profile.workspace_min + self.profile.preview_min + self.page_splitter.handleWidth()
+        return self.profile.workspace_min + self._preview_min_width() + self.page_splitter.handleWidth()
+
+    def _preview_min_width(self) -> int:
+        return max(self.profile.preview_min, scale_value(520, self.profile, 460))
 
     def _apply_page_overflow_policy(self) -> None:
         min_width = self._page_min_width()
         self.page_splitter.setMinimumWidth(min_width)
         self.page_splitter.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
-        if hasattr(self, "page_scroll_area"):
-            self.page_scroll_area.setMinimumWidth(0)
-            self.page_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         QTimer.singleShot(0, self._set_page_sizes)
 
     def _available_page_width(self) -> int:
-        if hasattr(self, "page_scroll_area") and self.page_scroll_area.viewport() is not None:
-            width = self.page_scroll_area.viewport().width()
-            if width > 0:
-                return width
+        width = self.page_splitter.width()
+        if width > 0:
+            return width
         width = self.ui.gisaxsFittingPage.width()
         return width if width > 0 else self._page_min_width()
 
     def _set_page_sizes(self, sizes: Sequence[int] | None = None) -> None:
         available = max(1, self._available_page_width() - self.page_splitter.handleWidth())
         left_min = self.profile.workspace_min
-        right_min = self.profile.preview_min
+        right_min = self._preview_min_width()
 
         if available < left_min + right_min:
             self.page_splitter.setSizes([left_min, right_min])
@@ -1562,11 +1735,9 @@ class GisaxsFittingWorkspace:
             if sizes.get("profile") != self.profile.key:
                 self._set_page_sizes(self.profile.page_sizes)
                 self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
-                self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
                 return
             page_sizes = sizes.get("page")
             work_sizes = sizes.get("work")
-            preview_sizes = sizes.get("preview")
             if isinstance(page_sizes, (list, tuple)) and len(page_sizes) == 2:
                 self._set_page_sizes(page_sizes)
             else:
@@ -1580,21 +1751,10 @@ class GisaxsFittingWorkspace:
                 )
             else:
                 self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
-            if isinstance(preview_sizes, (list, tuple)) and len(preview_sizes) == 3:
-                self.preview_splitter.setSizes(
-                    [
-                        max(self.DEFAULT_PREVIEW_SIZES[0], int(preview_sizes[0])),
-                        max(self.DEFAULT_PREVIEW_SIZES[1], int(preview_sizes[1])),
-                        max(self.DEFAULT_PREVIEW_SIZES[2], int(preview_sizes[2])),
-                    ]
-                )
-            else:
-                self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
             return
 
         self._set_page_sizes(self.profile.page_sizes)
         self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
-        self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
 
     def save_state(self) -> None:
         user_settings.set(
@@ -1602,7 +1762,6 @@ class GisaxsFittingWorkspace:
             {
                 "page": self.page_splitter.sizes(),
                 "work": self.work_splitter.sizes(),
-                "preview": self.preview_splitter.sizes(),
                 "profile": self.profile.key,
             },
         )
@@ -1610,13 +1769,12 @@ class GisaxsFittingWorkspace:
     def apply_responsive_profile(self, profile) -> None:
         self.profile = profile
         self.DEFAULT_WORK_SIZES = list(profile.work_sizes)
-        self.DEFAULT_PREVIEW_SIZES = list(profile.preview_sizes)
         self._configure_button_responsiveness()
         fitting_card = self.fixed_controls_stack.findChild(FittingControlsCard, "FittingControlsCard")
         if fitting_card is not None:
             fitting_card.apply_responsive_profile(profile)
-        self.preview_splitter.setMinimumWidth(profile.preview_min)
-        self.preview_scroll_area.setMinimumWidth(profile.preview_min)
+        self.right_panel.setMinimumWidth(self._preview_min_width())
+        self.preview_scroll_area.setMinimumWidth(self._preview_min_width())
         self.work_splitter.setMinimumWidth(profile.workspace_min)
         self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(profile.workspace_min)
         self._apply_page_overflow_policy()
@@ -1626,12 +1784,8 @@ class GisaxsFittingWorkspace:
         self.work_splitter.setMinimumHeight(
             fixed_min + self.DEFAULT_WORK_SIZES[1] + self.work_splitter.handleWidth()
         )
-        self.preview_splitter.setMinimumHeight(
-            sum(self.DEFAULT_PREVIEW_SIZES) + 2 * self.preview_splitter.handleWidth()
-        )
         self._set_page_sizes(profile.page_sizes)
         self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
-        self.preview_splitter.setSizes(self.DEFAULT_PREVIEW_SIZES)
 
     def _fixed_stack_min_height(self) -> int:
         card_names = ("GisaxsInputCard", "CutLineCard", "FittingControlsCard")
