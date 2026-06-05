@@ -4,7 +4,7 @@
   "window_height": 900,
   "font_adjustment": -3,
   "visual_font_scale": 100,
-  "_auto_k_enabled": false,
+  "_auto_k_enabled": true,
   "fit.points_num": 1001,
   "fit.interp_method": "Spline",
   "responsive_layout_mode": "auto",
@@ -18,16 +18,16 @@
   "auto_fit_layout_target": true,
   "main_splitter_sizes": [
     190,
-    1552
+    1293
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      1006,
+      747,
       520
     ],
     "work": [
       1558,
-      821
+      1200
     ],
     "profile": "normal"
   }

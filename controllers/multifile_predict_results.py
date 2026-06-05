@@ -320,7 +320,7 @@ class MultiFilePredictResultsWidget(QWidget):
         self.sort_combo.addItem("Duration", 2)
         filter_layout.addWidget(self.sort_combo)
         
-        self.sort_order_btn = QPushButton("↑")
+        self.sort_order_btn = QPushButton("Asc")
         self.sort_order_btn.setFixedSize(30, 25)
         filter_layout.addWidget(self.sort_order_btn)
         
@@ -350,10 +350,11 @@ class MultiFilePredictResultsWidget(QWidget):
         self.table_view.setSortingEnabled(True)
         
         header = self.table_view.horizontalHeader()
-        header.setStretchLastSection(True)
-        header.resizeSection(0, 200)  # File Name
-        header.resizeSection(1, 100)  # Status
-        header.resizeSection(2, 80)   # Duration
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
         
         # 启用右键菜单
         self.table_view.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -507,7 +508,7 @@ class MultiFilePredictResultsWidget(QWidget):
             self.filter_model.sort(column, new_order)
             
         # 更新按钮文字
-        self.sort_order_btn.setText("↓" if new_order == Qt.DescendingOrder else "↑")
+        self.sort_order_btn.setText("Desc" if new_order == Qt.DescendingOrder else "Asc")
         
     def onTableClicked(self, index: QModelIndex) -> None:
         """表格点击事件"""
