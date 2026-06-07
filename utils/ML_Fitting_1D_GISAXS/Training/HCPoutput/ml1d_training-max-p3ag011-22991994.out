@@ -1,0 +1,2892 @@
+Training parameters:
+Epochs: 50
+Batch size: 64
+Learning rate: 0.0001
+Dataset dir: /data/dust/user/zhaiyufe/TrainSet/ML_1D_Fitting_GISAXS_K1
+Model dir: /data/dust/user/zhaiyufe/Models/ML_1D_Fitting_GISAXS_K1
+Extra train args: --log_interval 10 --save_interval 10
+CUDA_VISIBLE_DEVICES=
+/usr/bin/nvidia-smi
+Fri Jun  5 10:26:50 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.159.03             Driver Version: 580.159.03     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla P100-SXM2-16GB           On  |   00000000:05:00.0 Off |                    0 |
+| N/A   36C    P0             33W /  300W |       0MiB /  16384MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   1  Tesla P100-SXM2-16GB           On  |   00000000:06:00.0 Off |                    0 |
+| N/A   33C    P0             30W /  300W |       0MiB /  16384MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   2  Tesla P100-SXM2-16GB           On  |   00000000:84:00.0 Off |                    0 |
+| N/A   35C    P0             30W /  300W |       0MiB /  16384MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   3  Tesla P100-SXM2-16GB           On  |   00000000:85:00.0 Off |                    0 |
+| N/A   37C    P0             32W /  300W |       0MiB /  16384MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Interpreting legacy checkpoint /data/dust/user/zhaiyufe/Models/ML_1D_Fitting_GISAXS_K1/checkpoints/ckpt-40 as completed epoch 40.
+Restored checkpoint /data/dust/user/zhaiyufe/Models/ML_1D_Fitting_GISAXS_K1/checkpoints/ckpt-40: epoch=41, step=0, global_step=56280
+Training samples=90000, val samples=5000, steps=1407/79
+Intervals: log_interval=10, save_interval=10
+epoch 41 train step 10/1407 global_step=56290 loss=-5.29201
+saved progress at epoch 41 step 10/1407 global_step=56290
+epoch 41 train step 20/1407 global_step=56300 loss=-5.73409
+saved progress at epoch 41 step 20/1407 global_step=56300
+epoch 41 train step 30/1407 global_step=56310 loss=-5.48537
+saved progress at epoch 41 step 30/1407 global_step=56310
+epoch 41 train step 40/1407 global_step=56320 loss=-5.56767
+saved progress at epoch 41 step 40/1407 global_step=56320
+epoch 41 train step 50/1407 global_step=56330 loss=-5.32914
+saved progress at epoch 41 step 50/1407 global_step=56330
+epoch 41 train step 60/1407 global_step=56340 loss=-5.82296
+saved progress at epoch 41 step 60/1407 global_step=56340
+epoch 41 train step 70/1407 global_step=56350 loss=-5.41124
+saved progress at epoch 41 step 70/1407 global_step=56350
+epoch 41 train step 80/1407 global_step=56360 loss=-5.49050
+saved progress at epoch 41 step 80/1407 global_step=56360
+epoch 41 train step 90/1407 global_step=56370 loss=-5.74941
+saved progress at epoch 41 step 90/1407 global_step=56370
+epoch 41 train step 100/1407 global_step=56380 loss=-5.58701
+saved progress at epoch 41 step 100/1407 global_step=56380
+epoch 41 train step 110/1407 global_step=56390 loss=-5.85908
+saved progress at epoch 41 step 110/1407 global_step=56390
+epoch 41 train step 120/1407 global_step=56400 loss=-5.43459
+saved progress at epoch 41 step 120/1407 global_step=56400
+epoch 41 train step 130/1407 global_step=56410 loss=-5.60234
+saved progress at epoch 41 step 130/1407 global_step=56410
+epoch 41 train step 140/1407 global_step=56420 loss=-5.57444
+saved progress at epoch 41 step 140/1407 global_step=56420
+epoch 41 train step 150/1407 global_step=56430 loss=-5.13300
+saved progress at epoch 41 step 150/1407 global_step=56430
+epoch 41 train step 160/1407 global_step=56440 loss=-5.49806
+saved progress at epoch 41 step 160/1407 global_step=56440
+epoch 41 train step 170/1407 global_step=56450 loss=-5.51641
+saved progress at epoch 41 step 170/1407 global_step=56450
+epoch 41 train step 180/1407 global_step=56460 loss=-5.92521
+saved progress at epoch 41 step 180/1407 global_step=56460
+epoch 41 train step 190/1407 global_step=56470 loss=-5.69087
+saved progress at epoch 41 step 190/1407 global_step=56470
+epoch 41 train step 200/1407 global_step=56480 loss=-5.46944
+saved progress at epoch 41 step 200/1407 global_step=56480
+epoch 41 train step 210/1407 global_step=56490 loss=-5.38034
+saved progress at epoch 41 step 210/1407 global_step=56490
+epoch 41 train step 220/1407 global_step=56500 loss=-5.55001
+saved progress at epoch 41 step 220/1407 global_step=56500
+epoch 41 train step 230/1407 global_step=56510 loss=-5.79790
+saved progress at epoch 41 step 230/1407 global_step=56510
+epoch 41 train step 240/1407 global_step=56520 loss=-5.14684
+saved progress at epoch 41 step 240/1407 global_step=56520
+epoch 41 train step 250/1407 global_step=56530 loss=-5.83486
+saved progress at epoch 41 step 250/1407 global_step=56530
+epoch 41 train step 260/1407 global_step=56540 loss=-5.69091
+saved progress at epoch 41 step 260/1407 global_step=56540
+epoch 41 train step 270/1407 global_step=56550 loss=-5.65229
+saved progress at epoch 41 step 270/1407 global_step=56550
+epoch 41 train step 280/1407 global_step=56560 loss=-5.75644
+saved progress at epoch 41 step 280/1407 global_step=56560
+epoch 41 train step 290/1407 global_step=56570 loss=-5.47620
+saved progress at epoch 41 step 290/1407 global_step=56570
+epoch 41 train step 300/1407 global_step=56580 loss=-5.64622
+saved progress at epoch 41 step 300/1407 global_step=56580
+epoch 41 train step 310/1407 global_step=56590 loss=-5.72802
+saved progress at epoch 41 step 310/1407 global_step=56590
+epoch 41 train step 320/1407 global_step=56600 loss=-5.65705
+saved progress at epoch 41 step 320/1407 global_step=56600
+epoch 41 train step 330/1407 global_step=56610 loss=-5.63552
+saved progress at epoch 41 step 330/1407 global_step=56610
+epoch 41 train step 340/1407 global_step=56620 loss=-5.51996
+saved progress at epoch 41 step 340/1407 global_step=56620
+epoch 41 train step 350/1407 global_step=56630 loss=-5.54277
+saved progress at epoch 41 step 350/1407 global_step=56630
+epoch 41 train step 360/1407 global_step=56640 loss=-5.35681
+saved progress at epoch 41 step 360/1407 global_step=56640
+epoch 41 train step 370/1407 global_step=56650 loss=-5.51258
+saved progress at epoch 41 step 370/1407 global_step=56650
+epoch 41 train step 380/1407 global_step=56660 loss=-5.33521
+saved progress at epoch 41 step 380/1407 global_step=56660
+epoch 41 train step 390/1407 global_step=56670 loss=-5.74302
+saved progress at epoch 41 step 390/1407 global_step=56670
+epoch 41 train step 400/1407 global_step=56680 loss=-5.64009
+saved progress at epoch 41 step 400/1407 global_step=56680
+epoch 41 train step 410/1407 global_step=56690 loss=-5.74920
+saved progress at epoch 41 step 410/1407 global_step=56690
+epoch 41 train step 420/1407 global_step=56700 loss=-5.48576
+saved progress at epoch 41 step 420/1407 global_step=56700
+epoch 41 train step 430/1407 global_step=56710 loss=-5.76662
+saved progress at epoch 41 step 430/1407 global_step=56710
+epoch 41 train step 440/1407 global_step=56720 loss=-5.97756
+saved progress at epoch 41 step 440/1407 global_step=56720
+epoch 41 train step 450/1407 global_step=56730 loss=-5.22871
+saved progress at epoch 41 step 450/1407 global_step=56730
+epoch 41 train step 460/1407 global_step=56740 loss=-5.49592
+saved progress at epoch 41 step 460/1407 global_step=56740
+epoch 41 train step 470/1407 global_step=56750 loss=-5.41329
+saved progress at epoch 41 step 470/1407 global_step=56750
+epoch 41 train step 480/1407 global_step=56760 loss=-5.29828
+saved progress at epoch 41 step 480/1407 global_step=56760
+epoch 41 train step 490/1407 global_step=56770 loss=-5.57515
+saved progress at epoch 41 step 490/1407 global_step=56770
+epoch 41 train step 500/1407 global_step=56780 loss=-5.33722
+saved progress at epoch 41 step 500/1407 global_step=56780
+epoch 41 train step 510/1407 global_step=56790 loss=-5.77421
+saved progress at epoch 41 step 510/1407 global_step=56790
+epoch 41 train step 520/1407 global_step=56800 loss=-5.51770
+saved progress at epoch 41 step 520/1407 global_step=56800
+epoch 41 train step 530/1407 global_step=56810 loss=-5.82715
+saved progress at epoch 41 step 530/1407 global_step=56810
+epoch 41 train step 540/1407 global_step=56820 loss=-5.41071
+saved progress at epoch 41 step 540/1407 global_step=56820
+epoch 41 train step 550/1407 global_step=56830 loss=-5.04264
+saved progress at epoch 41 step 550/1407 global_step=56830
+epoch 41 train step 560/1407 global_step=56840 loss=-5.95154
+saved progress at epoch 41 step 560/1407 global_step=56840
+epoch 41 train step 570/1407 global_step=56850 loss=-5.50853
+saved progress at epoch 41 step 570/1407 global_step=56850
+epoch 41 train step 580/1407 global_step=56860 loss=-5.51257
+saved progress at epoch 41 step 580/1407 global_step=56860
+epoch 41 train step 590/1407 global_step=56870 loss=-5.36724
+saved progress at epoch 41 step 590/1407 global_step=56870
+epoch 41 train step 600/1407 global_step=56880 loss=-5.49138
+saved progress at epoch 41 step 600/1407 global_step=56880
+epoch 41 train step 610/1407 global_step=56890 loss=-5.49490
+saved progress at epoch 41 step 610/1407 global_step=56890
+epoch 41 train step 620/1407 global_step=56900 loss=-5.27658
+saved progress at epoch 41 step 620/1407 global_step=56900
+epoch 41 train step 630/1407 global_step=56910 loss=-5.50965
+saved progress at epoch 41 step 630/1407 global_step=56910
+epoch 41 train step 640/1407 global_step=56920 loss=-5.56393
+saved progress at epoch 41 step 640/1407 global_step=56920
+epoch 41 train step 650/1407 global_step=56930 loss=-5.71414
+saved progress at epoch 41 step 650/1407 global_step=56930
+epoch 41 train step 660/1407 global_step=56940 loss=-5.10503
+saved progress at epoch 41 step 660/1407 global_step=56940
+epoch 41 train step 670/1407 global_step=56950 loss=-5.48369
+saved progress at epoch 41 step 670/1407 global_step=56950
+epoch 41 train step 680/1407 global_step=56960 loss=-5.25380
+saved progress at epoch 41 step 680/1407 global_step=56960
+epoch 41 train step 690/1407 global_step=56970 loss=-5.30626
+saved progress at epoch 41 step 690/1407 global_step=56970
+epoch 41 train step 700/1407 global_step=56980 loss=-5.08440
+saved progress at epoch 41 step 700/1407 global_step=56980
+epoch 41 train step 710/1407 global_step=56990 loss=-5.54431
+saved progress at epoch 41 step 710/1407 global_step=56990
+epoch 41 train step 720/1407 global_step=57000 loss=-5.69816
+saved progress at epoch 41 step 720/1407 global_step=57000
+epoch 41 train step 730/1407 global_step=57010 loss=-5.90950
+saved progress at epoch 41 step 730/1407 global_step=57010
+epoch 41 train step 740/1407 global_step=57020 loss=-5.46799
+saved progress at epoch 41 step 740/1407 global_step=57020
+epoch 41 train step 750/1407 global_step=57030 loss=-5.27349
+saved progress at epoch 41 step 750/1407 global_step=57030
+epoch 41 train step 760/1407 global_step=57040 loss=-5.88646
+saved progress at epoch 41 step 760/1407 global_step=57040
+epoch 41 train step 770/1407 global_step=57050 loss=-5.74524
+saved progress at epoch 41 step 770/1407 global_step=57050
+epoch 41 train step 780/1407 global_step=57060 loss=-5.35257
+saved progress at epoch 41 step 780/1407 global_step=57060
+epoch 41 train step 790/1407 global_step=57070 loss=-5.80928
+saved progress at epoch 41 step 790/1407 global_step=57070
+epoch 41 train step 800/1407 global_step=57080 loss=-5.57854
+saved progress at epoch 41 step 800/1407 global_step=57080
+epoch 41 train step 810/1407 global_step=57090 loss=-5.43976
+saved progress at epoch 41 step 810/1407 global_step=57090
+epoch 41 train step 820/1407 global_step=57100 loss=-5.72016
+saved progress at epoch 41 step 820/1407 global_step=57100
+epoch 41 train step 830/1407 global_step=57110 loss=-5.36120
+saved progress at epoch 41 step 830/1407 global_step=57110
+epoch 41 train step 840/1407 global_step=57120 loss=-5.36035
+saved progress at epoch 41 step 840/1407 global_step=57120
+epoch 41 train step 850/1407 global_step=57130 loss=-5.54262
+saved progress at epoch 41 step 850/1407 global_step=57130
+epoch 41 train step 860/1407 global_step=57140 loss=-5.51053
+saved progress at epoch 41 step 860/1407 global_step=57140
+epoch 41 train step 870/1407 global_step=57150 loss=-5.74861
+saved progress at epoch 41 step 870/1407 global_step=57150
+epoch 41 train step 880/1407 global_step=57160 loss=-5.70271
+saved progress at epoch 41 step 880/1407 global_step=57160
+epoch 41 train step 890/1407 global_step=57170 loss=-5.37272
+saved progress at epoch 41 step 890/1407 global_step=57170
+epoch 41 train step 900/1407 global_step=57180 loss=-5.67701
+saved progress at epoch 41 step 900/1407 global_step=57180
+epoch 41 train step 910/1407 global_step=57190 loss=-5.65747
+saved progress at epoch 41 step 910/1407 global_step=57190
+epoch 41 train step 920/1407 global_step=57200 loss=-5.80680
+saved progress at epoch 41 step 920/1407 global_step=57200
+epoch 41 train step 930/1407 global_step=57210 loss=-5.86181
+saved progress at epoch 41 step 930/1407 global_step=57210
+epoch 41 train step 940/1407 global_step=57220 loss=-5.59505
+saved progress at epoch 41 step 940/1407 global_step=57220
+epoch 41 train step 950/1407 global_step=57230 loss=-5.74713
+saved progress at epoch 41 step 950/1407 global_step=57230
+epoch 41 train step 960/1407 global_step=57240 loss=-5.50356
+saved progress at epoch 41 step 960/1407 global_step=57240
+epoch 41 train step 970/1407 global_step=57250 loss=-5.56668
+saved progress at epoch 41 step 970/1407 global_step=57250
+epoch 41 train step 980/1407 global_step=57260 loss=-5.69038
+saved progress at epoch 41 step 980/1407 global_step=57260
+epoch 41 train step 990/1407 global_step=57270 loss=-5.09485
+saved progress at epoch 41 step 990/1407 global_step=57270
+epoch 41 train step 1000/1407 global_step=57280 loss=-5.30064
+saved progress at epoch 41 step 1000/1407 global_step=57280
+epoch 41 train step 1010/1407 global_step=57290 loss=-5.17839
+saved progress at epoch 41 step 1010/1407 global_step=57290
+epoch 41 train step 1020/1407 global_step=57300 loss=-5.64322
+saved progress at epoch 41 step 1020/1407 global_step=57300
+epoch 41 train step 1030/1407 global_step=57310 loss=-5.23824
+saved progress at epoch 41 step 1030/1407 global_step=57310
+epoch 41 train step 1040/1407 global_step=57320 loss=-5.38380
+saved progress at epoch 41 step 1040/1407 global_step=57320
+epoch 41 train step 1050/1407 global_step=57330 loss=-5.58051
+saved progress at epoch 41 step 1050/1407 global_step=57330
+epoch 41 train step 1060/1407 global_step=57340 loss=-5.73282
+saved progress at epoch 41 step 1060/1407 global_step=57340
+epoch 41 train step 1070/1407 global_step=57350 loss=-5.49369
+saved progress at epoch 41 step 1070/1407 global_step=57350
+epoch 41 train step 1080/1407 global_step=57360 loss=-5.44356
+saved progress at epoch 41 step 1080/1407 global_step=57360
+epoch 41 train step 1090/1407 global_step=57370 loss=-5.53785
+saved progress at epoch 41 step 1090/1407 global_step=57370
+epoch 41 train step 1100/1407 global_step=57380 loss=-5.72377
+saved progress at epoch 41 step 1100/1407 global_step=57380
+epoch 41 train step 1110/1407 global_step=57390 loss=-5.25271
+saved progress at epoch 41 step 1110/1407 global_step=57390
+epoch 41 train step 1120/1407 global_step=57400 loss=-5.07816
+saved progress at epoch 41 step 1120/1407 global_step=57400
+epoch 41 train step 1130/1407 global_step=57410 loss=-5.57727
+saved progress at epoch 41 step 1130/1407 global_step=57410
+epoch 41 train step 1140/1407 global_step=57420 loss=-5.33309
+saved progress at epoch 41 step 1140/1407 global_step=57420
+epoch 41 train step 1150/1407 global_step=57430 loss=-5.65378
+saved progress at epoch 41 step 1150/1407 global_step=57430
+epoch 41 train step 1160/1407 global_step=57440 loss=-5.46886
+saved progress at epoch 41 step 1160/1407 global_step=57440
+epoch 41 train step 1170/1407 global_step=57450 loss=-5.40632
+saved progress at epoch 41 step 1170/1407 global_step=57450
+epoch 41 train step 1180/1407 global_step=57460 loss=-5.80501
+saved progress at epoch 41 step 1180/1407 global_step=57460
+epoch 41 train step 1190/1407 global_step=57470 loss=-5.47305
+saved progress at epoch 41 step 1190/1407 global_step=57470
+epoch 41 train step 1200/1407 global_step=57480 loss=-5.58921
+saved progress at epoch 41 step 1200/1407 global_step=57480
+epoch 41 train step 1210/1407 global_step=57490 loss=-5.02920
+saved progress at epoch 41 step 1210/1407 global_step=57490
+epoch 41 train step 1220/1407 global_step=57500 loss=-5.60607
+saved progress at epoch 41 step 1220/1407 global_step=57500
+epoch 41 train step 1230/1407 global_step=57510 loss=-5.45648
+saved progress at epoch 41 step 1230/1407 global_step=57510
+epoch 41 train step 1240/1407 global_step=57520 loss=-5.77233
+saved progress at epoch 41 step 1240/1407 global_step=57520
+epoch 41 train step 1250/1407 global_step=57530 loss=-5.66281
+saved progress at epoch 41 step 1250/1407 global_step=57530
+epoch 41 train step 1260/1407 global_step=57540 loss=-5.46382
+saved progress at epoch 41 step 1260/1407 global_step=57540
+epoch 41 train step 1270/1407 global_step=57550 loss=-5.50372
+saved progress at epoch 41 step 1270/1407 global_step=57550
+epoch 41 train step 1280/1407 global_step=57560 loss=-5.31417
+saved progress at epoch 41 step 1280/1407 global_step=57560
+epoch 41 train step 1290/1407 global_step=57570 loss=-5.24389
+saved progress at epoch 41 step 1290/1407 global_step=57570
+epoch 41 train step 1300/1407 global_step=57580 loss=-5.45206
+saved progress at epoch 41 step 1300/1407 global_step=57580
+epoch 41 train step 1310/1407 global_step=57590 loss=-5.67105
+saved progress at epoch 41 step 1310/1407 global_step=57590
+epoch 41 train step 1320/1407 global_step=57600 loss=-5.49002
+saved progress at epoch 41 step 1320/1407 global_step=57600
+epoch 41 train step 1330/1407 global_step=57610 loss=-5.73483
+saved progress at epoch 41 step 1330/1407 global_step=57610
+epoch 41 train step 1340/1407 global_step=57620 loss=-5.49364
+saved progress at epoch 41 step 1340/1407 global_step=57620
+epoch 41 train step 1350/1407 global_step=57630 loss=-5.84382
+saved progress at epoch 41 step 1350/1407 global_step=57630
+epoch 41 train step 1360/1407 global_step=57640 loss=-5.51383
+saved progress at epoch 41 step 1360/1407 global_step=57640
+epoch 41 train step 1370/1407 global_step=57650 loss=-5.08234
+saved progress at epoch 41 step 1370/1407 global_step=57650
+epoch 41 train step 1380/1407 global_step=57660 loss=-5.49560
+saved progress at epoch 41 step 1380/1407 global_step=57660
+epoch 41 train step 1390/1407 global_step=57670 loss=-5.51487
+saved progress at epoch 41 step 1390/1407 global_step=57670
+epoch 41 train step 1400/1407 global_step=57680 loss=-5.37521
+saved progress at epoch 41 step 1400/1407 global_step=57680
+epoch 41 train step 1407/1407 global_step=57687 loss=-4.96502
+saved progress at epoch 41 step 1407/1407 global_step=57687
+epoch 41: train_loss=-5.52077 val_loss=-5.27421 val_type_acc=0.980 val_nonempty_acc=0.927
+saved epoch 41 checkpoint/model artifacts
+saved progress at epoch 42 step 3/1407 global_step=57690
+epoch 42 train step 10/1407 global_step=57697 loss=-5.79764
+saved progress at epoch 42 step 13/1407 global_step=57700
+epoch 42 train step 20/1407 global_step=57707 loss=-5.72575
+saved progress at epoch 42 step 23/1407 global_step=57710
+epoch 42 train step 30/1407 global_step=57717 loss=-5.67105
+saved progress at epoch 42 step 33/1407 global_step=57720
+epoch 42 train step 40/1407 global_step=57727 loss=-5.24519
+saved progress at epoch 42 step 43/1407 global_step=57730
+epoch 42 train step 50/1407 global_step=57737 loss=-5.93052
+saved progress at epoch 42 step 53/1407 global_step=57740
+epoch 42 train step 60/1407 global_step=57747 loss=-5.47808
+saved progress at epoch 42 step 63/1407 global_step=57750
+epoch 42 train step 70/1407 global_step=57757 loss=-5.55602
+saved progress at epoch 42 step 73/1407 global_step=57760
+epoch 42 train step 80/1407 global_step=57767 loss=-5.49100
+saved progress at epoch 42 step 83/1407 global_step=57770
+epoch 42 train step 90/1407 global_step=57777 loss=-6.03905
+saved progress at epoch 42 step 93/1407 global_step=57780
+epoch 42 train step 100/1407 global_step=57787 loss=-5.42694
+saved progress at epoch 42 step 103/1407 global_step=57790
+epoch 42 train step 110/1407 global_step=57797 loss=-5.59340
+saved progress at epoch 42 step 113/1407 global_step=57800
+epoch 42 train step 120/1407 global_step=57807 loss=-5.56318
+saved progress at epoch 42 step 123/1407 global_step=57810
+epoch 42 train step 130/1407 global_step=57817 loss=-5.59553
+saved progress at epoch 42 step 133/1407 global_step=57820
+epoch 42 train step 140/1407 global_step=57827 loss=-5.51962
+saved progress at epoch 42 step 143/1407 global_step=57830
+epoch 42 train step 150/1407 global_step=57837 loss=-5.54496
+saved progress at epoch 42 step 153/1407 global_step=57840
+epoch 42 train step 160/1407 global_step=57847 loss=-5.49127
+saved progress at epoch 42 step 163/1407 global_step=57850
+epoch 42 train step 170/1407 global_step=57857 loss=-5.42985
+saved progress at epoch 42 step 173/1407 global_step=57860
+epoch 42 train step 180/1407 global_step=57867 loss=-5.61111
+saved progress at epoch 42 step 183/1407 global_step=57870
+epoch 42 train step 190/1407 global_step=57877 loss=-5.32935
+saved progress at epoch 42 step 193/1407 global_step=57880
+epoch 42 train step 200/1407 global_step=57887 loss=-5.63476
+saved progress at epoch 42 step 203/1407 global_step=57890
+epoch 42 train step 210/1407 global_step=57897 loss=-5.36541
+saved progress at epoch 42 step 213/1407 global_step=57900
+epoch 42 train step 220/1407 global_step=57907 loss=-5.46817
+saved progress at epoch 42 step 223/1407 global_step=57910
+epoch 42 train step 230/1407 global_step=57917 loss=-5.80420
+saved progress at epoch 42 step 233/1407 global_step=57920
+epoch 42 train step 240/1407 global_step=57927 loss=-5.54046
+saved progress at epoch 42 step 243/1407 global_step=57930
+epoch 42 train step 250/1407 global_step=57937 loss=-5.49069
+saved progress at epoch 42 step 253/1407 global_step=57940
+epoch 42 train step 260/1407 global_step=57947 loss=-5.35258
+saved progress at epoch 42 step 263/1407 global_step=57950
+epoch 42 train step 270/1407 global_step=57957 loss=-5.43462
+saved progress at epoch 42 step 273/1407 global_step=57960
+epoch 42 train step 280/1407 global_step=57967 loss=-5.55460
+saved progress at epoch 42 step 283/1407 global_step=57970
+epoch 42 train step 290/1407 global_step=57977 loss=-5.39399
+saved progress at epoch 42 step 293/1407 global_step=57980
+epoch 42 train step 300/1407 global_step=57987 loss=-5.75348
+saved progress at epoch 42 step 303/1407 global_step=57990
+epoch 42 train step 310/1407 global_step=57997 loss=-5.57113
+saved progress at epoch 42 step 313/1407 global_step=58000
+epoch 42 train step 320/1407 global_step=58007 loss=-5.73625
+saved progress at epoch 42 step 323/1407 global_step=58010
+epoch 42 train step 330/1407 global_step=58017 loss=-5.60954
+saved progress at epoch 42 step 333/1407 global_step=58020
+epoch 42 train step 340/1407 global_step=58027 loss=-5.71979
+saved progress at epoch 42 step 343/1407 global_step=58030
+epoch 42 train step 350/1407 global_step=58037 loss=-5.58302
+saved progress at epoch 42 step 353/1407 global_step=58040
+epoch 42 train step 360/1407 global_step=58047 loss=-4.96334
+saved progress at epoch 42 step 363/1407 global_step=58050
+epoch 42 train step 370/1407 global_step=58057 loss=-5.49007
+saved progress at epoch 42 step 373/1407 global_step=58060
+epoch 42 train step 380/1407 global_step=58067 loss=-5.52299
+saved progress at epoch 42 step 383/1407 global_step=58070
+epoch 42 train step 390/1407 global_step=58077 loss=-5.64057
+saved progress at epoch 42 step 393/1407 global_step=58080
+epoch 42 train step 400/1407 global_step=58087 loss=-5.44896
+saved progress at epoch 42 step 403/1407 global_step=58090
+epoch 42 train step 410/1407 global_step=58097 loss=-5.64630
+saved progress at epoch 42 step 413/1407 global_step=58100
+epoch 42 train step 420/1407 global_step=58107 loss=-5.80251
+saved progress at epoch 42 step 423/1407 global_step=58110
+epoch 42 train step 430/1407 global_step=58117 loss=-5.49973
+saved progress at epoch 42 step 433/1407 global_step=58120
+epoch 42 train step 440/1407 global_step=58127 loss=-5.65164
+saved progress at epoch 42 step 443/1407 global_step=58130
+epoch 42 train step 450/1407 global_step=58137 loss=-5.46554
+saved progress at epoch 42 step 453/1407 global_step=58140
+epoch 42 train step 460/1407 global_step=58147 loss=-5.34182
+saved progress at epoch 42 step 463/1407 global_step=58150
+epoch 42 train step 470/1407 global_step=58157 loss=-5.21764
+saved progress at epoch 42 step 473/1407 global_step=58160
+epoch 42 train step 480/1407 global_step=58167 loss=-5.48963
+saved progress at epoch 42 step 483/1407 global_step=58170
+epoch 42 train step 490/1407 global_step=58177 loss=-5.72623
+saved progress at epoch 42 step 493/1407 global_step=58180
+epoch 42 train step 500/1407 global_step=58187 loss=-5.37839
+saved progress at epoch 42 step 503/1407 global_step=58190
+epoch 42 train step 510/1407 global_step=58197 loss=-5.76073
+saved progress at epoch 42 step 513/1407 global_step=58200
+epoch 42 train step 520/1407 global_step=58207 loss=-5.22004
+saved progress at epoch 42 step 523/1407 global_step=58210
+epoch 42 train step 530/1407 global_step=58217 loss=-5.62156
+saved progress at epoch 42 step 533/1407 global_step=58220
+epoch 42 train step 540/1407 global_step=58227 loss=-5.51685
+saved progress at epoch 42 step 543/1407 global_step=58230
+epoch 42 train step 550/1407 global_step=58237 loss=-5.26238
+saved progress at epoch 42 step 553/1407 global_step=58240
+epoch 42 train step 560/1407 global_step=58247 loss=-5.57204
+saved progress at epoch 42 step 563/1407 global_step=58250
+epoch 42 train step 570/1407 global_step=58257 loss=-5.16832
+saved progress at epoch 42 step 573/1407 global_step=58260
+epoch 42 train step 580/1407 global_step=58267 loss=-5.75662
+saved progress at epoch 42 step 583/1407 global_step=58270
+epoch 42 train step 590/1407 global_step=58277 loss=-5.53933
+saved progress at epoch 42 step 593/1407 global_step=58280
+epoch 42 train step 600/1407 global_step=58287 loss=-5.52406
+saved progress at epoch 42 step 603/1407 global_step=58290
+epoch 42 train step 610/1407 global_step=58297 loss=-5.03687
+saved progress at epoch 42 step 613/1407 global_step=58300
+epoch 42 train step 620/1407 global_step=58307 loss=-5.56644
+saved progress at epoch 42 step 623/1407 global_step=58310
+epoch 42 train step 630/1407 global_step=58317 loss=-5.10117
+saved progress at epoch 42 step 633/1407 global_step=58320
+epoch 42 train step 640/1407 global_step=58327 loss=-5.92156
+saved progress at epoch 42 step 643/1407 global_step=58330
+epoch 42 train step 650/1407 global_step=58337 loss=-5.20660
+saved progress at epoch 42 step 653/1407 global_step=58340
+epoch 42 train step 660/1407 global_step=58347 loss=-5.55893
+saved progress at epoch 42 step 663/1407 global_step=58350
+epoch 42 train step 670/1407 global_step=58357 loss=-5.10943
+saved progress at epoch 42 step 673/1407 global_step=58360
+epoch 42 train step 680/1407 global_step=58367 loss=-5.69749
+saved progress at epoch 42 step 683/1407 global_step=58370
+epoch 42 train step 690/1407 global_step=58377 loss=-5.97211
+saved progress at epoch 42 step 693/1407 global_step=58380
+epoch 42 train step 700/1407 global_step=58387 loss=-5.56399
+saved progress at epoch 42 step 703/1407 global_step=58390
+epoch 42 train step 710/1407 global_step=58397 loss=-5.71187
+saved progress at epoch 42 step 713/1407 global_step=58400
+epoch 42 train step 720/1407 global_step=58407 loss=-5.74911
+saved progress at epoch 42 step 723/1407 global_step=58410
+epoch 42 train step 730/1407 global_step=58417 loss=-5.54907
+saved progress at epoch 42 step 733/1407 global_step=58420
+epoch 42 train step 740/1407 global_step=58427 loss=-5.17606
+saved progress at epoch 42 step 743/1407 global_step=58430
+epoch 42 train step 750/1407 global_step=58437 loss=-5.29600
+saved progress at epoch 42 step 753/1407 global_step=58440
+epoch 42 train step 760/1407 global_step=58447 loss=-5.59186
+saved progress at epoch 42 step 763/1407 global_step=58450
+epoch 42 train step 770/1407 global_step=58457 loss=-5.69779
+saved progress at epoch 42 step 773/1407 global_step=58460
+epoch 42 train step 780/1407 global_step=58467 loss=-5.74813
+saved progress at epoch 42 step 783/1407 global_step=58470
+epoch 42 train step 790/1407 global_step=58477 loss=-5.48207
+saved progress at epoch 42 step 793/1407 global_step=58480
+epoch 42 train step 800/1407 global_step=58487 loss=-5.52582
+saved progress at epoch 42 step 803/1407 global_step=58490
+epoch 42 train step 810/1407 global_step=58497 loss=-5.77813
+saved progress at epoch 42 step 813/1407 global_step=58500
+epoch 42 train step 820/1407 global_step=58507 loss=-5.25674
+saved progress at epoch 42 step 823/1407 global_step=58510
+epoch 42 train step 830/1407 global_step=58517 loss=-5.60157
+saved progress at epoch 42 step 833/1407 global_step=58520
+epoch 42 train step 840/1407 global_step=58527 loss=-5.74561
+saved progress at epoch 42 step 843/1407 global_step=58530
+epoch 42 train step 850/1407 global_step=58537 loss=-5.60105
+saved progress at epoch 42 step 853/1407 global_step=58540
+epoch 42 train step 860/1407 global_step=58547 loss=-5.84735
+saved progress at epoch 42 step 863/1407 global_step=58550
+epoch 42 train step 870/1407 global_step=58557 loss=-5.45576
+saved progress at epoch 42 step 873/1407 global_step=58560
+epoch 42 train step 880/1407 global_step=58567 loss=-5.69738
+saved progress at epoch 42 step 883/1407 global_step=58570
+epoch 42 train step 890/1407 global_step=58577 loss=-5.56275
+saved progress at epoch 42 step 893/1407 global_step=58580
+epoch 42 train step 900/1407 global_step=58587 loss=-5.08027
+saved progress at epoch 42 step 903/1407 global_step=58590
+epoch 42 train step 910/1407 global_step=58597 loss=-5.56081
+saved progress at epoch 42 step 913/1407 global_step=58600
+epoch 42 train step 920/1407 global_step=58607 loss=-5.61734
+saved progress at epoch 42 step 923/1407 global_step=58610
+epoch 42 train step 930/1407 global_step=58617 loss=-5.78330
+saved progress at epoch 42 step 933/1407 global_step=58620
+epoch 42 train step 940/1407 global_step=58627 loss=-5.53738
+saved progress at epoch 42 step 943/1407 global_step=58630
+epoch 42 train step 950/1407 global_step=58637 loss=-5.47899
+saved progress at epoch 42 step 953/1407 global_step=58640
+epoch 42 train step 960/1407 global_step=58647 loss=-5.45909
+saved progress at epoch 42 step 963/1407 global_step=58650
+epoch 42 train step 970/1407 global_step=58657 loss=-5.64497
+saved progress at epoch 42 step 973/1407 global_step=58660
+epoch 42 train step 980/1407 global_step=58667 loss=-3.49295
+saved progress at epoch 42 step 983/1407 global_step=58670
+epoch 42 train step 990/1407 global_step=58677 loss=-5.82466
+saved progress at epoch 42 step 993/1407 global_step=58680
+epoch 42 train step 1000/1407 global_step=58687 loss=-5.31970
+saved progress at epoch 42 step 1003/1407 global_step=58690
+epoch 42 train step 1010/1407 global_step=58697 loss=-5.80676
+saved progress at epoch 42 step 1013/1407 global_step=58700
+epoch 42 train step 1020/1407 global_step=58707 loss=-5.67530
+saved progress at epoch 42 step 1023/1407 global_step=58710
+epoch 42 train step 1030/1407 global_step=58717 loss=-5.19824
+saved progress at epoch 42 step 1033/1407 global_step=58720
+epoch 42 train step 1040/1407 global_step=58727 loss=-5.28509
+saved progress at epoch 42 step 1043/1407 global_step=58730
+epoch 42 train step 1050/1407 global_step=58737 loss=-5.75943
+saved progress at epoch 42 step 1053/1407 global_step=58740
+epoch 42 train step 1060/1407 global_step=58747 loss=-5.83527
+saved progress at epoch 42 step 1063/1407 global_step=58750
+epoch 42 train step 1070/1407 global_step=58757 loss=-5.54602
+saved progress at epoch 42 step 1073/1407 global_step=58760
+epoch 42 train step 1080/1407 global_step=58767 loss=-5.73892
+saved progress at epoch 42 step 1083/1407 global_step=58770
+epoch 42 train step 1090/1407 global_step=58777 loss=-5.59022
+saved progress at epoch 42 step 1093/1407 global_step=58780
+epoch 42 train step 1100/1407 global_step=58787 loss=-5.54835
+saved progress at epoch 42 step 1103/1407 global_step=58790
+epoch 42 train step 1110/1407 global_step=58797 loss=-5.47082
+saved progress at epoch 42 step 1113/1407 global_step=58800
+epoch 42 train step 1120/1407 global_step=58807 loss=-5.37669
+saved progress at epoch 42 step 1123/1407 global_step=58810
+epoch 42 train step 1130/1407 global_step=58817 loss=-5.87551
+saved progress at epoch 42 step 1133/1407 global_step=58820
+epoch 42 train step 1140/1407 global_step=58827 loss=-5.72756
+saved progress at epoch 42 step 1143/1407 global_step=58830
+epoch 42 train step 1150/1407 global_step=58837 loss=-5.53361
+saved progress at epoch 42 step 1153/1407 global_step=58840
+epoch 42 train step 1160/1407 global_step=58847 loss=-5.53648
+saved progress at epoch 42 step 1163/1407 global_step=58850
+epoch 42 train step 1170/1407 global_step=58857 loss=-5.83312
+saved progress at epoch 42 step 1173/1407 global_step=58860
+epoch 42 train step 1180/1407 global_step=58867 loss=-5.53770
+saved progress at epoch 42 step 1183/1407 global_step=58870
+epoch 42 train step 1190/1407 global_step=58877 loss=-5.24338
+saved progress at epoch 42 step 1193/1407 global_step=58880
+epoch 42 train step 1200/1407 global_step=58887 loss=-5.72654
+saved progress at epoch 42 step 1203/1407 global_step=58890
+epoch 42 train step 1210/1407 global_step=58897 loss=-5.80513
+saved progress at epoch 42 step 1213/1407 global_step=58900
+epoch 42 train step 1220/1407 global_step=58907 loss=-5.33826
+saved progress at epoch 42 step 1223/1407 global_step=58910
+epoch 42 train step 1230/1407 global_step=58917 loss=-5.47787
+saved progress at epoch 42 step 1233/1407 global_step=58920
+epoch 42 train step 1240/1407 global_step=58927 loss=-5.54901
+saved progress at epoch 42 step 1243/1407 global_step=58930
+epoch 42 train step 1250/1407 global_step=58937 loss=-5.42503
+saved progress at epoch 42 step 1253/1407 global_step=58940
+epoch 42 train step 1260/1407 global_step=58947 loss=-5.58090
+saved progress at epoch 42 step 1263/1407 global_step=58950
+epoch 42 train step 1270/1407 global_step=58957 loss=-5.18528
+saved progress at epoch 42 step 1273/1407 global_step=58960
+epoch 42 train step 1280/1407 global_step=58967 loss=-5.65643
+saved progress at epoch 42 step 1283/1407 global_step=58970
+epoch 42 train step 1290/1407 global_step=58977 loss=-5.70500
+saved progress at epoch 42 step 1293/1407 global_step=58980
+epoch 42 train step 1300/1407 global_step=58987 loss=-5.25358
+saved progress at epoch 42 step 1303/1407 global_step=58990
+epoch 42 train step 1310/1407 global_step=58997 loss=-5.65187
+saved progress at epoch 42 step 1313/1407 global_step=59000
+epoch 42 train step 1320/1407 global_step=59007 loss=-5.32035
+saved progress at epoch 42 step 1323/1407 global_step=59010
+epoch 42 train step 1330/1407 global_step=59017 loss=-5.80361
+saved progress at epoch 42 step 1333/1407 global_step=59020
+epoch 42 train step 1340/1407 global_step=59027 loss=-5.48342
+saved progress at epoch 42 step 1343/1407 global_step=59030
+epoch 42 train step 1350/1407 global_step=59037 loss=-5.41309
+saved progress at epoch 42 step 1353/1407 global_step=59040
+epoch 42 train step 1360/1407 global_step=59047 loss=-5.21708
+saved progress at epoch 42 step 1363/1407 global_step=59050
+epoch 42 train step 1370/1407 global_step=59057 loss=-5.82073
+saved progress at epoch 42 step 1373/1407 global_step=59060
+epoch 42 train step 1380/1407 global_step=59067 loss=-5.70005
+saved progress at epoch 42 step 1383/1407 global_step=59070
+epoch 42 train step 1390/1407 global_step=59077 loss=-5.80637
+saved progress at epoch 42 step 1393/1407 global_step=59080
+epoch 42 train step 1400/1407 global_step=59087 loss=-5.63867
+saved progress at epoch 42 step 1403/1407 global_step=59090
+epoch 42 train step 1407/1407 global_step=59094 loss=-5.84213
+saved progress at epoch 42 step 1407/1407 global_step=59094
+epoch 42: train_loss=-5.54269 val_loss=-5.33061 val_type_acc=0.982 val_nonempty_acc=0.934
+saved epoch 42 checkpoint/model artifacts
+saved progress at epoch 43 step 6/1407 global_step=59100
+epoch 43 train step 10/1407 global_step=59104 loss=-5.52637
+saved progress at epoch 43 step 16/1407 global_step=59110
+epoch 43 train step 20/1407 global_step=59114 loss=-5.36391
+saved progress at epoch 43 step 26/1407 global_step=59120
+epoch 43 train step 30/1407 global_step=59124 loss=-5.75257
+saved progress at epoch 43 step 36/1407 global_step=59130
+epoch 43 train step 40/1407 global_step=59134 loss=-5.48220
+saved progress at epoch 43 step 46/1407 global_step=59140
+epoch 43 train step 50/1407 global_step=59144 loss=-5.61952
+saved progress at epoch 43 step 56/1407 global_step=59150
+epoch 43 train step 60/1407 global_step=59154 loss=-5.48719
+saved progress at epoch 43 step 66/1407 global_step=59160
+epoch 43 train step 70/1407 global_step=59164 loss=-5.29640
+saved progress at epoch 43 step 76/1407 global_step=59170
+epoch 43 train step 80/1407 global_step=59174 loss=-5.46388
+saved progress at epoch 43 step 86/1407 global_step=59180
+epoch 43 train step 90/1407 global_step=59184 loss=-5.72706
+saved progress at epoch 43 step 96/1407 global_step=59190
+epoch 43 train step 100/1407 global_step=59194 loss=-5.56208
+saved progress at epoch 43 step 106/1407 global_step=59200
+epoch 43 train step 110/1407 global_step=59204 loss=-5.76373
+saved progress at epoch 43 step 116/1407 global_step=59210
+epoch 43 train step 120/1407 global_step=59214 loss=-5.34866
+saved progress at epoch 43 step 126/1407 global_step=59220
+epoch 43 train step 130/1407 global_step=59224 loss=-5.72518
+saved progress at epoch 43 step 136/1407 global_step=59230
+epoch 43 train step 140/1407 global_step=59234 loss=-5.24478
+saved progress at epoch 43 step 146/1407 global_step=59240
+epoch 43 train step 150/1407 global_step=59244 loss=-5.27901
+saved progress at epoch 43 step 156/1407 global_step=59250
+epoch 43 train step 160/1407 global_step=59254 loss=-5.66273
+saved progress at epoch 43 step 166/1407 global_step=59260
+epoch 43 train step 170/1407 global_step=59264 loss=-5.39169
+saved progress at epoch 43 step 176/1407 global_step=59270
+epoch 43 train step 180/1407 global_step=59274 loss=-5.61143
+saved progress at epoch 43 step 186/1407 global_step=59280
+epoch 43 train step 190/1407 global_step=59284 loss=-5.72487
+saved progress at epoch 43 step 196/1407 global_step=59290
+epoch 43 train step 200/1407 global_step=59294 loss=-5.42496
+saved progress at epoch 43 step 206/1407 global_step=59300
+epoch 43 train step 210/1407 global_step=59304 loss=-5.37395
+saved progress at epoch 43 step 216/1407 global_step=59310
+epoch 43 train step 220/1407 global_step=59314 loss=-5.54767
+saved progress at epoch 43 step 226/1407 global_step=59320
+epoch 43 train step 230/1407 global_step=59324 loss=-5.60027
+saved progress at epoch 43 step 236/1407 global_step=59330
+epoch 43 train step 240/1407 global_step=59334 loss=-5.17826
+saved progress at epoch 43 step 246/1407 global_step=59340
+epoch 43 train step 250/1407 global_step=59344 loss=-5.28809
+saved progress at epoch 43 step 256/1407 global_step=59350
+epoch 43 train step 260/1407 global_step=59354 loss=-5.28764
+saved progress at epoch 43 step 266/1407 global_step=59360
+epoch 43 train step 270/1407 global_step=59364 loss=-5.28983
+saved progress at epoch 43 step 276/1407 global_step=59370
+epoch 43 train step 280/1407 global_step=59374 loss=-5.90333
+saved progress at epoch 43 step 286/1407 global_step=59380
+epoch 43 train step 290/1407 global_step=59384 loss=-5.69292
+saved progress at epoch 43 step 296/1407 global_step=59390
+epoch 43 train step 300/1407 global_step=59394 loss=-5.95449
+saved progress at epoch 43 step 306/1407 global_step=59400
+epoch 43 train step 310/1407 global_step=59404 loss=-5.31472
+saved progress at epoch 43 step 316/1407 global_step=59410
+epoch 43 train step 320/1407 global_step=59414 loss=-5.76157
+saved progress at epoch 43 step 326/1407 global_step=59420
+epoch 43 train step 330/1407 global_step=59424 loss=-5.58474
+saved progress at epoch 43 step 336/1407 global_step=59430
+epoch 43 train step 340/1407 global_step=59434 loss=-5.62487
+saved progress at epoch 43 step 346/1407 global_step=59440
+epoch 43 train step 350/1407 global_step=59444 loss=-5.27514
+saved progress at epoch 43 step 356/1407 global_step=59450
+epoch 43 train step 360/1407 global_step=59454 loss=-5.35044
+saved progress at epoch 43 step 366/1407 global_step=59460
+epoch 43 train step 370/1407 global_step=59464 loss=-5.51338
+saved progress at epoch 43 step 376/1407 global_step=59470
+epoch 43 train step 380/1407 global_step=59474 loss=-5.70590
+saved progress at epoch 43 step 386/1407 global_step=59480
+epoch 43 train step 390/1407 global_step=59484 loss=-5.48904
+saved progress at epoch 43 step 396/1407 global_step=59490
+epoch 43 train step 400/1407 global_step=59494 loss=-5.66368
+saved progress at epoch 43 step 406/1407 global_step=59500
+epoch 43 train step 410/1407 global_step=59504 loss=-5.40164
+saved progress at epoch 43 step 416/1407 global_step=59510
+epoch 43 train step 420/1407 global_step=59514 loss=-5.58470
+saved progress at epoch 43 step 426/1407 global_step=59520
+epoch 43 train step 430/1407 global_step=59524 loss=-5.48127
+saved progress at epoch 43 step 436/1407 global_step=59530
+epoch 43 train step 440/1407 global_step=59534 loss=-5.59593
+saved progress at epoch 43 step 446/1407 global_step=59540
+epoch 43 train step 450/1407 global_step=59544 loss=-5.55226
+saved progress at epoch 43 step 456/1407 global_step=59550
+epoch 43 train step 460/1407 global_step=59554 loss=-5.32302
+saved progress at epoch 43 step 466/1407 global_step=59560
+epoch 43 train step 470/1407 global_step=59564 loss=-5.51682
+saved progress at epoch 43 step 476/1407 global_step=59570
+epoch 43 train step 480/1407 global_step=59574 loss=-5.66774
+saved progress at epoch 43 step 486/1407 global_step=59580
+epoch 43 train step 490/1407 global_step=59584 loss=-5.81879
+saved progress at epoch 43 step 496/1407 global_step=59590
+epoch 43 train step 500/1407 global_step=59594 loss=-5.72462
+saved progress at epoch 43 step 506/1407 global_step=59600
+epoch 43 train step 510/1407 global_step=59604 loss=-5.49316
+saved progress at epoch 43 step 516/1407 global_step=59610
+epoch 43 train step 520/1407 global_step=59614 loss=-5.41546
+saved progress at epoch 43 step 526/1407 global_step=59620
+epoch 43 train step 530/1407 global_step=59624 loss=-5.49953
+saved progress at epoch 43 step 536/1407 global_step=59630
+epoch 43 train step 540/1407 global_step=59634 loss=-5.35448
+saved progress at epoch 43 step 546/1407 global_step=59640
+epoch 43 train step 550/1407 global_step=59644 loss=-5.67259
+saved progress at epoch 43 step 556/1407 global_step=59650
+epoch 43 train step 560/1407 global_step=59654 loss=-5.45367
+saved progress at epoch 43 step 566/1407 global_step=59660
+epoch 43 train step 570/1407 global_step=59664 loss=-5.40287
+saved progress at epoch 43 step 576/1407 global_step=59670
+epoch 43 train step 580/1407 global_step=59674 loss=-5.42148
+saved progress at epoch 43 step 586/1407 global_step=59680
+epoch 43 train step 590/1407 global_step=59684 loss=-5.17917
+saved progress at epoch 43 step 596/1407 global_step=59690
+epoch 43 train step 600/1407 global_step=59694 loss=-5.50400
+saved progress at epoch 43 step 606/1407 global_step=59700
+epoch 43 train step 610/1407 global_step=59704 loss=-5.46757
+saved progress at epoch 43 step 616/1407 global_step=59710
+epoch 43 train step 620/1407 global_step=59714 loss=-5.56597
+saved progress at epoch 43 step 626/1407 global_step=59720
+epoch 43 train step 630/1407 global_step=59724 loss=-5.14243
+saved progress at epoch 43 step 636/1407 global_step=59730
+epoch 43 train step 640/1407 global_step=59734 loss=-5.38313
+saved progress at epoch 43 step 646/1407 global_step=59740
+epoch 43 train step 650/1407 global_step=59744 loss=-5.58493
+saved progress at epoch 43 step 656/1407 global_step=59750
+epoch 43 train step 660/1407 global_step=59754 loss=-5.05472
+saved progress at epoch 43 step 666/1407 global_step=59760
+epoch 43 train step 670/1407 global_step=59764 loss=-5.41176
+saved progress at epoch 43 step 676/1407 global_step=59770
+epoch 43 train step 680/1407 global_step=59774 loss=-5.64178
+saved progress at epoch 43 step 686/1407 global_step=59780
+epoch 43 train step 690/1407 global_step=59784 loss=-5.68179
+saved progress at epoch 43 step 696/1407 global_step=59790
+epoch 43 train step 700/1407 global_step=59794 loss=-6.03732
+saved progress at epoch 43 step 706/1407 global_step=59800
+epoch 43 train step 710/1407 global_step=59804 loss=-5.97882
+saved progress at epoch 43 step 716/1407 global_step=59810
+epoch 43 train step 720/1407 global_step=59814 loss=-5.55651
+saved progress at epoch 43 step 726/1407 global_step=59820
+epoch 43 train step 730/1407 global_step=59824 loss=-5.11783
+saved progress at epoch 43 step 736/1407 global_step=59830
+epoch 43 train step 740/1407 global_step=59834 loss=-5.41541
+saved progress at epoch 43 step 746/1407 global_step=59840
+epoch 43 train step 750/1407 global_step=59844 loss=-5.72680
+saved progress at epoch 43 step 756/1407 global_step=59850
+epoch 43 train step 760/1407 global_step=59854 loss=-5.76418
+saved progress at epoch 43 step 766/1407 global_step=59860
+epoch 43 train step 770/1407 global_step=59864 loss=-5.56007
+saved progress at epoch 43 step 776/1407 global_step=59870
+epoch 43 train step 780/1407 global_step=59874 loss=-5.34208
+saved progress at epoch 43 step 786/1407 global_step=59880
+epoch 43 train step 790/1407 global_step=59884 loss=-5.51934
+saved progress at epoch 43 step 796/1407 global_step=59890
+epoch 43 train step 800/1407 global_step=59894 loss=-5.66299
+saved progress at epoch 43 step 806/1407 global_step=59900
+epoch 43 train step 810/1407 global_step=59904 loss=-5.58358
+saved progress at epoch 43 step 816/1407 global_step=59910
+epoch 43 train step 820/1407 global_step=59914 loss=-5.71844
+saved progress at epoch 43 step 826/1407 global_step=59920
+epoch 43 train step 830/1407 global_step=59924 loss=-5.36170
+saved progress at epoch 43 step 836/1407 global_step=59930
+epoch 43 train step 840/1407 global_step=59934 loss=-5.61316
+saved progress at epoch 43 step 846/1407 global_step=59940
+epoch 43 train step 850/1407 global_step=59944 loss=-5.57090
+saved progress at epoch 43 step 856/1407 global_step=59950
+epoch 43 train step 860/1407 global_step=59954 loss=-5.95556
+saved progress at epoch 43 step 866/1407 global_step=59960
+epoch 43 train step 870/1407 global_step=59964 loss=-5.44080
+saved progress at epoch 43 step 876/1407 global_step=59970
+epoch 43 train step 880/1407 global_step=59974 loss=-5.46741
+saved progress at epoch 43 step 886/1407 global_step=59980
+epoch 43 train step 890/1407 global_step=59984 loss=-5.32540
+saved progress at epoch 43 step 896/1407 global_step=59990
+epoch 43 train step 900/1407 global_step=59994 loss=-5.37194
+saved progress at epoch 43 step 906/1407 global_step=60000
+epoch 43 train step 910/1407 global_step=60004 loss=-5.52565
+saved progress at epoch 43 step 916/1407 global_step=60010
+epoch 43 train step 920/1407 global_step=60014 loss=-5.31450
+saved progress at epoch 43 step 926/1407 global_step=60020
+epoch 43 train step 930/1407 global_step=60024 loss=-5.52953
+saved progress at epoch 43 step 936/1407 global_step=60030
+epoch 43 train step 940/1407 global_step=60034 loss=-5.65178
+saved progress at epoch 43 step 946/1407 global_step=60040
+epoch 43 train step 950/1407 global_step=60044 loss=-5.79196
+saved progress at epoch 43 step 956/1407 global_step=60050
+epoch 43 train step 960/1407 global_step=60054 loss=-5.63105
+saved progress at epoch 43 step 966/1407 global_step=60060
+epoch 43 train step 970/1407 global_step=60064 loss=-5.25314
+saved progress at epoch 43 step 976/1407 global_step=60070
+epoch 43 train step 980/1407 global_step=60074 loss=-5.49042
+saved progress at epoch 43 step 986/1407 global_step=60080
+epoch 43 train step 990/1407 global_step=60084 loss=-5.22547
+saved progress at epoch 43 step 996/1407 global_step=60090
+epoch 43 train step 1000/1407 global_step=60094 loss=-5.84246
+saved progress at epoch 43 step 1006/1407 global_step=60100
+epoch 43 train step 1010/1407 global_step=60104 loss=-5.85466
+saved progress at epoch 43 step 1016/1407 global_step=60110
+epoch 43 train step 1020/1407 global_step=60114 loss=-5.36317
+saved progress at epoch 43 step 1026/1407 global_step=60120
+epoch 43 train step 1030/1407 global_step=60124 loss=-5.75450
+saved progress at epoch 43 step 1036/1407 global_step=60130
+epoch 43 train step 1040/1407 global_step=60134 loss=-5.88859
+saved progress at epoch 43 step 1046/1407 global_step=60140
+epoch 43 train step 1050/1407 global_step=60144 loss=-5.60833
+saved progress at epoch 43 step 1056/1407 global_step=60150
+epoch 43 train step 1060/1407 global_step=60154 loss=-5.64490
+saved progress at epoch 43 step 1066/1407 global_step=60160
+epoch 43 train step 1070/1407 global_step=60164 loss=-5.62119
+saved progress at epoch 43 step 1076/1407 global_step=60170
+epoch 43 train step 1080/1407 global_step=60174 loss=-5.53970
+saved progress at epoch 43 step 1086/1407 global_step=60180
+epoch 43 train step 1090/1407 global_step=60184 loss=-5.54338
+saved progress at epoch 43 step 1096/1407 global_step=60190
+epoch 43 train step 1100/1407 global_step=60194 loss=-5.53737
+saved progress at epoch 43 step 1106/1407 global_step=60200
+epoch 43 train step 1110/1407 global_step=60204 loss=-5.79025
+saved progress at epoch 43 step 1116/1407 global_step=60210
+epoch 43 train step 1120/1407 global_step=60214 loss=-5.88393
+saved progress at epoch 43 step 1126/1407 global_step=60220
+epoch 43 train step 1130/1407 global_step=60224 loss=-5.84980
+saved progress at epoch 43 step 1136/1407 global_step=60230
+epoch 43 train step 1140/1407 global_step=60234 loss=-5.69481
+saved progress at epoch 43 step 1146/1407 global_step=60240
+epoch 43 train step 1150/1407 global_step=60244 loss=-5.43382
+saved progress at epoch 43 step 1156/1407 global_step=60250
+epoch 43 train step 1160/1407 global_step=60254 loss=-5.55039
+saved progress at epoch 43 step 1166/1407 global_step=60260
+epoch 43 train step 1170/1407 global_step=60264 loss=-5.84977
+saved progress at epoch 43 step 1176/1407 global_step=60270
+epoch 43 train step 1180/1407 global_step=60274 loss=-5.41830
+saved progress at epoch 43 step 1186/1407 global_step=60280
+epoch 43 train step 1190/1407 global_step=60284 loss=-5.21918
+saved progress at epoch 43 step 1196/1407 global_step=60290
+epoch 43 train step 1200/1407 global_step=60294 loss=-5.86261
+saved progress at epoch 43 step 1206/1407 global_step=60300
+epoch 43 train step 1210/1407 global_step=60304 loss=-5.58213
+saved progress at epoch 43 step 1216/1407 global_step=60310
+epoch 43 train step 1220/1407 global_step=60314 loss=-5.66449
+saved progress at epoch 43 step 1226/1407 global_step=60320
+epoch 43 train step 1230/1407 global_step=60324 loss=-5.76230
+saved progress at epoch 43 step 1236/1407 global_step=60330
+epoch 43 train step 1240/1407 global_step=60334 loss=-5.43929
+saved progress at epoch 43 step 1246/1407 global_step=60340
+epoch 43 train step 1250/1407 global_step=60344 loss=-5.29075
+saved progress at epoch 43 step 1256/1407 global_step=60350
+epoch 43 train step 1260/1407 global_step=60354 loss=-5.59418
+saved progress at epoch 43 step 1266/1407 global_step=60360
+epoch 43 train step 1270/1407 global_step=60364 loss=-6.08637
+saved progress at epoch 43 step 1276/1407 global_step=60370
+epoch 43 train step 1280/1407 global_step=60374 loss=-5.65386
+saved progress at epoch 43 step 1286/1407 global_step=60380
+epoch 43 train step 1290/1407 global_step=60384 loss=-5.44548
+saved progress at epoch 43 step 1296/1407 global_step=60390
+epoch 43 train step 1300/1407 global_step=60394 loss=-5.75293
+saved progress at epoch 43 step 1306/1407 global_step=60400
+epoch 43 train step 1310/1407 global_step=60404 loss=-5.66490
+saved progress at epoch 43 step 1316/1407 global_step=60410
+epoch 43 train step 1320/1407 global_step=60414 loss=-5.43487
+saved progress at epoch 43 step 1326/1407 global_step=60420
+epoch 43 train step 1330/1407 global_step=60424 loss=-5.59648
+saved progress at epoch 43 step 1336/1407 global_step=60430
+epoch 43 train step 1340/1407 global_step=60434 loss=-5.49928
+saved progress at epoch 43 step 1346/1407 global_step=60440
+epoch 43 train step 1350/1407 global_step=60444 loss=-5.66413
+saved progress at epoch 43 step 1356/1407 global_step=60450
+epoch 43 train step 1360/1407 global_step=60454 loss=-5.64581
+saved progress at epoch 43 step 1366/1407 global_step=60460
+epoch 43 train step 1370/1407 global_step=60464 loss=-5.58311
+saved progress at epoch 43 step 1376/1407 global_step=60470
+epoch 43 train step 1380/1407 global_step=60474 loss=-5.65785
+saved progress at epoch 43 step 1386/1407 global_step=60480
+epoch 43 train step 1390/1407 global_step=60484 loss=-5.59704
+saved progress at epoch 43 step 1396/1407 global_step=60490
+epoch 43 train step 1400/1407 global_step=60494 loss=-5.24848
+saved progress at epoch 43 step 1406/1407 global_step=60500
+epoch 43 train step 1407/1407 global_step=60501 loss=-5.52903
+saved progress at epoch 43 step 1407/1407 global_step=60501
+epoch 43: train_loss=-5.56025 val_loss=-5.38906 val_type_acc=0.982 val_nonempty_acc=0.933
+saved epoch 43 checkpoint/model artifacts
+saved progress at epoch 44 step 9/1407 global_step=60510
+epoch 44 train step 10/1407 global_step=60511 loss=-5.53155
+saved progress at epoch 44 step 19/1407 global_step=60520
+epoch 44 train step 20/1407 global_step=60521 loss=-5.21684
+saved progress at epoch 44 step 29/1407 global_step=60530
+epoch 44 train step 30/1407 global_step=60531 loss=-5.91679
+saved progress at epoch 44 step 39/1407 global_step=60540
+epoch 44 train step 40/1407 global_step=60541 loss=-5.12813
+saved progress at epoch 44 step 49/1407 global_step=60550
+epoch 44 train step 50/1407 global_step=60551 loss=-5.57767
+saved progress at epoch 44 step 59/1407 global_step=60560
+epoch 44 train step 60/1407 global_step=60561 loss=-5.74677
+saved progress at epoch 44 step 69/1407 global_step=60570
+epoch 44 train step 70/1407 global_step=60571 loss=-5.75673
+saved progress at epoch 44 step 79/1407 global_step=60580
+epoch 44 train step 80/1407 global_step=60581 loss=-5.73840
+saved progress at epoch 44 step 89/1407 global_step=60590
+epoch 44 train step 90/1407 global_step=60591 loss=-5.68131
+saved progress at epoch 44 step 99/1407 global_step=60600
+epoch 44 train step 100/1407 global_step=60601 loss=-5.47856
+saved progress at epoch 44 step 109/1407 global_step=60610
+epoch 44 train step 110/1407 global_step=60611 loss=-5.32389
+saved progress at epoch 44 step 119/1407 global_step=60620
+epoch 44 train step 120/1407 global_step=60621 loss=-5.58696
+saved progress at epoch 44 step 129/1407 global_step=60630
+epoch 44 train step 130/1407 global_step=60631 loss=-5.82830
+saved progress at epoch 44 step 139/1407 global_step=60640
+epoch 44 train step 140/1407 global_step=60641 loss=-5.24168
+saved progress at epoch 44 step 149/1407 global_step=60650
+epoch 44 train step 150/1407 global_step=60651 loss=-5.66046
+saved progress at epoch 44 step 159/1407 global_step=60660
+epoch 44 train step 160/1407 global_step=60661 loss=-5.70303
+saved progress at epoch 44 step 169/1407 global_step=60670
+epoch 44 train step 170/1407 global_step=60671 loss=-5.81886
+saved progress at epoch 44 step 179/1407 global_step=60680
+epoch 44 train step 180/1407 global_step=60681 loss=-5.24437
+saved progress at epoch 44 step 189/1407 global_step=60690
+epoch 44 train step 190/1407 global_step=60691 loss=-5.52037
+saved progress at epoch 44 step 199/1407 global_step=60700
+epoch 44 train step 200/1407 global_step=60701 loss=-5.51388
+saved progress at epoch 44 step 209/1407 global_step=60710
+epoch 44 train step 210/1407 global_step=60711 loss=-5.92300
+saved progress at epoch 44 step 219/1407 global_step=60720
+epoch 44 train step 220/1407 global_step=60721 loss=-5.76006
+saved progress at epoch 44 step 229/1407 global_step=60730
+epoch 44 train step 230/1407 global_step=60731 loss=-5.62608
+saved progress at epoch 44 step 239/1407 global_step=60740
+epoch 44 train step 240/1407 global_step=60741 loss=-5.31471
+saved progress at epoch 44 step 249/1407 global_step=60750
+epoch 44 train step 250/1407 global_step=60751 loss=-5.44181
+saved progress at epoch 44 step 259/1407 global_step=60760
+epoch 44 train step 260/1407 global_step=60761 loss=-5.64688
+saved progress at epoch 44 step 269/1407 global_step=60770
+epoch 44 train step 270/1407 global_step=60771 loss=-5.67385
+saved progress at epoch 44 step 279/1407 global_step=60780
+epoch 44 train step 280/1407 global_step=60781 loss=-6.08540
+saved progress at epoch 44 step 289/1407 global_step=60790
+epoch 44 train step 290/1407 global_step=60791 loss=-5.96562
+saved progress at epoch 44 step 299/1407 global_step=60800
+epoch 44 train step 300/1407 global_step=60801 loss=-5.85388
+saved progress at epoch 44 step 309/1407 global_step=60810
+epoch 44 train step 310/1407 global_step=60811 loss=-5.59762
+saved progress at epoch 44 step 319/1407 global_step=60820
+epoch 44 train step 320/1407 global_step=60821 loss=-5.77563
+saved progress at epoch 44 step 329/1407 global_step=60830
+epoch 44 train step 330/1407 global_step=60831 loss=-5.56540
+saved progress at epoch 44 step 339/1407 global_step=60840
+epoch 44 train step 340/1407 global_step=60841 loss=-5.33886
+saved progress at epoch 44 step 349/1407 global_step=60850
+epoch 44 train step 350/1407 global_step=60851 loss=-5.39330
+saved progress at epoch 44 step 359/1407 global_step=60860
+epoch 44 train step 360/1407 global_step=60861 loss=-5.55195
+saved progress at epoch 44 step 369/1407 global_step=60870
+epoch 44 train step 370/1407 global_step=60871 loss=-5.21263
+saved progress at epoch 44 step 379/1407 global_step=60880
+epoch 44 train step 380/1407 global_step=60881 loss=-5.28728
+saved progress at epoch 44 step 389/1407 global_step=60890
+epoch 44 train step 390/1407 global_step=60891 loss=-5.41880
+saved progress at epoch 44 step 399/1407 global_step=60900
+epoch 44 train step 400/1407 global_step=60901 loss=-5.49430
+saved progress at epoch 44 step 409/1407 global_step=60910
+epoch 44 train step 410/1407 global_step=60911 loss=-5.43525
+saved progress at epoch 44 step 419/1407 global_step=60920
+epoch 44 train step 420/1407 global_step=60921 loss=-5.47083
+saved progress at epoch 44 step 429/1407 global_step=60930
+epoch 44 train step 430/1407 global_step=60931 loss=-5.53298
+saved progress at epoch 44 step 439/1407 global_step=60940
+epoch 44 train step 440/1407 global_step=60941 loss=-5.29490
+saved progress at epoch 44 step 449/1407 global_step=60950
+epoch 44 train step 450/1407 global_step=60951 loss=-6.08183
+saved progress at epoch 44 step 459/1407 global_step=60960
+epoch 44 train step 460/1407 global_step=60961 loss=-5.91295
+saved progress at epoch 44 step 469/1407 global_step=60970
+epoch 44 train step 470/1407 global_step=60971 loss=-5.54096
+saved progress at epoch 44 step 479/1407 global_step=60980
+epoch 44 train step 480/1407 global_step=60981 loss=-5.99066
+saved progress at epoch 44 step 489/1407 global_step=60990
+epoch 44 train step 490/1407 global_step=60991 loss=-5.90484
+saved progress at epoch 44 step 499/1407 global_step=61000
+epoch 44 train step 500/1407 global_step=61001 loss=-5.52595
+saved progress at epoch 44 step 509/1407 global_step=61010
+epoch 44 train step 510/1407 global_step=61011 loss=-5.89160
+saved progress at epoch 44 step 519/1407 global_step=61020
+epoch 44 train step 520/1407 global_step=61021 loss=-5.54175
+saved progress at epoch 44 step 529/1407 global_step=61030
+epoch 44 train step 530/1407 global_step=61031 loss=-5.06860
+saved progress at epoch 44 step 539/1407 global_step=61040
+epoch 44 train step 540/1407 global_step=61041 loss=-5.74990
+saved progress at epoch 44 step 549/1407 global_step=61050
+epoch 44 train step 550/1407 global_step=61051 loss=-5.44499
+saved progress at epoch 44 step 559/1407 global_step=61060
+epoch 44 train step 560/1407 global_step=61061 loss=-5.75041
+saved progress at epoch 44 step 569/1407 global_step=61070
+epoch 44 train step 570/1407 global_step=61071 loss=-5.95428
+saved progress at epoch 44 step 579/1407 global_step=61080
+epoch 44 train step 580/1407 global_step=61081 loss=-5.28524
+saved progress at epoch 44 step 589/1407 global_step=61090
+epoch 44 train step 590/1407 global_step=61091 loss=-5.62319
+saved progress at epoch 44 step 599/1407 global_step=61100
+epoch 44 train step 600/1407 global_step=61101 loss=-5.53502
+saved progress at epoch 44 step 609/1407 global_step=61110
+epoch 44 train step 610/1407 global_step=61111 loss=-5.70613
+saved progress at epoch 44 step 619/1407 global_step=61120
+epoch 44 train step 620/1407 global_step=61121 loss=-5.45590
+saved progress at epoch 44 step 629/1407 global_step=61130
+epoch 44 train step 630/1407 global_step=61131 loss=-5.66780
+saved progress at epoch 44 step 639/1407 global_step=61140
+epoch 44 train step 640/1407 global_step=61141 loss=-5.40937
+saved progress at epoch 44 step 649/1407 global_step=61150
+epoch 44 train step 650/1407 global_step=61151 loss=-5.65568
+saved progress at epoch 44 step 659/1407 global_step=61160
+epoch 44 train step 660/1407 global_step=61161 loss=-5.54237
+saved progress at epoch 44 step 669/1407 global_step=61170
+epoch 44 train step 670/1407 global_step=61171 loss=-5.51638
+saved progress at epoch 44 step 679/1407 global_step=61180
+epoch 44 train step 680/1407 global_step=61181 loss=-5.74177
+saved progress at epoch 44 step 689/1407 global_step=61190
+epoch 44 train step 690/1407 global_step=61191 loss=-5.29319
+saved progress at epoch 44 step 699/1407 global_step=61200
+epoch 44 train step 700/1407 global_step=61201 loss=-5.49762
+saved progress at epoch 44 step 709/1407 global_step=61210
+epoch 44 train step 710/1407 global_step=61211 loss=-5.81391
+saved progress at epoch 44 step 719/1407 global_step=61220
+epoch 44 train step 720/1407 global_step=61221 loss=-5.91652
+saved progress at epoch 44 step 729/1407 global_step=61230
+epoch 44 train step 730/1407 global_step=61231 loss=-5.33677
+saved progress at epoch 44 step 739/1407 global_step=61240
+epoch 44 train step 740/1407 global_step=61241 loss=-5.44843
+saved progress at epoch 44 step 749/1407 global_step=61250
+epoch 44 train step 750/1407 global_step=61251 loss=-5.74066
+saved progress at epoch 44 step 759/1407 global_step=61260
+epoch 44 train step 760/1407 global_step=61261 loss=-5.37300
+saved progress at epoch 44 step 769/1407 global_step=61270
+epoch 44 train step 770/1407 global_step=61271 loss=-5.74771
+saved progress at epoch 44 step 779/1407 global_step=61280
+epoch 44 train step 780/1407 global_step=61281 loss=-5.73933
+saved progress at epoch 44 step 789/1407 global_step=61290
+epoch 44 train step 790/1407 global_step=61291 loss=-5.18353
+saved progress at epoch 44 step 799/1407 global_step=61300
+epoch 44 train step 800/1407 global_step=61301 loss=-5.51386
+saved progress at epoch 44 step 809/1407 global_step=61310
+epoch 44 train step 810/1407 global_step=61311 loss=-5.30561
+saved progress at epoch 44 step 819/1407 global_step=61320
+epoch 44 train step 820/1407 global_step=61321 loss=-5.73104
+saved progress at epoch 44 step 829/1407 global_step=61330
+epoch 44 train step 830/1407 global_step=61331 loss=-5.48761
+saved progress at epoch 44 step 839/1407 global_step=61340
+epoch 44 train step 840/1407 global_step=61341 loss=-5.32582
+saved progress at epoch 44 step 849/1407 global_step=61350
+epoch 44 train step 850/1407 global_step=61351 loss=-5.85771
+saved progress at epoch 44 step 859/1407 global_step=61360
+epoch 44 train step 860/1407 global_step=61361 loss=-5.55353
+saved progress at epoch 44 step 869/1407 global_step=61370
+epoch 44 train step 870/1407 global_step=61371 loss=-5.79457
+saved progress at epoch 44 step 879/1407 global_step=61380
+epoch 44 train step 880/1407 global_step=61381 loss=-5.71589
+saved progress at epoch 44 step 889/1407 global_step=61390
+epoch 44 train step 890/1407 global_step=61391 loss=-5.88511
+saved progress at epoch 44 step 899/1407 global_step=61400
+epoch 44 train step 900/1407 global_step=61401 loss=-5.59246
+saved progress at epoch 44 step 909/1407 global_step=61410
+epoch 44 train step 910/1407 global_step=61411 loss=-5.61450
+saved progress at epoch 44 step 919/1407 global_step=61420
+epoch 44 train step 920/1407 global_step=61421 loss=-5.31216
+saved progress at epoch 44 step 929/1407 global_step=61430
+epoch 44 train step 930/1407 global_step=61431 loss=-5.53227
+saved progress at epoch 44 step 939/1407 global_step=61440
+epoch 44 train step 940/1407 global_step=61441 loss=-5.83137
+saved progress at epoch 44 step 949/1407 global_step=61450
+epoch 44 train step 950/1407 global_step=61451 loss=-5.61678
+saved progress at epoch 44 step 959/1407 global_step=61460
+epoch 44 train step 960/1407 global_step=61461 loss=-5.42385
+saved progress at epoch 44 step 969/1407 global_step=61470
+epoch 44 train step 970/1407 global_step=61471 loss=-6.00886
+saved progress at epoch 44 step 979/1407 global_step=61480
+epoch 44 train step 980/1407 global_step=61481 loss=-5.74906
+saved progress at epoch 44 step 989/1407 global_step=61490
+epoch 44 train step 990/1407 global_step=61491 loss=-5.95053
+saved progress at epoch 44 step 999/1407 global_step=61500
+epoch 44 train step 1000/1407 global_step=61501 loss=-5.78022
+saved progress at epoch 44 step 1009/1407 global_step=61510
+epoch 44 train step 1010/1407 global_step=61511 loss=-5.64636
+saved progress at epoch 44 step 1019/1407 global_step=61520
+epoch 44 train step 1020/1407 global_step=61521 loss=-5.82735
+saved progress at epoch 44 step 1029/1407 global_step=61530
+epoch 44 train step 1030/1407 global_step=61531 loss=-5.75461
+saved progress at epoch 44 step 1039/1407 global_step=61540
+epoch 44 train step 1040/1407 global_step=61541 loss=-5.40126
+saved progress at epoch 44 step 1049/1407 global_step=61550
+epoch 44 train step 1050/1407 global_step=61551 loss=-5.38778
+saved progress at epoch 44 step 1059/1407 global_step=61560
+epoch 44 train step 1060/1407 global_step=61561 loss=-5.86706
+saved progress at epoch 44 step 1069/1407 global_step=61570
+epoch 44 train step 1070/1407 global_step=61571 loss=-5.30112
+saved progress at epoch 44 step 1079/1407 global_step=61580
+epoch 44 train step 1080/1407 global_step=61581 loss=-5.53423
+saved progress at epoch 44 step 1089/1407 global_step=61590
+epoch 44 train step 1090/1407 global_step=61591 loss=-5.63194
+saved progress at epoch 44 step 1099/1407 global_step=61600
+epoch 44 train step 1100/1407 global_step=61601 loss=-5.47470
+saved progress at epoch 44 step 1109/1407 global_step=61610
+epoch 44 train step 1110/1407 global_step=61611 loss=-5.49294
+saved progress at epoch 44 step 1119/1407 global_step=61620
+epoch 44 train step 1120/1407 global_step=61621 loss=-5.93212
+saved progress at epoch 44 step 1129/1407 global_step=61630
+epoch 44 train step 1130/1407 global_step=61631 loss=-5.61357
+saved progress at epoch 44 step 1139/1407 global_step=61640
+epoch 44 train step 1140/1407 global_step=61641 loss=-5.74429
+saved progress at epoch 44 step 1149/1407 global_step=61650
+epoch 44 train step 1150/1407 global_step=61651 loss=-5.89177
+saved progress at epoch 44 step 1159/1407 global_step=61660
+epoch 44 train step 1160/1407 global_step=61661 loss=-5.55913
+saved progress at epoch 44 step 1169/1407 global_step=61670
+epoch 44 train step 1170/1407 global_step=61671 loss=-5.56707
+saved progress at epoch 44 step 1179/1407 global_step=61680
+epoch 44 train step 1180/1407 global_step=61681 loss=-5.64397
+saved progress at epoch 44 step 1189/1407 global_step=61690
+epoch 44 train step 1190/1407 global_step=61691 loss=-5.84257
+saved progress at epoch 44 step 1199/1407 global_step=61700
+epoch 44 train step 1200/1407 global_step=61701 loss=-5.28993
+saved progress at epoch 44 step 1209/1407 global_step=61710
+epoch 44 train step 1210/1407 global_step=61711 loss=-5.40077
+saved progress at epoch 44 step 1219/1407 global_step=61720
+epoch 44 train step 1220/1407 global_step=61721 loss=-5.62799
+saved progress at epoch 44 step 1229/1407 global_step=61730
+epoch 44 train step 1230/1407 global_step=61731 loss=-5.49027
+saved progress at epoch 44 step 1239/1407 global_step=61740
+epoch 44 train step 1240/1407 global_step=61741 loss=-5.72054
+saved progress at epoch 44 step 1249/1407 global_step=61750
+epoch 44 train step 1250/1407 global_step=61751 loss=-5.72099
+saved progress at epoch 44 step 1259/1407 global_step=61760
+epoch 44 train step 1260/1407 global_step=61761 loss=-5.56154
+saved progress at epoch 44 step 1269/1407 global_step=61770
+epoch 44 train step 1270/1407 global_step=61771 loss=-5.71219
+saved progress at epoch 44 step 1279/1407 global_step=61780
+epoch 44 train step 1280/1407 global_step=61781 loss=-5.91538
+saved progress at epoch 44 step 1289/1407 global_step=61790
+epoch 44 train step 1290/1407 global_step=61791 loss=-5.69313
+saved progress at epoch 44 step 1299/1407 global_step=61800
+epoch 44 train step 1300/1407 global_step=61801 loss=-5.54345
+saved progress at epoch 44 step 1309/1407 global_step=61810
+epoch 44 train step 1310/1407 global_step=61811 loss=-5.33482
+saved progress at epoch 44 step 1319/1407 global_step=61820
+epoch 44 train step 1320/1407 global_step=61821 loss=-5.65991
+saved progress at epoch 44 step 1329/1407 global_step=61830
+epoch 44 train step 1330/1407 global_step=61831 loss=-5.50828
+saved progress at epoch 44 step 1339/1407 global_step=61840
+epoch 44 train step 1340/1407 global_step=61841 loss=-5.83410
+saved progress at epoch 44 step 1349/1407 global_step=61850
+epoch 44 train step 1350/1407 global_step=61851 loss=-5.43399
+saved progress at epoch 44 step 1359/1407 global_step=61860
+epoch 44 train step 1360/1407 global_step=61861 loss=-5.79340
+saved progress at epoch 44 step 1369/1407 global_step=61870
+epoch 44 train step 1370/1407 global_step=61871 loss=-5.70346
+saved progress at epoch 44 step 1379/1407 global_step=61880
+epoch 44 train step 1380/1407 global_step=61881 loss=-5.64858
+saved progress at epoch 44 step 1389/1407 global_step=61890
+epoch 44 train step 1390/1407 global_step=61891 loss=-5.21991
+saved progress at epoch 44 step 1399/1407 global_step=61900
+epoch 44 train step 1400/1407 global_step=61901 loss=-5.86741
+epoch 44 train step 1407/1407 global_step=61908 loss=-4.90834
+saved progress at epoch 44 step 1407/1407 global_step=61908
+epoch 44: train_loss=-5.57104 val_loss=-5.20916 val_type_acc=0.981 val_nonempty_acc=0.931
+saved epoch 44 checkpoint/model artifacts
+saved progress at epoch 45 step 2/1407 global_step=61910
+epoch 45 train step 10/1407 global_step=61918 loss=-6.00490
+saved progress at epoch 45 step 12/1407 global_step=61920
+epoch 45 train step 20/1407 global_step=61928 loss=-5.62464
+saved progress at epoch 45 step 22/1407 global_step=61930
+epoch 45 train step 30/1407 global_step=61938 loss=-5.50978
+saved progress at epoch 45 step 32/1407 global_step=61940
+epoch 45 train step 40/1407 global_step=61948 loss=-5.93439
+saved progress at epoch 45 step 42/1407 global_step=61950
+epoch 45 train step 50/1407 global_step=61958 loss=-5.44569
+saved progress at epoch 45 step 52/1407 global_step=61960
+epoch 45 train step 60/1407 global_step=61968 loss=-5.29161
+saved progress at epoch 45 step 62/1407 global_step=61970
+epoch 45 train step 70/1407 global_step=61978 loss=-5.80723
+saved progress at epoch 45 step 72/1407 global_step=61980
+epoch 45 train step 80/1407 global_step=61988 loss=-5.70888
+saved progress at epoch 45 step 82/1407 global_step=61990
+epoch 45 train step 90/1407 global_step=61998 loss=-5.73553
+saved progress at epoch 45 step 92/1407 global_step=62000
+epoch 45 train step 100/1407 global_step=62008 loss=-5.63950
+saved progress at epoch 45 step 102/1407 global_step=62010
+epoch 45 train step 110/1407 global_step=62018 loss=-5.53432
+saved progress at epoch 45 step 112/1407 global_step=62020
+epoch 45 train step 120/1407 global_step=62028 loss=-5.48464
+saved progress at epoch 45 step 122/1407 global_step=62030
+epoch 45 train step 130/1407 global_step=62038 loss=-5.41361
+saved progress at epoch 45 step 132/1407 global_step=62040
+epoch 45 train step 140/1407 global_step=62048 loss=-5.06454
+saved progress at epoch 45 step 142/1407 global_step=62050
+epoch 45 train step 150/1407 global_step=62058 loss=-5.54619
+saved progress at epoch 45 step 152/1407 global_step=62060
+epoch 45 train step 160/1407 global_step=62068 loss=-5.27292
+saved progress at epoch 45 step 162/1407 global_step=62070
+epoch 45 train step 170/1407 global_step=62078 loss=-5.49168
+saved progress at epoch 45 step 172/1407 global_step=62080
+epoch 45 train step 180/1407 global_step=62088 loss=-5.65894
+saved progress at epoch 45 step 182/1407 global_step=62090
+epoch 45 train step 190/1407 global_step=62098 loss=-5.45373
+saved progress at epoch 45 step 192/1407 global_step=62100
+epoch 45 train step 200/1407 global_step=62108 loss=-5.68689
+saved progress at epoch 45 step 202/1407 global_step=62110
+epoch 45 train step 210/1407 global_step=62118 loss=-5.56045
+saved progress at epoch 45 step 212/1407 global_step=62120
+epoch 45 train step 220/1407 global_step=62128 loss=-6.04956
+saved progress at epoch 45 step 222/1407 global_step=62130
+epoch 45 train step 230/1407 global_step=62138 loss=-5.69618
+saved progress at epoch 45 step 232/1407 global_step=62140
+epoch 45 train step 240/1407 global_step=62148 loss=-5.83155
+saved progress at epoch 45 step 242/1407 global_step=62150
+epoch 45 train step 250/1407 global_step=62158 loss=-5.46773
+saved progress at epoch 45 step 252/1407 global_step=62160
+epoch 45 train step 260/1407 global_step=62168 loss=-5.66686
+saved progress at epoch 45 step 262/1407 global_step=62170
+epoch 45 train step 270/1407 global_step=62178 loss=-5.50683
+saved progress at epoch 45 step 272/1407 global_step=62180
+epoch 45 train step 280/1407 global_step=62188 loss=-5.52976
+saved progress at epoch 45 step 282/1407 global_step=62190
+epoch 45 train step 290/1407 global_step=62198 loss=-5.27898
+saved progress at epoch 45 step 292/1407 global_step=62200
+epoch 45 train step 300/1407 global_step=62208 loss=-5.49697
+saved progress at epoch 45 step 302/1407 global_step=62210
+epoch 45 train step 310/1407 global_step=62218 loss=-5.94887
+saved progress at epoch 45 step 312/1407 global_step=62220
+epoch 45 train step 320/1407 global_step=62228 loss=-5.74948
+saved progress at epoch 45 step 322/1407 global_step=62230
+epoch 45 train step 330/1407 global_step=62238 loss=-5.49226
+saved progress at epoch 45 step 332/1407 global_step=62240
+epoch 45 train step 340/1407 global_step=62248 loss=-5.93941
+saved progress at epoch 45 step 342/1407 global_step=62250
+epoch 45 train step 350/1407 global_step=62258 loss=-5.98929
+saved progress at epoch 45 step 352/1407 global_step=62260
+epoch 45 train step 360/1407 global_step=62268 loss=-5.53489
+saved progress at epoch 45 step 362/1407 global_step=62270
+epoch 45 train step 370/1407 global_step=62278 loss=-5.66430
+saved progress at epoch 45 step 372/1407 global_step=62280
+epoch 45 train step 380/1407 global_step=62288 loss=-5.99984
+saved progress at epoch 45 step 382/1407 global_step=62290
+epoch 45 train step 390/1407 global_step=62298 loss=-5.74240
+saved progress at epoch 45 step 392/1407 global_step=62300
+epoch 45 train step 400/1407 global_step=62308 loss=-5.78266
+saved progress at epoch 45 step 402/1407 global_step=62310
+epoch 45 train step 410/1407 global_step=62318 loss=-5.78170
+saved progress at epoch 45 step 412/1407 global_step=62320
+epoch 45 train step 420/1407 global_step=62328 loss=-5.77661
+saved progress at epoch 45 step 422/1407 global_step=62330
+epoch 45 train step 430/1407 global_step=62338 loss=-5.99309
+saved progress at epoch 45 step 432/1407 global_step=62340
+epoch 45 train step 440/1407 global_step=62348 loss=-5.44131
+saved progress at epoch 45 step 442/1407 global_step=62350
+epoch 45 train step 450/1407 global_step=62358 loss=-5.95424
+saved progress at epoch 45 step 452/1407 global_step=62360
+epoch 45 train step 460/1407 global_step=62368 loss=-6.02783
+saved progress at epoch 45 step 462/1407 global_step=62370
+epoch 45 train step 470/1407 global_step=62378 loss=-5.71284
+saved progress at epoch 45 step 472/1407 global_step=62380
+epoch 45 train step 480/1407 global_step=62388 loss=-5.80304
+saved progress at epoch 45 step 482/1407 global_step=62390
+epoch 45 train step 490/1407 global_step=62398 loss=-5.67828
+saved progress at epoch 45 step 492/1407 global_step=62400
+epoch 45 train step 500/1407 global_step=62408 loss=-5.63467
+saved progress at epoch 45 step 502/1407 global_step=62410
+epoch 45 train step 510/1407 global_step=62418 loss=-5.59064
+saved progress at epoch 45 step 512/1407 global_step=62420
+epoch 45 train step 520/1407 global_step=62428 loss=-5.88386
+saved progress at epoch 45 step 522/1407 global_step=62430
+epoch 45 train step 530/1407 global_step=62438 loss=-5.36905
+saved progress at epoch 45 step 532/1407 global_step=62440
+epoch 45 train step 540/1407 global_step=62448 loss=-5.57070
+saved progress at epoch 45 step 542/1407 global_step=62450
+epoch 45 train step 550/1407 global_step=62458 loss=-5.16652
+saved progress at epoch 45 step 552/1407 global_step=62460
+epoch 45 train step 560/1407 global_step=62468 loss=-5.58030
+saved progress at epoch 45 step 562/1407 global_step=62470
+epoch 45 train step 570/1407 global_step=62478 loss=-5.16354
+saved progress at epoch 45 step 572/1407 global_step=62480
+epoch 45 train step 580/1407 global_step=62488 loss=-5.54778
+saved progress at epoch 45 step 582/1407 global_step=62490
+epoch 45 train step 590/1407 global_step=62498 loss=-5.67930
+saved progress at epoch 45 step 592/1407 global_step=62500
+epoch 45 train step 600/1407 global_step=62508 loss=-5.71312
+saved progress at epoch 45 step 602/1407 global_step=62510
+epoch 45 train step 610/1407 global_step=62518 loss=-5.41931
+saved progress at epoch 45 step 612/1407 global_step=62520
+epoch 45 train step 620/1407 global_step=62528 loss=-5.27787
+saved progress at epoch 45 step 622/1407 global_step=62530
+epoch 45 train step 630/1407 global_step=62538 loss=-5.52744
+saved progress at epoch 45 step 632/1407 global_step=62540
+epoch 45 train step 640/1407 global_step=62548 loss=-5.24363
+saved progress at epoch 45 step 642/1407 global_step=62550
+epoch 45 train step 650/1407 global_step=62558 loss=-5.52544
+saved progress at epoch 45 step 652/1407 global_step=62560
+epoch 45 train step 660/1407 global_step=62568 loss=-5.97042
+saved progress at epoch 45 step 662/1407 global_step=62570
+epoch 45 train step 670/1407 global_step=62578 loss=-5.72122
+saved progress at epoch 45 step 672/1407 global_step=62580
+epoch 45 train step 680/1407 global_step=62588 loss=-5.47767
+saved progress at epoch 45 step 682/1407 global_step=62590
+epoch 45 train step 690/1407 global_step=62598 loss=-5.36100
+saved progress at epoch 45 step 692/1407 global_step=62600
+epoch 45 train step 700/1407 global_step=62608 loss=-5.89903
+saved progress at epoch 45 step 702/1407 global_step=62610
+epoch 45 train step 710/1407 global_step=62618 loss=-5.83795
+saved progress at epoch 45 step 712/1407 global_step=62620
+epoch 45 train step 720/1407 global_step=62628 loss=-5.21701
+saved progress at epoch 45 step 722/1407 global_step=62630
+epoch 45 train step 730/1407 global_step=62638 loss=-5.77143
+saved progress at epoch 45 step 732/1407 global_step=62640
+epoch 45 train step 740/1407 global_step=62648 loss=-5.88962
+saved progress at epoch 45 step 742/1407 global_step=62650
+epoch 45 train step 750/1407 global_step=62658 loss=-5.63574
+saved progress at epoch 45 step 752/1407 global_step=62660
+epoch 45 train step 760/1407 global_step=62668 loss=-5.37778
+saved progress at epoch 45 step 762/1407 global_step=62670
+epoch 45 train step 770/1407 global_step=62678 loss=-5.43690
+saved progress at epoch 45 step 772/1407 global_step=62680
+epoch 45 train step 780/1407 global_step=62688 loss=-5.61575
+saved progress at epoch 45 step 782/1407 global_step=62690
+epoch 45 train step 790/1407 global_step=62698 loss=-5.70091
+saved progress at epoch 45 step 792/1407 global_step=62700
+epoch 45 train step 800/1407 global_step=62708 loss=-5.60928
+saved progress at epoch 45 step 802/1407 global_step=62710
+epoch 45 train step 810/1407 global_step=62718 loss=-5.99868
+saved progress at epoch 45 step 812/1407 global_step=62720
+epoch 45 train step 820/1407 global_step=62728 loss=-5.73622
+saved progress at epoch 45 step 822/1407 global_step=62730
+epoch 45 train step 830/1407 global_step=62738 loss=-5.33994
+saved progress at epoch 45 step 832/1407 global_step=62740
+epoch 45 train step 840/1407 global_step=62748 loss=-5.54982
+saved progress at epoch 45 step 842/1407 global_step=62750
+epoch 45 train step 850/1407 global_step=62758 loss=-4.91124
+saved progress at epoch 45 step 852/1407 global_step=62760
+epoch 45 train step 860/1407 global_step=62768 loss=-5.82010
+saved progress at epoch 45 step 862/1407 global_step=62770
+epoch 45 train step 870/1407 global_step=62778 loss=-5.55013
+saved progress at epoch 45 step 872/1407 global_step=62780
+epoch 45 train step 880/1407 global_step=62788 loss=-6.06560
+saved progress at epoch 45 step 882/1407 global_step=62790
+epoch 45 train step 890/1407 global_step=62798 loss=-6.21804
+saved progress at epoch 45 step 892/1407 global_step=62800
+epoch 45 train step 900/1407 global_step=62808 loss=-5.63328
+saved progress at epoch 45 step 902/1407 global_step=62810
+epoch 45 train step 910/1407 global_step=62818 loss=-5.42360
+saved progress at epoch 45 step 912/1407 global_step=62820
+epoch 45 train step 920/1407 global_step=62828 loss=-5.56289
+saved progress at epoch 45 step 922/1407 global_step=62830
+epoch 45 train step 930/1407 global_step=62838 loss=-5.90876
+saved progress at epoch 45 step 932/1407 global_step=62840
+epoch 45 train step 940/1407 global_step=62848 loss=-5.61266
+saved progress at epoch 45 step 942/1407 global_step=62850
+epoch 45 train step 950/1407 global_step=62858 loss=-5.23649
+saved progress at epoch 45 step 952/1407 global_step=62860
+epoch 45 train step 960/1407 global_step=62868 loss=-5.27362
+saved progress at epoch 45 step 962/1407 global_step=62870
+epoch 45 train step 970/1407 global_step=62878 loss=-5.68423
+saved progress at epoch 45 step 972/1407 global_step=62880
+epoch 45 train step 980/1407 global_step=62888 loss=-5.58523
+saved progress at epoch 45 step 982/1407 global_step=62890
+epoch 45 train step 990/1407 global_step=62898 loss=-5.66743
+saved progress at epoch 45 step 992/1407 global_step=62900
+epoch 45 train step 1000/1407 global_step=62908 loss=-5.62014
+saved progress at epoch 45 step 1002/1407 global_step=62910
+epoch 45 train step 1010/1407 global_step=62918 loss=-5.55830
+saved progress at epoch 45 step 1012/1407 global_step=62920
+epoch 45 train step 1020/1407 global_step=62928 loss=-5.66350
+saved progress at epoch 45 step 1022/1407 global_step=62930
+epoch 45 train step 1030/1407 global_step=62938 loss=-5.65479
+saved progress at epoch 45 step 1032/1407 global_step=62940
+epoch 45 train step 1040/1407 global_step=62948 loss=-5.88343
+saved progress at epoch 45 step 1042/1407 global_step=62950
+epoch 45 train step 1050/1407 global_step=62958 loss=-5.44948
+saved progress at epoch 45 step 1052/1407 global_step=62960
+epoch 45 train step 1060/1407 global_step=62968 loss=-5.58155
+saved progress at epoch 45 step 1062/1407 global_step=62970
+epoch 45 train step 1070/1407 global_step=62978 loss=-5.69147
+saved progress at epoch 45 step 1072/1407 global_step=62980
+epoch 45 train step 1080/1407 global_step=62988 loss=-5.94998
+saved progress at epoch 45 step 1082/1407 global_step=62990
+epoch 45 train step 1090/1407 global_step=62998 loss=-5.39597
+saved progress at epoch 45 step 1092/1407 global_step=63000
+epoch 45 train step 1100/1407 global_step=63008 loss=-5.36016
+saved progress at epoch 45 step 1102/1407 global_step=63010
+epoch 45 train step 1110/1407 global_step=63018 loss=-5.59576
+saved progress at epoch 45 step 1112/1407 global_step=63020
+epoch 45 train step 1120/1407 global_step=63028 loss=-5.40410
+saved progress at epoch 45 step 1122/1407 global_step=63030
+epoch 45 train step 1130/1407 global_step=63038 loss=-5.20629
+saved progress at epoch 45 step 1132/1407 global_step=63040
+epoch 45 train step 1140/1407 global_step=63048 loss=-5.68389
+saved progress at epoch 45 step 1142/1407 global_step=63050
+epoch 45 train step 1150/1407 global_step=63058 loss=-5.75633
+saved progress at epoch 45 step 1152/1407 global_step=63060
+epoch 45 train step 1160/1407 global_step=63068 loss=-5.60597
+saved progress at epoch 45 step 1162/1407 global_step=63070
+epoch 45 train step 1170/1407 global_step=63078 loss=-5.38872
+saved progress at epoch 45 step 1172/1407 global_step=63080
+epoch 45 train step 1180/1407 global_step=63088 loss=-5.48649
+saved progress at epoch 45 step 1182/1407 global_step=63090
+epoch 45 train step 1190/1407 global_step=63098 loss=-5.62004
+saved progress at epoch 45 step 1192/1407 global_step=63100
+epoch 45 train step 1200/1407 global_step=63108 loss=-5.52667
+saved progress at epoch 45 step 1202/1407 global_step=63110
+epoch 45 train step 1210/1407 global_step=63118 loss=-5.33087
+saved progress at epoch 45 step 1212/1407 global_step=63120
+epoch 45 train step 1220/1407 global_step=63128 loss=-5.50761
+saved progress at epoch 45 step 1222/1407 global_step=63130
+epoch 45 train step 1230/1407 global_step=63138 loss=-5.37182
+saved progress at epoch 45 step 1232/1407 global_step=63140
+epoch 45 train step 1240/1407 global_step=63148 loss=-5.39176
+saved progress at epoch 45 step 1242/1407 global_step=63150
+epoch 45 train step 1250/1407 global_step=63158 loss=-5.74182
+saved progress at epoch 45 step 1252/1407 global_step=63160
+epoch 45 train step 1260/1407 global_step=63168 loss=-5.84756
+saved progress at epoch 45 step 1262/1407 global_step=63170
+epoch 45 train step 1270/1407 global_step=63178 loss=-5.65877
+saved progress at epoch 45 step 1272/1407 global_step=63180
+epoch 45 train step 1280/1407 global_step=63188 loss=-5.66159
+saved progress at epoch 45 step 1282/1407 global_step=63190
+epoch 45 train step 1290/1407 global_step=63198 loss=-4.50776
+saved progress at epoch 45 step 1292/1407 global_step=63200
+epoch 45 train step 1300/1407 global_step=63208 loss=-5.91835
+saved progress at epoch 45 step 1302/1407 global_step=63210
+epoch 45 train step 1310/1407 global_step=63218 loss=-5.22337
+saved progress at epoch 45 step 1312/1407 global_step=63220
+epoch 45 train step 1320/1407 global_step=63228 loss=-5.55234
+saved progress at epoch 45 step 1322/1407 global_step=63230
+epoch 45 train step 1330/1407 global_step=63238 loss=-5.99404
+saved progress at epoch 45 step 1332/1407 global_step=63240
+epoch 45 train step 1340/1407 global_step=63248 loss=-5.12143
+saved progress at epoch 45 step 1342/1407 global_step=63250
+epoch 45 train step 1350/1407 global_step=63258 loss=-5.71686
+saved progress at epoch 45 step 1352/1407 global_step=63260
+epoch 45 train step 1360/1407 global_step=63268 loss=-5.53842
+saved progress at epoch 45 step 1362/1407 global_step=63270
+epoch 45 train step 1370/1407 global_step=63278 loss=-5.51983
+saved progress at epoch 45 step 1372/1407 global_step=63280
+epoch 45 train step 1380/1407 global_step=63288 loss=-5.24917
+saved progress at epoch 45 step 1382/1407 global_step=63290
+epoch 45 train step 1390/1407 global_step=63298 loss=-5.44893
+saved progress at epoch 45 step 1392/1407 global_step=63300
+epoch 45 train step 1400/1407 global_step=63308 loss=-5.30473
+saved progress at epoch 45 step 1402/1407 global_step=63310
+epoch 45 train step 1407/1407 global_step=63315 loss=-6.15643
+saved progress at epoch 45 step 1407/1407 global_step=63315
+epoch 45: train_loss=-5.59052 val_loss=-5.43726 val_type_acc=0.982 val_nonempty_acc=0.934
+saved epoch 45 checkpoint/model artifacts
+saved progress at epoch 46 step 5/1407 global_step=63320
+epoch 46 train step 10/1407 global_step=63325 loss=-5.79373
+saved progress at epoch 46 step 15/1407 global_step=63330
+epoch 46 train step 20/1407 global_step=63335 loss=-5.51600
+saved progress at epoch 46 step 25/1407 global_step=63340
+epoch 46 train step 30/1407 global_step=63345 loss=-5.51361
+saved progress at epoch 46 step 35/1407 global_step=63350
+epoch 46 train step 40/1407 global_step=63355 loss=-5.95563
+saved progress at epoch 46 step 45/1407 global_step=63360
+epoch 46 train step 50/1407 global_step=63365 loss=-5.81580
+saved progress at epoch 46 step 55/1407 global_step=63370
+epoch 46 train step 60/1407 global_step=63375 loss=-5.53376
+saved progress at epoch 46 step 65/1407 global_step=63380
+epoch 46 train step 70/1407 global_step=63385 loss=-5.36808
+saved progress at epoch 46 step 75/1407 global_step=63390
+epoch 46 train step 80/1407 global_step=63395 loss=-5.96284
+saved progress at epoch 46 step 85/1407 global_step=63400
+epoch 46 train step 90/1407 global_step=63405 loss=-5.42924
+saved progress at epoch 46 step 95/1407 global_step=63410
+epoch 46 train step 100/1407 global_step=63415 loss=-5.60594
+saved progress at epoch 46 step 105/1407 global_step=63420
+epoch 46 train step 110/1407 global_step=63425 loss=-5.58542
+saved progress at epoch 46 step 115/1407 global_step=63430
+epoch 46 train step 120/1407 global_step=63435 loss=-5.75604
+saved progress at epoch 46 step 125/1407 global_step=63440
+epoch 46 train step 130/1407 global_step=63445 loss=-5.68419
+saved progress at epoch 46 step 135/1407 global_step=63450
+epoch 46 train step 140/1407 global_step=63455 loss=-5.86615
+saved progress at epoch 46 step 145/1407 global_step=63460
+epoch 46 train step 150/1407 global_step=63465 loss=-5.51418
+saved progress at epoch 46 step 155/1407 global_step=63470
+epoch 46 train step 160/1407 global_step=63475 loss=-5.63502
+saved progress at epoch 46 step 165/1407 global_step=63480
+epoch 46 train step 170/1407 global_step=63485 loss=-5.55764
+saved progress at epoch 46 step 175/1407 global_step=63490
+epoch 46 train step 180/1407 global_step=63495 loss=-5.94913
+saved progress at epoch 46 step 185/1407 global_step=63500
+epoch 46 train step 190/1407 global_step=63505 loss=-5.51010
+saved progress at epoch 46 step 195/1407 global_step=63510
+epoch 46 train step 200/1407 global_step=63515 loss=-5.18871
+saved progress at epoch 46 step 205/1407 global_step=63520
+epoch 46 train step 210/1407 global_step=63525 loss=-5.32913
+saved progress at epoch 46 step 215/1407 global_step=63530
+epoch 46 train step 220/1407 global_step=63535 loss=-5.76470
+saved progress at epoch 46 step 225/1407 global_step=63540
+epoch 46 train step 230/1407 global_step=63545 loss=-5.69313
+saved progress at epoch 46 step 235/1407 global_step=63550
+epoch 46 train step 240/1407 global_step=63555 loss=-5.48370
+saved progress at epoch 46 step 245/1407 global_step=63560
+epoch 46 train step 250/1407 global_step=63565 loss=-5.43652
+saved progress at epoch 46 step 255/1407 global_step=63570
+epoch 46 train step 260/1407 global_step=63575 loss=-5.64641
+saved progress at epoch 46 step 265/1407 global_step=63580
+epoch 46 train step 270/1407 global_step=63585 loss=-5.61671
+saved progress at epoch 46 step 275/1407 global_step=63590
+epoch 46 train step 280/1407 global_step=63595 loss=-5.38899
+saved progress at epoch 46 step 285/1407 global_step=63600
+epoch 46 train step 290/1407 global_step=63605 loss=-5.59892
+saved progress at epoch 46 step 295/1407 global_step=63610
+epoch 46 train step 300/1407 global_step=63615 loss=-5.78471
+saved progress at epoch 46 step 305/1407 global_step=63620
+epoch 46 train step 310/1407 global_step=63625 loss=-5.69720
+saved progress at epoch 46 step 315/1407 global_step=63630
+epoch 46 train step 320/1407 global_step=63635 loss=-5.94137
+saved progress at epoch 46 step 325/1407 global_step=63640
+epoch 46 train step 330/1407 global_step=63645 loss=-5.68781
+saved progress at epoch 46 step 335/1407 global_step=63650
+epoch 46 train step 340/1407 global_step=63655 loss=-5.61830
+saved progress at epoch 46 step 345/1407 global_step=63660
+epoch 46 train step 350/1407 global_step=63665 loss=-5.94039
+saved progress at epoch 46 step 355/1407 global_step=63670
+epoch 46 train step 360/1407 global_step=63675 loss=-5.70216
+saved progress at epoch 46 step 365/1407 global_step=63680
+epoch 46 train step 370/1407 global_step=63685 loss=-5.32125
+saved progress at epoch 46 step 375/1407 global_step=63690
+epoch 46 train step 380/1407 global_step=63695 loss=-5.61590
+saved progress at epoch 46 step 385/1407 global_step=63700
+epoch 46 train step 390/1407 global_step=63705 loss=-6.21970
+saved progress at epoch 46 step 395/1407 global_step=63710
+epoch 46 train step 400/1407 global_step=63715 loss=-5.55265
+saved progress at epoch 46 step 405/1407 global_step=63720
+epoch 46 train step 410/1407 global_step=63725 loss=-5.30694
+saved progress at epoch 46 step 415/1407 global_step=63730
+epoch 46 train step 420/1407 global_step=63735 loss=-6.01465
+saved progress at epoch 46 step 425/1407 global_step=63740
+epoch 46 train step 430/1407 global_step=63745 loss=-5.20091
+saved progress at epoch 46 step 435/1407 global_step=63750
+epoch 46 train step 440/1407 global_step=63755 loss=-5.44476
+saved progress at epoch 46 step 445/1407 global_step=63760
+epoch 46 train step 450/1407 global_step=63765 loss=-5.38657
+saved progress at epoch 46 step 455/1407 global_step=63770
+epoch 46 train step 460/1407 global_step=63775 loss=-5.18594
+saved progress at epoch 46 step 465/1407 global_step=63780
+epoch 46 train step 470/1407 global_step=63785 loss=-5.47801
+saved progress at epoch 46 step 475/1407 global_step=63790
+epoch 46 train step 480/1407 global_step=63795 loss=-5.80634
+saved progress at epoch 46 step 485/1407 global_step=63800
+epoch 46 train step 490/1407 global_step=63805 loss=-5.64385
+saved progress at epoch 46 step 495/1407 global_step=63810
+epoch 46 train step 500/1407 global_step=63815 loss=-5.55274
+saved progress at epoch 46 step 505/1407 global_step=63820
+epoch 46 train step 510/1407 global_step=63825 loss=-5.75638
+saved progress at epoch 46 step 515/1407 global_step=63830
+epoch 46 train step 520/1407 global_step=63835 loss=-5.15478
+saved progress at epoch 46 step 525/1407 global_step=63840
+epoch 46 train step 530/1407 global_step=63845 loss=-5.73169
+saved progress at epoch 46 step 535/1407 global_step=63850
+epoch 46 train step 540/1407 global_step=63855 loss=-5.31355
+saved progress at epoch 46 step 545/1407 global_step=63860
+epoch 46 train step 550/1407 global_step=63865 loss=-5.80195
+saved progress at epoch 46 step 555/1407 global_step=63870
+epoch 46 train step 560/1407 global_step=63875 loss=-5.53528
+saved progress at epoch 46 step 565/1407 global_step=63880
+epoch 46 train step 570/1407 global_step=63885 loss=-5.37963
+saved progress at epoch 46 step 575/1407 global_step=63890
+epoch 46 train step 580/1407 global_step=63895 loss=-5.18319
+saved progress at epoch 46 step 585/1407 global_step=63900
+epoch 46 train step 590/1407 global_step=63905 loss=-5.39106
+saved progress at epoch 46 step 595/1407 global_step=63910
+epoch 46 train step 600/1407 global_step=63915 loss=-5.70069
+saved progress at epoch 46 step 605/1407 global_step=63920
+epoch 46 train step 610/1407 global_step=63925 loss=-5.58848
+saved progress at epoch 46 step 615/1407 global_step=63930
+epoch 46 train step 620/1407 global_step=63935 loss=-5.67937
+saved progress at epoch 46 step 625/1407 global_step=63940
+epoch 46 train step 630/1407 global_step=63945 loss=-5.76100
+saved progress at epoch 46 step 635/1407 global_step=63950
+epoch 46 train step 640/1407 global_step=63955 loss=-5.60468
+saved progress at epoch 46 step 645/1407 global_step=63960
+epoch 46 train step 650/1407 global_step=63965 loss=-5.89404
+saved progress at epoch 46 step 655/1407 global_step=63970
+epoch 46 train step 660/1407 global_step=63975 loss=-5.48030
+saved progress at epoch 46 step 665/1407 global_step=63980
+epoch 46 train step 670/1407 global_step=63985 loss=-5.68766
+saved progress at epoch 46 step 675/1407 global_step=63990
+epoch 46 train step 680/1407 global_step=63995 loss=-5.67870
+saved progress at epoch 46 step 685/1407 global_step=64000
+epoch 46 train step 690/1407 global_step=64005 loss=-5.78025
+saved progress at epoch 46 step 695/1407 global_step=64010
+epoch 46 train step 700/1407 global_step=64015 loss=-5.88102
+saved progress at epoch 46 step 705/1407 global_step=64020
+epoch 46 train step 710/1407 global_step=64025 loss=-5.58199
+saved progress at epoch 46 step 715/1407 global_step=64030
+epoch 46 train step 720/1407 global_step=64035 loss=-5.69756
+saved progress at epoch 46 step 725/1407 global_step=64040
+epoch 46 train step 730/1407 global_step=64045 loss=-5.47640
+saved progress at epoch 46 step 735/1407 global_step=64050
+epoch 46 train step 740/1407 global_step=64055 loss=-5.39792
+saved progress at epoch 46 step 745/1407 global_step=64060
+epoch 46 train step 750/1407 global_step=64065 loss=-5.39074
+saved progress at epoch 46 step 755/1407 global_step=64070
+epoch 46 train step 760/1407 global_step=64075 loss=-5.55042
+saved progress at epoch 46 step 765/1407 global_step=64080
+epoch 46 train step 770/1407 global_step=64085 loss=-5.51440
+saved progress at epoch 46 step 775/1407 global_step=64090
+epoch 46 train step 780/1407 global_step=64095 loss=-5.96737
+saved progress at epoch 46 step 785/1407 global_step=64100
+epoch 46 train step 790/1407 global_step=64105 loss=-5.48521
+saved progress at epoch 46 step 795/1407 global_step=64110
+epoch 46 train step 800/1407 global_step=64115 loss=-5.77622
+saved progress at epoch 46 step 805/1407 global_step=64120
+epoch 46 train step 810/1407 global_step=64125 loss=-5.72185
+saved progress at epoch 46 step 815/1407 global_step=64130
+epoch 46 train step 820/1407 global_step=64135 loss=-5.93811
+saved progress at epoch 46 step 825/1407 global_step=64140
+epoch 46 train step 830/1407 global_step=64145 loss=-5.80392
+saved progress at epoch 46 step 835/1407 global_step=64150
+epoch 46 train step 840/1407 global_step=64155 loss=-5.77376
+saved progress at epoch 46 step 845/1407 global_step=64160
+epoch 46 train step 850/1407 global_step=64165 loss=-5.55121
+saved progress at epoch 46 step 855/1407 global_step=64170
+epoch 46 train step 860/1407 global_step=64175 loss=-5.81820
+saved progress at epoch 46 step 865/1407 global_step=64180
+epoch 46 train step 870/1407 global_step=64185 loss=-5.41724
+saved progress at epoch 46 step 875/1407 global_step=64190
+epoch 46 train step 880/1407 global_step=64195 loss=-5.59899
+saved progress at epoch 46 step 885/1407 global_step=64200
+epoch 46 train step 890/1407 global_step=64205 loss=-5.94454
+saved progress at epoch 46 step 895/1407 global_step=64210
+epoch 46 train step 900/1407 global_step=64215 loss=-5.53281
+saved progress at epoch 46 step 905/1407 global_step=64220
+epoch 46 train step 910/1407 global_step=64225 loss=-5.45992
+saved progress at epoch 46 step 915/1407 global_step=64230
+epoch 46 train step 920/1407 global_step=64235 loss=-5.49890
+saved progress at epoch 46 step 925/1407 global_step=64240
+epoch 46 train step 930/1407 global_step=64245 loss=-5.69447
+saved progress at epoch 46 step 935/1407 global_step=64250
+epoch 46 train step 940/1407 global_step=64255 loss=-5.77401
+saved progress at epoch 46 step 945/1407 global_step=64260
+epoch 46 train step 950/1407 global_step=64265 loss=-5.76500
+saved progress at epoch 46 step 955/1407 global_step=64270
+epoch 46 train step 960/1407 global_step=64275 loss=-5.70215
+saved progress at epoch 46 step 965/1407 global_step=64280
+epoch 46 train step 970/1407 global_step=64285 loss=-5.26115
+saved progress at epoch 46 step 975/1407 global_step=64290
+epoch 46 train step 980/1407 global_step=64295 loss=-5.74145
+saved progress at epoch 46 step 985/1407 global_step=64300
+epoch 46 train step 990/1407 global_step=64305 loss=-5.50026
+saved progress at epoch 46 step 995/1407 global_step=64310
+epoch 46 train step 1000/1407 global_step=64315 loss=-5.74563
+saved progress at epoch 46 step 1005/1407 global_step=64320
+epoch 46 train step 1010/1407 global_step=64325 loss=-5.55292
+saved progress at epoch 46 step 1015/1407 global_step=64330
+epoch 46 train step 1020/1407 global_step=64335 loss=-4.70354
+saved progress at epoch 46 step 1025/1407 global_step=64340
+epoch 46 train step 1030/1407 global_step=64345 loss=-5.52692
+saved progress at epoch 46 step 1035/1407 global_step=64350
+epoch 46 train step 1040/1407 global_step=64355 loss=-5.74973
+saved progress at epoch 46 step 1045/1407 global_step=64360
+epoch 46 train step 1050/1407 global_step=64365 loss=-5.58173
+saved progress at epoch 46 step 1055/1407 global_step=64370
+epoch 46 train step 1060/1407 global_step=64375 loss=-5.46107
+saved progress at epoch 46 step 1065/1407 global_step=64380
+epoch 46 train step 1070/1407 global_step=64385 loss=-5.77631
+saved progress at epoch 46 step 1075/1407 global_step=64390
+epoch 46 train step 1080/1407 global_step=64395 loss=-5.47736
+saved progress at epoch 46 step 1085/1407 global_step=64400
+epoch 46 train step 1090/1407 global_step=64405 loss=-5.48080
+saved progress at epoch 46 step 1095/1407 global_step=64410
+epoch 46 train step 1100/1407 global_step=64415 loss=-5.37947
+saved progress at epoch 46 step 1105/1407 global_step=64420
+epoch 46 train step 1110/1407 global_step=64425 loss=-5.31470
+saved progress at epoch 46 step 1115/1407 global_step=64430
+epoch 46 train step 1120/1407 global_step=64435 loss=-5.75806
+saved progress at epoch 46 step 1125/1407 global_step=64440
+epoch 46 train step 1130/1407 global_step=64445 loss=-5.56135
+saved progress at epoch 46 step 1135/1407 global_step=64450
+epoch 46 train step 1140/1407 global_step=64455 loss=-5.76652
+saved progress at epoch 46 step 1145/1407 global_step=64460
+epoch 46 train step 1150/1407 global_step=64465 loss=-5.85925
+saved progress at epoch 46 step 1155/1407 global_step=64470
+epoch 46 train step 1160/1407 global_step=64475 loss=-5.33337
+saved progress at epoch 46 step 1165/1407 global_step=64480
+epoch 46 train step 1170/1407 global_step=64485 loss=-5.70164
+saved progress at epoch 46 step 1175/1407 global_step=64490
+epoch 46 train step 1180/1407 global_step=64495 loss=-5.80525
+saved progress at epoch 46 step 1185/1407 global_step=64500
+epoch 46 train step 1190/1407 global_step=64505 loss=-5.38048
+saved progress at epoch 46 step 1195/1407 global_step=64510
+epoch 46 train step 1200/1407 global_step=64515 loss=-5.34733
+saved progress at epoch 46 step 1205/1407 global_step=64520
+epoch 46 train step 1210/1407 global_step=64525 loss=-5.56414
+saved progress at epoch 46 step 1215/1407 global_step=64530
+epoch 46 train step 1220/1407 global_step=64535 loss=-5.49149
+saved progress at epoch 46 step 1225/1407 global_step=64540
+epoch 46 train step 1230/1407 global_step=64545 loss=-5.60115
+saved progress at epoch 46 step 1235/1407 global_step=64550
+epoch 46 train step 1240/1407 global_step=64555 loss=-5.48028
+saved progress at epoch 46 step 1245/1407 global_step=64560
+epoch 46 train step 1250/1407 global_step=64565 loss=-5.38898
+saved progress at epoch 46 step 1255/1407 global_step=64570
+epoch 46 train step 1260/1407 global_step=64575 loss=-5.56891
+saved progress at epoch 46 step 1265/1407 global_step=64580
+epoch 46 train step 1270/1407 global_step=64585 loss=-5.84330
+saved progress at epoch 46 step 1275/1407 global_step=64590
+epoch 46 train step 1280/1407 global_step=64595 loss=-6.08768
+saved progress at epoch 46 step 1285/1407 global_step=64600
+epoch 46 train step 1290/1407 global_step=64605 loss=-5.85429
+saved progress at epoch 46 step 1295/1407 global_step=64610
+epoch 46 train step 1300/1407 global_step=64615 loss=-5.36237
+saved progress at epoch 46 step 1305/1407 global_step=64620
+epoch 46 train step 1310/1407 global_step=64625 loss=-5.60988
+saved progress at epoch 46 step 1315/1407 global_step=64630
+epoch 46 train step 1320/1407 global_step=64635 loss=-5.34312
+saved progress at epoch 46 step 1325/1407 global_step=64640
+epoch 46 train step 1330/1407 global_step=64645 loss=-6.00836
+saved progress at epoch 46 step 1335/1407 global_step=64650
+epoch 46 train step 1340/1407 global_step=64655 loss=-5.68573
+saved progress at epoch 46 step 1345/1407 global_step=64660
+epoch 46 train step 1350/1407 global_step=64665 loss=-5.60872
+saved progress at epoch 46 step 1355/1407 global_step=64670
+epoch 46 train step 1360/1407 global_step=64675 loss=-5.65597
+saved progress at epoch 46 step 1365/1407 global_step=64680
+epoch 46 train step 1370/1407 global_step=64685 loss=-5.45809
+saved progress at epoch 46 step 1375/1407 global_step=64690
+epoch 46 train step 1380/1407 global_step=64695 loss=-5.67672
+saved progress at epoch 46 step 1385/1407 global_step=64700
+epoch 46 train step 1390/1407 global_step=64705 loss=-5.35999
+saved progress at epoch 46 step 1395/1407 global_step=64710
+epoch 46 train step 1400/1407 global_step=64715 loss=-5.54480
+saved progress at epoch 46 step 1405/1407 global_step=64720
+epoch 46 train step 1407/1407 global_step=64722 loss=-5.56702
+saved progress at epoch 46 step 1407/1407 global_step=64722
+epoch 46: train_loss=-5.59674 val_loss=-5.32569 val_type_acc=0.983 val_nonempty_acc=0.939
+saved epoch 46 checkpoint/model artifacts
+saved progress at epoch 47 step 8/1407 global_step=64730
+epoch 47 train step 10/1407 global_step=64732 loss=-5.49112
+saved progress at epoch 47 step 18/1407 global_step=64740
+epoch 47 train step 20/1407 global_step=64742 loss=-5.09586
+saved progress at epoch 47 step 28/1407 global_step=64750
+epoch 47 train step 30/1407 global_step=64752 loss=-5.64481
+saved progress at epoch 47 step 38/1407 global_step=64760
+epoch 47 train step 40/1407 global_step=64762 loss=-5.99976
+saved progress at epoch 47 step 48/1407 global_step=64770
+epoch 47 train step 50/1407 global_step=64772 loss=-5.60506
+saved progress at epoch 47 step 58/1407 global_step=64780
+epoch 47 train step 60/1407 global_step=64782 loss=-5.49752
+saved progress at epoch 47 step 68/1407 global_step=64790
+epoch 47 train step 70/1407 global_step=64792 loss=-5.60098
+saved progress at epoch 47 step 78/1407 global_step=64800
+epoch 47 train step 80/1407 global_step=64802 loss=-5.81759
+saved progress at epoch 47 step 88/1407 global_step=64810
+epoch 47 train step 90/1407 global_step=64812 loss=-5.79338
+saved progress at epoch 47 step 98/1407 global_step=64820
+epoch 47 train step 100/1407 global_step=64822 loss=-5.38805
+saved progress at epoch 47 step 108/1407 global_step=64830
+epoch 47 train step 110/1407 global_step=64832 loss=-5.56385
+saved progress at epoch 47 step 118/1407 global_step=64840
+epoch 47 train step 120/1407 global_step=64842 loss=-5.64519
+saved progress at epoch 47 step 128/1407 global_step=64850
+epoch 47 train step 130/1407 global_step=64852 loss=-5.41902
+saved progress at epoch 47 step 138/1407 global_step=64860
+epoch 47 train step 140/1407 global_step=64862 loss=-5.61254
+saved progress at epoch 47 step 148/1407 global_step=64870
+epoch 47 train step 150/1407 global_step=64872 loss=-5.92696
+saved progress at epoch 47 step 158/1407 global_step=64880
+epoch 47 train step 160/1407 global_step=64882 loss=-5.81632
+saved progress at epoch 47 step 168/1407 global_step=64890
+epoch 47 train step 170/1407 global_step=64892 loss=-5.76736
+saved progress at epoch 47 step 178/1407 global_step=64900
+epoch 47 train step 180/1407 global_step=64902 loss=-5.74493
+saved progress at epoch 47 step 188/1407 global_step=64910
+epoch 47 train step 190/1407 global_step=64912 loss=-5.66428
+saved progress at epoch 47 step 198/1407 global_step=64920
+epoch 47 train step 200/1407 global_step=64922 loss=-5.71319
+saved progress at epoch 47 step 208/1407 global_step=64930
+epoch 47 train step 210/1407 global_step=64932 loss=-5.44629
+saved progress at epoch 47 step 218/1407 global_step=64940
+epoch 47 train step 220/1407 global_step=64942 loss=-5.80202
+saved progress at epoch 47 step 228/1407 global_step=64950
+epoch 47 train step 230/1407 global_step=64952 loss=-5.08893
+saved progress at epoch 47 step 238/1407 global_step=64960
+epoch 47 train step 240/1407 global_step=64962 loss=-5.67826
+saved progress at epoch 47 step 248/1407 global_step=64970
+epoch 47 train step 250/1407 global_step=64972 loss=-5.25019
+saved progress at epoch 47 step 258/1407 global_step=64980
+epoch 47 train step 260/1407 global_step=64982 loss=-5.68014
+saved progress at epoch 47 step 268/1407 global_step=64990
+epoch 47 train step 270/1407 global_step=64992 loss=-5.76029
+saved progress at epoch 47 step 278/1407 global_step=65000
+epoch 47 train step 280/1407 global_step=65002 loss=-5.82885
+saved progress at epoch 47 step 288/1407 global_step=65010
+epoch 47 train step 290/1407 global_step=65012 loss=-5.65893
+saved progress at epoch 47 step 298/1407 global_step=65020
+epoch 47 train step 300/1407 global_step=65022 loss=-5.78796
+saved progress at epoch 47 step 308/1407 global_step=65030
+epoch 47 train step 310/1407 global_step=65032 loss=-5.70289
+saved progress at epoch 47 step 318/1407 global_step=65040
+epoch 47 train step 320/1407 global_step=65042 loss=-5.52853
+saved progress at epoch 47 step 328/1407 global_step=65050
+epoch 47 train step 330/1407 global_step=65052 loss=-5.85827
+saved progress at epoch 47 step 338/1407 global_step=65060
+epoch 47 train step 340/1407 global_step=65062 loss=-5.57977
+saved progress at epoch 47 step 348/1407 global_step=65070
+epoch 47 train step 350/1407 global_step=65072 loss=-5.44337
+saved progress at epoch 47 step 358/1407 global_step=65080
+epoch 47 train step 360/1407 global_step=65082 loss=-5.67443
+saved progress at epoch 47 step 368/1407 global_step=65090
+epoch 47 train step 370/1407 global_step=65092 loss=-5.60598
+saved progress at epoch 47 step 378/1407 global_step=65100
+epoch 47 train step 380/1407 global_step=65102 loss=-5.30388
+saved progress at epoch 47 step 388/1407 global_step=65110
+epoch 47 train step 390/1407 global_step=65112 loss=-5.44550
+saved progress at epoch 47 step 398/1407 global_step=65120
+epoch 47 train step 400/1407 global_step=65122 loss=-6.11094
+saved progress at epoch 47 step 408/1407 global_step=65130
+epoch 47 train step 410/1407 global_step=65132 loss=-4.72362
+saved progress at epoch 47 step 418/1407 global_step=65140
+epoch 47 train step 420/1407 global_step=65142 loss=-5.52696
+saved progress at epoch 47 step 428/1407 global_step=65150
+epoch 47 train step 430/1407 global_step=65152 loss=-5.71064
+saved progress at epoch 47 step 438/1407 global_step=65160
+epoch 47 train step 440/1407 global_step=65162 loss=-6.13611
+saved progress at epoch 47 step 448/1407 global_step=65170
+epoch 47 train step 450/1407 global_step=65172 loss=-5.47445
+saved progress at epoch 47 step 458/1407 global_step=65180
+epoch 47 train step 460/1407 global_step=65182 loss=-5.91866
+saved progress at epoch 47 step 468/1407 global_step=65190
+epoch 47 train step 470/1407 global_step=65192 loss=-5.66017
+saved progress at epoch 47 step 478/1407 global_step=65200
+epoch 47 train step 480/1407 global_step=65202 loss=-5.63424
+saved progress at epoch 47 step 488/1407 global_step=65210
+epoch 47 train step 490/1407 global_step=65212 loss=-5.67110
+saved progress at epoch 47 step 498/1407 global_step=65220
+epoch 47 train step 500/1407 global_step=65222 loss=-5.48046
+saved progress at epoch 47 step 508/1407 global_step=65230
+epoch 47 train step 510/1407 global_step=65232 loss=-5.65086
+saved progress at epoch 47 step 518/1407 global_step=65240
+epoch 47 train step 520/1407 global_step=65242 loss=-5.53727
+saved progress at epoch 47 step 528/1407 global_step=65250
+epoch 47 train step 530/1407 global_step=65252 loss=-5.89419
+saved progress at epoch 47 step 538/1407 global_step=65260
+epoch 47 train step 540/1407 global_step=65262 loss=-5.79079
+saved progress at epoch 47 step 548/1407 global_step=65270
+epoch 47 train step 550/1407 global_step=65272 loss=-5.63871
+saved progress at epoch 47 step 558/1407 global_step=65280
+epoch 47 train step 560/1407 global_step=65282 loss=-5.70746
+saved progress at epoch 47 step 568/1407 global_step=65290
+epoch 47 train step 570/1407 global_step=65292 loss=-5.73627
+saved progress at epoch 47 step 578/1407 global_step=65300
+epoch 47 train step 580/1407 global_step=65302 loss=-5.59303
+saved progress at epoch 47 step 588/1407 global_step=65310
+epoch 47 train step 590/1407 global_step=65312 loss=-5.60772
+saved progress at epoch 47 step 598/1407 global_step=65320
+epoch 47 train step 600/1407 global_step=65322 loss=-5.96077
+saved progress at epoch 47 step 608/1407 global_step=65330
+epoch 47 train step 610/1407 global_step=65332 loss=-5.58579
+saved progress at epoch 47 step 618/1407 global_step=65340
+epoch 47 train step 620/1407 global_step=65342 loss=-5.46522
+saved progress at epoch 47 step 628/1407 global_step=65350
+epoch 47 train step 630/1407 global_step=65352 loss=-5.82320
+saved progress at epoch 47 step 638/1407 global_step=65360
+epoch 47 train step 640/1407 global_step=65362 loss=-5.61997
+saved progress at epoch 47 step 648/1407 global_step=65370
+epoch 47 train step 650/1407 global_step=65372 loss=-5.72728
+saved progress at epoch 47 step 658/1407 global_step=65380
+epoch 47 train step 660/1407 global_step=65382 loss=-5.56081
+saved progress at epoch 47 step 668/1407 global_step=65390
+epoch 47 train step 670/1407 global_step=65392 loss=-5.36135
+saved progress at epoch 47 step 678/1407 global_step=65400
+epoch 47 train step 680/1407 global_step=65402 loss=-5.11330
+saved progress at epoch 47 step 688/1407 global_step=65410
+epoch 47 train step 690/1407 global_step=65412 loss=-5.67782
+saved progress at epoch 47 step 698/1407 global_step=65420
+epoch 47 train step 700/1407 global_step=65422 loss=-5.60490
+saved progress at epoch 47 step 708/1407 global_step=65430
+epoch 47 train step 710/1407 global_step=65432 loss=-5.48559
+saved progress at epoch 47 step 718/1407 global_step=65440
+epoch 47 train step 720/1407 global_step=65442 loss=-5.55674
+saved progress at epoch 47 step 728/1407 global_step=65450
+epoch 47 train step 730/1407 global_step=65452 loss=-5.64982
+saved progress at epoch 47 step 738/1407 global_step=65460
+epoch 47 train step 740/1407 global_step=65462 loss=-5.88210
+saved progress at epoch 47 step 748/1407 global_step=65470
+epoch 47 train step 750/1407 global_step=65472 loss=-5.65493
+saved progress at epoch 47 step 758/1407 global_step=65480
+epoch 47 train step 760/1407 global_step=65482 loss=-5.72959
+saved progress at epoch 47 step 768/1407 global_step=65490
+epoch 47 train step 770/1407 global_step=65492 loss=-5.61498
+saved progress at epoch 47 step 778/1407 global_step=65500
+epoch 47 train step 780/1407 global_step=65502 loss=-5.49817
+saved progress at epoch 47 step 788/1407 global_step=65510
+epoch 47 train step 790/1407 global_step=65512 loss=-5.54543
+saved progress at epoch 47 step 798/1407 global_step=65520
+epoch 47 train step 800/1407 global_step=65522 loss=-5.60590
+saved progress at epoch 47 step 808/1407 global_step=65530
+epoch 47 train step 810/1407 global_step=65532 loss=-5.60526
+saved progress at epoch 47 step 818/1407 global_step=65540
+epoch 47 train step 820/1407 global_step=65542 loss=-5.42183
+saved progress at epoch 47 step 828/1407 global_step=65550
+epoch 47 train step 830/1407 global_step=65552 loss=-5.46306
+saved progress at epoch 47 step 838/1407 global_step=65560
+epoch 47 train step 840/1407 global_step=65562 loss=-5.50134
+saved progress at epoch 47 step 848/1407 global_step=65570
+epoch 47 train step 850/1407 global_step=65572 loss=-5.81248
+saved progress at epoch 47 step 858/1407 global_step=65580
+epoch 47 train step 860/1407 global_step=65582 loss=-5.57413
+saved progress at epoch 47 step 868/1407 global_step=65590
+epoch 47 train step 870/1407 global_step=65592 loss=-5.93802
+saved progress at epoch 47 step 878/1407 global_step=65600
+epoch 47 train step 880/1407 global_step=65602 loss=-5.61146
+saved progress at epoch 47 step 888/1407 global_step=65610
+epoch 47 train step 890/1407 global_step=65612 loss=-5.82993
+saved progress at epoch 47 step 898/1407 global_step=65620
+epoch 47 train step 900/1407 global_step=65622 loss=-5.04107
+saved progress at epoch 47 step 908/1407 global_step=65630
+epoch 47 train step 910/1407 global_step=65632 loss=-5.58753
+saved progress at epoch 47 step 918/1407 global_step=65640
+epoch 47 train step 920/1407 global_step=65642 loss=-5.51821
+saved progress at epoch 47 step 928/1407 global_step=65650
+epoch 47 train step 930/1407 global_step=65652 loss=-5.78014
+saved progress at epoch 47 step 938/1407 global_step=65660
+epoch 47 train step 940/1407 global_step=65662 loss=-5.58257
+saved progress at epoch 47 step 948/1407 global_step=65670
+epoch 47 train step 950/1407 global_step=65672 loss=-5.63547
+saved progress at epoch 47 step 958/1407 global_step=65680
+epoch 47 train step 960/1407 global_step=65682 loss=-5.56522
+saved progress at epoch 47 step 968/1407 global_step=65690
+epoch 47 train step 970/1407 global_step=65692 loss=-5.29066
+saved progress at epoch 47 step 978/1407 global_step=65700
+epoch 47 train step 980/1407 global_step=65702 loss=-5.41528
+saved progress at epoch 47 step 988/1407 global_step=65710
+epoch 47 train step 990/1407 global_step=65712 loss=-5.60714
+saved progress at epoch 47 step 998/1407 global_step=65720
+epoch 47 train step 1000/1407 global_step=65722 loss=-5.69646
+saved progress at epoch 47 step 1008/1407 global_step=65730
+epoch 47 train step 1010/1407 global_step=65732 loss=-5.62861
+saved progress at epoch 47 step 1018/1407 global_step=65740
+epoch 47 train step 1020/1407 global_step=65742 loss=-5.60276
+saved progress at epoch 47 step 1028/1407 global_step=65750
+epoch 47 train step 1030/1407 global_step=65752 loss=-5.82569
+saved progress at epoch 47 step 1038/1407 global_step=65760
+epoch 47 train step 1040/1407 global_step=65762 loss=-5.18046
+saved progress at epoch 47 step 1048/1407 global_step=65770
+epoch 47 train step 1050/1407 global_step=65772 loss=-5.07175
+saved progress at epoch 47 step 1058/1407 global_step=65780
+epoch 47 train step 1060/1407 global_step=65782 loss=-5.33822
+saved progress at epoch 47 step 1068/1407 global_step=65790
+epoch 47 train step 1070/1407 global_step=65792 loss=-5.20333
+saved progress at epoch 47 step 1078/1407 global_step=65800
+epoch 47 train step 1080/1407 global_step=65802 loss=-5.35947
+saved progress at epoch 47 step 1088/1407 global_step=65810
+epoch 47 train step 1090/1407 global_step=65812 loss=-5.64903
+saved progress at epoch 47 step 1098/1407 global_step=65820
+epoch 47 train step 1100/1407 global_step=65822 loss=-5.57942
+saved progress at epoch 47 step 1108/1407 global_step=65830
+epoch 47 train step 1110/1407 global_step=65832 loss=-5.83775
+saved progress at epoch 47 step 1118/1407 global_step=65840
+epoch 47 train step 1120/1407 global_step=65842 loss=-5.73689
+saved progress at epoch 47 step 1128/1407 global_step=65850
+epoch 47 train step 1130/1407 global_step=65852 loss=-5.87704
+saved progress at epoch 47 step 1138/1407 global_step=65860
+epoch 47 train step 1140/1407 global_step=65862 loss=-5.63794
+saved progress at epoch 47 step 1148/1407 global_step=65870
+epoch 47 train step 1150/1407 global_step=65872 loss=-5.58840
+saved progress at epoch 47 step 1158/1407 global_step=65880
+epoch 47 train step 1160/1407 global_step=65882 loss=-5.65931
+saved progress at epoch 47 step 1168/1407 global_step=65890
+epoch 47 train step 1170/1407 global_step=65892 loss=-5.88991
+saved progress at epoch 47 step 1178/1407 global_step=65900
+epoch 47 train step 1180/1407 global_step=65902 loss=-5.70985
+saved progress at epoch 47 step 1188/1407 global_step=65910
+epoch 47 train step 1190/1407 global_step=65912 loss=-5.49747
+saved progress at epoch 47 step 1198/1407 global_step=65920
+epoch 47 train step 1200/1407 global_step=65922 loss=-5.66261
+saved progress at epoch 47 step 1208/1407 global_step=65930
+epoch 47 train step 1210/1407 global_step=65932 loss=-5.19410
+saved progress at epoch 47 step 1218/1407 global_step=65940
+epoch 47 train step 1220/1407 global_step=65942 loss=-5.27523
+saved progress at epoch 47 step 1228/1407 global_step=65950
+epoch 47 train step 1230/1407 global_step=65952 loss=-5.64452
+saved progress at epoch 47 step 1238/1407 global_step=65960
+epoch 47 train step 1240/1407 global_step=65962 loss=-5.45947
+saved progress at epoch 47 step 1248/1407 global_step=65970
+epoch 47 train step 1250/1407 global_step=65972 loss=-5.97523
+saved progress at epoch 47 step 1258/1407 global_step=65980
+epoch 47 train step 1260/1407 global_step=65982 loss=-5.60458
+saved progress at epoch 47 step 1268/1407 global_step=65990
+epoch 47 train step 1270/1407 global_step=65992 loss=-5.47473
+saved progress at epoch 47 step 1278/1407 global_step=66000
+epoch 47 train step 1280/1407 global_step=66002 loss=-5.52428
+saved progress at epoch 47 step 1288/1407 global_step=66010
+epoch 47 train step 1290/1407 global_step=66012 loss=-5.54880
+saved progress at epoch 47 step 1298/1407 global_step=66020
+epoch 47 train step 1300/1407 global_step=66022 loss=-5.91547
+saved progress at epoch 47 step 1308/1407 global_step=66030
+epoch 47 train step 1310/1407 global_step=66032 loss=-5.48126
+saved progress at epoch 47 step 1318/1407 global_step=66040
+epoch 47 train step 1320/1407 global_step=66042 loss=-5.54611
+saved progress at epoch 47 step 1328/1407 global_step=66050
+epoch 47 train step 1330/1407 global_step=66052 loss=-5.56817
+saved progress at epoch 47 step 1338/1407 global_step=66060
+epoch 47 train step 1340/1407 global_step=66062 loss=-5.92694
+saved progress at epoch 47 step 1348/1407 global_step=66070
+epoch 47 train step 1350/1407 global_step=66072 loss=-5.17196
+saved progress at epoch 47 step 1358/1407 global_step=66080
+epoch 47 train step 1360/1407 global_step=66082 loss=-5.55647
+saved progress at epoch 47 step 1368/1407 global_step=66090
+epoch 47 train step 1370/1407 global_step=66092 loss=-5.56569
+saved progress at epoch 47 step 1378/1407 global_step=66100
+epoch 47 train step 1380/1407 global_step=66102 loss=-5.68664
+saved progress at epoch 47 step 1388/1407 global_step=66110
+epoch 47 train step 1390/1407 global_step=66112 loss=-5.57835
+saved progress at epoch 47 step 1398/1407 global_step=66120
+epoch 47 train step 1400/1407 global_step=66122 loss=-5.71864
+epoch 47 train step 1407/1407 global_step=66129 loss=-5.34774
+saved progress at epoch 47 step 1407/1407 global_step=66129
+epoch 47: train_loss=-5.61934 val_loss=-5.37735 val_type_acc=0.981 val_nonempty_acc=0.931
+saved epoch 47 checkpoint/model artifacts
+saved progress at epoch 48 step 1/1407 global_step=66130
+epoch 48 train step 10/1407 global_step=66139 loss=-5.41553
+saved progress at epoch 48 step 11/1407 global_step=66140
+epoch 48 train step 20/1407 global_step=66149 loss=-5.86724
+saved progress at epoch 48 step 21/1407 global_step=66150
+epoch 48 train step 30/1407 global_step=66159 loss=-5.62637
+saved progress at epoch 48 step 31/1407 global_step=66160
+epoch 48 train step 40/1407 global_step=66169 loss=-5.83824
+saved progress at epoch 48 step 41/1407 global_step=66170
+epoch 48 train step 50/1407 global_step=66179 loss=-5.42066
+saved progress at epoch 48 step 51/1407 global_step=66180
+epoch 48 train step 60/1407 global_step=66189 loss=-5.43507
+saved progress at epoch 48 step 61/1407 global_step=66190
+epoch 48 train step 70/1407 global_step=66199 loss=-5.52247
+saved progress at epoch 48 step 71/1407 global_step=66200
+epoch 48 train step 80/1407 global_step=66209 loss=-5.63372
+saved progress at epoch 48 step 81/1407 global_step=66210
+epoch 48 train step 90/1407 global_step=66219 loss=-6.05323
+saved progress at epoch 48 step 91/1407 global_step=66220
+epoch 48 train step 100/1407 global_step=66229 loss=-5.81246
+saved progress at epoch 48 step 101/1407 global_step=66230
+epoch 48 train step 110/1407 global_step=66239 loss=-5.49266
+saved progress at epoch 48 step 111/1407 global_step=66240
+epoch 48 train step 120/1407 global_step=66249 loss=-5.23561
+saved progress at epoch 48 step 121/1407 global_step=66250
+epoch 48 train step 130/1407 global_step=66259 loss=-5.42255
+saved progress at epoch 48 step 131/1407 global_step=66260
+epoch 48 train step 140/1407 global_step=66269 loss=-5.58778
+saved progress at epoch 48 step 141/1407 global_step=66270
+epoch 48 train step 150/1407 global_step=66279 loss=-5.65453
+saved progress at epoch 48 step 151/1407 global_step=66280
+epoch 48 train step 160/1407 global_step=66289 loss=-5.97227
+saved progress at epoch 48 step 161/1407 global_step=66290
+epoch 48 train step 170/1407 global_step=66299 loss=-5.60867
+saved progress at epoch 48 step 171/1407 global_step=66300
+epoch 48 train step 180/1407 global_step=66309 loss=-5.48026
+saved progress at epoch 48 step 181/1407 global_step=66310
+epoch 48 train step 190/1407 global_step=66319 loss=-6.08734
+saved progress at epoch 48 step 191/1407 global_step=66320
+epoch 48 train step 200/1407 global_step=66329 loss=-6.09103
+saved progress at epoch 48 step 201/1407 global_step=66330
+epoch 48 train step 210/1407 global_step=66339 loss=-5.61415
+saved progress at epoch 48 step 211/1407 global_step=66340
+epoch 48 train step 220/1407 global_step=66349 loss=-5.39519
+saved progress at epoch 48 step 221/1407 global_step=66350
+epoch 48 train step 230/1407 global_step=66359 loss=-5.56230
+saved progress at epoch 48 step 231/1407 global_step=66360
+epoch 48 train step 240/1407 global_step=66369 loss=-5.66378
+saved progress at epoch 48 step 241/1407 global_step=66370
+epoch 48 train step 250/1407 global_step=66379 loss=-5.24300
+saved progress at epoch 48 step 251/1407 global_step=66380
+epoch 48 train step 260/1407 global_step=66389 loss=-5.39810
+saved progress at epoch 48 step 261/1407 global_step=66390
+epoch 48 train step 270/1407 global_step=66399 loss=-5.92647
+saved progress at epoch 48 step 271/1407 global_step=66400
+epoch 48 train step 280/1407 global_step=66409 loss=-5.81753
+saved progress at epoch 48 step 281/1407 global_step=66410
+epoch 48 train step 290/1407 global_step=66419 loss=-5.63638
+saved progress at epoch 48 step 291/1407 global_step=66420
+epoch 48 train step 300/1407 global_step=66429 loss=-5.85716
+saved progress at epoch 48 step 301/1407 global_step=66430
+epoch 48 train step 310/1407 global_step=66439 loss=-5.64768
+saved progress at epoch 48 step 311/1407 global_step=66440
+epoch 48 train step 320/1407 global_step=66449 loss=-5.70891
+saved progress at epoch 48 step 321/1407 global_step=66450
+epoch 48 train step 330/1407 global_step=66459 loss=-5.61364
+saved progress at epoch 48 step 331/1407 global_step=66460
+epoch 48 train step 340/1407 global_step=66469 loss=-5.70389
+saved progress at epoch 48 step 341/1407 global_step=66470
+epoch 48 train step 350/1407 global_step=66479 loss=-5.26678
+saved progress at epoch 48 step 351/1407 global_step=66480
+epoch 48 train step 360/1407 global_step=66489 loss=-5.27061
+saved progress at epoch 48 step 361/1407 global_step=66490
+epoch 48 train step 370/1407 global_step=66499 loss=-5.55763
+saved progress at epoch 48 step 371/1407 global_step=66500
+epoch 48 train step 380/1407 global_step=66509 loss=-5.93125
+saved progress at epoch 48 step 381/1407 global_step=66510
+epoch 48 train step 390/1407 global_step=66519 loss=-5.59186
+saved progress at epoch 48 step 391/1407 global_step=66520
+epoch 48 train step 400/1407 global_step=66529 loss=-5.78435
+saved progress at epoch 48 step 401/1407 global_step=66530
+epoch 48 train step 410/1407 global_step=66539 loss=-5.27816
+saved progress at epoch 48 step 411/1407 global_step=66540
+epoch 48 train step 420/1407 global_step=66549 loss=-5.88557
+saved progress at epoch 48 step 421/1407 global_step=66550
+epoch 48 train step 430/1407 global_step=66559 loss=-5.24118
+saved progress at epoch 48 step 431/1407 global_step=66560
+epoch 48 train step 440/1407 global_step=66569 loss=-5.49499
+saved progress at epoch 48 step 441/1407 global_step=66570
+epoch 48 train step 450/1407 global_step=66579 loss=-5.66442
+saved progress at epoch 48 step 451/1407 global_step=66580
+epoch 48 train step 460/1407 global_step=66589 loss=-5.76536
+saved progress at epoch 48 step 461/1407 global_step=66590
+epoch 48 train step 470/1407 global_step=66599 loss=-5.51539
+saved progress at epoch 48 step 471/1407 global_step=66600
+epoch 48 train step 480/1407 global_step=66609 loss=-5.87063
+saved progress at epoch 48 step 481/1407 global_step=66610
+epoch 48 train step 490/1407 global_step=66619 loss=-5.53358
+saved progress at epoch 48 step 491/1407 global_step=66620
+epoch 48 train step 500/1407 global_step=66629 loss=-5.34055
+saved progress at epoch 48 step 501/1407 global_step=66630
+epoch 48 train step 510/1407 global_step=66639 loss=-5.73707
+saved progress at epoch 48 step 511/1407 global_step=66640
+epoch 48 train step 520/1407 global_step=66649 loss=-5.91844
+saved progress at epoch 48 step 521/1407 global_step=66650
+epoch 48 train step 530/1407 global_step=66659 loss=-5.69119
+saved progress at epoch 48 step 531/1407 global_step=66660
+epoch 48 train step 540/1407 global_step=66669 loss=-5.58560
+saved progress at epoch 48 step 541/1407 global_step=66670
+epoch 48 train step 550/1407 global_step=66679 loss=-5.69144
+saved progress at epoch 48 step 551/1407 global_step=66680
+epoch 48 train step 560/1407 global_step=66689 loss=-5.64987
+saved progress at epoch 48 step 561/1407 global_step=66690
+epoch 48 train step 570/1407 global_step=66699 loss=-5.67692
+saved progress at epoch 48 step 571/1407 global_step=66700
+epoch 48 train step 580/1407 global_step=66709 loss=-5.50996
+saved progress at epoch 48 step 581/1407 global_step=66710
+epoch 48 train step 590/1407 global_step=66719 loss=-5.43795
+saved progress at epoch 48 step 591/1407 global_step=66720
+epoch 48 train step 600/1407 global_step=66729 loss=-5.55693
+saved progress at epoch 48 step 601/1407 global_step=66730
+epoch 48 train step 610/1407 global_step=66739 loss=-5.40474
+saved progress at epoch 48 step 611/1407 global_step=66740
+epoch 48 train step 620/1407 global_step=66749 loss=-5.86175
+saved progress at epoch 48 step 621/1407 global_step=66750
+epoch 48 train step 630/1407 global_step=66759 loss=-5.48929
+saved progress at epoch 48 step 631/1407 global_step=66760
+epoch 48 train step 640/1407 global_step=66769 loss=-5.79731
+saved progress at epoch 48 step 641/1407 global_step=66770
+epoch 48 train step 650/1407 global_step=66779 loss=-5.45133
+saved progress at epoch 48 step 651/1407 global_step=66780
+epoch 48 train step 660/1407 global_step=66789 loss=-5.33240
+saved progress at epoch 48 step 661/1407 global_step=66790
+epoch 48 train step 670/1407 global_step=66799 loss=-5.58341
+saved progress at epoch 48 step 671/1407 global_step=66800
+epoch 48 train step 680/1407 global_step=66809 loss=-5.55435
+saved progress at epoch 48 step 681/1407 global_step=66810
+epoch 48 train step 690/1407 global_step=66819 loss=-5.49721
+saved progress at epoch 48 step 691/1407 global_step=66820
+epoch 48 train step 700/1407 global_step=66829 loss=-5.75865
+saved progress at epoch 48 step 701/1407 global_step=66830
+epoch 48 train step 710/1407 global_step=66839 loss=-5.37910
+saved progress at epoch 48 step 711/1407 global_step=66840
+epoch 48 train step 720/1407 global_step=66849 loss=-5.14355
+saved progress at epoch 48 step 721/1407 global_step=66850
+epoch 48 train step 730/1407 global_step=66859 loss=-5.67718
+saved progress at epoch 48 step 731/1407 global_step=66860
+epoch 48 train step 740/1407 global_step=66869 loss=-5.32641
+saved progress at epoch 48 step 741/1407 global_step=66870
+epoch 48 train step 750/1407 global_step=66879 loss=-5.93801
+saved progress at epoch 48 step 751/1407 global_step=66880
+epoch 48 train step 760/1407 global_step=66889 loss=-5.33403
+saved progress at epoch 48 step 761/1407 global_step=66890
+epoch 48 train step 770/1407 global_step=66899 loss=-5.69673
+saved progress at epoch 48 step 771/1407 global_step=66900
+epoch 48 train step 780/1407 global_step=66909 loss=-5.43643
+saved progress at epoch 48 step 781/1407 global_step=66910
+epoch 48 train step 790/1407 global_step=66919 loss=-5.62340
+saved progress at epoch 48 step 791/1407 global_step=66920
+epoch 48 train step 800/1407 global_step=66929 loss=-5.98506
+saved progress at epoch 48 step 801/1407 global_step=66930
+epoch 48 train step 810/1407 global_step=66939 loss=-5.41672
+saved progress at epoch 48 step 811/1407 global_step=66940
+epoch 48 train step 820/1407 global_step=66949 loss=-5.44410
+saved progress at epoch 48 step 821/1407 global_step=66950
+epoch 48 train step 830/1407 global_step=66959 loss=-5.83632
+saved progress at epoch 48 step 831/1407 global_step=66960
+epoch 48 train step 840/1407 global_step=66969 loss=-5.03084
+saved progress at epoch 48 step 841/1407 global_step=66970
+epoch 48 train step 850/1407 global_step=66979 loss=-5.77664
+saved progress at epoch 48 step 851/1407 global_step=66980
+epoch 48 train step 860/1407 global_step=66989 loss=-5.91431
+saved progress at epoch 48 step 861/1407 global_step=66990
+epoch 48 train step 870/1407 global_step=66999 loss=-5.62478
+saved progress at epoch 48 step 871/1407 global_step=67000
+epoch 48 train step 880/1407 global_step=67009 loss=-5.65693
+saved progress at epoch 48 step 881/1407 global_step=67010
+epoch 48 train step 890/1407 global_step=67019 loss=-5.12339
+saved progress at epoch 48 step 891/1407 global_step=67020
+epoch 48 train step 900/1407 global_step=67029 loss=-5.31016
+saved progress at epoch 48 step 901/1407 global_step=67030
+epoch 48 train step 910/1407 global_step=67039 loss=-5.72053
+saved progress at epoch 48 step 911/1407 global_step=67040
+epoch 48 train step 920/1407 global_step=67049 loss=-5.99943
+saved progress at epoch 48 step 921/1407 global_step=67050
+epoch 48 train step 930/1407 global_step=67059 loss=-5.48453
+saved progress at epoch 48 step 931/1407 global_step=67060
+epoch 48 train step 940/1407 global_step=67069 loss=-5.57888
+saved progress at epoch 48 step 941/1407 global_step=67070
+epoch 48 train step 950/1407 global_step=67079 loss=-5.75858
+saved progress at epoch 48 step 951/1407 global_step=67080
+epoch 48 train step 960/1407 global_step=67089 loss=-5.99200
+saved progress at epoch 48 step 961/1407 global_step=67090
+epoch 48 train step 970/1407 global_step=67099 loss=-5.85810
+saved progress at epoch 48 step 971/1407 global_step=67100
+epoch 48 train step 980/1407 global_step=67109 loss=-5.84087
+saved progress at epoch 48 step 981/1407 global_step=67110
+epoch 48 train step 990/1407 global_step=67119 loss=-6.21112
+saved progress at epoch 48 step 991/1407 global_step=67120
+epoch 48 train step 1000/1407 global_step=67129 loss=-5.39704
+saved progress at epoch 48 step 1001/1407 global_step=67130
+epoch 48 train step 1010/1407 global_step=67139 loss=-6.19903
+saved progress at epoch 48 step 1011/1407 global_step=67140
+epoch 48 train step 1020/1407 global_step=67149 loss=-5.61685
+saved progress at epoch 48 step 1021/1407 global_step=67150
+epoch 48 train step 1030/1407 global_step=67159 loss=-5.79304
+saved progress at epoch 48 step 1031/1407 global_step=67160
+epoch 48 train step 1040/1407 global_step=67169 loss=-5.59278
+saved progress at epoch 48 step 1041/1407 global_step=67170
+epoch 48 train step 1050/1407 global_step=67179 loss=-5.50019
+saved progress at epoch 48 step 1051/1407 global_step=67180
+epoch 48 train step 1060/1407 global_step=67189 loss=-5.59582
+saved progress at epoch 48 step 1061/1407 global_step=67190
+epoch 48 train step 1070/1407 global_step=67199 loss=-5.56504
+saved progress at epoch 48 step 1071/1407 global_step=67200
+epoch 48 train step 1080/1407 global_step=67209 loss=-6.04112
+saved progress at epoch 48 step 1081/1407 global_step=67210
+epoch 48 train step 1090/1407 global_step=67219 loss=-5.90442
+saved progress at epoch 48 step 1091/1407 global_step=67220
+epoch 48 train step 1100/1407 global_step=67229 loss=-5.56881
+saved progress at epoch 48 step 1101/1407 global_step=67230
+epoch 48 train step 1110/1407 global_step=67239 loss=-5.09648
+saved progress at epoch 48 step 1111/1407 global_step=67240
+epoch 48 train step 1120/1407 global_step=67249 loss=-6.01602
+saved progress at epoch 48 step 1121/1407 global_step=67250
+epoch 48 train step 1130/1407 global_step=67259 loss=-5.37854
+saved progress at epoch 48 step 1131/1407 global_step=67260
+epoch 48 train step 1140/1407 global_step=67269 loss=-5.36366
+saved progress at epoch 48 step 1141/1407 global_step=67270
+epoch 48 train step 1150/1407 global_step=67279 loss=-5.58780
+saved progress at epoch 48 step 1151/1407 global_step=67280
+epoch 48 train step 1160/1407 global_step=67289 loss=-5.69907
+saved progress at epoch 48 step 1161/1407 global_step=67290
+epoch 48 train step 1170/1407 global_step=67299 loss=-5.52150
+saved progress at epoch 48 step 1171/1407 global_step=67300
+epoch 48 train step 1180/1407 global_step=67309 loss=-5.47622
+saved progress at epoch 48 step 1181/1407 global_step=67310
+epoch 48 train step 1190/1407 global_step=67319 loss=-6.14085
+saved progress at epoch 48 step 1191/1407 global_step=67320
+epoch 48 train step 1200/1407 global_step=67329 loss=-5.33196
+saved progress at epoch 48 step 1201/1407 global_step=67330
+epoch 48 train step 1210/1407 global_step=67339 loss=-5.61671
+saved progress at epoch 48 step 1211/1407 global_step=67340
+epoch 48 train step 1220/1407 global_step=67349 loss=-5.51988
+saved progress at epoch 48 step 1221/1407 global_step=67350
+epoch 48 train step 1230/1407 global_step=67359 loss=-5.57455
+saved progress at epoch 48 step 1231/1407 global_step=67360
+epoch 48 train step 1240/1407 global_step=67369 loss=-5.58962
+saved progress at epoch 48 step 1241/1407 global_step=67370
+epoch 48 train step 1250/1407 global_step=67379 loss=-6.10309
+saved progress at epoch 48 step 1251/1407 global_step=67380
+epoch 48 train step 1260/1407 global_step=67389 loss=-5.72104
+saved progress at epoch 48 step 1261/1407 global_step=67390
+epoch 48 train step 1270/1407 global_step=67399 loss=-5.58908
+saved progress at epoch 48 step 1271/1407 global_step=67400
+epoch 48 train step 1280/1407 global_step=67409 loss=-5.76599
+saved progress at epoch 48 step 1281/1407 global_step=67410
+epoch 48 train step 1290/1407 global_step=67419 loss=-5.47612
+saved progress at epoch 48 step 1291/1407 global_step=67420
+epoch 48 train step 1300/1407 global_step=67429 loss=-5.96622
+saved progress at epoch 48 step 1301/1407 global_step=67430
+epoch 48 train step 1310/1407 global_step=67439 loss=-5.66754
+saved progress at epoch 48 step 1311/1407 global_step=67440
+epoch 48 train step 1320/1407 global_step=67449 loss=-5.56945
+saved progress at epoch 48 step 1321/1407 global_step=67450
+epoch 48 train step 1330/1407 global_step=67459 loss=-5.90828
+saved progress at epoch 48 step 1331/1407 global_step=67460
+epoch 48 train step 1340/1407 global_step=67469 loss=-5.56127
+saved progress at epoch 48 step 1341/1407 global_step=67470
+epoch 48 train step 1350/1407 global_step=67479 loss=-5.60120
+saved progress at epoch 48 step 1351/1407 global_step=67480
+epoch 48 train step 1360/1407 global_step=67489 loss=-5.57859
+saved progress at epoch 48 step 1361/1407 global_step=67490
+epoch 48 train step 1370/1407 global_step=67499 loss=-5.55806
+saved progress at epoch 48 step 1371/1407 global_step=67500
+epoch 48 train step 1380/1407 global_step=67509 loss=-5.83721
+saved progress at epoch 48 step 1381/1407 global_step=67510
+epoch 48 train step 1390/1407 global_step=67519 loss=-5.53943
+saved progress at epoch 48 step 1391/1407 global_step=67520
+epoch 48 train step 1400/1407 global_step=67529 loss=-5.80834
+saved progress at epoch 48 step 1401/1407 global_step=67530
+epoch 48 train step 1407/1407 global_step=67536 loss=-6.18460
+saved progress at epoch 48 step 1407/1407 global_step=67536
+epoch 48: train_loss=-5.63585 val_loss=-5.38984 val_type_acc=0.982 val_nonempty_acc=0.935
+saved epoch 48 checkpoint/model artifacts
+saved progress at epoch 49 step 4/1407 global_step=67540
+epoch 49 train step 10/1407 global_step=67546 loss=-5.23770
+saved progress at epoch 49 step 14/1407 global_step=67550
+epoch 49 train step 20/1407 global_step=67556 loss=-5.49917
+saved progress at epoch 49 step 24/1407 global_step=67560
+epoch 49 train step 30/1407 global_step=67566 loss=-5.20121
+saved progress at epoch 49 step 34/1407 global_step=67570
+epoch 49 train step 40/1407 global_step=67576 loss=-5.83417
+saved progress at epoch 49 step 44/1407 global_step=67580
+epoch 49 train step 50/1407 global_step=67586 loss=-5.42906
+saved progress at epoch 49 step 54/1407 global_step=67590
+epoch 49 train step 60/1407 global_step=67596 loss=-5.78306
+saved progress at epoch 49 step 64/1407 global_step=67600
+epoch 49 train step 70/1407 global_step=67606 loss=-4.88477
+saved progress at epoch 49 step 74/1407 global_step=67610
+epoch 49 train step 80/1407 global_step=67616 loss=-5.43734
+saved progress at epoch 49 step 84/1407 global_step=67620
+epoch 49 train step 90/1407 global_step=67626 loss=-5.66895
+saved progress at epoch 49 step 94/1407 global_step=67630
+epoch 49 train step 100/1407 global_step=67636 loss=-5.07197
+saved progress at epoch 49 step 104/1407 global_step=67640
+epoch 49 train step 110/1407 global_step=67646 loss=-5.51347
+saved progress at epoch 49 step 114/1407 global_step=67650
+epoch 49 train step 120/1407 global_step=67656 loss=-5.65308
+saved progress at epoch 49 step 124/1407 global_step=67660
+epoch 49 train step 130/1407 global_step=67666 loss=-5.95391
+saved progress at epoch 49 step 134/1407 global_step=67670
+epoch 49 train step 140/1407 global_step=67676 loss=-5.66463
+saved progress at epoch 49 step 144/1407 global_step=67680
+epoch 49 train step 150/1407 global_step=67686 loss=-6.17107
+saved progress at epoch 49 step 154/1407 global_step=67690
+epoch 49 train step 160/1407 global_step=67696 loss=-5.56513
+saved progress at epoch 49 step 164/1407 global_step=67700
+epoch 49 train step 170/1407 global_step=67706 loss=-5.72221
+saved progress at epoch 49 step 174/1407 global_step=67710
+epoch 49 train step 180/1407 global_step=67716 loss=-5.94073
+saved progress at epoch 49 step 184/1407 global_step=67720
+epoch 49 train step 190/1407 global_step=67726 loss=-5.65504
+saved progress at epoch 49 step 194/1407 global_step=67730
+epoch 49 train step 200/1407 global_step=67736 loss=-5.63134
+saved progress at epoch 49 step 204/1407 global_step=67740
+epoch 49 train step 210/1407 global_step=67746 loss=-5.19217
+saved progress at epoch 49 step 214/1407 global_step=67750
+epoch 49 train step 220/1407 global_step=67756 loss=-6.10185
+saved progress at epoch 49 step 224/1407 global_step=67760
+epoch 49 train step 230/1407 global_step=67766 loss=-5.76083
+saved progress at epoch 49 step 234/1407 global_step=67770
+epoch 49 train step 240/1407 global_step=67776 loss=-5.56575
+saved progress at epoch 49 step 244/1407 global_step=67780
+epoch 49 train step 250/1407 global_step=67786 loss=-5.42101
+saved progress at epoch 49 step 254/1407 global_step=67790
+epoch 49 train step 260/1407 global_step=67796 loss=-5.94193
+saved progress at epoch 49 step 264/1407 global_step=67800
+epoch 49 train step 270/1407 global_step=67806 loss=-5.73027
+saved progress at epoch 49 step 274/1407 global_step=67810
+epoch 49 train step 280/1407 global_step=67816 loss=-5.94552
+saved progress at epoch 49 step 284/1407 global_step=67820
+epoch 49 train step 290/1407 global_step=67826 loss=-5.47429
+saved progress at epoch 49 step 294/1407 global_step=67830
+epoch 49 train step 300/1407 global_step=67836 loss=-6.07794
+saved progress at epoch 49 step 304/1407 global_step=67840
+epoch 49 train step 310/1407 global_step=67846 loss=-5.39670
+saved progress at epoch 49 step 314/1407 global_step=67850
+epoch 49 train step 320/1407 global_step=67856 loss=-5.89416
+saved progress at epoch 49 step 324/1407 global_step=67860
+epoch 49 train step 330/1407 global_step=67866 loss=-5.69785
+saved progress at epoch 49 step 334/1407 global_step=67870
+epoch 49 train step 340/1407 global_step=67876 loss=-5.82583
+saved progress at epoch 49 step 344/1407 global_step=67880
+epoch 49 train step 350/1407 global_step=67886 loss=-5.60540
+saved progress at epoch 49 step 354/1407 global_step=67890
+epoch 49 train step 360/1407 global_step=67896 loss=-5.80113
+saved progress at epoch 49 step 364/1407 global_step=67900
+epoch 49 train step 370/1407 global_step=67906 loss=-5.66313
+saved progress at epoch 49 step 374/1407 global_step=67910
+epoch 49 train step 380/1407 global_step=67916 loss=-6.04239
+saved progress at epoch 49 step 384/1407 global_step=67920
+epoch 49 train step 390/1407 global_step=67926 loss=-5.64973
+saved progress at epoch 49 step 394/1407 global_step=67930
+epoch 49 train step 400/1407 global_step=67936 loss=-5.38558
+saved progress at epoch 49 step 404/1407 global_step=67940
+epoch 49 train step 410/1407 global_step=67946 loss=-5.34392
+saved progress at epoch 49 step 414/1407 global_step=67950
+epoch 49 train step 420/1407 global_step=67956 loss=-5.43059
+saved progress at epoch 49 step 424/1407 global_step=67960
+epoch 49 train step 430/1407 global_step=67966 loss=-5.77056
+saved progress at epoch 49 step 434/1407 global_step=67970
+epoch 49 train step 440/1407 global_step=67976 loss=-5.16861
+saved progress at epoch 49 step 444/1407 global_step=67980
+epoch 49 train step 450/1407 global_step=67986 loss=-5.86088
+saved progress at epoch 49 step 454/1407 global_step=67990
+epoch 49 train step 460/1407 global_step=67996 loss=-5.75175
+saved progress at epoch 49 step 464/1407 global_step=68000
+epoch 49 train step 470/1407 global_step=68006 loss=-5.48937
+saved progress at epoch 49 step 474/1407 global_step=68010
+epoch 49 train step 480/1407 global_step=68016 loss=-5.71016
+saved progress at epoch 49 step 484/1407 global_step=68020
+epoch 49 train step 490/1407 global_step=68026 loss=-5.55354
+saved progress at epoch 49 step 494/1407 global_step=68030
+epoch 49 train step 500/1407 global_step=68036 loss=-5.93669
+saved progress at epoch 49 step 504/1407 global_step=68040
+epoch 49 train step 510/1407 global_step=68046 loss=-5.52410
+saved progress at epoch 49 step 514/1407 global_step=68050
+epoch 49 train step 520/1407 global_step=68056 loss=-5.65893
+saved progress at epoch 49 step 524/1407 global_step=68060
+epoch 49 train step 530/1407 global_step=68066 loss=-5.65056
+saved progress at epoch 49 step 534/1407 global_step=68070
+epoch 49 train step 540/1407 global_step=68076 loss=-5.56296
+saved progress at epoch 49 step 544/1407 global_step=68080
+epoch 49 train step 550/1407 global_step=68086 loss=-5.85863
+saved progress at epoch 49 step 554/1407 global_step=68090
+epoch 49 train step 560/1407 global_step=68096 loss=-5.89230
+saved progress at epoch 49 step 564/1407 global_step=68100
+epoch 49 train step 570/1407 global_step=68106 loss=-5.85310
+saved progress at epoch 49 step 574/1407 global_step=68110
+epoch 49 train step 580/1407 global_step=68116 loss=-5.56962
+saved progress at epoch 49 step 584/1407 global_step=68120
+epoch 49 train step 590/1407 global_step=68126 loss=-6.17403
+saved progress at epoch 49 step 594/1407 global_step=68130
+epoch 49 train step 600/1407 global_step=68136 loss=-5.88566
+saved progress at epoch 49 step 604/1407 global_step=68140
+epoch 49 train step 610/1407 global_step=68146 loss=-5.77296
+saved progress at epoch 49 step 614/1407 global_step=68150
+epoch 49 train step 620/1407 global_step=68156 loss=-5.72178
+saved progress at epoch 49 step 624/1407 global_step=68160
+epoch 49 train step 630/1407 global_step=68166 loss=-5.23764
+saved progress at epoch 49 step 634/1407 global_step=68170
+epoch 49 train step 640/1407 global_step=68176 loss=-5.87142
+saved progress at epoch 49 step 644/1407 global_step=68180
+epoch 49 train step 650/1407 global_step=68186 loss=-5.37146
+saved progress at epoch 49 step 654/1407 global_step=68190
+epoch 49 train step 660/1407 global_step=68196 loss=-6.02624
+saved progress at epoch 49 step 664/1407 global_step=68200
+epoch 49 train step 670/1407 global_step=68206 loss=-5.25413
+saved progress at epoch 49 step 674/1407 global_step=68210
+epoch 49 train step 680/1407 global_step=68216 loss=-5.58913
+saved progress at epoch 49 step 684/1407 global_step=68220
+epoch 49 train step 690/1407 global_step=68226 loss=-5.68473
+saved progress at epoch 49 step 694/1407 global_step=68230
+epoch 49 train step 700/1407 global_step=68236 loss=-5.62158
+saved progress at epoch 49 step 704/1407 global_step=68240
+epoch 49 train step 710/1407 global_step=68246 loss=-5.94463
+saved progress at epoch 49 step 714/1407 global_step=68250
+epoch 49 train step 720/1407 global_step=68256 loss=-5.73631
+saved progress at epoch 49 step 724/1407 global_step=68260
+epoch 49 train step 730/1407 global_step=68266 loss=-5.23600
+saved progress at epoch 49 step 734/1407 global_step=68270
+epoch 49 train step 740/1407 global_step=68276 loss=-5.44094
+saved progress at epoch 49 step 744/1407 global_step=68280
+epoch 49 train step 750/1407 global_step=68286 loss=-5.25666
+saved progress at epoch 49 step 754/1407 global_step=68290
+epoch 49 train step 760/1407 global_step=68296 loss=-5.82961
+saved progress at epoch 49 step 764/1407 global_step=68300
+epoch 49 train step 770/1407 global_step=68306 loss=-5.63742
+saved progress at epoch 49 step 774/1407 global_step=68310
+epoch 49 train step 780/1407 global_step=68316 loss=-6.01223
+saved progress at epoch 49 step 784/1407 global_step=68320
+epoch 49 train step 790/1407 global_step=68326 loss=-5.52677
+saved progress at epoch 49 step 794/1407 global_step=68330
+epoch 49 train step 800/1407 global_step=68336 loss=-5.76563
+saved progress at epoch 49 step 804/1407 global_step=68340
+epoch 49 train step 810/1407 global_step=68346 loss=-5.88271
+saved progress at epoch 49 step 814/1407 global_step=68350
+epoch 49 train step 820/1407 global_step=68356 loss=-5.50230
+saved progress at epoch 49 step 824/1407 global_step=68360
+epoch 49 train step 830/1407 global_step=68366 loss=-5.49165
+saved progress at epoch 49 step 834/1407 global_step=68370
+epoch 49 train step 840/1407 global_step=68376 loss=-5.44590
+saved progress at epoch 49 step 844/1407 global_step=68380
+epoch 49 train step 850/1407 global_step=68386 loss=-5.88774
+saved progress at epoch 49 step 854/1407 global_step=68390
+epoch 49 train step 860/1407 global_step=68396 loss=-5.65361
+saved progress at epoch 49 step 864/1407 global_step=68400
+epoch 49 train step 870/1407 global_step=68406 loss=-5.85463
+saved progress at epoch 49 step 874/1407 global_step=68410
+epoch 49 train step 880/1407 global_step=68416 loss=-5.82364
+saved progress at epoch 49 step 884/1407 global_step=68420
+epoch 49 train step 890/1407 global_step=68426 loss=-5.40078
+saved progress at epoch 49 step 894/1407 global_step=68430
+epoch 49 train step 900/1407 global_step=68436 loss=-5.99745
+saved progress at epoch 49 step 904/1407 global_step=68440
+epoch 49 train step 910/1407 global_step=68446 loss=-5.79545
+saved progress at epoch 49 step 914/1407 global_step=68450
+epoch 49 train step 920/1407 global_step=68456 loss=-5.28162
+saved progress at epoch 49 step 924/1407 global_step=68460
+epoch 49 train step 930/1407 global_step=68466 loss=-5.91967
+saved progress at epoch 49 step 934/1407 global_step=68470
+epoch 49 train step 940/1407 global_step=68476 loss=-5.72926
+saved progress at epoch 49 step 944/1407 global_step=68480
+epoch 49 train step 950/1407 global_step=68486 loss=-5.49666
+saved progress at epoch 49 step 954/1407 global_step=68490
+epoch 49 train step 960/1407 global_step=68496 loss=-5.31757
+saved progress at epoch 49 step 964/1407 global_step=68500
+epoch 49 train step 970/1407 global_step=68506 loss=-6.13405
+saved progress at epoch 49 step 974/1407 global_step=68510
+epoch 49 train step 980/1407 global_step=68516 loss=-5.71509
+saved progress at epoch 49 step 984/1407 global_step=68520
+epoch 49 train step 990/1407 global_step=68526 loss=-5.68711
+saved progress at epoch 49 step 994/1407 global_step=68530
+epoch 49 train step 1000/1407 global_step=68536 loss=-5.58220
+saved progress at epoch 49 step 1004/1407 global_step=68540
+epoch 49 train step 1010/1407 global_step=68546 loss=-5.38549
+saved progress at epoch 49 step 1014/1407 global_step=68550
+epoch 49 train step 1020/1407 global_step=68556 loss=-5.53644
+saved progress at epoch 49 step 1024/1407 global_step=68560
+epoch 49 train step 1030/1407 global_step=68566 loss=-5.78333
+saved progress at epoch 49 step 1034/1407 global_step=68570
+epoch 49 train step 1040/1407 global_step=68576 loss=-5.41113
+saved progress at epoch 49 step 1044/1407 global_step=68580
+epoch 49 train step 1050/1407 global_step=68586 loss=-6.15144
+saved progress at epoch 49 step 1054/1407 global_step=68590
+epoch 49 train step 1060/1407 global_step=68596 loss=-5.57713
+saved progress at epoch 49 step 1064/1407 global_step=68600
+epoch 49 train step 1070/1407 global_step=68606 loss=-5.47235
+saved progress at epoch 49 step 1074/1407 global_step=68610
+epoch 49 train step 1080/1407 global_step=68616 loss=-5.22794
+saved progress at epoch 49 step 1084/1407 global_step=68620
+epoch 49 train step 1090/1407 global_step=68626 loss=-5.11758
+saved progress at epoch 49 step 1094/1407 global_step=68630
+epoch 49 train step 1100/1407 global_step=68636 loss=-5.42760
+saved progress at epoch 49 step 1104/1407 global_step=68640
+epoch 49 train step 1110/1407 global_step=68646 loss=-5.79153
+saved progress at epoch 49 step 1114/1407 global_step=68650
+epoch 49 train step 1120/1407 global_step=68656 loss=-5.64182
+saved progress at epoch 49 step 1124/1407 global_step=68660
+epoch 49 train step 1130/1407 global_step=68666 loss=-5.80443
+saved progress at epoch 49 step 1134/1407 global_step=68670
+epoch 49 train step 1140/1407 global_step=68676 loss=-5.28008
+saved progress at epoch 49 step 1144/1407 global_step=68680
+epoch 49 train step 1150/1407 global_step=68686 loss=-5.81180
+saved progress at epoch 49 step 1154/1407 global_step=68690
+epoch 49 train step 1160/1407 global_step=68696 loss=-5.88042
+saved progress at epoch 49 step 1164/1407 global_step=68700
+epoch 49 train step 1170/1407 global_step=68706 loss=-5.54243
+saved progress at epoch 49 step 1174/1407 global_step=68710
+epoch 49 train step 1180/1407 global_step=68716 loss=-5.26636
+saved progress at epoch 49 step 1184/1407 global_step=68720
+epoch 49 train step 1190/1407 global_step=68726 loss=-5.53254
+saved progress at epoch 49 step 1194/1407 global_step=68730
+epoch 49 train step 1200/1407 global_step=68736 loss=-5.59129
+saved progress at epoch 49 step 1204/1407 global_step=68740
+epoch 49 train step 1210/1407 global_step=68746 loss=-6.14894
+saved progress at epoch 49 step 1214/1407 global_step=68750
+epoch 49 train step 1220/1407 global_step=68756 loss=-5.33033
+saved progress at epoch 49 step 1224/1407 global_step=68760
+epoch 49 train step 1230/1407 global_step=68766 loss=-5.57562
+saved progress at epoch 49 step 1234/1407 global_step=68770
+epoch 49 train step 1240/1407 global_step=68776 loss=-5.60409
+saved progress at epoch 49 step 1244/1407 global_step=68780
+epoch 49 train step 1250/1407 global_step=68786 loss=-5.87776
+saved progress at epoch 49 step 1254/1407 global_step=68790
+epoch 49 train step 1260/1407 global_step=68796 loss=-5.86362
+saved progress at epoch 49 step 1264/1407 global_step=68800
+epoch 49 train step 1270/1407 global_step=68806 loss=-5.86654
+saved progress at epoch 49 step 1274/1407 global_step=68810
+epoch 49 train step 1280/1407 global_step=68816 loss=-5.56446
+saved progress at epoch 49 step 1284/1407 global_step=68820
+epoch 49 train step 1290/1407 global_step=68826 loss=-5.94647
+saved progress at epoch 49 step 1294/1407 global_step=68830
+epoch 49 train step 1300/1407 global_step=68836 loss=-6.06305
+saved progress at epoch 49 step 1304/1407 global_step=68840
+epoch 49 train step 1310/1407 global_step=68846 loss=-5.68013
+saved progress at epoch 49 step 1314/1407 global_step=68850
+epoch 49 train step 1320/1407 global_step=68856 loss=-5.57324
+saved progress at epoch 49 step 1324/1407 global_step=68860
+epoch 49 train step 1330/1407 global_step=68866 loss=-5.37177
+saved progress at epoch 49 step 1334/1407 global_step=68870
+epoch 49 train step 1340/1407 global_step=68876 loss=-5.71206
+saved progress at epoch 49 step 1344/1407 global_step=68880
+epoch 49 train step 1350/1407 global_step=68886 loss=-5.61948
+saved progress at epoch 49 step 1354/1407 global_step=68890
+epoch 49 train step 1360/1407 global_step=68896 loss=-5.81419
+saved progress at epoch 49 step 1364/1407 global_step=68900
+epoch 49 train step 1370/1407 global_step=68906 loss=-5.61101
+saved progress at epoch 49 step 1374/1407 global_step=68910
+epoch 49 train step 1380/1407 global_step=68916 loss=-5.47211
+saved progress at epoch 49 step 1384/1407 global_step=68920
+epoch 49 train step 1390/1407 global_step=68926 loss=-5.81206
+saved progress at epoch 49 step 1394/1407 global_step=68930
+epoch 49 train step 1400/1407 global_step=68936 loss=-5.59815
+saved progress at epoch 49 step 1404/1407 global_step=68940
+epoch 49 train step 1407/1407 global_step=68943 loss=-6.18827
+saved progress at epoch 49 step 1407/1407 global_step=68943
+epoch 49: train_loss=-5.65828 val_loss=-5.44652 val_type_acc=0.982 val_nonempty_acc=0.935
+saved epoch 49 checkpoint/model artifacts
+saved progress at epoch 50 step 7/1407 global_step=68950
+epoch 50 train step 10/1407 global_step=68953 loss=-5.81271
+saved progress at epoch 50 step 17/1407 global_step=68960
+epoch 50 train step 20/1407 global_step=68963 loss=-5.54934
+saved progress at epoch 50 step 27/1407 global_step=68970
+epoch 50 train step 30/1407 global_step=68973 loss=-5.97262
+saved progress at epoch 50 step 37/1407 global_step=68980
+epoch 50 train step 40/1407 global_step=68983 loss=-5.88403
+saved progress at epoch 50 step 47/1407 global_step=68990
+epoch 50 train step 50/1407 global_step=68993 loss=-5.74350
+saved progress at epoch 50 step 57/1407 global_step=69000
+epoch 50 train step 60/1407 global_step=69003 loss=-5.78908
+saved progress at epoch 50 step 67/1407 global_step=69010
+epoch 50 train step 70/1407 global_step=69013 loss=-5.51681
+saved progress at epoch 50 step 77/1407 global_step=69020
+epoch 50 train step 80/1407 global_step=69023 loss=-5.69674
+saved progress at epoch 50 step 87/1407 global_step=69030
+epoch 50 train step 90/1407 global_step=69033 loss=-5.99977
+saved progress at epoch 50 step 97/1407 global_step=69040
+epoch 50 train step 100/1407 global_step=69043 loss=-5.50819
+saved progress at epoch 50 step 107/1407 global_step=69050
+epoch 50 train step 110/1407 global_step=69053 loss=-5.76705
+saved progress at epoch 50 step 117/1407 global_step=69060
+epoch 50 train step 120/1407 global_step=69063 loss=-5.91344
+saved progress at epoch 50 step 127/1407 global_step=69070
+epoch 50 train step 130/1407 global_step=69073 loss=-5.51906
+saved progress at epoch 50 step 137/1407 global_step=69080
+epoch 50 train step 140/1407 global_step=69083 loss=-5.65516
+saved progress at epoch 50 step 147/1407 global_step=69090
+epoch 50 train step 150/1407 global_step=69093 loss=-5.79092
+saved progress at epoch 50 step 157/1407 global_step=69100
+epoch 50 train step 160/1407 global_step=69103 loss=-5.46604
+saved progress at epoch 50 step 167/1407 global_step=69110
+epoch 50 train step 170/1407 global_step=69113 loss=-5.45066
+saved progress at epoch 50 step 177/1407 global_step=69120
+epoch 50 train step 180/1407 global_step=69123 loss=-5.46029
+saved progress at epoch 50 step 187/1407 global_step=69130
+epoch 50 train step 190/1407 global_step=69133 loss=-5.71417
+saved progress at epoch 50 step 197/1407 global_step=69140
+epoch 50 train step 200/1407 global_step=69143 loss=-5.48414
+saved progress at epoch 50 step 207/1407 global_step=69150
+epoch 50 train step 210/1407 global_step=69153 loss=-5.66126
+saved progress at epoch 50 step 217/1407 global_step=69160
+epoch 50 train step 220/1407 global_step=69163 loss=-5.97772
+saved progress at epoch 50 step 227/1407 global_step=69170
+epoch 50 train step 230/1407 global_step=69173 loss=-5.74330
+saved progress at epoch 50 step 237/1407 global_step=69180
+epoch 50 train step 240/1407 global_step=69183 loss=-5.47984
+saved progress at epoch 50 step 247/1407 global_step=69190
+epoch 50 train step 250/1407 global_step=69193 loss=-5.98129
+saved progress at epoch 50 step 257/1407 global_step=69200
+epoch 50 train step 260/1407 global_step=69203 loss=-5.52405
+saved progress at epoch 50 step 267/1407 global_step=69210
+epoch 50 train step 270/1407 global_step=69213 loss=-5.69641
+saved progress at epoch 50 step 277/1407 global_step=69220
+epoch 50 train step 280/1407 global_step=69223 loss=-5.55590
+saved progress at epoch 50 step 287/1407 global_step=69230
+epoch 50 train step 290/1407 global_step=69233 loss=-5.88215
+saved progress at epoch 50 step 297/1407 global_step=69240
+epoch 50 train step 300/1407 global_step=69243 loss=-5.67966
+saved progress at epoch 50 step 307/1407 global_step=69250
+epoch 50 train step 310/1407 global_step=69253 loss=-5.78250
+saved progress at epoch 50 step 317/1407 global_step=69260
+epoch 50 train step 320/1407 global_step=69263 loss=-5.67665
+saved progress at epoch 50 step 327/1407 global_step=69270
+epoch 50 train step 330/1407 global_step=69273 loss=-5.57812
+saved progress at epoch 50 step 337/1407 global_step=69280
+epoch 50 train step 340/1407 global_step=69283 loss=-5.39408
+saved progress at epoch 50 step 347/1407 global_step=69290
+epoch 50 train step 350/1407 global_step=69293 loss=-5.34817
+saved progress at epoch 50 step 357/1407 global_step=69300
+epoch 50 train step 360/1407 global_step=69303 loss=-5.59450
+saved progress at epoch 50 step 367/1407 global_step=69310
+epoch 50 train step 370/1407 global_step=69313 loss=-5.93598
+saved progress at epoch 50 step 377/1407 global_step=69320
+epoch 50 train step 380/1407 global_step=69323 loss=-5.36820
+saved progress at epoch 50 step 387/1407 global_step=69330
+epoch 50 train step 390/1407 global_step=69333 loss=-5.68871
+saved progress at epoch 50 step 397/1407 global_step=69340
+epoch 50 train step 400/1407 global_step=69343 loss=-5.86715
+saved progress at epoch 50 step 407/1407 global_step=69350
+epoch 50 train step 410/1407 global_step=69353 loss=-5.70896
+saved progress at epoch 50 step 417/1407 global_step=69360
+epoch 50 train step 420/1407 global_step=69363 loss=-5.81292
+saved progress at epoch 50 step 427/1407 global_step=69370
+epoch 50 train step 430/1407 global_step=69373 loss=-6.11144
+saved progress at epoch 50 step 437/1407 global_step=69380
+epoch 50 train step 440/1407 global_step=69383 loss=-5.58090
+saved progress at epoch 50 step 447/1407 global_step=69390
+epoch 50 train step 450/1407 global_step=69393 loss=-5.43382
+saved progress at epoch 50 step 457/1407 global_step=69400
+epoch 50 train step 460/1407 global_step=69403 loss=-5.69910
+saved progress at epoch 50 step 467/1407 global_step=69410
+epoch 50 train step 470/1407 global_step=69413 loss=-5.64241
+saved progress at epoch 50 step 477/1407 global_step=69420
+epoch 50 train step 480/1407 global_step=69423 loss=-5.54013
+saved progress at epoch 50 step 487/1407 global_step=69430
+epoch 50 train step 490/1407 global_step=69433 loss=-5.96650
+saved progress at epoch 50 step 497/1407 global_step=69440
+epoch 50 train step 500/1407 global_step=69443 loss=-5.85865
+saved progress at epoch 50 step 507/1407 global_step=69450
+epoch 50 train step 510/1407 global_step=69453 loss=-5.85171
+saved progress at epoch 50 step 517/1407 global_step=69460
+epoch 50 train step 520/1407 global_step=69463 loss=-5.92082
+saved progress at epoch 50 step 527/1407 global_step=69470
+epoch 50 train step 530/1407 global_step=69473 loss=-5.76955
+saved progress at epoch 50 step 537/1407 global_step=69480
+epoch 50 train step 540/1407 global_step=69483 loss=-5.05446
+saved progress at epoch 50 step 547/1407 global_step=69490
+epoch 50 train step 550/1407 global_step=69493 loss=-5.19134
+saved progress at epoch 50 step 557/1407 global_step=69500
+epoch 50 train step 560/1407 global_step=69503 loss=-5.65337
+saved progress at epoch 50 step 567/1407 global_step=69510
+epoch 50 train step 570/1407 global_step=69513 loss=-5.86010
+saved progress at epoch 50 step 577/1407 global_step=69520
+epoch 50 train step 580/1407 global_step=69523 loss=-5.65755
+saved progress at epoch 50 step 587/1407 global_step=69530
+epoch 50 train step 590/1407 global_step=69533 loss=-5.73453
+saved progress at epoch 50 step 597/1407 global_step=69540
+epoch 50 train step 600/1407 global_step=69543 loss=-5.74107
+saved progress at epoch 50 step 607/1407 global_step=69550
+epoch 50 train step 610/1407 global_step=69553 loss=-5.58447
+saved progress at epoch 50 step 617/1407 global_step=69560
+epoch 50 train step 620/1407 global_step=69563 loss=-5.40856
+saved progress at epoch 50 step 627/1407 global_step=69570
+epoch 50 train step 630/1407 global_step=69573 loss=-5.20709
+saved progress at epoch 50 step 637/1407 global_step=69580
+epoch 50 train step 640/1407 global_step=69583 loss=-5.59479
+saved progress at epoch 50 step 647/1407 global_step=69590
+epoch 50 train step 650/1407 global_step=69593 loss=-5.78346
+saved progress at epoch 50 step 657/1407 global_step=69600
+epoch 50 train step 660/1407 global_step=69603 loss=-6.03576
+saved progress at epoch 50 step 667/1407 global_step=69610
+epoch 50 train step 670/1407 global_step=69613 loss=-5.41197
+saved progress at epoch 50 step 677/1407 global_step=69620
+epoch 50 train step 680/1407 global_step=69623 loss=-5.49694
+saved progress at epoch 50 step 687/1407 global_step=69630
+epoch 50 train step 690/1407 global_step=69633 loss=-5.72599
+saved progress at epoch 50 step 697/1407 global_step=69640
+epoch 50 train step 700/1407 global_step=69643 loss=-5.93416
+saved progress at epoch 50 step 707/1407 global_step=69650
+epoch 50 train step 710/1407 global_step=69653 loss=-5.47206
+saved progress at epoch 50 step 717/1407 global_step=69660
+epoch 50 train step 720/1407 global_step=69663 loss=-5.59532
+saved progress at epoch 50 step 727/1407 global_step=69670
+epoch 50 train step 730/1407 global_step=69673 loss=-5.48800
+saved progress at epoch 50 step 737/1407 global_step=69680
+epoch 50 train step 740/1407 global_step=69683 loss=-5.73899
+saved progress at epoch 50 step 747/1407 global_step=69690
+epoch 50 train step 750/1407 global_step=69693 loss=-5.71460
+saved progress at epoch 50 step 757/1407 global_step=69700
+epoch 50 train step 760/1407 global_step=69703 loss=-5.61734
+saved progress at epoch 50 step 767/1407 global_step=69710
+epoch 50 train step 770/1407 global_step=69713 loss=-5.74394
+saved progress at epoch 50 step 777/1407 global_step=69720
+epoch 50 train step 780/1407 global_step=69723 loss=-5.85946
+saved progress at epoch 50 step 787/1407 global_step=69730
+epoch 50 train step 790/1407 global_step=69733 loss=-5.65129
+saved progress at epoch 50 step 797/1407 global_step=69740
+epoch 50 train step 800/1407 global_step=69743 loss=-5.77304
+saved progress at epoch 50 step 807/1407 global_step=69750
+epoch 50 train step 810/1407 global_step=69753 loss=-5.60815
+saved progress at epoch 50 step 817/1407 global_step=69760
+epoch 50 train step 820/1407 global_step=69763 loss=-5.75947
+saved progress at epoch 50 step 827/1407 global_step=69770
+epoch 50 train step 830/1407 global_step=69773 loss=-5.69788
+saved progress at epoch 50 step 837/1407 global_step=69780
+epoch 50 train step 840/1407 global_step=69783 loss=-5.34753
+saved progress at epoch 50 step 847/1407 global_step=69790
+epoch 50 train step 850/1407 global_step=69793 loss=-5.59724
+saved progress at epoch 50 step 857/1407 global_step=69800
+epoch 50 train step 860/1407 global_step=69803 loss=-6.29087
+saved progress at epoch 50 step 867/1407 global_step=69810
+epoch 50 train step 870/1407 global_step=69813 loss=-5.70622
+saved progress at epoch 50 step 877/1407 global_step=69820
+epoch 50 train step 880/1407 global_step=69823 loss=-5.95993
+saved progress at epoch 50 step 887/1407 global_step=69830
+epoch 50 train step 890/1407 global_step=69833 loss=-5.51294
+saved progress at epoch 50 step 897/1407 global_step=69840
+epoch 50 train step 900/1407 global_step=69843 loss=-5.20610
+saved progress at epoch 50 step 907/1407 global_step=69850
+epoch 50 train step 910/1407 global_step=69853 loss=-5.79486
+saved progress at epoch 50 step 917/1407 global_step=69860
+epoch 50 train step 920/1407 global_step=69863 loss=-5.63559
+saved progress at epoch 50 step 927/1407 global_step=69870
+epoch 50 train step 930/1407 global_step=69873 loss=-5.59704
+saved progress at epoch 50 step 937/1407 global_step=69880
+epoch 50 train step 940/1407 global_step=69883 loss=-5.08041
+saved progress at epoch 50 step 947/1407 global_step=69890
+epoch 50 train step 950/1407 global_step=69893 loss=-5.70292
+saved progress at epoch 50 step 957/1407 global_step=69900
+epoch 50 train step 960/1407 global_step=69903 loss=-5.59397
+saved progress at epoch 50 step 967/1407 global_step=69910
+epoch 50 train step 970/1407 global_step=69913 loss=-5.89067
+saved progress at epoch 50 step 977/1407 global_step=69920
+epoch 50 train step 980/1407 global_step=69923 loss=-5.70870
+saved progress at epoch 50 step 987/1407 global_step=69930
+epoch 50 train step 990/1407 global_step=69933 loss=-5.71522
+saved progress at epoch 50 step 997/1407 global_step=69940
+epoch 50 train step 1000/1407 global_step=69943 loss=-5.85102
+saved progress at epoch 50 step 1007/1407 global_step=69950
+epoch 50 train step 1010/1407 global_step=69953 loss=-5.94910
+saved progress at epoch 50 step 1017/1407 global_step=69960
+epoch 50 train step 1020/1407 global_step=69963 loss=-5.63589
+saved progress at epoch 50 step 1027/1407 global_step=69970
+epoch 50 train step 1030/1407 global_step=69973 loss=-5.39037
+saved progress at epoch 50 step 1037/1407 global_step=69980
+epoch 50 train step 1040/1407 global_step=69983 loss=-5.82814
+saved progress at epoch 50 step 1047/1407 global_step=69990
+epoch 50 train step 1050/1407 global_step=69993 loss=-5.49027
+saved progress at epoch 50 step 1057/1407 global_step=70000
+epoch 50 train step 1060/1407 global_step=70003 loss=-5.72317
+saved progress at epoch 50 step 1067/1407 global_step=70010
+epoch 50 train step 1070/1407 global_step=70013 loss=-5.58756
+saved progress at epoch 50 step 1077/1407 global_step=70020
+epoch 50 train step 1080/1407 global_step=70023 loss=-6.01099
+saved progress at epoch 50 step 1087/1407 global_step=70030
+epoch 50 train step 1090/1407 global_step=70033 loss=-5.74828
+saved progress at epoch 50 step 1097/1407 global_step=70040
+epoch 50 train step 1100/1407 global_step=70043 loss=-5.46163
+saved progress at epoch 50 step 1107/1407 global_step=70050
+epoch 50 train step 1110/1407 global_step=70053 loss=-5.63675
+saved progress at epoch 50 step 1117/1407 global_step=70060
+epoch 50 train step 1120/1407 global_step=70063 loss=-5.49701
+saved progress at epoch 50 step 1127/1407 global_step=70070
+epoch 50 train step 1130/1407 global_step=70073 loss=-5.89112
+saved progress at epoch 50 step 1137/1407 global_step=70080
+epoch 50 train step 1140/1407 global_step=70083 loss=-5.69811
+saved progress at epoch 50 step 1147/1407 global_step=70090
+epoch 50 train step 1150/1407 global_step=70093 loss=-5.48533
+saved progress at epoch 50 step 1157/1407 global_step=70100
+epoch 50 train step 1160/1407 global_step=70103 loss=-5.74118
+saved progress at epoch 50 step 1167/1407 global_step=70110
+epoch 50 train step 1170/1407 global_step=70113 loss=-5.75359
+saved progress at epoch 50 step 1177/1407 global_step=70120
+epoch 50 train step 1180/1407 global_step=70123 loss=-5.89286
+saved progress at epoch 50 step 1187/1407 global_step=70130
+epoch 50 train step 1190/1407 global_step=70133 loss=-5.63718
+saved progress at epoch 50 step 1197/1407 global_step=70140
+epoch 50 train step 1200/1407 global_step=70143 loss=-5.90885
+saved progress at epoch 50 step 1207/1407 global_step=70150
+epoch 50 train step 1210/1407 global_step=70153 loss=-5.79277
+saved progress at epoch 50 step 1217/1407 global_step=70160
+epoch 50 train step 1220/1407 global_step=70163 loss=-5.71812
+saved progress at epoch 50 step 1227/1407 global_step=70170
+epoch 50 train step 1230/1407 global_step=70173 loss=-5.97914
+saved progress at epoch 50 step 1237/1407 global_step=70180
+epoch 50 train step 1240/1407 global_step=70183 loss=-5.41422
+saved progress at epoch 50 step 1247/1407 global_step=70190
+epoch 50 train step 1250/1407 global_step=70193 loss=-5.82261
+saved progress at epoch 50 step 1257/1407 global_step=70200
+epoch 50 train step 1260/1407 global_step=70203 loss=-5.73773
+saved progress at epoch 50 step 1267/1407 global_step=70210
+epoch 50 train step 1270/1407 global_step=70213 loss=-5.02491
+saved progress at epoch 50 step 1277/1407 global_step=70220
+epoch 50 train step 1280/1407 global_step=70223 loss=-6.33597
+saved progress at epoch 50 step 1287/1407 global_step=70230
+epoch 50 train step 1290/1407 global_step=70233 loss=-5.55825
+saved progress at epoch 50 step 1297/1407 global_step=70240
+epoch 50 train step 1300/1407 global_step=70243 loss=-5.66546
+saved progress at epoch 50 step 1307/1407 global_step=70250
+epoch 50 train step 1310/1407 global_step=70253 loss=-5.42728
+saved progress at epoch 50 step 1317/1407 global_step=70260
+epoch 50 train step 1320/1407 global_step=70263 loss=-5.51751
+saved progress at epoch 50 step 1327/1407 global_step=70270
+epoch 50 train step 1330/1407 global_step=70273 loss=-5.74395
+saved progress at epoch 50 step 1337/1407 global_step=70280
+epoch 50 train step 1340/1407 global_step=70283 loss=-5.60920
+saved progress at epoch 50 step 1347/1407 global_step=70290
+epoch 50 train step 1350/1407 global_step=70293 loss=-6.03413
+saved progress at epoch 50 step 1357/1407 global_step=70300
+epoch 50 train step 1360/1407 global_step=70303 loss=-5.93498
+saved progress at epoch 50 step 1367/1407 global_step=70310
+epoch 50 train step 1370/1407 global_step=70313 loss=-5.54488
+saved progress at epoch 50 step 1377/1407 global_step=70320
+epoch 50 train step 1380/1407 global_step=70323 loss=-5.47941
+saved progress at epoch 50 step 1387/1407 global_step=70330
+epoch 50 train step 1390/1407 global_step=70333 loss=-5.71416
+saved progress at epoch 50 step 1397/1407 global_step=70340
+epoch 50 train step 1400/1407 global_step=70343 loss=-6.06284
+epoch 50 train step 1407/1407 global_step=70350 loss=-5.76567
+saved progress at epoch 50 step 1407/1407 global_step=70350
+epoch 50: train_loss=-5.67548 val_loss=-5.44868 val_type_acc=0.982 val_nonempty_acc=0.934
+saved epoch 50 checkpoint/model artifacts
+Training complete. Model written to /data/dust/user/zhaiyufe/Models/ML_1D_Fitting_GISAXS_K1

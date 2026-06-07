@@ -1,0 +1,59 @@
+CUDA_VISIBLE_DEVICES=
+/usr/bin/nvidia-smi
+Fri Jun  5 15:26:44 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.159.03             Driver Version: 580.159.03     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla P100-PCIE-16GB           On  |   00000000:86:00.0 Off |                    0 |
+| N/A   38C    P0             27W /  250W |       0MiB /  16384MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Overfit debug parameters:
+TRAIN_DIR=/data/dust/user/zhaiyufe/TrainSet/ML_1D_Fitting_GISAXS_K1/train
+OUTPUT_DIR=/home/zhaiyufe/PycharmProjects/ML_Fitting_1D_GISAXS/Training/overfit_debug_simple_loss
+NUM_SAMPLES=64
+EPOCHS=100
+BATCH_SIZE=8
+EVAL_BATCH_SIZE=1
+PRINT_EVERY=5
+NOISE_FRAC=0.01
+DEBUG_MAX_POINTS=256
+PLOT_N=16
+LEARNING_RATE=0.0001
+SKIP_MODEL_SAVE=1
+Loading K=1 subset...
+epoch 001 | train_loss=2.861755 | type_accuracy=0.7656 | param_mae=0.248859 | global_mae=0.260835 | exist_loss=0.090159 | type_loss=0.475084 | param_mse=0.088574 | global_mse=0.105005
+epoch 005 | train_loss=2.005061 | type_accuracy=0.8906 | param_mae=0.207216 | global_mae=0.203925 | exist_loss=0.015742 | type_loss=0.340744 | param_mse=0.067026 | global_mse=0.061610
+epoch 010 | train_loss=1.784933 | type_accuracy=0.8750 | param_mae=0.188212 | global_mae=0.186966 | exist_loss=0.008854 | type_loss=0.281528 | param_mse=0.061701 | global_mse=0.052105
+epoch 015 | train_loss=1.487462 | type_accuracy=0.9219 | param_mae=0.171787 | global_mae=0.180190 | exist_loss=0.006894 | type_loss=0.215306 | param_mse=0.050868 | global_mse=0.049579
+epoch 020 | train_loss=1.294672 | type_accuracy=0.9531 | param_mae=0.158267 | global_mae=0.176810 | exist_loss=0.006896 | type_loss=0.152290 | param_mse=0.044662 | global_mse=0.048449
+epoch 025 | train_loss=1.052616 | type_accuracy=1.0000 | param_mae=0.140919 | global_mae=0.173500 | exist_loss=0.005766 | type_loss=0.093645 | param_mse=0.035867 | global_mse=0.047172
+epoch 030 | train_loss=0.883132 | type_accuracy=0.9844 | param_mae=0.126581 | global_mae=0.170437 | exist_loss=0.006193 | type_loss=0.074247 | param_mse=0.028618 | global_mse=0.046065
+epoch 035 | train_loss=0.759806 | type_accuracy=1.0000 | param_mae=0.116577 | global_mae=0.167774 | exist_loss=0.005311 | type_loss=0.059895 | param_mse=0.023546 | global_mse=0.044735
+epoch 040 | train_loss=0.708485 | type_accuracy=1.0000 | param_mae=0.108516 | global_mae=0.164517 | exist_loss=0.005189 | type_loss=0.051482 | param_mse=0.021694 | global_mse=0.043589
+epoch 045 | train_loss=0.636711 | type_accuracy=1.0000 | param_mae=0.102421 | global_mae=0.160034 | exist_loss=0.004305 | type_loss=0.033516 | param_mse=0.019356 | global_mse=0.042353
+epoch 050 | train_loss=0.715081 | type_accuracy=0.9844 | param_mae=0.103578 | global_mae=0.158615 | exist_loss=0.003449 | type_loss=0.068204 | param_mse=0.021625 | global_mse=0.042184
+epoch 055 | train_loss=0.505293 | type_accuracy=1.0000 | param_mae=0.083577 | global_mae=0.157777 | exist_loss=0.004077 | type_loss=0.024444 | param_mse=0.013647 | global_mse=0.040766
+epoch 060 | train_loss=0.437083 | type_accuracy=1.0000 | param_mae=0.074118 | global_mae=0.155813 | exist_loss=0.003713 | type_loss=0.021251 | param_mse=0.010621 | global_mse=0.039942
+epoch 065 | train_loss=0.459683 | type_accuracy=0.9844 | param_mae=0.077048 | global_mae=0.155850 | exist_loss=0.003198 | type_loss=0.036180 | param_mse=0.011063 | global_mse=0.039810
+epoch 070 | train_loss=0.413955 | type_accuracy=1.0000 | param_mae=0.074739 | global_mae=0.152671 | exist_loss=0.003795 | type_loss=0.014173 | param_mse=0.010063 | global_mse=0.038946
+epoch 075 | train_loss=0.312195 | type_accuracy=1.0000 | param_mae=0.051442 | global_mae=0.150607 | exist_loss=0.002877 | type_loss=0.015209 | param_mse=0.005225 | global_mse=0.037920
+epoch 080 | train_loss=0.418659 | type_accuracy=0.9844 | param_mae=0.064544 | global_mae=0.148712 | exist_loss=0.002723 | type_loss=0.049686 | param_mse=0.008984 | global_mse=0.037312
+epoch 085 | train_loss=0.337557 | type_accuracy=1.0000 | param_mae=0.055828 | global_mae=0.147350 | exist_loss=0.002796 | type_loss=0.010449 | param_mse=0.007149 | global_mse=0.036265
+epoch 090 | train_loss=0.313847 | type_accuracy=1.0000 | param_mae=0.055506 | global_mae=0.144536 | exist_loss=0.002564 | type_loss=0.012977 | param_mse=0.006001 | global_mse=0.035658
+epoch 095 | train_loss=0.266073 | type_accuracy=1.0000 | param_mae=0.048902 | global_mae=0.143253 | exist_loss=0.002090 | type_loss=0.007309 | param_mse=0.004140 | global_mse=0.034777
+epoch 100 | train_loss=0.239418 | type_accuracy=1.0000 | param_mae=0.042656 | global_mae=0.142135 | exist_loss=0.002228 | type_loss=0.006817 | param_mse=0.003054 | global_mse=0.033860
+Rendering saved/oracle/predicted curves for first 16 samples...
+Done. Outputs written to /home/zhaiyufe/PycharmProjects/ML_Fitting_1D_GISAXS/Training/overfit_debug_simple_loss

@@ -334,6 +334,9 @@ class MainController(QObject):
         return {
             'trainset': self.trainset_controller.get_parameters(),
             'fitting': self.fitting_controller.get_parameters(),
+            'fitting_model_parameters': {
+                'fitting': self.fitting_controller.model_params_manager.get_parameter('fitting', None, {})
+            } if hasattr(self.fitting_controller, 'model_params_manager') else {},
             'classification': self.classification_controller.get_parameters(),
             'gisaxs_predict': self.gisaxs_predict_controller.get_parameters()
         }
@@ -350,6 +353,13 @@ class MainController(QObject):
                 self.trainset_controller.set_parameters(parameters['trainset'])
             if 'fitting' in parameters:
                 self.fitting_controller.set_parameters(parameters['fitting'])
+            if 'fitting_model_parameters' in parameters:
+                model_params = parameters.get('fitting_model_parameters') or {}
+                fitting_model = model_params.get('fitting') if isinstance(model_params, dict) else None
+                if isinstance(fitting_model, dict) and hasattr(self.fitting_controller, 'model_params_manager'):
+                    self.fitting_controller.model_params_manager._parameters['fitting'] = fitting_model
+                    self.fitting_controller.model_params_manager.save_parameters()
+                    self.fitting_controller.reload_particle_parameters()
             if 'classification' in parameters:
                 self.classification_controller.set_parameters(parameters['classification'])
             if 'gisaxs_predict' in parameters:

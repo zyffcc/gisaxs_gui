@@ -1,0 +1,90 @@
+[
+  {
+    "epoch": 1,
+    "train_loss": 0.45167515822686255,
+    "type_accuracy": 0.515625,
+    "param_mae": 0.3134762746049091,
+    "global_mae": 0.25542302150279284,
+    "batch_loss_mean": 1.2005782723426819
+  },
+  {
+    "epoch": 5,
+    "train_loss": -1.4135238211601973,
+    "type_accuracy": 0.84375,
+    "param_mae": 0.2584628309123218,
+    "global_mae": 0.2379332554526627,
+    "batch_loss_mean": -1.1504611894488335
+  },
+  {
+    "epoch": 10,
+    "train_loss": -2.0611793496645987,
+    "type_accuracy": 0.765625,
+    "param_mae": 0.22827737568877637,
+    "global_mae": 0.21694662356749178,
+    "batch_loss_mean": -1.8783743977546692
+  },
+  {
+    "epoch": 15,
+    "train_loss": -2.2364620147272944,
+    "type_accuracy": 0.84375,
+    "param_mae": 0.21930402499856427,
+    "global_mae": 0.20395564772188662,
+    "batch_loss_mean": -2.1220993101596832
+  },
+  {
+    "epoch": 20,
+    "train_loss": -2.6197724053636193,
+    "type_accuracy": 0.8125,
+    "param_mae": 0.20733115845359862,
+    "global_mae": 0.1944617665372789,
+    "batch_loss_mean": -2.458948642015457
+  },
+  {
+    "epoch": 25,
+    "train_loss": -2.8935226961039007,
+    "type_accuracy": 0.8125,
+    "param_mae": 0.20447338256053627,
+    "global_mae": 0.1923323451541364,
+    "batch_loss_mean": -2.7812475860118866
+  },
+  {
+    "epoch": 30,
+    "train_loss": -3.1748095117509365,
+    "type_accuracy": 0.84375,
+    "param_mae": 0.18876199226360768,
+    "global_mae": 0.18754940070211887,
+    "batch_loss_mean": -3.0254159569740295
+  },
+  {
+    "epoch": 35,
+    "train_loss": -3.4576000329107046,
+    "type_accuracy": 0.84375,
+    "param_mae": 0.18705512629821897,
+    "global_mae": 0.1836742889136076,
+    "batch_loss_mean": -3.293431878089905
+  },
+  {
+    "epoch": 40,
+    "train_loss": -3.56875829026103,
+    "type_accuracy": 0.8125,
+    "param_mae": 0.17791647970443591,
+    "global_mae": 0.17787959072738885,
+    "batch_loss_mean": -3.6011880338191986
+  },
+  {
+    "epoch": 45,
+    "train_loss": -3.911123737692833,
+    "type_accuracy": 0.875,
+    "param_mae": 0.18051665759412572,
+    "global_mae": 0.1708579952828586,
+    "batch_loss_mean": -3.711357742547989
+  },
+  {
+    "epoch": 50,
+    "train_loss": -4.025955110788345,
+    "type_accuracy": 0.890625,
+    "param_mae": 0.16816176706925035,
+    "global_mae": 0.16627898616716266,
+    "batch_loss_mean": -4.112596809864044
+  }
+]

@@ -1,0 +1,57 @@
+{
+  "sample_index": 12,
+  "true_slot": 0,
+  "pred_slot": 0,
+  "true_type": 2,
+  "pred_type": 2,
+  "true_type_name": "cylinder",
+  "pred_type_name": "cylinder",
+  "true_params_phys": [
+    1.0099369287490845,
+    0.7239550948143005,
+    65.67265319824219,
+    27.606908798217773,
+    37.603485107421875,
+    28.53015899658203
+  ],
+  "pred_params_phys": [
+    1.4619274139404297,
+    0.40029916167259216,
+    50.55985641479492,
+    37.812774658203125,
+    40.93173599243164,
+    18.342004776000977
+  ],
+  "true_global_phys": [
+    4.653490037753727e-09,
+    0.06977424770593643,
+    6.325949668884277,
+    4.20525211666245e-05,
+    0.11968294531106949
+  ],
+  "pred_global_phys": [
+    3.5109920304421394e-08,
+    0.026693038642406464,
+    4.184652328491211,
+    3.430671746684766e-09,
+    0.31995660066604614
+  ],
+  "true_slot_weight": 1.0,
+  "pred_slot_weight": 0.34069928961271484,
+  "forced_slot_weight": 1.0,
+  "true_slot_weight_is_one": true,
+  "true_slot_weight_warning": null,
+  "curve_metric_source": "pred_params_true_global_curve",
+  "curve_rmse_linear": 0.001774965595857251,
+  "curve_log_rmse": 0.24320139027756071,
+  "oracle_curve_from_true_label_linear_rmse": 2.5489498340807045e-10,
+  "oracle_curve_from_true_label_log_rmse": 5.672464844077433e-08,
+  "pred_params_true_global_curve_linear_rmse": 0.001774965595857251,
+  "pred_params_true_global_curve_log_rmse": 0.24320139027756071,
+  "pred_params_pred_global_curve_linear_rmse": 0.01512894123175718,
+  "pred_params_pred_global_curve_log_rmse": 1.1208732838208952,
+  "pred_params_true_global_pred_weight_curve_linear_rmse": 0.003652780006161384,
+  "pred_params_true_global_pred_weight_curve_log_rmse": 0.9830665700070228,
+  "pred_params_pred_global_pred_weight_curve_linear_rmse": 0.0011188821346829472,
+  "pred_params_pred_global_pred_weight_curve_log_rmse": 0.21447100361870358
+}

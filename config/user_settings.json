@@ -16,17 +16,26 @@
   "layout_target_mode": "compact",
   "layout_target_custom": "3840x2160",
   "auto_fit_layout_target": true,
+  "ai_fitting": {
+    "model_base_dirs": [
+      "modules/Fitting_1D_Model",
+      "modules/Fitting_1D_model"
+    ],
+    "last_selected_model": "",
+    "last_constraint_mode": "Fixed Combination",
+    "extra_model_paths": []
+  },
   "main_splitter_sizes": [
     180,
-    1476
+    999
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      821,
-      629
+      600,
+      460
     ],
     "work": [
-      1427,
+      1569,
       909
     ],
     "profile": "compact"

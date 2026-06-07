@@ -1,0 +1,48 @@
+{
+  "sample_index": 9,
+  "true_slot": 0,
+  "pred_slot": 0,
+  "true_type": 2,
+  "pred_type": 2,
+  "true_type_name": "cylinder",
+  "pred_type_name": "cylinder",
+  "true_params_phys": [
+    1.1503750085830688,
+    0.6212131381034851,
+    185.40159606933594,
+    22.71054458618164,
+    10.384374618530273,
+    0.7345828413963318
+  ],
+  "pred_params_phys": [
+    1.4287159442901611,
+    0.6896929144859314,
+    224.7913360595703,
+    28.697002410888672,
+    7.897536754608154,
+    0.2935105860233307
+  ],
+  "true_global_phys": [
+    4.635191999113886e-06,
+    0.17971660196781158,
+    1.1810740232467651,
+    9.999999747378752e-06,
+    3.871450424194336
+  ],
+  "pred_global_phys": [
+    9.584837243892252e-07,
+    0.03732359781861305,
+    4.263782024383545,
+    0.020749405026435852,
+    1.8529634475708008
+  ],
+  "curve_metric_source": "pred_params_true_global_curve",
+  "curve_rmse_linear": 0.12506299212437785,
+  "curve_log_rmse": 1.4008005353318174,
+  "oracle_curve_from_true_label_linear_rmse": 6.939845839523103e-06,
+  "oracle_curve_from_true_label_log_rmse": 0.0005464360031259781,
+  "pred_params_true_global_curve_linear_rmse": 0.12506299212437785,
+  "pred_params_true_global_curve_log_rmse": 1.4008005353318174,
+  "pred_params_pred_global_curve_linear_rmse": 0.08634400347200168,
+  "pred_params_pred_global_curve_log_rmse": 1.9406903417292927
+}

@@ -62,6 +62,26 @@ class MenuManager(QObject):
                 self.main_window.actionLoadParams.setStatusTip('Load parameters from a file')
                 self.main_window.actionLoadParams.triggered.connect(self.load_parameters)
                 parameters_menu.addAction(self.main_window.actionLoadParams)
+
+            parameters_menu.addSeparator()
+
+            if not hasattr(self.main_window, 'actionSaveFittingParams'):
+                self.main_window.actionSaveFittingParams = QAction('Save Fitting Parameters...', self.main_window)
+                self.main_window.actionSaveFittingParams.setStatusTip('Save only Cut/Fitting parameters, including particle model parameters')
+                self.main_window.actionSaveFittingParams.triggered.connect(self.save_fitting_parameters)
+                parameters_menu.addAction(self.main_window.actionSaveFittingParams)
+
+            if not hasattr(self.main_window, 'actionLoadFittingParams'):
+                self.main_window.actionLoadFittingParams = QAction('Load Fitting Parameters...', self.main_window)
+                self.main_window.actionLoadFittingParams.setStatusTip('Load only Cut/Fitting parameters')
+                self.main_window.actionLoadFittingParams.triggered.connect(self.load_fitting_parameters)
+                parameters_menu.addAction(self.main_window.actionLoadFittingParams)
+
+            if not hasattr(self.main_window, 'actionOpenAIFittingWorkspace'):
+                self.main_window.actionOpenAIFittingWorkspace = QAction('Open AI Fitting Workspace...', self.main_window)
+                self.main_window.actionOpenAIFittingWorkspace.setStatusTip('Open the detached AI fitting workspace')
+                self.main_window.actionOpenAIFittingWorkspace.triggered.connect(self.open_ai_fitting_workspace)
+                parameters_menu.addAction(self.main_window.actionOpenAIFittingWorkspace)
             
             print("✓ Parameter menu created")
             
@@ -116,7 +136,13 @@ class MenuManager(QObject):
             
             if file_path:
                 file_path = normalize_path(file_path)
-                global_params.save_parameters(file_path)
+                main_controller = getattr(self.main_window, 'main_controller', None)
+                if main_controller is not None and hasattr(main_controller, 'save_parameters_to_file'):
+                    ok = main_controller.save_parameters_to_file(file_path)
+                    if not ok:
+                        raise RuntimeError("Main controller failed to save parameters")
+                else:
+                    global_params.save_parameters(file_path)
                 QMessageBox.information(
                     self.main_window, 
                     'Saved', 
@@ -145,7 +171,13 @@ class MenuManager(QObject):
             
             if file_path:
                 file_path = normalize_path(file_path)
-                global_params.load_parameters(file_path)
+                main_controller = getattr(self.main_window, 'main_controller', None)
+                if main_controller is not None and hasattr(main_controller, 'load_parameters_from_file'):
+                    ok = main_controller.load_parameters_from_file(file_path)
+                    if not ok:
+                        raise RuntimeError("Main controller failed to load parameters")
+                else:
+                    global_params.load_parameters(file_path)
                 QMessageBox.information(
                     self.main_window, 
                     'Loaded', 
@@ -160,3 +192,28 @@ class MenuManager(QObject):
                 f'Failed to load parameters: {str(e)}'
             )
             print(f"Failed to load parameters: {e}")
+
+    def _fitting_controller(self):
+        main_controller = getattr(self.main_window, 'main_controller', None)
+        return getattr(main_controller, 'fitting_controller', None)
+
+    def save_fitting_parameters(self):
+        controller = self._fitting_controller()
+        if controller is None:
+            QMessageBox.warning(self.main_window, 'Fitting Parameters', 'Fitting controller is not available yet.')
+            return
+        controller.save_fitting_parameters_dialog()
+
+    def load_fitting_parameters(self):
+        controller = self._fitting_controller()
+        if controller is None:
+            QMessageBox.warning(self.main_window, 'Fitting Parameters', 'Fitting controller is not available yet.')
+            return
+        controller.load_fitting_parameters_dialog()
+
+    def open_ai_fitting_workspace(self):
+        controller = self._fitting_controller()
+        if controller is None:
+            QMessageBox.warning(self.main_window, 'AI Fitting', 'Fitting controller is not available yet.')
+            return
+        controller.open_ai_fitting_workspace()

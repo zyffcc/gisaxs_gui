@@ -42,7 +42,16 @@ class UserSettings:
             "manual_screen_resolution": "auto",
             "layout_target_mode": "auto",
             "layout_target_custom": "1920x1080",
-            "auto_fit_layout_target": True
+            "auto_fit_layout_target": True,
+            "ai_fitting": {
+                "model_base_dirs": [
+                    "modules/Fitting_1D_Model",
+                    "modules/Fitting_1D_model"
+                ],
+                "last_selected_model": "",
+                "last_constraint_mode": "Free",
+                "extra_model_paths": []
+            }
         }
 
     def _load_default_settings(self):

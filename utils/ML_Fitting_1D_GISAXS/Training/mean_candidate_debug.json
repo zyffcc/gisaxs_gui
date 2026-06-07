@@ -1,0 +1,181 @@
+{
+  "input": {
+    "curve": "/data/dust/user/zhaiyufe/TrainSet/ML_1D_Fitting_GISAXS_K1/inspection/example_curve.csv",
+    "model_dir": "/data/dust/user/zhaiyufe/Models/ML_1D_Fitting_GISAXS_K1",
+    "q_min": 0.001,
+    "q_max": 2.0
+  },
+  "raw_example": {
+    "n_points": 285,
+    "q_min": 0.05391845479607582,
+    "q_max": 0.5359339714050293,
+    "I_min": 3.6227471828460693,
+    "I_max": 85.76128387451172
+  },
+  "predict_topk_loaded": {
+    "n_points": 139,
+    "q_min": 0.05391845479607582,
+    "q_max": 0.33396267890930176,
+    "I_min": 18.807350158691406,
+    "I_max": 85.76128387451172
+  },
+  "true_label": {
+    "type": "cylinder",
+    "type_id": 2,
+    "weight": 1.0,
+    "params_phys": {
+      "R": 97.19374084472656,
+      "sigma_R": 51.84303665161133,
+      "h": 15.80517578125,
+      "sigma_h": 5.200435161590576,
+      "D": 30.593164443969727,
+      "sigma_D": 16.75853157043457
+    },
+    "global_params_phys": {
+      "BG": 0.26741090416908264,
+      "sigma_Res": 0.07061117142438889,
+      "nu_Res": 5.1258544921875,
+      "int_Res": 0.0,
+      "k": 827.541259765625
+    }
+  },
+  "oracle_metrics": {
+    "I_clean_vs_true_forward_raw_logrmse": 3.316912237085805e-08,
+    "I_noisy_vs_true_forward_raw_logrmse": 0.21585711716465217,
+    "I_clean_interp_vs_true_forward_predict_topk_points_logrmse": 3.3322013376950486e-08,
+    "I_predict_topk_vs_true_forward_logrmse": 0.058376793478297065
+  },
+  "model_shapes": {
+    "input_shapes": {
+      "x": "(None, 1000, 3)",
+      "point_mask": "(None, 1000)",
+      "global_features": "(None, 5)",
+      "type_allowed": "(None, 4, 4)",
+      "param_low_norm": "(None, 4, 4, 6)",
+      "param_high_norm": "(None, 4, 4, 6)",
+      "param_range_mask": "(None, 4, 4, 6)",
+      "force_exist": "(None, 4)",
+      "global_low_norm": "(None, 5)",
+      "global_high_norm": "(None, 5)",
+      "global_range_mask": "(None, 5)"
+    },
+    "output_shapes": {
+      "exist_logit": "(None, 4)",
+      "type_logits": "(None, 4, 4)",
+      "param_mu_raw": "(None, 4, 4, 6)",
+      "param_mu_norm": "(None, 4, 4, 6)",
+      "param_logstd_raw": "(None, 4, 4, 6)",
+      "weight_logit": "(None, 4)",
+      "global_mu_raw": "(None, 5)",
+      "global_mu_norm": "(None, 5)",
+      "global_logstd_raw": "(None, 5)",
+      "quality": "(None, 1)"
+    }
+  },
+  "proposal": {
+    "exist_prob": [
+      0.9900428445599584,
+      1.572529086616273e-05,
+      0.0007924492650620015,
+      5.147097099888739e-06
+    ],
+    "top_types": [
+      "cylinder",
+      "empty",
+      "empty",
+      "empty"
+    ],
+    "type_probs": [
+      [
+        0.006083483300261022,
+        0.42484650406245167,
+        0.5682217906020716,
+        0.0008482220352155921
+      ],
+      [
+        0.9999684929974743,
+        2.6240935456297154e-05,
+        5.024153531709387e-06,
+        2.419135376093313e-07
+      ],
+      [
+        0.9992640019528006,
+        0.00020484423148222665,
+        0.0005074810671723435,
+        2.3672748544904748e-05
+      ],
+      [
+        0.9999892777126325,
+        1.4653670558859842e-06,
+        9.215197080425029e-06,
+        4.1723231244246013e-08
+      ]
+    ]
+  },
+  "mean_candidate": {
+    "components": [
+      {
+        "type": "cylinder",
+        "type_id": 2,
+        "weight": 1.0,
+        "params_phys": {
+          "R": 73.56974029541016,
+          "sigma_R": 45.66160202026367,
+          "h": 116.46089172363281,
+          "sigma_h": 42.32970428466797,
+          "D": 20.622936248779297,
+          "sigma_D": 3.0558865070343018
+        }
+      }
+    ],
+    "global_phys": {
+      "BG": 0.012440972961485386,
+      "sigma_Res": 0.035205673426389694,
+      "nu_Res": 4.395270347595215,
+      "int_Res": 2.2918214881428867e-07,
+      "k": 437.6093444824219
+    },
+    "log_rmse": 2.4982854984806693,
+    "weighted_log_chi2": 4547.354590954042,
+    "relative_rmse": 0.8982014920416779
+  },
+  "decomposition_logrmse_against_I_predict_topk": {
+    "A_model_params_model_global": 2.4982854984806693,
+    "B_model_params_true_global": 1.8348037927661969,
+    "C_true_params_model_global": 0.6470711404204796,
+    "D_true_params_true_global": 0.058376793478297065
+  },
+  "decomposition_logrmse_against_I_clean_interp": {
+    "A_model_params_model_global": 2.5011850144315484,
+    "B_model_params_true_global": 1.8382559464755759,
+    "C_true_params_model_global": 0.6456951120289843,
+    "D_true_params_true_global": 3.3322013376950486e-08
+  },
+  "sampling_200": {
+    "n_valid": 198,
+    "best_sample_log_rmse": 1.187819804969676,
+    "median_sample_log_rmse": 2.1775587840518793,
+    "best_sample_components": [
+      {
+        "type": "sphere",
+        "type_id": 1,
+        "weight": 1.0,
+        "params_phys": {
+          "R": 79.29186248779297,
+          "sigma_R": 61.787132263183594,
+          "h": 0.0,
+          "sigma_h": 0.0,
+          "D": 26.9941349029541,
+          "sigma_D": 3.10526442527771
+        }
+      }
+    ],
+    "best_sample_global_phys": {
+      "BG": 0.02009773440659046,
+      "sigma_Res": 0.03508482873439789,
+      "nu_Res": 4.394768238067627,
+      "int_Res": 1.929481641127495e-07,
+      "k": 479.4862365722656
+    }
+  }
+}

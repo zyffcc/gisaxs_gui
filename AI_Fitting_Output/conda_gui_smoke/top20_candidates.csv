@@ -1,0 +1,4 @@
+rank,combination,mode,best_source,score_weighted_probability,posterior_frequency,best_log_rmse,best_chi2_weighted,rejected_empty,rejected_exact_nonempty,note
+1,sphere+sphere+vertical_cylinder,proposal_only,sample_proposal,0.2222222222222222,0.2222222222222222,nan,nan,0,0,"Training/physics modules are unavailable; this row is a neural model proposal, not a physics-verified fit."
+2,sphere+vertical_cylinder+vertical_cylinder,proposal_only,mean_proposal,0.2222222222222222,0.2222222222222222,nan,nan,0,0,"Training/physics modules are unavailable; this row is a neural model proposal, not a physics-verified fit."
+3,cylinder+sphere+sphere,proposal_only,sample_proposal,0.1111111111111111,0.1111111111111111,nan,nan,0,0,"Training/physics modules are unavailable; this row is a neural model proposal, not a physics-verified fit."

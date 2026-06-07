@@ -1,0 +1,48 @@
+{
+  "sample_index": 14,
+  "true_slot": 0,
+  "pred_slot": 0,
+  "true_type": 1,
+  "pred_type": 1,
+  "true_type_name": "sphere",
+  "pred_type_name": "sphere",
+  "true_params_phys": [
+    3.856168508529663,
+    2.428459405899048,
+    0.0,
+    0.0,
+    139.72647094726562,
+    52.8604621887207
+  ],
+  "pred_params_phys": [
+    6.041905879974365,
+    1.9798918962478638,
+    0.0,
+    0.0,
+    200.351806640625,
+    58.12992477416992
+  ],
+  "true_global_phys": [
+    3.150974750518799,
+    0.00231315940618515,
+    1.2837592363357544,
+    364.1164245605469,
+    31479.359375
+  ],
+  "pred_global_phys": [
+    6.101950645446777,
+    0.014337337575852871,
+    4.55885648727417,
+    1076.5989990234375,
+    8928.8720703125
+  ],
+  "curve_metric_source": "pred_params_true_global_curve",
+  "curve_rmse_linear": 9267.68987105259,
+  "curve_log_rmse": 0.27490222208162235,
+  "oracle_curve_from_true_label_linear_rmse": 12246.355737757463,
+  "oracle_curve_from_true_label_log_rmse": 0.6200148288252839,
+  "pred_params_true_global_curve_linear_rmse": 9267.68987105259,
+  "pred_params_true_global_curve_log_rmse": 0.27490222208162235,
+  "pred_params_pred_global_curve_linear_rmse": 9395.000680243867,
+  "pred_params_pred_global_curve_log_rmse": 3.000129268611345
+}

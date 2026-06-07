@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
     QAbstractButton,
     QBoxLayout,
     QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QFrame,
@@ -814,17 +815,98 @@ class FittingControlsCard(CardFrame):
         external_layout.addWidget(ui.fitImport1dFileButton, 0)
         external_layout.addWidget(ui.fitImport1dFileValue, 1)
 
-        method_group = self._make_group("Auto Fitting / Method")
-        method_layout = QGridLayout(method_group)
-        self._configure_group_layout(method_layout, group_margin, group_top, group_spacing)
-        method_layout.addWidget(ui.fitMethodLabel, 0, 0, Qt.AlignRight | Qt.AlignVCenter)
-        method_layout.addWidget(ui.fitMethodValue, 0, 1)
-        method_layout.addWidget(ui.FittingAutoFittingButton, 0, 2)
-        self.methodInfoLabel = QLabel("Method selection is not implemented yet.", method_group)
+        method_group = self._make_group("AI Auto Fitting")
+        method_layout = QVBoxLayout(method_group)
+        self._configure_group_layout(method_layout, group_margin, group_top, scale_value(10, self.profile, 8))
+        _detach_from_parent_layout(ui.fitMethodLabel)
+        _detach_from_parent_layout(ui.fitMethodValue)
+        _detach_from_parent_layout(ui.FittingAutoFittingButton)
+
+        ui.aiFittingModelComboBox = QComboBox(method_group)
+        ui.aiFittingRefreshButton = QPushButton("Refresh", method_group)
+        ui.aiFittingOpenWorkspaceButton = QPushButton("Open Workspace", method_group)
+        ui.aiFittingConstraintComboBox = QComboBox(method_group)
+        ui.aiFittingConstraintComboBox.addItems(["Free Prediction", "Fixed K", "Fixed Combination", "Current Manual Model"])
+        ui.aiFittingFastPredictButton = QPushButton("Fast Predict", method_group)
+        ui.aiFittingFullAutoFitButton = QPushButton("Full Auto Fit", method_group)
+        self.methodInfoLabel = QLabel("Status: Ready", method_group)
+        ui.aiFittingStatusLabel = self.methodInfoLabel
         self.methodInfoLabel.setObjectName("fitMethodInfoLabel")
-        self.methodInfoLabel.setStyleSheet("color: #2563eb;")
-        method_layout.addWidget(self.methodInfoLabel, 1, 1, 1, 2)
-        method_layout.setColumnStretch(1, 1)
+        self.methodInfoLabel.setWordWrap(True)
+        self.methodInfoLabel.setMinimumHeight(scale_value(28, self.profile, 24))
+        self.methodInfoLabel.setStyleSheet(
+            "QLabel {"
+            "color: #1d4ed8;"
+            "background: #eff6ff;"
+            "border: 1px solid #bfdbfe;"
+            "border-radius: 6px;"
+            "padding: 5px 8px;"
+            "}"
+        )
+
+        ui.aiFittingModelComboBox.setMinimumWidth(scale_value(300, self.profile, 240))
+        ui.aiFittingModelComboBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        ui.aiFittingConstraintComboBox.setMinimumWidth(scale_value(210, self.profile, 180))
+        ui.aiFittingConstraintComboBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        button_specs = (
+            (ui.aiFittingRefreshButton, scale_value(96, self.profile, 88)),
+            (ui.aiFittingOpenWorkspaceButton, scale_value(166, self.profile, 146)),
+            (ui.aiFittingFastPredictButton, scale_value(136, self.profile, 120)),
+            (ui.aiFittingFullAutoFitButton, scale_value(136, self.profile, 120)),
+        )
+        for button in (
+            ui.aiFittingRefreshButton,
+            ui.aiFittingOpenWorkspaceButton,
+            ui.aiFittingFastPredictButton,
+            ui.aiFittingFullAutoFitButton,
+        ):
+            normalize_button(button)
+            button.setMinimumHeight(scale_value(34, self.profile, 30))
+            button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        for button, width in button_specs:
+            button.setMinimumWidth(width)
+
+        def make_ai_label(text: str) -> QLabel:
+            label = QLabel(text, method_group)
+            label.setMinimumWidth(scale_value(76, self.profile, 66))
+            label.setStyleSheet("font-size: 11px; font-weight: 600; color: #475569;")
+            return label
+
+        ui.aiFittingModelLabel = make_ai_label("AI Model")
+        ui.aiFittingConstraintLabel = make_ai_label("Constraint")
+
+        model_row = QHBoxLayout()
+        model_row.setContentsMargins(0, 0, 0, 0)
+        model_row.setSpacing(scale_value(8, self.profile, 6))
+        model_row.addWidget(ui.aiFittingModelLabel)
+        model_row.addWidget(ui.aiFittingModelComboBox, 1)
+
+        model_actions_row = QHBoxLayout()
+        model_actions_row.setContentsMargins(scale_value(84, self.profile, 72), 0, 0, 0)
+        model_actions_row.setSpacing(scale_value(8, self.profile, 6))
+        model_actions_row.addWidget(ui.aiFittingRefreshButton)
+        model_actions_row.addWidget(ui.aiFittingOpenWorkspaceButton)
+        model_actions_row.addStretch(1)
+
+        control_row = QHBoxLayout()
+        control_row.setContentsMargins(0, 0, 0, 0)
+        control_row.setSpacing(scale_value(8, self.profile, 6))
+        control_row.addWidget(ui.aiFittingConstraintLabel)
+        control_row.addWidget(ui.aiFittingConstraintComboBox, 1)
+
+        predict_row = QHBoxLayout()
+        predict_row.setContentsMargins(scale_value(84, self.profile, 72), 0, 0, 0)
+        predict_row.setSpacing(scale_value(8, self.profile, 6))
+        predict_row.addWidget(ui.aiFittingFastPredictButton)
+        predict_row.addWidget(ui.aiFittingFullAutoFitButton)
+        predict_row.addStretch(1)
+
+        method_layout.addLayout(model_row)
+        method_layout.addLayout(model_actions_row)
+        method_layout.addLayout(control_row)
+        method_layout.addLayout(predict_row)
+        method_layout.addWidget(self.methodInfoLabel)
 
         global_group = self._make_group("Global Parameters")
         global_layout = QGridLayout(global_group)

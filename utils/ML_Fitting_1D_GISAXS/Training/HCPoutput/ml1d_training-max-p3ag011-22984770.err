@@ -1,0 +1,41 @@
+CUDA 12.3 loaded using /software/cuda/cuda-12.3
+/var/spool/slurmd/job22984770/slurm_script: line 39: activate: No such file or directory
+
+CommandNotFoundError: Your shell has not been properly configured to use 'conda activate'.
+To initialize your shell, run
+
+    $ conda init <SHELL_NAME>
+
+Currently supported shells are:
+  - bash
+  - fish
+  - tcsh
+  - xonsh
+  - zsh
+  - powershell
+
+See 'conda init --help' for more information and options.
+
+IMPORTANT: You may need to close and restart your shell after running 'conda init'.
+
+
+2026-06-05 02:33:02.165589: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-06-05 02:33:02.165682: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-06-05 02:33:02.167367: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-06-05 02:33:02.176201: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-06-05 02:33:04.171040: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+2026-06-05 02:33:08.600664: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1929] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 15511 MB memory:  -> device: 0, name: Tesla P100-SXM2-16GB, pci bus id: 0000:05:00.0, compute capability: 6.0
+2026-06-05 02:33:08.601273: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1929] Created device /job:localhost/replica:0/task:0/device:GPU:1 with 15511 MB memory:  -> device: 1, name: Tesla P100-SXM2-16GB, pci bus id: 0000:06:00.0, compute capability: 6.0
+2026-06-05 02:33:08.601723: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1929] Created device /job:localhost/replica:0/task:0/device:GPU:2 with 15511 MB memory:  -> device: 2, name: Tesla P100-SXM2-16GB, pci bus id: 0000:84:00.0, compute capability: 6.0
+2026-06-05 02:33:08.602202: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1929] Created device /job:localhost/replica:0/task:0/device:GPU:3 with 15511 MB memory:  -> device: 3, name: Tesla P100-SXM2-16GB, pci bus id: 0000:85:00.0, compute capability: 6.0
+2026-06-05 02:33:34.222355: I external/local_xla/xla/service/service.cc:168] XLA service 0x147cc2b79f60 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+2026-06-05 02:33:34.222439: I external/local_xla/xla/service/service.cc:176]   StreamExecutor device (0): Tesla P100-SXM2-16GB, Compute Capability 6.0
+2026-06-05 02:33:34.222475: I external/local_xla/xla/service/service.cc:176]   StreamExecutor device (1): Tesla P100-SXM2-16GB, Compute Capability 6.0
+2026-06-05 02:33:34.222506: I external/local_xla/xla/service/service.cc:176]   StreamExecutor device (2): Tesla P100-SXM2-16GB, Compute Capability 6.0
+2026-06-05 02:33:34.222519: I external/local_xla/xla/service/service.cc:176]   StreamExecutor device (3): Tesla P100-SXM2-16GB, Compute Capability 6.0
+2026-06-05 02:33:34.230202: I tensorflow/compiler/mlir/tensorflow/utils/dump_mlir_util.cc:269] disabling MLIR crash reproducer, set env var `MLIR_CRASH_REPRODUCER_DIRECTORY` to enable.
+2026-06-05 02:33:34.286210: I external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:454] Loaded cuDNN version 8907
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1780619614.356531 2176648 device_compiler.h:186] Compiled cluster using XLA!  This line is logged at most once for the lifetime of the process.
+[2026-06-05T09:33:17.005] error: *** JOB 22984770 ON max-p3ag011 CANCELLED AT 2026-06-05T09:33:17 DUE TO TIME LIMIT ***

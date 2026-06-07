@@ -1,0 +1,57 @@
+{
+  "sample_index": 13,
+  "true_slot": 0,
+  "pred_slot": 0,
+  "true_type": 3,
+  "pred_type": 3,
+  "true_type_name": "vertical_cylinder",
+  "pred_type_name": "vertical_cylinder",
+  "true_params_phys": [
+    1.1639368534088135,
+    0.7448556423187256,
+    0.0,
+    0.0,
+    387.1934509277344,
+    70.83828735351562
+  ],
+  "pred_params_phys": [
+    1.2156137228012085,
+    0.6136595010757446,
+    0.0,
+    0.0,
+    327.976318359375,
+    62.447505950927734
+  ],
+  "true_global_phys": [
+    2.9856785488391324e-08,
+    0.05681835114955902,
+    7.092916488647461,
+    1.9855668498269807e-10,
+    25.98505401611328
+  ],
+  "pred_global_phys": [
+    5.582816431370929e-10,
+    0.035084303468465805,
+    5.026228427886963,
+    1.0540270913017569e-11,
+    4.908730983734131
+  ],
+  "true_slot_weight": 1.0,
+  "pred_slot_weight": 0.16776735433440917,
+  "forced_slot_weight": 1.0,
+  "true_slot_weight_is_one": true,
+  "true_slot_weight_warning": null,
+  "curve_metric_source": "pred_params_true_global_curve",
+  "curve_rmse_linear": 4.023762746355726e-06,
+  "curve_log_rmse": 0.07969336484778171,
+  "oracle_curve_from_true_label_linear_rmse": 3.862871957373656e-12,
+  "oracle_curve_from_true_label_log_rmse": 1.621373217798048e-07,
+  "pred_params_true_global_curve_linear_rmse": 4.023762746355726e-06,
+  "pred_params_true_global_curve_log_rmse": 0.07969336484778171,
+  "pred_params_pred_global_curve_linear_rmse": 2.077293903942537e-05,
+  "pred_params_pred_global_curve_log_rmse": 1.6895950141187723,
+  "pred_params_true_global_pred_weight_curve_linear_rmse": 2.119786731930327e-05,
+  "pred_params_true_global_pred_weight_curve_log_rmse": 1.7744512938102432,
+  "pred_params_pred_global_pred_weight_curve_linear_rmse": 2.4073000348077264e-05,
+  "pred_params_pred_global_pred_weight_curve_log_rmse": 3.4709399172213335
+}

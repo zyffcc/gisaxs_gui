@@ -6,9 +6,13 @@ import os
 import json
 import re
 import time
+import datetime
+import copy
+import sys
 from collections import OrderedDict, defaultdict
+from pathlib import Path
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint
+from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint, QProcess, QUrl
 from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -30,6 +34,10 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QCheckBox,
     QPushButton,
+    QProgressBar,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
 )
 
 # ?????????????
@@ -42,8 +50,14 @@ from config.model_parameters_manager import ModelParametersManager
 # ?????????????????
 from utils.universal_parameter_trigger_manager import UniversalParameterTriggerManager
 from utils.path_utils import normalize_path
+from utils.ai_fitting_models import (
+    ModelInfo,
+    default_ai_fitting_model_base_dirs,
+    discover_ai_fitting_models,
+    discover_model_in_path,
+)
 from PyQt5.QtWidgets import QShortcut
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtGui import QKeySequence, QDesktopServices
 
 """Heavy libraries (matplotlib/fabio) are lazy-loaded to speed up startup."""
 # Lazy availability flags (None means unchecked yet)
@@ -1814,6 +1828,14 @@ class FittingController(QObject):
         self._dynamic_show_layout = None
         self._dynamic_show_container = None
         self._particle_checkbox_host_name = ''
+        self._ai_process = None
+        self._ai_output_dir = None
+        self._ai_input_csv = None
+        self._ai_action_buttons = []
+        self._ai_stop_button = None
+        self._ai_open_output_button = None
+        self._ai_results_dialog = None
+        self._ai_candidate_rows = []
 
         # ????????ingle/Stack/In-situ?????????
         self.load_mode = 'Single'
@@ -2844,6 +2866,23 @@ class FittingController(QObject):
         if hasattr(self.ui, 'FittingManualFittingButton'):
             self.ui.FittingManualFittingButton.clicked.connect(self._perform_manual_fitting)
 
+        if hasattr(self.ui, 'FittingAutoFittingButton'):
+            self.ui.FittingAutoFittingButton.clicked.connect(self.open_ai_fitting_workspace)
+        if hasattr(self.ui, 'aiFittingRefreshButton'):
+            self.ui.aiFittingRefreshButton.clicked.connect(self._refresh_ai_fitting_models)
+        if hasattr(self.ui, 'aiFittingOpenWorkspaceButton'):
+            self.ui.aiFittingOpenWorkspaceButton.clicked.connect(self.open_ai_fitting_workspace)
+        if hasattr(self.ui, 'aiFittingModelComboBox'):
+            self.ui.aiFittingModelComboBox.currentIndexChanged.connect(self._on_ai_model_selected)
+        if hasattr(self.ui, 'aiFittingConstraintComboBox'):
+            self.ui.aiFittingConstraintComboBox.currentTextChanged.connect(
+                lambda text: self._save_ai_fitting_settings(last_constraint_mode=str(text).replace(" Prediction", ""))
+            )
+        if hasattr(self.ui, 'aiFittingFastPredictButton'):
+            self.ui.aiFittingFastPredictButton.clicked.connect(lambda: self._start_ai_prediction("fast"))
+        if hasattr(self.ui, 'aiFittingFullAutoFitButton'):
+            self.ui.aiFittingFullAutoFitButton.clicked.connect(lambda: self._start_ai_prediction("full"))
+
         # ???FittingAutoKButton???
         if hasattr(self.ui, 'FittingAutoKButton'):
             self.ui.FittingAutoKButton.clicked.connect(self._on_auto_k_button_clicked)
@@ -2863,6 +2902,9 @@ class FittingController(QObject):
 
         # ???FittingTextBrowser????????
         self._setup_fitting_text_browser()
+        self._setup_fitting_parameters_context_menu()
+        self._refresh_ai_fitting_models()
+        self._restore_main_ai_settings()
 
     def _connect_cutline_parameter_signals(self, mode: str = 'changed', overrides: dict = None):
         """Cut Line/Center/Vmin/Vmax?????meta ??? & ?????? global_params
@@ -8673,6 +8715,842 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Failed to import parameters: {e}")
             return False
+
+    def _build_fitting_parameter_snapshot(self) -> dict:
+        """Return a portable fitting-parameter snapshot."""
+        try:
+            self.save_particle_parameters()
+        except Exception:
+            pass
+        model_section = {}
+        try:
+            model_section = copy.deepcopy(self.model_params_manager.get_parameter('fitting', None, {}))
+        except Exception:
+            model_section = {}
+        return {
+            "schema": "gimap_fitting_parameters_v1",
+            "saved_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "fitting": copy.deepcopy(self.get_parameters()),
+            "model_parameters": {
+                "fitting": model_section,
+            },
+        }
+
+    def save_fitting_parameters_to_file(self, filepath: str) -> bool:
+        """Save only Cut/Fitting parameters, including particle/global model params."""
+        try:
+            filepath = normalize_path(filepath)
+            os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
+            with open(filepath, "w", encoding="utf-8") as fh:
+                json.dump(self._build_fitting_parameter_snapshot(), fh, indent=4, ensure_ascii=False)
+            self._add_fitting_success(f"Fitting parameters saved to: {filepath}")
+            return True
+        except Exception as e:
+            self._add_fitting_error(f"Failed to save fitting parameters: {e}")
+            return False
+
+    def load_fitting_parameters_from_file(self, filepath: str) -> bool:
+        """Load a Cut/Fitting parameter snapshot and refresh the fitting UI."""
+        try:
+            filepath = normalize_path(filepath)
+            with open(filepath, "r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+
+            fitting_params = payload.get("fitting") if isinstance(payload, dict) else None
+            if isinstance(fitting_params, dict):
+                self.set_parameters(fitting_params)
+
+            model_fitting = None
+            if isinstance(payload, dict):
+                model_params = payload.get("model_parameters")
+                if isinstance(model_params, dict):
+                    model_fitting = model_params.get("fitting")
+                if model_fitting is None and ("particles" in payload or "global_parameters" in payload):
+                    model_fitting = payload
+                if model_fitting is None and "fitting" in payload and isinstance(payload.get("fitting"), dict):
+                    maybe = payload["fitting"]
+                    if "particles" in maybe or "global_parameters" in maybe:
+                        model_fitting = maybe
+
+            if isinstance(model_fitting, dict):
+                if not hasattr(self.model_params_manager, "_parameters") or not isinstance(self.model_params_manager._parameters, dict):
+                    self.model_params_manager._parameters = {}
+                self.model_params_manager._parameters["fitting"] = copy.deepcopy(model_fitting)
+                self.model_params_manager.save_parameters()
+                self.reload_particle_parameters()
+
+            self.parameters_changed.emit(self.current_parameters)
+            self._add_fitting_success(f"Fitting parameters loaded from: {filepath}")
+            return True
+        except Exception as e:
+            self._add_fitting_error(f"Failed to load fitting parameters: {e}")
+            return False
+
+    def save_fitting_parameters_dialog(self) -> bool:
+        filepath, _ = QFileDialog.getSaveFileName(
+            self.main_window or self.ui,
+            "Save Fitting Parameters",
+            "config/fitting_parameters.json",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        return self.save_fitting_parameters_to_file(filepath) if filepath else False
+
+    def load_fitting_parameters_dialog(self) -> bool:
+        filepath, _ = QFileDialog.getOpenFileName(
+            self.main_window or self.ui,
+            "Load Fitting Parameters",
+            "config/",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        return self.load_fitting_parameters_from_file(filepath) if filepath else False
+
+    def _setup_fitting_parameters_context_menu(self) -> None:
+        for name in ("fitBox", "sampleParametersBox", "gisaxsFittingPageScrollAreaWidgetContents"):
+            widget = getattr(self.ui, name, None)
+            if widget is None:
+                continue
+            widget.setContextMenuPolicy(Qt.CustomContextMenu)
+            try:
+                widget.customContextMenuRequested.connect(self._show_fitting_parameters_context_menu)
+            except Exception:
+                pass
+
+    def _show_fitting_parameters_context_menu(self, pos: QPoint) -> None:
+        widget = self.sender()
+        if widget is None:
+            return
+        menu = QMenu(widget)
+        save_action = menu.addAction("Save Fitting Parameters...")
+        load_action = menu.addAction("Load Fitting Parameters...")
+        menu.addSeparator()
+        export_particles_action = menu.addAction("Export Particle Parameters Only...")
+        import_particles_action = menu.addAction("Import Particle Parameters Only...")
+        reload_action = menu.addAction("Reload Parameters from Config")
+        menu.addSeparator()
+        ai_action = menu.addAction("Open AI Fitting Workspace...")
+        action = menu.exec_(widget.mapToGlobal(pos))
+        if action == save_action:
+            self.save_fitting_parameters_dialog()
+        elif action == load_action:
+            self.load_fitting_parameters_dialog()
+        elif action == export_particles_action:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self.main_window or self.ui,
+                "Export Particle Parameters",
+                "config/model_parameters_fitting.json",
+                "JSON Files (*.json);;All Files (*)",
+            )
+            if filepath:
+                self.export_particle_parameters(filepath)
+        elif action == import_particles_action:
+            filepath, _ = QFileDialog.getOpenFileName(
+                self.main_window or self.ui,
+                "Import Particle Parameters",
+                "config/",
+                "JSON Files (*.json);;All Files (*)",
+            )
+            if filepath:
+                self.import_particle_parameters(filepath)
+        elif action == reload_action:
+            self.reload_particle_parameters()
+        elif action == ai_action:
+            self.open_ai_fitting_workspace()
+
+    def _ai_fitting_settings(self) -> dict:
+        try:
+            from core.user_settings import user_settings
+            settings = user_settings.get("ai_fitting", {})
+            return settings if isinstance(settings, dict) else {}
+        except Exception:
+            return {}
+
+    def _save_ai_fitting_settings(self, **updates) -> None:
+        try:
+            from core.user_settings import user_settings
+            settings = self._ai_fitting_settings()
+            settings.update(updates)
+            user_settings.set("ai_fitting", settings)
+            user_settings.save_settings()
+        except Exception:
+            pass
+
+    def _ai_fitting_base_dirs(self) -> list:
+        settings = self._ai_fitting_settings()
+        stored = settings.get("model_base_dirs")
+        dirs = []
+        if isinstance(stored, list):
+            dirs.extend(Path(p) for p in stored if isinstance(p, str) and p.strip())
+        dirs.extend(default_ai_fitting_model_base_dirs(Path.cwd()))
+        extra = settings.get("extra_model_paths")
+        if isinstance(extra, list):
+            dirs.extend(Path(p) for p in extra if isinstance(p, str) and p.strip())
+        unique = []
+        seen = set()
+        for path in dirs:
+            key = str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(path)
+        return unique
+
+    def _scan_ai_fitting_models(self) -> list[ModelInfo]:
+        return discover_ai_fitting_models(self._ai_fitting_base_dirs())
+
+    def open_ai_fitting_workspace(self) -> None:
+        if getattr(self, "_ai_fitting_dialog", None) is not None:
+            self._refresh_ai_fitting_models()
+            self._ai_fitting_dialog.show()
+            self._ai_fitting_dialog.raise_()
+            self._ai_fitting_dialog.activateWindow()
+            return
+
+        dialog = QDialog(self.main_window or self.ui)
+        dialog.setWindowTitle("AI Fitting Workspace")
+        dialog.resize(760, 460)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        model_row = QHBoxLayout()
+        model_row.addWidget(QLabel("AI Model:", dialog))
+        self._ai_model_combo = QComboBox(dialog)
+        self._ai_model_combo.setMinimumWidth(360)
+        model_row.addWidget(self._ai_model_combo, 1)
+        refresh_btn = QPushButton("Refresh", dialog)
+        browse_btn = QPushButton("Browse...", dialog)
+        model_row.addWidget(refresh_btn)
+        model_row.addWidget(browse_btn)
+        layout.addLayout(model_row)
+
+        constraint_row = QHBoxLayout()
+        constraint_row.addWidget(QLabel("Constraint Mode:", dialog))
+        self._ai_constraint_combo = QComboBox(dialog)
+        self._ai_constraint_combo.addItems(["Free", "Fixed K", "Fixed Combination", "Current Manual Model"])
+        constraint_row.addWidget(self._ai_constraint_combo)
+        self._ai_constraint_k_combo = QComboBox(dialog)
+        self._ai_constraint_k_combo.addItems(["1", "2", "3", "4"])
+        constraint_row.addWidget(QLabel("K:", dialog))
+        constraint_row.addWidget(self._ai_constraint_k_combo)
+        constraint_row.addStretch(1)
+        layout.addLayout(constraint_row)
+
+        self._ai_status_label = QLabel("Status: Ready", dialog)
+        self._ai_progress = QProgressBar(dialog)
+        self._ai_progress.setRange(0, 100)
+        self._ai_progress.setValue(0)
+        layout.addWidget(self._ai_status_label)
+        layout.addWidget(self._ai_progress)
+
+        action_row = QHBoxLayout()
+        self._ai_action_buttons = []
+        for text in ("Fast Predict", "Full Auto Fit", "Show Results", "Advanced Constraints"):
+            btn = QPushButton(text, dialog)
+            btn.setMinimumHeight(28)
+            if text == "Fast Predict":
+                btn.clicked.connect(lambda _checked=False: self._start_ai_prediction("fast"))
+            elif text == "Full Auto Fit":
+                btn.clicked.connect(lambda _checked=False: self._start_ai_prediction("full"))
+            elif text == "Show Results":
+                btn.clicked.connect(lambda _checked=False: self._show_ai_candidate_table())
+            else:
+                btn.clicked.connect(lambda _checked=False, label=text: self._ai_workspace_placeholder(label))
+            action_row.addWidget(btn)
+            self._ai_action_buttons.append(btn)
+        self._ai_stop_button = QPushButton("Stop", dialog)
+        self._ai_stop_button.setEnabled(False)
+        self._ai_stop_button.clicked.connect(self._stop_ai_fitting_process)
+        action_row.addWidget(self._ai_stop_button)
+        layout.addLayout(action_row)
+
+        self._ai_log_browser = QTextBrowser(dialog)
+        self._ai_log_browser.setMinimumHeight(180)
+        self._ai_log_browser.setPlaceholderText("AI fitting log")
+        layout.addWidget(self._ai_log_browser, 1)
+
+        close_row = QHBoxLayout()
+        self._ai_open_output_button = QPushButton("Open Output Folder", dialog)
+        self._ai_open_output_button.setEnabled(bool(getattr(self, "_ai_output_dir", None)))
+        self._ai_open_output_button.clicked.connect(self._open_ai_output_folder)
+        close_row.addWidget(self._ai_open_output_button)
+        close_row.addStretch(1)
+        close_btn = QPushButton("Close", dialog)
+        close_btn.clicked.connect(dialog.close)
+        close_row.addWidget(close_btn)
+        layout.addLayout(close_row)
+
+        refresh_btn.clicked.connect(self._refresh_ai_fitting_models)
+        browse_btn.clicked.connect(self._browse_ai_fitting_model)
+        self._ai_model_combo.currentIndexChanged.connect(self._on_ai_model_selected)
+        self._ai_constraint_combo.currentTextChanged.connect(self._on_ai_constraint_mode_changed)
+        dialog.finished.connect(lambda _result: setattr(self, "_ai_fitting_dialog", None))
+        self._ai_fitting_dialog = dialog
+        self._refresh_ai_fitting_models()
+        self._restore_ai_workspace_settings()
+        dialog.show()
+
+    def _refresh_ai_fitting_models(self) -> None:
+        models = self._scan_ai_fitting_models()
+        self._ai_fitting_models = models
+        for combo in (getattr(self, "_ai_model_combo", None), getattr(self.ui, "aiFittingModelComboBox", None)):
+            if combo is None:
+                continue
+            combo.blockSignals(True)
+            combo.clear()
+            for model in models:
+                combo.addItem(model.display_name, str(model.artifact_path))
+            combo.blockSignals(False)
+        self._restore_ai_model_selection()
+        if models:
+            self._set_ai_workspace_status(f"Found {len(models)} AI fitting model(s).", 0)
+        else:
+            self._set_ai_workspace_status("No AI fitting model found in modules/Fitting_1D_Model/ or modules/Fitting_1D_model/", 0)
+
+    def _browse_ai_fitting_model(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self.main_window or self.ui,
+            "Select AI Fitting Model Folder",
+            os.path.join(os.getcwd(), "modules", "Fitting_1D_Model"),
+        )
+        if not folder:
+            return
+        found = discover_model_in_path(Path(folder))
+        if not found:
+            QMessageBox.warning(
+                self.main_window or self.ui,
+                "AI Fitting Model",
+                "Selected folder must contain a .keras artifact or a TensorFlow SavedModel root/subfolder.",
+            )
+            return
+        settings = self._ai_fitting_settings()
+        extra = settings.get("extra_model_paths")
+        extra = extra if isinstance(extra, list) else []
+        if folder not in extra:
+            extra.append(folder)
+        self._save_ai_fitting_settings(extra_model_paths=extra, last_selected_model=str(found[0].artifact_path))
+        self._refresh_ai_fitting_models()
+        self._set_ai_workspace_status(f"Selected model: {found[0].artifact_path}", 0)
+
+    def _restore_ai_model_selection(self) -> None:
+        selected = self._ai_fitting_settings().get("last_selected_model")
+        if not selected:
+            return
+        for combo in (getattr(self, "_ai_model_combo", None), getattr(self.ui, "aiFittingModelComboBox", None)):
+            if combo is None:
+                continue
+            for i in range(combo.count()):
+                if combo.itemData(i) == selected:
+                    combo.setCurrentIndex(i)
+                    break
+
+    def _restore_ai_workspace_settings(self) -> None:
+        mode = self._ai_fitting_settings().get("last_constraint_mode", "Free")
+        combo = getattr(self, "_ai_constraint_combo", None)
+        if combo is not None:
+            idx = combo.findText(str(mode))
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+            self._on_ai_constraint_mode_changed(combo.currentText())
+
+    def _restore_main_ai_settings(self) -> None:
+        mode = self._ai_fitting_settings().get("last_constraint_mode", "Free")
+        combo = getattr(self.ui, "aiFittingConstraintComboBox", None)
+        if combo is not None:
+            label = "Free Prediction" if mode == "Free" else str(mode)
+            idx = combo.findText(label)
+            combo.blockSignals(True)
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+            combo.blockSignals(False)
+
+    def _on_ai_model_selected(self, index: int) -> None:
+        combo = self.sender()
+        if combo is None or index < 0:
+            return
+        path = combo.itemData(index)
+        if path:
+            self._save_ai_fitting_settings(last_selected_model=str(path))
+            self._sync_ai_model_combos(str(path))
+
+    def _sync_ai_model_combos(self, selected_path: str) -> None:
+        for combo in (getattr(self.ui, "aiFittingModelComboBox", None), getattr(self, "_ai_model_combo", None)):
+            if combo is None:
+                continue
+            for i in range(combo.count()):
+                if combo.itemData(i) == selected_path:
+                    combo.blockSignals(True)
+                    combo.setCurrentIndex(i)
+                    combo.blockSignals(False)
+                    break
+
+    def _on_ai_constraint_mode_changed(self, mode: str) -> None:
+        self._save_ai_fitting_settings(last_constraint_mode=mode)
+        k_combo = getattr(self, "_ai_constraint_k_combo", None)
+        if k_combo is not None:
+            k_combo.setVisible(mode == "Fixed K")
+
+    def _set_ai_workspace_status(self, text: str, progress: int = None) -> None:
+        main_label = getattr(self.ui, "aiFittingStatusLabel", None) or getattr(self.ui, "fitMethodInfoLabel", None)
+        if main_label is not None:
+            main_label.setText(f"Status: {text}")
+        label = getattr(self, "_ai_status_label", None)
+        if label is not None:
+            label.setText(f"Status: {text}")
+        bar = getattr(self, "_ai_progress", None)
+        if bar is not None and progress is not None:
+            bar.setValue(int(progress))
+        browser = getattr(self, "_ai_log_browser", None)
+        if browser is not None:
+            browser.append(text)
+
+    def _ai_workspace_placeholder(self, action_name: str) -> None:
+        if action_name == "Advanced Constraints":
+            self._show_advanced_constraints_dialog()
+            return
+        if action_name == "Show Results":
+            self._show_ai_candidate_table()
+            return
+        self._set_ai_workspace_status(
+            f"{action_name} is available after a prediction run.",
+            0,
+        )
+
+    def _selected_ai_model_path(self) -> Path | None:
+        for combo in (getattr(self, "_ai_model_combo", None), getattr(self.ui, "aiFittingModelComboBox", None)):
+            if combo is None or combo.currentIndex() < 0:
+                continue
+            data = combo.itemData(combo.currentIndex())
+            if data:
+                return Path(str(data))
+        selected = self._ai_fitting_settings().get("last_selected_model")
+        return Path(str(selected)) if selected else None
+
+    def _current_ai_curve_arrays(self):
+        def clean(q_arr, i_arr, sigma_arr=None):
+            q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
+            i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
+            n = min(q_arr.size, i_arr.size)
+            q_arr, i_arr = q_arr[:n], i_arr[:n]
+            if sigma_arr is None:
+                sigma_arr = np.maximum(0.05 * np.maximum(i_arr, 1e-30), 1e-30)
+            else:
+                sigma_arr = np.asarray(sigma_arr, dtype=np.float64).reshape(-1)[:n]
+            mask = np.isfinite(q_arr) & np.isfinite(i_arr) & np.isfinite(sigma_arr) & (q_arr > 0) & (i_arr > 0) & (sigma_arr > 0)
+            if np.sum(mask) < 16:
+                return None
+            return q_arr[mask], i_arr[mask], sigma_arr[mask]
+
+        def apply_fit_region(q_arr, i_arr, sigma_arr=None):
+            q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
+            i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
+            n = min(q_arr.size, i_arr.size)
+            q_arr, i_arr = q_arr[:n], i_arr[:n]
+            if sigma_arr is not None:
+                sigma_arr = np.asarray(sigma_arr, dtype=np.float64).reshape(-1)[:n]
+            if getattr(self, "_roi_controls_enabled", True) and self._roi_min is not None and self._roi_max is not None:
+                lo = min(float(self._roi_min), float(self._roi_max))
+                hi = max(float(self._roi_min), float(self._roi_max))
+                region_mask = np.isfinite(q_arr) & (q_arr >= lo) & (q_arr <= hi)
+                if np.sum(region_mask) >= 16:
+                    q_arr = q_arr[region_mask]
+                    i_arr = i_arr[region_mask]
+                    if sigma_arr is not None:
+                        sigma_arr = sigma_arr[region_mask]
+            return clean(q_arr, i_arr, sigma_arr)
+
+        try:
+            if self.q_ROI is not None and self.I_ROI is not None:
+                result = clean(self.q_ROI, self.I_ROI)
+                if result is not None:
+                    return result
+        except Exception:
+            pass
+        if self.q is not None and self.I is not None:
+            result = apply_fit_region(self.q, self.I)
+            if result is not None:
+                return result
+        if isinstance(getattr(self, "current_1d_data", None), dict):
+            data = self.current_1d_data
+            result = apply_fit_region(data.get("q", []), data.get("I", []), data.get("err"))
+            if result is not None:
+                return result
+        if isinstance(getattr(self, "cut", None), dict):
+            result = apply_fit_region(self.cut.get("q", []), self.cut.get("I", []))
+            if result is not None:
+                return result
+        return None
+
+    def _prepare_ai_prediction_io(self) -> tuple[Path, Path] | None:
+        arrays = self._current_ai_curve_arrays()
+        if arrays is None:
+            QMessageBox.warning(
+                self.main_window or self.ui,
+                "AI Fitting",
+                "No valid positive 1D curve is loaded. Load or cut a 1D curve before prediction.",
+            )
+            return None
+        q_arr, i_arr, sigma_arr = arrays
+        root = Path.cwd() / "AI_Fitting_Output"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_dir = root / f"prediction_{timestamp}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        input_csv = out_dir / "input_curve.csv"
+        table = np.column_stack([q_arr, i_arr, sigma_arr])
+        np.savetxt(input_csv, table, delimiter=",", header="q,I,sigma", comments="")
+        self._ai_output_dir = out_dir
+        self._ai_input_csv = input_csv
+        return input_csv, out_dir
+
+    def _ai_exact_nonempty_arg(self):
+        constraints = self.build_ai_constraints_json_from_ui()
+        exact = constraints.get("exact_nonempty")
+        try:
+            exact = int(exact)
+        except Exception:
+            exact = None
+        return exact if exact and exact > 0 else None
+
+    def _start_ai_prediction(self, run_mode: str = "fast") -> None:
+        process = getattr(self, "_ai_process", None)
+        if process is not None and process.state() != QProcess.NotRunning:
+            self._set_ai_workspace_status("AI prediction is already running.", None)
+            return
+
+        model_path = self._selected_ai_model_path()
+        if model_path is None or not model_path.exists():
+            QMessageBox.warning(
+                self.main_window or self.ui,
+                "AI Fitting",
+                "Please import or select a valid AI fitting model first.",
+            )
+            return
+        io_paths = self._prepare_ai_prediction_io()
+        if io_paths is None:
+            return
+        input_csv, out_dir = io_paths
+
+        script = Path.cwd() / "utils" / "predict_topK.py"
+        if not script.is_file():
+            QMessageBox.warning(self.main_window or self.ui, "AI Fitting", f"Prediction script not found:\n{script}")
+            return
+
+        exact = self._ai_exact_nonempty_arg()
+        args = [
+            str(script),
+            "--model_dir", str(model_path),
+            "--input_csv", str(input_csv),
+            "--output_dir", str(out_dir),
+            "--score_mode", "unweighted_log",
+            "--sampling_std", "0.005",
+            "--include_mean_candidate",
+            "--allow_unsafe_lambda",
+        ]
+        if run_mode == "full":
+            args.extend([
+                "--num_samples", "5000",
+                "--top_k", "20",
+                "--refine_top_n", "5",
+                "--refine_max_nfev", "80",
+                "--refine_progress_interval", "20",
+                "--refine_stall_patience", "80",
+                "--refine_stall_tol", "1e-4",
+                "--refine_target_logrmse", "0.08",
+                "--progress_interval", "100",
+            ])
+        else:
+            args.extend([
+                "--num_samples", "128",
+                "--top_k", "20",
+                "--refine_top_n", "0",
+                "--progress_interval", "16",
+            ])
+        if exact is not None:
+            args.extend(["--exact_nonempty", str(exact)])
+
+        process = QProcess(self.main_window or self.ui)
+        process.setWorkingDirectory(str(Path.cwd()))
+        process.readyReadStandardOutput.connect(self._on_ai_process_stdout)
+        process.readyReadStandardError.connect(self._on_ai_process_stderr)
+        process.finished.connect(self._on_ai_process_finished)
+        process.errorOccurred.connect(self._on_ai_process_error)
+        self._ai_process = process
+        self._ai_candidate_rows = []
+        self._set_ai_running_state(True)
+        self._set_ai_workspace_status(f"Starting {run_mode} AI fitting run...", 0)
+        self._append_ai_log(f"Command: {sys.executable} {' '.join(args)}")
+        process.start(sys.executable, args)
+
+    def _set_ai_running_state(self, running: bool) -> None:
+        for button in getattr(self, "_ai_action_buttons", []) or []:
+            text = button.text()
+            if text in ("Fast Predict", "Full Auto Fit"):
+                button.setEnabled(not running)
+        for name in ("aiFittingFastPredictButton", "aiFittingFullAutoFitButton"):
+            button = getattr(self.ui, name, None)
+            if button is not None:
+                button.setEnabled(not running)
+        if self._ai_stop_button is not None:
+            self._ai_stop_button.setEnabled(running)
+        if self._ai_open_output_button is not None:
+            self._ai_open_output_button.setEnabled(bool(getattr(self, "_ai_output_dir", None)))
+
+    def _append_ai_log(self, text: str) -> None:
+        text = str(text).rstrip()
+        if not text:
+            return
+        browser = getattr(self, "_ai_log_browser", None)
+        if browser is not None:
+            browser.append(text)
+        out_dir = getattr(self, "_ai_output_dir", None)
+        if out_dir:
+            try:
+                with (Path(out_dir) / "gui_run.log").open("a", encoding="utf-8") as fh:
+                    fh.write(text + "\n")
+            except Exception:
+                pass
+
+    def _on_ai_process_stdout(self) -> None:
+        process = getattr(self, "_ai_process", None)
+        if process is None:
+            return
+        text = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        self._handle_ai_process_text(text)
+
+    def _on_ai_process_stderr(self) -> None:
+        process = getattr(self, "_ai_process", None)
+        if process is None:
+            return
+        text = bytes(process.readAllStandardError()).decode("utf-8", errors="replace")
+        self._handle_ai_process_text(text)
+
+    def _handle_ai_process_text(self, text: str) -> None:
+        for line in str(text).splitlines():
+            self._append_ai_log(line)
+            match = re.search(r"Progress\s+(\d+)/(\d+)", line)
+            if match:
+                current = int(match.group(1))
+                total = max(1, int(match.group(2)))
+                self._set_ai_workspace_status(f"Sampling progress {current}/{total}", int(current * 100 / total))
+            elif "Refine #" in line:
+                self._set_ai_workspace_status(line[:180], None)
+            elif line.startswith("Wrote "):
+                self._set_ai_workspace_status(line, 100)
+
+    def _on_ai_process_finished(self, exit_code: int, exit_status) -> None:
+        self._set_ai_running_state(False)
+        if exit_code == 0:
+            self._set_ai_workspace_status(f"AI fitting finished. Output: {self._ai_output_dir}", 100)
+            self._show_ai_candidate_table(self._ai_output_dir)
+        else:
+            self._set_ai_workspace_status(f"AI fitting failed with exit code {exit_code}. See log for details.", 0)
+
+    def _on_ai_process_error(self, error) -> None:
+        self._set_ai_running_state(False)
+        self._set_ai_workspace_status(f"AI process error: {error}", 0)
+
+    def _stop_ai_fitting_process(self) -> None:
+        process = getattr(self, "_ai_process", None)
+        if process is None or process.state() == QProcess.NotRunning:
+            return
+        self._append_ai_log("Stopping AI fitting process...")
+        process.terminate()
+        QTimer.singleShot(2500, lambda: process.kill() if process.state() != QProcess.NotRunning else None)
+
+    def _open_ai_output_folder(self) -> None:
+        out_dir = getattr(self, "_ai_output_dir", None)
+        if out_dir:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(out_dir))))
+
+    def _show_ai_candidate_table(self, output_dir: Path | None = None) -> None:
+        output_dir = Path(output_dir or getattr(self, "_ai_output_dir", "") or "")
+        results_path = output_dir / "top20_candidates.json"
+        if not results_path.is_file():
+            self._set_ai_workspace_status("No AI candidate results found yet.", None)
+            return
+        try:
+            with results_path.open("r", encoding="utf-8") as fh:
+                rows = json.load(fh)
+        except Exception as exc:
+            QMessageBox.warning(self.main_window or self.ui, "AI Fitting Results", f"Failed to read results:\n{exc}")
+            return
+        if not isinstance(rows, list) or not rows:
+            self._set_ai_workspace_status("AI fitting produced no candidates.", None)
+            return
+        self._ai_candidate_rows = rows
+
+        dialog = QDialog(self.main_window or self.ui)
+        dialog.setWindowTitle("AI Fitting Candidates")
+        dialog.resize(900, 520)
+        layout = QVBoxLayout(dialog)
+        table = QTableWidget(len(rows), 7, dialog)
+        table.setHorizontalHeaderLabels(["Rank", "Combination", "Score Prob.", "Posterior", "logRMSE", "Chi2", "Source"])
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setSelectionMode(QTableWidget.SingleSelection)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        for row_idx, row in enumerate(rows):
+            values = [
+                row.get("rank", row_idx + 1),
+                row.get("combination", ""),
+                f"{float(row.get('score_weighted_probability', 0.0)) * 100:.2f}%",
+                f"{float(row.get('posterior_frequency', 0.0)) * 100:.2f}%",
+                f"{float(row.get('best_log_rmse', np.nan)):.5g}",
+                f"{float(row.get('best_chi2_weighted', np.nan)):.5g}",
+                row.get("best_source", ""),
+            ]
+            for col, value in enumerate(values):
+                table.setItem(row_idx, col, QTableWidgetItem(str(value)))
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        for col in range(2, 7):
+            table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        table.selectRow(0)
+        layout.addWidget(table, 1)
+
+        button_row = QHBoxLayout()
+        load_btn = QPushButton("Load Selected Params", dialog)
+        open_btn = QPushButton("Open Output Folder", dialog)
+        close_btn = QPushButton("Close", dialog)
+        load_btn.clicked.connect(lambda: self._load_selected_ai_candidate_from_table(table, rows, dialog))
+        table.doubleClicked.connect(lambda _index: self._load_selected_ai_candidate_from_table(table, rows, dialog))
+        open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_dir))))
+        close_btn.clicked.connect(dialog.close)
+        button_row.addWidget(load_btn)
+        button_row.addWidget(open_btn)
+        button_row.addStretch(1)
+        button_row.addWidget(close_btn)
+        layout.addLayout(button_row)
+        self._ai_results_dialog = dialog
+        dialog.show()
+
+    def _load_selected_ai_candidate_from_table(self, table: QTableWidget, rows: list, dialog: QDialog | None = None) -> None:
+        selected = table.currentRow()
+        if selected < 0 or selected >= len(rows):
+            return
+        if self._load_ai_candidate_params(rows[selected]):
+            if dialog is not None:
+                dialog.accept()
+
+    def _load_ai_candidate_params(self, row: dict) -> bool:
+        components = row.get("components") or []
+        if not isinstance(components, list) or not components:
+            QMessageBox.warning(self.main_window or self.ui, "AI Fitting", "Selected candidate has no component parameters.")
+            return False
+        try:
+            while len(self._iter_particle_widget_ids()) < len(components):
+                self._on_add_particle_clicked()
+            for widget_id in self._iter_particle_widget_ids():
+                self.set_particle_shape(widget_id, "None")
+
+            shape_map = {
+                "sphere": "Sphere",
+                "cylinder": "Cylinder",
+                "vertical_cylinder": "Vertical Cylinder",
+                "vertical cylinder": "Vertical Cylinder",
+                "verticalcylinder": "Vertical Cylinder",
+            }
+            param_map = {
+                "R": "radius",
+                "sigma_R": "sigma_radius",
+                "h": "height",
+                "sigma_h": "sigma_height",
+                "D": "diameter",
+                "sigma_D": "sigma_diameter",
+            }
+            widget_ids = self._iter_particle_widget_ids()
+            for idx, component in enumerate(components):
+                widget_id = widget_ids[idx]
+                raw_type = str(component.get("type", "")).strip()
+                shape = shape_map.get(raw_type.lower().replace("-", "_"), raw_type)
+                if shape not in COMPONENT_PARAMETER_SCHEMAS:
+                    shape = "Sphere"
+                particle_id = f"particle_{widget_id}"
+                self.model_params_manager.set_particle_shape("fitting", particle_id, shape)
+                self.model_params_manager.set_particle_enabled("fitting", particle_id, True)
+                self.model_params_manager.set_particle_parameter("fitting", particle_id, shape, "intensity", float(component.get("weight", 1.0)))
+                params = component.get("params") or {}
+                for source_key, target_key in param_map.items():
+                    if source_key in params:
+                        self.model_params_manager.set_particle_parameter(
+                            "fitting", particle_id, shape, target_key, float(params[source_key])
+                        )
+
+            global_map = {
+                "background": "background",
+                "BG": "background",
+                "sigma_res": "sigma_res",
+                "sigma_Res": "sigma_res",
+                "nu_res": "nu_res",
+                "nu_Res": "nu_res",
+                "int_res": "int_res",
+                "int_Res": "int_res",
+                "k": "k_value",
+                "k_value": "k_value",
+            }
+            for key, value in (row.get("global_params") or {}).items():
+                target = global_map.get(str(key), global_map.get(str(key).lower()))
+                if target is not None:
+                    self.model_params_manager.set_global_parameter("fitting", target, float(value))
+            self.model_params_manager.save_parameters()
+            self.reload_particle_parameters()
+            self._set_ai_workspace_status(f"Loaded AI candidate #{row.get('rank', '')}: {row.get('combination', '')}", None)
+            return True
+        except Exception as exc:
+            QMessageBox.warning(self.main_window or self.ui, "AI Fitting", f"Failed to load candidate parameters:\n{exc}")
+            return False
+
+    def build_ai_constraints_json_from_ui(self) -> dict:
+        mode = self._ai_fitting_settings().get("last_constraint_mode", "Free")
+        workspace_combo = getattr(self, "_ai_constraint_combo", None)
+        if workspace_combo is not None:
+            mode = workspace_combo.currentText()
+        main_combo = getattr(self.ui, "aiFittingConstraintComboBox", None)
+        if main_combo is not None and workspace_combo is None:
+            mode = main_combo.currentText().replace(" Prediction", "")
+        payload = {"mode": mode, "constraints": {}}
+        if mode == "Fixed K":
+            k_combo = getattr(self, "_ai_constraint_k_combo", None)
+            try:
+                payload["exact_nonempty"] = int(k_combo.currentText()) if k_combo is not None else 1
+            except Exception:
+                payload["exact_nonempty"] = 1
+        elif mode == "Current Manual Model":
+            shapes = []
+            try:
+                for widget_id in self._iter_particle_widget_ids():
+                    shape = self.get_particle_shape(widget_id)
+                    if shape and shape != "None":
+                        shapes.append(shape.lower().replace(" ", "_"))
+            except Exception:
+                shapes = []
+            payload["constraints"]["fixed_combination"] = shapes
+            payload["exact_nonempty"] = len(shapes) if shapes else None
+        elif mode == "Fixed Combination":
+            payload["constraints"]["fixed_combination"] = []
+            payload["warning"] = "Fixed Combination editor skeleton is present; component rows are not wired yet."
+        return payload
+
+    def _show_advanced_constraints_dialog(self) -> None:
+        dialog = QDialog(self.main_window or self.ui)
+        dialog.setWindowTitle("Advanced Constraints")
+        dialog.resize(560, 420)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Advanced constraints skeleton", dialog))
+        text = QTextBrowser(dialog)
+        text.setPlainText(
+            "This dialog is reserved for parameter range constraints:\n"
+            "- Component slots: free / exist / empty\n"
+            "- Allowed type: sphere / cylinder / vertical_cylinder / all\n"
+            "- Parameter ranges: R, sigma_R, h, sigma_h, D, sigma_D\n"
+            "- Global ranges: BG, sigma_Res, nu_Res, int_Res, k\n\n"
+            "Current JSON skeleton:\n"
+            + json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False)
+        )
+        layout.addWidget(text, 1)
+        close = QPushButton("Close", dialog)
+        close.clicked.connect(dialog.accept)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(close)
+        layout.addLayout(row)
+        dialog.exec_()
 
     def get_global_parameter(self, param: str) -> float:
         """No description."""

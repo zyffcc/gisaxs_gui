@@ -1,0 +1,36 @@
+CUDA_VISIBLE_DEVICES=
+/usr/bin/nvidia-smi
+Fri Jun  5 15:09:39 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.159.03             Driver Version: 580.159.03     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla P100-PCIE-16GB           On  |   00000000:86:00.0 Off |                    0 |
+| N/A   48C    P0             28W /  250W |       0MiB /  16384MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Loading K=1 subset...
+epoch 001 | train_loss=0.451675 | type_accuracy=0.5156 | param_mae=0.313476 | global_mae=0.255423
+epoch 005 | train_loss=-1.413524 | type_accuracy=0.8438 | param_mae=0.258463 | global_mae=0.237933
+epoch 010 | train_loss=-2.061179 | type_accuracy=0.7656 | param_mae=0.228277 | global_mae=0.216947
+epoch 015 | train_loss=-2.236462 | type_accuracy=0.8438 | param_mae=0.219304 | global_mae=0.203956
+epoch 020 | train_loss=-2.619772 | type_accuracy=0.8125 | param_mae=0.207331 | global_mae=0.194462
+epoch 025 | train_loss=-2.893523 | type_accuracy=0.8125 | param_mae=0.204473 | global_mae=0.192332
+epoch 030 | train_loss=-3.174810 | type_accuracy=0.8438 | param_mae=0.188762 | global_mae=0.187549
+epoch 035 | train_loss=-3.457600 | type_accuracy=0.8438 | param_mae=0.187055 | global_mae=0.183674
+epoch 040 | train_loss=-3.568758 | type_accuracy=0.8125 | param_mae=0.177916 | global_mae=0.177880
+epoch 045 | train_loss=-3.911124 | type_accuracy=0.8750 | param_mae=0.180517 | global_mae=0.170858
+epoch 050 | train_loss=-4.025955 | type_accuracy=0.8906 | param_mae=0.168162 | global_mae=0.166279
+Rendering predicted_curve vs saved_curve for all selected samples...
+Done. Outputs written to /home/zhaiyufe/PycharmProjects/ML_Fitting_1D_GISAXS/Training/overfit_debug_output
