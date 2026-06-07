@@ -41,6 +41,7 @@ class PredictResult:
     processing_time: float = 0.0
     error_message: str = ""
     prediction_data: Optional[Dict[str, Any]] = None
+    stack_count: int = 1
     
     @property
     def duration_str(self) -> str:
@@ -65,7 +66,7 @@ class PredictResult:
 class PredictResultsTableModel(QAbstractTableModel):
     """预测结果表格模型"""
     
-    COLUMNS = ['File Name', 'Status', 'Duration', 'Error']
+    COLUMNS = ['Input Stack', 'Files', 'Status', 'Duration', 'Error']
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -92,25 +93,27 @@ class PredictResultsTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             if col == 0:  # File Name
                 return result.file_name
-            elif col == 1:  # Status
+            elif col == 1:  # Stack count
+                return f"{max(1, int(getattr(result, 'stack_count', 1)))}"
+            elif col == 2:  # Status
                 return result.status.value
-            elif col == 2:  # Duration
+            elif col == 3:  # Duration
                 return result.duration_str
-            elif col == 3:  # Error
+            elif col == 4:  # Error
                 return result.error_message[:50] + "..." if len(result.error_message) > 50 else result.error_message
                 
         elif role == Qt.ForegroundRole:
-            if col == 1:  # Status column color
+            if col == 2:  # Status column color
                 return QBrush(result.status_color)
                 
         elif role == Qt.FontRole:
-            if col == 1 and result.status == PredictStatus.RUNNING:
+            if col == 2 and result.status == PredictStatus.RUNNING:
                 font = QFont()
                 font.setBold(True)
                 return font
                 
         elif role == Qt.ToolTipRole:
-            if col == 3 and result.error_message:
+            if col == 4 and result.error_message:
                 return result.error_message
             elif col == 0:
                 return result.file_path
@@ -316,8 +319,9 @@ class MultiFilePredictResultsWidget(QWidget):
         
         self.sort_combo = QComboBox()
         self.sort_combo.addItem("File Name", 0)
-        self.sort_combo.addItem("Status", 1) 
-        self.sort_combo.addItem("Duration", 2)
+        self.sort_combo.addItem("Stack Files", 1)
+        self.sort_combo.addItem("Status", 2)
+        self.sort_combo.addItem("Duration", 3)
         filter_layout.addWidget(self.sort_combo)
         
         self.sort_order_btn = QPushButton("Asc")
@@ -354,7 +358,8 @@ class MultiFilePredictResultsWidget(QWidget):
         header.setSectionResizeMode(0, QHeaderView.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.Stretch)
         
         # 启用右键菜单
         self.table_view.setContextMenuPolicy(Qt.CustomContextMenu)

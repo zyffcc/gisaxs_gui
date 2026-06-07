@@ -2038,8 +2038,8 @@ class GisaxsPredictWorkspace:
         self.ui.gisaxsPredictEditButton.setText("Edit Config")
         self.ui.gisaxsPredictModelImportButton.setText("Import Model")
         self.ui.gisaxsPredictPredictButton.setText("Predict")
-        self.ui.gisaxsImageExportButton.setText("Export Current Result")
-        self.ui.predict2dExportButton.setText("Export Current Result")
+        self.ui.gisaxsImageExportButton.setText("Export...")
+        self.ui.predict2dExportButton.setText("Export...")
         self.ui.gisaxsPredictEveryValue.setPlaceholderText("1")
         self.ui.gisaxsPredictStackValue.setPlaceholderText("e.g. 5-15")
 
@@ -2054,6 +2054,9 @@ class GisaxsPredictWorkspace:
             self.ui.predict2dExportButton,
         ):
             normalize_button(button, wide=button in (self.ui.gisaxsPredictPredictButton,))
+        for button in (self.ui.gisaxsImageExportButton, self.ui.predict2dExportButton):
+            button.setMinimumWidth(scale_value(120, self.profile, 104))
+            button.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
 
         for widget in (
             self.ui.gisaxsPredictChooseGisaxsFileValue,
@@ -2088,8 +2091,13 @@ class GisaxsPredictWorkspace:
             self.ui.gisaxsPredictChooseFolderButton,
             self.ui.gisaxsPredictChooseFolderValue,
             self.ui.widget_5,
+            self.ui.gisaxsPredictStackLabel,
+            self.ui.gisaxsPredictStackValue,
+            self.ui.gisaxsPredictEveryLabel,
+            self.ui.gisaxsPredictEveryValue,
         ):
             _detach_from_parent_layout(widget)
+        self.ui.widget_5.setVisible(False)
 
         self.ui.gisaxsPredictShowMultiFileResultsButton = QPushButton("Show Multi-File Results", form)
         self.ui.gisaxsPredictShowMultiFileResultsButton.setObjectName("gisaxsPredictShowMultiFileResultsButton")
@@ -2103,7 +2111,35 @@ class GisaxsPredictWorkspace:
         mode_layout.addWidget(self.ui.gisaxsPredictMultiFilesRadioButton)
         mode_layout.addStretch(1)
 
-        hint = QLabel("Range is inclusive. Every controls how many files are stacked per prediction.", form)
+        range_panel = QFrame(form)
+        range_panel.setObjectName("gisaxsPredictRangePanel")
+        range_panel.setStyleSheet(
+            """
+            QFrame#gisaxsPredictRangePanel {
+                background: #f8fafc;
+                border: 1px solid #dbe3ec;
+                border-radius: 8px;
+                padding: 4px;
+            }
+            QLabel { color: #334155; font-weight: 600; }
+            """
+        )
+        range_layout = QHBoxLayout(range_panel)
+        range_layout.setContentsMargins(8, 6, 8, 6)
+        range_layout.setSpacing(8)
+        self.ui.gisaxsPredictStackLabel.setMinimumWidth(scale_value(48, self.profile, 42))
+        self.ui.gisaxsPredictEveryLabel.setMinimumWidth(scale_value(44, self.profile, 38))
+        self.ui.gisaxsPredictStackValue.setMinimumWidth(scale_value(180, self.profile, 150))
+        self.ui.gisaxsPredictStackValue.setMaximumWidth(16777215)
+        self.ui.gisaxsPredictStackValue.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.ui.gisaxsPredictEveryValue.setMinimumWidth(scale_value(72, self.profile, 64))
+        self.ui.gisaxsPredictEveryValue.setMaximumWidth(scale_value(96, self.profile, 84))
+        range_layout.addWidget(self.ui.gisaxsPredictStackLabel)
+        range_layout.addWidget(self.ui.gisaxsPredictStackValue, 1)
+        range_layout.addWidget(self.ui.gisaxsPredictEveryLabel)
+        range_layout.addWidget(self.ui.gisaxsPredictEveryValue)
+
+        hint = QLabel("Inclusive range. Every = files stacked per prediction.", form)
         hint.setObjectName("gisaxsPredictRangeHintLabel")
         hint.setProperty("cardMeta", True)
         hint.setWordWrap(True)
@@ -2114,7 +2150,7 @@ class GisaxsPredictWorkspace:
         grid.addWidget(self.ui.gisaxsPredictChooseGisaxsFileValue, 1, 1, 1, 2)
         grid.addWidget(self.ui.gisaxsPredictChooseFolderButton, 2, 0)
         grid.addWidget(self.ui.gisaxsPredictChooseFolderValue, 2, 1, 1, 2)
-        grid.addWidget(self.ui.widget_5, 3, 0, 1, 2)
+        grid.addWidget(range_panel, 3, 0, 1, 2)
         grid.addWidget(self.ui.gisaxsPredictShowMultiFileResultsButton, 3, 2)
         grid.addWidget(hint, 4, 0, 1, 3)
         grid.setColumnStretch(0, 0)
@@ -2209,11 +2245,187 @@ class GisaxsPredictWorkspace:
     def _build_results_card(self, parent: QWidget) -> PredictCard:
         card = PredictCard("Results / Preview", "GisaxsPredictResultsCard", parent)
         _detach_from_parent_layout(self.ui.gisaxsPredictImageShowWidget)
+        self._modernize_predict_preview_pages()
         self.ui.gisaxsPredictImageShowWidget.setParent(card.content_widget)
         card.setMinimumHeight(scale_value(520, self.profile, 420))
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         card.add_content(self.ui.gisaxsPredictImageShowWidget, 1)
         return card
+
+    def _clear_layout(self, layout) -> None:
+        if layout is None:
+            return
+        while layout.count():
+            item = layout.takeAt(0)
+            child_layout = item.layout()
+            if child_layout is not None:
+                self._clear_layout(child_layout)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+
+    def _make_preview_section(self, title: str, parent: QWidget) -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame(parent)
+        frame.setObjectName("predictPreviewSection")
+        frame.setStyleSheet(
+            """
+            QFrame#predictPreviewSection {
+                background: #f8fafc;
+                border: 1px solid #dde5ef;
+                border-radius: 8px;
+            }
+            """
+        )
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(10, 8, 10, 10)
+        layout.setSpacing(6)
+        label = QLabel(title, frame)
+        label.setProperty("sectionTitle", True)
+        layout.addWidget(label)
+        return frame, layout
+
+    def _modernize_predict_preview_pages(self) -> None:
+        self._modernize_gisaxs_preview_tab()
+        self._modernize_predict2d_preview_tab()
+
+    def _modernize_gisaxs_preview_tab(self) -> None:
+        tab = self.ui.gisaxsImageTab
+        page_layout = tab.layout()
+        if page_layout is None:
+            page_layout = QGridLayout(tab)
+        self._clear_layout(page_layout)
+
+        view = self.ui.gisaxsImageGraphicsView
+        panel = self.ui.gisaxsImageParametersWidget
+        panel_layout = panel.layout()
+        if panel_layout is None:
+            panel_layout = QGridLayout(panel)
+        self._clear_layout(panel_layout)
+        panel.setMinimumWidth(scale_value(300, self.profile, 270))
+        panel.setMaximumWidth(scale_value(360, self.profile, 330))
+        panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+        current_section, current_layout = self._make_preview_section("Current", panel)
+        current_row = QHBoxLayout()
+        current_row.setContentsMargins(0, 0, 0, 0)
+        current_row.setSpacing(6)
+        current_row.addWidget(self.ui.gisaxsImageShowingLabel)
+        current_row.addWidget(self.ui.gisaxsImageShowingValue, 1)
+        current_layout.addLayout(current_row)
+
+        scale_section, scale_layout = self._make_preview_section("Display", panel)
+        limits = QGridLayout()
+        limits.setContentsMargins(0, 0, 0, 0)
+        limits.setHorizontalSpacing(6)
+        limits.setVerticalSpacing(6)
+        limits.addWidget(self.ui.gisaxsImageVminLabel, 0, 0)
+        limits.addWidget(self.ui.gisaxsImageVminValue, 0, 1)
+        limits.addWidget(self.ui.gisaxsImageVmaxLabel, 1, 0)
+        limits.addWidget(self.ui.gisaxsImageVmaxValue, 1, 1)
+        scale_layout.addWidget(self.ui.gisaxsImageColorScaleLabel)
+        scale_layout.addLayout(limits)
+        checks = QHBoxLayout()
+        checks.addWidget(self.ui.gisaxsImageAutoScaleCheckBox)
+        checks.addWidget(self.ui.gisaxsImageLogScaleCheckBox)
+        scale_layout.addLayout(checks)
+        scale_layout.addWidget(self.ui.gisaxsImageAutoScaleResetButton)
+        cmap_row = QHBoxLayout()
+        cmap_row.addWidget(self.ui.gisaxsImageColormapLabel)
+        cmap_row.addWidget(self.ui.gisaxsImageColormapCombox, 1)
+        scale_layout.addLayout(cmap_row)
+
+        zoom_section, zoom_layout = self._make_preview_section("Zoom", panel)
+        zoom_row = QHBoxLayout()
+        zoom_row.setSpacing(6)
+        for button in (self.ui.gisaxsImageZoomInButton, self.ui.gisaxsImageZoomOutButton, self.ui.gisaxsImageZoomResetButton):
+            normalize_button(button)
+            button.setMinimumWidth(scale_value(76, self.profile, 68))
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            zoom_row.addWidget(button)
+        zoom_layout.addLayout(zoom_row)
+
+        output_section, output_layout = self._make_preview_section("Output", panel)
+        normalize_button(self.ui.gisaxsImageExportButton, wide=True)
+        self.ui.gisaxsImageExportButton.setMinimumWidth(scale_value(180, self.profile, 150))
+        output_layout.addWidget(self.ui.gisaxsImageExportButton)
+
+        panel_layout.addWidget(current_section, 0, 0)
+        panel_layout.addWidget(scale_section, 1, 0)
+        panel_layout.addWidget(zoom_section, 2, 0)
+        panel_layout.addWidget(output_section, 3, 0)
+        panel_layout.setRowStretch(4, 1)
+
+        page_layout.addWidget(view, 0, 0)
+        page_layout.addWidget(panel, 0, 1)
+        page_layout.setColumnStretch(0, 1)
+        page_layout.setColumnStretch(1, 0)
+
+    def _modernize_predict2d_preview_tab(self) -> None:
+        tab = self.ui.predict2dImageTab
+        page_layout = tab.layout()
+        if page_layout is None:
+            page_layout = QGridLayout(tab)
+        self._clear_layout(page_layout)
+
+        view = self.ui.predict2dGraphicsView
+        panel = self.ui.predict2dParameterWidget
+        panel_layout = panel.layout()
+        if panel_layout is None:
+            panel_layout = QGridLayout(panel)
+        self._clear_layout(panel_layout)
+        panel.setMinimumWidth(scale_value(300, self.profile, 270))
+        panel.setMaximumWidth(scale_value(380, self.profile, 340))
+        panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+        scale_section, scale_layout = self._make_preview_section("Display", panel)
+        limits = QGridLayout()
+        limits.setContentsMargins(0, 0, 0, 0)
+        limits.setHorizontalSpacing(6)
+        limits.setVerticalSpacing(6)
+        limits.addWidget(self.ui.predict2dVminLabel, 0, 0)
+        limits.addWidget(self.ui.predict2dVminValue, 0, 1)
+        limits.addWidget(self.ui.predict2dVmaxLabel, 1, 0)
+        limits.addWidget(self.ui.predict2dVmaxValue, 1, 1)
+        scale_layout.addWidget(self.ui.predict2dColorScaleLabel)
+        scale_layout.addLayout(limits)
+        checks = QHBoxLayout()
+        checks.addWidget(self.ui.predict2dAutoScaleCheckBox)
+        checks.addWidget(self.ui.predict2dLogScaleCheckBox)
+        scale_layout.addLayout(checks)
+        scale_layout.addWidget(self.ui.predict2dAutoScaleResetButton)
+        cmap_row = QHBoxLayout()
+        cmap_row.addWidget(self.ui.predict2dColormapLabel)
+        cmap_row.addWidget(self.ui.predict2dLabelCombox, 1)
+        scale_layout.addLayout(cmap_row)
+
+        zoom_section, zoom_layout = self._make_preview_section("Zoom", panel)
+        zoom_row = QHBoxLayout()
+        zoom_row.setSpacing(6)
+        for button in (self.ui.predict2dZoomInButton, self.ui.predict2dZoomOutButton, self.ui.predict2dZoomResetButton):
+            normalize_button(button)
+            button.setMinimumWidth(scale_value(76, self.profile, 68))
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            zoom_row.addWidget(button)
+        zoom_layout.addLayout(zoom_row)
+
+        output_section, output_layout = self._make_preview_section("Output", panel)
+        normalize_button(self.ui.predict2dExportButton, wide=True)
+        self.ui.predict2dExportButton.setMinimumWidth(scale_value(180, self.profile, 150))
+        output_layout.addWidget(self.ui.predict2dExportButton)
+
+        curve_section, curve_layout = self._make_preview_section("Curve", panel)
+        curve_layout.addWidget(self.ui.predict2dParameter1dpartWidget)
+
+        panel_layout.addWidget(scale_section, 0, 0)
+        panel_layout.addWidget(zoom_section, 1, 0)
+        panel_layout.addWidget(output_section, 2, 0)
+        panel_layout.addWidget(curve_section, 3, 0)
+        panel_layout.setRowStretch(4, 1)
+
+        page_layout.addWidget(view, 0, 0)
+        page_layout.addWidget(panel, 0, 1)
+        page_layout.setColumnStretch(0, 1)
+        page_layout.setColumnStretch(1, 0)
 
     def apply_responsive_profile(self, profile) -> None:
         self.profile = profile

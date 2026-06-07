@@ -53,6 +53,7 @@ class GisaxsPredictController(QObject):
     progress_updated = pyqtSignal(int)
     parameters_changed = pyqtSignal(dict)
     prediction_completed = pyqtSignal(dict)
+    model_load_finished = pyqtSignal(object, str, str)
 
     _DEFAULT_COLORMAPS = [
         "viridis",
@@ -141,6 +142,7 @@ class GisaxsPredictController(QObject):
         # 读取全局参数
         self._set_default_parameters()
         self._load_saved_parameters()
+        self.model_load_finished.connect(self._on_model_load_finished)
 
     # ------------------------------------------------------------------
     # 初始化 & UI
@@ -549,8 +551,6 @@ class GisaxsPredictController(QObject):
             pass
 
     def _set_model_status_color(self, color: str, tooltip: str = "") -> None:
-        if self._model_status_label is None:
-            return
         text_map = {
             "green": "Loaded",
             "red": "Loading",
@@ -567,10 +567,18 @@ class GisaxsPredictController(QObject):
             "padding: 4px 8px;"
             "}"
         )
-        self._model_status_label.setStyleSheet(style)
-        self._model_status_label.setText(status_text)
-        if tooltip:
-            self._model_status_label.setToolTip(tooltip)
+        labels = []
+        if self._model_status_label is not None:
+            labels.append(self._model_status_label)
+        for name in ("gisaxsPredictModelStatusTextLabel",):
+            label = getattr(self.ui, name, None)
+            if label is not None and label not in labels:
+                labels.append(label)
+        for label in labels:
+            label.setStyleSheet(style)
+            label.setText(status_text)
+            if tooltip:
+                label.setToolTip(tooltip)
         self._refresh_predict_readiness()
 
     def _on_cancel_loading_shortcut(self) -> None:
@@ -778,6 +786,8 @@ class GisaxsPredictController(QObject):
         if win is None:
             QMessageBox.information(self.main_window, "Multi-File Results", "The multi-file results window is not available yet.")
             return
+        if self._multifile_results_widget is not None:
+            self._multifile_results_widget.setVisible(True)
         win.show()
         try:
             win.raise_()
@@ -818,12 +828,13 @@ class GisaxsPredictController(QObject):
             else:
                 self._current_file_label.setVisible(False)
 
-    def _update_current_file_display(self, file_path: str) -> None:
+    def _update_current_file_display(self, file_path: str, stack_count: int = 1) -> None:
         """更新当前文件显示"""
         if hasattr(self, '_current_file_label'):
             if file_path:
                 file_name = os.path.basename(file_path)
-                self._current_file_label.setText(file_name)
+                suffix = f" ({stack_count} files stacked)" if stack_count and stack_count > 1 else " (1 file)"
+                self._current_file_label.setText(f"{file_name}{suffix}")
                 self._current_file_label.setToolTip(file_path)
             else:
                 self._current_file_label.setText("No file selected")
@@ -933,6 +944,20 @@ class GisaxsPredictController(QObject):
         self._set_line_edit("gisaxsPredictExportFolderValue", folder)
         self._persist_parameters()
         self._append_status_message(f"Export folder selected: {folder}")
+
+    def _prompt_export_folder(self, title: str = "Select Export Folder") -> str:
+        folder = QFileDialog.getExistingDirectory(
+            self.main_window,
+            title,
+            self.current_parameters.get("export_path", "") or "",
+        )
+        if not folder:
+            return ""
+        folder = normalize_path(folder)
+        self.current_parameters["export_path"] = folder
+        self._set_line_edit("gisaxsPredictExportFolderValue", folder)
+        self._persist_parameters()
+        return folder
 
     def _handle_file_line_edit_committed(self) -> None:
         widget = getattr(self.ui, "gisaxsPredictChooseGisaxsFileValue", None)
@@ -1384,12 +1409,9 @@ class GisaxsPredictController(QObject):
         if self._current_pixmap is None:
             self._append_status_message("No GISAXS image to export", level="WARN")
             return
-        export_path = self.current_parameters.get("export_path")
+        export_path = self._prompt_export_folder("Save GISAXS Image To")
         if not export_path:
-            self._choose_export_folder()
-            export_path = self.current_parameters.get("export_path")
-            if not export_path:
-                return
+            return
         if not os.path.isdir(export_path):
             QMessageBox.warning(self.main_window, "Export Path", f"Export folder not found: {export_path}")
             return
@@ -2355,20 +2377,7 @@ class GisaxsPredictController(QObject):
         self._rerender_predict_view()
 
     def _on_predict_export_clicked(self) -> None:
-        """导出预测结果 - 支持单文件和多文件模式"""
-        if not self.prediction_results:
-            QMessageBox.information(self.main_window, "Export", "Run a prediction before exporting the current result.")
-            self._append_status_message("No prediction result to export", level="WARN")
-            return
-        export_path = self.current_parameters.get("export_path")
-        if not export_path:
-            self._choose_export_folder()
-            export_path = self.current_parameters.get("export_path")
-            if not export_path:
-                return
-        if not os.path.isdir(export_path):
-            QMessageBox.warning(self.main_window, "Export Path", f"Export folder not found: {export_path}")
-            return
+        """Export prediction results for single-file or multi-file mode."""
 
         # 检查当前模式
         mode = self.current_parameters.get("mode", "single_file")
@@ -2376,6 +2385,11 @@ class GisaxsPredictController(QObject):
         if mode == "multi_files" and self._multifile_results_widget:
             # 多文件模式：触发多文件导出界面
             self._multifile_results_widget.onExportClicked()
+            return
+
+        if not self.prediction_results:
+            QMessageBox.information(self.main_window, "Export", "Run a prediction before exporting the current result.")
+            self._append_status_message("No prediction result to export", level="WARN")
             return
 
         # 单文件模式：使用原有逻辑
@@ -2409,6 +2423,13 @@ class GisaxsPredictController(QObject):
             return
         export_image = clicked in (btn_img, btn_both)
         export_data = clicked in (btn_data, btn_both)
+
+        export_path = self._prompt_export_folder("Save Prediction Output To")
+        if not export_path:
+            return
+        if not os.path.isdir(export_path):
+            QMessageBox.warning(self.main_window, "Export Path", f"Export folder not found: {export_path}")
+            return
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -3442,18 +3463,26 @@ class GisaxsPredictController(QObject):
         import threading
         def _run():
             model, err = _load()
-            if err:
-                self._append_status_message(f"Model load failed: {err}", level="ERROR")
-                self.progress_updated.emit(0)
-                self._set_model_status_color("gray", "Not loaded")
-                self._model_loading = False
-                btn = getattr(self.ui, "gisaxsPredictModelImportButton", None)
-                if btn:
-                    btn.setEnabled(True)
-                return
+            self.model_load_finished.emit(model, err or "", model_path)
+
+        import threading as _threading
+        self._model_loader_thread = _threading.Thread(target=_run, daemon=True)
+        self._model_loader_thread.start()
+
+    def _on_model_load_finished(self, model: object, err: str, model_path: str) -> None:
+        """Finalize model loading on the Qt UI thread."""
+        if err:
+            self._append_status_message(f"Model load failed: {err}", level="ERROR")
+            self.progress_updated.emit(0)
+            self._current_model = None
+            self._model_loading = False
+            self._set_model_status_color("gray", "Not loaded")
+        else:
             self._current_model = model
+            self.current_parameters["module_model_path"] = model_path
+            if self._current_module is not None:
+                self._current_module["model_path"] = model_path
             if self._model_cancel_requested:
-                # Ignore result if canceled
                 self._current_model = None
                 self._append_status_message("Model load canceled.")
                 self.progress_updated.emit(0)
@@ -3463,14 +3492,12 @@ class GisaxsPredictController(QObject):
                 self.progress_updated.emit(100)
                 self._set_model_status_color("green", "Loaded")
             self._model_loading = False
-            btn = getattr(self.ui, "gisaxsPredictModelImportButton", None)
-            if btn:
-                btn.setEnabled(True)
 
-        import threading as _threading
-        self._model_loader_thread = _threading.Thread(target=_run, daemon=True)
-        self._model_loader_thread.start()
-
+        btn = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+        if btn:
+            btn.setEnabled(True)
+        self._persist_parameters()
+        self._refresh_predict_readiness()
 
     def _write_model_path_to_yaml(self, spec: Dict[str, object], model_path: str) -> None:
         yaml_path = spec.get("yaml_path") if isinstance(spec, dict) else None
@@ -3671,9 +3698,21 @@ class GisaxsPredictController(QObject):
             self._set_line_edit("gisaxsPredictEveryValue", "1")
             self._append_status_message("Every must be a positive integer; using 1.", level="WARN")
 
-        batches = [files[i : i + every] for i in range(0, len(files), every)]
+        if every > 1:
+            batches = [files[i : i + every] for i in range(0, len(files), every) if len(files[i : i + every]) == every]
+            skipped = len(files) - (len(batches) * every)
+            if skipped:
+                self._append_status_message(
+                    f"Skipped {skipped} trailing file(s) that do not make a full Every={every} stack.",
+                    level="WARN",
+                )
+        else:
+            batches = [[file_path] for file_path in files]
         self._multifile_batch_map = {batch[0]: batch for batch in batches if batch}
         files_to_process = list(self._multifile_batch_map.keys())
+        if not files_to_process:
+            self._append_status_message("No complete multi-file stacks selected by range/every.", level="WARN")
+            return None
         if every > 1:
             self._append_status_message(
                 f"Multi-file range grouped into {len(files_to_process)} batch(es), Every={every}.",
@@ -3691,8 +3730,18 @@ class GisaxsPredictController(QObject):
                 if len(batch) > 1:
                     result = self._multifile_results_widget.table_model.getResult(row)
                     if result is not None:
-                        result.file_name = f"{os.path.basename(batch[0])} + {len(batch) - 1} more"
+                        result.file_name = f"{os.path.basename(batch[0])} - {os.path.basename(batch[-1])}"
                         result.file_path = "\n".join(batch)
+                        result.stack_count = len(batch)
+                        self._multifile_results_widget.table_model.updateResult(row, result)
+                        self._append_status_message(
+                            f"Queued stack: {os.path.basename(batch[0])} - {os.path.basename(batch[-1])} ({len(batch)} files)",
+                            level="INFO",
+                        )
+                elif batch:
+                    result = self._multifile_results_widget.table_model.getResult(row)
+                    if result is not None:
+                        result.stack_count = 1
                         self._multifile_results_widget.table_model.updateResult(row, result)
 
         # 开始批量预测
@@ -3714,9 +3763,16 @@ class GisaxsPredictController(QObject):
             # 临时设置当前文件用于预测
             old_file = self.current_parameters.get("input_file", "")
             self.current_parameters["input_file"] = file_path
+            batch = self._multifile_batch_map.get(file_path) or [file_path]
+            if len(batch) > 1:
+                self.status_updated.emit(
+                    f"Predicting stack ({len(batch)} files): {os.path.basename(batch[0])} - {os.path.basename(batch[-1])}"
+                )
+            else:
+                self.status_updated.emit(f"Predicting file: {os.path.basename(file_path)}")
             
             # 执行实际预测逻辑（这里需要调用真正的预测代码）
-            result = self._execute_single_file_prediction(file_path, self._multifile_batch_map.get(file_path))
+            result = self._execute_single_file_prediction(file_path, batch)
             
             # 恢复原来的文件设置
             self.current_parameters["input_file"] = old_file
@@ -3769,6 +3825,8 @@ class GisaxsPredictController(QObject):
             # 返回结果（只包含预测数据，预处理步骤按需计算）
             return {
                 "file": file_path,
+                "stack_count": len(stack_files) if stack_files else 1,
+                "stack_files": list(stack_files) if stack_files else [file_path],
                 "prediction_data": outs  # 真正的预测结果
             }
             
@@ -3786,12 +3844,12 @@ class GisaxsPredictController(QObject):
         """多文件结果选中处理 - 双击显示单文件结果"""
         if result.status != PredictStatus.COMPLETED or not result.prediction_data:
             # 如果结果还未完成，只更新当前文件显示
-            self._update_current_file_display(result.file_path.splitlines()[0])
+            self._update_current_file_display(result.file_path.splitlines()[0], getattr(result, "stack_count", 1))
             return
             
         try:
             # 更新当前文件显示
-            self._update_current_file_display(result.file_path.splitlines()[0])
+            self._update_current_file_display(result.file_path.splitlines()[0], getattr(result, "stack_count", 1))
             
             # 获取预测结果数据
             prediction_data = result.prediction_data.get("prediction_data", {})
@@ -3840,9 +3898,8 @@ class GisaxsPredictController(QObject):
             QMessageBox.information(self.main_window, "Export", "No results to export.")
             return
             
-        export_path = self.current_parameters.get("export_path")
+        export_path = self._prompt_export_folder("Save Multi-File Prediction Output To")
         if not export_path:
-            QMessageBox.warning(self.main_window, "Export Path", "Please choose an export folder first.")
             return
             
         try:
@@ -3896,6 +3953,15 @@ class GisaxsPredictController(QObject):
         """多文件预测结果更新"""
         if self._multifile_results_widget:
             self._multifile_results_widget.updatePredictResult(index, **update_data)
+            if update_data.get("status") == PredictStatus.RUNNING:
+                result = self._multifile_results_widget.table_model.getResult(index)
+                if result is not None:
+                    first = result.file_path.splitlines()[0] if result.file_path else result.file_name
+                    stack_count = max(1, int(getattr(result, "stack_count", 1)))
+                    self._append_status_message(
+                        f"Running stack ({stack_count} file{'s' if stack_count != 1 else ''}): {os.path.basename(first)}",
+                        level="INFO",
+                    )
 
     def _on_multifile_progress_updated(self, completed: int, total: int) -> None:
         """多文件预测进度更新"""
@@ -3917,6 +3983,7 @@ class GisaxsPredictController(QObject):
                     "index": i,
                     "filename": result.file_name,
                     "filepath": result.file_path,
+                    "stack_count": max(1, int(getattr(result, "stack_count", 1))),
                     "timestamp": result.start_time.isoformat() if result.start_time else None,
                     "processing_time": result.processing_time,
                     "confidence": self._result_confidence(result),
