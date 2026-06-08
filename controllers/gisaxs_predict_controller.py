@@ -383,6 +383,10 @@ class GisaxsPredictController(QObject):
         if btn:
             btn.clicked.connect(self._run_gisaxs_predict)
 
+        btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if btn:
+            btn.clicked.connect(self._stop_gisaxs_predict)
+
         btn = getattr(self.ui, "gisaxsPredictShowMultiFileResultsButton", None)
         if btn:
             btn.clicked.connect(self._show_multifile_results_window)
@@ -808,6 +812,17 @@ class GisaxsPredictController(QObject):
                 self._multifile_results_widget.onExportClicked()
             else:
                 QMessageBox.information(self.main_window, "Export", "No results to export.")
+
+    def _stop_gisaxs_predict(self) -> None:
+        if not self._multifile_prediction_active:
+            self._append_status_message("No active multi-file prediction to stop.", level="INFO")
+            return
+        if self._multifile_manager:
+            self._multifile_manager.cancel_prediction()
+            self._append_status_message("Stopping multi-file prediction after the current file...", level="WARN")
+        stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if stop_btn:
+            stop_btn.setEnabled(False)
 
     def _adjust_predict_layout_for_mode(self, mode: str) -> None:
         """根据模式调整预测布局"""
@@ -1274,6 +1289,9 @@ class GisaxsPredictController(QObject):
         btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
         if btn is not None and not self._multifile_prediction_active:
             btn.setEnabled(input_ready and model_ready and framework_ready)
+        stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if stop_btn is not None:
+            stop_btn.setEnabled(bool(self._multifile_prediction_active))
 
         for export_name in ("gisaxsImageExportButton", "predict2dExportButton"):
             export_btn = getattr(self.ui, export_name, None)
@@ -1790,6 +1808,55 @@ class GisaxsPredictController(QObject):
                 return None
         return inp
 
+    def _normalize_parameter_prediction(self, pred: object) -> Optional[Dict[str, object]]:
+        spec = self._current_module if isinstance(self._current_module, dict) else {}
+        output_type = str(spec.get("output_type") or "").lower()
+        is_sf = output_type in {"sf_4_parameters", "sf_parameters", "parameters"}
+        if not is_sf and isinstance(pred, dict):
+            is_sf = "branch_thickness" in pred and "branch_size" in pred
+        if not is_sf:
+            return None
+
+        normalized = None
+        if isinstance(pred, dict):
+            if "branch_thickness" in pred and "branch_size" in pred:
+                thickness = np.asarray(pred["branch_thickness"], dtype=np.float32)
+                size = np.asarray(pred["branch_size"], dtype=np.float32)
+                normalized = np.concatenate([thickness, size], axis=-1)
+            elif "parameters" in pred:
+                normalized = np.asarray(pred["parameters"], dtype=np.float32)
+            elif pred:
+                values = [np.asarray(value, dtype=np.float32) for value in pred.values()]
+                if values:
+                    normalized = np.concatenate(values, axis=-1)
+        else:
+            arr = np.asarray(pred, dtype=np.float32)
+            if arr.size:
+                normalized = arr
+
+        if normalized is None:
+            return None
+        arr = np.asarray(normalized, dtype=np.float32)
+        if arr.ndim > 1:
+            arr = arr.reshape((-1, arr.shape[-1]))[0]
+        arr = arr.reshape(-1)
+
+        names = spec.get("parameter_names") if isinstance(spec.get("parameter_names"), list) else []
+        names = [str(name) for name in names] if names else ["t_Cu", "t_polymer", "D", "sigma"]
+        target_min = np.asarray(spec.get("target_min") or [0.0, 10.0, 4.0, 0.2], dtype=np.float32)
+        target_max = np.asarray(spec.get("target_max") or [25.0, 50.0, 20.0, 4.0], dtype=np.float32)
+
+        count = min(arr.size, len(names), target_min.size, target_max.size)
+        if count <= 0:
+            return None
+        arr = arr[:count]
+        values = arr * (target_max[:count] - target_min[:count]) + target_min[:count]
+        return {
+            "parameters": values.astype(np.float32),
+            "parameters_normalized": arr.astype(np.float32),
+            "parameter_names": names[:count],
+        }
+
     def _predict_with_current_model(self, inp: np.ndarray) -> Optional[Dict[str, np.ndarray]]:
         if self._current_model is None or inp is None:
             return None
@@ -1815,6 +1882,9 @@ class GisaxsPredictController(QObject):
             # TensorFlow 2.13 installations often expose only ``tensorflow.keras``.
             if hasattr(self._current_model, 'predict'):
                 pred = self._current_model.predict(inp, verbose=0)
+                parameter_out = self._normalize_parameter_prediction(pred)
+                if parameter_out is not None:
+                    return parameter_out  # type: ignore[return-value]
                 if isinstance(pred, (list, tuple)) and len(pred) > 0:
                     # Prefer 2D-like output if present, else capture scalar
                     cand0 = np.array(pred[0])
@@ -1824,7 +1894,9 @@ class GisaxsPredictController(QObject):
                         scalar_out = cand0.squeeze()
                 elif isinstance(pred, dict):
                     # Try common keys
-                    val = pred.get('hr') or pred.get('output') or None
+                    val = pred.get('hr', None)
+                    if val is None:
+                        val = pred.get('output', None)
                     if val is None and len(pred) > 0:
                         val = list(pred.values())[0]
                     if val is not None:
@@ -1863,6 +1935,10 @@ class GisaxsPredictController(QObject):
                     # res is a dict of tensors
                     vals = list(res.values())
                     if vals:
+                        pred_dict = {str(key): value.numpy() for key, value in res.items()}
+                        parameter_out = self._normalize_parameter_prediction(pred_dict)
+                        if parameter_out is not None:
+                            return parameter_out  # type: ignore[return-value]
                         tmp = vals[0].numpy()
                         if np.squeeze(tmp).ndim >= 2:
                             out_image = tmp
@@ -1928,7 +2004,7 @@ class GisaxsPredictController(QObject):
         if x.ndim == 3:
             if x.shape[0] == 1:
                 return x[..., None].astype(np.float32, copy=False)
-            if x.shape[-1] in (1, 3):
+            if x.shape[-1] in (1, 2, 3, 4):
                 return x[None, ...].astype(np.float32, copy=False)
             return x[..., None].astype(np.float32, copy=False)
         return x.astype(np.float32, copy=False)
@@ -2101,13 +2177,24 @@ class GisaxsPredictController(QObject):
             self._show_pixmap_in_predict_view(pix)
             self._refresh_predict_controls("curve")
             return
+        if kind == "parameters" and isinstance(data, np.ndarray):
+            names = spec.get("names") if isinstance(spec.get("names"), list) else None
+            pix = self._render_parameters_figure(data, [str(name) for name in names] if names else None)
+            if pix is not None:
+                self._show_pixmap_in_predict_view(pix)
+            self._refresh_predict_controls("array")
+            return
         if kind == "steps":
             steps = spec.get("steps") if isinstance(spec.get("steps"), list) else []
             if not steps:
                 return
             self._step_snapshots = steps
-            # Render first step by default
-            start_idx = self._current_step_index if 0 <= self._current_step_index < len(steps) else 0
+            # Show the final model input by default when the preprocess panel provides it.
+            default_idx = spec.get("default_index") if isinstance(spec, dict) else None
+            if isinstance(default_idx, int) and 0 <= default_idx < len(steps):
+                start_idx = default_idx
+            else:
+                start_idx = self._current_step_index if 0 <= self._current_step_index < len(steps) else 0
             self._render_step_snapshot(start_idx)
             self._refresh_predict_controls("steps")
             # Build buttons under the tabs page to switch steps
@@ -2187,6 +2274,42 @@ class GisaxsPredictController(QObject):
         cmap = self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0])
         pix = self._create_pixmap_from_array(display, vmin, vmax, cmap)
         self._show_pixmap_in_predict_view(pix)
+
+    def _render_parameters_figure(self, values: np.ndarray, names: Optional[List[str]] = None) -> Optional[QPixmap]:
+        try:
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+            vals = np.asarray(values, dtype=np.float32).reshape(-1)
+            labels = names if names and len(names) >= vals.size else [f"p{i + 1}" for i in range(vals.size)]
+            fig = Figure(figsize=(7.2, 3.8), dpi=120)
+            canvas = FigureCanvasAgg(fig)
+            ax = fig.add_subplot(111)
+            x = np.arange(vals.size)
+            bars = ax.bar(x, vals, color=["#2563eb", "#16a34a", "#f59e0b", "#dc2626"][: vals.size])
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels[: vals.size])
+            ax.set_ylabel("Predicted value")
+            ax.set_title("SF Predicted Parameters")
+            ax.grid(axis="y", alpha=0.25)
+            for bar, value in zip(bars, vals):
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2.0,
+                    bar.get_height(),
+                    f"{float(value):.5g}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=9,
+                )
+            fig.tight_layout()
+            canvas.draw()
+            buf = np.asarray(canvas.buffer_rgba())
+            height, width = buf.shape[:2]
+            qimg = QImage(buf.data, width, height, buf.strides[0], QImage.Format_RGBA8888)
+            return QPixmap.fromImage(qimg.copy())
+        except Exception as exc:
+            self._append_status_message(f"Parameter plot failed: {exc}", level="ERROR")
+            return None
 
     def _refresh_predict_controls(self, kind: str) -> None:
         param_widget = getattr(self.ui, "predict2dParameterWidget", None)
@@ -2529,16 +2652,51 @@ class GisaxsPredictController(QObject):
             self._append_status_message(f"Predicted scalars: [{vals}]", level="INFO")
             return
         panels: List[Dict[str, object]] = []
+        params = outputs.get("parameters") if isinstance(outputs, dict) else None
+        param_names = outputs.get("parameter_names") if isinstance(outputs, dict) else None
+        if isinstance(params, np.ndarray):
+            names = [str(name) for name in param_names] if isinstance(param_names, list) else [f"p{i + 1}" for i in range(params.size)]
+            text = ", ".join(
+                f"{name}={float(value):.6g}"
+                for name, value in zip(names, np.asarray(params).reshape(-1))
+            )
+            self._append_status_message(f"Predicted parameters: {text}", level="INFO")
+            panels.append({
+                "kind": "parameters",
+                "title": "Parameters",
+                "data": np.asarray(params, dtype=np.float32).reshape(-1),
+                "names": names,
+            })
 
         # Optional: Preprocessed steps panel with buttons following YAML order
         try:
             if self._current_image is not None:
                 pre_img, pre_steps = self._collect_preprocess_steps(self._current_image)
                 if pre_steps:
+                    display_steps = list(pre_steps)
+                    if isinstance(pre_img, np.ndarray):
+                        final_input = np.squeeze(pre_img)
+                        if isinstance(final_input, np.ndarray) and final_input.ndim == 3 and final_input.shape[-1] >= 2:
+                            display_steps = [{
+                                "step": "Final Input: intensity",
+                                "label": "Final Input: intensity",
+                                "image": final_input[..., 0],
+                            }, {
+                                "step": "Final Input: mask channel",
+                                "label": "Final Input: mask channel",
+                                "image": final_input[..., 1],
+                            }] + display_steps
+                        elif isinstance(final_input, np.ndarray) and final_input.ndim == 2:
+                            display_steps = [{
+                                "step": "Final Input",
+                                "label": "Final Input",
+                                "image": final_input,
+                            }] + display_steps
                     panels.append({
                         "kind": "steps",
                         "title": "Preprocessed",
-                        "steps": pre_steps,
+                        "steps": display_steps,
+                        "default_index": 0,
                     })
                 elif isinstance(pre_img, np.ndarray):
                     pre_img2d = np.squeeze(pre_img)
@@ -3153,6 +3311,26 @@ class GisaxsPredictController(QObject):
                     spec["io_input_shape"] = (int(shp[0]), int(shp[1]), int(shp[2]), int(shp[3]))
                 except Exception:
                     pass
+        outputs = data.get("outputs")
+        if isinstance(outputs, dict):
+            out_type = outputs.get("type")
+            if isinstance(out_type, str):
+                spec["output_type"] = out_type
+            names = outputs.get("parameter_names")
+            if isinstance(names, list):
+                spec["parameter_names"] = [str(name) for name in names]
+            target_min = outputs.get("target_min")
+            target_max = outputs.get("target_max")
+            if isinstance(target_min, list):
+                try:
+                    spec["target_min"] = [float(v) for v in target_min]
+                except Exception:
+                    pass
+            if isinstance(target_max, list):
+                try:
+                    spec["target_max"] = [float(v) for v in target_max]
+                except Exception:
+                    pass
         return spec
 
     def _extract_spec_fallback(self, text: str) -> Optional[Dict[str, object]]:
@@ -3266,6 +3444,95 @@ class GisaxsPredictController(QObject):
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
         )
         return os.path.abspath(normalize_path(folder)) if folder else ""
+
+    def _install_legacy_keras_load_shims(self) -> None:
+        """Allow older Keras 2.x .keras files to load in newer Keras 3.x runtimes."""
+        try:
+            import types
+            import sys as _sys
+            import keras  # type: ignore
+            from keras.src.models.functional import Functional  # type: ignore
+            from keras.src.layers.core.lambda_layer import Lambda  # type: ignore
+            from keras.src.layers.normalization.batch_normalization import BatchNormalization  # type: ignore
+            from keras.src.utils import python_utils  # type: ignore
+
+            engine_pkg = types.ModuleType("keras.src.engine")
+            functional_mod = types.ModuleType("keras.src.engine.functional")
+            functional_mod.Functional = Functional
+            _sys.modules.setdefault("keras.src.engine", engine_pkg)
+            _sys.modules.setdefault("keras.src.engine.functional", functional_mod)
+
+            if not getattr(Lambda, "_gimap_legacy_from_config", False):
+                original_from_config = Lambda.from_config
+
+                @classmethod
+                def _legacy_lambda_from_config(cls, config, custom_objects=None, safe_mode=None):
+                    if isinstance(config, dict):
+                        config = dict(config)
+                        for key in ("function_type", "module", "output_shape_type", "output_shape_module"):
+                            config.pop(key, None)
+                        fn = config.get("function")
+                        if isinstance(fn, (list, tuple)) and fn:
+                            try:
+                                defaults = fn[1] if len(fn) > 1 else None
+                                closure = fn[2] if len(fn) > 2 else None
+                                config["function"] = python_utils.func_load(fn[0], defaults=defaults, closure=closure)
+                            except Exception:
+                                pass
+                        if callable(config.get("function")):
+                            return cls(**config)
+                    try:
+                        return original_from_config(config, custom_objects=custom_objects, safe_mode=safe_mode)
+                    except TypeError:
+                        return original_from_config(config)
+
+                Lambda.from_config = _legacy_lambda_from_config  # type: ignore[method-assign]
+                Lambda._gimap_legacy_from_config = True  # type: ignore[attr-defined]
+
+            if not getattr(BatchNormalization, "_gimap_legacy_from_config", False):
+                original_bn_from_config = BatchNormalization.from_config
+
+                @classmethod
+                def _legacy_bn_from_config(cls, config):
+                    if isinstance(config, dict):
+                        config = dict(config)
+                        axis = config.get("axis")
+                        if isinstance(axis, list) and len(axis) == 1:
+                            config["axis"] = axis[0]
+                    return original_bn_from_config(config)
+
+                BatchNormalization.from_config = _legacy_bn_from_config  # type: ignore[method-assign]
+                BatchNormalization._gimap_legacy_from_config = True  # type: ignore[attr-defined]
+
+            if "keras.src.layers.core.tf_op_layer" not in _sys.modules:
+                tf_op_mod = types.ModuleType("keras.src.layers.core.tf_op_layer")
+
+                @keras.saving.register_keras_serializable(package="keras.src.layers.core.tf_op_layer")
+                class SlicingOpLambda(keras.layers.Layer):  # type: ignore[misc]
+                    def __init__(self, function=None, **kwargs):
+                        super().__init__(**kwargs)
+                        self.function = function
+
+                    def call(self, inputs, slice_spec=None, **kwargs):
+                        if slice_spec is None:
+                            return inputs
+                        slices = []
+                        for spec in slice_spec:
+                            if isinstance(spec, dict):
+                                slices.append(slice(spec.get("start"), spec.get("stop"), spec.get("step")))
+                            else:
+                                slices.append(spec)
+                        return inputs[tuple(slices)]
+
+                    def get_config(self):
+                        config = super().get_config()
+                        config["function"] = self.function
+                        return config
+
+                tf_op_mod.SlicingOpLambda = SlicingOpLambda
+                _sys.modules["keras.src.layers.core.tf_op_layer"] = tf_op_mod
+        except Exception as exc:
+            self._append_status_message(f"Legacy Keras compatibility shim unavailable: {exc}", level="WARN")
 
     def _on_module_selected(self, name: str) -> None:
         if not name:
@@ -3446,12 +3713,14 @@ class GisaxsPredictController(QObject):
                         return None, str(exc)
                 try:
                     import keras  # type: ignore
+                    self._install_legacy_keras_load_shims()
                     try:
                         model = keras.models.load_model(model_path, safe_mode=False, compile=False)  # type: ignore[call-arg]
                     except TypeError:
                         model = keras.models.load_model(model_path, compile=False)
                 except Exception:
                     import tensorflow as tf  # type: ignore
+                    self._install_legacy_keras_load_shims()
                     # Fallback to TF Keras, also disable compile to speed import
                     model = tf.keras.models.load_model(model_path, compile=False)
                 self._append_status_message(f"Model successfully loaded from: {model_path}")
@@ -3503,6 +3772,7 @@ class GisaxsPredictController(QObject):
         yaml_path = spec.get("yaml_path") if isinstance(spec, dict) else None
         if not isinstance(yaml_path, str) or not os.path.isfile(yaml_path):
             return
+        yaml_model_path = "'" + str(model_path).replace("'", "''") + "'"
         try:
             with open(yaml_path, "r", encoding="utf-8") as f:
                 text = f.read()
@@ -3526,7 +3796,7 @@ class GisaxsPredictController(QObject):
                     # leaving model block
                     if leading <= model_indent:
                         if not wrote:
-                            out.append(" " * (model_indent + 2) + f"model_path: \"{model_path}\"")
+                            out.append(" " * (model_indent + 2) + f"model_path: {yaml_model_path}")
                             wrote = True
                         in_model = False
                         out.append(line)
@@ -3535,14 +3805,14 @@ class GisaxsPredictController(QObject):
                     m2 = re.match(r"(\s*)model_path\s*:\s*(.*)$", line)
                     if m2:
                         indent = m2.group(1)
-                        out.append(f"{indent}model_path: \"{model_path}\"")
+                        out.append(f"{indent}model_path: {yaml_model_path}")
                         wrote = True
                     else:
                         out.append(line)
 
             # If file ended while still in model block
             if in_model and not wrote:
-                out.append(" " * (model_indent + 2) + f"model_path: \"{model_path}\"")
+                out.append(" " * (model_indent + 2) + f"model_path: {yaml_model_path}")
                 wrote = True
 
             if wrote:
@@ -3937,6 +4207,9 @@ class GisaxsPredictController(QObject):
         if btn:
             btn.setEnabled(False)
             btn.setText("Predicting...")
+        stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if stop_btn:
+            stop_btn.setEnabled(True)
 
     def _on_multifile_prediction_completed(self) -> None:
         """多文件预测完成"""
@@ -3946,6 +4219,9 @@ class GisaxsPredictController(QObject):
         if btn:
             btn.setEnabled(True)
             btn.setText("Predict")
+        stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if stop_btn:
+            stop_btn.setEnabled(False)
             
         self._append_status_message("Multi-file prediction completed!", level="INFO")
 
@@ -4028,6 +4304,8 @@ class GisaxsPredictController(QObject):
     def _export_results_ascii(self, results: List[PredictResult], export_path: str, timestamp: str) -> None:
         """导出ASCII 1D曲线数据"""
         ascii_path = os.path.join(export_path, f"prediction_curves_{timestamp}.txt")
+        parameter_rows = []
+        parameter_names: List[str] = []
         
         # 收集所有1D数据
         all_h_data = []
@@ -4041,6 +4319,17 @@ class GisaxsPredictController(QObject):
             prediction_data = result.prediction_data.get("prediction_data", {})
             h_data = prediction_data.get("h")
             r_data = prediction_data.get("r")
+            p_data = prediction_data.get("parameters")
+            p_names = prediction_data.get("parameter_names")
+            if isinstance(p_data, np.ndarray):
+                arr = np.asarray(p_data, dtype=np.float32).reshape(-1)
+                if isinstance(p_names, list) and len(p_names) >= arr.size:
+                    names = [str(name) for name in p_names[: arr.size]]
+                else:
+                    names = [f"p{idx + 1}" for idx in range(arr.size)]
+                if not parameter_names:
+                    parameter_names = names
+                parameter_rows.append((result.file_name, arr))
             
             if isinstance(h_data, np.ndarray):
                 all_h_data.append(h_data)
@@ -4074,6 +4363,14 @@ class GisaxsPredictController(QObject):
                         else:
                             line.append("NaN")
                     f.write("\t".join(line) + "\n")
+        elif parameter_rows:
+            param_path = os.path.join(export_path, f"prediction_parameters_{timestamp}.txt")
+            with open(param_path, 'w', encoding='utf-8') as f:
+                f.write("# Prediction Parameters Export\n")
+                f.write(f"# Generated: {timestamp}\n")
+                f.write("filename\t" + "\t".join(parameter_names) + "\n")
+                for file_name, values in parameter_rows:
+                    f.write(str(file_name) + "\t" + "\t".join(f"{float(v):.8g}" for v in values) + "\n")
 
     def _serialize_prediction_data(self, prediction_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """序列化预测数据为JSON兼容格式"""

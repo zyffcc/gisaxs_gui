@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QSpinBox,
     QStackedWidget,
     QToolButton,
     QVBoxLayout,
@@ -827,8 +828,57 @@ class FittingControlsCard(CardFrame):
         ui.aiFittingOpenWorkspaceButton = QPushButton("Open Workspace", method_group)
         ui.aiFittingConstraintComboBox = QComboBox(method_group)
         ui.aiFittingConstraintComboBox.addItems(["Free Prediction", "Fixed K", "Fixed Combination", "Current Manual Model"])
+        ui.aiFittingAdvancedConstraintsButton = QPushButton("Constraints...", method_group)
         ui.aiFittingFastPredictButton = QPushButton("Fast Predict", method_group)
         ui.aiFittingFullAutoFitButton = QPushButton("Full Auto Fit", method_group)
+        ui.aiFittingStopButton = QPushButton("Stop", method_group)
+        ui.aiFittingStopButton.setEnabled(False)
+        ui.aiFittingSamplesSpinBox = QSpinBox(method_group)
+        ui.aiFittingSamplesSpinBox.setObjectName("aiFittingSamplesSpinBox")
+        ui.aiFittingSamplesSpinBox.setRange(1, 1_000_000)
+        ui.aiFittingSamplesSpinBox.setValue(2000)
+        ui.aiFittingRefineTopNSpinBox = QSpinBox(method_group)
+        ui.aiFittingRefineTopNSpinBox.setObjectName("aiFittingRefineTopNSpinBox")
+        ui.aiFittingRefineTopNSpinBox.setRange(0, 100)
+        ui.aiFittingRefineTopNSpinBox.setValue(5)
+        ui.aiFittingRefineMaxEvalSpinBox = QSpinBox(method_group)
+        ui.aiFittingRefineMaxEvalSpinBox.setObjectName("aiFittingRefineMaxEvalSpinBox")
+        ui.aiFittingRefineMaxEvalSpinBox.setRange(1, 100000)
+        ui.aiFittingRefineMaxEvalSpinBox.setValue(80)
+        ui.aiFittingSamplingStdSpinBox = QDoubleSpinBox(method_group)
+        ui.aiFittingSamplingStdSpinBox.setObjectName("aiFittingSamplingStdSpinBox")
+        ui.aiFittingSamplingStdSpinBox.setDecimals(5)
+        ui.aiFittingSamplingStdSpinBox.setRange(0.00001, 10.0)
+        ui.aiFittingSamplingStdSpinBox.setSingleStep(0.001)
+        ui.aiFittingSamplingStdSpinBox.setValue(0.005)
+        ui.aiFittingTargetLogRmseSpinBox = QDoubleSpinBox(method_group)
+        ui.aiFittingTargetLogRmseSpinBox.setObjectName("aiFittingTargetLogRmseSpinBox")
+        ui.aiFittingTargetLogRmseSpinBox.setDecimals(8)
+        ui.aiFittingTargetLogRmseSpinBox.setRange(0.0, 10.0)
+        ui.aiFittingTargetLogRmseSpinBox.setSingleStep(0.00000001)
+        ui.aiFittingTargetLogRmseSpinBox.setValue(0.08)
+        ui.aiFittingProgressEverySpinBox = QSpinBox(method_group)
+        ui.aiFittingProgressEverySpinBox.setObjectName("aiFittingProgressEverySpinBox")
+        ui.aiFittingProgressEverySpinBox.setRange(0, 10000)
+        ui.aiFittingProgressEverySpinBox.setValue(20)
+        ui.aiFittingRefineFtolSpinBox = QDoubleSpinBox(method_group)
+        ui.aiFittingRefineFtolSpinBox.setObjectName("aiFittingRefineFtolSpinBox")
+        ui.aiFittingRefineFtolSpinBox.setDecimals(10)
+        ui.aiFittingRefineFtolSpinBox.setRange(0.0, 1.0)
+        ui.aiFittingRefineFtolSpinBox.setSingleStep(0.00000001)
+        ui.aiFittingRefineFtolSpinBox.setValue(1e-8)
+        ui.aiFittingRefineXtolSpinBox = QDoubleSpinBox(method_group)
+        ui.aiFittingRefineXtolSpinBox.setObjectName("aiFittingRefineXtolSpinBox")
+        ui.aiFittingRefineXtolSpinBox.setDecimals(10)
+        ui.aiFittingRefineXtolSpinBox.setRange(0.0, 1.0)
+        ui.aiFittingRefineXtolSpinBox.setSingleStep(0.00000001)
+        ui.aiFittingRefineXtolSpinBox.setValue(1e-8)
+        ui.aiFittingRefineGtolSpinBox = QDoubleSpinBox(method_group)
+        ui.aiFittingRefineGtolSpinBox.setObjectName("aiFittingRefineGtolSpinBox")
+        ui.aiFittingRefineGtolSpinBox.setDecimals(10)
+        ui.aiFittingRefineGtolSpinBox.setRange(0.0, 1.0)
+        ui.aiFittingRefineGtolSpinBox.setSingleStep(0.00000001)
+        ui.aiFittingRefineGtolSpinBox.setValue(1e-8)
         self.methodInfoLabel = QLabel("Status: Ready", method_group)
         ui.aiFittingStatusLabel = self.methodInfoLabel
         self.methodInfoLabel.setObjectName("fitMethodInfoLabel")
@@ -852,14 +902,18 @@ class FittingControlsCard(CardFrame):
         button_specs = (
             (ui.aiFittingRefreshButton, scale_value(96, self.profile, 88)),
             (ui.aiFittingOpenWorkspaceButton, scale_value(166, self.profile, 146)),
+            (ui.aiFittingAdvancedConstraintsButton, scale_value(138, self.profile, 120)),
             (ui.aiFittingFastPredictButton, scale_value(136, self.profile, 120)),
             (ui.aiFittingFullAutoFitButton, scale_value(136, self.profile, 120)),
+            (ui.aiFittingStopButton, scale_value(86, self.profile, 76)),
         )
         for button in (
             ui.aiFittingRefreshButton,
             ui.aiFittingOpenWorkspaceButton,
+            ui.aiFittingAdvancedConstraintsButton,
             ui.aiFittingFastPredictButton,
             ui.aiFittingFullAutoFitButton,
+            ui.aiFittingStopButton,
         ):
             normalize_button(button)
             button.setMinimumHeight(scale_value(34, self.profile, 30))
@@ -894,18 +948,46 @@ class FittingControlsCard(CardFrame):
         control_row.setSpacing(scale_value(8, self.profile, 6))
         control_row.addWidget(ui.aiFittingConstraintLabel)
         control_row.addWidget(ui.aiFittingConstraintComboBox, 1)
+        control_row.addWidget(ui.aiFittingAdvancedConstraintsButton)
 
         predict_row = QHBoxLayout()
         predict_row.setContentsMargins(scale_value(84, self.profile, 72), 0, 0, 0)
         predict_row.setSpacing(scale_value(8, self.profile, 6))
         predict_row.addWidget(ui.aiFittingFastPredictButton)
         predict_row.addWidget(ui.aiFittingFullAutoFitButton)
+        predict_row.addWidget(ui.aiFittingStopButton)
         predict_row.addStretch(1)
+
+        tuning_grid = QGridLayout()
+        tuning_grid.setContentsMargins(scale_value(84, self.profile, 72), 0, 0, 0)
+        tuning_grid.setHorizontalSpacing(scale_value(8, self.profile, 6))
+        tuning_grid.setVerticalSpacing(scale_value(6, self.profile, 5))
+        tuning_specs = (
+            ("Samples", ui.aiFittingSamplesSpinBox),
+            ("Refine top", ui.aiFittingRefineTopNSpinBox),
+            ("Max eval", ui.aiFittingRefineMaxEvalSpinBox),
+            ("Progress every", ui.aiFittingProgressEverySpinBox),
+            ("Sample std", ui.aiFittingSamplingStdSpinBox),
+            ("Target logRMSE", ui.aiFittingTargetLogRmseSpinBox),
+            ("ftol", ui.aiFittingRefineFtolSpinBox),
+            ("xtol", ui.aiFittingRefineXtolSpinBox),
+            ("gtol", ui.aiFittingRefineGtolSpinBox),
+        )
+        for idx, (label_text, editor) in enumerate(tuning_specs):
+            label = QLabel(label_text, method_group)
+            label.setStyleSheet("font-size: 11px; color: #475569;")
+            row, col = divmod(idx, 3)
+            tuning_grid.addWidget(label, row, col * 2)
+            tuning_grid.addWidget(editor, row, col * 2 + 1)
+            editor.setMinimumWidth(scale_value(82, self.profile, 72))
+            editor.setMaximumWidth(scale_value(116, self.profile, 104))
+            editor.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         method_layout.addLayout(model_row)
         method_layout.addLayout(model_actions_row)
         method_layout.addLayout(control_row)
         method_layout.addLayout(predict_row)
+        method_layout.addLayout(tuning_grid)
         method_layout.addWidget(self.methodInfoLabel)
 
         global_group = self._make_group("Global Parameters")
@@ -999,8 +1081,15 @@ class FittingControlsCard(CardFrame):
         actions_group = self._make_group("Fitting Actions")
         actions_layout = QHBoxLayout(actions_group)
         self._configure_group_layout(actions_layout, group_margin, group_top, group_spacing)
+        ui.FittingAutoRefineButton = QPushButton("Auto Refine", actions_group)
+        ui.FittingAutoRefineButton.setObjectName("FittingAutoRefineButton")
+        normalize_button(ui.FittingAutoRefineButton)
+        ui.FittingAutoRefineButton.setMinimumHeight(scale_value(34, self.profile, 30))
+        ui.FittingAutoRefineButton.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self._managed_buttons.append(ui.FittingAutoRefineButton)
         actions_layout.addWidget(ui.FittingClearFittingButton_2)
         actions_layout.addWidget(ui.FittingManualFittingButton)
+        actions_layout.addWidget(ui.FittingAutoRefineButton)
         actions_layout.addWidget(ui.FittingExportButton)
 
         layout = QVBoxLayout()
@@ -2287,6 +2376,10 @@ class GisaxsPredictWorkspace:
 
         _detach_from_parent_layout(self.ui.gisaxsPredictPredictButton)
         _detach_from_parent_layout(self.ui.predictStatusTextBrowser)
+        self.ui.gisaxsPredictStopButton = QPushButton("Stop", run)
+        self.ui.gisaxsPredictStopButton.setObjectName("gisaxsPredictStopButton")
+        self.ui.gisaxsPredictStopButton.setEnabled(False)
+        normalize_button(self.ui.gisaxsPredictStopButton)
 
         status_grid = QGridLayout()
         status_grid.setContentsMargins(0, 0, 0, 0)
@@ -2311,6 +2404,7 @@ class GisaxsPredictWorkspace:
         button_row = QHBoxLayout()
         button_row.addStretch(1)
         button_row.addWidget(self.ui.gisaxsPredictPredictButton)
+        button_row.addWidget(self.ui.gisaxsPredictStopButton)
 
         log_title = QLabel("Run Log", run)
         log_title.setObjectName("gisaxsPredictRunLogTitle")

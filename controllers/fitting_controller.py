@@ -35,9 +35,11 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QPushButton,
     QProgressBar,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
+    QAbstractItemView,
 )
 
 # ?????????????
@@ -209,6 +211,38 @@ try:
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
+
+
+class ManualAutoRefineWorker(QObject):
+    """Run manual Auto Refine outside the GUI thread."""
+
+    progress = pyqtSignal(dict)
+    finished = pyqtSignal(dict)
+    failed = pyqtSignal(str)
+
+    def __init__(self, controller, setup, selected, options):
+        super().__init__()
+        self.controller = controller
+        self.setup = setup
+        self.selected = selected
+        self.options = options
+        self._stop_requested = False
+
+    def request_stop(self):
+        self._stop_requested = True
+
+    def run(self):
+        try:
+            result = self.controller._run_manual_auto_refine(
+                self.setup,
+                self.selected,
+                self.options,
+                progress_callback=self.progress.emit,
+                stop_callback=lambda: self._stop_requested,
+            )
+            self.finished.emit(result)
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 
 class IndependentMatplotlibWindow(QMainWindow):
@@ -1023,6 +1057,7 @@ class IndependentFitWindow(QMainWindow):
     # ??????????
     status_updated = pyqtSignal(str)
     display_unit_changed = pyqtSignal(str)
+    input_point_delete_requested = pyqtSignal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1041,6 +1076,10 @@ class IndependentFitWindow(QMainWindow):
         self.canvas = None
         self.toolbar = None
         self.ax = None
+        self._delete_input_points_enabled = False
+        self._delete_raw_q = np.array([], dtype=float)
+        self._delete_plot_x = np.array([], dtype=float)
+        self._delete_plot_y = np.array([], dtype=float)
         try:
             if is_matplotlib_available():
                 from matplotlib.figure import Figure
@@ -1070,6 +1109,7 @@ class IndependentFitWindow(QMainWindow):
         self.setFocusPolicy(Qt.StrongFocus)
         if self.canvas is not None:
             self.canvas.setFocusPolicy(Qt.StrongFocus)
+            self.canvas.mpl_connect('button_press_event', self._on_canvas_button_press)
 
         # ???????
         if self.figure is not None and self.canvas is not None and self.ax is not None:
@@ -1130,6 +1170,12 @@ class IndependentFitWindow(QMainWindow):
         self.y_range_combo.setCurrentIndex(2)
         self.y_range_combo.currentTextChanged.connect(self._on_y_range_changed)
         control_layout.addWidget(self.y_range_combo)
+
+        control_layout.addSpacing(12)
+        self.delete_input_points_cb = QCheckBox("Delete Points")
+        self.delete_input_points_cb.setToolTip("Enable, then left-click a plotted input point to exclude it from AI fitting input.")
+        self.delete_input_points_cb.toggled.connect(self._on_delete_input_points_toggled)
+        control_layout.addWidget(self.delete_input_points_cb)
 
         control_layout.addStretch(1)
         return control_layout
@@ -1203,6 +1249,68 @@ class IndependentFitWindow(QMainWindow):
             pass
         return 'all'
 
+    def _on_delete_input_points_toggled(self, checked):
+        """Enable point deletion mode for AI fitting input outliers."""
+        self._delete_input_points_enabled = bool(checked)
+        if self.canvas is not None:
+            self.canvas.setCursor(Qt.CrossCursor if checked else Qt.ArrowCursor)
+        self.status_updated.emit(
+            "Delete Points mode enabled: left-click a data point to exclude it."
+            if checked else
+            "Delete Points mode disabled."
+        )
+
+    def set_deletable_points(self, raw_q, plot_x, plot_y):
+        """Register visible points that can be clicked to exclude from AI fitting input."""
+        try:
+            raw_q = np.asarray(raw_q, dtype=float).reshape(-1)
+            plot_x = np.asarray(plot_x, dtype=float).reshape(-1)
+            plot_y = np.asarray(plot_y, dtype=float).reshape(-1)
+            n = min(raw_q.size, plot_x.size, plot_y.size)
+            if n <= 0:
+                self.clear_deletable_points()
+                return
+            raw_q, plot_x, plot_y = raw_q[:n], plot_x[:n], plot_y[:n]
+            mask = np.isfinite(raw_q) & np.isfinite(plot_x) & np.isfinite(plot_y)
+            self._delete_raw_q = raw_q[mask]
+            self._delete_plot_x = plot_x[mask]
+            self._delete_plot_y = plot_y[mask]
+        except Exception:
+            self.clear_deletable_points()
+
+    def clear_deletable_points(self):
+        self._delete_raw_q = np.array([], dtype=float)
+        self._delete_plot_x = np.array([], dtype=float)
+        self._delete_plot_y = np.array([], dtype=float)
+
+    def _on_canvas_button_press(self, event):
+        """Delete the nearest registered data point when delete mode is active."""
+        try:
+            if not getattr(self, "_delete_input_points_enabled", False):
+                return
+            if event.button != 1 or event.inaxes is None or self.ax is None:
+                return
+            if self.toolbar is not None and getattr(self.toolbar, "mode", ""):
+                return
+            if self._delete_raw_q.size == 0:
+                self.status_updated.emit("No deletable input points are registered for this plot.")
+                return
+
+            points = np.column_stack([self._delete_plot_x, self._delete_plot_y])
+            pixel_points = self.ax.transData.transform(points)
+            click = np.array([event.x, event.y], dtype=float)
+            distances = np.hypot(pixel_points[:, 0] - click[0], pixel_points[:, 1] - click[1])
+            if distances.size == 0:
+                return
+            nearest = int(np.argmin(distances))
+            if float(distances[nearest]) > 16.0:
+                self.status_updated.emit("Click closer to a data point to delete it.")
+                return
+            q_value = float(self._delete_raw_q[nearest])
+            self.input_point_delete_requested.emit(q_value)
+        except Exception as exc:
+            self.status_updated.emit(f"Failed to delete input point: {exc}")
+
     def update_plot(self, x_coords, y_intensity, x_label, y_label, title, log_x=False, log_y=False, normalize=False, y_errors=None):
         """No description."""
         try:
@@ -1274,6 +1382,11 @@ class IndependentFitWindow(QMainWindow):
                 except:
                     # ???????????????????????
                     self.ax.plot(x_data, y_data, 'o-', markersize=4, linewidth=1.5, alpha=0.8, label='Data')
+
+            try:
+                self.set_deletable_points(x_data / self._get_q_unit_scale_factor() if is_q_axis else x_data, x_data, y_data)
+            except Exception:
+                self.clear_deletable_points()
 
             # ??????????????????????mathtext ???????????????
             try:
@@ -1836,6 +1949,11 @@ class FittingController(QObject):
         self._ai_open_output_button = None
         self._ai_results_dialog = None
         self._ai_candidate_rows = []
+        self._ai_excluded_input_q = set()
+        self._ai_input_data_dialog = None
+        self._ai_input_data_table = None
+        self._ai_input_data_summary = None
+        self._ai_input_dialog_arrays = None
 
         # ????????ingle/Stack/In-situ?????????
         self.load_mode = 'Single'
@@ -2866,6 +2984,9 @@ class FittingController(QObject):
         if hasattr(self.ui, 'FittingManualFittingButton'):
             self.ui.FittingManualFittingButton.clicked.connect(self._perform_manual_fitting)
 
+        if hasattr(self.ui, 'FittingAutoRefineButton'):
+            self.ui.FittingAutoRefineButton.clicked.connect(self._show_manual_auto_refine_dialog)
+
         if hasattr(self.ui, 'FittingAutoFittingButton'):
             self.ui.FittingAutoFittingButton.clicked.connect(self.open_ai_fitting_workspace)
         if hasattr(self.ui, 'aiFittingRefreshButton'):
@@ -2882,6 +3003,11 @@ class FittingController(QObject):
             self.ui.aiFittingFastPredictButton.clicked.connect(lambda: self._start_ai_prediction("fast"))
         if hasattr(self.ui, 'aiFittingFullAutoFitButton'):
             self.ui.aiFittingFullAutoFitButton.clicked.connect(lambda: self._start_ai_prediction("full"))
+        if hasattr(self.ui, 'aiFittingStopButton'):
+            self.ui.aiFittingStopButton.clicked.connect(self._stop_ai_fitting_process)
+        if hasattr(self.ui, 'aiFittingAdvancedConstraintsButton'):
+            self.ui.aiFittingAdvancedConstraintsButton.clicked.connect(self._show_advanced_constraints_dialog)
+        self._connect_ai_fitting_settings_widgets()
 
         # ???FittingAutoKButton???
         if hasattr(self.ui, 'FittingAutoKButton'):
@@ -4688,6 +4814,8 @@ class FittingController(QObject):
                     self.independent_fit_window.q_unit_combo.currentTextChanged.connect(self._on_positive_only_changed)
                 if hasattr(self.independent_fit_window, 'y_range_combo'):
                     self.independent_fit_window.y_range_combo.currentTextChanged.connect(self._on_positive_only_changed)
+                if hasattr(self.independent_fit_window, 'input_point_delete_requested'):
+                    self.independent_fit_window.input_point_delete_requested.connect(self._exclude_ai_input_point_from_plot)
                 try:
                     self._sync_axis_filter_controls()
                 except Exception:
@@ -5971,6 +6099,7 @@ class FittingController(QObject):
             q_data, I_data = self._get_roi_active_arrays()
             if q_data is None or I_data is None:
                 return
+            q_data, I_data = self._filter_ai_excluded_points_for_display(q_data, I_data)
 
             q_data, q_plot, I_data, _ = self._filter_q_data_for_independent_display(q_data, I_data)
             if q_data.size == 0 or I_data is None or I_data.size == 0:
@@ -6164,6 +6293,7 @@ class FittingController(QObject):
 
             if q_data is None or I_data is None or len(q_data) == 0 or len(I_data) == 0:
                 return
+            q_data, I_data = self._filter_ai_excluded_points_for_display(q_data, I_data)
 
             q_data, q_plot, I_data, _ = self._filter_q_data_for_independent_display(q_data, I_data)
             if q_data.size == 0 or I_data is None or I_data.size == 0:
@@ -6315,6 +6445,12 @@ class FittingController(QObject):
                 extra_y_values=extra_y_for_limits,
                 log_y=log_y,
             )
+
+            try:
+                if hasattr(self.independent_fit_window, 'set_deletable_points'):
+                    self.independent_fit_window.set_deletable_points(q_data, q_plot, I_data)
+            except Exception:
+                pass
 
             # ??????
             if hasattr(self.independent_fit_window, 'canvas'):
@@ -8805,19 +8941,39 @@ class FittingController(QObject):
         return self.load_fitting_parameters_from_file(filepath) if filepath else False
 
     def _setup_fitting_parameters_context_menu(self) -> None:
-        for name in ("fitBox", "sampleParametersBox", "gisaxsFittingPageScrollAreaWidgetContents"):
+        names = (
+            "FittingControlsCard",
+            "ModelParameterCard",
+            "gisaxsFixedControlsStack",
+            "gisaxsWorkAreaContents",
+            "sampleParametersBox",
+            "fitBox",
+            "gisaxsFittingPageScrollAreaWidgetContents",
+        )
+        for name in names:
             widget = getattr(self.ui, name, None)
             if widget is None:
+                root = getattr(self.ui, "centralwidget", None)
+                widget = root.findChild(QWidget, name) if root is not None else None
+            if widget is None:
                 continue
-            widget.setContextMenuPolicy(Qt.CustomContextMenu)
             try:
+                widget.setContextMenuPolicy(Qt.CustomContextMenu)
                 widget.customContextMenuRequested.connect(self._show_fitting_parameters_context_menu)
+            except RuntimeError:
+                # Some generated containers are intentionally replaced by the runtime layout wrapper.
+                # PyQt keeps the Python attribute even after Qt deletes the C++ object.
+                continue
             except Exception:
                 pass
 
     def _show_fitting_parameters_context_menu(self, pos: QPoint) -> None:
         widget = self.sender()
         if widget is None:
+            return
+        try:
+            global_pos = widget.mapToGlobal(pos)
+        except RuntimeError:
             return
         menu = QMenu(widget)
         save_action = menu.addAction("Save Fitting Parameters...")
@@ -8828,7 +8984,7 @@ class FittingController(QObject):
         reload_action = menu.addAction("Reload Parameters from Config")
         menu.addSeparator()
         ai_action = menu.addAction("Open AI Fitting Workspace...")
-        action = menu.exec_(widget.mapToGlobal(pos))
+        action = menu.exec_(global_pos)
         if action == save_action:
             self.save_fitting_parameters_dialog()
         elif action == load_action:
@@ -8873,6 +9029,102 @@ class FittingController(QObject):
             user_settings.save_settings()
         except Exception:
             pass
+
+    def _default_ai_run_settings(self) -> dict:
+        return {
+            "full_num_samples": 2000,
+            "full_top_k": 20,
+            "full_refine_top_n": 5,
+            "full_refine_max_nfev": 80,
+            "full_refine_progress_interval": 20,
+            "full_refine_ftol": 1e-8,
+            "full_refine_xtol": 1e-8,
+            "full_refine_gtol": 1e-8,
+            "full_refine_stall_patience": 0,
+            "full_refine_stall_tol": 1e-4,
+            "full_refine_target_logrmse": 0.08,
+            "full_sampling_std": 0.005,
+            "fast_num_samples": 128,
+            "fast_top_k": 20,
+            "fast_progress_interval": 16,
+            "parameter_constraints": {},
+        }
+
+    def _ai_run_settings(self) -> dict:
+        settings = self._default_ai_run_settings()
+        stored = self._ai_fitting_settings()
+        for key in settings:
+            if key in stored:
+                settings[key] = stored[key]
+        return settings
+
+    def _connect_ai_fitting_settings_widgets(self) -> None:
+        self._restore_ai_run_settings_to_widgets()
+        widget_map = {
+            "aiFittingSamplesSpinBox": "full_num_samples",
+            "aiFittingRefineTopNSpinBox": "full_refine_top_n",
+            "aiFittingRefineMaxEvalSpinBox": "full_refine_max_nfev",
+            "aiFittingProgressEverySpinBox": "full_refine_progress_interval",
+            "aiFittingRefineFtolSpinBox": "full_refine_ftol",
+            "aiFittingRefineXtolSpinBox": "full_refine_xtol",
+            "aiFittingRefineGtolSpinBox": "full_refine_gtol",
+            "aiFittingSamplingStdSpinBox": "full_sampling_std",
+            "aiFittingTargetLogRmseSpinBox": "full_refine_target_logrmse",
+        }
+        for widget_name, setting_key in widget_map.items():
+            widget = getattr(self.ui, widget_name, None)
+            if widget is None or widget.property("aiSettingConnected"):
+                continue
+            widget.valueChanged.connect(lambda value, key=setting_key: self._save_ai_fitting_settings(**{key: value}))
+            widget.setProperty("aiSettingConnected", True)
+
+    def _restore_ai_run_settings_to_widgets(self) -> None:
+        settings = self._ai_run_settings()
+        widget_map = {
+            "aiFittingSamplesSpinBox": "full_num_samples",
+            "aiFittingRefineTopNSpinBox": "full_refine_top_n",
+            "aiFittingRefineMaxEvalSpinBox": "full_refine_max_nfev",
+            "aiFittingProgressEverySpinBox": "full_refine_progress_interval",
+            "aiFittingRefineFtolSpinBox": "full_refine_ftol",
+            "aiFittingRefineXtolSpinBox": "full_refine_xtol",
+            "aiFittingRefineGtolSpinBox": "full_refine_gtol",
+            "aiFittingSamplingStdSpinBox": "full_sampling_std",
+            "aiFittingTargetLogRmseSpinBox": "full_refine_target_logrmse",
+        }
+        for widget_name, setting_key in widget_map.items():
+            widget = getattr(self.ui, widget_name, None)
+            if widget is None:
+                continue
+            try:
+                widget.blockSignals(True)
+                widget.setValue(settings[setting_key])
+            finally:
+                widget.blockSignals(False)
+
+    def _sync_workspace_ai_run_widgets(self) -> None:
+        settings = self._ai_run_settings()
+        workspace_map = {
+            "_ai_full_samples_spin": "full_num_samples",
+            "_ai_refine_top_n_spin": "full_refine_top_n",
+            "_ai_refine_max_nfev_spin": "full_refine_max_nfev",
+            "_ai_progress_every_spin": "full_refine_progress_interval",
+            "_ai_refine_ftol_spin": "full_refine_ftol",
+            "_ai_refine_xtol_spin": "full_refine_xtol",
+            "_ai_refine_gtol_spin": "full_refine_gtol",
+            "_ai_stall_patience_spin": "full_refine_stall_patience",
+            "_ai_stall_tol_spin": "full_refine_stall_tol",
+            "_ai_sampling_std_spin": "full_sampling_std",
+            "_ai_target_logrmse_spin": "full_refine_target_logrmse",
+        }
+        for attr, key in workspace_map.items():
+            widget = getattr(self, attr, None)
+            if widget is None:
+                continue
+            try:
+                widget.blockSignals(True)
+                widget.setValue(settings[key])
+            finally:
+                widget.blockSignals(False)
 
     def _ai_fitting_base_dirs(self) -> list:
         settings = self._ai_fitting_settings()
@@ -8942,15 +9194,77 @@ class FittingController(QObject):
         layout.addWidget(self._ai_status_label)
         layout.addWidget(self._ai_progress)
 
+        settings_grid = QGridLayout()
+        settings_grid.addWidget(QLabel("Full samples:", dialog), 0, 0)
+        self._ai_full_samples_spin = QSpinBox(dialog)
+        self._ai_full_samples_spin.setRange(1, 1_000_000)
+        settings_grid.addWidget(self._ai_full_samples_spin, 0, 1)
+        settings_grid.addWidget(QLabel("Refine top:", dialog), 0, 2)
+        self._ai_refine_top_n_spin = QSpinBox(dialog)
+        self._ai_refine_top_n_spin.setRange(0, 100)
+        settings_grid.addWidget(self._ai_refine_top_n_spin, 0, 3)
+        settings_grid.addWidget(QLabel("Max eval:", dialog), 0, 4)
+        self._ai_refine_max_nfev_spin = QSpinBox(dialog)
+        self._ai_refine_max_nfev_spin.setRange(1, 100000)
+        settings_grid.addWidget(self._ai_refine_max_nfev_spin, 0, 5)
+        settings_grid.addWidget(QLabel("Progress every:", dialog), 0, 6)
+        self._ai_progress_every_spin = QSpinBox(dialog)
+        self._ai_progress_every_spin.setRange(0, 10000)
+        settings_grid.addWidget(self._ai_progress_every_spin, 0, 7)
+        settings_grid.addWidget(QLabel("Sample std:", dialog), 1, 0)
+        self._ai_sampling_std_spin = QDoubleSpinBox(dialog)
+        self._ai_sampling_std_spin.setDecimals(5)
+        self._ai_sampling_std_spin.setRange(0.00001, 10.0)
+        self._ai_sampling_std_spin.setSingleStep(0.001)
+        settings_grid.addWidget(self._ai_sampling_std_spin, 1, 1)
+        settings_grid.addWidget(QLabel("Target logRMSE:", dialog), 1, 2)
+        self._ai_target_logrmse_spin = QDoubleSpinBox(dialog)
+        self._ai_target_logrmse_spin.setDecimals(8)
+        self._ai_target_logrmse_spin.setRange(0.0, 10.0)
+        self._ai_target_logrmse_spin.setSingleStep(0.00000001)
+        settings_grid.addWidget(self._ai_target_logrmse_spin, 1, 3)
+        settings_grid.addWidget(QLabel("ftol:", dialog), 2, 0)
+        self._ai_refine_ftol_spin = QDoubleSpinBox(dialog)
+        self._ai_refine_ftol_spin.setDecimals(10)
+        self._ai_refine_ftol_spin.setRange(0.0, 1.0)
+        self._ai_refine_ftol_spin.setSingleStep(0.00000001)
+        settings_grid.addWidget(self._ai_refine_ftol_spin, 2, 1)
+        settings_grid.addWidget(QLabel("xtol:", dialog), 2, 2)
+        self._ai_refine_xtol_spin = QDoubleSpinBox(dialog)
+        self._ai_refine_xtol_spin.setDecimals(10)
+        self._ai_refine_xtol_spin.setRange(0.0, 1.0)
+        self._ai_refine_xtol_spin.setSingleStep(0.00000001)
+        settings_grid.addWidget(self._ai_refine_xtol_spin, 2, 3)
+        settings_grid.addWidget(QLabel("gtol:", dialog), 2, 4)
+        self._ai_refine_gtol_spin = QDoubleSpinBox(dialog)
+        self._ai_refine_gtol_spin.setDecimals(10)
+        self._ai_refine_gtol_spin.setRange(0.0, 1.0)
+        self._ai_refine_gtol_spin.setSingleStep(0.00000001)
+        settings_grid.addWidget(self._ai_refine_gtol_spin, 2, 5)
+        settings_grid.addWidget(QLabel("Stall patience:", dialog), 3, 0)
+        self._ai_stall_patience_spin = QSpinBox(dialog)
+        self._ai_stall_patience_spin.setRange(0, 100000)
+        self._ai_stall_patience_spin.setToolTip("0 disables stall early stop.")
+        settings_grid.addWidget(self._ai_stall_patience_spin, 3, 1)
+        settings_grid.addWidget(QLabel("Stall tol:", dialog), 3, 2)
+        self._ai_stall_tol_spin = QDoubleSpinBox(dialog)
+        self._ai_stall_tol_spin.setDecimals(10)
+        self._ai_stall_tol_spin.setRange(0.0, 1.0)
+        self._ai_stall_tol_spin.setSingleStep(0.00000001)
+        settings_grid.addWidget(self._ai_stall_tol_spin, 3, 3)
+        layout.addLayout(settings_grid)
+
         action_row = QHBoxLayout()
         self._ai_action_buttons = []
-        for text in ("Fast Predict", "Full Auto Fit", "Show Results", "Advanced Constraints"):
+        for text in ("Fast Predict", "Full Auto Fit", "Show Input Data", "Show Results", "Advanced Constraints"):
             btn = QPushButton(text, dialog)
             btn.setMinimumHeight(28)
             if text == "Fast Predict":
                 btn.clicked.connect(lambda _checked=False: self._start_ai_prediction("fast"))
             elif text == "Full Auto Fit":
                 btn.clicked.connect(lambda _checked=False: self._start_ai_prediction("full"))
+            elif text == "Show Input Data":
+                btn.clicked.connect(lambda _checked=False: self._show_ai_input_data_dialog())
             elif text == "Show Results":
                 btn.clicked.connect(lambda _checked=False: self._show_ai_candidate_table())
             else:
@@ -8983,6 +9297,22 @@ class FittingController(QObject):
         browse_btn.clicked.connect(self._browse_ai_fitting_model)
         self._ai_model_combo.currentIndexChanged.connect(self._on_ai_model_selected)
         self._ai_constraint_combo.currentTextChanged.connect(self._on_ai_constraint_mode_changed)
+        self._sync_workspace_ai_run_widgets()
+        workspace_setting_map = {
+            self._ai_full_samples_spin: "full_num_samples",
+            self._ai_refine_top_n_spin: "full_refine_top_n",
+            self._ai_refine_max_nfev_spin: "full_refine_max_nfev",
+            self._ai_progress_every_spin: "full_refine_progress_interval",
+            self._ai_refine_ftol_spin: "full_refine_ftol",
+            self._ai_refine_xtol_spin: "full_refine_xtol",
+            self._ai_refine_gtol_spin: "full_refine_gtol",
+            self._ai_stall_patience_spin: "full_refine_stall_patience",
+            self._ai_stall_tol_spin: "full_refine_stall_tol",
+            self._ai_sampling_std_spin: "full_sampling_std",
+            self._ai_target_logrmse_spin: "full_refine_target_logrmse",
+        }
+        for widget, key in workspace_setting_map.items():
+            widget.valueChanged.connect(lambda value, setting_key=key: self._save_ai_fitting_settings(**{setting_key: value}))
         dialog.finished.connect(lambda _result: setattr(self, "_ai_fitting_dialog", None))
         self._ai_fitting_dialog = dialog
         self._refresh_ai_fitting_models()
@@ -9123,7 +9453,7 @@ class FittingController(QObject):
         selected = self._ai_fitting_settings().get("last_selected_model")
         return Path(str(selected)) if selected else None
 
-    def _current_ai_curve_arrays(self):
+    def _current_ai_curve_arrays(self, apply_exclusions: bool = True):
         def clean(q_arr, i_arr, sigma_arr=None):
             q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
             i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
@@ -9156,27 +9486,253 @@ class FittingController(QObject):
                         sigma_arr = sigma_arr[region_mask]
             return clean(q_arr, i_arr, sigma_arr)
 
+        def apply_excluded_q(result):
+            if not apply_exclusions or result is None:
+                return result
+            excluded = getattr(self, "_ai_excluded_input_q", set()) or set()
+            if not excluded:
+                return result
+            q_arr, i_arr, sigma_arr = result
+            keep = np.array([self._ai_q_key(q_val) not in excluded for q_val in q_arr], dtype=bool)
+            if int(np.sum(keep)) < 16:
+                self._add_fitting_error("AI input outlier filter would leave fewer than 16 points; using unfiltered data.")
+                return result
+            return q_arr[keep], i_arr[keep], sigma_arr[keep]
+
         try:
             if self.q_ROI is not None and self.I_ROI is not None:
                 result = clean(self.q_ROI, self.I_ROI)
                 if result is not None:
-                    return result
+                    return apply_excluded_q(result)
         except Exception:
             pass
         if self.q is not None and self.I is not None:
             result = apply_fit_region(self.q, self.I)
             if result is not None:
-                return result
+                return apply_excluded_q(result)
         if isinstance(getattr(self, "current_1d_data", None), dict):
             data = self.current_1d_data
             result = apply_fit_region(data.get("q", []), data.get("I", []), data.get("err"))
             if result is not None:
-                return result
+                return apply_excluded_q(result)
         if isinstance(getattr(self, "cut", None), dict):
             result = apply_fit_region(self.cut.get("q", []), self.cut.get("I", []))
             if result is not None:
-                return result
+                return apply_excluded_q(result)
         return None
+
+    @staticmethod
+    def _ai_q_key(q_value) -> str:
+        try:
+            return f"{float(q_value):.12g}"
+        except Exception:
+            return str(q_value)
+
+    def _filter_ai_excluded_points_for_display(self, q_arr, *value_arrays):
+        excluded = getattr(self, "_ai_excluded_input_q", set()) or set()
+        if not excluded:
+            return (q_arr, *value_arrays)
+        try:
+            q_np = np.asarray(q_arr)
+            keep = np.array([
+                self._ai_q_key(q_val) not in excluded and self._ai_q_key(abs(float(q_val))) not in excluded
+                for q_val in q_np
+            ], dtype=bool)
+            if int(np.sum(keep)) == 0:
+                return (q_arr, *value_arrays)
+            filtered = [q_np[keep]]
+            for arr in value_arrays:
+                if arr is None:
+                    filtered.append(None)
+                    continue
+                arr_np = np.asarray(arr)
+                if arr_np.shape[0] == q_np.shape[0]:
+                    filtered.append(arr_np[keep])
+                else:
+                    filtered.append(arr)
+            return tuple(filtered)
+        except Exception:
+            return (q_arr, *value_arrays)
+
+    def _show_ai_input_data_dialog(self) -> None:
+        arrays = self._current_ai_curve_arrays(apply_exclusions=False)
+        if arrays is None:
+            QMessageBox.warning(
+                self.main_window or self.ui,
+                "AI Input Data",
+                "No valid positive 1D curve is loaded. Load or cut a 1D curve first.",
+            )
+            return
+
+        existing = getattr(self, "_ai_input_data_dialog", None)
+        if existing is not None and existing.isVisible():
+            self._ai_input_dialog_arrays = arrays
+            self._refresh_ai_input_data_dialog()
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        dialog = QDialog(self.main_window or self.ui)
+        dialog.setWindowTitle("AI Input Data")
+        dialog.resize(820, 560)
+        dialog.setModal(False)
+        layout = QVBoxLayout(dialog)
+
+        summary = QLabel(dialog)
+        summary.setWordWrap(True)
+        layout.addWidget(summary)
+
+        table = QTableWidget(0, 4, dialog)
+        table.setHorizontalHeaderLabels(["Use", "q", "I", "sigma"])
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        for col in range(1, 4):
+            table.horizontalHeader().setSectionResizeMode(col, QHeaderView.Stretch)
+        layout.addWidget(table, 1)
+
+        def selected_rows() -> list[int]:
+            selection = table.selectionModel()
+            if selection is None:
+                return []
+            return sorted({index.row() for index in selection.selectedRows()})
+
+        def selected_q_values() -> list[float]:
+            dialog_arrays = getattr(self, "_ai_input_dialog_arrays", None)
+            if dialog_arrays is None:
+                return []
+            q_arr, _, _ = dialog_arrays
+            values = []
+            for row in selected_rows():
+                if 0 <= row < len(q_arr):
+                    values.append(float(q_arr[row]))
+            return values
+
+        def delete_selected() -> None:
+            values = selected_q_values()
+            if not values:
+                return
+            self._exclude_ai_input_points(values, source="table")
+
+        def restore_selected() -> None:
+            values = selected_q_values()
+            if not values:
+                return
+            self._restore_ai_input_points(values)
+
+        def restore_all() -> None:
+            self._restore_all_ai_input_points()
+
+        button_row = QHBoxLayout()
+        delete_btn = QPushButton("Delete Selected", dialog)
+        restore_btn = QPushButton("Restore Selected", dialog)
+        restore_all_btn = QPushButton("Restore All", dialog)
+        close_btn = QPushButton("Close", dialog)
+        delete_btn.clicked.connect(delete_selected)
+        restore_btn.clicked.connect(restore_selected)
+        restore_all_btn.clicked.connect(restore_all)
+        close_btn.clicked.connect(dialog.close)
+        button_row.addWidget(delete_btn)
+        button_row.addWidget(restore_btn)
+        button_row.addWidget(restore_all_btn)
+        button_row.addStretch(1)
+        button_row.addWidget(close_btn)
+        layout.addLayout(button_row)
+
+        def on_finished(_result):
+            self._ai_input_data_dialog = None
+            self._ai_input_data_table = None
+            self._ai_input_data_summary = None
+            self._ai_input_dialog_arrays = None
+
+        dialog.finished.connect(on_finished)
+        self._ai_input_data_dialog = dialog
+        self._ai_input_data_table = table
+        self._ai_input_data_summary = summary
+        self._ai_input_dialog_arrays = arrays
+        self._refresh_ai_input_data_dialog()
+        dialog.show()
+
+    def _refresh_ai_input_data_dialog(self) -> None:
+        dialog = getattr(self, "_ai_input_data_dialog", None)
+        table = getattr(self, "_ai_input_data_table", None)
+        summary = getattr(self, "_ai_input_data_summary", None)
+        arrays = getattr(self, "_ai_input_dialog_arrays", None)
+        if dialog is None or table is None or summary is None or arrays is None:
+            return
+        try:
+            q_arr, i_arr, sigma_arr = arrays
+            excluded = getattr(self, "_ai_excluded_input_q", set()) or set()
+            table.setRowCount(len(q_arr))
+            for row, (q_val, i_val, sigma_val) in enumerate(zip(q_arr, i_arr, sigma_arr)):
+                enabled = self._ai_q_key(q_val) not in excluded
+                table.setItem(row, 0, QTableWidgetItem("Yes" if enabled else "No"))
+                table.setItem(row, 1, QTableWidgetItem(f"{float(q_val):.8g}"))
+                table.setItem(row, 2, QTableWidgetItem(f"{float(i_val):.8g}"))
+                table.setItem(row, 3, QTableWidgetItem(f"{float(sigma_val):.8g}"))
+            kept = sum(1 for q_val in q_arr if self._ai_q_key(q_val) not in excluded)
+            removed = len(q_arr) - kept
+            summary.setText(
+                "Input points: "
+                f"{len(q_arr)} | used: {kept} | excluded: {removed}. "
+                "In Independent Fit Window, enable Delete Points and click a curve point to exclude it."
+            )
+        except Exception:
+            pass
+
+    def _exclude_ai_input_point_from_plot(self, q_value: float) -> None:
+        self._exclude_ai_input_points([q_value], source="plot")
+
+    def _exclude_ai_input_points(self, q_values, source: str = "table") -> None:
+        excluded = set(getattr(self, "_ai_excluded_input_q", set()) or set())
+        before = len(excluded)
+        for q_value in q_values:
+            excluded.add(self._ai_q_key(q_value))
+            if source == "plot":
+                try:
+                    excluded.add(self._ai_q_key(abs(float(q_value))))
+                except Exception:
+                    pass
+        self._ai_excluded_input_q = excluded
+        added = max(0, len(excluded) - before)
+        self._refresh_ai_input_data_dialog()
+        self._refresh_ai_input_outlier_views()
+        if added:
+            label = "from Independent Fit Window" if source == "plot" else "from table"
+            self._set_ai_workspace_status(f"Excluded {added} input point(s) {label}.", None)
+
+    def _restore_ai_input_points(self, q_values) -> None:
+        excluded = set(getattr(self, "_ai_excluded_input_q", set()) or set())
+        before = len(excluded)
+        for q_value in q_values:
+            excluded.discard(self._ai_q_key(q_value))
+            try:
+                abs_q = abs(float(q_value))
+                excluded.discard(self._ai_q_key(abs_q))
+                excluded.discard(self._ai_q_key(-abs_q))
+            except Exception:
+                pass
+        self._ai_excluded_input_q = excluded
+        restored = max(0, before - len(excluded))
+        self._refresh_ai_input_data_dialog()
+        self._refresh_ai_input_outlier_views()
+        if restored:
+            self._set_ai_workspace_status(f"Restored {restored} input point(s).", None)
+
+    def _restore_all_ai_input_points(self) -> None:
+        self._ai_excluded_input_q = set()
+        self._refresh_ai_input_data_dialog()
+        self._refresh_ai_input_outlier_views()
+        self._set_ai_workspace_status("All AI input points restored.", None)
+
+    def _refresh_ai_input_outlier_views(self) -> None:
+        try:
+            mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
+            self._update_GUI_image(mode)
+            self._update_outside_window(mode)
+        except Exception:
+            pass
 
     def _prepare_ai_prediction_io(self) -> tuple[Path, Path] | None:
         arrays = self._current_ai_curve_arrays()
@@ -9233,37 +9789,44 @@ class FittingController(QObject):
             return
 
         exact = self._ai_exact_nonempty_arg()
+        run_settings = self._ai_run_settings()
+        constraints_path = self._write_ai_constraints_json(out_dir)
         args = [
             str(script),
             "--model_dir", str(model_path),
             "--input_csv", str(input_csv),
             "--output_dir", str(out_dir),
             "--score_mode", "unweighted_log",
-            "--sampling_std", "0.005",
+            "--sampling_std", str(run_settings["full_sampling_std"] if run_mode == "full" else 0.005),
             "--include_mean_candidate",
             "--allow_unsafe_lambda",
         ]
         if run_mode == "full":
             args.extend([
-                "--num_samples", "5000",
-                "--top_k", "20",
-                "--refine_top_n", "5",
-                "--refine_max_nfev", "80",
-                "--refine_progress_interval", "20",
-                "--refine_stall_patience", "80",
-                "--refine_stall_tol", "1e-4",
-                "--refine_target_logrmse", "0.08",
+                "--num_samples", str(int(run_settings["full_num_samples"])),
+                "--top_k", str(int(run_settings["full_top_k"])),
+                "--refine_top_n", str(int(run_settings["full_refine_top_n"])),
+                "--refine_max_nfev", str(int(run_settings["full_refine_max_nfev"])),
+                "--refine_progress_interval", str(int(run_settings["full_refine_progress_interval"])),
+                "--refine_ftol", str(float(run_settings["full_refine_ftol"])),
+                "--refine_xtol", str(float(run_settings["full_refine_xtol"])),
+                "--refine_gtol", str(float(run_settings["full_refine_gtol"])),
+                "--refine_stall_patience", str(int(run_settings["full_refine_stall_patience"])),
+                "--refine_stall_tol", str(float(run_settings["full_refine_stall_tol"])),
+                "--refine_target_logrmse", str(float(run_settings["full_refine_target_logrmse"])),
                 "--progress_interval", "100",
             ])
         else:
             args.extend([
-                "--num_samples", "128",
-                "--top_k", "20",
+                "--num_samples", str(int(run_settings["fast_num_samples"])),
+                "--top_k", str(int(run_settings["fast_top_k"])),
                 "--refine_top_n", "0",
-                "--progress_interval", "16",
+                "--progress_interval", str(int(run_settings["fast_progress_interval"])),
             ])
         if exact is not None:
             args.extend(["--exact_nonempty", str(exact)])
+        if constraints_path is not None:
+            args.extend(["--constraints_json", str(constraints_path)])
 
         process = QProcess(self.main_window or self.ui)
         process.setWorkingDirectory(str(Path.cwd()))
@@ -9287,6 +9850,9 @@ class FittingController(QObject):
             button = getattr(self.ui, name, None)
             if button is not None:
                 button.setEnabled(not running)
+        main_stop = getattr(self.ui, "aiFittingStopButton", None)
+        if main_stop is not None:
+            main_stop.setEnabled(running)
         if self._ai_stop_button is not None:
             self._ai_stop_button.setEnabled(running)
         if self._ai_open_output_button is not None:
@@ -9504,7 +10070,13 @@ class FittingController(QObject):
         main_combo = getattr(self.ui, "aiFittingConstraintComboBox", None)
         if main_combo is not None and workspace_combo is None:
             mode = main_combo.currentText().replace(" Prediction", "")
+        settings_constraints = self._ai_run_settings().get("parameter_constraints", {})
         payload = {"mode": mode, "constraints": {}}
+        if isinstance(settings_constraints, dict):
+            for key in ("type_parameter_ranges", "global_ranges", "parameter_ranges"):
+                value = settings_constraints.get(key)
+                if value:
+                    payload[key] = value
         if mode == "Fixed K":
             k_combo = getattr(self, "_ai_constraint_k_combo", None)
             try:
@@ -9520,33 +10092,163 @@ class FittingController(QObject):
                         shapes.append(shape.lower().replace(" ", "_"))
             except Exception:
                 shapes = []
-            payload["constraints"]["fixed_combination"] = shapes
+            payload["components"] = shapes
             payload["exact_nonempty"] = len(shapes) if shapes else None
         elif mode == "Fixed Combination":
-            payload["constraints"]["fixed_combination"] = []
-            payload["warning"] = "Fixed Combination editor skeleton is present; component rows are not wired yet."
+            components = settings_constraints.get("components") if isinstance(settings_constraints, dict) else None
+            payload["components"] = components if isinstance(components, list) else []
         return payload
+
+    def _write_ai_constraints_json(self, out_dir: Path) -> Path | None:
+        payload = self.build_ai_constraints_json_from_ui()
+        has_constraints = any(payload.get(key) for key in ("components", "type_parameter_ranges", "global_ranges", "parameter_ranges"))
+        if not has_constraints and payload.get("mode") in ("Free", "Free Prediction"):
+            return None
+        path = Path(out_dir) / "constraints.json"
+        try:
+            with path.open("w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, ensure_ascii=False)
+            self._append_ai_log(f"Constraints: {path}")
+            return path
+        except Exception as exc:
+            self._append_ai_log(f"Failed to write constraints JSON: {exc}")
+            return None
 
     def _show_advanced_constraints_dialog(self) -> None:
         dialog = QDialog(self.main_window or self.ui)
         dialog.setWindowTitle("Advanced Constraints")
-        dialog.resize(560, 420)
+        dialog.resize(760, 560)
         layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel("Advanced constraints skeleton", dialog))
-        text = QTextBrowser(dialog)
-        text.setPlainText(
-            "This dialog is reserved for parameter range constraints:\n"
-            "- Component slots: free / exist / empty\n"
-            "- Allowed type: sphere / cylinder / vertical_cylinder / all\n"
-            "- Parameter ranges: R, sigma_R, h, sigma_h, D, sigma_D\n"
-            "- Global ranges: BG, sigma_Res, nu_Res, int_Res, k\n\n"
-            "Current JSON skeleton:\n"
-            + json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False)
+        hint = QLabel(
+            "Enable ranges to constrain posterior sampling and final least-squares refinement.",
+            dialog,
         )
-        layout.addWidget(text, 1)
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        rows = [
+            ("type", "R", 1.0, 100.0),
+            ("type", "sigma_R", 0.02, 90.0),
+            ("type", "h", 2.0, 500.0),
+            ("type", "sigma_h", 0.04, 400.0),
+            ("type", "D", 3.0, 500.0),
+            ("type", "sigma_D", 0.06, 400.0),
+            ("global", "BG", 1e-18, 1e8),
+            ("global", "sigma_Res", 0.002, 0.3),
+            ("global", "nu_Res", 1.0, 10.0),
+            ("global", "int_Res", 1e-18, 1e8),
+            ("global", "k", 1e-2, 1e6),
+        ]
+        stored = self._ai_run_settings().get("parameter_constraints", {})
+        type_ranges = stored.get("type_parameter_ranges", {}) if isinstance(stored, dict) else {}
+        global_ranges = stored.get("global_ranges", {}) if isinstance(stored, dict) else {}
+
+        table = QTableWidget(len(rows), 5, dialog)
+        table.setHorizontalHeaderLabels(["Apply", "Scope", "Parameter", "Min", "Max"])
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+
+        row_widgets = []
+        for row_idx, (scope, name, default_lo, default_hi) in enumerate(rows):
+            if scope == "type":
+                existing = None
+                for type_name in ("sphere", "cylinder", "vertical_cylinder"):
+                    ranges = type_ranges.get(type_name, {}) if isinstance(type_ranges, dict) else {}
+                    if name in ranges:
+                        existing = ranges[name]
+                        break
+            else:
+                existing = global_ranges.get(name) if isinstance(global_ranges, dict) else None
+            enabled = isinstance(existing, (list, tuple)) and len(existing) == 2
+            lo = float(existing[0]) if enabled else float(default_lo)
+            hi = float(existing[1]) if enabled else float(default_hi)
+
+            check = QCheckBox(table)
+            check.setChecked(enabled)
+            min_box = QDoubleSpinBox(table)
+            max_box = QDoubleSpinBox(table)
+            for spin in (min_box, max_box):
+                spin.setDecimals(8)
+                spin.setRange(0.0, 1e12)
+                spin.setSingleStep(max(abs(default_hi - default_lo) / 100.0, 1e-6))
+                spin.setMinimumWidth(120)
+            min_box.setValue(lo)
+            max_box.setValue(hi)
+            table.setCellWidget(row_idx, 0, check)
+            table.setItem(row_idx, 1, QTableWidgetItem("Component" if scope == "type" else "Global"))
+            table.setItem(row_idx, 2, QTableWidgetItem(name))
+            table.setCellWidget(row_idx, 3, min_box)
+            table.setCellWidget(row_idx, 4, max_box)
+            row_widgets.append((scope, name, check, min_box, max_box))
+
+        layout.addWidget(table, 1)
+
+        preview = QTextBrowser(dialog)
+        preview.setMaximumHeight(120)
+        preview.setPlainText(json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False))
+        layout.addWidget(preview)
+
+        def collect_constraints() -> dict:
+            type_constraints = {}
+            global_constraints = {}
+            for scope, name, check, min_box, max_box in row_widgets:
+                if not check.isChecked():
+                    continue
+                lo = float(min_box.value())
+                hi = float(max_box.value())
+                if hi < lo:
+                    lo, hi = hi, lo
+                if scope == "type":
+                    for type_name in ("sphere", "cylinder", "vertical_cylinder"):
+                        type_constraints.setdefault(type_name, {})[name] = [lo, hi]
+                else:
+                    global_constraints[name] = [lo, hi]
+            payload = {}
+            if type_constraints:
+                payload["type_parameter_ranges"] = type_constraints
+            if global_constraints:
+                payload["global_ranges"] = global_constraints
+            return payload
+
+        def refresh_preview() -> None:
+            settings = self._ai_fitting_settings()
+            old_constraints = settings.get("parameter_constraints")
+            self._save_ai_fitting_settings(parameter_constraints=collect_constraints())
+            preview.setPlainText(json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False))
+            self._save_ai_fitting_settings(parameter_constraints=old_constraints if isinstance(old_constraints, dict) else {})
+
+        for _scope, _name, check, min_box, max_box in row_widgets:
+            check.toggled.connect(lambda _=False: refresh_preview())
+            min_box.valueChanged.connect(lambda _=0.0: refresh_preview())
+            max_box.valueChanged.connect(lambda _=0.0: refresh_preview())
+
+        save = QPushButton("Save Constraints", dialog)
+        clear = QPushButton("Clear All", dialog)
         close = QPushButton("Close", dialog)
-        close.clicked.connect(dialog.accept)
+
+        def save_constraints() -> None:
+            constraints_payload = collect_constraints()
+            self._save_ai_fitting_settings(parameter_constraints=constraints_payload)
+            preview.setPlainText(json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False))
+            self._set_ai_workspace_status("Advanced parameter constraints saved.", None)
+            dialog.accept()
+
+        def clear_constraints() -> None:
+            for _scope, _name, check, _min_box, _max_box in row_widgets:
+                check.setChecked(False)
+            self._save_ai_fitting_settings(parameter_constraints={})
+            preview.setPlainText(json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False))
+
+        save.clicked.connect(save_constraints)
+        clear.clicked.connect(clear_constraints)
+        close.clicked.connect(dialog.reject)
         row = QHBoxLayout()
+        row.addWidget(save)
+        row.addWidget(clear)
         row.addStretch(1)
         row.addWidget(close)
         layout.addLayout(row)
@@ -10182,6 +10884,677 @@ class FittingController(QObject):
 
         except Exception as e:
             self._add_fitting_error(f"Export failed: {str(e)}")
+
+    def _show_manual_auto_refine_dialog(self):
+        """Open a local least-squares refine dialog based on current manual fitting parameters."""
+        try:
+            if not SCIPY_AVAILABLE:
+                QMessageBox.warning(
+                    self.main_window or self.ui,
+                    "Auto Refine",
+                    "SciPy is required for Auto Refine. Please install scipy first.",
+                )
+                return
+
+            setup = self._build_manual_refine_setup()
+            if setup is None:
+                return
+
+            dialog = QDialog(self.main_window or self.ui)
+            dialog.setWindowTitle("Auto Refine Manual Fit")
+            dialog.resize(980, 640)
+            layout = QVBoxLayout(dialog)
+
+            info = QLabel(
+                "Choose parameters to refine. Current manual parameters are used as initial values; "
+                "refined values will be written back to the fitting controls.",
+                dialog,
+            )
+            info.setWordWrap(True)
+            layout.addWidget(info)
+
+            run_settings = self._ai_run_settings()
+            controls = QGridLayout()
+            controls.addWidget(QLabel("Max eval:", dialog), 0, 0)
+            max_eval = QSpinBox(dialog)
+            max_eval.setRange(1, 100000)
+            max_eval.setValue(int(run_settings.get("full_refine_max_nfev", 120)))
+            controls.addWidget(max_eval, 0, 1)
+
+            controls.addWidget(QLabel("Target logRMSE:", dialog), 0, 2)
+            target = QDoubleSpinBox(dialog)
+            target.setDecimals(8)
+            target.setRange(0.0, 10.0)
+            target.setSingleStep(0.00000001)
+            target.setValue(float(run_settings.get("full_refine_target_logrmse", 0.0)))
+            controls.addWidget(target, 0, 3)
+
+            controls.addWidget(QLabel("ftol:", dialog), 1, 0)
+            ftol = QDoubleSpinBox(dialog)
+            ftol.setDecimals(10)
+            ftol.setRange(0.0, 1.0)
+            ftol.setSingleStep(0.00000001)
+            ftol.setValue(float(run_settings.get("full_refine_ftol", 1e-8)))
+            controls.addWidget(ftol, 1, 1)
+
+            controls.addWidget(QLabel("xtol:", dialog), 1, 2)
+            xtol = QDoubleSpinBox(dialog)
+            xtol.setDecimals(10)
+            xtol.setRange(0.0, 1.0)
+            xtol.setSingleStep(0.00000001)
+            xtol.setValue(float(run_settings.get("full_refine_xtol", 1e-8)))
+            controls.addWidget(xtol, 1, 3)
+
+            controls.addWidget(QLabel("gtol:", dialog), 1, 4)
+            gtol = QDoubleSpinBox(dialog)
+            gtol.setDecimals(10)
+            gtol.setRange(0.0, 1.0)
+            gtol.setSingleStep(0.00000001)
+            gtol.setValue(float(run_settings.get("full_refine_gtol", 1e-8)))
+            controls.addWidget(gtol, 1, 5)
+
+            controls.addWidget(QLabel("Progress every:", dialog), 2, 0)
+            progress_every = QSpinBox(dialog)
+            progress_every.setRange(1, 10000)
+            progress_every.setValue(max(1, int(run_settings.get("full_refine_progress_interval", 5) or 5)))
+            controls.addWidget(progress_every, 2, 1)
+            controls.addWidget(QLabel("Show every:", dialog), 2, 2)
+            show_every = QSpinBox(dialog)
+            show_every.setRange(0, 10000)
+            show_every.setValue(10)
+            show_every.setToolTip("Update the Fitting Plot every N refine evaluations; 0 disables live plot updates.")
+            controls.addWidget(show_every, 2, 3)
+            controls.setColumnStretch(6, 1)
+            layout.addLayout(controls)
+
+            table = QTableWidget(len(setup["params"]), 5, dialog)
+            table.setHorizontalHeaderLabels(["Refine", "Parameter", "Current", "Min", "Max"])
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table.setSelectionMode(QAbstractItemView.SingleSelection)
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+            for col in range(2, 5):
+                table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
+            layout.addWidget(table, 1)
+
+            row_widgets = []
+            for row, desc in enumerate(setup["params"]):
+                value = float(desc["value"])
+                default_selected = self._manual_refine_default_selected(desc["name"])
+                lower, upper = self._default_manual_refine_bounds(desc["name"], value)
+
+                check = QCheckBox(table)
+                check.setChecked(default_selected)
+                table.setCellWidget(row, 0, check)
+                table.setItem(row, 1, QTableWidgetItem(str(desc["label"])))
+                table.setItem(row, 2, QTableWidgetItem(f"{value:.10g}"))
+
+                min_box = QDoubleSpinBox(table)
+                max_box = QDoubleSpinBox(table)
+                for spin in (min_box, max_box):
+                    spin.setDecimals(8)
+                    spin.setRange(-1e12, 1e12)
+                    spin.setSingleStep(max(abs(value) * 0.01, 1e-8))
+                min_box.setValue(float(lower))
+                max_box.setValue(float(upper))
+                table.setCellWidget(row, 3, min_box)
+                table.setCellWidget(row, 4, max_box)
+                row_widgets.append((desc, check, min_box, max_box))
+
+            result_label = QLabel("Ready.", dialog)
+            result_label.setWordWrap(True)
+            layout.addWidget(result_label)
+            progress_bar = QProgressBar(dialog)
+            progress_bar.setRange(0, 100)
+            progress_bar.setValue(0)
+            layout.addWidget(progress_bar)
+
+            button_row = QHBoxLayout()
+            select_intensity = QPushButton("Select Intensity + Scale", dialog)
+            select_all = QPushButton("Select All", dialog)
+            clear = QPushButton("Clear", dialog)
+            run = QPushButton("Run Refine", dialog)
+            stop = QPushButton("Stop", dialog)
+            stop.setEnabled(False)
+            apply_current = QPushButton("Apply Current", dialog)
+            apply_current.setEnabled(False)
+            close = QPushButton("Close", dialog)
+            button_row.addWidget(select_intensity)
+            button_row.addWidget(select_all)
+            button_row.addWidget(clear)
+            button_row.addStretch(1)
+            button_row.addWidget(run)
+            button_row.addWidget(stop)
+            button_row.addWidget(apply_current)
+            button_row.addWidget(close)
+            layout.addLayout(button_row)
+
+            def set_selected(predicate):
+                for desc, check, _min_box, _max_box in row_widgets:
+                    check.setChecked(bool(predicate(desc)))
+
+            select_intensity.clicked.connect(
+                lambda: set_selected(lambda desc: self._manual_refine_default_selected(desc["name"]))
+            )
+            select_all.clicked.connect(lambda: set_selected(lambda _desc: True))
+            clear.clicked.connect(lambda: set_selected(lambda _desc: False))
+            close.clicked.connect(dialog.reject)
+            refine_state = {
+                "thread": None,
+                "worker": None,
+                "latest_result": None,
+                "running": False,
+            }
+
+            def set_running_state(running: bool):
+                refine_state["running"] = bool(running)
+                run.setEnabled(not running)
+                stop.setEnabled(running)
+                apply_current.setEnabled(refine_state["latest_result"] is not None and not running)
+                close.setEnabled(not running)
+                for widget in (select_intensity, select_all, clear, table, max_eval, target, ftol, xtol, gtol, progress_every, show_every):
+                    widget.setEnabled(not running)
+
+            def apply_result(result):
+                if not result:
+                    return
+                self._apply_manual_refine_result(setup, result["params"])
+                self._perform_manual_fitting()
+                for row, value in enumerate(result["params"]):
+                    table.setItem(row, 2, QTableWidgetItem(f"{float(value):.10g}"))
+                self._add_fitting_success(
+                    f"Applied Auto Refine parameters: logRMSE={float(result.get('final_log_rmse', np.nan)):.6g}"
+                )
+
+            def on_progress(payload):
+                refine_state["latest_result"] = payload
+                max_nfev = max(1, int(payload.get("max_nfev", max_eval.value())))
+                nfev = int(payload.get("nfev", payload.get("calls", 0)))
+                progress_bar.setValue(max(0, min(99, int(100 * nfev / max_nfev))))
+                result_label.setText(
+                    f"Running: eval={nfev}/{max_nfev}, "
+                    f"current logRMSE={float(payload.get('current_log_rmse', np.nan)):.6g}, "
+                    f"best={float(payload.get('final_log_rmse', payload.get('best_log_rmse', np.nan))):.6g}"
+                )
+                show_interval = int(payload.get("show_interval", show_every.value()) or 0)
+                if show_interval > 0 and nfev > 0 and (nfev == 1 or nfev % show_interval == 0):
+                    self._preview_manual_refine_curve(setup, payload.get("params"))
+
+            def finish_worker():
+                thread = refine_state.get("thread")
+                worker = refine_state.get("worker")
+                if thread is not None:
+                    thread.quit()
+                    thread.wait(3000)
+                    thread.deleteLater()
+                if worker is not None:
+                    worker.deleteLater()
+                refine_state["thread"] = None
+                refine_state["worker"] = None
+                set_running_state(False)
+
+            def on_finished(result):
+                refine_state["latest_result"] = result
+                progress_bar.setValue(100 if not result.get("stopped") else progress_bar.value())
+                if result.get("stopped"):
+                    result_label.setText(
+                        f"Stopped: best logRMSE {result['initial_log_rmse']:.6g} -> {result['final_log_rmse']:.6g}; "
+                        "click Apply Current to save the current best parameters."
+                    )
+                    self._add_fitting_warning("Auto Refine stopped. Current best parameters are available to apply.")
+                else:
+                    apply_result(result)
+                    result_label.setText(
+                        f"Done: logRMSE {result['initial_log_rmse']:.6g} -> {result['final_log_rmse']:.6g}; "
+                        f"nfev={result['nfev']}; {result['message']}"
+                    )
+                    self._add_fitting_success(result_label.text())
+                finish_worker()
+
+            def on_failed(message):
+                result_label.setText(f"Auto Refine failed: {message}")
+                self._add_fitting_error(f"Auto Refine failed: {message}")
+                finish_worker()
+
+            def stop_refine():
+                worker = refine_state.get("worker")
+                if worker is not None:
+                    worker.request_stop()
+                    result_label.setText("Stopping Auto Refine after the current residual evaluation...")
+                    stop.setEnabled(False)
+
+            stop.clicked.connect(stop_refine)
+            apply_current.clicked.connect(lambda: apply_result(refine_state.get("latest_result")))
+
+            def on_dialog_finished(_result):
+                worker = refine_state.get("worker")
+                if worker is not None:
+                    worker.request_stop()
+
+            dialog.finished.connect(on_dialog_finished)
+
+            def run_refine():
+                try:
+                    options = {
+                        "max_nfev": int(max_eval.value()),
+                        "target_logrmse": float(target.value()),
+                        "ftol": float(ftol.value()) if ftol.value() > 0 else None,
+                        "xtol": float(xtol.value()) if xtol.value() > 0 else None,
+                        "gtol": float(gtol.value()) if gtol.value() > 0 else None,
+                        "progress_interval": int(progress_every.value()),
+                        "show_interval": int(show_every.value()),
+                    }
+                    self._save_ai_fitting_settings(
+                        full_refine_max_nfev=int(max_eval.value()),
+                        full_refine_target_logrmse=float(target.value()),
+                        full_refine_ftol=float(ftol.value()),
+                        full_refine_xtol=float(xtol.value()),
+                        full_refine_gtol=float(gtol.value()),
+                        full_refine_progress_interval=int(progress_every.value()),
+                    )
+                    selected = []
+                    for desc, check, min_box, max_box in row_widgets:
+                        if not check.isChecked():
+                            continue
+                        lo = float(min_box.value())
+                        hi = float(max_box.value())
+                        if hi <= lo:
+                            raise ValueError(f"{desc['label']} max must be greater than min.")
+                        selected.append((desc, lo, hi))
+                    if not selected:
+                        QMessageBox.information(dialog, "Auto Refine", "Select at least one parameter to refine.")
+                        return
+                    refine_state["latest_result"] = None
+                    progress_bar.setValue(0)
+                    result_label.setText("Refining...")
+                    thread = QThread(dialog)
+                    worker = ManualAutoRefineWorker(self, setup, selected, options)
+                    worker.moveToThread(thread)
+                    thread.started.connect(worker.run)
+                    worker.progress.connect(on_progress)
+                    worker.finished.connect(on_finished)
+                    worker.failed.connect(on_failed)
+                    refine_state["thread"] = thread
+                    refine_state["worker"] = worker
+                    set_running_state(True)
+                    thread.start()
+                except Exception as exc:
+                    result_label.setText(f"Auto Refine failed: {exc}")
+                    self._add_fitting_error(f"Auto Refine failed: {exc}")
+
+            run.clicked.connect(run_refine)
+            dialog.exec_()
+
+        except Exception as e:
+            self._add_fitting_error(f"Failed to open Auto Refine: {e}")
+
+    def _build_manual_refine_setup(self):
+        try:
+            from utils.fitting import make_mixed_model, params_template
+
+            active_shapes, shape_configs = self._collect_active_particles()
+            if not active_shapes:
+                self._add_fitting_error("No active particle shapes selected for Auto Refine")
+                return None
+
+            q_data = None
+            y_data = None
+            q_source_kind = None
+            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
+                if getattr(self, 'current_cut_data', None) is not None:
+                    q_data = np.asarray(self.current_cut_data.get('x_coords'), dtype=float)
+                    y_data = np.asarray(self.current_cut_data.get('y_intensity'), dtype=float)
+                    q_source_kind = 'cut'
+            else:
+                if getattr(self, 'current_1d_data', None) is not None:
+                    q_data = np.asarray(self.current_1d_data.get('q'), dtype=float)
+                    y_data = np.asarray(self.current_1d_data.get('I'), dtype=float)
+                    q_source_kind = '1d'
+            if q_data is None or y_data is None:
+                self._add_fitting_error("No input curve available for Auto Refine")
+                return None
+
+            n = min(q_data.size, y_data.size)
+            q_data, y_data = q_data[:n], y_data[:n]
+            q_data, y_data = self._filter_ai_excluded_points_for_display(q_data, y_data)
+            mask = np.isfinite(q_data) & np.isfinite(y_data) & (y_data > 0)
+            if self._roi_active():
+                lo = min(float(self._roi_min), float(self._roi_max))
+                hi = max(float(self._roi_min), float(self._roi_max))
+                mask &= (q_data >= lo) & (q_data <= hi)
+            q_data, y_data = q_data[mask], y_data[mask]
+            if q_data.size < 8:
+                self._add_fitting_error("Auto Refine needs at least 8 valid positive-intensity points")
+                return None
+
+            q_model = self._convert_q_values_for_model(q_data, source=q_source_kind)
+            model_func = make_mixed_model(active_shapes)
+            param_names = params_template(active_shapes)
+            params = self._get_current_manual_param_values(active_shapes, shape_configs)
+            if not params or len(params) != len(param_names):
+                self._add_fitting_error("Could not read current manual fitting parameters")
+                return None
+
+            descriptors = self._build_manual_refine_param_descriptors(active_shapes, shape_configs, param_names, params)
+            self._last_active_particle_ids = shape_configs.copy()
+            return {
+                "shapes": active_shapes,
+                "shape_configs": shape_configs,
+                "q_raw": q_data,
+                "q_model": q_model,
+                "y": y_data,
+                "q_source_kind": q_source_kind,
+                "model_func": model_func,
+                "param_names": param_names,
+                "params": descriptors,
+            }
+        except Exception as exc:
+            self._add_fitting_error(f"Auto Refine setup failed: {exc}")
+            return None
+
+    def _get_current_manual_param_values(self, active_shapes, shape_configs):
+        param_aliases = {
+            "intensity": "Int",
+            "radius": "R",
+            "sigma_radius": "sigma_R",
+            "height": "h",
+            "sigma_height": "sigma_h",
+            "diameter": "D",
+            "sigma_diameter": "sigma_D",
+        }
+        params = []
+        for shape, widget_id in zip(active_shapes, shape_configs):
+            shape_display = self._shape_display_name(shape)
+            schema = COMPONENT_PARAMETER_SCHEMAS.get(shape_display, [])
+            for param_key, _suffix, _label, default_value, _decimals, _step in schema:
+                alias = param_aliases[param_key]
+                params.append(float(self._get_particle_parameter(widget_id, alias, default_value)))
+
+        global_defaults = [
+            ("fitBGValue", "background", 0.0),
+            ("fitSigmaResValue", "sigma_res", 0.1),
+            ("fitNuResValue", "nu_res", 5.0),
+            ("fitIntResValue", "int_res", 0.0),
+            ("fitKValue", "k_value", 1.0),
+        ]
+        for widget_name, global_key, default in global_defaults:
+            if hasattr(self.ui, widget_name):
+                params.append(float(getattr(self.ui, widget_name).value()))
+            elif hasattr(self, "get_global_parameter"):
+                params.append(float(self.get_global_parameter(global_key)))
+            else:
+                params.append(float(default))
+        return params
+
+    def _build_manual_refine_param_descriptors(self, active_shapes, shape_configs, param_names, params):
+        descriptors = []
+        global_map = {
+            "BG": ("fitBGValue", "background", "Global BG"),
+            "sigma_Res": ("fitSigmaResValue", "sigma_res", "Global sigma_Res"),
+            "nu_Res": ("fitNuResValue", "nu_res", "Global nu_Res"),
+            "int_Res": ("fitIntResValue", "int_res", "Global int_Res"),
+            "k": ("fitKValue", "k_value", "Global k"),
+        }
+        for idx, (name, value) in enumerate(zip(param_names, params)):
+            match = re.match(r'^(.*?)(\d+)$', str(name))
+            desc = {
+                "index": idx,
+                "name": str(name),
+                "value": float(value),
+                "scope": "global",
+                "label": str(name),
+                "widget_name": None,
+                "global_key": None,
+                "widget_id": None,
+                "shape": None,
+                "alias": None,
+            }
+            if match:
+                alias = match.group(1)
+                seq_index = int(match.group(2))
+                widget_id = shape_configs[seq_index - 1] if 1 <= seq_index <= len(shape_configs) else None
+                shape = active_shapes[seq_index - 1] if 1 <= seq_index <= len(active_shapes) else None
+                widget_name = self._get_ui_control_name(widget_id, shape, alias) if widget_id and shape else None
+                desc.update({
+                    "scope": "particle",
+                    "label": f"Particle {seq_index} ({self._shape_display_name(shape)} {widget_id}) {alias}",
+                    "widget_name": widget_name,
+                    "widget_id": widget_id,
+                    "shape": shape,
+                    "alias": alias,
+                })
+            else:
+                widget_name, global_key, label = global_map.get(str(name), (None, None, str(name)))
+                desc.update({
+                    "scope": "global",
+                    "label": label,
+                    "widget_name": widget_name,
+                    "global_key": global_key,
+                })
+            descriptors.append(desc)
+        return descriptors
+
+    def _manual_refine_default_selected(self, name: str) -> bool:
+        base = re.sub(r'\d+$', '', str(name))
+        return base in {"Int", "BG", "int_Res", "k"}
+
+    def _default_manual_refine_bounds(self, name: str, value: float):
+        base = re.sub(r'\d+$', '', str(name))
+        value = float(value)
+        if base == "BG":
+            return 0.0, max(abs(value) * 10.0, 1.0)
+        if base in {"sigma_R", "sigma_h", "sigma_D"}:
+            return 0.0, max(abs(value) * 5.0, 1.0)
+        if base in {"nu_Res"}:
+            return 0.1, max(abs(value) * 4.0, 50.0)
+        return 0.0, max(abs(value) * 10.0, 1.0)
+
+    def _run_manual_auto_refine(self, setup, selected, options, progress_callback=None, stop_callback=None):
+        model_func = setup["model_func"]
+        q_model = np.asarray(setup["q_model"], dtype=float)
+        y = np.asarray(setup["y"], dtype=float)
+        params0 = np.array([float(desc["value"]) for desc in setup["params"]], dtype=float)
+        variable_indices = [int(desc["index"]) for desc, _lo, _hi in selected]
+        lower = np.array([float(lo) for _desc, lo, _hi in selected], dtype=float)
+        upper = np.array([float(hi) for _desc, _lo, hi in selected], dtype=float)
+        x0 = params0[variable_indices].copy()
+        x0 = np.minimum(np.maximum(x0, lower + 1e-15), upper - 1e-15)
+
+        progress = {"best": np.inf, "best_x": x0.copy(), "calls": 0, "current": np.inf}
+        target_logrmse = float(options.get("target_logrmse", 0.0) or 0.0)
+        progress_interval = max(1, int(options.get("progress_interval", 5) or 5))
+        show_interval = int(options.get("show_interval", 0) or 0)
+        max_nfev = int(options.get("max_nfev", 120))
+
+        def build_params(x):
+            params = params0.copy()
+            params[variable_indices] = x
+            return params
+
+        def log_rmse_for_params(params):
+            y_model = np.asarray(model_func(q_model, *params), dtype=float)
+            if y_model.shape != y.shape:
+                y_model = y_model[:y.shape[0]]
+            if not np.all(np.isfinite(y_model)):
+                return np.inf, y_model
+            eps = 1e-30
+            residual = np.log10(np.maximum(y_model, eps)) - np.log10(np.maximum(y, eps))
+            return float(np.sqrt(np.mean(residual * residual))), y_model
+
+        initial_log_rmse, _ = log_rmse_for_params(params0)
+        if progress_callback:
+            progress_callback({
+                "params": params0.copy(),
+                "initial_log_rmse": initial_log_rmse,
+                "final_log_rmse": initial_log_rmse,
+                "best_log_rmse": initial_log_rmse,
+                "current_log_rmse": initial_log_rmse,
+                "nfev": 0,
+                "calls": 0,
+                "max_nfev": max_nfev,
+                "show_interval": show_interval,
+                "message": "started",
+                "stopped": False,
+            })
+
+        def residuals(x):
+            if stop_callback and stop_callback():
+                raise RuntimeError("__AUTO_REFINE_STOP_REQUESTED__")
+            params = build_params(x)
+            y_model = np.asarray(model_func(q_model, *params), dtype=float)
+            eps = 1e-30
+            if y_model.shape != y.shape or not np.all(np.isfinite(y_model)):
+                return np.full_like(y, 1e6, dtype=float)
+            residual = np.log10(np.maximum(y_model, eps)) - np.log10(np.maximum(y, eps))
+            current = float(np.sqrt(np.mean(residual * residual)))
+            progress["calls"] += 1
+            progress["current"] = current
+            if current < progress["best"]:
+                progress["best"] = current
+                progress["best_x"] = np.array(x, dtype=float, copy=True)
+            if progress_callback and (
+                progress["calls"] == 1 or progress["calls"] % progress_interval == 0
+            ):
+                best_params = build_params(progress["best_x"])
+                progress_callback({
+                    "params": best_params,
+                    "initial_log_rmse": initial_log_rmse,
+                    "final_log_rmse": float(progress["best"]),
+                    "best_log_rmse": float(progress["best"]),
+                    "current_log_rmse": current,
+                    "nfev": int(progress["calls"]),
+                    "calls": int(progress["calls"]),
+                    "max_nfev": max_nfev,
+                    "show_interval": show_interval,
+                    "message": "running",
+                    "stopped": False,
+                })
+            if target_logrmse > 0 and current <= target_logrmse:
+                raise RuntimeError("__AUTO_REFINE_TARGET_REACHED__")
+            return residual
+
+        stopped = False
+        try:
+            result = least_squares(
+                residuals,
+                x0,
+                bounds=(lower, upper),
+                max_nfev=max_nfev,
+                ftol=options.get("ftol"),
+                xtol=options.get("xtol"),
+                gtol=options.get("gtol"),
+            )
+            x_final = result.x
+            message = str(result.message)
+            nfev = int(result.nfev)
+        except RuntimeError as exc:
+            text = str(exc)
+            if "__AUTO_REFINE_TARGET_REACHED__" not in text and "__AUTO_REFINE_STOP_REQUESTED__" not in text:
+                raise
+            x_final = np.array(progress.get("best_x", x0), dtype=float, copy=True)
+            stopped = "__AUTO_REFINE_STOP_REQUESTED__" in text
+            message = "Stopped by user." if stopped else "Stopped after reaching target logRMSE."
+            nfev = int(progress.get("calls", 0))
+
+        final_params = build_params(x_final)
+        final_log_rmse, _ = log_rmse_for_params(final_params)
+        result_payload = {
+            "params": final_params,
+            "initial_log_rmse": initial_log_rmse,
+            "final_log_rmse": final_log_rmse,
+            "nfev": nfev,
+            "calls": int(progress.get("calls", nfev)),
+            "max_nfev": max_nfev,
+            "show_interval": show_interval,
+            "message": message,
+            "stopped": stopped,
+        }
+        if progress_callback:
+            progress_callback(result_payload)
+        return result_payload
+
+    def _apply_manual_refine_result(self, setup, refined_params):
+        old_loading = getattr(self, "_loading_parameters", False)
+        self._loading_parameters = True
+        try:
+            for desc, value in zip(setup["params"], refined_params):
+                value = float(value)
+                widget_name = desc.get("widget_name")
+                if widget_name and hasattr(self.ui, widget_name):
+                    widget = getattr(self.ui, widget_name)
+                    if hasattr(widget, "blockSignals"):
+                        widget.blockSignals(True)
+                    try:
+                        widget.setValue(value)
+                    finally:
+                        if hasattr(widget, "blockSignals"):
+                            widget.blockSignals(False)
+
+                if desc.get("scope") == "particle":
+                    widget_id = desc.get("widget_id")
+                    shape = desc.get("shape")
+                    alias = desc.get("alias")
+                    if widget_id and shape and alias and hasattr(self, "model_params_manager"):
+                        particle_id = f"particle_{widget_id}"
+                        param_key = self._parameter_key_from_alias(shape, alias)
+                        self.model_params_manager.set_particle_parameter(
+                            "fitting",
+                            particle_id,
+                            self._shape_key(shape),
+                            param_key,
+                            value,
+                        )
+                elif desc.get("global_key") and hasattr(self, "model_params_manager"):
+                    self.model_params_manager.set_global_parameter("fitting", desc["global_key"], value)
+            try:
+                self.model_params_manager.save_parameters()
+            except Exception:
+                pass
+        finally:
+            self._loading_parameters = old_loading
+
+    def _preview_manual_refine_curve(self, setup, params):
+        if params is None:
+            return
+        try:
+            params = np.asarray(params, dtype=float)
+            q_raw = None
+            if getattr(self, "q", None) is not None:
+                q_raw = np.asarray(self.q, dtype=float)
+                q_raw = q_raw[np.isfinite(q_raw)]
+            if q_raw is None or q_raw.size == 0:
+                q_raw = np.asarray(setup.get("q_raw", setup["q_model"]), dtype=float)
+            q_model = self._convert_q_values_for_model(q_raw, source=setup.get("q_source_kind"))
+            y_fit = np.asarray(setup["model_func"](q_model, *params), dtype=float)
+            if y_fit.size == 0:
+                return
+            param_dict = {
+                str(name): float(value)
+                for name, value in zip(setup.get("param_names", []), params)
+            }
+            self.I_fitting = y_fit
+            self.has_fitting_data = True
+            self._has_fitting_data = True
+            self.fitting = {
+                "q": np.array(q_raw[: y_fit.size], copy=True),
+                "I": np.array(y_fit, copy=True),
+                "meta": {
+                    "shapes": list(setup.get("shapes", [])),
+                    "params": param_dict,
+                    "source": "auto_refine_preview",
+                    "data_source": setup.get("q_source_kind"),
+                    "q_source_unit": self._get_q_source_unit(setup.get("q_source_kind")),
+                    "q_model_unit": "nm",
+                    "preview": True,
+                },
+            }
+            self.display_mode = "fitting"
+            self._display_mode = "fitting"
+            self._fitting_mode_active = True
+            self._update_GUI_image("fitting")
+            self._update_outside_window("fitting")
+        except Exception as exc:
+            self._add_fitting_error(f"Auto Refine preview update failed: {exc}")
 
 
     def _perform_manual_fitting(self):
@@ -10846,6 +12219,8 @@ class FittingController(QObject):
                     self.independent_fit_window.q_unit_combo.currentTextChanged.connect(self._on_positive_only_changed)
                 if hasattr(self.independent_fit_window, 'y_range_combo'):
                     self.independent_fit_window.y_range_combo.currentTextChanged.connect(self._on_positive_only_changed)
+                if hasattr(self.independent_fit_window, 'input_point_delete_requested'):
+                    self.independent_fit_window.input_point_delete_requested.connect(self._exclude_ai_input_point_from_plot)
                 try:
                     self._sync_axis_filter_controls()
                 except Exception:
@@ -10907,8 +12282,10 @@ class FittingController(QObject):
             filter_mode = self._get_independent_axis_filter_mode()
             original_x_plot = original_x
             fitting_x_plot = fitting_x
+            original_x_raw_for_delete = None
             if original_x is not None and plot_original_y is not None:
-                _, original_x_plot, plot_original_y, filter_mode = self._filter_q_data_for_independent_display(original_x, plot_original_y)
+                original_x, plot_original_y = self._filter_ai_excluded_points_for_display(original_x, plot_original_y)
+                original_x_raw_for_delete, original_x_plot, plot_original_y, filter_mode = self._filter_q_data_for_independent_display(original_x, plot_original_y)
             if fitting_x is not None and plot_fitting_y is not None:
                 _, fitting_x_plot, plot_fitting_y, _ = self._filter_q_data_for_independent_display(fitting_x, plot_fitting_y)
 
@@ -10953,6 +12330,17 @@ class FittingController(QObject):
                 fitting_y=plot_fitting_y,
                 log_y=log_y,
             )
+
+            try:
+                if (original_x_raw_for_delete is not None and plot_original_y is not None and
+                        hasattr(self.independent_fit_window, 'set_deletable_points')):
+                    self.independent_fit_window.set_deletable_points(
+                        original_x_raw_for_delete,
+                        original_x_plot,
+                        plot_original_y,
+                    )
+            except Exception:
+                pass
 
             # ??????
             if hasattr(self.independent_fit_window, 'canvas'):
@@ -11332,6 +12720,7 @@ class FittingController(QObject):
                     plot_y = y_data / max_val
 
             x_raw, x_plot, plot_y, filter_mode = self._filter_q_data_for_independent_display(x_data, plot_y)
+            x_raw, x_plot, plot_y = self._filter_ai_excluded_points_for_display(x_raw, x_plot, plot_y)
             x_plot = self._convert_q_values_for_display(x_plot)
             if x_plot.size == 0 or plot_y is None or plot_y.size == 0:
                 return
@@ -11363,6 +12752,11 @@ class FittingController(QObject):
 
             # ??????
             if hasattr(self.independent_fit_window, 'canvas'):
+                try:
+                    if hasattr(self.independent_fit_window, 'set_deletable_points'):
+                        self.independent_fit_window.set_deletable_points(x_raw, x_plot, plot_y)
+                except Exception:
+                    pass
                 self.independent_fit_window.canvas.draw()
 
         except Exception as e:

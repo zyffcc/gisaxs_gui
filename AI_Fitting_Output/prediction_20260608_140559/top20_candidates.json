@@ -1,0 +1,208 @@
+[
+  {
+    "rank": 1,
+    "combination": "sphere+sphere+sphere",
+    "score_mode": "unweighted_log",
+    "robust_loss": "huber",
+    "robust_f_scale": 0.3,
+    "q_min": null,
+    "q_max": null,
+    "drop_outliers": false,
+    "n_removed_outliers": 0,
+    "include_mean_candidate": true,
+    "exact_nonempty": 3,
+    "refine_top_n": 1,
+    "refine_max_nfev": 200,
+    "refine_target_logrmse": 0.0,
+    "refine_stall_patience": 80,
+    "refine_stall_tol": 0.0001,
+    "refine_attempted": true,
+    "refine_success": true,
+    "refine_nfev": -1,
+    "refine_residual_calls": 699,
+    "refine_early_stop_reason": "stalled for 80 residual calls; best_logRMSE=0.0468267",
+    "refine_best_log_rmse_seen": 0.04682671048055233,
+    "refine_message": "stalled for 80 residual calls; best_logRMSE=0.0468267",
+    "rejected_empty": 0,
+    "rejected_exact_nonempty": 0,
+    "rejected_forward": 0,
+    "rejected_nonfinite": 0,
+    "best_source": "sample+refined",
+    "unrefined_best_source": "sample",
+    "score_weighted_probability": 1.0,
+    "posterior_frequency": 1.0,
+    "chi2_weighted_probability": 1.0,
+    "fit_percent": 0.0,
+    "fit_percent_by_log_rmse": 0.0,
+    "fit_percent_by_chi2": 0.0,
+    "best_score": 0.04682671048055233,
+    "best_log_rmse": 0.04682671048055233,
+    "best_chi2_weighted": 4.650275352316988,
+    "best_robust_log": 0.0010873286485312183,
+    "best_relative_rmse": 0.11255521091137075,
+    "best_linear_rmse": 223804.8208875125,
+    "unrefined_best_score": 0.7906402643984937,
+    "unrefined_best_log_rmse": 0.7906402643984937,
+    "unrefined_best_chi2_weighted": 1325.7121113747858,
+    "components": [
+      {
+        "type": "sphere",
+        "weight": 0.0005799100601510504,
+        "params": {
+          "R": 12.13269329071045,
+          "sigma_R": 0.09178021550178528,
+          "D": 495.2030029296875,
+          "sigma_D": 0.508342444896698
+        }
+      },
+      {
+        "type": "sphere",
+        "weight": 0.07948097905487322,
+        "params": {
+          "R": 4.029223442077637,
+          "sigma_R": 0.9434022307395935,
+          "D": 6.224350452423096,
+          "sigma_D": 0.6527596712112427
+        }
+      },
+      {
+        "type": "sphere",
+        "weight": 0.9199391108849758,
+        "params": {
+          "R": 33.7878532409668,
+          "sigma_R": 8.629481315612793,
+          "D": 20.708118438720703,
+          "sigma_D": 3.9571752548217773
+        }
+      }
+    ],
+    "global_params": {
+      "BG": 0.34812790155410767,
+      "sigma_Res": 0.017609165981411934,
+      "nu_Res": 5.935795783996582,
+      "int_Res": 12.906378746032715,
+      "k": 236716.859375
+    },
+    "posterior_parameter_stats": {
+      "components": [
+        {
+          "type": "sphere",
+          "weight": {
+            "median": 0.24329441077401584,
+            "p16": 0.24329441077401584,
+            "p84": 0.24329441077401584
+          },
+          "params": {
+            "R": {
+              "median": 25.31592559814453,
+              "p16": 24.756576538085938,
+              "p84": 25.934627532958984
+            },
+            "sigma_R": {
+              "median": 5.267209529876709,
+              "p16": 5.037149429321289,
+              "p84": 5.479128837585449
+            },
+            "D": {
+              "median": 24.786678314208984,
+              "p16": 24.130111694335938,
+              "p84": 25.492090225219727
+            },
+            "sigma_D": {
+              "median": 5.125350475311279,
+              "p16": 4.9278669357299805,
+              "p84": 5.351433753967285
+            }
+          }
+        },
+        {
+          "type": "sphere",
+          "weight": {
+            "median": 0.2532407922563538,
+            "p16": 0.2532407922563538,
+            "p84": 0.2532407922563538
+          },
+          "params": {
+            "R": {
+              "median": 11.797465324401855,
+              "p16": 11.505160331726074,
+              "p84": 12.02755355834961
+            },
+            "sigma_R": {
+              "median": 1.5100730657577515,
+              "p16": 1.4482529163360596,
+              "p84": 1.5648165941238403
+            },
+            "D": {
+              "median": 8.913578033447266,
+              "p16": 8.684581756591797,
+              "p84": 9.15339469909668
+            },
+            "sigma_D": {
+              "median": 0.8802604675292969,
+              "p16": 0.8461323380470276,
+              "p84": 0.9165557622909546
+            }
+          }
+        },
+        {
+          "type": "sphere",
+          "weight": {
+            "median": 0.5034647969696303,
+            "p16": 0.5034647969696303,
+            "p84": 0.5034647969696303
+          },
+          "params": {
+            "R": {
+              "median": 3.2077391147613525,
+              "p16": 3.1305277347564697,
+              "p84": 3.286980628967285
+            },
+            "sigma_R": {
+              "median": 0.5467196106910706,
+              "p16": 0.5240568518638611,
+              "p84": 0.5722423791885376
+            },
+            "D": {
+              "median": 4.9927897453308105,
+              "p16": 4.860727787017822,
+              "p84": 5.12804651260376
+            },
+            "sigma_D": {
+              "median": 0.3625130355358124,
+              "p16": 0.346903532743454,
+              "p84": 0.3801504373550415
+            }
+          }
+        }
+      ],
+      "global_params": {
+        "BG": {
+          "median": 0.1173277199268341,
+          "p16": 0.08644048124551773,
+          "p84": 0.15264269709587097
+        },
+        "sigma_Res": {
+          "median": 0.021594421938061714,
+          "p16": 0.02103462442755699,
+          "p84": 0.022104177623987198
+        },
+        "nu_Res": {
+          "median": 4.859569549560547,
+          "p16": 4.815576076507568,
+          "p84": 4.910228729248047
+        },
+        "int_Res": {
+          "median": 4.281639931491554e-08,
+          "p16": 3.1999700667029174e-08,
+          "p84": 5.6623800759325604e-08
+        },
+        "k": {
+          "median": 397895.0,
+          "p16": 363599.3125,
+          "p84": 430614.84375
+        }
+      }
+    }
+  }
+]

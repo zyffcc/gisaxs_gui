@@ -1,11 +1,11 @@
 {
     "fitting": {
         "global_parameters": {
-            "sigma_res": 0.01999378576874733,
-            "k_value": 368205.5,
-            "int_res": 1.884432343501885e-08,
-            "nu_res": 4.9802470207214355,
-            "background": 0.134151428937912
+            "sigma_res": 0.01730831353337056,
+            "k_value": 373615.98284238484,
+            "int_res": 0.9742845439085588,
+            "nu_res": 4.643230265378543,
+            "background": 0.0002876952709267506
         },
         "particles": {
             "particle_7": {
@@ -33,22 +33,22 @@
                 }
             },
             "particle_3": {
-                "shape": "Vertical Cylinder",
+                "shape": "Sphere",
                 "enabled": true,
                 "parameters": {
                     "vertical_cylinder": {
-                        "radius": 23.0,
-                        "intensity": 0.34,
-                        "sigma_radius": 0.39,
-                        "diameter": 16.0,
-                        "sigma_diameter": 4.8
+                        "radius": 22.112717352344035,
+                        "intensity": 0.9070231847340101,
+                        "sigma_radius": 4.698889326438766,
+                        "diameter": 30.82322325785503,
+                        "sigma_diameter": 6.510470696943217
                     },
                     "sphere": {
-                        "diameter": 6.5,
-                        "sigma_diameter": 0.62,
-                        "radius": 4.5,
-                        "intensity": 0.158,
-                        "sigma_radius": 1.0
+                        "diameter": 17.918824116308038,
+                        "sigma_diameter": 32.26065093873412,
+                        "radius": 70.67143038498152,
+                        "intensity": 1.0055664281819139,
+                        "sigma_radius": 12.894660558894735
                     },
                     "cylinder": {
                         "intensity": 0.3474755863637331,
@@ -60,11 +60,11 @@
                         "sigma_diameter": 0.3884720206260681
                     },
                     "vertical cylinder": {
-                        "intensity": 0.28869177300450954,
-                        "radius": 12.009413719177246,
-                        "sigma_radius": 0.40634191036224365,
-                        "diameter": 9.335593223571777,
-                        "sigma_diameter": 1.645982265472412
+                        "intensity": 0.3178514159686905,
+                        "radius": 13.555416107177734,
+                        "sigma_radius": 0.4479770362377167,
+                        "diameter": 10.633874893188477,
+                        "sigma_diameter": 1.9716017246246338
                     }
                 }
             },
@@ -73,20 +73,20 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 0.3734397816519731,
-                        "radius": 3.462524652481079,
-                        "sigma_radius": 0.30399757623672485,
-                        "diameter": 4.612735271453857,
-                        "sigma_diameter": 0.4269197881221771
+                        "intensity": 0.06808605890169724,
+                        "radius": 4.2377851389242815,
+                        "sigma_radius": 0.8414067980758209,
+                        "diameter": 6.28960699773378,
+                        "sigma_diameter": 0.6088055892175115
                     },
                     "cylinder": {
-                        "intensity": 0.31,
-                        "radius": 2.5,
-                        "sigma_radius": 0.7693,
-                        "height": 17.87,
-                        "sigma_height": 1.49,
-                        "diameter": 5.75,
-                        "sigma_diameter": 1.02
+                        "intensity": 0.641146,
+                        "radius": 3.577366852244157,
+                        "sigma_radius": 1.404974353377571,
+                        "height": 57.70578551802015,
+                        "sigma_height": 6.431505812815366,
+                        "diameter": 6.5783267065335975,
+                        "sigma_diameter": 0.8469100206896945
                     },
                     "vertical_cylinder": {
                         "intensity": 1.0,
@@ -97,43 +97,16 @@
                     }
                 }
             },
-            "particle_2": {
-                "shape": "Vertical Cylinder",
-                "enabled": true,
-                "parameters": {
-                    "vertical_cylinder": {
-                        "intensity": 0.345,
-                        "radius": 23.2,
-                        "sigma_radius": 0.35,
-                        "diameter": 15.93,
-                        "sigma_diameter": 4.83
-                    },
-                    "sphere": {
-                        "intensity": 0.832,
-                        "radius": 50.0,
-                        "sigma_radius": 13.68,
-                        "diameter": 0.1,
-                        "sigma_diameter": 0.060000000000000005
-                    },
-                    "vertical cylinder": {
-                        "intensity": 0.3378684453435173,
-                        "radius": 10.406355857849121,
-                        "sigma_radius": 0.3407605290412903,
-                        "diameter": 43.936466217041016,
-                        "sigma_diameter": 14.513193130493164
-                    }
-                }
-            },
             "particle_4": {
                 "shape": "Sphere",
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 0.012,
-                        "radius": 10.7,
-                        "sigma_radius": 1.61,
-                        "diameter": 0.0,
-                        "sigma_diameter": 0.0
+                        "intensity": 0.5707042893304722,
+                        "radius": 18.799589157104492,
+                        "sigma_radius": 5.30005407333374,
+                        "diameter": 4.267856121063232,
+                        "sigma_diameter": 0.3472563326358795
                     },
                     "cylinder": {
                         "intensity": 1.0,
@@ -150,6 +123,42 @@
                         "sigma_radius": 0.3,
                         "diameter": 20.0,
                         "sigma_diameter": 0.1
+                    }
+                }
+            },
+            "particle_2": {
+                "shape": "Sphere",
+                "enabled": true,
+                "parameters": {
+                    "sphere": {
+                        "intensity": 0.734948219419986,
+                        "radius": 21.449781408739423,
+                        "sigma_radius": 5.748804718844298,
+                        "diameter": 5.058630344413954,
+                        "sigma_diameter": 0.5003893530256599
+                    },
+                    "cylinder": {
+                        "intensity": 1.0,
+                        "radius": 10.0,
+                        "sigma_radius": 0.1,
+                        "height": 20.0,
+                        "sigma_height": 0.1,
+                        "diameter": 20.0,
+                        "sigma_diameter": 0.1
+                    },
+                    "vertical_cylinder": {
+                        "intensity": 1.3818040559731224,
+                        "radius": 22.61565653448969,
+                        "sigma_radius": 0.03127984848208867,
+                        "diameter": 19.950589699957963,
+                        "sigma_diameter": 0.014703133913740903
+                    },
+                    "vertical cylinder": {
+                        "intensity": 0.3611272807452939,
+                        "radius": 13.079044342041016,
+                        "sigma_radius": 0.3468473553657532,
+                        "diameter": 60.561859130859375,
+                        "sigma_diameter": 20.768064498901367
                     }
                 }
             }

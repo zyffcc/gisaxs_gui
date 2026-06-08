@@ -1,0 +1,208 @@
+[
+  {
+    "rank": 1,
+    "combination": "sphere+vertical_cylinder+vertical_cylinder",
+    "score_mode": "unweighted_log",
+    "robust_loss": "huber",
+    "robust_f_scale": 0.3,
+    "q_min": null,
+    "q_max": null,
+    "drop_outliers": false,
+    "n_removed_outliers": 0,
+    "include_mean_candidate": true,
+    "exact_nonempty": 3,
+    "refine_top_n": 1,
+    "refine_max_nfev": 200,
+    "refine_target_logrmse": 0.0,
+    "refine_stall_patience": 80,
+    "refine_stall_tol": 0.0001,
+    "refine_attempted": true,
+    "refine_success": true,
+    "refine_nfev": -1,
+    "refine_residual_calls": 403,
+    "refine_early_stop_reason": "stalled for 80 residual calls; best_logRMSE=0.0439506",
+    "refine_best_log_rmse_seen": 0.043950595200842824,
+    "refine_message": "stalled for 80 residual calls; best_logRMSE=0.0439506",
+    "rejected_empty": 0,
+    "rejected_exact_nonempty": 0,
+    "rejected_forward": 0,
+    "rejected_nonfinite": 0,
+    "best_source": "sample+refined",
+    "unrefined_best_source": "sample",
+    "score_weighted_probability": 1.0,
+    "posterior_frequency": 1.0,
+    "chi2_weighted_probability": 1.0,
+    "fit_percent": 0.0,
+    "fit_percent_by_log_rmse": 0.0,
+    "fit_percent_by_chi2": 0.0,
+    "best_score": 0.043950595200842824,
+    "best_log_rmse": 0.043950595200842824,
+    "best_chi2_weighted": 4.0965748129383615,
+    "best_robust_log": 0.0009658274092541741,
+    "best_relative_rmse": 0.10201622736992225,
+    "best_linear_rmse": 13528.838373154438,
+    "unrefined_best_score": 0.4983872327763621,
+    "unrefined_best_log_rmse": 0.4983872327763621,
+    "unrefined_best_chi2_weighted": 526.7750361827982,
+    "components": [
+      {
+        "type": "sphere",
+        "weight": 0.06519618582535318,
+        "params": {
+          "R": 4.931000232696533,
+          "sigma_R": 1.2543681859970093,
+          "D": 6.3838701248168945,
+          "sigma_D": 0.616918683052063
+        }
+      },
+      {
+        "type": "vertical_cylinder",
+        "weight": 0.7027099261800634,
+        "params": {
+          "R": 22.160320281982422,
+          "sigma_R": 1.7119202613830566,
+          "D": 43.02870559692383,
+          "sigma_D": 44.371070861816406
+        }
+      },
+      {
+        "type": "vertical_cylinder",
+        "weight": 0.23209388799458341,
+        "params": {
+          "R": 12.368898391723633,
+          "sigma_R": 0.38938915729522705,
+          "D": 21.427663803100586,
+          "sigma_D": 16.658042907714844
+        }
+      }
+    ],
+    "global_params": {
+      "BG": 0.021103158593177795,
+      "sigma_Res": 0.15309131145477295,
+      "nu_Res": 5.218228816986084,
+      "int_Res": 0.0031231280881911516,
+      "k": 510579.40625
+    },
+    "posterior_parameter_stats": {
+      "components": [
+        {
+          "type": "sphere",
+          "weight": {
+            "median": 0.3520074289263091,
+            "p16": 0.3520074289263091,
+            "p84": 0.3520074289263091
+          },
+          "params": {
+            "R": {
+              "median": 4.4388203620910645,
+              "p16": 4.3288397789001465,
+              "p84": 4.525391578674316
+            },
+            "sigma_R": {
+              "median": 1.0482298135757446,
+              "p16": 1.0053168535232544,
+              "p84": 1.0862305164337158
+            },
+            "D": {
+              "median": 4.8841166496276855,
+              "p16": 4.758640289306641,
+              "p84": 5.015522003173828
+            },
+            "sigma_D": {
+              "median": 0.4266963601112366,
+              "p16": 0.4101531207561493,
+              "p84": 0.4442901015281677
+            }
+          }
+        },
+        {
+          "type": "vertical_cylinder",
+          "weight": {
+            "median": 0.3053863861039087,
+            "p16": 0.3053863861039087,
+            "p84": 0.3053863861039087
+          },
+          "params": {
+            "R": {
+              "median": 13.81020450592041,
+              "p16": 13.505070686340332,
+              "p84": 14.147714614868164
+            },
+            "sigma_R": {
+              "median": 0.4113653004169464,
+              "p16": 0.39339780807495117,
+              "p84": 0.4279160797595978
+            },
+            "D": {
+              "median": 7.828394412994385,
+              "p16": 7.621030330657959,
+              "p84": 8.05118465423584
+            },
+            "sigma_D": {
+              "median": 0.9545105695724487,
+              "p16": 0.9177326560020447,
+              "p84": 0.9966148734092712
+            }
+          }
+        },
+        {
+          "type": "vertical_cylinder",
+          "weight": {
+            "median": 0.34260618496978223,
+            "p16": 0.34260618496978223,
+            "p84": 0.34260618496978223
+          },
+          "params": {
+            "R": {
+              "median": 14.208971977233887,
+              "p16": 13.86695671081543,
+              "p84": 14.559979438781738
+            },
+            "sigma_R": {
+              "median": 0.4603843092918396,
+              "p16": 0.44130033254623413,
+              "p84": 0.4818766117095947
+            },
+            "D": {
+              "median": 47.27812957763672,
+              "p16": 46.02759552001953,
+              "p84": 48.55891418457031
+            },
+            "sigma_D": {
+              "median": 15.197783470153809,
+              "p16": 14.543378829956055,
+              "p84": 15.937203407287598
+            }
+          }
+        }
+      ],
+      "global_params": {
+        "BG": {
+          "median": 0.1173277199268341,
+          "p16": 0.08644048124551773,
+          "p84": 0.15264269709587097
+        },
+        "sigma_Res": {
+          "median": 0.021594421938061714,
+          "p16": 0.02103462442755699,
+          "p84": 0.022104177623987198
+        },
+        "nu_Res": {
+          "median": 4.859569549560547,
+          "p16": 4.815576076507568,
+          "p84": 4.910228729248047
+        },
+        "int_Res": {
+          "median": 4.281639931491554e-08,
+          "p16": 3.1999700667029174e-08,
+          "p84": 5.6623800759325604e-08
+        },
+        "k": {
+          "median": 397895.0,
+          "p16": 363599.3125,
+          "p84": 430614.84375
+        }
+      }
+    }
+  }
+]

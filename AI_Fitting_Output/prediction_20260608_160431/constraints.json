@@ -1,0 +1,14 @@
+{
+  "mode": "Free",
+  "constraints": {},
+  "global_ranges": {
+    "sigma_Res": [
+      0.005,
+      0.0051
+    ],
+    "nu_Res": [
+      6.1172,
+      6.1173
+    ]
+  }
+}

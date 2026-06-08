@@ -1,0 +1,23 @@
+{
+  "original_n_points": 443,
+  "after_finite_positive_n_points": 443,
+  "drop_low_intensity_floor": false,
+  "low_intensity_floor_percentile": 0.5,
+  "low_intensity_floor_factor": 5.0,
+  "low_intensity_floor_value": null,
+  "low_intensity_floor_removed_n_points": 0,
+  "after_low_intensity_floor_n_points": 443,
+  "after_load_n_points": 443,
+  "q_min_arg": null,
+  "q_max_arg": null,
+  "q_range_removed_n_points": 0,
+  "after_q_range_n_points": 443,
+  "drop_outliers": false,
+  "outlier_removed_n_points": 0,
+  "after_outlier_filter_n_points": 443,
+  "after_downsample_n_points": 443,
+  "final_q_min": 0.0003790807266701016,
+  "final_q_max": 2.3843407709814066,
+  "final_I_min": 0.33149420618473346,
+  "final_I_max": 13958.623709952813
+}

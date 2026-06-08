@@ -1,11 +1,11 @@
 id: Yuxin_CuPolymer_FF_256
-name: "Gold on Silicon (DESY P03) - Sputter"
+name: "Copper on Silicon (DESY P03) - Sputter"
 framework: tensorflow
 version: "2.x"
 model:
   format: keras
   # model_path: 允许为空，首次使用需要选择
-  model_path: "C:\Users\87514\Downloads\Au_Si_Model\Au_Si_Model\Au_ff_h2_0to15_savedmodel"
+  model_path: 'C:\Users\zhaiyufe\Downloads\yuxin_saved_model\yuxin_saved_model'
 preprocess:
   entry: preprocess:run
   # Keep consistent with FF_test.ipynb experimental preprocessing and

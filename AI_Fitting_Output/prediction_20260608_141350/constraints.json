@@ -1,0 +1,10 @@
+{
+  "mode": "Current Manual Model",
+  "constraints": {},
+  "components": [
+    "sphere",
+    "vertical_cylinder",
+    "vertical_cylinder"
+  ],
+  "exact_nonempty": 3
+}

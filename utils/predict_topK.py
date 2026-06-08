@@ -294,6 +294,9 @@ def parse_args():
         default=10,
         help="Print refine progress every N residual evaluations; 0 disables per-candidate progress.",
     )
+    p.add_argument("--refine_ftol", type=float, default=1e-8, help="SciPy least_squares ftol; <=0 disables.")
+    p.add_argument("--refine_xtol", type=float, default=1e-8, help="SciPy least_squares xtol; <=0 disables.")
+    p.add_argument("--refine_gtol", type=float, default=1e-8, help="SciPy least_squares gtol; <=0 disables.")
     p.add_argument(
         "--refine_target_logrmse",
         type=float,
@@ -776,8 +779,8 @@ def robust_log_score(log_residual, robust_loss="huber", f_scale=0.3):
 
 
 def fit_metrics(I_fit, I_exp, sigma_log, robust_loss="huber", robust_f_scale=0.3, eps=1e-30):
-    log_i_exp = np.log(np.maximum(I_exp, eps))
-    log_i_fit = np.log(np.maximum(I_fit, eps))
+    log_i_exp = np.log10(np.maximum(I_exp, eps))
+    log_i_fit = np.log10(np.maximum(I_fit, eps))
     log_residual = log_i_fit - log_i_exp
     linear_residual = I_fit - I_exp
     log_rmse = float(np.sqrt(np.mean(log_residual**2)))
@@ -910,6 +913,9 @@ def refine_candidate(
     refine_target_logrmse=0.0,
     refine_stall_patience=80,
     refine_stall_tol=1e-4,
+    refine_ftol=1e-8,
+    refine_xtol=1e-8,
+    refine_gtol=1e-8,
 ):
     class EarlyStopRefine(Exception):
         pass
@@ -927,7 +933,7 @@ def refine_candidate(
         }
 
     x0, lower, upper, setup = candidate_refine_setup(item)
-    log_i_exp = np.log(np.maximum(I_eval, 1e-30))
+    log_i_exp = np.log10(np.maximum(I_eval, 1e-30))
     progress = {
         "calls": 0,
         "best_log_rmse": float(item.get("log_rmse", np.inf)),
@@ -946,7 +952,7 @@ def refine_candidate(
             residual = np.full_like(log_i_exp, 1e6, dtype=np.float64)
         else:
             if np.all(np.isfinite(i_fit)):
-                residual = np.log(np.maximum(i_fit, 1e-30)) - log_i_exp
+                residual = np.log10(np.maximum(i_fit, 1e-30)) - log_i_exp
             else:
                 residual = np.full_like(log_i_exp, 1e6, dtype=np.float64)
         log_rmse = float(np.sqrt(np.mean(residual**2)))
@@ -981,6 +987,9 @@ def refine_candidate(
                 bounds=(lower, upper),
                 max_nfev=int(max_nfev),
                 x_scale="jac",
+                ftol=float(refine_ftol) if float(refine_ftol) > 0 else None,
+                xtol=float(refine_xtol) if float(refine_xtol) > 0 else None,
+                gtol=float(refine_gtol) if float(refine_gtol) > 0 else None,
             )
             x_final = result.x
             success = bool(result.success)
@@ -1285,7 +1294,10 @@ def main():
 
     groups = defaultdict(list)
     curve_bank = []
-    sigma_log = np.maximum(sigma_eval / np.maximum(I_eval, 1e-30), 1e-3)
+    sigma_log = np.maximum(
+        sigma_eval / (np.maximum(I_eval, 1e-30) * np.log(10.0)),
+        1e-3,
+    )
 
     print(
         f"Sampling {args.num_samples} posterior candidates and verifying with physics forward model...",
@@ -1519,6 +1531,9 @@ def main():
                 refine_target_logrmse=args.refine_target_logrmse,
                 refine_stall_patience=args.refine_stall_patience,
                 refine_stall_tol=args.refine_stall_tol,
+                refine_ftol=args.refine_ftol,
+                refine_xtol=args.refine_xtol,
+                refine_gtol=args.refine_gtol,
             )
             r["refine_info"] = refine_info
             r["unrefined_best_score"] = float(unrefined["score"])

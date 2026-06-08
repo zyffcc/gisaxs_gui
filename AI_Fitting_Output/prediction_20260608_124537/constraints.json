@@ -1,0 +1,11 @@
+{
+  "mode": "Fixed K",
+  "constraints": {},
+  "global_ranges": {
+    "int_Res": [
+      1.0,
+      100000000.0
+    ]
+  },
+  "exact_nonempty": 1
+}

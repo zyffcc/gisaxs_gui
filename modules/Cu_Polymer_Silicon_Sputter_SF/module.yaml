@@ -1,0 +1,42 @@
+id: Yuxin_CuPolymer_SF_4Para
+name: "Copper on Silicon SF 4-Parameter"
+framework: tensorflow
+version: "2.x"
+model:
+  format: keras
+  model_path: 'C:\Users\zhaiyufe\Downloads\yuxin_sf_model\yuxin_sf_model'
+preprocess:
+  entry: preprocess:run
+  steps:
+    - crop
+    - resize
+    - detector_cleanup
+    - log_and_normalize
+    - fixed_mask
+    - add_mask_channel
+  params:
+    crop:
+      left: 530
+      up: 1100
+      down: 300
+      right: 670
+    resize:
+      shape: [256, 256]
+      method: nearest
+    detector_cleanup:
+      saturation_threshold: 1000000
+    log_and_normalize:
+      eps: 1e-8
+    mask:
+      apply: true
+      path: "../Cu_Polymer_Silicon_Sputter/assets/mask.npy"
+      mask_value: -1
+io:
+  input_type: "cbf"
+  stack_axis: 0
+  input_shape: [1, 256, 256, 2]
+outputs:
+  type: "sf_4_parameters"
+  parameter_names: ["t_Cu", "t_polymer", "D", "sigma"]
+  target_min: [0.0, 10.0, 4.0, 0.2]
+  target_max: [25.0, 50.0, 20.0, 4.0]
