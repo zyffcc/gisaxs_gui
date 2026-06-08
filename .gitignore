@@ -144,6 +144,7 @@ config/user_settings.json
 # 测试输出
 test_output/
 test_results/
+AI_Fitting_Output/
 
 # 文档生成
 docs/_build/
