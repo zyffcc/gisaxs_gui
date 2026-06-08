@@ -22,6 +22,8 @@ from PyQt5.QtWidgets import (
     QGroupBox, QCheckBox, QMessageBox, QApplication, QAbstractItemView
 )
 
+from ui.responsive_layout import move_window_to_cursor_screen
+
 
 class DistributionHeatmapWindow(QDialog):
     """Detached heatmap viewer for multi-file predicted h/R distributions."""
@@ -854,6 +856,8 @@ class MultiFilePredictResultsWidget(QWidget):
             self._heatmap_window = DistributionHeatmapWindow(self, self.window())
             self._heatmap_window.finished.connect(lambda _result: setattr(self, "_heatmap_window", None))
         self._heatmap_window.refresh_components_and_plot()
+        if not self._heatmap_window.isVisible():
+            move_window_to_cursor_screen(self._heatmap_window)
         self._heatmap_window.show()
         self._heatmap_window.raise_()
         self._heatmap_window.activateWindow()
@@ -867,6 +871,8 @@ class MultiFilePredictResultsWidget(QWidget):
             self._parameter_trend_window = ParameterTrendWindow(self, self.window())
             self._parameter_trend_window.finished.connect(lambda _result: setattr(self, "_parameter_trend_window", None))
         self._parameter_trend_window.refresh_parameters_and_plot()
+        if not self._parameter_trend_window.isVisible():
+            move_window_to_cursor_screen(self._parameter_trend_window)
         self._parameter_trend_window.show()
         self._parameter_trend_window.raise_()
         self._parameter_trend_window.activateWindow()

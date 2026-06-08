@@ -8,6 +8,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 
 from core.global_params import global_params
+from ui.responsive_layout import move_window_to_cursor_screen
 from utils.path_utils import normalize_path
 
 
@@ -205,6 +206,7 @@ class MainController(QObject):
         try:
             from WAXS.WAXS import MainWindow as WAXSMainWindow
             self._waxs_window = WAXSMainWindow()
+            move_window_to_cursor_screen(self._waxs_window)
             self._waxs_window.show()
             self.status_updated.emit("WAXS standalone window opened")
         except Exception as e:

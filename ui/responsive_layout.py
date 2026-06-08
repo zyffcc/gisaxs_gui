@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PyQt5.QtCore import QObject, QEvent, QRect, QSize, QTimer, pyqtSignal
+from PyQt5.QtCore import QObject, QEvent, QPoint, QRect, QSize, QTimer, pyqtSignal
 from PyQt5.QtGui import QCursor, QScreen
 from PyQt5.QtWidgets import QApplication, QAbstractButton, QCheckBox, QSizePolicy, QWidget
 
@@ -226,6 +226,40 @@ def screen_for_window(window: QWidget | None = None) -> QScreen | None:
         screen = app.screenAt(QCursor.pos())
     if screen is None:
         screen = app.primaryScreen()
+    return screen
+
+
+def screen_at_cursor() -> QScreen | None:
+    app = QApplication.instance()
+    if app is None:
+        return None
+    return app.screenAt(QCursor.pos()) or app.primaryScreen()
+
+
+def move_window_to_cursor_screen(window: QWidget, margin: int = 24) -> QScreen | None:
+    """Center a top-level window on the monitor that currently contains the mouse."""
+    screen = screen_at_cursor()
+    if screen is None:
+        return None
+
+    available = screen.availableGeometry()
+    size = window.size()
+    if not size.isValid() or size.isEmpty():
+        size = window.sizeHint()
+    if not size.isValid() or size.isEmpty():
+        size = window.minimumSizeHint()
+    if not size.isValid() or size.isEmpty():
+        size = QSize(900, 600)
+
+    max_width = max(320, available.width() - margin * 2)
+    max_height = max(240, available.height() - margin * 2)
+    if size.width() > max_width or size.height() > max_height:
+        size = QSize(min(size.width(), max_width), min(size.height(), max_height))
+        window.resize(size)
+
+    x = available.x() + max(0, (available.width() - size.width()) // 2)
+    y = available.y() + max(0, (available.height() - size.height()) // 2)
+    window.move(QPoint(x, y))
     return screen
 
 

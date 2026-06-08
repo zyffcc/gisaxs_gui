@@ -44,7 +44,11 @@ from PyQt5.QtWidgets import (
 
 # ?????????????
 from ui.detector_parameters_dialog import DetectorParametersDialog
-from ui.responsive_layout import apply_density_profile, install_adaptive_window_profile
+from ui.responsive_layout import (
+    apply_density_profile,
+    install_adaptive_window_profile,
+    move_window_to_cursor_screen,
+)
 
 # ??????????????
 from config.model_parameters_manager import ModelParametersManager
@@ -4585,6 +4589,8 @@ class FittingController(QObject):
                 self._sync_independent_window_selection()
 
             # ??????????????
+            if not self.independent_window.isVisible():
+                move_window_to_cursor_screen(self.independent_window)
             self.independent_window.show()
             self.independent_window.raise_()
             self.independent_window.activateWindow()
@@ -4822,6 +4828,7 @@ class FittingController(QObject):
                     pass
 
                 # ??????
+                move_window_to_cursor_screen(self.independent_fit_window)
                 self.independent_fit_window.show()
                 self.independent_fit_window.raise_()
                 self.independent_fit_window.activateWindow()
@@ -12240,6 +12247,8 @@ class FittingController(QObject):
             )
 
             # ??????
+            if not self.independent_fit_window.isVisible():
+                move_window_to_cursor_screen(self.independent_fit_window)
             self.independent_fit_window.show()
             self.independent_fit_window.raise_()
             self.independent_fit_window.activateWindow()

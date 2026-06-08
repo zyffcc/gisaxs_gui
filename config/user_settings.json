@@ -3,9 +3,9 @@
   "window_width": 1566,
   "window_height": 900,
   "font_adjustment": -3,
-  "visual_font_scale": 80,
+  "visual_font_scale": 110,
   "_auto_k_enabled": false,
-  "fit.points_num": 1001,
+  "fit.points_num": 2000,
   "fit.interp_method": "Spline",
   "responsive_layout_mode": "auto",
   "responsive_resize_on_start": false,
@@ -25,7 +25,7 @@
     "last_constraint_mode": "Free",
     "extra_model_paths": [],
     "full_num_samples": 300,
-    "full_refine_max_nfev": 200,
+    "full_refine_max_nfev": 20,
     "parameter_constraints": {
       "global_ranges": {
         "sigma_Res": [
@@ -44,20 +44,22 @@
     "full_refine_xtol": 1e-08,
     "full_refine_gtol": 1e-08,
     "full_refine_progress_interval": 20,
-    "full_sampling_std": 0.014000000000000002
+    "full_sampling_std": 0.004999999999999997,
+    "full_refine_stall_patience": 10,
+    "full_refine_stall_tol": 0.0001
   },
   "main_splitter_sizes": [
     180,
-    1600
+    1476
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      904,
-      670
+      802,
+      648
     ],
     "work": [
-      1671,
-      915
+      1742,
+      977
     ],
     "profile": "compact"
   }

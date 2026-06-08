@@ -34,7 +34,11 @@ from PyQt5.QtWidgets import (
 )
 
 from core.global_params import global_params
-from ui.responsive_layout import apply_density_profile, install_adaptive_window_profile
+from ui.responsive_layout import (
+    apply_density_profile,
+    install_adaptive_window_profile,
+    move_window_to_cursor_screen,
+)
 from utils.path_utils import normalize_path
 from .fitting_controller import AsyncImageLoader, is_matplotlib_available, is_fabio_available
 from .multifile_predict_results import (
@@ -222,6 +226,8 @@ class GisaxsPredictController(QObject):
         if source is None:
             return
         if self._status_text_window is not None:
+            if not self._status_text_window.isVisible():
+                move_window_to_cursor_screen(self._status_text_window)
             self._status_text_window.show()
             self._status_text_window.raise_()
             self._status_text_window.activateWindow()
@@ -244,6 +250,7 @@ class GisaxsPredictController(QObject):
             apply_window_minimum=False,
         )
         win.finished.connect(self._on_status_text_window_closed)
+        move_window_to_cursor_screen(win)
         win.show()
 
     def _on_status_text_window_closed(self) -> None:
@@ -792,6 +799,8 @@ class GisaxsPredictController(QObject):
             return
         if self._multifile_results_widget is not None:
             self._multifile_results_widget.setVisible(True)
+        if not win.isVisible():
+            move_window_to_cursor_screen(win)
         win.show()
         try:
             win.raise_()

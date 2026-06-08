@@ -26,7 +26,11 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem, QPushButton, QGraphicsScene
 )
 from core.global_params import global_params  # 全局参数管理器，用于持久化到 user_parameters.json
-from ui.responsive_layout import apply_density_profile, install_adaptive_window_profile
+from ui.responsive_layout import (
+    apply_density_profile,
+    install_adaptive_window_profile,
+    move_window_to_cursor_screen,
+)
 from utils.path_utils import normalize_path
 
 
@@ -1803,6 +1807,8 @@ class ClassificationController(QObject):
                 self._dr_window.sp_y.setMaximum(max(2, emb.shape[1]))
                 # keep current limits if set
                 self._dr_window._redraw()
+            if not self._dr_window.isVisible():
+                move_window_to_cursor_screen(self._dr_window)
             self._dr_window.show()
             self._dr_window.raise_()
             self._dr_window.activateWindow()
