@@ -2,10 +2,17 @@
 Menu Manager - responsible for creating and managing the main window menu system
 """
 
+from pathlib import Path
+
+from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import QMenuBar, QMenu, QAction, QMessageBox, QFileDialog
-from PyQt5.QtCore import Qt, QObject
+from PyQt5.QtCore import Qt, QObject, QUrl
 from core.global_params import global_params
 from utils.path_utils import normalize_path
+
+
+APP_VERSION = "GIMaP v0.0.2 Alpha (Pre-release)"
+GITHUB_URL = "https://github.com/zyffcc/gisaxs_gui"
 
 
 class MenuManager(QObject):
@@ -18,6 +25,7 @@ class MenuManager(QObject):
     def setup_menus(self):
         """Set up all menus"""
         self.create_parameters_menu()
+        self.create_help_menu()
         print("The menu system has been initialized.")
     
     def create_parameters_menu(self):
@@ -87,6 +95,47 @@ class MenuManager(QObject):
             
         except Exception as e:
             print(f"Failed to create parameter menu: {e}")
+
+    def create_help_menu(self):
+        """Create Help menu with version and documentation links."""
+        try:
+            menubar = self.main_window.menuBar()
+
+            help_menu = None
+            for action in menubar.actions():
+                if action.text() in ('Help', 'Help (&H)', '&Help'):
+                    if action.text() != 'Help (&H)':
+                        action.setText('Help (&H)')
+                    help_menu = action.menu()
+                    break
+
+            if help_menu is None:
+                help_menu = menubar.addMenu('Help (&H)')
+
+            if not hasattr(self.main_window, 'actionOpenUserManual'):
+                self.main_window.actionOpenUserManual = QAction('User Manual...', self.main_window)
+                self.main_window.actionOpenUserManual.setStatusTip('Open the local GIMaP user manual')
+                self.main_window.actionOpenUserManual.triggered.connect(self.open_user_manual)
+                help_menu.addAction(self.main_window.actionOpenUserManual)
+
+            if not hasattr(self.main_window, 'actionOpenGitHub'):
+                self.main_window.actionOpenGitHub = QAction('GitHub Repository...', self.main_window)
+                self.main_window.actionOpenGitHub.setStatusTip('Open the GIMaP GitHub repository')
+                self.main_window.actionOpenGitHub.triggered.connect(self.open_github_repository)
+                help_menu.addAction(self.main_window.actionOpenGitHub)
+
+            help_menu.addSeparator()
+
+            if not hasattr(self.main_window, 'actionAboutGIMaP'):
+                self.main_window.actionAboutGIMaP = QAction('About GIMaP...', self.main_window)
+                self.main_window.actionAboutGIMaP.setStatusTip('Show GIMaP version and project information')
+                self.main_window.actionAboutGIMaP.triggered.connect(self.show_about_dialog)
+                help_menu.addAction(self.main_window.actionAboutGIMaP)
+
+            print("Help menu created")
+
+        except Exception as e:
+            print(f"Failed to create help menu: {e}")
     
     def reset_parameters(self):
         """Reset all parameters to their initial default values"""
@@ -217,3 +266,34 @@ class MenuManager(QObject):
             QMessageBox.warning(self.main_window, 'AI Fitting', 'Fitting controller is not available yet.')
             return
         controller.open_ai_fitting_workspace()
+
+    def open_user_manual(self):
+        """Open the local user manual in the system default application."""
+        manual_path = Path(__file__).resolve().parents[1] / 'docs' / 'User_Manual.md'
+        if not manual_path.exists():
+            QMessageBox.warning(
+                self.main_window,
+                'User Manual',
+                f'User manual was not found:\n{manual_path}'
+            )
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(manual_path)))
+
+    def open_github_repository(self):
+        """Open the project repository in the default browser."""
+        QDesktopServices.openUrl(QUrl(GITHUB_URL))
+
+    def show_about_dialog(self):
+        """Show version, repository, and documentation information."""
+        QMessageBox.about(
+            self.main_window,
+            'About GIMaP',
+            (
+                f'<b>GIMaP</b><br>'
+                f'Version: {APP_VERSION}<br><br>'
+                f'GIMaP is a desktop application for GISAXS/GIWAXS data '
+                f'visualization, fitting, and machine-learning-assisted workflows.<br><br>'
+                f'GitHub: <a href="{GITHUB_URL}">{GITHUB_URL}</a><br>'
+                f'User Manual: docs/User_Manual.md'
+            )
+        )
