@@ -1,125 +1,186 @@
-# Grazing Incidence Mapping Package (GIMaP)
+# GIMaP
 
-A Windows-friendly GUI for GISAXS/GIWAXS data processing: cut & fitting, CNN-based prediction, dataset classification, and GIWAXS 1D integration. Supports single images and batch workflows with clear outputs.
+GIMaP (Grazing-Incidence Mapping Package) is a desktop application for GISAXS/GIWAXS data visualization, analysis, fitting, and machine-learning-assisted workflows. It is built with PyQt and is currently an early pre-release / beta scientific GUI.
 
-## Features
-- **Cut & Fitting**:
-  - File import and 2D preview (TIFF/PNG/JPG, text `.ctxti`, P03-style `.nxs`).
-  - Interactive ROI for 1D integration (radial/azimuthal) with pixel or Q-space views.
-  - Batch processing to export 1D curves and 2D images.
-  - Traditional model-based fitting workflows with session save/restore.
-- **GISAXS Prediction**:
-  - CNN-based prediction using trained models for structures/parameters.
-  - Single-file and multi-file prediction with result manager and export.
-- **Classification**:
-  - Batch import of experimental data, dimensionality reduction (UMAP/others),
-    feature extraction/visualization, and classification workflows.
-- **GIWAXS Module**:
-  - GIWAXS data import, signal integration, and batch processing.
+## Overview
+
+GIMaP provides a single desktop interface for working with grazing-incidence scattering data. The current codebase includes tools for detector image viewing, cut-and-fit workflows, trained-model prediction, AI-assisted 1D fitting, trainset generation, classification, and an experimental WAXS/GIWAXS window.
+
+The application entry point is `main.py`.
+
+## Key Features
+
+- **Cut & Fitting**: load GISAXS detector images, inspect 2D data, define cuts, fit 1D curves, and run least-squares refinement.
+- **AI-assisted fitting**: generate model candidates, rank predicted candidates, refine selected candidates, and export prediction/refinement results.
+- **GIMaP Predict**: run configured trained-model prediction modules on single files or multi-file batches.
+- **Model import**: import or select trained models through module configuration files.
+- **Trainset Build**: generate synthetic or simulated training data through an experimental GUI workflow (Not implemented).
+- **Classification**: import datasets, preview data, reduce dimensions, train classifiers, and save/load classification models.
+- **WAXS/GIWAXS**: standalone experimental window for WAXS/GIWAXS-related workflows.
 
 ## Installation
-Recommended environment: **Windows + Python 3.10/3.11**.
-You can install dependencies with either **Conda** or a local **`.env` virtual environment**.
 
-### Option 1: Conda (recommended)
-```bash
-# clone your project repo then
+### Windows Installer
+
+* Visit the [GitHub Releases](https://github.com) page.
+* Look for the latest version marked with the **Latest** tag.
+* Download the `*-setup.exe` (or the provided `.zip` archive).
+
+### Windows SmartScreen Warning
+
+Unsigned pre-release executables can trigger Windows SmartScreen. Only run files downloaded from a trusted release source.
+
+If you do not want to run an unsigned executable, you can run GIMaP from source in a local Python environment instead. See the “Running from Source” section below for instructions.
+
+### Running from Source
+
+Recommended source environment: Windows with Python 3.10 or 3.11.
+
+```powershell
 cd gisaxs_gui
 
-# create and activate a new environment
-conda create -n GISAXS python=3.11 -y
-conda activate GISAXS
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
-# install dependencies
-pip install -r requirements.txt
-```
-
-### Option 2: No conda — use `.env`
-```bash
-# clone your project repo then
-cd gisaxs_gui
-
-# create a local virtual environment named .env
-py -3.11 -m venv .env
-# or: python -m venv .env
-
-# if PowerShell blocks activation, run this once in the current terminal
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-
-# activate the environment
-.\.env\Scripts\Activate.ps1
-
-# install dependencies
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
 
-Notes:
-- TensorFlow 2.15 is pinned for Windows/Python 3.11 compatibility.
-- If you use `.env`, activate it again each time you open a new terminal before running `python main.py`.
-- If you have a GPU build of TensorFlow/CUDA, install it separately as needed.
-
-## Quick Start
-```bash
-# from the project root
 python main.py
 ```
-- Use the left file tree or "Select File" to open images.
-- Top right: switch between "Original" (pixel space) and "Cut" (Q-space) views.
-- Adjust color limits; Flip toggles display orientation only.
 
-### ROI and 1D Integration
-- Click "Select ROI" and pick four clicks:
-  1) First radial line (angle start), 2) second radial line (angle end),
-  3) inner radius point, 4) outer radius point.
-- Angle convention (consistent across UI and Cut mode):
-  - 0° along +Qr (right). Upper half-plane is −180..0°, lower half-plane is 0..180°.
-  - Azimuth in Cut mode integrates in Q-space chi within your wedge.
-- Press "Integrate" and choose Radial/Azimuthal with Log/Linear.
-- Batch 1D output headers include: `# q/chi <file_or_frame_names>`.
+If PowerShell blocks activation in the current terminal session:
 
-### Batch Processing
-- Panel: "Batch Process".
-- Choose a folder and filename pattern (e.g. `*.tif`, `*.ctxti`, `*.nxs`).
-- Options:
-  - Export images (2D PNG/JPG), export 1D curves, background subtraction.
-  - For `.nxs`, frames are processed in sequence and suffixed (e.g., `f0001`).
-- Outputs:
-  - 2D: `image/<name>[_fNNNN].jpg`.
-  - 1D: `1D/output.txt` and (if enabled) `1D/output_subBk.txt`, both with header.
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
 
-## Module Guide
+Conda can also be used if preferred:
 
-### Cut & Fitting
-- Import data → preview → select ROI → integrate 1D.
-- Switch to Cut (Q-space) for azimuthal profiles in Q (chi) with q-range inferred from ROI.
-- Run traditional fitting via the fitting panel; sessions are saved/restored automatically.
+```powershell
+conda create -n GUI python=3.11 -y
+conda activate GUI
+pip install -r requirements.txt
+python main.py
+```
 
-### GISAXS Prediction
-- Load data, select a trained model, and run prediction.
-- Supports single-file and batch prediction with a results manager UI and export dialogs.
+### GUI Layout Too Large for Small Screen
 
-### Classification
-- Import batches, compute features, dimensionality reduction (e.g., UMAP), visualize clusters,
-  and run classification workflows.
+The GUI contains dense scientific controls. Use a larger display, maximize the window, or adjust system scaling if controls are clipped. For the best user experience, a 1080p or higher-resolution screen is recommended.
 
-### GIWAXS Module
-- Import GIWAXS images, perform 1D signal integration, and batch export curves.
+## Basic Workflow
 
-## Supported Formats
-- Images: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`, `.bmp`, `.edf`, `.cbf`
-- Text: `.ctxti` (2D numeric arrays)
-- P03 NXS (module series): `.nxs` with automatic module stitching and frame selection
+1. Start the application with `python main.py`.
+2. Choose a workspace from the left navigation panel.
+3. Load a GISAXS/GIWAXS file or a folder of files.
 
-## Tips & Conventions
-- Intensity thresholds mask hot/bad pixels; NaNs break bins for cleaner plots.
-- Azimuth bins cover −180..180°. Wedges that cross the seam are handled automatically.
-- In Cut mode, q-range for azimuth integration is derived from the ROI’s q distribution.
+## Cut & Fitting Workflow
 
-## Troubleshooting
-- If TensorFlow install fails on Windows, try a fresh conda env and ensure Python 3.10/3.11.
-- For `.nxs` series, ensure all module files are in the same folder.
-- If batch 1D outputs look repeated, verify the pattern and that files match.
+1. Open the **Cut & Fitting** page.
+2. Import a GISAXS detector image or supported data file.
+3. Adjust display options such as scale, intensity range, and log display.
+4. Configure detector and cut parameters.
+5. Generate a 1D curve from the selected region.
+6. Select a fitting model and parameter bounds.
+7. Run manual fitting or Auto Refine. Auto Refine uses least-squares optimization.
+8. Export plots, fitting curves, and fitting results.
+
+The current fitting code includes sphere, cylinder, vertical cylinder components.
+
+## GIMaP Predict Workflow
+
+1. Open the **GIMaP Predict** page.
+2. Choose **Single File** or **Multi Files** mode.
+3. Select a GISAXS file or input folder.
+4. Set stack, range, and step/every options when working with stacked or batch data.
+5. Select a prediction module.
+6. Confirm or edit the module configuration.
+7. Import or load the trained model.
+8. Run prediction.
+9. Review outputs in the result tabs.
+10. Export the current result or all multi-file results.
+
+## Model Import
+
+Prediction modules are configured through `module.yaml` files under `modules/`. Existing module configurations include fields such as:
+
+- `id`
+- `name`
+- `framework`
+- `version`
+- `model.model_path`
+- `preprocess.entry`
+- `preprocess.steps`
+- `preprocess.params`
+- `io.input_type`
+- `io.input_shape`
+- `outputs`
+
+AI fitting models are discovered from fitting-model folders under `modules/`, including `modules/Fitting_1D_Model`. **For normal users, only the model path should be changed when importing or replacing a trained model. Different models may require different preprocessing settings, so please make sure the selected model and preprocessing workflow match.** 
+
+## Multi-file Prediction
+
+The GIMaP Predict page includes a multi-file workflow for processing folders or file collections. Results can be reviewed in an external multi-file results window and exported for later analysis.
+
+## Exporting Results
+
+Export support depends on the active page and workflow. The current codebase includes exports for fitting results, prediction outputs, multi-file prediction tables, AI fitting candidates, curves, residuals, and plots.
+
+AI fitting output is written under `AI_Fitting_Output/current_prediction` and may include JSON, CSV, NPZ, and PNG files.
+
+## System Requirements
+
+- Windows is the primary development and usage target.
+- Python 3.10 or 3.11 is recommended for source execution.
+- A display large enough for scientific control panels is recommended.
+- CPU execution is supported. GPU TensorFlow setups are not configured by this repository and must be installed separately if required.
+
+## Dependencies
+
+Dependencies are listed in `requirements.txt`:
+
+- PyQt5
+- NumPy
+- SciPy
+- Matplotlib
+- OpenCV
+- h5py
+- fabio
+- umap-learn
+- scikit-learn
+- TensorFlow 2.15.x (`tensorflow-intel` on Windows)
+
+## Project Structure
+
+```text
+main.py                         Application entry point
+controllers/                    Page controllers and workflow logic
+ui/                             PyQt UI definitions and components
+utils/                          Fitting, prediction, loading, and helper utilities
+modules/                        Prediction and fitting model modules
+config/                         Application parameters and configuration files
+core/                           Shared settings and global parameter helpers
+WAXS/                           Standalone experimental WAXS/GIWAXS window
+AI_Fitting_Output/              AI fitting output directory
+docs/                           User and developer documentation
+requirements.txt                Python dependency list
+```
+
+## Current Limitations
+
+- This is early pre-release / beta scientific software.
+- Some pages and workflows are experimental or under active development.
+- Some model configuration paths may need to be adjusted for each local installation.
+- Small screens may require window resizing or scrolling because scientific controls are dense.
+
+
+## Feedback and Contact
+
+For feedback, bug reports, or collaboration questions, contact:
+
+[yufeng.zhai@desy.de](mailto:yufeng.zhai@desy.de)
+
 
 ## License
-MIT License — see [LICENSE](LICENSE).
+
+This project is released under the MIT License. See [LICENSE](LICENSE) for the full license text.

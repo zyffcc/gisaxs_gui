@@ -822,12 +822,23 @@ class FittingControlsCard(CardFrame):
         _detach_from_parent_layout(ui.fitMethodLabel)
         _detach_from_parent_layout(ui.fitMethodValue)
         _detach_from_parent_layout(ui.FittingAutoFittingButton)
+        for legacy_widget in (ui.fitMethodLabel, ui.fitMethodValue, ui.FittingAutoFittingButton):
+            legacy_widget.setVisible(False)
 
         ui.aiFittingModelComboBox = QComboBox(method_group)
         ui.aiFittingRefreshButton = QPushButton("Refresh", method_group)
         ui.aiFittingOpenWorkspaceButton = QPushButton("Open Workspace", method_group)
+        ui.aiFittingExportOutputButton = QPushButton("Export Output...", method_group)
+        ui.aiFittingExportOutputButton.setEnabled(False)
         ui.aiFittingConstraintComboBox = QComboBox(method_group)
         ui.aiFittingConstraintComboBox.addItems(["Free Prediction", "Fixed K", "Fixed Combination", "Current Manual Model"])
+        ui.aiFittingFixedKComboBox = QComboBox(method_group)
+        ui.aiFittingFixedKComboBox.setObjectName("aiFittingFixedKComboBox")
+        ui.aiFittingFixedKComboBox.addItems(["1", "2", "3", "4"])
+        ui.aiFittingFixedKComboBox.setVisible(False)
+        ui.aiFittingCombinationButton = QPushButton("Choose Combination...", method_group)
+        ui.aiFittingCombinationButton.setObjectName("aiFittingCombinationButton")
+        ui.aiFittingCombinationButton.setVisible(False)
         ui.aiFittingAdvancedConstraintsButton = QPushButton("Constraints...", method_group)
         ui.aiFittingFastPredictButton = QPushButton("Fast Predict", method_group)
         ui.aiFittingFullAutoFitButton = QPushButton("Full Auto Fit", method_group)
@@ -879,6 +890,14 @@ class FittingControlsCard(CardFrame):
         ui.aiFittingRefineGtolSpinBox.setRange(0.0, 1.0)
         ui.aiFittingRefineGtolSpinBox.setSingleStep(0.00000001)
         ui.aiFittingRefineGtolSpinBox.setValue(1e-8)
+        for workspace_only_widget in (
+            ui.aiFittingSamplingStdSpinBox,
+            ui.aiFittingTargetLogRmseSpinBox,
+            ui.aiFittingRefineFtolSpinBox,
+            ui.aiFittingRefineXtolSpinBox,
+            ui.aiFittingRefineGtolSpinBox,
+        ):
+            workspace_only_widget.setVisible(False)
         self.methodInfoLabel = QLabel("Status: Ready", method_group)
         ui.aiFittingStatusLabel = self.methodInfoLabel
         self.methodInfoLabel.setObjectName("fitMethodInfoLabel")
@@ -902,6 +921,8 @@ class FittingControlsCard(CardFrame):
         button_specs = (
             (ui.aiFittingRefreshButton, scale_value(96, self.profile, 88)),
             (ui.aiFittingOpenWorkspaceButton, scale_value(166, self.profile, 146)),
+            (ui.aiFittingExportOutputButton, scale_value(146, self.profile, 128)),
+            (ui.aiFittingCombinationButton, scale_value(176, self.profile, 150)),
             (ui.aiFittingAdvancedConstraintsButton, scale_value(138, self.profile, 120)),
             (ui.aiFittingFastPredictButton, scale_value(136, self.profile, 120)),
             (ui.aiFittingFullAutoFitButton, scale_value(136, self.profile, 120)),
@@ -910,6 +931,8 @@ class FittingControlsCard(CardFrame):
         for button in (
             ui.aiFittingRefreshButton,
             ui.aiFittingOpenWorkspaceButton,
+            ui.aiFittingExportOutputButton,
+            ui.aiFittingCombinationButton,
             ui.aiFittingAdvancedConstraintsButton,
             ui.aiFittingFastPredictButton,
             ui.aiFittingFullAutoFitButton,
@@ -941,6 +964,7 @@ class FittingControlsCard(CardFrame):
         model_actions_row.setSpacing(scale_value(8, self.profile, 6))
         model_actions_row.addWidget(ui.aiFittingRefreshButton)
         model_actions_row.addWidget(ui.aiFittingOpenWorkspaceButton)
+        model_actions_row.addWidget(ui.aiFittingExportOutputButton)
         model_actions_row.addStretch(1)
 
         control_row = QHBoxLayout()
@@ -948,6 +972,8 @@ class FittingControlsCard(CardFrame):
         control_row.setSpacing(scale_value(8, self.profile, 6))
         control_row.addWidget(ui.aiFittingConstraintLabel)
         control_row.addWidget(ui.aiFittingConstraintComboBox, 1)
+        control_row.addWidget(ui.aiFittingFixedKComboBox)
+        control_row.addWidget(ui.aiFittingCombinationButton)
         control_row.addWidget(ui.aiFittingAdvancedConstraintsButton)
 
         predict_row = QHBoxLayout()
@@ -967,11 +993,6 @@ class FittingControlsCard(CardFrame):
             ("Refine top", ui.aiFittingRefineTopNSpinBox),
             ("Max eval", ui.aiFittingRefineMaxEvalSpinBox),
             ("Progress every", ui.aiFittingProgressEverySpinBox),
-            ("Sample std", ui.aiFittingSamplingStdSpinBox),
-            ("Target logRMSE", ui.aiFittingTargetLogRmseSpinBox),
-            ("ftol", ui.aiFittingRefineFtolSpinBox),
-            ("xtol", ui.aiFittingRefineXtolSpinBox),
-            ("gtol", ui.aiFittingRefineGtolSpinBox),
         )
         for idx, (label_text, editor) in enumerate(tuning_specs):
             label = QLabel(label_text, method_group)

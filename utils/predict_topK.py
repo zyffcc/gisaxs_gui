@@ -292,7 +292,7 @@ def parse_args():
         "--refine_progress_interval",
         type=int,
         default=10,
-        help="Print refine progress every N residual evaluations; 0 disables per-candidate progress.",
+        help="Print refine progress every N estimated least_squares nfev steps; 0 disables per-candidate progress.",
     )
     p.add_argument("--refine_ftol", type=float, default=1e-8, help="SciPy least_squares ftol; <=0 disables.")
     p.add_argument("--refine_xtol", type=float, default=1e-8, help="SciPy least_squares xtol; <=0 disables.")
@@ -827,76 +827,103 @@ def components_json(components):
     ]
 
 
+def _type_name_for_id(type_id):
+    names = schema.TYPE_NAMES
+    if isinstance(names, dict):
+        return names[int(type_id)]
+    return names[int(type_id)]
+
+
+def _manual_refine_bound(name, value):
+    base = str(name)
+    while base and base[-1].isdigit():
+        base = base[:-1]
+    value = float(value)
+    if base == "BG":
+        return 0.0, max(abs(value) * 10.0, 1.0)
+    if base in {"sigma_R", "sigma_h", "sigma_D"}:
+        return 0.0, max(abs(value) * 5.0, 1.0)
+    if base in {"nu_Res"}:
+        return 0.1, max(abs(value) * 4.0, 50.0)
+    return 0.0, max(abs(value) * 10.0, 1.0)
+
+
 def candidate_refine_setup(item):
+    """Build a GUI Auto-Refine-equivalent physical parameter vector.
+
+    Earlier AI refinement optimized normalized/log schema variables and used a
+    softmax for multi-component weights. The GUI Auto Refine optimizes the
+    physical params_template vector directly, where component weights are free
+    Int1/Int2/... parameters. Keeping this setup equivalent makes in-script AI
+    refine match loading the candidate into the GUI and selecting all params.
+    """
+    from utils.fitting import make_mixed_model, params_template
+
     components = item["components"]
     global_phys = np.asarray(item["global_phys"], dtype=np.float64)
+    spec = []
     x0 = []
-    lower = []
-    upper = []
     comp_specs = []
 
     for comp in components:
         tid = int(comp["type_id"])
+        spec.append(_type_name_for_id(tid))
         params_phys = np.asarray(comp["params_phys"], dtype=np.float64)
-        param_indices = [i for i, enabled in enumerate(schema.type_param_mask(tid)) if enabled > 0.5]
-        comp_specs.append({"type_id": tid, "param_indices": param_indices})
-        for pidx in param_indices:
-            name = schema.PARAM_NAMES[pidx]
-            x0.append(schema.normalize_value(float(params_phys[pidx]), schema.PARAM_NORM_RANGES[name]))
-            lower.append(0.0)
-            upper.append(1.0)
+        comp_start = len(x0)
+        weight = float(comp.get("weight", 1.0))
+        if tid == schema.TYPE_CYLINDER:
+            x0.extend([weight, params_phys[0], params_phys[1], params_phys[2], params_phys[3], params_phys[4], params_phys[5]])
+        elif tid in (schema.TYPE_SPHERE, schema.TYPE_VERTICAL_CYLINDER):
+            x0.extend([weight, params_phys[0], params_phys[1], params_phys[4], params_phys[5]])
+        else:
+            raise ValueError(f"Unsupported component type for refinement: {tid}")
+        comp_specs.append({"type_id": tid, "start": comp_start, "stop": len(x0)})
 
-    global_norm = schema.normalize_global(global_phys)
     global_start = len(x0)
-    x0.extend([float(v) for v in global_norm])
-    lower.extend([0.0] * schema.G_MAX)
-    upper.extend([1.0] * schema.G_MAX)
+    x0.extend([float(v) for v in global_phys[: schema.G_MAX]])
+    param_names = params_template(spec)
+    if len(x0) != len(param_names):
+        raise ValueError(f"Refine setup mismatch: {len(x0)} values for params {param_names}")
 
-    weight_start = len(x0)
-    if len(components) > 1:
-        for comp in components:
-            x0.append(float(np.log(max(float(comp.get("weight", 0.0)), 1e-12))))
-            lower.append(-20.0)
-            upper.append(20.0)
+    bounds = [_manual_refine_bound(name, value) for name, value in zip(param_names, x0)]
+    lower = np.asarray([lo for lo, _hi in bounds], dtype=np.float64)
+    upper = np.asarray([hi for _lo, hi in bounds], dtype=np.float64)
+    x0 = np.asarray(x0, dtype=np.float64)
+    x0 = np.minimum(np.maximum(x0, lower + 1e-15), upper - 1e-15)
 
     setup = {
         "components": components,
         "comp_specs": comp_specs,
+        "spec": spec,
+        "param_names": param_names,
+        "model_func": make_mixed_model(spec),
         "global_start": global_start,
-        "weight_start": weight_start,
     }
-    return np.asarray(x0, dtype=np.float64), np.asarray(lower, dtype=np.float64), np.asarray(upper, dtype=np.float64), setup
+    return x0, lower, upper, setup
 
 
 def unpack_refined_candidate(x, setup):
     x = np.asarray(x, dtype=np.float64)
     components = []
-    cursor = 0
     for spec in setup["comp_specs"]:
         tid = int(spec["type_id"])
-        params_norm = np.zeros(schema.P_MAX, dtype=np.float64)
-        for pidx in spec["param_indices"]:
-            params_norm[pidx] = x[cursor]
-            cursor += 1
-        params_phys = schema.denormalize_params(params_norm, tid)
+        start = int(spec["start"])
+        stop = int(spec["stop"])
+        vals = x[start:stop]
+        if tid == schema.TYPE_CYLINDER:
+            weight = float(vals[0])
+            params_phys = np.asarray([vals[1], vals[2], vals[3], vals[4], vals[5], vals[6]], dtype=np.float64)
+        elif tid in (schema.TYPE_SPHERE, schema.TYPE_VERTICAL_CYLINDER):
+            weight = float(vals[0])
+            params_phys = np.asarray([vals[1], vals[2], 0.0, 0.0, vals[3], vals[4]], dtype=np.float64)
+        else:
+            raise ValueError(f"Unsupported component type for refinement: {tid}")
         params_phys = schema.apply_type_param_mask(params_phys, tid)
-        components.append({"type_id": tid, "params_phys": params_phys})
+        components.append(component_array_to_dict(tid, params_phys, weight))
 
     global_start = int(setup["global_start"])
-    global_norm = x[global_start : global_start + schema.G_MAX]
-    global_phys = schema.denormalize_global_with_optional_zero(global_norm)
-
-    if len(components) == 1:
-        weights = np.array([1.0], dtype=np.float64)
-    else:
-        weight_start = int(setup["weight_start"])
-        weights = softmax(x[weight_start : weight_start + len(components)])
-
-    component_dicts = [
-        component_array_to_dict(comp["type_id"], comp["params_phys"], float(weights[i]))
-        for i, comp in enumerate(components)
-    ]
-    return component_dicts, global_phys
+    global_phys = np.asarray(x[global_start : global_start + schema.G_MAX], dtype=np.float64)
+    return components, global_phys
 
 
 def refine_candidate(
@@ -939,15 +966,18 @@ def refine_candidate(
         "best_log_rmse": float(item.get("log_rmse", np.inf)),
         "best_x": np.asarray(x0, dtype=np.float64).copy(),
         "last_improve_call": 0,
+        "last_report_nfev": -1,
         "early_stop_reason": None,
     }
     refine_stall_tol = float(refine_stall_tol)
+    model_func = setup["model_func"]
+    n_variables = max(1, int(x0.size))
+    calls_per_nfev_estimate = n_variables + 1
 
     def residual_fn(x):
         progress["calls"] += 1
-        components, global_phys = unpack_refined_candidate(x, setup)
         try:
-            i_fit = evaluate_clean(q_eval, components, global_array_to_dict(global_phys))
+            i_fit = np.asarray(model_func(q_eval, *x), dtype=np.float64)
         except Exception:
             residual = np.full_like(log_i_exp, 1e6, dtype=np.float64)
         else:
@@ -956,15 +986,22 @@ def refine_candidate(
             else:
                 residual = np.full_like(log_i_exp, 1e6, dtype=np.float64)
         log_rmse = float(np.sqrt(np.mean(residual**2)))
+        nfev_est = max(1, int(np.ceil(progress["calls"] / calls_per_nfev_estimate)))
         if log_rmse < progress["best_log_rmse"] - refine_stall_tol:
             progress["best_log_rmse"] = log_rmse
             progress["best_x"] = np.asarray(x, dtype=np.float64).copy()
             progress["last_improve_call"] = progress["calls"]
         if progress_interval > 0 and (
-            progress["calls"] == 1 or progress["calls"] % int(progress_interval) == 0
+            progress["calls"] == 1
+            or (
+                nfev_est != progress["last_report_nfev"]
+                and nfev_est % int(progress_interval) == 0
+            )
         ):
+            progress["last_report_nfev"] = nfev_est
             print(
-                f"  refine{progress_label} eval={progress['calls']:04d} "
+                f"  refine{progress_label} nfev~{nfev_est:04d}/{int(max_nfev)} "
+                f"residual_calls={progress['calls']:04d} "
                 f"current_logRMSE={log_rmse:.5g} best_logRMSE={progress['best_log_rmse']:.5g}",
                 flush=True,
             )
@@ -986,7 +1023,6 @@ def refine_candidate(
                 x0,
                 bounds=(lower, upper),
                 max_nfev=int(max_nfev),
-                x_scale="jac",
                 ftol=float(refine_ftol) if float(refine_ftol) > 0 else None,
                 xtol=float(refine_xtol) if float(refine_xtol) > 0 else None,
                 gtol=float(refine_gtol) if float(refine_gtol) > 0 else None,
@@ -999,10 +1035,10 @@ def refine_candidate(
             x_final = progress["best_x"]
             success = True
             message = str(progress["early_stop_reason"])
-            nfev = -1
+            nfev = max(1, int(np.ceil(int(progress["calls"]) / calls_per_nfev_estimate)))
 
         components, global_phys = unpack_refined_candidate(x_final, setup)
-        I_fit = evaluate_clean(q_eval, components, global_array_to_dict(global_phys))
+        I_fit = np.asarray(model_func(q_eval, *x_final), dtype=np.float64)
         if not np.all(np.isfinite(I_fit)):
             raise ValueError("refined forward curve contains non-finite values")
         metrics = fit_metrics(
@@ -1498,11 +1534,6 @@ def main():
     if args.refine_top_n > 0:
         n_refine = min(int(args.refine_top_n), len(ranked))
         print(f"Refining top {n_refine} candidates with scipy least_squares log residuals...", flush=True)
-        print(
-            "Note: refine eval=... counts residual calls, not scipy nfev. "
-            "With numerical Jacobian, residual_calls can be roughly nfev * (n_variables + 1).",
-            flush=True,
-        )
         for idx, r in enumerate(ranked[:n_refine], start=1):
             unrefined = r["best"]
             n_components = len(unrefined["components"])
@@ -1558,6 +1589,8 @@ def main():
                 f"early_stop={refine_info.get('early_stop_reason')}",
                 flush=True,
             )
+        ranked.sort(key=lambda r: (r["best_score"], -r["score_weighted_probability"]))
+        print(f"Re-ranked candidates by refined {args.score_mode} score.", flush=True)
 
     json_rows = []
     residual_bank = []

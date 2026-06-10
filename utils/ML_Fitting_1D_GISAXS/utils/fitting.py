@@ -103,13 +103,13 @@ def sphere_form_factor_pd(q, R, sigma_R, n_samples=25, nsig=4.0):
         F2 += wi * (Fi * Fi)
     return F2
 
-# ---- Cylinder (随机取向各向平均) ----
+# ---- Cylinder (Randomly Oriented Average) ----
 def _F_cylinder_amp(q, R, h, alpha):
     """
-    归一化圆柱振幅（均质圆柱）：
+    Normalized Cylindrical Vibration (Homogeneous Cylindrical Amplitude)：
       F(q;R,h,alpha) = [2 J1(qR sinα)/(qR sinα)] * sinc(q h cosα / 2)
-    其中 sinc(x)=sin(x)/x；F(0)=1
-    alpha 为圆柱轴与 q 的夹角。
+    where sinc(x)=sin(x)/x；F(0)=1
+    alpha The angle between the cylindrical axis and q。
     """
     q = np.asarray(q, dtype=float)
     sa = np.sin(alpha)

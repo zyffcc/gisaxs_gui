@@ -9,6 +9,7 @@ import time
 import datetime
 import copy
 import sys
+import shutil
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 import numpy as np
@@ -1951,8 +1952,10 @@ class FittingController(QObject):
         self._ai_action_buttons = []
         self._ai_stop_button = None
         self._ai_open_output_button = None
+        self._ai_export_output_button = None
         self._ai_results_dialog = None
         self._ai_candidate_rows = []
+        self._ai_log_lines = []
         self._ai_excluded_input_q = set()
         self._ai_input_data_dialog = None
         self._ai_input_data_table = None
@@ -2997,12 +3000,18 @@ class FittingController(QObject):
             self.ui.aiFittingRefreshButton.clicked.connect(self._refresh_ai_fitting_models)
         if hasattr(self.ui, 'aiFittingOpenWorkspaceButton'):
             self.ui.aiFittingOpenWorkspaceButton.clicked.connect(self.open_ai_fitting_workspace)
+        if hasattr(self.ui, 'aiFittingExportOutputButton'):
+            self.ui.aiFittingExportOutputButton.clicked.connect(self._export_ai_prediction_output)
         if hasattr(self.ui, 'aiFittingModelComboBox'):
             self.ui.aiFittingModelComboBox.currentIndexChanged.connect(self._on_ai_model_selected)
         if hasattr(self.ui, 'aiFittingConstraintComboBox'):
-            self.ui.aiFittingConstraintComboBox.currentTextChanged.connect(
-                lambda text: self._save_ai_fitting_settings(last_constraint_mode=str(text).replace(" Prediction", ""))
+            self.ui.aiFittingConstraintComboBox.currentTextChanged.connect(self._on_ai_constraint_mode_changed)
+        if hasattr(self.ui, 'aiFittingFixedKComboBox'):
+            self.ui.aiFittingFixedKComboBox.currentTextChanged.connect(
+                lambda text: self._on_ai_fixed_k_changed(text)
             )
+        if hasattr(self.ui, 'aiFittingCombinationButton'):
+            self.ui.aiFittingCombinationButton.clicked.connect(self._show_ai_fixed_combination_dialog)
         if hasattr(self.ui, 'aiFittingFastPredictButton'):
             self.ui.aiFittingFastPredictButton.clicked.connect(lambda: self._start_ai_prediction("fast"))
         if hasattr(self.ui, 'aiFittingFullAutoFitButton'):
@@ -9191,6 +9200,9 @@ class FittingController(QObject):
         self._ai_constraint_k_combo.addItems(["1", "2", "3", "4"])
         constraint_row.addWidget(QLabel("K:", dialog))
         constraint_row.addWidget(self._ai_constraint_k_combo)
+        self._ai_constraint_combination_button = QPushButton("Choose Combination...", dialog)
+        self._ai_constraint_combination_button.setVisible(False)
+        constraint_row.addWidget(self._ai_constraint_combination_button)
         constraint_row.addStretch(1)
         layout.addLayout(constraint_row)
 
@@ -9287,6 +9299,8 @@ class FittingController(QObject):
         self._ai_log_browser = QTextBrowser(dialog)
         self._ai_log_browser.setMinimumHeight(180)
         self._ai_log_browser.setPlaceholderText("AI fitting log")
+        if getattr(self, "_ai_log_lines", None):
+            self._ai_log_browser.setPlainText("\n".join(self._ai_log_lines))
         layout.addWidget(self._ai_log_browser, 1)
 
         close_row = QHBoxLayout()
@@ -9294,6 +9308,10 @@ class FittingController(QObject):
         self._ai_open_output_button.setEnabled(bool(getattr(self, "_ai_output_dir", None)))
         self._ai_open_output_button.clicked.connect(self._open_ai_output_folder)
         close_row.addWidget(self._ai_open_output_button)
+        self._ai_export_output_button = QPushButton("Export Output...", dialog)
+        self._ai_export_output_button.setEnabled(bool(getattr(self, "_ai_output_dir", None)))
+        self._ai_export_output_button.clicked.connect(self._export_ai_prediction_output)
+        close_row.addWidget(self._ai_export_output_button)
         close_row.addStretch(1)
         close_btn = QPushButton("Close", dialog)
         close_btn.clicked.connect(dialog.close)
@@ -9304,6 +9322,8 @@ class FittingController(QObject):
         browse_btn.clicked.connect(self._browse_ai_fitting_model)
         self._ai_model_combo.currentIndexChanged.connect(self._on_ai_model_selected)
         self._ai_constraint_combo.currentTextChanged.connect(self._on_ai_constraint_mode_changed)
+        self._ai_constraint_k_combo.currentTextChanged.connect(lambda text: self._on_ai_fixed_k_changed(text))
+        self._ai_constraint_combination_button.clicked.connect(self._show_ai_fixed_combination_dialog)
         self._sync_workspace_ai_run_widgets()
         workspace_setting_map = {
             self._ai_full_samples_spin: "full_num_samples",
@@ -9381,15 +9401,24 @@ class FittingController(QObject):
                     break
 
     def _restore_ai_workspace_settings(self) -> None:
-        mode = self._ai_fitting_settings().get("last_constraint_mode", "Free")
+        mode = str(self._ai_fitting_settings().get("last_constraint_mode", "Free")).replace(" Prediction", "")
         combo = getattr(self, "_ai_constraint_combo", None)
         if combo is not None:
             idx = combo.findText(str(mode))
+            combo.blockSignals(True)
             combo.setCurrentIndex(idx if idx >= 0 else 0)
-            self._on_ai_constraint_mode_changed(combo.currentText())
+            combo.blockSignals(False)
+        k_value = str(self._ai_fitting_settings().get("fixed_k", 1))
+        k_combo = getattr(self, "_ai_constraint_k_combo", None)
+        if k_combo is not None:
+            idx = k_combo.findText(k_value)
+            k_combo.blockSignals(True)
+            k_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            k_combo.blockSignals(False)
+        self._sync_ai_constraint_controls(str(mode))
 
     def _restore_main_ai_settings(self) -> None:
-        mode = self._ai_fitting_settings().get("last_constraint_mode", "Free")
+        mode = str(self._ai_fitting_settings().get("last_constraint_mode", "Free")).replace(" Prediction", "")
         combo = getattr(self.ui, "aiFittingConstraintComboBox", None)
         if combo is not None:
             label = "Free Prediction" if mode == "Free" else str(mode)
@@ -9397,6 +9426,14 @@ class FittingController(QObject):
             combo.blockSignals(True)
             combo.setCurrentIndex(idx if idx >= 0 else 0)
             combo.blockSignals(False)
+        k_value = str(self._ai_fitting_settings().get("fixed_k", 1))
+        k_combo = getattr(self.ui, "aiFittingFixedKComboBox", None)
+        if k_combo is not None:
+            idx = k_combo.findText(k_value)
+            k_combo.blockSignals(True)
+            k_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            k_combo.blockSignals(False)
+        self._sync_ai_constraint_controls(str(mode))
 
     def _on_ai_model_selected(self, index: int) -> None:
         combo = self.sender()
@@ -9419,10 +9456,134 @@ class FittingController(QObject):
                     break
 
     def _on_ai_constraint_mode_changed(self, mode: str) -> None:
+        mode = str(mode).replace(" Prediction", "")
         self._save_ai_fitting_settings(last_constraint_mode=mode)
-        k_combo = getattr(self, "_ai_constraint_k_combo", None)
-        if k_combo is not None:
-            k_combo.setVisible(mode == "Fixed K")
+        self._sync_ai_constraint_combos(mode)
+        self._sync_ai_constraint_controls(mode)
+        if mode == "Fixed Combination" and not self._ai_fixed_combination():
+            QTimer.singleShot(0, self._show_ai_fixed_combination_dialog)
+
+    def _on_ai_fixed_k_changed(self, text: str) -> None:
+        try:
+            value = int(text)
+        except Exception:
+            value = 1
+        self._save_ai_fitting_settings(fixed_k=value)
+        for combo in (getattr(self.ui, "aiFittingFixedKComboBox", None), getattr(self, "_ai_constraint_k_combo", None)):
+            if combo is None:
+                continue
+            idx = combo.findText(str(value))
+            if idx >= 0 and combo.currentIndex() != idx:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(idx)
+                combo.blockSignals(False)
+
+    def _sync_ai_constraint_combos(self, mode: str) -> None:
+        for combo, free_label in (
+            (getattr(self.ui, "aiFittingConstraintComboBox", None), "Free Prediction"),
+            (getattr(self, "_ai_constraint_combo", None), "Free"),
+        ):
+            if combo is None:
+                continue
+            label = free_label if mode == "Free" else str(mode)
+            idx = combo.findText(label)
+            if idx >= 0 and combo.currentIndex() != idx:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(idx)
+                combo.blockSignals(False)
+
+    def _sync_ai_constraint_controls(self, mode: str | None = None) -> None:
+        mode = str(mode or self._ai_fitting_settings().get("last_constraint_mode", "Free")).replace(" Prediction", "")
+        show_k = mode == "Fixed K"
+        show_combo = mode == "Fixed Combination"
+        for widget in (getattr(self.ui, "aiFittingFixedKComboBox", None), getattr(self, "_ai_constraint_k_combo", None)):
+            if widget is not None:
+                widget.setVisible(show_k)
+        label = self._ai_fixed_combination_label()
+        for widget in (getattr(self.ui, "aiFittingCombinationButton", None), getattr(self, "_ai_constraint_combination_button", None)):
+            if widget is not None:
+                widget.setVisible(show_combo)
+                widget.setText(label)
+
+    def _ai_fixed_combination(self) -> list[str]:
+        constraints = self._ai_run_settings().get("parameter_constraints", {})
+        components = constraints.get("components") if isinstance(constraints, dict) else None
+        return [str(c) for c in components] if isinstance(components, list) else []
+
+    def _ai_fixed_combination_label(self) -> str:
+        components = self._ai_fixed_combination()
+        if not components:
+            return "Choose Combination..."
+        display = [str(c).replace("_", " ").title() for c in components]
+        return " + ".join(display)
+
+    def _save_ai_fixed_combination(self, components: list[str]) -> None:
+        settings_constraints = self._ai_run_settings().get("parameter_constraints", {})
+        constraints_payload = dict(settings_constraints) if isinstance(settings_constraints, dict) else {}
+        if components:
+            constraints_payload["components"] = components
+        else:
+            constraints_payload.pop("components", None)
+        self._save_ai_fitting_settings(parameter_constraints=constraints_payload)
+        self._sync_ai_constraint_controls("Fixed Combination")
+
+    def _show_ai_fixed_combination_dialog(self) -> None:
+        dialog = QDialog(self.main_window or self.ui)
+        dialog.setWindowTitle("Fixed Combination")
+        dialog.resize(420, 260)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Select the component sequence for Fixed Combination:", dialog))
+        current = self._ai_fixed_combination()
+        choices = [
+            ("None", ""),
+            ("Sphere", "sphere"),
+            ("Cylinder", "cylinder"),
+            ("Vertical Cylinder", "vertical_cylinder"),
+        ]
+        combos = []
+        for idx in range(4):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(f"Slot {idx + 1}:", dialog))
+            combo = QComboBox(dialog)
+            for label, value in choices:
+                combo.addItem(label, value)
+            if idx < len(current):
+                found = combo.findData(current[idx])
+                combo.setCurrentIndex(found if found >= 0 else 0)
+            row.addWidget(combo, 1)
+            layout.addLayout(row)
+            combos.append(combo)
+
+        buttons = QHBoxLayout()
+        save = QPushButton("Save", dialog)
+        clear = QPushButton("Clear", dialog)
+        cancel = QPushButton("Cancel", dialog)
+        buttons.addWidget(save)
+        buttons.addWidget(clear)
+        buttons.addStretch(1)
+        buttons.addWidget(cancel)
+        layout.addLayout(buttons)
+
+        def selected_components() -> list[str]:
+            return [str(combo.currentData()) for combo in combos if combo.currentData()]
+
+        def save_selection() -> None:
+            components = selected_components()
+            if not components:
+                QMessageBox.information(dialog, "Fixed Combination", "Select at least one component.")
+                return
+            self._save_ai_fixed_combination(components)
+            self._set_ai_workspace_status(f"Fixed combination: {self._ai_fixed_combination_label()}", None)
+            dialog.accept()
+
+        def clear_selection() -> None:
+            self._save_ai_fixed_combination([])
+            dialog.accept()
+
+        save.clicked.connect(save_selection)
+        clear.clicked.connect(clear_selection)
+        cancel.clicked.connect(dialog.reject)
+        dialog.exec_()
 
     def _set_ai_workspace_status(self, text: str, progress: int = None) -> None:
         main_label = getattr(self.ui, "aiFittingStatusLabel", None) or getattr(self.ui, "fitMethodInfoLabel", None)
@@ -9461,6 +9622,36 @@ class FittingController(QObject):
         return Path(str(selected)) if selected else None
 
     def _current_ai_curve_arrays(self, apply_exclusions: bool = True):
+        filter_mode = self._get_independent_axis_filter_mode()
+
+        def apply_axis_filter(q_arr, i_arr, sigma_arr=None):
+            q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
+            i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
+            n = min(q_arr.size, i_arr.size)
+            q_arr, i_arr = q_arr[:n], i_arr[:n]
+            if sigma_arr is not None:
+                sigma_arr = np.asarray(sigma_arr, dtype=np.float64).reshape(-1)[:n]
+
+            if filter_mode == "positive":
+                axis_mask = q_arr > 0
+                q_arr = q_arr[axis_mask]
+                i_arr = i_arr[axis_mask]
+                if sigma_arr is not None:
+                    sigma_arr = sigma_arr[axis_mask]
+            elif filter_mode == "negative":
+                axis_mask = q_arr < 0
+                q_arr = np.abs(q_arr[axis_mask])
+                i_arr = i_arr[axis_mask]
+                if sigma_arr is not None:
+                    sigma_arr = sigma_arr[axis_mask]
+                if q_arr.size > 0:
+                    order = np.argsort(q_arr)
+                    q_arr = q_arr[order]
+                    i_arr = i_arr[order]
+                    if sigma_arr is not None:
+                        sigma_arr = sigma_arr[order]
+            return q_arr, i_arr, sigma_arr
+
         def clean(q_arr, i_arr, sigma_arr=None):
             q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
             i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
@@ -9482,6 +9673,7 @@ class FittingController(QObject):
             q_arr, i_arr = q_arr[:n], i_arr[:n]
             if sigma_arr is not None:
                 sigma_arr = np.asarray(sigma_arr, dtype=np.float64).reshape(-1)[:n]
+            q_arr, i_arr, sigma_arr = apply_axis_filter(q_arr, i_arr, sigma_arr)
             if getattr(self, "_roi_controls_enabled", True) and self._roi_min is not None and self._roi_max is not None:
                 lo = min(float(self._roi_min), float(self._roi_max))
                 hi = max(float(self._roi_min), float(self._roi_max))
@@ -9508,7 +9700,8 @@ class FittingController(QObject):
 
         try:
             if self.q_ROI is not None and self.I_ROI is not None:
-                result = clean(self.q_ROI, self.I_ROI)
+                q_arr, i_arr, sigma_arr = apply_axis_filter(self.q_ROI, self.I_ROI)
+                result = clean(q_arr, i_arr, sigma_arr)
                 if result is not None:
                     return apply_excluded_q(result)
         except Exception:
@@ -9567,7 +9760,7 @@ class FittingController(QObject):
             QMessageBox.warning(
                 self.main_window or self.ui,
                 "AI Input Data",
-                "No valid positive 1D curve is loaded. Load or cut a 1D curve first.",
+                "No valid AI input curve is loaded. Load or cut a 1D curve first.",
             )
             return
 
@@ -9741,20 +9934,45 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    def _ai_prediction_output_root(self) -> Path:
+        return Path.cwd() / "AI_Fitting_Output"
+
+    def _ai_current_prediction_dir(self) -> Path:
+        return self._ai_prediction_output_root() / "current_prediction"
+
+    def _clear_ai_current_prediction_dir(self, out_dir: Path) -> None:
+        root = self._ai_prediction_output_root().resolve()
+        target = Path(out_dir).resolve()
+        expected = (root / "current_prediction").resolve()
+        if target != expected:
+            raise RuntimeError(f"Refusing to clear unexpected AI output directory: {target}")
+        target.mkdir(parents=True, exist_ok=True)
+        for child in target.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+
     def _prepare_ai_prediction_io(self) -> tuple[Path, Path] | None:
         arrays = self._current_ai_curve_arrays()
         if arrays is None:
             QMessageBox.warning(
                 self.main_window or self.ui,
                 "AI Fitting",
-                "No valid positive 1D curve is loaded. Load or cut a 1D curve before prediction.",
+                "No valid AI input curve is loaded. Load or cut a 1D curve before prediction.",
             )
             return None
         q_arr, i_arr, sigma_arr = arrays
-        root = Path.cwd() / "AI_Fitting_Output"
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_dir = root / f"prediction_{timestamp}"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = self._ai_current_prediction_dir()
+        try:
+            self._clear_ai_current_prediction_dir(out_dir)
+        except Exception as exc:
+            QMessageBox.warning(
+                self.main_window or self.ui,
+                "AI Fitting",
+                f"Failed to prepare the reusable AI output folder:\n{exc}",
+            )
+            return None
         input_csv = out_dir / "input_curve.csv"
         table = np.column_stack([q_arr, i_arr, sigma_arr])
         np.savetxt(input_csv, table, delimiter=",", header="q,I,sigma", comments="")
@@ -9862,13 +10080,24 @@ class FittingController(QObject):
             main_stop.setEnabled(running)
         if self._ai_stop_button is not None:
             self._ai_stop_button.setEnabled(running)
+        can_export = bool(getattr(self, "_ai_output_dir", None)) and not running
         if self._ai_open_output_button is not None:
             self._ai_open_output_button.setEnabled(bool(getattr(self, "_ai_output_dir", None)))
+        if self._ai_export_output_button is not None:
+            self._ai_export_output_button.setEnabled(can_export)
+        main_export = getattr(self.ui, "aiFittingExportOutputButton", None)
+        if main_export is not None:
+            main_export.setEnabled(can_export)
 
     def _append_ai_log(self, text: str) -> None:
         text = str(text).rstrip()
         if not text:
             return
+        if not isinstance(getattr(self, "_ai_log_lines", None), list):
+            self._ai_log_lines = []
+        self._ai_log_lines.append(text)
+        if len(self._ai_log_lines) > 2000:
+            self._ai_log_lines = self._ai_log_lines[-2000:]
         browser = getattr(self, "_ai_log_browser", None)
         if browser is not None:
             browser.append(text)
@@ -9902,6 +10131,14 @@ class FittingController(QObject):
                 current = int(match.group(1))
                 total = max(1, int(match.group(2)))
                 self._set_ai_workspace_status(f"Sampling progress {current}/{total}", int(current * 100 / total))
+            elif re.search(r"refine\s+#(\d+)/(\d+)\s+nfev~(\d+)/(\d+)", line):
+                refine_match = re.search(r"refine\s+#(\d+)/(\d+)\s+nfev~(\d+)/(\d+)", line)
+                idx = int(refine_match.group(1))
+                total = max(1, int(refine_match.group(2)))
+                nfev = int(refine_match.group(3))
+                max_nfev = max(1, int(refine_match.group(4)))
+                refine_fraction = ((idx - 1) + min(1.0, nfev / max_nfev)) / total
+                self._set_ai_workspace_status(line[:180], int(100 * refine_fraction))
             elif "Refine #" in line:
                 self._set_ai_workspace_status(line[:180], None)
             elif line.startswith("Wrote "):
@@ -9931,6 +10168,64 @@ class FittingController(QObject):
         out_dir = getattr(self, "_ai_output_dir", None)
         if out_dir:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(out_dir))))
+
+    def _export_ai_prediction_output(self) -> None:
+        out_dir = Path(getattr(self, "_ai_output_dir", "") or self._ai_current_prediction_dir())
+        if not out_dir.is_dir() or not any(out_dir.iterdir()):
+            QMessageBox.information(
+                self.main_window or self.ui,
+                "Export AI Output",
+                "No AI prediction output is available yet. Run a prediction first.",
+            )
+            return
+
+        settings = self._ai_fitting_settings()
+        start_dir = str(settings.get("last_export_parent") or Path.cwd())
+        parent = QFileDialog.getExistingDirectory(
+            self.main_window or self.ui,
+            "Choose Folder for Exported AI Output",
+            start_dir,
+        )
+        if not parent:
+            return
+
+        parent_path = Path(parent)
+        try:
+            source_dir = out_dir.resolve()
+            parent_resolved = parent_path.resolve()
+            if parent_resolved == source_dir or source_dir in parent_resolved.parents:
+                QMessageBox.warning(
+                    self.main_window or self.ui,
+                    "Export AI Output",
+                    "Choose a folder outside the reusable AI output directory.",
+                )
+                return
+        except Exception:
+            pass
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest = parent_path / f"ai_prediction_{timestamp}"
+        suffix = 1
+        while dest.exists():
+            dest = parent_path / f"ai_prediction_{timestamp}_{suffix}"
+            suffix += 1
+        try:
+            shutil.copytree(out_dir, dest)
+        except Exception as exc:
+            QMessageBox.warning(
+                self.main_window or self.ui,
+                "Export AI Output",
+                f"Failed to export AI prediction output:\n{exc}",
+            )
+            return
+
+        self._save_ai_fitting_settings(last_export_parent=str(parent_path))
+        self._set_ai_workspace_status(f"Exported AI output to: {dest}", None)
+        self._append_ai_log(f"Exported AI output to: {dest}")
+        QMessageBox.information(
+            self.main_window or self.ui,
+            "Export AI Output",
+            f"AI prediction output exported to:\n{dest}",
+        )
 
     def _show_ai_candidate_table(self, output_dir: Path | None = None) -> None:
         output_dir = Path(output_dir or getattr(self, "_ai_output_dir", "") or "")
@@ -10085,9 +10380,8 @@ class FittingController(QObject):
                 if value:
                     payload[key] = value
         if mode == "Fixed K":
-            k_combo = getattr(self, "_ai_constraint_k_combo", None)
             try:
-                payload["exact_nonempty"] = int(k_combo.currentText()) if k_combo is not None else 1
+                payload["exact_nonempty"] = int(self._ai_fitting_settings().get("fixed_k", 1))
             except Exception:
                 payload["exact_nonempty"] = 1
         elif mode == "Current Manual Model":
@@ -10910,6 +11204,8 @@ class FittingController(QObject):
             dialog = QDialog(self.main_window or self.ui)
             dialog.setWindowTitle("Auto Refine Manual Fit")
             dialog.resize(980, 640)
+            dialog.setModal(False)
+            dialog.setAttribute(Qt.WA_DeleteOnClose, True)
             layout = QVBoxLayout(dialog)
 
             info = QLabel(
@@ -10960,16 +11256,17 @@ class FittingController(QObject):
             gtol.setValue(float(run_settings.get("full_refine_gtol", 1e-8)))
             controls.addWidget(gtol, 1, 5)
 
-            controls.addWidget(QLabel("Progress every:", dialog), 2, 0)
+            controls.addWidget(QLabel("Progress every nfev:", dialog), 2, 0)
             progress_every = QSpinBox(dialog)
             progress_every.setRange(1, 10000)
             progress_every.setValue(max(1, int(run_settings.get("full_refine_progress_interval", 5) or 5)))
+            progress_every.setToolTip("Update progress every N estimated SciPy least_squares function evaluations.")
             controls.addWidget(progress_every, 2, 1)
             controls.addWidget(QLabel("Show every:", dialog), 2, 2)
             show_every = QSpinBox(dialog)
             show_every.setRange(0, 10000)
             show_every.setValue(10)
-            show_every.setToolTip("Update the Fitting Plot every N refine evaluations; 0 disables live plot updates.")
+            show_every.setToolTip("Update the Fitting Plot every N estimated SciPy least_squares function evaluations; 0 disables live plot updates.")
             controls.addWidget(show_every, 2, 3)
             controls.setColumnStretch(6, 1)
             layout.addLayout(controls)
@@ -10985,10 +11282,20 @@ class FittingController(QObject):
             layout.addWidget(table, 1)
 
             row_widgets = []
+            cached_rows = self._manual_refine_dialog_state()
+            initializing_rows = True
             for row, desc in enumerate(setup["params"]):
                 value = float(desc["value"])
                 default_selected = self._manual_refine_default_selected(desc["name"])
                 lower, upper = self._default_manual_refine_bounds(desc["name"], value)
+                cached = cached_rows.get(str(desc["name"]), {}) if isinstance(cached_rows, dict) else {}
+                if isinstance(cached, dict):
+                    default_selected = bool(cached.get("checked", default_selected))
+                    try:
+                        lower = float(cached.get("min", lower))
+                        upper = float(cached.get("max", upper))
+                    except Exception:
+                        pass
 
                 check = QCheckBox(table)
                 check.setChecked(default_selected)
@@ -11007,6 +11314,24 @@ class FittingController(QObject):
                 table.setCellWidget(row, 3, min_box)
                 table.setCellWidget(row, 4, max_box)
                 row_widgets.append((desc, check, min_box, max_box))
+            initializing_rows = False
+
+            def persist_row_state():
+                if initializing_rows:
+                    return
+                rows = {}
+                for desc, check, min_box, max_box in row_widgets:
+                    rows[str(desc["name"])] = {
+                        "checked": bool(check.isChecked()),
+                        "min": float(min_box.value()),
+                        "max": float(max_box.value()),
+                    }
+                self._save_manual_refine_dialog_state(rows)
+
+            for _desc, check, min_box, max_box in row_widgets:
+                check.toggled.connect(lambda _checked=False: persist_row_state())
+                min_box.valueChanged.connect(lambda _value: persist_row_state())
+                max_box.valueChanged.connect(lambda _value: persist_row_state())
 
             result_label = QLabel("Ready.", dialog)
             result_label.setWordWrap(True)
@@ -11017,7 +11342,6 @@ class FittingController(QObject):
             layout.addWidget(progress_bar)
 
             button_row = QHBoxLayout()
-            select_intensity = QPushButton("Select Intensity + Scale", dialog)
             select_all = QPushButton("Select All", dialog)
             clear = QPushButton("Clear", dialog)
             run = QPushButton("Run Refine", dialog)
@@ -11026,7 +11350,6 @@ class FittingController(QObject):
             apply_current = QPushButton("Apply Current", dialog)
             apply_current.setEnabled(False)
             close = QPushButton("Close", dialog)
-            button_row.addWidget(select_intensity)
             button_row.addWidget(select_all)
             button_row.addWidget(clear)
             button_row.addStretch(1)
@@ -11039,13 +11362,11 @@ class FittingController(QObject):
             def set_selected(predicate):
                 for desc, check, _min_box, _max_box in row_widgets:
                     check.setChecked(bool(predicate(desc)))
+                persist_row_state()
 
-            select_intensity.clicked.connect(
-                lambda: set_selected(lambda desc: self._manual_refine_default_selected(desc["name"]))
-            )
             select_all.clicked.connect(lambda: set_selected(lambda _desc: True))
             clear.clicked.connect(lambda: set_selected(lambda _desc: False))
-            close.clicked.connect(dialog.reject)
+            close.clicked.connect(dialog.close)
             refine_state = {
                 "thread": None,
                 "worker": None,
@@ -11059,7 +11380,7 @@ class FittingController(QObject):
                 stop.setEnabled(running)
                 apply_current.setEnabled(refine_state["latest_result"] is not None and not running)
                 close.setEnabled(not running)
-                for widget in (select_intensity, select_all, clear, table, max_eval, target, ftol, xtol, gtol, progress_every, show_every):
+                for widget in (select_all, clear, table, max_eval, target, ftol, xtol, gtol, progress_every, show_every):
                     widget.setEnabled(not running)
 
             def apply_result(result):
@@ -11076,10 +11397,11 @@ class FittingController(QObject):
             def on_progress(payload):
                 refine_state["latest_result"] = payload
                 max_nfev = max(1, int(payload.get("max_nfev", max_eval.value())))
-                nfev = int(payload.get("nfev", payload.get("calls", 0)))
+                nfev = int(payload.get("nfev_est", payload.get("nfev", payload.get("calls", 0))))
+                calls = int(payload.get("calls", 0))
                 progress_bar.setValue(max(0, min(99, int(100 * nfev / max_nfev))))
                 result_label.setText(
-                    f"Running: eval={nfev}/{max_nfev}, "
+                    f"Running: nfev~{nfev}/{max_nfev}, residual calls={calls}, "
                     f"current logRMSE={float(payload.get('current_log_rmse', np.nan)):.6g}, "
                     f"best={float(payload.get('final_log_rmse', payload.get('best_log_rmse', np.nan))):.6g}"
                 )
@@ -11151,6 +11473,7 @@ class FittingController(QObject):
                         "progress_interval": int(progress_every.value()),
                         "show_interval": int(show_every.value()),
                     }
+                    persist_row_state()
                     self._save_ai_fitting_settings(
                         full_refine_max_nfev=int(max_eval.value()),
                         full_refine_target_logrmse=float(target.value()),
@@ -11190,7 +11513,11 @@ class FittingController(QObject):
                     self._add_fitting_error(f"Auto Refine failed: {exc}")
 
             run.clicked.connect(run_refine)
-            dialog.exec_()
+            dialog.finished.connect(lambda _result: setattr(self, "_manual_auto_refine_dialog", None))
+            self._manual_auto_refine_dialog = dialog
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
 
         except Exception as e:
             self._add_fitting_error(f"Failed to open Auto Refine: {e}")
@@ -11345,6 +11672,24 @@ class FittingController(QObject):
         base = re.sub(r'\d+$', '', str(name))
         return base in {"Int", "BG", "int_Res", "k"}
 
+    def _manual_refine_dialog_state(self) -> dict:
+        try:
+            from core.user_settings import user_settings
+            state = user_settings.get("manual_auto_refine", {})
+            return state if isinstance(state, dict) else {}
+        except Exception:
+            return getattr(self, "_manual_auto_refine_state", {}) if isinstance(getattr(self, "_manual_auto_refine_state", None), dict) else {}
+
+    def _save_manual_refine_dialog_state(self, rows: dict) -> None:
+        rows = rows if isinstance(rows, dict) else {}
+        self._manual_auto_refine_state = rows
+        try:
+            from core.user_settings import user_settings
+            user_settings.set("manual_auto_refine", rows)
+            user_settings.save_settings()
+        except Exception:
+            pass
+
     def _default_manual_refine_bounds(self, name: str, value: float):
         base = re.sub(r'\d+$', '', str(name))
         value = float(value)
@@ -11367,7 +11712,15 @@ class FittingController(QObject):
         x0 = params0[variable_indices].copy()
         x0 = np.minimum(np.maximum(x0, lower + 1e-15), upper - 1e-15)
 
-        progress = {"best": np.inf, "best_x": x0.copy(), "calls": 0, "current": np.inf}
+        n_variables = max(1, int(x0.size))
+        calls_per_nfev_estimate = n_variables + 1
+        progress = {
+            "best": np.inf,
+            "best_x": x0.copy(),
+            "calls": 0,
+            "current": np.inf,
+            "last_report_nfev": -1,
+        }
         target_logrmse = float(options.get("target_logrmse", 0.0) or 0.0)
         progress_interval = max(1, int(options.get("progress_interval", 5) or 5))
         show_interval = int(options.get("show_interval", 0) or 0)
@@ -11397,6 +11750,7 @@ class FittingController(QObject):
                 "best_log_rmse": initial_log_rmse,
                 "current_log_rmse": initial_log_rmse,
                 "nfev": 0,
+                "nfev_est": 0,
                 "calls": 0,
                 "max_nfev": max_nfev,
                 "show_interval": show_interval,
@@ -11416,12 +11770,18 @@ class FittingController(QObject):
             current = float(np.sqrt(np.mean(residual * residual)))
             progress["calls"] += 1
             progress["current"] = current
+            nfev_est = max(1, int(np.ceil(progress["calls"] / calls_per_nfev_estimate)))
             if current < progress["best"]:
                 progress["best"] = current
                 progress["best_x"] = np.array(x, dtype=float, copy=True)
             if progress_callback and (
-                progress["calls"] == 1 or progress["calls"] % progress_interval == 0
+                progress["calls"] == 1
+                or (
+                    nfev_est != progress["last_report_nfev"]
+                    and nfev_est % progress_interval == 0
+                )
             ):
+                progress["last_report_nfev"] = nfev_est
                 best_params = build_params(progress["best_x"])
                 progress_callback({
                     "params": best_params,
@@ -11429,7 +11789,8 @@ class FittingController(QObject):
                     "final_log_rmse": float(progress["best"]),
                     "best_log_rmse": float(progress["best"]),
                     "current_log_rmse": current,
-                    "nfev": int(progress["calls"]),
+                    "nfev": int(nfev_est),
+                    "nfev_est": int(nfev_est),
                     "calls": int(progress["calls"]),
                     "max_nfev": max_nfev,
                     "show_interval": show_interval,
@@ -11461,7 +11822,7 @@ class FittingController(QObject):
             x_final = np.array(progress.get("best_x", x0), dtype=float, copy=True)
             stopped = "__AUTO_REFINE_STOP_REQUESTED__" in text
             message = "Stopped by user." if stopped else "Stopped after reaching target logRMSE."
-            nfev = int(progress.get("calls", 0))
+            nfev = max(1, int(np.ceil(int(progress.get("calls", 0)) / calls_per_nfev_estimate)))
 
         final_params = build_params(x_final)
         final_log_rmse, _ = log_rmse_for_params(final_params)
@@ -11470,6 +11831,7 @@ class FittingController(QObject):
             "initial_log_rmse": initial_log_rmse,
             "final_log_rmse": final_log_rmse,
             "nfev": nfev,
+            "nfev_est": nfev,
             "calls": int(progress.get("calls", nfev)),
             "max_nfev": max_nfev,
             "show_interval": show_interval,
