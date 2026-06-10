@@ -3,9 +3,16 @@ Menu Manager - responsible for creating and managing the main window menu system
 """
 
 from pathlib import Path
+import tempfile
 
-from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWidgets import QMenuBar, QMenu, QAction, QMessageBox, QFileDialog
+from PyQt5.QtGui import QDesktopServices, QTextDocument
+from PyQt5.QtWidgets import (
+    QMenuBar,
+    QMenu,
+    QAction,
+    QMessageBox,
+    QFileDialog,
+)
 from PyQt5.QtCore import Qt, QObject, QUrl
 from core.global_params import global_params
 from utils.path_utils import normalize_path
@@ -268,7 +275,7 @@ class MenuManager(QObject):
         controller.open_ai_fitting_workspace()
 
     def open_user_manual(self):
-        """Open the local user manual in the system default application."""
+        """Open the local user manual in the system default browser."""
         manual_path = Path(__file__).resolve().parents[1] / 'docs' / 'User_Manual.md'
         if not manual_path.exists():
             QMessageBox.warning(
@@ -277,7 +284,45 @@ class MenuManager(QObject):
                 f'User manual was not found:\n{manual_path}'
             )
             return
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(manual_path)))
+
+        try:
+            manual_text = manual_path.read_text(encoding='utf-8')
+            document = QTextDocument()
+            if hasattr(document, 'setMarkdown'):
+                document.setMarkdown(manual_text)
+            else:
+                document.setPlainText(manual_text)
+
+            html_path = Path(tempfile.gettempdir()) / 'GIMaP_User_Manual.html'
+            html_path.write_text(
+                (
+                    '<!doctype html>\n'
+                    '<html><head><meta charset="utf-8">\n'
+                    '<title>GIMaP User Manual</title>\n'
+                    '<style>\n'
+                    'body { font-family: "Segoe UI", Arial, sans-serif; '
+                    'max-width: 980px; margin: 32px auto; padding: 0 24px; '
+                    'line-height: 1.58; color: #1f2933; }\n'
+                    'code, pre { background: #f4f6f8; border-radius: 4px; }\n'
+                    'code { padding: 1px 4px; }\n'
+                    'pre { padding: 12px; overflow-x: auto; }\n'
+                    'h1, h2, h3 { color: #102a43; }\n'
+                    'a { color: #0b63ce; }\n'
+                    '</style></head><body>\n'
+                    f'{document.toHtml()}\n'
+                    '</body></html>\n'
+                ),
+                encoding='utf-8',
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self.main_window,
+                'User Manual',
+                f'Failed to prepare user manual:\n{exc}'
+            )
+            return
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(html_path)))
 
     def open_github_repository(self):
         """Open the project repository in the default browser."""
