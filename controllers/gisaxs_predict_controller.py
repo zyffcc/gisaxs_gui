@@ -498,6 +498,9 @@ class GisaxsPredictController(QObject):
         btn_edit = getattr(self.ui, "gisaxsPredictEditButton", None)
         if btn_edit:
             btn_edit.clicked.connect(self._on_edit_module_clicked)
+        btn_reload = getattr(self.ui, "gisaxsPredictReloadConfigButton", None)
+        if btn_reload:
+            btn_reload.clicked.connect(self._on_reload_module_config_clicked)
         btn_import = getattr(self.ui, "gisaxsPredictModelImportButton", None)
         if btn_import:
             btn_import.clicked.connect(self._on_model_import_clicked)
@@ -3656,6 +3659,63 @@ class GisaxsPredictController(QObject):
             self._current_module = self._modules_by_name[selected_name]
             self._load_module_mask(self._current_module)
         self._append_status_message("module.yaml saved; module settings reloaded.")
+
+    def _on_reload_module_config_clicked(self) -> None:
+        combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
+        selected_name = combo.currentText().strip() if combo else ""
+        old_spec = self._modules_by_name.get(selected_name) if selected_name else self._current_module
+        old_yaml_path = old_spec.get("yaml_path") if isinstance(old_spec, dict) else None
+        old_model_path = ""
+        if isinstance(self._current_module, dict):
+            old_model_path = str(self._current_module.get("model_path") or "")
+
+        self._refresh_modules()
+
+        refreshed_spec = None
+        if isinstance(old_yaml_path, str) and old_yaml_path:
+            old_yaml_abs = os.path.normcase(os.path.abspath(old_yaml_path))
+            for spec in self._modules_by_name.values():
+                yaml_path = spec.get("yaml_path") if isinstance(spec, dict) else None
+                if isinstance(yaml_path, str) and os.path.normcase(os.path.abspath(yaml_path)) == old_yaml_abs:
+                    refreshed_spec = spec
+                    break
+
+        if refreshed_spec is None and selected_name:
+            refreshed_spec = self._modules_by_name.get(selected_name)
+
+        if not isinstance(refreshed_spec, dict):
+            QMessageBox.warning(
+                self.main_window,
+                "Reload Config",
+                "Could not reload the selected module. Please check module.yaml."
+            )
+            self._append_status_message("Module config reload failed: selected module not found after scan.", level="ERROR")
+            return
+
+        new_name = str(refreshed_spec.get("name") or selected_name)
+        new_model_path = str(refreshed_spec.get("model_path") or "")
+        self._current_module = refreshed_spec
+        self.current_parameters["module_name"] = new_name
+
+        if combo is not None and combo.findText(new_name) >= 0:
+            blocker = QSignalBlocker(combo)
+            combo.setCurrentText(new_name)
+            del blocker
+
+        if new_model_path:
+            self.current_parameters["module_model_path"] = os.path.abspath(new_model_path)
+        if old_model_path and new_model_path and os.path.abspath(old_model_path) != os.path.abspath(new_model_path):
+            self._current_model = None
+            self._set_model_status_color("gray", "Not loaded")
+
+        self.refresh_framework_options_for_current_module()
+        self._load_module_mask(self._current_module)
+        self._persist_parameters()
+        self._refresh_predict_readiness()
+
+        steps = refreshed_spec.get("preprocess_steps")
+        step_text = ", ".join(str(s) for s in steps) if isinstance(steps, list) and steps else "default"
+        self._append_status_message(f"Module config reloaded: {new_name}; preprocess steps: {step_text}")
 
     def _on_model_import_clicked(self) -> None:
         # Ensure a module is selected

@@ -2228,6 +2228,10 @@ class GisaxsPredictWorkspace:
         self.ui.gisaxsPredictExportFolderButton.setVisible(False)
         self.ui.gisaxsPredictExportFolderValue.setVisible(False)
         self.ui.gisaxsPredictEditButton.setText("Edit Config")
+        if not hasattr(self.ui, "gisaxsPredictReloadConfigButton"):
+            self.ui.gisaxsPredictReloadConfigButton = QPushButton("Reload Config")
+            self.ui.gisaxsPredictReloadConfigButton.setObjectName("gisaxsPredictReloadConfigButton")
+        self.ui.gisaxsPredictReloadConfigButton.setText("Reload Config")
         self.ui.gisaxsPredictModelImportButton.setText("Import Model")
         self.ui.gisaxsPredictPredictButton.setText("Predict")
         self.ui.gisaxsImageExportButton.setText("Export...")
@@ -2239,6 +2243,7 @@ class GisaxsPredictWorkspace:
             self.ui.gisaxsPredictChooseGisaxsFileButton,
             self.ui.gisaxsPredictChooseFolderButton,
             self.ui.gisaxsPredictEditButton,
+            self.ui.gisaxsPredictReloadConfigButton,
             self.ui.gisaxsPredictModelImportButton,
             self.ui.gisaxsPredictPredictButton,
             self.ui.gisaxsPredictImportimagesButton,
@@ -2375,9 +2380,16 @@ class GisaxsPredictWorkspace:
         self.ui.gisaxsPredictFrameworkStatusLabel = QLabel("Framework: checking...", form)
         self.ui.gisaxsPredictFrameworkStatusLabel.setObjectName("gisaxsPredictFrameworkStatusLabel")
         self.ui.gisaxsPredictFrameworkStatusLabel.setProperty("cardMeta", True)
+        if not hasattr(self.ui, "gisaxsPredictReloadConfigButton"):
+            self.ui.gisaxsPredictReloadConfigButton = QPushButton("Reload Config", form)
+            self.ui.gisaxsPredictReloadConfigButton.setObjectName("gisaxsPredictReloadConfigButton")
+            normalize_button(self.ui.gisaxsPredictReloadConfigButton)
+        else:
+            self.ui.gisaxsPredictReloadConfigButton.setParent(form)
 
         grid.addWidget(self.ui.gisaxsPredictModuleSelectLabel, 0, 0)
-        grid.addWidget(self.ui.gisaxsPredictModuleSelectCombox, 0, 1, 1, 2)
+        grid.addWidget(self.ui.gisaxsPredictModuleSelectCombox, 0, 1)
+        grid.addWidget(self.ui.gisaxsPredictReloadConfigButton, 0, 2)
         grid.addWidget(self.ui.gisaxsPredictFrameworkLabel, 1, 0)
         grid.addWidget(self.ui.gisaxsPredictFrameworkCombox, 1, 1)
         grid.addWidget(self.ui.gisaxsPredictFrameworkStatusLabel, 1, 2)

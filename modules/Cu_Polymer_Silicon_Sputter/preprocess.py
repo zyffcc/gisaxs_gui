@@ -158,6 +158,11 @@ def _build_experiment_mask(img: np.ndarray, cfg: dict | None = None) -> np.ndarr
     median_size = int(c.get("median_size", 5))
     dilate_iter = int(c.get("dilate_iter", 1))
     beamstops = c.get("beamstops", [])
+    crop_mask_cfg = c.get("crop_mask", {}) if isinstance(c.get("crop_mask", {}), dict) else {}
+    crop_mask_up = int(c.get("crop_mask_up", crop_mask_cfg.get("up", 0)))
+    crop_mask_down = int(c.get("crop_mask_down", crop_mask_cfg.get("down", 0)))
+    crop_mask_left = int(c.get("crop_mask_left", crop_mask_cfg.get("left", 0)))
+    crop_mask_right = int(c.get("crop_mask_right", crop_mask_cfg.get("right", 0)))
 
     data = np.asarray(img, dtype=np.float32)
     invalid = ~np.isfinite(data) | (data <= gap_value_threshold)
@@ -207,6 +212,15 @@ def _build_experiment_mask(img: np.ndarray, cfg: dict | None = None) -> np.ndarr
             beamstop_mask |= _circular_mask(data.shape, (int(center[0]), int(center[1])), int(radius))
 
     mask = gap_mask | badpixel_mask | beamstop_mask
+    h, w = mask.shape
+    if crop_mask_up > 0:
+        mask[:min(crop_mask_up, h), :] = True
+    if crop_mask_down > 0:
+        mask[max(0, h - crop_mask_down):, :] = True
+    if crop_mask_left > 0:
+        mask[:, :min(crop_mask_left, w)] = True
+    if crop_mask_right > 0:
+        mask[:, max(0, w - crop_mask_right):] = True
     if dilate_iter > 0 and binary_dilation is not None:
         mask = binary_dilation(mask, iterations=dilate_iter)
     if binary_fill_holes is not None:

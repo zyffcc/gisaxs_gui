@@ -30,12 +30,19 @@ preprocess:
       method: nearest
     experiment_mask:
       apply: true
-      gap_value_threshold: 0
+      gap_value_threshold: -1e-5
       row_gap_fraction: 0.8
       col_gap_fraction: 0.8
       bad_sigma: 1e6
       median_size: 5
       dilate_iter: 1
+      # Optional manual edge mask after resize. For example, down: 20 masks
+      # the bottom 20 pixels before log normalization.
+      crop_mask:
+        up: 0
+        down: 0
+        left: 0
+        right: 0
       beamstops:
         - center: [0, 270]
           radius: 30

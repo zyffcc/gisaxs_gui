@@ -22,7 +22,7 @@
       "modules/Fitting_1D_model"
     ],
     "last_selected_model": "",
-    "last_constraint_mode": "Fixed K",
+    "last_constraint_mode": "Fixed Combination",
     "extra_model_paths": [],
     "full_num_samples": 300,
     "full_refine_max_nfev": 100,
@@ -40,15 +40,14 @@
       "components": [
         "sphere",
         "sphere",
-        "sphere",
-        "cylinder"
+        "sphere"
       ]
     },
     "full_refine_top_n": 1,
     "full_refine_target_logrmse": 0.0,
     "full_refine_ftol": 1e-10,
     "full_refine_xtol": 1e-10,
-    "full_refine_gtol": 1.000000000000009e-10,
+    "full_refine_gtol": 1e-10,
     "full_refine_progress_interval": 20,
     "full_sampling_std": 0.004999999999999997,
     "full_refine_stall_patience": 30,
