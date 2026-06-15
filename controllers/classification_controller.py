@@ -14,12 +14,15 @@ import io
 import fnmatch
 import time
 import re
+import sys
+import traceback
+from functools import partial
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Tuple
 
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal, Qt
-from PyQt5.QtCore import QThreadPool, QRunnable, QEvent, QTimer
+from PyQt5.QtCore import QThreadPool, QRunnable, QTimer
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QFileDialog, QMessageBox, QInputDialog, QMenu,
@@ -78,6 +81,7 @@ class ClassificationController(QObject):
         # 数据与状态
         self.samples: List[Sample] = []
         self._row_to_index: Dict[int, int] = {}
+        self._row_to_category: Dict[int, str] = {}
         self._path_to_index: Dict[str, int] = {}
         self._feature_crop_shape_2d: Optional[Tuple[int, int]] = None
         self._loaded_model = None
@@ -93,23 +97,35 @@ class ClassificationController(QObject):
         self._external_window = None
         self._dr_window = None
         self._last_preview_index: Optional[int] = None
+        self._classification_workflow_ready = False
+        self._classification_status_cards = {}
+        self._classification_status_card_frames = {}
+        self._classification_status_card_titles = {}
+        self._classification_responsive_mode = None
+        self._classification_responsive_refs = {}
+        self._classification_active_tasks = []
 
     # ---------------------------- 初始化与连接 ----------------------------
     def initialize(self):
         if self._initialized:
             return
 
+        self._install_classification_exception_hook()
         self._setup_connections()
+        try:
+            self._setup_workflow_layout()
+        except Exception as e:
+            self.log(f"[UI] Classification layout refactor skipped: {e}")
         # Build classification panel with 1D/2D display controls
         try:
             self._setup_classification_panel()
-        except Exception:
-            pass
+        except Exception as e:
+            self.log(f"[UI] Preview controls setup failed: {e}")
         # Prepare table headers/columns
         try:
             self._ensure_table_headers()
-        except Exception:
-            pass
+        except Exception as e:
+            self.log(f"[UI] Classification table setup failed: {e}")
         # 优先恢复缓存，再初始化UI，避免默认项覆盖
         try:
             params = global_params.get_module_parameters('classification')
@@ -122,16 +138,500 @@ class ClassificationController(QObject):
         # 初始化后，若各类别已配置路径，则自动扫描一次以填充 Status（m/n）
         try:
             self._refresh_status_for_all_categories()
-        except Exception:
-            pass
+        except Exception as e:
+            self.log(f"[Import] Initial category scan failed: {e}")
         self._initialized = True
         # 初始化时确保降维控件状态与当前方法一致（隐藏/显示 nNeighborsWidget 等）
         try:
             dim_method = getattr(self.ui, 'DimensionalityReductionMethodCombox', None)
             if dim_method is not None:
                 self._on_dim_method_changed(dim_method.currentText())
+        except Exception as e:
+            self.log(f"[UI] Dimensionality controls setup failed: {e}")
+        self._update_dataset_status_cards()
+
+    def _install_classification_exception_hook(self):
+        if getattr(self, '_classification_exception_hook_installed', False):
+            return
+        self._classification_exception_hook_installed = True
+        self._previous_exception_hook = sys.excepthook
+
+        def _hook(exc_type, exc_value, exc_tb):
+            text = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
+            self._write_classification_crash_log(text)
+            try:
+                print(text)
+            except Exception:
+                pass
+            try:
+                self.log(f"[Crash] {exc_type.__name__}: {exc_value}")
+            except Exception:
+                pass
+            previous = getattr(self, '_previous_exception_hook', None)
+            if previous is not None and previous is not _hook:
+                try:
+                    previous(exc_type, exc_value, exc_tb)
+                except Exception:
+                    pass
+
+        sys.excepthook = _hook
+
+    def _write_classification_crash_log(self, text: str) -> None:
+        try:
+            path = os.path.join(os.getcwd(), 'classification_crash.log')
+            with open(path, 'a', encoding='utf-8') as fh:
+                fh.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}]\n{text}\n")
+        except Exception:
+            try:
+                print(text)
+            except Exception:
+                pass
+
+    def _log_exception(self, context: str, exc: BaseException) -> None:
+        text = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        self._write_classification_crash_log(text)
+        try:
+            self.log(f"{context}: {exc}")
+        except Exception:
+            print(f"{context}: {exc}")
+
+    def _setup_workflow_layout(self):
+        """Build a stable tabbed Classification page once.
+
+        TODO: Auto QC.
+        TODO: Include/exclude samples.
+        TODO: table filtering.
+        TODO: confidence threshold.
+        TODO: export labels CSV.
+        TODO: export selected file list.
+        TODO: copy selected files.
+        TODO: embedding point selection linked to table.
+        """
+        if self._classification_workflow_ready:
+            return
+        root = getattr(self.ui, 'classificationGraphicsViewWidget', None)
+        table = getattr(self.ui, 'ClassificationImportTableWidget', None)
+        label_list = getattr(self.ui, 'ClassificationImportListWidget', None)
+        path_btn = getattr(self.ui, 'ClassificationImportFolderPathLabel', None)
+        path_edit = getattr(self.ui, 'ClassificationImportFolderPathValue', None)
+        rule_label = getattr(self.ui, 'ClassificationImportRuleLabel', None)
+        rule_edit = getattr(self.ui, 'ClassificationImportRuleValue', None)
+        import_btn = getattr(self.ui, 'ClassificationImportImportButton', None)
+        predict_btn = getattr(self.ui, 'ClassificationImportClassifyButton', None)
+        graphics = getattr(self.ui, 'ClassificationGraphicsView', None)
+        dr_group = getattr(self.ui, 'DimensionalityReductionGroupBox', None)
+        clf_group = getattr(self.ui, 'ClassificationGroupBox', None)
+        log_browser = getattr(self.ui, 'classificationPageTextBrowser', None)
+        if any(widget is None for widget in (root, table, label_list, path_btn, path_edit, rule_edit, import_btn, graphics, dr_group, clf_group)):
+            return
+
+        from PyQt5.QtWidgets import (
+            QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
+            QTabWidget, QFrame, QScrollArea, QSizePolicy, QAbstractItemView,
+            QFormLayout, QTextEdit
+        )
+
+        def _clear_layout(layout):
+            if layout is None:
+                return
+            while layout.count():
+                layout.takeAt(0)
+
+        def _detach(widget):
+            parent = widget.parentWidget() if widget is not None and hasattr(widget, 'parentWidget') else None
+            layout = parent.layout() if parent is not None else None
+            if layout is not None:
+                for idx in reversed(range(layout.count())):
+                    item = layout.itemAt(idx)
+                    if item is not None and item.widget() is widget:
+                        layout.takeAt(idx)
+            if widget is not None:
+                widget.setParent(None)
+            return widget
+
+        old_layout = root.layout()
+        _clear_layout(old_layout)
+        if old_layout is None:
+            main_layout = QVBoxLayout(root)
+            root.setLayout(main_layout)
+        else:
+            main_layout = old_layout
+        main_layout.setContentsMargins(6, 6, 6, 6)
+        main_layout.setSpacing(6)
+
+        tabs = QTabWidget(root)
+        tabs.setObjectName("ClassificationMainTabs")
+        main_layout.addWidget(tabs)
+        self._classification_main_tabs = tabs
+
+        dataset_tab = QWidget()
+        dataset_scroll = QScrollArea()
+        dataset_scroll.setWidgetResizable(True)
+        dataset_scroll.setFrameShape(QFrame.NoFrame)
+        dataset_content = QWidget()
+        dataset_layout = QVBoxLayout(dataset_content)
+        dataset_layout.setContentsMargins(8, 8, 8, 8)
+        dataset_layout.setSpacing(8)
+        dataset_scroll.setWidget(dataset_content)
+        dataset_outer = QVBoxLayout(dataset_tab)
+        dataset_outer.setContentsMargins(0, 0, 0, 0)
+        dataset_outer.addWidget(dataset_scroll)
+
+        dataset_title = QLabel("Dataset")
+        dataset_title.setStyleSheet("font-weight: 700; font-size: 13px;")
+        dataset_layout.addWidget(dataset_title)
+        dataset_layout.addWidget(QLabel("Label"))
+        label_list.setMinimumWidth(300)
+        label_list.setMinimumHeight(160)
+        dataset_layout.addWidget(_detach(label_list))
+        label_buttons = QHBoxLayout()
+        plus_btn = getattr(self.ui, 'ClassificationImportPlusButton', None)
+        minus_btn = getattr(self.ui, 'ClassificationImportMinusButton', None)
+        if plus_btn is not None:
+            label_buttons.addWidget(_detach(plus_btn))
+        if minus_btn is not None:
+            label_buttons.addWidget(_detach(minus_btn))
+        label_buttons.addStretch(1)
+        dataset_layout.addLayout(label_buttons)
+
+        source_form = QFormLayout()
+        source_form.setContentsMargins(0, 6, 0, 0)
+        source_form.setSpacing(6)
+        path_row = QWidget()
+        path_row_layout = QHBoxLayout(path_row)
+        path_row_layout.setContentsMargins(0, 0, 0, 0)
+        path_row_layout.setSpacing(6)
+        path_edit.setMinimumWidth(220)
+        path_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        path_row_layout.addWidget(_detach(path_edit), 1)
+        path_row_layout.addWidget(_detach(path_btn))
+        source_form.addRow("Path", path_row)
+        rule_edit.setMinimumWidth(220)
+        rule_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        source_form.addRow("Rule", _detach(rule_edit))
+        dataset_layout.addLayout(source_form)
+        if rule_label is not None:
+            rule_label.hide()
+
+        action_row = QHBoxLayout()
+        self._classification_scan_button = QPushButton("Scan Files")
+        self._classification_scan_button.clicked.connect(self._on_scan_files_clicked)
+        action_row.addWidget(self._classification_scan_button)
+        action_row.addWidget(_detach(import_btn))
+        action_row.addStretch(1)
+        dataset_layout.addLayout(action_row)
+        dataset_layout.addStretch(1)
+
+        table_tab = QWidget()
+        table_layout = QVBoxLayout(table_tab)
+        table_layout.setContentsMargins(8, 8, 8, 8)
+        table_layout.setSpacing(8)
+        stats_widget = QWidget()
+        stats = QGridLayout(stats_widget)
+        stats.setContentsMargins(0, 0, 0, 0)
+        stats.setHorizontalSpacing(6)
+        stats.setVerticalSpacing(6)
+        for key, title in (
+            ('total', 'Total files'),
+            ('loaded', 'Loaded files'),
+            ('labels', 'Labels'),
+            ('selected', 'Current label'),
+        ):
+            frame = QFrame()
+            frame.setStyleSheet(
+                "QFrame { background: #f7f9fc; border: 1px solid #dce3ee; border-radius: 6px; }"
+                "QLabel { background: transparent; border: none; }"
+            )
+            card_layout = QVBoxLayout(frame)
+            card_layout.setContentsMargins(8, 5, 8, 5)
+            title_label = QLabel(title)
+            title_label.setStyleSheet("color: #596579; font-size: 10px;")
+            value_label = QLabel("-")
+            value_label.setStyleSheet("font-weight: 700; font-size: 12px;")
+            value_label.setWordWrap(True)
+            card_layout.addWidget(title_label)
+            card_layout.addWidget(value_label)
+            stats.addWidget(frame, 0 if key in ('total', 'loaded') else 1, 0 if key in ('total', 'labels') else 1)
+            self._classification_status_card_frames[key] = frame
+            self._classification_status_card_titles[key] = title_label
+            self._classification_status_cards[key] = value_label
+        table_layout.addWidget(stats_widget)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SingleSelection)
+        table.setAlternatingRowColors(True)
+        table.setMinimumHeight(260)
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        table_layout.addWidget(_detach(table), 1)
+
+        preview_tab = QWidget()
+        preview_layout = QVBoxLayout(preview_tab)
+        preview_layout.setContentsMargins(6, 6, 6, 6)
+        preview_layout.setSpacing(6)
+        graphics.setMaximumWidth(16777215)
+        graphics.setMinimumHeight(300)
+        preview_layout.addWidget(_detach(graphics), 1)
+        panel = getattr(self.ui, 'ClassificationPanelWidget', None)
+        if panel is None:
+            panel = QWidget(preview_tab)
+            panel.setObjectName('ClassificationPanelWidget')
+            self.ui.ClassificationPanelWidget = panel
+        preview_layout.addWidget(panel)
+
+        embedding_tab = QWidget()
+        embedding_layout = QVBoxLayout(embedding_tab)
+        embedding_layout.setContentsMargins(8, 8, 8, 8)
+        embedding_layout.addWidget(_detach(dr_group))
+        embedding_layout.addStretch(1)
+
+        model_tab = QWidget()
+        model_layout = QVBoxLayout(model_tab)
+        model_layout.setContentsMargins(8, 8, 8, 8)
+        model_layout.addWidget(_detach(clf_group))
+        if predict_btn is not None:
+            model_layout.addWidget(_detach(predict_btn))
+        self._classification_result_text = QTextEdit()
+        self._classification_result_text.setReadOnly(True)
+        self._classification_result_text.setPlaceholderText("Training and prediction results will appear in the log.")
+        self._classification_result_text.setMaximumHeight(120)
+        model_layout.addWidget(self._classification_result_text)
+        model_layout.addStretch(1)
+
+        log_tab = QWidget()
+        log_layout = QVBoxLayout(log_tab)
+        log_layout.setContentsMargins(6, 6, 6, 6)
+        if log_browser is not None:
+            log_layout.addWidget(_detach(log_browser))
+            old_log_area = getattr(self.ui, 'classificationPageScrollArea', None)
+            if old_log_area is not None:
+                old_log_area.hide()
+        alt_log = getattr(self.ui, 'classificationPagetextBrowser', None)
+        if alt_log is not None:
+            alt_log.hide()
+
+        for old_container_name in ('ClassificationImportGroupBox', 'ClassificationImportWidget'):
+            old_container = getattr(self.ui, old_container_name, None)
+            if old_container is not None:
+                old_container.hide()
+
+        tabs.addTab(dataset_tab, "Dataset")
+        tabs.addTab(table_tab, "Table / Inspect")
+        tabs.addTab(preview_tab, "Preview")
+        tabs.addTab(embedding_tab, "Embedding")
+        tabs.addTab(model_tab, "Model / Result")
+        tabs.addTab(log_tab, "Log")
+
+        self._classification_responsive_refs = {
+            'root': root,
+            'tabs': tabs,
+            'preview_tab': preview_tab,
+            'stats_layout': stats,
+            'preview_layout': preview_layout,
+        }
+        self._rename_workflow_buttons()
+        self._classification_workflow_ready = True
+        self._set_table_responsive_columns('stable')
+        self._update_dataset_status_cards()
+
+    def _rename_workflow_buttons(self):
+        names = {
+            'ClassificationImportPlusButton': 'Add Label',
+            'ClassificationImportMinusButton': 'Remove Label',
+            'ClassificationImportFolderPathLabel': 'Choose Folder',
+            'ClassificationImportImportButton': 'Import Selected',
+            'ClassificationImportClassifyButton': 'Predict',
+            'DimensionalityReductionStartButton': 'Run Embedding',
+            'DimensionalityReductionShowResultButton': 'Show Embedding',
+            'ClassificationClassifyButton': 'Train Classifier',
+            'ClassificationSaveModelButton': 'Save Model',
+            'ClassificationLoadModelButton': 'Load Model',
+        }
+        for attr, text in names.items():
+            widget = getattr(self.ui, attr, None)
+            if widget is not None and hasattr(widget, 'setText'):
+                widget.setText(text)
+                try:
+                    widget.setMinimumHeight(30)
+                    widget.setMinimumWidth(96)
+                    widget.setMaximumWidth(16777215)
+                except Exception:
+                    pass
+
+    def _on_scan_files_clicked(self):
+        path = self._get_cached('path', '') or ''
+        rule = self._get_cached('rule', '*') or '*'
+        if not path:
+            path_edit = getattr(self.ui, 'ClassificationImportFolderPathValue', None)
+            path = normalize_path(path_edit.text()) if path_edit is not None else ''
+        if not path:
+            self.log('[Import] Please choose a folder or enter a path first.')
+            return
+        self._scan_and_list_files(path, rule)
+
+    def _update_dataset_status_cards(self):
+        cards = getattr(self, '_classification_status_cards', {})
+        if not cards:
+            return
+        total = len(self.samples)
+        loaded = sum(1 for s in self.samples if (s.preprocessed_data is not None) or (s.raw_data is not None))
+        labels = len(self.import_cache)
+        selected = self._get_current_name() or self.current_item_name or '-'
+        values = {
+            'total': str(total),
+            'loaded': str(loaded),
+            'labels': str(labels),
+            'selected': selected,
+        }
+        for key, value in values.items():
+            label = cards.get(key)
+            if label is not None:
+                label.setText(value)
+
+    def eventFilter(self, watched, event):
+        return super().eventFilter(watched, event)
+
+    def _classification_available_width(self) -> int:
+        refs = getattr(self, '_classification_responsive_refs', {})
+        root = refs.get('root')
+        fallback_widths = []
+        try:
+            if self.main_window is not None and self.main_window.isVisible() and self.main_window.width() > 400:
+                return self.main_window.width()
         except Exception:
             pass
+        try:
+            if root is not None and root.isVisible() and root.width() > 400:
+                return root.width()
+        except Exception:
+            pass
+        try:
+            if self.main_window is not None and self.main_window.width() > 1000:
+                fallback_widths.append(self.main_window.width())
+        except Exception:
+            pass
+        try:
+            if root is not None and root.width() > 1000:
+                fallback_widths.append(root.width())
+        except Exception:
+            pass
+        try:
+            widget = root or self.main_window
+            screen = widget.screen() if widget is not None and hasattr(widget, 'screen') else None
+            if screen is not None:
+                fallback_widths.append(screen.availableGeometry().width())
+        except Exception:
+            pass
+        return max(fallback_widths) if fallback_widths else 1366
+
+    def _remove_widget_from_layout(self, layout, widget) -> None:
+        if layout is None or widget is None:
+            return
+        for i in reversed(range(layout.count())):
+            item = layout.itemAt(i)
+            if item is not None and item.widget() is widget:
+                layout.takeAt(i)
+
+    def _remove_tab_widget(self, tabs, widget) -> None:
+        if tabs is None or widget is None:
+            return
+        idx = tabs.indexOf(widget)
+        if idx >= 0:
+            tabs.removeTab(idx)
+
+    def _set_status_card_layout(self, mode: str) -> None:
+        refs = getattr(self, '_classification_responsive_refs', {})
+        layout = refs.get('stats_layout')
+        if layout is None:
+            return
+        while layout.count():
+            layout.takeAt(0)
+        frames = getattr(self, '_classification_status_card_frames', {})
+        labels = getattr(self, '_classification_status_cards', {})
+        titles = getattr(self, '_classification_status_card_titles', {})
+        order = ['total', 'loaded', 'labels', 'selected']
+        compact_titles = {
+            'total': 'Total',
+            'loaded': 'Loaded',
+            'labels': 'Labels',
+            'selected': 'Current',
+        }
+        full_titles = {
+            'total': 'Total files',
+            'loaded': 'Loaded files',
+            'labels': 'Number of labels',
+            'selected': 'Current selected label',
+        }
+        for pos, key in enumerate(order):
+            frame = frames.get(key)
+            label = labels.get(key)
+            if frame is None:
+                continue
+            title = titles.get(key)
+            if title is not None:
+                compact_card = mode in ('compact', 'stable')
+                title.setText(compact_titles[key] if compact_card else full_titles[key])
+                title.setStyleSheet("color: #596579; font-size: 10px;" if compact_card else "color: #596579; font-size: 11px;")
+            if label is not None:
+                label.setStyleSheet("font-weight: 700; font-size: 12px;" if mode in ('compact', 'stable') else "font-weight: 700; font-size: 14px;")
+            if mode in ('compact', 'stable'):
+                layout.addWidget(frame, pos // 2, pos % 2)
+            else:
+                layout.addWidget(frame, 0, pos)
+
+    def _set_table_responsive_columns(self, mode: str) -> None:
+        table = getattr(self.ui, 'ClassificationImportTableWidget', None)
+        if table is None:
+            return
+        from PyQt5.QtWidgets import QHeaderView, QAbstractScrollArea, QAbstractItemView
+        try:
+            table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+            table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustIgnored)
+            for col in range(table.columnCount()):
+                table.setColumnHidden(col, False)
+            if mode == 'compact':
+                for col in (4, 6, 7):
+                    table.setColumnHidden(col, True)
+            header = table.horizontalHeader()
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(5, QHeaderView.Stretch)
+            header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(8, QHeaderView.ResizeToContents)
+            if mode == 'compact':
+                table.setMinimumHeight(260)
+            else:
+                table.setMinimumHeight(300)
+        except Exception as e:
+            self.log(f"[UI] Responsive table update failed: {e}")
+
+    def _compact_preview_controls(self, mode: str) -> None:
+        refs = getattr(self, '_classification_responsive_refs', {})
+        preview_layout = refs.get('preview_layout')
+        panel = getattr(self.ui, 'ClassificationPanelWidget', None)
+        graphics = getattr(self.ui, 'ClassificationGraphicsView', None)
+        try:
+            if preview_layout is not None:
+                margins = 4 if mode == 'compact' else 6
+                preview_layout.setContentsMargins(margins, margins, margins, margins)
+                preview_layout.setSpacing(4 if mode == 'compact' else 6)
+            if panel is not None:
+                panel.setMaximumHeight(150 if mode == 'compact' else 240)
+                if panel.layout() is not None:
+                    panel.layout().setContentsMargins(4, 4, 4, 4)
+                    panel.layout().setSpacing(4 if mode == 'compact' else 6)
+            if graphics is not None:
+                graphics.setMinimumHeight(300 if mode == 'compact' else 220)
+        except Exception as e:
+            self.log(f"[UI] Preview responsive update failed: {e}")
+
+    def _apply_classification_responsive_mode(self, force: bool = False):
+        self._set_status_card_layout('stable')
+        self._set_table_responsive_columns('stable')
+        self._compact_preview_controls('stable')
 
     def _setup_connections(self):
         """连接 Classification 页面相关控件（Import/降维/分类）。"""
@@ -222,7 +722,7 @@ class ClassificationController(QObject):
                 parent = dim_start.parent() if dim_start is not None else None
                 if parent is not None and parent.layout() is not None:
                     from PyQt5.QtWidgets import QPushButton
-                    self._dr_show_btn = QPushButton('Show')
+                    self._dr_show_btn = QPushButton('Show Embedding')
                     self._dr_show_btn.setToolTip('Show DR result')
                     self._dr_show_btn.clicked.connect(self._on_dim_show_clicked)
                     parent.layout().addWidget(self._dr_show_btn)
@@ -494,9 +994,10 @@ class ClassificationController(QObject):
         rule_label = getattr(self.ui, 'ClassificationImportRuleLabel', None)
         path_btn = getattr(self.ui, 'ClassificationImportFolderPathLabel', None)
         if path_btn is not None:
-            path_btn.setText(f"Path - {name}")
+            path_btn.setText("Choose Folder")
+            path_btn.setToolTip(f"Choose folder or file for {name}")
         if rule_label is not None:
-            rule_label.setText(f"Rule - {name}:")
+            rule_label.setText("Rule:")
 
     # ---------------------------- 事件处理 ----------------------------
     def _on_list_selection_changed(self):
@@ -509,6 +1010,7 @@ class ClassificationController(QObject):
         if path_edit is not None:
             path_edit.setText(self._get_cached('path', '') or '')
         self._refresh_labels()
+        self._update_dataset_status_cards()
 
     def _on_item_double_clicked(self, item):
         # 启动内联编辑
@@ -773,8 +1275,8 @@ class ClassificationController(QObject):
                     if lw.item(i).text() == name:
                         lw.setCurrentRow(i)
                         break
-        except Exception:
-            pass
+        except Exception as e:
+            self._log_exception('[UI] Table click sync failed', e)
         self._preview_category_row(row)
 
     def _on_preview_index_entered(self, category: str, edit):
@@ -794,10 +1296,30 @@ class ClassificationController(QObject):
         self.show_sample(indices[pos - 1])
 
     # ---------------------------- 数据读取 ----------------------------
+    def _on_preview_category_clicked(self, category: str, edit=None, *_args):
+        if edit is not None:
+            self._on_preview_index_entered(category, edit)
+        else:
+            indices = [i for i, s in enumerate(self.samples) if s.category == category]
+            if indices:
+                pos = max(1, min(self._category_show_index.get(category, 1), len(indices)))
+                self._category_show_index[category] = pos
+                self.show_sample(indices[pos - 1])
+        try:
+            tabs = getattr(self, '_classification_main_tabs', None)
+            refs = getattr(self, '_classification_responsive_refs', {})
+            preview_tab = refs.get('preview_tab')
+            if tabs is not None and preview_tab is not None:
+                idx = tabs.indexOf(preview_tab)
+                if idx >= 0:
+                    tabs.setCurrentIndex(idx)
+        except Exception as e:
+            self._log_exception('[Preview] Switch tab failed', e)
+
     def _on_import_clicked(self):
         table = self.ui.ClassificationImportTableWidget
         try:
-            table.setColumnCount(6)
+            table.setColumnCount(9)
             self._ensure_table_headers()
         except Exception:
             pass
@@ -881,10 +1403,15 @@ class ClassificationController(QObject):
                 self._rebuild_table_grouped()
             if loaded_ref['done'] >= len(remaining):
                 self.log(f"[Import] [{cat}] Done: {loaded_ref['ok']} loaded, {loaded_ref['fail']} failed.")
+                self._classification_active_tasks = [
+                    task for task in self._classification_active_tasks
+                    if not isinstance(task, _ImportTask)
+                ]
 
         for i in remaining:
             task = _ImportTask(self, i)
             task.signals.result.connect(_on_result)
+            self._classification_active_tasks.append(task)
             pool.start(task)
 
     def _load_sample_data(self, sample: Sample) -> bool:
@@ -2116,11 +2643,18 @@ class ClassificationController(QObject):
                 self.classification_completed.emit({'accuracy': float(acc)})
             except Exception as e:
                 self.log(f"[CLS] Error on finish: {e}")
+            finally:
+                try:
+                    if task in self._classification_active_tasks:
+                        self._classification_active_tasks.remove(task)
+                except Exception:
+                    pass
 
         # 启动后台训练
         self._set_import_clf_button_state(ready=False, running=True)
         task = _ClfTask(X_all, cats, mask, method, param_text, dr_method, target_dim, dr_param)
         task.signals.finished.connect(_on_finished)
+        self._classification_active_tasks.append(task)
         pool.start(task)
 
     def _on_clf_save_clicked(self):
@@ -2303,6 +2837,7 @@ class ClassificationController(QObject):
                     self.samples[idx_global].predicted_label = str(y_pred[idx_local])
 
         self.log(f"[CLS] Applied model to category '{current_category}', classified {len(cat_row_indices)} samples.")
+        self._rebuild_table_grouped()
 
         # 若我们刚刚更新了 embedding，可选择自动打开 DR 结果窗口
         try:
@@ -2322,95 +2857,125 @@ class ClassificationController(QObject):
         - Status 显示 Loaded m/n
         """
         table = self.ui.ClassificationImportTableWidget
-        # Ensure headers/columns
         try:
             self._ensure_table_headers()
-        except Exception:
-            pass
+        except Exception as e:
+            self.log(f"[UI] Table header refresh failed: {e}")
         lw = getattr(self.ui, 'ClassificationImportListWidget', None)
-        table.setRowCount(0)
-        self._row_to_index.clear()
         names: List[str] = []
         if lw is not None:
             names = [lw.item(i).text() for i in range(lw.count())]
-        # 构建每个类别的统计
-        for category in names:
-            indices = [idx for idx, s in enumerate(self.samples) if s.category == category]
-            row = table.rowCount()
-            table.insertRow(row)
-            if indices:
-                self._row_to_index[row] = indices[0]
-            total = len(indices)
-            loaded = sum(1 for i in indices if (self.samples[i].preprocessed_data is not None) or (self.samples[i].raw_data is not None))
-            n1d = sum(1 for i in indices if self.samples[i].data_type == '1D')
-            n2d = sum(1 for i in indices if self.samples[i].data_type == '2D')
-            type_text = f"1D:{n1d}, 2D:{n2d}"
-            status_text = f"Loaded {loaded}/{total}"
-
-            # Category（可编辑）
-            it_cat = QTableWidgetItem(category)
-            it_cat.setFlags(it_cat.flags() | Qt.ItemIsEditable)
-            table.setItem(row, 0, it_cat)
-            # Type（只读）
-            it_type = QTableWidgetItem(type_text)
-            it_type.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            table.setItem(row, 1, it_type)
-            # Category（重复列，只读，保持 UI 原布局）
-            it_cat2 = QTableWidgetItem(category)
-            it_cat2.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            table.setItem(row, 2, it_cat2)
-            # Status（只读）
-            it_status = QTableWidgetItem(status_text)
-            it_status.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            table.setItem(row, 3, it_status)
-            # Shape（只读）
-            shapes: List[str] = []
-            for i in indices:
-                d = self.samples[i].preprocessed_data if self.samples[i].preprocessed_data is not None else self.samples[i].raw_data
-                if d is None:
-                    continue
-                if self.samples[i].data_type == '1D':
-                    shapes.append(f"[{d.shape[0]}]")
+        current_category = self._get_current_name() or self.current_item_name
+        table.blockSignals(True)
+        try:
+            for row in range(table.rowCount()):
+                for col in range(table.columnCount()):
+                    widget = table.cellWidget(row, col)
+                    if widget is not None:
+                        table.removeCellWidget(row, col)
+                        widget.deleteLater()
+            table.setRowCount(0)
+            self._row_to_index.clear()
+            self._row_to_category.clear()
+            self._ensure_table_headers()
+            for category in names:
+                indices = [idx for idx, s in enumerate(self.samples) if s.category == category]
+                row = table.rowCount()
+                table.insertRow(row)
+                self._row_to_category[row] = category
+                if indices:
+                    self._row_to_index[row] = indices[0]
+                total = len(indices)
+                loaded = sum(1 for i in indices if (self.samples[i].preprocessed_data is not None) or (self.samples[i].raw_data is not None))
+                n1d = sum(1 for i in indices if self.samples[i].data_type == '1D')
+                n2d = sum(1 for i in indices if self.samples[i].data_type == '2D')
+                type_parts = []
+                if n1d:
+                    type_parts.append(f"1D:{n1d}")
+                if n2d:
+                    type_parts.append(f"2D:{n2d}")
+                type_text = ', '.join(type_parts) if type_parts else '-'
+                if total == 0:
+                    status_text = 'No files scanned'
+                elif loaded == total:
+                    status_text = 'Ready'
+                elif loaded > 0:
+                    status_text = 'Partially loaded'
                 else:
-                    if d.ndim == 2:
-                        shapes.append(f"[{d.shape[0]},{d.shape[1]}]")
-                    elif d.ndim == 3:
-                        shapes.append(f"[{d.shape[0]},{d.shape[1]},{d.shape[2]}]")
-            shape_text = ' '.join(sorted(set(shapes))) if shapes else ''
-            it_shape = QTableWidgetItem(shape_text)
-            it_shape.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            table.setItem(row, 4, it_shape)
-            # 预处理摘要（只读）
-            pp_descs = {self.samples[i].preprocessing_desc for i in indices if self.samples[i].preprocessing_desc}
-            pp_text = ','.join(sorted(pp_descs)) if pp_descs else ''
-            it_pp = QTableWidgetItem(pp_text)
-            it_pp.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            table.setItem(row, 5, it_pp)
-            # 预览输入框+按钮
-            from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QPushButton
-            cell = QWidget()
-            hb = QHBoxLayout(cell)
-            hb.setContentsMargins(0, 0, 0, 0)
-            le = QLineEdit()
-            le.setPlaceholderText(f"1-{max(1, total)}")
-            try:
-                le.setText(str(self._category_show_index.get(category, 1)))
-            except Exception:
-                pass
-            le.returnPressed.connect(lambda c=category, e=le: self._on_preview_index_entered(c, e))
-            btn = QPushButton('Show')
-            btn.clicked.connect(lambda _, r=row: self._preview_category_row(r))
-            hb.addWidget(le)
-            hb.addWidget(btn)
-            table.setCellWidget(row, 5, cell)
+                    status_text = 'Scanned'
+
+                it_label = QTableWidgetItem(category)
+                it_label.setFlags(it_label.flags() | Qt.ItemIsEditable)
+                table.setItem(row, 0, it_label)
+
+                def _readonly(value: str) -> QTableWidgetItem:
+                    item = QTableWidgetItem(value)
+                    item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                    return item
+
+                shapes: List[str] = []
+                predictions: Dict[str, int] = {}
+                for i in indices:
+                    sample = self.samples[i]
+                    d = sample.preprocessed_data if sample.preprocessed_data is not None else sample.raw_data
+                    if d is not None:
+                        if sample.data_type == '1D':
+                            shapes.append(f"[{d.shape[0]}]")
+                        elif d.ndim == 2:
+                            shapes.append(f"[{d.shape[0]},{d.shape[1]}]")
+                        elif d.ndim == 3:
+                            shapes.append(f"[{d.shape[0]},{d.shape[1]},{d.shape[2]}]")
+                    if sample.predicted_label:
+                        predictions[sample.predicted_label] = predictions.get(sample.predicted_label, 0) + 1
+                shape_text = ', '.join(sorted(set(shapes))) if shapes else '-'
+                prediction_text = '-'
+                if predictions:
+                    prediction_text = ', '.join(f"{k}:{v}" for k, v in sorted(predictions.items()))
+
+                table.setItem(row, 1, _readonly(type_text))
+                table.setItem(row, 2, _readonly(str(total)))
+                table.setItem(row, 3, _readonly(str(loaded)))
+                table.setItem(row, 4, _readonly(shape_text))
+                table.setItem(row, 5, _readonly(status_text))
+                table.setItem(row, 6, _readonly(prediction_text))
+                table.setItem(row, 7, _readonly('-'))
+
+                from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QPushButton
+                cell = QWidget()
+                hb = QHBoxLayout(cell)
+                hb.setContentsMargins(0, 0, 0, 0)
+                le = QLineEdit()
+                le.setPlaceholderText(f"1-{max(1, total)}")
+                try:
+                    le.setText(str(self._category_show_index.get(category, 1)))
+                except Exception:
+                    le.setText('1')
+                le.returnPressed.connect(partial(self._on_preview_index_entered, category, le))
+                btn = QPushButton('Preview')
+                btn.clicked.connect(partial(self._on_preview_category_clicked, category, le))
+                hb.addWidget(le)
+                hb.addWidget(btn)
+                table.setCellWidget(row, 8, cell)
+            if current_category:
+                for row, category in self._row_to_category.items():
+                    if category == current_category:
+                        table.selectRow(row)
+                        break
+        finally:
+            table.blockSignals(False)
+        self._update_dataset_status_cards()
+        self._set_table_responsive_columns('stable')
 
     def _ensure_table_headers(self):
         table = getattr(self.ui, 'ClassificationImportTableWidget', None)
         if table is None:
             return
         from PyQt5.QtWidgets import QHeaderView
-        table.setColumnCount(6)
-        table.setHorizontalHeaderLabels(['Category', 'Type', 'Category', 'Status', 'Shape', 'Preview'])
+        table.setColumnCount(9)
+        table.setHorizontalHeaderLabels([
+            'Label', 'Type', 'Files', 'Loaded', 'Shape',
+            'Status', 'Prediction', 'Confidence', 'Preview'
+        ])
         try:
             header = table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -2418,7 +2983,10 @@ class ClassificationController(QObject):
             header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
             header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
             header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(5, QHeaderView.Stretch)
+            header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(8, QHeaderView.ResizeToContents)
         except Exception:
             pass
 
@@ -2466,13 +3034,10 @@ class ClassificationController(QObject):
                 if path_edit is not None:
                     path_edit.setText(self._get_cached('path', '') or '')
             if old_name and old_name != new_name:
-                renamed_any = False
                 for s in self.samples:
                     if s.category == old_name:
                         s.category = new_name
-                        renamed_any = True
-                if renamed_any:
-                    self._rebuild_table_grouped()
+                self._rebuild_table_grouped()
         finally:
             self._rename_old_name = None
             self._in_item_changed = False
@@ -2496,7 +3061,7 @@ class ClassificationController(QObject):
         self._sync_dynamic_attributes()
         if self.samples and any(s.category == name for s in self.samples):
             self.samples = [s for s in self.samples if s.category != name]
-            self._rebuild_table_grouped()
+        self._rebuild_table_grouped()
 
     # ---------------------------- 表格交互（选择/重命名） ----------------------------
     def _on_table_selection_changed(self):
@@ -2516,8 +3081,9 @@ class ClassificationController(QObject):
                 if lw.item(i).text() == name:
                     lw.setCurrentRow(i)
                     break
-        except Exception:
-            pass
+            self._preview_category_row(r)
+        except Exception as e:
+            self._log_exception('[Preview] Table selection update failed', e)
 
     def _on_table_item_changed(self, item: QTableWidgetItem):
         # 仅处理第一列（Category）改名，其他列不允许编辑
