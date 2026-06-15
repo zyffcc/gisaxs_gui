@@ -51,6 +51,28 @@ class Sample:
     preprocessing_desc: str = ""
 
 
+TABLE_COL_LABEL = 0
+TABLE_COL_TYPE = 1
+TABLE_COL_FILES = 2
+TABLE_COL_LOADED = 3
+TABLE_COL_SHAPE = 4
+TABLE_COL_STATUS = 5
+TABLE_COL_PREDICTION = 6
+TABLE_COL_CONFIDENCE = 7
+TABLE_COL_PREVIEW = 8
+TABLE_HEADERS = [
+    'Label',
+    'Type',
+    'Files',
+    'Loaded',
+    'Shape',
+    'Status',
+    'Prediction',
+    'Confidence',
+    'Preview',
+]
+
+
 class ClassificationController(QObject):
     """Classification控制器：实现 Import 列表、缓存、路径/规则联动等逻辑"""
 
@@ -209,6 +231,8 @@ class ClassificationController(QObject):
         """
         if self._classification_workflow_ready:
             return
+        self._setup_fresh_classification_page()
+        return
         root = getattr(self.ui, 'classificationGraphicsViewWidget', None)
         table = getattr(self.ui, 'ClassificationImportTableWidget', None)
         label_list = getattr(self.ui, 'ClassificationImportListWidget', None)
@@ -228,7 +252,7 @@ class ClassificationController(QObject):
         from PyQt5.QtWidgets import (
             QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
             QTabWidget, QFrame, QScrollArea, QSizePolicy, QAbstractItemView,
-            QFormLayout, QTextEdit
+            QFormLayout, QTextEdit, QSplitter
         )
 
         def _clear_layout(layout):
@@ -252,17 +276,80 @@ class ClassificationController(QObject):
         old_layout = root.layout()
         _clear_layout(old_layout)
         if old_layout is None:
-            main_layout = QVBoxLayout(root)
-            root.setLayout(main_layout)
+            root_layout = QVBoxLayout(root)
+            root.setLayout(root_layout)
         else:
-            main_layout = old_layout
+            root_layout = old_layout
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        page_body = QWidget(root)
+        page_body.setObjectName("classificationPageBody")
+        main_layout = QVBoxLayout(page_body)
         main_layout.setContentsMargins(6, 6, 6, 6)
         main_layout.setSpacing(6)
+        try:
+            from PyQt5.QtWidgets import QGridLayout
+            if isinstance(root_layout, QGridLayout):
+                root_layout.addWidget(page_body, 0, 0, 1, 1)
+            else:
+                root_layout.addWidget(page_body)
+        except Exception:
+            root_layout.addWidget(page_body)
 
-        tabs = QTabWidget(root)
+        splitter = QSplitter(Qt.Vertical, page_body)
+        splitter.setChildrenCollapsible(False)
+        main_layout.addWidget(splitter, 1)
+        main_layout.setStretch(0, 1)
+        self._classification_main_splitter = splitter
+
+        tabs = QTabWidget(splitter)
         tabs.setObjectName("ClassificationMainTabs")
-        main_layout.addWidget(tabs)
+        tabs.setMinimumHeight(360)
+        splitter.addWidget(tabs)
         self._classification_main_tabs = tabs
+        root.setStyleSheet("""
+            QWidget#classificationGraphicsViewWidget {
+                background: #f3f6fa;
+            }
+            QFrame[classificationCard="true"] {
+                background: #ffffff;
+                border: 1px solid #cfd8e3;
+                border-radius: 6px;
+            }
+            QLabel[classificationTitle="true"] {
+                font-weight: 700;
+                color: #1f2937;
+            }
+            QTableWidget {
+                background: #ffffff;
+                gridline-color: #d8e1ec;
+                selection-background-color: #dbeafe;
+                selection-color: #111827;
+            }
+            QHeaderView::section {
+                background: #edf2f7;
+                border: 0;
+                border-right: 1px solid #cfd8e3;
+                border-bottom: 1px solid #cfd8e3;
+                padding: 5px;
+                font-weight: 600;
+            }
+            QPushButton {
+                min-height: 28px;
+            }
+        """)
+
+        def _card(title: str):
+            card = QFrame()
+            card.setProperty("classificationCard", True)
+            layout = QVBoxLayout(card)
+            layout.setContentsMargins(10, 8, 10, 10)
+            layout.setSpacing(6)
+            title_label = QLabel(title)
+            title_label.setProperty("classificationTitle", True)
+            layout.addWidget(title_label)
+            return card, layout
 
         dataset_tab = QWidget()
         dataset_scroll = QScrollArea()
@@ -277,13 +364,11 @@ class ClassificationController(QObject):
         dataset_outer.setContentsMargins(0, 0, 0, 0)
         dataset_outer.addWidget(dataset_scroll)
 
-        dataset_title = QLabel("Dataset")
-        dataset_title.setStyleSheet("font-weight: 700; font-size: 13px;")
-        dataset_layout.addWidget(dataset_title)
-        dataset_layout.addWidget(QLabel("Label"))
+        labels_card, labels_card_layout = _card("Labels")
+        labels_card_layout.addWidget(QLabel("Label"))
         label_list.setMinimumWidth(300)
         label_list.setMinimumHeight(160)
-        dataset_layout.addWidget(_detach(label_list))
+        labels_card_layout.addWidget(_detach(label_list))
         label_buttons = QHBoxLayout()
         plus_btn = getattr(self.ui, 'ClassificationImportPlusButton', None)
         minus_btn = getattr(self.ui, 'ClassificationImportMinusButton', None)
@@ -292,8 +377,10 @@ class ClassificationController(QObject):
         if minus_btn is not None:
             label_buttons.addWidget(_detach(minus_btn))
         label_buttons.addStretch(1)
-        dataset_layout.addLayout(label_buttons)
+        labels_card_layout.addLayout(label_buttons)
+        dataset_layout.addWidget(labels_card)
 
+        source_card, source_card_layout = _card("Source")
         source_form = QFormLayout()
         source_form.setContentsMargins(0, 6, 0, 0)
         source_form.setSpacing(6)
@@ -309,23 +396,27 @@ class ClassificationController(QObject):
         rule_edit.setMinimumWidth(220)
         rule_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         source_form.addRow("Rule", _detach(rule_edit))
-        dataset_layout.addLayout(source_form)
+        source_card_layout.addLayout(source_form)
+        dataset_layout.addWidget(source_card)
         if rule_label is not None:
             rule_label.hide()
 
+        actions_card, actions_card_layout = _card("Actions")
         action_row = QHBoxLayout()
         self._classification_scan_button = QPushButton("Scan Files")
         self._classification_scan_button.clicked.connect(self._on_scan_files_clicked)
         action_row.addWidget(self._classification_scan_button)
         action_row.addWidget(_detach(import_btn))
         action_row.addStretch(1)
-        dataset_layout.addLayout(action_row)
+        actions_card_layout.addLayout(action_row)
+        dataset_layout.addWidget(actions_card)
         dataset_layout.addStretch(1)
 
         table_tab = QWidget()
         table_layout = QVBoxLayout(table_tab)
         table_layout.setContentsMargins(8, 8, 8, 8)
         table_layout.setSpacing(8)
+        summary_card, summary_card_layout = _card("Dataset Summary")
         stats_widget = QWidget()
         stats = QGridLayout(stats_widget)
         stats.setContentsMargins(0, 0, 0, 0)
@@ -355,58 +446,67 @@ class ClassificationController(QObject):
             self._classification_status_card_frames[key] = frame
             self._classification_status_card_titles[key] = title_label
             self._classification_status_cards[key] = value_label
-        table_layout.addWidget(stats_widget)
+        summary_card_layout.addWidget(stats_widget)
+        table_layout.addWidget(summary_card)
+        table_card, table_card_layout = _card("Dataset Table")
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
         table.setSelectionMode(QAbstractItemView.SingleSelection)
         table.setAlternatingRowColors(True)
         table.setMinimumHeight(260)
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        table_layout.addWidget(_detach(table), 1)
+        table_card_layout.addWidget(_detach(table), 1)
+        table_layout.addWidget(table_card, 1)
 
         preview_tab = QWidget()
         preview_layout = QVBoxLayout(preview_tab)
         preview_layout.setContentsMargins(6, 6, 6, 6)
         preview_layout.setSpacing(6)
+        preview_display_card, preview_display_layout = _card("Preview Display")
         graphics.setMaximumWidth(16777215)
         graphics.setMinimumHeight(300)
-        preview_layout.addWidget(_detach(graphics), 1)
+        preview_display_layout.addWidget(_detach(graphics), 1)
+        preview_layout.addWidget(preview_display_card, 1)
+        preview_controls_card, preview_controls_layout = _card("Display Controls")
         panel = getattr(self.ui, 'ClassificationPanelWidget', None)
         if panel is None:
             panel = QWidget(preview_tab)
             panel.setObjectName('ClassificationPanelWidget')
             self.ui.ClassificationPanelWidget = panel
-        preview_layout.addWidget(panel)
+        preview_controls_layout.addWidget(panel)
+        preview_layout.addWidget(preview_controls_card)
 
         embedding_tab = QWidget()
         embedding_layout = QVBoxLayout(embedding_tab)
         embedding_layout.setContentsMargins(8, 8, 8, 8)
-        embedding_layout.addWidget(_detach(dr_group))
+        embedding_controls_card, embedding_controls_layout = _card("Embedding Controls")
+        embedding_controls_layout.addWidget(_detach(dr_group))
+        self._compact_classification_controls(dr_group)
+        embedding_layout.addWidget(embedding_controls_card)
+        embedding_result_card, embedding_result_layout = _card("Embedding Result / Preview")
+        embedding_result_layout.addWidget(QLabel("Use Show Embedding to open the existing embedding result window."))
+        embedding_layout.addWidget(embedding_result_card)
         embedding_layout.addStretch(1)
 
         model_tab = QWidget()
         model_layout = QVBoxLayout(model_tab)
         model_layout.setContentsMargins(8, 8, 8, 8)
-        model_layout.addWidget(_detach(clf_group))
+        classifier_card, classifier_layout = _card("Classifier Controls")
+        classifier_layout.addWidget(_detach(clf_group))
+        self._compact_classification_controls(clf_group)
         if predict_btn is not None:
-            model_layout.addWidget(_detach(predict_btn))
+            classifier_layout.addWidget(_detach(predict_btn))
+            predict_btn.setMaximumWidth(180)
+        model_layout.addWidget(classifier_card)
+        result_card, result_layout = _card("Result Summary")
         self._classification_result_text = QTextEdit()
         self._classification_result_text.setReadOnly(True)
-        self._classification_result_text.setPlaceholderText("Training and prediction results will appear in the log.")
+        self._classification_result_text.setPlaceholderText(
+            "Train a classifier on loaded labeled samples. Results will appear here and in the log."
+        )
         self._classification_result_text.setMaximumHeight(120)
-        model_layout.addWidget(self._classification_result_text)
+        result_layout.addWidget(self._classification_result_text)
+        model_layout.addWidget(result_card)
         model_layout.addStretch(1)
-
-        log_tab = QWidget()
-        log_layout = QVBoxLayout(log_tab)
-        log_layout.setContentsMargins(6, 6, 6, 6)
-        if log_browser is not None:
-            log_layout.addWidget(_detach(log_browser))
-            old_log_area = getattr(self.ui, 'classificationPageScrollArea', None)
-            if old_log_area is not None:
-                old_log_area.hide()
-        alt_log = getattr(self.ui, 'classificationPagetextBrowser', None)
-        if alt_log is not None:
-            alt_log.hide()
 
         for old_container_name in ('ClassificationImportGroupBox', 'ClassificationImportWidget'):
             old_container = getattr(self.ui, old_container_name, None)
@@ -418,11 +518,68 @@ class ClassificationController(QObject):
         tabs.addTab(preview_tab, "Preview")
         tabs.addTab(embedding_tab, "Embedding")
         tabs.addTab(model_tab, "Model / Result")
-        tabs.addTab(log_tab, "Log")
+
+        log_card = QFrame()
+        log_card.setProperty("classificationCard", True)
+        log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        log_card.setMinimumHeight(44)
+        log_card_layout = QVBoxLayout(log_card)
+        log_card_layout.setContentsMargins(8, 6, 8, 8)
+        log_card_layout.setSpacing(4)
+        log_header = QHBoxLayout()
+        log_header.setContentsMargins(0, 0, 0, 0)
+        log_title = QLabel("Operation Log")
+        log_title.setProperty("classificationTitle", True)
+        log_title.setMaximumHeight(20)
+        log_header.addWidget(log_title)
+        log_header.addStretch(1)
+        log_controls = QHBoxLayout()
+        log_controls.setContentsMargins(0, 0, 0, 0)
+        log_controls.setSpacing(4)
+        log_controls.addStretch(1)
+        clear_log_btn = QPushButton("Clear Log")
+        toggle_log_btn = QPushButton("Collapse")
+        clear_log_btn.setFixedHeight(24)
+        toggle_log_btn.setFixedHeight(24)
+        clear_log_btn.clicked.connect(self._clear_classification_log)
+        toggle_log_btn.clicked.connect(self._toggle_classification_log_panel)
+        log_controls.addWidget(clear_log_btn)
+        log_controls.addWidget(toggle_log_btn)
+        log_header.addLayout(log_controls)
+        log_card_layout.addLayout(log_header)
+        if log_browser is None:
+            log_browser = QTextEdit(log_card)
+            log_browser.setReadOnly(True)
+            self.ui.classificationPageTextBrowser = log_browser
+        log_browser = _detach(log_browser)
+        log_browser.setMinimumHeight(110)
+        log_browser.setMaximumHeight(16777215)
+        try:
+            from PyQt5.QtGui import QFont
+            log_browser.setFont(QFont("Consolas", 9))
+        except Exception as e:
+            self._log_exception('[UI] Table header setup failed', e)
+        log_card_layout.addWidget(log_browser)
+        self._classification_log_browser = log_browser
+        old_log_area = getattr(self.ui, 'classificationPageScrollArea', None)
+        if old_log_area is not None:
+            old_log_area.hide()
+        alt_log = getattr(self.ui, 'classificationPagetextBrowser', None)
+        if alt_log is not None:
+            alt_log.hide()
+        self._classification_log_panel = log_card
+        self._classification_log_toggle_button = toggle_log_btn
+        self._classification_log_expanded = True
+        self._classification_log_last_sizes = [560, 160]
+        splitter.addWidget(log_card)
+        splitter.setStretchFactor(0, 5)
+        splitter.setStretchFactor(1, 1)
+        QTimer.singleShot(0, lambda: splitter.setSizes([560, 160]))
 
         self._classification_responsive_refs = {
             'root': root,
             'tabs': tabs,
+            'splitter': splitter,
             'preview_tab': preview_tab,
             'stats_layout': stats,
             'preview_layout': preview_layout,
@@ -431,6 +588,435 @@ class ClassificationController(QObject):
         self._classification_workflow_ready = True
         self._set_table_responsive_columns('stable')
         self._update_dataset_status_cards()
+
+    def _safe_connect(self, signal, slot):
+        try:
+            signal.disconnect(slot)
+        except Exception:
+            pass
+        try:
+            signal.connect(slot)
+        except Exception as e:
+            self._log_exception('[UI] Signal connect failed', e)
+
+    def _setup_fresh_classification_page(self):
+        """Create a clean Classification page without reparenting old .ui widgets."""
+        root = getattr(self.ui, 'classificationGraphicsViewWidget', None)
+        if root is None:
+            return
+
+        from PyQt5.QtWidgets import (
+            QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton,
+            QTabWidget, QFrame, QScrollArea, QSizePolicy, QAbstractItemView,
+            QFormLayout, QTextEdit, QSplitter, QListWidget, QLineEdit,
+            QTableWidget, QGraphicsView, QComboBox, QSpinBox, QTextBrowser
+        )
+        from PyQt5.QtGui import QFont
+
+        def _clear_root_layout():
+            layout = root.layout()
+            if layout is None:
+                layout = QVBoxLayout(root)
+                root.setLayout(layout)
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.hide()
+                    widget.setParent(None)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            return layout
+
+        def _card(title: str):
+            card = QFrame()
+            card.setProperty("classificationCard", True)
+            layout = QVBoxLayout(card)
+            layout.setContentsMargins(10, 8, 10, 10)
+            layout.setSpacing(8)
+            title_label = QLabel(title)
+            title_label.setProperty("classificationTitle", True)
+            layout.addWidget(title_label)
+            return card, layout
+
+        root_layout = _clear_root_layout()
+        page = QWidget(root)
+        page.setObjectName("ClassificationPageRoot")
+        root_layout.addWidget(page)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(8, 8, 8, 8)
+        page_layout.setSpacing(8)
+
+        root.setStyleSheet("""
+            QWidget#ClassificationPageRoot, QWidget#classificationGraphicsViewWidget {
+                background: #f3f6fa;
+            }
+            QFrame[classificationCard="true"] {
+                background: #ffffff;
+                border: 1px solid #cfd8e3;
+                border-radius: 6px;
+            }
+            QLabel[classificationTitle="true"] {
+                font-weight: 700;
+                color: #1f2937;
+            }
+            QTableWidget {
+                background: #ffffff;
+                gridline-color: #d8e1ec;
+                selection-background-color: #dbeafe;
+                selection-color: #111827;
+            }
+            QHeaderView::section {
+                background: #edf2f7;
+                border: 0;
+                border-right: 1px solid #cfd8e3;
+                border-bottom: 1px solid #cfd8e3;
+                padding: 5px;
+                font-weight: 600;
+            }
+            QPushButton {
+                min-height: 28px;
+            }
+        """)
+
+        splitter = QSplitter(Qt.Vertical, page)
+        splitter.setChildrenCollapsible(False)
+        page_layout.addWidget(splitter, 1)
+        self._classification_main_splitter = splitter
+
+        tabs = QTabWidget(splitter)
+        tabs.setObjectName("ClassificationMainTabs")
+        splitter.addWidget(tabs)
+        self._classification_main_tabs = tabs
+
+        # Dataset tab
+        dataset_tab = QWidget()
+        dataset_scroll = QScrollArea()
+        dataset_scroll.setWidgetResizable(True)
+        dataset_scroll.setFrameShape(QFrame.NoFrame)
+        dataset_content = QWidget()
+        dataset_layout = QVBoxLayout(dataset_content)
+        dataset_layout.setContentsMargins(8, 8, 8, 8)
+        dataset_layout.setSpacing(8)
+        dataset_scroll.setWidget(dataset_content)
+        dataset_outer = QVBoxLayout(dataset_tab)
+        dataset_outer.setContentsMargins(0, 0, 0, 0)
+        dataset_outer.addWidget(dataset_scroll)
+
+        labels_card, labels_layout = _card("Labels")
+        label_list = QListWidget()
+        label_list.setObjectName("ClassificationImportListWidget")
+        label_list.setMaximumHeight(220)
+        label_list.setMinimumHeight(150)
+        labels_layout.addWidget(label_list)
+        label_button_row = QHBoxLayout()
+        add_label_btn = QPushButton("Add Label")
+        remove_label_btn = QPushButton("Remove Label")
+        label_button_row.addWidget(add_label_btn)
+        label_button_row.addWidget(remove_label_btn)
+        label_button_row.addStretch(1)
+        labels_layout.addLayout(label_button_row)
+        dataset_layout.addWidget(labels_card)
+
+        source_card, source_layout = _card("Source")
+        source_form = QFormLayout()
+        source_form.setContentsMargins(0, 0, 0, 0)
+        source_form.setSpacing(8)
+        path_row = QWidget()
+        path_row_layout = QHBoxLayout(path_row)
+        path_row_layout.setContentsMargins(0, 0, 0, 0)
+        path_row_layout.setSpacing(6)
+        path_edit = QLineEdit()
+        path_edit.setPlaceholderText("Folder or file path")
+        choose_folder_btn = QPushButton("Choose Folder")
+        path_row_layout.addWidget(path_edit, 1)
+        path_row_layout.addWidget(choose_folder_btn)
+        rule_edit = QLineEdit("*")
+        source_form.addRow("Path", path_row)
+        source_form.addRow("Rule", rule_edit)
+        source_layout.addLayout(source_form)
+        source_actions = QHBoxLayout()
+        scan_btn = QPushButton("Scan Files")
+        import_btn = QPushButton("Import Selected")
+        source_actions.addWidget(scan_btn)
+        source_actions.addWidget(import_btn)
+        source_actions.addStretch(1)
+        source_layout.addLayout(source_actions)
+        dataset_layout.addWidget(source_card)
+        dataset_layout.addStretch(1)
+
+        # Table tab
+        table_tab = QWidget()
+        table_layout = QVBoxLayout(table_tab)
+        table_layout.setContentsMargins(8, 8, 8, 8)
+        table_layout.setSpacing(8)
+        summary_card, summary_layout = _card("Dataset Summary")
+        stats_widget = QWidget()
+        stats = QGridLayout(stats_widget)
+        stats.setContentsMargins(0, 0, 0, 0)
+        stats.setHorizontalSpacing(6)
+        stats.setVerticalSpacing(6)
+        self._classification_status_cards = {}
+        self._classification_status_card_frames = {}
+        self._classification_status_card_titles = {}
+        for pos, (key, title) in enumerate((
+            ('total', 'Total files'),
+            ('loaded', 'Loaded files'),
+            ('labels', 'Labels'),
+            ('selected', 'Current label'),
+        )):
+            frame = QFrame()
+            frame.setStyleSheet(
+                "QFrame { background: #f7f9fc; border: 1px solid #dce3ee; border-radius: 6px; }"
+                "QLabel { background: transparent; border: none; }"
+            )
+            card_layout = QVBoxLayout(frame)
+            card_layout.setContentsMargins(8, 5, 8, 5)
+            title_label = QLabel(title)
+            title_label.setStyleSheet("color: #596579; font-size: 10px;")
+            value_label = QLabel("-")
+            value_label.setStyleSheet("font-weight: 700; font-size: 12px;")
+            value_label.setWordWrap(True)
+            card_layout.addWidget(title_label)
+            card_layout.addWidget(value_label)
+            stats.addWidget(frame, pos // 2, pos % 2)
+            self._classification_status_card_frames[key] = frame
+            self._classification_status_card_titles[key] = title_label
+            self._classification_status_cards[key] = value_label
+        summary_layout.addWidget(stats_widget)
+        table_layout.addWidget(summary_card)
+
+        table_card, table_card_layout = _card("Dataset Table")
+        table = QTableWidget()
+        table.setObjectName("ClassificationImportTableWidget")
+        table.setColumnCount(len(TABLE_HEADERS))
+        table.setHorizontalHeaderLabels(TABLE_HEADERS)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SingleSelection)
+        table.setAlternatingRowColors(True)
+        table.setMinimumHeight(300)
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        table_card_layout.addWidget(table, 1)
+        table_layout.addWidget(table_card, 1)
+
+        # Preview tab
+        preview_tab = QWidget()
+        preview_layout = QVBoxLayout(preview_tab)
+        preview_layout.setContentsMargins(8, 8, 8, 8)
+        preview_layout.setSpacing(8)
+        preview_card, preview_card_layout = _card("Preview Display")
+        graphics = QGraphicsView()
+        graphics.setObjectName("ClassificationGraphicsView")
+        graphics.setMinimumHeight(300)
+        graphics.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        preview_card_layout.addWidget(graphics, 1)
+        preview_layout.addWidget(preview_card, 1)
+        controls_card, controls_layout = _card("Display Controls")
+        panel = QWidget()
+        panel.setObjectName("ClassificationPanelWidget")
+        controls_layout.addWidget(panel)
+        preview_layout.addWidget(controls_card)
+
+        # Embedding tab
+        embedding_tab = QWidget()
+        embedding_layout = QVBoxLayout(embedding_tab)
+        embedding_layout.setContentsMargins(8, 8, 8, 8)
+        embedding_layout.setSpacing(8)
+        embedding_card, embedding_card_layout = _card("Embedding Controls")
+        embedding_form = QFormLayout()
+        embedding_form.setContentsMargins(0, 0, 0, 0)
+        embedding_form.setSpacing(8)
+        dim_method = QComboBox()
+        dim_method.addItems(["PCA", "t-SNE", "UMAP"])
+        dim_method.setMaximumWidth(220)
+        target_dim = QSpinBox()
+        target_dim.setRange(1, 50)
+        target_dim.setValue(2)
+        target_dim.setMaximumWidth(120)
+        n_widget = QWidget()
+        n_layout = QHBoxLayout(n_widget)
+        n_layout.setContentsMargins(0, 0, 0, 0)
+        n_label = QLabel("n_neighbors")
+        n_spin = QSpinBox()
+        n_spin.setRange(2, 200)
+        n_spin.setValue(15)
+        n_spin.setMaximumWidth(120)
+        n_layout.addWidget(n_label)
+        n_layout.addWidget(n_spin)
+        n_layout.addStretch(1)
+        embedding_form.addRow("Method", dim_method)
+        target_dim_label = QLabel("Target Dim")
+        embedding_form.addRow(target_dim_label, target_dim)
+        embedding_form.addRow("", n_widget)
+        embedding_card_layout.addLayout(embedding_form)
+        embedding_buttons = QHBoxLayout()
+        run_embedding_btn = QPushButton("Run Embedding")
+        show_embedding_btn = QPushButton("Show Embedding")
+        self._dr_status_label = QLabel("●")
+        self._dr_status_label.setFixedWidth(16)
+        embedding_buttons.addWidget(run_embedding_btn)
+        embedding_buttons.addWidget(show_embedding_btn)
+        embedding_buttons.addWidget(self._dr_status_label)
+        embedding_buttons.addStretch(1)
+        embedding_card_layout.addLayout(embedding_buttons)
+        embedding_layout.addWidget(embedding_card)
+        embedding_result_card, embedding_result_layout = _card("Embedding Result / Preview")
+        embedding_result_layout.addWidget(QLabel("Run embedding, then use Show Embedding to inspect the result."))
+        embedding_layout.addWidget(embedding_result_card)
+        embedding_layout.addStretch(1)
+
+        # Model tab
+        model_tab = QWidget()
+        model_layout = QVBoxLayout(model_tab)
+        model_layout.setContentsMargins(8, 8, 8, 8)
+        model_layout.setSpacing(8)
+        model_card, model_card_layout = _card("Classifier Controls")
+        model_form = QFormLayout()
+        model_form.setContentsMargins(0, 0, 0, 0)
+        model_form.setSpacing(8)
+        clf_method = QComboBox()
+        clf_method.addItems(["KNN", "SVM"])
+        clf_method.setMaximumWidth(220)
+        clf_param_label = QLabel("n_neighbors:")
+        clf_param_edit = QLineEdit("5")
+        clf_param_edit.setMaximumWidth(120)
+        model_form.addRow("Method", clf_method)
+        model_form.addRow(clf_param_label, clf_param_edit)
+        model_card_layout.addLayout(model_form)
+        model_buttons = QHBoxLayout()
+        train_btn = QPushButton("Train Classifier")
+        predict_btn = QPushButton("Predict")
+        save_btn = QPushButton("Save Model")
+        load_btn = QPushButton("Load Model")
+        for button in (train_btn, predict_btn, save_btn, load_btn):
+            button.setMaximumWidth(160)
+            model_buttons.addWidget(button)
+        model_buttons.addStretch(1)
+        model_card_layout.addLayout(model_buttons)
+        model_layout.addWidget(model_card)
+        result_card, result_layout = _card("Result Summary")
+        self._classification_result_text = QTextEdit()
+        self._classification_result_text.setReadOnly(True)
+        self._classification_result_text.setPlaceholderText(
+            "Train a classifier on loaded labeled samples. Results will appear here and in the log."
+        )
+        self._classification_result_text.setMinimumHeight(110)
+        result_layout.addWidget(self._classification_result_text)
+        model_layout.addWidget(result_card)
+        model_layout.addStretch(1)
+
+        tabs.addTab(dataset_tab, "Dataset")
+        tabs.addTab(table_tab, "Table / Inspect")
+        tabs.addTab(preview_tab, "Preview")
+        tabs.addTab(embedding_tab, "Embedding")
+        tabs.addTab(model_tab, "Model / Result")
+
+        # Operation log
+        log_panel = QFrame()
+        log_panel.setProperty("classificationCard", True)
+        log_panel.setMinimumHeight(140)
+        log_layout = QVBoxLayout(log_panel)
+        log_layout.setContentsMargins(8, 6, 8, 8)
+        log_layout.setSpacing(4)
+        log_header = QHBoxLayout()
+        log_title = QLabel("Operation Log")
+        log_title.setProperty("classificationTitle", True)
+        clear_log_btn = QPushButton("Clear Log")
+        toggle_log_btn = QPushButton("Collapse")
+        clear_log_btn.setFixedHeight(24)
+        toggle_log_btn.setFixedHeight(24)
+        log_header.addWidget(log_title)
+        log_header.addStretch(1)
+        log_header.addWidget(clear_log_btn)
+        log_header.addWidget(toggle_log_btn)
+        log_layout.addLayout(log_header)
+        log_browser = QTextBrowser()
+        log_browser.setObjectName("classificationPageTextBrowser")
+        log_browser.setFont(QFont("Consolas", 9))
+        log_browser.setMinimumHeight(104)
+        log_layout.addWidget(log_browser, 1)
+        splitter.addWidget(log_panel)
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 1)
+        QTimer.singleShot(0, lambda: splitter.setSizes([720, 180]))
+
+        # Assign fresh widgets to the existing controller aliases.
+        self.ui.ClassificationImportListWidget = label_list
+        self.ui.ClassificationImportPlusButton = add_label_btn
+        self.ui.ClassificationImportMinusButton = remove_label_btn
+        self.ui.ClassificationImportFolderPathLabel = choose_folder_btn
+        self.ui.ClassificationImportFolderPathValue = path_edit
+        self.ui.ClassificationImportRuleLabel = QLabel("Rule")
+        self.ui.ClassificationImportRuleValue = rule_edit
+        self.ui.ClassificationImportImportButton = import_btn
+        self.ui.ClassificationImportClassifyButton = predict_btn
+        self.ui.ClassificationImportTableWidget = table
+        self.ui.ClassificationGraphicsView = graphics
+        self.ui.ClassificationPanelWidget = panel
+        self.ui.DimensionalityReductionMethodCombox = dim_method
+        self.ui.DimensionalityReductionTargetDimLabel = target_dim_label
+        self.ui.DimensionalityReductionTargetDimValue = target_dim
+        self.ui.nNeighborsWidget = n_widget
+        self.ui.DimensionalityReductionNNeighborLabel = n_label
+        self.ui.DimensionalityReductionNNeighborValue = n_spin
+        self.ui.DimensionalityReductionStartButton = run_embedding_btn
+        self.ui.DimensionalityReductionShowResultButton = show_embedding_btn
+        self.ui.ClassificationMethodCombox = clf_method
+        self.ui.ClassificationKNnnNneighborsLabel = clf_param_label
+        self.ui.ClassificationKNnnNneighborsValue = clf_param_edit
+        self.ui.ClassificationClassifyButton = train_btn
+        self.ui.ClassificationSaveModelButton = save_btn
+        self.ui.ClassificationLoadModelButton = load_btn
+        self.ui.classificationPageTextBrowser = log_browser
+        self.ui.classificationPagetextBrowser = log_browser
+
+        self._classification_log_browser = log_browser
+        self._classification_log_panel = log_panel
+        self._classification_log_toggle_button = toggle_log_btn
+        self._classification_log_expanded = True
+        self._classification_log_last_sizes = [720, 180]
+        self._classification_scan_button = scan_btn
+        self._classification_responsive_refs = {
+            'root': root,
+            'tabs': tabs,
+            'splitter': splitter,
+            'preview_tab': preview_tab,
+            'stats_layout': stats,
+            'preview_layout': preview_layout,
+        }
+
+        self._safe_connect(label_list.itemSelectionChanged, self._on_list_selection_changed)
+        self._safe_connect(label_list.itemDoubleClicked, self._on_item_double_clicked)
+        self._safe_connect(label_list.itemChanged, self._on_item_renamed)
+        self._safe_connect(add_label_btn.clicked, self._on_plus_clicked)
+        self._safe_connect(remove_label_btn.clicked, self._on_minus_clicked)
+        self._safe_connect(choose_folder_btn.clicked, self._on_choose_path_clicked)
+        self._safe_connect(rule_edit.editingFinished, self._on_rule_edited)
+        self._safe_connect(path_edit.editingFinished, self._on_path_edited)
+        self._safe_connect(scan_btn.clicked, self._on_scan_files_clicked)
+        self._safe_connect(import_btn.clicked, self._on_import_clicked)
+        self._safe_connect(predict_btn.clicked, self._on_import_classify_clicked)
+        self._safe_connect(table.cellClicked, self._on_table_cell_clicked)
+        self._safe_connect(table.itemSelectionChanged, self._on_table_selection_changed)
+        self._safe_connect(table.itemChanged, self._on_table_item_changed)
+        self._safe_connect(dim_method.currentTextChanged, self._on_dim_method_changed)
+        self._safe_connect(run_embedding_btn.clicked, self._on_dim_start_clicked_async)
+        self._safe_connect(show_embedding_btn.clicked, self._on_dim_show_clicked)
+        self._safe_connect(clf_method.currentTextChanged, self._on_clf_method_changed)
+        self._safe_connect(train_btn.clicked, self._on_clf_start_clicked)
+        self._safe_connect(save_btn.clicked, self._on_clf_save_clicked)
+        self._safe_connect(load_btn.clicked, self._on_clf_load_clicked)
+        self._safe_connect(clear_log_btn.clicked, self._clear_classification_log)
+        self._safe_connect(toggle_log_btn.clicked, self._toggle_classification_log_panel)
+
+        self._ensure_table_headers()
+        self._on_dim_method_changed(dim_method.currentText())
+        self._on_clf_method_changed(clf_method.currentText())
+        self._set_dr_status_color('brown')
+        self._classification_workflow_ready = True
+        self._set_table_responsive_columns('stable')
+        self._update_dataset_status_cards()
+        self.log("[UI] Fresh Classification page initialized.")
 
     def _rename_workflow_buttons(self):
         names = {
@@ -455,6 +1041,70 @@ class ClassificationController(QObject):
                     widget.setMaximumWidth(16777215)
                 except Exception:
                     pass
+
+    def _compact_classification_controls(self, container):
+        """Keep moved legacy controls usable inside compact cards."""
+        if container is None:
+            return
+        try:
+            from PyQt5.QtWidgets import QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QLineEdit
+            for combo in container.findChildren(QComboBox):
+                combo.setMaximumWidth(220)
+                combo.setMinimumWidth(120)
+            for spin in container.findChildren((QSpinBox, QDoubleSpinBox)):
+                spin.setMaximumWidth(120)
+            for edit in container.findChildren(QLineEdit):
+                edit.setMaximumWidth(220)
+            for button in container.findChildren(QPushButton):
+                button.setMinimumHeight(30)
+                button.setMaximumWidth(180)
+        except Exception as e:
+            self._log_exception('[UI] Compact controls failed', e)
+
+    def _clear_classification_log(self):
+        try:
+            tb = getattr(self, '_classification_log_browser', None)
+            if tb is None:
+                tb = getattr(self.ui, 'classificationPageTextBrowser', None)
+            if tb is not None:
+                tb.clear()
+        except Exception as e:
+            self._log_exception('[UI] Clear log failed', e)
+
+    def _toggle_classification_log_panel(self):
+        try:
+            tb = getattr(self, '_classification_log_browser', None)
+            btn = getattr(self, '_classification_log_toggle_button', None)
+            splitter = getattr(self, '_classification_main_splitter', None)
+            if tb is None:
+                return
+            expanded = bool(getattr(self, '_classification_log_expanded', True))
+            panel = getattr(self, '_classification_log_panel', None)
+            if expanded:
+                if splitter is not None:
+                    sizes = splitter.sizes()
+                    if sizes and len(sizes) >= 2 and sizes[1] > 45:
+                        self._classification_log_last_sizes = sizes
+                    splitter.setSizes([max(1, sum(sizes) - 34) if sizes else 700, 34])
+                tb.setVisible(False)
+                if panel is not None:
+                    panel.setMinimumHeight(34)
+                    panel.setMaximumHeight(44)
+                if btn is not None:
+                    btn.setText("Expand")
+                self._classification_log_expanded = False
+            else:
+                if panel is not None:
+                    panel.setMaximumHeight(16777215)
+                    panel.setMinimumHeight(120)
+                tb.setVisible(True)
+                if splitter is not None:
+                    splitter.setSizes(getattr(self, '_classification_log_last_sizes', [560, 160]))
+                if btn is not None:
+                    btn.setText("Collapse")
+                self._classification_log_expanded = True
+        except Exception as e:
+            self._log_exception('[UI] Toggle log panel failed', e)
 
     def _on_scan_files_clicked(self):
         path = self._get_cached('path', '') or ''
@@ -496,13 +1146,13 @@ class ClassificationController(QObject):
         try:
             if self.main_window is not None and self.main_window.isVisible() and self.main_window.width() > 400:
                 return self.main_window.width()
-        except Exception:
-            pass
+        except Exception as e:
+            self._log_exception('[UI] Import table header setup failed', e)
         try:
             if root is not None and root.isVisible() and root.width() > 400:
                 return root.width()
-        except Exception:
-            pass
+        except Exception as e:
+            self._log_exception('[UI] Table header setup failed', e)
         try:
             if self.main_window is not None and self.main_window.width() > 1000:
                 fallback_widths.append(self.main_window.width())
@@ -588,19 +1238,19 @@ class ClassificationController(QObject):
             for col in range(table.columnCount()):
                 table.setColumnHidden(col, False)
             if mode == 'compact':
-                for col in (4, 6, 7):
+                for col in (TABLE_COL_SHAPE, TABLE_COL_PREDICTION, TABLE_COL_CONFIDENCE):
                     table.setColumnHidden(col, True)
             header = table.horizontalHeader()
             header.setStretchLastSection(False)
-            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(5, QHeaderView.Stretch)
-            header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(8, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_LABEL, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_TYPE, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_FILES, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_LOADED, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_SHAPE, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_STATUS, QHeaderView.Stretch)
+            header.setSectionResizeMode(TABLE_COL_PREDICTION, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_CONFIDENCE, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_PREVIEW, QHeaderView.ResizeToContents)
             if mode == 'compact':
                 table.setMinimumHeight(260)
             else:
@@ -793,6 +1443,96 @@ class ClassificationController(QObject):
         """Create 1D/2D display controls inside ClassificationPanelWidget."""
         panel = getattr(self.ui, 'ClassificationPanelWidget', None)
         if panel is None:
+            return
+        try:
+            from PyQt5.QtWidgets import QVBoxLayout, QGridLayout, QLabel, QCheckBox, QDoubleSpinBox, QComboBox
+            if panel.layout() is None:
+                layout = QVBoxLayout(panel)
+                panel.setLayout(layout)
+            else:
+                layout = panel.layout()
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+            layout.setContentsMargins(6, 6, 6, 6)
+            layout.setSpacing(6)
+
+            info_label = QLabel('Select a row in Table / Inspect or click Preview.')
+            info_label.setWordWrap(True)
+            layout.addWidget(info_label)
+            self._panel_info_label = info_label
+
+            controls = QGridLayout()
+            controls.setContentsMargins(0, 0, 0, 0)
+            controls.setHorizontalSpacing(10)
+            controls.setVerticalSpacing(5)
+
+            title_2d = QLabel('2D')
+            title_2d.setStyleSheet('font-weight: 700;')
+            title_1d = QLabel('1D')
+            title_1d.setStyleSheet('font-weight: 700;')
+            cb_auto = QCheckBox('Auto scale')
+            cb_auto.setChecked(True)
+            cb_auto.toggled.connect(self._on_image_auto_scale_toggled)
+            cb_log = QCheckBox('Log scale')
+            cb_log.setChecked(False)
+            cb_log.toggled.connect(self._on_image_log_scale_toggled)
+            sp_vmin = QDoubleSpinBox()
+            sp_vmin.setDecimals(4)
+            sp_vmin.setMinimum(-1e12)
+            sp_vmin.setMaximum(1e12)
+            sp_vmin.setSingleStep(0.1)
+            sp_vmin.setValue(0.0)
+            sp_vmin.setMaximumWidth(130)
+            sp_vmax = QDoubleSpinBox()
+            sp_vmax.setDecimals(4)
+            sp_vmax.setMinimum(-1e12)
+            sp_vmax.setMaximum(1e12)
+            sp_vmax.setSingleStep(0.1)
+            sp_vmax.setValue(1.0)
+            sp_vmax.setMaximumWidth(130)
+            sp_vmin.editingFinished.connect(self._on_image_vmin_editing_finished)
+            sp_vmax.editingFinished.connect(self._on_image_vmax_editing_finished)
+            sp_vmin.setEnabled(False)
+            sp_vmax.setEnabled(False)
+
+            cb_cmap = QComboBox()
+            cb_cmap.addItems(['jet', 'gray', 'viridis', 'plasma', 'magma', 'inferno', 'turbo'])
+            cb_cmap.setCurrentText(self._image_cmap_name)
+            cb_cmap.setMaximumWidth(180)
+            cb_cmap.currentTextChanged.connect(self._on_image_cmap_changed)
+
+            cb_logy = QCheckBox('Log Y')
+            cb_logy.setChecked(False)
+            cb_logy.toggled.connect(self._on_curve_logy_toggled)
+
+            controls.addWidget(title_2d, 0, 0)
+            controls.addWidget(cb_auto, 0, 1)
+            controls.addWidget(cb_log, 0, 2)
+            controls.addWidget(QLabel('Colormap'), 1, 0)
+            controls.addWidget(cb_cmap, 1, 1)
+            controls.addWidget(QLabel('vmin'), 1, 2)
+            controls.addWidget(sp_vmin, 1, 3)
+            controls.addWidget(QLabel('vmax'), 1, 4)
+            controls.addWidget(sp_vmax, 1, 5)
+            controls.addWidget(title_1d, 2, 0)
+            controls.addWidget(cb_logy, 2, 1)
+            controls.setColumnStretch(6, 1)
+            layout.addLayout(controls)
+
+            self._panel_widgets = {
+                '2d_auto': cb_auto,
+                '2d_log': cb_log,
+                'vmin': sp_vmin,
+                'vmax': sp_vmax,
+                '1d_logy': cb_logy,
+                'cmap': cb_cmap,
+            }
+            return
+        except Exception as e:
+            self._log_exception('[UI] Preview controls rebuild failed', e)
             return
         from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QCheckBox, QDoubleSpinBox, QComboBox, QFormLayout
         # Initialize layout
@@ -1159,6 +1899,11 @@ class ClassificationController(QObject):
             tb = getattr(self.ui, 'classificationPagetextBrowser', None)
         if tb is not None:
             tb.append(line)
+            try:
+                bar = tb.verticalScrollBar()
+                bar.setValue(bar.maximum())
+            except Exception:
+                pass
         self.status_updated.emit(message)
 
     # ---------------------------- 文件扫描 + 表格管理 ----------------------------
@@ -1267,7 +2012,7 @@ class ClassificationController(QObject):
     def _on_table_cell_clicked(self, row: int, col: int):
         # 同步选择到上方列表，但不强制选中表格行于列表切换时
         try:
-            it = self.ui.ClassificationImportTableWidget.item(row, 0)
+            it = self.ui.ClassificationImportTableWidget.item(row, TABLE_COL_LABEL)
             if it is not None:
                 name = it.text()
                 lw = self.ui.ClassificationImportListWidget
@@ -1316,13 +2061,30 @@ class ClassificationController(QObject):
         except Exception as e:
             self._log_exception('[Preview] Switch tab failed', e)
 
+    def _preview_category_by_name(self, category: str, edit=None, switch_tab: bool = False, *_args):
+        if edit is not None:
+            self._on_preview_index_entered(category, edit)
+        else:
+            self._on_preview_category_clicked(category)
+        if switch_tab:
+            try:
+                tabs = getattr(self, '_classification_main_tabs', None)
+                refs = getattr(self, '_classification_responsive_refs', {})
+                preview_tab = refs.get('preview_tab')
+                if tabs is not None and preview_tab is not None:
+                    idx = tabs.indexOf(preview_tab)
+                    if idx >= 0:
+                        tabs.setCurrentIndex(idx)
+            except Exception as e:
+                self._log_exception('[Preview] Switch tab failed', e)
+
     def _on_import_clicked(self):
         table = self.ui.ClassificationImportTableWidget
         try:
-            table.setColumnCount(9)
+            table.setColumnCount(len(TABLE_HEADERS))
             self._ensure_table_headers()
-        except Exception:
-            pass
+        except Exception as e:
+            self._log_exception('[UI] Table header setup failed', e)
         lw = getattr(self.ui, 'ClassificationImportListWidget', None)
         if table.rowCount() == 0:
             self.log('[Import] No categories to import.')
@@ -1331,7 +2093,7 @@ class ClassificationController(QObject):
         cat = None
         r = table.currentRow()
         if r is not None and r >= 0:
-            it = table.item(r, 0)
+            it = table.item(r, TABLE_COL_LABEL)
             if it is not None:
                 cat = (it.text() or '').strip()
         if not cat and lw is not None and lw.currentItem() is not None:
@@ -1496,7 +2258,7 @@ class ClassificationController(QObject):
         table = getattr(self.ui, 'ClassificationImportTableWidget', None)
         if table is None:
             return
-        it = table.item(row, 0)
+        it = table.item(row, TABLE_COL_LABEL)
         if it is None:
             return
         category = (it.text() or '').strip()
@@ -2863,9 +3625,25 @@ class ClassificationController(QObject):
             self.log(f"[UI] Table header refresh failed: {e}")
         lw = getattr(self.ui, 'ClassificationImportListWidget', None)
         names: List[str] = []
+        seen = set()
+        for category in self.import_cache.keys():
+            if category not in seen:
+                names.append(category)
+                seen.add(category)
         if lw is not None:
-            names = [lw.item(i).text() for i in range(lw.count())]
+            for i in range(lw.count()):
+                category = lw.item(i).text()
+                if category not in seen:
+                    names.append(category)
+                    seen.add(category)
+        for sample in self.samples:
+            category = sample.category
+            if category and category not in seen:
+                names.append(category)
+                seen.add(category)
         current_category = self._get_current_name() or self.current_item_name
+        self.log(f"[Table] headers={TABLE_HEADERS}")
+        self.log(f"[Table] categories={names}")
         table.blockSignals(True)
         try:
             for row in range(table.rowCount()):
@@ -2874,14 +3652,15 @@ class ClassificationController(QObject):
                     if widget is not None:
                         table.removeCellWidget(row, col)
                         widget.deleteLater()
-            table.setRowCount(0)
             self._row_to_index.clear()
             self._row_to_category.clear()
+            table.clearContents()
+            table.setColumnCount(len(TABLE_HEADERS))
+            table.setHorizontalHeaderLabels(TABLE_HEADERS)
+            table.setRowCount(len(names))
             self._ensure_table_headers()
-            for category in names:
+            for row, category in enumerate(names):
                 indices = [idx for idx, s in enumerate(self.samples) if s.category == category]
-                row = table.rowCount()
-                table.insertRow(row)
                 self._row_to_category[row] = category
                 if indices:
                     self._row_to_index[row] = indices[0]
@@ -2889,24 +3668,24 @@ class ClassificationController(QObject):
                 loaded = sum(1 for i in indices if (self.samples[i].preprocessed_data is not None) or (self.samples[i].raw_data is not None))
                 n1d = sum(1 for i in indices if self.samples[i].data_type == '1D')
                 n2d = sum(1 for i in indices if self.samples[i].data_type == '2D')
-                type_parts = []
-                if n1d:
-                    type_parts.append(f"1D:{n1d}")
-                if n2d:
-                    type_parts.append(f"2D:{n2d}")
-                type_text = ', '.join(type_parts) if type_parts else '-'
+                if n1d and n2d:
+                    type_text = '1D/2D'
+                elif n1d:
+                    type_text = '1D'
+                elif n2d:
+                    type_text = '2D'
+                else:
+                    type_text = '-'
                 if total == 0:
                     status_text = 'No files scanned'
-                elif loaded == total:
-                    status_text = 'Ready'
                 elif loaded > 0:
-                    status_text = 'Partially loaded'
+                    status_text = f"Loaded {loaded}/{total}"
                 else:
-                    status_text = 'Scanned'
+                    status_text = f"Listed {total} files"
 
                 it_label = QTableWidgetItem(category)
                 it_label.setFlags(it_label.flags() | Qt.ItemIsEditable)
-                table.setItem(row, 0, it_label)
+                table.setItem(row, TABLE_COL_LABEL, it_label)
 
                 def _readonly(value: str) -> QTableWidgetItem:
                     item = QTableWidgetItem(value)
@@ -2915,6 +3694,7 @@ class ClassificationController(QObject):
 
                 shapes: List[str] = []
                 predictions: Dict[str, int] = {}
+                confidences: List[float] = []
                 for i in indices:
                     sample = self.samples[i]
                     d = sample.preprocessed_data if sample.preprocessed_data is not None else sample.raw_data
@@ -2927,35 +3707,52 @@ class ClassificationController(QObject):
                             shapes.append(f"[{d.shape[0]},{d.shape[1]},{d.shape[2]}]")
                     if sample.predicted_label:
                         predictions[sample.predicted_label] = predictions.get(sample.predicted_label, 0) + 1
+                    confidence = getattr(sample, 'confidence', None)
+                    if confidence is None:
+                        confidence = getattr(sample, 'prediction_confidence', None)
+                    if confidence is not None:
+                        try:
+                            confidences.append(float(confidence))
+                        except (TypeError, ValueError):
+                            pass
                 shape_text = ', '.join(sorted(set(shapes))) if shapes else '-'
                 prediction_text = '-'
                 if predictions:
                     prediction_text = ', '.join(f"{k}:{v}" for k, v in sorted(predictions.items()))
+                confidence_text = '-'
+                if confidences:
+                    confidence_text = f"{float(np.mean(confidences)):.3f}"
 
-                table.setItem(row, 1, _readonly(type_text))
-                table.setItem(row, 2, _readonly(str(total)))
-                table.setItem(row, 3, _readonly(str(loaded)))
-                table.setItem(row, 4, _readonly(shape_text))
-                table.setItem(row, 5, _readonly(status_text))
-                table.setItem(row, 6, _readonly(prediction_text))
-                table.setItem(row, 7, _readonly('-'))
+                table.setItem(row, TABLE_COL_TYPE, _readonly(type_text))
+                table.setItem(row, TABLE_COL_FILES, _readonly(str(total)))
+                table.setItem(row, TABLE_COL_LOADED, _readonly(str(loaded)))
+                table.setItem(row, TABLE_COL_SHAPE, _readonly(shape_text))
+                table.setItem(row, TABLE_COL_STATUS, _readonly(status_text))
+                table.setItem(row, TABLE_COL_PREDICTION, _readonly(prediction_text))
+                table.setItem(row, TABLE_COL_CONFIDENCE, _readonly(confidence_text))
+                self.log(f"[Table] row {row}: label={category}, files={total}, loaded={loaded}")
 
                 from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QPushButton
                 cell = QWidget()
                 hb = QHBoxLayout(cell)
                 hb.setContentsMargins(0, 0, 0, 0)
+                hb.setSpacing(4)
                 le = QLineEdit()
                 le.setPlaceholderText(f"1-{max(1, total)}")
+                le.setMaximumWidth(54)
                 try:
                     le.setText(str(self._category_show_index.get(category, 1)))
                 except Exception:
                     le.setText('1')
                 le.returnPressed.connect(partial(self._on_preview_index_entered, category, le))
                 btn = QPushButton('Preview')
-                btn.clicked.connect(partial(self._on_preview_category_clicked, category, le))
+                btn.setMaximumWidth(82)
+                btn.setEnabled(total > 0)
+                btn.clicked.connect(partial(self._preview_category_by_name, category, le, True))
+                le.setEnabled(total > 0)
                 hb.addWidget(le)
                 hb.addWidget(btn)
-                table.setCellWidget(row, 8, cell)
+                table.setCellWidget(row, TABLE_COL_PREVIEW, cell)
             if current_category:
                 for row, category in self._row_to_category.items():
                     if category == current_category:
@@ -2965,30 +3762,28 @@ class ClassificationController(QObject):
             table.blockSignals(False)
         self._update_dataset_status_cards()
         self._set_table_responsive_columns('stable')
+        self.log(f"[Table] Rebuilt grouped table: {len(names)} labels, {len(self.samples)} samples, rows={table.rowCount()}, categories={names}")
 
     def _ensure_table_headers(self):
         table = getattr(self.ui, 'ClassificationImportTableWidget', None)
         if table is None:
             return
         from PyQt5.QtWidgets import QHeaderView
-        table.setColumnCount(9)
-        table.setHorizontalHeaderLabels([
-            'Label', 'Type', 'Files', 'Loaded', 'Shape',
-            'Status', 'Prediction', 'Confidence', 'Preview'
-        ])
+        table.setColumnCount(len(TABLE_HEADERS))
+        table.setHorizontalHeaderLabels(TABLE_HEADERS)
         try:
             header = table.horizontalHeader()
-            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(5, QHeaderView.Stretch)
-            header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(8, QHeaderView.ResizeToContents)
-        except Exception:
-            pass
+            header.setSectionResizeMode(TABLE_COL_LABEL, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_TYPE, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_FILES, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_LOADED, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_SHAPE, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_STATUS, QHeaderView.Stretch)
+            header.setSectionResizeMode(TABLE_COL_PREDICTION, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_CONFIDENCE, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(TABLE_COL_PREVIEW, QHeaderView.ResizeToContents)
+        except Exception as e:
+            self._log_exception('[UI] Table header setup failed', e)
 
     def _on_item_renamed(self, item):
         """重命名：迁移缓存 + 同步样本类别名 + 重建聚合表。"""
@@ -3070,7 +3865,7 @@ class ClassificationController(QObject):
             r = table.currentRow()
             if r is None or r < 0:
                 return
-            it = table.item(r, 0)
+            it = table.item(r, TABLE_COL_LABEL)
             if it is None:
                 return
             name = (it.text() or '').strip()
@@ -3087,7 +3882,7 @@ class ClassificationController(QObject):
 
     def _on_table_item_changed(self, item: QTableWidgetItem):
         # 仅处理第一列（Category）改名，其他列不允许编辑
-        if item is None or item.column() != 0:
+        if item is None or item.column() != TABLE_COL_LABEL:
             return
         if self._in_table_item_changed:
             return
@@ -3097,15 +3892,23 @@ class ClassificationController(QObject):
             row = item.row()
             new_name = (item.text() or '').strip()
             lw = self.ui.ClassificationImportListWidget
-            if lw is None or row < 0 or row >= lw.count():
+            if lw is None or row < 0:
                 return
-            old_name = lw.item(row).text()
+            old_name = self._row_to_category.get(row)
+            if not old_name:
+                old_item = table.item(row, TABLE_COL_LABEL)
+                old_name = (old_item.text() or '').strip() if old_item is not None else ''
+            if not old_name:
+                return
             if new_name == old_name or not new_name:
                 # 回退显示
                 item.setText(old_name)
                 return
             # 通过上方列表的重命名逻辑来迁移缓存/样本
-            lw.item(row).setText(new_name)
+            for i in range(lw.count()):
+                if lw.item(i).text() == old_name:
+                    lw.item(i).setText(new_name)
+                    break
             # _on_item_renamed 会被触发并负责重建表格
         finally:
             self._in_table_item_changed = False
