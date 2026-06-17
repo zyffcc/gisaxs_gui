@@ -8,13 +8,15 @@ changing object names that controllers depend on.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable, Sequence
 
-from PyQt5.QtCore import QEvent, QSettings, QTimer, Qt, QUrl
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import QEvent, QSize, QSettings, QTimer, Qt, QUrl, pyqtSignal
+from PyQt5.QtGui import QDesktopServices, QIcon
 from PyQt5.QtWidgets import (
     QAbstractButton,
     QBoxLayout,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -69,26 +71,169 @@ class PageDefinition:
 
 
 class NavigationSidebar(QWidget):
-    """Owns the left navigation buttons while preserving generated buttons."""
+    """Collapsible app navigation with an always-visible icon rail."""
+
+    collapsedChanged = pyqtSignal(bool)
+
+    SETTINGS_KEY = "main_sidebar_collapsed"
+    RAIL_WIDTH = 56
+    PANEL_WIDTH = 220
+    PANEL_BUTTON_WIDTH = 200
+    BUTTON_HEIGHT = 46
+    EXPANDED_WIDTH = RAIL_WIDTH + PANEL_WIDTH
+    COLLAPSED_WIDTH = RAIL_WIDTH
+
+    PAGE_META = (
+        ("Cut & Fitting", "1D_Cut.svg"),
+        ("2D Prediction", "Predict.svg"),
+        ("Trainset Build", "TraintingSetBuild.svg"),
+        ("Classification", "Classification.svg"),
+        ("WAXS", "WAXS.svg"),
+    )
 
     def __init__(self, buttons: Sequence[QAbstractButton], parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("navigationSidebar")
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self._buttons = list(buttons)
+        self._rail_buttons: list[QToolButton] = []
+        self._icon_dir = Path(__file__).resolve().parents[2] / "assets" / "icons"
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        for button in buttons:
-            button.setParent(self)
-            button.setProperty("navigationButton", True)
-            normalize_button(button, wide=True)
-            button.setMinimumHeight(BUTTON_HEIGHT + 6)
-            button.setMaximumHeight(BUTTON_HEIGHT + 12)
-            layout.addWidget(button)
+        self.rail = QWidget(self)
+        self.rail.setObjectName("navigationIconRail")
+        self.rail.setFixedWidth(self.RAIL_WIDTH)
+        rail_layout = QVBoxLayout(self.rail)
+        rail_layout.setContentsMargins(8, 8, 8, 8)
+        rail_layout.setSpacing(8)
 
-        layout.addStretch(1)
+        self.toggle_button = QToolButton(self.rail)
+        self.toggle_button.setObjectName("sidebarCollapseButton")
+        self.toggle_button.setToolTip("Collapse sidebar")
+        self.toggle_button.setAutoRaise(True)
+        self.toggle_button.setFixedSize(40, 40)
+        self.toggle_button.clicked.connect(self.toggle_collapsed)
+        rail_layout.addWidget(self.toggle_button)
+
+        self.button_group = QButtonGroup(self)
+        self.button_group.setExclusive(True)
+        for index, button in enumerate(self._buttons):
+            title, icon_name = self._page_meta(index)
+            rail_button = QToolButton(self.rail)
+            rail_button.setObjectName(f"navigationRailButton{index}")
+            rail_button.setProperty("navigationRailButton", True)
+            rail_button.setCheckable(True)
+            rail_button.setAutoRaise(True)
+            rail_button.setFixedSize(40, 40)
+            rail_button.setToolTip(title)
+            icon_path = self._icon_dir / icon_name
+            if icon_path.exists():
+                rail_button.setIcon(QIcon(str(icon_path)))
+                rail_button.setIconSize(QSize(24, 24))
+            else:
+                rail_button.setText(title[:1])
+            rail_button.clicked.connect(lambda _checked=False, i=index: self.set_active_index(i))
+            rail_button.clicked.connect(lambda _checked=False, target=button: target.click())
+            self.button_group.addButton(rail_button, index)
+            self._rail_buttons.append(rail_button)
+            rail_layout.addWidget(rail_button)
+
+            button.toggled.connect(lambda checked, i=index: self._sync_rail_checked(i, checked))
+            button.clicked.connect(lambda _checked=False, i=index: self.set_active_index(i))
+
+        rail_layout.addStretch(1)
+
+        self.panel = QWidget(self)
+        self.panel.setObjectName("navigationControlPanel")
+        self.panel.setFixedWidth(self.PANEL_WIDTH)
+        panel_layout = QVBoxLayout(self.panel)
+        panel_layout.setContentsMargins(10, 10, 10, 12)
+        panel_layout.setSpacing(8)
+
+        self.controls_scroll = QScrollArea(self.panel)
+        self.controls_scroll.setObjectName("navigationControlsScroll")
+        self.controls_scroll.setWidgetResizable(True)
+        self.controls_scroll.setFrameShape(QFrame.NoFrame)
+        self.controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        panel_layout.addWidget(self.controls_scroll, 1)
+
+        self.controls_content = QWidget(self.controls_scroll)
+        self.controls_content.setObjectName("navigationControlsContent")
+        controls_layout = QVBoxLayout(self.controls_content)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(8)
+        for index, button in enumerate(self._buttons):
+            controls_layout.addWidget(self._create_panel_button(index, button), 0, Qt.AlignHCenter)
+        controls_layout.addStretch(1)
+        self.controls_scroll.setWidget(self.controls_content)
+
+        layout.addWidget(self.rail)
+        layout.addWidget(self.panel)
+
+        collapsed = QSettings().value(self.SETTINGS_KEY, False, type=bool)
+        self.set_collapsed(collapsed, emit_signal=False)
+        self.set_active_index(0)
+
+    def _page_meta(self, index: int) -> tuple[str, str]:
+        if index < len(self.PAGE_META):
+            return self.PAGE_META[index]
+        return (f"Page {index + 1}", "")
+
+    def _create_panel_button(self, index: int, button: QAbstractButton) -> QAbstractButton:
+        title, _icon_name = self._page_meta(index)
+        button.setParent(self.controls_content)
+        button.setProperty("navigationButton", True)
+        button.setText(title)
+        normalize_button(button, wide=True)
+        button.setFixedWidth(self.PANEL_BUTTON_WIDTH)
+        button.setMinimumHeight(self.BUTTON_HEIGHT)
+        button.setMaximumHeight(self.BUTTON_HEIGHT)
+        return button
+
+    def set_active_index(self, index: int) -> None:
+        if 0 <= index < len(self._rail_buttons):
+            self._rail_buttons[index].setChecked(True)
+
+    def _sync_rail_checked(self, index: int, checked: bool) -> None:
+        if checked:
+            self.set_active_index(index)
+
+    def toggle_collapsed(self) -> None:
+        self.set_collapsed(not self.is_collapsed())
+
+    def set_collapsed(self, collapsed: bool, *, emit_signal: bool = True) -> None:
+        collapsed = bool(collapsed)
+        self.apply_layout_state(collapsed)
+        self.toggle_button.setArrowType(Qt.RightArrow if collapsed else Qt.LeftArrow)
+        self.toggle_button.setToolTip("Expand sidebar" if collapsed else "Collapse sidebar")
+        QSettings().setValue(self.SETTINGS_KEY, collapsed)
+        if emit_signal:
+            self.collapsedChanged.emit(collapsed)
+
+    def apply_layout_state(self, collapsed: bool | None = None) -> None:
+        if collapsed is None:
+            collapsed = self.is_collapsed()
+        collapsed = bool(collapsed)
+        width = self.COLLAPSED_WIDTH if collapsed else self.EXPANDED_WIDTH
+
+        if self.layout() is not None:
+            self.layout().setContentsMargins(0, 0, 0, 0)
+            self.layout().setSpacing(0)
+        self.rail.setFixedWidth(self.RAIL_WIDTH)
+        self.panel.setFixedWidth(self.PANEL_WIDTH)
+        self.panel.setVisible(not collapsed)
+        self.setMinimumWidth(width)
+        self.setMaximumWidth(width)
+        self.setFixedWidth(width)
+        self.updateGeometry()
+        self.adjustSize()
+        self.update()
+
+    def is_collapsed(self) -> bool:
+        return not self.panel.isVisible()
 
 
 class ContentStack:
@@ -1878,7 +2023,7 @@ class GisaxsFittingWorkspace:
         return self.profile.workspace_min + self._preview_min_width() + self.page_splitter.handleWidth()
 
     def _preview_min_width(self) -> int:
-        return max(self.profile.preview_min, scale_value(520, self.profile, 460))
+        return max(self.profile.preview_min, scale_value(420, self.profile, 340))
 
     def _apply_page_overflow_policy(self) -> None:
         min_width = self._page_min_width()
@@ -2006,21 +2151,30 @@ class MainShell(QSplitter):
         content_widget: QWidget,
         parent: QWidget | None = None,
         profile=None,
+        navigation_sidebar: NavigationSidebar | None = None,
     ):
         super().__init__(Qt.Horizontal, parent or central_widget)
         self.profile = profile or current_profile(central_widget)
+        self.navigation_sidebar = navigation_sidebar
+        self.sidebar_area = sidebar_area
+        self.content_widget = content_widget
         self.setObjectName("mainShell")
         self.setHandleWidth(6)
         self.setChildrenCollapsible(False)
         self.setOpaqueResize(True)
         self._enforce_window_minimum_width(central_widget)
+        source_layout.setContentsMargins(0, 0, 0, 0)
+        source_layout.setSpacing(0)
+        central_widget.setContentsMargins(0, 0, 0, 0)
 
         self._remove_from_layout(source_layout, sidebar_area)
         self._remove_from_layout(source_layout, content_widget)
 
-        sidebar_area.setMinimumWidth(self.profile.sidebar_min)
-        sidebar_area.setMaximumWidth(self.profile.sidebar_max)
-        sidebar_area.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        sidebar_min = self._sidebar_min_width()
+        sidebar_max = self._sidebar_max_width()
+        sidebar_area.setMinimumWidth(sidebar_min)
+        sidebar_area.setMaximumWidth(sidebar_max)
+        sidebar_area.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         content_widget.setMinimumWidth(self.profile.content_min)
         content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -2032,6 +2186,8 @@ class MainShell(QSplitter):
         self.setCollapsible(1, False)
 
         source_layout.addWidget(self)
+        if self.navigation_sidebar is not None:
+            self.navigation_sidebar.collapsedChanged.connect(self._on_sidebar_collapsed_changed)
         self.restore_sizes()
 
     @staticmethod
@@ -2041,30 +2197,91 @@ class MainShell(QSplitter):
             layout.takeAt(index)
 
     def restore_sizes(self) -> None:
+        if self._sidebar_collapsed():
+            self._apply_sidebar_width(NavigationSidebar.COLLAPSED_WIDTH)
+            self.setSizes([NavigationSidebar.COLLAPSED_WIDTH, self.profile.content_min])
+            return
+
         sizes = user_settings.get(self.SETTINGS_KEY, None)
         if isinstance(sizes, (list, tuple)) and len(sizes) == 2:
+            sidebar_width = min(self._sidebar_max_width(), max(self._sidebar_min_width(), int(sizes[0])))
             self.setSizes(
                 [
-                    max(self.profile.sidebar_min, int(sizes[0])),
+                    sidebar_width,
                     max(self.profile.content_min, int(sizes[1])),
                 ]
             )
             return
 
-        self.setSizes([self.profile.sidebar_default, self.profile.content_min])
+        self.setSizes([self._sidebar_default_width(), self.profile.content_min])
 
     def save_sizes(self) -> None:
-        user_settings.set(self.SETTINGS_KEY, self.sizes())
+        if not self._sidebar_collapsed():
+            user_settings.set(self.SETTINGS_KEY, self.sizes())
+        user_settings.set(NavigationSidebar.SETTINGS_KEY, self._sidebar_collapsed())
         user_settings.save_settings()
 
     def apply_responsive_profile(self, profile) -> None:
         self.profile = profile
         sidebar = self.widget(0)
         content = self.widget(1)
-        sidebar.setMinimumWidth(profile.sidebar_min)
-        sidebar.setMaximumWidth(profile.sidebar_max)
+        self._apply_sidebar_width(
+            NavigationSidebar.COLLAPSED_WIDTH if self._sidebar_collapsed() else self._sidebar_default_width()
+        )
         content.setMinimumWidth(profile.content_min)
-        self.setSizes([profile.sidebar_default, profile.content_min])
+        self.setSizes([sidebar.width(), profile.content_min])
+
+    def _on_sidebar_collapsed_changed(self, collapsed: bool) -> None:
+        if collapsed:
+            self._apply_sidebar_width(NavigationSidebar.COLLAPSED_WIDTH)
+            self.setSizes([NavigationSidebar.COLLAPSED_WIDTH, max(self.profile.content_min, self.width())])
+            return
+
+        width = self._sidebar_default_width()
+        self._apply_sidebar_width(width)
+        self.setSizes([width, max(self.profile.content_min, self.width() - width)])
+
+    def _sidebar_collapsed(self) -> bool:
+        return bool(self.navigation_sidebar is not None and self.navigation_sidebar.is_collapsed())
+
+    def _sidebar_min_width(self) -> int:
+        if self._sidebar_collapsed():
+            return NavigationSidebar.COLLAPSED_WIDTH
+        return NavigationSidebar.EXPANDED_WIDTH
+
+    def _sidebar_max_width(self) -> int:
+        if self._sidebar_collapsed():
+            return NavigationSidebar.COLLAPSED_WIDTH
+        return NavigationSidebar.EXPANDED_WIDTH
+
+    def _sidebar_default_width(self) -> int:
+        return NavigationSidebar.EXPANDED_WIDTH
+
+    def _apply_sidebar_width(self, width: int) -> None:
+        width = NavigationSidebar.COLLAPSED_WIDTH if self._sidebar_collapsed() else NavigationSidebar.EXPANDED_WIDTH
+        sidebar = self.widget(0)
+        if self.navigation_sidebar is not None:
+            self.navigation_sidebar.apply_layout_state(self._sidebar_collapsed())
+        sidebar.setMinimumWidth(width)
+        sidebar.setMaximumWidth(width)
+        if self.navigation_sidebar is not None:
+            self.navigation_sidebar.setFixedWidth(width)
+        sidebar.updateGeometry()
+
+    def apply_initial_sidebar_state(self) -> None:
+        collapsed = self._sidebar_collapsed()
+        width = NavigationSidebar.COLLAPSED_WIDTH if collapsed else NavigationSidebar.EXPANDED_WIDTH
+        if self.navigation_sidebar is not None:
+            self.navigation_sidebar.apply_layout_state(collapsed)
+        self.sidebar_area.setMinimumWidth(width)
+        self.sidebar_area.setMaximumWidth(width)
+        self.sidebar_area.setFixedWidth(width)
+        self.sidebar_area.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.sidebar_area.updateGeometry()
+        self.sidebar_area.update()
+        self.setSizes([width, max(self.profile.content_min, self.width() - width)])
+        self.updateGeometry()
+        self.update()
 
     @staticmethod
     def _enforce_window_minimum_width(central_widget: QWidget) -> None:
@@ -2658,11 +2875,13 @@ class MainWindowComponents:
             ui.sideBarScrollArea,
             ui.mainContentWidget,
             profile=self.responsive_profile,
+            navigation_sidebar=self.sidebar,
         )
         apply_main_window_styles(ui)
         apply_density_profile(ui.centralwidget, self.responsive_profile)
         apply_window_profile(ui.centralwidget.window(), self.responsive_profile, resize_window=True)
         install_adaptive_window_profile(ui.centralwidget.window(), self._on_screen_profile_changed)
+        QTimer.singleShot(0, self.shell.apply_initial_sidebar_state)
 
     def _create_sidebar(self) -> NavigationSidebar:
         buttons = [
@@ -2675,7 +2894,24 @@ class MainWindowComponents:
         sidebar = NavigationSidebar(buttons)
         self.ui.sideBarScrollArea.setWidget(sidebar)
         self.ui.sideBarScrollArea.setWidgetResizable(True)
+        self.ui.sideBarScrollArea.setFrameShape(QFrame.NoFrame)
+        self.ui.sideBarScrollArea.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.ui.sideBarScrollArea.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self.ui.sideBarScrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.ui.sideBarScrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.ui.mainWindowWidget.currentChanged.connect(self._sync_sidebar_to_content_page)
         return sidebar
+
+    def _sync_sidebar_to_content_page(self, page_index: int) -> None:
+        rail_index_by_page = {
+            2: 0,  # Cut & Fitting
+            1: 1,  # 2D Prediction
+            0: 2,  # Trainset Build
+            3: 3,  # Classification
+        }
+        rail_index = rail_index_by_page.get(page_index)
+        if rail_index is not None:
+            self.sidebar.set_active_index(rail_index)
 
     def save_state(self) -> None:
         self.fitting_workspace.save_state()

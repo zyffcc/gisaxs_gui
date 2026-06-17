@@ -78,17 +78,14 @@
             "show_q_axis": false
         },
         "last_session": {
-            "last_opened_file": "C:\\Users\\87514\\Downloads\\Au_Si_Model\\Au_Si_Model\\TestData\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00034.cbf",
-            "imported_gisaxs_file": "C:\\Users\\87514\\Downloads\\Au_Si_Model\\Au_Si_Model\\TestData\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00034.cbf",
-            "last_directory": "C:\\Users\\87514\\Downloads\\Au_Si_Model\\Au_Si_Model\\TestData",
             "load_mode": "Stack",
             "display_mode": "normal",
             "stack_value": "1",
             "stack_count": 1,
             "insitu_range": "",
-            "fit_current_data": true,
+            "fit_current_data": false,
             "fit_log_x": false,
-            "fit_log_y": true,
+            "fit_log_y": false,
             "fit_norm": false,
             "auto_show": false
         },

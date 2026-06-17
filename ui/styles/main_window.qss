@@ -2,7 +2,9 @@ QMainWindow,
 QWidget#centralwidget {
     background: #eef2f6;
     color: #1f2933;
-    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+QWidget {
     font-size: @APP_FONT_SIZE@;
 }
 
@@ -27,29 +29,64 @@ QWidget#navigationSidebar {
     border-right: 1px solid #cbd5e1;
 }
 
+QWidget#navigationIconRail {
+    background: #172033;
+    border-right: 1px solid #25324a;
+}
+
+QWidget#navigationControlPanel {
+    background: #e8eef6;
+    border-right: 1px solid #c8d3e1;
+}
+
+QScrollArea#navigationControlsScroll,
+QWidget#navigationControlsContent {
+    background: transparent;
+    border: none;
+}
+
+QToolButton#sidebarCollapseButton,
+QToolButton[navigationRailButton="true"] {
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: #cbd5e1;
+    padding: 4px;
+}
+
+QToolButton#sidebarCollapseButton:hover,
+QToolButton[navigationRailButton="true"]:hover {
+    background: #25324a;
+    border-color: #3b4a66;
+    color: #ffffff;
+}
+
+QToolButton[navigationRailButton="true"]:checked {
+    background: #2563eb;
+    border-color: #60a5fa;
+    color: #ffffff;
+}
+
 QPushButton[navigationButton="true"] {
     background: #f8fafc;
     border: 1px solid transparent;
-    border-left: 4px solid transparent;
-    border-radius: 7px;
+    border-radius: 6px;
     color: #172033;
     font-weight: 600;
-    min-height: 36px;
-    padding: 7px 10px 7px 12px;
-    text-align: left;
+    min-height: 44px;
+    padding: 4px 6px;
+    text-align: center;
 }
 
 QPushButton[navigationButton="true"]:hover {
     background: #eff6ff;
     border-color: #93c5fd;
-    border-left-color: #2563eb;
     color: #0f172a;
 }
 
 QPushButton[navigationButton="true"]:checked {
     background: #2563eb;
     border-color: #3b82f6;
-    border-left-color: #0f172a;
     color: #ffffff;
     font-weight: 700;
 }

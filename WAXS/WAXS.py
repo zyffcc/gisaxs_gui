@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog,
     QLineEdit, QVBoxLayout, QSizePolicy, QGridLayout, QWidget, QRadioButton, QButtonGroup, \
     QFileSystemModel, QTreeView, QHBoxLayout, QSplitter, QDesktopWidget, QMessageBox, QComboBox, \
     QFrame, QCheckBox, QProgressBar, QMenu, QMenuBar, QAction, QTextEdit, QDialog, QInputDialog
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QTransform, QMovie
+from PyQt5.QtGui import QFont, QImage, QPixmap, QPainter, QTransform, QMovie
 from PyQt5.QtCore import QSize, Qt, QRect, QPoint, QDir, QTimer, QCoreApplication, QEventLoop,\
     QSettings, QThread, pyqtSignal, QResource
 from matplotlib import cm
@@ -1577,7 +1577,7 @@ class ImageLayout(QWidget):
         # 添加按钮和文本框控件
         self.button = QPushButton('Select File', self)
         self.button.setFixedWidth(200)
-        self.button.setFixedHeight(30)
+        self.button.setMinimumHeight(30)
         self.button.clicked.connect(self.select_file)
 
         # 帧号输入（仅 NXS 可用）
@@ -1585,7 +1585,7 @@ class ImageLayout(QWidget):
         self.label_no.setFixedWidth(30)
         self.textbox_frameNo = QLineEdit(self)
         self.textbox_frameNo.setFixedWidth(100)
-        self.textbox_frameNo.setFixedHeight(20)
+        self.textbox_frameNo.setMinimumHeight(20)
         self.textbox_frameNo.setEnabled(False)  # 默认禁用
         self.textbox_frameNo.setPlaceholderText('1-N')
         self.textbox_frameNo.setToolTip('Select frame number (enabled for NXS)')
@@ -1598,7 +1598,7 @@ class ImageLayout(QWidget):
             value = 0
         self.textbox_min = QLineEdit(str(value))
         self.textbox_min.setFixedWidth(100)
-        self.textbox_min.setFixedHeight(20)
+        self.textbox_min.setMinimumHeight(20)
         # self.textbox_min.setText('0')
 
         try:
@@ -1607,19 +1607,19 @@ class ImageLayout(QWidget):
             value = 800
         self.textbox_max = QLineEdit(str(value))
         self.textbox_max.setFixedWidth(100)
-        self.textbox_max.setFixedHeight(20)
+        self.textbox_max.setMinimumHeight(20)
         # self.textbox_max.setText('800')
 
         self.button_output = QPushButton('Export Image', self)
         self.button_output.setFixedWidth(200)
-        self.button_output.setFixedHeight(30)
+        self.button_output.setMinimumHeight(30)
 
         self.button_outputdir = QPushButton('Select Output Folder', self)
         self.button_outputdir.setFixedWidth(200)
-        self.button_outputdir.setFixedHeight(30)
+        self.button_outputdir.setMinimumHeight(30)
         self.textbox_outputdir = QLineEdit(self)
         self.textbox_outputdir.setFixedWidth(400)
-        self.textbox_outputdir.setFixedHeight(20)
+        self.textbox_outputdir.setMinimumHeight(20)
         self.textbox_outputdir.setText(os.getcwd())
         self.update_output_folder()
 
@@ -1631,19 +1631,19 @@ class ImageLayout(QWidget):
         self.button_integer = QPushButton('Integrate',self)
         self.textbox_startAngle = QLineEdit(self)
         self.textbox_startAngle.setFixedWidth(200)
-        self.textbox_startAngle.setFixedHeight(20)
+        self.textbox_startAngle.setMinimumHeight(20)
         self.textbox_startAngle.setPlaceholderText('start angle')
         self.textbox_endAngle = QLineEdit(self)
         self.textbox_endAngle.setFixedWidth(200)
-        self.textbox_endAngle.setFixedHeight(20)
+        self.textbox_endAngle.setMinimumHeight(20)
         self.textbox_endAngle.setPlaceholderText('end angle')
         self.textbox_innerRadius = QLineEdit(self)
         self.textbox_innerRadius.setFixedWidth(200)
-        self.textbox_innerRadius.setFixedHeight(20)
+        self.textbox_innerRadius.setMinimumHeight(20)
         self.textbox_innerRadius.setPlaceholderText('inner radius')
         self.textbox_outerRadius = QLineEdit(self)
         self.textbox_outerRadius.setFixedWidth(200)
-        self.textbox_outerRadius.setFixedHeight(20)
+        self.textbox_outerRadius.setMinimumHeight(20)
         self.textbox_outerRadius.setPlaceholderText('outer radius')
         self.export_1D = QPushButton("Export 1D (csv)", self)
 
@@ -3704,7 +3704,12 @@ if __name__ == '__main__':
     qrc_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources.qrc')
     QResource.registerResource(qrc_path)
 
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
+    font = QFont("Segoe UI", 9) if sys.platform.startswith("win") else QFont(app.font())
+    font.setPointSize(9)
+    app.setFont(font)
 
     # 创建启动画面
     splash = SplashScreen()
