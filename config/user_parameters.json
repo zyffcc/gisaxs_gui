@@ -78,9 +78,9 @@
             "show_q_axis": false
         },
         "last_session": {
-            "load_mode": "Stack",
+            "load_mode": "In-situ",
             "display_mode": "normal",
-            "stack_value": "1",
+            "stack_value": "1-",
             "stack_count": 1,
             "insitu_range": "",
             "fit_current_data": false,
@@ -94,8 +94,8 @@
             "center_parallel": 769.97,
             "cutline_vertical": 5.0,
             "cutline_parallel": 1181.0,
-            "load_mode": "Stack",
-            "center_vertical": 505.0,
+            "load_mode": "In-situ",
+            "center_vertical": -4.0,
             "vmin": -4.71
         }
     },
@@ -149,11 +149,11 @@
         "num_threads": 4
     },
     "trainset.detector": {
-        "preset": "Pilatus 2M",
+        "preset": "User-defined",
         "nbins_x": 1475,
-        "nbins_y": 1679,
-        "pixel_size_x": 172,
-        "pixel_size_y": 172,
+        "nbins_y": 1475,
+        "pixel_size_x": 172.0,
+        "pixel_size_y": 172.0,
         "beam_center_x": 737,
         "beam_center_y": 839
     }
