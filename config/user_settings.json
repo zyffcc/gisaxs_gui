@@ -1,20 +1,20 @@
 {
   "enable_adaptive_scaling": true,
-  "window_width": 1566,
+  "window_width": 1400,
   "window_height": 900,
-  "font_adjustment": -3,
-  "visual_font_scale": 90,
+  "font_adjustment": 0,
+  "visual_font_scale": 100,
   "_auto_k_enabled": false,
-  "fit.points_num": 2000,
-  "fit.interp_method": "Spline",
+  "fit.points_num": 50,
+  "fit.interp_method": "Linear",
   "responsive_layout_mode": "auto",
   "responsive_resize_on_start": false,
   "responsive_font_enabled": false,
   "auto_detect_monitor_dpi": true,
   "adaptive_layout_enabled": true,
-  "manual_screen_resolution": "1280x720",
-  "layout_target_mode": "compact",
-  "layout_target_custom": "3840x2160",
+  "manual_screen_resolution": "auto",
+  "layout_target_mode": "auto",
+  "layout_target_custom": "1920x1080",
   "auto_fit_layout_target": true,
   "ai_fitting": {
     "model_base_dirs": [
@@ -22,164 +22,23 @@
       "modules/Fitting_1D_model"
     ],
     "last_selected_model": "",
-    "last_constraint_mode": "Fixed Combination",
-    "extra_model_paths": [],
-    "full_num_samples": 300,
-    "full_refine_max_nfev": 100,
-    "parameter_constraints": {
-      "global_ranges": {
-        "sigma_Res": [
-          0.005718,
-          0.005718
-        ],
-        "nu_Res": [
-          4.9736,
-          4.9736
-        ]
-      },
-      "components": [
-        "sphere",
-        "sphere",
-        "sphere"
-      ]
-    },
-    "full_refine_top_n": 1,
-    "full_refine_target_logrmse": 0.0,
-    "full_refine_ftol": 1e-10,
-    "full_refine_xtol": 1e-10,
-    "full_refine_gtol": 1e-10,
-    "full_refine_progress_interval": 20,
-    "full_sampling_std": 0.004999999999999997,
-    "full_refine_stall_patience": 30,
-    "full_refine_stall_tol": 1e-06,
-    "fixed_k": 2
+    "last_constraint_mode": "Free",
+    "extra_model_paths": []
   },
-  "main_splitter_sizes": [
-<<<<<<< HEAD
-    180,
-    1716
-  ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      962,
-      728
-=======
-    276,
-    921
-  ],
-  "gisaxs_fitting_splitter_sizes": {
-    "page": [
-      739,
-      453
->>>>>>> 44a0a033f1d7279e12911fa5b8533fcc9d77b2cb
+      1012,
+      666
     ],
     "work": [
-      1685,
+      1792,
       921
     ],
-    "profile": "compact"
+    "profile": "normal"
   },
-  "manual_auto_refine": {
-    "Int1": {
-      "checked": true,
-      "min": 0.0,
-      "max": 2.68138
-    },
-    "R1": {
-      "checked": true,
-      "min": 0.0,
-      "max": 116.37
-    },
-    "sigma_R1": {
-      "checked": true,
-      "min": 0.0,
-      "max": 8.6595
-    },
-    "D1": {
-      "checked": true,
-      "min": 0.0,
-      "max": 88.83
-    },
-    "sigma_D1": {
-      "checked": true,
-      "min": 0.0,
-      "max": 4.4975
-    },
-    "Int2": {
-      "checked": true,
-      "min": 0.0,
-      "max": 4.92557
-    },
-    "R2": {
-      "checked": true,
-      "min": 0.0,
-      "max": 30.97
-    },
-    "sigma_R2": {
-      "checked": true,
-      "min": 0.0,
-      "max": 2.9735
-    },
-    "D2": {
-      "checked": true,
-      "min": 0.0,
-      "max": 48.84
-    },
-    "sigma_D2": {
-      "checked": true,
-      "min": 0.0,
-      "max": 1.7165
-    },
-    "Int3": {
-      "checked": true,
-      "min": 0.0,
-      "max": 2.39305
-    },
-    "R3": {
-      "checked": true,
-      "min": 0.0,
-      "max": 240.33
-    },
-    "sigma_R3": {
-      "checked": true,
-      "min": 0.0,
-      "max": 30.896
-    },
-    "D3": {
-      "checked": true,
-      "min": 0.0,
-      "max": 216.95
-    },
-    "sigma_D3": {
-      "checked": true,
-      "min": 0.0,
-      "max": 21.0625
-    },
-    "BG": {
-      "checked": true,
-      "min": 0.0,
-      "max": 12.52119
-    },
-    "sigma_Res": {
-      "checked": true,
-      "min": 0.0,
-      "max": 1.0
-    },
-    "nu_Res": {
-      "checked": true,
-      "min": 0.1,
-      "max": 50.0
-    },
-    "int_Res": {
-      "checked": true,
-      "min": 0.0,
-      "max": 1.0
-    },
-    "k": {
-      "checked": true,
-      "min": 0.0,
-      "max": 9752396.25
-    }
-  },
+  "main_splitter_sizes": [
+    276,
+    1484
+  ],
   "main_sidebar_collapsed": true
 }

@@ -91,16 +91,16 @@
         },
         "gisaxs_input": {
             "vmax": 4.21,
-            "center_parallel": 769.97,
+            "center_parallel": -4.0,
             "cutline_vertical": 5.0,
-            "cutline_parallel": 1181.0,
+            "cutline_parallel": 7.0,
             "load_mode": "In-situ",
             "center_vertical": -4.0,
             "vmin": -4.71
         }
     },
     "gisaxs_predict": {
-        "framework": "tensorflow 2.15.1",
+        "framework": "tensorflow 2.15.0",
         "mode": "single_file",
         "input_file": "F:\\Georgios Panagiotidis Ag sputter\\p2m\\george_31_ag_pno01_dc_20p_insitu_00001_00037.cbf",
         "input_folder": "F:\\Georgios Panagiotidis Ag sputter\\p2m",
@@ -149,11 +149,11 @@
         "num_threads": 4
     },
     "trainset.detector": {
-        "preset": "User-defined",
+        "preset": "Pilatus 2M",
         "nbins_x": 1475,
-        "nbins_y": 1475,
-        "pixel_size_x": 172.0,
-        "pixel_size_y": 172.0,
+        "nbins_y": 1679,
+        "pixel_size_x": 172,
+        "pixel_size_y": 172,
         "beam_center_x": 737,
         "beam_center_y": 839
     }
