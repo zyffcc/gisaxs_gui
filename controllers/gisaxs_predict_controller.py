@@ -680,7 +680,7 @@ class GisaxsPredictController(QObject):
                 """
             )
             self._current_file_label.setWordWrap(True)
-            self._current_file_label.setFixedHeight(50)
+            self._current_file_label.setMinimumHeight(50)
             current_file_layout.addWidget(self._current_file_label)
             outer.addWidget(current_file_frame)
 
@@ -763,10 +763,10 @@ class GisaxsPredictController(QObject):
             buttons_layout = QHBoxLayout()
             buttons_layout.setSpacing(8)
             clear_button = QPushButton("Clear All", actions_frame)
-            clear_button.setFixedHeight(28)
+            clear_button.setMinimumHeight(28)
             clear_button.clicked.connect(self._clear_multifile_results)
             export_all_button = QPushButton("Export All", actions_frame)
-            export_all_button.setFixedHeight(28)
+            export_all_button.setMinimumHeight(28)
             export_all_button.clicked.connect(self._export_all_results)
             buttons_layout.addWidget(clear_button)
             buttons_layout.addWidget(export_all_button)

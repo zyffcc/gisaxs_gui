@@ -177,6 +177,7 @@ class WindowManager:
     def apply_adaptive_font(self, window, base_font_size=None):
         """为窗口应用自适应字体"""
         from PyQt5.QtGui import QFont
+        from PyQt5.QtWidgets import QApplication
 
         if base_font_size is None:
             base_font_size = self.config.DEFAULT_FONT_SIZE
@@ -188,9 +189,11 @@ class WindowManager:
             scale = user_settings.get_visual_font_scale() / 100.0
         font_size = max(4.0, base_font_size * scale)
 
-        font = QFont()
+        app = QApplication.instance()
+        font = QFont(app.font() if app is not None else window.font())
         font.setPointSizeF(font_size)
-        window.setFont(font)
+        if app is not None:
+            app.setFont(font)
     
     def get_screen_dpi_info(self):
         """获取屏幕DPI信息"""

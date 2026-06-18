@@ -356,9 +356,6 @@ class SettingsDialog(QDialog):
         app = QApplication.instance()
         if app is not None:
             app.setFont(font)
-        self.parent_window.setFont(font)
-        for widget in self.parent_window.findChildren(QWidget):
-            widget.setFont(QFont(font))
         apply_main_window_styles(self.parent_window)
 
     def _save_settings(self) -> None:

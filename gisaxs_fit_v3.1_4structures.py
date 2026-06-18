@@ -13,6 +13,9 @@ import sys
 import timeit
 
 import PyQt5
+import PyQt5.QtCore
+import PyQt5.QtGui
+import PyQt5.QtWidgets
 import lmfit
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1538,7 +1541,12 @@ def Main():
     print('Welcome to Gisaxs-Fit!')
     print('This is version {0}'.format(__VERSION__))
 
+    PyQt5.QtWidgets.QApplication.setAttribute(PyQt5.QtCore.Qt.AA_EnableHighDpiScaling, True)
+    PyQt5.QtWidgets.QApplication.setAttribute(PyQt5.QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = PyQt5.QtWidgets.QApplication(sys.argv)
+    font = PyQt5.QtGui.QFont("Segoe UI", 9) if sys.platform.startswith("win") else PyQt5.QtGui.QFont(app.font())
+    font.setPointSize(9)
+    app.setFont(font)
     my_app = GisaxsModeler()
     my_app.show()
     # just to be sure it's on top

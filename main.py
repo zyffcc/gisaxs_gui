@@ -9,6 +9,7 @@ import os
 import warnings
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
 from ui.main_window import Ui_MainWindow  # 导入转换后的 UI 类
 from ui.components import MainWindowComponents
 from ui.menu_manager import MenuManager
@@ -23,6 +24,16 @@ from utils.parameter_access import (
     get_param_by_path,
     validate_params_for_physics
 )
+
+
+def configure_application_font(app: QApplication, point_size: int = 9) -> None:
+    """Install the normal UI font once, immediately after QApplication exists."""
+    if sys.platform.startswith("win"):
+        font = QFont("Segoe UI", point_size)
+    else:
+        font = QFont(app.font())
+        font.setPointSize(point_size)
+    app.setFont(font)
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -279,6 +290,7 @@ def main():
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
+    configure_application_font(app, point_size=9)
     
     # 设置应用程序属性
     app.setApplicationName("GIMaP")

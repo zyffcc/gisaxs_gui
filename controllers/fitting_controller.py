@@ -2,6 +2,8 @@
 Cut Fitting ?????- ???GISAXS?????????????
 """
 
+from __future__ import annotations
+
 import os
 import json
 import re
@@ -2857,6 +2859,80 @@ class FittingController(QObject):
             except Exception:
                 return np.interp(x_new, x, y)
         return np.interp(x_new, x, y)
+
+    def _log_cut_debug(self, message: str):
+        """Send cut diagnostics to the fitting log without interrupting the cut flow."""
+        try:
+            self._add_fitting_message(message, "INFO")
+        except Exception:
+            try:
+                self.status_updated.emit(message)
+            except Exception:
+                pass
+
+    def _get_axis_filter_debug_count(self, q_values):
+        try:
+            mode = self._get_independent_axis_filter_mode()
+        except Exception:
+            mode = 'all'
+        q_arr = np.asarray(q_values, dtype=float)
+        if mode == 'positive':
+            count = int(np.sum(q_arr > 0))
+        elif mode == 'negative':
+            count = int(np.sum(q_arr < 0))
+        else:
+            count = int(q_arr.size)
+        return mode, count
+
+    def _sort_filter_cut_pairs(self, x_values, intensity_values, context: str = "cut", pixel_rows=None, log_vertical: bool = False):
+        """Keep cut x/intensity arrays paired while removing bad values and sorting by x."""
+        x_arr = np.asarray(x_values, dtype=float).reshape(-1)
+        y_arr = np.asarray(intensity_values, dtype=float).reshape(-1)
+        n = min(x_arr.size, y_arr.size)
+        if x_arr.size != y_arr.size:
+            self._log_cut_debug(f"{context}: length mismatch x={x_arr.size}, intensity={y_arr.size}; truncating to {n}.")
+        x_arr = x_arr[:n]
+        y_arr = y_arr[:n]
+
+        rows_arr = None
+        if pixel_rows is not None:
+            rows_arr = np.asarray(pixel_rows).reshape(-1)[:n]
+
+        finite_mask = np.isfinite(x_arr) & np.isfinite(y_arr)
+        removed = int(n - np.sum(finite_mask))
+        if removed:
+            self._log_cut_debug(f"{context}: removed {removed} non-finite q/intensity point(s).")
+        x_arr = x_arr[finite_mask]
+        y_arr = y_arr[finite_mask]
+        if rows_arr is not None:
+            rows_arr = rows_arr[finite_mask]
+        if x_arr.size == 0:
+            raise Exception(f"{context}: no finite q/intensity pairs")
+
+        if log_vertical:
+            self._log_cut_debug(f"{context}: first/last q before sorting = {x_arr[0]:.8g}, {x_arr[-1]:.8g}")
+
+        order = np.argsort(x_arr, kind='mergesort')
+        x_arr = x_arr[order]
+        y_arr = y_arr[order]
+        if rows_arr is not None:
+            rows_arr = rows_arr[order]
+
+        if log_vertical:
+            monotonic = bool(np.all(np.diff(x_arr) >= 0)) if x_arr.size > 1 else True
+            self._log_cut_debug(f"{context}: first/last q after sorting = {x_arr[0]:.8g}, {x_arr[-1]:.8g}; monotonic={monotonic}")
+            try:
+                max_idx = int(np.nanargmax(y_arr))
+                if rows_arr is not None and rows_arr.size:
+                    self._log_cut_debug(f"{context}: max intensity row={int(rows_arr[max_idx])}, q={x_arr[max_idx]:.8g}")
+                else:
+                    self._log_cut_debug(f"{context}: max intensity q={x_arr[max_idx]:.8g}")
+            except Exception as exc:
+                self._log_cut_debug(f"{context}: max intensity diagnostic failed: {exc}")
+            mode, count = self._get_axis_filter_debug_count(x_arr)
+            self._log_cut_debug(f"{context}: points after {mode} axis filter would be {count}/{x_arr.size}")
+
+        return x_arr, y_arr, rows_arr
 
     def _setup_connections(self):
         """No description."""
@@ -6614,6 +6690,7 @@ class FittingController(QObject):
                 pixel_to_q_method = self._convert_pixel_to_qz
                 x_label = r'$q_z$ (nm$^{-1}$)'
                 title = "Vertical Cut"
+                self._last_vertical_cut_pixel_rows = None
             else:
                 raise Exception(f"Unknown cut type: {cut_type}")
 
@@ -6669,28 +6746,47 @@ class FittingController(QObject):
             mask = ((qy_mesh >= qy_min) & (qy_mesh <= qy_max) &
                     (qz_mesh >= qz_min) & (qz_mesh <= qz_max))
 
-            # ???????????
-            region_data = np.where(mask, self.current_stack_data, 0)
+            data = np.asarray(self.current_stack_data, dtype=float)
+            finite_mask = mask & np.isfinite(data) & np.isfinite(qy_mesh) & np.isfinite(qz_mesh)
 
-            # ??????????????????????
             if cut_type == 'horizontal':
-                # ?????????????????
-                intensity_sum = np.sum(region_data, axis=0)
-                q_line = qy_mesh[0, :]  # ???????qy??
+                selected_cols = np.where(np.any(finite_mask, axis=0))[0]
+                if selected_cols.size == 0:
+                    raise Exception("No valid data in the selected region")
+                intensity_sum = np.array([
+                    np.mean(data[finite_mask[:, col], col])
+                    for col in selected_cols
+                ], dtype=float)
+                q_line = np.array([
+                    np.mean(qy_mesh[finite_mask[:, col], col])
+                    for col in selected_cols
+                ], dtype=float)
+                valid_q, valid_intensity, _ = self._sort_filter_cut_pairs(
+                    q_line, intensity_sum, context="Horizontal Q cut"
+                )
             elif cut_type == 'vertical':
-                # ?????????????????
-                intensity_sum = np.sum(region_data, axis=1)
-                q_line = qz_mesh[:, 0]  # ???????qz??
+                selected_rows = np.where(np.any(finite_mask, axis=1))[0]
+                if selected_rows.size == 0:
+                    raise Exception("No valid data in the selected region")
+                intensity_sum = np.array([
+                    np.mean(data[row, finite_mask[row, :]])
+                    for row in selected_rows
+                ], dtype=float)
+                q_line = np.array([
+                    np.mean(qz_mesh[row, finite_mask[row, :]])
+                    for row in selected_rows
+                ], dtype=float)
+                self._log_cut_debug(
+                    f"Vertical Q cut: ROI q range qy=[{qy_min:.8g}, {qy_max:.8g}], qz=[{qz_min:.8g}, {qz_max:.8g}]"
+                )
+                self._log_cut_debug(
+                    f"Vertical Q cut: first/last pixel row used = {int(selected_rows[0])}, {int(selected_rows[-1])}"
+                )
+                valid_q, valid_intensity, _ = self._sort_filter_cut_pairs(
+                    q_line, intensity_sum, context="Vertical Q cut", pixel_rows=selected_rows, log_vertical=True
+                )
             else:
                 raise Exception(f"Unknown cut type: {cut_type}")
-
-            # ???????????
-            valid_indices = np.isfinite(intensity_sum) & (intensity_sum > 0)
-            if not np.any(valid_indices):
-                raise Exception("No valid data in the selected region")
-
-            valid_q = q_line[valid_indices]
-            valid_intensity = intensity_sum[valid_indices]
 
             n_points = self._resolve_cut_points(points_override)
             q_interp = np.linspace(valid_q.min(), valid_q.max(), n_points)
@@ -6730,14 +6826,14 @@ class FittingController(QObject):
 
             # ?????????
             x_min = max(0, int(center_x - width / 2))
-            x_max = min(img_width, int(center_x + width / 2))
+            x_max = min(img_width - 1, int(center_x + width / 2))
             y_min = max(0, int(center_y - height / 2))
-            y_max = min(img_height, int(center_y + height / 2))
+            y_max = min(img_height - 1, int(center_y + height / 2))
 
             # ???????????flipud???????????
             y_min_adj = img_height - 1 - y_max
             y_max_adj = img_height - 1 - y_min
-            y_min_adj, y_max_adj = max(0, y_min_adj), min(img_height, y_max_adj)
+            y_min_adj, y_max_adj = max(0, y_min_adj), min(img_height - 1, y_max_adj)
 
             # ?????????
             region_data = self.current_stack_data[y_min_adj:y_max_adj+1, x_min:x_max+1]
@@ -6748,12 +6844,20 @@ class FittingController(QObject):
             # ??????????????
             if cut_type == 'horizontal':
                 # ?????????????????
-                intensity_sum = np.sum(region_data, axis=0)
-                pixel_coords = np.arange(x_min, x_min + len(intensity_sum))
+                intensity_sum = np.mean(region_data, axis=0)
+                pixel_coords = np.arange(x_min, x_max + 1)
             elif cut_type == 'vertical':
                 # ?????????????????
-                intensity_sum = np.sum(region_data, axis=1)
-                pixel_coords = np.arange(y_min, y_min + len(intensity_sum))
+                intensity_sum = np.mean(region_data, axis=1)
+                pixel_coords = np.arange(y_min_adj, y_max_adj + 1)
+                self._log_cut_debug(
+                    f"Vertical Pixel cut: ROI display pixels x=[{x_min}, {x_max}], y=[{y_min}, {y_max}], "
+                    f"array rows=[{y_min_adj}, {y_max_adj}], image_origin=lower"
+                )
+                if pixel_coords.size:
+                    self._log_cut_debug(
+                        f"Vertical Pixel cut: first/last pixel row used = {int(pixel_coords[0])}, {int(pixel_coords[-1])}"
+                    )
             else:
                 raise Exception(f"Unknown cut type: {cut_type}")
 
@@ -6761,12 +6865,11 @@ class FittingController(QObject):
             if len(pixel_coords) > 1:
                 n_points = self._resolve_cut_points(points_override)
                 # ??????
-                finite_mask = np.isfinite(pixel_coords) & np.isfinite(intensity_sum)
-                pixel_coords_f = pixel_coords[finite_mask]
-                intensity_sum_f = intensity_sum[finite_mask]
+                pixel_coords_f, intensity_sum_f, _ = self._sort_filter_cut_pairs(
+                    pixel_coords, intensity_sum, context=f"{cut_type.capitalize()} Pixel cut pixels"
+                )
                 if len(pixel_coords_f) < 2:
-                    pixel_coords_f = pixel_coords
-                    intensity_sum_f = intensity_sum
+                    raise Exception("Not enough finite data points in the selected region")
                 pixel_interp = np.linspace(pixel_coords_f.min(), pixel_coords_f.max(), n_points)
                 method = None
                 try:
@@ -6774,6 +6877,8 @@ class FittingController(QObject):
                 except Exception:
                     method = self._interp_method_default
                 intensity_interp = self._interpolate_series(pixel_coords_f, intensity_sum_f, pixel_interp, method)
+                if cut_type == 'vertical':
+                    self._last_vertical_cut_pixel_rows = np.asarray(pixel_interp, dtype=float).copy()
                 try:
                     self.status_updated.emit(f"Cut(Pixel) extracted points: {len(pixel_interp)} (method={method})")
                 except Exception:
@@ -6781,6 +6886,8 @@ class FittingController(QObject):
             else:
                 pixel_interp = pixel_coords
                 intensity_interp = intensity_sum
+                if cut_type == 'vertical':
+                    self._last_vertical_cut_pixel_rows = np.asarray(pixel_interp, dtype=float).copy()
 
             return intensity_interp, pixel_interp
 
@@ -6835,34 +6942,59 @@ class FittingController(QObject):
             conversion_type: ???????qy' ??'qz'
         """
         try:
-            detector = self._get_detector_for_pixel_conversion()
-            if detector is None:
-                raise Exception("Failed to create detector")
-
             height, width = self.current_stack_data.shape
-            q_coords = []
+            coords = np.asarray(pixel_coords, dtype=float)
+
+            try:
+                qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+            except Exception:
+                qy_mesh, qz_mesh = None, None
 
             if conversion_type == 'qy':
-                # ????y???????????????y?????
+                if qy_mesh is not None and getattr(qy_mesh, 'shape', None) == (height, width):
+                    row = int(np.clip(round(height / 2.0), 0, height - 1))
+                    cols = np.clip(np.rint(coords).astype(int), 0, width - 1)
+                    return np.asarray(qy_mesh[row, cols], dtype=float)
+
+                detector = self._get_detector_for_pixel_conversion()
+                if detector is None:
+                    raise Exception("Failed to create detector")
                 center_y = height / 2.0
-                for px in pixel_coords:
-                    _, qy, _ = detector.pixel_to_q_space(px, center_y)
-                    q_coords.append(qy)
+                _, q_coords, _ = detector.pixel_to_q_space(coords, center_y)
             elif conversion_type == 'qz':
-                # ????z???????????????x?????
+                if qz_mesh is not None and getattr(qz_mesh, 'shape', None) == (height, width):
+                    col = int(np.clip(round(width / 2.0), 0, width - 1))
+                    rows = np.clip(np.rint(coords).astype(int), 0, height - 1)
+                    q_coords = np.asarray(qz_mesh[rows, col], dtype=float)
+                    if q_coords.size:
+                        self._log_cut_debug(
+                            f"Vertical Pixel cut: first/last q before sorting = {q_coords[0]:.8g}, {q_coords[-1]:.8g}"
+                        )
+                    return q_coords
+
+                detector = self._get_detector_for_pixel_conversion()
+                if detector is None:
+                    raise Exception("Failed to create detector")
                 center_x = width / 2.0
-                for py in pixel_coords:
-                    _, _, qz = detector.pixel_to_q_space(center_x, py)
-                    q_coords.append(qz)
+                # qz meshgrids are flipped vertically for origin='lower'; mirror rows for fallback consistency.
+                mirrored_rows = (height - 1) - coords
+                _, _, q_coords = detector.pixel_to_q_space(center_x, mirrored_rows)
             else:
                 raise Exception(f"Unknown conversion type: {conversion_type}")
 
-            return np.array(q_coords)
+            return np.asarray(q_coords, dtype=float)
 
         except Exception as e:
             # ?????????????????????????
-            self.status_updated.emit(f"Pixel to {conversion_type} conversion failed: {str(e)}")
-            return (pixel_coords - pixel_coords.mean()) / pixel_coords.std()
+            try:
+                self._add_fitting_message(f"Pixel to {conversion_type} conversion failed: {str(e)}", "ERROR")
+            except Exception:
+                self.status_updated.emit(f"Pixel to {conversion_type} conversion failed: {str(e)}")
+            coords = np.asarray(pixel_coords, dtype=float)
+            std = coords.std()
+            if not np.isfinite(std) or std == 0:
+                return coords
+            return (coords - coords.mean()) / std
 
     def _convert_pixel_to_qy(self, pixel_coords):
         """qy"""
@@ -6876,11 +7008,23 @@ class FittingController(QObject):
         """No description."""
         try:
             # ?????????????q,I ?????????????????
-            x_arr = np.asarray(x_coords)
-            y_arr = np.asarray(y_intensity)
-            finite_mask = np.isfinite(x_arr) & np.isfinite(y_arr)
-            x_arr = x_arr[finite_mask]
-            y_arr = y_arr[finite_mask]
+            x_arr = np.asarray(x_coords, dtype=float)
+            y_arr = np.asarray(y_intensity, dtype=float)
+            rows_for_debug = None
+            if "vertical" in str(title).lower():
+                candidate_rows = getattr(self, '_last_vertical_cut_pixel_rows', None)
+                try:
+                    if candidate_rows is not None and len(candidate_rows) == len(x_arr):
+                        rows_for_debug = candidate_rows
+                except Exception:
+                    rows_for_debug = None
+            x_arr, y_arr, _ = self._sort_filter_cut_pairs(
+                x_arr,
+                y_arr,
+                context=title,
+                pixel_rows=rows_for_debug,
+                log_vertical=("vertical" in str(title).lower()),
+            )
             self.q = x_arr
             self.I = y_arr
 
@@ -6926,12 +7070,12 @@ class FittingController(QObject):
             if "q" in x_label.lower():
                 # ???x???q????????D?????????
                 self._display_manager.plot_1d_data(
-                    x_coords, y_intensity, None, title, "cut_data",
+                    x_arr, y_arr, None, title, "cut_data",
                     options['log_x'], options['log_y'], options['normalize']
                 )
             else:
                 # ???x???????????????????????????
-                self._plot_cut_data_legacy(x_coords, y_intensity, x_label, y_label, title, options)
+                self._plot_cut_data_legacy(x_arr, y_arr, x_label, y_label, title, options)
 
             self.status_updated.emit(f"Cut result plotted: {title}")
 

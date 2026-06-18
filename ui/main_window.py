@@ -134,7 +134,7 @@ class Ui_MainWindow(object):
         self.beamParametersBox.setSizePolicy(sizePolicy)
         self.beamParametersBox.setMaximumSize(QtCore.QSize(16777215, 100))
         self.beamParametersBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.beamParametersBox.setObjectName("beamParametersBox")
         self.gridLayout = QtWidgets.QGridLayout(self.beamParametersBox)
@@ -184,7 +184,7 @@ class Ui_MainWindow(object):
         self.detectorParametersBox = QtWidgets.QGroupBox(self.scrollAreaWidgetContents_2)
         self.detectorParametersBox.setMaximumSize(QtCore.QSize(16777215, 250))
         self.detectorParametersBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.detectorParametersBox.setObjectName("detectorParametersBox")
         self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.detectorParametersBox)
@@ -357,7 +357,7 @@ class Ui_MainWindow(object):
         self.sampleParametersBox.setSizePolicy(sizePolicy)
         self.sampleParametersBox.setMinimumSize(QtCore.QSize(0, 0))
         self.sampleParametersBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.sampleParametersBox.setObjectName("sampleParametersBox")
         self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.sampleParametersBox)
@@ -1409,7 +1409,7 @@ class Ui_MainWindow(object):
         self.preProcessingBox.setSizePolicy(sizePolicy)
         self.preProcessingBox.setMaximumSize(QtCore.QSize(16777215, 16777215))
         self.preProcessingBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.preProcessingBox.setObjectName("preProcessingBox")
         self.gridLayout_8 = QtWidgets.QGridLayout(self.preProcessingBox)
@@ -1422,7 +1422,7 @@ class Ui_MainWindow(object):
         self.trainsetGenerateBox.setSizePolicy(sizePolicy)
         self.trainsetGenerateBox.setMaximumSize(QtCore.QSize(16777215, 16777215))
         self.trainsetGenerateBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.trainsetGenerateBox.setObjectName("trainsetGenerateBox")
         self.verticalLayout_15 = QtWidgets.QVBoxLayout(self.trainsetGenerateBox)
@@ -1553,7 +1553,7 @@ class Ui_MainWindow(object):
         self.preProcessingNoisingBox.setSizePolicy(sizePolicy)
         self.preProcessingNoisingBox.setMaximumSize(QtCore.QSize(16777215, 16777215))
         self.preProcessingNoisingBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.preProcessingNoisingBox.setObjectName("preProcessingNoisingBox")
         self.verticalLayout_14 = QtWidgets.QVBoxLayout(self.preProcessingNoisingBox)
@@ -1647,7 +1647,7 @@ class Ui_MainWindow(object):
         self.preProcessingFocusRegionBox.setSizePolicy(sizePolicy)
         self.preProcessingFocusRegionBox.setMaximumSize(QtCore.QSize(16777215, 16777215))
         self.preProcessingFocusRegionBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.preProcessingFocusRegionBox.setObjectName("preProcessingFocusRegionBox")
         self.verticalLayout_13 = QtWidgets.QVBoxLayout(self.preProcessingFocusRegionBox)
@@ -1774,7 +1774,7 @@ class Ui_MainWindow(object):
         self.preProcessingOthersBox.setSizePolicy(sizePolicy)
         self.preProcessingOthersBox.setMaximumSize(QtCore.QSize(16777215, 16777215))
         self.preProcessingOthersBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.preProcessingOthersBox.setObjectName("preProcessingOthersBox")
         self.gridLayout_11 = QtWidgets.QGridLayout(self.preProcessingOthersBox)
@@ -2483,7 +2483,7 @@ class Ui_MainWindow(object):
         self.gisaxsInputBox.setMinimumSize(QtCore.QSize(0, 0))
         self.gisaxsInputBox.setMaximumSize(QtCore.QSize(16777215, 16777215))
         self.gisaxsInputBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.gisaxsInputBox.setObjectName("gisaxsInputBox")
         self.gridLayout_23 = QtWidgets.QGridLayout(self.gisaxsInputBox)
@@ -2636,7 +2636,7 @@ class Ui_MainWindow(object):
         self.fitBox.setMinimumSize(QtCore.QSize(1000, 0))
         self.fitBox.setMaximumSize(QtCore.QSize(16777215, 16777215))
         self.fitBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.fitBox.setObjectName("fitBox")
         self.gridLayout_24 = QtWidgets.QGridLayout(self.fitBox)
@@ -3369,8 +3369,7 @@ class Ui_MainWindow(object):
         self.FittingTextBrowser.setMaximumSize(QtCore.QSize(16777215, 100))
         self.FittingTextBrowser.setStyleSheet("QTextBrowser {\n"
 "  background: rgba(255,255,255,0.75);\n"
-"  color: #1d2433;\n"
-"  font-family: \"Inter\", \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n"
+ "  color: #1d2433;\n"
 "  font-size: 13px;\n"
 "  border: 1px solid rgba(0,0,0,0.06);\n"
 "  border-radius: 14px;\n"
@@ -3381,8 +3380,7 @@ class Ui_MainWindow(object):
 "QScrollBar::handle:vertical { background: rgba(0,0,0,0.18); border-radius: 4px; }\n"
 "QScrollBar::handle:vertical:hover { background: rgba(0,0,0,0.28); }QTextBrowser {\n"
 "  background: rgba(255,255,255,0.75);\n"
-"  color: #1d2433;\n"
-"  font-family: \"Inter\", \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif;\n"
+ "  color: #1d2433;\n"
 "  font-size: 13px;\n"
 "  border: 1px solid rgba(0,0,0,0.06);\n"
 "  border-radius: 14px;\n"
@@ -3421,7 +3419,7 @@ class Ui_MainWindow(object):
         self.ClassificationImportGroupBox = QtWidgets.QGroupBox(self.classificationGraphicsViewWidget)
         self.ClassificationImportGroupBox.setMinimumSize(QtCore.QSize(0, 0))
         self.ClassificationImportGroupBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.ClassificationImportGroupBox.setObjectName("ClassificationImportGroupBox")
         self.gridLayout_36 = QtWidgets.QGridLayout(self.ClassificationImportGroupBox)
@@ -3513,7 +3511,7 @@ class Ui_MainWindow(object):
         self.gridLayout_34.addWidget(self.ClassificationGraphicsView, 0, 1, 3, 1)
         self.DimensionalityReductionGroupBox = QtWidgets.QGroupBox(self.classificationGraphicsViewWidget)
         self.DimensionalityReductionGroupBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.DimensionalityReductionGroupBox.setObjectName("DimensionalityReductionGroupBox")
         self.gridLayout_31 = QtWidgets.QGridLayout(self.DimensionalityReductionGroupBox)
@@ -3545,7 +3543,7 @@ class Ui_MainWindow(object):
         self.gridLayout_34.addWidget(self.DimensionalityReductionGroupBox, 1, 0, 1, 1)
         self.ClassificationGroupBox = QtWidgets.QGroupBox(self.classificationGraphicsViewWidget)
         self.ClassificationGroupBox.setStyleSheet("QGroupBox {\n"
-"    font: bold 10pt \"Microsoft YaHei\";\n"
+"    font-weight: bold;\n"
 "}")
         self.ClassificationGroupBox.setObjectName("ClassificationGroupBox")
         self.gridLayout_35 = QtWidgets.QGridLayout(self.ClassificationGroupBox)
@@ -3792,7 +3790,7 @@ class Ui_MainWindow(object):
         self.substrateThicknessValue.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
 "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
 "p, li { white-space: pre-wrap; }\n"
-"</style></head><body style=\" font-family:\'MS Shell Dlg 2\'; font-size:8.25pt; font-weight:400; font-style:normal;\">\n"
+"</style></head><body>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Semi-infinite</p></body></html>"))
         self.substrateRoughnessLabel.setText(_translate("MainWindow", "Roughness:"))
         self.substrateRoughnessLabelCombox.setItemText(0, _translate("MainWindow", "None"))
@@ -4097,7 +4095,12 @@ from utils.widgets.qtrangeslider import QRangeSlider
 
 if __name__ == "__main__":
     import sys
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+    font = QtGui.QFont("Segoe UI", 9) if sys.platform.startswith("win") else QtGui.QFont(app.font())
+    font.setPointSize(9)
+    app.setFont(font)
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)

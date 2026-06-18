@@ -19,7 +19,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.widgets import SpanSelector
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 
 @dataclass
@@ -662,7 +662,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     output_json = Path(args.output_json).expanduser().resolve()
 
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+    font = QtGui.QFont("Segoe UI", 9) if sys.platform.startswith("win") else QtGui.QFont(app.font())
+    font.setPointSize(9)
+    app.setFont(font)
     win = MaskRangeSelector(input_file=input_file, output_json=output_json)
     win.show()
     return app.exec_()

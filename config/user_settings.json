@@ -3,7 +3,7 @@
   "window_width": 1566,
   "window_height": 900,
   "font_adjustment": -3,
-  "visual_font_scale": 110,
+  "visual_font_scale": 90,
   "_auto_k_enabled": false,
   "fit.points_num": 2000,
   "fit.interp_method": "Spline",
@@ -55,6 +55,7 @@
     "fixed_k": 2
   },
   "main_splitter_sizes": [
+<<<<<<< HEAD
     180,
     1716
   ],
@@ -62,10 +63,19 @@
     "page": [
       962,
       728
+=======
+    276,
+    921
+  ],
+  "gisaxs_fitting_splitter_sizes": {
+    "page": [
+      739,
+      453
+>>>>>>> 44a0a033f1d7279e12911fa5b8533fcc9d77b2cb
     ],
     "work": [
-      1715,
-      917
+      1685,
+      921
     ],
     "profile": "compact"
   },
@@ -170,5 +180,6 @@
       "min": 0.0,
       "max": 9752396.25
     }
-  }
+  },
+  "main_sidebar_collapsed": true
 }
