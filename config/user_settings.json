@@ -56,12 +56,12 @@
   },
   "main_splitter_sizes": [
     180,
-    1600
+    1716
   ],
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      896,
-      678
+      962,
+      728
     ],
     "work": [
       1715,

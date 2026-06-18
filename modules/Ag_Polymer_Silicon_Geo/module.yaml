@@ -1,0 +1,58 @@
+id: G_AgPNO_FF_256
+name: "G Ag/PNO FF 256 (Experimental)"
+framework: tensorflow
+version: "2.x"
+model:
+  format: keras
+  # model_path: 允许为空，首次使用需要选择
+  model_path: ""
+preprocess:
+  entry: preprocess:run
+  # Keep consistent with FF_test.ipynb experimental preprocessing and
+  # FF_training.py clean-input log/mask behavior.
+  steps:
+    - crop
+    - resize
+    - experiment_mask
+    - log_and_normalize
+    - mask
+  params:
+    crop:
+      # FF_test uses CROP_PARAMS=[700,800,300,200] and slicing:
+      # cropped_raw = raw_data[up:-down, right:-left]
+      # This maps to crop(left=200, up=800, down=300, right=700).
+      left: 200
+      up: 800
+      down: 300
+      right: 700
+    resize:
+      shape: [256, 256]
+      method: nearest
+    experiment_mask:
+      apply: true
+      gap_value_threshold: 0
+      row_gap_fraction: 0.8
+      col_gap_fraction: 0.8
+      bad_sigma: 1e6
+      median_size: 5
+      dilate_iter: 1
+      beamstops:
+        - center: [0, 270]
+          radius: 30
+        - center: [246, 256]
+          radius: 20
+    log_and_normalize:
+      eps: 1e-8
+    mask: 
+      apply: true
+      path: "assets/mask.npy"
+      mask_value: -1
+io:
+  input_type: "cbf"
+  stack_axis: 0
+  input_shape: [1, 256, 256, 1]
+outputs:
+  - name: "hr distribution"
+    shape: [30, 30]
+
+  
