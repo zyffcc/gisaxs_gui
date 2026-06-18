@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import json
+import csv
 import re
 import time
 import datetime
@@ -20,6 +21,7 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QGraphicsScene,
+    QBoxLayout,
     QVBoxLayout,
     QHBoxLayout,
     QWidget,
@@ -37,6 +39,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox,
     QCheckBox,
     QPushButton,
+    QLineEdit,
     QProgressBar,
     QSpinBox,
     QTableWidget,
@@ -250,6 +253,41 @@ class ManualAutoRefineWorker(QObject):
             self.finished.emit(result)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+class InsituBatchImageLoader(QThread):
+    """Load and sum an explicit list of detector images without blocking the UI."""
+
+    image_loaded = pyqtSignal(object, str)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, file_paths):
+        super().__init__()
+        self.file_paths = list(file_paths or [])
+
+    def run(self):
+        try:
+            if not self.file_paths:
+                raise RuntimeError("No files to load")
+            if not is_fabio_available():
+                raise RuntimeError("fabio library is required for CBF loading")
+            import fabio
+
+            summed = None
+            for path in self.file_paths:
+                if self.isInterruptionRequested():
+                    raise RuntimeError("Batch loading stopped")
+                cbf_image = fabio.open(path)
+                data = cbf_image.data.astype(np.float32, copy=False)
+                if summed is None:
+                    summed = data.copy()
+                else:
+                    if summed.shape != data.shape:
+                        raise RuntimeError(f"Image shape mismatch in batch: {path}")
+                    summed += data
+            self.image_loaded.emit(summed, self.file_paths[0])
+        except Exception as exc:
+            self.error_occurred.emit(str(exc))
 
 
 class IndependentMatplotlibWindow(QMainWindow):
@@ -1968,6 +2006,32 @@ class FittingController(QObject):
         self.load_mode = 'Single'
         self._insitu_timer = None
         self._insitu_last_file = None
+        self._insitu_workflow_button = None
+        self._insitu_workflow_dialog = None
+        self._insitu_workflow_timer = None
+        self._insitu_workflow_state = "Idle"
+        self._insitu_workflow_queue = []
+        self._insitu_workflow_seen = set()
+        self._insitu_workflow_file_sizes = {}
+        self._insitu_workflow_processing_file = None
+        self._insitu_workflow_busy = False
+        self._insitu_workflow_stop_requested = False
+        self._insitu_workflow_processed_count = 0
+        self._insitu_workflow_failed_count = 0
+        self._insitu_workflow_results = []
+        self._insitu_workflow_last_fit_params = None
+        self._insitu_workflow_current_record = None
+        self._insitu_workflow_refine_thread = None
+        self._insitu_workflow_refine_worker = None
+        self._insitu_workflow_ai_record = None
+        self._insitu_workflow_ai_then_refine = False
+        self._insitu_batch_loader = None
+        self._insitu_trend_dialog = None
+        self._insitu_trend_table = None
+        self._insitu_trend_combo = None
+        self._insitu_trend_plot_holder = None
+        self._insitu_workflow_canvas_image = None
+        self._insitu_workflow_canvas_curve = None
 
         # ?????????????????finished??????????????changed??
         self._default_signal_mode = 'finished'
@@ -2022,6 +2086,7 @@ class FittingController(QObject):
         # ??????UI??????????????
         self._initialize_ui()
         self._setup_folder_navigation_ui()
+        self._setup_insitu_workflow_button()
         # ????????????
         self._setup_connections()
         # ???????????????????????
@@ -2036,6 +2101,7 @@ class FittingController(QObject):
                 self.load_mode = mode_now or getattr(self, 'load_mode', 'Single')
                 # ???????????????????
                 self._update_stack_controls_visibility()
+                self._update_insitu_workflow_button_visibility()
                 # ??? In-situ???????????
                 if self.load_mode == 'In-situ' and hasattr(self.ui, 'gisaxsInputStackValue'):
                     self.ui.gisaxsInputStackValue.setVisible(False)
@@ -3149,9 +3215,11 @@ class FittingController(QObject):
                     if p in ('vmin', 'vmax'):
                         self._on_color_scale_value_committed()
                         self._add_fitting_message(f"Meta commit GISAXS {p} = {value}", "INFO")
+                        self._refresh_insitu_workflow_step_styles()
                         return
                     self._on_parameter_display_changed()
                     self._add_fitting_message(f"Meta commit GISAXS {p} = {value}", "INFO")
+                    self._refresh_insitu_workflow_step_styles()
                 except Exception:
                     pass
             widget_mode = overrides.get(widget_name, mode)
@@ -4199,10 +4267,364 @@ class FittingController(QObject):
                     self._start_insitu_timer()
             else:
                 self._stop_insitu_timer()
+                self._stop_insitu_workflow()
+                dialog = getattr(self, "_insitu_workflow_dialog", None)
+                if dialog is not None and dialog.isVisible():
+                    dialog.close()
             # ????????
             self._update_stack_display()
+            self._update_insitu_workflow_button_visibility()
         except Exception:
             pass
+
+    def _setup_insitu_workflow_button(self):
+        """Add the In-situ Workflow launcher under the Load Mode controls."""
+        try:
+            if self._insitu_workflow_button is not None:
+                return
+            parent = getattr(self.ui, 'gisaxsInputBox', None) or getattr(self.ui, 'centralwidget', None) or self.ui
+            button = QPushButton("In-situ Workflow", parent)
+            button.setObjectName("gisaxsInputInsituWorkflowButton")
+            button.setToolTip("Open the In-situ workflow automation panel")
+            button.clicked.connect(self._open_insitu_workflow_dialog)
+            button.setText("In-situ Workflow")
+            button.setMinimumHeight(22)
+            button.setMaximumHeight(26)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            self._insitu_workflow_button = button
+
+            inserted = False
+            combo = getattr(self.ui, 'gisaxsInputModelCombox', None)
+            combo_layout = self._find_layout_containing_widget(combo) if combo is not None else None
+            if combo_layout is not None:
+                try:
+                    if isinstance(combo_layout, QGridLayout):
+                        for index in range(combo_layout.count()):
+                            item = combo_layout.itemAt(index)
+                            if item is not None and item.widget() is combo:
+                                row, col, _row_span, _col_span = combo_layout.getItemPosition(index)
+                                holder = self._make_insitu_workflow_mode_box(combo, button, parent)
+                                combo_layout.removeWidget(combo)
+                                combo_layout.addWidget(holder, row, col, 1, 1, Qt.AlignTop | Qt.AlignLeft)
+                                inserted = True
+                                break
+                    elif isinstance(combo_layout, QBoxLayout):
+                        index = combo_layout.indexOf(combo)
+                        if index >= 0:
+                            holder = self._make_insitu_workflow_mode_box(combo, button, parent)
+                            combo_layout.removeWidget(combo)
+                            combo_layout.insertWidget(index, holder, 0, Qt.AlignLeft)
+                            inserted = True
+                except Exception:
+                    inserted = False
+            if not inserted:
+                grid = getattr(self.ui, 'gridLayout_23', None)
+                if grid is not None:
+                    try:
+                        grid.addWidget(button, 1, 1, 1, 1)
+                        inserted = True
+                    except Exception:
+                        inserted = False
+            if not inserted:
+                button.setParent(parent)
+            self._update_insitu_workflow_button_visibility()
+        except Exception as exc:
+            self.status_updated.emit(f"Failed to create In-situ Workflow button: {exc}")
+
+    def _make_insitu_workflow_mode_box(self, combo, button, parent):
+        holder = QWidget(parent)
+        holder.setObjectName("gisaxsInputInsituWorkflowModeBox")
+        holder_layout = QVBoxLayout(holder)
+        holder_layout.setContentsMargins(0, 0, 0, 0)
+        holder_layout.setSpacing(3)
+        holder_layout.addWidget(combo, 0, Qt.AlignLeft)
+        holder_layout.addWidget(button, 0, Qt.AlignLeft)
+        holder.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        return holder
+
+    def _find_layout_containing_widget(self, widget):
+        if widget is None:
+            return None
+
+        def walk(layout):
+            if layout is None:
+                return None
+            for index in range(layout.count()):
+                item = layout.itemAt(index)
+                if item is None:
+                    continue
+                if item.widget() is widget:
+                    return layout
+                nested = item.layout()
+                found = walk(nested)
+                if found is not None:
+                    return found
+            return None
+
+        parent = widget.parentWidget()
+        while parent is not None:
+            found = walk(parent.layout())
+            if found is not None:
+                return found
+            parent = parent.parentWidget()
+        return None
+
+    def _update_insitu_workflow_button_visibility(self):
+        try:
+            button = getattr(self, '_insitu_workflow_button', None)
+            if button is not None:
+                button.setVisible(getattr(self, 'load_mode', 'Single') == 'In-situ')
+        except Exception:
+            pass
+
+    def _insitu_workflow_parent_widget(self):
+        for candidate in (getattr(self, "main_window", None), getattr(self, "parent", None), getattr(self.ui, "centralwidget", None)):
+            if isinstance(candidate, QWidget):
+                return candidate
+        return None
+
+    def _open_insitu_workflow_dialog(self):
+        try:
+            if getattr(self, '_insitu_workflow_dialog', None) is not None and self._insitu_workflow_dialog.isVisible():
+                self._insitu_workflow_dialog.raise_()
+                self._insitu_workflow_dialog.activateWindow()
+                return
+            dialog = QDialog(self._insitu_workflow_parent_widget())
+            dialog.setWindowTitle("In-situ Workflow")
+            dialog.resize(1180, 760)
+            dialog.setModal(False)
+            dialog.setAttribute(Qt.WA_DeleteOnClose, True)
+            root = QHBoxLayout(dialog)
+
+            left = QWidget(dialog)
+            left_layout = QVBoxLayout(left)
+            left_layout.setContentsMargins(0, 0, 8, 0)
+            root.addWidget(left, 0)
+
+            mode_grid = QGridLayout()
+            run_mode = QComboBox(dialog)
+            run_mode.addItems(["Live Watch", "Process Existing Sequence"])
+            mode_grid.addWidget(QLabel("Run Mode:", dialog), 0, 0)
+            mode_grid.addWidget(run_mode, 0, 1)
+            left_layout.addLayout(mode_grid)
+
+            workflow_grid = QGridLayout()
+            auto_show = QCheckBox("Auto Show latest image", dialog)
+            auto_cut = QCheckBox("Auto Cut using current Cut Line settings", dialog)
+            auto_fit = QCheckBox("Auto Fit using current fitting model", dialog)
+            auto_show.setObjectName("insituWorkflowAutoShowCheckBox")
+            auto_cut.setObjectName("insituWorkflowAutoCutCheckBox")
+            auto_fit.setObjectName("insituWorkflowAutoFitCheckBox")
+            workflow_grid.addWidget(auto_show, 0, 0, 1, 2)
+            workflow_grid.addWidget(auto_cut, 1, 0, 1, 2)
+            workflow_grid.addWidget(auto_fit, 2, 0, 1, 2)
+
+            use_previous = QCheckBox("Use previous fit result as next initial guess", dialog)
+            use_previous.setChecked(True)
+            full_auto_fit = QCheckBox("Full Auto Fit", dialog)
+            auto_refine = QCheckBox("Auto Refine", dialog)
+            workflow_grid.addWidget(use_previous, 3, 0, 1, 2)
+            workflow_grid.addWidget(full_auto_fit, 4, 0)
+            workflow_grid.addWidget(auto_refine, 4, 1)
+            left_layout.addLayout(workflow_grid)
+
+            watch_grid = QGridLayout()
+            live_settings_widget = QWidget(dialog)
+            live_settings_layout = QGridLayout(live_settings_widget)
+            live_settings_layout.setContentsMargins(0, 0, 0, 0)
+            poll = QDoubleSpinBox(dialog)
+            poll.setRange(0.2, 3600.0)
+            poll.setDecimals(1)
+            poll.setSingleStep(0.5)
+            poll.setValue(2.0)
+            fit_every = QSpinBox(dialog)
+            fit_every.setRange(1, 100000)
+            fit_every.setValue(1)
+            ui_every = QSpinBox(dialog)
+            ui_every.setRange(1, 100000)
+            ui_every.setValue(5)
+            ui_every.setToolTip("Refresh heavy plots every N processed files during workflow runs.")
+            stable = QCheckBox("Wait until file size is stable", dialog)
+            stable.setChecked(True)
+            live_settings_layout.addWidget(QLabel("Poll interval:", dialog), 0, 0)
+            live_settings_layout.addWidget(poll, 0, 1)
+            live_settings_layout.addWidget(QLabel("s", dialog), 0, 2)
+            live_settings_layout.addWidget(stable, 1, 0, 1, 3)
+            watch_grid.addWidget(live_settings_widget, 0, 0, 1, 3)
+            watch_grid.addWidget(QLabel("Stack N files per fit:", dialog), 1, 0)
+            watch_grid.addWidget(fit_every, 1, 1)
+            watch_grid.addWidget(QLabel("UI update every N files:", dialog), 1, 2)
+            watch_grid.addWidget(ui_every, 1, 3)
+
+            sequence_settings_widget = QWidget(dialog)
+            sequence_settings_layout = QGridLayout(sequence_settings_widget)
+            sequence_settings_layout.setContentsMargins(0, 0, 0, 0)
+            sequence_folder = QLineEdit(dialog)
+            sequence_folder.setPlaceholderText("Current image folder")
+            sequence_browse = QPushButton("Browse", dialog)
+            sequence_pattern = QLineEdit("*.cbf", dialog)
+            sequence_start = QSpinBox(dialog)
+            sequence_end = QSpinBox(dialog)
+            sequence_step = QSpinBox(dialog)
+            for spin in (sequence_start, sequence_end):
+                spin.setRange(0, 100000000)
+                spin.setSpecialValueText("Auto")
+                spin.setValue(0)
+            sequence_step.setRange(1, 1000000)
+            sequence_step.setValue(1)
+            sequence_settings_layout.addWidget(QLabel("Folder:", dialog), 0, 0)
+            sequence_settings_layout.addWidget(sequence_folder, 0, 1)
+            sequence_settings_layout.addWidget(sequence_browse, 0, 2)
+            sequence_settings_layout.addWidget(QLabel("Pattern:", dialog), 1, 0)
+            sequence_settings_layout.addWidget(sequence_pattern, 1, 1, 1, 2)
+            sequence_settings_layout.addWidget(QLabel("Start index:", dialog), 2, 0)
+            sequence_settings_layout.addWidget(sequence_start, 2, 1)
+            sequence_settings_layout.addWidget(QLabel("End index:", dialog), 3, 0)
+            sequence_settings_layout.addWidget(sequence_end, 3, 1)
+            sequence_settings_layout.addWidget(QLabel("Step:", dialog), 4, 0)
+            sequence_settings_layout.addWidget(sequence_step, 4, 1)
+            watch_grid.addWidget(sequence_settings_widget, 2, 0, 1, 3)
+            left_layout.addLayout(watch_grid)
+
+            button_row = QHBoxLayout()
+            start_btn = QPushButton("Start Watch", dialog)
+            process_btn = QPushButton("Start Process", dialog)
+            pause_btn = QPushButton("Pause", dialog)
+            stop_btn = QPushButton("Stop", dialog)
+            trend_btn = QPushButton("Open Trend Monitor", dialog)
+            export_btn = QPushButton("Export Results...", dialog)
+            clear_cache_btn = QPushButton("Clear Session Cache", dialog)
+            open_cache_btn = QPushButton("Open Cache Folder", dialog)
+            pause_btn.setEnabled(False)
+            stop_btn.setEnabled(False)
+            button_row.addWidget(start_btn)
+            button_row.addWidget(process_btn)
+            button_row.addWidget(pause_btn)
+            button_row.addWidget(stop_btn)
+            left_layout.addLayout(button_row)
+            output_row = QHBoxLayout()
+            output_row.addWidget(trend_btn)
+            output_row.addWidget(export_btn)
+            output_row.addWidget(clear_cache_btn)
+            output_row.addWidget(open_cache_btn)
+            left_layout.addLayout(output_row)
+
+            status_grid = QGridLayout()
+            status_names = [
+                ("run_mode", "Run mode"),
+                ("status", "Watch status"),
+                ("file", "Current file"),
+                ("processed", "Processed count"),
+                ("failed", "Failed count"),
+                ("queue", "Queue count"),
+                ("fit", "Last fit status"),
+                ("chi", "Last chi-square"),
+                ("cache", "Cache path"),
+            ]
+            status_labels = {}
+            for row, (key, label_text) in enumerate(status_names):
+                status_grid.addWidget(QLabel(f"{label_text}:", dialog), row, 0)
+                value = QLabel("Idle" if key == "status" else "-", dialog)
+                value.setWordWrap(True)
+                status_grid.addWidget(value, row, 1)
+                status_labels[key] = value
+            left_layout.addLayout(status_grid)
+
+            log_browser = QTextBrowser(dialog)
+            log_browser.setMinimumHeight(180)
+            left_layout.addWidget(log_browser, 1)
+
+            right = QWidget(dialog)
+            right_layout = QVBoxLayout(right)
+            right_layout.setContentsMargins(8, 0, 0, 0)
+            root.addWidget(right, 1)
+
+            image_label = QLabel("Current image: -", dialog)
+            image_label.setWordWrap(True)
+            right_layout.addWidget(image_label)
+            image_canvas = self._make_insitu_workflow_canvas(right)
+            curve_canvas = self._make_insitu_workflow_canvas(right)
+            right_layout.addWidget(image_canvas, 2)
+            right_layout.addWidget(curve_canvas, 2)
+
+            self._insitu_workflow_dialog = dialog
+            self._insitu_workflow_widgets = {
+                "run_mode": run_mode,
+                "auto_show": auto_show,
+                "auto_cut": auto_cut,
+                "auto_fit": auto_fit,
+                "use_previous": use_previous,
+                "full_auto_fit": full_auto_fit,
+                "auto_refine": auto_refine,
+                "live_settings": live_settings_widget,
+                "sequence_settings": sequence_settings_widget,
+                "sequence_folder": sequence_folder,
+                "sequence_browse": sequence_browse,
+                "sequence_pattern": sequence_pattern,
+                "sequence_start": sequence_start,
+                "sequence_end": sequence_end,
+                "sequence_step": sequence_step,
+                "poll": poll,
+                "fit_every": fit_every,
+                "ui_every": ui_every,
+                "stable": stable,
+                "start": start_btn,
+                "process": process_btn,
+                "pause": pause_btn,
+                "stop": stop_btn,
+                "trend": trend_btn,
+                "export": export_btn,
+                "clear_cache": clear_cache_btn,
+                "open_cache": open_cache_btn,
+                "status_labels": status_labels,
+                "log": log_browser,
+                "image_label": image_label,
+            }
+            self._insitu_workflow_canvas_image = image_canvas
+            self._insitu_workflow_canvas_curve = curve_canvas
+
+            for checkbox in (auto_show, auto_cut, auto_fit, use_previous, full_auto_fit, auto_refine):
+                checkbox.toggled.connect(self._refresh_insitu_workflow_step_styles)
+            run_mode.currentTextChanged.connect(lambda _text: self._update_insitu_run_mode_ui())
+            sequence_browse.clicked.connect(self._browse_insitu_sequence_folder)
+            start_btn.clicked.connect(self._start_insitu_workflow)
+            process_btn.clicked.connect(self._start_insitu_sequence_processing)
+            pause_btn.clicked.connect(self._pause_insitu_workflow)
+            stop_btn.clicked.connect(self._stop_insitu_workflow)
+            trend_btn.clicked.connect(self._open_insitu_trend_monitor)
+            export_btn.clicked.connect(self._export_insitu_workflow_results)
+            clear_cache_btn.clicked.connect(self._clear_insitu_session_cache)
+            open_cache_btn.clicked.connect(self._open_insitu_cache_folder)
+            dialog.finished.connect(lambda _result: setattr(self, "_insitu_workflow_dialog", None))
+
+            self._populate_insitu_sequence_folder_default()
+            self._update_insitu_run_mode_ui()
+            self._refresh_insitu_workflow_step_styles()
+            self._refresh_insitu_workflow_status()
+            dialog.show()
+        except Exception as exc:
+            self._add_fitting_error(f"Failed to open In-situ Workflow: {exc}")
+
+    def _make_insitu_workflow_canvas(self, parent):
+        holder = QWidget(parent)
+        layout = QVBoxLayout(holder)
+        layout.setContentsMargins(0, 0, 0, 0)
+        if is_matplotlib_available():
+            try:
+                from matplotlib.figure import Figure
+                from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+                fig = Figure(figsize=(5.5, 3.1), dpi=80)
+                canvas = FigureCanvas(fig)
+                holder._insitu_figure = fig
+                holder._insitu_canvas = canvas
+                layout.addWidget(canvas)
+                return holder
+            except Exception:
+                pass
+        label = QLabel("Matplotlib preview unavailable", holder)
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+        return holder
 
     def _update_stack_controls_visibility(self):
         """No description."""
@@ -4464,13 +4886,1236 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    def _insitu_workflow_settings(self) -> dict:
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        return {
+            "run_mode": widgets.get("run_mode").currentText() if widgets.get("run_mode") else "Live Watch",
+            "auto_show": bool(widgets.get("auto_show").isChecked()) if widgets.get("auto_show") else False,
+            "auto_cut": bool(widgets.get("auto_cut").isChecked()) if widgets.get("auto_cut") else False,
+            "auto_fit": bool(widgets.get("auto_fit").isChecked()) if widgets.get("auto_fit") else False,
+            "use_previous": bool(widgets.get("use_previous").isChecked()) if widgets.get("use_previous") else True,
+            "full_auto_fit": bool(widgets.get("full_auto_fit").isChecked()) if widgets.get("full_auto_fit") else False,
+            "auto_refine": bool(widgets.get("auto_refine").isChecked()) if widgets.get("auto_refine") else False,
+            "poll_interval": float(widgets.get("poll").value()) if widgets.get("poll") else 2.0,
+            "fit_every": int(widgets.get("fit_every").value()) if widgets.get("fit_every") else 1,
+            "ui_every": int(widgets.get("ui_every").value()) if widgets.get("ui_every") else 5,
+            "wait_stable": bool(widgets.get("stable").isChecked()) if widgets.get("stable") else True,
+        }
+
+    def _update_insitu_run_mode_ui(self):
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        mode = self._insitu_workflow_settings().get("run_mode", "Live Watch")
+        is_live = mode == "Live Watch"
+        for key, visible in (
+            ("live_settings", is_live),
+            ("sequence_settings", not is_live),
+            ("start", is_live),
+            ("process", not is_live),
+            ("pause", True),
+            ("stop", True),
+        ):
+            widget = widgets.get(key)
+            if widget is not None:
+                widget.setVisible(visible)
+        self._refresh_insitu_workflow_status()
+
+    def _populate_insitu_sequence_folder_default(self):
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        edit = widgets.get("sequence_folder")
+        if edit is None:
+            return
+        try:
+            current = self.current_parameters.get('imported_gisaxs_file', '')
+            folder = os.path.dirname(current) if current else ""
+            if folder:
+                edit.setText(folder)
+        except Exception:
+            pass
+
+    def _browse_insitu_sequence_folder(self):
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        edit = widgets.get("sequence_folder")
+        start = edit.text().strip() if edit is not None else ""
+        folder = QFileDialog.getExistingDirectory(self._insitu_workflow_parent_widget(), "Select In-situ Sequence Folder", start)
+        if folder and edit is not None:
+            edit.setText(normalize_path(folder))
+
+    def _set_insitu_workflow_state(self, state: str, message: str = ""):
+        self._insitu_workflow_state = state
+        if message:
+            self._log_insitu_workflow(message)
+        self._refresh_insitu_workflow_status()
+
+    def _log_insitu_workflow(self, message: str, level: str = "INFO"):
+        text = f"[In-situ Workflow][{level}] {message}"
+        try:
+            self._add_fitting_message(text, level if level in ("INFO", "DEBUG", "ERROR", "WARN", "SUCCESS") else "INFO")
+        except Exception:
+            try:
+                self.status_updated.emit(text)
+            except Exception:
+                pass
+        browser = (getattr(self, "_insitu_workflow_widgets", {}) or {}).get("log")
+        if browser is not None:
+            browser.append(text)
+            try:
+                document = browser.document()
+                while document.blockCount() > 500:
+                    cursor = browser.textCursor()
+                    cursor.movePosition(cursor.Start)
+                    cursor.select(cursor.BlockUnderCursor)
+                    cursor.removeSelectedText()
+                    cursor.deleteChar()
+            except Exception:
+                pass
+
+    def _refresh_insitu_workflow_status(self):
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        labels = widgets.get("status_labels") or {}
+        try:
+            values = {
+                "status": self._insitu_workflow_state,
+                "run_mode": self._insitu_workflow_settings().get("run_mode", "Live Watch"),
+                "file": self._insitu_current_batch_label(),
+                "processed": str(int(getattr(self, "_insitu_workflow_processed_count", 0))),
+                "failed": str(int(getattr(self, "_insitu_workflow_failed_count", 0))),
+                "queue": str(len(getattr(self, "_insitu_workflow_queue", []) or [])),
+                "fit": str(getattr(self, "_insitu_workflow_last_fit_status", "-") or "-"),
+                "chi": self._format_optional_float(getattr(self, "_insitu_workflow_last_chi_square", None)),
+                "cache": str(self._insitu_session_cache_path()),
+            }
+            for key, value in values.items():
+                if key in labels and labels[key] is not None:
+                    labels[key].setText(value)
+            start_btn = widgets.get("start")
+            pause_btn = widgets.get("pause")
+            stop_btn = widgets.get("stop")
+            running = self._insitu_workflow_state in ("Watching", "Paused")
+            if start_btn is not None:
+                start_btn.setEnabled(not running or self._insitu_workflow_state == "Paused")
+                start_btn.setText("Resume" if self._insitu_workflow_state == "Paused" else "Start Watch")
+            process_btn = widgets.get("process")
+            if process_btn is not None:
+                process_btn.setEnabled(not running or self._insitu_workflow_state == "Paused")
+                process_btn.setText("Resume" if self._insitu_workflow_state == "Paused" else "Start Process")
+            if pause_btn is not None:
+                pause_btn.setEnabled(self._insitu_workflow_state == "Watching")
+            if stop_btn is not None:
+                stop_btn.setEnabled(running or bool(getattr(self, "_insitu_workflow_busy", False)))
+        except Exception:
+            pass
+
+    def _insitu_current_batch_label(self) -> str:
+        batch = getattr(self, "_insitu_workflow_processing_batch", None) or []
+        try:
+            if len(batch) > 1:
+                return f"{os.path.basename(batch[0])} -> {os.path.basename(batch[-1])} ({len(batch)} files)"
+            if len(batch) == 1:
+                return os.path.basename(batch[0])
+        except Exception:
+            pass
+        return os.path.basename(self._insitu_workflow_processing_file or "-")
+
+    def _format_optional_float(self, value):
+        try:
+            if value is None:
+                return "-"
+            value = float(value)
+            return f"{value:.6g}" if np.isfinite(value) else "-"
+        except Exception:
+            return "-"
+
+    def _refresh_insitu_workflow_step_styles(self):
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        cut_valid, _message = self._validate_current_cut_settings()
+        show_valid = bool(getattr(self, "current_stack_data", None) is not None or self.current_parameters.get('imported_gisaxs_file'))
+        fit_valid = self._has_active_fitting_template()
+        previous_valid = self._insitu_workflow_last_fit_params is not None
+        style_map = {
+            "auto_show": "color: #16803c;" if show_valid else "color: #b00020;",
+            "auto_cut": "color: #16803c;" if cut_valid else "color: #b00020;",
+            "auto_fit": "color: #16803c;" if fit_valid else "color: #b00020;",
+            "use_previous": "color: #16803c;" if previous_valid else "color: #b00020;",
+            "full_auto_fit": "color: #16803c;" if fit_valid else "color: #b00020;",
+            "auto_refine": "color: #16803c;" if SCIPY_AVAILABLE else "color: #b00020;",
+        }
+        for key, style in style_map.items():
+            widget = widgets.get(key)
+            if widget is None:
+                continue
+            widget.setStyleSheet(style if widget.isChecked() else "color: #202124;")
+        self._draw_insitu_workflow_region_preview()
+
+    def _validate_current_cut_settings(self):
+        try:
+            if self.current_stack_data is None:
+                return False, "No image loaded"
+            required = ('gisaxsInputCutLineVerticalValue', 'gisaxsInputCutLineParallelValue')
+            if not all(hasattr(self.ui, name) for name in required):
+                return False, "Cut controls unavailable"
+            vertical_value = float(self.ui.gisaxsInputCutLineVerticalValue.value())
+            parallel_value = float(self.ui.gisaxsInputCutLineParallelValue.value())
+            if vertical_value <= 0 or parallel_value <= 0:
+                return False, "Cut width/height must be positive"
+            info = self._create_selection_from_current_cut_controls()
+            if not info:
+                return False, "Cut ROI unavailable"
+            bounds = info.get("bounds", {})
+            height, width = self.current_stack_data.shape
+            if (
+                bounds.get("x_max", 0) <= 0 or bounds.get("y_max", 0) <= 0 or
+                bounds.get("x_min", width) >= width or bounds.get("y_min", height) >= height
+            ):
+                return False, "Cut ROI is outside the image"
+            return True, "OK"
+        except Exception as exc:
+            return False, str(exc)
+
+    def _has_active_fitting_template(self):
+        try:
+            active_shapes, _shape_configs = self._collect_active_particles()
+            return bool(active_shapes)
+        except Exception:
+            return False
+
+    def _start_insitu_workflow(self):
+        try:
+            if getattr(self, 'load_mode', 'Single') != 'In-situ':
+                QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "Set Load Mode to In-situ first.")
+                return
+            imported_file = self.current_parameters.get('imported_gisaxs_file', '')
+            if not imported_file:
+                QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "Import one GISAXS file from the watch folder first.")
+                return
+            folder = os.path.dirname(imported_file)
+            if not os.path.isdir(folder):
+                QMessageBox.warning(self._insitu_workflow_parent_widget(), "In-situ Workflow", f"Watch folder not found:\n{folder}")
+                return
+            settings = self._insitu_workflow_settings()
+            if not any(settings[key] for key in ("auto_show", "auto_cut", "auto_fit")):
+                QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "Enable at least one workflow step.")
+                return
+            if self._insitu_workflow_state != "Paused":
+                self._insitu_workflow_queue = []
+                self._insitu_workflow_seen = set(self._list_insitu_watch_files(folder))
+                self._insitu_workflow_file_sizes = {}
+                self._reset_insitu_session_cache()
+                self._insitu_workflow_last_fit_params = None
+                self._insitu_workflow_last_fit_status = "-"
+                self._insitu_workflow_last_chi_square = None
+            self._insitu_workflow_stop_requested = False
+            if self._insitu_workflow_timer is None:
+                self._insitu_workflow_timer = QTimer()
+                self._insitu_workflow_timer.setSingleShot(False)
+                self._insitu_workflow_timer.timeout.connect(self._insitu_workflow_poll)
+            self._insitu_workflow_timer.start(max(200, int(settings["poll_interval"] * 1000)))
+            self._stop_insitu_timer()
+            self._set_insitu_workflow_state("Watching", f"Watching {folder}")
+            self._insitu_workflow_poll()
+        except Exception as exc:
+            self._set_insitu_workflow_state("Error", f"Start failed: {exc}")
+
+    def _start_insitu_sequence_processing(self):
+        try:
+            if getattr(self, 'load_mode', 'Single') != 'In-situ':
+                QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "Set Load Mode to In-situ first.")
+                return
+            settings = self._insitu_workflow_settings()
+            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+            folder = widgets.get("sequence_folder").text().strip() if widgets.get("sequence_folder") else ""
+            if not folder:
+                self._populate_insitu_sequence_folder_default()
+                folder = widgets.get("sequence_folder").text().strip() if widgets.get("sequence_folder") else ""
+            if not folder or not os.path.isdir(folder):
+                QMessageBox.warning(self._insitu_workflow_parent_widget(), "In-situ Workflow", f"Sequence folder not found:\n{folder}")
+                return
+            if not any(settings[key] for key in ("auto_show", "auto_cut", "auto_fit")):
+                QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "Enable at least one workflow step.")
+                return
+            if self._insitu_workflow_state != "Paused":
+                self._insitu_workflow_queue = self._build_insitu_sequence_file_list(folder)
+                self._insitu_workflow_seen = set(self._insitu_workflow_queue)
+                self._insitu_workflow_file_sizes = {}
+                self._reset_insitu_session_cache()
+                self._insitu_workflow_last_fit_params = None
+                self._insitu_workflow_last_fit_status = "-"
+                self._insitu_workflow_last_chi_square = None
+                if not self._insitu_workflow_queue:
+                    QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "No files matched the sequence settings.")
+                    return
+            self._insitu_workflow_stop_requested = False
+            if self._insitu_workflow_timer is not None:
+                self._insitu_workflow_timer.stop()
+            self._stop_insitu_timer()
+            self._set_insitu_workflow_state("Processing", f"Processing {len(self._insitu_workflow_queue)} existing file(s)")
+            QTimer.singleShot(0, self._process_next_insitu_workflow_file)
+        except Exception as exc:
+            self._set_insitu_workflow_state("Error", f"Sequence start failed: {exc}")
+
+    def _build_insitu_sequence_file_list(self, folder: str) -> list[str]:
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        pattern = widgets.get("sequence_pattern").text().strip() if widgets.get("sequence_pattern") else "*.cbf"
+        pattern = pattern or "*.cbf"
+        try:
+            matches = sorted(Path(folder).glob(pattern), key=lambda p: self._natural_sort_key(str(p)))
+        except Exception:
+            matches = []
+        files = [str(path) for path in matches if path.is_file()]
+        start_value = int(widgets.get("sequence_start").value()) if widgets.get("sequence_start") else 0
+        end_value = int(widgets.get("sequence_end").value()) if widgets.get("sequence_end") else 0
+        step = max(1, int(widgets.get("sequence_step").value()) if widgets.get("sequence_step") else 1)
+
+        def index_from_name(path: str):
+            match = re.search(r'(\d+)(?=\.[^.]+$|$)', os.path.basename(path))
+            return int(match.group(1)) if match else None
+
+        filtered = []
+        for path in files:
+            idx = index_from_name(path)
+            if start_value and (idx is None or idx < start_value):
+                continue
+            if end_value and (idx is None or idx > end_value):
+                continue
+            if start_value and idx is not None and ((idx - start_value) % step != 0):
+                continue
+            filtered.append(path)
+        if not start_value and not end_value and step > 1:
+            filtered = filtered[::step]
+        return filtered
+
+    def _pause_insitu_workflow(self):
+        try:
+            if self._insitu_workflow_timer is not None:
+                self._insitu_workflow_timer.stop()
+            self._set_insitu_workflow_state("Paused", "Watch paused")
+        except Exception:
+            pass
+
+    def _stop_insitu_workflow(self):
+        try:
+            if self._insitu_workflow_timer is not None:
+                self._insitu_workflow_timer.stop()
+            self._insitu_workflow_stop_requested = True
+            self._insitu_workflow_queue = []
+            self._insitu_workflow_busy = False
+            self._insitu_workflow_processing_file = None
+            self._cleanup_insitu_refine_worker()
+            loader = getattr(self, "_insitu_batch_loader", None)
+            if loader is not None and loader.isRunning():
+                try:
+                    loader.requestInterruption()
+                    loader.quit()
+                    loader.wait(500)
+                except Exception:
+                    pass
+                self._insitu_batch_loader = None
+            if getattr(self, "_insitu_workflow_ai_record", None) is not None:
+                self._stop_ai_fitting_process()
+                self._insitu_workflow_ai_record = None
+                self._insitu_workflow_ai_then_refine = False
+            self._set_insitu_workflow_state("Idle", "Watch stopped")
+            if getattr(self, 'load_mode', 'Single') == 'In-situ' and self._is_auto_show_enabled():
+                self._start_insitu_timer()
+        except Exception:
+            pass
+
+    def _list_insitu_watch_files(self, folder: str):
+        try:
+            return [
+                os.path.join(folder, name)
+                for name in sorted(os.listdir(folder), key=self._natural_sort_key)
+                if name.lower().endswith(self._supported_folder_image_extensions())
+            ]
+        except Exception:
+            return []
+
+    def _insitu_workflow_poll(self):
+        try:
+            if self._insitu_workflow_state != "Watching":
+                return
+            imported_file = self.current_parameters.get('imported_gisaxs_file', '')
+            folder = os.path.dirname(imported_file) if imported_file else ""
+            if not folder or not os.path.isdir(folder):
+                self._set_insitu_workflow_state("Error", "Watch folder is unavailable")
+                return
+            settings = self._insitu_workflow_settings()
+            for path in self._list_insitu_watch_files(folder):
+                if path in self._insitu_workflow_seen or path in self._insitu_workflow_queue:
+                    continue
+                if settings["wait_stable"] and not self._insitu_workflow_file_is_stable(path):
+                    continue
+                self._insitu_workflow_seen.add(path)
+                self._insitu_workflow_queue.append(path)
+                self._log_insitu_workflow(f"Queued {os.path.basename(path)}")
+            self._refresh_insitu_workflow_status()
+            self._process_next_insitu_workflow_file()
+        except Exception as exc:
+            self._set_insitu_workflow_state("Error", f"Polling failed: {exc}")
+
+    def _insitu_workflow_file_is_stable(self, path: str) -> bool:
+        try:
+            stat = os.stat(path)
+            previous = self._insitu_workflow_file_sizes.get(path)
+            current = (int(stat.st_size), float(stat.st_mtime))
+            self._insitu_workflow_file_sizes[path] = current
+            return previous == current and current[0] > 0
+        except Exception:
+            return False
+
+    def _process_next_insitu_workflow_file(self):
+        if self._insitu_workflow_busy or self._insitu_workflow_state not in ("Watching", "Processing"):
+            return
+        if not self._insitu_workflow_queue:
+            if self._insitu_workflow_state == "Processing":
+                self._set_insitu_workflow_state("Idle", "Sequence processing complete")
+            self._refresh_insitu_workflow_status()
+            return
+        batch_size = max(1, int(self._insitu_workflow_settings().get("fit_every", 1)))
+        batch_paths = [self._insitu_workflow_queue.pop(0)]
+        while self._insitu_workflow_queue and len(batch_paths) < batch_size:
+            batch_paths.append(self._insitu_workflow_queue.pop(0))
+        path = batch_paths[0]
+        self._insitu_workflow_busy = True
+        self._insitu_workflow_processing_file = path
+        self._insitu_workflow_processing_batch = batch_paths
+        self._insitu_workflow_current_record = self._new_insitu_workflow_record(batch_paths)
+        self._refresh_insitu_workflow_status()
+        self._log_insitu_workflow(
+            f"Loading batch of {len(batch_paths)} file(s): {os.path.basename(batch_paths[0])}"
+            + (f" -> {os.path.basename(batch_paths[-1])}" if len(batch_paths) > 1 else "")
+        )
+        try:
+            self.current_parameters['imported_gisaxs_file'] = path
+            if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
+                self.ui.gisaxsInputImportButtonValue.setText(path)
+            self._scan_folder_images_for_file(path)
+            self._load_insitu_workflow_batch_async(batch_paths)
+            if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
+                if len(batch_paths) > 1:
+                    self.ui.gisaxsInputStackDisplayLabel.setText(
+                        f"In-situ workflow stack: {os.path.splitext(os.path.basename(batch_paths[0]))[0]} - "
+                        f"{os.path.splitext(os.path.basename(batch_paths[-1]))[0]}"
+                    )
+                else:
+                    self.ui.gisaxsInputStackDisplayLabel.setText(f"In-situ workflow: {os.path.splitext(os.path.basename(path))[0]}")
+        except Exception as exc:
+            self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc))
+
+    def _new_insitu_workflow_record(self, path_or_paths) -> dict:
+        paths = list(path_or_paths) if isinstance(path_or_paths, (list, tuple)) else [str(path_or_paths)]
+        first = paths[0] if paths else ""
+        last = paths[-1] if paths else first
+        batch_name = os.path.basename(first) if len(paths) == 1 else f"{os.path.basename(first)} -> {os.path.basename(last)}"
+        return {
+            "file_index": len(getattr(self, "_insitu_workflow_results", []) or []) + 1,
+            "file_name": batch_name,
+            "file_path": str(first),
+            "batch_size": len(paths),
+            "batch_files": json.dumps([os.path.basename(path) for path in paths], ensure_ascii=False),
+            "batch_paths": json.dumps(paths, ensure_ascii=False),
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "run_mode": self._insitu_workflow_settings().get("run_mode", "Live Watch"),
+            "load_status": "pending",
+            "cut_status": "skipped",
+            "fit_status": "skipped",
+            "chi_square": "",
+            "fitted_parameters": "",
+            "error_message": "",
+        }
+
+    def _load_insitu_workflow_batch_async(self, batch_paths: list[str]):
+        try:
+            loader = InsituBatchImageLoader(batch_paths)
+            loader.image_loaded.connect(self._on_insitu_batch_image_loaded)
+            loader.error_occurred.connect(self._on_insitu_batch_image_error)
+            loader.finished.connect(lambda: setattr(self, "_insitu_batch_loader", None))
+            self._insitu_batch_loader = loader
+            loader.start()
+        except Exception as exc:
+            self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc), failed=True)
+
+    def _on_insitu_batch_image_loaded(self, image_data, first_file_path: str):
+        try:
+            batch_paths = getattr(self, "_insitu_workflow_processing_batch", None) or [first_file_path]
+            if len(batch_paths) > 1:
+                self.status_updated.emit(
+                    f"In-situ batch loading complete: {len(batch_paths)} files "
+                    f"({os.path.basename(batch_paths[0])} -> {os.path.basename(batch_paths[-1])})"
+                )
+            self._ingest_workflow_image_without_preview(image_data)
+            if self._should_refresh_insitu_views_for_current_file():
+                self._display_image(image_data)
+            self._after_insitu_workflow_image_loaded(image_data, first_file_path)
+        except Exception as exc:
+            self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc), failed=True)
+
+    def _on_insitu_batch_image_error(self, message: str):
+        self._finalize_insitu_workflow_file(load_status="failed", error_message=str(message), failed=True)
+
+    def _after_insitu_workflow_image_loaded(self, image_data, file_path: str):
+        if not self._insitu_workflow_busy or file_path != self._insitu_workflow_processing_file:
+            return
+        record = self._insitu_workflow_current_record or self._new_insitu_workflow_record(file_path)
+        settings = self._insitu_workflow_settings()
+        refresh_views = self._should_refresh_insitu_views_for_current_file()
+        try:
+            record["load_status"] = "ok"
+            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+            image_label = widgets.get("image_label")
+            if image_label is not None:
+                image_label.setText(f"Current image: {file_path}")
+            if refresh_views and (settings["auto_show"] or settings["auto_cut"]):
+                self._draw_insitu_workflow_image_preview(image_data, file_path)
+
+            if settings["auto_cut"]:
+                valid, message = self._validate_current_cut_settings()
+                if not valid:
+                    record["cut_status"] = f"failed: {message}"
+                    raise RuntimeError(message)
+                old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
+                self._suppress_workflow_plot_updates = not refresh_views
+                try:
+                    self._perform_cut()
+                finally:
+                    self._suppress_workflow_plot_updates = old_suppress
+                if getattr(self, "current_cut_data", None) is None:
+                    raise RuntimeError("Cut did not produce data")
+                excluded_count = self._apply_deleted_point_mask_to_current_cut()
+                if excluded_count:
+                    record["deleted_points_applied"] = int(excluded_count)
+                    self._log_insitu_workflow(
+                        f"Applied deleted-point mask: removed {excluded_count} point(s) from {os.path.basename(file_path)}"
+                    )
+                record["cut_status"] = "ok"
+                if refresh_views:
+                    self._draw_insitu_workflow_region_preview()
+                    self._draw_insitu_workflow_curve_preview()
+                self._log_insitu_workflow(f"Cut completed for {os.path.basename(file_path)}", "SUCCESS")
+
+            if settings["auto_fit"]:
+                self._run_insitu_workflow_fit(record)
+                return
+
+            self._finalize_insitu_workflow_file(record=record)
+        except Exception as exc:
+            if settings["auto_cut"] and record.get("cut_status") == "skipped":
+                record["cut_status"] = "failed"
+            record["error_message"] = str(exc)
+            self._finalize_insitu_workflow_file(record=record, failed=True)
+
+    def _should_refresh_insitu_views_for_current_file(self) -> bool:
+        try:
+            ui_every = max(1, int(self._insitu_workflow_settings().get("ui_every", 5)))
+            index = int((self._insitu_workflow_current_record or {}).get("file_index", 1))
+            return (index % ui_every) == 0 or not bool(getattr(self, "_insitu_workflow_queue", []))
+        except Exception:
+            return True
+
+    def _apply_deleted_point_mask_to_current_cut(self) -> int:
+        """Apply the global deleted-q mask to the current cut arrays in-place."""
+        excluded = getattr(self, "_ai_excluded_input_q", set()) or set()
+        if not excluded or getattr(self, "current_cut_data", None) is None:
+            return 0
+        try:
+            q_arr = np.asarray(self.current_cut_data.get("x_coords", []), dtype=float).reshape(-1)
+            i_arr = np.asarray(self.current_cut_data.get("y_intensity", []), dtype=float).reshape(-1)
+            n = min(q_arr.size, i_arr.size)
+            if n <= 0:
+                return 0
+            q_arr, i_arr = q_arr[:n], i_arr[:n]
+            keep = np.array([
+                self._ai_q_key(q_val) not in excluded and self._ai_q_key(abs(float(q_val))) not in excluded
+                for q_val in q_arr
+            ], dtype=bool)
+            removed = int(n - np.sum(keep))
+            if removed <= 0 or int(np.sum(keep)) <= 0:
+                return 0
+            q_filtered = q_arr[keep]
+            i_filtered = i_arr[keep]
+            self.current_cut_data["x_coords"] = q_filtered
+            self.current_cut_data["y_intensity"] = i_filtered
+            self.q = q_filtered
+            self.I = i_filtered
+            if isinstance(getattr(self, "cut", None), dict):
+                self.cut["q"] = q_filtered
+                self.cut["I"] = i_filtered
+                meta = self.cut.setdefault("meta", {})
+                meta["deleted_points_applied"] = removed
+            return removed
+        except Exception as exc:
+            self._log_insitu_workflow(f"Deleted-point mask failed: {exc}", "ERROR")
+            return 0
+
+    def _run_insitu_workflow_fit(self, record: dict):
+        settings = self._insitu_workflow_settings()
+        try:
+            if settings["use_previous"] and self._insitu_workflow_last_fit_params is not None:
+                setup = self._build_manual_refine_setup()
+                if setup is not None:
+                    self._apply_manual_refine_result(setup, self._insitu_workflow_last_fit_params)
+
+            if settings["full_auto_fit"]:
+                self._insitu_workflow_ai_record = record
+                self._insitu_workflow_ai_then_refine = bool(settings["auto_refine"])
+                self._log_insitu_workflow("Full Auto Fit started")
+                self._start_ai_prediction("full")
+                process = getattr(self, "_ai_process", None)
+                if process is None or process.state() == QProcess.NotRunning:
+                    self._insitu_workflow_ai_record = None
+                    raise RuntimeError("Full Auto Fit did not start. Check the selected AI fitting model and input curve.")
+                return
+
+            if settings["auto_refine"]:
+                self._start_insitu_auto_refine(record)
+                return
+
+            before = getattr(self, "fitting", None)
+            old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
+            self._suppress_workflow_plot_updates = not self._should_refresh_insitu_views_for_current_file()
+            try:
+                self._perform_manual_fitting()
+            finally:
+                self._suppress_workflow_plot_updates = old_suppress
+            if getattr(self, "fitting", None) is before and before is None:
+                raise RuntimeError("Manual fitting did not produce a result")
+            self._complete_insitu_workflow_fit(record, "ok")
+        except Exception as exc:
+            record["fit_status"] = "failed"
+            record["error_message"] = str(exc)
+            self._finalize_insitu_workflow_file(record=record, failed=True)
+
+    def _start_insitu_auto_refine(self, record: dict):
+        if not SCIPY_AVAILABLE:
+            raise RuntimeError("SciPy is required for Auto Refine")
+        setup = self._build_manual_refine_setup()
+        if setup is None:
+            raise RuntimeError("Auto Refine setup failed")
+        selected = self._insitu_auto_refine_selected_params(setup)
+        if not selected:
+            raise RuntimeError("No Auto Refine parameters selected")
+        run_settings = self._ai_run_settings()
+        options = {
+            "max_nfev": int(run_settings.get("full_refine_max_nfev", 80)),
+            "target_logrmse": float(run_settings.get("full_refine_target_logrmse", 0.0)),
+            "ftol": float(run_settings.get("full_refine_ftol", 1e-8)),
+            "xtol": float(run_settings.get("full_refine_xtol", 1e-8)),
+            "gtol": float(run_settings.get("full_refine_gtol", 1e-8)),
+            "progress_interval": int(run_settings.get("full_refine_progress_interval", 20)),
+            "show_interval": 0,
+        }
+        self._cleanup_insitu_refine_worker()
+        thread = QThread(self._insitu_workflow_parent_widget())
+        worker = ManualAutoRefineWorker(self, setup, selected, options)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(lambda payload: self._on_insitu_refine_progress(payload))
+        worker.finished.connect(lambda result, rec=record, st=setup: self._on_insitu_refine_finished(rec, st, result))
+        worker.failed.connect(lambda message, rec=record: self._on_insitu_refine_failed(rec, message))
+        self._insitu_workflow_refine_thread = thread
+        self._insitu_workflow_refine_worker = worker
+        self._log_insitu_workflow("Auto Refine started")
+        thread.start()
+
+    def _insitu_auto_refine_selected_params(self, setup):
+        cached_rows = self._manual_refine_dialog_state()
+        selected = []
+        for desc in setup.get("params", []):
+            name = str(desc.get("name", ""))
+            cached = cached_rows.get(name, {}) if isinstance(cached_rows, dict) else {}
+            checked = bool(cached.get("checked", self._manual_refine_default_selected(name))) if isinstance(cached, dict) else self._manual_refine_default_selected(name)
+            if not checked:
+                continue
+            value = float(desc.get("value", 0.0))
+            default_lo, default_hi = self._default_manual_refine_bounds(name, value)
+            try:
+                lo = float(cached.get("min", default_lo)) if isinstance(cached, dict) else float(default_lo)
+                hi = float(cached.get("max", default_hi)) if isinstance(cached, dict) else float(default_hi)
+            except Exception:
+                lo, hi = float(default_lo), float(default_hi)
+            if hi <= lo:
+                hi = lo + max(abs(lo) * 0.1, 1e-9)
+            selected.append((desc, lo, hi))
+        return selected
+
+    def _on_insitu_refine_progress(self, payload: dict):
+        try:
+            nfev = int(payload.get("nfev_est", payload.get("nfev", payload.get("calls", 0))) or 0)
+            calls = int(payload.get("calls", 0) or 0)
+            max_nfev = int(payload.get("max_nfev", 0) or 0)
+            log_rmse = float(payload.get('current_log_rmse', np.nan))
+            self._insitu_workflow_last_fit_status = (
+                f"Auto Refine running: eval {nfev}/{max_nfev}, calls {calls}, logRMSE {log_rmse:.6g}"
+            )
+            record = getattr(self, "_insitu_workflow_current_record", None)
+            if isinstance(record, dict):
+                record["refine_nfev"] = nfev
+                record["refine_calls"] = calls
+                record["refine_max_nfev"] = max_nfev
+                record["fit_status"] = "refining"
+            self._log_insitu_workflow(self._insitu_workflow_last_fit_status)
+            self._refresh_insitu_workflow_status()
+            self._refresh_insitu_trend_monitor()
+        except Exception:
+            pass
+
+    def _on_insitu_refine_finished(self, record: dict, setup: dict, result: dict):
+        try:
+            self._apply_manual_refine_result(setup, result.get("params"))
+            old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
+            self._suppress_workflow_plot_updates = not self._should_refresh_insitu_views_for_current_file()
+            try:
+                self._perform_manual_fitting()
+            finally:
+                self._suppress_workflow_plot_updates = old_suppress
+            self._insitu_workflow_last_fit_params = np.asarray(result.get("params"), dtype=float).copy()
+            record["refine_nfev"] = int(result.get("nfev_est", result.get("nfev", 0)) or 0)
+            record["refine_calls"] = int(result.get("calls", 0) or 0)
+            record["refine_max_nfev"] = int(result.get("max_nfev", 0) or 0)
+            record["refine_log_rmse"] = float(result.get("final_log_rmse", np.nan))
+            self._log_insitu_workflow(
+                f"Auto Refine finished: eval {record['refine_nfev']}/{record['refine_max_nfev']}, "
+                f"calls {record['refine_calls']}, logRMSE {record['refine_log_rmse']:.6g}",
+                "SUCCESS",
+            )
+            self._complete_insitu_workflow_fit(record, "ok")
+        except Exception as exc:
+            self._on_insitu_refine_failed(record, str(exc))
+        finally:
+            self._cleanup_insitu_refine_worker()
+
+    def _on_insitu_refine_failed(self, record: dict, message: str):
+        try:
+            record["fit_status"] = "failed"
+            record["error_message"] = message
+            self._insitu_workflow_last_fit_status = f"failed: {message}"
+            self._finalize_insitu_workflow_file(record=record, failed=True)
+        finally:
+            self._cleanup_insitu_refine_worker()
+
+    def _cleanup_insitu_refine_worker(self):
+        worker = getattr(self, "_insitu_workflow_refine_worker", None)
+        thread = getattr(self, "_insitu_workflow_refine_thread", None)
+        try:
+            if worker is not None:
+                try:
+                    worker.request_stop()
+                except Exception:
+                    pass
+            if thread is not None:
+                thread.quit()
+                thread.wait(1000)
+                thread.deleteLater()
+        except Exception:
+            pass
+        self._insitu_workflow_refine_worker = None
+        self._insitu_workflow_refine_thread = None
+
+    def _on_insitu_ai_full_fit_finished(self, record: dict, exit_code: int):
+        try:
+            if exit_code != 0:
+                raise RuntimeError(f"Full Auto Fit failed with exit code {exit_code}")
+            output_dir = Path(getattr(self, "_ai_output_dir", "") or "")
+            results_path = output_dir / "top20_candidates.json"
+            if not results_path.is_file():
+                raise RuntimeError(f"Full Auto Fit results not found: {results_path}")
+            with results_path.open("r", encoding="utf-8") as fh:
+                rows = json.load(fh)
+            if not isinstance(rows, list) or not rows:
+                raise RuntimeError("Full Auto Fit produced no candidates")
+            if not self._load_ai_candidate_params(rows[0]):
+                raise RuntimeError("Failed to load the best Full Auto Fit candidate")
+            old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
+            self._suppress_workflow_plot_updates = not self._should_refresh_insitu_views_for_current_file()
+            try:
+                self._perform_manual_fitting()
+            finally:
+                self._suppress_workflow_plot_updates = old_suppress
+            self._log_insitu_workflow("Full Auto Fit best candidate loaded", "SUCCESS")
+            if getattr(self, "_insitu_workflow_ai_then_refine", False):
+                self._start_insitu_auto_refine(record)
+                return
+            self._complete_insitu_workflow_fit(record, "ok")
+        except Exception as exc:
+            record["fit_status"] = "failed"
+            record["error_message"] = str(exc)
+            self._insitu_workflow_last_fit_status = f"failed: {exc}"
+            self._finalize_insitu_workflow_file(record=record, failed=True)
+        finally:
+            self._insitu_workflow_ai_record = None
+            self._insitu_workflow_ai_then_refine = False
+
+    def _complete_insitu_workflow_fit(self, record: dict, status: str):
+        record["fit_status"] = status
+        params = self._current_fitting_parameter_dict()
+        record["fitted_parameters"] = json.dumps(params, ensure_ascii=False, sort_keys=True)
+        record.update(params)
+        chi = self._calculate_current_chi_square()
+        if chi is not None:
+            record["chi_square"] = chi
+        try:
+            if self._insitu_workflow_last_fit_params is None:
+                shapes, params_list = self._get_last_fitting_spec_and_params()
+                if params_list:
+                    self._insitu_workflow_last_fit_params = np.asarray(params_list, dtype=float).copy()
+        except Exception:
+            pass
+        self._insitu_workflow_last_fit_status = status
+        self._insitu_workflow_last_chi_square = chi
+        self._log_insitu_workflow(f"Fit completed: chi-square={self._format_optional_float(chi)}", "SUCCESS")
+        if self._should_refresh_insitu_views_for_current_file():
+            self._draw_insitu_workflow_curve_preview()
+        self._finalize_insitu_workflow_file(record=record)
+
+    def _current_fitting_parameter_dict(self):
+        try:
+            if isinstance(getattr(self, "fitting", None), dict):
+                params = self.fitting.get("meta", {}).get("params")
+                if isinstance(params, dict):
+                    return {str(k): float(v) for k, v in params.items()}
+        except Exception:
+            pass
+        return {}
+
+    def _calculate_current_chi_square(self):
+        try:
+            if not isinstance(getattr(self, "fitting", None), dict):
+                return None
+            fit_y = np.asarray(self.fitting.get("I", []), dtype=float).reshape(-1)
+            exp_y = None
+            if getattr(self, "current_cut_data", None) is not None:
+                exp_y = np.asarray(self.current_cut_data.get("y_intensity", []), dtype=float).reshape(-1)
+            elif getattr(self, "current_1d_data", None) is not None:
+                exp_y = np.asarray(self.current_1d_data.get("I", []), dtype=float).reshape(-1)
+            if exp_y is None:
+                return None
+            n = min(fit_y.size, exp_y.size)
+            if n <= 0:
+                return None
+            fit_y = fit_y[:n]
+            exp_y = exp_y[:n]
+            mask = np.isfinite(fit_y) & np.isfinite(exp_y)
+            if not np.any(mask):
+                return None
+            residual = fit_y[mask] - exp_y[mask]
+            return float(np.mean(residual * residual))
+        except Exception:
+            return None
+
+    def _finalize_insitu_workflow_file(self, record: dict = None, load_status: str = None, error_message: str = "", failed: bool = False):
+        record = record or self._insitu_workflow_current_record or {}
+        refresh_views = self._should_refresh_insitu_views_for_current_file()
+        if load_status is not None:
+            record["load_status"] = load_status
+        if error_message:
+            record["error_message"] = error_message
+        if failed or record.get("error_message") or str(record.get("load_status", "")).startswith("failed") or str(record.get("fit_status", "")).startswith("failed"):
+            self._insitu_workflow_failed_count += 1
+            self._log_insitu_workflow(f"{record.get('file_name', 'file')} failed: {record.get('error_message', '')}", "ERROR")
+        else:
+            self._log_insitu_workflow(f"{record.get('file_name', 'file')} processed", "SUCCESS")
+        self._insitu_workflow_processed_count += 1
+        self._insitu_workflow_results.append(record.copy())
+        self._append_insitu_session_cache(record)
+        self._insitu_workflow_busy = False
+        self._insitu_workflow_processing_file = None
+        self._insitu_workflow_processing_batch = []
+        self._insitu_workflow_current_record = None
+        self._refresh_insitu_workflow_status()
+        if refresh_views:
+            self._refresh_insitu_trend_monitor()
+        if not self._insitu_workflow_stop_requested and self._insitu_workflow_state in ("Watching", "Processing"):
+            QTimer.singleShot(15, self._process_next_insitu_workflow_file)
+
+    def _insitu_cache_dir(self) -> Path:
+        return Path.cwd() / ".gimap_cache"
+
+    def _insitu_session_cache_path(self) -> Path:
+        return self._insitu_cache_dir() / "insitu_current_session.jsonl"
+
+    def _reset_insitu_session_cache(self):
+        self._insitu_workflow_processed_count = 0
+        self._insitu_workflow_failed_count = 0
+        self._insitu_workflow_results = []
+        self._insitu_cache_dir().mkdir(parents=True, exist_ok=True)
+        self._insitu_session_cache_path().write_text("", encoding="utf-8")
+        self._refresh_insitu_workflow_status()
+
+    def _append_insitu_session_cache(self, record: dict):
+        try:
+            self._insitu_cache_dir().mkdir(parents=True, exist_ok=True)
+            with self._insitu_session_cache_path().open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+        except Exception as exc:
+            self._log_insitu_workflow(f"Session cache write failed: {exc}", "ERROR")
+
+    def _load_insitu_session_records(self) -> list[dict]:
+        if self._insitu_workflow_results:
+            rows = list(self._insitu_workflow_results)
+            current = getattr(self, "_insitu_workflow_current_record", None)
+            if isinstance(current, dict):
+                rows.append(current.copy())
+            return rows
+        path = self._insitu_session_cache_path()
+        rows = []
+        if not path.is_file():
+            return rows
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    rows.append(json.loads(line))
+        except Exception as exc:
+            self._log_insitu_workflow(f"Session cache read failed: {exc}", "ERROR")
+        current = getattr(self, "_insitu_workflow_current_record", None)
+        if isinstance(current, dict):
+            rows.append(current.copy())
+        return rows
+
+    def _export_insitu_records_to_csv(self, path: Path, rows: list[dict]):
+        try:
+            if not rows:
+                return
+            base_columns = [
+                "file_index",
+                "file_name",
+                "timestamp",
+                "load_status",
+                "cut_status",
+                "fit_status",
+                "chi_square",
+                "fitted_parameters",
+                "error_message",
+            ]
+            extra_columns = []
+            for row in rows:
+                for key in row.keys():
+                    if key not in base_columns and key not in extra_columns:
+                        extra_columns.append(key)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w", encoding="utf-8", newline="") as fh:
+                writer = csv.DictWriter(fh, fieldnames=base_columns + extra_columns)
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow(row)
+        except Exception as exc:
+            self._log_insitu_workflow(f"CSV export failed: {exc}", "ERROR")
+
+    def _export_insitu_workflow_results(self):
+        rows = self._load_insitu_session_records()
+        if not rows:
+            QMessageBox.information(self._insitu_workflow_parent_widget(), "Export Results", "No cached in-situ results to export.")
+            return
+        default_name = f"in_situ_results_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename, _ = QFileDialog.getSaveFileName(
+            self._insitu_workflow_parent_widget(),
+            "Export In-situ Results",
+            default_name,
+            "CSV Files (*.csv);;All Files (*)",
+        )
+        if not filename:
+            return
+        self._export_insitu_records_to_csv(Path(filename), rows)
+        self._log_insitu_workflow(f"Exported results to {filename}", "SUCCESS")
+
+    def _clear_insitu_session_cache(self):
+        if self._insitu_workflow_busy:
+            QMessageBox.information(self._insitu_workflow_parent_widget(), "Clear Session Cache", "Stop the workflow before clearing the cache.")
+            return
+        self._reset_insitu_session_cache()
+        self._insitu_workflow_last_fit_params = None
+        self._insitu_workflow_last_fit_status = "-"
+        self._insitu_workflow_last_chi_square = None
+        self._log_insitu_workflow("Session cache cleared")
+
+    def _open_insitu_cache_folder(self):
+        try:
+            self._insitu_cache_dir().mkdir(parents=True, exist_ok=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._insitu_cache_dir())))
+        except Exception as exc:
+            self._log_insitu_workflow(f"Open cache folder failed: {exc}", "ERROR")
+
+    def _draw_insitu_workflow_image_preview(self, image_data, file_path: str = ""):
+        holder = getattr(self, "_insitu_workflow_canvas_image", None)
+        auto_cut = self._insitu_workflow_settings().get("auto_cut", False)
+        self._draw_insitu_image_on_holder(holder, image_data, title=os.path.basename(file_path) or "Current image", selection=auto_cut)
+
+    def _draw_insitu_workflow_region_preview(self):
+        if getattr(self, "current_stack_data", None) is None:
+            return
+        self._draw_insitu_workflow_image_preview(self.current_stack_data, self._insitu_workflow_processing_file or "")
+
+    def _draw_insitu_image_on_holder(self, holder, image_data, title: str = "", selection: bool = False):
+        try:
+            if holder is None or not hasattr(holder, "_insitu_figure"):
+                return
+            fig = holder._insitu_figure
+            canvas = holder._insitu_canvas
+            fig.clear()
+            ax = fig.add_subplot(111)
+            processed, _ = self._prepare_image_data_for_display(image_data)
+            processed = np.flipud(processed)
+            preview_data, _ = self._downsample_for_preview(processed, max_pixels=280_000)
+            vmin = self._current_vmin if self._current_vmin is not None else np.nanmin(processed)
+            vmax = self._current_vmax if self._current_vmax is not None else np.nanmax(processed)
+            ax.imshow(preview_data, cmap="viridis", origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax)
+            if selection:
+                try:
+                    valid, message = self._validate_current_cut_settings()
+                    info = self._create_selection_from_current_cut_controls()
+                    if info:
+                        bounds = info.get("bounds", {})
+                        scale_y = preview_data.shape[0] / max(1, processed.shape[0])
+                        scale_x = preview_data.shape[1] / max(1, processed.shape[1])
+                        from matplotlib.patches import Rectangle
+                        rect = Rectangle(
+                            (bounds.get("x_min", 0) * scale_x, bounds.get("y_min", 0) * scale_y),
+                            max(1, (bounds.get("x_max", 0) - bounds.get("x_min", 0)) * scale_x),
+                            max(1, (bounds.get("y_max", 0) - bounds.get("y_min", 0)) * scale_y),
+                            linewidth=2,
+                            edgecolor="#16803c" if valid else "#b00020",
+                            facecolor="none",
+                        )
+                        ax.add_patch(rect)
+                    if not valid:
+                        ax.text(
+                            0.02, 0.96, message,
+                            transform=ax.transAxes,
+                            color="#b00020",
+                            fontsize=9,
+                            va="top",
+                            bbox={"facecolor": "white", "alpha": 0.75, "edgecolor": "none"},
+                        )
+                except Exception:
+                    pass
+            ax.set_title(title)
+            ax.axis("off")
+            fig.tight_layout(pad=0.3)
+            canvas.draw_idle()
+        except Exception:
+            pass
+
+    def _create_selection_from_current_cut_controls(self):
+        try:
+            if not all(hasattr(self.ui, name) for name in (
+                'gisaxsInputCenterParallelValue',
+                'gisaxsInputCenterVerticalValue',
+                'gisaxsInputCutLineParallelValue',
+                'gisaxsInputCutLineVerticalValue',
+            )):
+                return None
+            return self._create_selection_from_parameters(
+                float(self.ui.gisaxsInputCenterParallelValue.value()),
+                float(self.ui.gisaxsInputCenterVerticalValue.value()),
+                float(self.ui.gisaxsInputCutLineParallelValue.value()),
+                float(self.ui.gisaxsInputCutLineVerticalValue.value()),
+            )
+        except Exception:
+            return None
+
+    def _draw_insitu_workflow_curve_preview(self):
+        holder = getattr(self, "_insitu_workflow_canvas_curve", None)
+        try:
+            if holder is None or not hasattr(holder, "_insitu_figure"):
+                return
+            fig = holder._insitu_figure
+            canvas = holder._insitu_canvas
+            fig.clear()
+            ax = fig.add_subplot(111)
+            log_x = self._is_fit_log_x_enabled()
+            log_y = self._is_fit_log_y_enabled()
+            normalize = self._is_fit_norm_enabled()
+            filter_mode = self._get_independent_axis_filter_mode()
+
+            def prepare_pair(x_values, y_values, source="cut"):
+                x = np.asarray(x_values, dtype=float).reshape(-1)
+                y = np.asarray(y_values, dtype=float).reshape(-1)
+                n = min(x.size, y.size)
+                x, y = x[:n], y[:n]
+                mask = np.isfinite(x) & np.isfinite(y)
+                x, y = x[mask], y[mask]
+                if filter_mode == "positive":
+                    keep = x > 0
+                    x, y = x[keep], y[keep]
+                elif filter_mode == "negative":
+                    keep = x < 0
+                    x, y = np.abs(x[keep]), y[keep]
+                    order = np.argsort(x)
+                    x, y = x[order], y[order]
+                if normalize and y.size:
+                    max_y = float(np.nanmax(y))
+                    if np.isfinite(max_y) and max_y > 0:
+                        y = y / max_y
+                x = self._convert_q_values_for_display(x, source=source)
+                return x, y
+
+            if getattr(self, "current_cut_data", None) is not None:
+                x, y = prepare_pair(
+                    self.current_cut_data.get("x_coords", []),
+                    self.current_cut_data.get("y_intensity", []),
+                    source="cut",
+                )
+                if x.size and y.size:
+                    ax.plot(x, y, marker="o", markersize=3, linewidth=1.4, color="#1f77b4", label="Cut")
+            if isinstance(getattr(self, "fitting", None), dict):
+                source = self.fitting.get("meta", {}).get("data_source", "cut")
+                fx, fy = prepare_pair(self.fitting.get("q", []), self.fitting.get("I", []), source=source)
+                if fx.size and fy.size:
+                    ax.plot(fx, fy, linewidth=2.0, color="#d62728", label="Fit")
+            if log_x:
+                ax.set_xscale("log")
+            if log_y:
+                ax.set_yscale("log")
+            self._apply_fit_y_axis_limits(ax, log_y=log_y)
+            self._draw_roi_guides_if_active(ax)
+            ax.set_title("Cut / fitting curve")
+            ax.set_xlabel(self._build_q_axis_label())
+            ax.set_ylabel("Normalized Intensity" if normalize else "Intensity (a.u.)")
+            ax.grid(True, alpha=0.3)
+            ax.legend(loc="best")
+            fig.tight_layout(pad=0.3)
+            canvas.draw_idle()
+        except Exception:
+            pass
+
+    def _open_insitu_trend_monitor(self):
+        try:
+            rows = self._load_insitu_session_records()
+            if not rows:
+                QMessageBox.information(self._insitu_workflow_parent_widget(), "Trend Monitor", "No in-situ workflow results yet.")
+                return
+            existing = getattr(self, "_insitu_trend_dialog", None)
+            if existing is not None and existing.isVisible():
+                self._refresh_insitu_trend_monitor()
+                existing.raise_()
+                existing.activateWindow()
+                return
+            dialog = QDialog(self._insitu_workflow_parent_widget())
+            dialog.setWindowTitle("In-situ Trend Monitor")
+            dialog.resize(980, 620)
+            layout = QVBoxLayout(dialog)
+            combo = QComboBox(dialog)
+            layout.addWidget(combo)
+            table = QTableWidget(0, 0, dialog)
+            table.setEditTriggers(QTableWidget.NoEditTriggers)
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            layout.addWidget(table, 1)
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+            table.horizontalHeader().setStretchLastSection(True)
+            plot_holder = None
+            if is_matplotlib_available():
+                plot_holder = self._make_insitu_workflow_canvas(dialog)
+                layout.addWidget(plot_holder, 1)
+            close = QPushButton("Close", dialog)
+            close.clicked.connect(dialog.close)
+            layout.addWidget(close)
+            self._insitu_trend_dialog = dialog
+            self._insitu_trend_table = table
+            self._insitu_trend_combo = combo
+            self._insitu_trend_plot_holder = plot_holder
+            combo.currentTextChanged.connect(lambda _text: self._refresh_insitu_trend_plot())
+            dialog.finished.connect(lambda _result: self._clear_insitu_trend_refs())
+            dialog.show()
+            self._refresh_insitu_trend_monitor()
+        except Exception as exc:
+            self._log_insitu_workflow(f"Trend monitor failed: {exc}", "ERROR")
+
+    def _clear_insitu_trend_refs(self):
+        self._insitu_trend_dialog = None
+        self._insitu_trend_table = None
+        self._insitu_trend_combo = None
+        self._insitu_trend_plot_holder = None
+
+    def _insitu_trend_parameter_keys(self, rows: list[dict]) -> list[str]:
+        keys = ["chi_square"]
+        skip = {"file_index", "file_name", "file_path", "timestamp", "run_mode", "load_status", "cut_status", "fit_status", "fitted_parameters", "error_message"}
+        for row in rows:
+            for key, value in row.items():
+                if key in skip:
+                    continue
+                try:
+                    float(value)
+                except Exception:
+                    continue
+                if key not in keys:
+                    keys.append(key)
+        return keys
+
+    def _refresh_insitu_trend_monitor(self):
+        dialog = getattr(self, "_insitu_trend_dialog", None)
+        table = getattr(self, "_insitu_trend_table", None)
+        combo = getattr(self, "_insitu_trend_combo", None)
+        if dialog is None or table is None or combo is None:
+            return
+        rows = self._load_insitu_session_records()
+        parameter_keys = self._insitu_trend_parameter_keys(rows)
+        current_key = combo.currentText()
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            combo.addItems(parameter_keys)
+            if current_key:
+                idx = combo.findText(current_key)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+        finally:
+            combo.blockSignals(False)
+        headers = ["file_index", "file_name", "fit_status", "error_message"] + parameter_keys
+        table.setColumnCount(len(headers))
+        table.setRowCount(len(rows))
+        table.setHorizontalHeaderLabels(headers)
+        for r, row in enumerate(rows):
+            for c, key in enumerate(headers):
+                table.setItem(r, c, QTableWidgetItem(str(row.get(key, ""))))
+        self._refresh_insitu_trend_plot()
+
+    def _refresh_insitu_trend_plot(self):
+        combo = getattr(self, "_insitu_trend_combo", None)
+        plot_holder = getattr(self, "_insitu_trend_plot_holder", None)
+        if combo is None or plot_holder is None or not hasattr(plot_holder, "_insitu_figure"):
+            return
+        rows = self._load_insitu_session_records()
+        key = combo.currentText() or "chi_square"
+        fig = plot_holder._insitu_figure
+        canvas = plot_holder._insitu_canvas
+        fig.clear()
+        ax = fig.add_subplot(111)
+        xs, ys = [], []
+        for row in rows:
+            try:
+                y = float(row.get(key, ""))
+                x = float(row.get("file_index", len(xs) + 1))
+            except Exception:
+                continue
+            if np.isfinite(x) and np.isfinite(y):
+                xs.append(x)
+                ys.append(y)
+        ax.plot(xs, ys, marker="o")
+        ax.set_xlabel("file_index")
+        ax.set_ylabel(key)
+        ax.set_title(f"In-situ trend: {key}")
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout(pad=0.3)
+        canvas.draw_idle()
+
     def _on_image_loaded(self, image_data, file_path):
         """No description."""
         try:
             self.status_updated.emit(f"Image loading complete: {os.path.basename(file_path)}")
-            self._display_image(image_data)
+            workflow_frame = (
+                getattr(self, "_insitu_workflow_busy", False)
+                and file_path == getattr(self, "_insitu_workflow_processing_file", None)
+            )
+            if workflow_frame and not self._should_refresh_insitu_views_for_current_file():
+                self._ingest_workflow_image_without_preview(image_data)
+            else:
+                self._display_image(image_data)
+            self._after_insitu_workflow_image_loaded(image_data, file_path)
         except Exception as e:
             self.status_updated.emit(f"Error while displaying image: {str(e)}")
+            if getattr(self, "_insitu_workflow_processing_file", None) == file_path:
+                self._finalize_insitu_workflow_file(load_status="failed", error_message=str(e), failed=True)
 
     def _on_image_loading_progress(self, progress, status):
         """No description."""
@@ -4482,7 +6127,33 @@ class FittingController(QObject):
 
     def _on_image_loading_error(self, error_message):
         """No description."""
+        if getattr(self, "_insitu_workflow_busy", False):
+            self._finalize_insitu_workflow_file(load_status="failed", error_message=str(error_message), failed=True)
+            return
         QMessageBox.critical(self.main_window, "Image loading error", error_message)
+
+    def _ingest_workflow_image_without_preview(self, image_data):
+        """Update data needed for cut/fitting without repainting heavy image views."""
+        self.current_stack_data = image_data
+        self.data = image_data
+        try:
+            sc = int(self.current_parameters.get('stack_count', 1))
+        except Exception:
+            sc = 1
+        self.summed_data = image_data if sc and sc > 1 else None
+        try:
+            self._compute_q_meshgrids_and_store()
+        except Exception:
+            pass
+        if self._current_vmin is None or self._current_vmax is None:
+            try:
+                self._handle_color_scale(image_data)
+            except Exception:
+                pass
+        try:
+            self._update_cutline_labels_units()
+        except Exception:
+            pass
 
     def _display_image(self, image_data):
         """No description."""
@@ -6655,8 +8326,9 @@ class FittingController(QObject):
                 pass
 
             self._apply_roi_to_data_and_refresh()
-            self._update_GUI_image('normal')
-            self._update_outside_window('normal')
+            if not getattr(self, "_suppress_workflow_plot_updates", False):
+                self._update_GUI_image('normal')
+                self._update_outside_window('normal')
 
         except Exception as e:
             self.status_updated.emit(f"Cut operation failed: {str(e)}")
@@ -7056,6 +8728,9 @@ class FittingController(QObject):
             except Exception:
                 # ??????????????????
                 self.cut = {'q': x_arr, 'I': y_arr, 'meta': {'source': 'cut'}}
+
+            if getattr(self, "_suppress_workflow_plot_updates", False):
+                return
 
             if not is_matplotlib_available():
                 QMessageBox.warning(self.main_window, "Missing Library",
@@ -10040,11 +11715,18 @@ class FittingController(QObject):
                     pass
         self._ai_excluded_input_q = excluded
         added = max(0, len(excluded) - before)
+        removed_from_current_cut = self._apply_deleted_point_mask_to_current_cut()
         self._refresh_ai_input_data_dialog()
         self._refresh_ai_input_outlier_views()
+        self._draw_insitu_workflow_curve_preview()
         if added:
             label = "from Independent Fit Window" if source == "plot" else "from table"
             self._set_ai_workspace_status(f"Excluded {added} input point(s) {label}.", None)
+        if removed_from_current_cut:
+            self._add_fitting_message(
+                f"Deleted-point mask applied to current cut: removed {removed_from_current_cut} point(s)",
+                "INFO",
+            )
 
     def _restore_ai_input_points(self, q_values) -> None:
         excluded = set(getattr(self, "_ai_excluded_input_q", set()) or set())
@@ -10061,6 +11743,7 @@ class FittingController(QObject):
         restored = max(0, before - len(excluded))
         self._refresh_ai_input_data_dialog()
         self._refresh_ai_input_outlier_views()
+        self._draw_insitu_workflow_curve_preview()
         if restored:
             self._set_ai_workspace_status(f"Restored {restored} input point(s).", None)
 
@@ -10068,6 +11751,7 @@ class FittingController(QObject):
         self._ai_excluded_input_q = set()
         self._refresh_ai_input_data_dialog()
         self._refresh_ai_input_outlier_views()
+        self._draw_insitu_workflow_curve_preview()
         self._set_ai_workspace_status("All AI input points restored.", None)
 
     def _refresh_ai_input_outlier_views(self) -> None:
@@ -10290,6 +11974,10 @@ class FittingController(QObject):
 
     def _on_ai_process_finished(self, exit_code: int, exit_status) -> None:
         self._set_ai_running_state(False)
+        workflow_record = getattr(self, "_insitu_workflow_ai_record", None)
+        if workflow_record is not None:
+            self._on_insitu_ai_full_fit_finished(workflow_record, int(exit_code))
+            return
         if exit_code == 0:
             self._set_ai_workspace_status(f"AI fitting finished. Output: {self._ai_output_dir}", 100)
             self._show_ai_candidate_table(self._ai_output_dir)
@@ -10298,6 +11986,14 @@ class FittingController(QObject):
 
     def _on_ai_process_error(self, error) -> None:
         self._set_ai_running_state(False)
+        workflow_record = getattr(self, "_insitu_workflow_ai_record", None)
+        if workflow_record is not None:
+            workflow_record["fit_status"] = "failed"
+            workflow_record["error_message"] = f"AI process error: {error}"
+            self._insitu_workflow_ai_record = None
+            self._insitu_workflow_ai_then_refine = False
+            self._finalize_insitu_workflow_file(record=workflow_record, failed=True)
+            return
         self._set_ai_workspace_status(f"AI process error: {error}", 0)
 
     def _stop_ai_fitting_process(self) -> None:
@@ -12247,8 +13943,9 @@ class FittingController(QObject):
                 self._fitting_mode_active = True  # ????????????
 
                 # ??????
-                self._update_GUI_image('fitting')
-                self._update_outside_window('fitting')
+                if not getattr(self, "_suppress_workflow_plot_updates", False):
+                    self._update_GUI_image('fitting')
+                    self._update_outside_window('fitting')
 
                 # ???????uto-K??????????????????????
                 if self._auto_k_enabled and hasattr(self, 'I') and self.I is not None:

@@ -78,14 +78,17 @@
             "show_q_axis": false
         },
         "last_session": {
+            "last_opened_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00014.cbf",
+            "imported_gisaxs_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00014.cbf",
+            "last_directory": "D:\\PythonCode\\gisaxs_gui\\Experiment_data",
             "load_mode": "In-situ",
             "display_mode": "normal",
             "stack_value": "1-",
             "stack_count": 1,
             "insitu_range": "",
-            "fit_current_data": false,
-            "fit_log_x": false,
-            "fit_log_y": false,
+            "fit_current_data": true,
+            "fit_log_x": true,
+            "fit_log_y": true,
             "fit_norm": false,
             "auto_show": false
         },

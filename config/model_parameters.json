@@ -1,11 +1,11 @@
 {
     "fitting": {
         "global_parameters": {
-            "sigma_res": 0.060491987470063235,
-            "k_value": 335037.5468783446,
-            "int_res": 0.08945918349545413,
-            "nu_res": 4.362191518739579,
-            "background": 12.496599091375185
+            "sigma_res": 0.101121,
+            "k_value": 22487.846674446086,
+            "int_res": 0.045504647053271494,
+            "nu_res": 2.499,
+            "background": 3.935057467854054
         },
         "particles": {
             "particle_7": {
@@ -44,11 +44,11 @@
                         "sigma_diameter": 10.066591828216042
                     },
                     "sphere": {
-                        "diameter": 6.354,
-                        "sigma_diameter": 17.50300736893945,
-                        "radius": 65.771,
-                        "intensity": 0.4351090969150951,
-                        "sigma_radius": 10.947464703306862
+                        "diameter": 37.87108171969715,
+                        "sigma_diameter": 39.85552940803163,
+                        "radius": 89.39096643425832,
+                        "intensity": 3.727582923028488,
+                        "sigma_radius": 21.96309127616512
                     },
                     "cylinder": {
                         "intensity": 0.7109756072435235,
@@ -73,11 +73,11 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 0.06444129557271505,
-                        "radius": 13.125202946070619,
-                        "sigma_radius": 4.067127335578804,
-                        "diameter": 10.43804844513419,
-                        "sigma_diameter": 2.107328642032671
+                        "intensity": 0.006925374611212619,
+                        "radius": 2.1578694975139663,
+                        "sigma_radius": 0.0013954591104452748,
+                        "diameter": 6.591842075272742,
+                        "sigma_diameter": 0.5820134041641323
                     },
                     "cylinder": {
                         "intensity": 0.3562638653873533,
@@ -131,11 +131,11 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 0.024544245534090375,
-                        "radius": 3.201,
-                        "sigma_radius": 0.6287871568916207,
-                        "diameter": 6.375,
-                        "sigma_diameter": 0.7325357625404678
+                        "intensity": 0.014684586425281376,
+                        "radius": 3.096446455966792,
+                        "sigma_radius": 0.165093540332483,
+                        "diameter": 5.77336006941562,
+                        "sigma_diameter": 1.2195106939220293
                     },
                     "cylinder": {
                         "intensity": 0.2947484837713447,
