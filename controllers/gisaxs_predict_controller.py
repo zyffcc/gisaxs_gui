@@ -3554,13 +3554,15 @@ class GisaxsPredictController(QObject):
             return
         self._current_module = spec
         self.current_parameters["module_name"] = spec.get("name", name)
+        self.current_parameters["module_model_path"] = ""
+        self._current_model = None
+        self._set_model_status_color("gray", "Not loaded")
         self.refresh_framework_options_for_current_module()
 
-        # Ensure model path available
-        model_path = spec.get("model_path") or self.current_parameters.get("module_model_path") or ""
+        # The selected module owns its model path. Do not inherit a previous
+        # module's model path here, or the wrong model can be silently loaded.
+        model_path = spec.get("model_path") or ""
         if not model_path or not os.path.exists(model_path):
-            self._current_model = None
-            self._set_model_status_color("gray", "Not loaded")
             self._load_module_mask(self._current_module)
             self._persist_parameters()
             self._append_status_message("Module selected. Use Import Model to choose and load a model.", level="INFO")
@@ -3571,9 +3573,6 @@ class GisaxsPredictController(QObject):
         abs_model = os.path.abspath(model_path)
         self.current_parameters["module_model_path"] = abs_model
         self._current_module["model_path"] = abs_model
-
-        # Write back to module.yaml
-        self._write_model_path_to_yaml(self._current_module, abs_model)
 
         # Load mask if available
         self._load_module_mask(self._current_module)
@@ -3704,6 +3703,10 @@ class GisaxsPredictController(QObject):
 
         if new_model_path:
             self.current_parameters["module_model_path"] = os.path.abspath(new_model_path)
+        else:
+            self.current_parameters["module_model_path"] = ""
+            self._current_model = None
+            self._set_model_status_color("gray", "Not loaded")
         if old_model_path and new_model_path and os.path.abspath(old_model_path) != os.path.abspath(new_model_path):
             self._current_model = None
             self._set_model_status_color("gray", "Not loaded")
@@ -3725,7 +3728,7 @@ class GisaxsPredictController(QObject):
         if not spec:
             QMessageBox.information(self.main_window, "No Module", "Please select a module first.")
             return
-        model_path = (spec.get("model_path") or self.current_parameters.get("module_model_path") or "") if isinstance(spec, dict) else ""
+        model_path = (spec.get("model_path") or "") if isinstance(spec, dict) else ""
         if not model_path or not os.path.exists(model_path):
             model_path = self._select_model_folder(spec.get("folder", "") if isinstance(spec, dict) else "")
             if not model_path:
@@ -3735,6 +3738,9 @@ class GisaxsPredictController(QObject):
             self._current_module["model_path"] = model_path
             self._write_model_path_to_yaml(self._current_module, model_path)
             self.refresh_framework_options_for_current_module()
+        else:
+            model_path = os.path.abspath(model_path)
+            self.current_parameters["module_model_path"] = model_path
 
         # Run load in background
         self._append_status_message("Loading model (this may take a while)...")
@@ -3809,6 +3815,29 @@ class GisaxsPredictController(QObject):
 
     def _on_model_load_finished(self, model: object, err: str, model_path: str) -> None:
         """Finalize model loading on the Qt UI thread."""
+        expected_model_path = str(self.current_parameters.get("module_model_path") or "")
+        if expected_model_path and os.path.abspath(model_path) != os.path.abspath(expected_model_path):
+            self._append_status_message(
+                f"Ignored stale model load result from: {model_path}",
+                level="WARN",
+            )
+            self._model_loading = False
+            btn = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+            if btn:
+                btn.setEnabled(True)
+            self._refresh_predict_readiness()
+            return
+        if not expected_model_path:
+            self._append_status_message(
+                f"Ignored model load result because no module model is selected: {model_path}",
+                level="WARN",
+            )
+            self._model_loading = False
+            btn = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+            if btn:
+                btn.setEnabled(True)
+            self._refresh_predict_readiness()
+            return
         if err:
             self._append_status_message(f"Model load failed: {err}", level="ERROR")
             self.progress_updated.emit(0)

@@ -5,7 +5,7 @@ version: "2.x"
 model:
   format: keras
   # model_path: 允许为空，首次使用需要选择
-  model_path: ""
+  model_path: 'C:\Users\zhaiyufe\Downloads\Geo_Ag_Si_Sputter_Model\Geo_Ag_Si_Sputter_Model\georgios_ff_model_softmax_poisson_10p0_100p0_saved_model'
 preprocess:
   entry: preprocess:run
   # Keep consistent with FF_test.ipynb experimental preprocessing and
