@@ -78,12 +78,12 @@
             "show_q_axis": false
         },
         "last_session": {
-            "last_opened_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00012.cbf",
-            "imported_gisaxs_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00012.cbf",
-            "last_directory": "D:\\PythonCode\\gisaxs_gui\\Experiment_data",
-            "load_mode": "In-situ",
+            "last_opened_file": "E:\\ExpData\\Alex\\p2m\\dl_28_ag_03_dc_12p_insitu_00001_00026.cbf",
+            "imported_gisaxs_file": "E:\\ExpData\\Alex\\p2m\\dl_28_ag_03_dc_12p_insitu_00001_00026.cbf",
+            "last_directory": "E:\\ExpData\\Alex\\p2m",
+            "load_mode": "Single",
             "display_mode": "normal",
-            "stack_value": "1-",
+            "stack_value": "1",
             "stack_count": 1,
             "insitu_range": "1",
             "fit_current_data": true,
@@ -97,7 +97,7 @@
             "center_parallel": -4.0,
             "cutline_vertical": 6.0,
             "cutline_parallel": 7.0,
-            "load_mode": "In-situ",
+            "load_mode": "Single",
             "center_vertical": -4.0,
             "vmin": -4.71
         }

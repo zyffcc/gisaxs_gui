@@ -24,7 +24,7 @@
     "last_selected_model": "",
     "last_constraint_mode": "Current Manual Model",
     "extra_model_paths": [],
-    "full_refine_max_nfev": 80,
+    "full_refine_max_nfev": 200,
     "full_refine_target_logrmse": 1e-08,
     "full_refine_ftol": 1e-08,
     "full_refine_xtol": 1e-08,

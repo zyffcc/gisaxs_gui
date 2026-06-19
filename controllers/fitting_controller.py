@@ -290,6 +290,147 @@ class InsituBatchImageLoader(QThread):
             self.error_occurred.emit(str(exc))
 
 
+class InsituCutWorker(QThread):
+    """Extract an in-situ cut from image arrays off the UI thread."""
+
+    cut_finished = pyqtSignal(dict)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, payload: dict):
+        super().__init__()
+        self.payload = dict(payload or {})
+
+    @staticmethod
+    def _sort_filter_pairs(x_values, y_values):
+        x_arr = np.asarray(x_values, dtype=float).reshape(-1)
+        y_arr = np.asarray(y_values, dtype=float).reshape(-1)
+        n = min(x_arr.size, y_arr.size)
+        x_arr, y_arr = x_arr[:n], y_arr[:n]
+        mask = np.isfinite(x_arr) & np.isfinite(y_arr)
+        x_arr, y_arr = x_arr[mask], y_arr[mask]
+        if x_arr.size == 0:
+            raise RuntimeError("No finite cut data points")
+        order = np.argsort(x_arr, kind="mergesort")
+        return x_arr[order], y_arr[order]
+
+    @staticmethod
+    def _interpolate_series(x, y, x_new, method: str):
+        m = (method or "Linear").lower()
+        if m == "quadratic":
+            try:
+                from scipy.interpolate import interp1d
+                return interp1d(x, y, kind="quadratic", bounds_error=False, fill_value="extrapolate")(x_new)
+            except Exception:
+                coeff = np.polyfit(x, y, deg=min(2, max(1, len(x) - 1)))
+                return np.polyval(coeff, x_new)
+        if m == "spline":
+            try:
+                from scipy.interpolate import CubicSpline
+                return CubicSpline(x, y, extrapolate=True)(x_new)
+            except Exception:
+                pass
+        return np.interp(x_new, x, y)
+
+    def run(self):
+        try:
+            p = self.payload
+            data = np.asarray(p.get("image_data"), dtype=float)
+            if data.ndim != 2:
+                raise RuntimeError("In-situ cut expects a 2D detector image")
+
+            vertical = float(p.get("vertical", 0.0))
+            parallel = float(p.get("parallel", 0.0))
+            center_x = float(p.get("center_x", 0.0))
+            center_y = float(p.get("center_y", 0.0))
+            cut_type = str(p.get("cut_type") or ("horizontal" if vertical <= parallel else "vertical"))
+            show_q_axis = bool(p.get("show_q_axis", False))
+            n_points = max(10, int(p.get("n_points", 300)))
+            method = str(p.get("method", "Linear"))
+
+            if show_q_axis:
+                qy_mesh = np.asarray(p.get("qy_mesh"), dtype=float)
+                qz_mesh = np.asarray(p.get("qz_mesh"), dtype=float)
+                if qy_mesh.shape != data.shape or qz_mesh.shape != data.shape:
+                    raise RuntimeError("Q-space meshgrids are unavailable or not aligned with image")
+                qy_min = center_x - parallel / 2.0
+                qy_max = center_x + parallel / 2.0
+                qz_min = center_y - vertical / 2.0
+                qz_max = center_y + vertical / 2.0
+                roi = (qy_mesh >= qy_min) & (qy_mesh <= qy_max) & (qz_mesh >= qz_min) & (qz_mesh <= qz_max)
+                finite = roi & np.isfinite(data) & np.isfinite(qy_mesh) & np.isfinite(qz_mesh)
+                if cut_type == "horizontal":
+                    indices = np.where(np.any(finite, axis=0))[0]
+                    if indices.size == 0:
+                        raise RuntimeError("No valid data in the selected region")
+                    intensity = np.array([np.mean(data[finite[:, col], col]) for col in indices], dtype=float)
+                    x_line = np.array([np.mean(qy_mesh[finite[:, col], col]) for col in indices], dtype=float)
+                    x_label = r"$q_y$ (nm$^{-1}$)"
+                    title = "Horizontal Cut"
+                else:
+                    indices = np.where(np.any(finite, axis=1))[0]
+                    if indices.size == 0:
+                        raise RuntimeError("No valid data in the selected region")
+                    intensity = np.array([np.mean(data[row, finite[row, :]]) for row in indices], dtype=float)
+                    x_line = np.array([np.mean(qz_mesh[row, finite[row, :]]) for row in indices], dtype=float)
+                    x_label = r"$q_z$ (nm$^{-1}$)"
+                    title = "Vertical Cut"
+                x_valid, y_valid = self._sort_filter_pairs(x_line, intensity)
+                x_interp = np.linspace(float(x_valid.min()), float(x_valid.max()), n_points)
+                y_interp = self._interpolate_series(x_valid, y_valid, x_interp, method)
+                self.cut_finished.emit({
+                    "x_coords": x_interp,
+                    "y_intensity": y_interp,
+                    "x_label": x_label,
+                    "title": title,
+                    "source": "q",
+                    "cut_type": cut_type,
+                    "points": int(len(x_interp)),
+                    "method": method,
+                })
+                return
+
+            img_height, img_width = data.shape
+            x_min = max(0, int(center_x - parallel / 2.0))
+            x_max = min(img_width - 1, int(center_x + parallel / 2.0))
+            y_min = max(0, int(center_y - vertical / 2.0))
+            y_max = min(img_height - 1, int(center_y + vertical / 2.0))
+            y_min_adj = max(0, img_height - 1 - y_max)
+            y_max_adj = min(img_height - 1, img_height - 1 - y_min)
+            region = data[y_min_adj:y_max_adj + 1, x_min:x_max + 1]
+            if region.size == 0:
+                raise RuntimeError("Empty region selected")
+
+            if cut_type == "horizontal":
+                intensity = np.mean(region, axis=0)
+                coords = np.arange(x_min, x_max + 1, dtype=float)
+                title = "Horizontal Cut"
+                x_label = "Pixel / qy"
+            else:
+                intensity = np.mean(region, axis=1)
+                coords = np.arange(y_min_adj, y_max_adj + 1, dtype=float)
+                title = "Vertical Cut"
+                x_label = "Pixel / qz"
+
+            x_valid, y_valid = self._sort_filter_pairs(coords, intensity)
+            if x_valid.size < 2:
+                x_interp, y_interp = x_valid, y_valid
+            else:
+                x_interp = np.linspace(float(x_valid.min()), float(x_valid.max()), n_points)
+                y_interp = self._interpolate_series(x_valid, y_valid, x_interp, method)
+            self.cut_finished.emit({
+                "x_coords": x_interp,
+                "y_intensity": y_interp,
+                "x_label": x_label,
+                "title": title,
+                "source": "pixel",
+                "cut_type": cut_type,
+                "points": int(len(x_interp)),
+                "method": method,
+            })
+        except Exception as exc:
+            self.error_occurred.emit(str(exc))
+
+
 class IndependentMatplotlibWindow(QMainWindow):
     """No description."""
 
@@ -2026,6 +2167,7 @@ class FittingController(QObject):
         self._insitu_workflow_ai_record = None
         self._insitu_workflow_ai_then_refine = False
         self._insitu_batch_loader = None
+        self._insitu_cut_worker = None
         self._insitu_trend_dialog = None
         self._insitu_trend_table = None
         self._insitu_trend_combo = None
@@ -5220,6 +5362,15 @@ class FittingController(QObject):
                 except Exception:
                     pass
                 self._insitu_batch_loader = None
+            cut_worker = getattr(self, "_insitu_cut_worker", None)
+            if cut_worker is not None and cut_worker.isRunning():
+                try:
+                    cut_worker.requestInterruption()
+                    cut_worker.quit()
+                    cut_worker.wait(500)
+                except Exception:
+                    pass
+                self._insitu_cut_worker = None
             if getattr(self, "_insitu_workflow_ai_record", None) is not None:
                 self._stop_ai_fitting_process()
                 self._insitu_workflow_ai_record = None
@@ -5379,29 +5530,8 @@ class FittingController(QObject):
                 self._draw_insitu_workflow_image_preview(image_data, file_path)
 
             if settings["auto_cut"]:
-                valid, message = self._validate_current_cut_settings()
-                if not valid:
-                    record["cut_status"] = f"failed: {message}"
-                    raise RuntimeError(message)
-                old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
-                self._suppress_workflow_plot_updates = not refresh_views
-                try:
-                    self._perform_cut()
-                finally:
-                    self._suppress_workflow_plot_updates = old_suppress
-                if getattr(self, "current_cut_data", None) is None:
-                    raise RuntimeError("Cut did not produce data")
-                excluded_count = self._apply_deleted_point_mask_to_current_cut()
-                if excluded_count:
-                    record["deleted_points_applied"] = int(excluded_count)
-                    self._log_insitu_workflow(
-                        f"Applied deleted-point mask: removed {excluded_count} point(s) from {os.path.basename(file_path)}"
-                    )
-                record["cut_status"] = "ok"
-                if refresh_views:
-                    self._draw_insitu_workflow_region_preview()
-                    self._draw_insitu_workflow_curve_preview()
-                self._log_insitu_workflow(f"Cut completed for {os.path.basename(file_path)}", "SUCCESS")
+                self._start_insitu_cut_worker(image_data, file_path, record, settings, refresh_views)
+                return
 
             if settings["auto_fit"]:
                 self._run_insitu_workflow_fit(record)
@@ -5413,6 +5543,110 @@ class FittingController(QObject):
                 record["cut_status"] = "failed"
             record["error_message"] = str(exc)
             self._finalize_insitu_workflow_file(record=record, failed=True)
+
+    def _start_insitu_cut_worker(self, image_data, file_path: str, record: dict, settings: dict, refresh_views: bool):
+        try:
+            valid, message = self._validate_current_cut_settings()
+            if not valid:
+                record["cut_status"] = f"failed: {message}"
+                raise RuntimeError(message)
+            vertical_value = float(self.ui.gisaxsInputCutLineVerticalValue.value()) if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue') else 0.0
+            parallel_value = float(self.ui.gisaxsInputCutLineParallelValue.value()) if hasattr(self.ui, 'gisaxsInputCutLineParallelValue') else 0.0
+            center_x, center_y = self._get_cut_center_coordinates()
+            show_q_axis = self._should_show_q_axis()
+            qy_mesh = qz_mesh = None
+            if show_q_axis:
+                qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+                if qy_mesh is None or qz_mesh is None:
+                    raise RuntimeError("Q-space meshgrids not available")
+            try:
+                method = self.ui.fitInterpolationMethodValue.currentText() if hasattr(self.ui, 'fitInterpolationMethodValue') else self._interp_method_default
+            except Exception:
+                method = self._interp_method_default
+            payload = {
+                "image_data": image_data,
+                "vertical": vertical_value,
+                "parallel": parallel_value,
+                "center_x": float(center_x),
+                "center_y": float(center_y),
+                "cut_type": "horizontal" if vertical_value <= parallel_value else "vertical",
+                "show_q_axis": bool(show_q_axis),
+                "qy_mesh": qy_mesh,
+                "qz_mesh": qz_mesh,
+                "n_points": self._resolve_cut_points(None),
+                "method": method,
+            }
+            worker = InsituCutWorker(payload)
+            worker.cut_finished.connect(
+                lambda result, rec=record, fp=file_path, st=dict(settings), rv=bool(refresh_views): (
+                    self._on_insitu_cut_finished(result, rec, fp, st, rv)
+                )
+            )
+            worker.error_occurred.connect(
+                lambda message, rec=record, st=dict(settings): self._on_insitu_cut_failed(message, rec, st)
+            )
+            worker.finished.connect(lambda: setattr(self, "_insitu_cut_worker", None))
+            self._insitu_cut_worker = worker
+            record["cut_status"] = "cutting"
+            self._log_insitu_workflow(f"Cut worker started for {os.path.basename(file_path)}")
+            self._refresh_insitu_workflow_status()
+            worker.start()
+        except Exception as exc:
+            record["cut_status"] = "failed"
+            record["error_message"] = str(exc)
+            self._finalize_insitu_workflow_file(record=record, failed=True)
+
+    def _on_insitu_cut_finished(self, result: dict, record: dict, file_path: str, settings: dict, refresh_views: bool):
+        try:
+            if getattr(self, "_insitu_workflow_stop_requested", False) or self._insitu_workflow_state not in ("Watching", "Processing"):
+                return
+            x_coords = np.asarray(result.get("x_coords", []), dtype=float)
+            y_values = np.asarray(result.get("y_intensity", []), dtype=float)
+            if result.get("source") == "pixel":
+                if result.get("cut_type") == "vertical":
+                    self._last_vertical_cut_pixel_rows = x_coords.copy()
+                    x_coords = self._convert_pixel_to_qz(x_coords)
+                    x_label = r"$q_z$ (nm$^{-1}$)"
+                else:
+                    x_coords = self._convert_pixel_to_qy(x_coords)
+                    x_label = r"$q_y$ (nm$^{-1}$)"
+            else:
+                x_label = str(result.get("x_label") or r"$q$ (nm$^{-1}$)")
+            old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
+            self._suppress_workflow_plot_updates = not refresh_views
+            try:
+                self._plot_cut_result(x_coords, y_values, x_label, "Intensity (a.u.)", str(result.get("title") or "Cut"))
+            finally:
+                self._suppress_workflow_plot_updates = old_suppress
+            if getattr(self, "current_cut_data", None) is None:
+                raise RuntimeError("Cut did not produce data")
+            excluded_count = self._apply_deleted_point_mask_to_current_cut()
+            if excluded_count:
+                record["deleted_points_applied"] = int(excluded_count)
+                self._log_insitu_workflow(
+                    f"Applied deleted-point mask: removed {excluded_count} point(s) from {os.path.basename(file_path)}"
+                )
+            record["cut_status"] = "ok"
+            if refresh_views:
+                self._draw_insitu_workflow_region_preview()
+                self._draw_insitu_workflow_curve_preview()
+            self._log_insitu_workflow(
+                f"Cut completed for {os.path.basename(file_path)}: {result.get('points', len(x_coords))} point(s)",
+                "SUCCESS",
+            )
+            if settings.get("auto_fit"):
+                QTimer.singleShot(0, lambda rec=record: self._run_insitu_workflow_fit(rec))
+                return
+            self._finalize_insitu_workflow_file(record=record)
+        except Exception as exc:
+            self._on_insitu_cut_failed(str(exc), record, settings)
+
+    def _on_insitu_cut_failed(self, message: str, record: dict, settings: dict):
+        if getattr(self, "_insitu_workflow_stop_requested", False) or self._insitu_workflow_state not in ("Watching", "Processing"):
+            return
+        record["cut_status"] = "failed"
+        record["error_message"] = str(message)
+        self._finalize_insitu_workflow_file(record=record, failed=True)
 
     def _should_refresh_insitu_views_for_current_file(self) -> bool:
         try:
