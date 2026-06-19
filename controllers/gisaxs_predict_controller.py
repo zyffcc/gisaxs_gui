@@ -3305,9 +3305,14 @@ class GisaxsPredictController(QObject):
                     }
             resize_cfg = params.get("resize") if isinstance(params, dict) else None
             if isinstance(resize_cfg, dict):
+                shape = resize_cfg.get("shape") or resize_cfg.get("size")
+                if isinstance(shape, (list, tuple)) and len(shape) == 2:
+                    height, width = int(shape[0]), int(shape[1])
+                else:
+                    height, width = resize_cfg.get("height"), resize_cfg.get("width")
                 spec["preprocess_resize"] = {
-                    "height": resize_cfg.get("height"),
-                    "width": resize_cfg.get("width"),
+                    "height": height,
+                    "width": width,
                 }
             elif isinstance(resize_cfg, (list, tuple)) and len(resize_cfg) == 2:
                 spec["preprocess_resize"] = {
@@ -3383,9 +3388,16 @@ class GisaxsPredictController(QObject):
         pre_indent = 0
         in_params = False
         params_indent = 0
+        in_steps = False
+        steps_indent = 0
+        steps = []
+        params: Dict[str, object] = {}
+        current_param = ""
+        current_param_indent = 0
         in_mask = False
         mask_indent = 0
         for line in lines:
+            stripped = line.strip()
             if not in_pre:
                 m = re.match(r"(\s*)preprocess\s*:\s*$", line)
                 if m:
@@ -3400,6 +3412,21 @@ class GisaxsPredictController(QObject):
                 m_entry = re.match(r"\s*entry\s*:\s*['\"]?(.*?)['\"]?\s*$", line)
                 if m_entry:
                     spec["preprocess_entry"] = m_entry.group(1)
+                if not in_steps:
+                    m_steps = re.match(r"(\s*)steps\s*:\s*$", line)
+                    if m_steps:
+                        in_steps = True
+                        steps_indent = len(m_steps.group(1))
+                        continue
+                else:
+                    leading_steps = len(line) - len(line.lstrip(" "))
+                    if leading_steps <= steps_indent and stripped:
+                        in_steps = False
+                    else:
+                        m_step = re.match(r"\s*-\s*['\"]?([^'\"]+?)['\"]?\s*$", line)
+                        if m_step:
+                            steps.append(m_step.group(1).strip())
+                        continue
                 if not in_params:
                     m_params = re.match(r"(\s*)params\s*:\s*$", line)
                     if m_params:
@@ -3410,7 +3437,46 @@ class GisaxsPredictController(QObject):
                     leading2 = len(line) - len(line.lstrip(" "))
                     if leading2 <= params_indent:
                         in_params = in_mask = False
+                        current_param = ""
                         continue
+                    m_section = re.match(r"(\s*)(crop|resize|mask)\s*:\s*$", line)
+                    if m_section:
+                        current_param = m_section.group(2)
+                        current_param_indent = len(m_section.group(1))
+                        params.setdefault(current_param, {})
+                        if current_param == "mask":
+                            in_mask = True
+                            mask_indent = current_param_indent
+                        else:
+                            in_mask = False
+                        continue
+                    if current_param:
+                        leading_param = len(line) - len(line.lstrip(" "))
+                        if leading_param <= current_param_indent and stripped:
+                            current_param = ""
+                        else:
+                            m_shape = re.match(r"\s*(shape|size)\s*:\s*\[\s*(\d+)\s*,\s*(\d+)\s*\]\s*$", line)
+                            if m_shape and isinstance(params.get(current_param), dict):
+                                params[current_param][m_shape.group(1)] = [int(m_shape.group(2)), int(m_shape.group(3))]
+                                continue
+                            m_scalar = re.match(r"\s*(left|up|down|right|height|width|method|path|mask_value)\s*:\s*['\"]?(.*?)['\"]?\s*$", line)
+                            if m_scalar and isinstance(params.get(current_param), dict):
+                                key, value = m_scalar.group(1), m_scalar.group(2).strip()
+                                if key in ("left", "up", "down", "right", "height", "width"):
+                                    try:
+                                        params[current_param][key] = int(value)
+                                    except Exception:
+                                        params[current_param][key] = value
+                                elif key == "mask_value":
+                                    try:
+                                        params[current_param][key] = float(value)
+                                    except Exception:
+                                        params[current_param][key] = value
+                                else:
+                                    params[current_param][key] = value
+                                if current_param == "mask" and key == "path":
+                                    spec["mask_path"] = value
+                                continue
                     if not in_mask:
                         m_mask = re.match(r"(\s*)mask\s*:\s*$", line)
                         if m_mask:
@@ -3425,6 +3491,24 @@ class GisaxsPredictController(QObject):
                         m_path = re.match(r"\s*path\s*:\s*['\"]?(.*?)['\"]?\s*$", line)
                         if m_path:
                             spec["mask_path"] = m_path.group(1)
+        if steps:
+            spec["preprocess_steps"] = steps
+        if params:
+            spec["preprocess_params"] = params
+            spec["preprocess_raw"] = {"steps": steps, "params": params}
+            crop_cfg = params.get("crop")
+            if isinstance(crop_cfg, dict):
+                spec["preprocess_crop"] = crop_cfg
+            resize_cfg = params.get("resize")
+            if isinstance(resize_cfg, dict):
+                shape = resize_cfg.get("shape") or resize_cfg.get("size")
+                if isinstance(shape, (list, tuple)) and len(shape) == 2:
+                    spec["preprocess_resize"] = {"height": int(shape[0]), "width": int(shape[1])}
+                elif "height" in resize_cfg and "width" in resize_cfg:
+                    spec["preprocess_resize"] = {
+                        "height": int(resize_cfg.get("height")),
+                        "width": int(resize_cfg.get("width")),
+                    }
 
         # Must have at least name
         return spec if (spec.get("name") or spec.get("id")) else None
