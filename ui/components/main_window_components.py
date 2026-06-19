@@ -274,7 +274,7 @@ class CardFrame(QFrame):
         self.setObjectName(object_name)
         self.setProperty("card", True)
         self.setMinimumWidth(SECTION_MIN_WIDTH)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
 
         self.body_layout = QVBoxLayout(self)
         self.body_layout.setContentsMargins(CARD_MARGIN, 12, CARD_MARGIN, CARD_MARGIN)
@@ -288,6 +288,17 @@ class CardFrame(QFrame):
     def add_content(self, widget: QWidget, stretch: int = 0) -> None:
         widget.setParent(self)
         self.body_layout.addWidget(widget, stretch)
+
+    def lock_to_natural_height(self) -> None:
+        if self.layout() is not None:
+            self.layout().activate()
+        self.adjustSize()
+        natural_height = max(self.minimumSizeHint().height(), self.sizeHint().height())
+        if natural_height > 0:
+            self.setMinimumHeight(natural_height)
+        self.setMaximumHeight(16777215)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.updateGeometry()
 
 
 class CollapsibleCardFrame(QFrame):
@@ -311,7 +322,7 @@ class CollapsibleCardFrame(QFrame):
         self.setObjectName(object_name)
         self.setProperty("card", True)
         self.setMinimumWidth(SECTION_MIN_WIDTH)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
 
         self.body_layout = QVBoxLayout(self)
         self.body_layout.setContentsMargins(CARD_MARGIN, 8, CARD_MARGIN, CARD_MARGIN)
@@ -370,7 +381,7 @@ class CollapsibleCardFrame(QFrame):
             margins = self.body_layout.contentsMargins()
             header_height = self.header_widget.sizeHint().height()
             self.setMinimumHeight(max(header_height + margins.top() + margins.bottom(), self.sizeHint().height()))
-            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         else:
             header_height = self.header_widget.sizeHint().height()
             margins = self.body_layout.contentsMargins()
@@ -396,15 +407,14 @@ class GisaxsInputCard(CardFrame):
         self.ui = ui
         content = ui.gisaxsInputBox
         profile = profile or current_profile(ui.centralwidget)
-        self.setMinimumHeight(scale_value(332, profile, 272))
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         content.setTitle("")
         if hasattr(content, "setFlat"):
             content.setFlat(True)
-        content.setMinimumHeight(scale_value(272, profile, 224))
-        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self._rebuild_layout(content, profile)
         self.add_content(content)
+        self.lock_to_natural_height()
 
     def _rebuild_layout(self, content: QWidget, profile) -> None:
         layout = content.layout()
@@ -579,8 +589,7 @@ class CutLineCard(CardFrame):
         super().__init__("Cut Line and Detector", "CutLineCard")
         self.ui = ui
         self.profile = profile or current_profile(ui.centralwidget)
-        self.setMinimumHeight(scale_value(370, self.profile, 315))
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self._managed_value_spinboxes = []
         self._managed_step_spinboxes = []
         self._managed_step_reset_buttons = []
@@ -661,6 +670,7 @@ class CutLineCard(CardFrame):
         content_layout.addWidget(detector_group)
         self.body_layout.addLayout(content_layout)
         self._apply_responsive_profile()
+        self.lock_to_natural_height()
 
     def _detach_generated_widgets(self) -> None:
         widgets = [
@@ -734,7 +744,7 @@ class CutLineCard(CardFrame):
             "padding: 0 4px;"
             "}"
         )
-        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         return group
 
     @staticmethod
@@ -803,8 +813,7 @@ class FittingControlsCard(CardFrame):
         group_spacing = scale_value(12, self.profile, 8)
         group_margin = scale_value(10, self.profile, 8)
         group_top = scale_value(18, self.profile, 14)
-        self.setMinimumHeight(scale_value(640, self.profile, 560))
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self._managed_group_layouts = []
         self._managed_buttons = []
         self._managed_inputs = []
@@ -1269,6 +1278,7 @@ class FittingControlsCard(CardFrame):
         layout.addWidget(method_group)
         layout.addWidget(global_group)
         self.apply_responsive_profile(self.profile)
+        self.lock_to_natural_height()
 
     def _make_group(self, title: str) -> QGroupBox:
         group = QGroupBox(title, self)
@@ -1287,7 +1297,7 @@ class FittingControlsCard(CardFrame):
             "padding: 0 4px;"
             "}"
         )
-        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         return group
 
     def _style_info_label(self, label: QLabel) -> None:
@@ -1346,7 +1356,6 @@ class FittingControlsCard(CardFrame):
         group_spacing = scale_value(12, profile, 8)
         group_margin = scale_value(10, profile, 8)
         group_top = scale_value(18, profile, 14)
-        self.setMinimumHeight(scale_value(640, profile, 560))
         self.setMaximumHeight(16777215)
 
         if hasattr(self, "_main_controls_layout"):
@@ -1388,6 +1397,8 @@ class FittingControlsCard(CardFrame):
         global_group = self.findChild(QGroupBox, "GlobalParametersGroup")
         if global_group is not None:
             global_group.setMinimumHeight(scale_value(238, profile, 210))
+            global_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.lock_to_natural_height()
         self.updateGeometry()
 
     def _show_method_not_implemented(self) -> None:
@@ -1414,8 +1425,7 @@ class ModelParameterCard(CardFrame):
     def __init__(self, ui, profile=None):
         super().__init__("Model Parameters", "ModelParameterCard")
         profile = profile or current_profile(ui.centralwidget)
-        self.setMinimumHeight(scale_value(220, profile, 180))
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
 
         add_button = getattr(ui, "pushButton", None)
         if add_button is not None:
@@ -1444,7 +1454,7 @@ class ModelParameterCard(CardFrame):
         _take_widget(ui.gridLayout_24, ui.widget_7)
         ui.widget_7.setMinimumWidth(0)
         ui.widget_7.setMaximumWidth(16777215)
-        ui.widget_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        ui.widget_7.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         if ui.widget_7.layout() is not None:
             ui.widget_7.layout().setContentsMargins(0, 0, 0, 0)
             ui.widget_7.layout().setSpacing(0)
@@ -1454,7 +1464,7 @@ class ModelParameterCard(CardFrame):
             content_widget = inner_scroll_area.takeWidget()
             if content_widget is not None:
                 content_widget.setParent(ui.widget_7)
-                content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+                content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
                 ui.widget_7.layout().addWidget(content_widget)
             inner_scroll_area.deleteLater()
         particle_layout = getattr(ui, "scrollAreaWidgetContents", None)
@@ -1466,7 +1476,8 @@ class ModelParameterCard(CardFrame):
             particle_layout.setAlignment(Qt.AlignTop)
             for index in range(particle_layout.count()):
                 particle_layout.setStretch(index, 0)
-        self.body_layout.addWidget(ui.widget_7, 1)
+        self.body_layout.addWidget(ui.widget_7, 0)
+        self.lock_to_natural_height()
 
 
 class DetectorPreviewCard(CollapsibleCardFrame):
@@ -1888,32 +1899,28 @@ class GisaxsFittingWorkspace:
         cut_line_card = CutLineCard(self.ui, self.profile)
         fitting_controls_card = FittingControlsCard(self.ui, self.profile)
         model_parameters_card = ModelParameterCard(self.ui, self.profile)
-        fixed_layout.addWidget(gisaxs_card)
-        fixed_layout.addWidget(cut_line_card)
-        fixed_layout.addWidget(fitting_controls_card)
+        fixed_layout.addWidget(gisaxs_card, 0)
+        fixed_layout.addWidget(cut_line_card, 0)
+        fixed_layout.addWidget(fitting_controls_card, 0)
+        fixed_layout.addWidget(model_parameters_card, 0)
         fixed_layout.addStretch(1)
         fixed_stack_min_height = self._fixed_stack_min_height()
         self.fixed_controls_stack.setMinimumHeight(fixed_stack_min_height)
-        self.work_splitter.setMinimumHeight(
-            fixed_stack_min_height
-            + self.DEFAULT_WORK_SIZES[1]
-            + self.work_splitter.handleWidth()
-        )
-        self.fixed_controls_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-
-        self.work_splitter.addWidget(self.fixed_controls_stack)
-        self.work_splitter.addWidget(model_parameters_card)
-        self.work_splitter.setStretchFactor(0, 0)
-        self.work_splitter.setStretchFactor(1, 1)
-        for index in range(self.work_splitter.count()):
-            self.work_splitter.setCollapsible(index, False)
+        self.fixed_controls_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.work_splitter.hide()
+        self.work_splitter.setParent(None)
 
         self.work_area_contents = QWidget()
         self.work_area_contents.setObjectName("gisaxsWorkAreaContents")
         layout = QVBoxLayout(self.work_area_contents)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(0)
-        layout.addWidget(self.work_splitter)
+        layout.setSpacing(CARD_SPACING)
+        layout.addWidget(self.fixed_controls_stack, 0, Qt.AlignTop)
+        layout.addStretch(1)
+        self.work_area_contents.setMinimumHeight(
+            fixed_stack_min_height + layout.contentsMargins().top() + layout.contentsMargins().bottom()
+        )
+        self.work_area_contents.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
 
         self.ui.gisaxsFittingPageScrollArea.setWidget(self.work_area_contents)
         self.page_splitter.addWidget(self.ui.gisaxsFittingPageScrollArea)
@@ -2081,26 +2088,27 @@ class GisaxsFittingWorkspace:
                 self._set_page_sizes(page_sizes)
             else:
                 self._set_page_sizes(self.profile.page_sizes)
-            if isinstance(work_sizes, (list, tuple)) and len(work_sizes) == 2:
+            if self.work_splitter.count() >= 2 and isinstance(work_sizes, (list, tuple)) and len(work_sizes) == 2:
                 self.work_splitter.setSizes(
                     [
                         max(self.DEFAULT_WORK_SIZES[0], int(work_sizes[0])),
                         max(self.DEFAULT_WORK_SIZES[1], int(work_sizes[1])),
                     ]
                 )
-            else:
+            elif self.work_splitter.count() >= 2:
                 self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
             return
 
         self._set_page_sizes(self.profile.page_sizes)
-        self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
+        if self.work_splitter.count() >= 2:
+            self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
 
     def save_state(self) -> None:
         user_settings.set(
             self.SETTINGS_KEY,
             {
                 "page": self.page_splitter.sizes(),
-                "work": self.work_splitter.sizes(),
+                "work": self.work_splitter.sizes() if self.work_splitter.count() >= 2 else [],
                 "profile": self.profile.key,
             },
         )
@@ -2120,16 +2128,21 @@ class GisaxsFittingWorkspace:
 
         fixed_min = self._fixed_stack_min_height()
         self.fixed_controls_stack.setMinimumHeight(fixed_min)
-        self.work_splitter.setMinimumHeight(
-            fixed_min + self.DEFAULT_WORK_SIZES[1] + self.work_splitter.handleWidth()
-        )
+        if self.work_area_contents.layout() is not None:
+            margins = self.work_area_contents.layout().contentsMargins()
+            self.work_area_contents.setMinimumHeight(fixed_min + margins.top() + margins.bottom())
+            self.work_area_contents.layout().invalidate()
+        self.fixed_controls_stack.layout().invalidate()
+        self.fixed_controls_stack.adjustSize()
+        self.work_area_contents.adjustSize()
         self._set_page_sizes(profile.page_sizes)
-        self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
+        if self.work_splitter.count() >= 2:
+            self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
 
     def _fixed_stack_min_height(self) -> int:
-        card_names = ("GisaxsInputCard", "CutLineCard", "FittingControlsCard")
+        card_names = ("GisaxsInputCard", "CutLineCard", "FittingControlsCard", "ModelParameterCard")
         card_heights = [
-            widget.minimumHeight()
+            max(widget.minimumHeight(), widget.minimumSizeHint().height(), widget.sizeHint().height())
             for name in card_names
             if (widget := self.fixed_controls_stack.findChild(QWidget, name)) is not None
         ]

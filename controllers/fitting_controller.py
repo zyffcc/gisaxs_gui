@@ -4288,8 +4288,8 @@ class FittingController(QObject):
             button.setToolTip("Open the In-situ workflow automation panel")
             button.clicked.connect(self._open_insitu_workflow_dialog)
             button.setText("In-situ Workflow")
-            button.setMinimumHeight(22)
-            button.setMaximumHeight(26)
+            button.setMinimumHeight(32)
+            button.setMaximumHeight(36)
             button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             self._insitu_workflow_button = button
 
@@ -4335,11 +4335,11 @@ class FittingController(QObject):
         holder = QWidget(parent)
         holder.setObjectName("gisaxsInputInsituWorkflowModeBox")
         holder_layout = QVBoxLayout(holder)
-        holder_layout.setContentsMargins(0, 0, 0, 0)
-        holder_layout.setSpacing(3)
+        holder_layout.setContentsMargins(0, 0, 0, 5)
+        holder_layout.setSpacing(4)
         holder_layout.addWidget(combo, 0, Qt.AlignLeft)
         holder_layout.addWidget(button, 0, Qt.AlignLeft)
-        holder.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        holder.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
         return holder
 
     def _find_layout_containing_widget(self, widget):
@@ -4374,6 +4374,17 @@ class FittingController(QObject):
             button = getattr(self, '_insitu_workflow_button', None)
             if button is not None:
                 button.setVisible(getattr(self, 'load_mode', 'Single') == 'In-situ')
+                for widget in (
+                    button.parentWidget(),
+                    getattr(self.ui, 'gisaxsInputBox', None),
+                    getattr(self.ui, 'gisaxsInputStackWidget', None),
+                ):
+                    if widget is None:
+                        continue
+                    layout = widget.layout()
+                    if layout is not None:
+                        layout.invalidate()
+                    widget.updateGeometry()
         except Exception:
             pass
 
