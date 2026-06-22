@@ -78,14 +78,14 @@
             "show_q_axis": false
         },
         "last_session": {
-            "last_opened_file": "E:\\ExpData\\Alex\\p2m\\dl_28_ag_03_dc_12p_insitu_00001_00026.cbf",
-            "imported_gisaxs_file": "E:\\ExpData\\Alex\\p2m\\dl_28_ag_03_dc_12p_insitu_00001_00026.cbf",
-            "last_directory": "E:\\ExpData\\Alex\\p2m",
+            "last_opened_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00020.cbf",
+            "imported_gisaxs_file": "D:\\PythonCode\\gisaxs_gui\\Experiment_data\\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00020.cbf",
+            "last_directory": "D:\\PythonCode\\gisaxs_gui\\Experiment_data",
             "load_mode": "Single",
             "display_mode": "normal",
             "stack_value": "1",
             "stack_count": 1,
-            "insitu_range": "1",
+            "insitu_range": "",
             "fit_current_data": true,
             "fit_log_x": true,
             "fit_log_y": true,

@@ -145,5 +145,8 @@
       "min": 0.0,
       "max": 145249.872
     }
-  }
+  },
+  "remote.copy_to_cache": true,
+  "remote.cache_dir": "D:\\PythonCode\\gisaxs_gui\\.gimap_cache\\remote_files",
+  "remote.cache_limit_gb": 3.0
 }

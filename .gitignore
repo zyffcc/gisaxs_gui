@@ -1,6 +1,7 @@
 # 实验数据文件夹（节省云端空间）
 Experiment_data/
 Experiment_SAXS_data/
+.gitmap_cache/
 
 # 但保留TestSAXSdata
 !TestSAXSdata/

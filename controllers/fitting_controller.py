@@ -13,6 +13,7 @@ import datetime
 import copy
 import sys
 import shutil
+import hashlib
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 import numpy as np
@@ -260,10 +261,35 @@ class InsituBatchImageLoader(QThread):
 
     image_loaded = pyqtSignal(object, str)
     error_occurred = pyqtSignal(str)
+    progress_updated = pyqtSignal(int, str)
+    remote_file_detected = pyqtSignal(str)
+    copy_started = pyqtSignal(str, str)
+    copy_finished = pyqtSignal(str, str)
 
-    def __init__(self, file_paths):
+    def __init__(self, file_paths, copy_remote_to_cache=True, cache_dir=None, cache_limit_gb=3.0):
         super().__init__()
         self.file_paths = list(file_paths or [])
+        self.copy_remote_to_cache = bool(copy_remote_to_cache)
+        self.cache_dir = cache_dir or _default_remote_cache_dir()
+        self.cache_limit_gb = float(cache_limit_gb or 3.0)
+
+    def _prepare_file_for_read(self, source_path: str) -> str:
+        source_path = normalize_path(source_path)
+        if self.copy_remote_to_cache and is_cloud_or_network_path(source_path):
+            self.remote_file_detected.emit(source_path)
+            self.progress_updated.emit(5, "Copying remote in-situ file to local cache...")
+            target = _cache_file_path_for_source(source_path, self.cache_dir)
+            self.copy_started.emit(source_path, target)
+            cached = _copy_remote_file_to_cache(
+                source_path,
+                self.cache_dir,
+                progress_callback=self.progress_updated.emit,
+                interrupt_callback=self.isInterruptionRequested,
+            )
+            self.copy_finished.emit(source_path, cached)
+            _enforce_remote_cache_limit(self.cache_dir, self.cache_limit_gb)
+            return cached
+        return source_path
 
     def run(self):
         try:
@@ -274,10 +300,15 @@ class InsituBatchImageLoader(QThread):
             import fabio
 
             summed = None
-            for path in self.file_paths:
+            for index, path in enumerate(self.file_paths):
                 if self.isInterruptionRequested():
                     raise RuntimeError("Batch loading stopped")
-                cbf_image = fabio.open(path)
+                self.progress_updated.emit(
+                    int(10 + (index / max(1, len(self.file_paths))) * 70),
+                    f"Loading in-situ file {index + 1}/{len(self.file_paths)}"
+                )
+                effective_path = self._prepare_file_for_read(path)
+                cbf_image = fabio.open(effective_path)
                 data = cbf_image.data.astype(np.float32, copy=False)
                 if summed is None:
                     summed = data.copy()
@@ -1816,12 +1847,204 @@ class UnifiedDisplayManager:
         }
 
 
+REMOTE_PATH_MARKERS = (
+    "onedrive",
+    "dropbox",
+    "google drive",
+    "googledrive",
+    "iclouddrive",
+    "icloud",
+    "nextcloud",
+    "owncloud",
+)
+
+
+def _default_remote_cache_dir() -> str:
+    return normalize_path(os.path.join(os.getcwd(), ".gimap_cache", "remote_files"))
+
+
+def _is_mapped_network_drive(path: str) -> bool:
+    try:
+        if os.name != "nt":
+            return False
+        drive, _tail = os.path.splitdrive(os.path.abspath(path))
+        if not drive:
+            return False
+        import ctypes
+        drive_root = drive + "\\"
+        return int(ctypes.windll.kernel32.GetDriveTypeW(drive_root)) == 4
+    except Exception:
+        return False
+
+
+def is_cloud_or_network_path(path: str) -> bool:
+    """Detect paths that should be copied locally before slow I/O."""
+    try:
+        if not path:
+            return False
+        text = normalize_path(str(path))
+        if text.startswith("\\\\") or text.startswith("//"):
+            return True
+        lowered = text.replace("\\", "/").lower()
+        if any(marker in lowered for marker in REMOTE_PATH_MARKERS):
+            return True
+        if _is_mapped_network_drive(text):
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _cache_file_path_for_source(source_path: str, cache_dir: str) -> str:
+    source_norm = normalize_path(source_path)
+    digest = hashlib.sha256(source_norm.encode("utf-8", errors="ignore")).hexdigest()[:16]
+    name = os.path.basename(source_norm) or "remote_file"
+    return normalize_path(os.path.join(cache_dir or _default_remote_cache_dir(), f"{digest}_{name}"))
+
+
+def _is_remote_raw_cache_name(name: str) -> bool:
+    return bool(re.match(r"^[0-9a-f]{16}_.+", name or "", re.IGNORECASE))
+
+
+def _copy_remote_file_to_cache(source_path: str, cache_dir: str, progress_callback=None, interrupt_callback=None) -> str:
+    source_path = normalize_path(source_path)
+    cache_dir = normalize_path(cache_dir or _default_remote_cache_dir())
+    os.makedirs(cache_dir, exist_ok=True)
+    target_path = _cache_file_path_for_source(source_path, cache_dir)
+    try:
+        src_stat = os.stat(source_path)
+        if os.path.exists(target_path):
+            dst_stat = os.stat(target_path)
+            if int(dst_stat.st_size) == int(src_stat.st_size) and int(dst_stat.st_mtime) >= int(src_stat.st_mtime):
+                if progress_callback:
+                    progress_callback(100, f"Using cached remote file: {os.path.basename(source_path)}")
+                return target_path
+        total = max(1, int(src_stat.st_size))
+        copied = 0
+        chunk_size = 8 * 1024 * 1024
+        tmp_path = target_path + ".part"
+        with open(source_path, "rb") as src, open(tmp_path, "wb") as dst:
+            while True:
+                if interrupt_callback and interrupt_callback():
+                    raise RuntimeError("Remote file copy cancelled")
+                chunk = src.read(chunk_size)
+                if not chunk:
+                    break
+                dst.write(chunk)
+                copied += len(chunk)
+                if progress_callback:
+                    pct = int(min(99, max(1, copied * 100 / total)))
+                    progress_callback(pct, f"Copying remote file... {pct}%")
+        try:
+            os.utime(tmp_path, (src_stat.st_atime, src_stat.st_mtime))
+        except Exception:
+            pass
+        os.replace(tmp_path, target_path)
+        if progress_callback:
+            progress_callback(100, f"Cached remote file: {os.path.basename(source_path)}")
+        return target_path
+    finally:
+        try:
+            part_path = target_path + ".part"
+            if os.path.exists(part_path):
+                os.remove(part_path)
+        except Exception:
+            pass
+
+
+def _enforce_remote_cache_limit(cache_dir: str, max_gb: float) -> None:
+    try:
+        cache_dir = normalize_path(cache_dir or _default_remote_cache_dir())
+        limit_bytes = int(max(0.25, float(max_gb or 3.0)) * 1024 ** 3)
+        if not os.path.isdir(cache_dir):
+            return
+        files = []
+        total = 0
+        for entry in os.scandir(cache_dir):
+            if not entry.is_file() or entry.name.endswith(".part") or not _is_remote_raw_cache_name(entry.name):
+                continue
+            try:
+                st = entry.stat()
+            except Exception:
+                continue
+            files.append((st.st_mtime, st.st_size, entry.path))
+            total += int(st.st_size)
+        if total <= limit_bytes:
+            return
+        for _mtime, size, path in sorted(files):
+            if total <= limit_bytes:
+                break
+            try:
+                os.remove(path)
+                total -= int(size)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+class FolderImageScanWorker(QThread):
+    """Scan one folder level for CBF navigation without blocking the UI."""
+
+    scan_finished = pyqtSignal(str, list)
+    status_updated = pyqtSignal(str)
+    error_occurred = pyqtSignal(str, str)
+
+    def __init__(self, file_path: str, extensions: tuple, max_files: int = 5000):
+        super().__init__()
+        self.file_path = normalize_path(file_path or "")
+        self.extensions = tuple(extensions or (".cbf",))
+        self.max_files = int(max(100, max_files or 5000))
+
+    def _natural_sort_key(self, path):
+        name = os.path.basename(path)
+        return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', name)]
+
+    def run(self):
+        try:
+            if not self.file_path:
+                self.scan_finished.emit("", [])
+                return
+            remote = is_cloud_or_network_path(self.file_path)
+            if remote:
+                self.status_updated.emit("Remote/cloud folder detected. Scanning current directory only...")
+            if os.path.isdir(self.file_path):
+                folder = self.file_path
+            else:
+                folder = os.path.dirname(self.file_path)
+            if not folder or not os.path.isdir(folder):
+                self.error_occurred.emit(self.file_path, "Folder does not exist")
+                return
+            files = []
+            with os.scandir(folder) as it:
+                for entry in it:
+                    if self.isInterruptionRequested():
+                        return
+                    if len(files) >= self.max_files:
+                        self.status_updated.emit(f"Folder scan limited to {self.max_files} files")
+                        break
+                    try:
+                        if entry.is_file() and os.path.splitext(entry.name)[1].lower() in self.extensions:
+                            files.append(normalize_path(entry.path))
+                    except Exception:
+                        continue
+            files.sort(key=self._natural_sort_key)
+            self.scan_finished.emit(self.file_path, files)
+        except Exception as exc:
+            self.error_occurred.emit(self.file_path, str(exc))
+
+
 class AsyncImageLoader(QThread):
     """No description."""
 
     image_loaded = pyqtSignal(np.ndarray, str)  # ??????, ?????
     progress_updated = pyqtSignal(int, str)  # ???, ???????
     error_occurred = pyqtSignal(str)  # ?????
+    remote_file_detected = pyqtSignal(str)
+    copy_started = pyqtSignal(str, str)
+    copy_finished = pyqtSignal(str, str)
+    load_started = pyqtSignal(str)
+    load_finished = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -1829,12 +2052,50 @@ class AsyncImageLoader(QThread):
         self.stack_count = 1
         self._image_cache = OrderedDict()
         self._image_cache_limit = 8
+        self.copy_remote_to_cache = True
+        self.remote_cache_dir = _default_remote_cache_dir()
+        self.remote_cache_limit_gb = 3.0
+        self._last_source_files = []
+        self._last_effective_files = []
+
+    def configure_remote_cache(self, enabled=True, cache_dir=None, max_gb=3.0):
+        self.copy_remote_to_cache = bool(enabled)
+        self.remote_cache_dir = normalize_path(cache_dir or _default_remote_cache_dir())
+        try:
+            self.remote_cache_limit_gb = float(max_gb)
+        except Exception:
+            self.remote_cache_limit_gb = 3.0
 
     def load_image(self, file_path, stack_count=1):
         """No description."""
+        if self.isRunning():
+            self.requestInterruption()
+            self.progress_updated.emit(0, "Previous image load is still running; please wait or cancel the current workflow.")
+            return
         self.file_path = file_path
         self.stack_count = stack_count
         self.start()
+
+    def _prepare_file_for_read(self, source_path: str) -> str:
+        source_path = normalize_path(source_path)
+        if self.copy_remote_to_cache and is_cloud_or_network_path(source_path):
+            self.remote_file_detected.emit(source_path)
+            self.progress_updated.emit(
+                5,
+                "This file appears to be in a cloud or network folder. Copying to local cache before processing..."
+            )
+            target = _cache_file_path_for_source(source_path, self.remote_cache_dir)
+            self.copy_started.emit(source_path, target)
+            cached = _copy_remote_file_to_cache(
+                source_path,
+                self.remote_cache_dir,
+                progress_callback=self.progress_updated.emit,
+                interrupt_callback=self.isInterruptionRequested,
+            )
+            self.copy_finished.emit(source_path, cached)
+            _enforce_remote_cache_limit(self.remote_cache_dir, self.remote_cache_limit_gb)
+            return cached
+        return source_path
 
     def run(self):
         """No description."""
@@ -1844,6 +2105,7 @@ class AsyncImageLoader(QThread):
                 return
 
             self.progress_updated.emit(10, "Loading file...")
+            self.load_started.emit(self.file_path)
 
             file_ext = os.path.splitext(self.file_path)[1].lower()
 
@@ -1880,6 +2142,7 @@ class AsyncImageLoader(QThread):
                 self.progress_updated.emit(90, "Processing image data...")
                 self.image_loaded.emit(image_data, self.file_path)
                 self.progress_updated.emit(100, "Done")
+                self.load_finished.emit(self.file_path)
             else:
                 self.error_occurred.emit("Failed to load image data")
 
@@ -1891,7 +2154,10 @@ class AsyncImageLoader(QThread):
         try:
             import fabio
             cbf_file = normalize_path(cbf_file)
-            cbf_image = fabio.open(cbf_file)
+            effective_file = self._prepare_file_for_read(cbf_file)
+            self._last_source_files = [cbf_file]
+            self._last_effective_files = [effective_file]
+            cbf_image = fabio.open(effective_file)
             data = cbf_image.data
 
             if data.dtype != np.float32:
@@ -1923,6 +2189,8 @@ class AsyncImageLoader(QThread):
 
             summed_data = None
             files_to_stack = cbf_files[start_index:start_index + stack_count]
+            self._last_source_files = [normalize_path(os.path.join(file_dir, name)) for name in files_to_stack]
+            self._last_effective_files = []
 
             import fabio
             for i, file_name in enumerate(files_to_stack):
@@ -1931,7 +2199,9 @@ class AsyncImageLoader(QThread):
                 self.progress_updated.emit(progress, f"Processing file {i+1}/{len(files_to_stack)}: {file_name}")
 
                 try:
-                    cbf_image = fabio.open(file_path)
+                    effective_file = self._prepare_file_for_read(file_path)
+                    self._last_effective_files.append(effective_file)
+                    cbf_image = fabio.open(effective_file)
                     data = cbf_image.data.astype(np.float32, copy=False) if cbf_image.data.dtype != np.float32 else cbf_image.data
 
                     if summed_data is None:
@@ -2005,8 +2275,14 @@ class FittingController(QObject):
         self.current_file_list = []
         self._folder_image_files = []
         self._folder_image_index = -1
+        self._folder_image_scan_worker = None
+        self._folder_image_scan_cache = {}
         self._previous_image_button = None
         self._next_image_button = None
+        self._remote_cache_controls = {}
+        self._remote_copy_enabled = True
+        self._remote_cache_dir = _default_remote_cache_dir()
+        self._remote_cache_limit_gb = 3.0
         # ??????????????????????
         self.data = None              # ????????????????????????????
         self.summed_data = None       # ???????????????????????
@@ -2102,6 +2378,11 @@ class FittingController(QObject):
         self.async_image_loader.image_loaded.connect(self._on_image_loaded)
         self.async_image_loader.progress_updated.connect(self._on_image_loading_progress)
         self.async_image_loader.error_occurred.connect(self._on_image_loading_error)
+        self.async_image_loader.remote_file_detected.connect(self._on_remote_file_detected)
+        self.async_image_loader.copy_started.connect(self._on_remote_copy_started)
+        self.async_image_loader.copy_finished.connect(self._on_remote_copy_finished)
+        self.async_image_loader.load_started.connect(self._on_remote_load_started)
+        self.async_image_loader.load_finished.connect(self._on_remote_load_finished)
 
         # ??????????
         self.current_parameter_selection = None
@@ -2229,6 +2510,8 @@ class FittingController(QObject):
         self._initialize_ui()
         self._setup_folder_navigation_ui()
         self._setup_insitu_workflow_button()
+        self._load_remote_cache_settings()
+        self._setup_remote_cache_controls()
         # ????????????
         self._setup_connections()
         # ???????????????????????
@@ -2292,6 +2575,160 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Failed to set up image navigation: {str(e)}")
 
+    def _load_remote_cache_settings(self):
+        try:
+            from core.user_settings import user_settings
+            self._remote_copy_enabled = bool(user_settings.get("remote.copy_to_cache", True))
+            self._remote_cache_dir = normalize_path(user_settings.get("remote.cache_dir", _default_remote_cache_dir()))
+            self._remote_cache_limit_gb = float(user_settings.get("remote.cache_limit_gb", 3.0))
+        except Exception:
+            self._remote_copy_enabled = True
+            self._remote_cache_dir = _default_remote_cache_dir()
+            self._remote_cache_limit_gb = 3.0
+        self._configure_async_loader_remote_cache()
+
+    def _save_remote_cache_settings(self):
+        try:
+            from core.user_settings import user_settings
+            user_settings.set("remote.copy_to_cache", bool(self._remote_copy_enabled))
+            user_settings.set("remote.cache_dir", normalize_path(self._remote_cache_dir or _default_remote_cache_dir()))
+            user_settings.set("remote.cache_limit_gb", float(self._remote_cache_limit_gb or 3.0))
+            user_settings.save_settings()
+        except Exception:
+            pass
+
+    def _configure_async_loader_remote_cache(self):
+        try:
+            self.async_image_loader.configure_remote_cache(
+                enabled=bool(self._remote_copy_enabled),
+                cache_dir=self._remote_cache_dir,
+                max_gb=self._remote_cache_limit_gb,
+            )
+        except Exception:
+            pass
+
+    def _setup_remote_cache_controls(self):
+        try:
+            if getattr(self, "_remote_cache_controls", None):
+                return
+            parent = getattr(self.ui, "gisaxsInputBox", None)
+            if parent is None or parent.layout() is None:
+                return
+            row = QWidget(parent)
+            row.setObjectName("gisaxsRemoteCacheRow")
+            layout = QHBoxLayout(row)
+            layout.setContentsMargins(0, 2, 0, 0)
+            layout.setSpacing(6)
+
+            copy_cb = QCheckBox("Copy cloud/network files to local cache", row)
+            copy_cb.setChecked(bool(self._remote_copy_enabled))
+            path_edit = QLineEdit(row)
+            path_edit.setText(self._remote_cache_dir)
+            path_edit.setPlaceholderText(".gimap_cache/remote_files")
+            path_edit.setMinimumWidth(180)
+            browse_btn = QPushButton("...", row)
+            browse_btn.setFixedWidth(32)
+            limit_spin = QDoubleSpinBox(row)
+            limit_spin.setRange(0.25, 100.0)
+            limit_spin.setDecimals(2)
+            limit_spin.setSingleStep(0.5)
+            limit_spin.setValue(float(self._remote_cache_limit_gb or 3.0))
+            limit_spin.setSuffix(" GB")
+            clear_btn = QPushButton("Clear Cache", row)
+
+            layout.addWidget(copy_cb)
+            layout.addWidget(QLabel("Cache:", row))
+            layout.addWidget(path_edit, 1)
+            layout.addWidget(browse_btn)
+            layout.addWidget(QLabel("Max:", row))
+            layout.addWidget(limit_spin)
+            layout.addWidget(clear_btn)
+            row.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+            parent.layout().addWidget(row)
+
+            self._remote_cache_controls = {
+                "row": row,
+                "copy": copy_cb,
+                "path": path_edit,
+                "browse": browse_btn,
+                "limit": limit_spin,
+                "clear": clear_btn,
+            }
+            copy_cb.toggled.connect(self._on_remote_cache_setting_changed)
+            path_edit.editingFinished.connect(self._on_remote_cache_setting_changed)
+            limit_spin.valueChanged.connect(self._on_remote_cache_setting_changed)
+            browse_btn.clicked.connect(self._browse_remote_cache_folder)
+            clear_btn.clicked.connect(self._clear_remote_file_cache)
+        except Exception as exc:
+            self.status_updated.emit(f"Remote cache controls failed: {exc}")
+
+    def _on_remote_cache_setting_changed(self):
+        try:
+            widgets = getattr(self, "_remote_cache_controls", {})
+            copy_cb = widgets.get("copy")
+            path_edit = widgets.get("path")
+            limit_spin = widgets.get("limit")
+            self._remote_copy_enabled = bool(copy_cb.isChecked()) if copy_cb is not None else True
+            self._remote_cache_dir = normalize_path(path_edit.text().strip()) if path_edit is not None else _default_remote_cache_dir()
+            self._remote_cache_limit_gb = float(limit_spin.value()) if limit_spin is not None else 3.0
+            self._configure_async_loader_remote_cache()
+            self._save_remote_cache_settings()
+        except Exception as exc:
+            self.status_updated.emit(f"Remote cache setting failed: {exc}")
+
+    def _browse_remote_cache_folder(self):
+        try:
+            start = self._remote_cache_dir or _default_remote_cache_dir()
+            folder = QFileDialog.getExistingDirectory(self.main_window, "Select Remote File Cache Folder", start)
+            if not folder:
+                return
+            widgets = getattr(self, "_remote_cache_controls", {})
+            edit = widgets.get("path")
+            if edit is not None:
+                edit.setText(normalize_path(folder))
+            self._on_remote_cache_setting_changed()
+        except Exception as exc:
+            self.status_updated.emit(f"Select cache folder failed: {exc}")
+
+    def _clear_remote_file_cache(self):
+        try:
+            cache_dir = normalize_path(self._remote_cache_dir or _default_remote_cache_dir())
+            if not os.path.isdir(cache_dir):
+                self.status_updated.emit("Remote cache folder is empty")
+                return
+            removed = 0
+            for entry in os.scandir(cache_dir):
+                if not entry.is_file() or not (_is_remote_raw_cache_name(entry.name) or entry.name.endswith(".part")):
+                    continue
+                try:
+                    os.remove(entry.path)
+                    removed += 1
+                except Exception:
+                    pass
+            self.status_updated.emit(f"Remote raw file cache cleared: {removed} file(s)")
+        except Exception as exc:
+            self.status_updated.emit(f"Clear remote cache failed: {exc}")
+
+    def _on_remote_file_detected(self, source_path: str):
+        message = "This file appears to be in a cloud or network folder. Copying to local cache before processing..."
+        self.status_updated.emit(message)
+        try:
+            self._add_fitting_message(f"{message} {source_path}", "INFO")
+        except Exception:
+            pass
+
+    def _on_remote_copy_started(self, source_path: str, target_path: str):
+        self.status_updated.emit(f"Copying remote file to cache: {os.path.basename(source_path)}")
+
+    def _on_remote_copy_finished(self, source_path: str, target_path: str):
+        self.status_updated.emit(f"Remote file cached: {os.path.basename(source_path)}")
+
+    def _on_remote_load_started(self, source_path: str):
+        self.status_updated.emit(f"Load started: {os.path.basename(source_path)}")
+
+    def _on_remote_load_finished(self, source_path: str):
+        self.status_updated.emit(f"Load finished: {os.path.basename(source_path)}")
+
     def _supported_folder_image_extensions(self):
         return ('.cbf',)
 
@@ -2303,33 +2740,70 @@ class FittingController(QObject):
         """Scan the selected file's folder and update navigation state."""
         try:
             file_path = normalize_path(file_path)
-            if not file_path or not os.path.exists(file_path):
+            if not file_path:
                 self._folder_image_files = []
                 self._folder_image_index = -1
                 self._update_folder_navigation_buttons()
-                self.status_updated.emit("File does not exist")
                 return
 
-            folder = os.path.dirname(file_path)
-            current_norm = os.path.normcase(os.path.abspath(file_path))
-            files = []
-            for name in os.listdir(folder):
-                candidate = os.path.join(folder, name)
-                if os.path.isfile(candidate) and os.path.splitext(name)[1].lower() in self._supported_folder_image_extensions():
-                    files.append(normalize_path(candidate))
-            files.sort(key=self._natural_sort_key)
+            looks_like_folder = not os.path.splitext(file_path)[1]
+            folder = file_path if looks_like_folder or (not is_cloud_or_network_path(file_path) and os.path.isdir(file_path)) else os.path.dirname(file_path)
+            cached = self._folder_image_scan_cache.get(normalize_path(folder))
+            if cached:
+                self._apply_folder_image_scan_result(file_path, cached)
+                return
 
+            worker = getattr(self, "_folder_image_scan_worker", None)
+            if worker is not None and worker.isRunning():
+                try:
+                    worker.requestInterruption()
+                except Exception:
+                    pass
+
+            self.status_updated.emit("Scanning image folder...")
+            worker = FolderImageScanWorker(file_path, self._supported_folder_image_extensions(), max_files=5000)
+            worker.status_updated.connect(self.status_updated.emit)
+            worker.scan_finished.connect(self._on_folder_image_scan_finished)
+            worker.error_occurred.connect(self._on_folder_image_scan_error)
+            worker.finished.connect(lambda: setattr(self, "_folder_image_scan_worker", None))
+            self._folder_image_scan_worker = worker
+            worker.start()
+        except Exception as e:
+            self._folder_image_files = []
+            self._folder_image_index = -1
+            self._update_folder_navigation_buttons()
+            self.status_updated.emit(f"Folder scan failed: {str(e)}")
+
+    def _apply_folder_image_scan_result(self, file_path: str, files: list):
+        try:
+            file_path = normalize_path(file_path)
+            current_norm = os.path.normcase(os.path.abspath(file_path))
+            files = [normalize_path(p) for p in (files or [])]
             self._folder_image_files = files
             norm_files = [os.path.normcase(os.path.abspath(p)) for p in files]
             self._folder_image_index = norm_files.index(current_norm) if current_norm in norm_files else -1
             if self._folder_image_index < 0 and files:
                 self.status_updated.emit("Current image is not in the scanned folder list")
             self._update_folder_navigation_buttons()
-        except Exception as e:
-            self._folder_image_files = []
-            self._folder_image_index = -1
-            self._update_folder_navigation_buttons()
-            self.status_updated.emit(f"Folder scan failed: {str(e)}")
+        except Exception as exc:
+            self.status_updated.emit(f"Folder scan apply failed: {exc}")
+
+    def _on_folder_image_scan_finished(self, file_path: str, files: list):
+        try:
+            normalized = normalize_path(file_path)
+            looks_like_folder = not os.path.splitext(normalized)[1]
+            folder = normalized if looks_like_folder or (not is_cloud_or_network_path(normalized) and os.path.isdir(normalized)) else normalize_path(os.path.dirname(normalized))
+            self._folder_image_scan_cache[folder] = [normalize_path(p) for p in files]
+            self._apply_folder_image_scan_result(file_path, files)
+            self.status_updated.emit(f"Folder scan complete: {len(files)} image file(s)")
+        except Exception as exc:
+            self.status_updated.emit(f"Folder scan result failed: {exc}")
+
+    def _on_folder_image_scan_error(self, file_path: str, message: str):
+        self._folder_image_files = []
+        self._folder_image_index = -1
+        self._update_folder_navigation_buttons()
+        self.status_updated.emit(f"Folder scan failed: {message}")
 
     def _update_folder_navigation_buttons(self):
         try:
@@ -2362,6 +2836,8 @@ class FittingController(QObject):
             current_file = self.current_parameters.get('imported_gisaxs_file', '')
             if self._folder_image_index < 0 and current_file:
                 self._scan_folder_images_for_file(current_file)
+                self.status_updated.emit("Image list is still scanning; try navigation again in a moment")
+                return
 
             target_index = self._folder_image_index + offset
             if target_index < 0:
@@ -2380,7 +2856,7 @@ class FittingController(QObject):
     def _select_folder_image(self, file_path):
         try:
             file_path = normalize_path(file_path)
-            if not os.path.exists(file_path):
+            if not is_cloud_or_network_path(file_path) and not os.path.exists(file_path):
                 QMessageBox.warning(self.main_window, "File Error", f"File does not exist:\n{file_path}")
                 self._scan_folder_images_for_file(self.current_parameters.get('imported_gisaxs_file', ''))
                 return
@@ -2389,7 +2865,12 @@ class FittingController(QObject):
             if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
                 self.ui.gisaxsInputImportButtonValue.setText(os.path.basename(file_path))
 
-            self._scan_folder_images_for_file(file_path)
+            folder = normalize_path(os.path.dirname(file_path))
+            cached = self._folder_image_scan_cache.get(folder)
+            if cached:
+                self._apply_folder_image_scan_result(file_path, cached)
+            else:
+                self._scan_folder_images_for_file(file_path)
             self._update_stack_display()
             self.parameters_changed.emit(self.current_parameters)
             if hasattr(self.parent, 'save_current_session'):
@@ -4072,6 +4553,10 @@ class FittingController(QObject):
         """ISAXS"""
         try:
             file_path = normalize_path(file_path)
+            if is_cloud_or_network_path(file_path):
+                self.status_updated.emit("Remote/cloud file selected. Validation will run in the background loader.")
+                return True
+
             if not os.path.exists(file_path):
                 QMessageBox.warning(self.main_window, "File Error", f"File does not exist: {file_path}")
                 return False
@@ -4117,14 +4602,14 @@ class FittingController(QObject):
             # ?????????????????????????????????????
             if not os.path.isabs(file_path_input):
                 current_file = self.current_parameters.get('imported_gisaxs_file', '')
-                if current_file and os.path.exists(current_file):
+                if current_file and (is_cloud_or_network_path(current_file) or os.path.exists(current_file)):
                     current_dir = os.path.dirname(current_file)
                     file_path_input = os.path.join(current_dir, file_path_input)
                 else:
                     file_path_input = os.path.abspath(file_path_input)
 
             # ???????????
-            if not os.path.exists(file_path_input):
+            if not is_cloud_or_network_path(file_path_input) and not os.path.exists(file_path_input):
                 self.status_updated.emit(f"File does not exist: {os.path.basename(file_path_input)}")
                 QMessageBox.warning(self.main_window, "File Error", f"File does not exist:\n{file_path_input}")
                 return
@@ -4222,8 +4707,17 @@ class FittingController(QObject):
             if mode == 'Stack':
                 file_dir = os.path.dirname(imported_file)
                 base_name = os.path.basename(imported_file)
-                cbf_files = [f for f in os.listdir(file_dir) if f.lower().endswith('.cbf')]
-                cbf_files.sort()
+                if is_cloud_or_network_path(file_dir):
+                    cached_paths = self._folder_image_scan_cache.get(normalize_path(file_dir))
+                    if not cached_paths:
+                        if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
+                            self.ui.gisaxsInputStackDisplayLabel.setText("Stack: scanning remote folder...")
+                        self._scan_folder_images_for_file(imported_file)
+                        return
+                    cbf_files = [os.path.basename(p) for p in cached_paths]
+                else:
+                    cbf_files = [f for f in os.listdir(file_dir) if f.lower().endswith('.cbf')]
+                    cbf_files.sort()
                 try:
                     start_index = cbf_files.index(base_name)
                     available_files = len(cbf_files) - start_index
@@ -4250,11 +4744,19 @@ class FittingController(QObject):
                         sv = self.ui.gisaxsInputStackValue.text().strip()
                 except Exception:
                     sv = ''
-                latest = self._find_latest_cbf(dir_path)
+                latest = ""
+                if is_cloud_or_network_path(dir_path):
+                    cached_paths = self._folder_image_scan_cache.get(normalize_path(dir_path))
+                    if cached_paths:
+                        latest = cached_paths[-1]
+                    else:
+                        self._scan_folder_images_for_file(imported_file)
+                else:
+                    latest = self._find_latest_cbf(dir_path)
                 if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
                     if sv == '' or sv.endswith('-'):
                         self.ui.gisaxsInputStackDisplayLabel.setText(
-                            f"In-situ: latest -> {os.path.splitext(os.path.basename(latest or ''))[0]}"
+                            f"In-situ: latest -> {os.path.splitext(os.path.basename(latest or 'scanning...'))[0]}"
                         )
                     elif '-' in sv:
                         self.ui.gisaxsInputStackDisplayLabel.setText(f"In-situ range: {sv}")
@@ -4275,7 +4777,7 @@ class FittingController(QObject):
                 file_input = self.ui.gisaxsInputImportButtonValue.text().strip()
                 if file_input:
                     # ??????????????????????
-                    if os.path.isabs(file_input) and os.path.exists(file_input):
+                    if os.path.isabs(file_input) and (is_cloud_or_network_path(file_input) or os.path.exists(file_input)):
                         self.current_parameters['imported_gisaxs_file'] = file_input
                     # ?????????????????????????????????
                     elif not os.path.isabs(file_input):
@@ -4286,7 +4788,7 @@ class FittingController(QObject):
                         if current_file and os.path.dirname(current_file):
                             # ?????????????
                             new_path = os.path.join(os.path.dirname(current_file), file_input)
-                            if os.path.exists(new_path):
+                            if is_cloud_or_network_path(new_path) or os.path.exists(new_path):
                                 self.current_parameters['imported_gisaxs_file'] = new_path
                                 file_found = True
 
@@ -4306,7 +4808,7 @@ class FittingController(QObject):
                             return  # ???????????????
 
                     # ???????????????????
-                    elif os.path.isabs(file_input) and not os.path.exists(file_input):
+                    elif os.path.isabs(file_input) and not is_cloud_or_network_path(file_input) and not os.path.exists(file_input):
                         self.status_updated.emit(f"Error: File '{file_input}' does not exist")
                         # ??????????????????
                         return  # ???????????????
@@ -4338,7 +4840,7 @@ class FittingController(QObject):
                 self.status_updated.emit("No file imported to show")
                 return
 
-            if not os.path.exists(imported_file):
+            if not is_cloud_or_network_path(imported_file) and not os.path.exists(imported_file):
                 self.status_updated.emit("File does not exist")
                 QMessageBox.warning(self.main_window, "File Error", f"File does not exist:\n{imported_file}")
                 self._scan_folder_images_for_file(imported_file)
@@ -4938,6 +5440,9 @@ class FittingController(QObject):
                 return
             dir_path = os.path.dirname(imported_file)
             latest = self._find_latest_cbf(dir_path)
+            if not latest and is_cloud_or_network_path(dir_path):
+                self._scan_folder_images_for_file(imported_file)
+                return
             if latest and latest != self._insitu_last_file:
                 sv = ''
                 try:
@@ -4974,10 +5479,17 @@ class FittingController(QObject):
 
     def _resolve_insitu_target(self, dir_path: str, imported_file: str, sv_text: str) -> str:
         try:
-            files = [f for f in os.listdir(dir_path) if f.lower().endswith('.cbf')]
+            if is_cloud_or_network_path(dir_path):
+                cached = self._folder_image_scan_cache.get(normalize_path(dir_path))
+                if not cached:
+                    self._scan_folder_images_for_file(imported_file)
+                    return None
+                files = [os.path.basename(p) for p in cached]
+            else:
+                files = [f for f in os.listdir(dir_path) if f.lower().endswith('.cbf')]
             if not files:
                 return None
-            files.sort()
+            files.sort(key=lambda name: self._natural_sort_key(name))
             def _index_from_name(name: str):
                 base = os.path.splitext(name)[0]
                 import re
@@ -5020,10 +5532,15 @@ class FittingController(QObject):
 
     def _find_latest_cbf(self, dir_path: str) -> str:
         try:
+            if is_cloud_or_network_path(dir_path):
+                cached = self._folder_image_scan_cache.get(normalize_path(dir_path))
+                if cached:
+                    return cached[-1]
+                return None
             files = [f for f in os.listdir(dir_path) if f.lower().endswith('.cbf')]
             if not files:
                 return None
-            files.sort()
+            files.sort(key=lambda name: self._natural_sort_key(name))
             return os.path.join(dir_path, files[-1])
         except Exception:
             return None
@@ -5241,7 +5758,7 @@ class FittingController(QObject):
                 QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "Import one GISAXS file from the watch folder first.")
                 return
             folder = os.path.dirname(imported_file)
-            if not os.path.isdir(folder):
+            if not is_cloud_or_network_path(folder) and not os.path.isdir(folder):
                 QMessageBox.warning(self._insitu_workflow_parent_widget(), "In-situ Workflow", f"Watch folder not found:\n{folder}")
                 return
             settings = self._insitu_workflow_settings()
@@ -5250,6 +5767,8 @@ class FittingController(QObject):
                 return
             if self._insitu_workflow_state != "Paused":
                 self._insitu_workflow_queue = []
+                if is_cloud_or_network_path(folder) and normalize_path(folder) not in self._folder_image_scan_cache:
+                    self._scan_folder_images_for_file(imported_file)
                 self._insitu_workflow_seen = set(self._list_insitu_watch_files(folder))
                 self._insitu_workflow_file_sizes = {}
                 self._reset_insitu_session_cache()
@@ -5279,7 +5798,7 @@ class FittingController(QObject):
             if not folder:
                 self._populate_insitu_sequence_folder_default()
                 folder = widgets.get("sequence_folder").text().strip() if widgets.get("sequence_folder") else ""
-            if not folder or not os.path.isdir(folder):
+            if not folder or (not is_cloud_or_network_path(folder) and not os.path.isdir(folder)):
                 QMessageBox.warning(self._insitu_workflow_parent_widget(), "In-situ Workflow", f"Sequence folder not found:\n{folder}")
                 return
             if not any(settings[key] for key in ("auto_show", "auto_cut", "auto_fit")):
@@ -5309,11 +5828,19 @@ class FittingController(QObject):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         pattern = widgets.get("sequence_pattern").text().strip() if widgets.get("sequence_pattern") else "*.cbf"
         pattern = pattern or "*.cbf"
-        try:
-            matches = sorted(Path(folder).glob(pattern), key=lambda p: self._natural_sort_key(str(p)))
-        except Exception:
-            matches = []
-        files = [str(path) for path in matches if path.is_file()]
+        if is_cloud_or_network_path(folder):
+            cached = self._folder_image_scan_cache.get(normalize_path(folder))
+            if cached is None:
+                self._scan_folder_images_for_file(folder)
+                self._set_insitu_workflow_state("Idle", "Scanning remote sequence folder...")
+                return []
+            files = [p for p in cached if Path(p).match(pattern)]
+        else:
+            try:
+                matches = sorted(Path(folder).glob(pattern), key=lambda p: self._natural_sort_key(str(p)))
+            except Exception:
+                matches = []
+            files = [str(path) for path in matches if path.is_file()]
         start_value = int(widgets.get("sequence_start").value()) if widgets.get("sequence_start") else 0
         end_value = int(widgets.get("sequence_end").value()) if widgets.get("sequence_end") else 0
         step = max(1, int(widgets.get("sequence_step").value()) if widgets.get("sequence_step") else 1)
@@ -5353,6 +5880,13 @@ class FittingController(QObject):
             self._insitu_workflow_busy = False
             self._insitu_workflow_processing_file = None
             self._cleanup_insitu_refine_worker()
+            image_loader = getattr(self, "async_image_loader", None)
+            if image_loader is not None and image_loader.isRunning():
+                try:
+                    image_loader.requestInterruption()
+                    self.status_updated.emit("Requested cancellation of current image loading")
+                except Exception:
+                    pass
             loader = getattr(self, "_insitu_batch_loader", None)
             if loader is not None and loader.isRunning():
                 try:
@@ -5383,6 +5917,9 @@ class FittingController(QObject):
 
     def _list_insitu_watch_files(self, folder: str):
         try:
+            if is_cloud_or_network_path(folder):
+                cached = self._folder_image_scan_cache.get(normalize_path(folder))
+                return list(cached or [])
             return [
                 os.path.join(folder, name)
                 for name in sorted(os.listdir(folder), key=self._natural_sort_key)
@@ -5397,8 +5934,12 @@ class FittingController(QObject):
                 return
             imported_file = self.current_parameters.get('imported_gisaxs_file', '')
             folder = os.path.dirname(imported_file) if imported_file else ""
-            if not folder or not os.path.isdir(folder):
+            if not folder or (not is_cloud_or_network_path(folder) and not os.path.isdir(folder)):
                 self._set_insitu_workflow_state("Error", "Watch folder is unavailable")
+                return
+            if is_cloud_or_network_path(folder) and normalize_path(folder) not in self._folder_image_scan_cache:
+                self._scan_folder_images_for_file(imported_file)
+                self._set_insitu_workflow_state("Watching", "Scanning remote watch folder...")
                 return
             settings = self._insitu_workflow_settings()
             for path in self._list_insitu_watch_files(folder):
@@ -5416,6 +5957,8 @@ class FittingController(QObject):
 
     def _insitu_workflow_file_is_stable(self, path: str) -> bool:
         try:
+            if is_cloud_or_network_path(path):
+                return True
             stat = os.stat(path)
             previous = self._insitu_workflow_file_sizes.get(path)
             current = (int(stat.st_size), float(stat.st_mtime))
@@ -5487,9 +6030,18 @@ class FittingController(QObject):
 
     def _load_insitu_workflow_batch_async(self, batch_paths: list[str]):
         try:
-            loader = InsituBatchImageLoader(batch_paths)
+            loader = InsituBatchImageLoader(
+                batch_paths,
+                copy_remote_to_cache=self._remote_copy_enabled,
+                cache_dir=self._remote_cache_dir,
+                cache_limit_gb=self._remote_cache_limit_gb,
+            )
             loader.image_loaded.connect(self._on_insitu_batch_image_loaded)
             loader.error_occurred.connect(self._on_insitu_batch_image_error)
+            loader.progress_updated.connect(self._on_image_loading_progress)
+            loader.remote_file_detected.connect(self._on_remote_file_detected)
+            loader.copy_started.connect(self._on_remote_copy_started)
+            loader.copy_finished.connect(self._on_remote_copy_finished)
             loader.finished.connect(lambda: setattr(self, "_insitu_batch_loader", None))
             self._insitu_batch_loader = loader
             loader.start()
