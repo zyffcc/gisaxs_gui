@@ -227,6 +227,7 @@ except ImportError:
 class ManualAutoRefineWorker(QObject):
     """Run manual Auto Refine outside the GUI thread."""
 
+    started = pyqtSignal()
     progress = pyqtSignal(dict)
     finished = pyqtSignal(dict)
     failed = pyqtSignal(str)
@@ -244,6 +245,7 @@ class ManualAutoRefineWorker(QObject):
 
     def run(self):
         try:
+            self.started.emit()
             result = self.controller._run_manual_auto_refine(
                 self.setup,
                 self.selected,
@@ -254,6 +256,14 @@ class ManualAutoRefineWorker(QObject):
             self.finished.emit(result)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+class RefineUiBridge(QObject):
+    """Relay refine worker signals to slots owned by the GUI thread."""
+
+    progress = pyqtSignal(dict)
+    finished = pyqtSignal(dict)
+    failed = pyqtSignal(str)
 
 
 class InsituBatchImageLoader(QThread):
@@ -470,6 +480,7 @@ class IndependentMatplotlibWindow(QMainWindow):
 
     # ???????????????????
     region_selected = pyqtSignal(dict)  # ?????????????
+    center_picked = pyqtSignal(dict)  # detector beam center picked from image
     status_updated = pyqtSignal(str)  # ?????????????
 
     def __init__(self, parent=None):
@@ -488,6 +499,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         self.figure = None
         self.canvas = None
         self.toolbar = None
+        self.pick_center_action = None
         self.ax = None
         try:
             if is_matplotlib_available():
@@ -497,6 +509,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self.figure = Figure(figsize=(10, 8), dpi=100)
                 self.canvas = FigureCanvas(self.figure)
                 self.toolbar = NavigationToolbar(self.canvas, self)
+                self._setup_pick_center_action()
                 layout.addWidget(self.toolbar)
                 layout.addWidget(self.canvas)
                 self.ax = self.figure.add_subplot(111)
@@ -522,6 +535,7 @@ class IndependentMatplotlibWindow(QMainWindow):
 
         # ?????????????
         self.selection_mode = False
+        self.pick_center_mode = False
         self.selection_start = None
         self.selection_rect = None
         self.current_selection = None
@@ -549,6 +563,49 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.canvas.mpl_connect('key_press_event', self._on_key_press)
         install_adaptive_window_profile(self, self._apply_screen_profile, apply_window_minimum=False)
 
+    def _setup_pick_center_action(self):
+        try:
+            if self.toolbar is None:
+                return
+            self.pick_center_action = QAction("Pick Center", self)
+            self.pick_center_action.setCheckable(True)
+            self.pick_center_action.setToolTip("Click the detector image to set Beam Center X/Y")
+            self.pick_center_action.triggered.connect(self._toggle_pick_center_mode)
+            self.toolbar.addSeparator()
+            self.toolbar.addAction(self.pick_center_action)
+        except Exception:
+            self.pick_center_action = None
+
+    def _toggle_pick_center_mode(self, checked: bool):
+        try:
+            if checked:
+                self.pick_center_mode = True
+                if self.selection_mode:
+                    self._exit_selection_mode()
+                if self.canvas is not None:
+                    self.canvas.setCursor(Qt.CrossCursor)
+                    self.canvas.setFocus()
+                self.setWindowTitle("GIMaP Image Viewer - Pick Center Mode (click image, Esc to cancel)")
+                self.status_updated.emit("Pick Center mode: click one point on the image to set Detector Beam Center X/Y")
+            else:
+                self._exit_pick_center_mode()
+        except Exception:
+            pass
+
+    def _exit_pick_center_mode(self):
+        try:
+            self.pick_center_mode = False
+            if self.pick_center_action is not None:
+                self.pick_center_action.blockSignals(True)
+                self.pick_center_action.setChecked(False)
+                self.pick_center_action.blockSignals(False)
+            if self.canvas is not None:
+                self.canvas.unsetCursor()
+            if not self.selection_mode:
+                self.setWindowTitle(self.DEFAULT_TITLE)
+        except Exception:
+            pass
+
     def _apply_screen_profile(self, profile, screen):
         apply_density_profile(self, profile)
 
@@ -562,8 +619,14 @@ class IndependentMatplotlibWindow(QMainWindow):
 
     def _on_mouse_press(self, event):
         """No description."""
+        if event.button == 1 and self.pick_center_mode and event.inaxes == self.ax:
+            self._emit_picked_center(event)
+            return
+
         if event.button == 3:  # ???
             if not self.selection_mode:
+                if self.pick_center_mode:
+                    self._exit_pick_center_mode()
                 self.selection_mode = True
                 self.setWindowTitle(self.SELECTION_TITLE)
                 self.canvas.setCursor(Qt.CrossCursor)
@@ -578,6 +641,52 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self.selection_rect.remove()
                 self.selection_rect = None
             self.status_updated.emit("Selection started - drag to define region")
+
+    def _emit_picked_center(self, event):
+        try:
+            if event.xdata is None or event.ydata is None:
+                return
+            x_value = float(event.xdata)
+            y_value = float(event.ydata)
+            show_q_axis = self._should_show_q_axis()
+            payload = {
+                "is_q_space": bool(show_q_axis),
+                "x": x_value,
+                "y": y_value,
+            }
+            if show_q_axis:
+                pixel_coords = self._convert_q_to_pixel_coordinates(x_value, y_value, 1e-9, 1e-9)
+                payload.update({
+                    "center_qy": x_value,
+                    "center_qz": y_value,
+                    "beam_center_x": float(pixel_coords.get("center_x", 0.0)),
+                    "beam_center_y": float(pixel_coords.get("center_y", 0.0)),
+                })
+                self.status_updated.emit(
+                    f"Picked center at q=({x_value:.6g}, {y_value:.6g}) -> "
+                    f"pixel=({payload['beam_center_x']:.2f}, {payload['beam_center_y']:.2f})"
+                )
+            else:
+                payload.update({
+                    "beam_center_x": x_value,
+                    "beam_center_y": y_value,
+                })
+                self.status_updated.emit(f"Picked detector center: X={x_value:.2f}, Y={y_value:.2f}")
+            try:
+                if self.ax is not None:
+                    marker = getattr(self, "_picked_center_marker", None)
+                    if marker is not None:
+                        marker.remove()
+                    lines = self.ax.plot(x_value, y_value, marker="+", color="cyan", markersize=14, markeredgewidth=2.5)
+                    self._picked_center_marker = lines[0] if lines else None
+                    self.canvas.draw_idle()
+            except Exception:
+                pass
+            self.center_picked.emit(payload)
+            self._exit_pick_center_mode()
+        except Exception as exc:
+            self.status_updated.emit(f"Pick center failed: {exc}")
+            self._exit_pick_center_mode()
 
     def _on_mouse_move(self, event):
         """No description."""
@@ -696,6 +805,7 @@ class IndependentMatplotlibWindow(QMainWindow):
     def _on_key_press(self, event):
         """No description."""
         if event.key == 'escape':
+            self._exit_pick_center_mode()
             self._exit_selection_mode()
         elif event.key == 'delete' or event.key == 'backspace':
             self._clear_selection()
@@ -704,6 +814,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         """Qt?????????????atplotlib"""
         try:
             if event.key() == Qt.Key_Escape:
+                self._exit_pick_center_mode()
                 self._exit_selection_mode()
             elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
                 self._clear_selection()
@@ -2283,6 +2394,10 @@ class FittingController(QObject):
         self._remote_copy_enabled = True
         self._remote_cache_dir = _default_remote_cache_dir()
         self._remote_cache_limit_gb = 3.0
+        self._insitu_last_refine_ui_update = 0.0
+        self._insitu_last_refine_log_update = 0.0
+        self._insitu_last_trend_refresh = 0.0
+        self._insitu_trend_refresh_pending = False
         # ??????????????????????
         self.data = None              # ????????????????????????????
         self.summed_data = None       # ???????????????????????
@@ -5892,7 +6007,6 @@ class FittingController(QObject):
                 try:
                     loader.requestInterruption()
                     loader.quit()
-                    loader.wait(500)
                 except Exception:
                     pass
                 self._insitu_batch_loader = None
@@ -5901,7 +6015,6 @@ class FittingController(QObject):
                 try:
                     cut_worker.requestInterruption()
                     cut_worker.quit()
-                    cut_worker.wait(500)
                 except Exception:
                     pass
                 self._insitu_cut_worker = None
@@ -6349,9 +6462,13 @@ class FittingController(QObject):
                 record["refine_calls"] = calls
                 record["refine_max_nfev"] = max_nfev
                 record["fit_status"] = "refining"
-            self._log_insitu_workflow(self._insitu_workflow_last_fit_status)
-            self._refresh_insitu_workflow_status()
-            self._refresh_insitu_trend_monitor()
+            now = time.perf_counter()
+            if now - float(getattr(self, "_insitu_last_refine_ui_update", 0.0)) >= 0.5:
+                self._insitu_last_refine_ui_update = now
+                self._refresh_insitu_workflow_status()
+            if now - float(getattr(self, "_insitu_last_refine_log_update", 0.0)) >= 2.0:
+                self._insitu_last_refine_log_update = now
+                self._log_insitu_workflow(self._insitu_workflow_last_fit_status)
         except Exception:
             pass
 
@@ -6359,11 +6476,15 @@ class FittingController(QObject):
         try:
             self._apply_manual_refine_result(setup, result.get("params"))
             old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
-            self._suppress_workflow_plot_updates = not self._should_refresh_insitu_views_for_current_file()
-            try:
-                self._perform_manual_fitting()
-            finally:
-                self._suppress_workflow_plot_updates = old_suppress
+            refresh_views = self._should_refresh_insitu_views_for_current_file()
+            if refresh_views:
+                self._suppress_workflow_plot_updates = False
+                try:
+                    self._perform_manual_fitting()
+                finally:
+                    self._suppress_workflow_plot_updates = old_suppress
+            else:
+                self._set_insitu_refine_fitting_result(setup, result.get("params"))
             self._insitu_workflow_last_fit_params = np.asarray(result.get("params"), dtype=float).copy()
             record["refine_nfev"] = int(result.get("nfev_est", result.get("nfev", 0)) or 0)
             record["refine_calls"] = int(result.get("calls", 0) or 0)
@@ -6379,6 +6500,42 @@ class FittingController(QObject):
             self._on_insitu_refine_failed(record, str(exc))
         finally:
             self._cleanup_insitu_refine_worker()
+
+    def _set_insitu_refine_fitting_result(self, setup: dict, params):
+        """Store final refine fit arrays without repainting the GUI."""
+        if params is None:
+            raise RuntimeError("Auto Refine returned no parameters")
+        params = np.asarray(params, dtype=float)
+        q_raw = np.asarray(setup.get("q_raw", []), dtype=float)
+        q_model = np.asarray(setup.get("q_model", []), dtype=float)
+        y_fit = np.asarray(setup["model_func"](q_model, *params), dtype=float)
+        n = min(q_raw.size, y_fit.size)
+        if n <= 0:
+            raise RuntimeError("Auto Refine produced an empty fitted curve")
+        q_raw = q_raw[:n]
+        y_fit = y_fit[:n]
+        param_dict = {
+            str(name): float(value)
+            for name, value in zip(setup.get("param_names", []), params)
+        }
+        self.I_fitting = y_fit
+        self.has_fitting_data = True
+        self._has_fitting_data = True
+        self.fitting = {
+            "q": np.array(q_raw, copy=True),
+            "I": np.array(y_fit, copy=True),
+            "meta": {
+                "shapes": list(setup.get("shapes", [])),
+                "params": param_dict,
+                "source": "insitu_auto_refine",
+                "data_source": setup.get("q_source_kind"),
+                "q_source_unit": self._get_q_source_unit(setup.get("q_source_kind")),
+                "q_model_unit": "nm",
+            },
+        }
+        self.display_mode = "fitting"
+        self._display_mode = "fitting"
+        self._fitting_mode_active = True
 
     def _on_insitu_refine_failed(self, record: dict, message: str):
         try:
@@ -6400,8 +6557,10 @@ class FittingController(QObject):
                     pass
             if thread is not None:
                 thread.quit()
-                thread.wait(1000)
-                thread.deleteLater()
+                try:
+                    thread.finished.connect(thread.deleteLater)
+                except Exception:
+                    thread.deleteLater()
         except Exception:
             pass
         self._insitu_workflow_refine_worker = None
@@ -6519,7 +6678,7 @@ class FittingController(QObject):
         self._insitu_workflow_current_record = None
         self._refresh_insitu_workflow_status()
         if refresh_views:
-            self._refresh_insitu_trend_monitor()
+            self._schedule_insitu_trend_refresh()
         if not self._insitu_workflow_stop_requested and self._insitu_workflow_state in ("Watching", "Processing"):
             QTimer.singleShot(15, self._process_next_insitu_workflow_file)
 
@@ -6845,6 +7004,8 @@ class FittingController(QObject):
         combo = getattr(self, "_insitu_trend_combo", None)
         if dialog is None or table is None or combo is None:
             return
+        self._insitu_last_trend_refresh = time.perf_counter()
+        self._insitu_trend_refresh_pending = False
         rows = self._load_insitu_session_records()
         parameter_keys = self._insitu_trend_parameter_keys(rows)
         current_key = combo.currentText()
@@ -6866,6 +7027,21 @@ class FittingController(QObject):
             for c, key in enumerate(headers):
                 table.setItem(r, c, QTableWidgetItem(str(row.get(key, ""))))
         self._refresh_insitu_trend_plot()
+
+    def _schedule_insitu_trend_refresh(self, min_interval: float = 1.0):
+        dialog = getattr(self, "_insitu_trend_dialog", None)
+        if dialog is None:
+            return
+        now = time.perf_counter()
+        last = float(getattr(self, "_insitu_last_trend_refresh", 0.0))
+        if now - last >= min_interval:
+            self._refresh_insitu_trend_monitor()
+            return
+        if getattr(self, "_insitu_trend_refresh_pending", False):
+            return
+        self._insitu_trend_refresh_pending = True
+        delay_ms = max(50, int((min_interval - (now - last)) * 1000))
+        QTimer.singleShot(delay_ms, self._refresh_insitu_trend_monitor)
 
     def _refresh_insitu_trend_plot(self):
         combo = getattr(self, "_insitu_trend_combo", None)
@@ -7128,6 +7304,7 @@ class FittingController(QObject):
                 self.independent_window = IndependentMatplotlibWindow(self.main_window)
                 # ????????????
                 self.independent_window.region_selected.connect(self._on_region_selected)
+                self.independent_window.center_picked.connect(self._on_detector_center_picked)
                 # ?????????????
                 self.independent_window.status_updated.connect(self.status_updated.emit)
 
@@ -7155,6 +7332,64 @@ class FittingController(QObject):
 
         except Exception as e:
             self.status_updated.emit(f"Independent window error: {str(e)}")
+
+    def _on_detector_center_picked(self, center_info: dict):
+        try:
+            beam_x = float(center_info.get("beam_center_x", 0.0))
+            beam_y = float(center_info.get("beam_center_y", 0.0))
+
+            try:
+                from core.global_params import global_params
+                global_params.set_parameter('fitting', 'detector.beam_center_x', beam_x)
+                global_params.set_parameter('fitting', 'detector.beam_center_y', beam_y)
+                global_params.save_user_parameters()
+            except Exception:
+                from core.global_params import GlobalParameterManager
+                gp = GlobalParameterManager()
+                gp.set_parameter('fitting', 'detector.beam_center_x', beam_x)
+                gp.set_parameter('fitting', 'detector.beam_center_y', beam_y)
+                try:
+                    gp.save_user_parameters()
+                except Exception:
+                    pass
+
+            dialog = getattr(self, 'detector_params_dialog', None)
+            if dialog is not None and dialog.isVisible():
+                try:
+                    dialog.beam_center_x_spinbox.blockSignals(True)
+                    dialog.beam_center_y_spinbox.blockSignals(True)
+                    dialog.beam_center_x_spinbox.setValue(beam_x)
+                    dialog.beam_center_y_spinbox.setValue(beam_y)
+                    dialog.beam_center_x_spinbox.blockSignals(False)
+                    dialog.beam_center_y_spinbox.blockSignals(False)
+                    if hasattr(dialog, '_save_parameters'):
+                        dialog._save_parameters()
+                    if hasattr(dialog, '_get_current_parameters'):
+                        dialog.parameters_changed.emit(dialog._get_current_parameters())
+                except Exception:
+                    pass
+
+            try:
+                self._q_mesh_cache_key = None
+                self._compute_q_meshgrids_and_store()
+            except Exception:
+                pass
+
+            try:
+                if self.independent_window is not None:
+                    self.independent_window._q_cache_key = None
+                    self.independent_window._qy_mesh = None
+                    self.independent_window._qz_mesh = None
+            except Exception:
+                pass
+
+            self._on_detector_parameters_changed({
+                'beam_center_x': beam_x,
+                'beam_center_y': beam_y,
+            })
+            self.status_updated.emit(f"Detector beam center set from image: X={beam_x:.2f}, Y={beam_y:.2f}")
+        except Exception as exc:
+            self.status_updated.emit(f"Failed to set detector center from image: {exc}")
 
     def _on_region_selected(self, selection_info):
         """ut Line"""
@@ -14007,12 +14242,18 @@ class FittingController(QObject):
             refine_state = {
                 "thread": None,
                 "worker": None,
+                "bridge": None,
                 "latest_result": None,
                 "running": False,
+                "status": "Idle",
+                "last_ui_update": 0.0,
+                "last_preview_update": 0.0,
             }
 
-            def set_running_state(running: bool):
+            def set_running_state(running: bool, status: str = None):
                 refine_state["running"] = bool(running)
+                if status:
+                    refine_state["status"] = status
                 run.setEnabled(not running)
                 stop.setEnabled(running)
                 apply_current.setEnabled(refine_state["latest_result"] is not None and not running)
@@ -14036,27 +14277,39 @@ class FittingController(QObject):
                 max_nfev = max(1, int(payload.get("max_nfev", max_eval.value())))
                 nfev = int(payload.get("nfev_est", payload.get("nfev", payload.get("calls", 0))))
                 calls = int(payload.get("calls", 0))
+                now = time.perf_counter()
                 progress_bar.setValue(max(0, min(99, int(100 * nfev / max_nfev))))
-                result_label.setText(
-                    f"Running: nfev~{nfev}/{max_nfev}, residual calls={calls}, "
-                    f"current logRMSE={float(payload.get('current_log_rmse', np.nan)):.6g}, "
-                    f"best={float(payload.get('final_log_rmse', payload.get('best_log_rmse', np.nan))):.6g}"
-                )
+                if now - float(refine_state.get("last_ui_update", 0.0)) >= 0.3 or nfev <= 1:
+                    refine_state["last_ui_update"] = now
+                    result_label.setText(
+                        f"Running: nfev~{nfev}/{max_nfev}, residual calls={calls}, "
+                        f"current logRMSE={float(payload.get('current_log_rmse', np.nan)):.6g}, "
+                        f"best={float(payload.get('final_log_rmse', payload.get('best_log_rmse', np.nan))):.6g}"
+                    )
                 show_interval = int(payload.get("show_interval", show_every.value()) or 0)
-                if show_interval > 0 and nfev > 0 and (nfev == 1 or nfev % show_interval == 0):
+                preview_due = (
+                    show_interval > 0
+                    and nfev > 0
+                    and (nfev == 1 or nfev % show_interval == 0)
+                    and (now - float(refine_state.get("last_preview_update", 0.0))) >= 0.75
+                )
+                if preview_due:
+                    refine_state["last_preview_update"] = now
                     self._preview_manual_refine_curve(setup, payload.get("params"))
 
             def finish_worker():
                 thread = refine_state.get("thread")
                 worker = refine_state.get("worker")
+                bridge = refine_state.get("bridge")
                 if thread is not None:
                     thread.quit()
-                    thread.wait(3000)
-                    thread.deleteLater()
                 if worker is not None:
                     worker.deleteLater()
+                if bridge is not None:
+                    bridge.deleteLater()
                 refine_state["thread"] = None
                 refine_state["worker"] = None
+                refine_state["bridge"] = None
                 set_running_state(False)
 
             def on_finished(result):
@@ -14086,6 +14339,7 @@ class FittingController(QObject):
                 worker = refine_state.get("worker")
                 if worker is not None:
                     worker.request_stop()
+                    refine_state["status"] = "Stopping"
                     result_label.setText("Stopping Auto Refine after the current residual evaluation...")
                     stop.setEnabled(False)
 
@@ -14109,6 +14363,7 @@ class FittingController(QObject):
                         "gtol": float(gtol.value()) if gtol.value() > 0 else None,
                         "progress_interval": int(progress_every.value()),
                         "show_interval": int(show_every.value()),
+                        "min_progress_seconds": 0.5,
                     }
                     persist_row_state()
                     self._save_ai_fitting_settings(
@@ -14136,14 +14391,22 @@ class FittingController(QObject):
                     result_label.setText("Refining...")
                     thread = QThread(dialog)
                     worker = ManualAutoRefineWorker(self, setup, selected, options)
+                    bridge = RefineUiBridge(dialog)
+                    bridge.progress.connect(on_progress)
+                    bridge.finished.connect(on_finished)
+                    bridge.failed.connect(on_failed)
                     worker.moveToThread(thread)
                     thread.started.connect(worker.run)
-                    worker.progress.connect(on_progress)
-                    worker.finished.connect(on_finished)
-                    worker.failed.connect(on_failed)
+                    worker.progress.connect(bridge.progress)
+                    worker.finished.connect(bridge.finished)
+                    worker.failed.connect(bridge.failed)
+                    worker.finished.connect(thread.quit)
+                    worker.failed.connect(lambda _message: thread.quit())
+                    thread.finished.connect(thread.deleteLater)
                     refine_state["thread"] = thread
                     refine_state["worker"] = worker
-                    set_running_state(True)
+                    refine_state["bridge"] = bridge
+                    set_running_state(True, "Running")
                     thread.start()
                 except Exception as exc:
                     result_label.setText(f"Auto Refine failed: {exc}")
@@ -14357,11 +14620,13 @@ class FittingController(QObject):
             "calls": 0,
             "current": np.inf,
             "last_report_nfev": -1,
+            "last_report_time": 0.0,
         }
         target_logrmse = float(options.get("target_logrmse", 0.0) or 0.0)
         progress_interval = max(1, int(options.get("progress_interval", 5) or 5))
         show_interval = int(options.get("show_interval", 0) or 0)
         max_nfev = int(options.get("max_nfev", 120))
+        min_progress_seconds = max(0.3, float(options.get("min_progress_seconds", 0.5) or 0.5))
 
         def build_params(x):
             params = params0.copy()
@@ -14411,14 +14676,18 @@ class FittingController(QObject):
             if current < progress["best"]:
                 progress["best"] = current
                 progress["best_x"] = np.array(x, dtype=float, copy=True)
+            now = time.perf_counter()
+            interval_due = (
+                nfev_est != progress["last_report_nfev"]
+                and nfev_est % progress_interval == 0
+                and (now - float(progress.get("last_report_time", 0.0))) >= min_progress_seconds
+            )
             if progress_callback and (
                 progress["calls"] == 1
-                or (
-                    nfev_est != progress["last_report_nfev"]
-                    and nfev_est % progress_interval == 0
-                )
+                or interval_due
             ):
                 progress["last_report_nfev"] = nfev_est
+                progress["last_report_time"] = now
                 best_params = build_params(progress["best_x"])
                 progress_callback({
                     "params": best_params,
