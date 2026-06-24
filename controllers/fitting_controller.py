@@ -1643,14 +1643,34 @@ class IndependentFitWindow(QMainWindow):
         """No description."""
         try:
             # ???????
-            x_data = np.array(x_coords)
-            y_data = np.array(y_intensity)
+            if self.ax is None or self.canvas is None or self.figure is None:
+                self.status_updated.emit("Independent fit window is not ready for plotting.")
+                return
+            x_data = np.asarray(x_coords, dtype=float).reshape(-1)
+            y_data = np.asarray(y_intensity, dtype=float).reshape(-1)
+            n = min(x_data.size, y_data.size)
+            if n <= 0:
+                self.status_updated.emit("No finite data available for independent fit window.")
+                return
+            x_data = x_data[:n]
+            y_data = y_data[:n]
 
 
             # ??????????
             err_data = None
             if y_errors is not None:
-                err_data = np.array(y_errors)
+                err_data = np.asarray(y_errors, dtype=float).reshape(-1)[:n]
+
+            finite_mask = np.isfinite(x_data) & np.isfinite(y_data)
+            if err_data is not None:
+                finite_mask &= np.isfinite(err_data)
+            x_data = x_data[finite_mask]
+            y_data = y_data[finite_mask]
+            if err_data is not None:
+                err_data = err_data[finite_mask]
+            if x_data.size == 0 or y_data.size == 0:
+                self.status_updated.emit("No finite data available for independent fit window.")
+                return
 
             is_q_axis = isinstance(x_label, str) and 'q' in x_label.lower()
 
@@ -1693,6 +1713,30 @@ class IndependentFitWindow(QMainWindow):
                     if err_data is not None:
                         err_data = err_data / float(max_intensity)
                     y_label = "Normalized Intensity"
+
+            if log_x:
+                positive_x = x_data > 0
+                if not np.any(positive_x):
+                    log_x = False
+                else:
+                    x_data = x_data[positive_x]
+                    y_data = y_data[positive_x]
+                    if err_data is not None:
+                        err_data = err_data[positive_x]
+
+            if log_y:
+                positive_y = y_data > 0
+                if not np.any(positive_y):
+                    log_y = False
+                else:
+                    x_data = x_data[positive_y]
+                    y_data = y_data[positive_y]
+                    if err_data is not None:
+                        err_data = err_data[positive_y]
+
+            if x_data.size == 0 or y_data.size == 0:
+                self.status_updated.emit("No plottable data available for independent fit window.")
+                return
 
             # ????????
             self.ax.clear()
@@ -1766,7 +1810,7 @@ class IndependentFitWindow(QMainWindow):
             self.figure.tight_layout()
 
             # ??????
-            self.canvas.draw()
+            self.canvas.draw_idle()
 
             # ????????
             self.setWindowTitle(f"GIMaP Cut Analysis - {title}")
@@ -1779,7 +1823,11 @@ class IndependentFitWindow(QMainWindow):
     def closeEvent(self, event):
         """No description."""
         try:
-            self.figure.clear()
+            if self.figure is not None:
+                self.figure.clear()
+            self.ax = None
+            self.canvas = None
+            self.toolbar = None
         except Exception:
             pass
         super().closeEvent(event)
@@ -1971,7 +2019,37 @@ REMOTE_PATH_MARKERS = (
 
 
 def _default_remote_cache_dir() -> str:
-    return normalize_path(os.path.join(os.getcwd(), ".gimap_cache", "remote_files"))
+    return os.path.join(".gimap_cache", "remote_files")
+
+
+def _app_root_dir() -> str:
+    try:
+        return str(Path(__file__).resolve().parents[1])
+    except Exception:
+        return os.getcwd()
+
+
+def _resolve_remote_cache_dir(cache_dir: str = "") -> str:
+    cache_dir = str(cache_dir or _default_remote_cache_dir()).strip()
+    if not cache_dir:
+        cache_dir = _default_remote_cache_dir()
+    if os.path.isabs(cache_dir):
+        return normalize_path(cache_dir)
+    return normalize_path(os.path.join(_app_root_dir(), cache_dir))
+
+
+def _display_remote_cache_dir(cache_dir: str = "") -> str:
+    cache_dir = str(cache_dir or "").strip()
+    default_rel = _default_remote_cache_dir()
+    default_abs = _resolve_remote_cache_dir(default_rel)
+    if not cache_dir:
+        return default_rel
+    try:
+        if os.path.normcase(os.path.abspath(cache_dir)) == os.path.normcase(os.path.abspath(default_abs)):
+            return default_rel
+    except Exception:
+        pass
+    return cache_dir
 
 
 def _is_mapped_network_drive(path: str) -> bool:
@@ -2006,11 +2084,29 @@ def is_cloud_or_network_path(path: str) -> bool:
     return False
 
 
+def _qobject_is_alive(obj) -> bool:
+    if obj is None:
+        return False
+    try:
+        import sip
+        if sip.isdeleted(obj):
+            return False
+    except Exception:
+        pass
+    try:
+        obj.objectName()
+    except RuntimeError:
+        return False
+    except Exception:
+        pass
+    return True
+
+
 def _cache_file_path_for_source(source_path: str, cache_dir: str) -> str:
     source_norm = normalize_path(source_path)
     digest = hashlib.sha256(source_norm.encode("utf-8", errors="ignore")).hexdigest()[:16]
     name = os.path.basename(source_norm) or "remote_file"
-    return normalize_path(os.path.join(cache_dir or _default_remote_cache_dir(), f"{digest}_{name}"))
+    return normalize_path(os.path.join(_resolve_remote_cache_dir(cache_dir), f"{digest}_{name}"))
 
 
 def _is_remote_raw_cache_name(name: str) -> bool:
@@ -2019,7 +2115,7 @@ def _is_remote_raw_cache_name(name: str) -> bool:
 
 def _copy_remote_file_to_cache(source_path: str, cache_dir: str, progress_callback=None, interrupt_callback=None) -> str:
     source_path = normalize_path(source_path)
-    cache_dir = normalize_path(cache_dir or _default_remote_cache_dir())
+    cache_dir = _resolve_remote_cache_dir(cache_dir)
     os.makedirs(cache_dir, exist_ok=True)
     target_path = _cache_file_path_for_source(source_path, cache_dir)
     try:
@@ -2065,7 +2161,7 @@ def _copy_remote_file_to_cache(source_path: str, cache_dir: str, progress_callba
 
 def _enforce_remote_cache_limit(cache_dir: str, max_gb: float) -> None:
     try:
-        cache_dir = normalize_path(cache_dir or _default_remote_cache_dir())
+        cache_dir = _resolve_remote_cache_dir(cache_dir)
         limit_bytes = int(max(0.25, float(max_gb or 3.0)) * 1024 ** 3)
         if not os.path.isdir(cache_dir):
             return
@@ -2171,7 +2267,7 @@ class AsyncImageLoader(QThread):
 
     def configure_remote_cache(self, enabled=True, cache_dir=None, max_gb=3.0):
         self.copy_remote_to_cache = bool(enabled)
-        self.remote_cache_dir = normalize_path(cache_dir or _default_remote_cache_dir())
+        self.remote_cache_dir = _display_remote_cache_dir(cache_dir or _default_remote_cache_dir())
         try:
             self.remote_cache_limit_gb = float(max_gb)
         except Exception:
@@ -2694,7 +2790,7 @@ class FittingController(QObject):
         try:
             from core.user_settings import user_settings
             self._remote_copy_enabled = bool(user_settings.get("remote.copy_to_cache", True))
-            self._remote_cache_dir = normalize_path(user_settings.get("remote.cache_dir", _default_remote_cache_dir()))
+            self._remote_cache_dir = _display_remote_cache_dir(user_settings.get("remote.cache_dir", ""))
             self._remote_cache_limit_gb = float(user_settings.get("remote.cache_limit_gb", 3.0))
         except Exception:
             self._remote_copy_enabled = True
@@ -2706,7 +2802,7 @@ class FittingController(QObject):
         try:
             from core.user_settings import user_settings
             user_settings.set("remote.copy_to_cache", bool(self._remote_copy_enabled))
-            user_settings.set("remote.cache_dir", normalize_path(self._remote_cache_dir or _default_remote_cache_dir()))
+            user_settings.set("remote.cache_dir", _display_remote_cache_dir(self._remote_cache_dir or _default_remote_cache_dir()))
             user_settings.set("remote.cache_limit_gb", float(self._remote_cache_limit_gb or 3.0))
             user_settings.save_settings()
         except Exception:
@@ -2784,7 +2880,7 @@ class FittingController(QObject):
             path_edit = widgets.get("path")
             limit_spin = widgets.get("limit")
             self._remote_copy_enabled = bool(copy_cb.isChecked()) if copy_cb is not None else True
-            self._remote_cache_dir = normalize_path(path_edit.text().strip()) if path_edit is not None else _default_remote_cache_dir()
+            self._remote_cache_dir = _display_remote_cache_dir(path_edit.text().strip()) if path_edit is not None else _default_remote_cache_dir()
             self._remote_cache_limit_gb = float(limit_spin.value()) if limit_spin is not None else 3.0
             self._configure_async_loader_remote_cache()
             self._save_remote_cache_settings()
@@ -2793,7 +2889,7 @@ class FittingController(QObject):
 
     def _browse_remote_cache_folder(self):
         try:
-            start = self._remote_cache_dir or _default_remote_cache_dir()
+            start = _resolve_remote_cache_dir(self._remote_cache_dir or _default_remote_cache_dir())
             folder = QFileDialog.getExistingDirectory(self.main_window, "Select Remote File Cache Folder", start)
             if not folder:
                 return
@@ -2807,7 +2903,7 @@ class FittingController(QObject):
 
     def _clear_remote_file_cache(self):
         try:
-            cache_dir = normalize_path(self._remote_cache_dir or _default_remote_cache_dir())
+            cache_dir = _resolve_remote_cache_dir(self._remote_cache_dir or _default_remote_cache_dir())
             if not os.path.isdir(cache_dir):
                 self.status_updated.emit("Remote cache folder is empty")
                 return
@@ -3982,6 +4078,38 @@ class FittingController(QObject):
             )
             # ??meta ????????connect_mode ????????????????
 
+    def _restore_gisaxs_input_parameters(self):
+        """Restore persisted GISAXS input and Cut Line values after widget setup."""
+        mapping = [
+            ('gisaxsInputCenterVerticalValue', 'center_vertical', 0.0),
+            ('gisaxsInputCenterParallelValue', 'center_parallel', 0.0),
+            ('gisaxsInputCutLineVerticalValue', 'cutline_vertical', 10.0),
+            ('gisaxsInputCutLineParallelValue', 'cutline_parallel', 10.0),
+            ('gisaxsInputVminValue', 'vmin', None),
+            ('gisaxsInputVmaxValue', 'vmax', None),
+        ]
+        try:
+            from core.global_params import GlobalParameterManager
+            global_params = GlobalParameterManager()
+        except Exception:
+            return
+
+        for widget_name, param_key, default_value in mapping:
+            if not hasattr(self.ui, widget_name):
+                continue
+            try:
+                value = global_params.get_parameter('fitting', f'gisaxs_input.{param_key}', default_value)
+                if value is None:
+                    continue
+                widget = getattr(self.ui, widget_name)
+                old_block_state = widget.blockSignals(True)
+                try:
+                    widget.setValue(float(value))
+                finally:
+                    widget.blockSignals(old_block_state)
+            except Exception:
+                continue
+
     def _connect_parameter_widgets(self):
         """No description."""
         # ????????UI????????????????
@@ -4079,6 +4207,8 @@ class FittingController(QObject):
             self.ui.gisaxsInputCutLineParallelValue.setDecimals(2)
             self.ui.gisaxsInputCutLineParallelValue.setValue(10.0)
             self.ui.gisaxsInputCutLineParallelValue.setKeyboardTracking(True)
+
+        self._restore_gisaxs_input_parameters()
 
         # ???Cut Line??????????????????????
         self._update_cutline_step_sizes()
@@ -6474,7 +6604,7 @@ class FittingController(QObject):
 
     def _on_insitu_refine_finished(self, record: dict, setup: dict, result: dict):
         try:
-            self._apply_manual_refine_result(setup, result.get("params"))
+            self._apply_manual_refine_result(setup, result.get("params"), apply_indices=result.get("selected_indices"))
             old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
             refresh_views = self._should_refresh_insitu_views_for_current_file()
             if refresh_views:
@@ -7595,10 +7725,25 @@ class FittingController(QObject):
             if self.q is None or self.I is None:
                 QMessageBox.information(self.main_window, "No Data", "No data available for display.")
                 return
+            try:
+                q_snapshot = np.asarray(self.q, dtype=float).reshape(-1)
+                i_snapshot = np.asarray(self.I, dtype=float).reshape(-1)
+                n_snapshot = min(q_snapshot.size, i_snapshot.size)
+                if n_snapshot <= 0 or not np.any(np.isfinite(q_snapshot[:n_snapshot]) & np.isfinite(i_snapshot[:n_snapshot])):
+                    QMessageBox.information(self.main_window, "No Data", "No finite fitting plot data available.")
+                    return
+            except Exception:
+                QMessageBox.information(self.main_window, "No Data", "Fitting plot data is not ready yet.")
+                return
 
             # ?????????????????
+            if not _qobject_is_alive(self.independent_fit_window):
+                self.independent_fit_window = None
+
             if self.independent_fit_window is None or not self.independent_fit_window.isVisible():
                 self.independent_fit_window = IndependentFitWindow(self.main_window)
+                self.independent_fit_window.setAttribute(Qt.WA_DeleteOnClose, True)
+                self.independent_fit_window.destroyed.connect(lambda _obj=None: setattr(self, "independent_fit_window", None))
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
                 # ??????????????????????????
                 self.independent_fit_window.show_positive_cb.toggled.connect(self._on_positive_only_changed)
@@ -7651,7 +7796,7 @@ class FittingController(QObject):
             if hasattr(self.independent_fit_window, 'canvas'):
                 self.independent_fit_window.canvas.setFocus()
                 # ?????????
-                self.independent_fit_window.canvas.draw()
+                self.independent_fit_window.canvas.draw_idle()
 
             self.status_updated.emit(f"{mode.capitalize()} mode independent window updated")
 
@@ -9249,7 +9394,7 @@ class FittingController(QObject):
 
             # ??????
             if hasattr(self.independent_fit_window, 'canvas'):
-                self.independent_fit_window.canvas.draw()
+                self.independent_fit_window.canvas.draw_idle()
 
         except Exception:
             pass
@@ -14264,9 +14409,13 @@ class FittingController(QObject):
             def apply_result(result):
                 if not result:
                     return
-                self._apply_manual_refine_result(setup, result["params"])
+                self._apply_manual_refine_result(setup, result["params"], apply_indices=result.get("selected_indices"))
                 self._perform_manual_fitting()
+                selected_for_display = result.get("selected_indices")
+                selected_for_display = {int(idx) for idx in selected_for_display} if selected_for_display is not None else None
                 for row, value in enumerate(result["params"]):
+                    if selected_for_display is not None and row not in selected_for_display:
+                        continue
                     table.setItem(row, 2, QTableWidgetItem(f"{float(value):.10g}"))
                 self._add_fitting_success(
                     f"Applied Auto Refine parameters: logRMSE={float(result.get('final_log_rmse', np.nan)):.6g}"
@@ -14607,6 +14756,7 @@ class FittingController(QObject):
         y = np.asarray(setup["y"], dtype=float)
         params0 = np.array([float(desc["value"]) for desc in setup["params"]], dtype=float)
         variable_indices = [int(desc["index"]) for desc, _lo, _hi in selected]
+        selected_indices = [int(idx) for idx in variable_indices]
         lower = np.array([float(lo) for _desc, lo, _hi in selected], dtype=float)
         upper = np.array([float(hi) for _desc, _lo, hi in selected], dtype=float)
         x0 = params0[variable_indices].copy()
@@ -14647,6 +14797,7 @@ class FittingController(QObject):
         if progress_callback:
             progress_callback({
                 "params": params0.copy(),
+                "selected_indices": selected_indices,
                 "initial_log_rmse": initial_log_rmse,
                 "final_log_rmse": initial_log_rmse,
                 "best_log_rmse": initial_log_rmse,
@@ -14691,6 +14842,7 @@ class FittingController(QObject):
                 best_params = build_params(progress["best_x"])
                 progress_callback({
                     "params": best_params,
+                    "selected_indices": selected_indices,
                     "initial_log_rmse": initial_log_rmse,
                     "final_log_rmse": float(progress["best"]),
                     "best_log_rmse": float(progress["best"]),
@@ -14734,6 +14886,7 @@ class FittingController(QObject):
         final_log_rmse, _ = log_rmse_for_params(final_params)
         result_payload = {
             "params": final_params,
+            "selected_indices": [int(idx) for idx in variable_indices],
             "initial_log_rmse": initial_log_rmse,
             "final_log_rmse": final_log_rmse,
             "nfev": nfev,
@@ -14748,11 +14901,15 @@ class FittingController(QObject):
             progress_callback(result_payload)
         return result_payload
 
-    def _apply_manual_refine_result(self, setup, refined_params):
+    def _apply_manual_refine_result(self, setup, refined_params, apply_indices=None):
         old_loading = getattr(self, "_loading_parameters", False)
         self._loading_parameters = True
         try:
-            for desc, value in zip(setup["params"], refined_params):
+            if apply_indices is not None:
+                apply_indices = {int(idx) for idx in apply_indices}
+            for idx, (desc, value) in enumerate(zip(setup["params"], refined_params)):
+                if apply_indices is not None and idx not in apply_indices:
+                    continue
                 value = float(value)
                 widget_name = desc.get("widget_name")
                 if widget_name and hasattr(self.ui, widget_name):
@@ -15483,8 +15640,13 @@ class FittingController(QObject):
                     data_label = "1D File Data"
 
             # ?????????????????
+            if not _qobject_is_alive(self.independent_fit_window):
+                self.independent_fit_window = None
+
             if self.independent_fit_window is None or not self.independent_fit_window.isVisible():
                 self.independent_fit_window = IndependentFitWindow(self.main_window)
+                self.independent_fit_window.setAttribute(Qt.WA_DeleteOnClose, True)
+                self.independent_fit_window.destroyed.connect(lambda _obj=None: setattr(self, "independent_fit_window", None))
 
                 # ??????
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
@@ -15539,23 +15701,47 @@ class FittingController(QObject):
                                                log_x, log_y, normalize):
         """No description."""
         try:
-            if not hasattr(self.independent_fit_window, 'ax'):
+            if not _qobject_is_alive(self.independent_fit_window) or not hasattr(self.independent_fit_window, 'ax'):
+                self.independent_fit_window = None
                 return
 
             ax = self.independent_fit_window.ax
+            if ax is None:
+                return
             ax.clear()
 
             # ??????????
-            plot_fitting_y = np.array(fitting_y)  # ????????????????
-            plot_original_y = np.array(original_y, copy=True) if original_y is not None else None
+            fitting_x = np.asarray(fitting_x, dtype=float).reshape(-1) if fitting_x is not None else np.array([], dtype=float)
+            plot_fitting_y = np.asarray(fitting_y, dtype=float).reshape(-1) if fitting_y is not None else np.array([], dtype=float)
+            nf = min(fitting_x.size, plot_fitting_y.size)
+            fitting_x, plot_fitting_y = fitting_x[:nf], plot_fitting_y[:nf]
+            if nf > 0:
+                mask = np.isfinite(fitting_x) & np.isfinite(plot_fitting_y)
+                fitting_x, plot_fitting_y = fitting_x[mask], plot_fitting_y[mask]
+
+            if original_x is not None and original_y is not None:
+                original_x = np.asarray(original_x, dtype=float).reshape(-1)
+                plot_original_y = np.asarray(original_y, dtype=float).reshape(-1)
+                no = min(original_x.size, plot_original_y.size)
+                original_x, plot_original_y = original_x[:no], plot_original_y[:no]
+                if no > 0:
+                    mask = np.isfinite(original_x) & np.isfinite(plot_original_y)
+                    original_x, plot_original_y = original_x[mask], plot_original_y[mask]
+            else:
+                original_x = None
+                plot_original_y = None
+
+            if (original_x is None or plot_original_y is None or original_x.size == 0) and fitting_x.size == 0:
+                self.status_updated.emit("No plottable fitting data for independent window.")
+                return
 
             if normalize and original_y is not None:
                 # ???????????????????????????????
-                max_original = np.max(original_y)
+                max_original = np.nanmax(plot_original_y) if plot_original_y is not None and plot_original_y.size else 0.0
                 if max_original > 0:
-                    plot_original_y = original_y / max_original
+                    plot_original_y = plot_original_y / max_original
                     # ?????????????????????????????
-                    plot_fitting_y = fitting_y / max_original
+                    plot_fitting_y = plot_fitting_y / max_original
 
             filter_mode = self._get_independent_axis_filter_mode()
             original_x_plot = original_x
@@ -15569,6 +15755,30 @@ class FittingController(QObject):
 
             original_x_plot = self._convert_q_values_for_display(original_x_plot)
             fitting_x_plot = self._convert_q_values_for_display(fitting_x_plot)
+
+            if log_x:
+                if original_x_plot is not None and plot_original_y is not None:
+                    mask = np.asarray(original_x_plot) > 0
+                    original_x_plot = np.asarray(original_x_plot)[mask]
+                    plot_original_y = np.asarray(plot_original_y)[mask]
+                    if original_x_raw_for_delete is not None:
+                        original_x_raw_for_delete = np.asarray(original_x_raw_for_delete)[mask]
+                if fitting_x_plot is not None and plot_fitting_y is not None:
+                    mask = np.asarray(fitting_x_plot) > 0
+                    fitting_x_plot = np.asarray(fitting_x_plot)[mask]
+                    plot_fitting_y = np.asarray(plot_fitting_y)[mask]
+
+            if log_y:
+                if original_x_plot is not None and plot_original_y is not None:
+                    mask = np.asarray(plot_original_y) > 0
+                    original_x_plot = np.asarray(original_x_plot)[mask]
+                    plot_original_y = np.asarray(plot_original_y)[mask]
+                    if original_x_raw_for_delete is not None:
+                        original_x_raw_for_delete = np.asarray(original_x_raw_for_delete)[mask]
+                if fitting_x_plot is not None and plot_fitting_y is not None:
+                    mask = np.asarray(plot_fitting_y) > 0
+                    fitting_x_plot = np.asarray(fitting_x_plot)[mask]
+                    plot_fitting_y = np.asarray(plot_fitting_y)[mask]
 
             # ???????????scatter??
             if original_x is not None and plot_original_y is not None and len(original_x_plot) > 0:
