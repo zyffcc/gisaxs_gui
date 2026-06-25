@@ -24,18 +24,25 @@
     "last_selected_model": "",
     "last_constraint_mode": "Current Manual Model",
     "extra_model_paths": [],
-    "full_refine_max_nfev": 200,
+    "full_refine_max_nfev": 300,
     "full_refine_target_logrmse": 1e-08,
     "full_refine_ftol": 1e-08,
     "full_refine_xtol": 1e-08,
     "full_refine_gtol": 1e-08,
     "full_refine_progress_interval": 20,
-    "full_refine_top_n": 1
+    "full_refine_top_n": 1,
+    "parameter_constraints": {
+      "components": [
+        "sphere",
+        "cylinder",
+        "sphere"
+      ]
+    }
   },
   "gisaxs_fitting_splitter_sizes": {
     "page": [
-      1012,
-      666
+      902,
+      593
     ],
     "work": [],
     "profile": "normal"

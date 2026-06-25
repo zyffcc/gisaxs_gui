@@ -73,33 +73,36 @@
             "distance": 2565.0,
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
-            "beam_center_x": 793.95,
-            "beam_center_y": 375.22,
+            "beam_center_x": 795.5714804956483,
+            "beam_center_y": 368.1254577210111,
             "show_q_axis": false
         },
         "last_session": {
-            "last_opened_file": "E:\\ExpData\\Alex\\p2m\\dl_28_ag_03_dc_12p_insitu_00001_00009.cbf",
-            "imported_gisaxs_file": "E:\\ExpData\\Alex\\p2m\\dl_28_ag_03_dc_12p_insitu_00001_00009.cbf",
-            "last_directory": "E:\\ExpData\\Alex\\p2m",
+            "last_opened_file": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata/jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
+            "imported_gisaxs_file": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata/jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00005.cbf",
+            "last_directory": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/TestSAXSdata",
             "load_mode": "Single",
             "display_mode": "normal",
             "stack_value": "1",
             "stack_count": 1,
             "insitu_range": "",
             "fit_current_data": true,
-            "fit_log_x": true,
-            "fit_log_y": true,
+            "fit_log_x": false,
+            "fit_log_y": false,
             "fit_norm": false,
             "auto_show": true
         },
         "gisaxs_input": {
-            "vmax": 4.21,
-            "center_parallel": -4.0,
-            "cutline_vertical": 6.0,
-            "cutline_parallel": 7.0,
+            "vmax": 6.0,
+            "center_parallel": 792.0,
+            "cutline_vertical": 34.0,
+            "cutline_parallel": 966.0,
             "load_mode": "Single",
-            "center_vertical": -4.0,
-            "vmin": -4.71
+            "center_vertical": 502.0,
+            "vmin": -4.71,
+            "show_cut_region": true,
+            "show_center": true,
+            "colormap": "viridis"
         }
     },
     "gisaxs_predict": {
@@ -128,7 +131,7 @@
         "predict_curve_ymin": null,
         "predict_curve_ymax": null,
         "module_name": "G Ag/PNO FF 256 (Experimental)",
-        "module_model_path": "C:\\Users\\zhaiyufe\\Downloads\\Geo_Ag_Si_Sputter_Model\\Geo_Ag_Si_Sputter_Model\\georgios_ff_model_softmax_poisson_10p0_100p0_saved_model"
+        "module_model_path": ""
     },
     "classification": {
         "import_cache": {

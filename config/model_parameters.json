@@ -1,11 +1,11 @@
 {
     "fitting": {
         "global_parameters": {
-            "sigma_res": 0.03612901795213891,
-            "k_value": 23.019385774973387,
-            "int_res": 0.3852861929723298,
-            "nu_res": 3.102190637717906,
-            "background": 9.157679587960701e-11
+            "sigma_res": 0.018591365843527875,
+            "k_value": 29431.820176868197,
+            "int_res": 0.9999999994569009,
+            "nu_res": 24.9966,
+            "background": 2.810472800518181e-07
         },
         "particles": {
             "particle_7": {
@@ -37,11 +37,11 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 1.1941781924525487,
-                        "radius": 8.348396301269531,
-                        "sigma_radius": 0.29979339241981506,
-                        "diameter": 11.73766040802002,
-                        "sigma_diameter": 0.628443717956543
+                        "intensity": 0.019928102679655533,
+                        "radius": 17.45369529724121,
+                        "sigma_radius": 6.45817232131958,
+                        "diameter": 11.58677864074707,
+                        "sigma_diameter": 8.231911659240723
                     },
                     "cylinder": {
                         "intensity": 0.3562638653873533,
@@ -66,11 +66,11 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 1.2053321337957905,
-                        "radius": 4.577607154846191,
-                        "sigma_radius": 0.28179773688316345,
-                        "diameter": 6.326902866363525,
-                        "sigma_diameter": 0.35942524671554565
+                        "intensity": 0.016286359659153687,
+                        "radius": 3.3213906288146973,
+                        "sigma_radius": 0.654208242893219,
+                        "diameter": 6.146551132202148,
+                        "sigma_diameter": 0.6940457820892334
                     },
                     "cylinder": {
                         "intensity": 1.0,
@@ -95,11 +95,40 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 1.2884407926923347,
-                        "radius": 20.416473388671875,
-                        "sigma_radius": 8.32012939453125,
-                        "diameter": 19.424976348876953,
-                        "sigma_diameter": 5.301321983337402
+                        "intensity": 1.9374573168993214,
+                        "radius": 88.28290557861328,
+                        "sigma_radius": 21.129045486450195,
+                        "diameter": 19.598567962646484,
+                        "sigma_diameter": 16.03392791748047
+                    },
+                    "cylinder": {
+                        "intensity": 1.0,
+                        "radius": 10.0,
+                        "sigma_radius": 0.1,
+                        "height": 20.0,
+                        "sigma_height": 0.1,
+                        "diameter": 20.0,
+                        "sigma_diameter": 0.1
+                    },
+                    "vertical_cylinder": {
+                        "intensity": 1.0,
+                        "radius": 10.0,
+                        "sigma_radius": 0.3,
+                        "diameter": 20.0,
+                        "sigma_diameter": 0.1
+                    }
+                }
+            },
+            "particle_4": {
+                "shape": "Sphere",
+                "enabled": true,
+                "parameters": {
+                    "sphere": {
+                        "intensity": 0.00487453920323942,
+                        "radius": 44.655242919921875,
+                        "sigma_radius": 3.842874050140381,
+                        "diameter": 11.334465026855469,
+                        "sigma_diameter": 0.020127924159169197
                     },
                     "cylinder": {
                         "intensity": 1.0,

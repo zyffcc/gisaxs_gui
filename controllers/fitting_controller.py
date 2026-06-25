@@ -49,6 +49,19 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
 )
 
+
+GISAXS_IMAGE_COLORMAPS = (
+    "viridis",
+    "cividis",
+    "plasma",
+    "magma",
+    "inferno",
+    "turbo",
+    "jet",
+    "coolwarm",
+    "gray",
+)
+
 # ?????????????
 from ui.detector_parameters_dialog import DetectorParametersDialog
 from ui.responsive_layout import (
@@ -482,6 +495,7 @@ class IndependentMatplotlibWindow(QMainWindow):
     region_selected = pyqtSignal(dict)  # ?????????????
     center_picked = pyqtSignal(dict)  # detector beam center picked from image
     status_updated = pyqtSignal(str)  # ?????????????
+    display_options_changed = pyqtSignal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -501,6 +515,14 @@ class IndependentMatplotlibWindow(QMainWindow):
         self.toolbar = None
         self.pick_center_action = None
         self.ax = None
+        self.show_cut_region = True
+        self.show_center = True
+        self.colormap = "viridis"
+        self._dragging_overlay = None
+        self._drag_start = None
+        self._drag_original_info = None
+        self._overlay_press_tolerance_px = 8.0
+        self._load_display_options()
         try:
             if is_matplotlib_available():
                 from matplotlib.figure import Figure
@@ -510,6 +532,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self.canvas = FigureCanvas(self.figure)
                 self.toolbar = NavigationToolbar(self.canvas, self)
                 self._setup_pick_center_action()
+                self._setup_display_option_widgets()
                 layout.addWidget(self.toolbar)
                 layout.addWidget(self.canvas)
                 self.ax = self.figure.add_subplot(111)
@@ -563,6 +586,26 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.canvas.mpl_connect('key_press_event', self._on_key_press)
         install_adaptive_window_profile(self, self._apply_screen_profile, apply_window_minimum=False)
 
+    def _load_display_options(self):
+        try:
+            from core.global_params import global_params
+            self.show_cut_region = bool(global_params.get_parameter('fitting', 'gisaxs_input.show_cut_region', True))
+            self.show_center = bool(global_params.get_parameter('fitting', 'gisaxs_input.show_center', True))
+            cmap = global_params.get_parameter('fitting', 'gisaxs_input.colormap', 'viridis')
+            self.colormap = cmap if cmap in GISAXS_IMAGE_COLORMAPS else "viridis"
+        except Exception:
+            pass
+
+    def _save_display_options(self):
+        try:
+            from core.global_params import global_params
+            global_params.set_parameter('fitting', 'gisaxs_input.show_cut_region', bool(self.show_cut_region))
+            global_params.set_parameter('fitting', 'gisaxs_input.show_center', bool(self.show_center))
+            global_params.set_parameter('fitting', 'gisaxs_input.colormap', self.colormap)
+            global_params.save_user_parameters()
+        except Exception:
+            pass
+
     def _setup_pick_center_action(self):
         try:
             if self.toolbar is None:
@@ -575,6 +618,134 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.toolbar.addAction(self.pick_center_action)
         except Exception:
             self.pick_center_action = None
+
+    def _setup_display_option_widgets(self):
+        try:
+            if self.toolbar is None:
+                return
+            self.show_cut_action = QAction("Cut Region", self)
+            self.show_cut_action.setCheckable(True)
+            self.show_cut_action.setChecked(bool(self.show_cut_region))
+            self.show_cut_action.setToolTip("Show or hide the Cut Region overlay")
+            self.show_cut_action.toggled.connect(self._on_show_cut_region_toggled)
+
+            self.show_center_action = QAction("Center", self)
+            self.show_center_action.setCheckable(True)
+            self.show_center_action.setChecked(bool(self.show_center))
+            self.show_center_action.setToolTip("Show or hide the center cross")
+            self.show_center_action.toggled.connect(self._on_show_center_toggled)
+
+            self.cmap_combo = QComboBox(self.toolbar)
+            self.cmap_combo.addItems(list(GISAXS_IMAGE_COLORMAPS))
+            idx = self.cmap_combo.findText(self.colormap)
+            self.cmap_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            self.cmap_combo.setMinimumWidth(112)
+            self.cmap_combo.setToolTip("Image color map")
+            self.cmap_combo.currentTextChanged.connect(self._on_colormap_changed)
+
+            self.toolbar.addSeparator()
+            self.toolbar.addAction(self.show_cut_action)
+            self.toolbar.addAction(self.show_center_action)
+            self.toolbar.addWidget(QLabel("Color:", self.toolbar))
+            self.toolbar.addWidget(self.cmap_combo)
+        except Exception:
+            pass
+
+    def set_display_options(self, show_cut_region=None, show_center=None, colormap=None, emit=False):
+        try:
+            if show_cut_region is not None:
+                self.show_cut_region = bool(show_cut_region)
+                action = getattr(self, 'show_cut_action', None)
+                if action is not None:
+                    action.blockSignals(True)
+                    action.setChecked(self.show_cut_region)
+                    action.blockSignals(False)
+            if show_center is not None:
+                self.show_center = bool(show_center)
+                action = getattr(self, 'show_center_action', None)
+                if action is not None:
+                    action.blockSignals(True)
+                    action.setChecked(self.show_center)
+                    action.blockSignals(False)
+            if colormap:
+                self.colormap = colormap if colormap in GISAXS_IMAGE_COLORMAPS else "viridis"
+                combo = getattr(self, 'cmap_combo', None)
+                if combo is not None:
+                    combo.blockSignals(True)
+                    idx = combo.findText(self.colormap)
+                    combo.setCurrentIndex(idx if idx >= 0 else 0)
+                    combo.blockSignals(False)
+                if self.current_image is not None:
+                    self.current_image.set_cmap(self.colormap)
+                    if self.colorbar is not None:
+                        self.colorbar.update_normal(self.current_image)
+            self._redraw_parameter_selection()
+            if self.canvas is not None:
+                self.canvas.draw_idle()
+            if emit:
+                self._emit_display_options_changed()
+        except Exception:
+            pass
+
+    def _emit_display_options_changed(self):
+        options = {
+            'show_cut_region': bool(self.show_cut_region),
+            'show_center': bool(self.show_center),
+            'colormap': self.colormap,
+        }
+        self._save_display_options()
+        self.display_options_changed.emit(options)
+
+    def _on_show_cut_region_toggled(self, checked: bool):
+        self._set_cut_region_visible(checked, emit=True)
+
+    def _on_show_center_toggled(self, checked: bool):
+        self._set_center_visible(checked, emit=True)
+
+    def _set_cut_region_visible(self, visible: bool, emit: bool = False):
+        try:
+            self.show_cut_region = bool(visible)
+            action = getattr(self, 'show_cut_action', None)
+            if action is not None:
+                action.blockSignals(True)
+                action.setChecked(self.show_cut_region)
+                action.blockSignals(False)
+            self._redraw_parameter_selection()
+            if self.canvas is not None:
+                self.canvas.draw_idle()
+            if emit:
+                self._emit_display_options_changed()
+        except Exception:
+            pass
+
+    def _set_center_visible(self, visible: bool, emit: bool = False):
+        try:
+            self.show_center = bool(visible)
+            action = getattr(self, 'show_center_action', None)
+            if action is not None:
+                action.blockSignals(True)
+                action.setChecked(self.show_center)
+                action.blockSignals(False)
+            self._redraw_parameter_selection()
+            if self.canvas is not None:
+                self.canvas.draw_idle()
+            if emit:
+                self._emit_display_options_changed()
+        except Exception:
+            pass
+
+    def _on_colormap_changed(self, text: str):
+        self.colormap = text if text in GISAXS_IMAGE_COLORMAPS else "viridis"
+        if self.current_image is not None:
+            try:
+                self.current_image.set_cmap(self.colormap)
+                if self.colorbar is not None:
+                    self.colorbar.update_normal(self.current_image)
+            except Exception:
+                pass
+        if self.canvas is not None:
+            self.canvas.draw_idle()
+        self._emit_display_options_changed()
 
     def _toggle_pick_center_mode(self, checked: bool):
         try:
@@ -641,6 +812,19 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self.selection_rect.remove()
                 self.selection_rect = None
             self.status_updated.emit("Selection started - drag to define region")
+            return
+
+        if event.button == 1 and not self.selection_mode and event.inaxes == self.ax:
+            hit = self._hit_test_overlay(event)
+            if hit:
+                self._dragging_overlay = hit
+                self._drag_start = (float(event.xdata), float(event.ydata))
+                self._drag_original_info = copy.deepcopy(self.parameter_selection_info) or {}
+                self._drag_original_center = self._get_detector_center_display_coordinates()
+                self._drag_current_center = None
+                if self.canvas is not None:
+                    self.canvas.setCursor(Qt.ClosedHandCursor)
+                self.status_updated.emit("Drag Cut Region" if hit == "region" else "Drag Detector Beam Center")
 
     def _emit_picked_center(self, event):
         try:
@@ -674,12 +858,13 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self.status_updated.emit(f"Picked detector center: X={x_value:.2f}, Y={y_value:.2f}")
             try:
                 if self.ax is not None:
-                    marker = getattr(self, "_picked_center_marker", None)
-                    if marker is not None:
-                        marker.remove()
-                    lines = self.ax.plot(x_value, y_value, marker="+", color="cyan", markersize=14, markeredgewidth=2.5)
-                    self._picked_center_marker = lines[0] if lines else None
-                    self.canvas.draw_idle()
+                    self._drag_current_center = (
+                        x_value,
+                        y_value,
+                        float(payload.get("beam_center_x", x_value)),
+                        float(payload.get("beam_center_y", y_value)),
+                    )
+                    self._set_center_visible(True, emit=True)
             except Exception:
                 pass
             self.center_picked.emit(payload)
@@ -690,6 +875,22 @@ class IndependentMatplotlibWindow(QMainWindow):
 
     def _on_mouse_move(self, event):
         """No description."""
+        if self._dragging_overlay and self._drag_start and self._drag_original_info is not None and event.inaxes == self.ax:
+            if event.xdata is None or event.ydata is None:
+                return
+            dx = float(event.xdata) - self._drag_start[0]
+            dy = float(event.ydata) - self._drag_start[1]
+            if self._dragging_overlay == "center":
+                self._move_detector_center_marker(dx, dy)
+            else:
+                self._move_parameter_selection(dx, dy)
+            return
+
+        if not self.selection_mode and event.inaxes == self.ax:
+            hit = self._hit_test_overlay(event)
+            if self.canvas is not None:
+                self.canvas.setCursor(Qt.OpenHandCursor if hit else Qt.ArrowCursor)
+
         if (self.selection_mode and self.selection_start and
             event.inaxes == self.ax and event.xdata and event.ydata):
 
@@ -717,6 +918,30 @@ class IndependentMatplotlibWindow(QMainWindow):
 
     def _on_mouse_release(self, event):
         """No description."""
+        if self._dragging_overlay:
+            moved_info = copy.deepcopy(self.parameter_selection_info)
+            moved_center = getattr(self, "_drag_current_center", None)
+            dragging = self._dragging_overlay
+            self._dragging_overlay = None
+            self._drag_start = None
+            self._drag_original_info = None
+            self._drag_original_center = None
+            self._drag_current_center = None
+            if self.canvas is not None:
+                self.canvas.setCursor(Qt.OpenHandCursor if self._hit_test_overlay(event) else Qt.ArrowCursor)
+            if dragging == "center" and moved_center:
+                payload = {
+                    "is_q_space": bool(self._should_show_q_axis()),
+                    "x": float(moved_center[0]),
+                    "y": float(moved_center[1]),
+                    "beam_center_x": float(moved_center[2]),
+                    "beam_center_y": float(moved_center[3]),
+                }
+                self.center_picked.emit(payload)
+            elif moved_info:
+                self.region_selected.emit(moved_info)
+            return
+
         if (self.selection_mode and self.selection_start and
             event.button == 1 and event.inaxes == self.ax and
             event.xdata and event.ydata):
@@ -795,12 +1020,163 @@ class IndependentMatplotlibWindow(QMainWindow):
                     )
 
                 self.current_selection = selection_info
+                self._set_cut_region_visible(True, emit=True)
 
                 # ??????????
                 self.region_selected.emit(selection_info)
 
             # ??????????
             self.selection_start = None
+            if self.selection_rect:
+                try:
+                    self.selection_rect.remove()
+                except Exception:
+                    pass
+                self.selection_rect = None
+                self.canvas.draw_idle()
+
+    def _hit_test_overlay(self, event):
+        try:
+            if self.ax is None or event.inaxes != self.ax:
+                return None
+            if event.xdata is None or event.ydata is None:
+                return None
+            point_px = self.ax.transData.transform((float(event.xdata), float(event.ydata)))
+            if self.show_center:
+                center = self._get_detector_center_display_coordinates()
+                if center is not None:
+                    center_px = self.ax.transData.transform((float(center[0]), float(center[1])))
+                    center_dist = float(np.hypot(point_px[0] - center_px[0], point_px[1] - center_px[1]))
+                    if center_dist <= self._overlay_press_tolerance_px * 1.8:
+                        return "center"
+
+            if self.parameter_selection_info is None:
+                return None
+            bounds = self.parameter_selection_info.get('bounds', {})
+            x_min = float(bounds.get('x_min', 0))
+            x_max = float(bounds.get('x_max', 0))
+            y_min = float(bounds.get('y_min', 0))
+            y_max = float(bounds.get('y_max', 0))
+            if x_min == x_max or y_min == y_max:
+                return None
+
+            corners = [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
+            min_edge_dist = None
+            for start, end in zip(corners, corners[1:] + corners[:1]):
+                p0 = self.ax.transData.transform(start)
+                p1 = self.ax.transData.transform(end)
+                dist = self._point_to_segment_distance(point_px, p0, p1)
+                min_edge_dist = dist if min_edge_dist is None else min(min_edge_dist, dist)
+            if self.show_cut_region and min_edge_dist is not None and min_edge_dist <= self._overlay_press_tolerance_px:
+                return "region"
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _point_to_segment_distance(point, start, end):
+        try:
+            point = np.asarray(point, dtype=float)
+            start = np.asarray(start, dtype=float)
+            end = np.asarray(end, dtype=float)
+            seg = end - start
+            denom = float(np.dot(seg, seg))
+            if denom <= 0:
+                return float(np.linalg.norm(point - start))
+            t = max(0.0, min(1.0, float(np.dot(point - start, seg) / denom)))
+            projection = start + t * seg
+            return float(np.linalg.norm(point - projection))
+        except Exception:
+            return float("inf")
+
+    def _get_detector_center_display_coordinates(self):
+        try:
+            from core.global_params import global_params
+            shape = getattr(self, 'current_image_shape', None) or self.last_image_shape
+            if shape is None:
+                return None
+            height, width = shape
+            beam_x = float(global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0))
+            beam_y = float(global_params.get_parameter('fitting', 'detector.beam_center_y', height / 2.0))
+            if self._should_show_q_axis():
+                qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+                if qy_mesh is None or qz_mesh is None:
+                    self._get_q_axis_extent(shape)
+                    qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+                if qy_mesh is not None and qz_mesh is not None:
+                    row = int(np.clip(round(beam_y), 0, qy_mesh.shape[0] - 1))
+                    col = int(np.clip(round(beam_x), 0, qy_mesh.shape[1] - 1))
+                    return float(qy_mesh[row, col]), float(qz_mesh[row, col]), beam_x, beam_y
+            return beam_x, beam_y, beam_x, beam_y
+        except Exception:
+            return None
+
+    def _move_detector_center_marker(self, dx, dy):
+        try:
+            original = getattr(self, "_drag_original_center", None)
+            if original is None:
+                return
+            display_x = float(original[0]) + dx
+            display_y = float(original[1]) + dy
+            if self._should_show_q_axis():
+                pixel_coords = self._convert_q_to_pixel_coordinates(display_x, display_y, 1e-9, 1e-9)
+                beam_x = float(pixel_coords.get('center_x', original[2]))
+                beam_y = float(pixel_coords.get('center_y', original[3]))
+            else:
+                beam_x = display_x
+                beam_y = display_y
+            self._drag_current_center = (display_x, display_y, beam_x, beam_y)
+            self._redraw_parameter_selection()
+            if self.canvas is not None:
+                self.canvas.draw_idle()
+        except Exception as exc:
+            self.status_updated.emit(f"Move Beam Center failed: {exc}")
+
+    def _move_parameter_selection(self, dx, dy):
+        try:
+            info = copy.deepcopy(self._drag_original_info)
+            if not info:
+                return
+            bounds = info.get('bounds', {})
+            x_min = float(bounds.get('x_min', 0)) + dx
+            x_max = float(bounds.get('x_max', 0)) + dx
+            y_min = float(bounds.get('y_min', 0)) + dy
+            y_max = float(bounds.get('y_max', 0)) + dy
+            info['bounds'] = {
+                'x_min': x_min,
+                'x_max': x_max,
+                'y_min': y_min,
+                'y_max': y_max,
+            }
+            width = abs(x_max - x_min)
+            height = abs(y_max - y_min)
+            center_x = (x_min + x_max) / 2.0
+            center_y = (y_min + y_max) / 2.0
+            info['center_x'] = center_x
+            info['center_y'] = center_y
+            info['width'] = width
+            info['height'] = height
+            if info.get('is_q_space', False):
+                pixel_coords = self._convert_q_to_pixel_coordinates(center_x, center_y, width, height)
+                info.update({
+                    'pixel_center_x': int(pixel_coords.get('center_x', 0)),
+                    'pixel_center_y': int(pixel_coords.get('center_y', 0)),
+                    'pixel_width': int(pixel_coords.get('width', 0)),
+                    'pixel_height': int(pixel_coords.get('height', 0)),
+                })
+            else:
+                info.update({
+                    'pixel_center_x': int(round(center_x)),
+                    'pixel_center_y': int(round(center_y)),
+                    'pixel_width': int(round(width)),
+                    'pixel_height': int(round(height)),
+                })
+            self.parameter_selection_info = info
+            self._redraw_parameter_selection()
+            if self.canvas is not None:
+                self.canvas.draw_idle()
+        except Exception as exc:
+            self.status_updated.emit(f"Move Cut Region failed: {exc}")
 
     def _on_key_press(self, event):
         """No description."""
@@ -899,6 +1275,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                 processed_data = np.flipud(processed_data)
                 self.current_image.set_data(processed_data)
                 self.current_image.set_clim(vmin, vmax)
+                self.current_image.set_cmap(self.colormap)
                 if self.colorbar is not None:
                     try:
                         self.colorbar.update_normal(self.current_image)
@@ -998,12 +1375,12 @@ class IndependentMatplotlibWindow(QMainWindow):
                     q_extent = [qy_min, qy_max, qz_min, qz_max]
 
                     # ???imshow???Q?????
-                    self.current_image = self.ax.imshow(processed_data, cmap='viridis', aspect='equal',
+                    self.current_image = self.ax.imshow(processed_data, cmap=self.colormap, aspect='equal',
                                                       origin='lower', interpolation='nearest',
                                                       vmin=vmin, vmax=vmax, extent=q_extent)
                 else:
                     # ???Q?????????????????xtent
-                    self.current_image = self.ax.imshow(processed_data, cmap='viridis', aspect='equal',
+                    self.current_image = self.ax.imshow(processed_data, cmap=self.colormap, aspect='equal',
                                                       origin='lower', interpolation='nearest',
                                                       vmin=vmin, vmax=vmax, extent=extent)
 
@@ -1012,7 +1389,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self.ax.set_ylabel(r'$q_z$ (nm$^{-1}$)')
             else:
                 # ?????????????????
-                self.current_image = self.ax.imshow(processed_data, cmap='viridis', aspect='equal',
+                self.current_image = self.ax.imshow(processed_data, cmap=self.colormap, aspect='equal',
                                                   origin='lower', interpolation='nearest',
                                                   vmin=vmin, vmax=vmax)
                 # ???????????
@@ -1311,32 +1688,44 @@ class IndependentMatplotlibWindow(QMainWindow):
                     pass
                 finally:
                     self.parameter_selection_center = None
+            picked_marker = getattr(self, "_picked_center_marker", None)
+            if picked_marker is not None:
+                try:
+                    picked_marker.remove()
+                except Exception:
+                    pass
+                finally:
+                    self._picked_center_marker = None
 
-            if not self.parameter_selection_info or self.ax is None:
+            if self.ax is None:
                 return
 
-            bounds = self.parameter_selection_info.get('bounds', {})
-            x_min = bounds.get('x_min', 0)
-            x_max = bounds.get('x_max', 0)
-            y_min = bounds.get('y_min', 0)
-            y_max = bounds.get('y_max', 0)
-            if x_min == x_max or y_min == y_max:
-                return
-
-            from matplotlib.patches import Rectangle
-            self.parameter_selection = Rectangle(
-                (x_min, y_min),
-                x_max - x_min,
-                y_max - y_min,
-                linewidth=2,
-                edgecolor='red',
-                facecolor='none',
-                alpha=0.85,
-            )
-            self.ax.add_patch(self.parameter_selection)
-            center_lines = self.ax.plot((x_min + x_max) / 2, (y_min + y_max) / 2,
-                                        'r+', markersize=10, markeredgewidth=2)
-            self.parameter_selection_center = center_lines[0] if center_lines else None
+            if self.parameter_selection_info and self.show_cut_region:
+                bounds = self.parameter_selection_info.get('bounds', {})
+                x_min = bounds.get('x_min', 0)
+                x_max = bounds.get('x_max', 0)
+                y_min = bounds.get('y_min', 0)
+                y_max = bounds.get('y_max', 0)
+                if x_min != x_max and y_min != y_max:
+                    from matplotlib.patches import Rectangle
+                    self.parameter_selection = Rectangle(
+                        (x_min, y_min),
+                        x_max - x_min,
+                        y_max - y_min,
+                        linewidth=2,
+                        edgecolor='red',
+                        facecolor='none',
+                        alpha=0.85,
+                    )
+                    self.ax.add_patch(self.parameter_selection)
+            if self.show_center:
+                center = getattr(self, "_drag_current_center", None) or self._get_detector_center_display_coordinates()
+                if center is None:
+                    return
+                center_lines = self.ax.plot(float(center[0]), float(center[1]),
+                                            marker='+', color='cyan', markersize=14, markeredgewidth=2.5)
+                self._picked_center_marker = center_lines[0] if center_lines else None
+                self.parameter_selection_center = self._picked_center_marker
         except Exception:
             pass
 
@@ -1357,6 +1746,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                 pass
             finally:
                 self.parameter_selection_center = None
+        self._redraw_parameter_selection()
         self.canvas.draw()
 
     def closeEvent(self, event):
@@ -2577,8 +2967,13 @@ class FittingController(QObject):
         # ?????????
         self._current_vmin = None
         self._current_vmax = None
+        self._show_cut_region = True
+        self._show_center = True
+        self._image_colormap = "viridis"
+        self._syncing_image_display_options = False
         self._updating_color_scale_ui = False
         self._has_displayed_image = False  # ???????????????
+        self._load_image_display_options()
 
         # ???????
         self._initialized = False
@@ -4110,6 +4505,148 @@ class FittingController(QObject):
             except Exception:
                 continue
 
+    def _load_image_display_options(self):
+        try:
+            from core.global_params import global_params
+            self._show_cut_region = bool(global_params.get_parameter('fitting', 'gisaxs_input.show_cut_region', True))
+            self._show_center = bool(global_params.get_parameter('fitting', 'gisaxs_input.show_center', True))
+            cmap = global_params.get_parameter('fitting', 'gisaxs_input.colormap', 'viridis')
+            self._image_colormap = cmap if cmap in GISAXS_IMAGE_COLORMAPS else "viridis"
+        except Exception:
+            self._show_cut_region = True
+            self._show_center = True
+            self._image_colormap = "viridis"
+
+    def _save_image_display_options(self):
+        try:
+            from core.global_params import global_params
+            global_params.set_parameter('fitting', 'gisaxs_input.show_cut_region', bool(self._show_cut_region))
+            global_params.set_parameter('fitting', 'gisaxs_input.show_center', bool(self._show_center))
+            global_params.set_parameter('fitting', 'gisaxs_input.colormap', self._image_colormap)
+            global_params.save_user_parameters()
+        except Exception:
+            pass
+
+    def _initialize_image_display_option_widgets(self):
+        try:
+            combo = getattr(self.ui, 'gisaxsInputColormapCombo', None)
+            if combo is not None:
+                combo.blockSignals(True)
+                combo.clear()
+                combo.addItems(list(GISAXS_IMAGE_COLORMAPS))
+                idx = combo.findText(self._image_colormap)
+                combo.setCurrentIndex(idx if idx >= 0 else 0)
+                combo.blockSignals(False)
+                combo.currentTextChanged.connect(self._on_main_colormap_changed)
+            cut_cb = getattr(self.ui, 'gisaxsInputShowCutRegionCheckBox', None)
+            if cut_cb is not None:
+                cut_cb.blockSignals(True)
+                cut_cb.setChecked(bool(self._show_cut_region))
+                cut_cb.blockSignals(False)
+                cut_cb.toggled.connect(self._on_main_show_cut_region_toggled)
+            center_cb = getattr(self.ui, 'gisaxsInputShowCenterCheckBox', None)
+            if center_cb is not None:
+                center_cb.blockSignals(True)
+                center_cb.setChecked(bool(self._show_center))
+                center_cb.blockSignals(False)
+                center_cb.toggled.connect(self._on_main_show_center_toggled)
+        except Exception:
+            pass
+
+    def _sync_image_display_option_widgets(self):
+        try:
+            self._syncing_image_display_options = True
+            combo = getattr(self.ui, 'gisaxsInputColormapCombo', None)
+            if combo is not None:
+                combo.blockSignals(True)
+                idx = combo.findText(self._image_colormap)
+                combo.setCurrentIndex(idx if idx >= 0 else 0)
+                combo.blockSignals(False)
+            cut_cb = getattr(self.ui, 'gisaxsInputShowCutRegionCheckBox', None)
+            if cut_cb is not None:
+                cut_cb.blockSignals(True)
+                cut_cb.setChecked(bool(self._show_cut_region))
+                cut_cb.blockSignals(False)
+            center_cb = getattr(self.ui, 'gisaxsInputShowCenterCheckBox', None)
+            if center_cb is not None:
+                center_cb.blockSignals(True)
+                center_cb.setChecked(bool(self._show_center))
+                center_cb.blockSignals(False)
+        finally:
+            self._syncing_image_display_options = False
+
+    def _apply_image_display_options(self, *, refresh=True, sync_window=True):
+        self._save_image_display_options()
+        self._refresh_current_parameter_selection_from_ui()
+        self._sync_image_display_option_widgets()
+        if sync_window and self.independent_window is not None:
+            try:
+                self.independent_window.set_display_options(
+                    show_cut_region=self._show_cut_region,
+                    show_center=self._show_center,
+                    colormap=self._image_colormap,
+                )
+            except Exception:
+                pass
+        if refresh and self.current_stack_data is not None:
+            self._refresh_image_display()
+
+    def _on_main_show_cut_region_toggled(self, checked: bool):
+        if self._syncing_image_display_options:
+            return
+        self._show_cut_region = bool(checked)
+        self._apply_image_display_options()
+
+    def _on_main_show_center_toggled(self, checked: bool):
+        if self._syncing_image_display_options:
+            return
+        self._show_center = bool(checked)
+        self._apply_image_display_options()
+
+    def _on_main_colormap_changed(self, text: str):
+        if self._syncing_image_display_options:
+            return
+        self._image_colormap = text if text in GISAXS_IMAGE_COLORMAPS else "viridis"
+        self._apply_image_display_options()
+
+    def _on_independent_display_options_changed(self, options: dict):
+        try:
+            self._show_cut_region = bool(options.get('show_cut_region', self._show_cut_region))
+            self._show_center = bool(options.get('show_center', self._show_center))
+            cmap = options.get('colormap', self._image_colormap)
+            self._image_colormap = cmap if cmap in GISAXS_IMAGE_COLORMAPS else "viridis"
+            self._apply_image_display_options(sync_window=False)
+        except Exception:
+            pass
+
+    def _persist_cut_region_parameters(self, center_parallel, center_vertical, cutline_parallel, cutline_vertical):
+        """Persist Cut Region geometry even when values are changed programmatically."""
+        try:
+            values = {
+                'center_parallel': float(center_parallel),
+                'center_vertical': float(center_vertical),
+                'cutline_parallel': float(cutline_parallel),
+                'cutline_vertical': float(cutline_vertical),
+            }
+            from core.global_params import global_params
+            for key, value in values.items():
+                global_params.set_parameter('fitting', f'gisaxs_input.{key}', value)
+            global_params.save_user_parameters()
+        except Exception:
+            try:
+                from core.global_params import GlobalParameterManager
+                gp = GlobalParameterManager()
+                for key, value in {
+                    'center_parallel': float(center_parallel),
+                    'center_vertical': float(center_vertical),
+                    'cutline_parallel': float(cutline_parallel),
+                    'cutline_vertical': float(cutline_vertical),
+                }.items():
+                    gp.set_parameter('fitting', f'gisaxs_input.{key}', value)
+                gp.save_user_parameters()
+            except Exception:
+                pass
+
     def _connect_parameter_widgets(self):
         """No description."""
         # ????????UI????????????????
@@ -4209,6 +4746,9 @@ class FittingController(QObject):
             self.ui.gisaxsInputCutLineParallelValue.setKeyboardTracking(True)
 
         self._restore_gisaxs_input_parameters()
+        self._initialize_image_display_option_widgets()
+        if getattr(self, 'current_stack_data', None) is not None:
+            QTimer.singleShot(0, self._refresh_image_display)
 
         # ???Cut Line??????????????????????
         self._update_cutline_step_sizes()
@@ -6945,7 +7485,7 @@ class FittingController(QObject):
             preview_data, _ = self._downsample_for_preview(processed, max_pixels=280_000)
             vmin = self._current_vmin if self._current_vmin is not None else np.nanmin(processed)
             vmax = self._current_vmax if self._current_vmax is not None else np.nanmax(processed)
-            ax.imshow(preview_data, cmap="viridis", origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax)
+            ax.imshow(preview_data, cmap=self._image_colormap, origin="lower", interpolation="nearest", vmin=vmin, vmax=vmax)
             if selection:
                 try:
                     valid, message = self._validate_current_cut_settings()
@@ -7278,6 +7818,7 @@ class FittingController(QObject):
 
             # ???Cut Line???????
             self._update_cutline_labels_units()
+            self._refresh_current_parameter_selection_from_ui()
 
             # ????????raphicsView
             if hasattr(self.ui, 'gisaxsInputGraphicsView'):
@@ -7393,6 +7934,7 @@ class FittingController(QObject):
         """No description."""
         try:
             if self.current_stack_data is not None:
+                self._refresh_current_parameter_selection_from_ui()
                 # ????????raphicsView
                 if hasattr(self.ui, 'gisaxsInputGraphicsView'):
                     self._update_graphics_view(self.current_stack_data)
@@ -7435,14 +7977,21 @@ class FittingController(QObject):
                 # ????????????
                 self.independent_window.region_selected.connect(self._on_region_selected)
                 self.independent_window.center_picked.connect(self._on_detector_center_picked)
+                self.independent_window.display_options_changed.connect(self._on_independent_display_options_changed)
                 # ?????????????
                 self.independent_window.status_updated.connect(self.status_updated.emit)
 
             # ????????????????????vmin/vmax??og?????
             if self.current_stack_data is not None:
                 is_log = self._is_log_mode_enabled()
+                self._refresh_current_parameter_selection_from_ui()
                 # ?????????????
                 self.independent_window.current_image_shape = self.current_stack_data.shape
+                self.independent_window.set_display_options(
+                    show_cut_region=self._show_cut_region,
+                    show_center=self._show_center,
+                    colormap=self._image_colormap,
+                )
                 self.independent_window.update_image(self.current_stack_data,
                                                    self._current_vmin, self._current_vmax,
                                                    use_log=is_log)
@@ -7454,6 +8003,7 @@ class FittingController(QObject):
             self.independent_window.show()
             self.independent_window.raise_()
             self.independent_window.activateWindow()
+            self._sync_independent_window_selection()
 
             # ????????anvas??????????????
             self.independent_window.canvas.setFocus()
@@ -7510,13 +8060,17 @@ class FittingController(QObject):
                     self.independent_window._q_cache_key = None
                     self.independent_window._qy_mesh = None
                     self.independent_window._qz_mesh = None
+                    self.independent_window._drag_current_center = None
             except Exception:
                 pass
 
+            self._show_center = True
+            self._apply_image_display_options(refresh=False)
             self._on_detector_parameters_changed({
                 'beam_center_x': beam_x,
                 'beam_center_y': beam_y,
             })
+            self._refresh_image_display()
             self.status_updated.emit(f"Detector beam center set from image: X={beam_x:.2f}, Y={beam_y:.2f}")
         except Exception as exc:
             self.status_updated.emit(f"Failed to set detector center from image: {exc}")
@@ -7619,6 +8173,7 @@ class FittingController(QObject):
                     'height': height_q,
                     'is_q_space': True
                 }
+                self._persist_cut_region_parameters(center_qy, center_qz, width_q, height_q)
             else:
                 # ????????????????????
                 main_view_selection_info = {
@@ -7634,6 +8189,7 @@ class FittingController(QObject):
                     'pixel_height': height,
                     'is_q_space': False
                 }
+                self._persist_cut_region_parameters(center_x, center_y, width, height)
 
             self._draw_selection_on_main_view(main_view_selection_info)
 
@@ -7859,6 +8415,7 @@ class FittingController(QObject):
 
             # ????????????
             selection_info = self._create_selection_from_parameters(center_x, center_y, width, height)
+            self._persist_cut_region_parameters(center_x, center_y, width, height)
 
             # ?????????
             self._update_parameter_selection_display(selection_info)
@@ -7930,7 +8487,7 @@ class FittingController(QObject):
     def _sync_independent_window_selection(self):
         """No description."""
         try:
-            if self.independent_window is None or not self.independent_window.isVisible():
+            if self.independent_window is None:
                 return
             selection_info = getattr(self, 'current_parameter_selection', None)
             if selection_info:
@@ -7957,10 +8514,17 @@ class FittingController(QObject):
             width = self.ui.gisaxsInputCutLineParallelValue.value()
             height = self.ui.gisaxsInputCutLineVerticalValue.value()
 
+            if getattr(self, '_show_cut_region', False):
+                if width <= 0:
+                    width = 10.0
+                if height <= 0:
+                    height = 10.0
+
             if width > 0 and height > 0:
                 self.current_parameter_selection = self._create_selection_from_parameters(
                     center_x, center_y, width, height
                 )
+                self._persist_cut_region_parameters(center_x, center_y, width, height)
             else:
                 self.current_parameter_selection = None
         except Exception:
@@ -8025,22 +8589,55 @@ class FittingController(QObject):
                 except Exception:
                     pass
             self._preview_selection_artists = []
-            if not selection_info:
-                return
-            bounds = selection_info.get('bounds', {})
-            x_min = bounds.get('x_min', 0)
-            x_max = bounds.get('x_max', 0)
-            y_min = bounds.get('y_min', 0)
-            y_max = bounds.get('y_max', 0)
-            from matplotlib.patches import Rectangle
-            rect = Rectangle((x_min, y_min), x_max - x_min, y_max - y_min,
-                             linewidth=2, edgecolor='red', facecolor='none', alpha=0.8)
-            ax.add_patch(rect)
-            marker = ax.plot((x_min + x_max) / 2, (y_min + y_max) / 2,
-                             'r+', markersize=10, markeredgewidth=2)[0]
-            self._preview_selection_artists = [rect, marker]
+            artists = []
+            if selection_info and self._show_cut_region:
+                bounds = selection_info.get('bounds', {})
+                x_min = bounds.get('x_min', 0)
+                x_max = bounds.get('x_max', 0)
+                y_min = bounds.get('y_min', 0)
+                y_max = bounds.get('y_max', 0)
+                from matplotlib.patches import Rectangle
+                rect = Rectangle((x_min, y_min), x_max - x_min, y_max - y_min,
+                                 linewidth=2, edgecolor='red', facecolor='none', alpha=0.8)
+                ax.add_patch(rect)
+                artists.append(rect)
+            artists.extend(self._draw_detector_center_on_axis(ax))
+            self._preview_selection_artists = artists
         except Exception:
             pass
+
+    def _draw_detector_center_on_axis(self, ax):
+        try:
+            if not self._show_center:
+                return []
+            center = self._get_detector_center_for_controller_axis()
+            if center is None:
+                return []
+            marker = ax.plot(float(center[0]), float(center[1]), marker='+', color='cyan',
+                             markersize=14, markeredgewidth=2.5)[0]
+            return [marker]
+        except Exception:
+            return []
+
+    def _get_detector_center_for_controller_axis(self):
+        try:
+            from core.global_params import global_params
+            if self.current_stack_data is not None:
+                height, width = self.current_stack_data.shape
+            else:
+                height, width = (1, 1)
+            beam_x = float(global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0))
+            beam_y = float(global_params.get_parameter('fitting', 'detector.beam_center_y', height / 2.0))
+            if self._should_show_q_axis():
+                qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+                if qy_mesh is None or qz_mesh is None:
+                    return None
+                row = int(np.clip(round(beam_y), 0, qy_mesh.shape[0] - 1))
+                col = int(np.clip(round(beam_x), 0, qy_mesh.shape[1] - 1))
+                return float(qy_mesh[row, col]), float(qz_mesh[row, col])
+            return beam_x, beam_y
+        except Exception:
+            return None
 
     def _try_update_cached_preview(self, image_data, selection_info=None):
         try:
@@ -8086,7 +8683,7 @@ class FittingController(QObject):
             if needs_create or mode_changed:
                 ax.clear()
                 self._preview_selection_artists = []
-                self._preview_image_artist = ax.imshow(preview_data, cmap='viridis', aspect='equal',
+                self._preview_image_artist = ax.imshow(preview_data, cmap=self._image_colormap, aspect='equal',
                                                        origin='lower', interpolation='nearest',
                                                        vmin=vmin, vmax=vmax, extent=extent)
                 if show_q_axis:
@@ -8104,6 +8701,7 @@ class FittingController(QObject):
                 self._preview_image_artist.set_data(preview_data)
                 self._preview_image_artist.set_extent(extent)
                 self._preview_image_artist.set_clim(vmin, vmax)
+                self._preview_image_artist.set_cmap(self._image_colormap)
 
             self._draw_preview_selection(ax, selection_info)
             render_start = time.perf_counter()
@@ -8191,7 +8789,7 @@ class FittingController(QObject):
                         qz_min, qz_max = qz_mesh.min(), qz_mesh.max()
                         q_extent = [qy_min, qy_max, qz_min, qz_max]
 
-                        im = ax.imshow(processed_data, cmap='viridis', aspect='equal', origin='lower',
+                        im = ax.imshow(processed_data, cmap=self._image_colormap, aspect='equal', origin='lower',
                                       interpolation='nearest', vmin=vmin, vmax=vmax, extent=q_extent)
 
                         # ???Q?????
@@ -8206,7 +8804,7 @@ class FittingController(QObject):
 
             if not show_q_axis:
                 # ?????????
-                im = ax.imshow(processed_data, cmap='viridis', aspect='equal', origin='lower',
+                im = ax.imshow(processed_data, cmap=self._image_colormap, aspect='equal', origin='lower',
                               interpolation='nearest', vmin=vmin, vmax=vmax)
                 # ???????????
                 ax.set_xlabel('Pixels (Horizontal)')
@@ -8220,20 +8818,17 @@ class FittingController(QObject):
                 y_min = bounds.get('y_min', 0)
                 y_max = bounds.get('y_max', 0)
 
-                # ?????????
-                from matplotlib.patches import Rectangle
-                selection_rect = Rectangle(
-                    (x_min, y_min),
-                    x_max - x_min,
-                    y_max - y_min,
-                    linewidth=2, edgecolor='red', facecolor='none', alpha=0.8
-                )
-                ax.add_patch(selection_rect)
+                if self._show_cut_region:
+                    from matplotlib.patches import Rectangle
+                    selection_rect = Rectangle(
+                        (x_min, y_min),
+                        x_max - x_min,
+                        y_max - y_min,
+                        linewidth=2, edgecolor='red', facecolor='none', alpha=0.8
+                    )
+                    ax.add_patch(selection_rect)
 
-                # ??????????
-                center_x = (x_min + x_max) / 2
-                center_y = (y_min + y_max) / 2
-                ax.plot(center_x, center_y, 'r+', markersize=10, markeredgewidth=2)
+            self._draw_detector_center_on_axis(ax)
 
             if not show_q_axis:
                 ax.axis('off')
@@ -9016,6 +9611,8 @@ class FittingController(QObject):
                 self._perform_cut()
                 self.status_updated.emit("Detector parameters updated; Cut results recalculated")
             else:
+                if getattr(self, 'current_stack_data', None) is not None:
+                    self._refresh_image_display()
                 self.status_updated.emit("Detector parameters updated and saved")
 
         except Exception as e:

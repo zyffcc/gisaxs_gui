@@ -480,6 +480,20 @@ class GisaxsInputCard(CardFrame):
         self.ui.gisaxsInputIntLogCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         normalize_input(self.ui.gisaxsInputVminValue)
         normalize_input(self.ui.gisaxsInputVmaxValue)
+        if not hasattr(self.ui, "gisaxsInputShowCutRegionCheckBox"):
+            self.ui.gisaxsInputShowCutRegionCheckBox = QCheckBox("Cut Region", scale_section)
+            self.ui.gisaxsInputShowCutRegionCheckBox.setObjectName("gisaxsInputShowCutRegionCheckBox")
+        if not hasattr(self.ui, "gisaxsInputShowCenterCheckBox"):
+            self.ui.gisaxsInputShowCenterCheckBox = QCheckBox("Center", scale_section)
+            self.ui.gisaxsInputShowCenterCheckBox.setObjectName("gisaxsInputShowCenterCheckBox")
+        if not hasattr(self.ui, "gisaxsInputColormapCombo"):
+            self.ui.gisaxsInputColormapCombo = QComboBox(scale_section)
+            self.ui.gisaxsInputColormapCombo.setObjectName("gisaxsInputColormapCombo")
+        self.ui.gisaxsInputShowCutRegionCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputShowCenterCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        normalize_checkbox(self.ui.gisaxsInputShowCutRegionCheckBox)
+        normalize_checkbox(self.ui.gisaxsInputShowCenterCheckBox)
+        normalize_input(self.ui.gisaxsInputColormapCombo)
         self.ui.gisaxsInputVminLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.ui.gisaxsInputVmaxLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         scale_grid.addWidget(self.ui.gisaxsInputAutoScaleCheckBox, 0, 0)
@@ -488,6 +502,10 @@ class GisaxsInputCard(CardFrame):
         scale_grid.addWidget(self.ui.gisaxsInputVmaxLabel, 0, 3)
         scale_grid.addWidget(self.ui.gisaxsInputVmaxValue, 0, 4)
         scale_grid.addWidget(self.ui.gisaxsInputIntLogCheckBox, 0, 5)
+        scale_grid.addWidget(self.ui.gisaxsInputShowCutRegionCheckBox, 1, 0)
+        scale_grid.addWidget(self.ui.gisaxsInputShowCenterCheckBox, 1, 1)
+        scale_grid.addWidget(QLabel("Color Map:", scale_section), 1, 2)
+        scale_grid.addWidget(self.ui.gisaxsInputColormapCombo, 1, 3, 1, 2)
         scale_grid.setColumnStretch(6, 1)
         scale_section.layout().addLayout(scale_grid)
 
