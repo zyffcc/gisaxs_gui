@@ -73,8 +73,8 @@
             "distance": 2565.0,
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
-            "beam_center_x": 795.5714804956483,
-            "beam_center_y": 368.1254577210111,
+            "beam_center_x": 792.33,
+            "beam_center_y": 374.45,
             "show_q_axis": false
         },
         "last_session": {
@@ -87,8 +87,8 @@
             "stack_count": 1,
             "insitu_range": "",
             "fit_current_data": true,
-            "fit_log_x": false,
-            "fit_log_y": false,
+            "fit_log_x": true,
+            "fit_log_y": true,
             "fit_norm": false,
             "auto_show": true
         },
@@ -100,8 +100,8 @@
             "load_mode": "Single",
             "center_vertical": 502.0,
             "vmin": -4.71,
-            "show_cut_region": true,
-            "show_center": true,
+            "show_cut_region": false,
+            "show_center": false,
             "colormap": "viridis"
         }
     },

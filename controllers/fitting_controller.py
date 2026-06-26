@@ -1,6 +1,4 @@
-﻿"""
-Cut Fitting ?????- ???GISAXS?????????????
-"""
+"""Cut/fitting controller for GISAXS image display, region cuts, and fitting workflows."""
 
 from __future__ import annotations
 
@@ -62,7 +60,6 @@ GISAXS_IMAGE_COLORMAPS = (
     "gray",
 )
 
-# ?????????????
 from ui.detector_parameters_dialog import DetectorParametersDialog
 from ui.responsive_layout import (
     apply_density_profile,
@@ -70,10 +67,8 @@ from ui.responsive_layout import (
     move_window_to_cursor_screen,
 )
 
-# ??????????????
 from config.model_parameters_manager import ModelParametersManager
 
-# ?????????????????
 from utils.universal_parameter_trigger_manager import UniversalParameterTriggerManager
 from utils.path_utils import normalize_path
 from utils.ai_fitting_models import (
@@ -158,21 +153,25 @@ COMPONENT_ORDER = ("None", "Sphere", "Cylinder", "Vertical Cylinder")
 
 
 class NoWheelDoubleSpinBox(QDoubleSpinBox):
+    # 函数说明：实现 wheel Event 相关逻辑。
     def wheelEvent(self, e) -> None:
         if e is not None:
             e.ignore()
 
 
 class CurrentPageHeightStackedWidget(QStackedWidget):
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.currentChanged.connect(lambda _index: QTimer.singleShot(0, self.sync_current_height))
 
+    # 函数说明：实现 Event 相关逻辑。
     def showEvent(self, event):
         super().showEvent(event)
         self.sync_current_height()
 
+    # 函数说明：同步当前 height。
     def sync_current_height(self):
         current_widget = self.currentWidget()
         hint = current_widget.sizeHint() if current_widget is not None else super().sizeHint()
@@ -181,12 +180,14 @@ class CurrentPageHeightStackedWidget(QStackedWidget):
         self.setMaximumHeight(height)
         self.updateGeometry()
 
+    # 函数说明：实现 size Hint 相关逻辑。
     def sizeHint(self):
         current_widget = self.currentWidget()
         if current_widget is not None:
             return current_widget.sizeHint()
         return super().sizeHint()
 
+    # 函数说明：实现 minimum Size Hint 相关逻辑。
     def minimumSizeHint(self):
         current_widget = self.currentWidget()
         if current_widget is not None:
@@ -194,6 +195,7 @@ class CurrentPageHeightStackedWidget(QStackedWidget):
         return super().minimumSizeHint()
 
 
+# 函数说明：判断matplotlib available是否成立。
 def is_matplotlib_available():
     """Lazy-check matplotlib availability and cache the result.
 
@@ -211,6 +213,7 @@ def is_matplotlib_available():
     return MATPLOTLIB_AVAILABLE
 
 
+# 函数说明：判断fabio available是否成立。
 def is_fabio_available():
     """Lazy-check fabio availability and cache the result."""
     global FABIO_AVAILABLE
@@ -245,6 +248,7 @@ class ManualAutoRefineWorker(QObject):
     finished = pyqtSignal(dict)
     failed = pyqtSignal(str)
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, controller, setup, selected, options):
         super().__init__()
         self.controller = controller
@@ -253,9 +257,11 @@ class ManualAutoRefineWorker(QObject):
         self.options = options
         self._stop_requested = False
 
+    # 函数说明：实现 request stop 相关逻辑。
     def request_stop(self):
         self._stop_requested = True
 
+    # 函数说明：执行后台任务或工作流程。
     def run(self):
         try:
             self.started.emit()
@@ -289,6 +295,7 @@ class InsituBatchImageLoader(QThread):
     copy_started = pyqtSignal(str, str)
     copy_finished = pyqtSignal(str, str)
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, file_paths, copy_remote_to_cache=True, cache_dir=None, cache_limit_gb=3.0):
         super().__init__()
         self.file_paths = list(file_paths or [])
@@ -296,6 +303,7 @@ class InsituBatchImageLoader(QThread):
         self.cache_dir = cache_dir or _default_remote_cache_dir()
         self.cache_limit_gb = float(cache_limit_gb or 3.0)
 
+    # 函数说明：实现 prepare 文件 for read 相关逻辑。
     def _prepare_file_for_read(self, source_path: str) -> str:
         source_path = normalize_path(source_path)
         if self.copy_remote_to_cache and is_cloud_or_network_path(source_path):
@@ -314,6 +322,7 @@ class InsituBatchImageLoader(QThread):
             return cached
         return source_path
 
+    # 函数说明：执行后台任务或工作流程。
     def run(self):
         try:
             if not self.file_paths:
@@ -350,10 +359,12 @@ class InsituCutWorker(QThread):
     cut_finished = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, payload: dict):
         super().__init__()
         self.payload = dict(payload or {})
 
+    # 函数说明：实现 排序 过滤 pairs 相关逻辑。
     @staticmethod
     def _sort_filter_pairs(x_values, y_values):
         x_arr = np.asarray(x_values, dtype=float).reshape(-1)
@@ -367,6 +378,7 @@ class InsituCutWorker(QThread):
         order = np.argsort(x_arr, kind="mergesort")
         return x_arr[order], y_arr[order]
 
+    # 函数说明：实现 interpolate series 相关逻辑。
     @staticmethod
     def _interpolate_series(x, y, x_new, method: str):
         m = (method or "Linear").lower()
@@ -385,6 +397,7 @@ class InsituCutWorker(QThread):
                 pass
         return np.interp(x_new, x, y)
 
+    # 函数说明：执行后台任务或工作流程。
     def run(self):
         try:
             p = self.payload
@@ -491,25 +504,22 @@ class IndependentMatplotlibWindow(QMainWindow):
     DEFAULT_TITLE = "GIMaP Image Viewer - Independent Window (right-click to select)"
     SELECTION_TITLE = "GIMaP Image Viewer - Selection Mode (drag to select, Esc to exit)"
 
-    # ???????????????????
-    region_selected = pyqtSignal(dict)  # ?????????????
+    region_selected = pyqtSignal(dict)
     center_picked = pyqtSignal(dict)  # detector beam center picked from image
-    status_updated = pyqtSignal(str)  # ?????????????
+    status_updated = pyqtSignal(str)
     display_options_changed = pyqtSignal(dict)
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(self.DEFAULT_TITLE)
         self.setGeometry(100, 100, 900, 700)
 
-        # ?????widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # ??????
         layout = QVBoxLayout(central_widget)
 
-        # ???matplotlib??????????????
         self.figure = None
         self.canvas = None
         self.toolbar = None
@@ -537,48 +547,41 @@ class IndependentMatplotlibWindow(QMainWindow):
                 layout.addWidget(self.canvas)
                 self.ax = self.figure.add_subplot(111)
         except Exception:
-            # ?????????????????????????????????
             pass
 
         self.current_image = None
         self.colorbar = None
 
-        # ??????????
         self.current_xlim = None
         self.current_ylim = None
         self.last_image_shape = None
         self._last_use_log = None
         self._last_show_q_axis = None
 
-        # Q??????
         self._q_detector = None
-        self._q_cache_key = None  # ????????????????
+        self._q_cache_key = None
         self._qy_mesh = None
         self._qz_mesh = None
 
-        # ?????????????
         self.selection_mode = False
         self.pick_center_mode = False
         self.selection_start = None
         self.selection_rect = None
         self.current_selection = None
-        self.parameter_selection = None  # ?????????????
+        self.parameter_selection = None
         self.parameter_selection_center = None
         self.parameter_selection_info = None
 
-        # ????????????????
         self.setFocusPolicy(Qt.StrongFocus)
         if self.canvas is not None:
             self.canvas.setFocusPolicy(Qt.StrongFocus)
             self.canvas.setFocus()
         central_widget.setFocusPolicy(Qt.StrongFocus)
 
-        # ????????????
         if self.ax is not None:
             self.ax.callbacks.connect('xlim_changed', self._on_xlim_changed)
             self.ax.callbacks.connect('ylim_changed', self._on_ylim_changed)
 
-        # ????????????????
         if self.canvas is not None:
             self.canvas.mpl_connect('button_press_event', self._on_mouse_press)
             self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
@@ -586,6 +589,7 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.canvas.mpl_connect('key_press_event', self._on_key_press)
         install_adaptive_window_profile(self, self._apply_screen_profile, apply_window_minimum=False)
 
+    # 函数说明：加载显示 options。
     def _load_display_options(self):
         try:
             from core.global_params import global_params
@@ -596,6 +600,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：保存显示 options。
     def _save_display_options(self):
         try:
             from core.global_params import global_params
@@ -606,6 +611,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：配置拾取 中心 action。
     def _setup_pick_center_action(self):
         try:
             if self.toolbar is None:
@@ -619,6 +625,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             self.pick_center_action = None
 
+    # 函数说明：配置显示 option 控件。
     def _setup_display_option_widgets(self):
         try:
             if self.toolbar is None:
@@ -651,6 +658,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：设置显示 options。
     def set_display_options(self, show_cut_region=None, show_center=None, colormap=None, emit=False):
         try:
             if show_cut_region is not None:
@@ -687,6 +695,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：实现 emit 显示 options changed 相关逻辑。
     def _emit_display_options_changed(self):
         options = {
             'show_cut_region': bool(self.show_cut_region),
@@ -696,12 +705,15 @@ class IndependentMatplotlibWindow(QMainWindow):
         self._save_display_options()
         self.display_options_changed.emit(options)
 
+    # 函数说明：处理切线 区域 toggled事件。
     def _on_show_cut_region_toggled(self, checked: bool):
         self._set_cut_region_visible(checked, emit=True)
 
+    # 函数说明：处理中心 toggled事件。
     def _on_show_center_toggled(self, checked: bool):
         self._set_center_visible(checked, emit=True)
 
+    # 函数说明：设置切线 区域 visible。
     def _set_cut_region_visible(self, visible: bool, emit: bool = False):
         try:
             self.show_cut_region = bool(visible)
@@ -718,6 +730,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：设置中心 visible。
     def _set_center_visible(self, visible: bool, emit: bool = False):
         try:
             self.show_center = bool(visible)
@@ -734,6 +747,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：处理颜色映射 changed事件。
     def _on_colormap_changed(self, text: str):
         self.colormap = text if text in GISAXS_IMAGE_COLORMAPS else "viridis"
         if self.current_image is not None:
@@ -747,6 +761,7 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.canvas.draw_idle()
         self._emit_display_options_changed()
 
+    # 函数说明：切换拾取 中心 模式。
     def _toggle_pick_center_mode(self, checked: bool):
         try:
             if checked:
@@ -763,6 +778,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：实现 exit 拾取 中心 模式 相关逻辑。
     def _exit_pick_center_mode(self):
         try:
             self.pick_center_mode = False
@@ -777,24 +793,28 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：应用screen profile。
     def _apply_screen_profile(self, profile, screen):
         apply_density_profile(self, profile)
 
+    # 函数说明：处理X 轴范围 changed事件。
     def _on_xlim_changed(self, ax):
         """No description."""
         self.current_xlim = ax.get_xlim()
 
+    # 函数说明：处理Y 轴范围 changed事件。
     def _on_ylim_changed(self, ax):
         """No description."""
         self.current_ylim = ax.get_ylim()
 
+    # 函数说明：处理mouse press事件。
     def _on_mouse_press(self, event):
         """No description."""
         if event.button == 1 and self.pick_center_mode and event.inaxes == self.ax:
             self._emit_picked_center(event)
             return
 
-        if event.button == 3:  # ???
+        if event.button == 3:
             if not self.selection_mode:
                 if self.pick_center_mode:
                     self._exit_pick_center_mode()
@@ -806,7 +826,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self._exit_selection_mode()
             return
 
-        if event.button == 1 and self.selection_mode and event.inaxes == self.ax:  # ?????xes??
+        if event.button == 1 and self.selection_mode and event.inaxes == self.ax:
             self.selection_start = (event.xdata, event.ydata)
             if self.selection_rect:
                 self.selection_rect.remove()
@@ -826,6 +846,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                     self.canvas.setCursor(Qt.ClosedHandCursor)
                 self.status_updated.emit("Drag Cut Region" if hit == "region" else "Drag Detector Beam Center")
 
+    # 函数说明：实现 emit picked 中心 相关逻辑。
     def _emit_picked_center(self, event):
         try:
             if event.xdata is None or event.ydata is None:
@@ -873,6 +894,7 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.status_updated.emit(f"Pick center failed: {exc}")
             self._exit_pick_center_mode()
 
+    # 函数说明：处理mouse 移动事件。
     def _on_mouse_move(self, event):
         """No description."""
         if self._dragging_overlay and self._drag_start and self._drag_original_info is not None and event.inaxes == self.ax:
@@ -894,11 +916,9 @@ class IndependentMatplotlibWindow(QMainWindow):
         if (self.selection_mode and self.selection_start and
             event.inaxes == self.ax and event.xdata and event.ydata):
 
-            # ?????????
             if self.selection_rect:
                 self.selection_rect.remove()
 
-            # ?????????
             x0, y0 = self.selection_start
             x1, y1 = event.xdata, event.ydata
 
@@ -907,7 +927,6 @@ class IndependentMatplotlibWindow(QMainWindow):
             x_min = min(x0, x1)
             y_min = min(y0, y1)
 
-            # ?????????
             from matplotlib.patches import Rectangle
             self.selection_rect = Rectangle(
                 (x_min, y_min), width, height,
@@ -916,6 +935,7 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.ax.add_patch(self.selection_rect)
             self.canvas.draw_idle()
 
+    # 函数说明：处理mouse release事件。
     def _on_mouse_release(self, event):
         """No description."""
         if self._dragging_overlay:
@@ -946,34 +966,28 @@ class IndependentMatplotlibWindow(QMainWindow):
             event.button == 1 and event.inaxes == self.ax and
             event.xdata and event.ydata):
 
-            # ?????????????
             x0, y0 = self.selection_start
             x1, y1 = event.xdata, event.ydata
 
-            # ???????????Q??????
             show_q_axis = self._should_show_q_axis()
 
-            # ????????????????????????
-            min_size_threshold = 0.001 if show_q_axis else 5  # Q????????????????
+            min_size_threshold = 0.001 if show_q_axis else 5
             if abs(x1 - x0) > min_size_threshold and abs(y1 - y0) > min_size_threshold:
-                # ?????????
                 width = abs(x1 - x0)
                 height = abs(y1 - y0)
                 center_x = (x0 + x1) / 2
                 center_y = (y0 + y1) / 2
 
-                # ??????????????
                 image_shape = getattr(self, 'current_image_shape', (1, 1))
                 img_height, img_width = image_shape
 
                 if show_q_axis:
-                    # Q?????????????????????????????????????
                     selection_info = {
-                        'center_x': center_x,      # Q??? (qy)
-                        'center_y': center_y,      # Q??? (qz)
-                        'width': width,            # Q??????
-                        'height': height,          # Q??????
-                        'is_q_space': True,        # ??????????
+                        'center_x': center_x,
+                        'center_y': center_y,
+                        'width': width,
+                        'height': height,
+                        'is_q_space': True,
                         'bounds': {
                             'x_min': min(x0, x1),
                             'x_max': max(x0, x1),
@@ -982,28 +996,24 @@ class IndependentMatplotlibWindow(QMainWindow):
                         }
                     }
 
-                    # ????????Q??????
                     self.setWindowTitle(
                         f"GIMaP Image Viewer - Q selection: "
                         f"center=({center_x:.6f}, {center_y:.6f}) nm^-1, "
                         f"size=({width:.6f} x {height:.6f}) nm^-1"
                     )
                 else:
-                    # ???????????????????????flipud????????rigin='lower'???
-                    # ????atplotlib????????????????????
                     original_center_y = center_y
 
-                    # ?????????
                     selection_info = {
                         'center_x': center_x,
-                        'center_y': center_y,  # matplotlib???
+                        'center_y': center_y,
                         'width': width,
                         'height': height,
                         'pixel_center_x': int(center_x),
-                        'pixel_center_y': int(original_center_y),  # ?????????????????
+                        'pixel_center_y': int(original_center_y),
                         'pixel_width': int(width),
                         'pixel_height': int(height),
-                        'is_q_space': False,       # ?????????????
+                        'is_q_space': False,
                         'bounds': {
                             'x_min': min(x0, x1),
                             'x_max': max(x0, x1),
@@ -1012,7 +1022,6 @@ class IndependentMatplotlibWindow(QMainWindow):
                         }
                     }
 
-                    # ?????????????????????????????
                     self.setWindowTitle(
                         f"GIMaP Image Viewer - Pixel selection: "
                         f"center=({selection_info['pixel_center_x']}, {selection_info['pixel_center_y']}), "
@@ -1022,10 +1031,8 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self.current_selection = selection_info
                 self._set_cut_region_visible(True, emit=True)
 
-                # ??????????
                 self.region_selected.emit(selection_info)
 
-            # ??????????
             self.selection_start = None
             if self.selection_rect:
                 try:
@@ -1035,6 +1042,7 @@ class IndependentMatplotlibWindow(QMainWindow):
                 self.selection_rect = None
                 self.canvas.draw_idle()
 
+    # 函数说明：实现 hit test overlay 相关逻辑。
     def _hit_test_overlay(self, event):
         try:
             if self.ax is None or event.inaxes != self.ax:
@@ -1073,6 +1081,7 @@ class IndependentMatplotlibWindow(QMainWindow):
             return None
         return None
 
+    # 函数说明：实现 point to segment distance 相关逻辑。
     @staticmethod
     def _point_to_segment_distance(point, start, end):
         try:
@@ -1089,6 +1098,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             return float("inf")
 
+    # 函数说明：获取探测器 中心 显示 coordinates。
     def _get_detector_center_display_coordinates(self):
         try:
             from core.global_params import global_params
@@ -1111,6 +1121,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             return None
 
+    # 函数说明：实现 移动 探测器 中心 marker 相关逻辑。
     def _move_detector_center_marker(self, dx, dy):
         try:
             original = getattr(self, "_drag_original_center", None)
@@ -1132,6 +1143,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception as exc:
             self.status_updated.emit(f"Move Beam Center failed: {exc}")
 
+    # 函数说明：实现 移动 参数 选区 相关逻辑。
     def _move_parameter_selection(self, dx, dy):
         try:
             info = copy.deepcopy(self._drag_original_info)
@@ -1178,6 +1190,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception as exc:
             self.status_updated.emit(f"Move Cut Region failed: {exc}")
 
+    # 函数说明：处理key press事件。
     def _on_key_press(self, event):
         """No description."""
         if event.key == 'escape':
@@ -1186,8 +1199,9 @@ class IndependentMatplotlibWindow(QMainWindow):
         elif event.key == 'delete' or event.key == 'backspace':
             self._clear_selection()
 
+    # 函数说明：处理键盘按键事件。
     def keyPressEvent(self, event):
-        """Qt?????????????atplotlib"""
+        """Forward Qt key events to the Matplotlib interaction handlers."""
         try:
             if event.key() == Qt.Key_Escape:
                 self._exit_pick_center_mode()
@@ -1199,12 +1213,13 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             super().keyPressEvent(event)
 
+    # 函数说明：处理鼠标按下事件。
     def mousePressEvent(self, event):
         """Qt"""
-        # ??canvas??????????????
         self.canvas.setFocus()
         super().mousePressEvent(event)
 
+    # 函数说明：实现 exit 选区 模式 相关逻辑。
     def _exit_selection_mode(self):
         """Exit selection mode."""
         self.selection_mode = False
@@ -1216,6 +1231,7 @@ class IndependentMatplotlibWindow(QMainWindow):
             self.selection_rect = None
             self.canvas.draw_idle()
 
+    # 函数说明：清除选区。
     def _clear_selection(self):
         """No description."""
         if self.selection_rect:
@@ -1228,25 +1244,22 @@ class IndependentMatplotlibWindow(QMainWindow):
         else:
             self.setWindowTitle(self.DEFAULT_TITLE)
 
+    # 函数说明：更新图像。
     def update_image(self, image_data, vmin=None, vmax=None, use_log=True):
         """No description."""
         try:
-            # ????????????????
             t_total_update = time.perf_counter()
             current_shape = image_data.shape
             shape_changed = (self.last_image_shape is None or
                            self.last_image_shape != current_shape)
 
-            # ?????????????????????????
             self.current_image_shape = current_shape
 
             if shape_changed:
-                # ?????????????????
                 self.current_xlim = None
                 self.current_ylim = None
                 self.last_image_shape = current_shape
 
-            # ????????- ?????????????
             saved_xlim = self.current_xlim
             saved_ylim = self.current_ylim
             preserve_view = (not shape_changed and saved_xlim is not None and saved_ylim is not None)
@@ -1291,7 +1304,6 @@ class IndependentMatplotlibWindow(QMainWindow):
                 print(f"[Timing] independent window rendering: {(time.perf_counter() - t_total) * 1000:.2f} ms")
                 return
 
-            # ??????????????
             try:
                 xlim_cid = None
                 ylim_cid = None
@@ -1321,7 +1333,6 @@ class IndependentMatplotlibWindow(QMainWindow):
             except Exception:
                 pass
 
-            # ???????????olorbar
             if self.colorbar is not None:
                 try:
                     self.colorbar.remove()
@@ -1330,10 +1341,8 @@ class IndependentMatplotlibWindow(QMainWindow):
                 finally:
                     self.colorbar = None
 
-            # ???axes
             self.ax.clear()
 
-            # ???????????????
             if use_log:
                 t0 = time.perf_counter()
                 safe_data = np.where(image_data > 0, image_data, 0.001)
@@ -1346,7 +1355,6 @@ class IndependentMatplotlibWindow(QMainWindow):
                 scale_text = "Linear Scale"
                 colorbar_label = "Intensity"
 
-            # ?????????vmin/vmax????????
             if vmin is None or vmax is None:
                 t0 = time.perf_counter()
                 auto_vmin = np.percentile(processed_data, 1)
@@ -1355,84 +1363,66 @@ class IndependentMatplotlibWindow(QMainWindow):
                 vmax = vmax if vmax is not None else auto_vmax
                 print(f"[Timing] autoscale calculation: {(time.perf_counter() - t0) * 1000:.2f} ms (independent window)")
 
-            # ???????????????????????
             processed_data = np.flipud(processed_data)
 
-            # ???????????????
             show_q_axis = self._should_show_q_axis()
 
             if show_q_axis:
-                # ???Q?????????extent
                 extent = self._get_q_axis_extent(image_data.shape)
 
-                # ?????????????????????extent
                 qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
 
                 if qy_mesh is not None and qz_mesh is not None:
-                    # ???Q??????????extent [left, right, bottom, top]
                     qy_min, qy_max = qy_mesh.min(), qy_mesh.max()
                     qz_min, qz_max = qz_mesh.min(), qz_mesh.max()
                     q_extent = [qy_min, qy_max, qz_min, qz_max]
 
-                    # ???imshow???Q?????
                     self.current_image = self.ax.imshow(processed_data, cmap=self.colormap, aspect='equal',
                                                       origin='lower', interpolation='nearest',
                                                       vmin=vmin, vmax=vmax, extent=q_extent)
                 else:
-                    # ???Q?????????????????xtent
                     self.current_image = self.ax.imshow(processed_data, cmap=self.colormap, aspect='equal',
                                                       origin='lower', interpolation='nearest',
                                                       vmin=vmin, vmax=vmax, extent=extent)
 
-                # ???Q?????
                 self.ax.set_xlabel(r'$q_y$ (nm$^{-1}$)')
                 self.ax.set_ylabel(r'$q_z$ (nm$^{-1}$)')
             else:
-                # ?????????????????
                 self.current_image = self.ax.imshow(processed_data, cmap=self.colormap, aspect='equal',
                                                   origin='lower', interpolation='nearest',
                                                   vmin=vmin, vmax=vmax)
-                # ???????????
                 self.ax.set_xlabel('Pixels (Horizontal)')
                 self.ax.set_ylabel('Pixels (Vertical)')
 
-            # ?????
             coord_info = "Q-space" if show_q_axis else "Pixel coordinates"
             self.ax.set_title(
                 f'GISAXS Image ({scale_text}) - {image_data.shape[1]} x {image_data.shape[0]} ({coord_info})\n'
                 f'Vmin: {vmin:.3f}, Vmax: {vmax:.3f}'
             )
 
-            # ???????????
             if show_q_axis:
-                self.ax.set_aspect('equal')  # Q????????qual aspect?????????
+                self.ax.set_aspect('equal')
             else:
-                self.ax.set_aspect('equal')  # ?????????equal aspect
+                self.ax.set_aspect('equal')
 
-            # ???????????
             try:
                 self.colorbar = self.figure.colorbar(self.current_image, ax=self.ax)
                 self.colorbar.set_label(colorbar_label)
             except Exception:
                 self.colorbar = None
 
-            # ???????????
             self.figure.tight_layout()
 
-            # ????????????????????/????????
             if preserve_view:
                 self.ax.set_xlim(saved_xlim)
                 self.ax.set_ylim(saved_ylim)
                 self.current_xlim = saved_xlim
                 self.current_ylim = saved_ylim
             else:
-                # ????????????????????
                 if show_q_axis:
-                    # Q????????atplotlib???????????extent?????
                     self.ax.autoscale()
 
                 else:
-                    # ???????????????????
                     self.ax.set_xlim(-0.5, processed_data.shape[1] - 0.5)
                     self.ax.set_ylim(-0.5, processed_data.shape[0] - 0.5)
 
@@ -1441,14 +1431,12 @@ class IndependentMatplotlibWindow(QMainWindow):
 
             self._redraw_parameter_selection()
 
-            # ???????????????
             try:
                 self.ax.callbacks.connect('xlim_changed', self._on_xlim_changed)
                 self.ax.callbacks.connect('ylim_changed', self._on_ylim_changed)
             except Exception:
                 pass
 
-            # ??????
             self._last_use_log = bool(use_log)
             self._last_show_q_axis = show_q_axis
             render_start = time.perf_counter()
@@ -1456,8 +1444,8 @@ class IndependentMatplotlibWindow(QMainWindow):
             print(f"[Timing] Matplotlib rendering: {(time.perf_counter() - render_start) * 1000:.2f} ms (independent window)")
             print(f"[Timing] independent window rendering: {(time.perf_counter() - t_total_update) * 1000:.2f} ms")
 
-            # ??????????????????anvas??????
             if preserve_view:
+                # 函数说明：实现 final 视图 check 相关逻辑。
                 def final_view_check():
                     current_xlim_after_draw = self.ax.get_xlim()
                     current_ylim_after_draw = self.ax.get_ylim()
@@ -1476,30 +1464,26 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception as e:
             pass
 
+    # 函数说明：转换Q to 像素 coordinates。
     def _convert_q_to_pixel_coordinates(self, center_qy, center_qz, width_q, height_q):
         """No description."""
         try:
-            # ??????????????
             qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
 
             if qy_mesh is None or qz_mesh is None:
-                # ???Q???????????????
                 return {'center_x': 0, 'center_y': 0, 'width': 100, 'height': 100}
 
-            # ????????
             if hasattr(self, 'current_stack_data') and self.current_stack_data is not None:
                 img_height, img_width = self.current_stack_data.shape
             else:
                 img_height, img_width = qy_mesh.shape
 
-            # ??????????Q???????????
             qy_diff = np.abs(qy_mesh - center_qy)
             qz_diff = np.abs(qz_mesh - center_qz)
             combined_diff = qy_diff + qz_diff
             center_idx = np.unravel_index(np.argmin(combined_diff), qy_mesh.shape)
             center_pixel_y, center_pixel_x = center_idx
 
-            # ???Q??????????????????
             qy_range = qy_mesh.max() - qy_mesh.min()
             qz_range = qz_mesh.max() - qz_mesh.min()
             pixel_x_range = img_width
@@ -1508,7 +1492,6 @@ class IndependentMatplotlibWindow(QMainWindow):
             qy_to_pixel_ratio = pixel_x_range / qy_range
             qz_to_pixel_ratio = pixel_y_range / qz_range
 
-            # ??????????
             width_pixel = width_q * qy_to_pixel_ratio
             height_pixel = height_q * qz_to_pixel_ratio
 
@@ -1524,26 +1507,23 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception as e:
             return {'center_x': 0, 'center_y': 0, 'width': 100, 'height': 100}
 
+    # 函数说明：更新切线 labels units。
     def _update_cutline_labels_units(self):
         """No description."""
         try:
             show_q_axis = self._should_show_q_axis()
 
             if show_q_axis:
-                # Q???????????(nm??? ???
                 unit_suffix = " (nm^-1)"
             else:
-                # ??????????????(pixel) ???
                 unit_suffix = " (pixel)"
 
-            # ???Center??
             if hasattr(self.ui, 'gisaxsInputCenterVerticalLabel'):
                 self.ui.gisaxsInputCenterVerticalLabel.setText(f"Vertical.{unit_suffix}")
 
             if hasattr(self.ui, 'gisaxsInputCenterParallelLabel'):
                 self.ui.gisaxsInputCenterParallelLabel.setText(f"Parallel.{unit_suffix}")
 
-            # ???Cut Line??
             if hasattr(self.ui, 'gisaxsInputCutLineVerticalLabel'):
                 self.ui.gisaxsInputCutLineVerticalLabel.setText(f"Vertical.{unit_suffix}")
 
@@ -1553,6 +1533,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：实现 Q 坐标轴 相关逻辑。
     def _should_show_q_axis(self):
         """No description."""
         try:
@@ -1562,30 +1543,27 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             return False
 
+    # 函数说明：获取Q 坐标轴 extent。
     def _get_q_axis_extent(self, image_shape):
-        """Q???extent"""
+        """Return the display extent for the Q-space axes."""
         try:
             from core.global_params import GlobalParameterManager
             global_params = GlobalParameterManager()
 
-            # ????????? - ??itting????????????
             height, width = image_shape
             pixel_size_x = global_params.get_parameter('fitting', 'detector.pixel_size_x', 172.0)  # micrometers
             pixel_size_y = global_params.get_parameter('fitting', 'detector.pixel_size_y', 172.0)  # micrometers
-            beam_center_x = global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0)  # Fitting??????beam center
-            beam_center_y = global_params.get_parameter('fitting', 'detector.beam_center_y', height / 2.0)  # Fitting??????beam center
+            beam_center_x = global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0)
+            beam_center_y = global_params.get_parameter('fitting', 'detector.beam_center_y', height / 2.0)
             distance = global_params.get_parameter('fitting', 'detector.distance', 2565.0)  # mm
             theta_in_deg = global_params.get_parameter('beam', 'grazing_angle', 0.4)
             wavelength = global_params.get_parameter('beam', 'wavelength', 0.1045)  # nm
 
             # Q-axis calculation parameters
 
-            # ????????
             cache_key = f"{width}x{height}_{pixel_size_x}_{pixel_size_y}_{beam_center_x}_{beam_center_y}_{distance}_{theta_in_deg}_{wavelength}"
 
-            # ???????????????
             if self._q_cache_key != cache_key or self._q_detector is None:
-                # ??????????????Q???????????
                 from utils.q_space_calculator import create_detector_from_image_and_params
                 self._q_detector = create_detector_from_image_and_params(
                     image_shape=(height, width),
@@ -1596,10 +1574,9 @@ class IndependentMatplotlibWindow(QMainWindow):
                     distance=distance,
                     theta_in_deg=theta_in_deg,
                     wavelength=wavelength,
-                    crop_params=None  # ??????????????????????????????
+                    crop_params=None
                 )
 
-                # ???Q??????
                 self._qy_mesh, self._qz_mesh = self._q_detector.get_qy_qz_meshgrids()
                 self._q_cache_key = cache_key
 
@@ -1610,17 +1587,17 @@ class IndependentMatplotlibWindow(QMainWindow):
             return extent
 
         except Exception:
-            # ???????????extent
             height, width = image_shape
             return [-0.5, width - 0.5, -0.5, height - 0.5]
 
+    # 函数说明：获取cached Q meshgrids。
     def _get_cached_q_meshgrids(self):
         """No description."""
         return self._qy_mesh, self._qz_mesh
 
+    # 函数说明：处理窗口关闭事件。
     def closeEvent(self, event):
         """Clean up the figure when the window closes."""
-        # ???colorbar
         if self.colorbar is not None:
             try:
                 self.colorbar.remove()
@@ -1629,7 +1606,6 @@ class IndependentMatplotlibWindow(QMainWindow):
             finally:
                 self.colorbar = None
 
-        # ??????
         try:
             self.figure.clear()
         except Exception:
@@ -1638,6 +1614,7 @@ class IndependentMatplotlibWindow(QMainWindow):
 
         super().closeEvent(event)
 
+    # 函数说明：更新参数 选区。
     def update_parameter_selection(self, center_v, center_p, cutline_v, cutline_p):
         """No description."""
         if center_v == 0 and center_p == 0 and cutline_v == 0 and cutline_p == 0:
@@ -1664,6 +1641,7 @@ class IndependentMatplotlibWindow(QMainWindow):
             'is_parameter_based': True,
         })
 
+    # 函数说明：设置参数 选区。
     def set_parameter_selection(self, selection_info):
         """No description."""
         self.parameter_selection_info = dict(selection_info) if selection_info else None
@@ -1671,6 +1649,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         if self.canvas is not None:
             self.canvas.draw_idle()
 
+    # 函数说明：实现 redraw 参数 选区 相关逻辑。
     def _redraw_parameter_selection(self):
         """No description."""
         try:
@@ -1729,6 +1708,7 @@ class IndependentMatplotlibWindow(QMainWindow):
         except Exception:
             pass
 
+    # 函数说明：清除参数 选区。
     def clear_parameter_selection(self):
         """No description."""
         self.parameter_selection_info = None
@@ -1749,9 +1729,9 @@ class IndependentMatplotlibWindow(QMainWindow):
         self._redraw_parameter_selection()
         self.canvas.draw()
 
+    # 函数说明：处理窗口关闭事件。
     def closeEvent(self, event):
         """No description."""
-        # ???colorbar
         if self.colorbar is not None:
             try:
                 self.colorbar.remove()
@@ -1760,7 +1740,6 @@ class IndependentMatplotlibWindow(QMainWindow):
             finally:
                 self.colorbar = None
 
-        # ??????
         try:
             self.figure.clear()
         except Exception:
@@ -1770,26 +1749,23 @@ class IndependentMatplotlibWindow(QMainWindow):
 
 
 class IndependentFitWindow(QMainWindow):
-    """atplotlib??????????????ut"""
+    """Independent Matplotlib window for cut/fitting results."""
 
-    # ??????????
     status_updated = pyqtSignal(str)
     display_unit_changed = pyqtSignal(str)
     input_point_delete_requested = pyqtSignal(float)
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("GIMaP Cut Analysis - Independent Fit Window")
         self.setGeometry(150, 150, 800, 600)
 
-        # ?????widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # ??????
         layout = QVBoxLayout(central_widget)
 
-        # ???matplotlib???????????
         self.figure = None
         self.canvas = None
         self.toolbar = None
@@ -1809,34 +1785,31 @@ class IndependentFitWindow(QMainWindow):
         except Exception:
             pass
 
-        # ?????????????
         control_layout = self._create_control_buttons()
 
-        # ?????????????anvas?????
         if self.toolbar is not None:
             layout.addWidget(self.toolbar)
-        layout.addLayout(control_layout)  # ???????
+        layout.addLayout(control_layout)
         if self.canvas is not None:
             layout.addWidget(self.canvas)
 
-        # ???axes
         if self.figure is not None:
             self.ax = self.figure.add_subplot(111)
 
-        # ????????????????
         self.setFocusPolicy(Qt.StrongFocus)
         if self.canvas is not None:
             self.canvas.setFocusPolicy(Qt.StrongFocus)
             self.canvas.mpl_connect('button_press_event', self._on_canvas_button_press)
 
-        # ???????
         if self.figure is not None and self.canvas is not None and self.ax is not None:
             self._setup_empty_plot()
         install_adaptive_window_profile(self, self._apply_screen_profile, apply_window_minimum=False)
 
+    # 函数说明：应用screen profile。
     def _apply_screen_profile(self, profile, screen):
         apply_density_profile(self, profile)
 
+    # 函数说明：配置empty 图表。
     def _setup_empty_plot(self):
         """No description."""
         self.ax.clear()
@@ -1850,20 +1823,18 @@ class IndependentFitWindow(QMainWindow):
         self.figure.tight_layout()
         self.canvas.draw()
 
+    # 函数说明：创建control buttons。
     def _create_control_buttons(self):
         """No description."""
         from PyQt5.QtWidgets import QHBoxLayout, QCheckBox, QLabel, QComboBox
         control_layout = QHBoxLayout()
 
-        # ?????
         control_layout.addWidget(QLabel("Data Filter:"))
 
-        # ????????
         self.show_positive_cb = QCheckBox("Positive Only")
         self.show_positive_cb.toggled.connect(self._on_show_positive_toggled)
         control_layout.addWidget(self.show_positive_cb)
 
-        # ??????????????????????|q|
         self.show_negative_cb = QCheckBox("Negative Only")
         self.show_negative_cb.toggled.connect(self._on_show_negative_toggled)
         control_layout.addWidget(self.show_negative_cb)
@@ -1898,6 +1869,7 @@ class IndependentFitWindow(QMainWindow):
         control_layout.addStretch(1)
         return control_layout
 
+    # 函数说明：处理正值 toggled事件。
     def _on_show_positive_toggled(self, checked):
         """No description."""
         if checked and hasattr(self, 'show_negative_cb') and self.show_negative_cb.isChecked():
@@ -1906,6 +1878,7 @@ class IndependentFitWindow(QMainWindow):
             self.show_negative_cb.blockSignals(False)
         self.status_updated.emit(f"Positive Only mode: {'enabled' if checked else 'disabled'}")
 
+    # 函数说明：处理负值 toggled事件。
     def _on_show_negative_toggled(self, checked):
         """No description."""
         if checked and hasattr(self, 'show_positive_cb') and self.show_positive_cb.isChecked():
@@ -1914,6 +1887,7 @@ class IndependentFitWindow(QMainWindow):
             self.show_positive_cb.blockSignals(False)
         self.status_updated.emit(f"Negative Only mode: {'enabled' if checked else 'disabled'}")
 
+    # 函数说明：获取Q unit key。
     def _get_q_unit_key(self):
         """No description."""
         try:
@@ -1925,10 +1899,12 @@ class IndependentFitWindow(QMainWindow):
             pass
         return 'nm'
 
+    # 函数说明：获取Q unit 缩放 factor。
     def _get_q_unit_scale_factor(self):
         """No description."""
         return 0.1 if self._get_q_unit_key() == 'angstrom' else 1.0
 
+    # 函数说明：实现 format Q 坐标轴 label 相关逻辑。
     def _format_q_axis_label(self, filter_mode='all', absolute=False):
         """No description."""
         unit_text = 'nm$^{-1}$' if self._get_q_unit_key() == 'nm' else r'$\AA^{-1}$'
@@ -1940,12 +1916,14 @@ class IndependentFitWindow(QMainWindow):
             suffix = ' [Negative Only]'
         return f'{base} ({unit_text}){suffix}'
 
+    # 函数说明：处理Q unit changed事件。
     def _on_q_unit_changed(self, _text):
         """No description."""
         unit_text = 'nm^-1' if self._get_q_unit_key() == 'nm' else 'Angstrom^-1'
         self.status_updated.emit(f"q unit changed to {unit_text}")
         self.display_unit_changed.emit(unit_text)
 
+    # 函数说明：处理y 范围 changed事件。
     def _on_y_range_changed(self, _text):
         """No description."""
         mode = self._get_y_range_mode()
@@ -1956,6 +1934,7 @@ class IndependentFitWindow(QMainWindow):
         }.get(mode, 'all visible data')
         self.status_updated.emit(f"Y range based on {label}")
 
+    # 函数说明：获取y 范围 模式。
     def _get_y_range_mode(self):
         """No description."""
         try:
@@ -1967,6 +1946,7 @@ class IndependentFitWindow(QMainWindow):
             pass
         return 'all'
 
+    # 函数说明：处理input points toggled事件。
     def _on_delete_input_points_toggled(self, checked):
         """Enable point deletion mode for AI fitting input outliers."""
         self._delete_input_points_enabled = bool(checked)
@@ -1978,6 +1958,7 @@ class IndependentFitWindow(QMainWindow):
             "Delete Points mode disabled."
         )
 
+    # 函数说明：设置deletable points。
     def set_deletable_points(self, raw_q, plot_x, plot_y):
         """Register visible points that can be clicked to exclude from AI fitting input."""
         try:
@@ -1996,11 +1977,13 @@ class IndependentFitWindow(QMainWindow):
         except Exception:
             self.clear_deletable_points()
 
+    # 函数说明：清除deletable points。
     def clear_deletable_points(self):
         self._delete_raw_q = np.array([], dtype=float)
         self._delete_plot_x = np.array([], dtype=float)
         self._delete_plot_y = np.array([], dtype=float)
 
+    # 函数说明：处理画布 按钮 press事件。
     def _on_canvas_button_press(self, event):
         """Delete the nearest registered data point when delete mode is active."""
         try:
@@ -2029,10 +2012,10 @@ class IndependentFitWindow(QMainWindow):
         except Exception as exc:
             self.status_updated.emit(f"Failed to delete input point: {exc}")
 
+    # 函数说明：更新plot。
     def update_plot(self, x_coords, y_intensity, x_label, y_label, title, log_x=False, log_y=False, normalize=False, y_errors=None):
         """No description."""
         try:
-            # ???????
             if self.ax is None or self.canvas is None or self.figure is None:
                 self.status_updated.emit("Independent fit window is not ready for plotting.")
                 return
@@ -2046,7 +2029,6 @@ class IndependentFitWindow(QMainWindow):
             y_data = y_data[:n]
 
 
-            # ??????????
             err_data = None
             if y_errors is not None:
                 err_data = np.asarray(y_errors, dtype=float).reshape(-1)[:n]
@@ -2064,7 +2046,6 @@ class IndependentFitWindow(QMainWindow):
 
             is_q_axis = isinstance(x_label, str) and 'q' in x_label.lower()
 
-            # ?????????????????
             if hasattr(self, 'show_positive_cb') and self.show_positive_cb.isChecked():
                 mask = x_data > 0
                 x_data = x_data[mask]
@@ -2095,7 +2076,6 @@ class IndependentFitWindow(QMainWindow):
                     has_negative = np.any(np.isfinite(original_x) & (original_x < 0))
                     x_label = self._format_q_axis_label(absolute=(log_x and has_negative))
 
-            # ???????????????????
             if normalize:
                 max_intensity = np.max(y_data) if y_data.size > 0 else 0.0
                 if max_intensity > 0:
@@ -2128,21 +2108,16 @@ class IndependentFitWindow(QMainWindow):
                 self.status_updated.emit("No plottable data available for independent fit window.")
                 return
 
-            # ????????
             self.ax.clear()
 
-            # ?????????????
             if err_data is not None:
-                # ?????????rrorbar
                 self.ax.errorbar(x_data, y_data, yerr=err_data, fmt='o-',
                                markersize=4, linewidth=1.5, capsize=3,
                                alpha=0.8, label='Data with error bars')
             else:
-                # ???????????????plot???????????????
                 try:
                     FittingController._plot_cut_data_with_log_handling(self.ax, x_data, y_data, log_x, markersize=6, linewidth=2)
                 except:
-                    # ???????????????????????
                     self.ax.plot(x_data, y_data, 'o-', markersize=4, linewidth=1.5, alpha=0.8, label='Data')
 
             try:
@@ -2150,9 +2125,8 @@ class IndependentFitWindow(QMainWindow):
             except Exception:
                 self.clear_deletable_points()
 
-            # ??????????????????????mathtext ???????????????
             try:
-                # ?????? '???? ??'A^-1' ???????mathtext ???
+                # 函数说明：实现 to mathtext 相关逻辑。
                 def _to_mathtext(label: str) -> str:
                     if not isinstance(label, str):
                         return label
@@ -2170,7 +2144,6 @@ class IndependentFitWindow(QMainWindow):
             self.ax.set_ylabel(y_lbl, fontsize=13)
             self.ax.set_title(title, fontsize=15)
 
-            # ????????????
             if log_x:
                 self.ax.set_xscale('log')
             else:
@@ -2181,7 +2154,6 @@ class IndependentFitWindow(QMainWindow):
             else:
                 self.ax.set_yscale('linear')
 
-            # ????????
             self.ax.grid(True, alpha=0.4, linestyle='--')
             try:
                 for axis in ['top', 'bottom', 'left', 'right']:
@@ -2190,19 +2162,15 @@ class IndependentFitWindow(QMainWindow):
             except Exception:
                 pass
 
-            # ???????????????????
             # stats_text = f'Points: {len(x_data)}\nMax: {np.max(y_data):.2e}\nMin: {np.min(y_data):.2e}'
             # self.ax.text(0.02, 0.88, stats_text, transform=self.ax.transAxes,
             #             verticalalignment='bottom', fontsize=10,
             #             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
-            # ??????
             self.figure.tight_layout()
 
-            # ??????
             self.canvas.draw_idle()
 
-            # ????????
             self.setWindowTitle(f"GIMaP Cut Analysis - {title}")
 
             self.status_updated.emit(f"Independent fit window updated: {title}")
@@ -2210,6 +2178,7 @@ class IndependentFitWindow(QMainWindow):
         except Exception as e:
             self.status_updated.emit(f"Failed to update independent fit window: {str(e)}")
 
+    # 函数说明：处理窗口关闭事件。
     def closeEvent(self, event):
         """No description."""
         try:
@@ -2226,20 +2195,20 @@ class IndependentFitWindow(QMainWindow):
 class UnifiedDisplayManager:
     """Manage unified plot display updates."""
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, controller):
         self.controller = controller
         self.ui = controller.ui
 
+    # 函数说明：绘制1d 数据。
     def plot_1d_data(self, q, intensity, err=None, title="", source_info="",
                      log_x=False, log_y=False, normalize=False):
         """Plot 1D data."""
         try:
-            # ???????
             plot_q = np.array(q)
             plot_I = np.array(intensity)
             plot_err = np.array(err) if err is not None else None
 
-            # ???????
             if normalize and len(plot_I) > 0:
                 max_I = np.max(plot_I)
                 if max_I > 0:
@@ -2247,22 +2216,18 @@ class UnifiedDisplayManager:
                     if plot_err is not None:
                         plot_err = plot_err / max_I
 
-            # Log-Y????
             if log_y and len(plot_I) > 0 and not np.all(plot_I > 0):
                 min_positive = np.min(plot_I[plot_I > 0]) if np.any(plot_I > 0) else 1e-10
                 plot_I = np.where(plot_I <= 0, min_positive, plot_I)
                 if plot_err is not None:
                     plot_err = np.where(plot_I <= min_positive, min_positive * 0.1, plot_err)
 
-            # ???GUI?????
             self._update_gui_1d_display(plot_q, plot_I, plot_err, title,
                                        log_x, log_y, normalize)
 
-            # ???????????
             self._update_independent_1d_display(plot_q, plot_I, plot_err, title,
                                                log_x, log_y, normalize)
 
-            # ???????
             y_label = 'Intensity' + (' (normalized)' if normalize else '')
             mode_str = f"Log-X: {log_x}, Log-Y: {log_y}, Norm: {normalize}"
             self.controller.status_updated.emit(f"1D data displayed: {title} [{mode_str}]")
@@ -2270,8 +2235,9 @@ class UnifiedDisplayManager:
         except Exception as e:
             self.controller.status_updated.emit(f"Failed to plot 1D data: {str(e)}")
 
+    # 函数说明：更新界面 1d 显示。
     def _update_gui_1d_display(self, q, intensity, err, title, log_x, log_y, normalize):
-        """GUI???1D"""
+        """Render the 1D fitting data in the GUI."""
         try:
             if not hasattr(self.ui, 'fitGraphicsView') or not is_matplotlib_available():
                 return
@@ -2279,33 +2245,26 @@ class UnifiedDisplayManager:
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-            # ???figure??:3 ????????400x300 ?????
             figure = Figure(figsize=(8, 6))
             canvas = FigureCanvas(figure)
             ax = figure.add_subplot(111)
 
-            # ??????????????
             self._unified_plot_1d_data(ax, q, intensity, err, title, log_x, log_y, normalize)
 
             figure.tight_layout()
 
-            # ????????????
             canvas.draw()
 
-            # ????????
             scene = self.controller._setup_fit_graphics_scene()
             if scene is not None:
                 proxy_widget = scene.addWidget(canvas)
                 self.controller._fit_view_to_item(self.ui.fitGraphicsView, proxy_widget, keep_aspect=True)
 
-                # ??????
                 self.controller._current_fit_canvas = canvas
                 self.controller._current_fit_figure = figure
 
-                # ??????????????????og-x????????OI???/????????????????????????????
                 try:
                     if log_x and hasattr(self.controller, '_adjust_roi_bounds_for_log_x'):
-                        # ???????????????t?????????????????lim
                         QTimer.singleShot(0, self.controller._adjust_roi_bounds_for_log_x)
                 except Exception:
                     pass
@@ -2313,31 +2272,27 @@ class UnifiedDisplayManager:
         except Exception as e:
             self.controller.status_updated.emit(f"Failed to update GUI 1D display: {str(e)}")
 
+    # 函数说明：实现 unified 图表 1d 数据 相关逻辑。
     def _unified_plot_1d_data(self, ax, q, intensity, err, title, log_x, log_y, normalize):
         """No description."""
         try:
             q_plot = self.controller._convert_q_values_for_display(q)
 
-            # ?????? - ?????????????????????
             if err is not None:
-                # ?????????rrorbar
                 ax.errorbar(q_plot, intensity, yerr=err, fmt='o-',
                            markersize=3, linewidth=1, capsize=2,
                            alpha=0.8, label='Data with error bars')
             else:
-                # ???????????????Log-X??????
                 FittingController._plot_cut_data_with_log_handling(
                     ax, q_plot, intensity, log_x, markersize=3, linewidth=1
                 )
 
-            # ?????????????? mathtext ??? superscript minus ????????????
             has_negative = np.any(np.isfinite(np.asarray(q)) & (np.asarray(q) < 0))
             ax.set_xlabel(self.controller._build_q_axis_label(absolute=(log_x and has_negative)), fontsize=13)
             ax.set_ylabel('Intensity' + (' (normalized)' if normalize else ''), fontsize=13)
             ax.set_title(title, fontsize=15)
             ax.grid(True, alpha=0.3)
 
-            # ????????- ??????????????
             if log_x:
                 ax.set_xscale('log')
             else:
@@ -2348,7 +2303,6 @@ class UnifiedDisplayManager:
             else:
                 ax.set_yscale('linear')
 
-            # ????????????????????????????
             try:
                 for axis in ['top', 'bottom', 'left', 'right']:
                     ax.spines[axis].set_linewidth(1.8)
@@ -2357,7 +2311,6 @@ class UnifiedDisplayManager:
                 pass
 
         except Exception as e:
-            # ??????????
             q_plot = self.controller._convert_q_values_for_display(q)
             if err is not None:
                 ax.errorbar(q_plot, intensity, yerr=err, fmt='o-', markersize=3, linewidth=1, capsize=2)
@@ -2369,6 +2322,7 @@ class UnifiedDisplayManager:
             ax.set_title(title, fontsize=15)
             ax.grid(True, alpha=0.3)
 
+    # 函数说明：更新独立 1d 显示。
     def _update_independent_1d_display(self, q, intensity, err, title, log_x, log_y, normalize):
         """D"""
         try:
@@ -2387,6 +2341,7 @@ class UnifiedDisplayManager:
         except Exception as e:
             self.controller.status_updated.emit(f"Failed to update independent 1D display: {str(e)}")
 
+    # 函数说明：获取显示 options。
     def get_display_options(self):
         """No description."""
         return {
@@ -2408,10 +2363,12 @@ REMOTE_PATH_MARKERS = (
 )
 
 
+# 函数说明：实现 默认 远程 缓存 dir 相关逻辑。
 def _default_remote_cache_dir() -> str:
     return os.path.join(".gimap_cache", "remote_files")
 
 
+# 函数说明：实现 app root dir 相关逻辑。
 def _app_root_dir() -> str:
     try:
         return str(Path(__file__).resolve().parents[1])
@@ -2419,6 +2376,7 @@ def _app_root_dir() -> str:
         return os.getcwd()
 
 
+# 函数说明：解析远程 缓存 dir。
 def _resolve_remote_cache_dir(cache_dir: str = "") -> str:
     cache_dir = str(cache_dir or _default_remote_cache_dir()).strip()
     if not cache_dir:
@@ -2428,6 +2386,7 @@ def _resolve_remote_cache_dir(cache_dir: str = "") -> str:
     return normalize_path(os.path.join(_app_root_dir(), cache_dir))
 
 
+# 函数说明：实现 显示 远程 缓存 dir 相关逻辑。
 def _display_remote_cache_dir(cache_dir: str = "") -> str:
     cache_dir = str(cache_dir or "").strip()
     default_rel = _default_remote_cache_dir()
@@ -2442,6 +2401,7 @@ def _display_remote_cache_dir(cache_dir: str = "") -> str:
     return cache_dir
 
 
+# 函数说明：判断mapped network drive是否成立。
 def _is_mapped_network_drive(path: str) -> bool:
     try:
         if os.name != "nt":
@@ -2456,6 +2416,7 @@ def _is_mapped_network_drive(path: str) -> bool:
         return False
 
 
+# 函数说明：判断cloud or network 路径是否成立。
 def is_cloud_or_network_path(path: str) -> bool:
     """Detect paths that should be copied locally before slow I/O."""
     try:
@@ -2474,6 +2435,7 @@ def is_cloud_or_network_path(path: str) -> bool:
     return False
 
 
+# 函数说明：实现 qobject is alive 相关逻辑。
 def _qobject_is_alive(obj) -> bool:
     if obj is None:
         return False
@@ -2492,6 +2454,7 @@ def _qobject_is_alive(obj) -> bool:
     return True
 
 
+# 函数说明：实现 缓存 文件 路径 for source 相关逻辑。
 def _cache_file_path_for_source(source_path: str, cache_dir: str) -> str:
     source_norm = normalize_path(source_path)
     digest = hashlib.sha256(source_norm.encode("utf-8", errors="ignore")).hexdigest()[:16]
@@ -2499,10 +2462,12 @@ def _cache_file_path_for_source(source_path: str, cache_dir: str) -> str:
     return normalize_path(os.path.join(_resolve_remote_cache_dir(cache_dir), f"{digest}_{name}"))
 
 
+# 函数说明：判断远程 raw 缓存 name是否成立。
 def _is_remote_raw_cache_name(name: str) -> bool:
     return bool(re.match(r"^[0-9a-f]{16}_.+", name or "", re.IGNORECASE))
 
 
+# 函数说明：实现 复制 远程 文件 to 缓存 相关逻辑。
 def _copy_remote_file_to_cache(source_path: str, cache_dir: str, progress_callback=None, interrupt_callback=None) -> str:
     source_path = normalize_path(source_path)
     cache_dir = _resolve_remote_cache_dir(cache_dir)
@@ -2549,6 +2514,7 @@ def _copy_remote_file_to_cache(source_path: str, cache_dir: str, progress_callba
             pass
 
 
+# 函数说明：实现 enforce 远程 缓存 limit 相关逻辑。
 def _enforce_remote_cache_limit(cache_dir: str, max_gb: float) -> None:
     try:
         cache_dir = _resolve_remote_cache_dir(cache_dir)
@@ -2587,16 +2553,19 @@ class FolderImageScanWorker(QThread):
     status_updated = pyqtSignal(str)
     error_occurred = pyqtSignal(str, str)
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, file_path: str, extensions: tuple, max_files: int = 5000):
         super().__init__()
         self.file_path = normalize_path(file_path or "")
         self.extensions = tuple(extensions or (".cbf",))
         self.max_files = int(max(100, max_files or 5000))
 
+    # 函数说明：实现 natural 排序 key 相关逻辑。
     def _natural_sort_key(self, path):
         name = os.path.basename(path)
         return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', name)]
 
+    # 函数说明：执行后台任务或工作流程。
     def run(self):
         try:
             if not self.file_path:
@@ -2634,15 +2603,16 @@ class FolderImageScanWorker(QThread):
 class AsyncImageLoader(QThread):
     """No description."""
 
-    image_loaded = pyqtSignal(np.ndarray, str)  # ??????, ?????
-    progress_updated = pyqtSignal(int, str)  # ???, ???????
-    error_occurred = pyqtSignal(str)  # ?????
+    image_loaded = pyqtSignal(np.ndarray, str)
+    progress_updated = pyqtSignal(int, str)
+    error_occurred = pyqtSignal(str)
     remote_file_detected = pyqtSignal(str)
     copy_started = pyqtSignal(str, str)
     copy_finished = pyqtSignal(str, str)
     load_started = pyqtSignal(str)
     load_finished = pyqtSignal(str)
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self):
         super().__init__()
         self.file_path = None
@@ -2655,6 +2625,7 @@ class AsyncImageLoader(QThread):
         self._last_source_files = []
         self._last_effective_files = []
 
+    # 函数说明：实现 configure 远程 缓存 相关逻辑。
     def configure_remote_cache(self, enabled=True, cache_dir=None, max_gb=3.0):
         self.copy_remote_to_cache = bool(enabled)
         self.remote_cache_dir = _display_remote_cache_dir(cache_dir or _default_remote_cache_dir())
@@ -2663,6 +2634,7 @@ class AsyncImageLoader(QThread):
         except Exception:
             self.remote_cache_limit_gb = 3.0
 
+    # 函数说明：加载图像。
     def load_image(self, file_path, stack_count=1):
         """No description."""
         if self.isRunning():
@@ -2673,6 +2645,7 @@ class AsyncImageLoader(QThread):
         self.stack_count = stack_count
         self.start()
 
+    # 函数说明：实现 prepare 文件 for read 相关逻辑。
     def _prepare_file_for_read(self, source_path: str) -> str:
         source_path = normalize_path(source_path)
         if self.copy_remote_to_cache and is_cloud_or_network_path(source_path):
@@ -2694,6 +2667,7 @@ class AsyncImageLoader(QThread):
             return cached
         return source_path
 
+    # 函数说明：执行后台任务或工作流程。
     def run(self):
         """No description."""
         try:
@@ -2722,11 +2696,9 @@ class AsyncImageLoader(QThread):
 
             read_start = time.perf_counter()
             if self.stack_count == 1:
-                # ????????
                 self.progress_updated.emit(50, "Loading single CBF file...")
                 image_data = self._load_single_cbf_file(self.file_path)
             else:
-                # ????????
                 self.progress_updated.emit(30, f"Loading and stacking {self.stack_count} files...")
                 image_data = self._load_multiple_cbf_files(self.file_path, self.stack_count)
             print(f"[Timing] fabio read: {(time.perf_counter() - read_start) * 1000:.2f} ms ({os.path.basename(self.file_path)})")
@@ -2746,6 +2718,7 @@ class AsyncImageLoader(QThread):
         except Exception as e:
             self.error_occurred.emit(f"Error loading image: {str(e)}")
 
+    # 函数说明：加载single cbf 文件。
     def _load_single_cbf_file(self, cbf_file):
         """CBF"""
         try:
@@ -2765,6 +2738,7 @@ class AsyncImageLoader(QThread):
         except Exception as e:
             return None
 
+    # 函数说明：加载multiple cbf 文件。
     def _load_multiple_cbf_files(self, start_file, stack_count):
         """BF"""
         try:
@@ -2816,30 +2790,26 @@ class AsyncImageLoader(QThread):
 
 
 class FittingController(QObject):
-    """Cut Fitting????????GISAXS"""
+    """Controller for GISAXS cut, display, and fitting workflows."""
 
-    # ???????
     status_updated = pyqtSignal(str)
     progress_updated = pyqtSignal(int)
     parameters_changed = pyqtSignal(dict)
     fitting_completed = pyqtSignal(dict)
 
+    # 函数说明：初始化对象状态和相关资源。
     def __init__(self, ui, parent=None):
         super().__init__(parent)
         self.ui = ui
-        self.parent = parent  # ?????????
-        # ???????????
+        self.parent = parent
         self.main_window = parent.parent if hasattr(parent, 'parent') else None
 
-        # ???????????
-        self.q = None  # q??????
-        self.I = None  # I??????
-        self.I_fitting = None  # ?????????
+        self.q = None
+        self.I = None
+        self.I_fitting = None
 
-        # ???????????
-        self.display_mode = 'normal'  # 'normal' ??'fitting'
-        self.data_source = None  # 'cut' ??'1d'
-        # ROI ????????
+        self.display_mode = 'normal'
+        self.data_source = None
         self._q_full_min = None
         self._q_full_max = None
         self._roi_min = None
@@ -2854,20 +2824,16 @@ class FittingController(QObject):
         self._points_num_current = 50
         self._interp_method_default = 'Linear'
 
-        # FittingTextBrowser????????????????????????
         self._fitting_messages_max_lines = 500
         self._detached_fitting_dialog = None
         self._detached_append = None
         self._fitting_browser_original_height = None
-        self.has_fitting_data = False  # ??????????
+        self.has_fitting_data = False
 
-        # ??????
         self.current_parameters = {}
 
-        # ??????
         self.fitting_results = {}
 
-        # ?????????
         self.current_stack_data = None
         self.current_file_list = []
         self._folder_image_files = []
@@ -2884,35 +2850,27 @@ class FittingController(QObject):
         self._insitu_last_refine_log_update = 0.0
         self._insitu_last_trend_refresh = 0.0
         self._insitu_trend_refresh_pending = False
-        # ??????????????????????
-        self.data = None              # ????????????????????????????
-        self.summed_data = None       # ???????????????????????
-        self.cut = None               # ??????ut??D??? {'q':..., 'I':..., meta}
-        self.fitting = None           # ??????itting??D??? {'q':..., 'I':..., meta}
-        # Q?????????????????????????????????????
+        self.data = None
+        self.summed_data = None
+        self.cut = None
+        self.fitting = None
         self.qy_matrix = None
         self.qz_matrix = None
         self.qr_matrix = None
         self._q_mesh_cache_key = None
 
-        # ??matplotlib???
         self.independent_window = None
 
-        # ???????????
         self.independent_fit_window = None
 
-        # ???????????? (???????????)
         self.current_cut_data = None
 
-        # 1D?????????
-        self.current_1d_data = None  # ????????D?????? {q, I, err}
-        self.current_1d_file_path = None  # ???????????D?????
-        self._imported_1d_q_unit = 'angstrom'  # 1D????????^-1 ?????????????????? nm^-1
+        self.current_1d_data = None
+        self.current_1d_file_path = None
+        self._imported_1d_q_unit = 'angstrom'
 
-        # ???????????????????
         self._last_q_mode = None
 
-        # ??????????????????
         self._graphics_scene = None
         self._figure_cache = None
         self._canvas_cache = None
@@ -2925,9 +2883,7 @@ class FittingController(QObject):
         self._image_display_cache = OrderedDict()
         self._image_display_cache_limit = 12
 
-        # ????????????
         try:
-            # ?????global_params ?????? meta ?????????????????user_settings
             default_points = None
             try:
                 from core.global_params import global_params
@@ -2943,7 +2899,6 @@ class FittingController(QObject):
                 us_val = 50
             self._points_num_default = int(default_points if default_points is not None else us_val)
             self._points_num_current = self._points_num_default
-            # ???????? user_settings ???
             try:
                 from core.user_settings import user_settings as _us
                 self._interp_method_default = _us.get('fit.interp_method', 'Linear')
@@ -2956,15 +2911,12 @@ class FittingController(QObject):
         except Exception:
             pass
 
-        # ???????????????
         self._fit_graphics_scene = None
         self._current_fit_canvas = None
         self._current_fit_figure = None
 
-        # ???????????
         self._display_manager = UnifiedDisplayManager(self)
 
-        # ?????????
         self._current_vmin = None
         self._current_vmax = None
         self._show_cut_region = True
@@ -2972,14 +2924,12 @@ class FittingController(QObject):
         self._image_colormap = "viridis"
         self._syncing_image_display_options = False
         self._updating_color_scale_ui = False
-        self._has_displayed_image = False  # ???????????????
+        self._has_displayed_image = False
         self._load_image_display_options()
 
-        # ???????
         self._initialized = False
-        self._initializing = True  # ??????????
+        self._initializing = True
 
-        # ???????????
         self.async_image_loader = AsyncImageLoader()
         self.async_image_loader.image_loaded.connect(self._on_image_loaded)
         self.async_image_loader.progress_updated.connect(self._on_image_loading_progress)
@@ -2990,14 +2940,12 @@ class FittingController(QObject):
         self.async_image_loader.load_started.connect(self._on_remote_load_started)
         self.async_image_loader.load_finished.connect(self._on_remote_load_finished)
 
-        # ??????????
         self.current_parameter_selection = None
 
-        # ?????????
-        self._display_mode = 'normal'  # 'normal' ??'fitting'
-        self._has_fitting_data = False  # ??????????
-        self._fitting_mode_active = False  # ???????????
-        self._last_active_particle_ids = []  # ??????????????????????
+        self._display_mode = 'normal'
+        self._has_fitting_data = False
+        self._fitting_mode_active = False
+        self._last_active_particle_ids = []
         self._particle_widgets = {}
         self._particle_parameter_meta_ids = defaultdict(list)
         self._recycled_particle_ids = []
@@ -3030,7 +2978,6 @@ class FittingController(QObject):
         self._ai_input_data_summary = None
         self._ai_input_dialog_arrays = None
 
-        # ????????ingle/Stack/In-situ?????????
         self.load_mode = 'Single'
         self._insitu_timer = None
         self._insitu_last_file = None
@@ -3062,87 +3009,68 @@ class FittingController(QObject):
         self._insitu_workflow_canvas_image = None
         self._insitu_workflow_canvas_curve = None
 
-        # ?????????????????finished??????????????changed??
         self._default_signal_mode = 'finished'
         self._signal_mode_overrides = {
-            # Fitting region ???????????
             'fitFittingRegionSlider': 'changed',
-            # Detector Para. ?? Beam Center?????????????????????????????????
-            # ??????????????????:
             # 'detectorBeamCenterX': 'changed',
             # 'detectorBeamCenterY': 'changed',
         }
 
-        # ??????????
         self.detector_params_dialog = None
 
-        # ???????????
         self.model_params_manager = ModelParametersManager()
 
-        # ???????????????????? UniversalParameterTriggerManager?????? FittingParameterTriggerManager ????
         self.param_trigger_manager = UniversalParameterTriggerManager(self)
 
-        # ???????????????????????
-        self._loading_parameters = False  # ????????????????
-        self._initializing = False  # ??????????????
+        self._loading_parameters = False
+        self._initializing = False
 
         # ==========================
-        # ???????????????????? meta registry ?????
         # ==========================
-        # ???????????????????????
         self._param_debounce_ms = 280
-        # ???????+?????
         self._param_abs_eps = 1e-12
         self._param_rel_eps = 1e-10
-        # ROI????????????????????????????????????????
         self._roi_debounce_ms = 140
         self._roi_update_timer = None
 
-        # ??K????????
-        self._auto_k_enabled = False  # ??????K?????
+        self._auto_k_enabled = False
 
-        # ???????????
         self._setup_particle_shape_connector()
 
-        # ??????????????uto-K?????
         self._load_auto_k_enabled()
 
+    # 函数说明：实现 initialize 相关逻辑。
     def initialize(self):
         """No description."""
         if self._initialized:
             return
 
-        # ??????UI??????????????
         self._initialize_ui()
         self._setup_folder_navigation_ui()
         self._setup_insitu_workflow_button()
         self._load_remote_cache_settings()
         self._setup_remote_cache_controls()
-        # ????????????
         self._setup_connections()
-        # ???????????????????????
         self._initialized = True
-        self._initializing = False  # ???????
-        # ??????????
+        self._initializing = False
         self._setup_meta_debug_shortcut()
-        # ????????????????????????????????????????????????????????
         try:
             if hasattr(self.ui, 'gisaxsInputModelCombox'):
                 mode_now = self.ui.gisaxsInputModelCombox.currentText()
                 self.load_mode = mode_now or getattr(self, 'load_mode', 'Single')
-                # ???????????????????
                 self._update_stack_controls_visibility()
                 self._update_insitu_workflow_button_visibility()
-                # ??? In-situ???????????
                 if self.load_mode == 'In-situ' and hasattr(self.ui, 'gisaxsInputStackValue'):
                     self.ui.gisaxsInputStackValue.setVisible(False)
         except Exception:
             pass
 
+    # 函数说明：配置meta debug shortcut。
     def _setup_meta_debug_shortcut(self):
         """No description."""
         try:
             sc = QShortcut(QKeySequence("Ctrl+Alt+M"), self.ui)
+            # 函数说明：实现 dump 相关逻辑。
             def _dump():
                 snap = self.param_trigger_manager.debug_dump_meta(verbose=False)
                 self._add_fitting_message("==== META SNAPSHOT ====", "INFO")
@@ -3153,6 +3081,7 @@ class FittingController(QObject):
         except Exception as e:
             print(f"Failed to register meta debug shortcut: {e}")
 
+    # 函数说明：配置文件夹 navigation 界面。
     def _setup_folder_navigation_ui(self):
         """Add Previous/Next buttons beside the current GISAXS file field."""
         try:
@@ -3181,6 +3110,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Failed to set up image navigation: {str(e)}")
 
+    # 函数说明：加载远程 缓存 settings。
     def _load_remote_cache_settings(self):
         try:
             from core.user_settings import user_settings
@@ -3193,6 +3123,7 @@ class FittingController(QObject):
             self._remote_cache_limit_gb = 3.0
         self._configure_async_loader_remote_cache()
 
+    # 函数说明：保存远程 缓存 settings。
     def _save_remote_cache_settings(self):
         try:
             from core.user_settings import user_settings
@@ -3203,6 +3134,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 configure 异步 loader 远程 缓存 相关逻辑。
     def _configure_async_loader_remote_cache(self):
         try:
             self.async_image_loader.configure_remote_cache(
@@ -3213,6 +3145,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：配置远程 缓存 controls。
     def _setup_remote_cache_controls(self):
         try:
             if getattr(self, "_remote_cache_controls", None):
@@ -3268,6 +3201,7 @@ class FittingController(QObject):
         except Exception as exc:
             self.status_updated.emit(f"Remote cache controls failed: {exc}")
 
+    # 函数说明：处理远程 缓存 setting changed事件。
     def _on_remote_cache_setting_changed(self):
         try:
             widgets = getattr(self, "_remote_cache_controls", {})
@@ -3282,6 +3216,7 @@ class FittingController(QObject):
         except Exception as exc:
             self.status_updated.emit(f"Remote cache setting failed: {exc}")
 
+    # 函数说明：实现 browse 远程 缓存 文件夹 相关逻辑。
     def _browse_remote_cache_folder(self):
         try:
             start = _resolve_remote_cache_dir(self._remote_cache_dir or _default_remote_cache_dir())
@@ -3296,6 +3231,7 @@ class FittingController(QObject):
         except Exception as exc:
             self.status_updated.emit(f"Select cache folder failed: {exc}")
 
+    # 函数说明：清除远程 文件 缓存。
     def _clear_remote_file_cache(self):
         try:
             cache_dir = _resolve_remote_cache_dir(self._remote_cache_dir or _default_remote_cache_dir())
@@ -3315,6 +3251,7 @@ class FittingController(QObject):
         except Exception as exc:
             self.status_updated.emit(f"Clear remote cache failed: {exc}")
 
+    # 函数说明：处理远程 文件 detected事件。
     def _on_remote_file_detected(self, source_path: str):
         message = "This file appears to be in a cloud or network folder. Copying to local cache before processing..."
         self.status_updated.emit(message)
@@ -3323,25 +3260,32 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：处理远程 复制 started事件。
     def _on_remote_copy_started(self, source_path: str, target_path: str):
         self.status_updated.emit(f"Copying remote file to cache: {os.path.basename(source_path)}")
 
+    # 函数说明：处理远程 复制 finished事件。
     def _on_remote_copy_finished(self, source_path: str, target_path: str):
         self.status_updated.emit(f"Remote file cached: {os.path.basename(source_path)}")
 
+    # 函数说明：处理远程 加载 started事件。
     def _on_remote_load_started(self, source_path: str):
         self.status_updated.emit(f"Load started: {os.path.basename(source_path)}")
 
+    # 函数说明：处理远程 加载 finished事件。
     def _on_remote_load_finished(self, source_path: str):
         self.status_updated.emit(f"Load finished: {os.path.basename(source_path)}")
 
+    # 函数说明：实现 supported 文件夹 图像 extensions 相关逻辑。
     def _supported_folder_image_extensions(self):
         return ('.cbf',)
 
+    # 函数说明：实现 natural 排序 key 相关逻辑。
     def _natural_sort_key(self, path):
         name = os.path.basename(path)
         return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', name)]
 
+    # 函数说明：实现 scan 文件夹 图像 for 文件 相关逻辑。
     def _scan_folder_images_for_file(self, file_path):
         """Scan the selected file's folder and update navigation state."""
         try:
@@ -3380,6 +3324,7 @@ class FittingController(QObject):
             self._update_folder_navigation_buttons()
             self.status_updated.emit(f"Folder scan failed: {str(e)}")
 
+    # 函数说明：应用文件夹 图像 scan 结果。
     def _apply_folder_image_scan_result(self, file_path: str, files: list):
         try:
             file_path = normalize_path(file_path)
@@ -3394,6 +3339,7 @@ class FittingController(QObject):
         except Exception as exc:
             self.status_updated.emit(f"Folder scan apply failed: {exc}")
 
+    # 函数说明：处理文件夹 图像 scan finished事件。
     def _on_folder_image_scan_finished(self, file_path: str, files: list):
         try:
             normalized = normalize_path(file_path)
@@ -3405,12 +3351,14 @@ class FittingController(QObject):
         except Exception as exc:
             self.status_updated.emit(f"Folder scan result failed: {exc}")
 
+    # 函数说明：处理文件夹 图像 scan 错误事件。
     def _on_folder_image_scan_error(self, file_path: str, message: str):
         self._folder_image_files = []
         self._folder_image_index = -1
         self._update_folder_navigation_buttons()
         self.status_updated.emit(f"Folder scan failed: {message}")
 
+    # 函数说明：更新文件夹 navigation buttons。
     def _update_folder_navigation_buttons(self):
         try:
             count = len(self._folder_image_files)
@@ -3426,12 +3374,15 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：显示previous 文件夹 图像。
     def _show_previous_folder_image(self):
         self._show_folder_image_at_offset(-1)
 
+    # 函数说明：显示next 文件夹 图像。
     def _show_next_folder_image(self):
         self._show_folder_image_at_offset(1)
 
+    # 函数说明：显示文件夹 图像 at offset。
     def _show_folder_image_at_offset(self, offset):
         try:
             if not self._folder_image_files:
@@ -3459,6 +3410,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Image navigation failed: {str(e)}")
 
+    # 函数说明：实现 select 文件夹 图像 相关逻辑。
     def _select_folder_image(self, file_path):
         try:
             file_path = normalize_path(file_path)
@@ -3488,6 +3440,7 @@ class FittingController(QObject):
             QMessageBox.warning(self.main_window, "Image Navigation Error", f"Failed to load image:\n{str(e)}")
 
     # ---------------- ROI helpers for plotting -----------------
+    # 函数说明：实现 ROI 活动 相关逻辑。
     def _roi_active(self) -> bool:
         if not getattr(self, '_roi_controls_enabled', True):
             return False
@@ -3497,11 +3450,13 @@ class FittingController(QObject):
             (abs(self._roi_min - self._q_full_min) > 1e-12 or abs(self._roi_max - self._q_full_max) > 1e-12)
         )
 
+    # 函数说明：获取ROI 活动 arrays。
     def _get_roi_active_arrays(self):
         """Return (q_plot, I_plot) using ROI subset if active, else full arrays."""
         if self.q is None or self.I is None:
             return None, None
         # Helper: filter out non-finite pairs to avoid None/inf/NaN issues
+        # 函数说明：实现 过滤 finite 相关逻辑。
         def _filter_finite(q_arr, I_arr):
             q_arr = np.asarray(q_arr)
             I_arr = np.asarray(I_arr)
@@ -3514,6 +3469,7 @@ class FittingController(QObject):
             return _filter_finite(self.q_ROI, self.I_ROI)
         return _filter_finite(self.q, self.I)
 
+    # 函数说明：绘制ROI guides if 活动。
     def _draw_roi_guides_if_active(self, ax):
         try:
             if not getattr(self, '_roi_controls_enabled', True):
@@ -3536,6 +3492,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 当前 Q has 负值 值 相关逻辑。
     def _current_q_has_negative_values(self) -> bool:
         try:
             q = np.asarray(self.q) if self.q is not None else None
@@ -3545,6 +3502,7 @@ class FittingController(QObject):
         except Exception:
             return False
 
+    # 函数说明：实现 ROI editing should be enabled 相关逻辑。
     def _roi_editing_should_be_enabled(self) -> bool:
         """ROI is ambiguous only when log-x folds positive and negative q together."""
         try:
@@ -3556,6 +3514,7 @@ class FittingController(QObject):
         except Exception:
             return True
 
+    # 函数说明：设置ROI controls enabled。
     def _set_roi_controls_enabled(self, enabled: bool):
         self._roi_controls_enabled = bool(enabled)
         for name in ('fitFittingRegionSlider', 'fitFittingRegionMinValue', 'fitFittingRegionMaxValue'):
@@ -3577,6 +3536,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：获取ROI domain bounds。
     def _get_roi_domain_bounds(self):
         if self.q is None or self.I is None:
             return None
@@ -3600,27 +3560,32 @@ class FittingController(QObject):
             return None
         return float(np.min(q_valid)), float(np.max(q_valid))
 
+    # 函数说明：实现 ROI controls use abs 负值 相关逻辑。
     def _roi_controls_use_abs_negative(self) -> bool:
         try:
             return self._get_independent_axis_filter_mode() == 'negative'
         except Exception:
             return False
 
+    # 函数说明：实现 ROI 数据 to control 范围 相关逻辑。
     def _roi_data_to_control_range(self, q_min: float, q_max: float):
         if self._roi_controls_use_abs_negative():
             vals = np.sort(np.abs(np.array([q_min, q_max], dtype=float)))
             return float(vals[0]), float(vals[1])
         return float(q_min), float(q_max)
 
+    # 函数说明：实现 ROI 数据 to control 值 相关逻辑。
     def _roi_data_to_control_values(self, q_min: float, q_max: float):
         return self._roi_data_to_control_range(q_min, q_max)
 
+    # 函数说明：实现 ROI control to 数据 值 相关逻辑。
     def _roi_control_to_data_values(self, vmin: float, vmax: float):
         if self._roi_controls_use_abs_negative():
             lo, hi = sorted((abs(float(vmin)), abs(float(vmax))))
             return -hi, -lo
         return float(vmin), float(vmax)
 
+    # 函数说明：实现 nearest ROI control 值 相关逻辑。
     def _nearest_roi_control_value(self, value: float):
         try:
             q = np.asarray(self.q) if self.q is not None else None
@@ -3637,6 +3602,7 @@ class FittingController(QObject):
         except Exception:
             return float(value)
 
+    # 函数说明：同步ROI controls to 当前 显示。
     def _sync_roi_controls_to_current_display(self, reset_to_domain: bool = False):
         """Update ROI bounds/editability to match the current Fitting Plot display."""
         enabled = self._roi_editing_should_be_enabled()
@@ -3673,6 +3639,7 @@ class FittingController(QObject):
             self._updating_roi_controls = False
 
     # ---------------- ROI & Interpolation Controls -----------------
+    # 函数说明：配置拟合 区域 controls。
     def _setup_fitting_region_controls(self):
         """Wire up ROI slider/spinboxes and interpolation widgets.
         - Initialize defaults from user settings
@@ -3710,27 +3677,23 @@ class FittingController(QObject):
             try:
                 self.ui.fitDataPointsNumValue.setRange(10, 5000)
                 self.ui.fitDataPointsNumValue.setSingleStep(1)
-                # ?????????????????? global_params/user_settings
                 self.ui.fitDataPointsNumValue.setValue(int(max(10, self._points_num_current)))
             except Exception:
                 pass
-            # ??? meta ?????????????????????
             try:
+                # 函数说明：实现 dp after commit 相关逻辑。
                 def _dp_after_commit(info, value):
                     try:
                         self._points_num_current = int(value)
                     except Exception:
                         self._points_num_current = int(self._points_num_default)
-                    # ???????????????????
                     was_fitting = self._is_in_fitting_mode() if hasattr(self, '_is_in_fitting_mode') else False
 
-                    # ????????????????????
                     if getattr(self, 'data_source', None) == 'cut':
                         self._perform_cut(points_override=int(self._points_num_current))
                     elif getattr(self, 'data_source', None) == '1d':
                         self._resample_1d(n_points=int(self._points_num_current))
 
-                    # ????????????????????????????perform_manual_fitting?????????????????????
                     if was_fitting:
                         self._perform_manual_fitting()
 
@@ -3753,9 +3716,7 @@ class FittingController(QObject):
                         'connect_mode': mode,
                     }
                 )
-                # ??meta ????????connect_mode ?????
             except Exception:
-                # ??????????
                 self.ui.fitDataPointsNumValue.editingFinished.connect(self._on_points_num_finished)
 
         # Interpolation method
@@ -3769,9 +3730,8 @@ class FittingController(QObject):
                 pass
             combo.currentTextChanged.connect(self._on_interp_method_changed)
 
-        # ROI min/max ??? editingFinished ???????????????????? editingFinished
-        # ROI slider ?????? valueChanged??angeChangedF/int???????????? manager ?????
 
+    # 函数说明：初始化ROI from 当前 Q。
     def _initialize_roi_from_current_q(self, force_full: bool = False):
         """Initialize or refresh ROI bounds from current q/I arrays.
 
@@ -3821,6 +3781,7 @@ class FittingController(QObject):
             self._updating_roi_controls = False
         self._sync_roi_controls_to_current_display(reset_to_domain=force_full)
 
+    # 函数说明：处理ROI slider changed int事件。
     def _on_roi_slider_changed_int(self, imin, imax):
         s = self.ui.fitFittingRegionSlider
         dec = 2
@@ -3831,6 +3792,7 @@ class FittingController(QObject):
         scale = 10 ** dec
         self._on_roi_slider_changed(imin / scale, imax / scale)
 
+    # 函数说明：处理ROI slider changed事件。
     def _on_roi_slider_changed(self, vmin: float, vmax: float):
         if self._updating_roi_controls:
             return
@@ -3857,9 +3819,9 @@ class FittingController(QObject):
         finally:
             self._updating_roi_controls = False
             self._slider_is_source = False
-            # ?????????????????????????????????????????????????
             self._schedule_roi_refresh()
 
+    # 函数说明：处理ROI spin finished事件。
     def _on_roi_spin_finished(self):
         if self._updating_roi_controls:
             return
@@ -3888,9 +3850,9 @@ class FittingController(QObject):
                 s.setMaxValueF(vmax)
         finally:
             self._updating_roi_controls = False
-            # ?????????????????????????????
             self._apply_roi_to_data_and_refresh()
 
+    # 函数说明：调度ROI 刷新。
     def _schedule_roi_refresh(self):
         """No description."""
         try:
@@ -3899,13 +3861,12 @@ class FittingController(QObject):
                 self._roi_update_timer = QTimer()
                 self._roi_update_timer.setSingleShot(True)
                 self._roi_update_timer.timeout.connect(self._apply_roi_to_data_and_refresh)
-            # ?????????????????????????
             delay = int(getattr(self, '_roi_debounce_ms', 140))
             self._roi_update_timer.start(max(20, delay))
         except Exception:
-            # ?????????????????????
             self._apply_roi_to_data_and_refresh()
 
+    # 函数说明：应用ROI to 数据 and 刷新。
     def _apply_roi_to_data_and_refresh(self):
         if self.q is None or self.I is None:
             return
@@ -3925,18 +3886,17 @@ class FittingController(QObject):
                 self.I_ROI = I[mask]
         # Redraw displays
         try:
-            # ????????????????????????????????????ormal???????????Fitting
             current_mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
             if current_mode == 'fitting' or (hasattr(self, '_is_in_fitting_mode') and self._is_in_fitting_mode()):
                 self._update_gui_fitting_display()
                 current_mode = 'fitting'
-            # ??????????????????????
             self._update_GUI_image(current_mode)
             self._update_outside_window(current_mode)
         except Exception:
             pass
 
     # ---------------- ROI bounds adjustment for log-x -----------------
+    # 函数说明：获取当前 拟合 坐标轴。
     def _get_current_fit_axes(self):
         """Try to get the current Matplotlib Axes used by the in-GUI 1D plot."""
         try:
@@ -3950,6 +3910,7 @@ class FittingController(QObject):
         except Exception:
             return None
 
+    # 函数说明：计算显示 xmin for 对数。
     def _compute_display_xmin_for_log(self) -> float:
         """Compute a safe lower X bound to use when log-x is enabled.
 
@@ -3985,6 +3946,7 @@ class FittingController(QObject):
         # 3) Fallback
         return 1e-12
 
+    # 函数说明：实现 adjust ROI bounds for 对数 x 相关逻辑。
     def _adjust_roi_bounds_for_log_x(self):
         """When log-x is enabled, ensure ROI slider/spin ranges start from the displayed x-axis min (>0).
 
@@ -4066,6 +4028,7 @@ class FittingController(QObject):
             pass
 
     # ---------------- Interpolation -----------------
+    # 函数说明：处理points num finished事件。
     def _on_points_num_finished(self):
         n = None
         try:
@@ -4088,19 +4051,17 @@ class FittingController(QObject):
             user_settings.set('fit.points_num', int(n)); user_settings.save_settings()
         except Exception:
             pass
-        # ???????????????????
         was_fitting = self._is_in_fitting_mode() if hasattr(self, '_is_in_fitting_mode') else False
 
-        # Apply ??????/?????
         if getattr(self, 'data_source', None) == 'cut':
             self._perform_cut(points_override=n)
         elif getattr(self, 'data_source', None) == '1d':
             self._resample_1d(n_points=n)
 
-        # ???????????????????????????_perform_manual_fitting???????????????
         if was_fitting:
             self._perform_manual_fitting()
 
+    # 函数说明：处理interp method changed事件。
     def _on_interp_method_changed(self, method: str):
         meth = method or 'Linear'
         try:
@@ -4113,6 +4074,7 @@ class FittingController(QObject):
         elif self.data_source == 'cut':
             self._perform_cut()
 
+    # 函数说明：实现 resample 1d 相关逻辑。
     def _resample_1d(self, n_points: int, method: str = None, keep_same_count: bool = False):
         if self.current_1d_data is None or self.q is None or self.I is None:
             return
@@ -4135,6 +4097,7 @@ class FittingController(QObject):
             self._initialize_roi_from_current_q()
         self._apply_roi_to_data_and_refresh()
 
+    # 函数说明：实现 interpolate series 相关逻辑。
     def _interpolate_series(self, x, y, x_new, method: str):
         m = (method or 'Linear').lower()
         if m == 'linear':
@@ -4155,6 +4118,7 @@ class FittingController(QObject):
                 return np.interp(x_new, x, y)
         return np.interp(x_new, x, y)
 
+    # 函数说明：实现 对数 切线 debug 相关逻辑。
     def _log_cut_debug(self, message: str):
         """Send cut diagnostics to the fitting log without interrupting the cut flow."""
         try:
@@ -4165,6 +4129,7 @@ class FittingController(QObject):
             except Exception:
                 pass
 
+    # 函数说明：获取坐标轴 过滤 debug count。
     def _get_axis_filter_debug_count(self, q_values):
         try:
             mode = self._get_independent_axis_filter_mode()
@@ -4179,6 +4144,7 @@ class FittingController(QObject):
             count = int(q_arr.size)
         return mode, count
 
+    # 函数说明：实现 排序 过滤 切线 pairs 相关逻辑。
     def _sort_filter_cut_pairs(self, x_values, intensity_values, context: str = "cut", pixel_rows=None, log_vertical: bool = False):
         """Keep cut x/intensity arrays paired while removing bad values and sorting by x."""
         x_arr = np.asarray(x_values, dtype=float).reshape(-1)
@@ -4229,9 +4195,9 @@ class FittingController(QObject):
 
         return x_arr, y_arr, rows_arr
 
+    # 函数说明：配置connections。
     def _setup_connections(self):
         """No description."""
-        # ???GISAXS?????????
         if hasattr(self.ui, 'gisaxsInputImportButton'):
             self.ui.gisaxsInputImportButton.clicked.connect(self._import_gisaxs_file)
 
@@ -4240,38 +4206,30 @@ class FittingController(QObject):
         if self._next_image_button is not None:
             self._next_image_button.clicked.connect(self._show_next_folder_image)
 
-        # ?????????????????????
         if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
             self.ui.gisaxsInputImportButtonValue.returnPressed.connect(self._on_import_value_changed)
 
-        # ???Stack?????????????????
         if hasattr(self.ui, 'gisaxsInputStackValue'):
             self.ui.gisaxsInputStackValue.returnPressed.connect(self._on_stack_value_changed)
 
-        # ???Show???
         if hasattr(self.ui, 'gisaxsInputShowButton'):
             self.ui.gisaxsInputShowButton.clicked.connect(self._show_image)
 
-        # ???AutoShow????
         if hasattr(self.ui, 'gisaxsInputAutoShowCheckBox'):
             self.ui.gisaxsInputAutoShowCheckBox.toggled.connect(self._on_auto_show_changed)
 
-        # ??????????????
         if hasattr(self.ui, 'gisaxsInputModelCombox'):
             try:
                 self.ui.gisaxsInputModelCombox.currentTextChanged.connect(self._on_load_mode_changed)
             except Exception:
                 pass
 
-        # ???Log????
         if hasattr(self.ui, 'gisaxsInputIntLogCheckBox'):
             self.ui.gisaxsInputIntLogCheckBox.toggled.connect(self._on_log_changed)
 
-        # ???AutoScale????
         if hasattr(self.ui, 'gisaxsInputAutoScaleCheckBox'):
             self.ui.gisaxsInputAutoScaleCheckBox.toggled.connect(self._on_auto_scale_changed)
 
-        # ???Q?????????
         if hasattr(self.ui, 'gisaxsInputDisplayModeQ'):
             self.ui.gisaxsInputDisplayModeQ.toggled.connect(self._on_q_mode_changed)
         if hasattr(self.ui, 'gisaxsInputDisplayModePixel'):
@@ -4282,46 +4240,35 @@ class FittingController(QObject):
         if hasattr(self.ui, 'gisaxsInputVmaxValue'):
             self.ui.gisaxsInputVmaxValue.editingFinished.connect(self._on_color_scale_value_committed)
 
-        # Vmin/Vmax?????????????????????
-        # ??_connect_cutline_parameter_signals() ???
 
-        # ???AutoFinding???
         if hasattr(self.ui, 'gisaxsInputCenterAutoFindingButton'):
             self.ui.gisaxsInputCenterAutoFindingButton.clicked.connect(self._auto_find_center)
 
-        # ???Cut???
         if hasattr(self.ui, 'gisaxsInputCutButton'):
             self.ui.gisaxsInputCutButton.clicked.connect(lambda _checked=False: self._perform_cut())
 
-        # ???Detector Parameters???
         if hasattr(self.ui, 'gisaxsInputDetectorParaButton'):
             self.ui.gisaxsInputDetectorParaButton.clicked.connect(self._show_detector_parameters)
 
-        # ???GraphicsView??????
         if hasattr(self.ui, 'gisaxsInputGraphicsView'):
             self.ui.gisaxsInputGraphicsView.setToolTip("Double-click to open a larger independent image window.")
             self.ui.gisaxsInputGraphicsView.mouseDoubleClickEvent = self._on_graphics_view_double_click
 
-        # ???fitGraphicsView??????
         if hasattr(self.ui, 'fitGraphicsView'):
             self.ui.fitGraphicsView.setToolTip("Double-click to open a larger independent fit window.")
             self.ui.fitGraphicsView.mouseDoubleClickEvent = self._on_fit_graphics_view_double_click
 
-        # ????????????????I????????
         if hasattr(self.ui, 'fitStartButton'):
             self.ui.fitStartButton.clicked.connect(self._start_fitting)
 
-        # ???Clear Fitting???
         if hasattr(self.ui, 'FittingClearFittingButton_2'):
             self.ui.FittingClearFittingButton_2.clicked.connect(self._clear_fitting_data)
 
-        # ?????????log???????
         if hasattr(self.ui, 'fitLogXCheckBox'):
             self.ui.fitLogXCheckBox.toggled.connect(self._on_fit_log_changed)
         if hasattr(self.ui, 'fitLogYCheckBox'):
             self.ui.fitLogYCheckBox.toggled.connect(self._on_fit_log_changed)
 
-        # ????????????????????????????????????
         for _name in ['fitBGShowCheckBox', 'fitResShowCheckBox']:
             if hasattr(self.ui, _name):
                 try:
@@ -4329,13 +4276,11 @@ class FittingController(QObject):
                 except Exception:
                     pass
 
-        # ???Normalize????
         if hasattr(self.ui, 'OthersNormalizeCheckBox'):
             self.ui.OthersNormalizeCheckBox.toggled.connect(self._on_normalize_changed)
         if hasattr(self.ui, 'fitNormCheckBox'):
             self.ui.fitNormCheckBox.toggled.connect(self._on_normalize_changed)
 
-        # ????????? Positive Only ?????????????????
         if hasattr(self.ui, 'PositiveOnlyCheckBox'):
             self.ui.PositiveOnlyCheckBox.toggled.connect(self._on_positive_only_changed)
         if hasattr(self.ui, 'fitRegionPositiveOnlyCheckBox'):
@@ -4346,19 +4291,15 @@ class FittingController(QObject):
         if hasattr(self.ui, 'fitResetButton'):
             self.ui.fitResetButton.clicked.connect(self._reset_fitting)
 
-        # ???fitImport1dFileButton???
         if hasattr(self.ui, 'fitImport1dFileButton'):
             self.ui.fitImport1dFileButton.clicked.connect(self._import_1d_file)
 
-        # ???fitImport1dFileValue????????????
         if hasattr(self.ui, 'fitImport1dFileValue'):
             self.ui.fitImport1dFileValue.returnPressed.connect(self._on_1d_file_value_changed)
 
-        # ???FittingExportButton???
         if hasattr(self.ui, 'FittingExportButton'):
             self.ui.FittingExportButton.clicked.connect(self._export_fitting_data)
 
-        # ???FittingManualFittingButton???
         if hasattr(self.ui, 'FittingManualFittingButton'):
             self.ui.FittingManualFittingButton.clicked.connect(self._perform_manual_fitting)
 
@@ -4393,37 +4334,31 @@ class FittingController(QObject):
             self.ui.aiFittingAdvancedConstraintsButton.clicked.connect(self._show_advanced_constraints_dialog)
         self._connect_ai_fitting_settings_widgets()
 
-        # ???FittingAutoKButton???
         if hasattr(self.ui, 'FittingAutoKButton'):
             self.ui.FittingAutoKButton.clicked.connect(self._on_auto_k_button_clicked)
 
-        # ????????????????
         if hasattr(self.ui, 'fitCurrentDataCheckBox'):
             self.ui.fitCurrentDataCheckBox.toggled.connect(self._on_current_data_checkbox_changed)
 
-        # ???Cut Line??enter????????????????????
         self._connect_cutline_parameter_signals(
             mode=self._default_signal_mode,
             overrides=self._signal_mode_overrides,
         )
 
-        # ??????????????????????????
         self._connect_parameter_widgets()
 
-        # ???FittingTextBrowser????????
         self._setup_fitting_text_browser()
         self._setup_fitting_parameters_context_menu()
         self._refresh_ai_fitting_models()
         self._restore_main_ai_settings()
 
+    # 函数说明：连接切线 参数 signals相关信号。
     def _connect_cutline_parameter_signals(self, mode: str = 'changed', overrides: dict = None):
-        """Cut Line/Center/Vmin/Vmax?????meta ??? & ?????? global_params
-        ???:
-            mode: 'changed' ??'finished'??
-                  - 'changed': ??? valueChanged/textChanged/currentTextChanged ??? meta ??????
-                  - 'finished': editingFinished/returnPressed ????????????
-            overrides: ???ict?????????????????????????('changed'|'finished')?????????? mode??
-        ????????????ode='changed'??
+        """Register Cut Line, center, and color-scale widgets with global parameter persistence.
+
+        Args:
+            mode: Signal mode. Use ``changed`` for live value updates or ``finished`` for commit-only updates.
+            overrides: Optional per-widget signal mode overrides.
         """
         from functools import partial
         mapping = [
@@ -4439,6 +4374,7 @@ class FittingController(QObject):
             if not hasattr(self.ui, widget_name):
                 continue
             w = getattr(self.ui, widget_name)
+            # 函数说明：实现 after commit 相关逻辑。
             def _after_commit(info, value, p=param_key):
                 try:
                     if p in ('vmin', 'vmax'):
@@ -4471,8 +4407,8 @@ class FittingController(QObject):
                 connect_signals=True,
                 meta=meta
             )
-            # ??meta ????????connect_mode ????????????????
 
+    # 函数说明：恢复GISAXS input 参数。
     def _restore_gisaxs_input_parameters(self):
         """Restore persisted GISAXS input and Cut Line values after widget setup."""
         mapping = [
@@ -4505,6 +4441,7 @@ class FittingController(QObject):
             except Exception:
                 continue
 
+    # 函数说明：加载图像 显示 options。
     def _load_image_display_options(self):
         try:
             from core.global_params import global_params
@@ -4517,6 +4454,7 @@ class FittingController(QObject):
             self._show_center = True
             self._image_colormap = "viridis"
 
+    # 函数说明：保存图像 显示 options。
     def _save_image_display_options(self):
         try:
             from core.global_params import global_params
@@ -4527,6 +4465,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：初始化图像 显示 option 控件。
     def _initialize_image_display_option_widgets(self):
         try:
             combo = getattr(self.ui, 'gisaxsInputColormapCombo', None)
@@ -4553,6 +4492,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：同步图像 显示 option 控件。
     def _sync_image_display_option_widgets(self):
         try:
             self._syncing_image_display_options = True
@@ -4575,6 +4515,7 @@ class FittingController(QObject):
         finally:
             self._syncing_image_display_options = False
 
+    # 函数说明：应用图像 显示 options。
     def _apply_image_display_options(self, *, refresh=True, sync_window=True):
         self._save_image_display_options()
         self._refresh_current_parameter_selection_from_ui()
@@ -4591,24 +4532,28 @@ class FittingController(QObject):
         if refresh and self.current_stack_data is not None:
             self._refresh_image_display()
 
+    # 函数说明：处理main show 切线 区域 toggled事件。
     def _on_main_show_cut_region_toggled(self, checked: bool):
         if self._syncing_image_display_options:
             return
         self._show_cut_region = bool(checked)
         self._apply_image_display_options()
 
+    # 函数说明：处理main show 中心 toggled事件。
     def _on_main_show_center_toggled(self, checked: bool):
         if self._syncing_image_display_options:
             return
         self._show_center = bool(checked)
         self._apply_image_display_options()
 
+    # 函数说明：处理main 颜色映射 changed事件。
     def _on_main_colormap_changed(self, text: str):
         if self._syncing_image_display_options:
             return
         self._image_colormap = text if text in GISAXS_IMAGE_COLORMAPS else "viridis"
         self._apply_image_display_options()
 
+    # 函数说明：处理独立 显示 options changed事件。
     def _on_independent_display_options_changed(self, options: dict):
         try:
             self._show_cut_region = bool(options.get('show_cut_region', self._show_cut_region))
@@ -4619,6 +4564,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：持久化保存切线 区域 参数。
     def _persist_cut_region_parameters(self, center_parallel, center_vertical, cutline_parallel, cutline_vertical):
         """Persist Cut Region geometry even when values are changed programmatically."""
         try:
@@ -4647,29 +4593,24 @@ class FittingController(QObject):
             except Exception:
                 pass
 
+    # 函数说明：连接参数 控件相关信号。
     def _connect_parameter_widgets(self):
         """No description."""
-        # ????????UI????????????????
-        # ????????????????????
 
-        # ?????????????????????????I?????????
         self._setup_particle_connections()
 
+    # 函数说明：初始化界面。
     def _initialize_ui(self):
         """No description."""
-        # ??????????????
         if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
             self.ui.gisaxsInputImportButtonValue.clear()
 
-        # ???Stack????
         if hasattr(self.ui, 'gisaxsInputStackValue'):
             self.ui.gisaxsInputStackValue.setText("1")
 
-        # ???stack?????
         if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
             self.ui.gisaxsInputStackDisplayLabel.setText("")
 
-        # ????????????????????
         if hasattr(self.ui, 'gisaxsInputModelCombox'):
             try:
                 from core.global_params import GlobalParameterManager
@@ -4680,30 +4621,23 @@ class FittingController(QObject):
                 self.load_mode = self.ui.gisaxsInputModelCombox.currentText()
             except Exception:
                 self.load_mode = 'Single'
-            # ???????UI?????????????In-situ???????????? Stack ??????????????LineEdit ?????
             try:
                 if self.load_mode == 'In-situ' and hasattr(self.ui, 'gisaxsInputStackValue'):
                     self.ui.gisaxsInputStackValue.setVisible(False)
             except Exception:
                 pass
-            # ?????????Stack??????????
             self._update_stack_controls_visibility()
 
-        # ???Log?????????
         if hasattr(self.ui, 'gisaxsInputIntLogCheckBox'):
             self.ui.gisaxsInputIntLogCheckBox.setChecked(True)
 
-        # ???AutoScale?????????
         if hasattr(self.ui, 'gisaxsInputAutoScaleCheckBox'):
             self.ui.gisaxsInputAutoScaleCheckBox.setChecked(True)
 
-        # ????????????????????????????????????
         self._initialize_fit_checkboxes()
 
-        # ????min/Vmax???0??????????????????????
         if hasattr(self.ui, 'gisaxsInputVminValue'):
             self.ui.gisaxsInputVminValue.setValue(0.0)
-            # ???????????????????????????
             self.ui.gisaxsInputVminValue.setDecimals(6)
             self.ui.gisaxsInputVminValue.setRange(-99999.999999, 99999.999999)
             self.ui.gisaxsInputVminValue.setSingleStep(0.1)
@@ -4712,14 +4646,12 @@ class FittingController(QObject):
 
         if hasattr(self.ui, 'gisaxsInputVmaxValue'):
             self.ui.gisaxsInputVmaxValue.setValue(0.0)
-            # ???????????????????????????
             self.ui.gisaxsInputVmaxValue.setDecimals(6)
             self.ui.gisaxsInputVmaxValue.setRange(-99999.999999, 99999.999999)
             self.ui.gisaxsInputVmaxValue.setSingleStep(0.1)
             self.ui.gisaxsInputVmaxValue.setKeyboardTracking(True)
             self._setup_smart_display(self.ui.gisaxsInputVmaxValue)
 
-        # ???Cut Line Center?????????????????????????
         if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
             self.ui.gisaxsInputCenterVerticalValue.setRange(-99999.99, 99999.99)
             self.ui.gisaxsInputCenterVerticalValue.setDecimals(2)
@@ -4732,7 +4664,6 @@ class FittingController(QObject):
             self.ui.gisaxsInputCenterParallelValue.setValue(0.0)
             self.ui.gisaxsInputCenterParallelValue.setKeyboardTracking(True)
 
-        # ???Cut Line Vertical/Parallel?????????????????????????
         if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
             self.ui.gisaxsInputCutLineVerticalValue.setRange(-99999.99, 99999.99)
             self.ui.gisaxsInputCutLineVerticalValue.setDecimals(2)
@@ -4750,58 +4681,46 @@ class FittingController(QObject):
         if getattr(self, 'current_stack_data', None) is not None:
             QTimer.singleShot(0, self._refresh_image_display)
 
-        # ???Cut Line??????????????????????
         self._update_cutline_step_sizes()
 
-        # ????????????????????
         if hasattr(self, '_on_q_mode_changed'):
-            # ??????????I???????
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(100, self._update_cutline_step_sizes)
 
-        # ????????
         self._set_default_parameters()
 
-        # ????ut Line???????
         self._update_cutline_labels_units()
 
-        # ??????????????????????????????
         self._initialize_q_mode_state()
 
-        # ????????
         self._check_dependencies()
 
-        # ??In-situ ????????????
         try:
             if getattr(self, 'load_mode', 'Single') == 'In-situ' and self._is_auto_show_enabled():
                 self._start_insitu_timer()
-            # ?????????????????????????????????????????????????
             self._enforce_insitu_visibility_once()
         except Exception:
             pass
 
+    # 函数说明：初始化拟合 checkboxes。
     def _initialize_fit_checkboxes(self):
         """No description."""
         try:
-            # ????itCurrentDataCheckBox???????????
             if hasattr(self.ui, 'fitCurrentDataCheckBox'):
                 self.ui.fitCurrentDataCheckBox.blockSignals(True)
                 self.ui.fitCurrentDataCheckBox.setChecked(False)
                 self.ui.fitCurrentDataCheckBox.blockSignals(False)
 
-            # ????itLogXCheckBox???????????
             if hasattr(self.ui, 'fitLogXCheckBox'):
                 self.ui.fitLogXCheckBox.blockSignals(True)
                 self.ui.fitLogXCheckBox.setChecked(False)
                 self.ui.fitLogXCheckBox.blockSignals(False)
 
-            # ????itLogYCheckBox???????????
             if hasattr(self.ui, 'fitLogYCheckBox'):
                 self.ui.fitLogYCheckBox.blockSignals(True)
                 self.ui.fitLogYCheckBox.setChecked(False)
                 self.ui.fitLogYCheckBox.blockSignals(False)
 
-            # ????itNormCheckBox???????????
             if hasattr(self.ui, 'fitNormCheckBox'):
                 self.ui.fitNormCheckBox.blockSignals(True)
                 self.ui.fitNormCheckBox.setChecked(False)
@@ -4810,28 +4729,25 @@ class FittingController(QObject):
         except Exception as e:
             pass
 
+    # 函数说明：恢复拟合 checkboxes。
     def _restore_fit_checkboxes(self, session_data):
         """No description."""
         try:
-            # ??fitCurrentDataCheckBox
             if hasattr(self.ui, 'fitCurrentDataCheckBox'):
                 self.ui.fitCurrentDataCheckBox.blockSignals(True)
                 self.ui.fitCurrentDataCheckBox.setChecked(session_data.get('fit_current_data', False))
                 self.ui.fitCurrentDataCheckBox.blockSignals(False)
 
-            # ??fitLogXCheckBox
             if hasattr(self.ui, 'fitLogXCheckBox'):
                 self.ui.fitLogXCheckBox.blockSignals(True)
                 self.ui.fitLogXCheckBox.setChecked(session_data.get('fit_log_x', False))
                 self.ui.fitLogXCheckBox.blockSignals(False)
 
-            # ??fitLogYCheckBox
             if hasattr(self.ui, 'fitLogYCheckBox'):
                 self.ui.fitLogYCheckBox.blockSignals(True)
                 self.ui.fitLogYCheckBox.setChecked(session_data.get('fit_log_y', False))
                 self.ui.fitLogYCheckBox.blockSignals(False)
 
-            # ??fitNormCheckBox
             if hasattr(self.ui, 'fitNormCheckBox'):
                 self.ui.fitNormCheckBox.blockSignals(True)
                 self.ui.fitNormCheckBox.setChecked(session_data.get('fit_norm', False))
@@ -4840,26 +4756,26 @@ class FittingController(QObject):
         except Exception as e:
             pass
 
+    # 函数说明：初始化Q 模式 状态。
     def _initialize_q_mode_state(self):
         """No description."""
         try:
-            # ??????Q????????????????????
             current_q_mode = self._should_show_q_axis()
             self._last_q_mode = current_q_mode
         except Exception as e:
-            # ???????????????????????????
             self._last_q_mode = False
 
+    # 函数说明：配置smart 显示。
     def _setup_smart_display(self, spinbox):
         """No description."""
         try:
-            # ?????????????????????
             spinbox.valueChanged.connect(lambda value: self._update_spinbox_format(spinbox, value))
             spinbox.editingFinished.connect(lambda: self._update_spinbox_format(spinbox, spinbox.value()))
             self._update_spinbox_format(spinbox, spinbox.value())
         except Exception:
             spinbox.setDecimals(2)
 
+    # 函数说明：更新数值框 format。
     def _update_spinbox_format(self, spinbox, value):
         """No description."""
         try:
@@ -4890,6 +4806,7 @@ class FittingController(QObject):
             except:
                 spinbox.setDecimals(2)
 
+    # 函数说明：刷新显示下限 显示上限 显示。
     def _refresh_vmin_vmax_display(self):
         """No description."""
         try:
@@ -4900,6 +4817,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 check dependencies 相关逻辑。
     def _check_dependencies(self):
         """No description."""
         if not is_fabio_available():
@@ -4907,41 +4825,37 @@ class FittingController(QObject):
         if not is_matplotlib_available():
             self.status_updated.emit("Warning: matplotlib not available. Image display will be disabled.")
 
+    # 函数说明：判断Q 空间 模式是否成立。
     def _is_q_space_mode(self):
         """Q-space"""
         try:
-            # ?????should_show_q_axis()????????
             return self._should_show_q_axis()
         except Exception:
             return False
 
+    # 函数说明：实现 delayed 切线 update 相关逻辑。
     def _delayed_cut_update(self):
         """No description."""
         try:
-            # ????????ut???????????
             if hasattr(self, '_cut_data') and self._cut_data is not None:
-                # ?????Cut???????????
                 self._execute_cut()
         except Exception as e:
             pass
 
+    # 函数说明：处理参数 显示 changed事件。
     def _on_parameter_display_changed(self):
         """No description."""
         try:
-            # ???????????
             if getattr(self, '_initializing', False):
                 return
-            # ?????????/??????????????
             if hasattr(self, '_update_stack_display'):
                 self._update_stack_display()
 
-            # ????????????????????Cut???
             center_x = 0
             center_y = 0
             width = 0
             height = 0
 
-            # ???????????
             if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
                 center_x = self.ui.gisaxsInputCenterParallelValue.value()
             if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
@@ -4951,17 +4865,16 @@ class FittingController(QObject):
             if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
                 height = self.ui.gisaxsInputCutLineVerticalValue.value()
 
-            # ?????????????????????
             if width > 0 and height > 0:
                 selection_info = self._create_selection_from_parameters(center_x, center_y, width, height)
                 self._update_parameter_selection_display(selection_info)
 
-            # ??????????????????????
             self._trigger_delayed_cut_update()
 
         except Exception as e:
             pass
 
+    # 函数说明：实现 trigger delayed 切线 update 相关逻辑。
     def _trigger_delayed_cut_update(self):
         """ut"""
         try:
@@ -4971,21 +4884,19 @@ class FittingController(QObject):
                 self._cut_update_timer.setSingleShot(True)
                 self._cut_update_timer.timeout.connect(self._delayed_cut_image_update)
 
-            # ?????????????
             self._cut_update_timer.stop()
-            self._cut_update_timer.start(300)  # 300ms?????????
+            self._cut_update_timer.start(300)
 
         except Exception as e:
             pass
 
+    # 函数说明：实现 delayed 切线 图像 update 相关逻辑。
     def _delayed_cut_image_update(self):
         """Cut"""
         try:
-            # ???????????Cut???????????????????ut???
             if (self.current_cut_data is not None and
                 hasattr(self, 'current_stack_data') and self.current_stack_data is not None):
 
-                # ?????????
                 center_x = 0
                 center_y = 0
                 width = 0
@@ -5000,41 +4911,35 @@ class FittingController(QObject):
                 if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
                     height = self.ui.gisaxsInputCutLineVerticalValue.value()
 
-                # ?????Cut???
                 self._perform_cut()
                 self.status_updated.emit(f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width} x {height})")
 
         except Exception as e:
             pass
 
+    # 函数说明：处理切线 参数 immediate update事件。
     def _on_cutline_parameters_immediate_update(self):
         """No description."""
         try:
-            # ??????????????????
             if hasattr(self, '_cut_update_timer'):
                 self._cut_update_timer.stop()
 
-            # ???????????
             self._delayed_cut_image_update()
 
         except Exception as e:
             pass
 
+    # 函数说明：更新切线 step sizes。
     def _update_cutline_step_sizes(self):
         """No description."""
         try:
-            # ??????????
             is_q_mode = self._is_q_space_mode()
 
-            # ????????????
             if is_q_mode:
-                # Q-space????????.01???
                 step_size = 0.01
             else:
-                # Pixel????????.0???
                 step_size = 1.0
 
-            # ???????????ut Line??????
             cutline_controls = [
                 'gisaxsInputCenterVerticalValue',
                 'gisaxsInputCenterParallelValue',
@@ -5067,26 +4972,23 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Error updating cut line step sizes: {str(e)}")
 
+    # 函数说明：更新切线 labels units。
     def _update_cutline_labels_units(self):
         """No description."""
         try:
             show_q_axis = self._should_show_q_axis()
 
             if show_q_axis:
-                # Q???????????(nm??? ???
                 unit_suffix = " (q)"
             else:
-                # ??????????????(pixel) ???
                 unit_suffix = " (px)"
 
-            # ???Center??
             if hasattr(self.ui, 'gisaxsInputCenterVerticalLabel'):
                 self.ui.gisaxsInputCenterVerticalLabel.setText(f"Center Vertical{unit_suffix}")
 
             if hasattr(self.ui, 'gisaxsInputCenterParallelLabel'):
                 self.ui.gisaxsInputCenterParallelLabel.setText(f"Center Parallel{unit_suffix}")
 
-            # ???Cut Line??
             if hasattr(self.ui, 'gisaxsInputCutLineVerticalLabel'):
                 self.ui.gisaxsInputCutLineVerticalLabel.setText(f"Vertical{unit_suffix}")
 
@@ -5096,6 +4998,7 @@ class FittingController(QObject):
         except Exception as e:
             pass
 
+    # 函数说明：实现 Q 坐标轴 相关逻辑。
     def _should_show_q_axis(self):
         """No description."""
         try:
@@ -5105,16 +5008,15 @@ class FittingController(QObject):
         except Exception:
             return False
 
+    # 函数说明：获取cached Q meshgrids。
     def _get_cached_q_meshgrids(self):
         """ - FittingController"""
         try:
-            # ????????????????????????????
             if (self.independent_window is not None and
                 hasattr(self.independent_window, '_qy_mesh') and
                 self.independent_window._qy_mesh is not None):
                 return self.independent_window._qy_mesh, self.independent_window._qz_mesh
 
-            # ?????????Q???
             if hasattr(self, 'current_stack_data') and self.current_stack_data is not None:
                 from core.global_params import GlobalParameterManager
                 from utils.q_space_calculator import create_detector_from_image_and_params
@@ -5149,28 +5051,33 @@ class FittingController(QObject):
         except Exception as e:
             return None, None
 
+    # 函数说明：设置默认 参数。
     def _set_default_parameters(self):
         """No description."""
         self.current_parameters = {
-            'imported_gisaxs_file': '',  # ?????ISAXS???
-            'stack_count': 1,  # ??????
+            'imported_gisaxs_file': '',
+            'stack_count': 1,
             'cut_region': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
             'fitting_params': {}
         }
 
+    # 函数说明：获取参数。
     def get_parameters(self):
         """No description."""
         return self.current_parameters.copy()
 
+    # 函数说明：设置参数。
     def set_parameters(self, parameters):
         """No description."""
         self.current_parameters.update(parameters)
         self.parameters_changed.emit(self.current_parameters)
 
+    # 函数说明：获取imported 文件。
     def get_imported_file(self):
         """ISAXS"""
         return self.current_parameters.get('imported_gisaxs_file', '')
 
+    # 函数说明：获取session 数据。
     def get_session_data(self):
         """Return the lightweight fitting session data used by MainController."""
         session_data = {}
@@ -5201,6 +5108,7 @@ class FittingController(QObject):
         session_data['load_mode'] = getattr(self, 'load_mode', 'Single')
         return session_data
 
+    # 函数说明：恢复session。
     def restore_session(self, session_data):
         """Restore the last opened fitting session with the current UI pathways."""
         if not isinstance(session_data, dict):
@@ -5293,8 +5201,8 @@ class FittingController(QObject):
             except Exception:
                 pass
 
-    # ========== ?????????????==========
 
+    # 函数说明：导入GISAXS 文件。
     def _import_gisaxs_file(self):
         """GISAXS"""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -5306,34 +5214,28 @@ class FittingController(QObject):
 
         if file_path:
             file_path = normalize_path(file_path)
-            # ??????
             self.current_parameters['imported_gisaxs_file'] = file_path
 
-            # ???UI??????????
             if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
                 file_name = os.path.basename(file_path)
                 self.ui.gisaxsInputImportButtonValue.setText(file_name)
 
             self._scan_folder_images_for_file(file_path)
 
-            # ?????????????
             self.status_updated.emit(f"Imported GISAXS file: {os.path.basename(file_path)}")
             self.parameters_changed.emit(self.current_parameters)
 
-            # ???????????????
             if hasattr(self.parent, 'save_current_session'):
                 self.parent.save_current_session()
 
-            # ??????
             self._validate_imported_file(file_path)
 
-            # ?????????
             self._update_stack_display()
 
-            # ???AutoShow????????????
             if hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked():
                 self._show_image()
 
+    # 函数说明：校验imported 文件。
     def _validate_imported_file(self, file_path):
         """ISAXS"""
         try:
@@ -5372,6 +5274,7 @@ class FittingController(QObject):
             QMessageBox.critical(self.main_window, "File Validation Error", f"Error validating file:\n{str(e)}")
             return False
 
+    # 函数说明：处理值 changed事件。
     def _on_import_value_changed(self):
         """No description."""
         try:
@@ -5384,7 +5287,6 @@ class FittingController(QObject):
                 self.status_updated.emit("Please enter a valid file path")
                 return
 
-            # ?????????????????????????????????????
             if not os.path.isabs(file_path_input):
                 current_file = self.current_parameters.get('imported_gisaxs_file', '')
                 if current_file and (is_cloud_or_network_path(current_file) or os.path.exists(current_file)):
@@ -5393,26 +5295,21 @@ class FittingController(QObject):
                 else:
                     file_path_input = os.path.abspath(file_path_input)
 
-            # ???????????
             if not is_cloud_or_network_path(file_path_input) and not os.path.exists(file_path_input):
                 self.status_updated.emit(f"File does not exist: {os.path.basename(file_path_input)}")
                 QMessageBox.warning(self.main_window, "File Error", f"File does not exist:\n{file_path_input}")
                 return
 
-            # ??????
             self.current_parameters['imported_gisaxs_file'] = file_path_input
 
-            # ???UI?????????
             file_name = os.path.basename(file_path_input)
             self.ui.gisaxsInputImportButtonValue.setText(file_name)
 
-            # ??????
             if self._validate_imported_file(file_path_input):
                 self._scan_folder_images_for_file(file_path_input)
                 self.status_updated.emit(f"Updated GISAXS file: {file_name}")
                 self.parameters_changed.emit(self.current_parameters)
 
-                # ???????????????
                 if hasattr(self.parent, 'save_current_session'):
                     self.parent.save_current_session()
 
@@ -5428,8 +5325,8 @@ class FittingController(QObject):
             self.status_updated.emit(f"Import value processing error: {str(e)}")
             QMessageBox.critical(self.main_window, "Processing Error", f"Error handling the imported file path:\n{str(e)}")
 
-    # ========== Stack ?????? ==========
 
+    # 函数说明：处理stack 值 changed事件。
     def _on_stack_value_changed(self):
         """No description."""
         try:
@@ -5468,6 +5365,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Stack value processing error: {str(e)}")
 
+    # 函数说明：更新stack 显示。
     def _update_stack_display(self):
         """No description."""
         try:
@@ -5552,32 +5450,26 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Display update error: {str(e)}")
 
-    # ========== ?????????????==========
 
+    # 函数说明：同步界面 to 参数。
     def _sync_ui_to_parameters(self):
         """UI"""
         try:
-            # ??????? - ?????????
             if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
                 file_input = self.ui.gisaxsInputImportButtonValue.text().strip()
                 if file_input:
-                    # ??????????????????????
                     if os.path.isabs(file_input) and (is_cloud_or_network_path(file_input) or os.path.exists(file_input)):
                         self.current_parameters['imported_gisaxs_file'] = file_input
-                    # ?????????????????????????????????
                     elif not os.path.isabs(file_input):
                         file_found = False
 
-                        # ????????????????????
                         current_file = self.current_parameters.get('imported_gisaxs_file', '')
                         if current_file and os.path.dirname(current_file):
-                            # ?????????????
                             new_path = os.path.join(os.path.dirname(current_file), file_input)
                             if is_cloud_or_network_path(new_path) or os.path.exists(new_path):
                                 self.current_parameters['imported_gisaxs_file'] = new_path
                                 file_found = True
 
-                        # ?????????????????xperiment_data??????
                         if not file_found:
                             experiment_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'Experiment_data')
                             if os.path.exists(experiment_dir):
@@ -5586,19 +5478,14 @@ class FittingController(QObject):
                                     self.current_parameters['imported_gisaxs_file'] = new_path
                                     file_found = True
 
-                        # ????????????????????????????
                         if not file_found:
                             self.status_updated.emit(f"Error: File '{file_input}' not found in any expected location")
-                            # ?????imported_gisaxs_file ?????????????????????????
-                            return  # ???????????????
+                            return
 
-                    # ???????????????????
                     elif os.path.isabs(file_input) and not is_cloud_or_network_path(file_input) and not os.path.exists(file_input):
                         self.status_updated.emit(f"Error: File '{file_input}' does not exist")
-                        # ??????????????????
-                        return  # ???????????????
+                        return
 
-            # ??Stack/????????????
             if hasattr(self.ui, 'gisaxsInputStackValue'):
                 sv = self.ui.gisaxsInputStackValue.text().strip()
                 if getattr(self, 'load_mode', 'Single') == 'Single':
@@ -5614,10 +5501,10 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Failed to sync UI parameters: {str(e)}")
 
+    # 函数说明：显示图像。
     def _show_image(self):
         """No description."""
         try:
-            # ????I?????????????????
             self._sync_ui_to_parameters()
 
             imported_file = self.current_parameters.get('imported_gisaxs_file', '')
@@ -5633,7 +5520,6 @@ class FittingController(QObject):
 
             self._scan_folder_images_for_file(imported_file)
 
-            # ????????
             if not is_fabio_available():
                 QMessageBox.warning(self.main_window, "Missing Library",
                                   "fabio library is required for CBF file processing.\nPlease install it using: pip install fabio")
@@ -5644,7 +5530,6 @@ class FittingController(QObject):
                                   "matplotlib library is required for image display.\nPlease install it using: pip install matplotlib")
                 return
 
-            # ??????????????????
             file_ext = os.path.splitext(imported_file)[1].lower()
             if file_ext != '.cbf':
                 self.status_updated.emit("Image display only supports CBF files currently")
@@ -5659,7 +5544,6 @@ class FittingController(QObject):
                 self.status_updated.emit(f"Please wait while stacking {stack_count} files...")
                 self.async_image_loader.load_image(imported_file, stack_count)
             else:
-                # In-situ ??????????????????
                 sv = ''
                 try:
                     if hasattr(self.ui, 'gisaxsInputStackValue'):
@@ -5677,20 +5561,18 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Show image error: {str(e)}")
 
+    # 函数说明：处理模式 changed事件。
     def _on_load_mode_changed(self, text: str):
         """No description."""
         try:
             self.load_mode = text or 'Single'
-            # ?????
             try:
                 from core.global_params import GlobalParameterManager
                 gp = GlobalParameterManager()
                 gp.set_parameter('fitting', 'gisaxs_input.load_mode', self.load_mode)
             except Exception:
                 pass
-            # ??????
             self._update_stack_controls_visibility()
-            # ???????
             if self.load_mode == 'In-situ':
                 if self._is_auto_show_enabled():
                     self._start_insitu_timer()
@@ -5700,12 +5582,12 @@ class FittingController(QObject):
                 dialog = getattr(self, "_insitu_workflow_dialog", None)
                 if dialog is not None and dialog.isVisible():
                     dialog.close()
-            # ????????
             self._update_stack_display()
             self._update_insitu_workflow_button_visibility()
         except Exception:
             pass
 
+    # 函数说明：配置原位 流程 按钮。
     def _setup_insitu_workflow_button(self):
         """Add the In-situ Workflow launcher under the Load Mode controls."""
         try:
@@ -5760,6 +5642,7 @@ class FittingController(QObject):
         except Exception as exc:
             self.status_updated.emit(f"Failed to create In-situ Workflow button: {exc}")
 
+    # 函数说明：创建原位 流程 模式 box。
     def _make_insitu_workflow_mode_box(self, combo, button, parent):
         holder = QWidget(parent)
         holder.setObjectName("gisaxsInputInsituWorkflowModeBox")
@@ -5771,10 +5654,12 @@ class FittingController(QObject):
         holder.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Minimum)
         return holder
 
+    # 函数说明：实现 find layout containing 控件 相关逻辑。
     def _find_layout_containing_widget(self, widget):
         if widget is None:
             return None
 
+        # 函数说明：实现 walk 相关逻辑。
         def walk(layout):
             if layout is None:
                 return None
@@ -5798,6 +5683,7 @@ class FittingController(QObject):
             parent = parent.parentWidget()
         return None
 
+    # 函数说明：更新原位 流程 按钮 visibility。
     def _update_insitu_workflow_button_visibility(self):
         try:
             button = getattr(self, '_insitu_workflow_button', None)
@@ -5817,12 +5703,14 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 原位 流程 parent 控件 相关逻辑。
     def _insitu_workflow_parent_widget(self):
         for candidate in (getattr(self, "main_window", None), getattr(self, "parent", None), getattr(self.ui, "centralwidget", None)):
             if isinstance(candidate, QWidget):
                 return candidate
         return None
 
+    # 函数说明：实现 打开 原位 流程 对话框 相关逻辑。
     def _open_insitu_workflow_dialog(self):
         try:
             if getattr(self, '_insitu_workflow_dialog', None) is not None and self._insitu_workflow_dialog.isVisible():
@@ -6045,6 +5933,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._add_fitting_error(f"Failed to open In-situ Workflow: {exc}")
 
+    # 函数说明：创建原位 流程 画布。
     def _make_insitu_workflow_canvas(self, parent):
         holder = QWidget(parent)
         layout = QVBoxLayout(holder)
@@ -6066,6 +5955,7 @@ class FittingController(QObject):
         layout.addWidget(label)
         return holder
 
+    # 函数说明：更新stack controls visibility。
     def _update_stack_controls_visibility(self):
         """No description."""
         try:
@@ -6079,14 +5969,11 @@ class FittingController(QObject):
                 from PyQt5.QtGui import QIntValidator, QRegularExpressionValidator
                 from PyQt5.QtCore import QRegularExpression
                 if self.load_mode == 'In-situ':
-                    # ???????????????????????? 1-??
                     if base_widget is not None:
                         base_widget.setVisible(False)
                     if editor_widget is not None:
                         editor_widget.setVisible(True)
-                    # ???????????In-situ LineEdit
                     if not hasattr(self, '_insitu_lineedit') or self._insitu_lineedit is None:
-                        # ??????????????????
                         parent = None
                         try:
                             parent = editor_widget if editor_widget is not None else (base_widget.parent() if base_widget is not None else self.ui.gisaxsInputStackDisplayLabel.parent())
@@ -6094,11 +5981,9 @@ class FittingController(QObject):
                             parent = None
                         from PyQt5.QtWidgets import QLineEdit as _QLE
                         self._insitu_lineedit = _QLE(parent)
-                        # ??????????????????????????????????
                         try:
                             layout = editor_layout if editor_layout is not None else (parent.layout() if parent is not None else None)
                             if layout is not None:
-                                # ??????????????????????????????????
                                 try:
                                     disp_label = getattr(self.ui, 'gisaxsInputStackDisplayLabel', None)
                                     if disp_label is not None:
@@ -6113,13 +5998,10 @@ class FittingController(QObject):
                                     layout.addWidget(self._insitu_lineedit)
                         except Exception:
                             pass
-                        # ??????? N | A-B | A-
                         regex = QRegularExpression(r"^\s*(?:\d+|\d+\s*-\s*\d+|\d+\s*-)\s*$")
                         self._insitu_lineedit.setValidator(QRegularExpressionValidator(regex, self._insitu_lineedit))
-                        # ????
                         self._insitu_lineedit.setText('1-')
                         self._insitu_lineedit.setPlaceholderText('e.g. 1-, 1-10, 5')
-                        # ?????????????????
                         try:
                             self._insitu_lineedit.returnPressed.connect(self._on_stack_value_changed)
                             self._insitu_lineedit.editingFinished.connect(self._on_stack_value_changed)
@@ -6127,7 +6009,6 @@ class FittingController(QObject):
                             pass
                     self._insitu_lineedit.setVisible(True)
                 else:
-                    # ??In-situ ????????LineEdit?????????
                     if hasattr(self, '_insitu_lineedit') and self._insitu_lineedit is not None:
                         self._insitu_lineedit.setVisible(False)
                     if base_widget is not None:
@@ -6141,7 +6022,6 @@ class FittingController(QObject):
                             base_widget.setValidator(None)
                             base_widget.setPlaceholderText('')
             except Exception:
-                # ??? PyQt5 ???????
                 if base_widget is not None:
                     base_widget.setVisible(self.load_mode != 'Single')
                 if editor_widget is not None:
@@ -6161,6 +6041,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 enforce 原位 visibility once 相关逻辑。
     def _enforce_insitu_visibility_once(self):
         """No description."""
         try:
@@ -6193,11 +6074,12 @@ class FittingController(QObject):
         except Exception:
             pass
 
-    # ????????????????????????????????????
 
+    # 函数说明：判断自动 show enabled是否成立。
     def _is_auto_show_enabled(self) -> bool:
         return hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
 
+    # 函数说明：启动原位 定时器。
     def _start_insitu_timer(self):
         try:
             if self._insitu_timer is None:
@@ -6209,6 +6091,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：停止原位 定时器。
     def _stop_insitu_timer(self):
         try:
             if self._insitu_timer is not None:
@@ -6216,6 +6099,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 原位 poll latest 相关逻辑。
     def _insitu_poll_latest(self):
         try:
             if self.load_mode != 'In-situ':
@@ -6241,6 +6125,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：获取stack 值 text。
     def _get_stack_value_text(self) -> str:
         try:
             if getattr(self, 'load_mode', 'Single') == 'In-situ' and hasattr(self, '_insitu_lineedit') and self._insitu_lineedit is not None:
@@ -6251,6 +6136,7 @@ class FittingController(QObject):
             pass
         return ''
 
+    # 函数说明：设置stack 值 text。
     def _set_stack_value_text(self, value: str):
         try:
             stack_text = str(value).strip()
@@ -6262,6 +6148,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：解析原位 target。
     def _resolve_insitu_target(self, dir_path: str, imported_file: str, sv_text: str) -> str:
         try:
             if is_cloud_or_network_path(dir_path):
@@ -6275,6 +6162,7 @@ class FittingController(QObject):
             if not files:
                 return None
             files.sort(key=lambda name: self._natural_sort_key(name))
+            # 函数说明：实现 index from name 相关逻辑。
             def _index_from_name(name: str):
                 base = os.path.splitext(name)[0]
                 import re
@@ -6315,6 +6203,7 @@ class FittingController(QObject):
         except Exception:
             return None
 
+    # 函数说明：实现 find latest cbf 相关逻辑。
     def _find_latest_cbf(self, dir_path: str) -> str:
         try:
             if is_cloud_or_network_path(dir_path):
@@ -6330,6 +6219,7 @@ class FittingController(QObject):
         except Exception:
             return None
 
+    # 函数说明：显示图像 原位。
     def _show_image_insitu(self, target_path: str):
         try:
             if not target_path:
@@ -6341,6 +6231,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 原位 流程 settings 相关逻辑。
     def _insitu_workflow_settings(self) -> dict:
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         return {
@@ -6357,6 +6248,7 @@ class FittingController(QObject):
             "wait_stable": bool(widgets.get("stable").isChecked()) if widgets.get("stable") else True,
         }
 
+    # 函数说明：更新原位 run 模式 界面。
     def _update_insitu_run_mode_ui(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         mode = self._insitu_workflow_settings().get("run_mode", "Live Watch")
@@ -6374,6 +6266,7 @@ class FittingController(QObject):
                 widget.setVisible(visible)
         self._refresh_insitu_workflow_status()
 
+    # 函数说明：实现 populate 原位 sequence 文件夹 默认 相关逻辑。
     def _populate_insitu_sequence_folder_default(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         edit = widgets.get("sequence_folder")
@@ -6387,6 +6280,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 browse 原位 sequence 文件夹 相关逻辑。
     def _browse_insitu_sequence_folder(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         edit = widgets.get("sequence_folder")
@@ -6395,12 +6289,14 @@ class FittingController(QObject):
         if folder and edit is not None:
             edit.setText(normalize_path(folder))
 
+    # 函数说明：设置原位 流程 状态。
     def _set_insitu_workflow_state(self, state: str, message: str = ""):
         self._insitu_workflow_state = state
         if message:
             self._log_insitu_workflow(message)
         self._refresh_insitu_workflow_status()
 
+    # 函数说明：实现 对数 原位 流程 相关逻辑。
     def _log_insitu_workflow(self, message: str, level: str = "INFO"):
         text = f"[In-situ Workflow][{level}] {message}"
         try:
@@ -6424,6 +6320,7 @@ class FittingController(QObject):
             except Exception:
                 pass
 
+    # 函数说明：刷新原位 流程 状态。
     def _refresh_insitu_workflow_status(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         labels = widgets.get("status_labels") or {}
@@ -6460,6 +6357,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 原位 当前 batch label 相关逻辑。
     def _insitu_current_batch_label(self) -> str:
         batch = getattr(self, "_insitu_workflow_processing_batch", None) or []
         try:
@@ -6471,6 +6369,7 @@ class FittingController(QObject):
             pass
         return os.path.basename(self._insitu_workflow_processing_file or "-")
 
+    # 函数说明：实现 format optional float 相关逻辑。
     def _format_optional_float(self, value):
         try:
             if value is None:
@@ -6480,6 +6379,7 @@ class FittingController(QObject):
         except Exception:
             return "-"
 
+    # 函数说明：刷新原位 流程 step styles。
     def _refresh_insitu_workflow_step_styles(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         cut_valid, _message = self._validate_current_cut_settings()
@@ -6501,6 +6401,7 @@ class FittingController(QObject):
             widget.setStyleSheet(style if widget.isChecked() else "color: #202124;")
         self._draw_insitu_workflow_region_preview()
 
+    # 函数说明：校验当前 切线 settings。
     def _validate_current_cut_settings(self):
         try:
             if self.current_stack_data is None:
@@ -6526,6 +6427,7 @@ class FittingController(QObject):
         except Exception as exc:
             return False, str(exc)
 
+    # 函数说明：判断是否存在活动 拟合 template。
     def _has_active_fitting_template(self):
         try:
             active_shapes, _shape_configs = self._collect_active_particles()
@@ -6533,6 +6435,7 @@ class FittingController(QObject):
         except Exception:
             return False
 
+    # 函数说明：启动原位 流程。
     def _start_insitu_workflow(self):
         try:
             if getattr(self, 'load_mode', 'Single') != 'In-situ':
@@ -6572,6 +6475,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._set_insitu_workflow_state("Error", f"Start failed: {exc}")
 
+    # 函数说明：启动原位 sequence processing。
     def _start_insitu_sequence_processing(self):
         try:
             if getattr(self, 'load_mode', 'Single') != 'In-situ':
@@ -6609,6 +6513,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._set_insitu_workflow_state("Error", f"Sequence start failed: {exc}")
 
+    # 函数说明：构建原位 sequence 文件 list。
     def _build_insitu_sequence_file_list(self, folder: str) -> list[str]:
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         pattern = widgets.get("sequence_pattern").text().strip() if widgets.get("sequence_pattern") else "*.cbf"
@@ -6630,6 +6535,7 @@ class FittingController(QObject):
         end_value = int(widgets.get("sequence_end").value()) if widgets.get("sequence_end") else 0
         step = max(1, int(widgets.get("sequence_step").value()) if widgets.get("sequence_step") else 1)
 
+        # 函数说明：实现 index from name 相关逻辑。
         def index_from_name(path: str):
             match = re.search(r'(\d+)(?=\.[^.]+$|$)', os.path.basename(path))
             return int(match.group(1)) if match else None
@@ -6648,6 +6554,7 @@ class FittingController(QObject):
             filtered = filtered[::step]
         return filtered
 
+    # 函数说明：实现 pause 原位 流程 相关逻辑。
     def _pause_insitu_workflow(self):
         try:
             if self._insitu_workflow_timer is not None:
@@ -6656,6 +6563,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：停止原位 流程。
     def _stop_insitu_workflow(self):
         try:
             if self._insitu_workflow_timer is not None:
@@ -6698,6 +6606,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 list 原位 watch 文件 相关逻辑。
     def _list_insitu_watch_files(self, folder: str):
         try:
             if is_cloud_or_network_path(folder):
@@ -6711,6 +6620,7 @@ class FittingController(QObject):
         except Exception:
             return []
 
+    # 函数说明：实现 原位 流程 poll 相关逻辑。
     def _insitu_workflow_poll(self):
         try:
             if self._insitu_workflow_state != "Watching":
@@ -6738,6 +6648,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._set_insitu_workflow_state("Error", f"Polling failed: {exc}")
 
+    # 函数说明：实现 原位 流程 文件 is stable 相关逻辑。
     def _insitu_workflow_file_is_stable(self, path: str) -> bool:
         try:
             if is_cloud_or_network_path(path):
@@ -6750,6 +6661,7 @@ class FittingController(QObject):
         except Exception:
             return False
 
+    # 函数说明：实现 process next 原位 流程 文件 相关逻辑。
     def _process_next_insitu_workflow_file(self):
         if self._insitu_workflow_busy or self._insitu_workflow_state not in ("Watching", "Processing"):
             return
@@ -6789,6 +6701,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc))
 
+    # 函数说明：实现 new 原位 流程 record 相关逻辑。
     def _new_insitu_workflow_record(self, path_or_paths) -> dict:
         paths = list(path_or_paths) if isinstance(path_or_paths, (list, tuple)) else [str(path_or_paths)]
         first = paths[0] if paths else ""
@@ -6811,6 +6724,7 @@ class FittingController(QObject):
             "error_message": "",
         }
 
+    # 函数说明：加载原位 流程 batch 异步。
     def _load_insitu_workflow_batch_async(self, batch_paths: list[str]):
         try:
             loader = InsituBatchImageLoader(
@@ -6831,6 +6745,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc), failed=True)
 
+    # 函数说明：处理原位 batch 图像 loaded事件。
     def _on_insitu_batch_image_loaded(self, image_data, first_file_path: str):
         try:
             batch_paths = getattr(self, "_insitu_workflow_processing_batch", None) or [first_file_path]
@@ -6846,9 +6761,11 @@ class FittingController(QObject):
         except Exception as exc:
             self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc), failed=True)
 
+    # 函数说明：处理原位 batch 图像 错误事件。
     def _on_insitu_batch_image_error(self, message: str):
         self._finalize_insitu_workflow_file(load_status="failed", error_message=str(message), failed=True)
 
+    # 函数说明：实现 after 原位 流程 图像 loaded 相关逻辑。
     def _after_insitu_workflow_image_loaded(self, image_data, file_path: str):
         if not self._insitu_workflow_busy or file_path != self._insitu_workflow_processing_file:
             return
@@ -6879,6 +6796,7 @@ class FittingController(QObject):
             record["error_message"] = str(exc)
             self._finalize_insitu_workflow_file(record=record, failed=True)
 
+    # 函数说明：启动原位 切线 worker。
     def _start_insitu_cut_worker(self, image_data, file_path: str, record: dict, settings: dict, refresh_views: bool):
         try:
             valid, message = self._validate_current_cut_settings()
@@ -6931,6 +6849,7 @@ class FittingController(QObject):
             record["error_message"] = str(exc)
             self._finalize_insitu_workflow_file(record=record, failed=True)
 
+    # 函数说明：处理原位 切线 finished事件。
     def _on_insitu_cut_finished(self, result: dict, record: dict, file_path: str, settings: dict, refresh_views: bool):
         try:
             if getattr(self, "_insitu_workflow_stop_requested", False) or self._insitu_workflow_state not in ("Watching", "Processing"):
@@ -6976,6 +6895,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._on_insitu_cut_failed(str(exc), record, settings)
 
+    # 函数说明：处理原位 切线 failed事件。
     def _on_insitu_cut_failed(self, message: str, record: dict, settings: dict):
         if getattr(self, "_insitu_workflow_stop_requested", False) or self._insitu_workflow_state not in ("Watching", "Processing"):
             return
@@ -6983,6 +6903,7 @@ class FittingController(QObject):
         record["error_message"] = str(message)
         self._finalize_insitu_workflow_file(record=record, failed=True)
 
+    # 函数说明：实现 原位 views for 当前 文件 相关逻辑。
     def _should_refresh_insitu_views_for_current_file(self) -> bool:
         try:
             ui_every = max(1, int(self._insitu_workflow_settings().get("ui_every", 5)))
@@ -6991,6 +6912,7 @@ class FittingController(QObject):
         except Exception:
             return True
 
+    # 函数说明：应用deleted point mask to 当前 切线。
     def _apply_deleted_point_mask_to_current_cut(self) -> int:
         """Apply the global deleted-q mask to the current cut arrays in-place."""
         excluded = getattr(self, "_ai_excluded_input_q", set()) or set()
@@ -7026,6 +6948,7 @@ class FittingController(QObject):
             self._log_insitu_workflow(f"Deleted-point mask failed: {exc}", "ERROR")
             return 0
 
+    # 函数说明：实现 run 原位 流程 拟合 相关逻辑。
     def _run_insitu_workflow_fit(self, record: dict):
         settings = self._insitu_workflow_settings()
         try:
@@ -7064,6 +6987,7 @@ class FittingController(QObject):
             record["error_message"] = str(exc)
             self._finalize_insitu_workflow_file(record=record, failed=True)
 
+    # 函数说明：启动原位 自动 refine。
     def _start_insitu_auto_refine(self, record: dict):
         if not SCIPY_AVAILABLE:
             raise RuntimeError("SciPy is required for Auto Refine")
@@ -7096,6 +7020,7 @@ class FittingController(QObject):
         self._log_insitu_workflow("Auto Refine started")
         thread.start()
 
+    # 函数说明：实现 原位 自动 refine selected 参数 相关逻辑。
     def _insitu_auto_refine_selected_params(self, setup):
         cached_rows = self._manual_refine_dialog_state()
         selected = []
@@ -7117,6 +7042,7 @@ class FittingController(QObject):
             selected.append((desc, lo, hi))
         return selected
 
+    # 函数说明：处理原位 refine progress事件。
     def _on_insitu_refine_progress(self, payload: dict):
         try:
             nfev = int(payload.get("nfev_est", payload.get("nfev", payload.get("calls", 0))) or 0)
@@ -7142,6 +7068,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：处理原位 refine finished事件。
     def _on_insitu_refine_finished(self, record: dict, setup: dict, result: dict):
         try:
             self._apply_manual_refine_result(setup, result.get("params"), apply_indices=result.get("selected_indices"))
@@ -7171,6 +7098,7 @@ class FittingController(QObject):
         finally:
             self._cleanup_insitu_refine_worker()
 
+    # 函数说明：设置原位 refine 拟合 结果。
     def _set_insitu_refine_fitting_result(self, setup: dict, params):
         """Store final refine fit arrays without repainting the GUI."""
         if params is None:
@@ -7207,6 +7135,7 @@ class FittingController(QObject):
         self._display_mode = "fitting"
         self._fitting_mode_active = True
 
+    # 函数说明：处理原位 refine failed事件。
     def _on_insitu_refine_failed(self, record: dict, message: str):
         try:
             record["fit_status"] = "failed"
@@ -7216,6 +7145,7 @@ class FittingController(QObject):
         finally:
             self._cleanup_insitu_refine_worker()
 
+    # 函数说明：实现 cleanup 原位 refine worker 相关逻辑。
     def _cleanup_insitu_refine_worker(self):
         worker = getattr(self, "_insitu_workflow_refine_worker", None)
         thread = getattr(self, "_insitu_workflow_refine_thread", None)
@@ -7236,6 +7166,7 @@ class FittingController(QObject):
         self._insitu_workflow_refine_worker = None
         self._insitu_workflow_refine_thread = None
 
+    # 函数说明：处理原位 ai full 拟合 finished事件。
     def _on_insitu_ai_full_fit_finished(self, record: dict, exit_code: int):
         try:
             if exit_code != 0:
@@ -7270,6 +7201,7 @@ class FittingController(QObject):
             self._insitu_workflow_ai_record = None
             self._insitu_workflow_ai_then_refine = False
 
+    # 函数说明：实现 complete 原位 流程 拟合 相关逻辑。
     def _complete_insitu_workflow_fit(self, record: dict, status: str):
         record["fit_status"] = status
         params = self._current_fitting_parameter_dict()
@@ -7292,6 +7224,7 @@ class FittingController(QObject):
             self._draw_insitu_workflow_curve_preview()
         self._finalize_insitu_workflow_file(record=record)
 
+    # 函数说明：实现 当前 拟合 参数 dict 相关逻辑。
     def _current_fitting_parameter_dict(self):
         try:
             if isinstance(getattr(self, "fitting", None), dict):
@@ -7302,6 +7235,7 @@ class FittingController(QObject):
             pass
         return {}
 
+    # 函数说明：计算当前 chi square。
     def _calculate_current_chi_square(self):
         try:
             if not isinstance(getattr(self, "fitting", None), dict):
@@ -7327,6 +7261,7 @@ class FittingController(QObject):
         except Exception:
             return None
 
+    # 函数说明：实现 finalize 原位 流程 文件 相关逻辑。
     def _finalize_insitu_workflow_file(self, record: dict = None, load_status: str = None, error_message: str = "", failed: bool = False):
         record = record or self._insitu_workflow_current_record or {}
         refresh_views = self._should_refresh_insitu_views_for_current_file()
@@ -7352,12 +7287,15 @@ class FittingController(QObject):
         if not self._insitu_workflow_stop_requested and self._insitu_workflow_state in ("Watching", "Processing"):
             QTimer.singleShot(15, self._process_next_insitu_workflow_file)
 
+    # 函数说明：实现 原位 缓存 dir 相关逻辑。
     def _insitu_cache_dir(self) -> Path:
         return Path.cwd() / ".gimap_cache"
 
+    # 函数说明：实现 原位 session 缓存 路径 相关逻辑。
     def _insitu_session_cache_path(self) -> Path:
         return self._insitu_cache_dir() / "insitu_current_session.jsonl"
 
+    # 函数说明：重置原位 session 缓存。
     def _reset_insitu_session_cache(self):
         self._insitu_workflow_processed_count = 0
         self._insitu_workflow_failed_count = 0
@@ -7366,6 +7304,7 @@ class FittingController(QObject):
         self._insitu_session_cache_path().write_text("", encoding="utf-8")
         self._refresh_insitu_workflow_status()
 
+    # 函数说明：实现 append 原位 session 缓存 相关逻辑。
     def _append_insitu_session_cache(self, record: dict):
         try:
             self._insitu_cache_dir().mkdir(parents=True, exist_ok=True)
@@ -7374,6 +7313,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._log_insitu_workflow(f"Session cache write failed: {exc}", "ERROR")
 
+    # 函数说明：加载原位 session records。
     def _load_insitu_session_records(self) -> list[dict]:
         if self._insitu_workflow_results:
             rows = list(self._insitu_workflow_results)
@@ -7399,6 +7339,7 @@ class FittingController(QObject):
             rows.append(current.copy())
         return rows
 
+    # 函数说明：导出原位 records to csv。
     def _export_insitu_records_to_csv(self, path: Path, rows: list[dict]):
         try:
             if not rows:
@@ -7428,6 +7369,7 @@ class FittingController(QObject):
         except Exception as exc:
             self._log_insitu_workflow(f"CSV export failed: {exc}", "ERROR")
 
+    # 函数说明：导出原位 流程 结果。
     def _export_insitu_workflow_results(self):
         rows = self._load_insitu_session_records()
         if not rows:
@@ -7445,6 +7387,7 @@ class FittingController(QObject):
         self._export_insitu_records_to_csv(Path(filename), rows)
         self._log_insitu_workflow(f"Exported results to {filename}", "SUCCESS")
 
+    # 函数说明：清除原位 session 缓存。
     def _clear_insitu_session_cache(self):
         if self._insitu_workflow_busy:
             QMessageBox.information(self._insitu_workflow_parent_widget(), "Clear Session Cache", "Stop the workflow before clearing the cache.")
@@ -7455,6 +7398,7 @@ class FittingController(QObject):
         self._insitu_workflow_last_chi_square = None
         self._log_insitu_workflow("Session cache cleared")
 
+    # 函数说明：实现 打开 原位 缓存 文件夹 相关逻辑。
     def _open_insitu_cache_folder(self):
         try:
             self._insitu_cache_dir().mkdir(parents=True, exist_ok=True)
@@ -7462,16 +7406,19 @@ class FittingController(QObject):
         except Exception as exc:
             self._log_insitu_workflow(f"Open cache folder failed: {exc}", "ERROR")
 
+    # 函数说明：绘制原位 流程 图像 预览。
     def _draw_insitu_workflow_image_preview(self, image_data, file_path: str = ""):
         holder = getattr(self, "_insitu_workflow_canvas_image", None)
         auto_cut = self._insitu_workflow_settings().get("auto_cut", False)
         self._draw_insitu_image_on_holder(holder, image_data, title=os.path.basename(file_path) or "Current image", selection=auto_cut)
 
+    # 函数说明：绘制原位 流程 区域 预览。
     def _draw_insitu_workflow_region_preview(self):
         if getattr(self, "current_stack_data", None) is None:
             return
         self._draw_insitu_workflow_image_preview(self.current_stack_data, self._insitu_workflow_processing_file or "")
 
+    # 函数说明：绘制原位 图像 on holder。
     def _draw_insitu_image_on_holder(self, holder, image_data, title: str = "", selection: bool = False):
         try:
             if holder is None or not hasattr(holder, "_insitu_figure"):
@@ -7522,6 +7469,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：创建选区 from 当前 切线 controls。
     def _create_selection_from_current_cut_controls(self):
         try:
             if not all(hasattr(self.ui, name) for name in (
@@ -7540,6 +7488,7 @@ class FittingController(QObject):
         except Exception:
             return None
 
+    # 函数说明：绘制原位 流程 曲线 预览。
     def _draw_insitu_workflow_curve_preview(self):
         holder = getattr(self, "_insitu_workflow_canvas_curve", None)
         try:
@@ -7554,6 +7503,7 @@ class FittingController(QObject):
             normalize = self._is_fit_norm_enabled()
             filter_mode = self._get_independent_axis_filter_mode()
 
+            # 函数说明：实现 prepare pair 相关逻辑。
             def prepare_pair(x_values, y_values, source="cut"):
                 x = np.asarray(x_values, dtype=float).reshape(-1)
                 y = np.asarray(y_values, dtype=float).reshape(-1)
@@ -7605,6 +7555,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 打开 原位 trend monitor 相关逻辑。
     def _open_insitu_trend_monitor(self):
         try:
             rows = self._load_insitu_session_records()
@@ -7647,12 +7598,14 @@ class FittingController(QObject):
         except Exception as exc:
             self._log_insitu_workflow(f"Trend monitor failed: {exc}", "ERROR")
 
+    # 函数说明：清除原位 trend refs。
     def _clear_insitu_trend_refs(self):
         self._insitu_trend_dialog = None
         self._insitu_trend_table = None
         self._insitu_trend_combo = None
         self._insitu_trend_plot_holder = None
 
+    # 函数说明：实现 原位 trend 参数 keys 相关逻辑。
     def _insitu_trend_parameter_keys(self, rows: list[dict]) -> list[str]:
         keys = ["chi_square"]
         skip = {"file_index", "file_name", "file_path", "timestamp", "run_mode", "load_status", "cut_status", "fit_status", "fitted_parameters", "error_message"}
@@ -7668,6 +7621,7 @@ class FittingController(QObject):
                     keys.append(key)
         return keys
 
+    # 函数说明：刷新原位 trend monitor。
     def _refresh_insitu_trend_monitor(self):
         dialog = getattr(self, "_insitu_trend_dialog", None)
         table = getattr(self, "_insitu_trend_table", None)
@@ -7698,6 +7652,7 @@ class FittingController(QObject):
                 table.setItem(r, c, QTableWidgetItem(str(row.get(key, ""))))
         self._refresh_insitu_trend_plot()
 
+    # 函数说明：调度原位 trend 刷新。
     def _schedule_insitu_trend_refresh(self, min_interval: float = 1.0):
         dialog = getattr(self, "_insitu_trend_dialog", None)
         if dialog is None:
@@ -7713,6 +7668,7 @@ class FittingController(QObject):
         delay_ms = max(50, int((min_interval - (now - last)) * 1000))
         QTimer.singleShot(delay_ms, self._refresh_insitu_trend_monitor)
 
+    # 函数说明：刷新原位 trend 图表。
     def _refresh_insitu_trend_plot(self):
         combo = getattr(self, "_insitu_trend_combo", None)
         plot_holder = getattr(self, "_insitu_trend_plot_holder", None)
@@ -7742,6 +7698,7 @@ class FittingController(QObject):
         fig.tight_layout(pad=0.3)
         canvas.draw_idle()
 
+    # 函数说明：处理图像 loaded事件。
     def _on_image_loaded(self, image_data, file_path):
         """No description."""
         try:
@@ -7760,6 +7717,7 @@ class FittingController(QObject):
             if getattr(self, "_insitu_workflow_processing_file", None) == file_path:
                 self._finalize_insitu_workflow_file(load_status="failed", error_message=str(e), failed=True)
 
+    # 函数说明：处理图像 loading progress事件。
     def _on_image_loading_progress(self, progress, status):
         """No description."""
         try:
@@ -7768,6 +7726,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Progress update error: {str(e)}")
 
+    # 函数说明：处理图像 loading 错误事件。
     def _on_image_loading_error(self, error_message):
         """No description."""
         if getattr(self, "_insitu_workflow_busy", False):
@@ -7775,6 +7734,7 @@ class FittingController(QObject):
             return
         QMessageBox.critical(self.main_window, "Image loading error", error_message)
 
+    # 函数说明：实现 ingest 流程 图像 without 预览 相关逻辑。
     def _ingest_workflow_image_without_preview(self, image_data):
         """Update data needed for cut/fitting without repainting heavy image views."""
         self.current_stack_data = image_data
@@ -7798,39 +7758,32 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 显示 图像 相关逻辑。
     def _display_image(self, image_data):
         """No description."""
         try:
-            # ?????????
             self.current_stack_data = image_data
-            # ?????????????????????
             self.data = image_data
             try:
                 sc = int(self.current_parameters.get('stack_count', 1))
             except Exception:
                 sc = 1
             self.summed_data = image_data if sc and sc > 1 else None
-            # ???????????????????y, qz, qr??
             self._compute_q_meshgrids_and_store()
 
-            # ????????????
             self._handle_color_scale(image_data)
 
-            # ???Cut Line???????
             self._update_cutline_labels_units()
             self._refresh_current_parameter_selection_from_ui()
 
-            # ????????raphicsView
             if hasattr(self.ui, 'gisaxsInputGraphicsView'):
                 self._update_graphics_view(image_data)
 
-            # ???????????????????????????
             if self.independent_window is not None and self.independent_window.isVisible():
                 is_log = self._is_log_mode_enabled()
                 self.independent_window.update_image(image_data, self._current_vmin, self._current_vmax, use_log=is_log)
                 self._sync_independent_window_selection()
 
-            # ???????
             window_status = " (+ Independent window)" if (self.independent_window and self.independent_window.isVisible()) else ""
             vmin_vmax_info = f" [Vmin: {self._current_vmin:.3f}, Vmax: {self._current_vmax:.3f}]" if self._current_vmin is not None and self._current_vmax is not None else ""
             mode_text = "Log" if self._is_log_mode_enabled() else "Linear"
@@ -7839,6 +7792,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Display error: {str(e)}")
 
+    # 函数说明：计算Q meshgrids and store。
     def _compute_q_meshgrids_and_store(self):
         """No description."""
         try:
@@ -7885,12 +7839,12 @@ class FittingController(QObject):
             self._q_mesh_cache_key = cache_key
             print(f"[Timing] q-space mesh calculation: {(time.perf_counter() - t0) * 1000:.2f} ms")
         except Exception:
-            # ????????????????????
             self.qy_matrix = None
             self.qz_matrix = None
             self.qr_matrix = None
             self._q_mesh_cache_key = None
 
+    # 函数说明：更新graphics 视图。
     def _update_graphics_view(self, image_data):
         """GraphicsView"""
         self._update_graphics_view_with_selection(
@@ -7898,6 +7852,7 @@ class FittingController(QObject):
             getattr(self, 'current_parameter_selection', None)
         )
 
+    # 函数说明：实现 prepare 图像 数据 for 显示 相关逻辑。
     def _prepare_image_data_for_display(self, image_data):
         """No description."""
         try:
@@ -7912,12 +7867,10 @@ class FittingController(QObject):
 
             if is_log:
                 t0 = time.perf_counter()
-                # Log???????????????????????????
                 safe_data = np.where(image_data > 0, image_data, 0.001)
                 processed_data = np.log(safe_data, dtype=np.float32)
                 print(f"[Timing] log transform: {(time.perf_counter() - t0) * 1000:.2f} ms")
             else:
-                # ???????????????????
                 processed_data = image_data.astype(np.float32)
             self._image_display_cache[cache_key] = processed_data
             self._image_display_cache.move_to_end(cache_key)
@@ -7927,19 +7880,17 @@ class FittingController(QObject):
             return processed_data, is_log
 
         except Exception:
-            # ??????????????Log???
             return image_data.astype(np.float32), True
 
+    # 函数说明：刷新图像 显示。
     def _refresh_image_display(self):
         """No description."""
         try:
             if self.current_stack_data is not None:
                 self._refresh_current_parameter_selection_from_ui()
-                # ????????raphicsView
                 if hasattr(self.ui, 'gisaxsInputGraphicsView'):
                     self._update_graphics_view(self.current_stack_data)
 
-                # ???????????????????????????
                 if self.independent_window is not None and self.independent_window.isVisible():
                     is_log = self._is_log_mode_enabled()
                     self.independent_window.update_image(self.current_stack_data,
@@ -7949,6 +7900,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Refresh display error: {str(e)}")
 
+    # 函数说明：处理graphics 视图 double click事件。
     def _on_graphics_view_double_click(self, event):
         """GraphicsView"""
         try:
@@ -7957,35 +7909,29 @@ class FittingController(QObject):
                                   "matplotlib library is required for independent window.\nPlease install it using: pip install matplotlib")
                 return
 
-            # ???????????????????????
             if self.current_stack_data is None:
                 QMessageBox.information(self.main_window, "No Image", "Please import and display an image first.")
                 return
 
-            # ??????????????
             self._show_independent_window()
 
         except Exception as e:
             self.status_updated.emit(f"Double-click error: {str(e)}")
 
+    # 函数说明：显示独立 窗口。
     def _show_independent_window(self):
         """atplotlib"""
         try:
-            # ?????????????????????????
             if self.independent_window is None or not self.independent_window.isVisible():
                 self.independent_window = IndependentMatplotlibWindow(self.main_window)
-                # ????????????
                 self.independent_window.region_selected.connect(self._on_region_selected)
                 self.independent_window.center_picked.connect(self._on_detector_center_picked)
                 self.independent_window.display_options_changed.connect(self._on_independent_display_options_changed)
-                # ?????????????
                 self.independent_window.status_updated.connect(self.status_updated.emit)
 
-            # ????????????????????vmin/vmax??og?????
             if self.current_stack_data is not None:
                 is_log = self._is_log_mode_enabled()
                 self._refresh_current_parameter_selection_from_ui()
-                # ?????????????
                 self.independent_window.current_image_shape = self.current_stack_data.shape
                 self.independent_window.set_display_options(
                     show_cut_region=self._show_cut_region,
@@ -7997,7 +7943,6 @@ class FittingController(QObject):
                                                    use_log=is_log)
                 self._sync_independent_window_selection()
 
-            # ??????????????
             if not self.independent_window.isVisible():
                 move_window_to_cursor_screen(self.independent_window)
             self.independent_window.show()
@@ -8005,7 +7950,6 @@ class FittingController(QObject):
             self.independent_window.activateWindow()
             self._sync_independent_window_selection()
 
-            # ????????anvas??????????????
             self.independent_window.canvas.setFocus()
 
             self.status_updated.emit("Independent window opened - Right-click to activate selection, ESC to exit selection mode")
@@ -8013,6 +7957,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Independent window error: {str(e)}")
 
+    # 函数说明：处理探测器 中心 picked事件。
     def _on_detector_center_picked(self, center_info: dict):
         try:
             beam_x = float(center_info.get("beam_center_x", 0.0))
@@ -8075,19 +8020,17 @@ class FittingController(QObject):
         except Exception as exc:
             self.status_updated.emit(f"Failed to set detector center from image: {exc}")
 
+    # 函数说明：处理区域 selected事件。
     def _on_region_selected(self, selection_info):
         """ut Line"""
         try:
-            # ?????????????????????????
             is_q_space = selection_info.get('is_q_space', False)
 
-            # ???Cut Line??enter???
             updated_controls = []
 
             if is_q_space:
-                # Q?????????????????Q???????????
-                center_qy = selection_info.get('center_x', 0)  # Q?????x???qy
-                center_qz = selection_info.get('center_y', 0)  # Q?????y???qz
+                center_qy = selection_info.get('center_x', 0)
+                center_qz = selection_info.get('center_y', 0)
                 width_q = selection_info.get('width', 0)
                 height_q = selection_info.get('height', 0)
 
@@ -8097,24 +8040,22 @@ class FittingController(QObject):
                 )
 
                 try:
-                    # ??????????????Q??????
                     if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
-                        self.ui.gisaxsInputCenterVerticalValue.setValue(center_qz)  # Vertical???qz???????
+                        self.ui.gisaxsInputCenterVerticalValue.setValue(center_qz)
                         updated_controls.append('gisaxsInputCenterVerticalValue')
 
                     if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
-                        self.ui.gisaxsInputCenterParallelValue.setValue(center_qy)  # Parallel???qy???????
+                        self.ui.gisaxsInputCenterParallelValue.setValue(center_qy)
                         updated_controls.append('gisaxsInputCenterParallelValue')
 
                     if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
-                        self.ui.gisaxsInputCutLineVerticalValue.setValue(height_q)  # Vertical?????height_q
+                        self.ui.gisaxsInputCutLineVerticalValue.setValue(height_q)
                         updated_controls.append('gisaxsInputCutLineVerticalValue')
 
                     if hasattr(self.ui, 'gisaxsInputCutLineParallelValue'):
-                        self.ui.gisaxsInputCutLineParallelValue.setValue(width_q)  # Parallel?????width_q
+                        self.ui.gisaxsInputCutLineParallelValue.setValue(width_q)
                         updated_controls.append('gisaxsInputCutLineParallelValue')
 
-                    # ????????????????????????Q?????????????
                     pixel_coords = self._convert_q_to_pixel_coordinates(center_qy, center_qz, width_q, height_q)
                     center_x = pixel_coords['center_x']
                     center_y = pixel_coords['center_y']
@@ -8125,7 +8066,6 @@ class FittingController(QObject):
                     self.status_updated.emit(f"Q-space parameter update failure: {str(e)}")
                     return
             else:
-                # ???????????????????????
                 center_x = selection_info.get('pixel_center_x', 0)
                 center_y = selection_info.get('pixel_center_y', 0)
                 width = selection_info.get('pixel_width', 0)
@@ -8135,20 +8075,14 @@ class FittingController(QObject):
                     f"Pixel region selected: Center({center_x}, {center_y}), Size({width} x {height})"
                 )
 
-                # ????????????????????
-                # Vertical???Y???????????????Parallel???X??????????????
-                # ???Vertical????-> Y???
                 if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
                     self.ui.gisaxsInputCenterVerticalValue.setValue(center_y)
                     updated_controls.append('gisaxsInputCenterVerticalValue')
 
-                # ???Parallel????-> X???
                 if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
                     self.ui.gisaxsInputCenterParallelValue.setValue(center_x)
                     updated_controls.append('gisaxsInputCenterParallelValue')
 
-                # ???Cut Line??ertical??arallel????????????
-                # Vertical??????????????Parallel?????????????
                 if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
                     self.ui.gisaxsInputCutLineVerticalValue.setValue(height)
                     updated_controls.append('gisaxsInputCutLineVerticalValue')
@@ -8157,9 +8091,7 @@ class FittingController(QObject):
                     self.ui.gisaxsInputCutLineParallelValue.setValue(width)
                     updated_controls.append('gisaxsInputCutLineParallelValue')
 
-            # ??????GraphicsView???????????
             if is_q_space:
-                # Q??????????????????????????
                 main_view_selection_info = {
                     'bounds': {
                         'x_min': center_qy - width_q / 2,
@@ -8175,7 +8107,6 @@ class FittingController(QObject):
                 }
                 self._persist_cut_region_parameters(center_qy, center_qz, width_q, height_q)
             else:
-                # ????????????????????
                 main_view_selection_info = {
                     'bounds': {
                         'x_min': center_x - width / 2,
@@ -8193,11 +8124,9 @@ class FittingController(QObject):
 
             self._draw_selection_on_main_view(main_view_selection_info)
 
-            # ??????????????
             if updated_controls:
                 coord_mode = "Q-space" if is_q_space else "pixel"
                 self.status_updated.emit(f"Updated Cut Line parameters ({coord_mode}): {', '.join(updated_controls)}")
-                # ????????????????????
                 if self.independent_window and self.independent_window.isVisible():
                     if is_q_space:
                         self.independent_window.setWindowTitle(
@@ -8216,6 +8145,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Error updating Cut Line parameters: {str(e)}")
 
+    # 函数说明：绘制切线 数据 with 对数 handling。
     @staticmethod
     def _plot_cut_data_with_log_handling(ax, x_coords, y_intensity, is_log_x, markersize=4, linewidth=1.5):
         """No description."""
@@ -8224,51 +8154,43 @@ class FittingController(QObject):
             y_array = np.array(y_intensity)
 
             if is_log_x:
-                # ??????????????
                 positive_mask = x_array > 0
                 x_positive = x_array[positive_mask]
                 y_positive = y_array[positive_mask]
 
-                # ???????????????
                 negative_mask = x_array < 0
                 x_negative_abs = np.abs(x_array[negative_mask])
                 y_negative = y_array[negative_mask]
 
-                # ???????????????
                 zero_mask = x_array == 0
                 x_zero = x_array[zero_mask]
                 y_zero = y_array[zero_mask]
 
-                # ???????????????
                 if len(x_positive) > 0:
                     ax.plot(x_positive, y_positive, 'bo-', markersize=markersize, linewidth=linewidth,
                            markerfacecolor='lightblue', alpha=0.8, label='Positive coordinates')
 
-                # ????????????????????????
                 if len(x_negative_abs) > 0:
                     ax.plot(x_negative_abs, y_negative, 'ro--', markersize=markersize, linewidth=linewidth,
                            markerfacecolor='lightcoral', alpha=0.8, label='Negative coordinates (|x|)')
 
-                # ??????????????????
                 if len(x_zero) > 0:
-                    # ?????????????????????????????
                     min_positive = min(np.min(x_positive) if len(x_positive) > 0 else 1e-6,
                                      np.min(x_negative_abs) if len(x_negative_abs) > 0 else 1e-6)
                     x_zero_replacement = np.full_like(x_zero, min_positive * 0.1)
                     ax.plot(x_zero_replacement, y_zero, 'go^', markersize=markersize+2,
                            markerfacecolor='lightgreen', alpha=0.8, label='Zero coordinates (approximated)')
 
-                # ??????
                 ax.legend(loc='best', fontsize=max(8, markersize*2))
 
             else:
-                # ??og-X??????????
                 ax.plot(x_array, y_array, 'bo-', markersize=markersize, linewidth=linewidth,
                        markerfacecolor='lightblue', alpha=0.8)
 
         except Exception as e:
             raise Exception(f"Plot data error: {str(e)}")
 
+    # 函数说明：处理拟合 graphics 视图 double click事件。
     def _on_fit_graphics_view_double_click(self, event):
         """No description."""
         try:
@@ -8277,7 +8199,6 @@ class FittingController(QObject):
                                   "matplotlib library is required for independent window.\nPlease install it using: pip install matplotlib")
                 return
 
-            # ???????????
             if self.q is None or self.I is None:
                 QMessageBox.information(self.main_window, "No Data", "No data available for display.")
                 return
@@ -8292,7 +8213,6 @@ class FittingController(QObject):
                 QMessageBox.information(self.main_window, "No Data", "Fitting plot data is not ready yet.")
                 return
 
-            # ?????????????????
             if not _qobject_is_alive(self.independent_fit_window):
                 self.independent_fit_window = None
 
@@ -8301,7 +8221,6 @@ class FittingController(QObject):
                 self.independent_fit_window.setAttribute(Qt.WA_DeleteOnClose, True)
                 self.independent_fit_window.destroyed.connect(lambda _obj=None: setattr(self, "independent_fit_window", None))
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
-                # ??????????????????????????
                 self.independent_fit_window.show_positive_cb.toggled.connect(self._on_positive_only_changed)
                 if hasattr(self.independent_fit_window, 'show_negative_cb'):
                     self.independent_fit_window.show_negative_cb.toggled.connect(self._on_positive_only_changed)
@@ -8316,21 +8235,17 @@ class FittingController(QObject):
                 except Exception:
                     pass
 
-                # ??????
                 move_window_to_cursor_screen(self.independent_fit_window)
                 self.independent_fit_window.show()
                 self.independent_fit_window.raise_()
                 self.independent_fit_window.activateWindow()
 
-            # ?????????????????????????????????
-            # ????????????????????????????????????????????????itting
             mode = (self.display_mode if hasattr(self, 'display_mode') else 'normal')
             try:
                 if hasattr(self, '_is_in_fitting_mode') and callable(self._is_in_fitting_mode) and self._is_in_fitting_mode():
                     mode = 'fitting'
             except Exception:
                 pass
-            # ???????????????????????????normal ?????????????????????????????
             try:
                 has_fit = bool(getattr(self, 'has_fitting_data', False) and getattr(self, 'I_fitting', None) is not None)
                 if mode == 'fitting' and not has_fit:
@@ -8338,7 +8253,6 @@ class FittingController(QObject):
             except Exception:
                 pass
 
-            # ???????????????????????GUI?????????????????????ROI/Normalize???????????????
             if mode == 'fitting':
                 try:
                     self._update_gui_fitting_display()
@@ -8348,10 +8262,8 @@ class FittingController(QObject):
             else:
                 self._update_outside_window(mode)
 
-            # ???????????
             if hasattr(self.independent_fit_window, 'canvas'):
                 self.independent_fit_window.canvas.setFocus()
-                # ?????????
                 self.independent_fit_window.canvas.draw_idle()
 
             self.status_updated.emit(f"{mode.capitalize()} mode independent window updated")
@@ -8361,83 +8273,72 @@ class FittingController(QObject):
 
 
 
+    # 函数说明：处理切线 参数 changed事件。
     def _on_cutline_parameters_changed(self):
         """No description."""
         try:
-            # ??????????????????
             if getattr(self, '_initializing', True):
                 return
 
-            # ???????????????????????????
             if not hasattr(self, '_cutline_update_timer'):
                 from PyQt5.QtCore import QTimer
                 self._cutline_update_timer = QTimer()
                 self._cutline_update_timer.setSingleShot(True)
                 self._cutline_update_timer.timeout.connect(self._delayed_cutline_update)
 
-            # ?????????????????????
             self._cutline_update_timer.stop()
-            self._cutline_update_timer.start(150)  # 150ms????????????????
+            self._cutline_update_timer.start(150)
 
         except Exception as e:
             pass
 
+    # 函数说明：实现 delayed 切线 update 相关逻辑。
     def _delayed_cutline_update(self):
         """No description."""
         try:
-            # ????????ut Line?????
             center_x = 0
             center_y = 0
             width = 0
             height = 0
 
-            # ???Center???
             if hasattr(self.ui, 'gisaxsInputCenterParallelValue'):
                 center_x = self.ui.gisaxsInputCenterParallelValue.value()
             if hasattr(self.ui, 'gisaxsInputCenterVerticalValue'):
                 center_y = self.ui.gisaxsInputCenterVerticalValue.value()
 
-            # ???Cut Line?????
             if hasattr(self.ui, 'gisaxsInputCutLineParallelValue'):
                 width = self.ui.gisaxsInputCutLineParallelValue.value()
             if hasattr(self.ui, 'gisaxsInputCutLineVerticalValue'):
                 height = self.ui.gisaxsInputCutLineVerticalValue.value()
 
-            # ??????????????????????????
             if center_x == 0 and center_y == 0 and width == 0 and height == 0:
                 self._clear_parameter_selection()
                 return
 
-            # ????????????????????????
             if width <= 0 or height <= 0:
                 self._clear_parameter_selection()
                 return
 
-            # ????????????
             selection_info = self._create_selection_from_parameters(center_x, center_y, width, height)
             self._persist_cut_region_parameters(center_x, center_y, width, height)
 
-            # ?????????
             self._update_parameter_selection_display(selection_info)
 
-            # ???????????Cut??????????????????????ut???
             if (self.current_cut_data is not None and
                 hasattr(self, 'current_stack_data') and self.current_stack_data is not None):
 
-                # ???????Cut???
                 self._perform_cut()
                 self.status_updated.emit(f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width} x {height})")
             else:
-                # ??????????
                 self.status_updated.emit(f"Parameter selection: Center({center_x}, {center_y}), Size({width} x {height}) - Perform Cut to see results")
 
         except Exception as e:
             self.status_updated.emit(f"Error updating parameter selection: {str(e)}")
 
+    # 函数说明：创建选区 from 参数。
     def _create_selection_from_parameters(self, center_x, center_y, width, height):
         """No description."""
         is_q_space = self._should_show_q_axis()
-        # ??????????????
         half_width = width / 2
         half_height = height / 2
 
@@ -8446,7 +8347,6 @@ class FittingController(QObject):
         y_min = center_y - half_height
         y_max = center_y + half_height
 
-        # ?????????????????????????
         selection_info = {
             'center_x': center_x,
             'center_y': center_y,
@@ -8463,27 +8363,26 @@ class FittingController(QObject):
                 'y_max': y_max
             },
             'is_q_space': is_q_space,
-            'is_parameter_based': True  # ????????????????
+            'is_parameter_based': True
         }
 
         return selection_info
 
+    # 函数说明：更新参数 选区 显示。
     def _update_parameter_selection_display(self, selection_info):
         """No description."""
         try:
-            # ?????????????????
             self.current_parameter_selection = selection_info
 
-            # ???????????????
             if self.current_stack_data is not None:
                 self._update_graphics_view_with_selection(self.current_stack_data, selection_info)
 
-            # ?????????????????
             self._sync_independent_window_selection()
 
         except Exception as e:
             self.status_updated.emit(f"Error updating parameter selection display: {str(e)}")
 
+    # 函数说明：同步独立 窗口 选区。
     def _sync_independent_window_selection(self):
         """No description."""
         try:
@@ -8498,6 +8397,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Error syncing independent window selection: {str(e)}")
 
+    # 函数说明：刷新当前 参数 选区 from 界面。
     def _refresh_current_parameter_selection_from_ui(self):
         """No description."""
         try:
@@ -8530,17 +8430,15 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：清除参数 选区。
     def _clear_parameter_selection(self):
         """No description."""
         try:
-            # ?????????????????
             self.current_parameter_selection = None
 
-            # ???????????????????????
             if self.current_stack_data is not None:
                 self._update_graphics_view_with_selection(self.current_stack_data, None)
 
-            # ???????????????
             if self.independent_window is not None and self.independent_window.isVisible():
                 self.independent_window.clear_parameter_selection()
 
@@ -8549,6 +8447,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Error clearing parameter selection: {str(e)}")
 
+    # 函数说明：绘制选区 on main 视图。
     def _draw_selection_on_main_view(self, selection_info):
         """raphicsView"""
         try:
@@ -8556,13 +8455,13 @@ class FittingController(QObject):
                 return
 
             self.current_parameter_selection = selection_info
-            # ??????????????????????????????
             self._update_graphics_view_with_selection(self.current_stack_data, selection_info)
             self._sync_independent_window_selection()
 
         except Exception as e:
             self.status_updated.emit(f"Error drawing selection on main view: {str(e)}")
 
+    # 函数说明：实现 downsample for 预览 相关逻辑。
     def _downsample_for_preview(self, data, max_pixels=700_000):
         try:
             h, w = data.shape
@@ -8572,6 +8471,7 @@ class FittingController(QObject):
         except Exception:
             return data, 1
 
+    # 函数说明：实现 预览 extent 相关逻辑。
     def _preview_extent(self, image_shape, show_q_axis):
         if show_q_axis:
             qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
@@ -8581,6 +8481,7 @@ class FittingController(QObject):
         height, width = image_shape
         return [-0.5, width - 0.5, -0.5, height - 0.5], False
 
+    # 函数说明：绘制预览 选区。
     def _draw_preview_selection(self, ax, selection_info):
         try:
             for artist in getattr(self, '_preview_selection_artists', []):
@@ -8606,6 +8507,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：绘制探测器 中心 on 坐标轴。
     def _draw_detector_center_on_axis(self, ax):
         try:
             if not self._show_center:
@@ -8619,6 +8521,7 @@ class FittingController(QObject):
         except Exception:
             return []
 
+    # 函数说明：获取探测器 中心 for controller 坐标轴。
     def _get_detector_center_for_controller_axis(self):
         try:
             from core.global_params import global_params
@@ -8639,6 +8542,7 @@ class FittingController(QObject):
         except Exception:
             return None
 
+    # 函数说明：实现 try update cached 预览 相关逻辑。
     def _try_update_cached_preview(self, image_data, selection_info=None):
         try:
             if not is_matplotlib_available():
@@ -8717,6 +8621,7 @@ class FittingController(QObject):
             self.status_updated.emit(f"Preview cache update failed: {str(e)}")
             return False
 
+    # 函数说明：更新graphics 视图 with 选区。
     def _update_graphics_view_with_selection(self, image_data, selection_info=None):
         """GraphicsView"""
         try:
@@ -8729,18 +8634,15 @@ class FittingController(QObject):
             if self._try_update_cached_preview(image_data, selection_info):
                 return
 
-            # ?????????scene?????????????
             if self._graphics_scene is None:
                 self._graphics_scene = QGraphicsScene()
                 graphics_view.setScene(self._graphics_scene)
             else:
                 self._graphics_scene.clear()
 
-            # ??????????????
             img_height, img_width = image_data.shape
             aspect_ratio = img_width / img_height
 
-            # ???figure?????
             base_size = 6
             if aspect_ratio > 1:
                 fig_width = base_size
@@ -8749,42 +8651,32 @@ class FittingController(QObject):
                 fig_height = base_size
                 fig_width = base_size * aspect_ratio
 
-            # ??????????
             fig_width = max(fig_width, 3)
             fig_height = max(fig_height, 2.5)
 
-            # ???figure?????PI??????????????atplotlib??
             try:
                 from matplotlib.figure import Figure
                 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
             except Exception:
-                # ??????matplotlib????????
                 return
             fig = Figure(figsize=(fig_width, fig_height), dpi=72)
             canvas = FigureCanvas(fig)
             ax = fig.add_subplot(111)
 
-            # ????????????????????
             processed_data, is_log = self._prepare_image_data_for_display(image_data)
 
-            # ???????????????????????
             processed_data = np.flipud(processed_data)
 
-            # ???????????????
             show_q_axis = self._should_show_q_axis()
 
-            # ????????????????min/vmax
             vmin = self._current_vmin if self._current_vmin is not None else np.min(processed_data)
             vmax = self._current_vmax if self._current_vmax is not None else np.max(processed_data)
 
             if show_q_axis:
-                # Q?????????????xtent?????
                 try:
-                    # ?????????????????????extent
                     qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
 
                     if qy_mesh is not None and qz_mesh is not None:
-                        # ???Q??????????extent [left, right, bottom, top]
                         qy_min, qy_max = qy_mesh.min(), qy_mesh.max()
                         qz_min, qz_max = qz_mesh.min(), qz_mesh.max()
                         q_extent = [qy_min, qy_max, qz_min, qz_max]
@@ -8792,25 +8684,20 @@ class FittingController(QObject):
                         im = ax.imshow(processed_data, cmap=self._image_colormap, aspect='equal', origin='lower',
                                       interpolation='nearest', vmin=vmin, vmax=vmax, extent=q_extent)
 
-                        # ???Q?????
                         ax.set_xlabel(r'$q_y$ (nm$^{-1}$)')
                         ax.set_ylabel(r'$q_z$ (nm$^{-1}$)')
                     else:
-                        # ???Q????????????????????
                         show_q_axis = False
                 except Exception as e:
                     pass
                     show_q_axis = False
 
             if not show_q_axis:
-                # ?????????
                 im = ax.imshow(processed_data, cmap=self._image_colormap, aspect='equal', origin='lower',
                               interpolation='nearest', vmin=vmin, vmax=vmax)
-                # ???????????
                 ax.set_xlabel('Pixels (Horizontal)')
                 ax.set_ylabel('Pixels (Vertical)')
 
-            # ?????????????????????????
             if selection_info:
                 bounds = selection_info.get('bounds', {})
                 x_min = bounds.get('x_min', 0)
@@ -8833,25 +8720,18 @@ class FittingController(QObject):
             if not show_q_axis:
                 ax.axis('off')
 
-            # ??????????
             fig.tight_layout(pad=0.05)
 
-            # ?????????
             if show_q_axis:
-                # Q?????matplotlib???????????extent?????
                 ax.autoscale()
             else:
-                # ???????????????????
                 ax.set_xlim(-0.5, processed_data.shape[1] - 0.5)
                 ax.set_ylim(-0.5, processed_data.shape[0] - 0.5)
 
-            # ???canvas
             canvas.draw()
 
-            # ????????
             proxy_widget = self._graphics_scene.addWidget(canvas)
 
-            # ??????????????????????????
             self._fit_view_to_item(graphics_view, proxy_widget, keep_aspect=True)
 
             mode_text = "Log" if self._is_log_mode_enabled() else "Linear"
@@ -8862,10 +8742,10 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Display error: {str(e)}")
 
-    # ========== ?????????????????==========
 
+    # 函数说明：计算显示下限 显示上限。
     def _calculate_vmin_vmax(self, image_data, use_log=True):
-        """min??max???1%??9%"""
+        """Calculate the display color range from robust percentiles."""
         try:
             t0 = time.perf_counter()
             if use_log:
@@ -8882,6 +8762,7 @@ class FittingController(QObject):
         except Exception:
             return None, None
 
+    # 函数说明：更新显示下限 显示上限 界面。
     def _update_vmin_vmax_ui(self, vmin, vmax):
         """No description."""
         try:
@@ -8901,6 +8782,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：获取显示下限 显示上限 from 界面。
     def _get_vmin_vmax_from_ui(self):
         """No description."""
         try:
@@ -8916,6 +8798,7 @@ class FittingController(QObject):
         except Exception:
             return None, None
 
+    # 函数说明：处理颜色 缩放。
     def _handle_color_scale(self, image_data):
         """No description."""
         try:
@@ -8924,26 +8807,22 @@ class FittingController(QObject):
             is_log = self._is_log_mode_enabled()
 
             if is_first_image:
-                # ?????????????AutoScale????????????
                 vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
                 if vmin is not None and vmax is not None:
                     self._update_vmin_vmax_ui(vmin, vmax)
                 self._has_displayed_image = True
 
             elif is_auto_scale:
-                # ???????????AutoScale?????????
                 vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
                 if vmin is not None and vmax is not None:
                     self._update_vmin_vmax_ui(vmin, vmax)
 
             else:
-                # ???????????AutoScale???????UI???????
                 vmin, vmax = self._get_vmin_vmax_from_ui()
                 self._current_vmin = vmin
                 self._current_vmax = vmax
 
         except Exception:
-            # ??????????????????
             try:
                 is_log = self._is_log_mode_enabled()
                 vmin, vmax = self._calculate_vmin_vmax(image_data, use_log=is_log)
@@ -8952,14 +8831,17 @@ class FittingController(QObject):
             except Exception:
                 pass
 
+    # 函数说明：判断自动 缩放 enabled是否成立。
     def _is_auto_scale_enabled(self):
         """No description."""
         return self._get_checkbox_state('gisaxsInputAutoScaleCheckBox', True)
 
+    # 函数说明：判断对数 模式 enabled是否成立。
     def _is_log_mode_enabled(self):
         """og"""
         return self._get_checkbox_state('gisaxsInputIntLogCheckBox', True)
 
+    # 函数说明：处理颜色 缩放 值 committed事件。
     def _on_color_scale_value_committed(self, *args):
         """Apply manually edited vmin/vmax values to all image views."""
         try:
@@ -8993,6 +8875,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Color scale update error: {str(e)}")
 
+    # 函数说明：处理自动 缩放 changed事件。
     def _on_auto_scale_changed(self):
         """No description."""
         try:
@@ -9008,6 +8891,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"AutoScale change error: {str(e)}")
 
+    # 函数说明：处理显示下限 值 changed事件。
     def _on_vmin_value_changed(self):
         """No description."""
         try:
@@ -9019,6 +8903,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：处理显示上限 值 changed事件。
     def _on_vmax_value_changed(self):
         """No description."""
         try:
@@ -9030,11 +8915,11 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：处理自动 show changed事件。
     def _on_auto_show_changed(self):
         """AutoShow"""
         auto_show = hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
         self.status_updated.emit(f"AutoShow {'enabled' if auto_show else 'disabled'}")
-        # In-situ ????????
         try:
             if getattr(self, 'load_mode', 'Single') == 'In-situ':
                 if auto_show:
@@ -9044,22 +8929,20 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：处理对数 changed事件。
     def _on_log_changed(self):
-        """Log???????????? - """
+        """Handle log-scale display changes and refresh image views."""
         try:
             is_log = self._is_log_mode_enabled()
 
-            # ???Vmin/Vmax???????????
             self._refresh_vmin_vmax_display()
 
-            # ????????????????????vmin/vmax????????
             if self.current_stack_data is not None:
                 if self._is_auto_scale_enabled():
                     vmin, vmax = self._calculate_vmin_vmax(self.current_stack_data, use_log=is_log)
                     if vmin is not None and vmax is not None:
                         self._update_vmin_vmax_ui(vmin, vmax)
 
-                # ?????????
                 self._refresh_image_display()
 
             self.status_updated.emit(f"*** DISPLAY MODE CHANGED TO: {'LOG' if is_log else 'LINEAR'} ***")
@@ -9067,20 +8950,17 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Log mode change error: {str(e)}")
 
+    # 函数说明：处理拟合 显示 option changed事件。
     def _on_fit_display_option_changed(self):
         """No description."""
         try:
-            # ??????????????????
             if getattr(self, '_initializing', True):
                 return
 
-            # ???itCurrentDataCheckBox?????
             if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
-                # fitCurrentDataCheckBox?????????????ut???
                 self._perform_cut()
                 self.status_updated.emit("Fit display options changed - Cut results updated")
             else:
-                # fitCurrentDataCheckBox??????????????????????D???
                 if self.current_1d_data is not None and hasattr(self, 'q') and self.q is not None:
                     mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
                     self._update_GUI_image(mode)
@@ -9092,39 +8972,31 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Fit display option change error: {str(e)}")
 
+    # 函数说明：处理当前 数据 复选框 changed事件。
     def _on_current_data_checkbox_changed(self, checked):
         """No description."""
         try:
-            # ??????????????????
             if getattr(self, '_initializing', True):
                 return
 
             if checked:
-                # ???????????Cut????????GISAXS????????
                 if self.current_stack_data is not None:
-                    # ??ISAXS????????ut???
                     self._perform_cut()
                     self.status_updated.emit("Current Data enabled - Cut operation performed")
                 else:
-                    # ???GISAXS???????????
                     self.status_updated.emit("Current Data enabled - No GISAXS data available for cut operation")
             else:
-                # ?????????????D????????????????
                 if self.current_1d_data is not None:
-                    # ??1D?????,I?????
                     self.q = self.current_1d_data['q']
                     self.I = self.current_1d_data['I']
                     self.data_source = '1d'
                     self.display_mode = 'normal'
 
-                    # ?????????
                     self._update_GUI_image('normal')
                     self._update_outside_window('normal')
                     self.status_updated.emit("Current Data disabled - 1D data restored")
                 else:
-                    # ???1D??????????????
                     self._clear_fit_graphics_view()
-                    # ???????????????????
                     if hasattr(self, 'independent_fit_window') and self.independent_fit_window is not None and self.independent_fit_window.isVisible():
                         self.independent_fit_window.ax.clear()
                         self.independent_fit_window.canvas.draw()
@@ -9133,23 +9005,20 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Current Data checkbox change error: {str(e)}")
 
-    # ========== ????????? ==========
 
+    # 函数说明：导入1d 文件。
     def _import_1d_file(self):
         """No description."""
         try:
-            # ???????????????????
             from core.global_params import global_params
             fitting_session = global_params.get_parameter('fitting', 'last_session', {})
             last_1d_directory = fitting_session.get('last_1d_directory')
 
-            # ??????
             if last_1d_directory and os.path.exists(last_1d_directory):
                 start_directory = last_1d_directory
             else:
-                start_directory = os.getcwd()  # ????????
+                start_directory = os.getcwd()
 
-            # ??????????????
             file_path, _ = QFileDialog.getOpenFileName(
                 self.main_window,
                 "Select 1D SAXS Data File",
@@ -9157,20 +9026,16 @@ class FittingController(QObject):
                 "Data Files (*.dat *.txt);;All Files (*)"
             )
 
-            # ??????????????
             if not file_path:
                 return
             file_path = normalize_path(file_path)
 
-            # ????????????????
             self.current_1d_file_path = file_path
 
-            # ?????????????
             current_directory = os.path.dirname(file_path)
             fitting_session['last_1d_directory'] = current_directory
             global_params.set_parameter('fitting', 'last_session', fitting_session)
 
-            # ??????
             self._load_1d_data(file_path)
 
         except Exception as e:
@@ -9181,6 +9046,7 @@ class FittingController(QObject):
                 f"Failed to import 1D file:\n{str(e)}"
             )
 
+    # 函数说明：处理1d 文件 值 changed事件。
     def _on_1d_file_value_changed(self):
         """No description."""
         try:
@@ -9193,12 +9059,9 @@ class FittingController(QObject):
                 self.status_updated.emit("No file path entered")
                 return
 
-            # ???global_params
             from core.global_params import global_params
 
-            # ????????????????????????????????????
             if not os.path.isabs(file_path_input):
-                # ???????????????????
                 fitting_session = global_params.get_parameter('fitting', 'last_session', {})
                 last_1d_directory = fitting_session.get('last_1d_directory')
 
@@ -9207,7 +9070,6 @@ class FittingController(QObject):
                 else:
                     file_path_input = os.path.join(os.getcwd(), file_path_input)
 
-            # ???????????
             if not os.path.exists(file_path_input):
                 QMessageBox.warning(
                     self.main_window,
@@ -9216,7 +9078,6 @@ class FittingController(QObject):
                 )
                 return
 
-            # ???????????
             file_ext = os.path.splitext(file_path_input)[1].lower()
             if file_ext not in ['.dat', '.txt']:
                 QMessageBox.warning(
@@ -9226,19 +9087,15 @@ class FittingController(QObject):
                 )
                 return
 
-            # ?????????????????
             self.ui.fitImport1dFileValue.setText(file_path_input)
 
-            # ????????
             self.current_1d_file_path = file_path_input
 
-            # ?????????????
             current_directory = os.path.dirname(file_path_input)
             fitting_session = global_params.get_parameter('fitting', 'last_session', {})
             fitting_session['last_1d_directory'] = current_directory
             global_params.set_parameter('fitting', 'last_session', fitting_session)
 
-            # ??????
             self._load_1d_data(file_path_input)
 
         except Exception as e:
@@ -9249,21 +9106,18 @@ class FittingController(QObject):
                 f"Failed to process 1D file path:\n{str(e)}"
             )
 
+    # 函数说明：加载1d 数据。
     def _load_1d_data(self, file_path):
         """No description."""
         try:
-            # ?????????
             from utils.load_SAXS_data import load_xy_any
 
-            # ??????
             self.status_updated.emit(f"Loading 1D data from {os.path.basename(file_path)}...")
             data = load_xy_any(file_path)
 
-            # ????????q,I ?????
             self.q = data.q
             self.I = data.I
 
-            # ???????????????
             self.current_1d_data = {
                 'q': data.q,
                 'I': data.I,
@@ -9272,7 +9126,6 @@ class FittingController(QObject):
                 'q_source_unit': self._imported_1d_q_unit
             }
 
-            # ?????D???????????????normal
             self.data_source = '1d'
             self.display_mode = 'normal'
             if hasattr(self.ui, 'fitCurrentDataCheckBox'):
@@ -9280,17 +9133,14 @@ class FittingController(QObject):
                 self.ui.fitCurrentDataCheckBox.setChecked(False)
                 self.ui.fitCurrentDataCheckBox.blockSignals(False)
 
-            # ???fitImport1dFileValue???
             if hasattr(self.ui, 'fitImport1dFileValue'):
                 self.ui.fitImport1dFileValue.setText(file_path)
 
-            # ????????ROI???????????
             try:
                 self._initialize_roi_from_current_q(force_full=True)
             except Exception:
                 pass
             self._apply_roi_to_data_and_refresh()
-            # ??????
             self._update_GUI_image('normal')
             self._update_outside_window('normal')
 
@@ -9302,6 +9152,7 @@ class FittingController(QObject):
 
 
 
+    # 函数说明：实现 expand right card 相关逻辑。
     def _expand_right_card(self, card_attr: str) -> None:
         try:
             card = getattr(self.ui, card_attr, None)
@@ -9310,6 +9161,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：配置拟合 graphics scene。
     def _setup_fit_graphics_scene(self):
         """itGraphicsView"""
         try:
@@ -9317,7 +9169,6 @@ class FittingController(QObject):
             if not hasattr(self.ui, 'fitGraphicsView'):
                 return None
 
-            # ??????????
             if not hasattr(self, '_fit_graphics_scene') or self._fit_graphics_scene is None:
                 self._fit_graphics_scene = QGraphicsScene()
                 self.ui.fitGraphicsView.setScene(self._fit_graphics_scene)
@@ -9339,7 +9190,6 @@ class FittingController(QObject):
                 except Exception:
                     pass
             else:
-                # ????????????????
                 self._fit_graphics_scene.clear()
 
             return self._fit_graphics_scene
@@ -9348,6 +9198,7 @@ class FittingController(QObject):
             self.status_updated.emit(f"Failed to setup fit graphics scene: {str(e)}")
             return None
 
+    # 函数说明：实现 拟合 视图 to item 相关逻辑。
     def _fit_view_to_item(self, graphics_view, item, keep_aspect=True):
         """Fit the view to the given item bounds; disable scrollbars by sizing the scene to the item."""
         try:
@@ -9363,6 +9214,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：清除拟合 graphics 视图。
     def _clear_fit_graphics_view(self):
         """fitGraphicsView"""
         try:
@@ -9378,6 +9230,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Failed to clear fit graphics view: {str(e)}")
 
+    # 函数说明：启动拟合。
     def _start_fitting(self):
         """No description."""
         if not self.current_parameters.get('imported_gisaxs_file'):
@@ -9392,7 +9245,6 @@ class FittingController(QObject):
             self.status_updated.emit("Start Cut Fitting Processing...")
             self.progress_updated.emit(0)
 
-            # TODO: ??????????????
             self._run_fitting_process()
 
             self.progress_updated.emit(100)
@@ -9405,26 +9257,21 @@ class FittingController(QObject):
                 f"Cut fitting failed:\n{str(e)}"
             )
 
+    # 函数说明：实现 run 拟合 process 相关逻辑。
     def _run_fitting_process(self):
         """No description."""
-        # TODO: ??????????????
-        # ??????????
-        # 1. ??????
-        # 2. ????
-        # 3. ??????
-        # 4. ??????
         pass
 
+    # 函数说明：重置拟合。
     def _reset_fitting(self):
         """No description."""
         self._set_default_parameters()
 
+    # 函数说明：实现 自动 find 中心 相关逻辑。
     def _auto_find_center(self):
         """GISAXS"""
-        # ????I?????????????????
         self._sync_ui_to_parameters()
 
-        # ???????????????????
         if self.current_stack_data is None:
             QMessageBox.warning(
                 self.main_window,
@@ -9433,7 +9280,6 @@ class FittingController(QObject):
             )
             return
 
-        # ?????????????????
         if not self._has_displayed_image:
             QMessageBox.warning(
                 self.main_window,
@@ -9445,21 +9291,16 @@ class FittingController(QObject):
         try:
             self.status_updated.emit("Searching for the center point automatically...")
 
-            # ??????????????
             data = np.log10(np.maximum(self.current_stack_data, 1))
 
-            # 1. ?????(center_y): ?????????????????????
-            vertical_profile = np.sum(data, axis=1)  # ????????
-            raw_center_y = np.argmax(vertical_profile)  # ????????
-            # ???????????flipud???????????
+            vertical_profile = np.sum(data, axis=1)
+            raw_center_y = np.argmax(vertical_profile)
             height = data.shape[0]
             pixel_center_y = float(height - 1 - raw_center_y)
 
-            # 2. ????(center_x): ??????????????????????????
-            horizontal_profile = np.sum(data, axis=0)  # ????????
+            horizontal_profile = np.sum(data, axis=0)
             pixel_center_x = float(np.sum(np.arange(len(horizontal_profile)) * horizontal_profile) / np.sum(horizontal_profile))
 
-            # 3. ????????0pixel
             pixel_cutline_height = 20.0
 
             # 4. Estimate cut-line width from the horizontal intensity profile.
@@ -9483,23 +9324,18 @@ class FittingController(QObject):
                 f"cut size=({pixel_cutline_width:.1f}, {pixel_cutline_height:.1f})"
             )
 
-            # 5. ?????ut??????????????? normal????????????????
             self.data_source = 'cut'
-            # ????????Normal ???????????????????????
             try:
                 if hasattr(self, '_switch_to_normal_display_mode') and callable(self._switch_to_normal_display_mode):
                     self._switch_to_normal_display_mode()
                 else:
-                    # ?????????????????
                     self.display_mode = 'normal'
                     if hasattr(self, '_display_mode'):
                         self._display_mode = 'normal'
                     if hasattr(self, '_fitting_mode_active'):
                         self._fitting_mode_active = False
-                # ????????????????? display_mode ????? normal
                 self.display_mode = 'normal'
             except Exception:
-                # ???????????????display_mode ??normal
                 self.display_mode = 'normal'
             if hasattr(self.ui, 'fitCurrentDataCheckBox'):
                 try:
@@ -9511,7 +9347,6 @@ class FittingController(QObject):
                     except Exception:
                         pass
 
-            # ????????ROI????????????????????
             try:
                 self._initialize_roi_from_current_q(force_full=True)
             except Exception:
@@ -9524,6 +9359,7 @@ class FittingController(QObject):
             self.status_updated.emit(f"Cut operation failed: {str(e)}")
             QMessageBox.critical(self.main_window, "Error", f"Cut operation failed:\n{str(e)}")
 
+    # 函数说明：计算95 percent width。
     def _calculate_95_percent_width(self, profile):
         """Return the profile width containing roughly 95 percent of the intensity."""
         profile = np.asarray(profile, dtype=float)
@@ -9558,6 +9394,7 @@ class FittingController(QObject):
         max_width = profile.size * 0.8
         return float(max(min_width, min(width, max_width)))
 
+    # 函数说明：显示探测器 参数。
     def _show_detector_parameters(self):
         """Show the detector parameters dialog."""
         try:
@@ -9584,6 +9421,7 @@ class FittingController(QObject):
                 f"Detector Parameters dialog cannot be displayed:\n{str(e)}"
             )
 
+    # 函数说明：处理探测器 对话框 finished事件。
     def _on_detector_dialog_finished(self):
         """Clear detector dialog reference after close."""
         try:
@@ -9592,6 +9430,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Failed to clear detector dialog: {str(e)}")
 
+    # 函数说明：处理探测器 参数 changed事件。
     def _on_detector_parameters_changed(self, parameters=None):
         """Handle detector parameter changes from the dialog."""
         try:
@@ -9618,13 +9457,13 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Failed to process detector parameter change: {str(e)}")
 
+    # 函数说明：更新界面 图像。
     def _update_GUI_image(self, mode):
         """UI"""
         try:
             if not self._has_valid_data():
                 return
 
-            # ?????????
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
@@ -9632,7 +9471,6 @@ class FittingController(QObject):
             positive_only = (filter_mode == 'positive')
             negative_only = (filter_mode == 'negative')
 
-            # ???????????OI???????????
             q_data, I_data = self._get_roi_active_arrays()
             if q_data is None or I_data is None:
                 return
@@ -9644,7 +9482,6 @@ class FittingController(QObject):
             q_data_display = self._convert_q_values_for_display(q_data)
             q_plot = self._convert_q_values_for_display(q_plot)
 
-            # ?????????????????????????????????????????????????????
             norm_factor = 1.0
             if normalize:
                 max_I = np.max(I_data) if I_data.size > 0 else 0.0
@@ -9652,7 +9489,6 @@ class FittingController(QObject):
                     norm_factor = float(max_I)
                     I_data = I_data / norm_factor
 
-            # ??????
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -9660,45 +9496,36 @@ class FittingController(QObject):
             if scene is None:
                 return
 
-            # ??? 4:3 ????????????
             fig = Figure(figsize=(9.6, 7.2), dpi=80)
             canvas = FigureCanvas(fig)
             ax = fig.add_subplot(111)
             fitting_y_for_limits = None
             extra_y_for_limits = []
 
-            # Normal?????????????????????
             if mode == 'normal' and log_x and not positive_only and not negative_only:
-                # ????????????
                 positive_mask = q_data > 0
                 negative_mask = q_data < 0
                 zero_mask = q_data == 0
 
-                # ????????????????????
                 if np.any(positive_mask):
                     ax.plot(q_data_display[positive_mask], I_data[positive_mask], 'o-',
                            color='blue', markersize=4, linewidth=1, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q>0)' if self.data_source else 'Data (q>0)', zorder=2)
 
-                # ???????????????????????q|??
                 if np.any(negative_mask):
                     ax.plot(np.abs(q_data_display[negative_mask]), I_data[negative_mask], 'o-',
                            color='red', markersize=4, linewidth=1, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q<0, |q|)' if self.data_source else 'Data (q<0, |q|)', zorder=2)
 
-                # ???q=0??????????
                 if np.any(zero_mask):
                     ax.plot(q_data_display[zero_mask], I_data[zero_mask], 'o',
                            color='green', markersize=6, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q=0)' if self.data_source else 'Data (q=0)', zorder=3)
             else:
-                # ???????????????
                 ax.scatter(q_plot, I_data, s=30, alpha=0.7, color='blue',
                           label=f'{self.data_source.upper()} Data' if self.data_source else 'Data', zorder=2)
-            # ROI ?????
             self._draw_roi_guides_if_active(ax)
 
-            # ???????????G??es??articles??????????????????????????????fitting????????
             try:
                 show_bg = self._get_checkbox_state('fitBGShowCheckBox', False)
                 show_res = self._get_checkbox_state('fitResShowCheckBox', False)
@@ -9708,7 +9535,6 @@ class FittingController(QObject):
                 particle_flags = {}
                 show_any = False
 
-            # ???????????????????
             norm_divisor = norm_factor if normalize and norm_factor > 0 else None
             if mode == 'fitting' and show_any:
                 shapes, params_list = self._get_last_fitting_spec_and_params()
@@ -9742,14 +9568,11 @@ class FittingController(QObject):
                                     label_id = f"{shape_name} {widget_id}" if widget_id is not None else f"{shape_name} {idx}"
                                     ax.plot(q_plot, yv_plot, linestyle='--', color=color, linewidth=1.5, label=label_id, zorder=2)
                                     extra_y_for_limits.append(yv_plot)
-                        # ?????????????
                         ax.legend()
                     except Exception:
                         pass
 
-            #??????????????_plot_fitting_result ??????????????????????????
 
-            # ?????itting??????????????????????????OI???????????
             if mode == 'fitting' and self.has_fitting_data and self.I_fitting is not None:
                 I_fitting_arr = np.asarray(self.I_fitting)
                 q_full = np.asarray(self.q)
@@ -9776,7 +9599,6 @@ class FittingController(QObject):
                     ax.plot(q_fit_plot[:plot_len], I_fitting_data[:plot_len], color='red', linewidth=2,
                            label='Fitting', zorder=3)
 
-            # ??????????
             x_label = self._build_q_axis_label(filter_mode=filter_mode)
             if mode == 'normal' and log_x and not positive_only and not negative_only and np.any(q_data < 0):
                 x_label = self._build_q_axis_label(filter_mode='all', absolute=True)
@@ -9786,7 +9608,6 @@ class FittingController(QObject):
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            # ?????????
             self._apply_log_scales(ax, log_x, log_y)
             self._apply_fit_y_axis_limits(
                 ax,
@@ -9798,34 +9619,30 @@ class FittingController(QObject):
 
             fig.tight_layout()
 
-            # ????????
             proxy_widget = scene.addWidget(canvas)
             self._fit_view_to_item(self.ui.fitGraphicsView, proxy_widget, keep_aspect=True)
 
-            # ??????
             self._current_fit_figure = fig
             self._current_fit_canvas = canvas
 
         except Exception:
             pass
 
+    # 函数说明：更新外部 窗口。
     def _update_outside_window(self, mode):
         """No description."""
         try:
             if not hasattr(self, 'independent_fit_window') or self.independent_fit_window is None or not self.independent_fit_window.isVisible():
                 return
 
-            # ?????????
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
 
-            # ??????????????????????
             filter_mode = self._get_independent_axis_filter_mode()
             positive_only = (filter_mode == 'positive')
             negative_only = (filter_mode == 'negative')
 
-            # ?????Fitting Plot ????????????????OI???????????????????
             q_data, I_data = self._get_roi_active_arrays()
 
             if q_data is None or I_data is None or len(q_data) == 0 or len(I_data) == 0:
@@ -9838,7 +9655,6 @@ class FittingController(QObject):
             q_data_display = self._convert_q_values_for_display(q_data)
             q_plot = self._convert_q_values_for_display(q_plot)
 
-            # ?????????????????????????????????????????????
             norm_factor = 1.0
             if normalize:
                 max_I = np.max(I_data) if I_data.size > 0 else 0.0
@@ -9851,38 +9667,30 @@ class FittingController(QObject):
             fitting_y_for_limits = None
             extra_y_for_limits = []
 
-            # Normal??????????????????????????????????????
             if mode == 'normal' and log_x and not positive_only and not negative_only:
-                # ????????????
                 positive_mask = q_data > 0
                 negative_mask = q_data < 0
                 zero_mask = q_data == 0
 
-                # ????????????????????
                 if np.any(positive_mask):
                     ax.plot(q_data_display[positive_mask], I_data[positive_mask], 'o-',
                            color='blue', markersize=4, linewidth=1, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q>0)' if self.data_source else 'Data (q>0)', zorder=2)
 
-                # ???????????????????????q|??
                 if np.any(negative_mask):
                     ax.plot(np.abs(q_data_display[negative_mask]), I_data[negative_mask], 'o-',
                            color='red', markersize=4, linewidth=1, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q<0, |q|)' if self.data_source else 'Data (q<0, |q|)', zorder=2)
 
-                # ???q=0??????????
                 if np.any(zero_mask):
                     ax.plot(q_data_display[zero_mask], I_data[zero_mask], 'o',
                            color='green', markersize=6, alpha=0.8,
                            label=f'{self.data_source.upper()} Data (q=0)' if self.data_source else 'Data (q=0)', zorder=3)
             else:
-                # ???????????????
                 ax.scatter(q_plot, I_data, s=30, alpha=0.7, color='blue',
                           label=f'{self.data_source.upper()} Data' if self.data_source else 'Data', zorder=2)
-            # ROI ?????
             self._draw_roi_guides_if_active(ax)
 
-            # ???????????G??es??articles??????fitting??????
             try:
                 show_bg = self._get_checkbox_state('fitBGShowCheckBox', False)
                 show_res = self._get_checkbox_state('fitResShowCheckBox', False)
@@ -9929,7 +9737,6 @@ class FittingController(QObject):
                     except Exception:
                         pass
 
-            # ?????itting????????????????????????????????????????????
             if mode == 'fitting' and self.has_fitting_data and self.I_fitting is not None:
                 I_fitting_arr = np.asarray(self.I_fitting)
                 q_full = np.asarray(self.q)
@@ -9947,7 +9754,6 @@ class FittingController(QObject):
                 q_fit_raw, q_fit_plot, I_fitting_data, _ = self._filter_q_data_for_independent_display(q_fit_raw, I_fitting_data)
                 q_fit_plot = self._convert_q_values_for_display(q_fit_plot)
 
-                # ?????????????????????
                 if normalize and norm_factor > 0 and I_fitting_data.size > 0:
                     I_fitting_data = I_fitting_data / norm_factor
 
@@ -9958,7 +9764,6 @@ class FittingController(QObject):
                     ax.plot(q_fit_plot[:plot_len], I_fitting_data[:plot_len], color='red', linewidth=2.5,
                            label='Fitting', zorder=3)
 
-            # ??????????
             x_label = self._build_q_axis_label(filter_mode=filter_mode)
             if mode == 'normal' and log_x and not positive_only and not negative_only and np.any(np.array(self.q) < 0):
                 x_label = self._build_q_axis_label(filter_mode='all', absolute=True)
@@ -9969,11 +9774,9 @@ class FittingController(QObject):
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            # ???????????
             for axis in ['top', 'bottom', 'left', 'right']:
                 ax.spines[axis].set_linewidth(1.8)
 
-            # ?????????
             self._apply_log_scales(ax, log_x, log_y)
             self._apply_fit_y_axis_limits(
                 ax,
@@ -9989,13 +9792,13 @@ class FittingController(QObject):
             except Exception:
                 pass
 
-            # ??????
             if hasattr(self.independent_fit_window, 'canvas'):
                 self.independent_fit_window.canvas.draw_idle()
 
         except Exception:
             pass
 
+    # 函数说明：获取切线 中心 coordinates。
     def _get_cut_center_coordinates(self):
         """No description."""
         center_x = 0.0
@@ -10008,6 +9811,7 @@ class FittingController(QObject):
 
         return center_x, center_y
 
+    # 函数说明：解析切线 points。
     def _resolve_cut_points(self, points_override: int = None) -> int:
         """Resolve the target cut point count from override, UI, cache, or settings."""
         if points_override is not None and not isinstance(points_override, bool):
@@ -10047,6 +9851,7 @@ class FittingController(QObject):
         except Exception:
             return max(10, int(getattr(self, '_points_num_default', 300)))
 
+    # 函数说明：执行切线。
     def _perform_cut(self, points_override: int = None):
         """Execute the current Cut operation using existing horizontal/vertical cut logic."""
         try:
@@ -10108,22 +9913,20 @@ class FittingController(QObject):
             self.status_updated.emit(f"Cut operation failed: {str(e)}")
             QMessageBox.critical(self.main_window, "Error", f"Cut operation failed:\n{str(e)}")
 
+    # 函数说明：执行切线 operation。
     def _perform_cut_operation(self, vertical_value, parallel_value, cut_type: str, points_override: int = None):
-        """
+        """Execute a horizontal or vertical cut with the current center and geometry.
 
         Args:
-            vertical_value: ??????????????
-            parallel_value: ?????????????
-            cut_type: ????????horizontal' ??'vertical'
+            vertical_value: Cut region height in the active coordinate system.
+            parallel_value: Cut region width in the active coordinate system.
+            cut_type: Either ``horizontal`` or ``vertical``.
         """
         try:
-            # ???????????????
             center_x, center_y = self._get_cut_center_coordinates()
 
-            # ????????Q??????
             show_q_axis = self._should_show_q_axis()
 
-            # ???????????????
             if cut_type == 'horizontal':
                 q_mode_method = self._extract_horizontal_cut_q_mode
                 pixel_mode_method = self._extract_horizontal_cut_pixel_mode
@@ -10141,54 +9944,50 @@ class FittingController(QObject):
                 raise Exception(f"Unknown cut type: {cut_type}")
 
             if show_q_axis:
-                # Q?????????????????
                 cut_data, q_coords = q_mode_method(
                     center_x, center_y, vertical_value, parallel_value, points_override=points_override
                 )
                 x_coordinates = q_coords
             else:
-                # ???????????????????????????
                 cut_data, pixel_coords = pixel_mode_method(
                     center_x, center_y, vertical_value, parallel_value, points_override=points_override
                 )
-                # ?????????????
                 x_coordinates = pixel_to_q_method(pixel_coords)
 
-            # ??????
             self._plot_cut_result(x_coordinates, cut_data, x_label, "Intensity (a.u.)", title)
 
         except Exception as e:
             raise Exception(f"{cut_type.capitalize()} cut failed: {str(e)}")
 
+    # 函数说明：执行horizontal 切线。
     def _perform_horizontal_cut(self, vertical_value, parallel_value, points_override: int = None):
         """No description."""
         self._perform_cut_operation(vertical_value, parallel_value, 'horizontal', points_override=points_override)
 
+    # 函数说明：执行vertical 切线。
     def _perform_vertical_cut(self, vertical_value, parallel_value, points_override: int = None):
         """No description."""
         self._perform_cut_operation(vertical_value, parallel_value, 'vertical', points_override=points_override)
 
+    # 函数说明：提取切线 Q 模式。
     def _extract_cut_q_mode(self, center_qy, center_qz, height_q, width_q, cut_type: str, points_override: int = None):
-        """Q?????????????????????
+        """Extract a horizontal or vertical cut from the selected Q-space region.
 
         Args:
-            center_qy, center_qz: Q????????
-            height_q, width_q: Q????????
-            cut_type: ????????horizontal' ??'vertical'
+            center_qy, center_qz: Q-space center coordinates.
+            height_q, width_q: Q-space region size.
+            cut_type: Either ``horizontal`` or ``vertical``.
         """
         try:
-            # ???Q???
             qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
             if qy_mesh is None or qz_mesh is None:
                 raise Exception("Q-space meshgrids not available")
 
-            # ????????????
             qy_min = center_qy - width_q / 2
             qy_max = center_qy + width_q / 2
             qz_min = center_qz - height_q / 2
             qz_max = center_qz + height_q / 2
 
-            # ?????????
             mask = ((qy_mesh >= qy_min) & (qy_mesh <= qy_max) &
                     (qz_mesh >= qz_min) & (qz_mesh <= qz_max))
 
@@ -10251,49 +10050,46 @@ class FittingController(QObject):
         except Exception as e:
             raise Exception(f"Q-mode {cut_type} cut extraction failed: {str(e)}")
 
+    # 函数说明：提取horizontal 切线 Q 模式。
     def _extract_horizontal_cut_q_mode(self, center_qy, center_qz, height_q, width_q, points_override: int = None):
         """Q"""
         return self._extract_cut_q_mode(center_qy, center_qz, height_q, width_q, 'horizontal', points_override=points_override)
 
+    # 函数说明：提取vertical 切线 Q 模式。
     def _extract_vertical_cut_q_mode(self, center_qy, center_qz, height_q, width_q, points_override: int = None):
         """Q"""
         return self._extract_cut_q_mode(center_qy, center_qz, height_q, width_q, 'vertical', points_override=points_override)
 
+    # 函数说明：提取切线 像素 模式。
     def _extract_cut_pixel_mode(self, center_x, center_y, height, width, cut_type: str, points_override: int = None):
-        """
+        """Extract a horizontal or vertical cut from the selected pixel-space region.
 
         Args:
-            center_x, center_y: ?????
-            height, width: ?????
-            cut_type: ????????horizontal' ??'vertical'
+            center_x, center_y: Pixel-space center coordinates.
+            height, width: Pixel-space region size.
+            cut_type: Either ``horizontal`` or ``vertical``.
         """
         try:
             img_height, img_width = self.current_stack_data.shape
 
-            # ?????????
             x_min = max(0, int(center_x - width / 2))
             x_max = min(img_width - 1, int(center_x + width / 2))
             y_min = max(0, int(center_y - height / 2))
             y_max = min(img_height - 1, int(center_y + height / 2))
 
-            # ???????????flipud???????????
             y_min_adj = img_height - 1 - y_max
             y_max_adj = img_height - 1 - y_min
             y_min_adj, y_max_adj = max(0, y_min_adj), min(img_height - 1, y_max_adj)
 
-            # ?????????
             region_data = self.current_stack_data[y_min_adj:y_max_adj+1, x_min:x_max+1]
 
             if region_data.size == 0:
                 raise Exception("Empty region selected")
 
-            # ??????????????
             if cut_type == 'horizontal':
-                # ?????????????????
                 intensity_sum = np.mean(region_data, axis=0)
                 pixel_coords = np.arange(x_min, x_max + 1)
             elif cut_type == 'vertical':
-                # ?????????????????
                 intensity_sum = np.mean(region_data, axis=1)
                 pixel_coords = np.arange(y_min_adj, y_max_adj + 1)
                 self._log_cut_debug(
@@ -10307,10 +10103,8 @@ class FittingController(QObject):
             else:
                 raise Exception(f"Unknown cut type: {cut_type}")
 
-            # ???????????????????????
             if len(pixel_coords) > 1:
                 n_points = self._resolve_cut_points(points_override)
-                # ??????
                 pixel_coords_f, intensity_sum_f, _ = self._sort_filter_cut_pairs(
                     pixel_coords, intensity_sum, context=f"{cut_type.capitalize()} Pixel cut pixels"
                 )
@@ -10340,14 +10134,17 @@ class FittingController(QObject):
         except Exception as e:
             raise Exception(f"Pixel-mode {cut_type} cut extraction failed: {str(e)}")
 
+    # 函数说明：提取horizontal 切线 像素 模式。
     def _extract_horizontal_cut_pixel_mode(self, center_x, center_y, height, width, points_override: int = None):
         """No description."""
         return self._extract_cut_pixel_mode(center_x, center_y, height, width, 'horizontal', points_override=points_override)
 
+    # 函数说明：提取vertical 切线 像素 模式。
     def _extract_vertical_cut_pixel_mode(self, center_x, center_y, height, width, points_override: int = None):
         """No description."""
         return self._extract_cut_pixel_mode(center_x, center_y, height, width, 'vertical', points_override=points_override)
 
+    # 函数说明：获取探测器 for 像素 conversion。
     def _get_detector_for_pixel_conversion(self):
         """No description."""
         try:
@@ -10357,7 +10154,6 @@ class FittingController(QObject):
             global_params = GlobalParameterManager()
             height, width = self.current_stack_data.shape
 
-            # ???????????
             pixel_size_x = global_params.get_parameter('fitting', 'detector.pixel_size_x', 172.0)
             pixel_size_y = global_params.get_parameter('fitting', 'detector.pixel_size_y', 172.0)
             beam_center_x = global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0)
@@ -10380,12 +10176,13 @@ class FittingController(QObject):
         except Exception:
             return None
 
+    # 函数说明：转换像素 coords to Q。
     def _convert_pixel_coords_to_q(self, pixel_coords, conversion_type: str):
-        """
+        """Convert detector pixel coordinates to Q coordinates.
 
         Args:
-            pixel_coords: ?????????
-            conversion_type: ???????qy' ??'qz'
+            pixel_coords: Pixel coordinates to convert.
+            conversion_type: Target coordinate type, either ``qy`` or ``qz``.
         """
         try:
             height, width = self.current_stack_data.shape
@@ -10431,7 +10228,6 @@ class FittingController(QObject):
             return np.asarray(q_coords, dtype=float)
 
         except Exception as e:
-            # ?????????????????????????
             try:
                 self._add_fitting_message(f"Pixel to {conversion_type} conversion failed: {str(e)}", "ERROR")
             except Exception:
@@ -10442,18 +10238,20 @@ class FittingController(QObject):
                 return coords
             return (coords - coords.mean()) / std
 
+    # 函数说明：转换像素 to Qy。
     def _convert_pixel_to_qy(self, pixel_coords):
         """qy"""
         return self._convert_pixel_coords_to_q(pixel_coords, 'qy')
 
+    # 函数说明：转换像素 to Qz。
     def _convert_pixel_to_qz(self, pixel_coords):
         """qz"""
         return self._convert_pixel_coords_to_q(pixel_coords, 'qz')
 
+    # 函数说明：绘制切线 结果。
     def _plot_cut_result(self, x_coords, y_intensity, x_label, y_label, title):
         """No description."""
         try:
-            # ?????????????q,I ?????????????????
             x_arr = np.asarray(x_coords, dtype=float)
             y_arr = np.asarray(y_intensity, dtype=float)
             rows_for_debug = None
@@ -10474,7 +10272,6 @@ class FittingController(QObject):
             self.q = x_arr
             self.I = y_arr
 
-            # ??????????????????????
             self.current_cut_data = {
                 'x_coords': x_arr.copy() if hasattr(x_arr, 'copy') else list(x_arr),
                 'y_intensity': y_arr.copy() if hasattr(y_arr, 'copy') else list(y_arr),
@@ -10483,7 +10280,6 @@ class FittingController(QObject):
                 'title': title,
                 'q_source_unit': 'nm'
             }
-            # ????????Cut?????????????q?????????????
             try:
                 import time
                 self.cut = {
@@ -10500,7 +10296,6 @@ class FittingController(QObject):
                     }
                 }
             except Exception:
-                # ??????????????????
                 self.cut = {'q': x_arr, 'I': y_arr, 'meta': {'source': 'cut'}}
 
             if getattr(self, "_suppress_workflow_plot_updates", False):
@@ -10511,19 +10306,14 @@ class FittingController(QObject):
                                   "matplotlib library is required for plotting.\nPlease install it using: pip install matplotlib")
                 return
 
-            # ?????????
             options = self._display_manager.get_display_options()
 
-            # ??????????????
-            # ???????ut?????_coords?????q????????
             if "q" in x_label.lower():
-                # ???x???q????????D?????????
                 self._display_manager.plot_1d_data(
                     x_arr, y_arr, None, title, "cut_data",
                     options['log_x'], options['log_y'], options['normalize']
                 )
             else:
-                # ???x???????????????????????????
                 self._plot_cut_data_legacy(x_arr, y_arr, x_label, y_label, title, options)
 
             self.status_updated.emit(f"Cut result plotted: {title}")
@@ -10536,10 +10326,10 @@ class FittingController(QObject):
                 f"Failed to plot cut result:\n{str(e)}"
             )
 
+    # 函数说明：绘制切线 数据 legacy。
     def _plot_cut_data_legacy(self, x_coords, y_intensity, x_label, y_label, title, options):
         """No description."""
         try:
-            # ??????????
             y_data = np.array(y_intensity)
             if options['normalize']:
                 max_intensity = np.max(y_data)
@@ -10547,48 +10337,38 @@ class FittingController(QObject):
                     y_data = y_data / max_intensity
                     y_label = "Normalized Intensity"
 
-            # ??????
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-            # ???????????????
             scene = self._setup_fit_graphics_scene()
             if scene is None:
                 return
 
-            # ???matplotlib???
             fig = Figure(figsize=(8, 6), dpi=80)
             canvas = FigureCanvas(fig)
             ax = fig.add_subplot(111)
 
-            # ???????????????
             self._plot_cut_data_with_log_handling(ax, x_coords, y_data, options['log_x'], markersize=4, linewidth=1.5)
 
-            # ????????
             ax.set_xlabel(x_label, fontsize=13)
             ax.set_ylabel(y_label, fontsize=13)
             ax.set_title(title, fontsize=15)
             ax.grid(True, alpha=0.3)
 
-            # ???????????
             for axis in ['top', 'bottom', 'left', 'right']:
                 ax.spines[axis].set_linewidth(1.8)
             ax.tick_params(axis='both', which='both', width=1.6, labelsize=12)
 
-            # ????????????
             if options['log_x']:
                 ax.set_xscale('log')
             if options['log_y']:
                 ax.set_yscale('log')
 
-            # ??????
             fig.tight_layout()
 
-            # ????????
             proxy_widget = scene.addWidget(canvas)
             self._fit_view_to_item(self.ui.fitGraphicsView, proxy_widget, keep_aspect=True)
 
-            # ?????????????????????????????
             if self.independent_fit_window is not None and self.independent_fit_window.isVisible():
                 self.independent_fit_window.update_plot(
                     x_coords, y_intensity, x_label, y_label, title,
@@ -10602,6 +10382,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Legacy plot cut data error: {str(e)}")
 
+    # 函数说明：获取复选框 状态。
     def _get_checkbox_state(self, checkbox_name: str, default_value: bool = False) -> bool:
         """No description."""
         try:
@@ -10612,19 +10393,22 @@ class FittingController(QObject):
         except Exception:
             return default_value
 
+    # 函数说明：判断拟合 对数 x enabled是否成立。
     def _is_fit_log_x_enabled(self):
         """No description."""
         return self._get_checkbox_state('fitLogXCheckBox', False)
 
+    # 函数说明：判断拟合 对数 y enabled是否成立。
     def _is_fit_log_y_enabled(self):
         """No description."""
         return self._get_checkbox_state('fitLogYCheckBox', False)
 
+    # 函数说明：判断拟合 norm enabled是否成立。
     def _is_fit_norm_enabled(self):
         """No description."""
-        # ??itNormCheckBox
         return self._get_checkbox_state('fitNormCheckBox', False)
 
+    # 函数说明：获取Q 显示 unit。
     def _get_q_display_unit(self):
         """No description."""
         try:
@@ -10643,6 +10427,7 @@ class FittingController(QObject):
             pass
         return 'nm'
 
+    # 函数说明：获取Q source unit。
     def _get_q_source_unit(self, source=None):
         """No description."""
         try:
@@ -10669,16 +10454,19 @@ class FittingController(QObject):
             pass
         return getattr(self, '_imported_1d_q_unit', 'angstrom')
 
+    # 函数说明：获取Q 显示 缩放。
     def _get_q_display_scale(self):
         """No description."""
         return 0.1 if self._get_q_display_unit() == 'angstrom' else 1.0
 
+    # 函数说明：获取Q unit label。
     def _get_q_unit_label(self, mathtext: bool = True):
         """No description."""
         if self._get_q_display_unit() == 'nm':
             return 'nm$^{-1}$' if mathtext else 'nm^-1'
         return r'$\AA^{-1}$' if mathtext else 'Angstrom^-1'
 
+    # 函数说明：转换Q 值 for 模型。
     def _convert_q_values_for_model(self, q_values, source=None):
         """No description."""
         q_arr = np.asarray([] if q_values is None else q_values, dtype=float)
@@ -10686,6 +10474,7 @@ class FittingController(QObject):
             return q_arr
         return q_arr * 10.0 if self._get_q_source_unit(source) == 'angstrom' else q_arr
 
+    # 函数说明：转换Q 值 for 显示。
     def _convert_q_values_for_display(self, q_values, source=None):
         """No description."""
         q_nm = self._convert_q_values_for_model(q_values, source=source)
@@ -10693,6 +10482,7 @@ class FittingController(QObject):
             return q_nm
         return q_nm * self._get_q_display_scale()
 
+    # 函数说明：构建Q 坐标轴 label。
     def _build_q_axis_label(self, filter_mode: str = 'all', absolute: bool = False, mathtext: bool = True):
         """No description."""
         unit_label = self._get_q_unit_label(mathtext=mathtext)
@@ -10704,8 +10494,9 @@ class FittingController(QObject):
             suffix = ' [Negative Only]'
         return f'{base} ({unit_label}){suffix}'
 
+    # 函数说明：判断正值 only enabled是否成立。
     def _is_positive_only_enabled(self):
-        """ositive Only????????????q"""
+        """Update axis filtering when the Positive Only option changes."""
         for owner, name in (
             (self.ui, 'fitRegionPositiveOnlyCheckBox'),
             (self.ui, 'PositiveOnlyCheckBox'),
@@ -10718,6 +10509,7 @@ class FittingController(QObject):
                 pass
         return False
 
+    # 函数说明：判断负值 only enabled是否成立。
     def _is_negative_only_enabled(self):
         """No description."""
         for owner, name in (
@@ -10731,6 +10523,7 @@ class FittingController(QObject):
                 pass
         return False
 
+    # 函数说明：获取独立 坐标轴 过滤 模式。
     def _get_independent_axis_filter_mode(self):
         """No description."""
         if self._is_negative_only_enabled():
@@ -10739,6 +10532,7 @@ class FittingController(QObject):
             return 'positive'
         return 'all'
 
+    # 函数说明：同步坐标轴 过滤 controls。
     def _sync_axis_filter_controls(self):
         """No description."""
         if getattr(self, '_syncing_axis_filter', False):
@@ -10769,6 +10563,7 @@ class FittingController(QObject):
                         mode = 'negative' if sender.isChecked() else 'all'
                         break
 
+            # 函数说明：设置checked。
             def _set_checked(owner, name, checked):
                 try:
                     if owner is None or not hasattr(owner, name):
@@ -10787,6 +10582,7 @@ class FittingController(QObject):
         finally:
             self._syncing_axis_filter = False
 
+    # 函数说明：实现 过滤 Q 数据 for 独立 显示 相关逻辑。
     def _filter_q_data_for_independent_display(self, q_data, y_data=None):
         """No description."""
         q_arr = np.asarray([] if q_data is None else q_data)
@@ -10822,6 +10618,7 @@ class FittingController(QObject):
 
         return q_raw, q_plot, y_arr, filter_mode
 
+    # 函数说明：获取拟合 y 范围 模式。
     def _get_fit_y_range_mode(self):
         """No description."""
         try:
@@ -10833,6 +10630,7 @@ class FittingController(QObject):
             pass
         return 'all'
 
+    # 函数说明：实现 valid y 值 for limits 相关逻辑。
     def _valid_y_values_for_limits(self, y_values, log_y=False):
         """No description."""
         try:
@@ -10846,6 +10644,7 @@ class FittingController(QObject):
         except Exception:
             return np.asarray([], dtype=float)
 
+    # 函数说明：应用拟合 y 坐标轴 limits。
     def _apply_fit_y_axis_limits(self, ax, experimental_y=None, fitting_y=None,
                                  extra_y_values=None, log_y=False):
         """No description."""
@@ -10893,6 +10692,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 归一化 intensity 数据 相关逻辑。
     def _normalize_intensity_data(self, I_data):
         """No description."""
         if len(I_data) == 0:
@@ -10902,6 +10702,7 @@ class FittingController(QObject):
             return I_data / max_I
         return I_data
 
+    # 函数说明：应用对数 scales。
     def _apply_log_scales(self, ax, log_x=False, log_y=False):
         """No description."""
         if log_x:
@@ -10909,6 +10710,7 @@ class FittingController(QObject):
         if log_y:
             ax.set_yscale('log')
 
+    # 函数说明：判断是否存在valid 数据。
     def _has_valid_data(self):
         """,I"""
         return (hasattr(self, 'q') and hasattr(self, 'I') and
@@ -10916,20 +10718,19 @@ class FittingController(QObject):
                 len(self.q) > 0 and len(self.I) > 0)
 
     # =========================================================================
-    # FittingTextBrowser ?????????
     # =========================================================================
 
+    # 函数说明：配置拟合 text browser。
     def _setup_fitting_text_browser(self):
         """No description."""
         if hasattr(self.ui, 'FittingTextBrowser'):
-            # ???status_updated?????ittingTextBrowser
             self.status_updated.connect(self._update_fitting_text_browser)
 
-            # ????ittingTextBrowser
             self.ui.FittingTextBrowser.clear()
             self._add_fitting_message("Fitting Controller initialized", "INFO")
             self._init_fitting_textbrowser_enhancements()
 
+    # 函数说明：初始化拟合 textbrowser enhancements。
     def _init_fitting_textbrowser_enhancements(self):
         """Initialize FittingTextBrowser enhancements: fixed height, context menu, detachable window."""
         tb = getattr(self.ui, 'FittingTextBrowser', None)
@@ -10940,10 +10741,10 @@ class FittingController(QObject):
         tb.setMaximumHeight(100)
         if self._fitting_browser_original_height is None:
             self._fitting_browser_original_height = tb.height()
-        # ????????????
         tb.setContextMenuPolicy(Qt.CustomContextMenu)
         tb.customContextMenuRequested.connect(self._show_fitting_browser_menu)
 
+    # 函数说明：显示拟合 browser menu。
     def _show_fitting_browser_menu(self, pos: QPoint):
         tb = getattr(self.ui, 'FittingTextBrowser', None)
         if tb is None:
@@ -10981,6 +10782,7 @@ class FittingController(QObject):
                 self._fitting_messages_max_lines = val
                 self._trim_fitting_messages_if_needed()
 
+    # 函数说明：实现 打开 detached 拟合 browser 相关逻辑。
     def _open_detached_fitting_browser(self):
         tb = getattr(self.ui, 'FittingTextBrowser', None)
         if tb is None:
@@ -10998,6 +10800,7 @@ class FittingController(QObject):
         layout.addWidget(browser)
         dlg.resize(640, 420)
         self._detached_fitting_dialog = dlg
+        # 函数说明：实现 sync 相关逻辑。
         def sync(msg_html):
             try: browser.append(msg_html)
             except Exception: pass
@@ -11006,10 +10809,12 @@ class FittingController(QObject):
         dlg.finished.connect(self._on_detached_closed)
         dlg.show()
 
+    # 函数说明：处理detached closed事件。
     def _on_detached_closed(self, *_):
         self._detached_fitting_dialog = None
         self._detached_append = None
 
+    # 函数说明：实现 trim 拟合 消息 if needed 相关逻辑。
     def _trim_fitting_messages_if_needed(self):
         tb = getattr(self.ui, 'FittingTextBrowser', None)
         if tb is None:
@@ -11032,11 +10837,13 @@ class FittingController(QObject):
             self._detached_append(notice)
 
 
+    # 函数说明：更新拟合 text browser。
     def _update_fitting_text_browser(self, message: str):
         """No description."""
         if hasattr(self.ui, 'FittingTextBrowser'):
             self._add_fitting_message(message, "STATUS")
 
+    # 函数说明：添加拟合 消息。
     def _add_fitting_message(self, message: str, msg_type: str = "INFO"):
         """ittingTextBrowser"""
         if not hasattr(self.ui, 'FittingTextBrowser'):
@@ -11045,53 +10852,52 @@ class FittingController(QObject):
         from datetime import datetime
         timestamp = datetime.now().strftime("%H:%M:%S")
 
-        # ???????????????
         color_map = {
-            "INFO": "#2E86AB",      # ???
-            "STATUS": "#28A745",    # ???
-            "WARNING": "#FD7E14",   # ???
-            "ERROR": "#DC3545",     # ???
-            "SUCCESS": "#198754",   # ?????
-            "PARTICLE": "#6F42C1"   # ???????????
+            "INFO": "#333333",
+            "STATUS": "#2563eb",
+            "WARNING": "#d97706",
+            "ERROR": "#dc2626",
+            "SUCCESS": "#16a34a",
+            "PARTICLE": "#7c3aed",
         }
 
         color = color_map.get(msg_type, "#333333")
 
-        # ????????
         formatted_message = f'<span style="color: {color};">[{timestamp}] {msg_type}: {message}</span>'
 
-        # ?????ittingTextBrowser
         self.ui.FittingTextBrowser.append(formatted_message)
-        # ??????????
         if self._detached_append:
             try:
                 self._detached_append(formatted_message)
             except Exception:
                 pass
-        # ??????
         self._trim_fitting_messages_if_needed()
 
-        # ??????????
         cursor = self.ui.FittingTextBrowser.textCursor()
         cursor.movePosition(cursor.End)
         self.ui.FittingTextBrowser.setTextCursor(cursor)
 
+    # 函数说明：添加拟合 警告。
     def _add_fitting_warning(self, message: str):
         """No description."""
         self._add_fitting_message(message, "WARNING")
 
+    # 函数说明：添加拟合 错误。
     def _add_fitting_error(self, message: str):
         """No description."""
         self._add_fitting_message(message, "ERROR")
 
+    # 函数说明：添加拟合 成功。
     def _add_fitting_success(self, message: str):
         """No description."""
         self._add_fitting_message(message, "SUCCESS")
 
+    # 函数说明：添加粒子 消息。
     def _add_particle_message(self, message: str):
         """No description."""
         self._add_fitting_message(message, "PARTICLE")
 
+    # 函数说明：清除拟合 消息。
     def clear_fitting_messages(self):
         """Clear fitting messages in both embedded and detached browser."""
         if hasattr(self.ui, 'FittingTextBrowser'):
@@ -11104,12 +10910,14 @@ class FittingController(QObject):
                         child.clear()
                         child.append('<span style="color:#2E86AB;">[INFO] Messages cleared</span>')
 
+    # 函数说明：获取拟合 消息。
     def get_fitting_messages(self) -> str:
         """No description."""
         if hasattr(self.ui, 'FittingTextBrowser'):
             return self.ui.FittingTextBrowser.toPlainText()
         return ""
 
+    # 函数说明：保存拟合 对数。
     def save_fitting_log(self, filepath: str) -> bool:
         """No description."""
         try:
@@ -11127,45 +10935,40 @@ class FittingController(QObject):
             return False
 
     # =========================================================================
-    # ???????????- ?????????????????
     # =========================================================================
 
+    # 函数说明：配置粒子 形状 connector。
     def _setup_particle_shape_connector(self):
         """No description."""
         self._initialize_particle_ui_registry()
         if not getattr(self, 'particle_shape_configs', None):
             self.particle_shape_configs = {}
 
-        # ????????? - ???????????????
         self.particle_control_types = {
             shape: [field[1] for field in schema]
             for shape, schema in COMPONENT_PARAMETER_SCHEMAS.items()
         }
 
-        # ??????
         self._setup_particle_connections()
 
-        # ????????????
         self._setup_particle_parameter_connections()
 
-        # ???????????????
         self._setup_global_parameter_connections()
 
-        # ?????????????????????
         self._setup_parameter_ranges()
 
-        # ?????????????????????????
         self._initialize_particle_states()
 
-        # ??????????????
         self._initialize_global_parameters()
 
         self._add_fitting_success("Particle Shape Connector initialized")
 
+    # 函数说明：实现 iter 粒子 控件 ids 相关逻辑。
     def _iter_particle_widget_ids(self):
         """No description."""
         return sorted(self.particle_shape_configs.keys()) if getattr(self, 'particle_shape_configs', None) else []
 
+    # 函数说明：实现 collect 活动 粒子 相关逻辑。
     def _collect_active_particles(self):
         """No description."""
         active_shapes = []
@@ -11181,6 +10984,7 @@ class FittingController(QObject):
                 widget_order.append(widget_id)
         return active_shapes, widget_order
 
+    # 函数说明：获取粒子 sequence flags。
     def _get_particle_sequence_flags(self):
         """No description."""
         flags = {}
@@ -11190,12 +10994,14 @@ class FittingController(QObject):
             flags[idx] = self._get_checkbox_state(checkbox_name, False)
         return flags
 
+    # 函数说明：实现 sequence index to 控件 id 相关逻辑。
     def _sequence_index_to_widget_id(self, seq_index: int):
         sequence = getattr(self, '_last_active_particle_ids', []) or []
         if 1 <= seq_index <= len(sequence):
             return sequence[seq_index - 1]
         return None
 
+    # 函数说明：初始化粒子 界面 registry。
     def _initialize_particle_ui_registry(self):
         """No description."""
         try:
@@ -11229,6 +11035,7 @@ class FittingController(QObject):
         self._next_particle_candidate = idx
         self._schedule_model_parameters_region_refresh()
 
+    # 函数说明：实现 prepare dynamic show 复选框 area 相关逻辑。
     def _prepare_dynamic_show_checkbox_area(self):
         if self._dynamic_show_layout is not None:
             return
@@ -11262,7 +11069,6 @@ class FittingController(QObject):
         self._dynamic_show_layout = layout
         self._particle_checkbox_host_name = 'fitFittingShowWidget'
 
-        # ?????????????????????????????????
         if hasattr(base_layout, 'addWidget'):
             if hasattr(base_layout, 'rowCount'):
                 row_index = base_layout.rowCount()
@@ -11273,6 +11079,7 @@ class FittingController(QObject):
                     pass
             base_layout.addWidget(self._dynamic_show_container)
 
+    # 函数说明：实现 register existing 粒子 控件 相关逻辑。
     def _register_existing_particle_widget(self, widget_id: int):
         widget = getattr(self.ui, f'fitParticleWidget_{widget_id}', None)
         if widget is None:
@@ -11290,6 +11097,7 @@ class FittingController(QObject):
         if checkbox is not None:
             self._register_particle_show_checkbox(widget_id, checkbox)
 
+    # 函数说明：构建粒子 config。
     def _build_particle_config(self, widget_id: int) -> dict:
         pages = {
             index: {'name': shape_name, 'page_index': index}
@@ -11301,6 +11109,7 @@ class FittingController(QObject):
             'pages': pages
         }
 
+    # 函数说明：实现 register 粒子 show 复选框 相关逻辑。
     def _register_particle_show_checkbox(self, widget_id: int, checkbox: QCheckBox = None):
         if checkbox is None:
             checkbox = self._create_particle_show_checkbox(widget_id)
@@ -11317,6 +11126,7 @@ class FittingController(QObject):
         self._particle_show_checkboxes[widget_id] = checkbox
         return checkbox
 
+    # 函数说明：创建粒子 show 复选框。
     def _create_particle_show_checkbox(self, widget_id: int):
         self._prepare_dynamic_show_checkbox_area()
         parent = self._dynamic_show_container or getattr(self.ui, 'fitFittingShowWidget', None)
@@ -11331,6 +11141,7 @@ class FittingController(QObject):
             parent.layout().addWidget(checkbox)
         return checkbox
 
+    # 函数说明：实现 insert 粒子 复选框 控件 相关逻辑。
     def _insert_particle_checkbox_widget(self, checkbox: QCheckBox, widget_id: int):
         layout = self._dynamic_show_layout
         if layout is None:
@@ -11354,12 +11165,15 @@ class FittingController(QObject):
         if not inserted:
             layout.addWidget(checkbox)
 
+    # 函数说明：实现 形状 key 相关逻辑。
     def _shape_key(self, shape_name: str) -> str:
         return str(shape_name).strip().lower().replace("-", "_").replace(" ", "_")
 
+    # 函数说明：实现 形状 object token 相关逻辑。
     def _shape_object_token(self, shape_name: str) -> str:
         return ''.join(part.capitalize() for part in self._shape_key(shape_name).split('_'))
 
+    # 函数说明：实现 形状 显示 name 相关逻辑。
     def _shape_display_name(self, shape_name: str) -> str:
         shape_key = self._shape_key(shape_name)
         for candidate in COMPONENT_ORDER:
@@ -11367,6 +11181,7 @@ class FittingController(QObject):
                 return candidate
         return str(shape_name)
 
+    # 函数说明：实现 参数 key from alias 相关逻辑。
     def _parameter_key_from_alias(self, shape_name: str, param_name: str) -> str:
         """Map fitting-template names (Int, sigma_R, h) to stored parameter keys."""
         alias = str(param_name)
@@ -11389,6 +11204,7 @@ class FittingController(QObject):
                     return param_key
         return alias
 
+    # 函数说明：实现 rebuild 粒子 控件 editor 相关逻辑。
     def _rebuild_particle_widget_editor(self, container: QWidget, widget_id: int) -> None:
         old_layout = container.layout()
         if old_layout is not None:
@@ -11464,6 +11280,7 @@ class FittingController(QObject):
         self._register_ui_children(container)
         QTimer.singleShot(0, lambda widget=container: self._sync_particle_widget_height(widget))
 
+    # 函数说明：创建粒子 参数 page。
     def _create_particle_parameter_page(self, parent: QWidget, widget_id: int, shape_name: str) -> QWidget:
         page = QWidget(parent)
         page.setObjectName(f"fitParticle{self._shape_object_token(shape_name)}Page_{widget_id}")
@@ -11507,6 +11324,7 @@ class FittingController(QObject):
         page.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         return page
 
+    # 函数说明：创建粒子 控件。
     def _create_particle_widget(self, widget_id: int) -> QWidget:
         parent = getattr(self, '_particle_scroll_container', getattr(self.ui, 'scrollAreaWidgetContents', self.ui))
         container = QWidget(parent)
@@ -11515,6 +11333,7 @@ class FittingController(QObject):
         self._apply_particle_widget_style(container, widget_id)
         return container
 
+    # 函数说明：应用粒子 控件 style。
     def _apply_particle_widget_style(self, widget: QWidget, widget_id: int):
         if widget is None:
             return
@@ -11585,6 +11404,7 @@ class FittingController(QObject):
             "}"
         )
 
+    # 函数说明：实现 register 界面 children 相关逻辑。
     def _register_ui_children(self, widget: QWidget):
         if widget is None:
             return
@@ -11596,6 +11416,7 @@ class FittingController(QObject):
         if name:
             setattr(self.ui, name, widget)
 
+    # 函数说明：处理粒子 clicked事件。
     def _on_add_particle_clicked(self):
         try:
             widget_id = self._allocate_particle_id()
@@ -11607,6 +11428,7 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Failed to add particle widget: {e}")
 
+    # 函数说明：实现 allocate 粒子 id 相关逻辑。
     def _allocate_particle_id(self) -> int:
         if self._recycled_particle_ids:
             self._recycled_particle_ids.sort()
@@ -11617,6 +11439,7 @@ class FittingController(QObject):
         self._next_particle_candidate = candidate + 1
         return candidate
 
+    # 函数说明：实现 attach 粒子 控件 相关逻辑。
     def _attach_particle_widget(self, widget: QWidget, widget_id: int):
         if widget is None:
             return
@@ -11640,6 +11463,7 @@ class FittingController(QObject):
         self._initialize_particle_states([widget_id])
         self._schedule_model_parameters_region_refresh()
 
+    # 函数说明：同步粒子 控件 height。
     def _sync_particle_widget_height(self, widget: QWidget):
         if widget is None:
             return
@@ -11655,12 +11479,14 @@ class FittingController(QObject):
         widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         widget.updateGeometry()
 
+    # 函数说明：调度模型 参数 区域 刷新。
     def _schedule_model_parameters_region_refresh(self):
         try:
             QTimer.singleShot(0, self._refresh_model_parameters_region_height)
         except Exception:
             self._refresh_model_parameters_region_height()
 
+    # 函数说明：刷新模型 参数 区域 height。
     def _refresh_model_parameters_region_height(self):
         model_card = self.ui.gisaxsFittingPage.findChild(QWidget, 'ModelParameterCard') if hasattr(self.ui, 'gisaxsFittingPage') else None
         work_splitter = self.ui.gisaxsFittingPage.findChild(QWidget, 'gisaxsMainWorkSplitter') if hasattr(self.ui, 'gisaxsFittingPage') else None
@@ -11713,6 +11539,7 @@ class FittingController(QObject):
             work_area_contents.setMinimumHeight(work_splitter.minimumHeight() + vertical_margins)
             work_area_contents.updateGeometry()
 
+    # 函数说明：实现 install 粒子 context menu 相关逻辑。
     def _install_particle_context_menu(self, widget: QWidget, widget_id: int):
         if widget is None:
             return
@@ -11723,6 +11550,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：处理粒子 context menu request。
     def _handle_particle_context_menu_request(self, pos: QPoint):
         widget = self.sender()
         if widget is None:
@@ -11733,6 +11561,7 @@ class FittingController(QObject):
         global_pos = widget.mapToGlobal(pos)
         self._show_particle_context_menu(int(widget_id), global_pos)
 
+    # 函数说明：显示粒子 context menu。
     def _show_particle_context_menu(self, widget_id: int, global_pos: QPoint):
         menu = QMenu(self.ui)
         remove_action = menu.addAction('Remove Particle')
@@ -11742,6 +11571,7 @@ class FittingController(QObject):
         if action == remove_action:
             self._remove_particle_widget(widget_id)
 
+    # 函数说明：移除粒子 控件。
     def _remove_particle_widget(self, widget_id: int):
         if widget_id not in self.particle_shape_configs:
             return
@@ -11789,6 +11619,7 @@ class FittingController(QObject):
         self._schedule_model_parameters_region_refresh()
         self._add_fitting_success(f"Particle {widget_id} removed")
 
+    # 函数说明：实现 cleanup 粒子 界面 attributes 相关逻辑。
     def _cleanup_particle_ui_attributes(self, widget_id: int):
         names = [
             f'fitParticleWidget_{widget_id}',
@@ -11814,6 +11645,7 @@ class FittingController(QObject):
                 except Exception:
                     pass
 
+    # 函数说明：配置粒子 connections。
     def _setup_particle_connections(self, widget_ids=None):
         """widget"""
         widget_ids = widget_ids or self._iter_particle_widget_ids()
@@ -11822,7 +11654,6 @@ class FittingController(QObject):
             if hasattr(self.ui, config['combobox']):
                 combobox = getattr(self.ui, config['combobox'])
 
-                # ???ComboBox???????????
                 combobox.currentIndexChanged.connect(
                     lambda index, wid=widget_id: self._on_particle_shape_changed(wid, index)
                 )
@@ -11834,14 +11665,13 @@ class FittingController(QObject):
 
                 self._add_fitting_message(f"Connected Particle Widget {widget_id}: {config['combobox']} -> {config['stack_widget']}", "INFO")
 
+    # 函数说明：配置参数 ranges。
     def _setup_parameter_ranges(self, widget_ids=None):
         """No description."""
-        # ???????????????????????ython float??????
-        min_value = -1e10  # ??????
-        max_value = 1e10   # ??????
-        decimals = 2       # 2????????
+        min_value = -1e10
+        max_value = 1e10
+        decimals = 2
 
-        # ???????????
         widgets_set = 0
 
         # Configure component parameter controls from the dynamic schema.
@@ -11859,7 +11689,6 @@ class FittingController(QObject):
                         widget.setSingleStep(step_by_param.get(param_key, 0.1))
                         widgets_set += 1
 
-        # ??????????????????
         if hasattr(self.ui, 'fitBGValue'):
             self.ui.fitBGValue.setRange(min_value, max_value)
             self.ui.fitBGValue.setDecimals(6)
@@ -11868,7 +11697,7 @@ class FittingController(QObject):
 
         if hasattr(self.ui, 'fitSigmaResValue'):
             self.ui.fitSigmaResValue.setRange(min_value, max_value)
-            self.ui.fitSigmaResValue.setDecimals(6)  # Br ???????
+            self.ui.fitSigmaResValue.setDecimals(6)
             self.ui.fitSigmaResValue.setSingleStep(0.1)
             widgets_set += 1
 
@@ -11886,12 +11715,13 @@ class FittingController(QObject):
 
         if hasattr(self.ui, 'fitKValue'):
             self.ui.fitKValue.setRange(min_value, max_value)
-            self.ui.fitKValue.setDecimals(4)  # k?????????
-            self.ui.fitKValue.setSingleStep(0.1)  # k????????1
+            self.ui.fitKValue.setDecimals(4)
+            self.ui.fitKValue.setSingleStep(0.1)
             widgets_set += 1
 
         self._add_fitting_success(f"Set ranges for {widgets_set} parameter widgets: [{min_value}, {max_value}] with {decimals} decimals")
 
+    # 函数说明：配置粒子 参数 connections。
     def _setup_particle_parameter_connections(self, widget_ids=None):
         """No description."""
         from functools import partial
@@ -11904,22 +11734,19 @@ class FittingController(QObject):
                     if not hasattr(self.ui, widget_name):
                         continue
                     w = getattr(self.ui, widget_name)
+                    # 函数说明：实现 after commit 相关逻辑。
                     def _after_commit(info, value, wid=widget_id, shp=shape_lower, p=param_key):
                         try:
                             self._add_particle_message(f"Meta commit {wid}.{shp}.{p} = {value}")
-                            # ???????????????????????????????????????????
-                            # ?????????????????(cut ??1d)?????????????
                             has_data = (hasattr(self, 'current_cut_data') and self.current_cut_data is not None) or \
                                        (hasattr(self, 'current_1d_data') and self.current_1d_data is not None)
                             if has_data:
-                                # ???????????????????????????????????????
                                 try:
                                     self.display_mode = 'fitting'
                                     self._display_mode = 'fitting'
                                     self._fitting_mode_active = True
                                 except Exception:
                                     pass
-                                # ???????????????????????? 1D ???
                                 self._perform_manual_fitting()
                         except Exception:
                             pass
@@ -11947,8 +11774,8 @@ class FittingController(QObject):
                         meta=meta
                     )
                     self._particle_parameter_meta_ids[widget_id].append(meta_id)
-                    # ??meta ????????connect_mode ?????
 
+    # 函数说明：配置全局 参数 connections。
     def _setup_global_parameter_connections(self):
         """No description."""
         from functools import partial
@@ -11963,13 +11790,13 @@ class FittingController(QObject):
             if not hasattr(self.ui, widget_name):
                 continue
             w = getattr(self.ui, widget_name)
+            # 函数说明：实现 after commit 相关逻辑。
             def _after_commit(info, value, p=param_key):
                 try:
                     self._add_particle_message(f"Meta commit global {p} = {value}")
                     has_data = (hasattr(self, 'current_cut_data') and self.current_cut_data is not None) or \
                                (hasattr(self, 'current_1d_data') and self.current_1d_data is not None)
                     if has_data:
-                        # ???????????????????????
                         try:
                             self.display_mode = 'fitting'
                             self._display_mode = 'fitting'
@@ -11999,10 +11826,10 @@ class FittingController(QObject):
                 connect_signals=True,
                 meta=meta
             )
-            # ??meta ????????connect_mode ?????
             self._add_fitting_message(f"Connected (meta, mode={self._signal_mode_overrides.get(widget_name, self._default_signal_mode)}) {widget_name}", "INFO")
 
 
+    # 函数说明：初始化全局 参数。
     def _initialize_global_parameters(self):
         """No description."""
         try:
@@ -12013,7 +11840,6 @@ class FittingController(QObject):
                 self.ui.fitBGValue.blockSignals(False)
                 self._add_fitting_message(f"Initialized fitBGValue to {saved_value}", "INFO")
 
-            # ????sigma_res
             if hasattr(self.ui, 'fitSigmaResValue'):
                 saved_value = self.model_params_manager.get_global_parameter('fitting', 'sigma_res', 0.1)
                 self.ui.fitSigmaResValue.blockSignals(True)
@@ -12021,7 +11847,6 @@ class FittingController(QObject):
                 self.ui.fitSigmaResValue.blockSignals(False)
                 self._add_fitting_message(f"Initialized fitSigmaResValue to {saved_value}", "INFO")
 
-            # ????nu_res
             if hasattr(self.ui, 'fitNuResValue'):
                 saved_value = self.model_params_manager.get_global_parameter('fitting', 'nu_res', 5.0)
                 self.ui.fitNuResValue.blockSignals(True)
@@ -12029,7 +11854,6 @@ class FittingController(QObject):
                 self.ui.fitNuResValue.blockSignals(False)
                 self._add_fitting_message(f"Initialized fitNuResValue to {saved_value}", "INFO")
 
-            # ????int_res
             if hasattr(self.ui, 'fitIntResValue'):
                 saved_value = self.model_params_manager.get_global_parameter('fitting', 'int_res', 0.0)
                 self.ui.fitIntResValue.blockSignals(True)
@@ -12037,7 +11861,6 @@ class FittingController(QObject):
                 self.ui.fitIntResValue.blockSignals(False)
                 self._add_fitting_message(f"Initialized fitIntResValue to {saved_value}", "INFO")
 
-            # ????k_value
             if hasattr(self.ui, 'fitKValue'):
                 saved_value = self.model_params_manager.get_global_parameter('fitting', 'k_value', 1.0)
                 self.ui.fitKValue.blockSignals(True)
@@ -12048,28 +11871,25 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Failed to initialize global parameters: {e}")
 
+    # 函数说明：初始化粒子 states。
     def _initialize_particle_states(self, widget_ids=None):
         """SON"""
         try:
-            # ????????????????????
             self._initializing = True
 
             target_ids = widget_ids or self._iter_particle_widget_ids()
             for widget_id in target_ids:
                 particle_id = f"particle_{widget_id}"
 
-                # ??SON??????????????????
                 saved_shape = self.model_params_manager.get_particle_shape('fitting', particle_id)
                 is_enabled = self.model_params_manager.get_particle_enabled('fitting', particle_id)
 
                 self._add_fitting_message(f"Initializing {particle_id}: shape={saved_shape}, enabled={is_enabled}", "INFO")
 
-                # ???ComboBox????????????????????
                 config = self.particle_shape_configs[widget_id]
                 if hasattr(self.ui, config['combobox']):
                     combobox = getattr(self.ui, config['combobox'])
 
-                    # ????????ombo index
                     combo_index = None
                     for index, page_config in config['pages'].items():
                         if page_config['name'] == saved_shape:
@@ -12077,22 +11897,17 @@ class FittingController(QObject):
                             break
 
                     if combo_index is not None:
-                        # ???????????
                         combobox.blockSignals(True)
                         combobox.setCurrentIndex(combo_index)
                         combobox.blockSignals(False)
 
-                        # ??????
                         page_config = config['pages'][combo_index]
                         self._switch_particle_page(widget_id, page_config, saved_shape)
 
-                        # ?????????????
                         if not is_enabled or saved_shape == 'None':
-                            # ??????
                             self._freeze_particle_controls(widget_id)
                             self._add_fitting_message(f"{particle_id} controls frozen (disabled/None)", "INFO")
                         else:
-                            # ??????????????
                             self._unfreeze_particle_controls(widget_id, saved_shape)
                             self._load_particle_parameters_from_json(widget_id, saved_shape)
                             self._add_fitting_message(f"{particle_id} controls active with {saved_shape} parameters", "INFO")
@@ -12102,10 +11917,10 @@ class FittingController(QObject):
             import traceback
             self._add_fitting_error(f"Traceback: {traceback.format_exc()}")
         finally:
-            # ??????????
             self._initializing = False
             self._schedule_model_parameters_region_refresh()
 
+    # 函数说明：设置粒子 page and 状态。
     def _set_particle_page_and_state(self, widget_id: int, combo_index: int, shape_name: str):
         """No description."""
         config = self.particle_shape_configs[widget_id]
@@ -12114,15 +11929,14 @@ class FittingController(QObject):
         if hasattr(self.ui, config['stack_widget']):
             stack_widget = getattr(self.ui, config['stack_widget'])
 
-            # ??????
             stack_widget.setCurrentIndex(page_config['page_index'])
 
-            # ??????????
             if shape_name == 'None':
                 self._set_particle_none_state(widget_id)
             else:
                 self._set_particle_active_state(widget_id, shape_name)
 
+    # 函数说明：加载粒子 参数。
     def _load_particle_parameters(self, widget_id: int, shape_name: str):
         """UI"""
         if shape_name == 'None':
@@ -12132,21 +11946,17 @@ class FittingController(QObject):
             particle_id = f"particle_{widget_id}"
             shape_key = self._shape_key(shape_name)
 
-            # ?????????
             param_mapping = self._get_parameter_widget_mapping(widget_id, shape_name)
 
-            # ??????????????????????
             for param_key, widget_name in param_mapping.items():
                 if hasattr(self.ui, widget_name):
                     widget = getattr(self.ui, widget_name)
 
-                    # ?????????????
                     value = self.model_params_manager.get_particle_parameter(
                         'fitting', particle_id, shape_key, param_key
                     )
 
                     if value is not None:
-                        # ???????????????????
                         widget.blockSignals(True)
                         widget.setValue(value)
                         widget.blockSignals(False)
@@ -12158,6 +11968,7 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Failed to load parameters for particle {widget_id}: {e}")
 
+    # 函数说明：获取参数 控件 mapping。
     def _get_parameter_widget_mapping(self, widget_id: int, shape_name: str) -> dict:
         """Return parameter key to spinbox object-name mapping for a component."""
         for schema_shape, schema in COMPONENT_PARAMETER_SCHEMAS.items():
@@ -12168,8 +11979,9 @@ class FittingController(QObject):
                     for param_key, suffix, _label, _default, _decimals, _step in schema
                 }
         return {}
+    # 函数说明：处理粒子 形状 changed事件。
     def _on_particle_shape_changed(self, widget_id: int, combo_index: int):
-        """ - ??????????????SON"""
+        """Handle a particle component selection change and persist it to JSON."""
         config = self.particle_shape_configs[widget_id]
         page_config = config['pages'][combo_index]
 
@@ -12177,48 +11989,39 @@ class FittingController(QObject):
             stack_widget = getattr(self.ui, config['stack_widget'])
             shape_name = page_config['name']
 
-            # ?????????????
             particle_id = f"particle_{widget_id}"
             current_shape = self.model_params_manager.get_particle_shape('fitting', particle_id)
 
-            # ????????????????
             if current_shape == shape_name:
-                self._add_particle_message(f"??? Particle {widget_id} already in {shape_name} state, skipping")
+                self._add_particle_message(f"Particle {widget_id} already in {shape_name} state; skipping")
                 return
 
-            self._add_particle_message(f"?? Particle {widget_id} shape changing: {current_shape} -> {shape_name}")
+            self._add_particle_message(f"Particle {widget_id} shape changing: {current_shape} -> {shape_name}")
 
-            # 1. ???JSON?????????????
             if shape_name == 'None':
-                # ?????one????disabled????
                 self.model_params_manager.set_particle_shape('fitting', particle_id, 'None')
                 self.model_params_manager.set_particle_enabled('fitting', particle_id, False)
-                self._add_particle_message(f"?? Saved {particle_id} as None (disabled)")
+                self._add_particle_message(f"Saved {particle_id} as None (disabled)")
             else:
-                # ?????????????????nabled????
                 self.model_params_manager.set_particle_shape('fitting', particle_id, shape_name)
                 self.model_params_manager.set_particle_enabled('fitting', particle_id, True)
-                self._add_particle_message(f"??Saved {particle_id} as {shape_name} (enabled)")
+                self._add_particle_message(f"Saved {particle_id} as {shape_name} (enabled)")
 
-            # ???JSON???
             self.model_params_manager.save_parameters()
 
-            # 2. ???UI???
             self._switch_particle_page(widget_id, page_config, shape_name)
 
-            # 3. ?????????????????
             if shape_name == 'None':
-                # None???????????????
                 self._freeze_particle_controls(widget_id)
-                self._add_particle_message(f"??? Particle {widget_id} controls frozen (None state)")
+                self._add_particle_message(f"Particle {widget_id} controls frozen (None state)")
             else:
-                # ?????????????????????
                 self._unfreeze_particle_controls(widget_id, shape_name)
                 self._load_particle_parameters_from_json(widget_id, shape_name)
-                self._add_particle_message(f"?? Particle {widget_id} controls unfrozen ({shape_name} state)")
+                self._add_particle_message(f"Particle {widget_id} controls unfrozen ({shape_name} state)")
 
             self._schedule_model_parameters_region_refresh()
 
+    # 函数说明：实现 switch 粒子 page 相关逻辑。
     def _switch_particle_page(self, widget_id: int, page_config: dict, shape_name: str):
         """No description."""
         config = self.particle_shape_configs[widget_id]
@@ -12227,17 +12030,15 @@ class FittingController(QObject):
             target_page_index = page_config['page_index']
             current_page_index = stack_widget.currentIndex()
 
-            self._add_particle_message(f"?? Switching page: {current_page_index} -> {target_page_index} for {shape_name}")
+            self._add_particle_message(f"Switching page: {current_page_index} -> {target_page_index} for {shape_name}")
 
-            # ?????????????????????????
             if target_page_index == current_page_index:
-                # ???????????????????????UI???
                 temp_page_index = 1 if target_page_index == 0 else 0
                 stack_widget.setCurrentIndex(temp_page_index)
                 from PyQt5.QtWidgets import QApplication
                 QApplication.processEvents()
                 stack_widget.setCurrentIndex(target_page_index)
-                self._add_particle_message(f"?? Forced refresh: temp({temp_page_index}) -> {target_page_index}")
+                self._add_particle_message(f"Forced refresh: temp({temp_page_index}) -> {target_page_index}")
             else:
                 stack_widget.setCurrentIndex(target_page_index)
 
@@ -12249,13 +12050,13 @@ class FittingController(QObject):
                 self._sync_particle_widget_height(parent_widget)
             self._schedule_model_parameters_region_refresh()
 
-            # ????????????
             final_page_index = stack_widget.currentIndex()
             if final_page_index == target_page_index:
-                self._add_particle_message(f"??Page switch confirmed: {final_page_index}")
+                self._add_particle_message(f"Page switch confirmed: {final_page_index}")
             else:
-                self._add_particle_message(f"??Page switch failed! Expected {target_page_index}, got {final_page_index}")
+                self._add_particle_message(f"Page switch failed: expected {target_page_index}, got {final_page_index}")
 
+    # 函数说明：实现 freeze 粒子 controls 相关逻辑。
     def _freeze_particle_controls(self, widget_id: int):
         """None"""
         for shape_name in COMPONENT_PARAMETER_SCHEMAS:
@@ -12265,6 +12066,7 @@ class FittingController(QObject):
                     widget = getattr(self.ui, widget_name)
                     widget.setEnabled(False)
 
+    # 函数说明：实现 unfreeze 粒子 controls 相关逻辑。
     def _unfreeze_particle_controls(self, widget_id: int, active_shape: str):
         """No description."""
         for shape_name in COMPONENT_PARAMETER_SCHEMAS:
@@ -12276,10 +12078,10 @@ class FittingController(QObject):
                     widget = getattr(self.ui, widget_name)
                     widget.setEnabled(is_active)
 
+    # 函数说明：加载粒子 参数 from JSON。
     def _load_particle_parameters_from_json(self, widget_id: int, shape_name: str):
-        """SON??????????????I"""
+        """Load particle parameters from JSON into the UI."""
         try:
-            # ????????????????????
             self._loading_parameters = True
 
             particle_id = f"particle_{widget_id}"
@@ -12290,25 +12092,22 @@ class FittingController(QObject):
                 self._add_particle_message(f"No parameters found in JSON for {particle_id}.{shape_name}")
                 return
 
-            # ?????????
             param_mapping = self._get_parameter_widget_mapping(widget_id, shape_name)
             loaded_count = 0
 
-            # ???????????I???
             for param_key, widget_name in param_mapping.items():
                 if param_key in shape_params and hasattr(self.ui, widget_name):
                     widget = getattr(self.ui, widget_name)
                     value = shape_params[param_key]
                     widget.setValue(value)
                     loaded_count += 1
-                    self._add_particle_message(f"?? Loaded {param_key}={value} for {particle_id}.{shape_name}")
+                    self._add_particle_message(f"Loaded {param_key}={value} for {particle_id}.{shape_name}")
 
-            self._add_particle_message(f"??Loaded {loaded_count} parameters from JSON for {particle_id}.{shape_name}")
+            self._add_particle_message(f"Loaded {loaded_count} parameters from JSON for {particle_id}.{shape_name}")
 
         except Exception as e:
             self._add_fitting_error(f"Failed to load parameters from JSON: {e}")
         finally:
-            # ?????????
             self._loading_parameters = False
 
 
@@ -12319,20 +12118,19 @@ class FittingController(QObject):
 
 
 
+    # 函数说明：设置粒子 形状。
     def set_particle_shape(self, widget_id: int, shape_name: str):
-        """
-        ????????????
+        """Set the active shape for a particle widget.
 
         Args:
-            widget_id: ?????? (1, 2, 3)
-            shape_name: ?????? ('Sphere', 'Cylinder', 'None')
+            widget_id: Particle widget index, such as 1, 2, or 3.
+            shape_name: Shape name, such as ``Sphere``, ``Cylinder``, or ``None``.
         """
         config = self.particle_shape_configs.get(widget_id)
         if not config:
             self._add_fitting_warning(f"Particle Widget {widget_id} not found")
             return False
 
-        # ????????ombo index
         combo_index = None
         for index, page_config in config['pages'].items():
             if page_config['name'] == shape_name:
@@ -12343,7 +12141,6 @@ class FittingController(QObject):
             self._add_fitting_warning(f"Shape {shape_name} not found for particle widget {widget_id}")
             return False
 
-        # ???ComboBox
         if hasattr(self.ui, config['combobox']):
             combobox = getattr(self.ui, config['combobox'])
             combobox.setCurrentIndex(combo_index)
@@ -12351,15 +12148,15 @@ class FittingController(QObject):
 
         return False
 
+    # 函数说明：获取粒子 形状。
     def get_particle_shape(self, widget_id: int) -> str:
-        """
-        ????????????
+        """Return the active shape for a particle widget.
 
         Args:
-            widget_id: ?????? (1, 2, 3)
+            widget_id: Particle widget index, such as 1, 2, or 3.
 
         Returns:
-            ?????????
+            Active shape name, or ``None`` when unavailable.
         """
         config = self.particle_shape_configs.get(widget_id)
         if not config:
@@ -12375,6 +12172,7 @@ class FittingController(QObject):
 
         return 'None'
 
+    # 函数说明：获取粒子 状态。
     def get_particles_status(self) -> dict:
         """No description."""
         status = {}
@@ -12382,50 +12180,50 @@ class FittingController(QObject):
             status[widget_id] = self.get_particle_shape(widget_id)
         return status
 
+    # 函数说明：重置all 粒子。
     def reset_all_particles(self):
         """No description."""
         for widget_id in self._iter_particle_widget_ids():
             self.set_particle_shape(widget_id, 'None')
         self._add_fitting_success("All particles reset to None state")
 
+    # 函数说明：添加new 粒子 形状。
     def add_new_particle_shape(self, shape_name: str, control_types: list):
-        """
-        ??????????????? - ??????
+        """Add a new particle shape definition to the particle widget pages.
 
         Args:
-            shape_name: ???????? 'Ellipsoid'
-            control_types: ??????????? ['Int', 'Ra', 'Rb', 'Rc', 'D', 'BG']
+            shape_name: Shape name, for example ``Ellipsoid``.
+            control_types: Control identifiers, for example ``['Int', 'Ra', 'Rb', 'Rc', 'D', 'BG']``.
         """
         self.particle_control_types[shape_name] = control_types
 
-        # ?????idget????????????
         for widget_id in self._iter_particle_widget_ids():
             pages = self.particle_shape_configs[widget_id]['pages']
-            new_index = len(pages) - 1  # None??????????????????????????
+            new_index = len(pages) - 1
 
-            # ????????????None???????
-            none_config = pages.pop(len(pages) - 1)  # ???None
+            none_config = pages.pop(len(pages) - 1)
 
-            # ????????
             pages[new_index] = {
                 'name': shape_name,
-                'page_index': new_index,  # ??????????????????
+                'page_index': new_index,
             }
 
-            # ??????None
             pages[len(pages)] = none_config
 
         self._add_fitting_success(f"Added new particle shape: {shape_name} with {len(control_types)} controls")
         self._add_fitting_warning("Note: You need to add corresponding UI pages and ComboBox items manually")
 
+    # 函数说明：获取all 粒子 参数。
     def get_all_particle_parameters(self) -> dict:
         """No description."""
         return self.model_params_manager.get_all_particles('fitting')
 
+    # 函数说明：保存粒子 参数。
     def save_particle_parameters(self) -> bool:
         """No description."""
         return self.model_params_manager.save_parameters()
 
+    # 函数说明：实现 reload 粒子 参数 相关逻辑。
     def reload_particle_parameters(self) -> bool:
         """I"""
         success = self.model_params_manager.load_parameters()
@@ -12437,6 +12235,7 @@ class FittingController(QObject):
             self._add_fitting_error("Failed to reload particle parameters")
         return success
 
+    # 函数说明：导出粒子 参数。
     def export_particle_parameters(self, filepath: str) -> bool:
         """No description."""
         try:
@@ -12448,6 +12247,7 @@ class FittingController(QObject):
             self._add_fitting_error(f"Failed to export parameters: {e}")
             return False
 
+    # 函数说明：导入粒子 参数。
     def import_particle_parameters(self, filepath: str) -> bool:
         """No description."""
         try:
@@ -12461,6 +12261,7 @@ class FittingController(QObject):
             self._add_fitting_error(f"Failed to import parameters: {e}")
             return False
 
+    # 函数说明：构建拟合 参数 snapshot。
     def _build_fitting_parameter_snapshot(self) -> dict:
         """Return a portable fitting-parameter snapshot."""
         try:
@@ -12481,6 +12282,7 @@ class FittingController(QObject):
             },
         }
 
+    # 函数说明：保存拟合 参数 to 文件。
     def save_fitting_parameters_to_file(self, filepath: str) -> bool:
         """Save only Cut/Fitting parameters, including particle/global model params."""
         try:
@@ -12494,6 +12296,7 @@ class FittingController(QObject):
             self._add_fitting_error(f"Failed to save fitting parameters: {e}")
             return False
 
+    # 函数说明：加载拟合 参数 from 文件。
     def load_fitting_parameters_from_file(self, filepath: str) -> bool:
         """Load a Cut/Fitting parameter snapshot and refresh the fitting UI."""
         try:
@@ -12531,6 +12334,7 @@ class FittingController(QObject):
             self._add_fitting_error(f"Failed to load fitting parameters: {e}")
             return False
 
+    # 函数说明：保存拟合 参数 对话框。
     def save_fitting_parameters_dialog(self) -> bool:
         filepath, _ = QFileDialog.getSaveFileName(
             self.main_window or self.ui,
@@ -12540,6 +12344,7 @@ class FittingController(QObject):
         )
         return self.save_fitting_parameters_to_file(filepath) if filepath else False
 
+    # 函数说明：加载拟合 参数 对话框。
     def load_fitting_parameters_dialog(self) -> bool:
         filepath, _ = QFileDialog.getOpenFileName(
             self.main_window or self.ui,
@@ -12549,6 +12354,7 @@ class FittingController(QObject):
         )
         return self.load_fitting_parameters_from_file(filepath) if filepath else False
 
+    # 函数说明：配置拟合 参数 context menu。
     def _setup_fitting_parameters_context_menu(self) -> None:
         names = (
             "FittingControlsCard",
@@ -12576,6 +12382,7 @@ class FittingController(QObject):
             except Exception:
                 pass
 
+    # 函数说明：显示拟合 参数 context menu。
     def _show_fitting_parameters_context_menu(self, pos: QPoint) -> None:
         widget = self.sender()
         if widget is None:
@@ -12621,6 +12428,7 @@ class FittingController(QObject):
         elif action == ai_action:
             self.open_ai_fitting_workspace()
 
+    # 函数说明：实现 ai 拟合 settings 相关逻辑。
     def _ai_fitting_settings(self) -> dict:
         try:
             from core.user_settings import user_settings
@@ -12629,6 +12437,7 @@ class FittingController(QObject):
         except Exception:
             return {}
 
+    # 函数说明：保存ai 拟合 settings。
     def _save_ai_fitting_settings(self, **updates) -> None:
         try:
             from core.user_settings import user_settings
@@ -12639,6 +12448,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 默认 ai run settings 相关逻辑。
     def _default_ai_run_settings(self) -> dict:
         return {
             "full_num_samples": 2000,
@@ -12659,6 +12469,7 @@ class FittingController(QObject):
             "parameter_constraints": {},
         }
 
+    # 函数说明：实现 ai run settings 相关逻辑。
     def _ai_run_settings(self) -> dict:
         settings = self._default_ai_run_settings()
         stored = self._ai_fitting_settings()
@@ -12667,6 +12478,7 @@ class FittingController(QObject):
                 settings[key] = stored[key]
         return settings
 
+    # 函数说明：连接ai 拟合 settings 控件相关信号。
     def _connect_ai_fitting_settings_widgets(self) -> None:
         self._restore_ai_run_settings_to_widgets()
         widget_map = {
@@ -12687,6 +12499,7 @@ class FittingController(QObject):
             widget.valueChanged.connect(lambda value, key=setting_key: self._save_ai_fitting_settings(**{key: value}))
             widget.setProperty("aiSettingConnected", True)
 
+    # 函数说明：恢复ai run settings to 控件。
     def _restore_ai_run_settings_to_widgets(self) -> None:
         settings = self._ai_run_settings()
         widget_map = {
@@ -12710,6 +12523,7 @@ class FittingController(QObject):
             finally:
                 widget.blockSignals(False)
 
+    # 函数说明：同步workspace ai run 控件。
     def _sync_workspace_ai_run_widgets(self) -> None:
         settings = self._ai_run_settings()
         workspace_map = {
@@ -12735,6 +12549,7 @@ class FittingController(QObject):
             finally:
                 widget.blockSignals(False)
 
+    # 函数说明：实现 ai 拟合 base dirs 相关逻辑。
     def _ai_fitting_base_dirs(self) -> list:
         settings = self._ai_fitting_settings()
         stored = settings.get("model_base_dirs")
@@ -12755,9 +12570,11 @@ class FittingController(QObject):
             unique.append(path)
         return unique
 
+    # 函数说明：实现 scan ai 拟合 模型 相关逻辑。
     def _scan_ai_fitting_models(self) -> list[ModelInfo]:
         return discover_ai_fitting_models(self._ai_fitting_base_dirs())
 
+    # 函数说明：实现 打开 ai 拟合 workspace 相关逻辑。
     def open_ai_fitting_workspace(self) -> None:
         if getattr(self, "_ai_fitting_dialog", None) is not None:
             self._refresh_ai_fitting_models()
@@ -12939,6 +12756,7 @@ class FittingController(QObject):
         self._restore_ai_workspace_settings()
         dialog.show()
 
+    # 函数说明：刷新ai 拟合 模型。
     def _refresh_ai_fitting_models(self) -> None:
         models = self._scan_ai_fitting_models()
         self._ai_fitting_models = models
@@ -12956,6 +12774,7 @@ class FittingController(QObject):
         else:
             self._set_ai_workspace_status("No AI fitting model found in modules/Fitting_1D_Model/ or modules/Fitting_1D_model/", 0)
 
+    # 函数说明：实现 browse ai 拟合 模型 相关逻辑。
     def _browse_ai_fitting_model(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self.main_window or self.ui,
@@ -12981,6 +12800,7 @@ class FittingController(QObject):
         self._refresh_ai_fitting_models()
         self._set_ai_workspace_status(f"Selected model: {found[0].artifact_path}", 0)
 
+    # 函数说明：恢复ai 模型 选区。
     def _restore_ai_model_selection(self) -> None:
         selected = self._ai_fitting_settings().get("last_selected_model")
         if not selected:
@@ -12993,6 +12813,7 @@ class FittingController(QObject):
                     combo.setCurrentIndex(i)
                     break
 
+    # 函数说明：恢复ai workspace settings。
     def _restore_ai_workspace_settings(self) -> None:
         mode = str(self._ai_fitting_settings().get("last_constraint_mode", "Free")).replace(" Prediction", "")
         combo = getattr(self, "_ai_constraint_combo", None)
@@ -13010,6 +12831,7 @@ class FittingController(QObject):
             k_combo.blockSignals(False)
         self._sync_ai_constraint_controls(str(mode))
 
+    # 函数说明：恢复main ai settings。
     def _restore_main_ai_settings(self) -> None:
         mode = str(self._ai_fitting_settings().get("last_constraint_mode", "Free")).replace(" Prediction", "")
         combo = getattr(self.ui, "aiFittingConstraintComboBox", None)
@@ -13028,6 +12850,7 @@ class FittingController(QObject):
             k_combo.blockSignals(False)
         self._sync_ai_constraint_controls(str(mode))
 
+    # 函数说明：处理ai 模型 selected事件。
     def _on_ai_model_selected(self, index: int) -> None:
         combo = self.sender()
         if combo is None or index < 0:
@@ -13037,6 +12860,7 @@ class FittingController(QObject):
             self._save_ai_fitting_settings(last_selected_model=str(path))
             self._sync_ai_model_combos(str(path))
 
+    # 函数说明：同步ai 模型 combos。
     def _sync_ai_model_combos(self, selected_path: str) -> None:
         for combo in (getattr(self.ui, "aiFittingModelComboBox", None), getattr(self, "_ai_model_combo", None)):
             if combo is None:
@@ -13048,6 +12872,7 @@ class FittingController(QObject):
                     combo.blockSignals(False)
                     break
 
+    # 函数说明：处理ai constraint 模式 changed事件。
     def _on_ai_constraint_mode_changed(self, mode: str) -> None:
         mode = str(mode).replace(" Prediction", "")
         self._save_ai_fitting_settings(last_constraint_mode=mode)
@@ -13056,6 +12881,7 @@ class FittingController(QObject):
         if mode == "Fixed Combination" and not self._ai_fixed_combination():
             QTimer.singleShot(0, self._show_ai_fixed_combination_dialog)
 
+    # 函数说明：处理ai fixed k changed事件。
     def _on_ai_fixed_k_changed(self, text: str) -> None:
         try:
             value = int(text)
@@ -13071,6 +12897,7 @@ class FittingController(QObject):
                 combo.setCurrentIndex(idx)
                 combo.blockSignals(False)
 
+    # 函数说明：同步ai constraint combos。
     def _sync_ai_constraint_combos(self, mode: str) -> None:
         for combo, free_label in (
             (getattr(self.ui, "aiFittingConstraintComboBox", None), "Free Prediction"),
@@ -13085,6 +12912,7 @@ class FittingController(QObject):
                 combo.setCurrentIndex(idx)
                 combo.blockSignals(False)
 
+    # 函数说明：同步ai constraint controls。
     def _sync_ai_constraint_controls(self, mode: str | None = None) -> None:
         mode = str(mode or self._ai_fitting_settings().get("last_constraint_mode", "Free")).replace(" Prediction", "")
         show_k = mode == "Fixed K"
@@ -13098,11 +12926,13 @@ class FittingController(QObject):
                 widget.setVisible(show_combo)
                 widget.setText(label)
 
+    # 函数说明：实现 ai fixed combination 相关逻辑。
     def _ai_fixed_combination(self) -> list[str]:
         constraints = self._ai_run_settings().get("parameter_constraints", {})
         components = constraints.get("components") if isinstance(constraints, dict) else None
         return [str(c) for c in components] if isinstance(components, list) else []
 
+    # 函数说明：实现 ai fixed combination label 相关逻辑。
     def _ai_fixed_combination_label(self) -> str:
         components = self._ai_fixed_combination()
         if not components:
@@ -13110,6 +12940,7 @@ class FittingController(QObject):
         display = [str(c).replace("_", " ").title() for c in components]
         return " + ".join(display)
 
+    # 函数说明：保存ai fixed combination。
     def _save_ai_fixed_combination(self, components: list[str]) -> None:
         settings_constraints = self._ai_run_settings().get("parameter_constraints", {})
         constraints_payload = dict(settings_constraints) if isinstance(settings_constraints, dict) else {}
@@ -13120,6 +12951,7 @@ class FittingController(QObject):
         self._save_ai_fitting_settings(parameter_constraints=constraints_payload)
         self._sync_ai_constraint_controls("Fixed Combination")
 
+    # 函数说明：显示ai fixed combination 对话框。
     def _show_ai_fixed_combination_dialog(self) -> None:
         dialog = QDialog(self.main_window or self.ui)
         dialog.setWindowTitle("Fixed Combination")
@@ -13157,9 +12989,11 @@ class FittingController(QObject):
         buttons.addWidget(cancel)
         layout.addLayout(buttons)
 
+        # 函数说明：实现 selected 组件 相关逻辑。
         def selected_components() -> list[str]:
             return [str(combo.currentData()) for combo in combos if combo.currentData()]
 
+        # 函数说明：保存选区。
         def save_selection() -> None:
             components = selected_components()
             if not components:
@@ -13169,6 +13003,7 @@ class FittingController(QObject):
             self._set_ai_workspace_status(f"Fixed combination: {self._ai_fixed_combination_label()}", None)
             dialog.accept()
 
+        # 函数说明：清除选区。
         def clear_selection() -> None:
             self._save_ai_fixed_combination([])
             dialog.accept()
@@ -13178,6 +13013,7 @@ class FittingController(QObject):
         cancel.clicked.connect(dialog.reject)
         dialog.exec_()
 
+    # 函数说明：设置ai workspace 状态。
     def _set_ai_workspace_status(self, text: str, progress: int = None) -> None:
         main_label = getattr(self.ui, "aiFittingStatusLabel", None) or getattr(self.ui, "fitMethodInfoLabel", None)
         if main_label is not None:
@@ -13192,6 +13028,7 @@ class FittingController(QObject):
         if browser is not None:
             browser.append(text)
 
+    # 函数说明：实现 ai workspace placeholder 相关逻辑。
     def _ai_workspace_placeholder(self, action_name: str) -> None:
         if action_name == "Advanced Constraints":
             self._show_advanced_constraints_dialog()
@@ -13204,6 +13041,7 @@ class FittingController(QObject):
             0,
         )
 
+    # 函数说明：实现 selected ai 模型 路径 相关逻辑。
     def _selected_ai_model_path(self) -> Path | None:
         for combo in (getattr(self, "_ai_model_combo", None), getattr(self.ui, "aiFittingModelComboBox", None)):
             if combo is None or combo.currentIndex() < 0:
@@ -13214,9 +13052,11 @@ class FittingController(QObject):
         selected = self._ai_fitting_settings().get("last_selected_model")
         return Path(str(selected)) if selected else None
 
+    # 函数说明：实现 当前 ai 曲线 arrays 相关逻辑。
     def _current_ai_curve_arrays(self, apply_exclusions: bool = True):
         filter_mode = self._get_independent_axis_filter_mode()
 
+        # 函数说明：应用坐标轴 过滤。
         def apply_axis_filter(q_arr, i_arr, sigma_arr=None):
             q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
             i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
@@ -13245,6 +13085,7 @@ class FittingController(QObject):
                         sigma_arr = sigma_arr[order]
             return q_arr, i_arr, sigma_arr
 
+        # 函数说明：实现 clean 相关逻辑。
         def clean(q_arr, i_arr, sigma_arr=None):
             q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
             i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
@@ -13259,6 +13100,7 @@ class FittingController(QObject):
                 return None
             return q_arr[mask], i_arr[mask], sigma_arr[mask]
 
+        # 函数说明：应用拟合 区域。
         def apply_fit_region(q_arr, i_arr, sigma_arr=None):
             q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
             i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
@@ -13278,6 +13120,7 @@ class FittingController(QObject):
                         sigma_arr = sigma_arr[region_mask]
             return clean(q_arr, i_arr, sigma_arr)
 
+        # 函数说明：应用excluded Q。
         def apply_excluded_q(result):
             if not apply_exclusions or result is None:
                 return result
@@ -13314,6 +13157,7 @@ class FittingController(QObject):
                 return apply_excluded_q(result)
         return None
 
+    # 函数说明：实现 ai Q key 相关逻辑。
     @staticmethod
     def _ai_q_key(q_value) -> str:
         try:
@@ -13321,6 +13165,7 @@ class FittingController(QObject):
         except Exception:
             return str(q_value)
 
+    # 函数说明：实现 过滤 ai excluded points for 显示 相关逻辑。
     def _filter_ai_excluded_points_for_display(self, q_arr, *value_arrays):
         excluded = getattr(self, "_ai_excluded_input_q", set()) or set()
         if not excluded:
@@ -13347,6 +13192,7 @@ class FittingController(QObject):
         except Exception:
             return (q_arr, *value_arrays)
 
+    # 函数说明：显示ai input 数据 对话框。
     def _show_ai_input_data_dialog(self) -> None:
         arrays = self._current_ai_curve_arrays(apply_exclusions=False)
         if arrays is None:
@@ -13385,12 +13231,14 @@ class FittingController(QObject):
             table.horizontalHeader().setSectionResizeMode(col, QHeaderView.Stretch)
         layout.addWidget(table, 1)
 
+        # 函数说明：实现 selected rows 相关逻辑。
         def selected_rows() -> list[int]:
             selection = table.selectionModel()
             if selection is None:
                 return []
             return sorted({index.row() for index in selection.selectedRows()})
 
+        # 函数说明：实现 selected Q 值 相关逻辑。
         def selected_q_values() -> list[float]:
             dialog_arrays = getattr(self, "_ai_input_dialog_arrays", None)
             if dialog_arrays is None:
@@ -13402,18 +13250,21 @@ class FittingController(QObject):
                     values.append(float(q_arr[row]))
             return values
 
+        # 函数说明：删除selected。
         def delete_selected() -> None:
             values = selected_q_values()
             if not values:
                 return
             self._exclude_ai_input_points(values, source="table")
 
+        # 函数说明：恢复selected。
         def restore_selected() -> None:
             values = selected_q_values()
             if not values:
                 return
             self._restore_ai_input_points(values)
 
+        # 函数说明：恢复all。
         def restore_all() -> None:
             self._restore_all_ai_input_points()
 
@@ -13433,6 +13284,7 @@ class FittingController(QObject):
         button_row.addWidget(close_btn)
         layout.addLayout(button_row)
 
+        # 函数说明：处理finished事件。
         def on_finished(_result):
             self._ai_input_data_dialog = None
             self._ai_input_data_table = None
@@ -13447,6 +13299,7 @@ class FittingController(QObject):
         self._refresh_ai_input_data_dialog()
         dialog.show()
 
+    # 函数说明：刷新ai input 数据 对话框。
     def _refresh_ai_input_data_dialog(self) -> None:
         dialog = getattr(self, "_ai_input_data_dialog", None)
         table = getattr(self, "_ai_input_data_table", None)
@@ -13474,9 +13327,11 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 exclude ai input point from 图表 相关逻辑。
     def _exclude_ai_input_point_from_plot(self, q_value: float) -> None:
         self._exclude_ai_input_points([q_value], source="plot")
 
+    # 函数说明：实现 exclude ai input points 相关逻辑。
     def _exclude_ai_input_points(self, q_values, source: str = "table") -> None:
         excluded = set(getattr(self, "_ai_excluded_input_q", set()) or set())
         before = len(excluded)
@@ -13502,6 +13357,7 @@ class FittingController(QObject):
                 "INFO",
             )
 
+    # 函数说明：恢复ai input points。
     def _restore_ai_input_points(self, q_values) -> None:
         excluded = set(getattr(self, "_ai_excluded_input_q", set()) or set())
         before = len(excluded)
@@ -13521,6 +13377,7 @@ class FittingController(QObject):
         if restored:
             self._set_ai_workspace_status(f"Restored {restored} input point(s).", None)
 
+    # 函数说明：恢复all ai input points。
     def _restore_all_ai_input_points(self) -> None:
         self._ai_excluded_input_q = set()
         self._refresh_ai_input_data_dialog()
@@ -13528,6 +13385,7 @@ class FittingController(QObject):
         self._draw_insitu_workflow_curve_preview()
         self._set_ai_workspace_status("All AI input points restored.", None)
 
+    # 函数说明：刷新ai input outlier views。
     def _refresh_ai_input_outlier_views(self) -> None:
         try:
             mode = self.display_mode if hasattr(self, 'display_mode') else 'normal'
@@ -13536,12 +13394,15 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 ai prediction output root 相关逻辑。
     def _ai_prediction_output_root(self) -> Path:
         return Path.cwd() / "AI_Fitting_Output"
 
+    # 函数说明：实现 ai 当前 prediction dir 相关逻辑。
     def _ai_current_prediction_dir(self) -> Path:
         return self._ai_prediction_output_root() / "current_prediction"
 
+    # 函数说明：清除ai 当前 prediction dir。
     def _clear_ai_current_prediction_dir(self, out_dir: Path) -> None:
         root = self._ai_prediction_output_root().resolve()
         target = Path(out_dir).resolve()
@@ -13555,6 +13416,7 @@ class FittingController(QObject):
             else:
                 child.unlink()
 
+    # 函数说明：实现 prepare ai prediction io 相关逻辑。
     def _prepare_ai_prediction_io(self) -> tuple[Path, Path] | None:
         arrays = self._current_ai_curve_arrays()
         if arrays is None:
@@ -13582,6 +13444,7 @@ class FittingController(QObject):
         self._ai_input_csv = input_csv
         return input_csv, out_dir
 
+    # 函数说明：实现 ai exact nonempty arg 相关逻辑。
     def _ai_exact_nonempty_arg(self):
         constraints = self.build_ai_constraints_json_from_ui()
         exact = constraints.get("exact_nonempty")
@@ -13591,6 +13454,7 @@ class FittingController(QObject):
             exact = None
         return exact if exact and exact > 0 else None
 
+    # 函数说明：启动ai prediction。
     def _start_ai_prediction(self, run_mode: str = "fast") -> None:
         process = getattr(self, "_ai_process", None)
         if process is not None and process.state() != QProcess.NotRunning:
@@ -13668,6 +13532,7 @@ class FittingController(QObject):
         self._append_ai_log(f"Command: {sys.executable} {' '.join(args)}")
         process.start(sys.executable, args)
 
+    # 函数说明：设置ai running 状态。
     def _set_ai_running_state(self, running: bool) -> None:
         for button in getattr(self, "_ai_action_buttons", []) or []:
             text = button.text()
@@ -13691,6 +13556,7 @@ class FittingController(QObject):
         if main_export is not None:
             main_export.setEnabled(can_export)
 
+    # 函数说明：实现 append ai 对数 相关逻辑。
     def _append_ai_log(self, text: str) -> None:
         text = str(text).rstrip()
         if not text:
@@ -13711,6 +13577,7 @@ class FittingController(QObject):
             except Exception:
                 pass
 
+    # 函数说明：处理ai process stdout事件。
     def _on_ai_process_stdout(self) -> None:
         process = getattr(self, "_ai_process", None)
         if process is None:
@@ -13718,6 +13585,7 @@ class FittingController(QObject):
         text = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace")
         self._handle_ai_process_text(text)
 
+    # 函数说明：处理ai process stderr事件。
     def _on_ai_process_stderr(self) -> None:
         process = getattr(self, "_ai_process", None)
         if process is None:
@@ -13725,6 +13593,7 @@ class FittingController(QObject):
         text = bytes(process.readAllStandardError()).decode("utf-8", errors="replace")
         self._handle_ai_process_text(text)
 
+    # 函数说明：处理ai process text。
     def _handle_ai_process_text(self, text: str) -> None:
         for line in str(text).splitlines():
             self._append_ai_log(line)
@@ -13746,6 +13615,7 @@ class FittingController(QObject):
             elif line.startswith("Wrote "):
                 self._set_ai_workspace_status(line, 100)
 
+    # 函数说明：处理ai process finished事件。
     def _on_ai_process_finished(self, exit_code: int, exit_status) -> None:
         self._set_ai_running_state(False)
         workflow_record = getattr(self, "_insitu_workflow_ai_record", None)
@@ -13758,6 +13628,7 @@ class FittingController(QObject):
         else:
             self._set_ai_workspace_status(f"AI fitting failed with exit code {exit_code}. See log for details.", 0)
 
+    # 函数说明：处理ai process 错误事件。
     def _on_ai_process_error(self, error) -> None:
         self._set_ai_running_state(False)
         workflow_record = getattr(self, "_insitu_workflow_ai_record", None)
@@ -13770,6 +13641,7 @@ class FittingController(QObject):
             return
         self._set_ai_workspace_status(f"AI process error: {error}", 0)
 
+    # 函数说明：停止ai 拟合 process。
     def _stop_ai_fitting_process(self) -> None:
         process = getattr(self, "_ai_process", None)
         if process is None or process.state() == QProcess.NotRunning:
@@ -13778,11 +13650,13 @@ class FittingController(QObject):
         process.terminate()
         QTimer.singleShot(2500, lambda: process.kill() if process.state() != QProcess.NotRunning else None)
 
+    # 函数说明：实现 打开 ai output 文件夹 相关逻辑。
     def _open_ai_output_folder(self) -> None:
         out_dir = getattr(self, "_ai_output_dir", None)
         if out_dir:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(out_dir))))
 
+    # 函数说明：导出ai prediction output。
     def _export_ai_prediction_output(self) -> None:
         out_dir = Path(getattr(self, "_ai_output_dir", "") or self._ai_current_prediction_dir())
         if not out_dir.is_dir() or not any(out_dir.iterdir()):
@@ -13841,6 +13715,7 @@ class FittingController(QObject):
             f"AI prediction output exported to:\n{dest}",
         )
 
+    # 函数说明：显示ai candidate table。
     def _show_ai_candidate_table(self, output_dir: Path | None = None) -> None:
         output_dir = Path(output_dir or getattr(self, "_ai_output_dir", "") or "")
         results_path = output_dir / "top20_candidates.json"
@@ -13902,6 +13777,7 @@ class FittingController(QObject):
         self._ai_results_dialog = dialog
         dialog.show()
 
+    # 函数说明：加载selected ai candidate from table。
     def _load_selected_ai_candidate_from_table(self, table: QTableWidget, rows: list, dialog: QDialog | None = None) -> None:
         selected = table.currentRow()
         if selected < 0 or selected >= len(rows):
@@ -13910,6 +13786,7 @@ class FittingController(QObject):
             if dialog is not None:
                 dialog.accept()
 
+    # 函数说明：加载ai candidate 参数。
     def _load_ai_candidate_params(self, row: dict) -> bool:
         components = row.get("components") or []
         if not isinstance(components, list) or not components:
@@ -13978,6 +13855,7 @@ class FittingController(QObject):
             QMessageBox.warning(self.main_window or self.ui, "AI Fitting", f"Failed to load candidate parameters:\n{exc}")
             return False
 
+    # 函数说明：构建ai constraints JSON from 界面。
     def build_ai_constraints_json_from_ui(self) -> dict:
         mode = self._ai_fitting_settings().get("last_constraint_mode", "Free")
         workspace_combo = getattr(self, "_ai_constraint_combo", None)
@@ -14014,6 +13892,7 @@ class FittingController(QObject):
             payload["components"] = components if isinstance(components, list) else []
         return payload
 
+    # 函数说明：实现 write ai constraints JSON 相关逻辑。
     def _write_ai_constraints_json(self, out_dir: Path) -> Path | None:
         payload = self.build_ai_constraints_json_from_ui()
         has_constraints = any(payload.get(key) for key in ("components", "type_parameter_ranges", "global_ranges", "parameter_ranges"))
@@ -14029,6 +13908,7 @@ class FittingController(QObject):
             self._append_ai_log(f"Failed to write constraints JSON: {exc}")
             return None
 
+    # 函数说明：显示advanced constraints 对话框。
     def _show_advanced_constraints_dialog(self) -> None:
         dialog = QDialog(self.main_window or self.ui)
         dialog.setWindowTitle("Advanced Constraints")
@@ -14107,6 +13987,7 @@ class FittingController(QObject):
         preview.setPlainText(json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False))
         layout.addWidget(preview)
 
+        # 函数说明：实现 collect constraints 相关逻辑。
         def collect_constraints() -> dict:
             type_constraints = {}
             global_constraints = {}
@@ -14129,6 +14010,7 @@ class FittingController(QObject):
                 payload["global_ranges"] = global_constraints
             return payload
 
+        # 函数说明：刷新预览。
         def refresh_preview() -> None:
             settings = self._ai_fitting_settings()
             old_constraints = settings.get("parameter_constraints")
@@ -14145,6 +14027,7 @@ class FittingController(QObject):
         clear = QPushButton("Clear All", dialog)
         close = QPushButton("Close", dialog)
 
+        # 函数说明：保存constraints。
         def save_constraints() -> None:
             constraints_payload = collect_constraints()
             self._save_ai_fitting_settings(parameter_constraints=constraints_payload)
@@ -14152,6 +14035,7 @@ class FittingController(QObject):
             self._set_ai_workspace_status("Advanced parameter constraints saved.", None)
             dialog.accept()
 
+        # 函数说明：清除constraints。
         def clear_constraints() -> None:
             for _scope, _name, check, _min_box, _max_box in row_widgets:
                 check.setChecked(False)
@@ -14169,15 +14053,16 @@ class FittingController(QObject):
         layout.addLayout(row)
         dialog.exec_()
 
+    # 函数说明：获取全局 参数。
     def get_global_parameter(self, param: str) -> float:
         """No description."""
         return self.model_params_manager.get_global_parameter('fitting', param, 0.0)
 
+    # 函数说明：设置全局 参数。
     def set_global_parameter(self, param: str, value: float) -> bool:
         """No description."""
         success = self.model_params_manager.set_global_parameter('fitting', param, value)
         if success:
-            # ???UI??????????
             if param == 'background' and hasattr(self.ui, 'fitBGValue'):
                 self.ui.fitBGValue.blockSignals(True)
                 self.ui.fitBGValue.setValue(value)
@@ -14191,14 +14076,15 @@ class FittingController(QObject):
                 self.ui.fitKValue.setValue(value)
                 self.ui.fitKValue.blockSignals(False)
 
-            # ??????
             self.model_params_manager.save_parameters()
         return success
 
+    # 函数说明：获取all 全局 参数。
     def get_all_global_parameters(self) -> dict:
         """No description."""
         return self.model_params_manager.get_all_global_parameters('fitting')
 
+    # 函数说明：重置全局 参数。
     def reset_global_parameters(self):
         """No description."""
         self.set_global_parameter('background', 0.0)
@@ -14209,9 +14095,9 @@ class FittingController(QObject):
         self._add_fitting_success("Global parameters reset to default values")
 
     # ================================
-    # ?????????
     # ================================
 
+    # 函数说明：保存自动 k enabled。
     def _save_auto_k_enabled(self):
         """auto-K"""
         try:
@@ -14221,6 +14107,7 @@ class FittingController(QObject):
         except Exception as e:
             print(f"Failed to save auto-K setting: {e}")
 
+    # 函数说明：加载自动 k enabled。
     def _load_auto_k_enabled(self):
         """No description."""
         try:
@@ -14231,6 +14118,7 @@ class FittingController(QObject):
             print(f"Failed to load auto-K setting: {e}")
             self._auto_k_enabled = False
 
+    # 函数说明：更新自动 k 按钮 style。
     def _update_auto_k_button_style(self):
         """No description."""
         if hasattr(self.ui, 'FittingAutoKButton'):
@@ -14244,6 +14132,7 @@ class FittingController(QObject):
                 self.ui.FittingAutoKButton.setText("Auto-K: OFF")
             self._sync_global_secondary_button_widths()
 
+    # 函数说明：同步全局 secondary 按钮 widths。
     def _sync_global_secondary_button_widths(self):
         """Keep Auto-K and step-reset buttons visually aligned after runtime style changes."""
         auto_k_button = getattr(self.ui, 'FittingAutoKButton', None)
@@ -14272,26 +14161,23 @@ class FittingController(QObject):
             button.setMaximumWidth(target_width)
             button.updateGeometry()
 
+    # 函数说明：处理自动 k 按钮 clicked事件。
     def _on_auto_k_button_clicked(self):
         """auto-K"""
-        # ???????
         self._auto_k_enabled = not self._auto_k_enabled
 
-        # ???????
         self._save_auto_k_enabled()
 
-        # ?????????
         self._update_auto_k_button_style()
 
-        # ??????????
         status = "enabled" if self._auto_k_enabled else "disabled"
         self._add_fitting_message(f"Auto K-value optimization {status}")
 
-        # ???????uto-K??????????????????????????
         if self._auto_k_enabled and hasattr(self, 'I') and hasattr(self, 'I_fitting'):
             if self.I is not None and self.I_fitting is not None:
                 self._optimize_k_value()
 
+    # 函数说明：实现 optimize k 值 相关逻辑。
     def _optimize_k_value(self):
         """K"""
         try:
@@ -14300,7 +14186,6 @@ class FittingController(QObject):
                 self._add_fitting_error("No fitting data available for K-value optimization")
                 return
 
-            # ????????????????
             if self.I.size == 0 or self.I_fitting.size == 0:
                 self._add_fitting_error("Empty data arrays for K-value optimization")
                 return
@@ -14309,16 +14194,13 @@ class FittingController(QObject):
                 self._add_fitting_error(f"Data shape mismatch: I{self.I.shape} vs I_fitting{self.I_fitting.shape}")
                 return
 
-            # ???????????aN???????
             if np.any(~np.isfinite(self.I)) or np.any(~np.isfinite(self.I_fitting)):
                 self._add_fitting_error("Data contains NaN or infinite values")
                 return
 
-            # ??????K??
             current_k = self.get_global_parameter('k_value')
             self._add_fitting_message(f"Starting K-value optimization from {current_k:.6f}...")
 
-            # ??????ROI?????OI???????????
             try:
                 q_arr = np.asarray(self.q) if hasattr(self, 'q') and self.q is not None else None
             except Exception:
@@ -14348,17 +14230,12 @@ class FittingController(QObject):
                 I_exp_used = I_exp_full
                 I_fit_used = I_fit_full
 
-            # ??1????????????????????????????ROI??? I_exp_used/I_fit_used??
-            k_safe = max(abs(current_k), 1e-12)  # ??????
+            k_safe = max(abs(current_k), 1e-12)
             I_base = I_fit_used / k_safe
 
-            # ??2???????????????
-            # ????? ||k * I_base - I_exp||^2 ???? = 0
-            # ???: k_opt = (I_base ? I_exp) / (I_base ? I_base)
             I_exp_flat = I_exp_used.flatten()
             I_base_flat = I_base.flatten()
 
-            # ??????????
             valid_mask = np.isfinite(I_exp_flat) & np.isfinite(I_base_flat) & (I_base_flat != 0)
 
             if not np.any(valid_mask):
@@ -14368,7 +14245,6 @@ class FittingController(QObject):
             I_exp_valid = I_exp_flat[valid_mask]
             I_base_valid = I_base_flat[valid_mask]
 
-            # ????????
             numerator = np.dot(I_base_valid, I_exp_valid)
             denominator = np.dot(I_base_valid, I_base_valid)
 
@@ -14378,12 +14254,9 @@ class FittingController(QObject):
 
             k_opt = numerator / denominator
 
-            # ??K?????
             if k_opt <= 0:
-                # ?????????????
                 try:
                     from scipy.optimize import nnls
-                    # ???????????? A*k = b?????A = I_base_valid.reshape(-1,1), b = I_exp_valid
                     A = I_base_valid.reshape(-1, 1)
                     b = I_exp_valid
                     k_nnls, residual = nnls(A, b)
@@ -14396,103 +14269,85 @@ class FittingController(QObject):
             else:
                 optimization_method = "Analytical"
 
-            # ?????????
             if not np.isfinite(k_opt) or k_opt <= 0:
                 self._add_fitting_error(f"Invalid optimized K-value: {k_opt}")
                 return
 
-            # ??????????????
             residual_before = np.sum((current_k * I_base_valid - I_exp_valid) ** 2)
             residual_after = np.sum((k_opt * I_base_valid - I_exp_valid) ** 2)
 
-            # ??3???????????
             if I_base.size == self.I_fitting.size:
-                # ?????????????????
                 self.I_fitting = k_opt * (self.I_fitting / k_safe)
             else:
-                # ?????OI????????OI???????????????????????????
                 try:
                     if 'mask' in locals() and mask is not None and mask.size == self.I_fitting.size:
                         I_base_full = self.I_fitting / k_safe
                         I_base_full = np.asarray(I_base_full)
-                        I_base_full[mask] = I_base  # ROI?????????????????
+                        I_base_full[mask] = I_base
                         self.I_fitting = k_opt * I_base_full
                     else:
-                        # ?????????mask?????????????
                         self.I_fitting = k_opt * (self.I_fitting / k_safe)
                 except Exception:
                     self.I_fitting = k_opt * (self.I_fitting / k_safe)
 
-            # ??4??????????????
             success = self.set_global_parameter('k_value', k_opt)
             if not success:
                 self._add_fitting_error("Failed to set optimized K-value")
                 return
 
-            # ??5????????I?????K?????
             if hasattr(self.ui, 'fitKValue'):
-                # ??????????????????????
                 self.ui.fitKValue.blockSignals(True)
                 self.ui.fitKValue.setValue(k_opt)
                 self.ui.fitKValue.blockSignals(False)
                 self._add_fitting_message(f"UI K-value updated to {k_opt:.6f}")
 
-            # ??????????????????k ??????????????????? k
             try:
                 if isinstance(getattr(self, 'fitting', None), dict):
                     meta = self.fitting.get('meta') or {}
                     params_meta = meta.get('params') or {}
-                    # params_template ??????? 'k'
                     params_meta['k'] = float(k_opt)
                     meta['params'] = params_meta
                     self.fitting['meta'] = meta
             except Exception:
                 pass
 
-            # ??6????????
             self._update_GUI_image('fitting')
             self._update_outside_window('fitting')
 
-            # ?????????
             improvement = ((residual_before - residual_after) / max(residual_before, 1e-12)) * 100
 
             self._add_fitting_success(
-                f"K-value optimized ({optimization_method}): {current_k:.6f} ??{k_opt:.6f}"
+                f"K-value optimized ({optimization_method}): {current_k:.6f} -> {k_opt:.6f}"
             )
             self._add_fitting_success(
                 f"Residual improvement: {improvement:.2f}% "
-                f"({residual_before:.6e} ??{residual_after:.6e})"
+                f"({residual_before:.6e} -> {residual_after:.6e})"
             )
 
-            # ?????????????
             data_info = f"Data range - I_exp: [{np.min(I_exp_valid):.3e}, {np.max(I_exp_valid):.3e}], "
             data_info += f"I_base: [{np.min(I_base_valid):.3e}, {np.max(I_base_valid):.3e}]"
             self._add_fitting_message(data_info)
 
         except ImportError:
             self._add_fitting_error("scipy.optimize.nnls not available, using analytical solution only")
-            # ???????????????????????
         except Exception as e:
             self._add_fitting_error(f"Error during K-value optimization: {e}")
-            # ??K????
             if 'current_k' in locals():
                 self.set_global_parameter('k_value', current_k)
 
     # ================================
-    # ?????????
     # ================================
 
 
 
 
+    # 函数说明：处理参数 editing finished事件。
     def _on_parameter_editing_finished(self, widget_id: int, shape: str, param: str):
         """No description."""
         try:
-            # ?????????????????????????
             if self._loading_parameters or self._initializing:
                 return
 
-            # ???????????
             param_mapping = self._get_parameter_widget_mapping(widget_id, shape)
             widget_name = param_mapping.get(param)
 
@@ -14500,37 +14355,33 @@ class FittingController(QObject):
                 widget = getattr(self.ui, widget_name)
                 current_value = widget.value()
 
-                # ????????SON
                 particle_id = f"particle_{widget_id}"
                 success = self.model_params_manager.set_particle_parameter('fitting', particle_id, shape.lower(), param, current_value)
 
                 if success:
                     self.model_params_manager.save_parameters()
-                    self._add_particle_message(f"?? Saved to JSON: {particle_id}.{shape.lower()}.{param} = {current_value}")
+                    self._add_particle_message(f"Saved to JSON: {particle_id}.{shape.lower()}.{param} = {current_value}")
                 else:
                     self._add_fitting_error(f"Failed to save parameter: {particle_id}.{shape.lower()}.{param} = {current_value}")
 
-            # ??????????????????
             is_fitting_mode = self._is_in_fitting_mode()
 
             if is_fitting_mode:
-                self._add_particle_message(f"?? Fitting mode: Auto-updating after {shape}.{param} edit finished")
-                # ????????????
+                self._add_particle_message(f"Fitting mode: auto-updating after {shape}.{param} edit finished")
                 self._perform_manual_fitting()
             else:
-                self._add_particle_message(f"?? Normal mode: Parameter {shape}.{param} edit finished (saved only)")
+                self._add_particle_message(f"Normal mode: parameter {shape}.{param} edit finished (saved only)")
 
         except Exception as e:
             self._add_fitting_error(f"Failed to handle parameter editing finished: {e}")
 
+    # 函数说明：处理全局 参数 editing finished事件。
     def _on_global_parameter_editing_finished(self, param_name: str):
         """No description."""
         try:
-            # ?????????????????????????
             if self._loading_parameters or self._initializing:
                 return
 
-            # ???????????????
             current_value = None
             if param_name == 'background' and hasattr(self.ui, 'fitBGValue'):
                 current_value = self.ui.fitBGValue.value()
@@ -14544,28 +14395,26 @@ class FittingController(QObject):
                 current_value = self.ui.fitKValue.value()
 
             if current_value is not None:
-                # ???????????SON
                 success = self.model_params_manager.set_global_parameter('fitting', param_name, current_value)
 
                 if success:
                     self.model_params_manager.save_parameters()
-                    self._add_particle_message(f"?? Saved global parameter to JSON: {param_name} = {current_value}")
+                    self._add_particle_message(f"Saved global parameter to JSON: {param_name} = {current_value}")
                 else:
                     self._add_fitting_error(f"Failed to save global parameter: {param_name} = {current_value}")
 
-            # ??????????????????
             is_fitting_mode = self._is_in_fitting_mode()
 
             if is_fitting_mode:
-                self._add_particle_message(f"?? Fitting mode: Auto-updating after global {param_name} edit finished")
-                # ????????????
+                self._add_particle_message(f"Fitting mode: auto-updating after global {param_name} edit finished")
                 self._perform_manual_fitting()
             else:
-                self._add_particle_message(f"?? Normal mode: Global parameter {param_name} edit finished (saved only)")
+                self._add_particle_message(f"Normal mode: global parameter {param_name} edit finished (saved only)")
 
         except Exception as e:
             self._add_fitting_error(f"Failed to handle global parameter editing finished: {e}")
 
+    # 函数说明：判断in 拟合 模式是否成立。
     def _is_in_fitting_mode(self) -> bool:
         """No description."""
         return hasattr(self, '_fitting_mode_active') and self._fitting_mode_active
@@ -14575,9 +14424,9 @@ class FittingController(QObject):
 
 
     # ================================
-    # ?????????
     # ================================
 
+    # 函数说明：获取拟合 参数 comment lines。
     def _get_fitting_parameter_comment_lines(self):
         """No description."""
         lines = ["# Fitting Parameters Begin"]
@@ -14652,6 +14501,7 @@ class FittingController(QObject):
         lines.append("# Fitting Parameters End")
         return lines
 
+    # 函数说明：构建header lines。
     def _build_export_header_lines(self, choice: str, data_name: str):
         """No description."""
         lines = []
@@ -14700,17 +14550,16 @@ class FittingController(QObject):
         lines.extend(self._get_fitting_parameter_comment_lines())
         return lines
 
+    # 函数说明：导出拟合 数据。
     def _export_fitting_data(self):
         """Fitting"""
         try:
             import numpy as np
 
-            # ???itGraphicsView?????
             if not hasattr(self.ui, 'fitGraphicsView') or self.ui.fitGraphicsView is None:
                 self._add_fitting_error("fitGraphicsView is not available")
                 return
 
-            # ????????????????
             options = []
             if getattr(self, 'cut', None) is not None:
                 options.append('Cut Data')
@@ -14722,9 +14571,7 @@ class FittingController(QObject):
                 self._add_fitting_error("No available data to export (need Cut, Fitting, or 1D data)")
                 return
 
-            # ??????????ut????itting?????D
             default_index = 0
-            # ???????????????????
             choice, ok = QInputDialog.getItem(
                 None,
                 "Select Data to Export",
@@ -14736,7 +14583,6 @@ class FittingController(QObject):
             if not ok:
                 return
 
-            # ????????x/y
             x_data = None
             y_data = None
             data_name = ""
@@ -14760,7 +14606,6 @@ class FittingController(QObject):
                 self._add_fitting_error("Selected data is not available to export")
                 return
 
-            # ??????????????
             filename, _ = QFileDialog.getSaveFileName(
                 None,
                 f"Export {data_name}",
@@ -14769,23 +14614,19 @@ class FittingController(QObject):
             )
 
             if not filename:
-                return  # ???????????
+                return
 
-            # ????????????
             min_length = min(len(x_data), len(y_data))
             x_data = x_data[:min_length]
             y_data = y_data[:min_length]
 
-            # ?????X???????????????????
             x_data = self._convert_q_values_for_display(x_data, source=q_source_kind)
             x_column_name = self._build_q_axis_label(filter_mode='all', mathtext=False)
             y_column_name = 'Intensity (a.u.)'
 
-            # ??????????????
             combined_data = np.column_stack([x_data, y_data])
             header_lines = self._build_export_header_lines(choice, data_name)
 
-            # ???????????????????????????????? # ???????????
             delimiter = ',' if filename.lower().endswith('.csv') else '\t'
             column_header = f'{x_column_name},{y_column_name}' if delimiter == ',' else f'{x_column_name}\t{y_column_name}'
 
@@ -14800,6 +14641,7 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Export failed: {str(e)}")
 
+    # 函数说明：显示手动 自动 refine 对话框。
     def _show_manual_auto_refine_dialog(self):
         """Open a local least-squares refine dialog based on current manual fitting parameters."""
         try:
@@ -14930,6 +14772,7 @@ class FittingController(QObject):
                 row_widgets.append((desc, check, min_box, max_box))
             initializing_rows = False
 
+            # 函数说明：实现 row 状态 相关逻辑。
             def persist_row_state():
                 if initializing_rows:
                     return
@@ -14973,6 +14816,7 @@ class FittingController(QObject):
             button_row.addWidget(close)
             layout.addLayout(button_row)
 
+            # 函数说明：设置selected。
             def set_selected(predicate):
                 for desc, check, _min_box, _max_box in row_widgets:
                     check.setChecked(bool(predicate(desc)))
@@ -14992,6 +14836,7 @@ class FittingController(QObject):
                 "last_preview_update": 0.0,
             }
 
+            # 函数说明：设置running 状态。
             def set_running_state(running: bool, status: str = None):
                 refine_state["running"] = bool(running)
                 if status:
@@ -15003,6 +14848,7 @@ class FittingController(QObject):
                 for widget in (select_all, clear, table, max_eval, target, ftol, xtol, gtol, progress_every, show_every):
                     widget.setEnabled(not running)
 
+            # 函数说明：应用结果。
             def apply_result(result):
                 if not result:
                     return
@@ -15018,6 +14864,7 @@ class FittingController(QObject):
                     f"Applied Auto Refine parameters: logRMSE={float(result.get('final_log_rmse', np.nan)):.6g}"
                 )
 
+            # 函数说明：处理progress事件。
             def on_progress(payload):
                 refine_state["latest_result"] = payload
                 max_nfev = max(1, int(payload.get("max_nfev", max_eval.value())))
@@ -15043,6 +14890,7 @@ class FittingController(QObject):
                     refine_state["last_preview_update"] = now
                     self._preview_manual_refine_curve(setup, payload.get("params"))
 
+            # 函数说明：实现 finish worker 相关逻辑。
             def finish_worker():
                 thread = refine_state.get("thread")
                 worker = refine_state.get("worker")
@@ -15058,6 +14906,7 @@ class FittingController(QObject):
                 refine_state["bridge"] = None
                 set_running_state(False)
 
+            # 函数说明：处理finished事件。
             def on_finished(result):
                 refine_state["latest_result"] = result
                 progress_bar.setValue(100 if not result.get("stopped") else progress_bar.value())
@@ -15076,11 +14925,13 @@ class FittingController(QObject):
                     self._add_fitting_success(result_label.text())
                 finish_worker()
 
+            # 函数说明：处理failed事件。
             def on_failed(message):
                 result_label.setText(f"Auto Refine failed: {message}")
                 self._add_fitting_error(f"Auto Refine failed: {message}")
                 finish_worker()
 
+            # 函数说明：停止refine。
             def stop_refine():
                 worker = refine_state.get("worker")
                 if worker is not None:
@@ -15092,6 +14943,7 @@ class FittingController(QObject):
             stop.clicked.connect(stop_refine)
             apply_current.clicked.connect(lambda: apply_result(refine_state.get("latest_result")))
 
+            # 函数说明：处理对话框 finished事件。
             def on_dialog_finished(_result):
                 worker = refine_state.get("worker")
                 if worker is not None:
@@ -15099,6 +14951,7 @@ class FittingController(QObject):
 
             dialog.finished.connect(on_dialog_finished)
 
+            # 函数说明：实现 run refine 相关逻辑。
             def run_refine():
                 try:
                     options = {
@@ -15168,6 +15021,7 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Failed to open Auto Refine: {e}")
 
+    # 函数说明：构建手动 refine 配置。
     def _build_manual_refine_setup(self):
         try:
             from utils.fitting import make_mixed_model, params_template
@@ -15232,6 +15086,7 @@ class FittingController(QObject):
             self._add_fitting_error(f"Auto Refine setup failed: {exc}")
             return None
 
+    # 函数说明：获取当前 手动 参数 值。
     def _get_current_manual_param_values(self, active_shapes, shape_configs):
         param_aliases = {
             "intensity": "Int",
@@ -15266,6 +15121,7 @@ class FittingController(QObject):
                 params.append(float(default))
         return params
 
+    # 函数说明：构建手动 refine 参数 descriptors。
     def _build_manual_refine_param_descriptors(self, active_shapes, shape_configs, param_names, params):
         descriptors = []
         global_map = {
@@ -15314,10 +15170,12 @@ class FittingController(QObject):
             descriptors.append(desc)
         return descriptors
 
+    # 函数说明：实现 手动 refine 默认 selected 相关逻辑。
     def _manual_refine_default_selected(self, name: str) -> bool:
         base = re.sub(r'\d+$', '', str(name))
         return base in {"Int", "BG", "int_Res", "k"}
 
+    # 函数说明：实现 手动 refine 对话框 状态 相关逻辑。
     def _manual_refine_dialog_state(self) -> dict:
         try:
             from core.user_settings import user_settings
@@ -15326,6 +15184,7 @@ class FittingController(QObject):
         except Exception:
             return getattr(self, "_manual_auto_refine_state", {}) if isinstance(getattr(self, "_manual_auto_refine_state", None), dict) else {}
 
+    # 函数说明：保存手动 refine 对话框 状态。
     def _save_manual_refine_dialog_state(self, rows: dict) -> None:
         rows = rows if isinstance(rows, dict) else {}
         self._manual_auto_refine_state = rows
@@ -15336,6 +15195,7 @@ class FittingController(QObject):
         except Exception:
             pass
 
+    # 函数说明：实现 默认 手动 refine bounds 相关逻辑。
     def _default_manual_refine_bounds(self, name: str, value: float):
         base = re.sub(r'\d+$', '', str(name))
         value = float(value)
@@ -15347,6 +15207,7 @@ class FittingController(QObject):
             return 0.1, max(abs(value) * 4.0, 50.0)
         return 0.0, max(abs(value) * 10.0, 1.0)
 
+    # 函数说明：实现 run 手动 自动 refine 相关逻辑。
     def _run_manual_auto_refine(self, setup, selected, options, progress_callback=None, stop_callback=None):
         model_func = setup["model_func"]
         q_model = np.asarray(setup["q_model"], dtype=float)
@@ -15375,11 +15236,13 @@ class FittingController(QObject):
         max_nfev = int(options.get("max_nfev", 120))
         min_progress_seconds = max(0.3, float(options.get("min_progress_seconds", 0.5) or 0.5))
 
+        # 函数说明：构建参数。
         def build_params(x):
             params = params0.copy()
             params[variable_indices] = x
             return params
 
+        # 函数说明：实现 对数 rmse for 参数 相关逻辑。
         def log_rmse_for_params(params):
             y_model = np.asarray(model_func(q_model, *params), dtype=float)
             if y_model.shape != y.shape:
@@ -15408,6 +15271,7 @@ class FittingController(QObject):
                 "stopped": False,
             })
 
+        # 函数说明：实现 residuals 相关逻辑。
         def residuals(x):
             if stop_callback and stop_callback():
                 raise RuntimeError("__AUTO_REFINE_STOP_REQUESTED__")
@@ -15498,6 +15362,7 @@ class FittingController(QObject):
             progress_callback(result_payload)
         return result_payload
 
+    # 函数说明：应用手动 refine 结果。
     def _apply_manual_refine_result(self, setup, refined_params, apply_indices=None):
         old_loading = getattr(self, "_loading_parameters", False)
         self._loading_parameters = True
@@ -15542,6 +15407,7 @@ class FittingController(QObject):
         finally:
             self._loading_parameters = old_loading
 
+    # 函数说明：实现 预览 手动 refine 曲线 相关逻辑。
     def _preview_manual_refine_curve(self, setup, params):
         if params is None:
             return
@@ -15586,12 +15452,12 @@ class FittingController(QObject):
             self._add_fitting_error(f"Auto Refine preview update failed: {exc}")
 
 
+    # 函数说明：执行手动 拟合。
     def _perform_manual_fitting(self):
         """No description."""
         try:
             from utils.fitting import make_mixed_model, params_template, mixed_model_components
 
-            # 1. ?????????ComboBox?????
             active_shapes, shape_configs = self._collect_active_particles()
 
             if not active_shapes:
@@ -15601,11 +15467,9 @@ class FittingController(QObject):
             self._add_fitting_success(f"Active shapes: {active_shapes}")
             self._last_active_particle_ids = shape_configs.copy()
 
-            # 2. ???q?????
             q_data = None
             q_source_kind = None
             if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
-                # ???Cut???????????Q?????nm^-1??
                 if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
                     q_data = np.array(self.current_cut_data['x_coords'])
                     q_source_kind = 'cut'
@@ -15613,7 +15477,6 @@ class FittingController(QObject):
                     self._add_fitting_error("No Cut data available for fitting")
                     return
             else:
-                # ???1D????????????????^-1 ???????????nm^-1 ?????
                 if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
                     q_data = np.array(self.current_1d_data['q'])
                     q_source_kind = '1d'
@@ -15626,7 +15489,6 @@ class FittingController(QObject):
                 f"q converted to internal model unit nm^-1 (source={self._get_q_source_unit(q_source_kind)}, display={self._get_q_display_unit()})"
             )
 
-            # 3. ?????????
             model_func = make_mixed_model(active_shapes)
             param_names = params_template(active_shapes)
 
@@ -15665,39 +15527,32 @@ class FittingController(QObject):
                         f"Shape {i} ({shape_display}): Structure factor enabled (D={d_param}, sigma_D={sigma_d_param})"
                     )
 
-            # 5. ????????????????????igma_Res??u_Res??nt_Res??
-            # ?????I?????????????BG??????????????????????
 
             if hasattr(self.ui, 'fitBGValue'):
                 bg_param = self.ui.fitBGValue.value()
             else:
                 bg_param = self.get_global_parameter('background') if hasattr(self, 'get_global_parameter') else 0.0
 
-            # ??? sigma_Res (Br)
             if hasattr(self.ui, 'fitSigmaResValue'):
                 sigma_res_param = self.ui.fitSigmaResValue.value()
             else:
                 sigma_res_param = self.get_global_parameter('sigma_res') if hasattr(self, 'get_global_parameter') else 0.1
 
-            # ??? nu_Res (Lorentzian???)
             if hasattr(self.ui, 'fitNuResValue'):
                 nu_res_param = self.ui.fitNuResValue.value()
             else:
                 nu_res_param = self.get_global_parameter('nu_res') if hasattr(self, 'get_global_parameter') else 5.0
 
-            # ??? int_Res (Lorentzian???)
             if hasattr(self.ui, 'fitIntResValue'):
                 int_res_param = self.ui.fitIntResValue.value()
             else:
                 int_res_param = self.get_global_parameter('int_res') if hasattr(self, 'get_global_parameter') else 0.0
 
-            # ??? k (??????)
             if hasattr(self.ui, 'fitKValue'):
                 k_param = self.ui.fitKValue.value()
             else:
                 k_param = self.get_global_parameter('k_value') if hasattr(self, 'get_global_parameter') else 1.0
 
-            # ?????????
             if sigma_res_param == 0 or int_res_param == 0:
                 self._add_fitting_success(
                     f"Lorentzian resolution component disabled (sigma_res={sigma_res_param}, int_res={int_res_param})"
@@ -15709,20 +15564,15 @@ class FittingController(QObject):
 
             params.extend([bg_param, sigma_res_param, nu_res_param, int_res_param, k_param])
 
-            # ??????????????
             param_dict = dict(zip(param_names, params))
             self._add_fitting_success(f"Using parameters: {param_dict}")
 
-            # ?????????
             self._validate_parameter_retrieval(active_shapes, shape_configs)
 
-            # 6. ????????
             try:
-                # ??????????????????????? q[nm^-1]??? R/D/h[nm] ?????
                 fitting_result = model_func(q_model, *params)
                 self._add_fitting_success(f"Fitting calculation completed successfully")
 
-                # ???????????????????
                 result_stats = {
                     'min': float(np.min(fitting_result)),
                     'max': float(np.max(fitting_result)),
@@ -15731,15 +15581,12 @@ class FittingController(QObject):
                 }
                 self._add_fitting_success(f"Result stats: {result_stats}")
 
-                # ???????????I_fitting
                 self.I_fitting = fitting_result
                 self.has_fitting_data = True
-                # ????????????????????
                 try:
                     self._has_fitting_data = True
                 except Exception:
                     pass
-                # ????????itting ???????????????????
                 try:
                     import time
                     self.fitting = {
@@ -15758,16 +15605,13 @@ class FittingController(QObject):
                 except Exception:
                     self.fitting = {'q': q_data, 'I': fitting_result, 'meta': {'source': 'fitting'}}
 
-                # ???????????Fitting with data
                 self.display_mode = 'fitting'
-                self._fitting_mode_active = True  # ????????????
+                self._fitting_mode_active = True
 
-                # ??????
                 if not getattr(self, "_suppress_workflow_plot_updates", False):
                     self._update_GUI_image('fitting')
                     self._update_outside_window('fitting')
 
-                # ???????uto-K??????????????????????
                 if self._auto_k_enabled and hasattr(self, 'I') and self.I is not None:
                     try:
                         self._optimize_k_value()
@@ -15780,6 +15624,7 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Manual fitting failed: {str(e)}")
 
+    # 函数说明：实现 store 拟合 数据 相关逻辑。
     def _store_fitting_data(self, q_data, intensity_data, active_shapes):
         """No description."""
         try:
@@ -15788,40 +15633,36 @@ class FittingController(QObject):
             self._fitting_shapes = active_shapes.copy() if active_shapes else []
             self._has_fitting_data = True
 
-            # ???GUI???????????
             self._update_gui_fitting_display()
 
         except Exception as e:
             pass
 
+    # 函数说明：实现 switch to 拟合 显示 模式 相关逻辑。
     def _switch_to_fitting_display_mode(self):
         """No description."""
         try:
-            # ????????????????????
             self._display_mode = 'fitting'
             self.display_mode = 'fitting'
             self._fitting_mode_active = True
 
-            # ???GUI???????????
             self._refresh_all_displays_for_fitting_mode()
 
         except Exception as e:
             pass
 
+    # 函数说明：实现 switch to normal 显示 模式 相关逻辑。
     def _switch_to_normal_display_mode(self):
         """No description."""
         try:
-            # ????????????????????
             self._display_mode = 'normal'
             self.display_mode = 'normal'
             self._fitting_mode_active = False
 
-            # ??????????????????????
             self._fitting_q_data = None
             self._fitting_intensity_data = None
             self._fitting_shapes = []
             self._has_fitting_data = False
-            # ??????????????????????????????????
             try:
                 self.has_fitting_data = False
                 self.I_fitting = None
@@ -15831,12 +15672,12 @@ class FittingController(QObject):
         except Exception as e:
             pass
 
+    # 函数说明：更新界面 拟合 显示。
     def _update_gui_fitting_display(self):
-        """GUI??????????itGraphicsView"""
+        """Render the current fitting plot in fitGraphicsView."""
         try:
             if not hasattr(self, '_fitting_q_data') or self._fitting_q_data is None:
                 return
-            # ?????????????????????????????????????fitting??????fitting???????????
             try:
                 self.display_mode = 'fitting'
                 self._display_mode = 'fitting'
@@ -15844,22 +15685,20 @@ class FittingController(QObject):
             except Exception:
                 pass
 
-            # ??UI???????????????????????
             self._plot_fitting_result(self._fitting_q_data, self._fitting_intensity_data, self._fitting_shapes)
 
         except Exception as e:
             pass
 
+    # 函数说明：刷新all displays for 拟合 模式。
     def _refresh_all_displays_for_fitting_mode(self):
         """No description."""
         try:
             if not self._has_fitting_data:
                 return
 
-            # 1. ???GUI???
             self._update_gui_fitting_display()
 
-            # 2. ???????????????????????
             if (hasattr(self, 'independent_fit_window') and
                 self.independent_fit_window is not None and
                 self.independent_fit_window.isVisible()):
@@ -15869,18 +15708,17 @@ class FittingController(QObject):
         except Exception as e:
             pass
 
+    # 函数说明：刷新外部 窗口 拟合 显示。
     def _refresh_external_window_fitting_display(self):
         """No description."""
         try:
             if not self._has_fitting_data:
                 return
 
-            # ????????????
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
 
-            # ????????
             original_x_data = None
             original_y_data = None
             data_label = ""
@@ -15896,7 +15734,6 @@ class FittingController(QObject):
                     original_y_data = np.array(self.current_1d_data['I'])
                     data_label = "1D File Data"
 
-            # ????????????
             x_label = self._build_q_axis_label()
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Manual Fitting Result - {", ".join(self._fitting_shapes)}'
@@ -15911,15 +15748,14 @@ class FittingController(QObject):
         except Exception as e:
             pass
 
+    # 函数说明：获取粒子 参数。
     def _get_particle_parameter(self, shape_idx, param_name, default_value):
         """No description."""
         try:
-            # ??????????????
             current_shape = self.get_particle_shape(shape_idx)
             if current_shape == 'None':
                 return default_value
 
-            # ?????I????????????UI??????????
             control_name = self._get_ui_control_name(shape_idx, current_shape, param_name)
             if control_name and hasattr(self.ui, control_name):
                 control = getattr(self.ui, control_name)
@@ -15933,7 +15769,6 @@ class FittingController(QObject):
                     except ValueError:
                         pass
 
-            # ???UI???????????????model_params_manager???
             if hasattr(self, 'model_params_manager'):
                 particle_id = f"particle_{shape_idx}"
                 shape_key = self._shape_key(current_shape)
@@ -15944,12 +15779,12 @@ class FittingController(QObject):
                 if value is not None:
                     return value
 
-            # ???????
             return default_value
 
         except Exception as e:
             return default_value
 
+    # 函数说明：获取界面 control name。
     def _get_ui_control_name(self, shape_idx, shape_name, param_name):
         """No description."""
         try:
@@ -15975,6 +15810,7 @@ class FittingController(QObject):
         except Exception:
             return None
 
+    # 函数说明：绘制拟合 结果。
     def _plot_fitting_result(self, q_data, intensity_data, active_shapes):
         """No description."""
         try:
@@ -15985,73 +15821,60 @@ class FittingController(QObject):
                 self._add_fitting_error("Matplotlib not available for plotting")
                 return
 
-            # ?????????
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
 
-            # ?????????????catter???
             original_x_data = None
             original_y_data = None
             data_label = ""
 
             if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
-                # ???Cut???
                 if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
                     original_x_data = np.array(self.current_cut_data['x_coords'])
                     original_y_data = np.array(self.current_cut_data['y_intensity'])
                     data_label = "Cut Data"
             else:
-                # ???1D??????
                 if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
                     original_x_data = np.array(self.current_1d_data['q'])
                     original_y_data = np.array(self.current_1d_data['I'])
                     data_label = "1D File Data"
 
-            # ??????
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-            # ???????????????
             scene = self._setup_fit_graphics_scene()
             if scene is None:
                 return
 
-            # ???matplotlib???
             fig = Figure(figsize=(9.6, 7.2), dpi=80)
             canvas = FigureCanvas(fig)
             ax = fig.add_subplot(111)
 
-            # ??????????
-            fitting_y_data = np.array(intensity_data)  # ????????????????
+            fitting_y_data = np.array(intensity_data)
             plot_original_y = original_y_data.copy() if original_y_data is not None else None
             norm_divisor = None
 
             if normalize and original_y_data is not None:
-                # ?????????????????????????
                 max_original = np.max(original_y_data)
                 if max_original > 0:
                     norm_divisor = max_original
                     plot_original_y = original_y_data / max_original
-                    # ?????????????????????????????
                     fitting_y_data = fitting_y_data / max_original
 
             original_x_plot = self._convert_q_values_for_display(original_x_data) if original_x_data is not None else None
             fitting_x_plot = self._convert_q_values_for_display(q_data)
 
-            # ???????????scatter??
             if original_x_plot is not None and plot_original_y is not None:
                 ax.scatter(original_x_plot, plot_original_y,
                           s=20, alpha=0.7, color='blue',
                           label=data_label, zorder=2)
 
-            # ????????
             ax.plot(fitting_x_plot, fitting_y_data,
                    color='red', linewidth=2,
                    label=f'Fitting ({", ".join(active_shapes)})',
                    zorder=3)
 
-            # ??????????
             x_label = self._build_q_axis_label() if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Manual Fitting Result - {", ".join(active_shapes)}'
@@ -16062,12 +15885,10 @@ class FittingController(QObject):
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            # ???????????
             for axis in ['top', 'bottom', 'left', 'right']:
                 ax.spines[axis].set_linewidth(1.8)
             ax.tick_params(axis='both', which='both', width=1.6, labelsize=12)
 
-            # ????????????
             if log_x:
                 ax.set_xscale('log')
             if log_y:
@@ -16079,21 +15900,16 @@ class FittingController(QObject):
                 log_y=log_y,
             )
 
-            # ROI ?????
             self._draw_roi_guides_if_active(ax)
 
-            # ??????
             fig.tight_layout()
 
-            # ????????
             proxy_widget = scene.addWidget(canvas)
             self._fit_view_to_item(self.ui.fitGraphicsView, proxy_widget, keep_aspect=True)
 
-            # ????????figure ??canvas ????????????????????
             self._current_fit_figure = fig
             self._current_fit_canvas = canvas
 
-            # ????????????
             if not hasattr(self, 'current_fitting_data'):
                 self.current_fitting_data = {}
 
@@ -16112,10 +15928,11 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Failed to plot fitting result: {str(e)}")
 
+    # 函数说明：获取上一次 拟合 spec and 参数。
     def _get_last_fitting_spec_and_params(self, fallback_shapes=None):
-        """ (shapes:list[str], params_in_order:list[float])??
-        ?????? self.fitting['meta'] ?? shapes ??params??????????????????????
-        ???????????? UI ??????????????????????
+        """Return the last fitting shapes and ordered parameter list.
+
+        Prefer metadata stored in ``self.fitting``; fall back to active UI widgets when metadata is unavailable.
         """
         try:
             import re
@@ -16195,48 +16012,40 @@ class FittingController(QObject):
         except Exception:
             return (fallback_shapes, None) if fallback_shapes else (None, None)
 
+    # 函数说明：处理组件 复选框 changed事件。
     def _on_component_checkbox_changed(self, *_):
-        """
-
-        ?????Normal ????????????????????Fitting ???????????????????
-        """
+        """Refresh fitting displays when component visibility changes in fitting mode."""
         try:
-            # ??????????????????????
             if not self._is_in_fitting_mode():
                 return
-            # ?????????????????????????????????UI??????
             self._update_GUI_image('fitting')
             self._update_outside_window('fitting')
         except Exception:
             pass
 
+    # 函数说明：显示拟合 in 外部 窗口。
     def _show_fitting_in_external_window(self, q_data, intensity_data, active_shapes):
         """No description."""
         try:
-            # ?????????
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
 
-            # ??????????
             original_x_data = None
             original_y_data = None
             data_label = ""
 
             if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
-                # ???Cut???
                 if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
                     original_x_data = np.array(self.current_cut_data['x_coords'])
                     original_y_data = np.array(self.current_cut_data['y_intensity'])
                     data_label = "Cut Data"
             else:
-                # ???1D??????
                 if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
                     original_x_data = np.array(self.current_1d_data['q'])
                     original_y_data = np.array(self.current_1d_data['I'])
                     data_label = "1D File Data"
 
-            # ?????????????????
             if not _qobject_is_alive(self.independent_fit_window):
                 self.independent_fit_window = None
 
@@ -16245,7 +16054,6 @@ class FittingController(QObject):
                 self.independent_fit_window.setAttribute(Qt.WA_DeleteOnClose, True)
                 self.independent_fit_window.destroyed.connect(lambda _obj=None: setattr(self, "independent_fit_window", None))
 
-                # ??????
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
                 self.independent_fit_window.show_positive_cb.toggled.connect(self._on_positive_only_changed)
                 if hasattr(self.independent_fit_window, 'show_negative_cb'):
@@ -16261,12 +16069,10 @@ class FittingController(QObject):
                 except Exception:
                     pass
 
-            # ????????????
             x_label = self._build_q_axis_label() if "q" in str(original_x_data).lower() or len(q_data) > 0 else "Position"
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Manual Fitting Result - {", ".join(active_shapes)}'
 
-            # ?????????????- ?????????????????
             self._update_independent_window_with_fitting(
                 original_x_data, original_y_data, data_label,
                 q_data, intensity_data, active_shapes,
@@ -16274,24 +16080,23 @@ class FittingController(QObject):
                 log_x, log_y, normalize
             )
 
-            # ??????
             if not self.independent_fit_window.isVisible():
                 move_window_to_cursor_screen(self.independent_fit_window)
             self.independent_fit_window.show()
             self.independent_fit_window.raise_()
             self.independent_fit_window.activateWindow()
 
-            # ??????
             if hasattr(self.independent_fit_window, 'canvas'):
                 self.independent_fit_window.canvas.setFocus()
 
             self._add_fitting_success(f"Fitting result displayed in external window")
-            return True  # ????????????
+            return True
 
         except Exception as e:
             self._add_fitting_error(f"Failed to show fitting in external window: {str(e)}")
-            return False  # ????????????
+            return False
 
+    # 函数说明：更新独立 窗口 with 拟合。
     def _update_independent_window_with_fitting(self, original_x, original_y, data_label,
                                                fitting_x, fitting_y, shapes,
                                                x_label, y_label, title,
@@ -16307,7 +16112,6 @@ class FittingController(QObject):
                 return
             ax.clear()
 
-            # ??????????
             fitting_x = np.asarray(fitting_x, dtype=float).reshape(-1) if fitting_x is not None else np.array([], dtype=float)
             plot_fitting_y = np.asarray(fitting_y, dtype=float).reshape(-1) if fitting_y is not None else np.array([], dtype=float)
             nf = min(fitting_x.size, plot_fitting_y.size)
@@ -16333,11 +16137,9 @@ class FittingController(QObject):
                 return
 
             if normalize and original_y is not None:
-                # ???????????????????????????????
                 max_original = np.nanmax(plot_original_y) if plot_original_y is not None and plot_original_y.size else 0.0
                 if max_original > 0:
                     plot_original_y = plot_original_y / max_original
-                    # ?????????????????????????????
                     plot_fitting_y = plot_fitting_y / max_original
 
             filter_mode = self._get_independent_axis_filter_mode()
@@ -16377,20 +16179,17 @@ class FittingController(QObject):
                     fitting_x_plot = np.asarray(fitting_x_plot)[mask]
                     plot_fitting_y = np.asarray(plot_fitting_y)[mask]
 
-            # ???????????scatter??
             if original_x is not None and plot_original_y is not None and len(original_x_plot) > 0:
                 ax.scatter(original_x_plot, plot_original_y,
                           s=30, alpha=0.7, color='blue',
                           label=data_label, zorder=2)
 
-            # ????????
             if fitting_x is not None and plot_fitting_y is not None and len(fitting_x_plot) > 0:
                 ax.plot(fitting_x_plot, plot_fitting_y,
                        color='red', linewidth=2.5,
                        label=f'Fitting ({", ".join(shapes)})',
                        zorder=3)
 
-            # ??????????
             plot_x_label = x_label
             if isinstance(x_label, str) and 'q' in x_label.lower():
                 plot_x_label = self._build_q_axis_label(filter_mode=filter_mode)
@@ -16400,11 +16199,9 @@ class FittingController(QObject):
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            # ???????????
             for axis in ['top', 'bottom', 'left', 'right']:
                 ax.spines[axis].set_linewidth(1.8)
 
-            # ????????????
             if log_x:
                 ax.set_xscale('log')
             if log_y:
@@ -16427,13 +16224,13 @@ class FittingController(QObject):
             except Exception:
                 pass
 
-            # ??????
             if hasattr(self.independent_fit_window, 'canvas'):
                 self.independent_fit_window.canvas.draw()
 
         except Exception as e:
             self._add_fitting_error(f"Failed to update independent window with fitting: {str(e)}")
 
+    # 函数说明：校验参数 retrieval。
     def _validate_parameter_retrieval(self, active_shapes, shape_configs):
         """No description."""
         try:
@@ -16464,7 +16261,6 @@ class FittingController(QObject):
                     else:
                         self._add_fitting_error(f"  {param_key}: {control_name} not found in UI")
 
-            # ??????????
             self._add_fitting_success("Global Parameters:")
             if hasattr(self.ui, 'fitBGValue'):
                 bg_value = self.ui.fitBGValue.value()
@@ -16501,23 +16297,20 @@ class FittingController(QObject):
         except Exception as e:
             self._add_fitting_error(f"Parameter validation failed: {str(e)}")
 
+    # 函数说明：清除拟合 数据。
     def _clear_fitting_data(self):
         """fitting"""
         try:
-            # ????????I_fitting???
             if not hasattr(self, 'I_fitting') or self.I_fitting is None:
                 self.status_updated.emit("No fitting data to clear")
                 return
 
-            # ???I_fitting???
             self.I_fitting = None
             self.has_fitting_data = False
 
-            # ??????????
             self.display_mode = 'normal'
-            self._fitting_mode_active = False  # ????????????
+            self._fitting_mode_active = False
 
-            # ????????????????????
             self._update_GUI_image('normal')
             self._update_outside_window('normal')
 
@@ -16526,46 +16319,40 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Error clearing fitting data: {str(e)}")
 
+    # 函数说明：实现 force update 界面 points only 相关逻辑。
     def _force_update_gui_points_only(self):
         """GUI"""
         try:
             if not hasattr(self.ui, 'fitGraphicsView'):
                 return
 
-            # ????????figure??anvas
             if not hasattr(self, '_current_fit_figure') or self._current_fit_figure is None:
                 return
 
             if not hasattr(self, '_current_fit_canvas') or self._current_fit_canvas is None:
                 return
 
-            # ?????????
             x_data, y_data, data_label = self._get_current_data_for_display()
             if x_data is None or y_data is None:
                 return
 
-            # ?????????????????
             self._current_fit_figure.clear()
             ax = self._current_fit_figure.add_subplot(111)
 
-            # ?????????
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
 
-            # ??????
             plot_y = y_data.copy()
             if normalize:
                 max_val = np.max(y_data)
                 if max_val > 0:
                     plot_y = y_data / max_val
 
-            # ????????
             x_plot = self._convert_q_values_for_display(x_data)
             ax.scatter(x_plot, plot_y, s=30, alpha=0.7, color='blue',
                       label=data_label, zorder=2)
 
-            # ??????????
             x_label = self._build_q_axis_label()
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Data Points Only - {data_label}'
@@ -16576,38 +16363,32 @@ class FittingController(QObject):
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            # ?????????
             if log_x:
                 ax.set_xscale('log')
             if log_y:
                 ax.set_yscale('log')
 
-            # ?????????
             self._current_fit_canvas.draw()
 
         except Exception as e:
-            # ???????????????????????????????
             pass
 
 
+    # 函数说明：更新拟合 图表 points only。
     def _update_fitting_plot_points_only(self):
         """No description."""
         try:
             if not hasattr(self, 'current_cut_data') or self.current_cut_data is None:
                 return
 
-            # ???????????
             if hasattr(self.ui, 'fitGraphicsView') and hasattr(self, '_current_fit_figure') and self._current_fit_figure is not None:
                 self._current_fit_figure.clear()
                 ax = self._current_fit_figure.add_subplot(111)
 
-                # ????????og???
                 log_x = self._get_checkbox_state('fitLogXCheckBox', False)
                 log_y = self._get_checkbox_state('fitLogYCheckBox', False)
 
-                # ????????
                 cut_data = self.current_cut_data
-                # ???????????
                 x_data = None
                 y_data = None
                 if 'x_coords' in cut_data and 'y_intensity' in cut_data:
@@ -16621,7 +16402,6 @@ class FittingController(QObject):
                     x_plot = self._convert_q_values_for_display(x_data)
                     ax.scatter(x_plot, y_data, c='blue', s=20, alpha=0.7, label='Data')
 
-                    # ????????
                     if log_x:
                         ax.set_xscale('log')
                     if log_y:
@@ -16632,13 +16412,13 @@ class FittingController(QObject):
                     ax.legend()
                     ax.grid(True, alpha=0.3)
 
-                # ??????
                 if hasattr(self, '_current_fit_canvas') and self._current_fit_canvas is not None:
                     self._current_fit_canvas.draw()
 
         except Exception as e:
             pass
 
+    # 函数说明：处理拟合 对数 changed事件。
     def _on_fit_log_changed(self):
         """Log-x/Log-y"""
         try:
@@ -16651,7 +16431,6 @@ class FittingController(QObject):
             self._update_GUI_image(mode)
             self._update_outside_window(mode)
             self.status_updated.emit("Display log scale updated")
-            # ??????ROI??????log-x????????????????????????????
             try:
                 QTimer.singleShot(0, self._adjust_roi_bounds_for_log_x)
             except Exception:
@@ -16659,6 +16438,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Error updating log scale: {str(e)}")
 
+    # 函数说明：处理归一化 changed事件。
     def _on_normalize_changed(self):
         """Normalize"""
         try:
@@ -16669,6 +16449,7 @@ class FittingController(QObject):
         except Exception as e:
             self.status_updated.emit(f"Error updating normalize setting: {str(e)}")
 
+    # 函数说明：处理正值 only changed事件。
     def _on_positive_only_changed(self):
         """No description."""
         try:
@@ -16695,6 +16476,7 @@ class FittingController(QObject):
 
 
 
+    # 函数说明：更新拟合 图表。
     def _update_fitting_plot(self):
         """No description."""
         try:
@@ -16705,11 +16487,9 @@ class FittingController(QObject):
                 self._current_fit_figure.clear()
                 ax = self._current_fit_figure.add_subplot(111)
 
-                # ????????og???
                 log_x = self._get_checkbox_state('fitLogXCheckBox', False)
                 log_y = self._get_checkbox_state('fitLogYCheckBox', False)
 
-                # ??????????????????
                 if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
                     cut_data = self.current_cut_data
                     if 'x_coords' in cut_data and 'y_intensity' in cut_data:
@@ -16717,12 +16497,10 @@ class FittingController(QObject):
                     elif 'x' in cut_data and 'y' in cut_data:
                         ax.scatter(self._convert_q_values_for_display(cut_data['x']), cut_data['y'], c='blue', s=20, alpha=0.7, label='Data')
 
-                # ???????????? self.fitting_data??
                 fitting_data = self.fitting_data
                 if isinstance(fitting_data, dict) and 'x' in fitting_data and 'y' in fitting_data:
                     ax.plot(self._convert_q_values_for_display(fitting_data['x']), fitting_data['y'], 'r-', linewidth=2, label='Fit')
 
-                # ????????
                 if log_x:
                     ax.set_xscale('log')
                 if log_y:
@@ -16733,20 +16511,18 @@ class FittingController(QObject):
                 ax.legend()
                 ax.grid(True, alpha=0.3)
 
-                # ??????
                 if hasattr(self, '_current_fit_canvas') and self._current_fit_canvas is not None:
                     self._current_fit_canvas.draw()
 
         except Exception:
             pass
 
+    # 函数说明：更新拟合 模式 displays without 线。
     def _update_fitting_mode_displays_without_line(self):
         """No description."""
         try:
-            # 1. ???GUI??? - ???????
             self._update_gui_points_only()
 
-            # 2. ???????????? - ???????
             if (hasattr(self, 'independent_fit_window') and
                 self.independent_fit_window is not None and
                 self.independent_fit_window.isVisible()):
@@ -16756,40 +16532,37 @@ class FittingController(QObject):
         except Exception as e:
             pass
 
+    # 函数说明：更新界面 points only。
     def _update_gui_points_only(self):
         """No description."""
         try:
             if not hasattr(self.ui, 'fitGraphicsView'):
                 return
 
-            # ?????????
             x_data, y_data, data_label = self._get_current_data_for_display()
             if x_data is None or y_data is None:
                 return
 
-            # ?????????
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
 
-            # ??UI???????
             self._plot_data_points_only(x_data, y_data, data_label, log_x, log_y, normalize)
 
         except Exception as e:
             pass
 
+    # 函数说明：更新外部 窗口 points only。
     def _update_external_window_points_only(self):
         """No description."""
         try:
             if not hasattr(self.independent_fit_window, 'ax'):
                 return
 
-            # ?????????
             x_data, y_data, data_label = self._get_current_data_for_display()
             if x_data is None or y_data is None:
                 return
 
-            # ?????????
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
@@ -16797,7 +16570,6 @@ class FittingController(QObject):
             ax = self.independent_fit_window.ax
             ax.clear()
 
-            # ??????
             plot_y = y_data.copy()
             if normalize:
                 max_val = np.max(y_data)
@@ -16810,11 +16582,9 @@ class FittingController(QObject):
             if x_plot.size == 0 or plot_y is None or plot_y.size == 0:
                 return
 
-            # ???????
             ax.scatter(x_plot, plot_y, s=30, alpha=0.7, color='blue',
                       label=data_label, zorder=2)
 
-            # ??????????????????????
             x_label = self._build_q_axis_label(filter_mode=filter_mode)
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
             title = f'Fitting Display Mode - {data_label}'
@@ -16825,17 +16595,14 @@ class FittingController(QObject):
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            # ????????????????????????
             for axis in ['top', 'bottom', 'left', 'right']:
                 ax.spines[axis].set_linewidth(1.8)
 
-            # ?????????
             if log_x:
                 ax.set_xscale('log')
             if log_y:
                 ax.set_yscale('log')
 
-            # ??????
             if hasattr(self.independent_fit_window, 'canvas'):
                 try:
                     if hasattr(self.independent_fit_window, 'set_deletable_points'):
@@ -16847,17 +16614,16 @@ class FittingController(QObject):
         except Exception as e:
             pass
 
+    # 函数说明：获取当前 数据 for 显示。
     def _get_current_data_for_display(self):
         """No description."""
         try:
             if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
-                # ???Cut???
                 if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
                     return (np.array(self.current_cut_data['x_coords']),
                            np.array(self.current_cut_data['y_intensity']),
                            "Cut Data")
             else:
-                # ???1D??????
                 if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
                     return (np.array(self.current_1d_data['q']),
                            np.array(self.current_1d_data['I']),
@@ -16868,6 +16634,7 @@ class FittingController(QObject):
         except Exception as e:
             return None, None, ""
 
+    # 函数说明：绘制数据 points only。
     def _plot_data_points_only(self, x_data, y_data, data_label, log_x, log_y, normalize):
         """UI"""
         try:
