@@ -15,7 +15,7 @@ import hashlib
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint, QProcess, QUrl
+from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint, QProcess, QUrl, QSettings
 from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -59,6 +59,52 @@ GISAXS_IMAGE_COLORMAPS = (
     "coolwarm",
     "gray",
 )
+
+
+# 函数说明：使用束心左右镜像补全 detector gap 像素。
+def mirror_fill_detector_gaps(image, center_x=None, gap_value=-1, gap_margin_px=0):
+    if center_x is None:
+        raise ValueError("center_x is required for mirror gap fill")
+    arr = np.asarray(image)
+    if arr.ndim != 2:
+        raise ValueError("mirror gap fill expects a 2D image")
+
+    filled = arr.copy()
+    source = arr.copy()
+    gap_mask = arr == gap_value
+    if not np.any(gap_mask):
+        return filled
+
+    margin = max(0, int(gap_margin_px or 0))
+    replace_mask = gap_mask.copy()
+    if margin > 0:
+        for dx in range(-margin, margin + 1):
+            if dx == 0:
+                continue
+            shifted = np.zeros_like(gap_mask, dtype=bool)
+            if dx < 0:
+                shifted[:, :dx] = gap_mask[:, -dx:]
+            else:
+                shifted[:, dx:] = gap_mask[:, :-dx]
+            replace_mask |= shifted
+
+    gap_y, gap_x = np.where(replace_mask)
+    if gap_x.size == 0:
+        return filled
+
+    x_mirror = np.rint((2.0 * float(center_x)) - gap_x).astype(int)
+    in_bounds = (x_mirror >= 0) & (x_mirror < arr.shape[1])
+    if not np.any(in_bounds):
+        return filled
+
+    target_y = gap_y[in_bounds]
+    target_x = gap_x[in_bounds]
+    source_x = x_mirror[in_bounds]
+    source_values = source[target_y, source_x]
+    valid_source = (source_values != gap_value) & np.isfinite(source_values)
+    if np.any(valid_source):
+        filled[target_y[valid_source], target_x[valid_source]] = source_values[valid_source]
+    return filled
 
 from ui.detector_parameters_dialog import DetectorParametersDialog
 from ui.responsive_layout import (
@@ -2922,6 +2968,11 @@ class FittingController(QObject):
         self._show_cut_region = True
         self._show_center = True
         self._image_colormap = "viridis"
+        self._mirror_fill_detector_gaps = False
+        self._mirror_gap_margin_px = 0
+        self.current_raw_image = None
+        self._last_mirror_fill_count = 0
+        self._last_mirror_fill_status = ""
         self._syncing_image_display_options = False
         self._updating_color_scale_ui = False
         self._has_displayed_image = False
@@ -4444,23 +4495,65 @@ class FittingController(QObject):
     # 函数说明：加载图像 显示 options。
     def _load_image_display_options(self):
         try:
+            settings = QSettings()
             from core.global_params import global_params
             self._show_cut_region = bool(global_params.get_parameter('fitting', 'gisaxs_input.show_cut_region', True))
             self._show_center = bool(global_params.get_parameter('fitting', 'gisaxs_input.show_center', True))
             cmap = global_params.get_parameter('fitting', 'gisaxs_input.colormap', 'viridis')
             self._image_colormap = cmap if cmap in GISAXS_IMAGE_COLORMAPS else "viridis"
+            self._mirror_fill_detector_gaps = settings.value(
+                'fitting/gisaxs_input/mirror_fill_detector_gaps',
+                bool(global_params.get_parameter('fitting', 'gisaxs_input.mirror_fill_detector_gaps', False)),
+                type=bool,
+            )
+            self._mirror_gap_margin_px = int(
+                settings.value(
+                    'fitting/gisaxs_input/mirror_gap_margin_px',
+                    global_params.get_parameter('fitting', 'gisaxs_input.mirror_gap_margin_px', 0),
+                    type=int,
+                )
+            )
+            self._mirror_gap_margin_px = int(np.clip(self._mirror_gap_margin_px, 0, 20))
         except Exception:
             self._show_cut_region = True
             self._show_center = True
             self._image_colormap = "viridis"
+            self._mirror_fill_detector_gaps = False
+            self._mirror_gap_margin_px = 0
+            try:
+                settings = QSettings()
+                self._mirror_fill_detector_gaps = settings.value(
+                    'fitting/gisaxs_input/mirror_fill_detector_gaps',
+                    False,
+                    type=bool,
+                )
+                self._mirror_gap_margin_px = int(
+                    settings.value('fitting/gisaxs_input/mirror_gap_margin_px', 0, type=int)
+                )
+                self._mirror_gap_margin_px = int(np.clip(self._mirror_gap_margin_px, 0, 20))
+            except Exception:
+                pass
 
     # 函数说明：保存图像 显示 options。
     def _save_image_display_options(self):
         try:
+            settings = QSettings()
+            settings.setValue('fitting/gisaxs_input/mirror_fill_detector_gaps', bool(self._mirror_fill_detector_gaps))
+            settings.setValue('fitting/gisaxs_input/mirror_gap_margin_px', int(self._mirror_gap_margin_px))
             from core.global_params import global_params
             global_params.set_parameter('fitting', 'gisaxs_input.show_cut_region', bool(self._show_cut_region))
             global_params.set_parameter('fitting', 'gisaxs_input.show_center', bool(self._show_center))
             global_params.set_parameter('fitting', 'gisaxs_input.colormap', self._image_colormap)
+            global_params.set_parameter(
+                'fitting',
+                'gisaxs_input.mirror_fill_detector_gaps',
+                bool(self._mirror_fill_detector_gaps),
+            )
+            global_params.set_parameter(
+                'fitting',
+                'gisaxs_input.mirror_gap_margin_px',
+                int(self._mirror_gap_margin_px),
+            )
             global_params.save_user_parameters()
         except Exception:
             pass
@@ -4489,6 +4582,25 @@ class FittingController(QObject):
                 center_cb.setChecked(bool(self._show_center))
                 center_cb.blockSignals(False)
                 center_cb.toggled.connect(self._on_main_show_center_toggled)
+            mirror_cb = getattr(self.ui, 'gisaxsInputMirrorGapFillCheckBox', None)
+            if mirror_cb is not None:
+                mirror_cb.blockSignals(True)
+                mirror_cb.setChecked(bool(self._mirror_fill_detector_gaps))
+                mirror_cb.blockSignals(False)
+                mirror_cb.toggled.connect(self._on_main_mirror_gap_fill_toggled)
+            margin_spin = getattr(self.ui, 'gisaxsInputMirrorGapMarginSpinBox', None)
+            if margin_spin is not None:
+                margin_spin.blockSignals(True)
+                margin_spin.setValue(int(self._mirror_gap_margin_px))
+                margin_spin.setEnabled(bool(self._mirror_fill_detector_gaps))
+                margin_spin.blockSignals(False)
+                margin_spin.valueChanged.connect(self._on_main_mirror_gap_margin_changed)
+            margin_label = getattr(self.ui, 'gisaxsInputMirrorGapMarginLabel', None)
+            if margin_label is not None:
+                margin_label.setEnabled(bool(self._mirror_fill_detector_gaps))
+            margin_unit = getattr(self.ui, 'gisaxsInputMirrorGapMarginUnitLabel', None)
+            if margin_unit is not None:
+                margin_unit.setEnabled(bool(self._mirror_fill_detector_gaps))
         except Exception:
             pass
 
@@ -4512,6 +4624,23 @@ class FittingController(QObject):
                 center_cb.blockSignals(True)
                 center_cb.setChecked(bool(self._show_center))
                 center_cb.blockSignals(False)
+            mirror_cb = getattr(self.ui, 'gisaxsInputMirrorGapFillCheckBox', None)
+            if mirror_cb is not None:
+                mirror_cb.blockSignals(True)
+                mirror_cb.setChecked(bool(self._mirror_fill_detector_gaps))
+                mirror_cb.blockSignals(False)
+            margin_spin = getattr(self.ui, 'gisaxsInputMirrorGapMarginSpinBox', None)
+            if margin_spin is not None:
+                margin_spin.blockSignals(True)
+                margin_spin.setValue(int(self._mirror_gap_margin_px))
+                margin_spin.setEnabled(bool(self._mirror_fill_detector_gaps))
+                margin_spin.blockSignals(False)
+            margin_label = getattr(self.ui, 'gisaxsInputMirrorGapMarginLabel', None)
+            if margin_label is not None:
+                margin_label.setEnabled(bool(self._mirror_fill_detector_gaps))
+            margin_unit = getattr(self.ui, 'gisaxsInputMirrorGapMarginUnitLabel', None)
+            if margin_unit is not None:
+                margin_unit.setEnabled(bool(self._mirror_fill_detector_gaps))
         finally:
             self._syncing_image_display_options = False
 
@@ -4530,6 +4659,13 @@ class FittingController(QObject):
             except Exception:
                 pass
         if refresh and self.current_stack_data is not None:
+            try:
+                if self._is_auto_scale_enabled():
+                    display_image = self._get_current_display_image()
+                    if display_image is not None:
+                        self._handle_color_scale(display_image)
+            except Exception:
+                pass
             self._refresh_image_display()
 
     # 函数说明：处理main show 切线 区域 toggled事件。
@@ -4552,6 +4688,83 @@ class FittingController(QObject):
             return
         self._image_colormap = text if text in GISAXS_IMAGE_COLORMAPS else "viridis"
         self._apply_image_display_options()
+
+    # 函数说明：处理镜像补全 detector gap 选项切换事件。
+    def _on_main_mirror_gap_fill_toggled(self, checked: bool):
+        if self._syncing_image_display_options:
+            return
+        self._mirror_fill_detector_gaps = bool(checked)
+        self._image_display_cache.clear()
+        self._apply_image_display_options()
+
+    # 函数说明：处理镜像补全 detector gap margin 数值变化事件。
+    def _on_main_mirror_gap_margin_changed(self, value: int):
+        if self._syncing_image_display_options:
+            return
+        self._mirror_gap_margin_px = int(np.clip(int(value), 0, 20))
+        self._image_display_cache.clear()
+        self._apply_image_display_options()
+
+    # 函数说明：获取镜像补全 detector gap 使用的束心 X 坐标。
+    def _get_mirror_gap_fill_center_x(self):
+        try:
+            from core.global_params import global_params
+            image_data = self.current_raw_image if self.current_raw_image is not None else self.current_stack_data
+            if image_data is None:
+                return None
+            _, width = image_data.shape
+            return float(global_params.get_parameter('fitting', 'detector.beam_center_x', width / 2.0))
+        except Exception:
+            return None
+
+    # 函数说明：按当前显示选项生成图像预览使用的数据。
+    def _get_current_display_image(self):
+        image_data = self.current_raw_image if self.current_raw_image is not None else self.current_stack_data
+        if image_data is None:
+            return None
+        if not self._mirror_fill_detector_gaps:
+            self._last_mirror_fill_count = 0
+            self._last_mirror_fill_status = ""
+            return image_data
+
+        center_x = self._get_mirror_gap_fill_center_x()
+        if center_x is None:
+            message = "Mirror gap fill requires beam center X to be defined"
+            if message != self._last_mirror_fill_status:
+                self.status_updated.emit(message)
+                self._last_mirror_fill_status = message
+            self._last_mirror_fill_count = 0
+            return image_data
+
+        try:
+            margin = int(np.clip(getattr(self, '_mirror_gap_margin_px', 0), 0, 20))
+            filled = mirror_fill_detector_gaps(
+                image_data,
+                center_x=center_x,
+                gap_value=-1,
+                gap_margin_px=margin,
+            )
+            original = np.asarray(image_data)
+            filled_arr = np.asarray(filled)
+            self._last_mirror_fill_count = int(np.count_nonzero((original == -1) & (filled_arr != -1)))
+            changed_mask = original != filled_arr
+            try:
+                changed_mask &= ~(np.isnan(original) & np.isnan(filled_arr))
+            except Exception:
+                pass
+            replaced_count = int(np.count_nonzero(changed_mask))
+            message = f"Mirror gap fill enabled: margin={margin} px, replaced {replaced_count} pixels"
+            if message != self._last_mirror_fill_status:
+                self.status_updated.emit(message)
+                self._last_mirror_fill_status = message
+            return filled
+        except Exception as exc:
+            message = f"Mirror gap fill skipped: {exc}"
+            if message != self._last_mirror_fill_status:
+                self.status_updated.emit(message)
+                self._last_mirror_fill_status = message
+            self._last_mirror_fill_count = 0
+            return image_data
 
     # 函数说明：处理独立 显示 options changed事件。
     def _on_independent_display_options_changed(self, options: dict):
@@ -7738,6 +7951,7 @@ class FittingController(QObject):
     def _ingest_workflow_image_without_preview(self, image_data):
         """Update data needed for cut/fitting without repainting heavy image views."""
         self.current_stack_data = image_data
+        self.current_raw_image = image_data
         self.data = image_data
         try:
             sc = int(self.current_parameters.get('stack_count', 1))
@@ -7750,7 +7964,8 @@ class FittingController(QObject):
             pass
         if self._current_vmin is None or self._current_vmax is None:
             try:
-                self._handle_color_scale(image_data)
+                display_image = self._get_current_display_image()
+                self._handle_color_scale(display_image if display_image is not None else image_data)
             except Exception:
                 pass
         try:
@@ -7763,7 +7978,9 @@ class FittingController(QObject):
         """No description."""
         try:
             self.current_stack_data = image_data
+            self.current_raw_image = image_data
             self.data = image_data
+            self._image_display_cache.clear()
             try:
                 sc = int(self.current_parameters.get('stack_count', 1))
             except Exception:
@@ -7771,17 +7988,21 @@ class FittingController(QObject):
             self.summed_data = image_data if sc and sc > 1 else None
             self._compute_q_meshgrids_and_store()
 
-            self._handle_color_scale(image_data)
+            display_image = self._get_current_display_image()
+            if display_image is None:
+                display_image = image_data
+
+            self._handle_color_scale(display_image)
 
             self._update_cutline_labels_units()
             self._refresh_current_parameter_selection_from_ui()
 
             if hasattr(self.ui, 'gisaxsInputGraphicsView'):
-                self._update_graphics_view(image_data)
+                self._update_graphics_view(display_image)
 
             if self.independent_window is not None and self.independent_window.isVisible():
                 is_log = self._is_log_mode_enabled()
-                self.independent_window.update_image(image_data, self._current_vmin, self._current_vmax, use_log=is_log)
+                self.independent_window.update_image(display_image, self._current_vmin, self._current_vmax, use_log=is_log)
                 self._sync_independent_window_selection()
 
             window_status = " (+ Independent window)" if (self.independent_window and self.independent_window.isVisible()) else ""
@@ -7888,12 +8109,15 @@ class FittingController(QObject):
         try:
             if self.current_stack_data is not None:
                 self._refresh_current_parameter_selection_from_ui()
+                display_image = self._get_current_display_image()
+                if display_image is None:
+                    display_image = self.current_stack_data
                 if hasattr(self.ui, 'gisaxsInputGraphicsView'):
-                    self._update_graphics_view(self.current_stack_data)
+                    self._update_graphics_view(display_image)
 
                 if self.independent_window is not None and self.independent_window.isVisible():
                     is_log = self._is_log_mode_enabled()
-                    self.independent_window.update_image(self.current_stack_data,
+                    self.independent_window.update_image(display_image,
                                                        self._current_vmin, self._current_vmax,
                                                        use_log=is_log)
                     self._sync_independent_window_selection()
@@ -7932,13 +8156,16 @@ class FittingController(QObject):
             if self.current_stack_data is not None:
                 is_log = self._is_log_mode_enabled()
                 self._refresh_current_parameter_selection_from_ui()
+                display_image = self._get_current_display_image()
+                if display_image is None:
+                    display_image = self.current_stack_data
                 self.independent_window.current_image_shape = self.current_stack_data.shape
                 self.independent_window.set_display_options(
                     show_cut_region=self._show_cut_region,
                     show_center=self._show_center,
                     colormap=self._image_colormap,
                 )
-                self.independent_window.update_image(self.current_stack_data,
+                self.independent_window.update_image(display_image,
                                                    self._current_vmin, self._current_vmax,
                                                    use_log=is_log)
                 self._sync_independent_window_selection()
@@ -8884,7 +9111,10 @@ class FittingController(QObject):
 
             if is_enabled and self.current_stack_data is not None:
                 is_log = self._is_log_mode_enabled()
-                vmin, vmax = self._calculate_vmin_vmax(self.current_stack_data, use_log=is_log)
+                display_image = self._get_current_display_image()
+                if display_image is None:
+                    display_image = self.current_stack_data
+                vmin, vmax = self._calculate_vmin_vmax(display_image, use_log=is_log)
                 if vmin is not None and vmax is not None:
                     self._update_vmin_vmax_ui(vmin, vmax)
                     self._refresh_image_display()
@@ -8939,7 +9169,10 @@ class FittingController(QObject):
 
             if self.current_stack_data is not None:
                 if self._is_auto_scale_enabled():
-                    vmin, vmax = self._calculate_vmin_vmax(self.current_stack_data, use_log=is_log)
+                    display_image = self._get_current_display_image()
+                    if display_image is None:
+                        display_image = self.current_stack_data
+                    vmin, vmax = self._calculate_vmin_vmax(display_image, use_log=is_log)
                     if vmin is not None and vmax is not None:
                         self._update_vmin_vmax_ui(vmin, vmax)
 

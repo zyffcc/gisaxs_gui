@@ -66,7 +66,7 @@
                 "enabled": true,
                 "parameters": {
                     "sphere": {
-                        "intensity": 0.016286359659153687,
+                        "intensity": 0.016286,
                         "radius": 3.3213906288146973,
                         "sigma_radius": 0.654208242893219,
                         "diameter": 6.146551132202148,

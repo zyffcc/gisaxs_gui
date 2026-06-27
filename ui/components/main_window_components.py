@@ -489,13 +489,42 @@ class GisaxsInputCard(CardFrame):
         if not hasattr(self.ui, "gisaxsInputColormapCombo"):
             self.ui.gisaxsInputColormapCombo = QComboBox(scale_section)
             self.ui.gisaxsInputColormapCombo.setObjectName("gisaxsInputColormapCombo")
+        if not hasattr(self.ui, "gisaxsInputMirrorGapFillCheckBox"):
+            self.ui.gisaxsInputMirrorGapFillCheckBox = QCheckBox("Mirror-fill detector gaps", scale_section)
+            self.ui.gisaxsInputMirrorGapFillCheckBox.setObjectName("gisaxsInputMirrorGapFillCheckBox")
+            self.ui.gisaxsInputMirrorGapFillCheckBox.setToolTip(
+                "Fill detector gap pixels using left-right symmetry around the beam center. Raw data is preserved."
+            )
+        if not hasattr(self.ui, "gisaxsInputMirrorGapMarginLabel"):
+            self.ui.gisaxsInputMirrorGapMarginLabel = QLabel("Gap margin:", scale_section)
+            self.ui.gisaxsInputMirrorGapMarginLabel.setObjectName("gisaxsInputMirrorGapMarginLabel")
+        if not hasattr(self.ui, "gisaxsInputMirrorGapMarginSpinBox"):
+            self.ui.gisaxsInputMirrorGapMarginSpinBox = QSpinBox(scale_section)
+            self.ui.gisaxsInputMirrorGapMarginSpinBox.setObjectName("gisaxsInputMirrorGapMarginSpinBox")
+            self.ui.gisaxsInputMirrorGapMarginSpinBox.setRange(0, 20)
+            self.ui.gisaxsInputMirrorGapMarginSpinBox.setSingleStep(1)
+            self.ui.gisaxsInputMirrorGapMarginSpinBox.setValue(0)
+            self.ui.gisaxsInputMirrorGapMarginSpinBox.setToolTip(
+                "Extra pixels on each horizontal side of detector gaps to mirror-fill."
+            )
+        if not hasattr(self.ui, "gisaxsInputMirrorGapMarginUnitLabel"):
+            self.ui.gisaxsInputMirrorGapMarginUnitLabel = QLabel("px", scale_section)
+            self.ui.gisaxsInputMirrorGapMarginUnitLabel.setObjectName("gisaxsInputMirrorGapMarginUnitLabel")
         self.ui.gisaxsInputShowCutRegionCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.ui.gisaxsInputShowCenterCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputMirrorGapFillCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputMirrorGapMarginLabel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputMirrorGapMarginSpinBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputMirrorGapMarginUnitLabel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         normalize_checkbox(self.ui.gisaxsInputShowCutRegionCheckBox)
         normalize_checkbox(self.ui.gisaxsInputShowCenterCheckBox)
+        normalize_checkbox(self.ui.gisaxsInputMirrorGapFillCheckBox)
         normalize_input(self.ui.gisaxsInputColormapCombo)
+        normalize_input(self.ui.gisaxsInputMirrorGapMarginSpinBox)
         self.ui.gisaxsInputVminLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.ui.gisaxsInputVmaxLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.ui.gisaxsInputMirrorGapMarginLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.ui.gisaxsInputMirrorGapMarginUnitLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         scale_grid.addWidget(self.ui.gisaxsInputAutoScaleCheckBox, 0, 0)
         scale_grid.addWidget(self.ui.gisaxsInputVminLabel, 0, 1)
         scale_grid.addWidget(self.ui.gisaxsInputVminValue, 0, 2)
@@ -506,6 +535,10 @@ class GisaxsInputCard(CardFrame):
         scale_grid.addWidget(self.ui.gisaxsInputShowCenterCheckBox, 1, 1)
         scale_grid.addWidget(QLabel("Color Map:", scale_section), 1, 2)
         scale_grid.addWidget(self.ui.gisaxsInputColormapCombo, 1, 3, 1, 2)
+        scale_grid.addWidget(self.ui.gisaxsInputMirrorGapFillCheckBox, 2, 0, 1, 2)
+        scale_grid.addWidget(self.ui.gisaxsInputMirrorGapMarginLabel, 2, 2)
+        scale_grid.addWidget(self.ui.gisaxsInputMirrorGapMarginSpinBox, 2, 3)
+        scale_grid.addWidget(self.ui.gisaxsInputMirrorGapMarginUnitLabel, 2, 4)
         scale_grid.setColumnStretch(6, 1)
         scale_section.layout().addLayout(scale_grid)
 

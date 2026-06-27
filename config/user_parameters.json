@@ -70,11 +70,11 @@
     },
     "fitting": {
         "detector": {
-            "distance": 2565.0,
+            "distance": 2564.7000000000003,
             "pixel_size_x": 172.0,
             "pixel_size_y": 172.0,
-            "beam_center_x": 792.33,
-            "beam_center_y": 374.45,
+            "beam_center_x": 791.61,
+            "beam_center_y": 374.44,
             "show_q_axis": false
         },
         "last_session": {
@@ -94,15 +94,17 @@
         },
         "gisaxs_input": {
             "vmax": 6.0,
-            "center_parallel": 792.0,
-            "cutline_vertical": 34.0,
-            "cutline_parallel": 966.0,
+            "center_parallel": 768.01,
+            "cutline_vertical": 20.0,
+            "cutline_parallel": 1180.0,
             "load_mode": "Single",
-            "center_vertical": 502.0,
+            "center_vertical": 505.0,
             "vmin": -4.71,
-            "show_cut_region": false,
-            "show_center": false,
-            "colormap": "viridis"
+            "show_cut_region": true,
+            "show_center": true,
+            "colormap": "viridis",
+            "mirror_fill_detector_gaps": true,
+            "mirror_gap_margin_px": 0
         }
     },
     "gisaxs_predict": {
