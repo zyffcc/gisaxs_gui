@@ -15,7 +15,7 @@ import hashlib
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint, QProcess, QUrl, QSettings
+from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint, QProcess, QUrl, QSettings, QEvent
 from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -342,12 +342,24 @@ class InsituBatchImageLoader(QThread):
     copy_finished = pyqtSignal(str, str)
 
     # 函数说明：初始化对象状态和相关资源。
-    def __init__(self, file_paths, copy_remote_to_cache=True, cache_dir=None, cache_limit_gb=3.0):
+    def __init__(
+        self,
+        file_paths,
+        copy_remote_to_cache=True,
+        cache_dir=None,
+        cache_limit_gb=3.0,
+        mirror_fill_gaps=False,
+        mirror_center_x=None,
+        mirror_gap_margin_px=0,
+    ):
         super().__init__()
         self.file_paths = list(file_paths or [])
         self.copy_remote_to_cache = bool(copy_remote_to_cache)
         self.cache_dir = cache_dir or _default_remote_cache_dir()
         self.cache_limit_gb = float(cache_limit_gb or 3.0)
+        self.mirror_fill_gaps = bool(mirror_fill_gaps)
+        self.mirror_center_x = mirror_center_x
+        self.mirror_gap_margin_px = int(mirror_gap_margin_px or 0)
 
     # 函数说明：实现 prepare 文件 for read 相关逻辑。
     def _prepare_file_for_read(self, source_path: str) -> str:
@@ -388,6 +400,15 @@ class InsituBatchImageLoader(QThread):
                 effective_path = self._prepare_file_for_read(path)
                 cbf_image = fabio.open(effective_path)
                 data = cbf_image.data.astype(np.float32, copy=False)
+                if self.mirror_fill_gaps:
+                    if self.mirror_center_x is None:
+                        raise RuntimeError("Mirror gap fill requires beam center X")
+                    data = mirror_fill_detector_gaps(
+                        data,
+                        center_x=float(self.mirror_center_x),
+                        gap_value=-1,
+                        gap_margin_px=self.mirror_gap_margin_px,
+                    ).astype(np.float32, copy=False)
                 if summed is None:
                     summed = data.copy()
                 else:
@@ -2926,6 +2947,7 @@ class FittingController(QObject):
         self._preview_shape = None
         self._preview_show_q_axis = None
         self._preview_colorbar = None
+        self._preview_resize_refit_pending = False
         self._image_display_cache = OrderedDict()
         self._image_display_cache_limit = 12
 
@@ -3059,6 +3081,15 @@ class FittingController(QObject):
         self._insitu_trend_plot_holder = None
         self._insitu_workflow_canvas_image = None
         self._insitu_workflow_canvas_curve = None
+        self._insitu_heatmap_dialog = None
+        self._insitu_heatmap_widgets = {}
+        self._insitu_heatmap_q = None
+        self._insitu_heatmap_data = None
+        self._insitu_heatmap_count = 0
+        self._insitu_heatmap_capacity = 0
+        self._insitu_heatmap_artist = None
+        self._insitu_heatmap_colorbar = None
+        self._insitu_heatmap_refresh_pending = False
 
         self._default_signal_mode = 'finished'
         self._signal_mode_overrides = {
@@ -4303,11 +4334,19 @@ class FittingController(QObject):
 
         if hasattr(self.ui, 'gisaxsInputGraphicsView'):
             self.ui.gisaxsInputGraphicsView.setToolTip("Double-click to open a larger independent image window.")
+            self.ui.gisaxsInputGraphicsView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.ui.gisaxsInputGraphicsView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.ui.gisaxsInputGraphicsView.setAlignment(Qt.AlignCenter)
             self.ui.gisaxsInputGraphicsView.mouseDoubleClickEvent = self._on_graphics_view_double_click
+            self.ui.gisaxsInputGraphicsView.installEventFilter(self)
 
         if hasattr(self.ui, 'fitGraphicsView'):
             self.ui.fitGraphicsView.setToolTip("Double-click to open a larger independent fit window.")
+            self.ui.fitGraphicsView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.ui.fitGraphicsView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.ui.fitGraphicsView.setAlignment(Qt.AlignCenter)
             self.ui.fitGraphicsView.mouseDoubleClickEvent = self._on_fit_graphics_view_double_click
+            self.ui.fitGraphicsView.installEventFilter(self)
 
         if hasattr(self.ui, 'fitStartButton'):
             self.ui.fitStartButton.clicked.connect(self._start_fitting)
@@ -5944,7 +5983,7 @@ class FittingController(QObject):
 
             mode_grid = QGridLayout()
             run_mode = QComboBox(dialog)
-            run_mode.addItems(["Live Watch", "Process Existing Sequence"])
+            run_mode.addItems(["Process Existing Sequence", "Live Watch"])
             mode_grid.addWidget(QLabel("Run Mode:", dialog), 0, 0)
             mode_grid.addWidget(run_mode, 0, 1)
             left_layout.addLayout(mode_grid)
@@ -6033,6 +6072,8 @@ class FittingController(QObject):
             pause_btn = QPushButton("Pause", dialog)
             stop_btn = QPushButton("Stop", dialog)
             trend_btn = QPushButton("Open Trend Monitor", dialog)
+            heatmap_btn = QPushButton("Open Cut Heatmap", dialog)
+            heatmap_btn.setToolTip("Show each completed auto-cut as one heatmap column.")
             export_btn = QPushButton("Export Results...", dialog)
             clear_cache_btn = QPushButton("Clear Session Cache", dialog)
             open_cache_btn = QPushButton("Open Cache Folder", dialog)
@@ -6044,6 +6085,7 @@ class FittingController(QObject):
             button_row.addWidget(stop_btn)
             left_layout.addLayout(button_row)
             output_row = QHBoxLayout()
+            output_row.addWidget(heatmap_btn)
             output_row.addWidget(trend_btn)
             output_row.addWidget(export_btn)
             output_row.addWidget(clear_cache_btn)
@@ -6114,6 +6156,7 @@ class FittingController(QObject):
                 "pause": pause_btn,
                 "stop": stop_btn,
                 "trend": trend_btn,
+                "heatmap": heatmap_btn,
                 "export": export_btn,
                 "clear_cache": clear_cache_btn,
                 "open_cache": open_cache_btn,
@@ -6133,6 +6176,7 @@ class FittingController(QObject):
             pause_btn.clicked.connect(self._pause_insitu_workflow)
             stop_btn.clicked.connect(self._stop_insitu_workflow)
             trend_btn.clicked.connect(self._open_insitu_trend_monitor)
+            heatmap_btn.clicked.connect(self._open_insitu_heatmap)
             export_btn.clicked.connect(self._export_insitu_workflow_results)
             clear_cache_btn.clicked.connect(self._clear_insitu_session_cache)
             open_cache_btn.clicked.connect(self._open_insitu_cache_folder)
@@ -6448,7 +6492,7 @@ class FittingController(QObject):
     def _insitu_workflow_settings(self) -> dict:
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         return {
-            "run_mode": widgets.get("run_mode").currentText() if widgets.get("run_mode") else "Live Watch",
+            "run_mode": widgets.get("run_mode").currentText() if widgets.get("run_mode") else "Process Existing Sequence",
             "auto_show": bool(widgets.get("auto_show").isChecked()) if widgets.get("auto_show") else False,
             "auto_cut": bool(widgets.get("auto_cut").isChecked()) if widgets.get("auto_cut") else False,
             "auto_fit": bool(widgets.get("auto_fit").isChecked()) if widgets.get("auto_fit") else False,
@@ -6464,7 +6508,7 @@ class FittingController(QObject):
     # 函数说明：更新原位 run 模式 界面。
     def _update_insitu_run_mode_ui(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-        mode = self._insitu_workflow_settings().get("run_mode", "Live Watch")
+        mode = self._insitu_workflow_settings().get("run_mode", "Process Existing Sequence")
         is_live = mode == "Live Watch"
         for key, visible in (
             ("live_settings", is_live),
@@ -6540,7 +6584,7 @@ class FittingController(QObject):
         try:
             values = {
                 "status": self._insitu_workflow_state,
-                "run_mode": self._insitu_workflow_settings().get("run_mode", "Live Watch"),
+                "run_mode": self._insitu_workflow_settings().get("run_mode", "Process Existing Sequence"),
                 "file": self._insitu_current_batch_label(),
                 "processed": str(int(getattr(self, "_insitu_workflow_processed_count", 0))),
                 "failed": str(int(getattr(self, "_insitu_workflow_failed_count", 0))),
@@ -6555,7 +6599,7 @@ class FittingController(QObject):
             start_btn = widgets.get("start")
             pause_btn = widgets.get("pause")
             stop_btn = widgets.get("stop")
-            running = self._insitu_workflow_state in ("Watching", "Paused")
+            running = self._insitu_workflow_state in ("Watching", "Processing", "Paused")
             if start_btn is not None:
                 start_btn.setEnabled(not running or self._insitu_workflow_state == "Paused")
                 start_btn.setText("Resume" if self._insitu_workflow_state == "Paused" else "Start Watch")
@@ -6564,7 +6608,7 @@ class FittingController(QObject):
                 process_btn.setEnabled(not running or self._insitu_workflow_state == "Paused")
                 process_btn.setText("Resume" if self._insitu_workflow_state == "Paused" else "Start Process")
             if pause_btn is not None:
-                pause_btn.setEnabled(self._insitu_workflow_state == "Watching")
+                pause_btn.setEnabled(self._insitu_workflow_state in ("Watching", "Processing"))
             if stop_btn is not None:
                 stop_btn.setEnabled(running or bool(getattr(self, "_insitu_workflow_busy", False)))
         except Exception:
@@ -6612,6 +6656,14 @@ class FittingController(QObject):
             if widget is None:
                 continue
             widget.setStyleSheet(style if widget.isChecked() else "color: #202124;")
+        auto_fit_enabled = bool(widgets.get("auto_fit") and widgets["auto_fit"].isChecked())
+        for key in ("use_previous", "full_auto_fit", "auto_refine"):
+            widget = widgets.get(key)
+            if widget is not None:
+                widget.setEnabled(auto_fit_enabled)
+        heatmap_button = widgets.get("heatmap")
+        if heatmap_button is not None:
+            heatmap_button.setEnabled(bool(widgets.get("auto_cut") and widgets["auto_cut"].isChecked()))
         self._draw_insitu_workflow_region_preview()
 
     # 函数说明：校验当前 切线 settings。
@@ -6676,6 +6728,7 @@ class FittingController(QObject):
                 self._insitu_workflow_last_fit_params = None
                 self._insitu_workflow_last_fit_status = "-"
                 self._insitu_workflow_last_chi_square = None
+                self._reset_insitu_heatmap_data()
             self._insitu_workflow_stop_requested = False
             if self._insitu_workflow_timer is None:
                 self._insitu_workflow_timer = QTimer()
@@ -6714,6 +6767,7 @@ class FittingController(QObject):
                 self._insitu_workflow_last_fit_params = None
                 self._insitu_workflow_last_fit_status = "-"
                 self._insitu_workflow_last_chi_square = None
+                self._reset_insitu_heatmap_data()
                 if not self._insitu_workflow_queue:
                     QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "No files matched the sequence settings.")
                     return
@@ -6772,7 +6826,7 @@ class FittingController(QObject):
         try:
             if self._insitu_workflow_timer is not None:
                 self._insitu_workflow_timer.stop()
-            self._set_insitu_workflow_state("Paused", "Watch paused")
+            self._set_insitu_workflow_state("Paused", "Workflow paused after the current operation")
         except Exception:
             pass
 
@@ -6928,7 +6982,7 @@ class FittingController(QObject):
             "batch_files": json.dumps([os.path.basename(path) for path in paths], ensure_ascii=False),
             "batch_paths": json.dumps(paths, ensure_ascii=False),
             "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
-            "run_mode": self._insitu_workflow_settings().get("run_mode", "Live Watch"),
+            "run_mode": self._insitu_workflow_settings().get("run_mode", "Process Existing Sequence"),
             "load_status": "pending",
             "cut_status": "skipped",
             "fit_status": "skipped",
@@ -6940,11 +6994,25 @@ class FittingController(QObject):
     # 函数说明：加载原位 流程 batch 异步。
     def _load_insitu_workflow_batch_async(self, batch_paths: list[str]):
         try:
+            mirror_fill_enabled = bool(getattr(self, "_mirror_fill_detector_gaps", False))
+            if mirror_fill_enabled:
+                self._log_insitu_workflow(
+                    f"Mirror-filling detector gaps before stacking/cutting "
+                    f"(margin={int(getattr(self, '_mirror_gap_margin_px', 0))} px)"
+                )
+                if isinstance(self._insitu_workflow_current_record, dict):
+                    self._insitu_workflow_current_record["mirror_fill_detector_gaps"] = True
+                    self._insitu_workflow_current_record["mirror_gap_margin_px"] = int(
+                        getattr(self, "_mirror_gap_margin_px", 0)
+                    )
             loader = InsituBatchImageLoader(
                 batch_paths,
                 copy_remote_to_cache=self._remote_copy_enabled,
                 cache_dir=self._remote_cache_dir,
                 cache_limit_gb=self._remote_cache_limit_gb,
+                mirror_fill_gaps=mirror_fill_enabled,
+                mirror_center_x=self._get_mirror_gap_fill_center_x(),
+                mirror_gap_margin_px=int(getattr(self, "_mirror_gap_margin_px", 0)),
             )
             loader.image_loaded.connect(self._on_insitu_batch_image_loaded)
             loader.error_occurred.connect(self._on_insitu_batch_image_error)
@@ -6960,6 +7028,8 @@ class FittingController(QObject):
 
     # 函数说明：处理原位 batch 图像 loaded事件。
     def _on_insitu_batch_image_loaded(self, image_data, first_file_path: str):
+        if getattr(self, "_insitu_workflow_stop_requested", False) or not self._insitu_workflow_busy:
+            return
         try:
             batch_paths = getattr(self, "_insitu_workflow_processing_batch", None) or [first_file_path]
             if len(batch_paths) > 1:
@@ -6976,6 +7046,8 @@ class FittingController(QObject):
 
     # 函数说明：处理原位 batch 图像 错误事件。
     def _on_insitu_batch_image_error(self, message: str):
+        if getattr(self, "_insitu_workflow_stop_requested", False):
+            return
         self._finalize_insitu_workflow_file(load_status="failed", error_message=str(message), failed=True)
 
     # 函数说明：实现 after 原位 流程 图像 loaded 相关逻辑。
@@ -7093,6 +7165,10 @@ class FittingController(QObject):
                 self._log_insitu_workflow(
                     f"Applied deleted-point mask: removed {excluded_count} point(s) from {os.path.basename(file_path)}"
                 )
+            self._append_insitu_heatmap_cut(
+                self.current_cut_data.get("x_coords", []),
+                self.current_cut_data.get("y_intensity", []),
+            )
             record["cut_status"] = "ok"
             if refresh_views:
                 self._draw_insitu_workflow_region_preview()
@@ -7283,6 +7359,9 @@ class FittingController(QObject):
 
     # 函数说明：处理原位 refine finished事件。
     def _on_insitu_refine_finished(self, record: dict, setup: dict, result: dict):
+        if getattr(self, "_insitu_workflow_stop_requested", False):
+            self._cleanup_insitu_refine_worker()
+            return
         try:
             self._apply_manual_refine_result(setup, result.get("params"), apply_indices=result.get("selected_indices"))
             old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
@@ -7350,6 +7429,9 @@ class FittingController(QObject):
 
     # 函数说明：处理原位 refine failed事件。
     def _on_insitu_refine_failed(self, record: dict, message: str):
+        if getattr(self, "_insitu_workflow_stop_requested", False):
+            self._cleanup_insitu_refine_worker()
+            return
         try:
             record["fit_status"] = "failed"
             record["error_message"] = message
@@ -7609,6 +7691,7 @@ class FittingController(QObject):
         self._insitu_workflow_last_fit_params = None
         self._insitu_workflow_last_fit_status = "-"
         self._insitu_workflow_last_chi_square = None
+        self._reset_insitu_heatmap_data()
         self._log_insitu_workflow("Session cache cleared")
 
     # 函数说明：实现 打开 原位 缓存 文件夹 相关逻辑。
@@ -7769,6 +7852,211 @@ class FittingController(QObject):
             pass
 
     # 函数说明：实现 打开 原位 trend monitor 相关逻辑。
+    def _reset_insitu_heatmap_data(self):
+        self._insitu_heatmap_q = None
+        self._insitu_heatmap_data = None
+        self._insitu_heatmap_count = 0
+        self._insitu_heatmap_capacity = 0
+        self._insitu_heatmap_artist = None
+        self._insitu_heatmap_colorbar = None
+        self._schedule_insitu_heatmap_refresh(force=True)
+
+    def _append_insitu_heatmap_cut(self, q_values, intensity_values):
+        """Append a cut using a chunked matrix, interpolating onto the first q grid."""
+        q = np.asarray(q_values, dtype=float).reshape(-1)
+        values = np.asarray(intensity_values, dtype=float).reshape(-1)
+        n = min(q.size, values.size)
+        if n <= 0:
+            return
+        q, values = q[:n], values[:n]
+        finite_q = np.isfinite(q)
+        q, values = q[finite_q], values[finite_q]
+        if q.size <= 0:
+            return
+        order = np.argsort(q, kind="mergesort")
+        q, values = q[order], values[order]
+        q, unique_indices = np.unique(q, return_index=True)
+        values = values[unique_indices]
+        if self._insitu_heatmap_q is None:
+            self._insitu_heatmap_q = q.copy()
+            self._insitu_heatmap_capacity = 256
+            self._insitu_heatmap_data = np.full((256, q.size), np.nan, dtype=np.float32)
+        target_q = np.asarray(self._insitu_heatmap_q, dtype=float)
+        if q.size == target_q.size and np.allclose(q, target_q, rtol=1e-7, atol=1e-10):
+            row = values
+        else:
+            valid = np.isfinite(values)
+            row = (
+                np.interp(target_q, q[valid], values[valid], left=np.nan, right=np.nan)
+                if np.count_nonzero(valid) >= 2
+                else np.full(target_q.shape, np.nan)
+            )
+        if self._insitu_heatmap_count >= self._insitu_heatmap_capacity:
+            new_capacity = max(256, self._insitu_heatmap_capacity * 2)
+            grown = np.full((new_capacity, target_q.size), np.nan, dtype=np.float32)
+            grown[:self._insitu_heatmap_count] = self._insitu_heatmap_data[:self._insitu_heatmap_count]
+            self._insitu_heatmap_data = grown
+            self._insitu_heatmap_capacity = new_capacity
+        self._insitu_heatmap_data[self._insitu_heatmap_count] = np.asarray(row, dtype=np.float32)
+        self._insitu_heatmap_count += 1
+        self._schedule_insitu_heatmap_refresh()
+
+    def _open_insitu_heatmap(self):
+        existing = getattr(self, "_insitu_heatmap_dialog", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        if not is_matplotlib_available():
+            QMessageBox.warning(self._insitu_workflow_parent_widget(), "Cut Heatmap", "Matplotlib is required.")
+            return
+        try:
+            dialog = QDialog(self._insitu_workflow_parent_widget())
+            dialog.setWindowTitle("In-situ Cut Heatmap")
+            dialog.resize(980, 680)
+            dialog.setModal(False)
+            dialog.setAttribute(Qt.WA_DeleteOnClose, True)
+            layout = QVBoxLayout(dialog)
+            controls = QHBoxLayout()
+            cmap = QComboBox(dialog)
+            cmap.addItems(list(GISAXS_IMAGE_COLORMAPS))
+            scale = QComboBox(dialog)
+            scale.addItems(["Linear", "Log"])
+            scale.setCurrentText("Log" if self._is_fit_log_y_enabled() else "Linear")
+            auto_range = QCheckBox("Auto range", dialog)
+            auto_range.setChecked(True)
+            follow = QCheckBox("Follow latest", dialog)
+            follow.setChecked(True)
+            vmin, vmax = QDoubleSpinBox(dialog), QDoubleSpinBox(dialog)
+            for spin in (vmin, vmax):
+                spin.setDecimals(6)
+                spin.setRange(-1e30, 1e30)
+            vmax.setValue(1.0)
+            reset_view = QPushButton("Reset view", dialog)
+            for label, widget in (
+                ("Colormap:", cmap), ("Color scale:", scale), ("", auto_range),
+                ("vmin:", vmin), ("vmax:", vmax), ("", follow), ("", reset_view),
+            ):
+                if label:
+                    controls.addWidget(QLabel(label, dialog))
+                controls.addWidget(widget)
+            layout.addLayout(controls)
+            holder = self._make_insitu_workflow_canvas(dialog)
+            layout.addWidget(holder, 1)
+            status = QLabel("Waiting for auto-cut data...", dialog)
+            layout.addWidget(status)
+            self._insitu_heatmap_dialog = dialog
+            self._insitu_heatmap_widgets = {
+                "holder": holder, "cmap": cmap, "scale": scale, "auto": auto_range,
+                "vmin": vmin, "vmax": vmax, "follow": follow, "status": status,
+            }
+            cmap.currentTextChanged.connect(lambda _text: self._refresh_insitu_heatmap())
+            scale.currentTextChanged.connect(lambda _text: self._refresh_insitu_heatmap())
+            auto_range.toggled.connect(self._on_insitu_heatmap_auto_range_toggled)
+            vmin.valueChanged.connect(lambda _value: self._refresh_insitu_heatmap())
+            vmax.valueChanged.connect(lambda _value: self._refresh_insitu_heatmap())
+            reset_view.clicked.connect(lambda: self._refresh_insitu_heatmap(reset_view=True))
+            follow.toggled.connect(lambda checked: self._refresh_insitu_heatmap(reset_view=checked))
+            dialog.finished.connect(lambda _result: self._clear_insitu_heatmap_refs())
+            self._on_insitu_heatmap_auto_range_toggled(True)
+            self._refresh_insitu_heatmap(reset_view=True)
+            dialog.show()
+        except Exception as exc:
+            self._log_insitu_workflow(f"Cut heatmap failed: {exc}", "ERROR")
+
+    def _clear_insitu_heatmap_refs(self):
+        self._insitu_heatmap_dialog = None
+        self._insitu_heatmap_widgets = {}
+        self._insitu_heatmap_artist = None
+        self._insitu_heatmap_colorbar = None
+        self._insitu_heatmap_refresh_pending = False
+
+    def _on_insitu_heatmap_auto_range_toggled(self, checked: bool):
+        widgets = getattr(self, "_insitu_heatmap_widgets", {}) or {}
+        for key in ("vmin", "vmax"):
+            if widgets.get(key) is not None:
+                widgets[key].setEnabled(not checked)
+        self._refresh_insitu_heatmap()
+
+    def _schedule_insitu_heatmap_refresh(self, force: bool = False):
+        dialog = getattr(self, "_insitu_heatmap_dialog", None)
+        if dialog is None or not dialog.isVisible():
+            return
+        if force:
+            self._insitu_heatmap_refresh_pending = False
+            self._refresh_insitu_heatmap(reset_view=True)
+        elif not self._insitu_heatmap_refresh_pending:
+            self._insitu_heatmap_refresh_pending = True
+            QTimer.singleShot(40, self._refresh_insitu_heatmap)
+
+    def _refresh_insitu_heatmap(self, reset_view: bool = False):
+        self._insitu_heatmap_refresh_pending = False
+        widgets = getattr(self, "_insitu_heatmap_widgets", {}) or {}
+        holder = widgets.get("holder")
+        if holder is None or not hasattr(holder, "_insitu_figure"):
+            return
+        fig, canvas = holder._insitu_figure, holder._insitu_canvas
+        count = int(getattr(self, "_insitu_heatmap_count", 0))
+        q = getattr(self, "_insitu_heatmap_q", None)
+        store = getattr(self, "_insitu_heatmap_data", None)
+        status = widgets.get("status")
+        if count <= 0 or q is None or store is None:
+            fig.clear()
+            ax = fig.add_subplot(111)
+            ax.text(0.5, 0.5, "Waiting for auto-cut data...", ha="center", va="center", transform=ax.transAxes)
+            ax.set_axis_off()
+            self._insitu_heatmap_artist = None
+            self._insitu_heatmap_colorbar = None
+            if status is not None:
+                status.setText("Waiting for auto-cut data...")
+            canvas.draw_idle()
+            return
+        from matplotlib.colors import LogNorm, Normalize
+        data = np.asarray(store[:count], dtype=float).T
+        scale = widgets["scale"].currentText()
+        display = np.where(data > 0, data, np.nan) if scale == "Log" else data
+        finite = np.isfinite(display)
+        values = display[finite]
+        if values.size:
+            if widgets["auto"].isChecked():
+                lo, hi = np.nanpercentile(values, [1.0, 99.0])
+            else:
+                lo, hi = widgets["vmin"].value(), widgets["vmax"].value()
+            if scale == "Log":
+                lo = max(float(lo), float(np.nanmin(values)), np.finfo(float).tiny)
+            if not np.isfinite(hi) or hi <= lo:
+                hi = lo * 1.01 if scale == "Log" else lo + max(abs(lo) * 0.01, 1e-12)
+        else:
+            lo, hi = (1.0, 10.0) if scale == "Log" else (0.0, 1.0)
+        norm = LogNorm(vmin=lo, vmax=hi) if scale == "Log" else Normalize(vmin=lo, vmax=hi)
+        extent = (0.5, count + 0.5, float(np.nanmin(q)), float(np.nanmax(q)))
+        artist = getattr(self, "_insitu_heatmap_artist", None)
+        if artist is None or artist.axes not in fig.axes:
+            fig.clear()
+            ax = fig.add_subplot(111)
+            artist = ax.imshow(
+                display, origin="lower", aspect="auto", interpolation="nearest",
+                extent=extent, cmap=widgets["cmap"].currentText(), norm=norm,
+            )
+            ax.set_xlabel("Sequence number")
+            ax.set_ylabel(r"$q$ (nm$^{-1}$)")
+            self._insitu_heatmap_artist = artist
+            self._insitu_heatmap_colorbar = fig.colorbar(artist, ax=ax, label="Intensity (a.u.)")
+            fig.tight_layout()
+        else:
+            artist.set_data(display)
+            artist.set_extent(extent)
+            artist.set_cmap(widgets["cmap"].currentText())
+            artist.set_norm(norm)
+            if reset_view or widgets["follow"].isChecked():
+                artist.axes.set_xlim(extent[0], extent[1])
+                artist.axes.set_ylim(extent[2], extent[3])
+            if self._insitu_heatmap_colorbar is not None:
+                self._insitu_heatmap_colorbar.update_normal(artist)
+        if status is not None:
+            status.setText(f"{count} cut(s) | q points: {len(q)} | color range: {lo:.6g} to {hi:.6g}")
+        canvas.draw_idle()
+
     def _open_insitu_trend_monitor(self):
         try:
             rows = self._load_insitu_session_records()
@@ -9432,6 +9720,45 @@ class FittingController(QObject):
             return None
 
     # 函数说明：实现 拟合 视图 to item 相关逻辑。
+    def eventFilter(self, watched, event):
+        """Refit preview canvases after users resize their splitter regions."""
+        try:
+            if event.type() == QEvent.Resize and watched in (
+                getattr(self.ui, "gisaxsInputGraphicsView", None),
+                getattr(self.ui, "fitGraphicsView", None),
+            ):
+                if not self._preview_resize_refit_pending:
+                    self._preview_resize_refit_pending = True
+                    QTimer.singleShot(0, self._refit_resized_preview_canvases)
+        except Exception:
+            pass
+        return super().eventFilter(watched, event)
+
+    def _refit_resized_preview_canvases(self):
+        self._preview_resize_refit_pending = False
+        for view, item in (
+            (
+                getattr(self.ui, "gisaxsInputGraphicsView", None),
+                getattr(self, "_preview_proxy_widget", None),
+            ),
+            (
+                getattr(self.ui, "fitGraphicsView", None),
+                self._current_fit_proxy_item(),
+            ),
+        ):
+            if view is not None and item is not None:
+                self._fit_view_to_item(view, item, keep_aspect=True)
+
+    def _current_fit_proxy_item(self):
+        scene = getattr(self, "_fit_graphics_scene", None)
+        if scene is None:
+            return None
+        try:
+            items = scene.items()
+            return items[0] if items else None
+        except Exception:
+            return None
+
     def _fit_view_to_item(self, graphics_view, item, keep_aspect=True):
         """Fit the view to the given item bounds; disable scrollbars by sizing the scene to the item."""
         try:
@@ -10969,9 +11296,11 @@ class FittingController(QObject):
         tb = getattr(self.ui, 'FittingTextBrowser', None)
         if tb is None:
             return
-        # Fixed height at 100px per new requirement
+        # Keep a useful minimum while allowing the resizable Run Log card to
+        # pass its additional content height through to the text browser.
         tb.setMinimumHeight(100)
-        tb.setMaximumHeight(100)
+        tb.setMaximumHeight(16777215)
+        tb.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         if self._fitting_browser_original_height is None:
             self._fitting_browser_original_height = tb.height()
         tb.setContextMenuPolicy(Qt.CustomContextMenu)

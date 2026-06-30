@@ -301,6 +301,38 @@ class CardFrame(QFrame):
         self.updateGeometry()
 
 
+class CardContentResizeHandle(QFrame):
+    """Small drag handle that changes only its card's expanded content height."""
+
+    def __init__(self, card: "CollapsibleCardFrame"):
+        super().__init__(card)
+        self.card = card
+        self._press_y = 0
+        self._start_height = 0
+        self.setFixedHeight(9)
+        self.setCursor(Qt.SizeVerCursor)
+        self.setToolTip("Drag to resize this card's content area.")
+        self.setStyleSheet(
+            "QFrame { border: 0; border-top: 2px solid #d6dee9; margin: 3px 35%; }"
+            "QFrame:hover { border-top-color: #7c93ad; }"
+        )
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._press_y = event.globalY()
+            self._start_height = self.card.height()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if event.buttons() & Qt.LeftButton:
+            self.card._set_user_expanded_height(self._start_height + event.globalY() - self._press_y)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+
 class CollapsibleCardFrame(QFrame):
     """Card wrapper with a persistent collapse/expand header."""
 
@@ -370,6 +402,45 @@ class CollapsibleCardFrame(QFrame):
         widget.setParent(self.content_widget)
         self.content_layout.addWidget(widget, stretch)
 
+    def enable_content_resize(self, base_height: int, maximum_height: int | None = None) -> None:
+        """Add an internal resize handle while keeping the title bar fixed."""
+        self._content_resize_handle = CardContentResizeHandle(self)
+        self.body_layout.addWidget(self._content_resize_handle)
+        self.body_layout.activate()
+        margins = self.body_layout.contentsMargins()
+        visible_body_height = (
+            self.header_widget.sizeHint().height()
+            + self.content_widget.minimumSizeHint().height()
+            + self._content_resize_handle.height()
+            + margins.top()
+            + margins.bottom()
+            + self.body_layout.spacing() * 2
+            + self.frameWidth() * 2
+            + 4
+        )
+        natural_height = max(
+            1,
+            int(base_height),
+            visible_body_height,
+            self.minimumSizeHint().height(),
+            self.sizeHint().height(),
+        )
+        self._resize_base_height = natural_height
+        requested_max = int(maximum_height) if maximum_height is not None else natural_height * 2
+        self._resize_max_height = max(natural_height, requested_max, natural_height * 2)
+        self._user_expanded_height = natural_height
+        self.set_expanded(self.is_expanded())
+
+    def _set_user_expanded_height(self, height: int) -> None:
+        if not self.is_expanded():
+            return
+        height = max(self._resize_base_height, min(int(height), self._resize_max_height))
+        self._user_expanded_height = height
+        self.setMinimumHeight(height)
+        self.setMaximumHeight(height)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.updateGeometry()
+
     def set_expanded(self, expanded: bool) -> None:
         expanded = bool(expanded)
         self.header_button.setChecked(expanded)
@@ -377,11 +448,14 @@ class CollapsibleCardFrame(QFrame):
         self.content_widget.setVisible(expanded)
         QSettings().setValue(self._settings_key, expanded)
         if expanded:
-            self.setMaximumHeight(16777215)
-            margins = self.body_layout.contentsMargins()
-            header_height = self.header_widget.sizeHint().height()
-            self.setMinimumHeight(max(header_height + margins.top() + margins.bottom(), self.sizeHint().height()))
-            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+            if hasattr(self, "_user_expanded_height"):
+                self._set_user_expanded_height(self._user_expanded_height)
+            else:
+                self.setMaximumHeight(16777215)
+                margins = self.body_layout.contentsMargins()
+                header_height = self.header_widget.sizeHint().height()
+                self.setMinimumHeight(max(header_height + margins.top() + margins.bottom(), self.sizeHint().height()))
+                self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         else:
             header_height = self.header_widget.sizeHint().height()
             margins = self.body_layout.contentsMargins()
@@ -389,6 +463,8 @@ class CollapsibleCardFrame(QFrame):
             self.setMinimumHeight(collapsed_height)
             self.setMaximumHeight(collapsed_height)
             self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        if hasattr(self, "_content_resize_handle"):
+            self._content_resize_handle.setVisible(expanded)
         self.updateGeometry()
 
     def is_expanded(self) -> bool:
@@ -1549,6 +1625,8 @@ class DetectorPreviewCard(CollapsibleCardFrame):
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(graphics_view, 1)
+        base_height = scale_value(260, profile, 210)
+        self.enable_content_resize(base_height, base_height * 2)
 
 
 class PlotCanvasArea(QFrame):
@@ -1816,6 +1894,7 @@ class PlotPreviewCard(CollapsibleCardFrame):
         self.setMinimumHeight(self._base_min_height)
         self.add_content(content, 1)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.enable_content_resize(self._base_min_height, self._base_min_height * 2)
 
     @staticmethod
     def _build_plot_layout(content: QWidget, graphics_view: QGraphicsView, profile) -> None:
@@ -1882,6 +1961,8 @@ class StatusCard(CollapsibleCardFrame):
         browser.setMaximumHeight(16777215)
         browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(browser, 1)
+        base_height = scale_value(230, profile, 176)
+        self.enable_content_resize(base_height, base_height * 2)
 
 
 class GisaxsFittingWorkspace:
@@ -1980,6 +2061,7 @@ class GisaxsFittingWorkspace:
         self.right_panel = QWidget(self.page_splitter)
         self.right_panel.setObjectName("gisaxsRightCollapsiblePanel")
         self.right_panel.setMinimumWidth(self._preview_min_width())
+        self.right_panel.setMaximumWidth(self._preview_max_width())
         self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         right_layout = QVBoxLayout(self.right_panel)
         right_layout.setContentsMargins(12, 12, 12, 12)
@@ -2003,15 +2085,16 @@ class GisaxsFittingWorkspace:
         self.ui.fittingPlotControlsCard = self.fitting_controls_card
         self.ui.runLogCard = self.run_log_card
 
-        right_layout.addWidget(self.detector_preview_card)
-        right_layout.addWidget(self.fitting_plot_card)
-        right_layout.addWidget(self.fitting_controls_card)
-        right_layout.addWidget(self.run_log_card)
+        right_layout.addWidget(self.detector_preview_card, 0, Qt.AlignTop)
+        right_layout.addWidget(self.fitting_plot_card, 0, Qt.AlignTop)
+        right_layout.addWidget(self.fitting_controls_card, 0, Qt.AlignTop)
+        right_layout.addWidget(self.run_log_card, 0, Qt.AlignTop)
         right_layout.addStretch(1)
 
         self.preview_scroll_area = make_scroll_area(self.right_panel, horizontal=True)
         self.preview_scroll_area.setObjectName("gisaxsPreviewScrollArea")
         self.preview_scroll_area.setMinimumWidth(self._preview_min_width())
+        self.preview_scroll_area.setMaximumWidth(self._preview_max_width())
 
         self.page_splitter.addWidget(self.preview_scroll_area)
         self.page_splitter.setStretchFactor(0, 3)
@@ -2082,6 +2165,10 @@ class GisaxsFittingWorkspace:
 
     def _preview_min_width(self) -> int:
         return max(self.profile.preview_min, scale_value(420, self.profile, 340))
+
+    def _preview_max_width(self) -> int:
+        """Allow the preview column to grow to twice its profile-default width."""
+        return max(self._preview_min_width(), int(self.profile.page_sizes[1]) * 2)
 
     def _apply_page_overflow_policy(self) -> None:
         min_width = self._page_min_width()
@@ -2172,7 +2259,9 @@ class GisaxsFittingWorkspace:
         if fitting_card is not None:
             fitting_card.apply_responsive_profile(profile)
         self.right_panel.setMinimumWidth(self._preview_min_width())
+        self.right_panel.setMaximumWidth(self._preview_max_width())
         self.preview_scroll_area.setMinimumWidth(self._preview_min_width())
+        self.preview_scroll_area.setMaximumWidth(self._preview_max_width())
         self.work_splitter.setMinimumWidth(profile.workspace_min)
         self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(profile.workspace_min)
         self._apply_page_overflow_policy()
