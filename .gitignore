@@ -4,6 +4,7 @@ Experiment_SAXS_data/
 .gitmap_cache/
 SF_test.ipynb
 SF_training.ipynb
+SF_training.py
 test.csv
 test.ipynb
 FF_test.ipynb
