@@ -2,6 +2,14 @@
 Experiment_data/
 Experiment_SAXS_data/
 .gitmap_cache/
+SF_test.ipynb
+SF_training.ipynb
+test.csv
+test.ipynb
+FF_test.ipynb
+convert_ui.py
+Plot_results.ipynb
+gisaxs_fit_v3.1_4structures.py
 
 # 但保留TestSAXSdata
 !TestSAXSdata/
