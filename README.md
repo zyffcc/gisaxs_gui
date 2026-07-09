@@ -4,7 +4,7 @@ GIMaP (Grazing-Incidence Mapping Package) is a desktop application for GISAXS/GI
 
 ## Overview
 
-GIMaP provides a single desktop interface for working with grazing-incidence scattering data. The current codebase includes tools for detector image viewing, cut-and-fit workflows, trained-model prediction, AI-assisted 1D fitting, trainset generation, classification, and an experimental WAXS/GIWAXS window.
+GIMaP provides a single desktop interface for working with grazing-incidence scattering data. The current codebase includes tools for detector image viewing, cut-and-fit workflows, trained-model prediction, AI-assisted 1D fitting, trainset generation, classification, and an embedded WAXS/GIWAXS in-situ processing page.
 
 The application entry point is `main.py`.
 
@@ -16,7 +16,7 @@ The application entry point is `main.py`.
 - **Model import**: import or select trained models through module configuration files.
 - **Trainset Build**: generate synthetic or simulated training data through an experimental GUI workflow (Not implemented).
 - **Classification**: import datasets, preview data, reduce dimensions, train classifiers, and save/load classification models.
-- **WAXS/GIWAXS**: standalone experimental window for WAXS/GIWAXS-related workflows.
+- **WAXS/GIWAXS**: embedded in-situ processing page for `.nxs`, `.tif`, and `.tiff` detector data, including display, masking, geometry, cut, 1D integration, and batch export controls.
 
 ## Installation
 
@@ -160,7 +160,7 @@ utils/                          Fitting, prediction, loading, and helper utiliti
 modules/                        Prediction and fitting model modules
 config/                         Application parameters and configuration files
 core/                           Shared settings and global parameter helpers
-WAXS/                           Standalone experimental WAXS/GIWAXS window
+WAXS/                           Legacy WAXS/GIWAXS algorithms and loaders reused by the embedded page
 AI_Fitting_Output/              AI fitting output directory
 docs/                           User and developer documentation
 requirements.txt                Python dependency list

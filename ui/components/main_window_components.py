@@ -62,6 +62,7 @@ from ui.responsive_layout import (
     scale_value,
 )
 from ui.style_loader import apply_main_window_styles
+from ui.waxs_page import InSituProcessingWidget
 
 
 @dataclass(frozen=True)
@@ -3060,6 +3061,7 @@ class MainWindowComponents:
         self.ui = ui
         self.responsive_profile = current_profile(ui.centralwidget)
         self._clear_generated_inline_styles(ui.centralwidget)
+        self.waxs_page = self._create_waxs_page()
         self.sidebar = self._create_sidebar()
         self.content = ContentStack(ui.mainWindowWidget)
         self.fitting_workspace = GisaxsFittingWorkspace(ui, self.responsive_profile)
@@ -3077,6 +3079,12 @@ class MainWindowComponents:
         apply_window_profile(ui.centralwidget.window(), self.responsive_profile, resize_window=True)
         install_adaptive_window_profile(ui.centralwidget.window(), self._on_screen_profile_changed)
         QTimer.singleShot(0, self.shell.apply_initial_sidebar_state)
+
+    def _create_waxs_page(self) -> InSituProcessingWidget:
+        page = InSituProcessingWidget()
+        self.ui.waxsPage = page
+        self.ui.waxsPageIndex = self.ui.mainWindowWidget.addWidget(page)
+        return page
 
     def _create_sidebar(self) -> NavigationSidebar:
         buttons = [
@@ -3103,6 +3111,7 @@ class MainWindowComponents:
             1: 1,  # 2D Prediction
             0: 2,  # Trainset Build
             3: 3,  # Classification
+            getattr(self.ui, "waxsPageIndex", -1): 4,  # WAXS
         }
         rail_index = rail_index_by_page.get(page_index)
         if rail_index is not None:
