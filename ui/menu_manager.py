@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QObject, QUrl
 from core.global_params import global_params
+from ui.app_assets import app_colored_logo_pixmap, app_icon
 from utils.path_utils import normalize_path
 
 
@@ -121,6 +122,7 @@ class MenuManager(QObject):
 
             if not hasattr(self.main_window, 'actionOpenUserManual'):
                 self.main_window.actionOpenUserManual = QAction('User Manual...', self.main_window)
+                self.main_window.actionOpenUserManual.setIcon(app_icon())
                 self.main_window.actionOpenUserManual.setStatusTip('Open the local GIMaP user manual')
                 self.main_window.actionOpenUserManual.triggered.connect(self.open_user_manual)
                 help_menu.addAction(self.main_window.actionOpenUserManual)
@@ -135,6 +137,7 @@ class MenuManager(QObject):
 
             if not hasattr(self.main_window, 'actionAboutGIMaP'):
                 self.main_window.actionAboutGIMaP = QAction('About GIMaP...', self.main_window)
+                self.main_window.actionAboutGIMaP.setIcon(app_icon())
                 self.main_window.actionAboutGIMaP.setStatusTip('Show GIMaP version and project information')
                 self.main_window.actionAboutGIMaP.triggered.connect(self.show_about_dialog)
                 help_menu.addAction(self.main_window.actionAboutGIMaP)
@@ -329,15 +332,22 @@ class MenuManager(QObject):
 
     def show_about_dialog(self):
         """Show version, repository, and documentation information."""
-        QMessageBox.about(
-            self.main_window,
-            'About GIMaP',
+        dialog = QMessageBox(self.main_window)
+        dialog.setWindowTitle('About GIMaP')
+        dialog.setWindowIcon(app_icon())
+        dialog.setTextFormat(Qt.RichText)
+        logo = app_colored_logo_pixmap(96, 96)
+        if not logo.isNull():
+            dialog.setIconPixmap(logo)
+        dialog.setText(
             (
-                f'<b>GIMaP</b><br>'
-                f'Version: {APP_VERSION}<br><br>'
+                f'<b style="font-size: 18px;">GIMaP</b><br>'
+                f'<span style="color: #475569;">{APP_VERSION}</span><br><br>'
                 f'GIMaP is a desktop application for GISAXS/GIWAXS data '
                 f'visualization, fitting, and machine-learning-assisted workflows.<br><br>'
                 f'GitHub: <a href="{GITHUB_URL}">{GITHUB_URL}</a><br>'
                 f'User Manual: docs/User_Manual.md'
             )
         )
+        dialog.setStandardButtons(QMessageBox.Ok)
+        dialog.exec_()

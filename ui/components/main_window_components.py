@@ -40,6 +40,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.user_settings import user_settings
+from ui.app_assets import app_colored_logo_pixmap, app_icon
 from ui.layout_utils import (
     BUTTON_HEIGHT,
     CARD_MARGIN,
@@ -116,6 +117,13 @@ class NavigationSidebar(QWidget):
         self.toggle_button.setAutoRaise(True)
         self.toggle_button.setFixedSize(40, 40)
         self.toggle_button.clicked.connect(self.toggle_collapsed)
+        self.rail_logo_label = QLabel(self.rail)
+        self.rail_logo_label.setObjectName("navigationRailLogo")
+        self.rail_logo_label.setAlignment(Qt.AlignCenter)
+        self.rail_logo_label.setFixedSize(40, 40)
+        self.rail_logo_label.setPixmap(app_icon().pixmap(32, 32))
+        self.rail_logo_label.setToolTip("GIMaP")
+        rail_layout.addWidget(self.rail_logo_label, 0, Qt.AlignHCenter)
         rail_layout.addWidget(self.toggle_button)
 
         self.button_group = QButtonGroup(self)
@@ -152,6 +160,40 @@ class NavigationSidebar(QWidget):
         panel_layout = QVBoxLayout(self.panel)
         panel_layout.setContentsMargins(10, 10, 10, 12)
         panel_layout.setSpacing(8)
+
+        self.brand_widget = QWidget(self.panel)
+        self.brand_widget.setObjectName("navigationBrand")
+        brand_layout = QHBoxLayout(self.brand_widget)
+        brand_layout.setContentsMargins(8, 6, 8, 8)
+        brand_layout.setSpacing(8)
+        self.brand_logo_label = QLabel(self.brand_widget)
+        self.brand_logo_label.setObjectName("navigationBrandLogo")
+        self.brand_logo_label.setFixedSize(46, 46)
+        self.brand_logo_label.setAlignment(Qt.AlignCenter)
+        colored_logo = app_colored_logo_pixmap(42, 42)
+        if not colored_logo.isNull():
+            self.brand_logo_label.setPixmap(colored_logo)
+        else:
+            self.brand_logo_label.setText("G")
+        self.brand_title_label = QLabel(
+            '<span style="color: #081b4c;">GIM</span>'
+            '<span style="color: #0b9fda;">a</span>'
+            '<span style="color: #081b4c;">P</span>',
+            self.brand_widget,
+        )
+        self.brand_title_label.setObjectName("navigationBrandTitle")
+        self.brand_title_label.setTextFormat(Qt.RichText)
+        self.brand_subtitle_label = QLabel("GISAXS / GIWAXS", self.brand_widget)
+        self.brand_subtitle_label.setObjectName("navigationBrandSubtitle")
+        brand_text = QWidget(self.brand_widget)
+        brand_text_layout = QVBoxLayout(brand_text)
+        brand_text_layout.setContentsMargins(0, 0, 0, 0)
+        brand_text_layout.setSpacing(1)
+        brand_text_layout.addWidget(self.brand_title_label)
+        brand_text_layout.addWidget(self.brand_subtitle_label)
+        brand_layout.addWidget(self.brand_logo_label, 0, Qt.AlignVCenter)
+        brand_layout.addWidget(brand_text, 1, Qt.AlignVCenter)
+        panel_layout.addWidget(self.brand_widget, 0)
 
         self.controls_scroll = QScrollArea(self.panel)
         self.controls_scroll.setObjectName("navigationControlsScroll")
