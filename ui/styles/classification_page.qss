@@ -1,0 +1,154 @@
+QWidget#ClassificationPageRoot {
+    background: #f5f7fb;
+    color: #162033;
+}
+
+QLabel#classificationTitle {
+    font-size: 18pt;
+    font-weight: 700;
+}
+
+QLabel#classificationSubtitle {
+    color: #5f6b7a;
+}
+
+QFrame#classificationStepper,
+QFrame#DatasetSection,
+QFrame#DataInspectionSection,
+QFrame#PreprocessingSection,
+QFrame#ExperimentSetupSection,
+QFrame#resultsPanel,
+QFrame#datasetSummaryFrame,
+QFrame#qualityFrame,
+QFrame#preprocessingFrame,
+QFrame#validationFrame,
+QFrame#projectionFrame,
+QFrame#runFrame,
+QFrame#overviewFrame,
+QFrame#logPanel,
+QFrame[classificationCard="true"] {
+    background: #ffffff;
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+}
+
+QLabel#sectionTitle {
+    font-weight: 700;
+    color: #1f2a44;
+}
+
+QLabel#stateBadgeLabel,
+QLabel#qualityStatusLabel,
+QLabel[classificationBadge="true"] {
+    background: #e9f2ff;
+    color: #0f4d8f;
+    border-radius: 7px;
+    padding: 3px 8px;
+    font-weight: 600;
+}
+
+QPushButton {
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 1px solid #c9d4e2;
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+QPushButton:hover {
+    background: #eef5ff;
+    border-color: #9bb9dd;
+}
+
+QPushButton#runComparisonButton {
+    min-height: 36px;
+    background: #1767c2;
+    color: #ffffff;
+    border-color: #1767c2;
+    font-weight: 700;
+}
+
+QPushButton#runComparisonButton:hover {
+    background: #0f56a5;
+}
+
+QPushButton#addClassButton,
+QPushButton#scanImportButton {
+    font-weight: 600;
+}
+
+QToolButton {
+    min-height: 28px;
+    padding: 4px 9px;
+    border: 1px solid #c9d4e2;
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+QToolButton:checked {
+    background: #e8f1ff;
+    color: #124c8b;
+    border-color: #7aa7d9;
+}
+
+QLineEdit,
+QComboBox,
+QSpinBox,
+QDoubleSpinBox {
+    min-height: 26px;
+    border: 1px solid #c9d4e2;
+    border-radius: 5px;
+    padding: 2px 6px;
+    background: #ffffff;
+}
+
+QTableWidget,
+QListWidget,
+QTextBrowser,
+QGraphicsView {
+    background: #ffffff;
+    border: 1px solid #d7dfeb;
+    border-radius: 6px;
+    gridline-color: #e6edf5;
+}
+
+QHeaderView::section {
+    background: #eef3f8;
+    color: #263449;
+    padding: 5px 6px;
+    border: 0;
+    border-right: 1px solid #d7dfeb;
+    font-weight: 600;
+}
+
+QProgressBar {
+    min-height: 14px;
+    border: 1px solid #c9d4e2;
+    border-radius: 7px;
+    background: #edf2f7;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    border-radius: 7px;
+    background: #27a26a;
+}
+
+QLabel#validationWarningLabel {
+    color: #a15c00;
+}
+
+QLabel#metricChartLabel {
+    color: #5f6b7a;
+}
+
+QTabWidget#classificationResultTabs::pane {
+    border: 1px solid #dbe3ef;
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+QTabWidget#classificationResultTabs QTabBar::tab {
+    min-width: 105px;
+    padding: 7px 10px;
+}
