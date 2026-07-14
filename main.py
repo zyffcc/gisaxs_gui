@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from ui.main_window import Ui_MainWindow  # 导入转换后的 UI 类
+from ui.app_assets import app_icon
 from ui.components import MainWindowComponents
 from ui.menu_manager import MenuManager
 from controllers.main_controller import MainController
@@ -44,6 +45,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         self.setupUi(self)
         self.setWindowTitle("GIMaP")
+        self.setWindowIcon(app_icon())
         self.components = MainWindowComponents(self)
         
         # 设置初始状态栏消息（英文）
@@ -296,6 +298,7 @@ def main():
     app.setApplicationName("GIMaP")
     app.setApplicationVersion("1.0.0")
     app.setOrganizationName("GIMaP")
+    app.setWindowIcon(app_icon())
     
     # 创建主窗口
     window = MainWindow()

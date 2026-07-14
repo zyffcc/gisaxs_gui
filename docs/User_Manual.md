@@ -226,7 +226,9 @@ Detected functionality includes:
 
 ## 8. WAXS Page
 
-The WAXS workflow is opened as a standalone window from the main GUI.
+The WAXS / in-situ workflow is embedded directly in the main GUI. Use the **WAXS** item in the left navigation panel to open it.
+
+The embedded page supports `.nxs`, `.tif`, and `.tiff` input through **Open File** or drag-and-drop. For `.nxs` files, the frame selector is enabled when multiple frames are detected. The page includes a large detector preview with zoom/pan controls, display and mask settings, geometry parameters, Q-range cut controls, 1D integration, and batch/in-situ export controls.
 
 ## 9. Model Configuration
 

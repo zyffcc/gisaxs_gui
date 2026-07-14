@@ -8,7 +8,6 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 
 from core.global_params import global_params
-from ui.responsive_layout import move_window_to_cursor_screen
 from utils.path_utils import normalize_path
 
 
@@ -148,7 +147,7 @@ class MainController(QObject):
         self.ui.ClassficationButton.clicked.connect(self._switch_to_classification)
         # 直接打开独立的WAXS窗口
         try:
-            self.ui.WAXSButton.clicked.connect(self._open_waxs_standalone)
+            self.ui.WAXSButton.clicked.connect(self._switch_to_waxs)
         except Exception:
             pass
         
@@ -201,18 +200,29 @@ class MainController(QObject):
         # 更新状态
         self.status_updated.emit("GIMaP ready")
 
-    def _open_waxs_standalone(self):
+    def _switch_to_waxs(self):
+        """Switch to the embedded WAXS / in-situ processing page."""
+        page_index = getattr(self.ui, "waxsPageIndex", None)
+        if page_index is None:
+            QMessageBox.warning(
+                self.parent if isinstance(self.parent, QMainWindow) else None,
+                "WAXS",
+                "Embedded WAXS page is not available.",
+            )
+            return
+        self.ui.mainWindowWidget.setCurrentIndex(page_index)
+        self.status_updated.emit("Switched to WAXS / in-situ processing mode")
+        self._update_button_states(4)
+
+    def _open_waxs_embedded_compat(self):
         """直接打开独立的 WAXS/WAXS.py 窗口。"""
         try:
-            from WAXS.WAXS import MainWindow as WAXSMainWindow
-            self._waxs_window = WAXSMainWindow()
-            move_window_to_cursor_screen(self._waxs_window)
-            self._waxs_window.show()
-            self.status_updated.emit("WAXS standalone window opened")
+            self._switch_to_waxs()
+            return
         except Exception as e:
             QMessageBox.warning(self.parent if isinstance(self.parent, QMainWindow) else None,
                                 "WAXS", f"Failed to open WAXS window: {e}")
-            print(f"Failed to open WAXS standalone window: {e}")
+            print(f"Failed to switch to embedded WAXS page: {e}")
     
     def _register_ui_controls(self):
         """自动注册UI控件到全局参数系统（优化版）"""
@@ -493,7 +503,8 @@ class MainController(QObject):
             self.ui.cutAndFittingButton,
             self.ui.gisaxsPredictButton,
             self.ui.trainsetBuildButton,
-            self.ui.ClassficationButton
+            self.ui.ClassficationButton,
+            self.ui.WAXSButton,
         ]
         
         for button in navigation_buttons:

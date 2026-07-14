@@ -1,0 +1,238 @@
+{
+    "trainset": {
+        "generation": {
+            "file_name": "trainset",
+            "save_path": "",
+            "trainset_number": 1000,
+            "save_every": 100
+        },
+        "beam": {
+            "wavelength": 0.1,
+            "grazing_angle": 0.4,
+            "beam_size_x": 0.1,
+            "beam_size_y": 0.1,
+            "flux": 1000000000000.0,
+            "polarization": "horizontal"
+        },
+        "detector": {
+            "preset": "Pilatus 2M",
+            "distance": 2000,
+            "nbins_x": 1475,
+            "nbins_y": 1679,
+            "pixel_size_x": 172,
+            "pixel_size_y": 172,
+            "beam_center_x": 737,
+            "beam_center_y": 839,
+            "exposure_time": 1.0,
+            "dark_current": 0.1,
+            "readout_noise": 5.0,
+            "description": "Pilatus 2M detector"
+        },
+        "sample": {
+            "particle_shape": "Sphere",
+            "particle_size": 10.0,
+            "size_distribution": 0.1,
+            "material": "Gold",
+            "substrate": "Silicon",
+            "thickness": 100.0,
+            "roughness": 1.0,
+            "density": 0.5,
+            "orientation": "random"
+        },
+        "preprocessing": {
+            "focus_region": {
+                "type": "q",
+                "qr_min": 0.01,
+                "qr_max": 3.0,
+                "qz_min": 0.01,
+                "qz_max": 3.0
+            },
+            "noising": {
+                "type": "Gaussian",
+                "snr_min": 80,
+                "snr_max": 130
+            },
+            "others": {
+                "crop_edge": true,
+                "add_mask": true,
+                "normalize": true,
+                "logarization": true
+            }
+        }
+    },
+    "fitting": {
+        "imported_gisaxs_file": "E:\\ExpData\\Alex\\p2m\\dl_28_ag_03_dc_12p_insitu_00001_00009.cbf",
+        "stack_count": 1,
+        "cut_region": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+        },
+        "fitting_params": {}
+    },
+    "fitting_model_parameters": {
+        "fitting": {
+            "global_parameters": {
+                "sigma_res": 0.03612901795213891,
+                "k_value": 23.019385774973387,
+                "int_res": 0.3852861929723298,
+                "nu_res": 3.102190637717906,
+                "background": 9.157679587960701e-11
+            },
+            "particles": {
+                "particle_7": {
+                    "shape": "Sphere",
+                    "enabled": true,
+                    "parameters": {
+                        "sphere": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.1,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1,
+                            "background": 0.0
+                        },
+                        "cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.1,
+                            "height": 20.0,
+                            "sigma_height": 0.1,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1,
+                            "background": 0.0
+                        }
+                    }
+                },
+                "particle_1": {
+                    "shape": "Sphere",
+                    "enabled": true,
+                    "parameters": {
+                        "sphere": {
+                            "intensity": 1.1941781924525487,
+                            "radius": 8.348396301269531,
+                            "sigma_radius": 0.29979339241981506,
+                            "diameter": 11.73766040802002,
+                            "sigma_diameter": 0.628443717956543
+                        },
+                        "cylinder": {
+                            "intensity": 0.3562638653873533,
+                            "radius": 3.187520962270096,
+                            "sigma_radius": 0.7566134489049009,
+                            "height": 26.525005777597368,
+                            "sigma_height": 3.4311112751564403,
+                            "diameter": 6.175602258518442,
+                            "sigma_diameter": 0.696476262497169
+                        },
+                        "vertical_cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.3,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1
+                        }
+                    }
+                },
+                "particle_2": {
+                    "shape": "Sphere",
+                    "enabled": true,
+                    "parameters": {
+                        "sphere": {
+                            "intensity": 1.2053321337957905,
+                            "radius": 4.577607154846191,
+                            "sigma_radius": 0.28179773688316345,
+                            "diameter": 6.326902866363525,
+                            "sigma_diameter": 0.35942524671554565
+                        },
+                        "cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.1,
+                            "height": 20.0,
+                            "sigma_height": 0.1,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1
+                        },
+                        "vertical_cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.3,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1
+                        }
+                    }
+                },
+                "particle_3": {
+                    "shape": "Sphere",
+                    "enabled": true,
+                    "parameters": {
+                        "sphere": {
+                            "intensity": 1.2884407926923347,
+                            "radius": 20.416473388671875,
+                            "sigma_radius": 8.32012939453125,
+                            "diameter": 19.424976348876953,
+                            "sigma_diameter": 5.301321983337402
+                        },
+                        "cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.1,
+                            "height": 20.0,
+                            "sigma_height": 0.1,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1
+                        },
+                        "vertical_cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.3,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "classification": {
+        "import_cache": {
+            "P2": {
+                "path": "E:\\PythonCode\\gisaxs_gui\\TestSAXSdata",
+                "rule": "*.dat"
+            },
+            "Particle 1": {
+                "path": "C:\\Users\\87514\\Downloads\\Au_Si_Model\\Au_Si_Model\\TestData",
+                "rule": "*.cbf"
+            }
+        }
+    },
+    "gisaxs_predict": {
+        "framework": "tensorflow 2.15.0",
+        "mode": "multi_files",
+        "input_file": "E:\\ExpData\\Alex\\p2m\\dl_28_ag_03_dc_12p_insitu_00001_00208.cbf",
+        "input_folder": "E:\\ExpData\\Alex\\p2m",
+        "export_path": "C:\\Users\\zhaiyufe\\Downloads\\test\\Output",
+        "stack_value": "5",
+        "range_value": "8-500",
+        "showing_value": "8",
+        "auto_scale": true,
+        "vmin": 0.0,
+        "vmax": 0.6989700198173523,
+        "predict_auto_scale": true,
+        "predict_vmin": -6.0,
+        "predict_vmax": -0.39593011140823364,
+        "colormap": "viridis",
+        "gisaxs_log_scale": true,
+        "predict_log_scale": true,
+        "predict_curve_logx": false,
+        "predict_curve_logy": false,
+        "predict_curve_autoscale": true,
+        "predict_curve_xmin": null,
+        "predict_curve_xmax": null,
+        "predict_curve_ymin": null,
+        "predict_curve_ymax": null,
+        "module_name": "G Ag/PNO FF 256 (Experimental)",
+        "module_model_path": "C:\\Users\\zhaiyufe\\Downloads\\Geo_Ag_Si_Sputter_Model\\Geo_Ag_Si_Sputter_Model\\georgios_ff_model_softmax_poisson_10p0_100p0_saved_model"
+    }
+}

@@ -39,6 +39,28 @@ QWidget#navigationControlPanel {
     border-right: 1px solid #c8d3e1;
 }
 
+QWidget#navigationBrand {
+    background: #f8fafc;
+    border: 1px solid #d8e2ee;
+    border-radius: 10px;
+}
+
+QLabel#navigationBrandLogo {
+    background: transparent;
+}
+
+QLabel#navigationBrandTitle {
+    color: #081b4c;
+    font-size: 17px;
+    font-weight: 800;
+}
+
+QLabel#navigationBrandSubtitle {
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 600;
+}
+
 QScrollArea#navigationControlsScroll,
 QWidget#navigationControlsContent {
     background: transparent;
