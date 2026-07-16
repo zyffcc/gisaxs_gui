@@ -64,6 +64,33 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Building a Portable Windows Release (No Python Required on Target PCs)
+
+The repository includes a release builder that packages the application together
+with the existing Conda environment. On the build computer, install `conda-pack`
+once in the base environment and run:
+
+```powershell
+python -m pip install --user conda-pack
+powershell -ExecutionPolicy Bypass -File .\tools\build_portable_release.ps1 -EnvironmentName GUI -Version 0.1.0
+```
+
+If the complete ZIP is under GitHub's per-file limit, upload it directly. For a
+larger environment, the builder also creates numbered `.zip.partXX` files and
+two installers. Upload every generated part and BAT to a GitHub Release tagged
+`v<version>`. Tell normal users to download only
+`00_Download_and_Install_GIMaP-<version>.bat`; it downloads and verifies all
+parts, joins them, extracts them, and starts GIMaP. `Install_GIMaP_parts.bat`
+remains an offline fallback for users who already downloaded every part. Python
+and Conda are not required. The
+generated `runtime\` and `release\` directories are ignored by Git and are
+intended only for release artifacts.
+
+Build and test the Windows package on the same CPU architecture as the target
+computers. A portable ZIP avoids a PyInstaller-wrapped executable, but an
+institution's antivirus or application-control policy may still block unsigned
+scripts or binaries.
+
 ### GUI Layout Too Large for Small Screen
 
 The GUI contains dense scientific controls. Use a larger display, maximize the window, or adjust system scaling if controls are clipped. For the best user experience, a 1080p or higher-resolution screen is recommended.

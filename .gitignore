@@ -45,6 +45,10 @@ MANIFEST
 *.manifest
 *.spec
 
+# Portable release runtime (generated locally; publish ZIPs via GitHub Releases)
+runtime/
+release/
+
 # 单元测试
 htmlcov/
 .tox/
