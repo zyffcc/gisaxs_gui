@@ -1,0 +1,13 @@
+name: gimap-trainset
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - scipy
+  - h5py
+  - pyyaml
+  - bornagain
+  - tensorflow=2.15
+  - keras=2.15
+  - matplotlib

@@ -1,1230 +1,1012 @@
-﻿"""
-训练集生成控制器 - 管理GISAXS训练集的生成过程，包含所有相关的子模块参数
-"""
+from __future__ import annotations
 
+import copy
 import os
-import json
+import re
+import sys
 import time
-import threading
-from datetime import datetime
-import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal, QTimer
-from PyQt5.QtWidgets import QMessageBox, QFileDialog
-from utils.path_utils import normalize_path
+from pathlib import Path
+from typing import Any, Dict, Optional
 
-# 导入全局参数管理器
-from core.global_params import GlobalParameterManager
+import numpy as np
+import yaml
+from PyQt5.QtCore import QObject, QProcess, QRunnable, QThreadPool, QTimer, Qt, pyqtSignal
+from PyQt5.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QLineEdit,
+    QMessageBox,
+    QSpinBox,
+)
+
+from trainset.backends import SlurmBackend, read_metrics
+from trainset.config import default_project_config, load_project_config, merge_config, save_project_config, validate_project_config
+from trainset.generator import DatasetGenerator, build_fixed_mask, build_random_mask, build_roi_shape_mask, crop_roi, load_scattering_image
+from trainset.geometry import roi_to_spherical_ranges
+from trainset.job_package import prepare_job_package
+from trainset.plugins import REGISTRY
+from ui.trainset_build_page import TrainsetBuildPage
+
+
+class _WorkerSignals(QObject):
+    finished = pyqtSignal(object)
+    error = pyqtSignal(str)
+
+
+class _FunctionWorker(QRunnable):
+    def __init__(self, function, *args, **kwargs):
+        super().__init__()
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = _WorkerSignals()
+
+    def run(self):
+        try:
+            self.signals.finished.emit(self.function(*self.args, **self.kwargs))
+        except Exception as exc:
+            self.signals.error.emit(str(exc))
+
+
+def _deep_get(mapping: Dict[str, Any], dotted: str, default: Any = None) -> Any:
+    value: Any = mapping
+    for part in dotted.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return default
+        value = value[part]
+    return value
+
+
+def _deep_set(mapping: Dict[str, Any], dotted: str, value: Any) -> None:
+    parts = dotted.split(".")
+    target = mapping
+    for part in parts[:-1]:
+        target = target.setdefault(part, {})
+    target[parts[-1]] = value
 
 
 class TrainsetController(QObject):
-    """训练集生成控制器，包含光束、探测器、样品和预处理参数管理"""
-    
-    # 信号定义
+    """Configuration-driven Trainset Build controller.
+
+    PyQt owns editing and visualization only. Dataset generation, job packaging,
+    local execution and Slurm operations live in the trainset package.
+    """
+
     parameters_changed = pyqtSignal(str, dict)
     generation_started = pyqtSignal()
     generation_finished = pyqtSignal()
     generation_error = pyqtSignal(str)
     progress_updated = pyqtSignal(int)
     status_updated = pyqtSignal(str)
-    
+
     def __init__(self, ui, parent=None):
         super().__init__(parent)
         self.ui = ui
-        self.parent = parent
-        
-        # 获取全局参数管理器实例
-        self.global_params = GlobalParameterManager()
-        
-        # 训练集生成相关参数
-        self.generation_params = {
-            'save_path': '',
-            'filename': 'trainset',
-            'total_number': 1000,
-            'save_interval': 100,
-            'current_index': 0
-        }
-        
-        # 子模块参数
-        self.beam_params = self._init_beam_params()
-        self.detector_params = self._init_detector_params()
-        self.sample_params = self._init_sample_params()
-        self.preprocessing_params = self._init_preprocessing_params()
-        
-        # 从全局参数管理器同步参数到控制器
-        self._sync_from_global_params()
-        
-        # 初始化探测器预设
-        self._load_detector_presets()
-        
-        # 生成控制
-        self.is_generating = False
-        self.generation_thread = None
-        self.generation_timer = QTimer()
-        self.generation_timer.timeout.connect(self._update_generation_progress)
-        
-        # 设置连接
-        self._setup_connections()
-    
-    def _init_beam_params(self):
-        """初始化光束参数"""
-        return {
-            'wavelength': 0.1,  # nm
-            'grazing_angle': 0.4,  # degrees
-        }
-        
-    def _init_detector_params(self):
-        """初始化探测器参数"""
-        # 从Trainset模块专用参数读取当前值，而不是使用硬编码默认值
-        return {
-            'preset': self.global_params.get_parameter('trainset', 'detector.preset', 'Pilatus 2M'),
-            'distance': self.global_params.get_parameter('trainset', 'detector.distance', 2000),  # mm
-            'nbins_x': self.global_params.get_parameter('trainset', 'detector.nbins_x', 1475),
-            'nbins_y': self.global_params.get_parameter('trainset', 'detector.nbins_y', 1475),
-            'pixel_size_x': self.global_params.get_parameter('trainset', 'detector.pixel_size_x', 172),  # μm
-            'pixel_size_y': self.global_params.get_parameter('trainset', 'detector.pixel_size_y', 172),  # μm
-            'beam_center_x': self.global_params.get_parameter('trainset', 'detector.beam_center_x', 737),  # bin
-            'beam_center_y': self.global_params.get_parameter('trainset', 'detector.beam_center_y', 737),  # bin
-        }
-        
-    def _init_sample_params(self):
-        """初始化样品参数"""
-        return {
-            'particle_shape': 'Sphere',
-            'particle_size': 10.0,  # nm
-            'size_distribution': 0.1,
-            'material': 'Gold',
-            'substrate': 'Silicon'
-        }
-        
-    def _init_preprocessing_params(self):
-        """初始化预处理参数"""
-        return {
-            'focus_region': {
-                'type': 'q',
-                'qr_min': 0.01,
-                'qr_max': 3.0,
-                'qz_min': 0.01,
-                'qz_max': 3.0,
-            },
-            'noising': {
-                'type': 'Gaussian',
-                'snr_min': 80,
-                'snr_max': 130,
-            },
-            'others': {
-                'crop_edge': True,
-                'add_mask': True,
-                'normalize': True,
-                'logarization': True,
+        self.parent_controller = parent
+        self.window = getattr(parent, "parent", None)
+        self.project_root = Path(__file__).resolve().parents[1]
+        self.config: Dict[str, Any] = default_project_config()
+        self.reference_image: Optional[np.ndarray] = None
+        self.package_dir: Optional[Path] = None
+        self.local_process: Optional[QProcess] = None
+        self.thread_pool = QThreadPool.globalInstance()
+        self._initialized = False
+        self._remote_refresh_running = False
+        self._result_sync_started = False
+        self._legacy_page_widgets = []
+        self.monitor_timer = QTimer(self)
+        self.monitor_timer.setInterval(15000)
+        self.monitor_timer.timeout.connect(self._refresh_job)
+        self.page = TrainsetBuildPage()
+        self._replace_generated_page()
+        self._connect_page()
+
+    def _replace_generated_page(self) -> None:
+        host = self.ui.trainsetBuildPage
+        layout = host.layout()
+        if layout is None:
+            from PyQt5.QtWidgets import QVBoxLayout
+
+            layout = QVBoxLayout(host)
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.hide()
+                widget.setParent(host)
+                self._legacy_page_widgets.append(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.page)
+        self.ui.trainsetWorkspace = self.page
+
+    def _connect_page(self) -> None:
+        page = self.page
+        page.reference_button.clicked.connect(self._select_reference)
+        page.draw_roi_button.clicked.connect(lambda: self._begin_roi("roi"))
+        page.draw_ellipse_roi_button.clicked.connect(lambda: self._begin_roi("roi_ellipse"))
+        page.draw_rectangle_button.clicked.connect(lambda: self._begin_mask("rectangle"))
+        page.draw_circle_button.clicked.connect(lambda: self._begin_mask("ellipse"))
+        page.remove_mask_button.clicked.connect(self._remove_selected_masks)
+        page.clear_masks_button.clicked.connect(self._clear_masks)
+        page.mask_region_created.connect(self._region_created)
+        page.generate_preview_button.clicked.connect(self._generate_preview)
+        page.preview_button.clicked.connect(lambda: page.step_list.setCurrentRow(1))
+        page.validate_button.clicked.connect(self._validate_and_report)
+        page.load_button.clicked.connect(self._load_project_dialog)
+        page.save_button.clicked.connect(self._save_project_dialog)
+        page.prepare_button.clicked.connect(self._prepare_hpc_job)
+        page.submit_button.clicked.connect(self._submit_maxwell)
+        page.model_validate_button.clicked.connect(self._validate_model_contract)
+        page.local_folder_button.clicked.connect(self._choose_workspace)
+        page.local_python_button.clicked.connect(self._choose_local_python)
+        page.local_prepare_button.clicked.connect(self._prepare_local_job)
+        page.local_generate_button.clicked.connect(self._run_local_generation)
+        page.local_train_button.clicked.connect(self._run_local_training)
+        page.connection_button.clicked.connect(self._test_connection)
+        page.hpc_prepare_button.clicked.connect(self._prepare_hpc_job)
+        page.hpc_submit_button.clicked.connect(self._submit_maxwell)
+        page.refresh_job_button.clicked.connect(self._refresh_job)
+        page.sync_results_button.clicked.connect(self._sync_results)
+        page.register_model_button.clicked.connect(self._register_best_model)
+        page.storage_accept_check.toggled.connect(self._storage_acceptance_changed)
+        page.reference_path.editingFinished.connect(self._load_reference_from_field)
+        page.fields["detector.preset"].currentTextChanged.connect(self._apply_detector_preset)
+        for path, widget in page.fields.items():
+            if path.startswith("roi."):
+                signal = getattr(widget, "valueChanged", None) or getattr(widget, "currentTextChanged", None)
+                if signal is not None:
+                    signal.connect(self._roi_config_changed)
+            elif path.startswith("detector.") or path.startswith("beam."):
+                signal = getattr(widget, "valueChanged", None) or getattr(widget, "currentTextChanged", None)
+                if signal is not None:
+                    signal.connect(self._geometry_changed)
+            if path.startswith("mask."):
+                signal = (
+                    getattr(widget, "valueChanged", None)
+                    or getattr(widget, "currentTextChanged", None)
+                    or getattr(widget, "toggled", None)
+                )
+                if signal is not None:
+                    signal.connect(self._mask_config_changed)
+        page.mask_shape_table.itemChanged.connect(self._mask_config_changed)
+
+    def initialize(self) -> None:
+        if self._initialized:
+            return
+        self._initialized = True
+        self._apply_config_to_page(self.config)
+        self._update_capabilities()
+        self._update_geometry_label()
+        self.status_updated.emit("Trainset workspace ready")
+
+    def _widget_value(self, widget):
+        if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+            return widget.value()
+        if isinstance(widget, QComboBox):
+            return widget.currentText()
+        if isinstance(widget, QCheckBox):
+            return widget.isChecked()
+        if isinstance(widget, QLineEdit):
+            return widget.text().strip()
+        return None
+
+    def _set_widget_value(self, widget, value) -> None:
+        widget.blockSignals(True)
+        try:
+            if isinstance(widget, QSpinBox):
+                widget.setValue(int(value))
+            elif isinstance(widget, QDoubleSpinBox):
+                widget.setValue(float(value))
+            elif isinstance(widget, QComboBox):
+                if widget.findText(str(value)) < 0:
+                    widget.addItem(str(value))
+                widget.setCurrentText(str(value))
+            elif isinstance(widget, QCheckBox):
+                widget.setChecked(bool(value))
+            elif isinstance(widget, QLineEdit):
+                widget.setText(str(value))
+        finally:
+            widget.blockSignals(False)
+
+    def _collect_config(self) -> Dict[str, Any]:
+        config = copy.deepcopy(self.config)
+        config["project"]["name"] = self.page.project_name.text().strip()
+        for path, widget in self.page.fields.items():
+            if path.startswith("pre.") or path in {"sample.particle_label", "sample.particle_material", "sample.interference_label", "model.channels"}:
+                continue
+            _deep_set(config, path, self._widget_value(widget))
+
+        parameters: Dict[str, Dict[str, Any]] = {}
+        for row in range(self.page.parameter_table.rowCount()):
+            cells = [self.page.parameter_table.item(row, column) for column in range(4)]
+            if not cells[0] or not cells[0].text().strip():
+                continue
+            parameters[cells[0].text().strip()] = {
+                "distribution": cells[1].text().strip() if cells[1] else "uniform",
+                "minimum": float(cells[2].text()) if cells[2] else 0.0,
+                "maximum": float(cells[3].text()) if cells[3] else 1.0,
             }
-        }
+        config["parameters"] = parameters
 
-    def _setup_connections(self):
-        """设置信号连接"""
-        # 训练集生成相关连接
-        if hasattr(self.ui, 'trainsetGenerateFileNameValue'):
-            self.ui.trainsetGenerateFileNameValue.textChanged.connect(self._on_generation_params_changed)
-        
-        if hasattr(self.ui, 'trainsetGenerateTrainsetNumberValue'):
-            self.ui.trainsetGenerateTrainsetNumberValue.textChanged.connect(self._on_trainset_number_changed)
-        
-        if hasattr(self.ui, 'trainsetGenerateSaveEveryValue'):
-            self.ui.trainsetGenerateSaveEveryValue.textChanged.connect(self._on_generation_params_changed)
-        
-        # 按钮连接
-        if hasattr(self.ui, 'trainsetGenerateSelectFolderButton'):
-            self.ui.trainsetGenerateSelectFolderButton.clicked.connect(self._select_save_folder)
-        if hasattr(self.ui, 'trainsetGenerateRunButton'):
-            self.ui.trainsetGenerateRunButton.clicked.connect(self._start_generation)
-        if hasattr(self.ui, 'trainsetGenerateStopButton'):
-            self.ui.trainsetGenerateStopButton.clicked.connect(self._stop_generation)
-            self.ui.trainsetGenerateStopButton.setEnabled(False)
-            
-        # 光束参数连接
-        self._setup_beam_connections()
-        
-        # 探测器参数连接
-        self._setup_detector_connections()
-        
-        # 样品参数连接
-        self._setup_sample_connections()
-        
-        # 预处理参数连接
-        self._setup_preprocessing_connections()
-        
-    def _setup_beam_connections(self):
-        """设置光束参数连接"""
-        if hasattr(self.ui, 'wavelengthValue'):
-            self.ui.wavelengthValue.textChanged.connect(self._on_beam_params_changed)
-        if hasattr(self.ui, 'angleValue'):
-            self.ui.angleValue.textChanged.connect(self._on_beam_params_changed)
-            
-    def _setup_detector_connections(self):
-        """设置探测器参数连接"""
-        if hasattr(self.ui, 'detectorPresetCombox'):
-            self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
-        
-        # 非关键参数 - 不会触发自动切换到User-defined
-        if hasattr(self.ui, 'distanceValue'):
-            self.ui.distanceValue.textChanged.connect(self._on_detector_params_changed)
-        if hasattr(self.ui, 'beamCenterXValue'):
-            self.ui.beamCenterXValue.textChanged.connect(self._on_detector_params_changed)
-        if hasattr(self.ui, 'beamCenterYValue'):
-            self.ui.beamCenterYValue.textChanged.connect(self._on_detector_params_changed)
-        
-        # 关键参数 - 会触发自动切换到User-defined的逻辑
-        if hasattr(self.ui, 'NbinsXValue'):
-            self.ui.NbinsXValue.textChanged.connect(self._on_detector_critical_params_changed)
-        if hasattr(self.ui, 'NbinsYValue'):
-            self.ui.NbinsYValue.textChanged.connect(self._on_detector_critical_params_changed)
-        if hasattr(self.ui, 'pixelSizeXValue'):
-            self.ui.pixelSizeXValue.textChanged.connect(self._on_detector_critical_params_changed)
-        if hasattr(self.ui, 'pixelSizeYValue'):
-            self.ui.pixelSizeYValue.textChanged.connect(self._on_detector_critical_params_changed)
-            
-    def _setup_sample_connections(self):
-        """设置样品参数连接"""
-        if hasattr(self.ui, 'particleShapeInitValue'):
-            self.ui.particleShapeInitValue.currentTextChanged.connect(self._on_sample_params_changed)
-        if hasattr(self.ui, 'particleSizeValue'):
-            self.ui.particleSizeValue.textChanged.connect(self._on_sample_params_changed)
-        if hasattr(self.ui, 'materialCombox'):
-            self.ui.materialCombox.currentTextChanged.connect(self._on_sample_params_changed)
-            
-    def _setup_preprocessing_connections(self):
-        """设置预处理参数连接"""
-        if hasattr(self.ui, 'focusRegionTypeCombox'):
-            self.ui.focusRegionTypeCombox.currentTextChanged.connect(self._on_preprocessing_params_changed)
-        if hasattr(self.ui, 'noisingTypeCombox'):
-            self.ui.noisingTypeCombox.currentTextChanged.connect(self._on_preprocessing_params_changed)
-        if hasattr(self.ui, 'OthersCropEdgeCheckBox'):
-            self.ui.OthersCropEdgeCheckBox.toggled.connect(self._on_preprocessing_params_changed)
-    
-    def _sync_from_global_params(self):
-        """从全局参数管理器同步参数到控制器"""
-        try:
-            # 同步光束参数
-            beam_params = self.global_params.get_module_parameters('beam')
-            if beam_params:
-                self.beam_params.update(beam_params)
-            
-            # 同步探测器参数
-            detector_params = self.global_params.get_module_parameters('detector')
-            if detector_params:
-                self.detector_params.update(detector_params)
-            
-            # 同步样品参数
-            sample_params = self.global_params.get_module_parameters('sample')
-            if sample_params:
-                self.sample_params.update(sample_params)
-            
-            # 同步预处理参数
-            preprocessing_params = self.global_params.get_module_parameters('preprocessing')
-            if preprocessing_params:
-                self.preprocessing_params.update(preprocessing_params)
-                
-            # 更新UI显示
-            self._update_ui_from_params()
-            
-        except Exception as e:
-            print(f"Failed to synchronize parameters from the global parameter manager: {e}")
-    
-    def _update_ui_from_params(self):
-        """根据当前参数更新UI显示"""
-        try:
-            # 更新光束参数UI
-            if hasattr(self.ui, 'wavelengthValue'):
-                self.ui.wavelengthValue.setText(str(self.beam_params.get('wavelength', 0.1)))
-            if hasattr(self.ui, 'angleValue'):
-                self.ui.angleValue.setText(str(self.beam_params.get('grazing_angle', 0.4)))
-            
-            # 更新探测器参数UI
-            if hasattr(self.ui, 'detectorDistanceValue'):
-                self.ui.detectorDistanceValue.setText(str(self.detector_params.get('distance', 2000)))
-            if hasattr(self.ui, 'detectorPixelXValue'):
-                self.ui.detectorPixelXValue.setText(str(self.detector_params.get('pixel_size_x', 172)))
-            if hasattr(self.ui, 'detectorPixelYValue'):
-                self.ui.detectorPixelYValue.setText(str(self.detector_params.get('pixel_size_y', 172)))
-            
-            # 更新样品参数UI
-            if hasattr(self.ui, 'particleShapeInitValue'):
-                particle_shape = self.sample_params.get('particle_shape', 'Sphere')
-                index = self.ui.particleShapeInitValue.findText(particle_shape)
-                if index >= 0:
-                    self.ui.particleShapeInitValue.setCurrentIndex(index)
-                # 切换到对应的页面
-                self._switch_particle_page(particle_shape)
-                    
-            if hasattr(self.ui, 'particleSizeValue'):
-                self.ui.particleSizeValue.setText(str(self.sample_params.get('particle_size', 10.0)))
-                
-            if hasattr(self.ui, 'materialCombox'):
-                material = self.sample_params.get('material', 'Gold')
-                index = self.ui.materialCombox.findText(material)
-                if index >= 0:
-                    self.ui.materialCombox.setCurrentIndex(index)
-            
-            # 更新预处理参数UI
-            if hasattr(self.ui, 'focusRegionTypeCombox'):
-                focus_type = self.preprocessing_params.get('focus_region', {}).get('type', 'q')
-                index = self.ui.focusRegionTypeCombox.findText(focus_type)
-                if index >= 0:
-                    self.ui.focusRegionTypeCombox.setCurrentIndex(index)
-                    
-            if hasattr(self.ui, 'noisingTypeCombox'):
-                noising_type = self.preprocessing_params.get('noising', {}).get('type', 'Gaussian')
-                index = self.ui.noisingTypeCombox.findText(noising_type)
-                if index >= 0:
-                    self.ui.noisingTypeCombox.setCurrentIndex(index)
-                    
-            if hasattr(self.ui, 'OthersCropEdgeCheckBox'):
-                crop_edge = self.preprocessing_params.get('others', {}).get('crop_edge', True)
-                self.ui.OthersCropEdgeCheckBox.setChecked(crop_edge)
-                
-        except Exception as e:
-            print(f"Failed to update UI display: {e}")
+        particle_label = self.page.fields["sample.particle_label"].currentText()
+        particle = next((spec for spec in REGISTRY.list("particle") if spec.label == particle_label), None)
+        config["sample"]["particles"] = [{
+            "plugin": particle.key if particle else "spherical_segment",
+            "material": self.page.fields["sample.particle_material"].currentText(),
+            "enabled": True,
+        }]
+        interference_label = self.page.fields["sample.interference_label"].currentText()
+        interference = next((spec for spec in REGISTRY.list("interference") if spec.label == interference_label), None)
+        config["sample"]["interference"]["plugin"] = interference.key if interference else "none"
+        config["sample"]["interference"]["enabled"] = bool(interference and interference.key != "none")
+        layers = []
+        for row in range(self.page.layer_table.rowCount()):
+            values = [self.page.layer_table.item(row, column).text() if self.page.layer_table.item(row, column) else "" for column in range(4)]
+            if values[1]:
+                layers.append({"enabled": values[0].strip().lower() not in {"0", "false", "no"}, "material": values[1], "thickness_nm": float(values[2] or 0), "roughness_nm": float(values[3] or 0)})
+        config["sample"]["layers"] = layers
+        config["mask"]["fixed_shapes"] = self.page.mask_shapes()
 
-    def initialize(self):
-        """初始化训练集生成参数"""
-        # 设置默认参数
-        default_params = {
-            'generation': {
-                'file_name': 'trainset',
-                'save_path': '',
-                'trainset_number': 1000,
-                'save_every': 100
-            },
-            'beam': self.beam_params,
-            'detector': self.detector_params,
-            'sample': self.sample_params,
-            'preprocessing': self.preprocessing_params
+        config["preprocessing"]["steps"] = [
+            {"plugin": "noise", "enabled": self.page.fields["pre.noise.enabled"].isChecked(), "snr_min_db": self.page.fields["pre.noise.min"].value(), "snr_max_db": self.page.fields["pre.noise.max"].value()},
+            {"plugin": "mask", "enabled": self.page.fields["pre.mask.enabled"].isChecked()},
+            {"plugin": "log", "enabled": self.page.fields["pre.log.enabled"].isChecked(), "epsilon": 1e-6},
+            {"plugin": "normalize", "enabled": self.page.fields["pre.normalize.enabled"].isChecked(), "mode": self.page.fields["pre.normalize.mode"].currentText(), "lower": self.page.fields["pre.normalize.lower"].value(), "upper": self.page.fields["pre.normalize.upper"].value()},
+            {"plugin": "random_edge_crop", "enabled": self.page.fields["pre.edge.enabled"].isChecked(), "maximum_px": self.page.fields["pre.edge.maximum"].value()},
+        ]
+        channels_text = self.page.fields["model.channels"].text()
+        config["model"]["channels"] = [int(item.strip()) for item in channels_text.split(",") if item.strip()]
+        self.config = config
+        self.parameters_changed.emit("Trainset parameters", copy.deepcopy(config))
+        return config
+
+    def _apply_config_to_page(self, config: Dict[str, Any]) -> None:
+        self.page.project_name.setText(str(config.get("project", {}).get("name", "")))
+        special = {
+            "sample.particle_label": next((spec.label for spec in REGISTRY.list("particle") if spec.key == config["sample"]["particles"][0]["plugin"]), "Spherical segment"),
+            "sample.particle_material": config["sample"]["particles"][0].get("material", "Copper"),
+            "sample.interference_label": next((spec.label for spec in REGISTRY.list("interference") if spec.key == config["sample"]["interference"].get("plugin")), "None"),
+            "model.channels": ", ".join(str(value) for value in config["model"]["channels"]),
         }
-        self.set_parameters(default_params)
-        self._update_ui_state()
-        
-        # 初始化时设置默认粒子形状页面
-        if hasattr(self.ui, 'particleShapeInitValue'):
-            default_shape = self.ui.particleShapeInitValue.currentText() or 'Sphere'
-            self._switch_particle_page(default_shape)
-    
-    def _select_save_folder(self):
-        """选择保存文件夹"""
-        # 获取主窗口作为父窗口
-        main_window = self.parent.parent if hasattr(self.parent, 'parent') else None
-        
-        folder_path = QFileDialog.getExistingDirectory(
-            main_window,
-            "Select the training set save folder",
-            os.path.expanduser("~")
+        for path, widget in self.page.fields.items():
+            if path in special:
+                self._set_widget_value(widget, special[path])
+            elif not path.startswith("pre."):
+                value = _deep_get(config, path)
+                if value is not None:
+                    self._set_widget_value(widget, value)
+        steps = {step["plugin"]: step for step in config.get("preprocessing", {}).get("steps", [])}
+        pre_map = {
+            "pre.noise.enabled": steps.get("noise", {}).get("enabled", True),
+            "pre.noise.min": steps.get("noise", {}).get("snr_min_db", 80.0),
+            "pre.noise.max": steps.get("noise", {}).get("snr_max_db", 110.0),
+            "pre.mask.enabled": steps.get("mask", {}).get("enabled", True),
+            "pre.log.enabled": steps.get("log", {}).get("enabled", True),
+            "pre.normalize.enabled": steps.get("normalize", {}).get("enabled", True),
+            "pre.normalize.mode": steps.get("normalize", {}).get("mode", "range"),
+            "pre.normalize.lower": steps.get("normalize", {}).get("lower", 0.0),
+            "pre.normalize.upper": steps.get("normalize", {}).get("upper", 1.0),
+            "pre.edge.enabled": steps.get("random_edge_crop", {}).get("enabled", False),
+            "pre.edge.maximum": steps.get("random_edge_crop", {}).get("maximum_px", 4),
+        }
+        for path, value in pre_map.items():
+            self._set_widget_value(self.page.fields[path], value)
+
+        self.page.mask_shape_table.setRowCount(0)
+        for shape in config.get("mask", {}).get("fixed_shapes", []):
+            self.page.add_mask_shape(shape)
+        self.page.parameter_table.setRowCount(0)
+        for row, (name, spec) in enumerate(config.get("parameters", {}).items()):
+            self.page.parameter_table.insertRow(row)
+            from PyQt5.QtWidgets import QTableWidgetItem
+
+            for column, value in enumerate((name, spec.get("distribution", "uniform"), spec.get("minimum", 0), spec.get("maximum", 1))):
+                self.page.parameter_table.setItem(row, column, QTableWidgetItem(str(value)))
+        self.page.layer_table.setRowCount(0)
+        for row, layer in enumerate(config.get("sample", {}).get("layers", [])):
+            self.page.layer_table.insertRow(row)
+            from PyQt5.QtWidgets import QTableWidgetItem
+
+            values = ("1" if layer.get("enabled", True) else "0", layer.get("material", ""), layer.get("thickness_nm", 0), layer.get("roughness_nm", 0))
+            for column, value in enumerate(values):
+                self.page.layer_table.setItem(row, column, QTableWidgetItem(str(value)))
+
+    def _select_reference(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self.window,
+            "Load real 2D scattering file",
+            str(Path.home()),
+            "Scattering files (*.cbf *.edf *.tif *.tiff *.png *.jpg *.npy *.npz *.h5 *.hdf5 *.nxs);;All files (*)",
         )
-        
-        if folder_path:
-            folder_path = normalize_path(folder_path)
-            self.ui.trainsetGenerateSavePathValue.setText(folder_path)
-            # 同步到全局参数管理器
-            self.global_params.set_parameter('trainset', 'save_path', folder_path)
-            self._emit_parameters_changed()
-    
-    def _on_trainset_number_changed(self):
-        """训练集数量改变处理"""
+        if path:
+            self.page.reference_path.setText(path)
+            self._load_reference(path)
+
+    def _load_reference_from_field(self) -> None:
+        path = self.page.reference_path.text().strip()
+        if path:
+            self._load_reference(path)
+
+    def _load_reference(self, path: str) -> None:
         try:
-            number = int(self.ui.trainsetGenerateTrainsetNumberValue.text())
-            # 同步到全局参数管理器
-            self.global_params.set_parameter('trainset', 'trainset_number', number)
-            # 更新预计时间显示等
-            self._update_generation_estimation()
-        except ValueError:
-            pass
-        
-        self._emit_parameters_changed()
-    
-    def _on_generation_params_changed(self):
-        """训练集生成参数改变处理"""
+            QApplication.setOverrideCursor(Qt.WaitCursor)  # type: ignore[name-defined]
+            image = load_scattering_image(path)
+            self.reference_image = image
+            self.config["project"]["reference_file"] = path
+            self.page.reference_path.setText(path)
+            if self.page.fields["detector.preset"].currentText() == "Custom":
+                self.page.fields["detector.pixels_x"].setValue(int(image.shape[1]))
+                self.page.fields["detector.pixels_y"].setValue(int(image.shape[0]))
+            for index in range(4):
+                self.page.set_design_stage_ready(index, index == 0)
+            self._refresh_design_overlay()
+            self.page.design_tabs.setCurrentIndex(0)
+            self.page.set_step_state(0, "Reference loaded")
+            self.page.design_info.setText(f"{Path(path).name}\nShape: {image.shape[1]} × {image.shape[0]} · dtype: {image.dtype}")
+            self.status_updated.emit(f"Loaded reference scattering file: {Path(path).name}")
+        except Exception as exc:
+            QMessageBox.critical(self.window, "Reference load failed", str(exc))
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def _geometry_changed(self, *_args) -> None:
+        self._update_geometry_label()
+        if self.reference_image is not None:
+            self._refresh_design_overlay()
+
+    def _roi_config_changed(self, *_args) -> None:
+        self._update_geometry_label()
+        if self.reference_image is None:
+            return
+        self._refresh_design_overlay()
+        self.page.set_design_stage_ready(1, True)
+        self.page.design_tabs.setCurrentIndex(1)
+        self.page.set_step_state(0, "ROI ready")
+
+    def _mask_config_changed(self, *_args) -> None:
+        if self.reference_image is None:
+            return
+        self._refresh_design_overlay()
+        self.page.set_design_stage_ready(2, True)
+        self.page.set_design_stage_ready(3, True)
+        self.page.design_tabs.setCurrentIndex(2)
+        self.page.set_step_state(0, "Mask ready")
+
+    def _apply_detector_preset(self, name: str) -> None:
+        presets = {
+            "PILATUS3 X 2M": (1475, 1679, 0.172, 0.172),
+            "EIGER2 X 4M": (2068, 2162, 0.075, 0.075),
+        }
+        values = presets.get(name)
+        if values is None:
+            return
+        for path, value in zip(
+            ("detector.pixels_x", "detector.pixels_y", "detector.pixel_size_x_mm", "detector.pixel_size_y_mm"),
+            values,
+        ):
+            self._set_widget_value(self.page.fields[path], value)
+        self._geometry_changed()
+
+    def _update_geometry_label(self) -> None:
         try:
-            # 同步文件名
-            if hasattr(self.ui, 'trainsetGenerateFileNameValue'):
-                filename = self.ui.trainsetGenerateFileNameValue.text()
-                self.global_params.set_parameter('trainset', 'file_name', filename)
-            
-            # 同步保存路径
-            if hasattr(self.ui, 'trainsetGenerateSavePathValue'):
-                save_path = self.ui.trainsetGenerateSavePathValue.text()
-                self.global_params.set_parameter('trainset', 'save_path', save_path)
-            
-            # 同步保存间隔
-            if hasattr(self.ui, 'trainsetGenerateSaveEveryValue'):
-                save_every = int(self.ui.trainsetGenerateSaveEveryValue.text())
-                self.global_params.set_parameter('trainset', 'save_every', save_every)
-                
-        except ValueError:
-            pass
-        
-        self._emit_parameters_changed()
-    
-    def _update_generation_estimation(self):
-        """Update generation time estimation"""
+            config = self._collect_config()
+            ranges = roi_to_spherical_ranges(config)
+            self.page.roi_range_label.setText(
+                f"BornAgain detector: φ {ranges['phi_min_deg']:.4f}° … {ranges['phi_max_deg']:.4f}° · "
+                f"α {ranges['alpha_min_deg']:.4f}° … {ranges['alpha_max_deg']:.4f}°"
+            )
+        except Exception as exc:
+            self.page.roi_range_label.setText(f"Geometry incomplete: {exc}")
+
+    def _begin_roi(self, mode: str = "roi") -> None:
+        if self.reference_image is None:
+            QMessageBox.information(self.window, "ROI", "Load a real scattering file first.")
+            return
+        self.page.full_detector_canvas.set_data(self.reference_image, roi=self._current_roi())
+        self.page.full_detector_canvas.set_draw_mode(mode)
+        self.page.design_tabs.setCurrentIndex(0)
+        shape = "ellipse" if mode == "roi_ellipse" else "rectangle"
+        self.status_updated.emit(f"Draw the ROI {shape} on the detector image")
+
+    def _begin_mask(self, mode: str) -> None:
+        if self.reference_image is None:
+            QMessageBox.information(self.window, "Mask", "Load a real scattering file first.")
+            return
         try:
-            trainset_number = int(self.ui.trainsetGenerateTrainsetNumberValue.text())
-            # 假设每个样本需要0.1秒生成
-            estimated_time = trainset_number * 0.1
-            
-            # Update UI string if there's a related label
-            if estimated_time < 60:
-                time_str = f"Estimated time: {estimated_time:.1f} s"
+            roi_image = crop_roi(self.reference_image, self._current_roi())
+            self.page.roi_design_canvas.set_data(roi_image)
+            self.page.roi_design_canvas.set_draw_mode(mode)
+            self.page.design_tabs.setCurrentIndex(1)
+            self.status_updated.emit(f"Draw a {mode} fixed mask in ROI coordinates")
+        except Exception as exc:
+            QMessageBox.warning(self.window, "Mask", str(exc))
+
+    def _region_created(self, mode: str, payload: Dict[str, Any]) -> None:
+        if mode in {"roi", "roi_ellipse"}:
+            for key in ("x", "y", "width", "height"):
+                self._set_widget_value(self.page.fields[f"roi.{key}"], int(payload[key]))
+            table = self.page.mask_shape_table
+            table.blockSignals(True)
+            try:
+                self.page.remove_mask_shapes_by_type("roi_ellipse_exterior")
+                if mode == "roi_ellipse":
+                    width, height = int(payload["width"]), int(payload["height"])
+                    self.page.add_mask_shape({
+                        "type": "roi_ellipse_exterior",
+                        "cx": width / 2.0,
+                        "cy": height / 2.0,
+                        "radius_x": max(1.0, width / 2.0),
+                        "radius_y": max(1.0, height / 2.0),
+                    })
+            finally:
+                table.blockSignals(False)
+            self.page.full_detector_canvas.set_draw_mode("")
+            self._update_geometry_label()
+            self.page.set_design_stage_ready(1, True)
+            self.page.design_tabs.setCurrentIndex(1)
+            self.page.set_step_state(0, "Ellipse ROI ready" if mode == "roi_ellipse" else "ROI ready")
+        else:
+            self.page.add_mask_shape(payload)
+            self.page.roi_design_canvas.set_draw_mode("")
+            self.page.set_design_stage_ready(2, True)
+            self.page.set_design_stage_ready(3, True)
+            self.page.design_tabs.setCurrentIndex(2)
+            self.page.set_step_state(0, "Mask ready")
+        self._refresh_design_overlay()
+
+    def _clear_masks(self) -> None:
+        self.page.mask_shape_table.setRowCount(0)
+        self._refresh_design_overlay()
+        self.page.set_design_stage_ready(2, True)
+        self.page.set_design_stage_ready(3, True)
+        self.page.design_tabs.setCurrentIndex(2)
+        self.page.set_step_state(0, "Mask updated")
+
+    def _remove_selected_masks(self) -> None:
+        if not self.page.remove_selected_mask_shapes():
+            self.status_updated.emit("Select one or more mask rows to remove")
+            return
+        self._refresh_design_overlay()
+        self.page.set_design_stage_ready(2, True)
+        self.page.set_design_stage_ready(3, True)
+        self.page.design_tabs.setCurrentIndex(2)
+        self.page.set_step_state(0, "Mask updated")
+        self.status_updated.emit("Removed selected mask regions")
+
+    def _current_roi(self) -> Dict[str, int]:
+        return {key: int(self.page.fields[f"roi.{key}"].value()) for key in ("x", "y", "width", "height")}
+
+    def _refresh_design_overlay(self, *_args) -> None:
+        if self.reference_image is None:
+            return
+        try:
+            config = self._collect_config()
+            roi = self._current_roi()
+            roi_image = crop_roi(self.reference_image, roi)
+            if config.get("mask", {}).get("mode") == "random":
+                seed = int(config.get("project", {}).get("seed", 42))
+                mask = build_random_mask(roi_image.shape, config, np.random.default_rng(seed))
+                mask_label = "random example"
             else:
-                time_str = f"Estimated time: {estimated_time/60:.1f} min"
-                
-            self.status_updated.emit(time_str)
-            
-        except ValueError:
-            pass
-    
-    def _start_generation(self):
-        """开始训练集生成"""
-        # 获取主窗口作为父窗口
-        main_window = self.parent.parent if hasattr(self.parent, 'parent') else None
-        
-        # 验证参数
-        is_valid, error_message = self.validate_parameters()
-        if not is_valid:
-            QMessageBox.warning(main_window, "Parameter Validation Error", error_message)
+                mask = build_fixed_mask(roi_image, config)
+                mask_label = "fixed"
+            roi_shape_mask = build_roi_shape_mask(roi_image.shape, config)
+            self.page.full_detector_canvas.set_data(self.reference_image, roi=roi)
+            self.page.roi_design_canvas.set_data(roi_image, mask=roi_shape_mask if roi_shape_mask.any() else None)
+            self.page.masked_design_canvas.set_data(roi_image, mask=mask)
+            self.page.mask_only_canvas.set_data(mask.astype(np.float32), binary=True)
+            self.page.design_info.setText(
+                f"Reference: {self.reference_image.shape[1]} × {self.reference_image.shape[0]}\n"
+                f"ROI tensor: {roi_image.shape[1]} × {roi_image.shape[0]} · {mask_label} masked: {mask.mean():.2%}\n"
+                "Use Draw ROI for detector coordinates; mask shapes are edited in ROI coordinates."
+            )
+            self.page.design_info.setToolTip(f"Mask mode: {mask_label}; masked fraction: {mask.mean():.2%}")
+        except Exception as exc:
+            self.page.design_info.setText(str(exc))
+
+    def _generate_preview(self) -> None:
+        config = self._collect_config()
+        valid, errors, warnings = validate_project_config(config, require_reference=True)
+        if not valid:
+            QMessageBox.warning(self.window, "Preview blocked", "\n".join(errors))
             return
-        
-        # 获取所有参数
-        all_parameters = self._get_all_system_parameters()
-        if not all_parameters:
-            QMessageBox.warning(main_window, "Parameter Error", "Unable to retrieve system parameters, please check the settings of each module")
-            return
-        
-        # 确认开始生成
-        reply = QMessageBox.question(
-            main_window,
-            "Confirm Generation",
-            f"About to generate {self.ui.trainsetGenerateTrainsetNumberValue.text()} training samples.\nContinue?",
-            QMessageBox.Yes | QMessageBox.No
+        try:
+            QApplication.setOverrideCursor(Qt.WaitCursor)  # type: ignore[name-defined]
+            started = time.perf_counter()
+            generator = DatasetGenerator(config)
+            if self.page.preview_mode.currentText() == "Dry run":
+                batch = generator.generate(self.page.preview_count.value(), mode="dry")
+                image = batch["images"][0]
+                result = generator.generate(1, mode="preview")
+                result.stages.append({"name": "Final", "image": image, "mask": batch["masks"][0]})
+            else:
+                result = generator.generate(self.page.preview_count.value(), mode="preview")
+            parameter_samples = generator.sample_parameters(self.page.preview_count.value())
+            total_samples = int(config["dataset"]["number_of_samples"])
+            final_image = np.asarray(result.stages[-1]["image"], dtype=np.float32)
+            bytes_per_sample = final_image.nbytes + final_image.size + 4 * len(config.get("parameters", {}))
+            result.stats["estimated_dataset_gib"] = round(total_samples * bytes_per_sample / (1024**3), 3)
+            elapsed = time.perf_counter() - started
+            result.stats["preview_elapsed_s"] = round(elapsed, 3)
+            if self.page.preview_mode.currentText() == "Dry run":
+                result.stats["estimated_generation_hours"] = round(
+                    elapsed / max(1, self.page.preview_count.value()) * total_samples / 3600.0,
+                    2,
+                )
+            else:
+                result.stats["generation_time_estimate"] = "Run Dry run with BornAgain to estimate"
+            self.page.set_preview_stages(self.reference_image, result.stages, result.stats, result.spectrum_x, result.spectrum_y)
+            self.page.set_parameter_samples(parameter_samples)
+            self.page.preview_gate_table.item(0, 1).setText("Ready")
+            self.page.preview_gate_table.item(1, 1).setText("Ready")
+            self.page.preview_gate_table.item(2, 1).setText("Ready")
+            self._storage_acceptance_changed(self.page.storage_accept_check.isChecked())
+            self.page.validation_badge.setText("Preview ready")
+            self.page.set_step_state(1, "Preview ready")
+            self.progress_updated.emit(100)
+            self.status_updated.emit("Local reference pipeline preview generated")
+        except Exception as exc:
+            QMessageBox.warning(self.window, "Preview failed", str(exc))
+            self.generation_error.emit(str(exc))
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def _validate_and_report(self) -> bool:
+        config = self._collect_config()
+        valid, errors, warnings = validate_project_config(config)
+        if valid:
+            self.page.validation_badge.setText("Configuration valid")
+            self.page.preview_gate_table.item(0, 1).setText("Ready")
+            text = "Configuration is valid."
+            if warnings:
+                text += "\n\nWarnings:\n" + "\n".join(f"• {item}" for item in warnings)
+            QMessageBox.information(self.window, "Validation", text)
+        else:
+            self.page.validation_badge.setText("Validation failed")
+            QMessageBox.warning(self.window, "Validation", "\n".join(f"• {item}" for item in errors))
+        return valid
+
+    def _validate_model_contract(self) -> None:
+        try:
+            config = self._collect_config()
+            height, width = int(config["roi"]["height"]), int(config["roi"]["width"])
+            channels = config["model"]["channels"]
+            out_h, out_w = height, width
+            for _ in channels:
+                out_h, out_w = out_h // 2, out_w // 2
+            if min(out_h, out_w) < 1:
+                raise ValueError("Too many pooling stages for the configured ROI size.")
+            outputs = len(config["parameters"])
+            try:
+                import tensorflow as tf
+
+                inputs = tf.keras.Input(shape=(height, width, 1))
+                x = inputs
+                for channel in channels:
+                    x = tf.keras.layers.Conv2D(int(channel), int(config["model"]["kernel_size"]), padding="same", activation="relu")(x)
+                    x = tf.keras.layers.MaxPool2D()(x)
+                x = tf.keras.layers.GlobalAveragePooling2D()(x)
+                prediction = tf.keras.layers.Dense(outputs)(x)
+                model = tf.keras.Model(inputs, prediction)
+                result = model(np.zeros((1, height, width, 1), dtype=np.float32), training=False)
+                summary = f"Forward pass OK\nInput: (1, {height}, {width}, 1)\nOutput: {tuple(result.shape)}\nParameters: {model.count_params():,}"
+            except Exception as exc:
+                summary = f"Static tensor contract OK\nInput: (1, {height}, {width}, 1)\nOutput: (1, {outputs})\nTensorFlow forward pass unavailable: {exc}"
+            self.page.model_summary.setPlainText(summary)
+            self.page.preview_gate_table.item(2, 1).setText("Ready")
+            self.page.set_step_state(2, "Contract ready")
+        except Exception as exc:
+            QMessageBox.warning(self.window, "Model validation", str(exc))
+
+    def _save_project_dialog(self) -> None:
+        config = self._collect_config()
+        default = self.project_root / f"{config['project']['name']}.yaml"
+        path, _ = QFileDialog.getSaveFileName(self.window, "Save trainset project", str(default), "YAML (*.yaml *.yml);;JSON (*.json)")
+        if path:
+            save_project_config(config, path)
+            self.status_updated.emit(f"Saved trainset project: {path}")
+
+    def _load_project_dialog(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self.window,
+            "Load trainset project",
+            str(self.project_root),
+            "Project configuration (*.yaml *.yml *.json);;All files (*)",
         )
-        
+        if not path:
+            return
+        try:
+            self.set_parameters(load_project_config(path))
+            self.status_updated.emit(f"Loaded trainset project: {path}")
+        except Exception as exc:
+            QMessageBox.critical(self.window, "Project load failed", str(exc))
+
+    def _choose_workspace(self) -> None:
+        path = QFileDialog.getExistingDirectory(self.window, "Choose local trainset workspace", str(self.project_root))
+        if path:
+            self.page.fields["project.workspace"].setText(path)
+
+    def _choose_local_python(self) -> None:
+        selected, _ = QFileDialog.getOpenFileName(
+            self.window,
+            "Choose local Python executable",
+            str(Path(sys.executable).parent),
+            "Python executable (python.exe python);;All files (*)",
+        )
+        if selected:
+            self.page.fields["training.local_python"].setText(selected)
+
+    def _workspace(self) -> Path:
+        configured = self.page.fields["project.workspace"].text().strip()
+        return Path(configured) if configured else self.project_root / "trainset_jobs"
+
+    def _prepare_local_job(self) -> None:
+        self._prepare_job(local=True)
+
+    def _prepare_hpc_job(self) -> None:
+        self._prepare_job(local=False)
+
+    def _prepare_job(self, local: bool) -> None:
+        config = self._collect_config()
+        config["training"]["backend"] = "local" if local else "slurm"
+        valid, errors, _warnings = validate_project_config(config)
+        if not valid:
+            QMessageBox.warning(self.window, "Job package blocked", "\n".join(errors))
+            return
+        try:
+            self.package_dir = prepare_job_package(config, self._workspace(), self.project_root)
+            config["runtime"]["last_project_dir"] = str(self.package_dir)
+            self.page.package_tree.setPlainText(
+                f"Prepared: {self.package_dir}\n\n"
+                "config.yaml\nmanifest.json\ngenerate_dataset.py\ntrain.py\nvalidate_config.py\n"
+                "environment.yml\nslurm_generate.sh\nslurm_train.sh\nsrc/trainset/\ndataset/\nresults/\nlogs/"
+            )
+            self.page.set_step_state(3, "Package ready")
+            self.status_updated.emit("Reproducible local/HPC job package prepared")
+        except Exception as exc:
+            QMessageBox.critical(self.window, "Prepare job failed", str(exc))
+
+    def _ensure_package(self) -> bool:
+        if self.package_dir and self.package_dir.exists():
+            return True
+        self._prepare_local_job()
+        return bool(self.package_dir and self.package_dir.exists())
+
+    def _start_local_process(self, arguments) -> None:
+        if not self._ensure_package():
+            return
+        if self.local_process and self.local_process.state() != QProcess.NotRunning:
+            QMessageBox.information(self.window, "Local backend", "A local generation/training process is already running.")
+            return
+        process = QProcess(self)
+        process.setWorkingDirectory(str(self.package_dir))
+        process.setProcessChannelMode(QProcess.MergedChannels)
+        process.readyReadStandardOutput.connect(lambda: self.page.job_log.append(bytes(process.readAllStandardOutput()).decode(errors="replace").rstrip()))
+        process.started.connect(
+            lambda: (
+                self.generation_started.emit(),
+                self.page.job_state.setText("RUNNING"),
+                self.page.set_step_state(4, "RUNNING"),
+            )
+        )
+        process.finished.connect(self._local_process_finished)
+        process.errorOccurred.connect(lambda _error: self.generation_error.emit(process.errorString()))
+        self.local_process = process
+        python_executable = self.page.fields["training.local_python"].text().strip() or sys.executable
+        process.start(python_executable, arguments)
+        self.page.step_list.setCurrentRow(4)
+
+    def _run_local_generation(self) -> None:
+        count = self.page.preview_count.value() if self.page.preview_mode.currentText() == "Dry run" else int(self._collect_config()["dataset"]["number_of_samples"])
+        self._start_local_process(["generate_dataset.py", "--samples", str(count), "--mode", "full"])
+
+    def _run_local_training(self) -> None:
+        self._start_local_process(["train.py"])
+
+    def _local_process_finished(self, exit_code: int, _status) -> None:
+        state = "COMPLETED" if exit_code == 0 else "FAILED"
+        self.page.job_state.setText(state)
+        self.page.set_step_state(4, state)
+        if exit_code == 0:
+            self.generation_finished.emit()
+        else:
+            self.generation_error.emit(f"Local process exited with code {exit_code}")
+        self._load_local_metrics()
+
+    def _load_local_metrics(self) -> None:
+        if not self.package_dir:
+            return
+        records = read_metrics(self.package_dir / "results" / "metrics.jsonl")
+        self.page.metrics_table.setRowCount(0)
+        from PyQt5.QtWidgets import QTableWidgetItem
+
+        for row, record in enumerate(records):
+            self.page.metrics_table.insertRow(row)
+            values = (record.get("epoch", ""), record.get("loss", record.get("train_loss", "")), record.get("val_loss", ""), record.get("lr", ""))
+            for column, value in enumerate(values):
+                self.page.metrics_table.setItem(row, column, QTableWidgetItem(str(value)))
+
+    def _slurm_backend(self) -> SlurmBackend:
+        config = self._collect_config()
+        if not config["hpc"]["user"] or not config["hpc"]["remote_path"]:
+            raise ValueError("Configure Maxwell user and remote project path first.")
+        return SlurmBackend(config)
+
+    def _run_worker(self, function, success, title: str, on_error=None) -> None:
+        worker = _FunctionWorker(function)
+        worker.signals.finished.connect(success)
+        def report_error(message: str) -> None:
+            if on_error is not None:
+                on_error()
+            QMessageBox.critical(self.window, title, message)
+        worker.signals.error.connect(report_error)
+        self.thread_pool.start(worker)
+
+    def _storage_acceptance_changed(self, accepted: bool) -> None:
+        self.page.preview_gate_table.item(4, 1).setText("Ready" if accepted else "Pending")
+
+    def _missing_submission_gates(self):
+        missing = []
+        for row in range(self.page.preview_gate_table.rowCount()):
+            gate = self.page.preview_gate_table.item(row, 0).text()
+            state = self.page.preview_gate_table.item(row, 1).text()
+            if state != "Ready":
+                missing.append(gate)
+        return missing
+
+    def _test_connection(self) -> None:
+        try:
+            backend = self._slurm_backend()
+            self.page.connection_button.setEnabled(False)
+            self._run_worker(
+                backend.connection_check,
+                lambda result: (self.page.connection_button.setEnabled(True), self.page.preview_gate_table.item(3, 1).setText("Ready"), QMessageBox.information(self.window, "Maxwell", f"Connection successful: {result}")),
+                "Maxwell connection failed",
+                on_error=lambda: self.page.connection_button.setEnabled(True),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self.window, "Maxwell", str(exc))
+
+    def _submit_maxwell(self) -> None:
+        missing = self._missing_submission_gates()
+        if missing:
+            self.page.step_list.setCurrentRow(1)
+            QMessageBox.warning(
+                self.window,
+                "Submission checks incomplete",
+                "Complete these checks before submitting:\n\n" + "\n".join(f"• {item}" for item in missing),
+            )
+            return
+        if not self.package_dir or not self.package_dir.exists():
+            self._prepare_hpc_job()
+        if not self.package_dir:
+            return
+        reply = QMessageBox.question(self.window, "Submit to Maxwell", f"Upload and submit this job package?\n\n{self.package_dir}", QMessageBox.Yes | QMessageBox.No)
         if reply != QMessageBox.Yes:
             return
-        
-        # 开始生成
-        self.is_generating = True
-        self.stop_requested = False
-        self.current_progress = 0
-        
-        # 更新UI状态
-        self._update_ui_state()
-        
-        # 启动生成线程
-        self.generation_thread = threading.Thread(target=self._generation_worker, args=(all_parameters,))
-        self.generation_thread.daemon = True
-        self.generation_thread.start()
-        
-        self.generation_started.emit()
-    
-    def _stop_generation(self):
-        """停止训练集生成"""
-        if self.is_generating:
-            self.stop_requested = True
-            self.status_updated.emit("Stopping generation...")
-    
-    def _generation_worker(self, parameters):
-        """训练集生成工作线程"""
         try:
-            trainset_params = self.get_parameters()
-            trainset_number = trainset_params['trainset_number']
-            save_every = trainset_params['save_every']
-            batch_size = trainset_params.get('batch_size', 10)
-            
-            self.total_samples = trainset_number
-            
-            # 创建保存目录
-            save_path = self._create_save_directory(trainset_params)
-            
-            # 保存参数配置
-            self._save_generation_config(save_path, parameters)
-            
-            # 生成样本
-            generated_count = 0
-            batch_data = []
-            
-            for i in range(trainset_number):
-                if self.stop_requested:
+            backend = self._slurm_backend()
+
+            def upload_submit():
+                backend.upload(self.package_dir)
+                return backend.submit()
+
+            self.page.hpc_submit_button.setEnabled(False)
+            self._run_worker(
+                upload_submit,
+                self._submission_finished,
+                "Maxwell submission failed",
+                on_error=lambda: self.page.hpc_submit_button.setEnabled(True),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self.window, "Maxwell", str(exc))
+
+    def _submission_finished(self, jobs: Dict[str, str]) -> None:
+        self.page.hpc_submit_button.setEnabled(True)
+        job_id = jobs["train_job_id"]
+        self.config["runtime"]["last_job_id"] = job_id
+        self.page.job_id_label.setText(f"Generate: {jobs['generate_job_id']} · Train: {job_id}")
+        self.page.job_state.setText("SUBMITTED")
+        self.page.set_step_state(3, "Submitted")
+        self.page.set_step_state(4, f"Job {job_id}")
+        self.page.step_list.setCurrentRow(4)
+        self._result_sync_started = False
+        self.monitor_timer.start()
+        self.status_updated.emit(f"Submitted Maxwell jobs: {jobs}")
+
+    def _refresh_job(self) -> None:
+        if self._remote_refresh_running:
+            return
+        job_id = str(self.config.get("runtime", {}).get("last_job_id", ""))
+        if not job_id:
+            self._load_local_metrics()
+            return
+        try:
+            backend = self._slurm_backend()
+            self._remote_refresh_running = True
+
+            def query():
+                return backend.query(job_id), backend.tail(job_id)
+
+            self._run_worker(
+                query,
+                self._job_refreshed,
+                "Job refresh failed",
+                on_error=lambda: setattr(self, "_remote_refresh_running", False),
+            )
+        except Exception as exc:
+            self._remote_refresh_running = False
+            QMessageBox.warning(self.window, "Job refresh", str(exc))
+
+    def _job_refreshed(self, payload) -> None:
+        self._remote_refresh_running = False
+        status, log = payload
+        self.page.job_state.setText(status.state)
+        self.page.set_step_state(4, status.state)
+        self.page.job_id_label.setText(f"Job ID: {status.job_id} · Elapsed: {status.elapsed} · MaxRSS: {status.max_rss}")
+        self.page.job_log.setPlainText(log or status.raw)
+        normalized_state = status.state.upper().split("+", 1)[0].split()[0] if status.state else "UNKNOWN"
+        terminal = normalized_state in {"COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "OUT_OF_MEMORY"}
+        if terminal:
+            self.monitor_timer.stop()
+        if normalized_state == "COMPLETED" and not self._result_sync_started:
+            self._result_sync_started = True
+            self._sync_results()
+
+    def _sync_results(self) -> None:
+        try:
+            backend = self._slurm_backend()
+            destination = self._workspace() / self.config["project"]["name"] / "results"
+            self._run_worker(lambda: backend.download_results(destination), lambda _result: (self._load_local_metrics(), QMessageBox.information(self.window, "Results", f"Results synchronized to:\n{destination}")), "Result synchronization failed")
+        except Exception as exc:
+            QMessageBox.warning(self.window, "Results", str(exc))
+
+    def _register_best_model(self) -> None:
+        config = self._collect_config()
+        roots = []
+        if self.package_dir:
+            roots.append(self.package_dir / "results")
+        last_project = str(config.get("runtime", {}).get("last_project_dir", "")).strip()
+        if last_project:
+            roots.append(Path(last_project) / "results")
+        roots.append(self._workspace() / config["project"]["name"] / "results")
+
+        model_path = None
+        for root in roots:
+            for name in ("best_model.keras", "best_model.h5", "best_model.pt", "best_model.pth"):
+                candidate = root / name
+                if candidate.exists():
+                    model_path = candidate
                     break
-                
-                # 生成单个样本
-                sample_data = self._generate_single_sample(parameters, i)
-                batch_data.append(sample_data)
-                generated_count += 1
-                
-                # 批量保存
-                if len(batch_data) >= batch_size or generated_count % save_every == 0:
-                    self._save_batch_data(save_path, batch_data, generated_count)
-                    batch_data = []
-                
-                # 更新进度
-                progress = int((generated_count / trainset_number) * 100)
-                if progress != self.current_progress:
-                    self.current_progress = progress
-                    self.progress_updated.emit(progress)
-                
-                # 状态更新
-                if generated_count % 10 == 0:
-                    self.status_updated.emit(f"Generated {generated_count}/{trainset_number} samples")
-                
-                # 模拟计算时间
-                time.sleep(0.01)
-            
-            # 保存剩余数据
-            if batch_data:
-                self._save_batch_data(save_path, batch_data, generated_count)
-            
-            # 生成完成
-            self._on_generation_completed(generated_count, trainset_number)
-            
-        except Exception as e:
-            self.generation_error.emit(f"Error during generation: {str(e)}")
-        finally:
-            self.is_generating = False
-            self._update_ui_state()
-    
-    def _generate_single_sample(self, parameters, sample_index):
-        """生成单个训练样本"""
-        # 这里实现实际的GISAXS模拟计算
-        # 根据参数生成散射图案
-        
-        # 示例：生成随机数据（实际应该是物理模拟）
-        sample_data = {
-            'index': sample_index,
-            'timestamp': datetime.now().isoformat(),
-            'parameters': self._randomize_parameters(parameters),
-            'scattering_pattern': self._simulate_scattering_pattern(parameters),
-        }
-        
-        return sample_data
-    
-    def _randomize_parameters(self, base_parameters):
-        """随机化参数（在指定范围内）"""
-        # 实现参数随机化逻辑
-        randomized = base_parameters.copy()
-        
-        # 示例：随机化一些参数
-        if 'sample' in randomized and 'sphere' in randomized['sample']:
-            sphere_params = randomized['sample']['sphere']
-            r_min = sphere_params.get('r_min', 0)
-            r_max = sphere_params.get('r_max', 20)
-            
-            # 在范围内随机选择半径
-            randomized['sample']['sphere']['r_current'] = np.random.uniform(r_min, r_max)
-        
-        return randomized
-    
-    def _simulate_scattering_pattern(self, parameters):
-        """模拟散射图案"""
-        # 这里应该实现实际的GISAXS物理模拟
-        # 暂时返回随机数据作为示例
-        
-        detector_params = parameters.get('detector', {})
-        nbins_x = detector_params.get('nbins_x', 100)
-        nbins_y = detector_params.get('nbins_y', 100)
-        
-        # 生成模拟散射图案
-        pattern = np.random.exponential(1.0, (nbins_y, nbins_x))
-        
-        return pattern.tolist()  # 转换为可序列化的格式
-    
-    def _create_save_directory(self, trainset_params):
-        """创建保存目录"""
-        base_path = trainset_params['save_path']
-        file_name = trainset_params['file_name']
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        save_dir = os.path.join(base_path, f"{file_name}_{timestamp}")
-        os.makedirs(save_dir, exist_ok=True)
-        
-        return save_dir
-    
-    def _save_generation_config(self, save_path, parameters):
-        """保存生成配置"""
-        config_file = os.path.join(save_path, "generation_config.json")
-        
-        config_data = {
-            'generation_time': datetime.now().isoformat(),
-            'parameters': parameters,
-            'software_version': '1.0.0',  # 可以从配置文件读取
-        }
-        
-        with open(config_file, 'w', encoding='utf-8') as f:
-            json.dump(config_data, f, indent=4, ensure_ascii=False)
-    
-    def _save_batch_data(self, save_path, batch_data, current_count):
-        """保存批量数据"""
-        batch_file = os.path.join(save_path, f"batch_{current_count:06d}.json")
-        
-        with open(batch_file, 'w', encoding='utf-8') as f:
-            json.dump(batch_data, f, indent=2, ensure_ascii=False)
-        
-        # 创建索引文件
-        self._update_index_file(save_path, batch_file, len(batch_data))
-    
-    def _update_index_file(self, save_path, batch_file, batch_size):
-        """更新索引文件"""
-        index_file = os.path.join(save_path, "trainset_index.json")
-        
-        if os.path.exists(index_file):
-            with open(index_file, 'r', encoding='utf-8') as f:
-                index_data = json.load(f)
-        else:
-            index_data = {
-                'total_samples': 0,
-                'batch_files': [],
-                'creation_time': datetime.now().isoformat()
-            }
-        
-        index_data['batch_files'].append({
-            'file': os.path.basename(batch_file),
-            'samples': batch_size,
-            'timestamp': datetime.now().isoformat()
-        })
-        index_data['total_samples'] += batch_size
-        
-        with open(index_file, 'w', encoding='utf-8') as f:
-            json.dump(index_data, f, indent=4, ensure_ascii=False)
-    
-    def _on_generation_completed(self, generated_count, total_requested):
-        """生成完成处理"""
-        if self.stop_requested:
-            self.status_updated.emit(f"Generation stopped. Generated {generated_count} samples in total")
-        else:
-            self.status_updated.emit(f"Generation completed! Generated {generated_count} samples in total")
-        
-        self.progress_updated.emit(100)
-        self.generation_finished.emit()
-    
-    def _get_all_system_parameters(self):
-        """获取所有系统参数"""
-        try:
-            # 从主控制器获取所有参数
-            if hasattr(self.parent, 'get_all_parameters'):
-                return self.parent.get_all_parameters()
-            else:
-                # 如果没有主控制器，则返回空参数
-                return {}
-        except Exception as e:
-            print(f"Failed to retrieve system parameters: {e}")
-            return {}
-    
-    def get_parameters(self):
-        """获取所有参数（包含所有子模块）"""
-        try:
-            generation_params = {
-                'file_name': self.ui.trainsetGenerateFileNameValue.text() if hasattr(self.ui, 'trainsetGenerateFileNameValue') else '',
-                'save_path': self.ui.trainsetGenerateSavePathValue.text() if hasattr(self.ui, 'trainsetGenerateSavePathValue') else '',
-                'trainset_number': int(self.ui.trainsetGenerateTrainsetNumberValue.text()) if hasattr(self.ui, 'trainsetGenerateTrainsetNumberValue') else 1000,
-                'save_every': int(self.ui.trainsetGenerateSaveEveryValue.text()) if hasattr(self.ui, 'trainsetGenerateSaveEveryValue') else 100,
-            }
-        except (ValueError, AttributeError):
-            generation_params = self.generation_params.copy()
-            
-        return {
-            'generation': generation_params,
-            'beam': self.beam_params.copy(),
-            'detector': self.detector_params.copy(),
-            'sample': self.sample_params.copy(),
-            'preprocessing': self.preprocessing_params.copy()
-        }
-    
-    def set_parameters(self, parameters):
-        """设置所有参数（包含所有子模块）"""
-        # 设置训练集生成参数
-        if 'generation' in parameters:
-            gen_params = parameters['generation']
-            if 'file_name' in gen_params and hasattr(self.ui, 'trainsetGenerateFileNameValue'):
-                self.ui.trainsetGenerateFileNameValue.setText(gen_params['file_name'])
-            if 'save_path' in gen_params and hasattr(self.ui, 'trainsetGenerateSavePathValue'):
-                self.ui.trainsetGenerateSavePathValue.setText(gen_params['save_path'])
-            if 'trainset_number' in gen_params and hasattr(self.ui, 'trainsetGenerateTrainsetNumberValue'):
-                self.ui.trainsetGenerateTrainsetNumberValue.setText(str(gen_params['trainset_number']))
-            if 'save_every' in gen_params and hasattr(self.ui, 'trainsetGenerateSaveEveryValue'):
-                self.ui.trainsetGenerateSaveEveryValue.setText(str(gen_params['save_every']))
-                
-        # 设置光束参数
-        if 'beam' in parameters:
-            self.beam_params.update(parameters['beam'])
-            if hasattr(self.ui, 'wavelengthValue'):
-                self.ui.wavelengthValue.setText(str(self.beam_params['wavelength']))
-            if hasattr(self.ui, 'angleValue'):
-                self.ui.angleValue.setText(str(self.beam_params['grazing_angle']))
-                
-        # 设置探测器参数
-        if 'detector' in parameters:
-            self.detector_params.update(parameters['detector'])
-            self._update_detector_ui()
-            
-        # 设置样品参数
-        if 'sample' in parameters:
-            self.sample_params.update(parameters['sample'])
-            if hasattr(self.ui, 'particleShapeInitValue'):
-                self.ui.particleShapeInitValue.setCurrentText(self.sample_params['particle_shape'])
-            if hasattr(self.ui, 'particleSizeValue'):
-                self.ui.particleSizeValue.setText(str(self.sample_params['particle_size']))
-                
-        # 设置预处理参数
-        if 'preprocessing' in parameters:
-            self.preprocessing_params.update(parameters['preprocessing'])
-            if hasattr(self.ui, 'focusRegionTypeCombox'):
-                self.ui.focusRegionTypeCombox.setCurrentText(self.preprocessing_params['focus_region']['type'])
-            if hasattr(self.ui, 'noisingTypeCombox'):
-                self.ui.noisingTypeCombox.setCurrentText(self.preprocessing_params['noising']['type'])
-        
-        if 'trainset_number' in parameters:
-            self.ui.trainsetGenerateTrainsetNumberValue.setText(str(parameters['trainset_number']))
-        
-        if 'save_every' in parameters:
-            self.ui.trainsetGenerateSaveEveryValue.setText(str(parameters['save_every']))
-        
-        self._emit_parameters_changed()
-    
-    def validate_parameters(self):
-        """验证训练集生成参数"""
-        try:
-            params = self.get_parameters()
-            
-            # 验证文件名
-            file_name = params.get('file_name', '').strip()
-            if not file_name:
-                return False, "Filename cannot be empty."
-            
-            # 验证保存路径
-            save_path = params.get('save_path', '').strip()
-            if not save_path:
-                return False, "Save path cannot be empty."
-            
-            if not os.path.exists(save_path):
-                return False, "Save path does not exist."
-            
-            if not os.access(save_path, os.W_OK):
-                return False, "Save path does not have write permission."
-            
-            # 验证训练集数量
-            trainset_number = params.get('trainset_number', 0)
-            if trainset_number <= 0 or trainset_number > 1000000:
-                return False, "Training set number must be between 1 and 1000000."
-            
-            # 验证保存间隔
-            save_every = params.get('save_every', 0)
-            if save_every <= 0 or save_every > trainset_number:
-                return False, "Save interval must be greater than 0 and not exceed the total number of training sets."
-            
-            return True, "Training set generation parameters are valid"
-            
-        except Exception as e:
-            return False, f"Parameter validation error: {str(e)}"
-    
-    def reset_to_defaults(self):
-        """重置所有参数到默认值"""
-        # 重置子模块参数
-        self.beam_params = self._init_beam_params()
-        self.detector_params = self._init_detector_params()
-        self.sample_params = self._init_sample_params()
-        self.preprocessing_params = self._init_preprocessing_params()
-        
-        # 重置训练集生成参数
-        default_generation_params = {
-            'generation': {
-                'file_name': 'trainset',
-                'save_path': '',
-                'trainset_number': 1000,
-                'save_every': 100
+            if model_path is not None:
+                break
+        if model_path is None:
+            selected, _ = QFileDialog.getOpenFileName(
+                self.window,
+                "Select trained model",
+                str(roots[0] if roots else self.project_root),
+                "Models (*.keras *.h5 *.pt *.pth);;All files (*)",
+            )
+            if not selected:
+                return
+            model_path = Path(selected)
+
+        slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(config["project"]["name"])).strip("_") or "trainset_model"
+        module_dir = self.project_root / "modules" / f"generated_{slug}"
+        module_dir.mkdir(parents=True, exist_ok=True)
+        parameter_names = list(config.get("parameters", {}))
+        target_min = [float(config["parameters"][name]["minimum"]) for name in parameter_names]
+        target_max = [float(config["parameters"][name]["maximum"]) for name in parameter_names]
+        roi = config["roi"]
+        inference_config = copy.deepcopy(config)
+        for step in inference_config.get("preprocessing", {}).get("steps", []):
+            if step.get("plugin") in {"noise", "random_edge_crop"}:
+                step["enabled"] = False
+        module = {
+            "id": f"generated_{slug}",
+            "name": f"{config['project']['name']} (trained)",
+            "model": {
+                "format": "pytorch" if model_path.suffix.lower() in {".pt", ".pth"} else "tensorflow_keras",
+                "model_path": str(model_path.resolve()),
             },
-            'beam': self.beam_params,
-            'detector': self.detector_params,
-            'sample': self.sample_params,
-            'preprocessing': self.preprocessing_params
+            "preprocess": {
+                "entry": "preprocessing:preprocess",
+                "steps": [step["plugin"] for step in inference_config["preprocessing"]["steps"] if step.get("enabled")],
+                "params": {"trainset_config": inference_config},
+            },
+            "io": {"input_shape": [1, int(roi["height"]), int(roi["width"]), 1]},
+            "outputs": {
+                "type": "parameters",
+                "parameter_names": parameter_names,
+                "target_min": target_min,
+                "target_max": target_max,
+            },
         }
-        
-        self.set_parameters(default_generation_params)
-        self.status_updated.emit("Training set parameters have been reset to default values")
-    
-    def _update_ui_state(self):
-        """更新UI状态"""
-        self.ui.trainsetGenerateRunButton.setEnabled(not self.is_generating)
-        self.ui.trainsetGenerateStopButton.setEnabled(self.is_generating)
-        
-        # 禁用/启用参数输入
-        input_widgets = [
-            self.ui.trainsetGenerateFileNameValue,
-            self.ui.trainsetGenerateSavePathValue,
-            self.ui.trainsetGenerateTrainsetNumberValue,
-            self.ui.trainsetGenerateSaveEveryValue,
-            self.ui.trainsetGenerateSelectFolderButton,
-        ]
-        
-        for widget in input_widgets:
-            widget.setEnabled(not self.is_generating)
-    
-    def _update_generation_progress(self):
-        """更新生成进度（定时器回调）"""
-        if self.is_generating and hasattr(self, 'current_progress'):
-            # 这个方法会被定时器调用，用于定期更新UI
-            # 实际的进度更新是在生成线程中完成的
-            pass
-    
-    def _emit_parameters_changed(self):
-        """发出参数改变信号"""
-        parameters = self.get_parameters()
-        self.parameters_changed.emit("Trainset Parameters", parameters)
-    
-    def get_generation_status(self):
-        """获取生成状态信息"""
-        return {
-            'is_generating': self.is_generating,
-            'current_progress': self.current_progress,
-            'total_samples': self.total_samples,
-            'stop_requested': self.stop_requested,
-        }
-    
-    def _on_beam_params_changed(self):
-        """光束参数改变处理"""
-        try:
-            if hasattr(self.ui, 'wavelengthValue'):
-                self.beam_params['wavelength'] = float(self.ui.wavelengthValue.text())
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('beam', 'wavelength', self.beam_params['wavelength'])
-                
-            if hasattr(self.ui, 'angleValue'):
-                self.beam_params['grazing_angle'] = float(self.ui.angleValue.text())
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('beam', 'grazing_angle', self.beam_params['grazing_angle'])
-                
-            self._emit_parameters_changed()
-        except ValueError:
-            pass
-    
-    def _load_detector_presets(self):
-        """从配置文件加载探测器预设并更新ComboBox"""
-        try:
-            import os
-            detector_config_file = os.path.join('config', 'detectors.json')
-            
-            if os.path.exists(detector_config_file):
-                with open(detector_config_file, 'r', encoding='utf-8') as f:
-                    self.detector_presets = json.load(f)
-                print(f"✓ Loaded detector configuration: {len(self.detector_presets)} presets")
-            else:
-                # 如果文件不存在，使用默认配置
-                self.detector_presets = {
-                    "Pilatus 2M": {
-                        "nbins_x": 1475, "nbins_y": 1679,
-                        "pixel_size_x": 172, "pixel_size_y": 172,
-                        "beam_center_x": 737, "beam_center_y": 839
-                    },
-                    "Pilatus 1M": {
-                        "nbins_x": 981, "nbins_y": 1043,
-                        "pixel_size_x": 172, "pixel_size_y": 172,
-                        "beam_center_x": 490, "beam_center_y": 521
-                    }
-                }
-                print("Detector configuration file not found, using default configuration")
-            
-            # 更新ComboBox
-            self._update_detector_preset_combobox()
-            
-        except Exception as e:
-            print(f"Failed to load detector configuration: {e}")
-            self.detector_presets = {}
-    
-    def _update_detector_preset_combobox(self):
-        """Update detector preset ComboBox"""
-        if not hasattr(self.ui, 'detectorPresetCombox'):
+        (module_dir / "module.yaml").write_text(
+            yaml.safe_dump(module, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        (module_dir / "preprocessing.py").write_text(
+            """from __future__ import annotations
+import copy
+import numpy as np
+from trainset.generator import apply_preprocessing, build_fixed_mask, crop_roi
+
+def preprocess(image, preprocess_config, module_folder=None, return_steps=False):
+    cfg = copy.deepcopy(preprocess_config["params"]["trainset_config"])
+    roi_image = crop_roi(np.asarray(image, dtype=np.float32), cfg["roi"])
+    mask = build_fixed_mask(roi_image, cfg)
+    stages = apply_preprocessing(
+        roi_image,
+        cfg,
+        mask,
+        np.random.default_rng(int(cfg["project"]["seed"])),
+    )
+    result = np.asarray(stages[-1]["image"], dtype=np.float32)
+    snapshots = [{"label": stage["name"], "image": stage["image"]} for stage in stages]
+    return (result, snapshots) if return_steps else result
+""",
+            encoding="utf-8",
+        )
+
+        predictor = getattr(self.parent_controller, "gisaxs_predict_controller", None)
+        if predictor is not None:
+            predictor._refresh_modules()
+            combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
+            module_name = module["name"]
+            if combo is not None and combo.findText(module_name) >= 0:
+                combo.setCurrentText(module_name)
+            predictor._on_module_selected(module_name)
+            self.parent_controller._switch_to_gisaxs_predict()
+        QMessageBox.information(self.window, "Model registered", f"Registered prediction module:\n{module_dir}")
+
+    def _update_capabilities(self) -> None:
+        available = DatasetGenerator(self.config).bornagain_available
+        self.page.preview_capability.setText("BornAgain local simulation available" if available else "BornAgain not installed locally · reference preview only")
+
+    def get_parameters(self) -> Dict[str, Any]:
+        return self._collect_config()
+
+    def set_parameters(self, parameters: Dict[str, Any]) -> None:
+        if not isinstance(parameters, dict):
             return
-            
-        try:
-            # Temporarily disconnect signals (safe way)
-            try:
-                self.ui.detectorPresetCombox.currentTextChanged.disconnect()
-            except TypeError:
-                # 如果没有连接信号，会抛出TypeError，这是正常的
-                pass
-            
-            # 清空现有选项
-            self.ui.detectorPresetCombox.clear()
-            
-            # 添加从配置文件加载的预设
-            for preset_name in self.detector_presets.keys():
-                self.ui.detectorPresetCombox.addItem(preset_name)
-                print(f"  Added preset: {preset_name}")
-            
-            # Finally add User-defined option
-            self.ui.detectorPresetCombox.addItem("User-defined")
-            print(f"  Added option: User-defined")
-            
-            # 设置默认选择第一个预设
-            if self.detector_presets:
-                self.ui.detectorPresetCombox.setCurrentIndex(0)
-                first_preset = list(self.detector_presets.keys())[0]
-                print(f"✓ Default detector preset: {first_preset}")
-                
-                # 加载第一个预设的参数
-                self._load_preset_parameters(first_preset)
-            
-            # 重新连接信号
-            self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
-            
-        except Exception as e:
-            print(f"Failed to update detector preset ComboBox: {e}")
-            # 重新连接信号（确保不会丢失连接）
-            try:
-                self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
-            except:
-                pass
-            
-    def _load_preset_parameters(self, preset_name):
-        """Load detector preset parameters into state, UI, and global settings."""
-        try:
-            if preset_name not in self.detector_presets:
-                print(f"Unknown detector preset: {preset_name}")
-                return
+        self.config = merge_config(default_project_config(), parameters)
+        self._apply_config_to_page(self.config)
+        reference = self.config.get("project", {}).get("reference_file")
+        if reference and Path(reference).exists():
+            self._load_reference(str(reference))
+        self._update_capabilities()
+        self._update_geometry_label()
+        runtime = self.config.get("runtime", {})
+        hpc = self.config.get("hpc", {})
+        if runtime.get("last_job_id") and hpc.get("user") and hpc.get("remote_path"):
+            self.monitor_timer.start()
 
-            preset_config = self.detector_presets[preset_name]
-            self.detector_params.update(preset_config)
-            self.detector_params['preset'] = preset_name
+    def validate_parameters(self):
+        valid, errors, warnings = validate_project_config(self._collect_config())
+        return valid, "\n".join(errors or warnings)
 
-            self._update_detector_ui()
-
-            self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
-            for key, value in preset_config.items():
-                if key != 'description':
-                    self.global_params.set_parameter('trainset.detector', key, value)
-
-            self._emit_parameters_changed()
-            print(f"Loaded detector preset: {preset_name}")
-
-        except Exception as e:
-            print(f"Failed to load detector preset parameters: {e}")
-
-    def _on_detector_preset_changed(self, preset_name):
-        """探测器预设改变处理"""
-        try:
-            if preset_name == 'User-defined':
-                # 用户自定义模式，不更改当前参数值，只更新预设标记
-                self.detector_params['preset'] = preset_name
-                self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
-                print("Switch to user-defined mode")
-                return
-            
-            # 检查是否是有效预设
-            if preset_name in self.detector_presets:
-                preset_config = self.detector_presets[preset_name]
-                
-                # 更新detector_params（合并所有参数）
-                self.detector_params.update(preset_config)
-                self.detector_params['preset'] = preset_name
-                
-                # 更新UI显示（会自动断开和重连信号）
-                self._update_detector_ui()
-                
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
-                for key, value in preset_config.items():
-                    # 跳过描述字段
-                    if key != 'description':
-                        self.global_params.set_parameter('trainset.detector', key, value)
-                
-                self._emit_parameters_changed()
-                print(f"✓ Detector preset switched to: {preset_name}")
-            else:
-                print(f"⚠ Unknown detector preset: {preset_name}")
-            
-        except Exception as e:
-            print(f"Failed to switch detector preset: {e}")
-            
-    def _on_detector_params_changed(self):
-        """Handle changes to non-critical detector parameters (distance, beam center)"""
-        try:
-            if hasattr(self.ui, 'distanceValue'):
-                self.detector_params['distance'] = float(self.ui.distanceValue.text())
-                # 同步到Trainset模块专用参数
-                self.global_params.set_parameter('trainset', 'detector.distance', self.detector_params['distance'])
-                
-            if hasattr(self.ui, 'beamCenterXValue'):
-                self.detector_params['beam_center_x'] = float(self.ui.beamCenterXValue.text())
-                # 同步到Trainset模块专用参数
-                self.global_params.set_parameter('trainset', 'detector.beam_center_x', self.detector_params['beam_center_x'])
-                
-            if hasattr(self.ui, 'beamCenterYValue'):
-                self.detector_params['beam_center_y'] = float(self.ui.beamCenterYValue.text())
-                # 同步到Trainset模块专用参数
-                self.global_params.set_parameter('trainset', 'detector.beam_center_y', self.detector_params['beam_center_y'])
-                
-            self._emit_parameters_changed()
-        except ValueError:
-            pass
-    
-    def _on_detector_critical_params_changed(self):
-        """探测器关键参数改变处理（Nbins和像素大小），会触发自动切换到User-defined"""
-        try:
-            # 更新参数值
-            if hasattr(self.ui, 'NbinsXValue'):
-                self.detector_params['nbins_x'] = int(self.ui.NbinsXValue.text())
-                self.global_params.set_parameter('trainset.detector', 'nbins_x', self.detector_params['nbins_x'])
-                
-            if hasattr(self.ui, 'NbinsYValue'):
-                self.detector_params['nbins_y'] = int(self.ui.NbinsYValue.text())
-                self.global_params.set_parameter('trainset.detector', 'nbins_y', self.detector_params['nbins_y'])
-                
-            if hasattr(self.ui, 'pixelSizeXValue'):
-                self.detector_params['pixel_size_x'] = float(self.ui.pixelSizeXValue.text())
-                self.global_params.set_parameter('trainset.detector', 'pixel_size_x', self.detector_params['pixel_size_x'])
-                
-            if hasattr(self.ui, 'pixelSizeYValue'):
-                self.detector_params['pixel_size_y'] = float(self.ui.pixelSizeYValue.text())
-                self.global_params.set_parameter('trainset.detector', 'pixel_size_y', self.detector_params['pixel_size_y'])
-            
-            # 检查是否需要切换到User-defined
-            self._check_and_switch_to_user_defined()
-                
-            self._emit_parameters_changed()
-        except ValueError:
-            pass
-    
-    def _check_and_switch_to_user_defined(self):
-        """检查当前参数是否与预设匹配，如果不匹配则切换到User-defined"""
-        current_nbins_x = self.detector_params.get('nbins_x')
-        current_nbins_y = self.detector_params.get('nbins_y')
-        current_pixel_x = self.detector_params.get('pixel_size_x')
-        current_pixel_y = self.detector_params.get('pixel_size_y')
-        
-        # 获取当前预设
-        current_preset = self.detector_params.get('preset', '')
-        
-        # 如果已经是User-defined，不需要检查
-        if current_preset == 'User-defined':
-            return
-        
-        # 检查当前参数是否与任何预设完全匹配
-        for preset_name, preset_config in self.detector_presets.items():
-            if (current_nbins_x == preset_config.get('nbins_x') and
-                current_nbins_y == preset_config.get('nbins_y') and
-                current_pixel_x == preset_config.get('pixel_size_x') and
-                current_pixel_y == preset_config.get('pixel_size_y')):
-                
-                # 匹配某个预设，如果当前预设不是这个，则切换
-                if current_preset != preset_name:
-                    self._switch_to_preset(preset_name)
-                return
-        
-        # 不匹配任何预设，切换到User-defined
-        self._switch_to_user_defined()
-    
-    def _on_detector_nbins_changed(self):
-        """Nbins参数改变处理，自动切换到User-defined模式"""
-        try:
-            # 获取当前Nbins值
-            current_nbins_x = None
-            current_nbins_y = None
-            
-            if hasattr(self.ui, 'NbinsXValue'):
-                current_nbins_x = int(self.ui.NbinsXValue.text())
-                self.detector_params['nbins_x'] = current_nbins_x
-                self.global_params.set_parameter('trainset.detector', 'nbins_x', current_nbins_x)
-                
-            if hasattr(self.ui, 'NbinsYValue'):
-                current_nbins_y = int(self.ui.NbinsYValue.text())
-                self.detector_params['nbins_y'] = current_nbins_y
-                self.global_params.set_parameter('trainset.detector', 'nbins_y', current_nbins_y)
-            
-            # 检查当前的Nbins值是否与预设值匹配
-            if self._should_switch_to_user_defined(current_nbins_x, current_nbins_y):
-                self._switch_to_user_defined()
-                
-            self._emit_parameters_changed()
-        except ValueError:
-            pass
-    
-    def _should_switch_to_user_defined(self, nbins_x, nbins_y):
-        """检查是否应该切换到User-defined模式（基于Nbins值）"""
-        # 获取当前预设
-        current_preset = self.detector_params.get('preset', '')
-        
-        # 如果已经是User-defined，不需要切换
-        if current_preset == 'User-defined':
-            return False
-            
-        # 检查当前Nbins值是否与任何预设匹配
-        for preset_name, preset_config in self.detector_presets.items():
-            if (nbins_x == preset_config.get('nbins_x') and 
-                nbins_y == preset_config.get('nbins_y')):
-                # 如果匹配，但当前预设不是这个，则切换预设
-                if current_preset != preset_name:
-                    self._switch_to_preset(preset_name)
-                return False
-        
-        # 如果不匹配任何预设，需要切换到User-defined
-        return True
-    
-    def _switch_to_user_defined(self):
-        """切换到User-defined模式"""
-        if hasattr(self.ui, 'detectorPresetCombox'):
-            # 暂时断开信号连接，避免循环触发
-            self.ui.detectorPresetCombox.currentTextChanged.disconnect()
-            
-            # 设置为User-defined
-            index = self.ui.detectorPresetCombox.findText('User-defined')
-            if index >= 0:
-                self.ui.detectorPresetCombox.setCurrentIndex(index)
-                self.detector_params['preset'] = 'User-defined'
-                self.global_params.set_parameter('trainset.detector', 'preset', 'User-defined')
-                print("Switch to user-defined mode due to Nbins value mismatch")
-            
-            # 重新连接信号
-            self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
-    
-    def _switch_to_preset(self, preset_name):
-        """切换到指定的预设"""
-        if hasattr(self.ui, 'detectorPresetCombox'):
-            # 暂时断开信号连接，避免循环触发
-            self.ui.detectorPresetCombox.currentTextChanged.disconnect()
-            
-            # 设置预设
-            index = self.ui.detectorPresetCombox.findText(preset_name)
-            if index >= 0:
-                self.ui.detectorPresetCombox.setCurrentIndex(index)
-                self.detector_params['preset'] = preset_name
-                self.global_params.set_parameter('trainset.detector', 'preset', preset_name)
-                print(f"✓ Due to Nbins value matching, automatically switched to preset: {preset_name}")
-            
-            # 重新连接信号
-            self.ui.detectorPresetCombox.currentTextChanged.connect(self._on_detector_preset_changed)
-            
-    def _on_sample_params_changed(self):
-        """样品参数改变处理"""
-        try:
-            if hasattr(self.ui, 'particleShapeInitValue'):
-                self.sample_params['particle_shape'] = self.ui.particleShapeInitValue.currentText()
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('sample', 'particle_shape', self.sample_params['particle_shape'])
-                
-                # 根据粒子形状切换页面
-                self._switch_particle_page(self.sample_params['particle_shape'])
-                
-            if hasattr(self.ui, 'particleSizeValue'):
-                self.sample_params['particle_size'] = float(self.ui.particleSizeValue.text())
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('sample', 'particle_size', self.sample_params['particle_size'])
-                
-            if hasattr(self.ui, 'materialCombox'):
-                self.sample_params['material'] = self.ui.materialCombox.currentText()
-                # 同步到全局参数管理器
-                self.global_params.set_parameter('sample', 'material', self.sample_params['material'])
-                
-            self._emit_parameters_changed()
-        except ValueError:
-            pass
-    
-    def _switch_particle_page(self, particle_shape):
-        """根据粒子形状切换对应的页面"""
-        if not hasattr(self.ui, 'sampleParametersParticleStackedWidget'):
-            return
-            
-        try:
-            # 定义形状与页面索引的映射
-            shape_to_index = {
-                'Sphere': 0,
-                'Ellipsoid': 1,
-                'Cylinder': 0,  # 如果没有Cylinder页面，暂时使用Sphere页面
-                'None': 0
-            }
-            
-            # 获取对应的页面索引
-            page_index = shape_to_index.get(particle_shape, 0)
-            
-            # 切换到对应页面
-            self.ui.sampleParametersParticleStackedWidget.setCurrentIndex(page_index)
-            
-            print(f"Switched particle shape page: {particle_shape} -> page index {page_index}")
-            
-        except Exception as e:
-            print(f"Failed to switch particle shape page: {e}")
-            
-    def _on_preprocessing_params_changed(self):
-        """预处理参数改变处理"""
-        if hasattr(self.ui, 'focusRegionTypeCombox'):
-            self.preprocessing_params['focus_region']['type'] = self.ui.focusRegionTypeCombox.currentText()
-            # 同步到全局参数管理器
-            self.global_params.set_parameter('preprocessing', 'focus_region', self.preprocessing_params['focus_region'])
-            
-        if hasattr(self.ui, 'noisingTypeCombox'):
-            self.preprocessing_params['noising']['type'] = self.ui.noisingTypeCombox.currentText()
-            # 同步到全局参数管理器
-            self.global_params.set_parameter('preprocessing', 'noising', self.preprocessing_params['noising'])
-            
-        if hasattr(self.ui, 'OthersCropEdgeCheckBox'):
-            self.preprocessing_params['others']['crop_edge'] = self.ui.OthersCropEdgeCheckBox.isChecked()
-            # 同步到全局参数管理器
-            self.global_params.set_parameter('preprocessing', 'others', self.preprocessing_params['others'])
-            
-        self._emit_parameters_changed()
-        
-    def _update_detector_ui(self):
-        """更新探测器UI显示，暂时断开信号连接避免循环触发"""
-        try:
-            # 断开关键参数的信号连接
-            critical_widgets = []
-            if hasattr(self.ui, 'NbinsXValue'):
-                try:
-                    self.ui.NbinsXValue.textChanged.disconnect(self._on_detector_critical_params_changed)
-                except TypeError:
-                    pass
-                critical_widgets.append(('NbinsXValue', self._on_detector_critical_params_changed))
-            if hasattr(self.ui, 'NbinsYValue'):
-                try:
-                    self.ui.NbinsYValue.textChanged.disconnect(self._on_detector_critical_params_changed)
-                except TypeError:
-                    pass
-                critical_widgets.append(('NbinsYValue', self._on_detector_critical_params_changed))
-            if hasattr(self.ui, 'pixelSizeXValue'):
-                try:
-                    self.ui.pixelSizeXValue.textChanged.disconnect(self._on_detector_critical_params_changed)
-                except TypeError:
-                    pass
-                critical_widgets.append(('pixelSizeXValue', self._on_detector_critical_params_changed))
-            if hasattr(self.ui, 'pixelSizeYValue'):
-                try:
-                    self.ui.pixelSizeYValue.textChanged.disconnect(self._on_detector_critical_params_changed)
-                except TypeError:
-                    pass
-                critical_widgets.append(('pixelSizeYValue', self._on_detector_critical_params_changed))
-            
-            # 更新UI控件值
-            if hasattr(self.ui, 'NbinsXValue'):
-                self.ui.NbinsXValue.setText(str(self.detector_params.get('nbins_x', 1475)))
-            if hasattr(self.ui, 'NbinsYValue'):
-                self.ui.NbinsYValue.setText(str(self.detector_params.get('nbins_y', 1679)))
-            if hasattr(self.ui, 'pixelSizeXValue'):
-                self.ui.pixelSizeXValue.setText(str(self.detector_params.get('pixel_size_x', 172)))
-            if hasattr(self.ui, 'pixelSizeYValue'):
-                self.ui.pixelSizeYValue.setText(str(self.detector_params.get('pixel_size_y', 172)))
-            if hasattr(self.ui, 'distanceValue'):
-                self.ui.distanceValue.setText(str(self.detector_params.get('distance', 2000)))
-            if hasattr(self.ui, 'beamCenterXValue'):
-                self.ui.beamCenterXValue.setText(str(self.detector_params.get('beam_center_x', 737)))
-            if hasattr(self.ui, 'beamCenterYValue'):
-                self.ui.beamCenterYValue.setText(str(self.detector_params.get('beam_center_y', 839)))
-            
-            # 重新连接关键参数的信号
-            for widget_name, handler in critical_widgets:
-                widget = getattr(self.ui, widget_name)
-                widget.textChanged.connect(handler)
-                
-        except Exception as e:
-            print(f"Failed to update detector UI: {e}")
-            # 确保信号连接不会丢失
-            self._setup_detector_connections()
-    
-    def _update_generation_progress(self):
-        """更新生成进度（定时器回调）"""
-        if self.is_generating and hasattr(self, 'current_progress'):
-            # 这个方法会被定时器调用，用于定期更新UI
-            # 实际的进度更新是在生成线程中完成的
-            pass
+    def reset_to_defaults(self) -> None:
+        self.monitor_timer.stop()
+        self.config = default_project_config()
+        self.reference_image = None
+        self._apply_config_to_page(self.config)
+        for canvas in (
+            self.page.full_detector_canvas,
+            self.page.roi_design_canvas,
+            self.page.masked_design_canvas,
+            self.page.mask_only_canvas,
+        ):
+            canvas.set_draw_mode("")
+            canvas.set_data(None)
+        for index in range(4):
+            self.page.set_design_stage_ready(index, False)
+        for index in range(len(self.page.STEPS)):
+            self.page.set_step_state(index, "Not started")
+        self.page.design_tabs.setCurrentIndex(0)
+        self.page.validation_badge.setText("Not validated")
+        self._update_capabilities()
+        self._update_geometry_label()

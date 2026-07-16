@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-07-16T17:38:56.302346+00:00",
+  "git_commit": "b48fab6a22287b6e3cde1a0c7843d973ea57011a",
+  "seed": 42,
+  "roi_spherical_ranges": {
+    "phi_min_deg": -0.622403784350998,
+    "phi_max_deg": -0.15865778035566822,
+    "alpha_min_deg": -0.7813749432523825,
+    "alpha_max_deg": -0.0003196397245608045,
+    "width_mm": 44.032,
+    "height_mm": 44.032,
+    "beam_center_roi_x_mm": 35.087999999999994,
+    "beam_center_roi_y_mm": 21.5
+  },
+  "files": {
+    "config.yaml": "bd36d54c6ec5c2f39dd301d39042631e6d1ad17ace25669c52f236b98d39400a",
+    "environment.yml": "46479c4263c3865d6f4befce7cbf6370cd719b7a035d1258e771e4c5b5259a6b",
+    "generate_dataset.py": "2e926d84b8ce57db173fff0a66f1db9cd70ac27994d4f1dd1b9c5cf2ac27ac18",
+    "slurm_generate.sh": "445fba4a65adc99efc24a1e2fb82a6b9835ad41900c61266daa7d467d0751fe0",
+    "slurm_train.sh": "a8c704d087a0b172828fad4a64ebb38c88c1aaff98132e6a5effc00172f69fc5",
+    "src/trainset/__init__.py": "6b1498df4a4dc2d9040525da499673befb2a31405a9f57b27883d22793d56b60",
+    "src/trainset/backends.py": "f257b6f55bf0fea3c146b5c8c3ab4e3e15295708155fd9fd5f2aa91a1060390d",
+    "src/trainset/config.py": "ca5a09db9ebf1618226cafa34547010e2d521b4d7f66e1d89011ed6e1a9107bb",
+    "src/trainset/generator.py": "f20b5e4c63840cb3a0294d9554ac5e340238c87b8d5fc44dba71cd6779fe6da0",
+    "src/trainset/geometry.py": "60701f9a1e6cce531fdbd6eed20e35d733781a9459b17b4f89387ea28ccb34cc",
+    "src/trainset/job_package.py": "37c169719ac691fe4c26f1fce404ee0865127379ffe6a6e7e361cdf049ab08dc",
+    "src/trainset/plugins.py": "34b26932df0e7661aa25bd9e10a5e6fc93998e632b2ae246116361fecacae847",
+    "src/trainset/simulation.py": "477bd997f3c05c6f50f9f4de0d560985ccc4201deca208b048adf98558f5c945",
+    "train.py": "f309ff660e657120127fdc4a9e3e7f25bffc501b9601e107b4bd9eb4911dec23",
+    "validate_config.py": "bba035ae7dc98718ca8f20b865a79e3aa60bd4e6a96c6805fde21a21e42f8fe7"
+  }
+}

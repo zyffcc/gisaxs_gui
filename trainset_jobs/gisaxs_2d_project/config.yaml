@@ -1,0 +1,145 @@
+schema_version: 1
+project:
+  name: gisaxs_2d_project
+  seed: 42
+  reference_file: ''
+  workspace: ''
+dataset:
+  dimension: 2d
+  number_of_samples: 200000
+  output_format: hdf5
+  samples_per_shard: 2000
+  sampling: latin_hypercube
+  split:
+    train: 0.8
+    validation: 0.1
+    test: 0.1
+  preview_samples: 16
+  dry_run_samples: 128
+beam:
+  wavelength_nm: 0.105
+  grazing_angle_deg: 0.4
+detector:
+  preset: Custom
+  pixels_x: 1475
+  pixels_y: 1679
+  pixel_size_x_mm: 0.172
+  pixel_size_y_mm: 0.172
+  distance_mm: 3230.0
+  beam_center_x_px: 804.0
+  beam_center_y_px: 305.0
+roi:
+  x: 600
+  y: 180
+  width: 256
+  height: 256
+mask:
+  mode: fixed
+  mask_value: -1.0
+  threshold:
+    enabled: true
+    minimum: 0.0
+    maximum: 1000000000000.0
+  fixed_shapes: []
+  random:
+    vertical_bars: 2
+    horizontal_bars: 1
+    bar_width_min: 2
+    bar_width_max: 6
+    circles: 1
+    circle_radius_min: 4
+    circle_radius_max: 12
+    beamstop: true
+simulation:
+  engine: bornagain_yuxin
+  image_size:
+  - 256
+  - 256
+  resolution_sigma_phi_deg: 0.01
+  resolution_sigma_alpha_deg: 0.01
+parameters:
+  radius_nm:
+    distribution: uniform
+    minimum: 1.0
+    maximum: 15.0
+  height_nm:
+    distribution: uniform
+    minimum: 1.0
+    maximum: 20.0
+  spacing_nm:
+    distribution: uniform
+    minimum: 3.0
+    maximum: 50.0
+sample:
+  surface_density_per_nm2: 0.01
+  particles:
+  - plugin: spherical_segment
+    material: Copper
+    enabled: true
+  layers:
+  - enabled: true
+    material: Copper
+    thickness_nm: 20.0
+    roughness_nm: 0.0
+  - enabled: true
+    material: Polymer
+    thickness_nm: 50.0
+    roughness_nm: 0.0
+  substrate:
+    material: Silicon
+    roughness_nm: 0.0
+  interference:
+    plugin: paracrystal
+    enabled: true
+    sigma_ratio: 0.1
+preprocessing:
+  steps:
+  - plugin: noise
+    enabled: true
+    snr_min_db: 80.0
+    snr_max_db: 110.0
+  - plugin: mask
+    enabled: true
+  - plugin: log
+    enabled: true
+    epsilon: 1.0e-06
+  - plugin: normalize
+    enabled: true
+    mode: range
+    lower: 0.0
+    upper: 1.0
+  - plugin: random_edge_crop
+    enabled: false
+    maximum_px: 4
+model:
+  template: cnn_2d
+  channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  kernel_size: 3
+  dropout: 0.5
+  output_mode: regression
+training:
+  backend: slurm
+  local_python: ''
+  batch_size: 64
+  epochs: 100
+  optimizer: adam
+  learning_rate: 0.0001
+  scheduler: cosine
+hpc:
+  host: maxwell.desy.de
+  user: ''
+  remote_path: ''
+  partition: allgpu
+  gpus: 1
+  cpus: 8
+  memory: 64G
+  time: '24:00:00'
+  python_command: python
+  job_array: true
+runtime:
+  last_job_id: ''
+  last_project_dir: E:\PythonCode\gisaxs_gui\trainset_jobs\gisaxs_2d_project
