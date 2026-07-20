@@ -22,15 +22,12 @@ The application entry point is `main.py`.
 
 ### Windows Installer
 
-* Visit the [GitHub Releases](https://github.com) page.
-* Look for the latest version marked with the **Latest** tag.
-* Download the `*-setup.exe` (or the provided `.zip` archive).
+* Visit the https://github.com/zyffcc/gisaxs_gui/releases page.
+* Look for the latest version marked tag.
+* Download the `00_Download_and_Install_GIMaP-*.bat`.
+* Place it in an empty folder.
+* Double-click the file. The installer will automatically download, verify, join, and extract all package parts.
 
-### Windows SmartScreen Warning
-
-Unsigned pre-release executables can trigger Windows SmartScreen. Only run files downloaded from a trusted release source.
-
-If you do not want to run an unsigned executable, you can run GIMaP from source in a local Python environment instead. See the “Running from Source” section below for instructions.
 
 ### Running from Source
 
@@ -64,32 +61,6 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Building a Portable Windows Release (No Python Required on Target PCs)
-
-The repository includes a release builder that packages the application together
-with the existing Conda environment. On the build computer, install `conda-pack`
-once in the base environment and run:
-
-```powershell
-python -m pip install --user conda-pack
-powershell -ExecutionPolicy Bypass -File .\tools\build_portable_release.ps1 -EnvironmentName GUI -Version 0.1.0
-```
-
-If the complete ZIP is under GitHub's per-file limit, upload it directly. For a
-larger environment, the builder also creates numbered `.zip.partXX` files and
-two installers. Upload every generated part and BAT to a GitHub Release tagged
-`v<version>`. Tell normal users to download only
-`00_Download_and_Install_GIMaP-<version>.bat`; it downloads and verifies all
-parts, joins them, extracts them, and starts GIMaP. `Install_GIMaP_parts.bat`
-remains an offline fallback for users who already downloaded every part. Python
-and Conda are not required. The
-generated `runtime\` and `release\` directories are ignored by Git and are
-intended only for release artifacts.
-
-Build and test the Windows package on the same CPU architecture as the target
-computers. A portable ZIP avoids a PyInstaller-wrapped executable, but an
-institution's antivirus or application-control policy may still block unsigned
-scripts or binaries.
 
 ### GUI Layout Too Large for Small Screen
 
@@ -145,15 +116,6 @@ Prediction modules are configured through `module.yaml` files under `modules/`. 
 
 AI fitting models are discovered from fitting-model folders under `modules/`, including `modules/Fitting_1D_Model`. **For normal users, only the model path should be changed when importing or replacing a trained model. Different models may require different preprocessing settings, so please make sure the selected model and preprocessing workflow match.** 
 
-## Multi-file Prediction
-
-The GIMaP Predict page includes a multi-file workflow for processing folders or file collections. Results can be reviewed in an external multi-file results window and exported for later analysis.
-
-## Exporting Results
-
-Export support depends on the active page and workflow. The current codebase includes exports for fitting results, prediction outputs, multi-file prediction tables, AI fitting candidates, curves, residuals, and plots.
-
-AI fitting output is written under `AI_Fitting_Output/current_prediction` and may include JSON, CSV, NPZ, and PNG files.
 
 ## System Requirements
 
@@ -166,39 +128,20 @@ AI fitting output is written under `AI_Fitting_Output/current_prediction` and ma
 
 Dependencies are listed in `requirements.txt`:
 
-- PyQt5
-- NumPy
-- SciPy
-- Matplotlib
-- OpenCV
-- h5py
-- fabio
-- umap-learn
-- scikit-learn
-- TensorFlow 2.15.x (`tensorflow-intel` on Windows)
-
-## Project Structure
-
-```text
-main.py                         Application entry point
-controllers/                    Page controllers and workflow logic
-ui/                             PyQt UI definitions and components
-utils/                          Fitting, prediction, loading, and helper utilities
-modules/                        Prediction and fitting model modules
-config/                         Application parameters and configuration files
-core/                           Shared settings and global parameter helpers
-WAXS/                           Legacy WAXS/GIWAXS algorithms and loaders reused by the embedded page
-AI_Fitting_Output/              AI fitting output directory
-docs/                           User and developer documentation
-requirements.txt                Python dependency list
-```
-
-## Current Limitations
-
-- This is early pre-release / beta scientific software.
-- Some pages and workflows are experimental or under active development.
-- Some model configuration paths may need to be adjusted for each local installation.
-- Small screens may require window resizing or scrolling because scientific controls are dense.
+- numpy>=1.24,<2.0
+- scipy>=1.10
+- matplotlib>=3.7
+- BornAgain==24.1
+- PyQt5>=5.15
+- opencv-python>=4.8
+- h5py>=3.9
+- fabio>=2023.4.0
+- tqdm>=4.65
+- umap-learn>=0.5.5
+- scikit-learn>=1.3
+- tensorflow-intel>=2.15,<=2.16; platform_system=="Windows"
+- tensorflow>=2.15,<=2.16; platform_system!="Windows"
+- PyYAML>=6.0
 
 
 ## Feedback and Contact
