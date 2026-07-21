@@ -230,7 +230,22 @@ The WAXS / in-situ workflow is embedded directly in the main GUI. Use the **WAXS
 
 The embedded page supports `.nxs`, `.tif`, and `.tiff` input through **Open File** or drag-and-drop. For `.nxs` files, the frame selector is enabled when multiple frames are detected. The page includes a large detector preview with zoom/pan controls, display and mask settings, geometry parameters, Q-range cut controls, 1D integration, and batch/in-situ export controls.
 
-## 9. Model Configuration
+## 9. Geometry Calibration Tool
+
+Open **Tools > Geometry Calibration...** (`Ctrl+Shift+G`) to calibrate a SAXS, GISAXS, or GIWAXS detector geometry without leaving the current page.
+
+1. Open a calibration-standard `.nxs` or `.cbf` image, or paste its path into the image field and press Enter.
+2. Confirm the detected energy and pixel size. For a CBF with matching scan NXS metadata, the energy is filled automatically. Enter the energy in keV if it is still missing.
+3. Confirm the detector model. If it cannot be identified, choose a known detector from **Detector model**, or select **Custom pixel size** and enter the values in **Advanced Settings**.
+4. Choose a standard, or leave **Auto Detect** selected. An approximate detector distance is optional but helps resolve harmonic alternatives.
+5. Click **Auto Calibration**. The calculation runs in the background and can be cancelled.
+6. Review the center, distance, residual, confidence, high-contrast overlay legend, and alternative candidates. **Clean image** temporarily hides all calibration overlays, **Reset view** restores the complete detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall WAXS mosaics more room. The horizontal divider can also be dragged.
+7. After calibration, **Manual refine** opens automatically. Drag the center marker, edit the center/distance values, or pair a detected ring with a theoretical peak. Use **Finish manual** to collapse the panel when more image space is needed.
+8. Click **Apply** to update the shared application geometry. Calibration results can also be exported to or imported from JSON.
+
+Solid yellow overlays are matched theoretical rings, dashed orange overlays are unused theoretical rings, and dotted white overlays are detected experimental radii; the preview legend identifies each style. Partial WAXS arcs and centers outside the active detector area are supported. A low-confidence result or a one-ring result should be treated as ambiguous and reviewed manually.
+
+## 10. Model Configuration
 
 Prediction modules are configured with YAML files under `modules/`. Existing module files contain fields such as:
 
@@ -251,7 +266,7 @@ When adding a new module, make sure the model path, input type, preprocessing co
 
 AI fitting model discovery is handled separately and searches fitting-model folders under `modules/`, including `modules/Fitting_1D_Model`.
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### File Cannot Be Loaded
 
@@ -293,7 +308,7 @@ Confirm that the output folder exists and is writable. Avoid exporting into prot
 
 The GUI contains dense scientific controls. Use a larger display, maximize the window, or adjust system scaling if controls are clipped. For the best user experience, a 1080p or higher-resolution screen is recommended.
 
-## 11. FAQ
+## 12. FAQ
 
 ### Is GIMaP production-ready?
 
@@ -307,7 +322,7 @@ Yes, if it can be represented by a compatible module configuration and supported
 
 AI fitting results are saved under `AI_Fitting_Output/current_prediction`.
 
-## 12. Version and Contact
+## 13. Version and Contact
 
 This documentation describes the current source repository state and may change as the GUI evolves.
 

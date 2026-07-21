@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import glob
 import os
-import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import h5py
 import numpy as np
 from matplotlib import colormaps
 from PyQt5.QtCore import QObject, Qt, QThread, pyqtSignal
@@ -51,6 +49,7 @@ from matplotlib.patches import Circle, Rectangle, Wedge
 from matplotlib.widgets import RectangleSelector
 
 from utils.path_utils import normalize_path
+from calibration.image_loader import detect_nxs_frame_count, load_detector_image
 
 
 SUPPORTED_EXTENSIONS = {".nxs", ".tif", ".tiff"}
@@ -1661,13 +1660,8 @@ def load_image_matrix(
     TIFF files are loaded as 2D matrices, and NXS files support P03-style
     multi-module stitching plus frame selection.
     """
-    path = Path(file_path)
-    suffix = path.suffix.lower()
-    if suffix in {".tif", ".tiff"}:
-        return load_tiff_matrix(path)
-    if suffix != ".nxs":
-        raise ValueError("Unsupported file type. Only .nxs, .tif, and .tiff are supported.")
-    return load_nxs_matrix(path, frame_idx, dataset_path, dist_path, mask_path)
+    del dist_path, mask_path
+    return load_detector_image(file_path, frame_idx=frame_idx, dataset_path=dataset_path).data
 
 
 def load_tiff_matrix(path: Path) -> np.ndarray:
@@ -1683,108 +1677,6 @@ def load_tiff_matrix(path: Path) -> np.ndarray:
     if arr.ndim == 3:
         arr = np.mean(arr[..., :3], axis=2)
     return np.asarray(arr, dtype=np.float32)
-
-
-def load_nxs_matrix(
-    path: Path,
-    frame_idx: int,
-    dataset_path: str,
-    dist_path: str,
-    mask_path: str,
-) -> np.ndarray:
-    base_name = path.name
-    folder = path.parent
-    m_match = re.search(r"_m(\d+)\.nxs$", base_name, re.IGNORECASE)
-    sep = ""
-    prefix = None
-    if m_match:
-        sep = "_"
-        prefix = base_name[: m_match.start()]
-    else:
-        m2 = re.search(r"m(\d+)\.nxs$", base_name, re.IGNORECASE)
-        if m2:
-            prefix = base_name[: m2.start()]
-
-    ordered_paths: list[Path] = []
-    if prefix is not None:
-        series = []
-        for fp in folder.glob(f"{prefix}{sep}m*.nxs"):
-            mm = re.search(r"m(\d+)\.nxs$", fp.name, re.IGNORECASE)
-            if mm:
-                series.append((int(mm.group(1)), fp))
-        if series:
-            series.sort(key=lambda item: item[0])
-            ordered_paths = [fp for _idx, fp in series]
-    if not ordered_paths:
-        ordered_paths = [path]
-
-    with h5py.File(str(ordered_paths[0]), "r") as handle:
-        if dataset_path not in handle:
-            raise ValueError("Invalid detector data path")
-        dset0 = handle[dataset_path]
-        if dset0.ndim == 3:
-            module_x, module_y = int(dset0.shape[1]), int(dset0.shape[2])
-        elif dset0.ndim == 2:
-            module_x, module_y = int(dset0.shape[0]), int(dset0.shape[1])
-        else:
-            raise ValueError(f"Unexpected detector dataset ndim: {dset0.ndim}")
-
-    modules = []
-    for module_path in ordered_paths:
-        with h5py.File(str(module_path), "r") as handle:
-            if dataset_path not in handle:
-                raise ValueError("Invalid detector data path")
-            dset = handle[dataset_path]
-            if dset.ndim == 3:
-                safe_frame = max(0, min(int(frame_idx), int(dset.shape[0]) - 1))
-                img = dset[safe_frame].astype(np.float32)
-            elif dset.ndim == 2:
-                img = dset[()].astype(np.float32)
-            else:
-                raise ValueError(f"Unexpected detector dataset ndim: {dset.ndim}")
-
-            if dist_path in handle:
-                dist = list(handle[dist_path])
-                trans_x = int(dist[1])
-                trans_y = int(dist[0])
-            else:
-                trans_x = 0
-                trans_y = 0
-            mask = handle[mask_path][()] if mask_path in handle else None
-
-        if img.shape == (module_y, module_x):
-            img_xy = img.T
-            mask_xy = mask.T if mask is not None and mask.shape == img.shape else mask
-        elif img.shape == (module_x, module_y):
-            img_xy = img
-            mask_xy = mask
-        else:
-            raise ValueError(f"{module_path.name}: unexpected module shape {img.shape}")
-
-        if mask_xy is not None:
-            img_xy = np.where(mask_xy != 0, np.nan, img_xy)
-        modules.append({"img": img_xy, "trans_x": trans_x, "trans_y": trans_y})
-
-    min_tx = min(module["trans_x"] for module in modules)
-    min_ty = min(module["trans_y"] for module in modules)
-    shift_x = -min_tx if min_tx < 0 else 0
-    shift_y = -min_ty if min_ty < 0 else 0
-
-    size_x = 0
-    size_y = 0
-    for module in modules:
-        module["sx"] = module["trans_x"] + shift_x
-        module["sy"] = module["trans_y"] + shift_y
-        size_x = max(size_x, int(module_x + module["sx"]))
-        size_y = max(size_y, int(module_y + module["sy"]))
-
-    grid = np.full((size_x, size_y), np.nan, dtype=np.float32)
-    for module in modules:
-        x0 = int(module["sx"])
-        y0 = int(module["sy"])
-        grid[x0 : x0 + module_x, y0 : y0 + module_y] = module["img"]
-
-    return np.flipud(grid.T).astype(np.float32, copy=False)
 
 
 def make_double_spin(minimum: float, maximum: float, value: float) -> QDoubleSpinBox:

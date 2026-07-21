@@ -33,8 +33,46 @@ class MenuManager(QObject):
     def setup_menus(self):
         """Set up all menus"""
         self.create_parameters_menu()
+        self.create_tools_menu()
         self.create_help_menu()
         print("The menu system has been initialized.")
+
+    def create_tools_menu(self):
+        """Create independent analysis tools without changing the active page."""
+        try:
+            menubar = self.main_window.menuBar()
+            tools_menu = None
+            for action in menubar.actions():
+                if action.text().replace("&", "") == "Tools":
+                    tools_menu = action.menu()
+                    break
+            if tools_menu is None:
+                tools_menu = menubar.addMenu("Tools (&T)")
+            if not hasattr(self.main_window, "actionGeometryCalibration"):
+                action = QAction("Geometry Calibration...", self.main_window)
+                action.setShortcut("Ctrl+Shift+G")
+                action.setStatusTip("Calibrate beam center and detector distance from a standard image")
+                action.triggered.connect(self.open_geometry_calibration)
+                tools_menu.addAction(action)
+                self.main_window.actionGeometryCalibration = action
+        except Exception as exc:
+            print(f"Failed to create Tools menu: {exc}")
+
+    def open_geometry_calibration(self):
+        """Show one modeless calibration dialog and preserve the current page."""
+        try:
+            dialog = getattr(self, "_geometry_calibration_dialog", None)
+            if dialog is None:
+                from ui.geometry_calibration_dialog import GeometryCalibrationDialog
+                dialog = GeometryCalibrationDialog(self.main_window)
+                dialog.setAttribute(Qt.WA_DeleteOnClose, True)
+                dialog.destroyed.connect(lambda: setattr(self, "_geometry_calibration_dialog", None))
+                self._geometry_calibration_dialog = dialog
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+        except Exception as exc:
+            QMessageBox.warning(self.main_window, "Geometry Calibration", f"The calibration tool could not be opened:\n{exc}")
     
     def create_parameters_menu(self):
         """Create Parameters menu"""
