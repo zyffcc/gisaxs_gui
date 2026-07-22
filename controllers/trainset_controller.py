@@ -23,10 +23,19 @@ from PyQt5.QtWidgets import (
 )
 
 from trainset.backends import SlurmBackend, read_metrics
-from trainset.config import default_project_config, load_project_config, merge_config, save_project_config, validate_project_config
+from trainset.config import (
+    default_project_config,
+    load_project_config,
+    merge_config,
+    save_project_config,
+    synchronize_parameter_specs,
+    trainable_parameter_names,
+    validate_project_config,
+)
 from trainset.generator import DatasetGenerator, build_fixed_mask, build_random_mask, build_roi_shape_mask, crop_roi, load_scattering_image
 from trainset.geometry import roi_to_spherical_ranges
 from trainset.job_package import prepare_job_package
+from trainset.modeling import build_keras_model, normalized_layers, static_contract
 from trainset.plugins import REGISTRY
 from ui.trainset_build_page import TrainsetBuildPage
 
@@ -92,6 +101,7 @@ class TrainsetController(QObject):
         self.reference_image: Optional[np.ndarray] = None
         self.package_dir: Optional[Path] = None
         self.local_process: Optional[QProcess] = None
+        self._pending_local_arguments = None
         self.thread_pool = QThreadPool.globalInstance()
         self._initialized = False
         self._remote_refresh_running = False
@@ -125,8 +135,8 @@ class TrainsetController(QObject):
     def _connect_page(self) -> None:
         page = self.page
         page.reference_button.clicked.connect(self._select_reference)
+        page.pick_beam_center_button.clicked.connect(self._begin_beam_center)
         page.draw_roi_button.clicked.connect(lambda: self._begin_roi("roi"))
-        page.draw_ellipse_roi_button.clicked.connect(lambda: self._begin_roi("roi_ellipse"))
         page.draw_rectangle_button.clicked.connect(lambda: self._begin_mask("rectangle"))
         page.draw_circle_button.clicked.connect(lambda: self._begin_mask("ellipse"))
         page.remove_mask_button.clicked.connect(self._remove_selected_masks)
@@ -137,7 +147,7 @@ class TrainsetController(QObject):
         page.validate_button.clicked.connect(self._validate_and_report)
         page.load_button.clicked.connect(self._load_project_dialog)
         page.save_button.clicked.connect(self._save_project_dialog)
-        page.prepare_button.clicked.connect(self._prepare_hpc_job)
+        page.prepare_button.clicked.connect(self._prepare_local_job)
         page.submit_button.clicked.connect(self._submit_maxwell)
         page.model_validate_button.clicked.connect(self._validate_model_contract)
         page.local_folder_button.clicked.connect(self._choose_workspace)
@@ -145,6 +155,7 @@ class TrainsetController(QObject):
         page.local_prepare_button.clicked.connect(self._prepare_local_job)
         page.local_generate_button.clicked.connect(self._run_local_generation)
         page.local_train_button.clicked.connect(self._run_local_training)
+        page.local_smoke_button.clicked.connect(self._run_local_smoke_test)
         page.connection_button.clicked.connect(self._test_connection)
         page.hpc_prepare_button.clicked.connect(self._prepare_hpc_job)
         page.hpc_submit_button.clicked.connect(self._submit_maxwell)
@@ -154,6 +165,8 @@ class TrainsetController(QObject):
         page.storage_accept_check.toggled.connect(self._storage_acceptance_changed)
         page.reference_path.editingFinished.connect(self._load_reference_from_field)
         page.fields["detector.preset"].currentTextChanged.connect(self._apply_detector_preset)
+        page.particle_combo.currentTextChanged.connect(self._particle_plugin_changed)
+        page.interference_combo.currentTextChanged.connect(self._interference_plugin_changed)
         for path, widget in page.fields.items():
             if path.startswith("roi."):
                 signal = getattr(widget, "valueChanged", None) or getattr(widget, "currentTextChanged", None)
@@ -215,21 +228,9 @@ class TrainsetController(QObject):
         config = copy.deepcopy(self.config)
         config["project"]["name"] = self.page.project_name.text().strip()
         for path, widget in self.page.fields.items():
-            if path.startswith("pre.") or path in {"sample.particle_label", "sample.particle_material", "sample.interference_label", "model.channels"}:
+            if path.startswith("pre.") or path in {"sample.particle_label", "sample.particle_material", "sample.interference_label"}:
                 continue
             _deep_set(config, path, self._widget_value(widget))
-
-        parameters: Dict[str, Dict[str, Any]] = {}
-        for row in range(self.page.parameter_table.rowCount()):
-            cells = [self.page.parameter_table.item(row, column) for column in range(4)]
-            if not cells[0] or not cells[0].text().strip():
-                continue
-            parameters[cells[0].text().strip()] = {
-                "distribution": cells[1].text().strip() if cells[1] else "uniform",
-                "minimum": float(cells[2].text()) if cells[2] else 0.0,
-                "maximum": float(cells[3].text()) if cells[3] else 1.0,
-            }
-        config["parameters"] = parameters
 
         particle_label = self.page.fields["sample.particle_label"].currentText()
         particle = next((spec for spec in REGISTRY.list("particle") if spec.label == particle_label), None)
@@ -237,39 +238,50 @@ class TrainsetController(QObject):
             "plugin": particle.key if particle else "spherical_segment",
             "material": self.page.fields["sample.particle_material"].currentText(),
             "enabled": True,
+            "parameters": self.page.plugin_parameters(self.page.particle_parameter_table),
         }]
         interference_label = self.page.fields["sample.interference_label"].currentText()
         interference = next((spec for spec in REGISTRY.list("interference") if spec.label == interference_label), None)
-        config["sample"]["interference"]["plugin"] = interference.key if interference else "none"
-        config["sample"]["interference"]["enabled"] = bool(interference and interference.key != "none")
+        config["sample"]["interference"] = {
+            "plugin": interference.key if interference else "none",
+            "enabled": bool(interference and interference.key != "none"),
+            "parameters": self.page.plugin_parameters(self.page.interference_parameter_table),
+        }
         layers = []
         for row in range(self.page.layer_table.rowCount()):
-            values = [self.page.layer_table.item(row, column).text() if self.page.layer_table.item(row, column) else "" for column in range(4)]
+            values = [self.page.layer_table.item(row, column).text() if self.page.layer_table.item(row, column) else "" for column in range(6)]
             if values[1]:
-                layers.append({"enabled": values[0].strip().lower() not in {"0", "false", "no"}, "material": values[1], "thickness_nm": float(values[2] or 0), "roughness_nm": float(values[3] or 0)})
+                layers.append({
+                    "enabled": values[0].strip().lower() not in {"0", "false", "no"},
+                    "material": values[1],
+                    "thickness_nm": {"minimum": float(values[2] or 0), "maximum": float(values[3] or values[2] or 0)},
+                    "roughness_nm": {"minimum": float(values[4] or 0), "maximum": float(values[5] or values[4] or 0)},
+                })
         config["sample"]["layers"] = layers
         config["mask"]["fixed_shapes"] = self.page.mask_shapes()
 
         config["preprocessing"]["steps"] = [
+            {"plugin": "physical_background", "enabled": self.page.fields["pre.background.enabled"].isChecked(), "fraction_min": self.page.fields["pre.background.min"].value(), "fraction_max": self.page.fields["pre.background.max"].value()},
             {"plugin": "noise", "enabled": self.page.fields["pre.noise.enabled"].isChecked(), "snr_min_db": self.page.fields["pre.noise.min"].value(), "snr_max_db": self.page.fields["pre.noise.max"].value()},
             {"plugin": "mask", "enabled": self.page.fields["pre.mask.enabled"].isChecked()},
             {"plugin": "log", "enabled": self.page.fields["pre.log.enabled"].isChecked(), "epsilon": 1e-6},
             {"plugin": "normalize", "enabled": self.page.fields["pre.normalize.enabled"].isChecked(), "mode": self.page.fields["pre.normalize.mode"].currentText(), "lower": self.page.fields["pre.normalize.lower"].value(), "upper": self.page.fields["pre.normalize.upper"].value()},
             {"plugin": "random_edge_crop", "enabled": self.page.fields["pre.edge.enabled"].isChecked(), "maximum_px": self.page.fields["pre.edge.maximum"].value()},
         ]
-        channels_text = self.page.fields["model.channels"].text()
-        config["model"]["channels"] = [int(item.strip()) for item in channels_text.split(",") if item.strip()]
+        config["model"]["layers"] = self.page.model_layers()
+        config = synchronize_parameter_specs(config)
         self.config = config
         self.parameters_changed.emit("Trainset parameters", copy.deepcopy(config))
         return config
 
     def _apply_config_to_page(self, config: Dict[str, Any]) -> None:
+        config = synchronize_parameter_specs(config)
+        self.config = config
         self.page.project_name.setText(str(config.get("project", {}).get("name", "")))
         special = {
             "sample.particle_label": next((spec.label for spec in REGISTRY.list("particle") if spec.key == config["sample"]["particles"][0]["plugin"]), "Spherical segment"),
             "sample.particle_material": config["sample"]["particles"][0].get("material", "Copper"),
             "sample.interference_label": next((spec.label for spec in REGISTRY.list("interference") if spec.key == config["sample"]["interference"].get("plugin")), "None"),
-            "model.channels": ", ".join(str(value) for value in config["model"]["channels"]),
         }
         for path, widget in self.page.fields.items():
             if path in special:
@@ -280,6 +292,9 @@ class TrainsetController(QObject):
                     self._set_widget_value(widget, value)
         steps = {step["plugin"]: step for step in config.get("preprocessing", {}).get("steps", [])}
         pre_map = {
+            "pre.background.enabled": steps.get("physical_background", {}).get("enabled", False),
+            "pre.background.min": steps.get("physical_background", {}).get("fraction_min", 0.05),
+            "pre.background.max": steps.get("physical_background", {}).get("fraction_max", 0.30),
             "pre.noise.enabled": steps.get("noise", {}).get("enabled", True),
             "pre.noise.min": steps.get("noise", {}).get("snr_min_db", 80.0),
             "pre.noise.max": steps.get("noise", {}).get("snr_max_db", 110.0),
@@ -298,21 +313,59 @@ class TrainsetController(QObject):
         self.page.mask_shape_table.setRowCount(0)
         for shape in config.get("mask", {}).get("fixed_shapes", []):
             self.page.add_mask_shape(shape)
-        self.page.parameter_table.setRowCount(0)
-        for row, (name, spec) in enumerate(config.get("parameters", {}).items()):
-            self.page.parameter_table.insertRow(row)
-            from PyQt5.QtWidgets import QTableWidgetItem
-
-            for column, value in enumerate((name, spec.get("distribution", "uniform"), spec.get("minimum", 0), spec.get("maximum", 1))):
-                self.page.parameter_table.setItem(row, column, QTableWidgetItem(str(value)))
+        particle_config = config["sample"]["particles"][0]
+        particle_plugin = REGISTRY.get("particle", particle_config["plugin"])
+        self.page.particle_help.setText(particle_plugin.description)
+        self.page.set_plugin_parameters(self.page.particle_parameter_table, particle_plugin.parameters, particle_config.get("parameters", {}))
+        interference_config = config["sample"]["interference"]
+        interference_plugin = REGISTRY.get("interference", interference_config.get("plugin", "none"))
+        self.page.interference_help.setText(interference_plugin.description)
+        self.page.set_plugin_parameters(self.page.interference_parameter_table, interference_plugin.parameters, interference_config.get("parameters", {}))
+        self.page.segment_constraint_check.setEnabled(particle_config.get("plugin") == "spherical_segment")
+        is_paracrystal = interference_config.get("plugin") == "paracrystal"
+        self.page.spacing_constraint_check.setEnabled(is_paracrystal and "radius_nm" in particle_config.get("parameters", {}))
+        self.page.sigma_constraint_check.setEnabled(is_paracrystal)
         self.page.layer_table.setRowCount(0)
         for row, layer in enumerate(config.get("sample", {}).get("layers", [])):
             self.page.layer_table.insertRow(row)
             from PyQt5.QtWidgets import QTableWidgetItem
 
-            values = ("1" if layer.get("enabled", True) else "0", layer.get("material", ""), layer.get("thickness_nm", 0), layer.get("roughness_nm", 0))
+            thickness = layer.get("thickness_nm", {})
+            roughness = layer.get("roughness_nm", {})
+            values = (
+                "1" if layer.get("enabled", True) else "0",
+                layer.get("material", ""),
+                thickness.get("minimum", 0) if isinstance(thickness, dict) else thickness,
+                thickness.get("maximum", 0) if isinstance(thickness, dict) else thickness,
+                roughness.get("minimum", 0) if isinstance(roughness, dict) else roughness,
+                roughness.get("maximum", 0) if isinstance(roughness, dict) else roughness,
+            )
             for column, value in enumerate(values):
                 self.page.layer_table.setItem(row, column, QTableWidgetItem(str(value)))
+        self.page.set_model_layers(normalized_layers(config.get("model", {})))
+
+    def _particle_plugin_changed(self, label: str) -> None:
+        plugin = next((spec for spec in REGISTRY.list("particle") if spec.label == label), None)
+        if plugin is None:
+            return
+        existing = self.page.plugin_parameters(self.page.particle_parameter_table) if self.page.particle_parameter_table.rowCount() else {}
+        self.page.set_plugin_parameters(self.page.particle_parameter_table, plugin.parameters, existing)
+        self.page.particle_help.setText(plugin.description)
+        self.page.segment_constraint_check.setEnabled(plugin.key == "spherical_segment")
+        self.page.spacing_constraint_check.setEnabled(
+            self.page.interference_combo.currentText() == "Paracrystal" and any(item["key"] == "radius_nm" for item in plugin.parameters)
+        )
+
+    def _interference_plugin_changed(self, label: str) -> None:
+        plugin = next((spec for spec in REGISTRY.list("interference") if spec.label == label), None)
+        if plugin is None:
+            return
+        existing = self.page.plugin_parameters(self.page.interference_parameter_table) if self.page.interference_parameter_table.rowCount() else {}
+        self.page.set_plugin_parameters(self.page.interference_parameter_table, plugin.parameters, existing)
+        self.page.interference_help.setText(plugin.description)
+        is_paracrystal = plugin.key == "paracrystal"
+        self.page.spacing_constraint_check.setEnabled(is_paracrystal and self.page.particle_combo.currentText() != "Box")
+        self.page.sigma_constraint_check.setEnabled(is_paracrystal)
 
     def _select_reference(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -405,11 +458,22 @@ class TrainsetController(QObject):
         if self.reference_image is None:
             QMessageBox.information(self.window, "ROI", "Load a real scattering file first.")
             return
-        self.page.full_detector_canvas.set_data(self.reference_image, roi=self._current_roi())
+        beam_center = (
+            self.page.fields["detector.beam_center_x_px"].value(),
+            self.page.fields["detector.beam_center_y_px"].value(),
+        )
+        self.page.full_detector_canvas.set_data(self.reference_image, roi=self._current_roi(), beam_center=beam_center)
         self.page.full_detector_canvas.set_draw_mode(mode)
         self.page.design_tabs.setCurrentIndex(0)
-        shape = "ellipse" if mode == "roi_ellipse" else "rectangle"
-        self.status_updated.emit(f"Draw the ROI {shape} on the detector image")
+        self.status_updated.emit("Draw the rectangular ROI on the detector image")
+
+    def _begin_beam_center(self) -> None:
+        if self.reference_image is None:
+            QMessageBox.information(self.window, "Beam center", "Load a real scattering file first.")
+            return
+        self.page.full_detector_canvas.set_draw_mode("beam_center")
+        self.page.design_tabs.setCurrentIndex(0)
+        self.status_updated.emit("Click the direct-beam position on the full detector")
 
     def _begin_mask(self, mode: str) -> None:
         if self.reference_image is None:
@@ -425,29 +489,20 @@ class TrainsetController(QObject):
             QMessageBox.warning(self.window, "Mask", str(exc))
 
     def _region_created(self, mode: str, payload: Dict[str, Any]) -> None:
-        if mode in {"roi", "roi_ellipse"}:
+        if mode == "beam_center":
+            self._set_widget_value(self.page.fields["detector.beam_center_x_px"], payload["x"])
+            self._set_widget_value(self.page.fields["detector.beam_center_y_px"], payload["y"])
+            self._update_geometry_label()
+            self.page.set_step_state(0, "Beam center selected")
+            self.status_updated.emit(f"Beam center selected at x={payload['x']:.1f}, y={payload['y']:.1f} px")
+        elif mode == "roi":
             for key in ("x", "y", "width", "height"):
                 self._set_widget_value(self.page.fields[f"roi.{key}"], int(payload[key]))
-            table = self.page.mask_shape_table
-            table.blockSignals(True)
-            try:
-                self.page.remove_mask_shapes_by_type("roi_ellipse_exterior")
-                if mode == "roi_ellipse":
-                    width, height = int(payload["width"]), int(payload["height"])
-                    self.page.add_mask_shape({
-                        "type": "roi_ellipse_exterior",
-                        "cx": width / 2.0,
-                        "cy": height / 2.0,
-                        "radius_x": max(1.0, width / 2.0),
-                        "radius_y": max(1.0, height / 2.0),
-                    })
-            finally:
-                table.blockSignals(False)
             self.page.full_detector_canvas.set_draw_mode("")
             self._update_geometry_label()
             self.page.set_design_stage_ready(1, True)
             self.page.design_tabs.setCurrentIndex(1)
-            self.page.set_step_state(0, "Ellipse ROI ready" if mode == "roi_ellipse" else "ROI ready")
+            self.page.set_step_state(0, "ROI ready")
         else:
             self.page.add_mask_shape(payload)
             self.page.roi_design_canvas.set_draw_mode("")
@@ -494,7 +549,14 @@ class TrainsetController(QObject):
                 mask = build_fixed_mask(roi_image, config)
                 mask_label = "fixed"
             roi_shape_mask = build_roi_shape_mask(roi_image.shape, config)
-            self.page.full_detector_canvas.set_data(self.reference_image, roi=roi)
+            self.page.full_detector_canvas.set_data(
+                self.reference_image,
+                roi=roi,
+                beam_center=(
+                    self.page.fields["detector.beam_center_x_px"].value(),
+                    self.page.fields["detector.beam_center_y_px"].value(),
+                ),
+            )
             self.page.roi_design_canvas.set_data(roi_image, mask=roi_shape_mask if roi_shape_mask.any() else None)
             self.page.masked_design_canvas.set_data(roi_image, mask=mask)
             self.page.mask_only_canvas.set_data(mask.astype(np.float32), binary=True)
@@ -573,28 +635,19 @@ class TrainsetController(QObject):
         try:
             config = self._collect_config()
             height, width = int(config["roi"]["height"]), int(config["roi"]["width"])
-            channels = config["model"]["channels"]
-            out_h, out_w = height, width
-            for _ in channels:
-                out_h, out_w = out_h // 2, out_w // 2
-            if min(out_h, out_w) < 1:
-                raise ValueError("Too many pooling stages for the configured ROI size.")
-            outputs = len(config["parameters"])
+            outputs = len(trainable_parameter_names(config))
+            if outputs < 1:
+                raise ValueError("At least one physics parameter needs a non-zero range.")
+            layers = normalized_layers(config.get("model", {}))
+            static_summary = static_contract((height, width, 1), outputs, layers)
             try:
                 import tensorflow as tf
 
-                inputs = tf.keras.Input(shape=(height, width, 1))
-                x = inputs
-                for channel in channels:
-                    x = tf.keras.layers.Conv2D(int(channel), int(config["model"]["kernel_size"]), padding="same", activation="relu")(x)
-                    x = tf.keras.layers.MaxPool2D()(x)
-                x = tf.keras.layers.GlobalAveragePooling2D()(x)
-                prediction = tf.keras.layers.Dense(outputs)(x)
-                model = tf.keras.Model(inputs, prediction)
+                model = build_keras_model(tf, (height, width, 1), outputs, config["model"])
                 result = model(np.zeros((1, height, width, 1), dtype=np.float32), training=False)
-                summary = f"Forward pass OK\nInput: (1, {height}, {width}, 1)\nOutput: {tuple(result.shape)}\nParameters: {model.count_params():,}"
+                summary = f"Forward pass OK\n\n{static_summary}\n\nBatch output: {tuple(result.shape)}\nTrainable weights: {model.count_params():,}"
             except Exception as exc:
-                summary = f"Static tensor contract OK\nInput: (1, {height}, {width}, 1)\nOutput: (1, {outputs})\nTensorFlow forward pass unavailable: {exc}"
+                summary = f"Static tensor contract\n\n{static_summary}\n\nTensorFlow forward pass unavailable: {exc}"
             self.page.model_summary.setPlainText(summary)
             self.page.preview_gate_table.item(2, 1).setText("Ready")
             self.page.set_step_state(2, "Contract ready")
@@ -675,7 +728,7 @@ class TrainsetController(QObject):
         self._prepare_local_job()
         return bool(self.package_dir and self.package_dir.exists())
 
-    def _start_local_process(self, arguments) -> None:
+    def _start_local_process(self, arguments, follow_up=None) -> None:
         if not self._ensure_package():
             return
         if self.local_process and self.local_process.state() != QProcess.NotRunning:
@@ -695,6 +748,7 @@ class TrainsetController(QObject):
         process.finished.connect(self._local_process_finished)
         process.errorOccurred.connect(lambda _error: self.generation_error.emit(process.errorString()))
         self.local_process = process
+        self._pending_local_arguments = follow_up
         python_executable = self.page.fields["training.local_python"].text().strip() or sys.executable
         process.start(python_executable, arguments)
         self.page.step_list.setCurrentRow(4)
@@ -706,13 +760,38 @@ class TrainsetController(QObject):
     def _run_local_training(self) -> None:
         self._start_local_process(["train.py"])
 
+    def _run_local_smoke_test(self) -> None:
+        config = self._collect_config()
+        reference = str(config.get("project", {}).get("reference_file", ""))
+        if not reference or not Path(reference).exists():
+            QMessageBox.information(self.window, "Local smoke test", "Load a real reference image first. It is used only to test the local data/model pipeline.")
+            return
+        self._prepare_local_job()
+        if not self.package_dir:
+            return
+        samples = int(config.get("training", {}).get("smoke_samples", 64))
+        epochs = int(config.get("training", {}).get("smoke_epochs", 2))
+        self.page.job_log.clear()
+        self.page.job_log.append("LIGHTWEIGHT DEMO: reference-derived images test I/O and training only; they are not a physical BornAgain dataset.")
+        self._start_local_process(
+            ["generate_dataset.py", "--samples", str(samples), "--mode", "demo"],
+            follow_up=["train.py", "--smoke", "--epochs", str(epochs)],
+        )
+
     def _local_process_finished(self, exit_code: int, _status) -> None:
         state = "COMPLETED" if exit_code == 0 else "FAILED"
         self.page.job_state.setText(state)
         self.page.set_step_state(4, state)
         if exit_code == 0:
             self.generation_finished.emit()
+            pending = self._pending_local_arguments
+            self._pending_local_arguments = None
+            if pending:
+                self.page.job_log.append("Starting lightweight training…")
+                QTimer.singleShot(0, lambda: self._start_local_process(pending))
+                return
         else:
+            self._pending_local_arguments = None
             self.generation_error.emit(f"Local process exited with code {exit_code}")
         self._load_local_metrics()
 
@@ -746,7 +825,7 @@ class TrainsetController(QObject):
         self.thread_pool.start(worker)
 
     def _storage_acceptance_changed(self, accepted: bool) -> None:
-        self.page.preview_gate_table.item(4, 1).setText("Ready" if accepted else "Pending")
+        self.page.preview_gate_table.item(3, 1).setText("Ready" if accepted else "Pending")
 
     def _missing_submission_gates(self):
         missing = []
@@ -897,7 +976,7 @@ class TrainsetController(QObject):
         slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(config["project"]["name"])).strip("_") or "trainset_model"
         module_dir = self.project_root / "modules" / f"generated_{slug}"
         module_dir.mkdir(parents=True, exist_ok=True)
-        parameter_names = list(config.get("parameters", {}))
+        parameter_names = trainable_parameter_names(config)
         target_min = [float(config["parameters"][name]["minimum"]) for name in parameter_names]
         target_max = [float(config["parameters"][name]["maximum"]) for name in parameter_names]
         roi = config["roi"]
@@ -973,7 +1052,7 @@ def preprocess(image, preprocess_config, module_folder=None, return_steps=False)
     def set_parameters(self, parameters: Dict[str, Any]) -> None:
         if not isinstance(parameters, dict):
             return
-        self.config = merge_config(default_project_config(), parameters)
+        self.config = synchronize_parameter_specs(merge_config(default_project_config(), parameters))
         self._apply_config_to_page(self.config)
         reference = self.config.get("project", {}).get("reference_file")
         if reference and Path(reference).exists():

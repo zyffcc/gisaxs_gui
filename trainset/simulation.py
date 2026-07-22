@@ -35,14 +35,20 @@ def _material(ba: Any, name: str) -> Any:
         return ba.RefractiveMaterial(name, delta, beta)
 
 
-def _build_particle_form_factor(ba: Any, plugin: str, radius: float, height: float) -> Any:
+def _build_particle_form_factor(ba: Any, plugin: str, sampled: Dict[str, float]) -> Any:
     nm = ba.nm
+    radius = float(sampled.get("radius_nm", 1.0))
+    height = float(sampled.get("height_nm", 1.0))
     if plugin == "sphere":
         return ba.Sphere(radius * nm)
     if plugin == "cylinder":
         return ba.Cylinder(radius * nm, height * nm)
     if plugin == "box":
-        return ba.Box(2.0 * radius * nm, 2.0 * radius * nm, height * nm)
+        return ba.Box(
+            float(sampled.get("length_x_nm", 2.0 * radius)) * nm,
+            float(sampled.get("length_y_nm", 2.0 * radius)) * nm,
+            float(sampled.get("length_z_nm", height)) * nm,
+        )
     # Preserve the Yuxin server pipeline convention: ``height_nm`` is the
     # truncation amount, so BornAgain receives the remaining segment height.
     return ba.SphericalSegment(radius * nm, 0.0 * nm, max(1e-6, 2.0 * radius - height) * nm)
@@ -67,14 +73,10 @@ def build_sample(ba: Any, config: Dict[str, Any], sampled: Dict[str, float]) -> 
     particle_cfg = next((p for p in sample_cfg.get("particles", []) if p.get("enabled", True)), None)
     if particle_cfg is None:
         raise ValueError("At least one particle plugin must be enabled.")
-    ff = _build_particle_form_factor(
-        ba,
-        str(particle_cfg.get("plugin", "spherical_segment")),
-        sampled["radius_nm"],
-        sampled["height_nm"],
-    )
+    ff = _build_particle_form_factor(ba, str(particle_cfg.get("plugin", "spherical_segment")), sampled)
     particle = ba.Particle(_material(ba, str(particle_cfg.get("material", "Copper"))), ff)
-    footprint = np.pi * max(sampled["radius_nm"], 1e-6) ** 2
+    radius_for_density = float(sampled.get("radius_nm", sampled.get("length_x_nm", 1.0) / 2.0))
+    footprint = np.pi * max(radius_for_density, 1e-6) ** 2
     configured_density = float(sampled.get("surface_density_per_nm2", sample_cfg.get("surface_density_per_nm2", 0.01)))
     effective_density = min(configured_density, 0.35 / max(footprint, 1e-12))
 
@@ -88,12 +90,16 @@ def build_sample(ba: Any, config: Dict[str, Any], sampled: Dict[str, float]) -> 
     else:
         ambient.deposit2D(ba.Dilute2D(effective_density, particle))
     sample.addLayer(ambient)
-    for layer in sample_cfg.get("layers", []):
+    for index, layer in enumerate(sample_cfg.get("layers", [])):
         if not layer.get("enabled", True):
             continue
-        thickness = float(layer.get("thickness_nm", 0.0))
+        thickness_spec = layer.get("thickness_nm", 0.0)
+        roughness_spec = layer.get("roughness_nm", 0.0)
+        thickness_default = float(thickness_spec.get("minimum", 0.0)) if isinstance(thickness_spec, dict) else float(thickness_spec)
+        roughness_default = float(roughness_spec.get("minimum", 0.0)) if isinstance(roughness_spec, dict) else float(roughness_spec)
+        thickness = float(sampled.get(f"layer_{index}_thickness_nm", thickness_default))
         if thickness > 0:
-            roughness = float(sampled.get("roughness_nm", layer.get("roughness_nm", 0.0)))
+            roughness = float(sampled.get(f"layer_{index}_roughness_nm", roughness_default))
             sample.addLayer(_layer(ba, _material(ba, str(layer.get("material", "Silicon"))), thickness, roughness))
     substrate = sample_cfg.get("substrate", {})
     substrate_roughness = float(sampled.get("roughness_nm", substrate.get("roughness_nm", 0.0)))
@@ -101,7 +107,7 @@ def build_sample(ba: Any, config: Dict[str, Any], sampled: Dict[str, float]) -> 
     return sample
 
 
-def simulate_pattern(config: Dict[str, Any], sampled: Dict[str, float]) -> np.ndarray:
+def _simulate_pattern_once(config: Dict[str, Any], sampled: Dict[str, float]) -> np.ndarray:
     import bornagain as ba  # type: ignore
 
     ranges = roi_to_spherical_ranges(config)
@@ -141,6 +147,21 @@ def simulate_pattern(config: Dict[str, Any], sampled: Dict[str, float]) -> np.nd
             image = np.asarray(result.array())
     image = np.asarray(image, dtype=np.float32)
 
+    return image
+
+
+def simulate_pattern(config: Dict[str, Any], sampled: Dict[str, Any]) -> np.ndarray:
+    components = sampled.get("__mixture_components")
+    weights = sampled.get("__mixture_weights")
+    if isinstance(components, list) and components:
+        if not isinstance(weights, list) or len(weights) != len(components):
+            weights = [1.0 / len(components)] * len(components)
+        image = np.zeros((int(config["roi"]["height"]), int(config["roi"]["width"])), dtype=np.float32)
+        for weight, component in zip(weights, components):
+            image += float(weight) * _simulate_pattern_once(config, component)
+    else:
+        image = _simulate_pattern_once(config, sampled)
+
     interference = config.get("sample", {}).get("interference", {})
     if interference.get("enabled", False) and interference.get("plugin") == "paracrystal":
         all_q = q_vectors(config)["qy"]
@@ -149,9 +170,12 @@ def simulate_pattern(config: Dict[str, Any], sampled: Dict[str, float]) -> np.nd
             int(roi_cfg["y"]) : int(roi_cfg["y"]) + int(roi_cfg["height"]),
             int(roi_cfg["x"]) : int(roi_cfg["x"]) + int(roi_cfg["width"]),
         ]
-        spacing = max(sampled.get("spacing_nm", 20.0), 1e-6)
-        sigma = float(interference.get("sigma_ratio", 0.1)) * spacing
+        structure_parameters = interference.get("parameters", {})
+        spacing_default = structure_parameters.get("D_nm", {}).get("minimum", 20.0)
+        sigma_default = structure_parameters.get("sigma_D_ratio", {}).get("minimum", 0.1)
+        spacing = max(float(sampled.get("D_nm", sampled.get("spacing_nm", spacing_default))), 1e-6)
+        sigma = float(sampled.get("sigma_D_ratio", sigma_default)) * spacing
         phi_q = np.exp(-np.pi * qy**2 * sigma**2)
         structure_factor = np.abs((1.0 - phi_q**2) / np.maximum(1.0 + phi_q**2 - 2.0 * phi_q * np.cos(qy * spacing), 1e-8))
         image *= structure_factor.astype(np.float32)
-    return image
+    return np.asarray(image, dtype=np.float32)

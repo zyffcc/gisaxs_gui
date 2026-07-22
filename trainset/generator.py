@@ -10,6 +10,8 @@ import numpy as np
 
 from scipy.stats import qmc
 
+from .config import synchronize_parameter_specs
+
 
 def _largest_2d_hdf5_dataset(handle: h5py.File) -> np.ndarray:
     candidates: List[tuple[int, str]] = []
@@ -148,7 +150,30 @@ def apply_preprocessing(image: np.ndarray, config: Dict[str, Any], mask: Optiona
         if not step.get("enabled", False):
             continue
         plugin = step.get("plugin")
-        if plugin == "noise":
+        if plugin == "physical_background":
+            from .geometry import q_vectors
+
+            q = q_vectors(config)
+            roi = config.get("roi", {})
+            x, y = int(roi.get("x", 0)), int(roi.get("y", 0))
+            height, width = current.shape[:2]
+            qy = q["qy"][y : y + height, x : x + width]
+            qz = q["qz"][y : y + height, x : x + width]
+            if qy.shape == current.shape and qz.shape == current.shape:
+                qy_scale = max(float(np.nanpercentile(np.abs(qy), 35)), 1e-6)
+                qz_center = float(np.nanpercentile(qz, 62))
+                qz_scale = max(float(np.nanpercentile(qz, 75) - np.nanpercentile(qz, 50)), 1e-6)
+                specular = np.exp(-0.5 * (qy / (0.18 * qy_scale)) ** 2)
+                yoneda = np.exp(-0.5 * ((qz - qz_center) / (0.35 * qz_scale)) ** 2)
+                background = 0.55 * specular + 0.45 * yoneda
+            else:
+                yy, xx = np.mgrid[-1.0:1.0:complex(height), -1.0:1.0:complex(width)]
+                background = 0.55 * np.exp(-0.5 * (xx / 0.05) ** 2) + 0.45 * np.exp(-0.5 * ((yy - 0.25) / 0.12) ** 2)
+            positive = current[np.isfinite(current) & (current > 0)]
+            reference = float(np.percentile(positive, 75)) if positive.size else 1.0
+            fraction = float(rng.uniform(float(step.get("fraction_min", 0.05)), float(step.get("fraction_max", 0.30))))
+            current = np.maximum(current + background.astype(np.float32) * reference * fraction, 0.0).astype(np.float32)
+        elif plugin == "noise":
             snr = float(rng.uniform(float(step.get("snr_min_db", 80.0)), float(step.get("snr_max_db", 110.0))))
             power = float(np.mean(np.square(np.nan_to_num(current))))
             sigma = np.sqrt(power / max(10 ** (snr / 10.0), 1e-12))
@@ -209,7 +234,7 @@ class DatasetGenerator:
     """Shared generator facade used by Preview, Dry run, local and Slurm backends."""
 
     def __init__(self, config: Dict[str, Any]):
-        self.config = config
+        self.config = synchronize_parameter_specs(config)
         self.rng = np.random.default_rng(int(config.get("project", {}).get("seed", 42)))
 
     @property
@@ -252,6 +277,8 @@ class DatasetGenerator:
     def generate(self, n_samples: int, mode: str = "preview") -> Any:
         if mode == "preview":
             return self.preview_reference()
+        if mode == "demo":
+            return self._generate_reference_demo(n_samples)
         if not self.bornagain_available:
             raise RuntimeError("BornAgain is required for simulated Dry run or Full run. Install it locally or use the Maxwell backend.")
         from .simulation import simulate_pattern
@@ -260,7 +287,8 @@ class DatasetGenerator:
         images: List[np.ndarray] = []
         masks: List[np.ndarray] = []
         for sampled in samples:
-            raw = simulate_pattern(self.config, sampled)
+            simulation_values = self._mixture_values(sampled)
+            raw = simulate_pattern(self.config, simulation_values)
             mask = (
                 build_random_mask(raw.shape, self.config, self.rng)
                 if self.config.get("mask", {}).get("mode") == "random"
@@ -275,6 +303,62 @@ class DatasetGenerator:
             "masks": np.stack(masks),
             "mode": mode,
         }
+
+    def _generate_reference_demo(self, n_samples: int) -> Dict[str, Any]:
+        """Exercise the complete local I/O/training path without claiming physics.
+
+        Images are small stochastic variants of the selected real reference;
+        labels are sampled from the configured ranges. This is intentionally a
+        pipeline smoke test, not a substitute for BornAgain generation.
+        """
+        path = str(self.config.get("project", {}).get("reference_file", ""))
+        if not path:
+            raise ValueError("A real reference image is required for the local demo dataset.")
+        roi_image = crop_roi(load_scattering_image(path), self.config["roi"])
+        if not roi_image.size:
+            raise ValueError("The selected ROI is empty in the reference image.")
+        samples = self.sample_parameters(n_samples)
+        images: List[np.ndarray] = []
+        masks: List[np.ndarray] = []
+        for _sampled in samples:
+            gain = float(self.rng.uniform(0.85, 1.15))
+            shifted = np.roll(roi_image * gain, (int(self.rng.integers(-2, 3)), int(self.rng.integers(-2, 3))), axis=(0, 1))
+            mask = (
+                build_random_mask(shifted.shape, self.config, self.rng)
+                if self.config.get("mask", {}).get("mode") == "random"
+                else build_fixed_mask(shifted, self.config)
+            )
+            stages = apply_preprocessing(shifted, self.config, mask, self.rng)
+            images.append(np.asarray(stages[-1]["image"], dtype=np.float32))
+            masks.append(mask)
+        return {"images": np.stack(images), "labels": samples, "masks": np.stack(masks), "mode": "demo"}
+
+    def _mixture_values(self, sampled: Dict[str, float]) -> Dict[str, Any]:
+        mixture = self.config.get("sample", {}).get("mixture", {})
+        mode = str(mixture.get("mode", "single"))
+        components = max(1, int(mixture.get("components", 1)))
+        if mode == "single" or components == 1:
+            return sampled
+        particle = next(iter(self.config.get("sample", {}).get("particles", [])), {})
+        particle_keys = list(particle.get("parameters", {}))
+        sigma_min = max(0.0, float(mixture.get("sigma_fraction_min", 0.01)))
+        sigma_max = max(sigma_min, float(mixture.get("sigma_fraction_max", 0.30)))
+        values: List[Dict[str, float]] = []
+        for _index in range(components):
+            component = dict(sampled)
+            for key in particle_keys:
+                spec = self.config.get("parameters", {}).get(key, {})
+                low, high = float(spec.get("minimum", sampled.get(key, 0.0))), float(spec.get("maximum", sampled.get(key, 0.0)))
+                spread = self.rng.uniform(sigma_min, sigma_max) * max(high - low, 1e-12)
+                component[key] = float(np.clip(self.rng.normal(sampled.get(key, low), spread), low, high))
+            if "height_nm" in component and "radius_nm" in component:
+                component["height_nm"] = min(component["height_nm"], max(1e-6, 2.0 * component["radius_nm"] - 1e-6))
+            values.append(component)
+        weights = self.rng.dirichlet(np.ones(components)).astype(float) if mixture.get("random_weights", True) else np.full(components, 1.0 / components)
+        enriched: Dict[str, Any] = dict(sampled)
+        enriched["__mixture_components"] = values
+        enriched["__mixture_weights"] = weights.tolist()
+        return enriched
 
     def sample_parameters(self, n_samples: int) -> List[Dict[str, float]]:
         specs = self.config.get("parameters", {})
@@ -298,12 +382,27 @@ class DatasetGenerator:
                     values[name] = float(np.exp(np.log(low) + row[index] * (np.log(high) - np.log(low))))
                 else:
                     values[name] = float(low + row[index] * (high - low))
-            if "radius_nm" in values and "height_nm" in values:
-                values["height_nm"] = min(values["height_nm"], max(1e-6, 2.0 * values["radius_nm"] - 1e-6))
+            constraints = self.config.get("sample", {}).get("constraints", {})
+            if constraints.get("segment_height_le_2r", False) and "radius_nm" in values and "height_nm" in values:
+                height_spec = specs["height_nm"]
+                feasible_high = min(float(height_spec["maximum"]), 2.0 * values["radius_nm"] - 1e-6)
+                feasible_low = float(height_spec["minimum"])
+                if feasible_high < feasible_low:
+                    raise ValueError("Constraint h <= 2R is infeasible for a sampled radius; adjust the configured ranges.")
+                values["height_nm"] = float(np.clip(values["height_nm"], feasible_low, feasible_high))
+            if constraints.get("interparticle_spacing_gt_2r", False) and "radius_nm" in values and "D_nm" in values:
+                distance_spec = specs["D_nm"]
+                feasible_low = max(float(distance_spec["minimum"]), 2.0 * values["radius_nm"] + 1e-6)
+                feasible_high = float(distance_spec["maximum"])
+                if feasible_low > feasible_high:
+                    raise ValueError("Constraint D > 2R is infeasible for a sampled radius; adjust the configured ranges.")
+                values["D_nm"] = float(np.clip(values["D_nm"], feasible_low, feasible_high))
+            if constraints.get("paracrystal_sigma_le_0_2d", False) and "sigma_D_ratio" in values:
+                values["sigma_D_ratio"] = min(values["sigma_D_ratio"], 0.2)
             output.append(values)
         return output
 
-    def write_hdf5_shards(self, output_dir: str | Path, n_samples: int) -> List[Path]:
+    def write_hdf5_shards(self, output_dir: str | Path, n_samples: int, mode: str = "full") -> List[Path]:
         destination = Path(output_dir)
         destination.mkdir(parents=True, exist_ok=True)
         shard_size = int(self.config.get("dataset", {}).get("samples_per_shard", 2000))
@@ -312,7 +411,7 @@ class DatasetGenerator:
         shard_index = 0
         while generated < n_samples:
             count = min(shard_size, n_samples - generated)
-            batch = self.generate(count, mode="full")
+            batch = self.generate(count, mode=mode)
             path = destination / f"dataset_{shard_index:04d}.h5"
             label_names = list(batch["labels"][0]) if batch["labels"] else []
             labels = np.asarray([[row[name] for name in label_names] for row in batch["labels"]], dtype=np.float32)

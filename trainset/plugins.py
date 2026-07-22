@@ -11,6 +11,7 @@ class PluginSpec:
     category: str
     description: str
     defaults: Dict[str, Any] = field(default_factory=dict)
+    parameters: tuple[Dict[str, Any], ...] = ()
 
 
 class PluginRegistry:
@@ -30,12 +31,58 @@ class PluginRegistry:
 REGISTRY = PluginRegistry()
 
 for item in (
-    PluginSpec("sphere", "Sphere", "particle", "Homogeneous sphere form factor."),
-    PluginSpec("spherical_segment", "Spherical segment", "particle", "Truncated sphere with independent radius and height."),
-    PluginSpec("cylinder", "Cylinder", "particle", "Cylinder with radius, height and orientation."),
-    PluginSpec("box", "Box", "particle", "Rectangular cuboid particle."),
+    PluginSpec(
+        "sphere",
+        "Sphere",
+        "particle",
+        "Homogeneous sphere form factor.",
+        parameters=(
+            {"key": "radius_nm", "label": "Radius R", "unit": "nm", "minimum": 1.0, "maximum": 15.0},
+        ),
+    ),
+    PluginSpec(
+        "spherical_segment",
+        "Spherical segment",
+        "particle",
+        "Sphere truncated by a plane; height must not exceed 2R.",
+        parameters=(
+            {"key": "radius_nm", "label": "Sphere radius R", "unit": "nm", "minimum": 1.0, "maximum": 15.0},
+            {"key": "height_nm", "label": "Truncation height h", "unit": "nm", "minimum": 1.0, "maximum": 20.0},
+        ),
+    ),
+    PluginSpec(
+        "cylinder",
+        "Cylinder",
+        "particle",
+        "Right circular cylinder.",
+        parameters=(
+            {"key": "radius_nm", "label": "Radius R", "unit": "nm", "minimum": 1.0, "maximum": 15.0},
+            {"key": "height_nm", "label": "Height H", "unit": "nm", "minimum": 1.0, "maximum": 30.0},
+        ),
+    ),
+    PluginSpec(
+        "box",
+        "Box",
+        "particle",
+        "Rectangular cuboid particle.",
+        parameters=(
+            {"key": "length_x_nm", "label": "Length X", "unit": "nm", "minimum": 1.0, "maximum": 30.0},
+            {"key": "length_y_nm", "label": "Length Y", "unit": "nm", "minimum": 1.0, "maximum": 30.0},
+            {"key": "length_z_nm", "label": "Length Z", "unit": "nm", "minimum": 1.0, "maximum": 30.0},
+        ),
+    ),
     PluginSpec("none", "None", "interference", "No interference function."),
-    PluginSpec("paracrystal", "Paracrystal", "interference", "Paracrystalline interference function.", {"domain_size_nm": 20.0}),
+    PluginSpec(
+        "paracrystal",
+        "Paracrystal",
+        "interference",
+        "One-dimensional paracrystal with mean spacing D and relative disorder sigma/D.",
+        parameters=(
+            {"key": "D_nm", "label": "Mean spacing D", "unit": "nm", "minimum": 3.0, "maximum": 50.0},
+            {"key": "sigma_D_ratio", "label": "Disorder sigma/D", "unit": "", "minimum": 0.05, "maximum": 0.20},
+        ),
+    ),
+    PluginSpec("physical_background", "Physical background", "preprocessing", "Optional specular/Yoneda-like background augmentation."),
     PluginSpec("noise", "Noise", "preprocessing", "Random detector/noise model."),
     PluginSpec("mask", "Mask", "preprocessing", "Fixed or randomized detector mask."),
     PluginSpec("log", "Log transform", "preprocessing", "Numerically stable logarithmic intensity transform."),

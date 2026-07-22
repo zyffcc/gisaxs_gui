@@ -40,15 +40,18 @@ from trainset.plugins import REGISTRY
 
 class ArrayCanvas(QWidget):
     region_created = pyqtSignal(str, dict)
+    position_changed = pyqtSignal(dict)
 
     def __init__(self, empty_text: str = "Load a real scattering file to begin", parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setMinimumSize(300, 260)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMouseTracking(True)
         self.empty_text = empty_text
         self.image: Optional[np.ndarray] = None
         self.mask: Optional[np.ndarray] = None
         self.roi: Optional[Dict[str, int]] = None
+        self.beam_center: Optional[tuple[float, float]] = None
         self.binary_mode = False
         self.display_colormap = "gray"
         self.display_log = False
@@ -66,10 +69,12 @@ class ArrayCanvas(QWidget):
         mask: Optional[np.ndarray] = None,
         roi: Optional[Dict[str, int]] = None,
         binary: bool = False,
+        beam_center: Optional[tuple[float, float]] = None,
     ) -> None:
         self.image = None if image is None else np.asarray(image)
         self.mask = None if mask is None else np.asarray(mask, dtype=bool)
         self.roi = roi
+        self.beam_center = beam_center
         self.binary_mode = binary
         self.update()
 
@@ -109,15 +114,28 @@ class ArrayCanvas(QWidget):
         if clip:
             x = float(np.clip(x, 0.0, 1.0))
             y = float(np.clip(y, 0.0, 1.0))
-        return QPoint(int(round(x * self.image.shape[1])), int(round(y * self.image.shape[0])))
+        return QPoint(
+            int(round(x * max(self.image.shape[1] - 1, 0))),
+            int(round(y * max(self.image.shape[0] - 1, 0))),
+        )
 
     def mousePressEvent(self, event) -> None:
         if self.mode and event.button() == Qt.LeftButton and self._image_rect().contains(event.pos()):
+            if self.mode == "beam_center":
+                point = self._to_image(event.pos())
+                self.region_created.emit("beam_center", {"x": float(point.x()), "y": float(point.y())})
+                self.set_draw_mode("")
+                return
             self._press = event.pos()
             self._current = event.pos()
             self.update()
 
     def mouseMoveEvent(self, event) -> None:
+        if self.image is not None and self._image_rect().contains(event.pos()):
+            point = self._to_image(event.pos())
+            x = max(0, min(point.x(), self.image.shape[1] - 1))
+            y = max(0, min(point.y(), self.image.shape[0] - 1))
+            self.position_changed.emit({"x": x, "y": y, "intensity": float(self.image[y, x])})
         if self._press is not None:
             self._current = event.pos()
             self.update()
@@ -190,6 +208,16 @@ class ArrayCanvas(QWidget):
             qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0], QImage.Format_RGBA8888).copy()
         target = self._image_rect()
         painter.drawPixmap(target, QPixmap.fromImage(qimage))
+        if self.beam_center is not None:
+            center_x, center_y = self.beam_center
+            sx = target.width() / max(data.shape[1], 1)
+            sy = target.height() / max(data.shape[0], 1)
+            px = target.left() + int(center_x * sx)
+            py = target.top() + int(center_y * sy)
+            if target.adjusted(-1, -1, 1, 1).contains(px, py):
+                painter.setPen(QPen(QColor(255, 196, 73), 2))
+                painter.drawLine(px - 10, py, px + 10, py)
+                painter.drawLine(px, py - 10, px, py + 10)
         if self.mask is not None and self.mask.shape == data.shape:
             overlay = np.zeros((*self.mask.shape, 4), dtype=np.uint8)
             overlay[self.mask] = (235, 82, 82, 125)
@@ -287,7 +315,7 @@ class TrainsetBuildPage(QWidget):
     step_changed = pyqtSignal(int)
     mask_region_created = pyqtSignal(str, dict)
 
-    STEPS = ("Dataset Design", "Local Preview", "Model Design", "HPC Submit", "Monitor & Results")
+    STEPS = ("Dataset Design", "Local Preview", "Model Design", "Local Run", "Monitor & Results")
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -309,7 +337,7 @@ class TrainsetBuildPage(QWidget):
         titles = QVBoxLayout()
         title = QLabel("2D Trainset & Model Workspace")
         title.setObjectName("pageTitle")
-        subtitle = QLabel("Design locally · validate with real scattering data · run locally or on Maxwell")
+        subtitle = QLabel("Design locally · validate with real scattering data · run a lightweight test · export for Maxwell later")
         subtitle.setObjectName("pageSubtitle")
         titles.addWidget(title)
         titles.addWidget(subtitle)
@@ -350,9 +378,10 @@ class TrainsetBuildPage(QWidget):
         self.load_button = QPushButton("Load Project")
         self.save_button = QPushButton("Save Project")
         self.preview_button = QPushButton("Preview")
-        self.prepare_button = QPushButton("Prepare HPC Job")
-        self.submit_button = QPushButton("Submit to Maxwell")
-        self.submit_button.setObjectName("primaryAction")
+        self.prepare_button = QPushButton("Prepare portable job")
+        self.submit_button = QPushButton("Maxwell (reserved)")
+        self.submit_button.setEnabled(False)
+        self.submit_button.setToolTip("SSH submission is intentionally disabled in the local demo. The portable Slurm package interface is retained.")
         actions.addWidget(self.back_button)
         actions.addStretch(1)
         for button in (self.validate_button, self.load_button, self.save_button, self.preview_button, self.prepare_button, self.submit_button):
@@ -510,159 +539,197 @@ class TrainsetBuildPage(QWidget):
         reference = QGroupBox("1 · Real scattering reference")
         ref_form = QGridLayout(reference)
         self.reference_path = self._line("project.reference_file")
-        self.reference_button = QPushButton("Load file…")
+        self.reference_button = QPushButton("Load file...")
         ref_form.addWidget(QLabel("Reference file"), 0, 0)
         ref_form.addWidget(self.reference_path, 0, 1)
-        ref_form.addWidget(self.reference_button, 0, 2)
-        ref_form.addWidget(QLabel("Use the real detector image to define ROI, thresholds, fixed masks and preprocessing."), 1, 0, 1, 3)
+        ref_form.addWidget(self.reference_button, 1, 1)
+        reference_help = QLabel("Use the real detector image to define ROI, thresholds, fixed masks and preprocessing.")
+        reference_help.setWordWrap(True)
+        ref_form.addWidget(reference_help, 2, 0, 1, 2)
+        ref_form.setColumnStretch(1, 1)
         form_stack.addWidget(reference)
 
         beam_detector = QGroupBox("2 · Beam and detector geometry")
         grid = QGridLayout(beam_detector)
         entries = (
-            ("Wavelength (nm)", self._double("beam.wavelength_nm", 0.105, 1e-5, 10.0), 0, 0),
-            ("Grazing angle (°)", self._double("beam.grazing_angle_deg", 0.4, -10.0, 10.0), 0, 2),
-            ("Detector preset", self._combo("detector.preset", ("Custom", "PILATUS3 X 2M", "EIGER2 X 4M"), "Custom"), 1, 0),
-            ("Distance (mm)", self._double("detector.distance_mm", 3230.0, 1.0, 1e6, 3), 1, 2),
-            ("Pixels X", self._spin("detector.pixels_x", 1475, 1), 2, 0),
-            ("Pixels Y", self._spin("detector.pixels_y", 1679, 1), 2, 2),
-            ("Pixel X (mm)", self._double("detector.pixel_size_x_mm", 0.172, 1e-6, 100.0), 3, 0),
-            ("Pixel Y (mm)", self._double("detector.pixel_size_y_mm", 0.172, 1e-6, 100.0), 3, 2),
-            ("Beam center X (px)", self._double("detector.beam_center_x_px", 804.0, -1e6, 1e6, 2), 4, 0),
-            ("Beam center Y (px)", self._double("detector.beam_center_y_px", 305.0, -1e6, 1e6, 2), 4, 2),
+            ("Wavelength (nm)", self._double("beam.wavelength_nm", 0.105, 1e-5, 10.0)),
+            ("Grazing angle (°)", self._double("beam.grazing_angle_deg", 0.4, -10.0, 10.0)),
+            ("Detector preset", self._combo("detector.preset", ("Custom", "PILATUS3 X 2M", "EIGER2 X 4M"), "Custom")),
+            ("Distance (mm)", self._double("detector.distance_mm", 3230.0, 1.0, 1e6, 3)),
+            ("Pixels X", self._spin("detector.pixels_x", 1475, 1)),
+            ("Pixels Y", self._spin("detector.pixels_y", 1679, 1)),
+            ("Pixel X (mm)", self._double("detector.pixel_size_x_mm", 0.172, 1e-6, 100.0)),
+            ("Pixel Y (mm)", self._double("detector.pixel_size_y_mm", 0.172, 1e-6, 100.0)),
+            ("Beam center X (px)", self._double("detector.beam_center_x_px", 804.0, -1e6, 1e6, 2)),
+            ("Beam center Y (px)", self._double("detector.beam_center_y_px", 305.0, -1e6, 1e6, 2)),
         )
-        for label, widget, row, column in entries:
-            grid.addWidget(QLabel(label), row, column)
-            grid.addWidget(widget, row, column + 1)
+        for row, (label, widget) in enumerate(entries):
+            grid.addWidget(QLabel(label), row, 0)
+            grid.addWidget(widget, row, 1)
+        self.pick_beam_center_button = QPushButton("Pick beam center on detector")
+        self.beam_cursor_label = QLabel("Move over the full detector to inspect x, y and intensity")
+        self.beam_cursor_label.setWordWrap(True)
+        grid.addWidget(self.pick_beam_center_button, len(entries), 0, 1, 2)
+        grid.addWidget(self.beam_cursor_label, len(entries) + 1, 0, 1, 2)
+        grid.setColumnStretch(1, 1)
         form_stack.addWidget(beam_detector)
 
         roi_group = QGroupBox("3 · ROI and simulation angular range")
         roi_grid = QGridLayout(roi_group)
-        for column, (label, path, value) in enumerate((
+        for row, (label, path, value) in enumerate((
             ("X", "roi.x", 600), ("Y", "roi.y", 180), ("Width", "roi.width", 256), ("Height", "roi.height", 256)
         )):
-            roi_grid.addWidget(QLabel(label), 0, column * 2)
-            roi_grid.addWidget(self._spin(path, value, 0), 0, column * 2 + 1)
+            roi_grid.addWidget(QLabel(label), row, 0)
+            roi_grid.addWidget(self._spin(path, value, 0), row, 1)
         self.draw_roi_button = QPushButton("Draw rectangle ROI")
-        self.draw_ellipse_roi_button = QPushButton("Draw ellipse ROI")
         self.roi_range_label = QLabel("phi / alpha range will be calculated from the detector geometry")
         self.roi_range_label.setWordWrap(True)
-        roi_grid.addWidget(self.draw_roi_button, 1, 0, 1, 2)
-        roi_grid.addWidget(self.draw_ellipse_roi_button, 1, 2, 1, 2)
-        roi_grid.addWidget(self.roi_range_label, 2, 0, 1, 8)
+        roi_grid.addWidget(self.draw_roi_button, 4, 0, 1, 2)
+        roi_help = QLabel("ROI is rectangular so tensor shape and angular limits stay explicit.")
+        roi_help.setWordWrap(True)
+        roi_grid.addWidget(roi_help, 5, 0, 1, 2)
+        roi_grid.addWidget(self.roi_range_label, 6, 0, 1, 2)
+        roi_grid.setColumnStretch(1, 1)
         form_stack.addWidget(roi_group)
 
         mask_group = QGroupBox("4 · Mask design")
         mask_grid = QGridLayout(mask_group)
         mask_grid.addWidget(QLabel("Mode"), 0, 0)
         mask_grid.addWidget(self._combo("mask.mode", ("fixed", "random"), "fixed"), 0, 1)
-        mask_grid.addWidget(self._check("mask.threshold.enabled", True, "Threshold mask"), 0, 2)
-        mask_grid.addWidget(QLabel("Minimum"), 1, 0)
-        mask_grid.addWidget(self._double("mask.threshold.minimum", 0.0), 1, 1)
-        mask_grid.addWidget(QLabel("Maximum"), 1, 2)
-        mask_grid.addWidget(self._double("mask.threshold.maximum", 1e12), 1, 3)
+        mask_grid.addWidget(self._check("mask.threshold.enabled", True, "Threshold mask"), 1, 0, 1, 2)
+        mask_grid.addWidget(QLabel("Minimum"), 2, 0)
+        mask_grid.addWidget(self._double("mask.threshold.minimum", 0.0), 2, 1)
+        mask_grid.addWidget(QLabel("Maximum"), 3, 0)
+        mask_grid.addWidget(self._double("mask.threshold.maximum", 1e12), 3, 1)
         self.draw_rectangle_button = QPushButton("Add rectangle")
-        self.draw_circle_button = QPushButton("Add ellipse")
+        self.draw_circle_button = QPushButton("Add elliptical mask")
         self.remove_mask_button = QPushButton("Remove selected")
         self.clear_masks_button = QPushButton("Clear all shapes")
-        mask_grid.addWidget(self.draw_rectangle_button, 2, 0)
-        mask_grid.addWidget(self.draw_circle_button, 2, 1)
-        mask_grid.addWidget(self.remove_mask_button, 2, 2)
-        mask_grid.addWidget(self.clear_masks_button, 2, 3)
+        mask_actions = QGridLayout()
+        mask_actions.addWidget(self.draw_rectangle_button, 0, 0)
+        mask_actions.addWidget(self.draw_circle_button, 0, 1)
+        mask_actions.addWidget(self.remove_mask_button, 1, 0)
+        mask_actions.addWidget(self.clear_masks_button, 1, 1)
+        mask_grid.addLayout(mask_actions, 4, 0, 1, 2)
         self.mask_shape_table = QTableWidget(0, 5)
         self.mask_shape_table.setHorizontalHeaderLabels(("Type", "X / CX", "Y / CY", "Width / Radius X", "Height / Radius Y"))
         self.mask_shape_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.mask_shape_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.mask_shape_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.mask_shape_table.setMaximumHeight(135)
-        mask_grid.addWidget(self.mask_shape_table, 3, 0, 1, 4)
-        random_box = QHBoxLayout()
-        for label, path, value in (
+        mask_grid.addWidget(self.mask_shape_table, 5, 0, 1, 2)
+        random_grid = QGridLayout()
+        for row, (label, path, value) in enumerate((
             ("Vertical bars", "mask.random.vertical_bars", 2),
             ("Horizontal bars", "mask.random.horizontal_bars", 1),
             ("Circles", "mask.random.circles", 1),
-        ):
-            random_box.addWidget(QLabel(label))
-            random_box.addWidget(self._spin(path, value, 0, 100))
-        random_box.addWidget(self._check("mask.random.beamstop", True, "Beamstop"))
-        mask_grid.addLayout(random_box, 4, 0, 1, 4)
+        )):
+            random_grid.addWidget(QLabel(label), row, 0)
+            random_grid.addWidget(self._spin(path, value, 0, 100), row, 1)
+        random_grid.addWidget(self._check("mask.random.beamstop", True, "Beamstop"), 3, 0, 1, 2)
+        mask_grid.addLayout(random_grid, 6, 0, 1, 2)
+        mask_grid.setColumnStretch(1, 1)
         form_stack.addWidget(mask_group)
 
-        parameters = QGroupBox("5 · Simulation parameter ranges")
-        param_layout = QVBoxLayout(parameters)
-        self.parameter_table = QTableWidget(3, 4)
-        self.parameter_table.setHorizontalHeaderLabels(("Parameter", "Distribution", "Minimum", "Maximum"))
-        defaults = (
-            ("radius_nm", "uniform", "1.0", "15.0"),
-            ("height_nm", "uniform", "1.0", "20.0"),
-            ("spacing_nm", "uniform", "3.0", "50.0"),
-        )
-        for row, values in enumerate(defaults):
-            for column, value in enumerate(values):
-                self.parameter_table.setItem(row, column, QTableWidgetItem(value))
-        self.parameter_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.parameter_table.setMaximumHeight(160)
-        param_layout.addWidget(self.parameter_table)
-        parameter_actions = QHBoxLayout()
-        self.add_parameter_button = QPushButton("Add parameter")
-        self.remove_parameter_button = QPushButton("Remove selected")
-        parameter_actions.addWidget(self.add_parameter_button)
-        parameter_actions.addWidget(self.remove_parameter_button)
-        parameter_actions.addStretch(1)
-        param_layout.addLayout(parameter_actions)
-        self.add_parameter_button.clicked.connect(self._add_parameter_row)
-        self.remove_parameter_button.clicked.connect(lambda: self._remove_selected_rows(self.parameter_table))
-        form_stack.addWidget(parameters)
-
-        sample_group = QGroupBox("6 · Sample, layers, substrate and interference plugins")
-        sample_grid = QGridLayout(sample_group)
+        form_factor = QGroupBox("5 · Particle form factor and population")
+        sample_grid = QGridLayout(form_factor)
         particle_labels = [item.label for item in REGISTRY.list("particle")]
-        interference_labels = [item.label for item in REGISTRY.list("interference")]
         sample_grid.addWidget(QLabel("Particle shape"), 0, 0)
         self.particle_combo = self._combo("sample.particle_label", particle_labels, "Spherical segment")
         sample_grid.addWidget(self.particle_combo, 0, 1)
-        sample_grid.addWidget(QLabel("Particle material"), 0, 2)
-        sample_grid.addWidget(self._combo("sample.particle_material", ("Copper", "Gold", "Silicon", "Polymer"), "Copper"), 0, 3)
-        sample_grid.addWidget(QLabel("Substrate"), 1, 0)
-        sample_grid.addWidget(self._combo("sample.substrate.material", ("Silicon", "Copper", "Gold", "Polymer"), "Silicon"), 1, 1)
-        sample_grid.addWidget(QLabel("Interference"), 1, 2)
-        sample_grid.addWidget(self._combo("sample.interference_label", interference_labels, "Paracrystal"), 1, 3)
-        sample_grid.addWidget(QLabel("Substrate roughness (nm)"), 2, 0)
-        sample_grid.addWidget(self._double("sample.substrate.roughness_nm", 0.0, 0.0, 1e6), 2, 1)
-        sample_grid.addWidget(QLabel("Paracrystal σ / spacing"), 2, 2)
-        sample_grid.addWidget(self._double("sample.interference.sigma_ratio", 0.1, 0.001, 0.49, 4), 2, 3)
-        sample_grid.addWidget(QLabel("Surface density (nm⁻²)"), 3, 0)
-        sample_grid.addWidget(self._double("sample.surface_density_per_nm2", 0.01, 0.0, 1e6, 6), 3, 1)
-        self.layer_table = QTableWidget(2, 4)
-        self.layer_table.setHorizontalHeaderLabels(("Enabled", "Material", "Thickness (nm)", "Roughness (nm)"))
-        for row, values in enumerate((("1", "Copper", "20.0", "0.0"), ("1", "Polymer", "50.0", "0.0"))):
+        sample_grid.addWidget(QLabel("Particle material"), 1, 0)
+        sample_grid.addWidget(self._combo("sample.particle_material", ("Copper", "Gold", "Silicon", "Polymer"), "Copper"), 1, 1)
+        self.particle_help = QLabel("Choose a shape first; only parameters used by that form factor are shown below.")
+        self.particle_help.setWordWrap(True)
+        sample_grid.addWidget(self.particle_help, 2, 0, 1, 2)
+        self.particle_parameter_table = QTableWidget(0, 5)
+        self.particle_parameter_table.setHorizontalHeaderLabels(("Parameter", "Distribution", "Minimum", "Maximum", "Meaning / unit"))
+        self.particle_parameter_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.particle_parameter_table.setMaximumHeight(150)
+        sample_grid.addWidget(self.particle_parameter_table, 3, 0, 1, 2)
+        sample_grid.addWidget(QLabel("Population model"), 4, 0)
+        sample_grid.addWidget(self._combo("sample.mixture.mode", ("single", "gaussian_mixture"), "gaussian_mixture"), 4, 1)
+        sample_grid.addWidget(QLabel("Gaussian components"), 5, 0)
+        sample_grid.addWidget(self._spin("sample.mixture.components", 5, 1, 20), 5, 1)
+        sample_grid.addWidget(QLabel("Width fraction minimum"), 6, 0)
+        sample_grid.addWidget(self._double("sample.mixture.sigma_fraction_min", 0.01, 0.0, 1.0, 3), 6, 1)
+        sample_grid.addWidget(QLabel("Width fraction maximum"), 7, 0)
+        sample_grid.addWidget(self._double("sample.mixture.sigma_fraction_max", 0.30, 0.0, 1.0, 3), 7, 1)
+        sample_grid.addWidget(self._check("sample.mixture.random_weights", True, "Random component weights"), 8, 0, 1, 2)
+        sample_grid.addWidget(QLabel("Surface density (nm⁻²)"), 9, 0)
+        sample_grid.addWidget(self._double("sample.surface_density_per_nm2", 0.01, 0.0, 1e6, 6), 9, 1)
+        self.segment_constraint_check = self._check("sample.constraints.segment_height_le_2r", True, "Enforce h ≤ 2R for spherical segments")
+        sample_grid.addWidget(self.segment_constraint_check, 10, 0, 1, 2)
+        sample_grid.setColumnStretch(1, 1)
+        form_stack.addWidget(form_factor)
+
+        structure_factor = QGroupBox("6 · Interference / structure factor")
+        structure_grid = QGridLayout(structure_factor)
+        interference_labels = [item.label for item in REGISTRY.list("interference")]
+        structure_grid.addWidget(QLabel("Interference model"), 0, 0)
+        self.interference_combo = self._combo("sample.interference_label", interference_labels, "Paracrystal")
+        structure_grid.addWidget(self.interference_combo, 0, 1)
+        self.interference_help = QLabel("The selected structure factor defines its own parameters.")
+        self.interference_help.setWordWrap(True)
+        structure_grid.addWidget(self.interference_help, 1, 0, 1, 2)
+        self.interference_parameter_table = QTableWidget(0, 5)
+        self.interference_parameter_table.setHorizontalHeaderLabels(("Parameter", "Distribution", "Minimum", "Maximum", "Meaning / unit"))
+        self.interference_parameter_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.interference_parameter_table.setMaximumHeight(135)
+        structure_grid.addWidget(self.interference_parameter_table, 2, 0, 1, 2)
+        self.spacing_constraint_check = self._check("sample.constraints.interparticle_spacing_gt_2r", True, "Enforce D > 2R (no particle overlap)")
+        self.sigma_constraint_check = self._check("sample.constraints.paracrystal_sigma_le_0_2d", True, "Enforce σ ≤ 0.2D for the paracrystal")
+        structure_grid.addWidget(self.spacing_constraint_check, 3, 0, 1, 2)
+        structure_grid.addWidget(self.sigma_constraint_check, 4, 0, 1, 2)
+        structure_grid.setColumnStretch(1, 1)
+        form_stack.addWidget(structure_factor)
+
+        layer_group = QGroupBox("7 · Layers and substrate")
+        layer_grid = QGridLayout(layer_group)
+        layer_help = QLabel("Use equal min/max for a fixed value; use different values to sample a training range.")
+        layer_help.setWordWrap(True)
+        layer_grid.addWidget(layer_help, 0, 0, 1, 2)
+        self.layer_table = QTableWidget(2, 6)
+        self.layer_table.setHorizontalHeaderLabels(("Enabled", "Material", "Thickness min", "Thickness max", "Roughness min", "Roughness max"))
+        for row, values in enumerate((("1", "Copper", "20.0", "20.0", "0.0", "0.0"), ("1", "Polymer", "50.0", "50.0", "0.0", "0.0"))):
             for column, value in enumerate(values):
                 self.layer_table.setItem(row, column, QTableWidgetItem(value))
         self.layer_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.layer_table.setMaximumHeight(115)
-        sample_grid.addWidget(self.layer_table, 4, 0, 1, 4)
+        self.layer_table.setMaximumHeight(140)
+        layer_grid.addWidget(self.layer_table, 1, 0, 1, 2)
         layer_actions = QHBoxLayout()
         self.add_layer_button = QPushButton("Add layer")
         self.remove_layer_button = QPushButton("Remove selected")
         layer_actions.addWidget(self.add_layer_button)
         layer_actions.addWidget(self.remove_layer_button)
         layer_actions.addStretch(1)
-        sample_grid.addLayout(layer_actions, 5, 0, 1, 4)
+        layer_grid.addLayout(layer_actions, 2, 0, 1, 2)
+        layer_grid.addWidget(QLabel("Substrate"), 3, 0)
+        layer_grid.addWidget(self._combo("sample.substrate.material", ("Silicon", "Copper", "Gold", "Polymer"), "Silicon"), 3, 1)
+        layer_grid.addWidget(QLabel("Substrate roughness (nm)"), 4, 0)
+        layer_grid.addWidget(self._double("sample.substrate.roughness_nm", 0.0, 0.0, 1e6), 4, 1)
+        layer_grid.setColumnStretch(1, 1)
         self.add_layer_button.clicked.connect(self._add_layer_row)
         self.remove_layer_button.clicked.connect(lambda: self._remove_selected_rows(self.layer_table))
-        form_stack.addWidget(sample_group)
+        form_stack.addWidget(layer_group)
 
-        dataset_group = QGroupBox("7 · Dataset sampling, sharding and split")
+        dataset_group = QGroupBox("8 · Dataset sampling, files and split")
         dataset_grid = QGridLayout(dataset_group)
         dataset_grid.addWidget(QLabel("Sampling"), 0, 0)
         dataset_grid.addWidget(self._combo("dataset.sampling", ("latin_hypercube", "uniform", "log_uniform", "grid"), "latin_hypercube"), 0, 1)
-        dataset_grid.addWidget(QLabel("Samples"), 0, 2)
-        dataset_grid.addWidget(self._spin("dataset.number_of_samples", 200000, 1, 1000000000), 0, 3)
-        dataset_grid.addWidget(QLabel("Samples / shard"), 1, 0)
-        dataset_grid.addWidget(self._spin("dataset.samples_per_shard", 2000, 1, 10000000), 1, 1)
-        for column, (name, value) in enumerate((("Train", 0.8), ("Validation", 0.1), ("Test", 0.1))):
-            dataset_grid.addWidget(QLabel(name), 2, column * 2)
-            dataset_grid.addWidget(self._double(f"dataset.split.{name.lower()}", value, 0.0, 1.0, 3), 2, column * 2 + 1)
+        dataset_grid.addWidget(QLabel("Samples"), 1, 0)
+        dataset_grid.addWidget(self._spin("dataset.number_of_samples", 200000, 1, 1000000000), 1, 1)
+        shard_label = QLabel("Samples per output file")
+        shard_label.setToolTip("A shard is one HDF5 dataset file. Multiple smaller files are easier to generate in parallel and resume later.")
+        dataset_grid.addWidget(shard_label, 2, 0)
+        dataset_grid.addWidget(self._spin("dataset.samples_per_shard", 2000, 1, 10000000), 2, 1)
+        shard_help = QLabel("One shard = one HDF5 file. This controls file size, not how samples are shared between train/validation/test.")
+        shard_help.setWordWrap(True)
+        dataset_grid.addWidget(shard_help, 3, 0, 1, 2)
+        for row, (name, value) in enumerate((("Train", 0.8), ("Validation", 0.1), ("Test", 0.1)), start=4):
+            dataset_grid.addWidget(QLabel(name), row, 0)
+            dataset_grid.addWidget(self._double(f"dataset.split.{name.lower()}", value, 0.0, 1.0, 3), row, 1)
+        dataset_grid.setColumnStretch(1, 1)
         form_stack.addWidget(dataset_group)
         form_stack.addStretch(1)
 
@@ -670,7 +737,7 @@ class TrainsetBuildPage(QWidget):
         preview_side = QVBoxLayout()
         preview_title = QLabel("Design preview")
         preview_title.setProperty("sectionTitle", True)
-        preview_hint = QLabel("Each action advances the view: full detector → ROI → masked image → binary mask.")
+        preview_hint = QLabel("Hover for detector coordinates and intensity. Pick the beam center, then draw a rectangular ROI and inspect its mask.")
         preview_hint.setWordWrap(True)
         preview_hint.setProperty("cardBody", True)
         preview_side.addWidget(preview_title)
@@ -686,6 +753,11 @@ class TrainsetBuildPage(QWidget):
         self.mask_only_canvas = ArrayCanvas("The binary mask will appear here (white = masked)")
         self.full_detector_canvas.region_created.connect(self.mask_region_created)
         self.roi_design_canvas.region_created.connect(self.mask_region_created)
+        self.full_detector_canvas.position_changed.connect(
+            lambda position: self.beam_cursor_label.setText(
+                f"x={position['x']} px · y={position['y']} px · I={position['intensity']:.6g}"
+            )
+        )
         for label, canvas in (
             ("Full detector", self.full_detector_canvas),
             ("ROI", self.roi_design_canvas),
@@ -719,7 +791,7 @@ class TrainsetBuildPage(QWidget):
         self.preview_count.setRange(1, 1000)
         self.preview_count.setValue(16)
         controls.addWidget(self.preview_count)
-        self.generate_preview_button = QPushButton("Generate with shared DatasetGenerator")
+        self.generate_preview_button = QPushButton("Generate preview")
         self.generate_preview_button.setObjectName("primaryAction")
         controls.addWidget(self.generate_preview_button)
         controls.addStretch(1)
@@ -727,25 +799,40 @@ class TrainsetBuildPage(QWidget):
         controls.addWidget(self.preview_capability)
         layout.addLayout(controls)
 
-        preprocessing = QGroupBox("Preprocessing plugin chain")
+        preprocessing = QGroupBox("Ordered preprocessing / augmentation chain")
         chain = QGridLayout(preprocessing)
-        chain.addWidget(self._check("pre.noise.enabled", True, "Noise"), 0, 0)
-        chain.addWidget(QLabel("SNR min/max"), 0, 1)
-        chain.addWidget(self._double("pre.noise.min", 80.0), 0, 2)
-        chain.addWidget(self._double("pre.noise.max", 110.0), 0, 3)
-        chain.addWidget(self._check("pre.mask.enabled", True, "Apply mask"), 0, 4)
-        chain.addWidget(self._check("pre.log.enabled", True, "Log"), 1, 0)
-        chain.addWidget(self._check("pre.normalize.enabled", True, "Normalize"), 1, 1)
-        chain.addWidget(self._combo("pre.normalize.mode", ("range", "upper", "lower"), "range"), 1, 2)
-        chain.addWidget(self._double("pre.normalize.lower", 0.0), 1, 3)
-        chain.addWidget(self._double("pre.normalize.upper", 1.0), 1, 4)
-        chain.addWidget(self._check("pre.edge.enabled", False, "Random edge crop"), 2, 0)
-        chain.addWidget(self._spin("pre.edge.maximum", 4, 0, 128), 2, 1)
+        chain.addWidget(QLabel("Enable"), 0, 0)
+        chain.addWidget(QLabel("Stage and effect"), 0, 1)
+        chain.addWidget(QLabel("Controls"), 0, 2, 1, 3)
+        chain.addWidget(self._check("pre.background.enabled", False), 1, 0)
+        chain.addWidget(QLabel("1. Physical background — adds a specular ridge and Yoneda-like band"), 1, 1)
+        chain.addWidget(QLabel("relative min / max"), 1, 2)
+        chain.addWidget(self._double("pre.background.min", 0.05, 0.0, 10.0, 3), 1, 3)
+        chain.addWidget(self._double("pre.background.max", 0.30, 0.0, 10.0, 3), 1, 4)
+        chain.addWidget(self._check("pre.noise.enabled", True), 2, 0)
+        chain.addWidget(QLabel("2. Detector noise — varies signal-to-noise ratio"), 2, 1)
+        chain.addWidget(QLabel("SNR min / max (dB)"), 2, 2)
+        chain.addWidget(self._double("pre.noise.min", 80.0), 2, 3)
+        chain.addWidget(self._double("pre.noise.max", 110.0), 2, 4)
+        chain.addWidget(self._check("pre.mask.enabled", True), 3, 0)
+        chain.addWidget(QLabel("3. Apply mask — writes the configured mask value"), 3, 1, 1, 4)
+        chain.addWidget(self._check("pre.log.enabled", True), 4, 0)
+        chain.addWidget(QLabel("4. Log transform — compresses scattering dynamic range"), 4, 1, 1, 4)
+        chain.addWidget(self._check("pre.normalize.enabled", True), 5, 0)
+        chain.addWidget(QLabel("5. Normalize — maps valid pixels to a stable scale"), 5, 1)
+        chain.addWidget(self._combo("pre.normalize.mode", ("range", "upper", "lower"), "range"), 5, 2)
+        chain.addWidget(self._double("pre.normalize.lower", 0.0), 5, 3)
+        chain.addWidget(self._double("pre.normalize.upper", 1.0), 5, 4)
+        chain.addWidget(self._check("pre.edge.enabled", False), 6, 0)
+        chain.addWidget(QLabel("6. Random edge crop — augmentation; crop then resize back"), 6, 1)
+        chain.addWidget(QLabel("maximum px"), 6, 2)
+        chain.addWidget(self._spin("pre.edge.maximum", 4, 0, 128), 6, 3)
+        chain.addWidget(QLabel("Every enabled effect receives its own preview tab below."), 7, 0, 1, 5)
         layout.addWidget(preprocessing)
 
         main = QSplitter(Qt.Horizontal)
         self.preview_tabs = QTabWidget()
-        for name in ("Reference", "ROI", "Masked image", "Mask only", "Noise", "Log", "Normalize", "Final"):
+        for name in ("Reference", "ROI", "Masked image", "Mask only", "Physical Background", "Noise", "Log", "Normalize", "Random Edge Crop", "Final"):
             canvas = ArrayCanvas(f"{name} stage will appear after preview")
             self.preview_canvases[name.lower()] = canvas
             self.preview_tabs.addTab(canvas, name)
@@ -761,14 +848,14 @@ class TrainsetBuildPage(QWidget):
         self.parameter_coverage = ParameterCoverageWidget()
         self.diagnostic_tabs.addTab(self.histogram, "Intensity")
         self.diagnostic_tabs.addTab(self.parameter_coverage, "Parameter coverage")
-        self.preview_gate_table = QTableWidget(5, 2)
-        self.preview_gate_table.setHorizontalHeaderLabels(("Submission gate", "State"))
-        for row, gate in enumerate(("Configuration valid", "Local samples generated", "Tensor shapes compatible", "Maxwell available", "Storage accepted")):
+        self.preview_gate_table = QTableWidget(4, 2)
+        self.preview_gate_table.setHorizontalHeaderLabels(("Local readiness check", "State"))
+        for row, gate in enumerate(("Configuration valid", "Local samples generated", "Tensor shapes compatible", "Storage estimate accepted")):
             self.preview_gate_table.setItem(row, 0, QTableWidgetItem(gate))
             self.preview_gate_table.setItem(row, 1, QTableWidgetItem("Pending"))
         self.preview_gate_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.preview_gate_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.storage_accept_check = QCheckBox("I accept the estimated storage for this run")
+        self.storage_accept_check = QCheckBox("I reviewed the estimated local storage for this run")
         right_layout.addWidget(self.preview_stats)
         right_layout.addWidget(self.diagnostic_tabs, 1)
         right_layout.addWidget(self.storage_accept_check)
@@ -781,29 +868,51 @@ class TrainsetBuildPage(QWidget):
 
     def _model_page(self) -> QWidget:
         page = QWidget()
-        layout = QHBoxLayout(page)
-        form_widget = QWidget()
-        form = QFormLayout(form_widget)
-        form.addRow("Tested model template", self._combo("model.template", ("cnn_2d",), "cnn_2d"))
-        form.addRow("Channels", self._line("model.channels", "32, 64, 128, 256"))
-        form.addRow("Kernel size", self._spin("model.kernel_size", 3, 1, 15))
-        form.addRow("Dropout", self._double("model.dropout", 0.5, 0.0, 0.95, 3))
-        form.addRow("Output mode", self._combo("model.output_mode", ("regression",), "regression"))
-        form.addRow("Batch size", self._spin("training.batch_size", 64, 1, 100000))
-        form.addRow("Epochs", self._spin("training.epochs", 100, 1, 100000))
-        form.addRow("Optimizer", self._combo("training.optimizer", ("adam", "adamw", "sgd"), "adam"))
-        form.addRow("Learning rate", self._double("training.learning_rate", 0.0001, 1e-9, 10.0, 8))
-        form.addRow("Scheduler", self._combo("training.scheduler", ("cosine", "plateau", "constant"), "cosine"))
-        self.model_validate_button = QPushButton("Build template and validate one forward pass")
-        form.addRow(self.model_validate_button)
-        layout.addWidget(self._scroll(form_widget), 1)
+        layout = QVBoxLayout(page)
+        intro = QLabel("Build the feature extractor row by row. The regression output size is added automatically from the variable physics parameters.")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        self.model_layer_table = QTableWidget(0, 5)
+        self.model_layer_table.setHorizontalHeaderLabels(("Layer type", "Filters / units", "Kernel / pool", "Activation", "Dropout rate"))
+        self.model_layer_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.model_layer_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.model_layer_table.setMinimumHeight(280)
+        layout.addWidget(self.model_layer_table, 2)
+        layer_actions = QHBoxLayout()
+        self.add_model_layer_button = QPushButton("Add layer")
+        self.remove_model_layer_button = QPushButton("Remove selected")
+        self.move_model_layer_up_button = QPushButton("Move up")
+        self.move_model_layer_down_button = QPushButton("Move down")
+        for button in (self.add_model_layer_button, self.remove_model_layer_button, self.move_model_layer_up_button, self.move_model_layer_down_button):
+            layer_actions.addWidget(button)
+        layer_actions.addStretch(1)
+        layout.addLayout(layer_actions)
+
+        lower = QHBoxLayout()
+        training = QGroupBox("Training controls")
+        training_form = QFormLayout(training)
+        training_form.addRow("Output mode", self._combo("model.output_mode", ("regression",), "regression"))
+        training_form.addRow("Batch size", self._spin("training.batch_size", 64, 1, 100000))
+        training_form.addRow("Epochs", self._spin("training.epochs", 100, 1, 100000))
+        training_form.addRow("Optimizer", self._combo("training.optimizer", ("adam", "adamw", "sgd"), "adam"))
+        training_form.addRow("Learning rate", self._double("training.learning_rate", 0.0001, 1e-9, 10.0, 8))
+        training_form.addRow("Scheduler", self._combo("training.scheduler", ("cosine", "plateau", "constant"), "cosine"))
+        lower.addWidget(training, 1)
         summary = QGroupBox("Model contract")
         summary_layout = QVBoxLayout(summary)
         self.model_summary = QTextEdit()
         self.model_summary.setReadOnly(True)
-        self.model_summary.setPlainText("The GUI changes parameters of tested model templates; it does not generate arbitrary Python source.\n\nValidate after a local preview to check input and output tensor shapes.")
+        self.model_summary.setPlainText("Add, remove and reorder layers, then validate the real tensor contract.\n\nSupported: Conv2D, MaxPool2D, BatchNormalization, Dropout, GlobalAveragePooling2D, Flatten and Dense.")
         summary_layout.addWidget(self.model_summary)
-        layout.addWidget(summary, 1)
+        lower.addWidget(summary, 2)
+        layout.addLayout(lower, 2)
+        self.model_validate_button = QPushButton("Build model and validate one forward pass")
+        self.model_validate_button.setObjectName("primaryAction")
+        layout.addWidget(self.model_validate_button)
+        self.add_model_layer_button.clicked.connect(lambda: self.add_model_layer({"type": "conv2d", "units": 32, "kernel": 3, "activation": "relu"}))
+        self.remove_model_layer_button.clicked.connect(lambda: self._remove_selected_rows(self.model_layer_table))
+        self.move_model_layer_up_button.clicked.connect(lambda: self._move_model_layer(-1))
+        self.move_model_layer_down_button.clicked.connect(lambda: self._move_model_layer(1))
         return page
 
     def _hpc_page(self) -> QWidget:
@@ -819,11 +928,19 @@ class TrainsetBuildPage(QWidget):
         self.local_folder_button = QPushButton("Choose folder…")
         local_form.addRow(self.local_folder_button)
         self.local_prepare_button = QPushButton("Prepare local job package")
-        self.local_generate_button = QPushButton("Run local Dry/Full generation")
+        self.local_generate_button = QPushButton("Generate physical dataset locally")
         self.local_train_button = QPushButton("Train locally")
+        local_form.addRow("Smoke-test samples", self._spin("training.smoke_samples", 64, 8, 10000))
+        local_form.addRow("Smoke-test epochs", self._spin("training.smoke_epochs", 2, 1, 20))
+        self.local_smoke_button = QPushButton("Run reference-based lightweight smoke test")
+        self.local_smoke_button.setObjectName("primaryAction")
+        smoke_help = QLabel("Creates a small non-physical demo dataset from the reference image, then tests the configured model for a few epochs.")
+        smoke_help.setWordWrap(True)
         local_form.addRow(self.local_prepare_button)
         local_form.addRow(self.local_generate_button)
         local_form.addRow(self.local_train_button)
+        local_form.addRow(self.local_smoke_button)
+        local_form.addRow(smoke_help)
         tabs.addTab(local, "Local")
 
         maxwell = QWidget()
@@ -842,9 +959,15 @@ class TrainsetBuildPage(QWidget):
         self.hpc_prepare_button = QPushButton("Prepare reproducible HPC job")
         self.hpc_submit_button = QPushButton("Upload and submit dependent jobs")
         self.hpc_submit_button.setObjectName("primaryAction")
+        reserved = QLabel("Reserved interface: Maxwell SSH upload/submission is disabled for this local demo. Job packaging and Slurm scripts remain exportable.")
+        reserved.setWordWrap(True)
+        maxwell_form.addRow(reserved)
         maxwell_form.addRow(self.connection_button)
         maxwell_form.addRow(self.hpc_prepare_button)
         maxwell_form.addRow(self.hpc_submit_button)
+        self.connection_button.setEnabled(False)
+        self.hpc_prepare_button.setEnabled(False)
+        self.hpc_submit_button.setEnabled(False)
         tabs.addTab(maxwell, "Maxwell")
         layout.addWidget(tabs)
         self.package_tree = QTextEdit()
@@ -911,17 +1034,97 @@ class TrainsetBuildPage(QWidget):
         for column, value in enumerate(values):
             self.mask_shape_table.setItem(row, column, QTableWidgetItem(str(value)))
 
-    def _add_parameter_row(self) -> None:
-        row = self.parameter_table.rowCount()
-        self.parameter_table.insertRow(row)
-        for column, value in enumerate((f"parameter_{row + 1}", "uniform", "0.0", "1.0")):
-            self.parameter_table.setItem(row, column, QTableWidgetItem(value))
+    def set_plugin_parameters(self, table: QTableWidget, definitions, values: Dict[str, Any]) -> None:
+        table.setRowCount(0)
+        for definition in definitions:
+            row = table.rowCount()
+            table.insertRow(row)
+            key = str(definition["key"])
+            spec = values.get(key, {}) if isinstance(values, dict) else {}
+            distribution = QComboBox()
+            distribution.addItems(("uniform", "log_uniform"))
+            distribution.setCurrentText(str(spec.get("distribution", "uniform")))
+            table.setItem(row, 0, QTableWidgetItem(key))
+            table.item(row, 0).setFlags(table.item(row, 0).flags() & ~Qt.ItemIsEditable)
+            table.setCellWidget(row, 1, distribution)
+            table.setItem(row, 2, QTableWidgetItem(str(spec.get("minimum", definition.get("minimum", 0.0)))))
+            table.setItem(row, 3, QTableWidgetItem(str(spec.get("maximum", definition.get("maximum", 1.0)))))
+            meaning = f"{definition.get('label', key)}"
+            if definition.get("unit"):
+                meaning += f" [{definition['unit']}]"
+            table.setItem(row, 4, QTableWidgetItem(meaning))
+            table.item(row, 4).setFlags(table.item(row, 4).flags() & ~Qt.ItemIsEditable)
+
+    @staticmethod
+    def plugin_parameters(table: QTableWidget) -> Dict[str, Dict[str, Any]]:
+        parameters: Dict[str, Dict[str, Any]] = {}
+        for row in range(table.rowCount()):
+            name = table.item(row, 0).text().strip()
+            distribution = table.cellWidget(row, 1)
+            parameters[name] = {
+                "distribution": distribution.currentText() if isinstance(distribution, QComboBox) else "uniform",
+                "minimum": float(table.item(row, 2).text()),
+                "maximum": float(table.item(row, 3).text()),
+            }
+        return parameters
 
     def _add_layer_row(self) -> None:
         row = self.layer_table.rowCount()
         self.layer_table.insertRow(row)
-        for column, value in enumerate(("1", "Silicon", "10.0", "0.0")):
+        for column, value in enumerate(("1", "Silicon", "10.0", "10.0", "0.0", "0.0")):
             self.layer_table.setItem(row, column, QTableWidgetItem(value))
+
+    def add_model_layer(self, spec: Dict[str, Any], row: Optional[int] = None) -> None:
+        row = self.model_layer_table.rowCount() if row is None else row
+        self.model_layer_table.insertRow(row)
+        kind = QComboBox()
+        kind.addItems(("conv2d", "maxpool2d", "batch_normalization", "dropout", "global_average_pooling2d", "flatten", "dense"))
+        kind.setCurrentText(str(spec.get("type", "conv2d")))
+        activation = QComboBox()
+        activation.addItems(("relu", "gelu", "tanh", "sigmoid", "linear"))
+        activation.setCurrentText(str(spec.get("activation", "relu")))
+        self.model_layer_table.setCellWidget(row, 0, kind)
+        self.model_layer_table.setItem(row, 1, QTableWidgetItem(str(spec.get("units", ""))))
+        self.model_layer_table.setItem(row, 2, QTableWidgetItem(str(spec.get("kernel", spec.get("pool", "")))))
+        self.model_layer_table.setCellWidget(row, 3, activation)
+        self.model_layer_table.setItem(row, 4, QTableWidgetItem(str(spec.get("rate", ""))))
+
+    def set_model_layers(self, layers) -> None:
+        self.model_layer_table.setRowCount(0)
+        for layer in layers:
+            self.add_model_layer(layer)
+
+    def model_layers(self):
+        layers = []
+        for row in range(self.model_layer_table.rowCount()):
+            kind_widget = self.model_layer_table.cellWidget(row, 0)
+            activation_widget = self.model_layer_table.cellWidget(row, 3)
+            kind = kind_widget.currentText() if isinstance(kind_widget, QComboBox) else "conv2d"
+            units_text = self.model_layer_table.item(row, 1).text().strip() if self.model_layer_table.item(row, 1) else ""
+            size_text = self.model_layer_table.item(row, 2).text().strip() if self.model_layer_table.item(row, 2) else ""
+            rate_text = self.model_layer_table.item(row, 4).text().strip() if self.model_layer_table.item(row, 4) else ""
+            spec: Dict[str, Any] = {"type": kind}
+            if kind in {"conv2d", "dense"}:
+                spec["units"] = int(float(units_text or 32))
+                spec["activation"] = activation_widget.currentText() if isinstance(activation_widget, QComboBox) else "relu"
+            if kind == "conv2d":
+                spec["kernel"] = int(float(size_text or 3))
+            elif kind == "maxpool2d":
+                spec["pool"] = int(float(size_text or 2))
+            elif kind == "dropout":
+                spec["rate"] = float(rate_text or 0.3)
+            layers.append(spec)
+        return layers
+
+    def _move_model_layer(self, offset: int) -> None:
+        row = self.model_layer_table.currentRow()
+        target = row + offset
+        if row < 0 or target < 0 or target >= self.model_layer_table.rowCount():
+            return
+        layers = self.model_layers()
+        layers[row], layers[target] = layers[target], layers[row]
+        self.set_model_layers(layers)
+        self.model_layer_table.selectRow(target)
 
     @staticmethod
     def _remove_selected_rows(table: QTableWidget) -> None:
