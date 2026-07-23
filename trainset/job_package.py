@@ -241,13 +241,22 @@ def prepare_job_package(config: Dict[str, Any], output_root: str | Path, project
         shutil.rmtree(destination)
     (destination / "src").mkdir(parents=True)
     shutil.copytree(project_root / "trainset", destination / "src" / "trainset", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    # Reference-derived detector masks must use exactly the same CBF/NXS
+    # orientation as the GUI.  The trainset loader delegates that work to the
+    # calibration package, so exported jobs need that package as well instead
+    # of silently depending on the source checkout being on PYTHONPATH.
+    shutil.copytree(
+        project_root / "calibration",
+        destination / "src" / "calibration",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
     save_project_config(config, destination / "config.yaml")
     _write(destination / "generate_dataset.py", GENERATE_SCRIPT)
     _write(destination / "validate_config.py", VALIDATE_SCRIPT)
     _write(destination / "train.py", TRAIN_SCRIPT)
     _write(
         destination / "environment.yml",
-        """name: gimap-trainset\nchannels:\n  - conda-forge\ndependencies:\n  - python=3.10\n  - numpy\n  - scipy\n  - h5py\n  - pyyaml\n  - tensorflow=2.15\n  - keras=2.15\n  - matplotlib\n  - pip\n  - pip:\n      - BornAgain==24.1\n""",
+        """name: gimap-trainset\nchannels:\n  - conda-forge\ndependencies:\n  - python=3.10\n  - numpy\n  - scipy\n  - h5py\n  - pyyaml\n  - fabio\n  - tensorflow=2.15\n  - keras=2.15\n  - matplotlib\n  - pip\n  - pip:\n      - BornAgain==24.1\n""",
     )
     dataset = config["dataset"]
     hpc = config["hpc"]

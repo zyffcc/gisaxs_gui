@@ -1,9 +1,9 @@
-schema_version: 1
+schema_version: 2
 project:
   name: gisaxs_2d_project
   seed: 42
-  reference_file: ''
-  workspace: ''
+  reference_file: E:\PythonCode\gisaxs_gui\TestSAXSdata\jg_gisaxs_4nm_old_3ml_insitu_ds03_00001_00033.cbf
+  workspace: E:\PythonCode\gisaxs_gui\trainset_jobs
 dataset:
   dimension: 2d
   number_of_samples: 200000
@@ -29,17 +29,19 @@ detector:
   beam_center_x_px: 804.0
   beam_center_y_px: 305.0
 roi:
-  x: 600
-  y: 180
-  width: 256
-  height: 256
+  x: 385
+  y: 876
+  width: 410
+  height: 435
 mask:
   mode: fixed
   mask_value: -1.0
   threshold:
     enabled: true
     minimum: 0.0
-    maximum: 1000000000000.0
+    maximum: 415940.95378
+    auto_reference_upper: true
+    upper_quantile: 99.999
   fixed_shapes: []
   random:
     vertical_bars: 2
@@ -59,45 +61,129 @@ simulation:
   resolution_sigma_alpha_deg: 0.01
 parameters:
   radius_nm:
-    distribution: uniform
     minimum: 1.0
     maximum: 15.0
-  height_nm:
     distribution: uniform
+    source: form_factor
+  height_nm:
     minimum: 1.0
     maximum: 20.0
-  spacing_nm:
     distribution: uniform
+    source: form_factor
+  D_nm:
     minimum: 3.0
     maximum: 50.0
+    distribution: uniform
+    source: structure_factor
+  sigma_D_ratio:
+    minimum: 0.05
+    maximum: 0.2
+    distribution: uniform
+    source: structure_factor
 sample:
   surface_density_per_nm2: 0.01
   particles:
   - plugin: spherical_segment
     material: Copper
     enabled: true
+    parameters:
+      radius_nm:
+        minimum: 1.0
+        maximum: 15.0
+        distribution: uniform
+      height_nm:
+        minimum: 1.0
+        maximum: 20.0
+        distribution: uniform
+  mixture:
+    mode: gaussian_mixture
+    components: 5
+    sigma_fraction_min: 0.01
+    sigma_fraction_max: 0.3
+    random_weights: true
   layers:
   - enabled: true
     material: Copper
-    thickness_nm: 20.0
-    roughness_nm: 0.0
+    thickness_nm:
+      minimum: 20.0
+      maximum: 20.0
+    roughness_nm:
+      minimum: 0.0
+      maximum: 0.0
   - enabled: true
     material: Polymer
-    thickness_nm: 50.0
-    roughness_nm: 0.0
+    thickness_nm:
+      minimum: 50.0
+      maximum: 50.0
+    roughness_nm:
+      minimum: 0.0
+      maximum: 0.0
   substrate:
     material: Silicon
     roughness_nm: 0.0
   interference:
     plugin: paracrystal
     enabled: true
-    sigma_ratio: 0.1
+    parameters:
+      D_nm:
+        minimum: 3.0
+        maximum: 50.0
+        distribution: uniform
+      sigma_D_ratio:
+        minimum: 0.05
+        maximum: 0.2
+        distribution: uniform
+  constraints:
+    segment_height_le_2r: true
+    interparticle_spacing_gt_2r: true
 preprocessing:
   steps:
-  - plugin: noise
+  - plugin: physical_background
+    enabled: false
+    target_fraction_min: 0.05
+    target_fraction_max: 0.3
+    constant_fraction_min: 0.0
+    constant_fraction_max: 0.03
+    specular_amplitude_min: 0.2
+    specular_amplitude_max: 1.0
+    specular_width_fraction_min: 0.01
+    specular_width_fraction_max: 0.04
+    specular_widening_min: 0.0
+    specular_widening_max: 0.12
+    specular_decay_fraction_min: 0.2
+    specular_decay_fraction_max: 0.8
+    yoneda_amplitude_min: 0.1
+    yoneda_amplitude_max: 0.7
+    yoneda_center_fraction_min: 0.5
+    yoneda_center_fraction_max: 0.72
+    yoneda_width_fraction_min: 0.02
+    yoneda_width_fraction_max: 0.08
+    yoneda_center_hole_min: 0.4
+    yoneda_center_hole_max: 0.95
+    wedge_amplitude_min: 0.05
+    wedge_amplitude_max: 0.4
+    wedge_anisotropy_min: 0.6
+    wedge_anisotropy_max: 2.0
+    wedge_porod_exponent_min: 2.0
+    wedge_porod_exponent_max: 3.8
+    wedge_rg_fraction_min: 0.05
+    wedge_rg_fraction_max: 0.25
+    plane_qy_slope_min: -0.08
+    plane_qy_slope_max: 0.08
+    plane_qz_slope_min: -0.08
+    plane_qz_slope_max: 0.08
+    low_qz_cut_fraction_min: 0.0
+    low_qz_cut_fraction_max: 0.08
+    blur_sigma_px_min: 0.0
+    blur_sigma_px_max: 0.6
+  - plugin: gaussian_noise
     enabled: true
     snr_min_db: 80.0
     snr_max_db: 110.0
+  - plugin: poisson_noise
+    enabled: false
+    count_scale_min: 1.0
+    count_scale_max: 20.0
   - plugin: mask
     enabled: true
   - plugin: log
@@ -112,24 +198,42 @@ preprocessing:
     enabled: false
     maximum_px: 4
 model:
-  template: cnn_2d
-  channels:
-  - 32
-  - 64
-  - 128
-  - 256
-  kernel_size: 3
-  dropout: 0.5
   output_mode: regression
+  layers:
+  - type: conv2d
+    units: 32
+    activation: relu
+    kernel: 3
+  - type: maxpool2d
+    pool: 2
+  - type: conv2d
+    units: 64
+    activation: relu
+    kernel: 3
+  - type: maxpool2d
+    pool: 2
+  - type: conv2d
+    units: 128
+    activation: relu
+    kernel: 3
+  - type: global_average_pooling2d
+  - type: dense
+    units: 128
+    activation: relu
+  - type: dropout
+    rate: 0.3
 training:
-  backend: slurm
-  local_python: ''
+  backend: local
+  local_python: D:\conda\envs\GUI\python.exe
   batch_size: 64
   epochs: 100
   optimizer: adam
   learning_rate: 0.0001
   scheduler: cosine
+  smoke_samples: 8
+  smoke_epochs: 2
 hpc:
+  enabled: false
   host: maxwell.desy.de
   user: ''
   remote_path: ''
@@ -143,3 +247,9 @@ hpc:
 runtime:
   last_job_id: ''
   last_project_dir: E:\PythonCode\gisaxs_gui\trainset_jobs\gisaxs_2d_project
+  auto_remember: true
+file_name: trainset
+save_path: ''
+trainset_number: 1000
+save_every: 100
+batch_size: 10

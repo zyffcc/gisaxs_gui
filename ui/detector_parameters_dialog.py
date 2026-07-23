@@ -333,7 +333,7 @@ class DetectorParametersDialog(QDialog):
             # 触发保存
             global_params.save_user_parameters()
             
-            print("✓ Detector parameters saved successfully")
+            print("Detector parameters saved successfully")
             
         except Exception as e:
             print(f"Failed to save detector parameters: {e}")

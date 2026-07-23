@@ -24,7 +24,7 @@ class LayoutUtils:
             lambda index: LayoutUtils._on_page_changed(stacked_widget, index)
         )
         
-    print("✓ StackedWidget configured for adaptive mode (each page has its own ScrollArea)")
+    print("StackedWidget configured for adaptive mode (each page has its own ScrollArea)")
     
     @staticmethod
     def _on_page_changed(stacked_widget, index):
@@ -45,7 +45,7 @@ class LayoutUtils:
                 }
                 
                 page_name = page_names.get(index, f"Page {index}")
-                print(f"✓ Switched to {page_name} page (index: {index})")
+                print(f"Switched to {page_name} page (index: {index})")
                 
         except Exception as e:
             print(f"Page switch handling failed: {e}")

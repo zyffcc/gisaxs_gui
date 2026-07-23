@@ -137,7 +137,7 @@ class MenuManager(QObject):
                 self.main_window.actionOpenAIFittingWorkspace.triggered.connect(self.open_ai_fitting_workspace)
                 parameters_menu.addAction(self.main_window.actionOpenAIFittingWorkspace)
             
-            print("✓ Parameter menu created")
+            print("Parameter menu created")
             
         except Exception as e:
             print(f"Failed to create parameter menu: {e}")
@@ -208,7 +208,7 @@ class MenuManager(QObject):
                     'All parameters have been reset to their initial default values!'
                 )
                 
-                print("✓ User manually reset parameters")
+                print("User manually reset parameters")
             else:
                 print("User canceled parameter reset")
                 
@@ -245,7 +245,7 @@ class MenuManager(QObject):
                     'Saved', 
                     f'Parameters have been saved to: {file_path}'
                 )
-                print(f"✓ User manually saved parameters to: {file_path}")
+                print(f"User manually saved parameters to: {file_path}")
             
         except Exception as e:
             QMessageBox.warning(
@@ -280,7 +280,7 @@ class MenuManager(QObject):
                     'Loaded', 
                     f'Parameters have been loaded from: {file_path}'
                 )
-                print(f"✓ User manually loaded parameters from: {file_path}")
+                print(f"User manually loaded parameters from: {file_path}")
             
         except Exception as e:
             QMessageBox.warning(

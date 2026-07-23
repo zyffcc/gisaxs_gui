@@ -26,7 +26,7 @@ from trainset.generator import DatasetGenerator
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", default="config.yaml")
 parser.add_argument("--samples", type=int, default=None)
-parser.add_argument("--mode", choices=("dry", "full"), default="full")
+parser.add_argument("--mode", choices=("dry", "full", "demo"), default="full")
 parser.add_argument("--output", default="dataset")
 args = parser.parse_args()
 config = load_project_config(ROOT / args.config)
@@ -42,7 +42,7 @@ if task_id is not None:
         raise SystemExit(f"array task {task_index} has no samples to generate")
     config["project"]["seed"] = int(config["project"]["seed"]) + task_index
     output = output / f"array_{task_index:04d}"
-files = DatasetGenerator(config).write_hdf5_shards(output, count)
+files = DatasetGenerator(config).write_hdf5_shards(output, count, mode=args.mode)
 print(f"generated_files={len(files)} samples={count} output={output}")
 '''
 
@@ -62,6 +62,7 @@ raise SystemExit(0 if valid else 1)
 '''
 
 TRAIN_SCRIPT = '''from __future__ import annotations
+import argparse
 import json
 import shutil
 import sys
@@ -71,41 +72,56 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-from trainset.config import load_project_config
+from trainset.config import load_project_config, synchronize_parameter_specs, trainable_parameter_names
+from trainset.modeling import build_keras_model, build_optimizer, resolve_keras_api
 
-cfg = load_project_config(ROOT / "config.yaml")
+parser = argparse.ArgumentParser()
+parser.add_argument("--smoke", action="store_true", help="Cap records/model size for a quick local pipeline test")
+parser.add_argument("--epochs", type=int, default=None)
+args = parser.parse_args()
+
+cfg = synchronize_parameter_specs(load_project_config(ROOT / "config.yaml"))
 try:
     import tensorflow as tf
 except Exception as exc:
     raise SystemExit(f"TensorFlow is required by the cnn_2d template: {exc}")
+keras_api = resolve_keras_api(tf)
 
 files = sorted((ROOT / "dataset").rglob("*.h5"))
 if not files:
     raise SystemExit("No HDF5 dataset shards found under dataset/.")
 
-parameter_names = list(cfg["parameters"])
+parameter_names = trainable_parameter_names(cfg)
 target_min = np.asarray([cfg["parameters"][name]["minimum"] for name in parameter_names], dtype=np.float32)
 target_max = np.asarray([cfg["parameters"][name]["maximum"] for name in parameter_names], dtype=np.float32)
 
 def records():
+    emitted = 0
     for path in files:
         with h5py.File(path, "r") as handle:
+            stored_names = [value.decode() if isinstance(value, bytes) else str(value) for value in handle.attrs["label_names"]]
+            label_indices = [stored_names.index(name) for name in parameter_names]
             for image, label in zip(handle["images"], handle["labels"]):
-                normalized_label = (label.astype("float32") - target_min) / np.maximum(target_max - target_min, 1e-12)
+                selected = label.astype("float32")[label_indices]
+                normalized_label = (selected - target_min) / np.maximum(target_max - target_min, 1e-12)
                 yield image[..., None].astype("float32"), normalized_label
+                emitted += 1
+                if args.smoke and emitted >= int(cfg["training"].get("smoke_samples", 64)):
+                    return
 
 with h5py.File(files[0], "r") as first:
     image_shape = tuple(first["images"].shape[1:]) + (1,)
-    output_size = int(first["labels"].shape[1])
+    output_size = len(parameter_names)
 signature = (
     tf.TensorSpec(shape=image_shape, dtype=tf.float32),
     tf.TensorSpec(shape=(output_size,), dtype=tf.float32),
 )
-dataset = tf.data.Dataset.from_generator(records, output_signature=signature)
 total_records = 0
 for path in files:
     with h5py.File(path, "r") as handle:
         total_records += int(handle["images"].shape[0])
+if args.smoke:
+    total_records = min(total_records, int(cfg["training"].get("smoke_samples", 64)))
 if total_records < 2:
     raise SystemExit("At least two generated samples are required for training.")
 
@@ -113,33 +129,31 @@ split = cfg["dataset"]["split"]
 train_count = max(1, int(total_records * float(split["train"])))
 validation_count = int(total_records * float(split["validation"]))
 test_count = max(0, total_records - train_count - validation_count)
-shuffled = dataset.shuffle(
-    min(total_records, 8192),
-    seed=int(cfg["project"]["seed"]),
-    reshuffle_each_iteration=False,
-)
 batch_size = int(cfg["training"]["batch_size"])
-train_dataset = shuffled.take(train_count).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-validation_dataset = shuffled.skip(train_count).take(validation_count).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-test_dataset = shuffled.skip(train_count + validation_count).take(test_count).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+if args.smoke:
+    materialized = list(records())
+    all_images = np.stack([item[0] for item in materialized])
+    all_labels = np.stack([item[1] for item in materialized])
+    order = np.random.default_rng(int(cfg["project"]["seed"])).permutation(total_records)
+    all_images, all_labels = all_images[order], all_labels[order]
+    train_data = (all_images[:train_count], all_labels[:train_count])
+    validation_data = (all_images[train_count:train_count + validation_count], all_labels[train_count:train_count + validation_count]) if validation_count else None
+    test_data = (all_images[train_count + validation_count:], all_labels[train_count + validation_count:]) if test_count else None
+else:
+    dataset = tf.data.Dataset.from_generator(records, output_signature=signature)
+    shuffled = dataset.shuffle(
+        min(total_records, 8192),
+        seed=int(cfg["project"]["seed"]),
+        reshuffle_each_iteration=False,
+    )
+    train_data = shuffled.take(train_count).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    validation_data = shuffled.skip(train_count).take(validation_count).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    test_data = shuffled.skip(train_count + validation_count).take(test_count).batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
-inputs = tf.keras.Input(shape=image_shape)
-x = inputs
-for channels in cfg["model"]["channels"]:
-    x = tf.keras.layers.Conv2D(int(channels), int(cfg["model"]["kernel_size"]), padding="same", activation="relu")(x)
-    x = tf.keras.layers.MaxPool2D()(x)
-x = tf.keras.layers.GlobalAveragePooling2D()(x)
-x = tf.keras.layers.Dropout(float(cfg["model"]["dropout"]))(x)
-outputs = tf.keras.layers.Dense(output_size)(x)
-model = tf.keras.Model(inputs, outputs)
+model = build_keras_model(tf, image_shape, output_size, cfg["model"], smoke=args.smoke)
 optimizer_name = str(cfg["training"].get("optimizer", "adam")).lower()
 learning_rate = float(cfg["training"]["learning_rate"])
-if optimizer_name == "sgd":
-    optimizer = tf.keras.optimizers.SGD(learning_rate)
-elif optimizer_name == "adamw" and hasattr(tf.keras.optimizers, "AdamW"):
-    optimizer = tf.keras.optimizers.AdamW(learning_rate)
-else:
-    optimizer = tf.keras.optimizers.Adam(learning_rate)
+optimizer = build_optimizer(keras_api, optimizer_name, learning_rate)
 model.compile(optimizer=optimizer, loss="mse", metrics=["mae"])
 
 results = ROOT / "results"
@@ -147,7 +161,7 @@ results.mkdir(exist_ok=True)
 metrics_path = results / "metrics.jsonl"
 if metrics_path.exists():
     metrics_path.unlink()
-class JsonlCallback(tf.keras.callbacks.Callback):
+class JsonlCallback(keras_api.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         payload = {"epoch": epoch + 1, **{key: float(value) for key, value in (logs or {}).items()}}
         with metrics_path.open("a", encoding="utf-8") as handle: handle.write(json.dumps(payload) + "\\n")
@@ -155,27 +169,38 @@ class JsonlCallback(tf.keras.callbacks.Callback):
 monitor = "val_loss" if validation_count else "loss"
 callbacks = [
     JsonlCallback(),
-    tf.keras.callbacks.ModelCheckpoint(results / "best_model.keras", monitor=monitor, save_best_only=True),
+    keras_api.callbacks.ModelCheckpoint(str(results / "best_model.h5"), monitor=monitor, save_best_only=True),
 ]
+epochs = args.epochs or (int(cfg["training"].get("smoke_epochs", 2)) if args.smoke else int(cfg["training"]["epochs"]))
 scheduler = str(cfg["training"].get("scheduler", "constant")).lower()
 if scheduler == "cosine":
-    epochs = max(1, int(cfg["training"]["epochs"]))
-    callbacks.append(tf.keras.callbacks.LearningRateScheduler(lambda epoch: learning_rate * 0.5 * (1.0 + np.cos(np.pi * epoch / epochs))))
+    epochs = max(1, int(epochs))
+    callbacks.append(keras_api.callbacks.LearningRateScheduler(lambda epoch: learning_rate * 0.5 * (1.0 + np.cos(np.pi * epoch / epochs))))
 elif scheduler == "plateau":
-    callbacks.append(tf.keras.callbacks.ReduceLROnPlateau(monitor=monitor, patience=5))
+    callbacks.append(keras_api.callbacks.ReduceLROnPlateau(monitor=monitor, patience=5))
 
-history = model.fit(
-    train_dataset,
-    validation_data=validation_dataset if validation_count else None,
-    epochs=int(cfg["training"]["epochs"]),
-    callbacks=callbacks,
-)
-model.save(results / "last_checkpoint.keras")
-test_metrics = model.evaluate(test_dataset, return_dict=True, verbose=0) if test_count else {}
+if args.smoke:
+    history = model.fit(
+        train_data[0], train_data[1],
+        validation_data=validation_data,
+        batch_size=min(batch_size, train_count),
+        epochs=epochs,
+        callbacks=callbacks,
+    )
+else:
+    history = model.fit(train_data, validation_data=validation_data, epochs=epochs, callbacks=callbacks)
+model.save(str(results / "last_checkpoint.h5"))
+if test_count and args.smoke:
+    values = model.evaluate(test_data[0], test_data[1], verbose=0)
+    test_metrics = dict(zip(model.metrics_names, np.atleast_1d(values)))
+elif test_count:
+    test_metrics = model.evaluate(test_data, return_dict=True, verbose=0)
+else:
+    test_metrics = {}
 (results / "test_metrics.json").write_text(json.dumps({key: float(value) for key, value in test_metrics.items()}, indent=2), encoding="utf-8")
 if test_count:
-    predictions = model.predict(test_dataset, verbose=0)
-    targets = np.concatenate([labels.numpy() for _images, labels in test_dataset], axis=0)
+    predictions = model.predict(test_data[0] if args.smoke else test_data, verbose=0)
+    targets = test_data[1] if args.smoke else np.concatenate([labels.numpy() for _images, labels in test_data], axis=0)
     with h5py.File(results / "predictions.h5", "w") as handle:
         handle.create_dataset("predictions_normalized", data=predictions, compression="gzip")
         handle.create_dataset("targets_normalized", data=targets, compression="gzip")
@@ -216,13 +241,22 @@ def prepare_job_package(config: Dict[str, Any], output_root: str | Path, project
         shutil.rmtree(destination)
     (destination / "src").mkdir(parents=True)
     shutil.copytree(project_root / "trainset", destination / "src" / "trainset", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    # Reference-derived detector masks must use exactly the same CBF/NXS
+    # orientation as the GUI.  The trainset loader delegates that work to the
+    # calibration package, so exported jobs need that package as well instead
+    # of silently depending on the source checkout being on PYTHONPATH.
+    shutil.copytree(
+        project_root / "calibration",
+        destination / "src" / "calibration",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
     save_project_config(config, destination / "config.yaml")
     _write(destination / "generate_dataset.py", GENERATE_SCRIPT)
     _write(destination / "validate_config.py", VALIDATE_SCRIPT)
     _write(destination / "train.py", TRAIN_SCRIPT)
     _write(
         destination / "environment.yml",
-        """name: gimap-trainset\nchannels:\n  - conda-forge\ndependencies:\n  - python=3.10\n  - numpy\n  - scipy\n  - h5py\n  - pyyaml\n  - bornagain\n  - tensorflow=2.15\n  - keras=2.15\n  - matplotlib\n""",
+        """name: gimap-trainset\nchannels:\n  - conda-forge\ndependencies:\n  - python=3.10\n  - numpy\n  - scipy\n  - h5py\n  - pyyaml\n  - fabio\n  - tensorflow=2.15\n  - keras=2.15\n  - matplotlib\n  - pip\n  - pip:\n      - BornAgain==24.1\n""",
     )
     dataset = config["dataset"]
     hpc = config["hpc"]

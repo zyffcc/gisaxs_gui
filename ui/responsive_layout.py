@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 
 from PyQt5.QtCore import QObject, QEvent, QPoint, QRect, QSize, QTimer, pyqtSignal
 from PyQt5.QtGui import QCursor, QScreen
@@ -413,6 +414,11 @@ def current_profile(window: QWidget | None = None) -> ResponsiveProfile:
 
 
 def profile_for_screen(screen: QScreen | None) -> ResponsiveProfile:
+    environment_profile = normalized_profile_key(
+        os.environ.get("GIMAP_LAYOUT_PROFILE", "")
+    )
+    if environment_profile in PROFILES:
+        return PROFILES[environment_profile]
     mode = normalized_profile_key(user_settings.get("responsive_layout_mode", "auto"))
     if mode in PROFILES:
         return PROFILES[mode]

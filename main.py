@@ -55,7 +55,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 快速初始化：仅设置基本UI
         self.setup_window()
         ui_ready_time = time.time() - self._startup_time
-        print(f"✓ UI ready in {ui_ready_time:.2f}s")
+        print(f"UI ready in {ui_ready_time:.2f}s")
         
         # 延迟初始化标志
         self._initialization_completed = False
@@ -100,13 +100,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # 计算总启动时间
             total_time = time.time() - self._startup_time
-            print(f"✓ Startup complete in {total_time:.2f}s")
+            print(f"Startup complete in {total_time:.2f}s")
             
             # 更新状态栏
             if hasattr(self, 'statusbar'):
                 self.statusbar.showMessage(f"GIMaP ready (startup: {total_time:.1f}s)")
             
-            print("✓ Deferred initialization finished")
+            print("Deferred initialization finished")
             
         except Exception as e:
             print(f"Deferred initialization failed: {e}")
@@ -270,7 +270,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             detector_params = global_params.get_module_parameters('detector')
             
             if beam_params and detector_params:
-                print("✓ Global parameter system initialized successfully")
+                print("Global parameter system initialized successfully")
             else:
                 print("⚠ Parameter system initialization incomplete, using default parameters")
                 
@@ -302,6 +302,13 @@ def main():
     
     # 创建主窗口
     window = MainWindow()
+    requested_size = os.environ.get("GIMAP_WINDOW_SIZE", "").strip().lower()
+    if "x" in requested_size:
+        try:
+            width_text, height_text = requested_size.split("x", 1)
+            window.resize(max(960, int(width_text)), max(640, int(height_text)))
+        except ValueError:
+            print(f"Ignoring invalid GIMAP_WINDOW_SIZE={requested_size!r}; expected WIDTHxHEIGHT")
     window.show()
     
     # 轻量预热：在窗口显示后构建字体缓存与绘图后端，避免首次绘图卡顿

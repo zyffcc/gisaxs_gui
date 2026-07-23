@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -33,15 +34,23 @@ def _largest_2d_hdf5_dataset(handle: h5py.File) -> np.ndarray:
 def load_scattering_image(path: str | Path) -> np.ndarray:
     source = Path(path)
     suffix = source.suffix.lower()
-    if suffix == ".npy":
+    if suffix in {".nxs", ".cbf"}:
+        # Reuse the same loader as GISAXS Image Input/calibration.  In
+        # particular, P03 NXS modules require stitching, a canvas transpose and
+        # one vertical flip; bypassing that path made the TrainSet ROI disagree
+        # with the image users selected elsewhere in the GUI.
+        from calibration.image_loader import load_detector_image
+
+        data = np.asarray(load_detector_image(source).data)
+    elif suffix == ".npy":
         data = np.load(source)
     elif suffix == ".npz":
         archive = np.load(source)
         data = np.asarray(archive[archive.files[0]])
-    elif suffix in {".h5", ".hdf5", ".nxs"}:
+    elif suffix in {".h5", ".hdf5"}:
         with h5py.File(source, "r") as handle:
             data = _largest_2d_hdf5_dataset(handle)
-    elif suffix in {".cbf", ".edf"}:
+    elif suffix == ".edf":
         import fabio
 
         data = np.asarray(fabio.open(str(source)).data)
@@ -78,14 +87,84 @@ def build_roi_shape_mask(shape: tuple[int, int], config: Dict[str, Any]) -> np.n
     return mask
 
 
-def build_fixed_mask(image: np.ndarray, config: Dict[str, Any]) -> np.ndarray:
+@lru_cache(maxsize=16)
+def _cached_reference_roi(
+    path: str,
+    modified_ns: int,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    del modified_ns  # Included in the cache key so changed files are reloaded.
+    return crop_roi(
+        load_scattering_image(path),
+        {"x": x, "y": y, "width": width, "height": height},
+    ).copy()
+
+
+def build_reference_threshold_mask(
+    image: np.ndarray,
+    config: Dict[str, Any],
+    reference_image: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Build a spatial bad-pixel mask from the experimental reference ROI.
+
+    Experimental intensity thresholds describe detector locations (module gaps,
+    saturated/hot pixels and non-finite values). They must not be evaluated on
+    a BornAgain intensity field, otherwise those detector defects disappear
+    from simulated training images.
+
+    ``image`` supplies the target shape. ``reference_image`` may be either the
+    full detector or an already-cropped ROI. If no reference file is configured
+    we retain the old direct-image behaviour for standalone callers and tests.
+    """
+    target = np.asarray(image)
+    threshold = config.get("mask", {}).get("threshold", {})
+    if not threshold.get("enabled", False):
+        return np.zeros(target.shape, dtype=bool)
+
+    roi = config.get("roi", {})
+    source: Optional[np.ndarray] = None
+    if reference_image is not None:
+        candidate = np.asarray(reference_image)
+        if candidate.shape == target.shape:
+            source = candidate
+        else:
+            source = crop_roi(candidate, roi)
+    else:
+        path_text = str(config.get("project", {}).get("reference_file", "")).strip()
+        path = Path(path_text) if path_text else None
+        if path is not None and path.exists():
+            source = _cached_reference_roi(
+                str(path.resolve()),
+                int(path.stat().st_mtime_ns),
+                int(roi.get("x", 0)),
+                int(roi.get("y", 0)),
+                int(roi.get("width", target.shape[1])),
+                int(roi.get("height", target.shape[0])),
+            )
+
+    if source is None:
+        source = target
+    mask = build_threshold_mask(source, config)
+    if mask.shape != target.shape:
+        mask = cv2.resize(
+            mask.astype(np.uint8),
+            (int(target.shape[1]), int(target.shape[0])),
+            interpolation=cv2.INTER_NEAREST,
+        ).astype(bool)
+    return np.asarray(mask, dtype=bool)
+
+
+def build_fixed_mask(
+    image: np.ndarray,
+    config: Dict[str, Any],
+    reference_image: Optional[np.ndarray] = None,
+) -> np.ndarray:
     mask_cfg = config.get("mask", {})
-    threshold = mask_cfg.get("threshold", {})
     mask = build_roi_shape_mask(image.shape, config)
-    if threshold.get("enabled", False):
-        low = float(threshold.get("minimum", -np.inf))
-        high = float(threshold.get("maximum", np.inf))
-        mask |= ~np.isfinite(image) | (image < low) | (image > high)
+    mask |= build_reference_threshold_mask(image, config, reference_image)
     yy, xx = np.ogrid[: image.shape[0], : image.shape[1]]
     for shape in mask_cfg.get("fixed_shapes", []):
         shape_type = shape.get("type")
@@ -108,6 +187,31 @@ def build_fixed_mask(image: np.ndarray, config: Dict[str, Any]) -> np.ndarray:
             radius_y = max(1e-6, float(shape.get("radius_y", shape.get("radius", 0))))
             mask |= ((xx - cx) / radius_x) ** 2 + ((yy - cy) / radius_y) ** 2 <= 1.0
     return mask
+
+
+def build_threshold_mask(image: np.ndarray, config: Dict[str, Any]) -> np.ndarray:
+    """Mask non-finite or out-of-range intensity in every mask mode."""
+    threshold = config.get("mask", {}).get("threshold", {})
+    if not threshold.get("enabled", False):
+        return np.zeros(np.asarray(image).shape, dtype=bool)
+    low = float(threshold.get("minimum", -np.inf))
+    high = float(threshold.get("maximum", np.inf))
+    data = np.asarray(image)
+    return ~np.isfinite(data) | (data < low) | (data > high)
+
+
+def merge_threshold_mask(
+    image: np.ndarray,
+    mask: np.ndarray,
+    config: Dict[str, Any],
+    reference_image: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Merge random/fixed geometry with the experimental spatial threshold mask."""
+    return np.asarray(mask, dtype=bool) | build_reference_threshold_mask(
+        image,
+        config,
+        reference_image,
+    )
 
 
 def build_random_mask(shape: tuple[int, int], config: Dict[str, Any], rng: np.random.Generator) -> np.ndarray:
@@ -141,9 +245,120 @@ def build_random_mask(shape: tuple[int, int], config: Dict[str, Any], rng: np.ra
     return mask
 
 
-def apply_preprocessing(image: np.ndarray, config: Dict[str, Any], mask: Optional[np.ndarray], rng: np.random.Generator) -> List[Dict[str, Any]]:
+def _range_value(
+    step: Dict[str, Any],
+    key: str,
+    rng: np.random.Generator,
+    overrides: Dict[str, float],
+    plugin: str,
+    fallback_min: float,
+    fallback_max: float,
+) -> float:
+    override_key = f"{plugin}.{key}"
+    if override_key in overrides:
+        return float(overrides[override_key])
+    minimum = float(step.get(f"{key}_min", fallback_min))
+    maximum = float(step.get(f"{key}_max", fallback_max))
+    if maximum < minimum:
+        minimum, maximum = maximum, minimum
+    return minimum if maximum == minimum else float(rng.uniform(minimum, maximum))
+
+
+def generate_physical_background(
+    image: np.ndarray,
+    config: Dict[str, Any],
+    step: Dict[str, Any],
+    rng: np.random.Generator,
+    overrides: Optional[Dict[str, float]] = None,
+    trace: Optional[Dict[str, float]] = None,
+) -> np.ndarray:
+    """Generate the configurable Yuxin-style physical GISAXS background.
+
+    Coordinates are normalized to the selected ROI, which makes the controls
+    meaningful for both small local previews and full-resolution datasets.
+    """
+    from .geometry import q_vectors
+
+    overrides = overrides or {}
+    if "target_fraction_min" not in step and "fraction_min" in step:
+        step = {**step, "target_fraction_min": step["fraction_min"], "target_fraction_max": step.get("fraction_max", step["fraction_min"])}
+    height, width = image.shape[:2]
+    q = q_vectors(config)
+    roi = config.get("roi", {})
+    x, y = int(roi.get("x", 0)), int(roi.get("y", 0))
+    qy = np.asarray(q["qy"][y : y + height, x : x + width], dtype=np.float64)
+    qz = np.asarray(q["qz"][y : y + height, x : x + width], dtype=np.float64)
+    if qy.shape != image.shape or qz.shape != image.shape:
+        qz, qy = np.mgrid[0.0:1.0:complex(height), -1.0:1.0:complex(width)]
+    else:
+        qy_mid = float(np.nanmedian(qy))
+        qy_span = max(float(np.nanmax(qy) - np.nanmin(qy)), 1e-12)
+        qz_min = float(np.nanmin(qz))
+        qz_span = max(float(np.nanmax(qz) - qz_min), 1e-12)
+        qy = (qy - qy_mid) / qy_span
+        qz = (qz - qz_min) / qz_span
+
+    def value(key: str, low: float, high: float) -> float:
+        selected = _range_value(step, key, rng, overrides, "physical_background", low, high)
+        if trace is not None:
+            trace[key] = float(selected)
+        return selected
+
+    target_fraction = max(0.0, value("target_fraction", 0.05, 0.30))
+    constant = max(0.0, value("constant_fraction", 0.0, 0.03))
+    spec_amplitude = max(0.0, value("specular_amplitude", 0.2, 1.0))
+    spec_width = max(1e-4, value("specular_width_fraction", 0.01, 0.04))
+    spec_widening = max(0.0, value("specular_widening", 0.0, 0.12))
+    spec_decay = max(1e-4, value("specular_decay_fraction", 0.2, 0.8))
+    local_width = spec_width * (1.0 + spec_widening * np.clip(qz, 0.0, 1.0))
+    specular = spec_amplitude * np.exp(-0.5 * (qy / local_width) ** 2) * np.exp(-np.clip(qz, 0.0, None) / spec_decay)
+
+    yoneda_amplitude = max(0.0, value("yoneda_amplitude", 0.1, 0.7))
+    yoneda_center = value("yoneda_center_fraction", 0.50, 0.72)
+    yoneda_width = max(1e-4, value("yoneda_width_fraction", 0.02, 0.08))
+    yoneda_hole = float(np.clip(value("yoneda_center_hole", 0.4, 0.95), 0.0, 1.0))
+    center_suppression = 1.0 - yoneda_hole * np.exp(-0.5 * (qy / max(2.5 * spec_width, 1e-4)) ** 2)
+    yoneda = yoneda_amplitude * np.exp(-0.5 * ((qz - yoneda_center) / yoneda_width) ** 2) * center_suppression
+
+    wedge_amplitude = max(0.0, value("wedge_amplitude", 0.05, 0.40))
+    anisotropy = max(1e-3, value("wedge_anisotropy", 0.6, 2.0))
+    porod = max(0.1, value("wedge_porod_exponent", 2.0, 3.8))
+    rg_fraction = max(1e-3, value("wedge_rg_fraction", 0.05, 0.25))
+    radial = np.sqrt((qy / anisotropy) ** 2 + np.clip(qz, 0.0, None) ** 2)
+    wedge = wedge_amplitude * np.power(1.0 + (radial / rg_fraction) ** 2, -0.5 * porod)
+
+    plane = (
+        constant
+        + value("plane_qy_slope", -0.08, 0.08) * qy
+        + value("plane_qz_slope", -0.08, 0.08) * (qz - 0.5)
+    )
+    background = np.maximum(specular + yoneda + wedge + plane, 0.0)
+    qz_cut = max(0.0, value("low_qz_cut_fraction", 0.0, 0.08))
+    if qz_cut > 0:
+        transition = max(0.005, qz_cut * 0.25)
+        background *= 1.0 / (1.0 + np.exp(-(qz - qz_cut) / transition))
+    blur_sigma = max(0.0, value("blur_sigma_px", 0.0, 0.6))
+    if blur_sigma > 1e-6:
+        background = cv2.GaussianBlur(background.astype(np.float32), (0, 0), blur_sigma)
+
+    positive = np.asarray(image)[np.isfinite(image) & (np.asarray(image) > 0)]
+    signal_reference = float(np.percentile(positive, 75)) if positive.size else 1.0
+    bg_reference = max(float(np.percentile(background, 95)), 1e-12)
+    background = background / bg_reference * signal_reference * target_fraction
+    return np.asarray(background, dtype=np.float32)
+
+
+def apply_preprocessing(
+    image: np.ndarray,
+    config: Dict[str, Any],
+    mask: Optional[np.ndarray],
+    rng: np.random.Generator,
+    overrides: Optional[Dict[str, float]] = None,
+    trace: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    overrides = overrides or {}
     current_mask = None if mask is None else np.asarray(mask, dtype=bool).copy()
-    stages: List[Dict[str, Any]] = [{"name": "ROI", "image": np.asarray(image, dtype=np.float32), "mask": current_mask}]
+    stages: List[Dict[str, Any]] = [{"name": "BornAgain Raw", "image": np.asarray(image, dtype=np.float32), "mask": current_mask}]
     current = np.asarray(image, dtype=np.float32).copy()
     mask_value = float(config.get("mask", {}).get("mask_value", -1.0))
     for step in config.get("preprocessing", {}).get("steps", []):
@@ -151,34 +366,38 @@ def apply_preprocessing(image: np.ndarray, config: Dict[str, Any], mask: Optiona
             continue
         plugin = step.get("plugin")
         if plugin == "physical_background":
-            from .geometry import q_vectors
-
-            q = q_vectors(config)
-            roi = config.get("roi", {})
-            x, y = int(roi.get("x", 0)), int(roi.get("y", 0))
-            height, width = current.shape[:2]
-            qy = q["qy"][y : y + height, x : x + width]
-            qz = q["qz"][y : y + height, x : x + width]
-            if qy.shape == current.shape and qz.shape == current.shape:
-                qy_scale = max(float(np.nanpercentile(np.abs(qy), 35)), 1e-6)
-                qz_center = float(np.nanpercentile(qz, 62))
-                qz_scale = max(float(np.nanpercentile(qz, 75) - np.nanpercentile(qz, 50)), 1e-6)
-                specular = np.exp(-0.5 * (qy / (0.18 * qy_scale)) ** 2)
-                yoneda = np.exp(-0.5 * ((qz - qz_center) / (0.35 * qz_scale)) ** 2)
-                background = 0.55 * specular + 0.45 * yoneda
+            background_trace: Dict[str, float] = {}
+            background = generate_physical_background(current, config, step, rng, overrides, background_trace)
+            if trace is not None:
+                trace["physical_background"] = background_trace
+            current = np.maximum(current + background, 0.0).astype(np.float32)
+        elif plugin in {"noise", "gaussian_noise"}:
+            if "gaussian_noise.snr_db" in overrides:
+                snr = float(overrides["gaussian_noise.snr_db"])
             else:
-                yy, xx = np.mgrid[-1.0:1.0:complex(height), -1.0:1.0:complex(width)]
-                background = 0.55 * np.exp(-0.5 * (xx / 0.05) ** 2) + 0.45 * np.exp(-0.5 * ((yy - 0.25) / 0.12) ** 2)
-            positive = current[np.isfinite(current) & (current > 0)]
-            reference = float(np.percentile(positive, 75)) if positive.size else 1.0
-            fraction = float(rng.uniform(float(step.get("fraction_min", 0.05)), float(step.get("fraction_max", 0.30))))
-            current = np.maximum(current + background.astype(np.float32) * reference * fraction, 0.0).astype(np.float32)
-        elif plugin == "noise":
-            snr = float(rng.uniform(float(step.get("snr_min_db", 80.0)), float(step.get("snr_max_db", 110.0))))
+                snr = float(rng.uniform(float(step.get("snr_min_db", 80.0)), float(step.get("snr_max_db", 110.0))))
             power = float(np.mean(np.square(np.nan_to_num(current))))
             sigma = np.sqrt(power / max(10 ** (snr / 10.0), 1e-12))
+            if trace is not None:
+                trace["gaussian_noise"] = {"snr_db": float(snr), "sigma": float(sigma)}
             current = np.maximum(current + rng.normal(0.0, sigma, current.shape), 0.0).astype(np.float32)
+        elif plugin == "poisson_noise":
+            if "poisson_noise.count_scale" in overrides:
+                count_scale = float(overrides["poisson_noise.count_scale"])
+            else:
+                count_scale = float(
+                    rng.uniform(float(step.get("count_scale_min", 1.0)), float(step.get("count_scale_max", 20.0)))
+                )
+            count_scale = max(count_scale, 1e-12)
+            if trace is not None:
+                trace["poisson_noise"] = {"count_scale": float(count_scale)}
+            current = (rng.poisson(np.maximum(current, 0.0) * count_scale) / count_scale).astype(np.float32)
         elif plugin == "mask" and current_mask is not None:
+            if trace is not None:
+                trace["mask"] = {
+                    "masked_fraction": float(current_mask.mean()),
+                    "threshold_enabled": bool(config.get("mask", {}).get("threshold", {}).get("enabled", False)),
+                }
             current = current.copy()
             current[current_mask] = mask_value
         elif plugin == "log":
@@ -205,6 +424,13 @@ def apply_preprocessing(image: np.ndarray, config: Dict[str, Any], mask: Optiona
             if maximum:
                 output_height, output_width = current.shape[:2]
                 top, bottom, left, right = [int(rng.integers(0, maximum + 1)) for _ in range(4)]
+                if trace is not None:
+                    trace["random_edge_crop"] = {
+                        "top_px": top,
+                        "bottom_px": bottom,
+                        "left_px": left,
+                        "right_px": right,
+                    }
                 cropped = current[top : current.shape[0] - bottom or None, left : current.shape[1] - right or None]
                 if cropped.size:
                     current = cv2.resize(cropped, (output_width, output_height), interpolation=cv2.INTER_AREA).astype(np.float32)
@@ -216,7 +442,17 @@ def apply_preprocessing(image: np.ndarray, config: Dict[str, Any], mask: Optiona
                             interpolation=cv2.INTER_NEAREST,
                         ).astype(bool)
                         current[current_mask] = mask_value
-        stages.append({"name": str(plugin).replace("_", " ").title(), "image": current.copy(), "mask": current_mask})
+        stage_name = {
+            "noise": "Gaussian Noise",
+            "gaussian_noise": "Gaussian Noise",
+            "poisson_noise": "Poisson Noise",
+            "mask": (
+                "Threshold + Detector Mask"
+                if config.get("mask", {}).get("threshold", {}).get("enabled", False)
+                else "Detector Mask"
+            ),
+        }.get(str(plugin), str(plugin).replace("_", " ").title())
+        stages.append({"name": stage_name, "image": current.copy(), "mask": current_mask})
     return stages
 
 
@@ -257,6 +493,7 @@ class DatasetGenerator:
             raise ValueError("The configured ROI is empty for the loaded detector image.")
         if self.config.get("mask", {}).get("mode") == "random":
             mask = build_random_mask(roi_image.shape, self.config, self.rng)
+            mask = merge_threshold_mask(roi_image, mask, self.config)
         else:
             mask = build_fixed_mask(roi_image, self.config)
         stages = apply_preprocessing(roi_image, self.config, mask, self.rng)
@@ -294,6 +531,8 @@ class DatasetGenerator:
                 if self.config.get("mask", {}).get("mode") == "random"
                 else build_fixed_mask(raw, self.config)
             )
+            if self.config.get("mask", {}).get("mode") == "random":
+                mask = merge_threshold_mask(raw, mask, self.config)
             stages = apply_preprocessing(raw, self.config, mask, self.rng)
             images.append(np.asarray(stages[-1]["image"], dtype=np.float32))
             masks.append(mask)
@@ -328,6 +567,8 @@ class DatasetGenerator:
                 if self.config.get("mask", {}).get("mode") == "random"
                 else build_fixed_mask(shifted, self.config)
             )
+            if self.config.get("mask", {}).get("mode") == "random":
+                mask = merge_threshold_mask(shifted, mask, self.config)
             stages = apply_preprocessing(shifted, self.config, mask, self.rng)
             images.append(np.asarray(stages[-1]["image"], dtype=np.float32))
             masks.append(mask)
@@ -397,8 +638,6 @@ class DatasetGenerator:
                 if feasible_low > feasible_high:
                     raise ValueError("Constraint D > 2R is infeasible for a sampled radius; adjust the configured ranges.")
                 values["D_nm"] = float(np.clip(values["D_nm"], feasible_low, feasible_high))
-            if constraints.get("paracrystal_sigma_le_0_2d", False) and "sigma_D_ratio" in values:
-                values["sigma_D_ratio"] = min(values["sigma_D_ratio"], 0.2)
             output.append(values)
         return output
 

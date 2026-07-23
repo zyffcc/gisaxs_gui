@@ -8,6 +8,162 @@ from typing import Any, Dict, List, Tuple
 import yaml
 
 
+PHYSICAL_BACKGROUND_PARAMETERS = (
+    {
+        "key": "target_fraction",
+        "label": "Overall level / signal",
+        "minimum": 0.05,
+        "maximum": 0.30,
+        "decimals": 3,
+        "help": "Background 95th percentile relative to the simulated signal 75th percentile.",
+    },
+    {
+        "key": "constant_fraction",
+        "label": "Constant floor",
+        "minimum": 0.00,
+        "maximum": 0.03,
+        "decimals": 3,
+        "help": "Uniform detector background before the overall relative scaling is applied.",
+    },
+    {
+        "key": "specular_amplitude",
+        "label": "Specular ridge amplitude",
+        "minimum": 0.20,
+        "maximum": 1.00,
+        "decimals": 3,
+        "help": "Relative strength of the narrow vertical specular ridge around qy = 0.",
+    },
+    {
+        "key": "specular_width_fraction",
+        "label": "Specular qy width",
+        "minimum": 0.01,
+        "maximum": 0.04,
+        "decimals": 4,
+        "help": "Gaussian ridge width as a fraction of the ROI qy span.",
+    },
+    {
+        "key": "specular_widening",
+        "label": "Specular widening",
+        "minimum": 0.00,
+        "maximum": 0.12,
+        "decimals": 3,
+        "help": "How much the specular ridge widens toward larger qz.",
+    },
+    {
+        "key": "specular_decay_fraction",
+        "label": "Specular qz decay",
+        "minimum": 0.20,
+        "maximum": 0.80,
+        "decimals": 3,
+        "help": "Vertical decay length as a fraction of the ROI qz span.",
+    },
+    {
+        "key": "yoneda_amplitude",
+        "label": "Yoneda band amplitude",
+        "minimum": 0.10,
+        "maximum": 0.70,
+        "decimals": 3,
+        "help": "Relative strength of the horizontal Yoneda-like band.",
+    },
+    {
+        "key": "yoneda_center_fraction",
+        "label": "Yoneda qz position",
+        "minimum": 0.50,
+        "maximum": 0.72,
+        "decimals": 3,
+        "help": "Vertical band position from ROI bottom (0) to top (1) in qz coordinates.",
+    },
+    {
+        "key": "yoneda_width_fraction",
+        "label": "Yoneda qz width",
+        "minimum": 0.02,
+        "maximum": 0.08,
+        "decimals": 3,
+        "help": "Gaussian band width as a fraction of the ROI qz span.",
+    },
+    {
+        "key": "yoneda_center_hole",
+        "label": "Yoneda center hole",
+        "minimum": 0.40,
+        "maximum": 0.95,
+        "decimals": 3,
+        "help": "Suppresses the Yoneda band close to qy = 0 to avoid an unrealistically bright cross.",
+    },
+    {
+        "key": "wedge_amplitude",
+        "label": "Diffuse wedge amplitude",
+        "minimum": 0.05,
+        "maximum": 0.40,
+        "decimals": 3,
+        "help": "Relative strength of the anisotropic Guinier–Porod diffuse component.",
+    },
+    {
+        "key": "wedge_anisotropy",
+        "label": "Diffuse anisotropy",
+        "minimum": 0.60,
+        "maximum": 2.00,
+        "decimals": 3,
+        "help": "Aspect ratio of the diffuse wedge in qy versus qz.",
+    },
+    {
+        "key": "wedge_porod_exponent",
+        "label": "Porod exponent",
+        "minimum": 2.00,
+        "maximum": 3.80,
+        "decimals": 3,
+        "help": "Controls how quickly the diffuse tail decays at high q.",
+    },
+    {
+        "key": "wedge_rg_fraction",
+        "label": "Diffuse Rg scale",
+        "minimum": 0.05,
+        "maximum": 0.25,
+        "decimals": 3,
+        "help": "Guinier knee position expressed as a fraction of the normalized ROI q span.",
+    },
+    {
+        "key": "plane_qy_slope",
+        "label": "Plane slope along qy",
+        "minimum": -0.08,
+        "maximum": 0.08,
+        "decimals": 3,
+        "help": "Slow left-to-right detector background gradient.",
+    },
+    {
+        "key": "plane_qz_slope",
+        "label": "Plane slope along qz",
+        "minimum": -0.08,
+        "maximum": 0.08,
+        "decimals": 3,
+        "help": "Slow bottom-to-top detector background gradient.",
+    },
+    {
+        "key": "low_qz_cut_fraction",
+        "label": "Low-qz suppression",
+        "minimum": 0.00,
+        "maximum": 0.08,
+        "decimals": 3,
+        "help": "Smoothly suppresses background below this fraction of the ROI qz span.",
+    },
+    {
+        "key": "blur_sigma_px",
+        "label": "PSF blur σ (px)",
+        "minimum": 0.00,
+        "maximum": 0.60,
+        "decimals": 3,
+        "help": "Gaussian point-spread blur applied only to the generated physical background.",
+    },
+)
+
+
+def default_physical_background_step() -> Dict[str, Any]:
+    step: Dict[str, Any] = {"plugin": "physical_background", "enabled": False}
+    for definition in PHYSICAL_BACKGROUND_PARAMETERS:
+        step[f"{definition['key']}_min"] = definition["minimum"]
+        step[f"{definition['key']}_max"] = definition["maximum"]
+    return step
+
+
 def _range_spec(value: Any, fallback: float = 0.0) -> Dict[str, float]:
     """Normalize legacy scalar and v2 min/max parameter representations."""
     if isinstance(value, dict):
@@ -106,6 +262,7 @@ def synchronize_parameter_specs(config: Dict[str, Any]) -> Dict[str, Any]:
             flat[key] = copy.deepcopy(spec)
             flat[key].setdefault("source", "custom")
     config["parameters"] = flat
+    config.setdefault("sample", {}).setdefault("constraints", {}).pop("paracrystal_sigma_le_0_2d", None)
     config["schema_version"] = max(2, int(config.get("schema_version", 1)))
     return config
 
@@ -153,7 +310,13 @@ def default_project_config() -> Dict[str, Any]:
         "mask": {
             "mode": "fixed",
             "mask_value": -1.0,
-            "threshold": {"enabled": True, "minimum": 0.0, "maximum": 1000000000000.0},
+            "threshold": {
+                "enabled": True,
+                "minimum": 0.0,
+                "maximum": 1000000000000.0,
+                "auto_reference_upper": True,
+                "upper_quantile": 99.999,
+            },
             "fixed_shapes": [],
             "random": {
                 "vertical_bars": 2,
@@ -212,13 +375,13 @@ def default_project_config() -> Dict[str, Any]:
             "constraints": {
                 "segment_height_le_2r": True,
                 "interparticle_spacing_gt_2r": True,
-                "paracrystal_sigma_le_0_2d": True,
             },
         },
         "preprocessing": {
             "steps": [
-                {"plugin": "physical_background", "enabled": False, "fraction_min": 0.05, "fraction_max": 0.30},
-                {"plugin": "noise", "enabled": True, "snr_min_db": 80.0, "snr_max_db": 110.0},
+                default_physical_background_step(),
+                {"plugin": "gaussian_noise", "enabled": True, "snr_min_db": 80.0, "snr_max_db": 110.0},
+                {"plugin": "poisson_noise", "enabled": False, "count_scale_min": 1.0, "count_scale_max": 20.0},
                 {"plugin": "mask", "enabled": True},
                 {"plugin": "log", "enabled": True, "epsilon": 1e-6},
                 {"plugin": "normalize", "enabled": True, "mode": "range", "lower": 0.0, "upper": 1.0},
@@ -262,7 +425,11 @@ def default_project_config() -> Dict[str, Any]:
             "python_command": "python",
             "job_array": True,
         },
-        "runtime": {"last_job_id": "", "last_project_dir": ""},
+        "runtime": {
+            "last_job_id": "",
+            "last_project_dir": "",
+            "auto_remember": True,
+        },
     }
 
 
@@ -342,10 +509,21 @@ def validate_project_config(config: Dict[str, Any], require_reference: bool = Fa
             if spec["minimum"] < 0 or spec["minimum"] > spec["maximum"]:
                 errors.append(f"Layer {index} {label}: use non-negative min/max with min <= max.")
     for step in config.get("preprocessing", {}).get("steps", []):
-        if step.get("plugin") == "physical_background" and float(step.get("fraction_min", 0.0)) > float(step.get("fraction_max", 0.0)):
-            errors.append("Physical background fraction minimum must not exceed maximum.")
-        if step.get("plugin") == "noise" and float(step.get("snr_min_db", 0.0)) > float(step.get("snr_max_db", 0.0)):
-            errors.append("Noise SNR minimum must not exceed maximum.")
+        plugin = step.get("plugin")
+        if plugin == "physical_background":
+            for definition in PHYSICAL_BACKGROUND_PARAMETERS:
+                key = str(definition["key"])
+                legacy_min = step.get("fraction_min", definition["minimum"]) if key == "target_fraction" else definition["minimum"]
+                legacy_max = step.get("fraction_max", definition["maximum"]) if key == "target_fraction" else definition["maximum"]
+                if float(step.get(f"{key}_min", legacy_min)) > float(step.get(f"{key}_max", legacy_max)):
+                    errors.append(f"Physical background {definition['label']}: minimum must not exceed maximum.")
+        if plugin in {"noise", "gaussian_noise"} and float(step.get("snr_min_db", 0.0)) > float(step.get("snr_max_db", 0.0)):
+            errors.append("Gaussian noise SNR minimum must not exceed maximum.")
+        if plugin == "poisson_noise":
+            low = float(step.get("count_scale_min", 0.0))
+            high = float(step.get("count_scale_max", 0.0))
+            if low <= 0 or low > high:
+                errors.append("Poisson photon-count scale must be positive with minimum <= maximum.")
     if not trainable_parameter_names(config):
         errors.append("At least one parameter must have a non-zero training range.")
     model_layers = config.get("model", {}).get("layers", [])
@@ -370,7 +548,7 @@ def validate_project_config(config: Dict[str, Any], require_reference: bool = Fa
         try:
             import bornagain  # type: ignore  # noqa: F401
         except Exception:
-            warnings.append("BornAgain is not installed locally; reference preprocessing preview works, but local simulation/full generation is unavailable.")
+            warnings.append("BornAgain is not installed locally; simulation preview and local physical generation are unavailable.")
     if config.get("hpc", {}).get("enabled", False):
         if not str(config.get("hpc", {}).get("user", "")).strip():
             warnings.append("Maxwell user is not configured.")

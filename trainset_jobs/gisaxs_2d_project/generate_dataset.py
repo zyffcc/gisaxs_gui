@@ -12,7 +12,7 @@ from trainset.generator import DatasetGenerator
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", default="config.yaml")
 parser.add_argument("--samples", type=int, default=None)
-parser.add_argument("--mode", choices=("dry", "full"), default="full")
+parser.add_argument("--mode", choices=("dry", "full", "demo"), default="full")
 parser.add_argument("--output", default="dataset")
 args = parser.parse_args()
 config = load_project_config(ROOT / args.config)
@@ -28,5 +28,5 @@ if task_id is not None:
         raise SystemExit(f"array task {task_index} has no samples to generate")
     config["project"]["seed"] = int(config["project"]["seed"]) + task_index
     output = output / f"array_{task_index:04d}"
-files = DatasetGenerator(config).write_hdf5_shards(output, count)
+files = DatasetGenerator(config).write_hdf5_shards(output, count, mode=args.mode)
 print(f"generated_files={len(files)} samples={count} output={output}")
