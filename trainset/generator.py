@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import cv2
 import h5py
@@ -472,6 +472,7 @@ class DatasetGenerator:
     def __init__(self, config: Dict[str, Any]):
         self.config = synchronize_parameter_specs(config)
         self.rng = np.random.default_rng(int(config.get("project", {}).get("seed", 42)))
+        self._grid_cache_data: Optional[Dict[str, Any]] = None
 
     @property
     def bornagain_available(self) -> bool:
@@ -511,7 +512,13 @@ class DatasetGenerator:
         }
         return PreviewResult(stages, roi_image, mask, (edges[:-1] + edges[1:]) / 2.0, hist, stats)
 
-    def generate(self, n_samples: int, mode: str = "preview") -> Any:
+    def generate(
+        self,
+        n_samples: int,
+        mode: str = "preview",
+        progress: Optional[Callable[[int, int, str], None]] = None,
+        pause: Optional[Callable[[], None]] = None,
+    ) -> Any:
         if mode == "preview":
             return self.preview_reference()
         if mode == "demo":
@@ -519,13 +526,41 @@ class DatasetGenerator:
         if not self.bornagain_available:
             raise RuntimeError("BornAgain is required for simulated Dry run or Full run. Install it locally or use the Maxwell backend.")
         from .simulation import simulate_pattern
+        use_grid = bool(
+            mode == "full"
+            and self.config.get("simulation", {}).get("grid_cache", {}).get("enabled", True)
+        )
+        if use_grid:
+            from .grid_cache import cache_compatible
+
+            use_grid = cache_compatible(self.config)
+        if use_grid and self._grid_cache_data is None:
+            from .grid_cache import load_or_build_grid
+
+            self._grid_cache_data = load_or_build_grid(
+                self.config,
+                progress=progress,
+                pause=pause,
+            )
 
         samples = self.sample_parameters(n_samples)
         images: List[np.ndarray] = []
         masks: List[np.ndarray] = []
-        for sampled in samples:
+        for index, sampled in enumerate(samples, start=1):
+            if pause is not None:
+                pause()
             simulation_values = self._mixture_values(sampled)
-            raw = simulate_pattern(self.config, simulation_values)
+            if self._grid_cache_data is not None:
+                from .grid_cache import mix_cached_grid
+
+                raw = mix_cached_grid(
+                    self.config,
+                    simulation_values,
+                    self._grid_cache_data,
+                    self.rng,
+                )
+            else:
+                raw = simulate_pattern(self.config, simulation_values)
             mask = (
                 build_random_mask(raw.shape, self.config, self.rng)
                 if self.config.get("mask", {}).get("mode") == "random"
@@ -536,6 +571,8 @@ class DatasetGenerator:
             stages = apply_preprocessing(raw, self.config, mask, self.rng)
             images.append(np.asarray(stages[-1]["image"], dtype=np.float32))
             masks.append(mask)
+            if progress is not None:
+                progress(index, n_samples, f"Generating dataset sample {index}/{n_samples}")
         return {
             "images": np.stack(images),
             "labels": samples,
@@ -641,7 +678,14 @@ class DatasetGenerator:
             output.append(values)
         return output
 
-    def write_hdf5_shards(self, output_dir: str | Path, n_samples: int, mode: str = "full") -> List[Path]:
+    def write_hdf5_shards(
+        self,
+        output_dir: str | Path,
+        n_samples: int,
+        mode: str = "full",
+        progress: Optional[Callable[[int, int, str], None]] = None,
+        pause: Optional[Callable[[], None]] = None,
+    ) -> List[Path]:
         destination = Path(output_dir)
         destination.mkdir(parents=True, exist_ok=True)
         shard_size = int(self.config.get("dataset", {}).get("samples_per_shard", 2000))
@@ -650,7 +694,20 @@ class DatasetGenerator:
         shard_index = 0
         while generated < n_samples:
             count = min(shard_size, n_samples - generated)
-            batch = self.generate(count, mode=mode)
+            def batch_progress(completed: int, total: int, message: str) -> None:
+                if progress is None:
+                    return
+                if message.startswith("BornAgain form-factor grid"):
+                    progress(completed, total, message)
+                else:
+                    progress(generated + completed, n_samples, message)
+
+            batch = self.generate(
+                count,
+                mode=mode,
+                progress=batch_progress,
+                pause=pause,
+            )
             path = destination / f"dataset_{shard_index:04d}.h5"
             label_names = list(batch["labels"][0]) if batch["labels"] else []
             labels = np.asarray([[row[name] for name in label_names] for row in batch["labels"]], dtype=np.float32)

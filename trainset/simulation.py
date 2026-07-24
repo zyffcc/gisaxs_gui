@@ -150,18 +150,9 @@ def _simulate_pattern_once(config: Dict[str, Any], sampled: Dict[str, float]) ->
     return image
 
 
-def simulate_pattern(config: Dict[str, Any], sampled: Dict[str, Any]) -> np.ndarray:
-    components = sampled.get("__mixture_components")
-    weights = sampled.get("__mixture_weights")
-    if isinstance(components, list) and components:
-        if not isinstance(weights, list) or len(weights) != len(components):
-            weights = [1.0 / len(components)] * len(components)
-        image = np.zeros((int(config["roi"]["height"]), int(config["roi"]["width"])), dtype=np.float32)
-        for weight, component in zip(weights, components):
-            image += float(weight) * _simulate_pattern_once(config, component)
-    else:
-        image = _simulate_pattern_once(config, sampled)
-
+def apply_interference(config: Dict[str, Any], sampled: Dict[str, Any], image: np.ndarray) -> np.ndarray:
+    """Apply the selected structure factor to a form-factor intensity image."""
+    image = np.asarray(image, dtype=np.float32).copy()
     interference = config.get("sample", {}).get("interference", {})
     if interference.get("enabled", False) and interference.get("plugin") == "paracrystal":
         all_q = q_vectors(config)["qy"]
@@ -179,3 +170,17 @@ def simulate_pattern(config: Dict[str, Any], sampled: Dict[str, Any]) -> np.ndar
         structure_factor = np.abs((1.0 - phi_q**2) / np.maximum(1.0 + phi_q**2 - 2.0 * phi_q * np.cos(qy * spacing), 1e-8))
         image *= structure_factor.astype(np.float32)
     return np.asarray(image, dtype=np.float32)
+
+
+def simulate_pattern(config: Dict[str, Any], sampled: Dict[str, Any]) -> np.ndarray:
+    components = sampled.get("__mixture_components")
+    weights = sampled.get("__mixture_weights")
+    if isinstance(components, list) and components:
+        if not isinstance(weights, list) or len(weights) != len(components):
+            weights = [1.0 / len(components)] * len(components)
+        image = np.zeros((int(config["roi"]["height"]), int(config["roi"]["width"])), dtype=np.float32)
+        for weight, component in zip(weights, components):
+            image += float(weight) * _simulate_pattern_once(config, component)
+    else:
+        image = _simulate_pattern_once(config, sampled)
+    return apply_interference(config, sampled, image)

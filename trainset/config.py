@@ -207,6 +207,7 @@ def synchronize_parameter_specs(config: Dict[str, Any]) -> Dict[str, Any]:
         source = particle_ranges.get(key, legacy_parameters.get(key, definition))
         normalized = _range_spec(source, float(definition.get("minimum", 0.0)))
         normalized["distribution"] = str(source.get("distribution", "uniform")) if isinstance(source, dict) else "uniform"
+        normalized["grid_points"] = max(1, int(source.get("grid_points", 30))) if isinstance(source, dict) else 30
         particle_ranges[key] = normalized
     particle["parameters"] = particle_ranges
 
@@ -334,6 +335,11 @@ def default_project_config() -> Dict[str, Any]:
             "image_size": [256, 256],
             "resolution_sigma_phi_deg": 0.01,
             "resolution_sigma_alpha_deg": 0.01,
+            "grid_cache": {
+                "enabled": True,
+                "directory": "_bornagain_cache",
+                "max_files": 5,
+            },
         },
         "parameters": {
             "radius_nm": {"distribution": "uniform", "minimum": 1.0, "maximum": 15.0, "source": "form_factor"},
@@ -348,8 +354,8 @@ def default_project_config() -> Dict[str, Any]:
                 "material": "Copper",
                 "enabled": True,
                 "parameters": {
-                    "radius_nm": {"distribution": "uniform", "minimum": 1.0, "maximum": 15.0},
-                    "height_nm": {"distribution": "uniform", "minimum": 1.0, "maximum": 20.0},
+                    "radius_nm": {"distribution": "uniform", "minimum": 1.0, "maximum": 15.0, "grid_points": 30},
+                    "height_nm": {"distribution": "uniform", "minimum": 1.0, "maximum": 20.0, "grid_points": 30},
                 },
             }],
             "mixture": {
@@ -429,6 +435,8 @@ def default_project_config() -> Dict[str, Any]:
             "last_job_id": "",
             "last_project_dir": "",
             "auto_remember": True,
+            "dataset_output_dir": "",
+            "results_output_dir": "",
         },
     }
 
@@ -503,6 +511,20 @@ def validate_project_config(config: Dict[str, Any], require_reference: bool = Fa
         errors.append("Gaussian mixture components must be at least 1.")
     if float(mixture.get("sigma_fraction_min", 0.0)) > float(mixture.get("sigma_fraction_max", 0.0)):
         errors.append("Gaussian mixture width minimum must not exceed its maximum.")
+    grid_cache = config.get("simulation", {}).get("grid_cache", {})
+    if int(grid_cache.get("max_files", 5)) < 1:
+        errors.append("BornAgain grid cache must retain at least one cache file.")
+    particle_ranges = next(iter(config.get("sample", {}).get("particles", [])), {}).get("parameters", {})
+    grid_nodes = 1
+    for name, spec in particle_ranges.items():
+        points = int(spec.get("grid_points", 30))
+        if points < 1:
+            errors.append(f"Particle parameter {name}: grid points must be at least 1.")
+        grid_nodes *= max(points, 1)
+    if grid_cache.get("enabled", True) and grid_nodes > 10000:
+        warnings.append(
+            f"BornAgain grid cache contains {grid_nodes:,} basis images; consider fewer points per axis."
+        )
     for index, layer in enumerate(config.get("sample", {}).get("layers", []), start=1):
         for key, label in (("thickness_nm", "thickness"), ("roughness_nm", "roughness")):
             spec = _range_spec(layer.get(key, 0.0))

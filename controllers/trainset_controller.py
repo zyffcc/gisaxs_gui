@@ -83,18 +83,29 @@ class _FunctionWorker(QRunnable):
 def _deep_get(mapping: Dict[str, Any], dotted: str, default: Any = None) -> Any:
     value: Any = mapping
     for part in dotted.split("."):
-        if not isinstance(value, dict) or part not in value:
+        if isinstance(value, list):
+            if not part.isdigit() or int(part) >= len(value):
+                return default
+            value = value[int(part)]
+        elif isinstance(value, dict) and part in value:
+            value = value[part]
+        else:
             return default
-        value = value[part]
     return value
 
 
 def _deep_set(mapping: Dict[str, Any], dotted: str, value: Any) -> None:
     parts = dotted.split(".")
-    target = mapping
+    target: Any = mapping
     for part in parts[:-1]:
-        target = target.setdefault(part, {})
-    target[parts[-1]] = value
+        if isinstance(target, list):
+            target = target[int(part)]
+        else:
+            target = target.setdefault(part, {})
+    if isinstance(target, list):
+        target[int(parts[-1])] = value
+    else:
+        target[parts[-1]] = value
 
 
 class TrainsetController(QObject):
@@ -122,6 +133,9 @@ class TrainsetController(QObject):
         self.package_dir: Optional[Path] = None
         self.local_process: Optional[QProcess] = None
         self._pending_local_arguments = None
+        self._local_control_file: Optional[Path] = None
+        self._local_output_buffer = ""
+        self._local_paused = False
         self.thread_pool = QThreadPool.globalInstance()
         self._initialized = False
         self._remote_refresh_running = False
@@ -188,12 +202,17 @@ class TrainsetController(QObject):
         page.submit_button.clicked.connect(self._submit_maxwell)
         page.model_validate_button.clicked.connect(self._validate_model_contract)
         page.local_folder_button.clicked.connect(self._choose_workspace)
+        page.local_dataset_folder_button.clicked.connect(self._choose_dataset_folder)
+        page.local_results_folder_button.clicked.connect(self._choose_results_folder)
+        page.local_cache_folder_button.clicked.connect(self._choose_cache_folder)
         page.local_python_button.clicked.connect(self._choose_local_python)
         page.local_prepare_button.clicked.connect(self._prepare_local_job)
         page.local_generate_test_button.clicked.connect(self._run_local_physical_test)
         page.local_generate_button.clicked.connect(self._run_local_generation)
         page.local_train_button.clicked.connect(self._run_local_training)
         page.local_smoke_button.clicked.connect(self._run_local_smoke_test)
+        page.local_pause_button.clicked.connect(self._toggle_local_pause)
+        page.local_stop_button.clicked.connect(self._stop_local_process)
         page.connection_button.clicked.connect(self._test_connection)
         page.hpc_prepare_button.clicked.connect(self._prepare_hpc_job)
         page.hpc_submit_button.clicked.connect(self._submit_maxwell)
@@ -415,6 +434,7 @@ class TrainsetController(QObject):
         config["model"]["layers"] = self.page.model_layers()
         config = synchronize_parameter_specs(config)
         self.config = config
+        self.page.update_cache_grid_summary(config)
         self.parameters_changed.emit("Trainset parameters", copy.deepcopy(config))
         return config
 
@@ -511,6 +531,7 @@ class TrainsetController(QObject):
             for column, value in enumerate(values):
                 self.page.layer_table.setItem(row, column, QTableWidgetItem(str(value)))
         self.page.set_model_layers(normalized_layers(config.get("model", {})))
+        self.page.update_cache_grid_summary(config)
         self._refresh_impact_options(config)
         self._applying_config = False
 
@@ -864,7 +885,11 @@ class TrainsetController(QObject):
             "beam": config.get("beam"),
             "detector": config.get("detector"),
             "roi": config.get("roi"),
-            "simulation": config.get("simulation"),
+            "simulation": {
+                key: value
+                for key, value in config.get("simulation", {}).items()
+                if key != "grid_cache"
+            },
             "sample": config.get("sample"),
             "sampled": sampled,
         }
@@ -1075,6 +1100,7 @@ class TrainsetController(QObject):
         self.page.set_comparison_details(
             result["comparison_details"],
             self.config.get("parameters", {}),
+            copy.deepcopy(self.config),
         )
         cache_hits = int(result["cache_hits"])
         cache_misses = int(result["cache_misses"])
@@ -1105,19 +1131,25 @@ class TrainsetController(QObject):
         QMessageBox.warning(self.window, "Preview failed", message)
         self.generation_error.emit(message)
 
-    def _start_what_if(self, values: Dict[str, float]) -> None:
-        numeric = {str(key): float(value) for key, value in values.items()}
+    def _start_what_if(self, values: Dict[str, Any]) -> None:
+        physics_payload = values.get("physics", values)
+        overrides = values.get("overrides", {})
+        numeric = {str(key): float(value) for key, value in physics_payload.items()}
+        request = {"physics": numeric, "overrides": copy.deepcopy(overrides)}
         if self._what_if_busy:
-            self._pending_what_if_values = numeric
+            self._pending_what_if_values = request
             self.page.set_what_if_busy(
                 True,
                 "Current simulation is finishing · the latest edit is queued.",
             )
             return
         config = self._collect_config()
+        for path, value in overrides.items():
+            _deep_set(config, str(path), value)
+        config = synchronize_parameter_specs(config)
         self._what_if_busy = True
         self._pending_what_if_values = None
-        self.page.set_what_if_busy(True, "Running editable What-if simulation in the background…")
+        self.page.set_what_if_busy(True, "Running manual simulation in the background…")
         worker = _FunctionWorker(
             self._compute_what_if,
             copy.deepcopy(config),
@@ -1142,14 +1174,14 @@ class TrainsetController(QObject):
             and "radius_nm" in sampled
             and sampled["height_nm"] > 2.0 * sampled["radius_nm"]
         ):
-            raise ValueError("What-if violates h ≤ 2R. Adjust height/radius or disable the physical constraint.")
+            raise ValueError("Manual simulation violates h ≤ 2R. Adjust height/radius or disable the physical constraint.")
         if (
             constraints.get("interparticle_spacing_gt_2r", False)
             and "D_nm" in sampled
             and "radius_nm" in sampled
             and sampled["D_nm"] <= 2.0 * sampled["radius_nm"]
         ):
-            raise ValueError("What-if violates D > 2R. Adjust spacing/radius or disable the physical constraint.")
+            raise ValueError("Manual simulation violates D > 2R. Adjust spacing/radius or disable the physical constraint.")
 
         seed = int(config.get("project", {}).get("seed", 42))
         generator = DatasetGenerator(config)
@@ -1192,7 +1224,7 @@ class TrainsetController(QObject):
     def _what_if_failed(self, message: str) -> None:
         self._what_if_busy = False
         self._what_if_worker = None
-        self.page.set_what_if_busy(False, f"What-if not simulated: {message}")
+        self.page.set_what_if_busy(False, f"Manual simulation not completed: {message}")
         self._run_pending_what_if()
 
     def _run_pending_what_if(self) -> None:
@@ -1267,6 +1299,36 @@ class TrainsetController(QObject):
         if path:
             self.page.fields["project.workspace"].setText(path)
 
+    def _choose_dataset_folder(self) -> None:
+        current = self.page.fields["runtime.dataset_output_dir"].text().strip()
+        path = QFileDialog.getExistingDirectory(
+            self.window,
+            "Choose generated dataset folder",
+            current or str(self._workspace()),
+        )
+        if path:
+            self.page.fields["runtime.dataset_output_dir"].setText(path)
+
+    def _choose_results_folder(self) -> None:
+        current = self.page.fields["runtime.results_output_dir"].text().strip()
+        path = QFileDialog.getExistingDirectory(
+            self.window,
+            "Choose training results folder",
+            current or str(self._workspace()),
+        )
+        if path:
+            self.page.fields["runtime.results_output_dir"].setText(path)
+
+    def _choose_cache_folder(self) -> None:
+        current = self.page.fields["simulation.grid_cache.directory"].text().strip()
+        path = QFileDialog.getExistingDirectory(
+            self.window,
+            "Choose BornAgain grid cache folder",
+            current or str(self._workspace()),
+        )
+        if path:
+            self.page.fields["simulation.grid_cache.directory"].setText(path)
+
     def _choose_local_python(self) -> None:
         selected, _ = QFileDialog.getOpenFileName(
             self.window,
@@ -1280,6 +1342,18 @@ class TrainsetController(QObject):
     def _workspace(self) -> Path:
         configured = self.page.fields["project.workspace"].text().strip()
         return Path(configured) if configured else self.project_root / "trainset_jobs"
+
+    def _dataset_output_dir(self) -> Path:
+        configured = self.page.fields["runtime.dataset_output_dir"].text().strip()
+        if configured:
+            return Path(configured)
+        return (self.package_dir or self._workspace() / self.page.project_name.text().strip()) / "dataset"
+
+    def _results_output_dir(self) -> Path:
+        configured = self.page.fields["runtime.results_output_dir"].text().strip()
+        if configured:
+            return Path(configured)
+        return (self.package_dir or self._workspace() / self.page.project_name.text().strip()) / "results"
 
     def _prepare_local_job(self) -> None:
         self._prepare_job(local=True)
@@ -1322,33 +1396,93 @@ class TrainsetController(QObject):
         process = QProcess(self)
         process.setWorkingDirectory(str(self.package_dir))
         process.setProcessChannelMode(QProcess.MergedChannels)
-        process.readyReadStandardOutput.connect(lambda: self.page.job_log.append(bytes(process.readAllStandardOutput()).decode(errors="replace").rstrip()))
+        self._local_control_file = self.package_dir / ".local_control"
+        self._local_control_file.write_text("running", encoding="utf-8")
+        arguments = list(arguments) + ["--control-file", str(self._local_control_file)]
+        process.readyReadStandardOutput.connect(self._read_local_output)
         process.started.connect(
             lambda: (
                 self.generation_started.emit(),
                 self.page.job_state.setText("RUNNING"),
                 self.page.set_step_state(4, "RUNNING"),
+                self.page.local_activity.setText("Starting local process…"),
+                self.page.local_progress.setValue(0),
+                self.page.local_pause_button.setEnabled(True),
+                self.page.local_stop_button.setEnabled(True),
             )
         )
         process.finished.connect(self._local_process_finished)
         process.errorOccurred.connect(lambda _error: self.generation_error.emit(process.errorString()))
         self.local_process = process
         self._pending_local_arguments = follow_up
+        self._local_paused = False
+        self.page.local_pause_button.setText("Pause")
         python_executable = self.page.fields["training.local_python"].text().strip() or sys.executable
         process.start(python_executable, arguments)
         self.page.step_list.setCurrentRow(4)
 
+    def _read_local_output(self) -> None:
+        if not self.local_process:
+            return
+        self._local_output_buffer += bytes(self.local_process.readAllStandardOutput()).decode(errors="replace")
+        lines = self._local_output_buffer.splitlines(keepends=True)
+        if lines and not lines[-1].endswith(("\n", "\r")):
+            self._local_output_buffer = lines.pop()
+        else:
+            self._local_output_buffer = ""
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line:
+                continue
+            match = re.match(r"^PROGRESS\s+(\d+)\s+(\d+)\s+(.*)$", line)
+            if match:
+                completed, total, message = int(match.group(1)), max(1, int(match.group(2))), match.group(3)
+                percent = max(0, min(100, int(round(100.0 * completed / total))))
+                self.page.local_progress.setValue(percent)
+                self.page.local_activity.setText(message)
+                self.progress_updated.emit(percent)
+            else:
+                self.page.job_log.append(line)
+
+    def _toggle_local_pause(self) -> None:
+        if not self._local_control_file or not self.local_process or self.local_process.state() == QProcess.NotRunning:
+            return
+        self._local_paused = not self._local_paused
+        self._local_control_file.write_text("paused" if self._local_paused else "running", encoding="utf-8")
+        self.page.local_pause_button.setText("Resume" if self._local_paused else "Pause")
+        self.page.local_activity.setText(
+            "Paused safely between BornAgain simulations/batches."
+            if self._local_paused
+            else "Resuming local process…"
+        )
+
+    def _stop_local_process(self) -> None:
+        if self._local_control_file and self.local_process and self.local_process.state() != QProcess.NotRunning:
+            self._local_control_file.write_text("cancelled", encoding="utf-8")
+            self.page.local_activity.setText("Stopping safely after the current simulation/batch…")
+            self.page.local_pause_button.setEnabled(False)
+
     def _run_local_physical_test(self) -> None:
         """Generate a small, genuinely physical BornAgain dataset."""
         samples = int(self._collect_config().get("training", {}).get("smoke_samples", 64))
-        self._start_local_process(["generate_dataset.py", "--samples", str(samples), "--mode", "full"])
+        self._start_local_process([
+            "generate_dataset.py", "--samples", str(samples), "--mode", "full",
+            "--output", str(self._dataset_output_dir()),
+        ])
 
     def _run_local_generation(self) -> None:
         count = int(self._collect_config()["dataset"]["number_of_samples"])
-        self._start_local_process(["generate_dataset.py", "--samples", str(count), "--mode", "full"])
+        self._start_local_process([
+            "generate_dataset.py", "--samples", str(count), "--mode", "full",
+            "--output", str(self._dataset_output_dir()),
+        ])
 
     def _run_local_training(self) -> None:
-        self._start_local_process(["train.py"])
+        self._start_local_process([
+            "train.py",
+            "--dataset", str(self._dataset_output_dir()),
+            "--output", str(self._results_output_dir()),
+        ])
 
     def _run_local_smoke_test(self) -> None:
         config = self._collect_config()
@@ -1364,14 +1498,28 @@ class TrainsetController(QObject):
         self.page.job_log.clear()
         self.page.job_log.append("LIGHTWEIGHT DEMO: reference-derived images test I/O and training only; they are not a physical BornAgain dataset.")
         self._start_local_process(
-            ["generate_dataset.py", "--samples", str(samples), "--mode", "demo"],
-            follow_up=["train.py", "--smoke", "--epochs", str(epochs)],
+            [
+                "generate_dataset.py", "--samples", str(samples), "--mode", "demo",
+                "--output", str(self._dataset_output_dir()),
+            ],
+            follow_up=[
+                "train.py", "--smoke", "--epochs", str(epochs),
+                "--dataset", str(self._dataset_output_dir()),
+                "--output", str(self._results_output_dir()),
+            ],
         )
 
     def _local_process_finished(self, exit_code: int, _status) -> None:
         state = "COMPLETED" if exit_code == 0 else "FAILED"
         self.page.job_state.setText(state)
         self.page.set_step_state(4, state)
+        self.page.local_pause_button.setEnabled(False)
+        self.page.local_stop_button.setEnabled(False)
+        self.page.local_pause_button.setText("Pause")
+        self.page.local_progress.setValue(100 if exit_code == 0 else self.page.local_progress.value())
+        self.page.local_activity.setText(
+            "Completed." if exit_code == 0 else f"Stopped or failed (exit code {exit_code})."
+        )
         if exit_code == 0:
             self.generation_finished.emit()
             pending = self._pending_local_arguments
@@ -1388,7 +1536,7 @@ class TrainsetController(QObject):
     def _load_local_metrics(self) -> None:
         if not self.package_dir:
             return
-        records = read_metrics(self.package_dir / "results" / "metrics.jsonl")
+        records = read_metrics(self._results_output_dir() / "metrics.jsonl")
         self.page.metrics_table.setRowCount(0)
         from PyQt5.QtWidgets import QTableWidgetItem
 

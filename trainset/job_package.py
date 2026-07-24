@@ -16,6 +16,7 @@ GENERATE_SCRIPT = '''from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -28,11 +29,24 @@ parser.add_argument("--config", default="config.yaml")
 parser.add_argument("--samples", type=int, default=None)
 parser.add_argument("--mode", choices=("dry", "full", "demo"), default="full")
 parser.add_argument("--output", default="dataset")
+parser.add_argument("--control-file", default="")
 args = parser.parse_args()
 config = load_project_config(ROOT / args.config)
 count = args.samples or int(config["dataset"]["number_of_samples"])
 task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
-output = ROOT / args.output
+output = Path(args.output).expanduser()
+if not output.is_absolute():
+    output = ROOT / output
+control_file = Path(args.control_file).expanduser() if args.control_file else None
+def wait_for_control():
+    if control_file is None:
+        return
+    while control_file.exists() and control_file.read_text(encoding="utf-8").strip() == "paused":
+        time.sleep(0.25)
+    if control_file.exists() and control_file.read_text(encoding="utf-8").strip() == "cancelled":
+        raise SystemExit(130)
+def report(completed, total, message):
+    print(f"PROGRESS {int(completed)} {int(total)} {message}", flush=True)
 if task_id is not None:
     task_index = int(task_id)
     shard_size = int(config["dataset"]["samples_per_shard"])
@@ -42,7 +56,9 @@ if task_id is not None:
         raise SystemExit(f"array task {task_index} has no samples to generate")
     config["project"]["seed"] = int(config["project"]["seed"]) + task_index
     output = output / f"array_{task_index:04d}"
-files = DatasetGenerator(config).write_hdf5_shards(output, count, mode=args.mode)
+files = DatasetGenerator(config).write_hdf5_shards(
+    output, count, mode=args.mode, progress=report, pause=wait_for_control
+)
 print(f"generated_files={len(files)} samples={count} output={output}")
 '''
 
@@ -66,6 +82,7 @@ import argparse
 import json
 import shutil
 import sys
+import time
 from pathlib import Path
 import h5py
 import numpy as np
@@ -78,6 +95,9 @@ from trainset.modeling import build_keras_model, build_optimizer, resolve_keras_
 parser = argparse.ArgumentParser()
 parser.add_argument("--smoke", action="store_true", help="Cap records/model size for a quick local pipeline test")
 parser.add_argument("--epochs", type=int, default=None)
+parser.add_argument("--dataset", default="dataset")
+parser.add_argument("--output", default="results")
+parser.add_argument("--control-file", default="")
 args = parser.parse_args()
 
 cfg = synchronize_parameter_specs(load_project_config(ROOT / "config.yaml"))
@@ -87,9 +107,21 @@ except Exception as exc:
     raise SystemExit(f"TensorFlow is required by the cnn_2d template: {exc}")
 keras_api = resolve_keras_api(tf)
 
-files = sorted((ROOT / "dataset").rglob("*.h5"))
+dataset_root = Path(args.dataset).expanduser()
+if not dataset_root.is_absolute(): dataset_root = ROOT / dataset_root
+results = Path(args.output).expanduser()
+if not results.is_absolute(): results = ROOT / results
+control_file = Path(args.control_file).expanduser() if args.control_file else None
+def wait_for_control():
+    if control_file is None: return
+    while control_file.exists() and control_file.read_text(encoding="utf-8").strip() == "paused":
+        time.sleep(0.25)
+    if control_file.exists() and control_file.read_text(encoding="utf-8").strip() == "cancelled":
+        raise SystemExit(130)
+
+files = sorted(dataset_root.rglob("*.h5"))
 if not files:
-    raise SystemExit("No HDF5 dataset shards found under dataset/.")
+    raise SystemExit(f"No HDF5 dataset shards found under {dataset_root}.")
 
 parameter_names = trainable_parameter_names(cfg)
 target_min = np.asarray([cfg["parameters"][name]["minimum"] for name in parameter_names], dtype=np.float32)
@@ -156,15 +188,17 @@ learning_rate = float(cfg["training"]["learning_rate"])
 optimizer = build_optimizer(keras_api, optimizer_name, learning_rate)
 model.compile(optimizer=optimizer, loss="mse", metrics=["mae"])
 
-results = ROOT / "results"
-results.mkdir(exist_ok=True)
+results.mkdir(parents=True, exist_ok=True)
 metrics_path = results / "metrics.jsonl"
 if metrics_path.exists():
     metrics_path.unlink()
 class JsonlCallback(keras_api.callbacks.Callback):
+    def on_train_batch_begin(self, batch, logs=None):
+        wait_for_control()
     def on_epoch_end(self, epoch, logs=None):
         payload = {"epoch": epoch + 1, **{key: float(value) for key, value in (logs or {}).items()}}
         with metrics_path.open("a", encoding="utf-8") as handle: handle.write(json.dumps(payload) + "\\n")
+        print(f"PROGRESS {epoch + 1} {epochs} Training epoch {epoch + 1}/{epochs}", flush=True)
 
 monitor = "val_loss" if validation_count else "loss"
 callbacks = [
@@ -237,10 +271,15 @@ def _git_commit(project_root: Path) -> str:
 def prepare_job_package(config: Dict[str, Any], output_root: str | Path, project_root: str | Path) -> Path:
     project_root = Path(project_root)
     destination = Path(output_root) / str(config["project"]["name"])
-    if destination.exists():
-        shutil.rmtree(destination)
-    (destination / "src").mkdir(parents=True)
-    shutil.copytree(project_root / "trainset", destination / "src" / "trainset", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    # Refresh package code and scripts in place so preparing an updated package
+    # never deletes already generated datasets, checkpoints, logs or caches.
+    (destination / "src").mkdir(parents=True, exist_ok=True)
+    shutil.copytree(
+        project_root / "trainset",
+        destination / "src" / "trainset",
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
     # Reference-derived detector masks must use exactly the same CBF/NXS
     # orientation as the GUI.  The trainset loader delegates that work to the
     # calibration package, so exported jobs need that package as well instead
@@ -248,6 +287,7 @@ def prepare_job_package(config: Dict[str, Any], output_root: str | Path, project
     shutil.copytree(
         project_root / "calibration",
         destination / "src" / "calibration",
+        dirs_exist_ok=True,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     save_project_config(config, destination / "config.yaml")
@@ -273,14 +313,18 @@ def prepare_job_package(config: Dict[str, Any], output_root: str | Path, project
         destination / "slurm_train.sh",
         f"""#!/bin/bash\n#SBATCH --job-name={config['project']['name']}-train\n#SBATCH --partition={hpc['partition']}\n#SBATCH --gres=gpu:{hpc['gpus']}\n#SBATCH --cpus-per-task={hpc['cpus']}\n#SBATCH --mem={hpc['memory']}\n#SBATCH --time={hpc['time']}\n#SBATCH --output=logs/train_%j.out\n#SBATCH --error=logs/train_%j.err\nset -euo pipefail\nmkdir -p logs results\n{python_command} train.py\n""",
     )
-    (destination / "logs").mkdir()
-    (destination / "dataset").mkdir()
-    (destination / "results").mkdir()
+    (destination / "logs").mkdir(exist_ok=True)
+    (destination / "dataset").mkdir(exist_ok=True)
+    (destination / "results").mkdir(exist_ok=True)
 
     file_hashes = {}
+    excluded_roots = {"dataset", "results", "logs", "_bornagain_cache"}
     for path in sorted(destination.rglob("*")):
         if path.is_file():
-            file_hashes[str(path.relative_to(destination)).replace("\\", "/")] = hashlib.sha256(path.read_bytes()).hexdigest()
+            relative = path.relative_to(destination)
+            if relative.parts and relative.parts[0] in excluded_roots:
+                continue
+            file_hashes[str(relative).replace("\\", "/")] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest = {
         "schema_version": 1,
         "created_at": datetime.now(timezone.utc).isoformat(),

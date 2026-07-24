@@ -107,9 +107,11 @@ class ArrayCanvas(QWidget):
         if self.image is None or not self.image.size:
             return QRect()
         height, width = self.image.shape[:2]
-        scale = min(self.width() / max(width, 1), self.height() / max(height, 1))
+        colorbar_space = 54 if not self.binary_mode else 0
+        available_width = max(1, self.width() - colorbar_space)
+        scale = min(available_width / max(width, 1), self.height() / max(height, 1))
         draw_width, draw_height = int(width * scale), int(height * scale)
-        return QRect((self.width() - draw_width) // 2, (self.height() - draw_height) // 2, draw_width, draw_height)
+        return QRect((available_width - draw_width) // 2, (self.height() - draw_height) // 2, draw_width, draw_height)
 
     def _to_image(self, point: QPoint, clip: bool = True) -> QPoint:
         rect = self._image_rect()
@@ -214,6 +216,27 @@ class ArrayCanvas(QWidget):
             qimage = QImage(rgba.data, rgba.shape[1], rgba.shape[0], rgba.strides[0], QImage.Format_RGBA8888).copy()
         target = self._image_rect()
         painter.drawPixmap(target, QPixmap.fromImage(qimage))
+        if not self.binary_mode and target.width() > 40:
+            bar_width = 13
+            bar_x = min(self.width() - bar_width - 28, target.right() + 10)
+            bar_rect = QRect(bar_x, target.top(), bar_width, target.height())
+            gradient_values = np.linspace(1.0, 0.0, max(2, bar_rect.height()), dtype=np.float64)[:, None]
+            gradient_rgba = np.ascontiguousarray(
+                colormaps[self.display_colormap](gradient_values, bytes=True),
+                dtype=np.uint8,
+            )
+            gradient_image = QImage(
+                gradient_rgba.data,
+                1,
+                gradient_rgba.shape[0],
+                gradient_rgba.strides[0],
+                QImage.Format_RGBA8888,
+            ).copy()
+            painter.drawPixmap(bar_rect, QPixmap.fromImage(gradient_image))
+            painter.setPen(QPen(QColor(71, 85, 105), 1))
+            painter.drawRect(bar_rect)
+            painter.drawText(QRect(bar_rect.right() + 4, bar_rect.top() - 2, 24, 16), Qt.AlignLeft, "max")
+            painter.drawText(QRect(bar_rect.right() + 4, bar_rect.bottom() - 14, 24, 16), Qt.AlignLeft, "min")
         if self.beam_center is not None:
             center_x, center_y = self.beam_center
             sx = target.width() / max(data.shape[1], 1)
@@ -470,6 +493,7 @@ class TrainsetBuildPage(QWidget):
         self._display_controls: Dict[str, Dict[str, QWidget]] = {}
         self._comparison_details: Dict[str, Any] = {}
         self._comparison_parameter_specs: Dict[str, Any] = {}
+        self._comparison_config: Dict[str, Any] = {}
         self._parameter_dialog: Optional[QDialog] = None
         self._step_states = ["Not started"] * len(self.STEPS)
         self._design_stage_ready = [False, False, False, False]
@@ -581,6 +605,8 @@ class TrainsetBuildPage(QWidget):
         root.addLayout(actions)
         self.back_button.clicked.connect(lambda: self.step_list.setCurrentRow(max(0, self.step_list.currentRow() - 1)))
         self.step_list.setCurrentRow(0)
+        QTimer.singleShot(0, self._apply_responsive_layout)
+        QTimer.singleShot(80, self._apply_responsive_layout)
 
     def set_step_state(self, index: int, state: str) -> None:
         if not 0 <= index < len(self.STEPS):
@@ -668,17 +694,17 @@ class TrainsetBuildPage(QWidget):
             control.setMinimumWidth(92)
             control.setEnabled(False)
 
-        # Keep the image controls on one compact row. This preserves useful
-        # canvas height on 720p screens while still fitting narrow workspaces.
+        # Two compact rows remain legible in the 340 px preview pane used at
+        # 1280×720; a single row truncates labels and makes Vmin/Vmax overlap.
         layout.addWidget(QLabel("Colormap"), 0, 0)
         layout.addWidget(colormap, 0, 1)
         layout.addWidget(log_scale, 0, 2)
         layout.addWidget(auto_scale, 0, 3)
-        layout.addWidget(QLabel("Vmin"), 0, 4)
-        layout.addWidget(vmin, 0, 5)
-        layout.addWidget(QLabel("Vmax"), 0, 6)
-        layout.addWidget(vmax, 0, 7)
-        layout.setColumnStretch(8, 1)
+        layout.addWidget(QLabel("Vmin"), 1, 0)
+        layout.addWidget(vmin, 1, 1)
+        layout.addWidget(QLabel("Vmax"), 1, 2)
+        layout.addWidget(vmax, 1, 3)
+        layout.setColumnStretch(4, 1)
 
         controls: Dict[str, QWidget] = {
             "colormap": colormap,
@@ -719,6 +745,8 @@ class TrainsetBuildPage(QWidget):
                 self.masked_design_canvas,
                 self.mask_only_canvas,
             ]
+        elif key == "manual" and hasattr(self, "_what_if_canvas"):
+            canvases = [self._what_if_canvas]
         else:
             canvases = list(self.preview_canvases.values())
             for copies in getattr(self, "impact_canvases", {}).values():
@@ -927,8 +955,10 @@ class TrainsetBuildPage(QWidget):
         self.particle_help = QLabel("Choose a shape first; only parameters used by that form factor are shown below.")
         self.particle_help.setWordWrap(True)
         sample_grid.addWidget(self.particle_help, 2, 0, 1, 2)
-        self.particle_parameter_table = QTableWidget(0, 5)
-        self.particle_parameter_table.setHorizontalHeaderLabels(("Parameter", "Distribution", "Minimum", "Maximum", "Meaning / unit"))
+        self.particle_parameter_table = QTableWidget(0, 6)
+        self.particle_parameter_table.setHorizontalHeaderLabels(
+            ("Parameter", "Distribution", "Minimum", "Maximum", "Grid points", "Meaning / unit")
+        )
         self.particle_parameter_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.particle_parameter_table.setMaximumHeight(150)
         sample_grid.addWidget(self.particle_parameter_table, 3, 0, 1, 2)
@@ -1473,11 +1503,37 @@ class TrainsetBuildPage(QWidget):
         local_intro.setWordWrap(True)
         local_form.addRow(local_intro)
         local_form.addRow("Output folder", self._line("project.workspace", ""))
+        local_form.addRow("Dataset folder", self._line("runtime.dataset_output_dir", ""))
+        local_form.addRow("Training results folder", self._line("runtime.results_output_dir", ""))
         local_form.addRow("Python executable", self._line("training.local_python", ""))
         self.local_python_button = QPushButton("Choose Python executable…")
         local_form.addRow(self.local_python_button)
         self.local_folder_button = QPushButton("Choose output folder…")
         local_form.addRow(self.local_folder_button)
+        self.local_dataset_folder_button = QPushButton("Choose dataset folder…")
+        self.local_results_folder_button = QPushButton("Choose training results folder…")
+        local_form.addRow(self.local_dataset_folder_button)
+        local_form.addRow(self.local_results_folder_button)
+        cache_group = QGroupBox("BornAgain form-factor grid cache")
+        cache_form = QFormLayout(cache_group)
+        cache_form.addRow(
+            self._check(
+                "simulation.grid_cache.enabled",
+                True,
+                "Use the precomputed particle-parameter matrix during dataset generation",
+            )
+        )
+        cache_form.addRow("Cache folder", self._line("simulation.grid_cache.directory", "_bornagain_cache"))
+        self.local_cache_folder_button = QPushButton("Choose cache folder…")
+        cache_form.addRow(self.local_cache_folder_button)
+        cache_form.addRow("Maximum cache files", self._spin("simulation.grid_cache.max_files", 5, 1, 50))
+        self.cache_grid_summary = QLabel(
+            "Grid points are set per particle parameter in Dataset Design. "
+            "For radius=30 and height=30, BornAgain precomputes one 30 × 30 form-factor matrix."
+        )
+        self.cache_grid_summary.setWordWrap(True)
+        cache_form.addRow(self.cache_grid_summary)
+        local_form.addRow(cache_group)
         local_form.addRow("Test samples", self._spin("training.smoke_samples", 64, 8, 10000))
         local_form.addRow("Test epochs", self._spin("training.smoke_epochs", 2, 1, 20))
         self.local_prepare_button = QPushButton("1 · Prepare local job package")
@@ -1489,7 +1545,6 @@ class TrainsetBuildPage(QWidget):
         self.local_smoke_button.setToolTip(
             "Fast non-physical I/O/model check using a loaded reference image. It is not a replacement for the small BornAgain physical test."
         )
-        self.local_generate_test_button.setObjectName("primaryAction")
         for button in (
             self.local_prepare_button,
             self.local_generate_test_button,
@@ -1498,6 +1553,22 @@ class TrainsetBuildPage(QWidget):
             self.local_smoke_button,
         ):
             local_form.addRow(button)
+        self.local_activity = QLabel("Idle")
+        self.local_activity.setWordWrap(True)
+        self.local_progress = QProgressBar()
+        self.local_progress.setRange(0, 100)
+        self.local_progress.setValue(0)
+        local_controls = QHBoxLayout()
+        self.local_pause_button = QPushButton("Pause")
+        self.local_pause_button.setEnabled(False)
+        self.local_stop_button = QPushButton("Stop safely")
+        self.local_stop_button.setEnabled(False)
+        local_controls.addWidget(self.local_pause_button)
+        local_controls.addWidget(self.local_stop_button)
+        local_controls.addStretch(1)
+        local_form.addRow("Current task", self.local_activity)
+        local_form.addRow("Progress", self.local_progress)
+        local_form.addRow(local_controls)
         output_help = QLabel(
             "Generation writes HDF5 shards under <output>/<project name>/dataset. Progress and errors appear in Monitor & Results."
         )
@@ -1577,6 +1648,7 @@ class TrainsetBuildPage(QWidget):
         self.stack.setCurrentIndex(index)
         self.back_button.setEnabled(index > 0)
         self.step_changed.emit(index)
+        QTimer.singleShot(0, self._apply_responsive_layout)
 
     def add_mask_shape(self, shape: Dict[str, Any]) -> None:
         row = self.mask_shape_table.rowCount()
@@ -1613,11 +1685,18 @@ class TrainsetBuildPage(QWidget):
             table.setCellWidget(row, 1, distribution)
             table.setItem(row, 2, QTableWidgetItem(str(spec.get("minimum", definition.get("minimum", 0.0)))))
             table.setItem(row, 3, QTableWidgetItem(str(spec.get("maximum", definition.get("maximum", 1.0)))))
+            meaning_column = 5 if table.columnCount() >= 6 else 4
+            if table.columnCount() >= 6:
+                table.setItem(row, 4, QTableWidgetItem(str(max(1, int(spec.get("grid_points", 30))))))
+                table.item(row, 4).setToolTip(
+                    "BornAgain basis-image count on this shape-parameter axis. "
+                    "For example, 30 radius values × 30 height values creates a 30 × 30 matrix."
+                )
             meaning = f"{definition.get('label', key)}"
             if definition.get("unit"):
                 meaning += f" [{definition['unit']}]"
-            table.setItem(row, 4, QTableWidgetItem(meaning))
-            table.item(row, 4).setFlags(table.item(row, 4).flags() & ~Qt.ItemIsEditable)
+            table.setItem(row, meaning_column, QTableWidgetItem(meaning))
+            table.item(row, meaning_column).setFlags(table.item(row, meaning_column).flags() & ~Qt.ItemIsEditable)
 
     @staticmethod
     def plugin_parameters(table: QTableWidget) -> Dict[str, Dict[str, Any]]:
@@ -1630,7 +1709,31 @@ class TrainsetBuildPage(QWidget):
                 "minimum": float(table.item(row, 2).text()),
                 "maximum": float(table.item(row, 3).text()),
             }
+            if table.columnCount() >= 6 and table.item(row, 4):
+                parameters[name]["grid_points"] = max(1, int(float(table.item(row, 4).text())))
         return parameters
+
+    def update_cache_grid_summary(self, config: Dict[str, Any]) -> None:
+        if not hasattr(self, "cache_grid_summary"):
+            return
+        particle = next(iter(config.get("sample", {}).get("particles", [])), {})
+        axes = [
+            (name, max(1, int(spec.get("grid_points", 30))))
+            for name, spec in particle.get("parameters", {}).items()
+        ]
+        nodes = int(np.prod([points for _name, points in axes], dtype=np.int64)) if axes else 0
+        roi = config.get("roi", {})
+        estimated_gib = (
+            nodes * int(roi.get("width", 0)) * int(roi.get("height", 0)) * 2 / (1024**3)
+        )
+        shape_text = " × ".join(str(points) for _name, points in axes) or "no axes"
+        names_text = ", ".join(name for name, _points in axes) or "none"
+        max_files = int(config.get("simulation", {}).get("grid_cache", {}).get("max_files", 5))
+        self.cache_grid_summary.setText(
+            f"Matrix: {shape_text} = {nodes:,} BornAgain basis images ({names_text}). "
+            f"Estimated float16 cache: {estimated_gib:.2f} GiB/file. "
+            f"Least-recently-used retention: {max_files} file(s)."
+        )
 
     def _add_layer_row(self) -> None:
         row = self.layer_table.rowCount()
@@ -1776,9 +1879,11 @@ class TrainsetBuildPage(QWidget):
         self,
         details: Dict[str, Any],
         parameter_specs: Optional[Dict[str, Any]] = None,
+        config: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._comparison_details = details
         self._comparison_parameter_specs = parameter_specs or {}
+        self._comparison_config = config or {}
         self.preview_parameters_button.setEnabled(bool(details))
 
     @staticmethod
@@ -1796,6 +1901,19 @@ class TrainsetBuildPage(QWidget):
                 if isinstance(child_value, (dict, list)):
                     TrainsetBuildPage._append_parameter_tree(child, child_value)
 
+    @staticmethod
+    def _manual_config_entries(value: Any, prefix: str = ""):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                path = f"{prefix}.{key}" if prefix else str(key)
+                yield from TrainsetBuildPage._manual_config_entries(child, path)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                path = f"{prefix}.{index}"
+                yield from TrainsetBuildPage._manual_config_entries(child, path)
+        elif isinstance(value, (bool, int, float, str)):
+            yield prefix, value
+
     def show_comparison_parameters(self) -> None:
         if not self._comparison_details:
             return
@@ -1806,12 +1924,13 @@ class TrainsetBuildPage(QWidget):
         dialog = QDialog(self)
         self._parameter_dialog = dialog
         dialog.setAttribute(Qt.WA_DeleteOnClose, True)
-        dialog.setWindowTitle("Parameters used and editable What-if simulation")
-        dialog.resize(900, 700)
+        dialog.setWindowTitle("Parameters used and manual simulation")
+        dialog.resize(1040, 720)
         dialog_layout = QVBoxLayout(dialog)
         note = QLabel(
-            "Minimum, midpoint and maximum are immutable audit snapshots. The What-if tab copies one snapshot, "
-            "lets you edit its physics values, and renders a fourth simulation without replacing the saved three."
+            "Minimum, midpoint and maximum remain immutable audit snapshots. Manual simulation starts from one "
+            "snapshot, lets you edit its physics, geometry, sample, mask and preprocessing settings, and renders "
+            "an independent fourth image without replacing the saved three."
         )
         note.setWordWrap(True)
         dialog_layout.addWidget(note)
@@ -1840,16 +1959,17 @@ class TrainsetBuildPage(QWidget):
         source_row.addStretch(1)
         what_if_layout.addLayout(source_row)
         what_if_help = QLabel(
-            "Edits are debounced: BornAgain runs after you pause, while unchanged physics reuses the preview cache. "
-            "Noise and mask use the same realization so visual differences remain attributable to the edited values."
+            "Auto-simulation is debounced. Geometry or physics edits rerun BornAgain; display-only changes do not. "
+            "Mask/noise keep the same realization so image differences remain attributable to your edit."
         )
         what_if_help.setWordWrap(True)
         what_if_help.setProperty("infoPanel", True)
         what_if_layout.addWidget(what_if_help)
         editor_and_image = QSplitter(Qt.Horizontal)
-        editor = QWidget()
-        editor_form = QFormLayout(editor)
-        self._what_if_controls: Dict[str, QDoubleSpinBox] = {}
+        editor_tabs = QTabWidget()
+        self._what_if_controls: Dict[str, QWidget] = {}
+        physics_editor = QWidget()
+        physics_form = QFormLayout(physics_editor)
         midpoint_values = self._comparison_details.get("midpoint", {}).get(
             "editable physics",
             self._comparison_details.get("midpoint", {}).get("physics values", {}),
@@ -1872,26 +1992,83 @@ class TrainsetBuildPage(QWidget):
             low = spec.get("minimum")
             high = spec.get("maximum")
             control.setToolTip(
-                f"Configured training range: {low} to {high}. What-if values may go outside it for diagnosis."
+                f"Configured training range: {low} to {high}. Manual values may go outside it for diagnosis."
                 if low is not None and high is not None
-                else "Editable physics value for the fourth diagnostic simulation."
+                else "Editable physics value for the independent manual simulation."
             )
-            editor_form.addRow(ParameterCoverageWidget._axis_label(name), control)
-            self._what_if_controls[name] = control
-        editor_and_image.addWidget(editor)
+            physics_form.addRow(ParameterCoverageWidget._axis_label(name), control)
+            self._what_if_controls[f"physics.{name}"] = control
+        editor_tabs.addTab(self._scroll(physics_editor), "Physics values")
+
+        config_roots = ("beam", "detector", "roi", "simulation", "sample", "mask", "preprocessing")
+        grouped = {
+            "Geometry": QWidget(),
+            "Sample": QWidget(),
+            "Mask & preprocessing": QWidget(),
+        }
+        forms = {name: QFormLayout(widget) for name, widget in grouped.items()}
+        ignored_fragments = (
+            ".parameters.",
+            "simulation.grid_cache",
+        )
+        for path, value in self._manual_config_entries(self._comparison_config):
+            if not path.startswith(config_roots) or any(fragment in path for fragment in ignored_fragments):
+                continue
+            if path.endswith(".plugin") or path.endswith(".preset"):
+                continue
+            if path.startswith(("beam.", "detector.", "roi.", "simulation.")):
+                group = "Geometry"
+            elif path.startswith("sample."):
+                group = "Sample"
+            else:
+                group = "Mask & preprocessing"
+            if isinstance(value, bool):
+                control = QCheckBox()
+                control.setChecked(value)
+            elif isinstance(value, int) and not isinstance(value, bool):
+                control = QSpinBox()
+                control.setRange(-1_000_000_000, 1_000_000_000)
+                control.setValue(value)
+            elif isinstance(value, float):
+                control = QDoubleSpinBox()
+                control.setDecimals(8)
+                control.setRange(-1e12, 1e12)
+                control.setValue(value)
+                control.setKeyboardTracking(False)
+            else:
+                control = QLineEdit(str(value))
+            control.setToolTip(
+                f"Manual override for {path}. This changes only the fourth simulation; saved comparison snapshots stay unchanged."
+            )
+            forms[group].addRow(path.replace("_", " "), control)
+            self._what_if_controls[f"config.{path}"] = control
+        for group, widget in grouped.items():
+            editor_tabs.addTab(self._scroll(widget), group)
+        editor_and_image.addWidget(editor_tabs)
         result_panel = QWidget()
         result_layout = QVBoxLayout(result_panel)
         self._what_if_canvas = ArrayCanvas("Edit a value or press Simulate now")
         self._what_if_canvas.setMinimumSize(330, 290)
-        self._what_if_status = QLabel("What-if is independent of the three saved comparison snapshots.")
+        self._what_if_status = QLabel("Manual simulation is independent of the three saved comparison snapshots.")
         self._what_if_status.setWordWrap(True)
         self._what_if_progress = QProgressBar()
         self._what_if_progress.setRange(0, 0)
         self._what_if_progress.setVisible(False)
         result_layout.addWidget(self._what_if_canvas, 1)
+        result_layout.addWidget(self._make_display_bar("manual"))
+        preview_display = self._display_controls.get("preview", {})
+        manual_display = self._display_controls.get("manual", {})
+        if preview_display and manual_display:
+            manual_display["colormap"].setCurrentText(preview_display["colormap"].currentText())
+            manual_display["log"].setChecked(preview_display["log"].isChecked())
+            manual_display["auto"].setChecked(preview_display["auto"].isChecked())
+            manual_display["vmin"].setValue(preview_display["vmin"].value())
+            manual_display["vmax"].setValue(preview_display["vmax"].value())
         result_layout.addWidget(self._what_if_progress)
         result_layout.addWidget(self._what_if_status)
         editor_and_image.addWidget(result_panel)
+        editor_and_image.setSizes((500, 500))
+        editor_and_image.setStretchFactor(0, 1)
         editor_and_image.setStretchFactor(1, 1)
         what_if_layout.addWidget(editor_and_image, 1)
         what_if_actions = QHBoxLayout()
@@ -1908,10 +2085,28 @@ class TrainsetBuildPage(QWidget):
         update_timer.setSingleShot(True)
         update_timer.setInterval(700)
 
+        def control_value(control: QWidget) -> Any:
+            if isinstance(control, QCheckBox):
+                return control.isChecked()
+            if isinstance(control, (QSpinBox, QDoubleSpinBox)):
+                return control.value()
+            if isinstance(control, QComboBox):
+                return control.currentText()
+            return control.text() if isinstance(control, QLineEdit) else None
+
         def request_what_if() -> None:
-            values = {name: control.value() for name, control in self._what_if_controls.items()}
-            if values:
-                self.what_if_requested.emit(values)
+            physics = {
+                path.split(".", 1)[1]: control_value(control)
+                for path, control in self._what_if_controls.items()
+                if path.startswith("physics.")
+            }
+            overrides = {
+                path.split(".", 1)[1]: control_value(control)
+                for path, control in self._what_if_controls.items()
+                if path.startswith("config.")
+            }
+            if physics:
+                self.what_if_requested.emit({"physics": physics, "overrides": overrides})
 
         def schedule_what_if(*_args) -> None:
             if auto_simulate.isChecked():
@@ -1923,7 +2118,10 @@ class TrainsetBuildPage(QWidget):
                 "editable physics",
                 self._comparison_details.get(key, {}).get("physics values", {}),
             )
-            for name, control in self._what_if_controls.items():
+            for path, control in self._what_if_controls.items():
+                if not path.startswith("physics."):
+                    continue
+                name = path.split(".", 1)[1]
                 if name in values and isinstance(values[name], (int, float, np.number)):
                     control.blockSignals(True)
                     control.setValue(float(values[name]))
@@ -1934,8 +2132,15 @@ class TrainsetBuildPage(QWidget):
         source_combo.currentIndexChanged.connect(load_snapshot)
         simulate_now.clicked.connect(request_what_if)
         for control in self._what_if_controls.values():
-            control.valueChanged.connect(schedule_what_if)
-        tabs.addTab(what_if_page, "What-if (editable)")
+            if isinstance(control, QCheckBox):
+                control.toggled.connect(schedule_what_if)
+            elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
+                control.valueChanged.connect(schedule_what_if)
+            elif isinstance(control, QComboBox):
+                control.currentTextChanged.connect(schedule_what_if)
+            elif isinstance(control, QLineEdit):
+                control.editingFinished.connect(schedule_what_if)
+        tabs.addTab(what_if_page, "Manual simulation")
         dialog_layout.addWidget(tabs, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(dialog.close)
@@ -1976,11 +2181,26 @@ class TrainsetBuildPage(QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        content_width = self.stack.width() if hasattr(self, "stack") else self.width()
+        self._apply_responsive_layout()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, self._apply_responsive_layout)
+        QTimer.singleShot(80, self._apply_responsive_layout)
+
+    def _apply_responsive_layout(self) -> None:
+        if not hasattr(self, "stack"):
+            return
+        measured = self.stack.width()
+        fallback = self.width() - (self.step_list.width() if hasattr(self, "step_list") else 0) - 42
+        content_width = max(measured, fallback)
         if hasattr(self, "impact_responsive_stack"):
             self.impact_responsive_stack.setCurrentIndex(0 if content_width >= 1040 else 1)
         if hasattr(self, "dataset_splitter"):
-            desired_orientation = Qt.Horizontal if content_width >= 1080 else Qt.Vertical
+            # The design form and preview have tested minimums of 480 + 340 px.
+            # Keep them side-by-side on a 1280×720 screen; stack only on truly
+            # narrow windows where those minimums cannot fit.
+            desired_orientation = Qt.Horizontal if content_width >= 820 else Qt.Vertical
             if desired_orientation != getattr(self, "_dataset_splitter_orientation", None):
                 self.dataset_splitter.setOrientation(desired_orientation)
                 self._dataset_splitter_orientation = desired_orientation

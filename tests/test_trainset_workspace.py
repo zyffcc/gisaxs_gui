@@ -4,6 +4,7 @@ import copy
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import h5py
 import numpy as np
@@ -23,10 +24,42 @@ from trainset.generator import (
     merge_threshold_mask,
 )
 from trainset.geometry import q_vectors, roi_to_spherical_ranges
+from trainset.grid_cache import load_or_build_grid
 from trainset.job_package import prepare_job_package
 
 
 class TrainsetWorkspaceTests(unittest.TestCase):
+    def test_bornagain_grid_cache_is_reused_and_limited_to_five_files(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            config = synchronize_parameter_specs(default_project_config())
+            config["roi"] = {"x": 0, "y": 0, "width": 2, "height": 2}
+            config["detector"].update({"pixels_x": 2, "pixels_y": 2})
+            config["simulation"]["grid_cache"].update(
+                {"directory": folder, "max_files": 5, "enabled": True}
+            )
+            particle = config["sample"]["particles"][0]["parameters"]
+            particle["radius_nm"]["grid_points"] = 2
+            particle["height_nm"]["grid_points"] = 3
+            config["sample"]["constraints"]["segment_height_le_2r"] = False
+
+            def fake_simulation(_config, sampled):
+                value = float(sampled["radius_nm"] + sampled["height_nm"])
+                return np.full((2, 2), value, dtype=np.float32)
+
+            with patch("trainset.grid_cache._simulate_pattern_once", side_effect=fake_simulation) as mocked:
+                first = load_or_build_grid(config)
+                second = load_or_build_grid(config)
+                self.assertFalse(first["cache_hit"])
+                self.assertTrue(second["cache_hit"])
+                self.assertEqual(mocked.call_count, 6)
+                self.assertEqual(first["images"].shape, (2, 3, 2, 2))
+
+                for index in range(1, 7):
+                    variant = copy.deepcopy(config)
+                    variant["beam"]["wavelength_nm"] += index * 1e-4
+                    load_or_build_grid(variant)
+            self.assertEqual(len(list(Path(folder).glob("form_factor_grid_*.npz"))), 5)
+
     def test_shape_and_interference_drive_flat_parameters(self) -> None:
         config = default_project_config()
         config["sample"]["particles"] = [
@@ -240,6 +273,17 @@ class TrainsetWorkspaceTests(unittest.TestCase):
 
             self.assertTrue((package / "src" / "calibration" / "image_loader.py").is_file())
             self.assertIn("fabio", (package / "environment.yml").read_text(encoding="utf-8"))
+
+            generated = package / "dataset" / "existing_shard.h5"
+            generated.write_bytes(b"keep me")
+            prepare_job_package(
+                config,
+                Path(folder),
+                Path(__file__).resolve().parents[1],
+            )
+            self.assertEqual(generated.read_bytes(), b"keep me")
+            manifest = (package / "manifest.json").read_text(encoding="utf-8")
+            self.assertNotIn("existing_shard.h5", manifest)
 
 
 if __name__ == "__main__":

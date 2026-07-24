@@ -6,9 +6,9 @@ project:
   workspace: E:\PythonCode\gisaxs_gui\trainset_jobs
 dataset:
   dimension: 2d
-  number_of_samples: 200000
+  number_of_samples: 2000
   output_format: hdf5
-  samples_per_shard: 2000
+  samples_per_shard: 200
   sampling: latin_hypercube
   split:
     train: 0.8
@@ -26,8 +26,8 @@ detector:
   pixel_size_x_mm: 0.172
   pixel_size_y_mm: 0.172
   distance_mm: 3230.0
-  beam_center_x_px: 804.0
-  beam_center_y_px: 305.0
+  beam_center_x_px: 794.0
+  beam_center_y_px: 1314.0
 roi:
   x: 385
   y: 876
@@ -97,7 +97,7 @@ sample:
         distribution: uniform
   mixture:
     mode: gaussian_mixture
-    components: 5
+    components: 3
     sigma_fraction_min: 0.01
     sigma_fraction_max: 0.3
     random_weights: true
