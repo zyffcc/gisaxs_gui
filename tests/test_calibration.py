@@ -14,7 +14,12 @@ from calibration.candidate_ranker import rank_candidates
 from calibration.center_estimator import estimate_center_candidates
 from calibration.engine import CalibrationEngine
 from calibration.geometry_model import energy_to_wavelength, q_to_ring_radius_px
-from calibration.image_loader import load_detector_image, nxs_invalid_pixel_mask
+from calibration.image_loader import (
+    detect_nxs_frame_count,
+    load_detector_image,
+    nxs_invalid_pixel_mask,
+    nxs_series_paths,
+)
 from calibration.models import CalibrationCandidate, CalibrationResult, DetectorImage
 from calibration.peak_detector import DetectedPeak
 from calibration.peak_matcher import generate_distance_candidates
@@ -65,6 +70,58 @@ class CalibrationTests(unittest.TestCase):
             np.testing.assert_array_equal(detector.data, expected)
             np.testing.assert_array_equal(legacy_api, expected)
             self.assertAlmostEqual(detector.pixel_size_x_m, 75e-6)
+
+    def test_nxs_module_series_and_frames_use_shared_loader(self):
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / f"scan_m{module:02d}.nxs" for module in (1, 2)]
+            for module, path in enumerate(paths):
+                source = np.full((2, 4, 6), 10 * (module + 1), dtype=np.float32)
+                source[1] += 1
+                with h5py.File(path, "w") as handle:
+                    handle.create_dataset("/entry/instrument/detector/data", data=source)
+                    handle.create_dataset(
+                        "/entry/instrument/detector/translation/distance",
+                        data=[0, module * 4],
+                    )
+
+            self.assertEqual(nxs_series_paths(paths[1]), paths)
+            self.assertEqual(detect_nxs_frame_count(paths[0]), 2)
+            detector = load_detector_image(paths[1], frame_idx=1)
+            self.assertEqual(detector.data.shape, (6, 8))
+            self.assertEqual(detector.metadata["frame_index"], 1)
+            self.assertEqual(len(detector.metadata["module_files"]), 2)
+            self.assertEqual(set(np.unique(detector.data)), {11.0, 21.0})
+
+    def test_single_image_nxs_files_are_not_grouped(self):
+        with tempfile.TemporaryDirectory() as folder:
+            paths = [Path(folder) / f"frame_{index:03d}.nxs" for index in (1, 2)]
+            for index, path in enumerate(paths):
+                with h5py.File(path, "w") as handle:
+                    handle.create_dataset(
+                        "/entry/instrument/detector/data",
+                        data=np.full((4, 6), index, dtype=np.float32),
+                    )
+            self.assertEqual(nxs_series_paths(paths[0]), [paths[0]])
+            self.assertEqual(nxs_series_paths(paths[1]), [paths[1]])
+            self.assertEqual(detect_nxs_frame_count(paths[0]), 1)
+
+    def test_loading_nxs_does_not_apply_beam_center_metadata(self):
+        before_x = global_params.get_parameter("fitting", "detector.beam_center_x")
+        before_y = global_params.get_parameter("fitting", "detector.beam_center_y")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "metadata_only.nxs"
+            with h5py.File(path, "w") as handle:
+                handle.create_dataset(
+                    "/entry/instrument/detector/data",
+                    data=np.ones((4, 6), dtype=np.float32),
+                )
+                handle.create_dataset("/entry/instrument/detector/beam_center_x", data=[999.0])
+                handle.create_dataset("/entry/instrument/detector/beam_center_y", data=[888.0])
+            detector = load_detector_image(path)
+            self.assertEqual(detector.beam_center_x_px, 999.0)
+            self.assertEqual(detector.beam_center_y_px, 888.0)
+        self.assertEqual(global_params.get_parameter("fitting", "detector.beam_center_x"), before_x)
+        self.assertEqual(global_params.get_parameter("fitting", "detector.beam_center_y"), before_y)
 
     def test_nxs_mask_preserves_undefined_and_virtual_pixel_bits(self):
         source = np.arange(24, dtype=np.float32).reshape(1, 4, 6) + 10.0

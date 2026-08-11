@@ -1,10 +1,10 @@
 {
     "fitting": {
         "global_parameters": {
-            "sigma_res": 0.013,
-            "k_value": 5377.319942969908,
+            "sigma_res": 0.0169,
+            "k_value": 1310.549674747558,
             "int_res": 22.117123,
-            "nu_res": 9.1,
+            "nu_res": 7.8,
             "background": 0.0001
         },
         "particles": {
@@ -46,11 +46,11 @@
                     "cylinder": {
                         "intensity": 0.0,
                         "radius": 5.537776470184326,
-                        "sigma_radius": 1.4587913751602173,
+                        "sigma_radius": 5.0,
                         "height": 67.2994384765625,
                         "sigma_height": 60.56949462890625,
-                        "diameter": 68.81668853759766,
-                        "sigma_diameter": 1.0790766477584839
+                        "diameter": 1000.0,
+                        "sigma_diameter": 100.0
                     },
                     "vertical_cylinder": {
                         "intensity": 1.0,

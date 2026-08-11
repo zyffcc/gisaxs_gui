@@ -62,6 +62,64 @@ GISAXS_IMAGE_COLORMAPS = (
 )
 
 
+def apply_threshold_mask(image, enabled=False, lower=-1e12, upper=1e12):
+    """Return input intensities with invalid/thresholded pixels represented as NaN."""
+    array = np.asarray(image, dtype=np.float32)
+    if not enabled:
+        return array
+    low, high = sorted((float(lower), float(upper)))
+    masked = array.copy()
+    invalid = ~np.isfinite(masked) | (masked < low) | (masked > high)
+    masked[invalid] = np.nan
+    return masked
+
+
+def apply_input_image_options(
+    image,
+    *,
+    flip_ud=False,
+    threshold_enabled=False,
+    threshold_min=-1e12,
+    threshold_max=1e12,
+):
+    """Apply read-level transforms used by every Cut Fitting consumer."""
+    transformed = np.asarray(image, dtype=np.float32)
+    if flip_ud:
+        transformed = np.ascontiguousarray(np.flipud(transformed))
+    return apply_threshold_mask(
+        transformed,
+        enabled=threshold_enabled,
+        lower=threshold_min,
+        upper=threshold_max,
+    )
+
+
+def finite_mean_axis(data, axis):
+    """Mean along an axis while giving masked/NaN pixels zero statistical weight."""
+    array = np.asarray(data, dtype=float)
+    finite = np.isfinite(array)
+    counts = np.sum(finite, axis=axis)
+    totals = np.sum(np.where(finite, array, 0.0), axis=axis)
+    result = np.full(np.shape(totals), np.nan, dtype=float)
+    np.divide(totals, counts, out=result, where=counts > 0)
+    return result
+
+
+def finite_log_profiles(data):
+    """Build center-finding profiles without giving masked pixels any weight."""
+    array = np.asarray(data, dtype=float)
+    finite = np.isfinite(array)
+    if not np.any(finite):
+        raise ValueError("No valid detector pixels remain after masking")
+    log_data = np.full(array.shape, np.nan, dtype=float)
+    log_data[finite] = np.log10(np.maximum(array[finite], 1.0))
+    vertical = np.nansum(log_data, axis=1)
+    vertical[~np.any(finite, axis=1)] = -np.inf
+    horizontal = np.nansum(log_data, axis=0)
+    horizontal[~np.any(finite, axis=0)] = 0.0
+    return vertical, horizontal
+
+
 # 函数说明：使用束心左右镜像补全 detector gap 像素。
 def mirror_fill_detector_gaps(image, center_x=None, gap_value=-1, gap_margin_px=0):
     if center_x is None:
@@ -118,6 +176,7 @@ from config.model_parameters_manager import ModelParametersManager
 
 from utils.universal_parameter_trigger_manager import UniversalParameterTriggerManager
 from utils.path_utils import normalize_path
+from calibration.image_loader import detect_nxs_frame_count, load_detector_image, nxs_series_paths
 from utils.ai_fitting_models import (
     ModelInfo,
     default_ai_fitting_model_base_dirs,
@@ -1344,15 +1403,20 @@ class IndependentMatplotlibWindow(QMainWindow):
                 t_total = time.perf_counter()
                 if use_log:
                     t0 = time.perf_counter()
-                    safe_data = np.where(image_data > 0, image_data, 0.001)
+                    safe_data = np.where(
+                        np.isfinite(image_data),
+                        np.maximum(image_data, 0.001),
+                        np.nan,
+                    )
                     processed_data = np.log(safe_data, dtype=np.float32)
                     print(f"[Timing] log transform: {(time.perf_counter() - t0) * 1000:.2f} ms (independent window)")
                 else:
                     processed_data = image_data.astype(np.float32)
                 if vmin is None or vmax is None:
                     t0 = time.perf_counter()
-                    auto_vmin = np.percentile(processed_data, 1)
-                    auto_vmax = np.percentile(processed_data, 99)
+                    finite_values = processed_data[np.isfinite(processed_data)]
+                    auto_vmin = np.percentile(finite_values, 1)
+                    auto_vmax = np.percentile(finite_values, 99)
                     vmin = vmin if vmin is not None else auto_vmin
                     vmax = vmax if vmax is not None else auto_vmax
                     print(f"[Timing] autoscale calculation: {(time.perf_counter() - t0) * 1000:.2f} ms (independent window)")
@@ -1416,7 +1480,11 @@ class IndependentMatplotlibWindow(QMainWindow):
 
             if use_log:
                 t0 = time.perf_counter()
-                safe_data = np.where(image_data > 0, image_data, 0.001)
+                safe_data = np.where(
+                    np.isfinite(image_data),
+                    np.maximum(image_data, 0.001),
+                    np.nan,
+                )
                 processed_data = np.log(safe_data, dtype=np.float32)
                 print(f"[Timing] log transform: {(time.perf_counter() - t0) * 1000:.2f} ms")
                 scale_text = "Log Scale"
@@ -1428,8 +1496,9 @@ class IndependentMatplotlibWindow(QMainWindow):
 
             if vmin is None or vmax is None:
                 t0 = time.perf_counter()
-                auto_vmin = np.percentile(processed_data, 1)
-                auto_vmax = np.percentile(processed_data, 99)
+                finite_values = processed_data[np.isfinite(processed_data)]
+                auto_vmin = np.percentile(finite_values, 1)
+                auto_vmax = np.percentile(finite_values, 99)
                 vmin = vmin if vmin is not None else auto_vmin
                 vmax = vmax if vmax is not None else auto_vmax
                 print(f"[Timing] autoscale calculation: {(time.perf_counter() - t0) * 1000:.2f} ms (independent window)")
@@ -2618,7 +2687,7 @@ def _enforce_remote_cache_limit(cache_dir: str, max_gb: float) -> None:
 
 
 class FolderImageScanWorker(QThread):
-    """Scan one folder level for CBF navigation without blocking the UI."""
+    """Scan one folder level for detector-image navigation without blocking the UI."""
 
     scan_finished = pyqtSignal(str, list)
     status_updated = pyqtSignal(str)
@@ -2688,6 +2757,7 @@ class AsyncImageLoader(QThread):
         super().__init__()
         self.file_path = None
         self.stack_count = 1
+        self.frame_index = 0
         self._image_cache = OrderedDict()
         self._image_cache_limit = 8
         self.copy_remote_to_cache = True
@@ -2705,8 +2775,13 @@ class AsyncImageLoader(QThread):
         except Exception:
             self.remote_cache_limit_gb = 3.0
 
+    @staticmethod
+    def _natural_sort_key(path):
+        name = os.path.basename(path)
+        return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', name)]
+
     # 函数说明：加载图像。
-    def load_image(self, file_path, stack_count=1):
+    def load_image(self, file_path, stack_count=1, frame_index=0):
         """No description."""
         if self.isRunning():
             self.requestInterruption()
@@ -2714,6 +2789,7 @@ class AsyncImageLoader(QThread):
             return
         self.file_path = file_path
         self.stack_count = stack_count
+        self.frame_index = max(0, int(frame_index or 0))
         self.start()
 
     # 函数说明：实现 prepare 文件 for read 相关逻辑。
@@ -2742,20 +2818,20 @@ class AsyncImageLoader(QThread):
     def run(self):
         """No description."""
         try:
-            if not is_fabio_available():
+            file_ext = os.path.splitext(self.file_path)[1].lower()
+            if file_ext == '.cbf' and not is_fabio_available():
                 self.error_occurred.emit("fabio library is required for CBF file processing")
                 return
 
             self.progress_updated.emit(10, "Loading file...")
             self.load_started.emit(self.file_path)
 
-            file_ext = os.path.splitext(self.file_path)[1].lower()
-
-            if file_ext != '.cbf':
-                self.error_occurred.emit("Only CBF files are supported currently")
+            if file_ext not in {'.cbf', '.nxs', '.tif', '.tiff'}:
+                self.error_occurred.emit("Only CBF, NXS, and TIFF detector images are supported currently")
                 return
 
-            cache_key = (normalize_path(self.file_path), int(self.stack_count))
+            effective_stack_count = max(1, int(self.stack_count))
+            cache_key = (normalize_path(self.file_path), effective_stack_count, int(self.frame_index))
             cached = self._image_cache.get(cache_key)
             if cached is not None:
                 self._image_cache.move_to_end(cache_key)
@@ -2766,7 +2842,24 @@ class AsyncImageLoader(QThread):
                 return
 
             read_start = time.perf_counter()
-            if self.stack_count == 1:
+            if file_ext == '.nxs' and self.stack_count > 1:
+                self.progress_updated.emit(30, f"Loading and stacking {self.stack_count} NXS frames...")
+                image_data = self._load_multiple_nxs_frames(
+                    self.file_path,
+                    self.frame_index,
+                    self.stack_count,
+                )
+            elif file_ext in {'.tif', '.tiff'} and self.stack_count > 1:
+                self.progress_updated.emit(30, f"Loading and stacking {self.stack_count} TIFF files...")
+                image_data = self._load_multiple_detector_files(
+                    self.file_path,
+                    self.stack_count,
+                    {'.tif', '.tiff'},
+                )
+            elif file_ext in {'.nxs', '.tif', '.tiff'}:
+                self.progress_updated.emit(50, f"Loading {file_ext[1:].upper()} detector image...")
+                image_data = self._load_detector_file(self.file_path, self.frame_index)
+            elif self.stack_count == 1:
                 self.progress_updated.emit(50, "Loading single CBF file...")
                 image_data = self._load_single_cbf_file(self.file_path)
             else:
@@ -2788,6 +2881,75 @@ class AsyncImageLoader(QThread):
 
         except Exception as e:
             self.error_occurred.emit(f"Error loading image: {str(e)}")
+
+    def _load_detector_file(self, file_path, frame_index=0):
+        """Reuse the WAXS/calibration detector loader for NXS and TIFF input."""
+        file_path = normalize_path(file_path)
+        # P03 NXS module series are discovered from sibling names by the shared
+        # loader, so retain the source path instead of isolating one module in
+        # the remote-file cache.
+        effective_file = file_path if file_path.lower().endswith('.nxs') else self._prepare_file_for_read(file_path)
+        self._last_source_files = [file_path]
+        self._last_effective_files = [effective_file]
+        detector_image = load_detector_image(effective_file, frame_idx=frame_index)
+        return np.asarray(detector_image.data, dtype=np.float32)
+
+    def _load_multiple_nxs_frames(self, file_path, frame_index, stack_count):
+        """Sum consecutive frames from one logical NXS source via the shared loader."""
+        file_path = normalize_path(file_path)
+        frame_count = max(1, int(detect_nxs_frame_count(file_path)))
+        start_frame = max(0, min(int(frame_index), frame_count - 1))
+        actual_count = min(max(1, int(stack_count)), frame_count - start_frame)
+        summed_data = None
+        self._last_source_files = [file_path] * actual_count
+        self._last_effective_files = [file_path] * actual_count
+        for offset in range(actual_count):
+            frame = start_frame + offset
+            self.progress_updated.emit(
+                40 + int((offset / actual_count) * 40),
+                f"Processing NXS frame {frame + 1}/{frame_count}",
+            )
+            data = np.asarray(load_detector_image(file_path, frame_idx=frame).data, dtype=np.float32)
+            if summed_data is None:
+                summed_data = data.copy()
+            else:
+                summed_data += data
+        return summed_data
+
+    def _load_multiple_detector_files(self, start_file, stack_count, extensions):
+        """Sum consecutive ordinary detector files such as TIFF images."""
+        start_file = normalize_path(start_file)
+        file_dir = os.path.dirname(start_file)
+        base_name = os.path.basename(start_file)
+        names = sorted(
+            (
+                name for name in os.listdir(file_dir)
+                if os.path.splitext(name)[1].lower() in set(extensions)
+            ),
+            key=self._natural_sort_key,
+        )
+        try:
+            start_index = names.index(base_name)
+        except ValueError:
+            return None
+        actual_count = min(max(1, int(stack_count)), len(names) - start_index)
+        selected = names[start_index:start_index + actual_count]
+        self._last_source_files = [normalize_path(os.path.join(file_dir, name)) for name in selected]
+        self._last_effective_files = []
+        summed_data = None
+        for index, source_path in enumerate(self._last_source_files):
+            self.progress_updated.emit(
+                40 + int((index / actual_count) * 40),
+                f"Processing file {index + 1}/{actual_count}: {os.path.basename(source_path)}",
+            )
+            effective_file = self._prepare_file_for_read(source_path)
+            self._last_effective_files.append(effective_file)
+            data = np.asarray(load_detector_image(effective_file).data, dtype=np.float32)
+            if summed_data is None:
+                summed_data = data.copy()
+            else:
+                summed_data += data
+        return summed_data
 
     # 函数说明：加载single cbf 文件。
     def _load_single_cbf_file(self, cbf_file):
@@ -2818,7 +2980,7 @@ class AsyncImageLoader(QThread):
             base_name = os.path.basename(start_file)
 
             cbf_files = [f for f in os.listdir(file_dir) if f.lower().endswith('.cbf')]
-            cbf_files.sort()
+            cbf_files.sort(key=self._natural_sort_key)
 
             try:
                 start_index = cbf_files.index(base_name)
@@ -2826,8 +2988,7 @@ class AsyncImageLoader(QThread):
                 return None
 
             available_files = len(cbf_files) - start_index
-            if stack_count > available_files:
-                return None
+            stack_count = min(max(1, int(stack_count)), available_files)
 
             summed_data = None
             files_to_stack = cbf_files[start_index:start_index + stack_count]
@@ -2913,6 +3074,8 @@ class FittingController(QObject):
         self._folder_image_scan_cache = {}
         self._previous_image_button = None
         self._next_image_button = None
+        self._nxs_frame_index = 0
+        self._nxs_frame_count = 1
         self._remote_cache_controls = {}
         self._remote_copy_enabled = True
         self._remote_cache_dir = _default_remote_cache_dir()
@@ -2994,6 +3157,10 @@ class FittingController(QObject):
         self._show_cut_region = True
         self._show_center = True
         self._image_colormap = "viridis"
+        self._flip_ud = False
+        self._threshold_mask_enabled = False
+        self._threshold_mask_min = -1e12
+        self._threshold_mask_max = 1e12
         self._mirror_fill_detector_gaps = False
         self._mirror_gap_margin_px = 0
         self.current_raw_image = None
@@ -3363,8 +3530,134 @@ class FittingController(QObject):
         self.status_updated.emit(f"Load finished: {os.path.basename(source_path)}")
 
     # 函数说明：实现 supported 文件夹 图像 extensions 相关逻辑。
-    def _supported_folder_image_extensions(self):
+    def _supported_folder_image_extensions(self, file_path=''):
+        suffix = os.path.splitext(file_path or '')[1].lower()
+        if suffix == '.nxs':
+            return ('.nxs',)
+        if suffix in {'.tif', '.tiff'}:
+            return ('.tif', '.tiff')
         return ('.cbf',)
+
+    def _folder_image_cache_key(self, file_path):
+        normalized = normalize_path(file_path)
+        folder = normalized if not os.path.splitext(normalized)[1] else normalize_path(os.path.dirname(normalized))
+        extensions = self._supported_folder_image_extensions(normalized)
+        return folder if extensions == ('.cbf',) else (folder, extensions)
+
+    def _navigation_file_key(self, file_path):
+        """Map every P03 module member to the first file of its logical NXS source."""
+        normalized = normalize_path(file_path)
+        if os.path.splitext(normalized)[1].lower() == '.nxs':
+            try:
+                normalized = normalize_path(str(nxs_series_paths(normalized)[0]))
+            except Exception:
+                pass
+        return os.path.normcase(os.path.abspath(normalized))
+
+    def _logical_navigation_files(self, files):
+        logical_files = []
+        seen = set()
+        for file_path in files or []:
+            normalized = normalize_path(file_path)
+            key = self._navigation_file_key(normalized)
+            if key in seen:
+                continue
+            seen.add(key)
+            logical_file = normalized
+            if os.path.splitext(normalized)[1].lower() == '.nxs':
+                try:
+                    logical_file = normalize_path(str(nxs_series_paths(normalized)[0]))
+                except Exception:
+                    pass
+            logical_files.append(logical_file)
+        return logical_files
+
+    def _set_nxs_frame_state(self, file_path, frame_index=0):
+        """Update NXS frame navigation only; detector geometry is intentionally untouched."""
+        if os.path.splitext(file_path or '')[1].lower() != '.nxs':
+            self._nxs_frame_index = 0
+            self._nxs_frame_count = 1
+            self.current_parameters.pop('nxs_frame_index', None)
+            return
+        try:
+            frame_count = max(1, int(detect_nxs_frame_count(file_path)))
+        except Exception as exc:
+            frame_count = 1
+            self.status_updated.emit(f"Could not inspect NXS frame count: {exc}")
+        self._nxs_frame_count = frame_count
+        self._nxs_frame_index = max(0, min(int(frame_index or 0), frame_count - 1))
+        self.current_parameters['nxs_frame_index'] = self._nxs_frame_index
+
+    @staticmethod
+    def _nxs_uses_internal_frames(file_path):
+        """Only stitched/module NXS sources expose frames to GISAXS navigation."""
+        if os.path.splitext(file_path or '')[1].lower() != '.nxs':
+            return False
+        try:
+            return len(nxs_series_paths(file_path)) > 1
+        except Exception:
+            return False
+
+    def _ordinary_stack_sequence(self, file_path):
+        """Return ordinary detector files from the selected file to the series end."""
+        suffix = os.path.splitext(file_path or '')[1].lower()
+        if suffix == '.cbf':
+            extensions = {'.cbf'}
+        elif suffix in {'.tif', '.tiff'}:
+            extensions = {'.tif', '.tiff'}
+        else:
+            return []
+        cached = self._folder_image_scan_cache.get(self._folder_image_cache_key(file_path))
+        if cached is not None:
+            paths = [normalize_path(path) for path in cached if os.path.splitext(path)[1].lower() in extensions]
+        else:
+            folder = os.path.dirname(file_path)
+            try:
+                paths = [
+                    normalize_path(entry.path)
+                    for entry in os.scandir(folder)
+                    if entry.is_file() and os.path.splitext(entry.name)[1].lower() in extensions
+                ]
+            except Exception:
+                paths = []
+        paths.sort(key=self._natural_sort_key)
+        current_key = os.path.normcase(os.path.abspath(file_path))
+        keys = [os.path.normcase(os.path.abspath(path)) for path in paths]
+        try:
+            return paths[keys.index(current_key):]
+        except ValueError:
+            return [normalize_path(file_path)] if file_path else []
+
+    def _maximum_stack_count(self, file_path=None):
+        file_path = file_path or self.current_parameters.get('imported_gisaxs_file', '')
+        suffix = os.path.splitext(file_path or '')[1].lower()
+        if suffix == '.nxs':
+            return max(1, int(self._nxs_frame_count) - int(self._nxs_frame_index))
+        if suffix in {'.cbf', '.tif', '.tiff'}:
+            return max(1, len(self._ordinary_stack_sequence(file_path)))
+        return 1
+
+    def _clamp_stack_count(self, requested=None, notify=True):
+        """Clamp Stack mode to the number of images available from the current start."""
+        if getattr(self, 'load_mode', 'Single') != 'Stack':
+            return 1
+        if requested is None:
+            requested = self.current_parameters.get('stack_count', 1)
+        try:
+            requested = max(1, int(requested))
+        except Exception:
+            requested = 1
+        maximum = self._maximum_stack_count()
+        clamped = min(requested, maximum)
+        self.current_parameters['stack_count'] = clamped
+        stack_edit = getattr(self.ui, 'gisaxsInputStackValue', None)
+        if stack_edit is not None and stack_edit.text().strip() != str(clamped):
+            stack_edit.setText(str(clamped))
+        if notify and clamped != requested:
+            self.status_updated.emit(
+                f"Stack count adjusted from {requested} to maximum available {maximum}"
+            )
+        return clamped
 
     # 函数说明：实现 natural 排序 key 相关逻辑。
     def _natural_sort_key(self, path):
@@ -3382,9 +3675,7 @@ class FittingController(QObject):
                 self._update_folder_navigation_buttons()
                 return
 
-            looks_like_folder = not os.path.splitext(file_path)[1]
-            folder = file_path if looks_like_folder or (not is_cloud_or_network_path(file_path) and os.path.isdir(file_path)) else os.path.dirname(file_path)
-            cached = self._folder_image_scan_cache.get(normalize_path(folder))
+            cached = self._folder_image_scan_cache.get(self._folder_image_cache_key(file_path))
             if cached:
                 self._apply_folder_image_scan_result(file_path, cached)
                 return
@@ -3397,7 +3688,11 @@ class FittingController(QObject):
                     pass
 
             self.status_updated.emit("Scanning image folder...")
-            worker = FolderImageScanWorker(file_path, self._supported_folder_image_extensions(), max_files=5000)
+            worker = FolderImageScanWorker(
+                file_path,
+                self._supported_folder_image_extensions(file_path),
+                max_files=5000,
+            )
             worker.status_updated.connect(self.status_updated.emit)
             worker.scan_finished.connect(self._on_folder_image_scan_finished)
             worker.error_occurred.connect(self._on_folder_image_scan_error)
@@ -3414,10 +3709,10 @@ class FittingController(QObject):
     def _apply_folder_image_scan_result(self, file_path: str, files: list):
         try:
             file_path = normalize_path(file_path)
-            current_norm = os.path.normcase(os.path.abspath(file_path))
-            files = [normalize_path(p) for p in (files or [])]
+            current_norm = self._navigation_file_key(file_path)
+            files = self._logical_navigation_files(files)
             self._folder_image_files = files
-            norm_files = [os.path.normcase(os.path.abspath(p)) for p in files]
+            norm_files = [self._navigation_file_key(p) for p in files]
             self._folder_image_index = norm_files.index(current_norm) if current_norm in norm_files else -1
             if self._folder_image_index < 0 and files:
                 self.status_updated.emit("Current image is not in the scanned folder list")
@@ -3428,10 +3723,7 @@ class FittingController(QObject):
     # 函数说明：处理文件夹 图像 scan finished事件。
     def _on_folder_image_scan_finished(self, file_path: str, files: list):
         try:
-            normalized = normalize_path(file_path)
-            looks_like_folder = not os.path.splitext(normalized)[1]
-            folder = normalized if looks_like_folder or (not is_cloud_or_network_path(normalized) and os.path.isdir(normalized)) else normalize_path(os.path.dirname(normalized))
-            self._folder_image_scan_cache[folder] = [normalize_path(p) for p in files]
+            self._folder_image_scan_cache[self._folder_image_cache_key(file_path)] = [normalize_path(p) for p in files]
             self._apply_folder_image_scan_result(file_path, files)
             self.status_updated.emit(f"Folder scan complete: {len(files)} image file(s)")
         except Exception as exc:
@@ -3449,8 +3741,19 @@ class FittingController(QObject):
         try:
             count = len(self._folder_image_files)
             index = self._folder_image_index
-            has_previous = count > 1 and index > 0
-            has_next = count > 1 and 0 <= index < count - 1
+            current_file = self.current_parameters.get('imported_gisaxs_file', '')
+            uses_internal_navigation = self._nxs_uses_internal_frames(current_file)
+            has_previous = (
+                (uses_internal_navigation and self._nxs_frame_index > 0)
+                or (count > 1 and index > 0)
+            )
+            has_next = (
+                (
+                    uses_internal_navigation
+                    and self._nxs_frame_index < self._nxs_frame_count - 1
+                )
+                or (count > 1 and 0 <= index < count - 1)
+            )
             if self._previous_image_button is not None:
                 self._previous_image_button.setEnabled(has_previous)
                 self._previous_image_button.setToolTip("Previous" if has_previous else "No previous image")
@@ -3471,12 +3774,29 @@ class FittingController(QObject):
     # 函数说明：显示文件夹 图像 at offset。
     def _show_folder_image_at_offset(self, offset):
         try:
+            current_file = self.current_parameters.get('imported_gisaxs_file', '')
+            if (
+                os.path.splitext(current_file)[1].lower() == '.nxs'
+                and self._nxs_uses_internal_frames(current_file)
+            ):
+                target_frame = self._nxs_frame_index + offset
+                if 0 <= target_frame < self._nxs_frame_count:
+                    self._nxs_frame_index = target_frame
+                    self.current_parameters['nxs_frame_index'] = target_frame
+                    self._update_stack_display()
+                    self._update_folder_navigation_buttons()
+                    self.parameters_changed.emit(self.current_parameters)
+                    self.status_updated.emit(
+                        f"Current NXS frame: {target_frame + 1}/{self._nxs_frame_count}"
+                    )
+                    self._show_image()
+                    return
+
             if not self._folder_image_files:
                 self.status_updated.emit("No previous image" if offset < 0 else "No next image")
                 self._update_folder_navigation_buttons()
                 return
 
-            current_file = self.current_parameters.get('imported_gisaxs_file', '')
             if self._folder_image_index < 0 and current_file:
                 self._scan_folder_images_for_file(current_file)
                 self.status_updated.emit("Image list is still scanning; try navigation again in a moment")
@@ -3492,12 +3812,23 @@ class FittingController(QObject):
                 self._update_folder_navigation_buttons()
                 return
 
-            self._select_folder_image(self._folder_image_files[target_index])
+            target_file = self._folder_image_files[target_index]
+            target_frame = 0
+            if (
+                offset < 0
+                and os.path.splitext(target_file)[1].lower() == '.nxs'
+                and self._nxs_uses_internal_frames(target_file)
+            ):
+                try:
+                    target_frame = max(0, int(detect_nxs_frame_count(target_file)) - 1)
+                except Exception:
+                    target_frame = 0
+            self._select_folder_image(target_file, frame_index=target_frame)
         except Exception as e:
             self.status_updated.emit(f"Image navigation failed: {str(e)}")
 
     # 函数说明：实现 select 文件夹 图像 相关逻辑。
-    def _select_folder_image(self, file_path):
+    def _select_folder_image(self, file_path, frame_index=0):
         try:
             file_path = normalize_path(file_path)
             if not is_cloud_or_network_path(file_path) and not os.path.exists(file_path):
@@ -3506,11 +3837,11 @@ class FittingController(QObject):
                 return
 
             self.current_parameters['imported_gisaxs_file'] = file_path
+            self._set_nxs_frame_state(file_path, frame_index)
             if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
                 self.ui.gisaxsInputImportButtonValue.setText(os.path.basename(file_path))
 
-            folder = normalize_path(os.path.dirname(file_path))
-            cached = self._folder_image_scan_cache.get(folder)
+            cached = self._folder_image_scan_cache.get(self._folder_image_cache_key(file_path))
             if cached:
                 self._apply_folder_image_scan_result(file_path, cached)
             else:
@@ -4265,6 +4596,22 @@ class FittingController(QObject):
         if rows_arr is not None:
             rows_arr = rows_arr[order]
 
+        if x_arr.size > 1:
+            unique_x, inverse, counts = np.unique(x_arr, return_inverse=True, return_counts=True)
+            if unique_x.size != x_arr.size:
+                summed_y = np.zeros(unique_x.size, dtype=float)
+                np.add.at(summed_y, inverse, y_arr)
+                y_arr = summed_y / counts
+                if rows_arr is not None:
+                    summed_rows = np.zeros(unique_x.size, dtype=float)
+                    np.add.at(summed_rows, inverse, rows_arr.astype(float))
+                    rows_arr = summed_rows / counts
+                duplicate_count = int(x_arr.size - unique_x.size)
+                self._log_cut_debug(
+                    f"{context}: merged {duplicate_count} duplicate q coordinate(s) before interpolation."
+                )
+                x_arr = unique_x
+
         if log_vertical:
             monotonic = bool(np.all(np.diff(x_arr) >= 0)) if x_arr.size > 1 else True
             self._log_cut_debug(f"{context}: first/last q after sorting = {x_arr[0]:.8g}, {x_arr[-1]:.8g}; monotonic={monotonic}")
@@ -4280,6 +4627,27 @@ class FittingController(QObject):
             self._log_cut_debug(f"{context}: points after {mode} axis filter would be {count}/{x_arr.size}")
 
         return x_arr, y_arr, rows_arr
+
+    def _filter_cut_pairs_for_active_axis(self, q_values, intensity_values, context="cut"):
+        """Apply Positive/Negative Only before resampling so all points cover the visible domain."""
+        q_arr = np.asarray(q_values, dtype=float)
+        intensity_arr = np.asarray(intensity_values, dtype=float)
+        try:
+            mode = self._get_independent_axis_filter_mode()
+        except Exception:
+            mode = 'all'
+        if mode == 'positive':
+            keep = q_arr > 0
+        elif mode == 'negative':
+            keep = q_arr < 0
+        else:
+            keep = np.ones(q_arr.shape, dtype=bool)
+        q_arr = q_arr[keep]
+        intensity_arr = intensity_arr[keep]
+        if q_arr.size < 2:
+            raise Exception(f"{context}: not enough points remain after {mode} axis filtering")
+        self._log_cut_debug(f"{context}: {q_arr.size} native point(s) remain after {mode} axis filtering.")
+        return q_arr, intensity_arr
 
     # 函数说明：配置connections。
     def _setup_connections(self):
@@ -4337,12 +4705,16 @@ class FittingController(QObject):
             self.ui.gisaxsInputDetectorParaButton.clicked.connect(self._show_detector_parameters)
 
         if hasattr(self.ui, 'gisaxsInputGraphicsView'):
-            self.ui.gisaxsInputGraphicsView.setToolTip("Double-click to open a larger independent image window.")
-            self.ui.gisaxsInputGraphicsView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            self.ui.gisaxsInputGraphicsView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            self.ui.gisaxsInputGraphicsView.setAlignment(Qt.AlignCenter)
-            self.ui.gisaxsInputGraphicsView.mouseDoubleClickEvent = self._on_graphics_view_double_click
-            self.ui.gisaxsInputGraphicsView.installEventFilter(self)
+            preview_view = self.ui.gisaxsInputGraphicsView
+            preview_view.setToolTip("Drop a CBF, NXS, or TIFF file here to load it. Double-click to open a larger window.")
+            preview_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            preview_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            preview_view.setAlignment(Qt.AlignCenter)
+            preview_view.mouseDoubleClickEvent = self._on_graphics_view_double_click
+            preview_view.setAcceptDrops(True)
+            preview_view.installEventFilter(self)
+            preview_view.viewport().setAcceptDrops(True)
+            preview_view.viewport().installEventFilter(self)
 
         if hasattr(self.ui, 'fitGraphicsView'):
             self.ui.fitGraphicsView.setToolTip("Double-click to open a larger independent fit window.")
@@ -4544,6 +4916,24 @@ class FittingController(QObject):
             self._show_center = bool(global_params.get_parameter('fitting', 'gisaxs_input.show_center', True))
             cmap = global_params.get_parameter('fitting', 'gisaxs_input.colormap', 'viridis')
             self._image_colormap = cmap if cmap in GISAXS_IMAGE_COLORMAPS else "viridis"
+            self._flip_ud = settings.value(
+                'fitting/gisaxs_input/flip_ud',
+                bool(global_params.get_parameter('fitting', 'gisaxs_input.flip_ud', False)),
+                type=bool,
+            )
+            self._threshold_mask_enabled = settings.value(
+                'fitting/gisaxs_input/threshold_mask_enabled',
+                bool(global_params.get_parameter('fitting', 'gisaxs_input.threshold_mask_enabled', False)),
+                type=bool,
+            )
+            self._threshold_mask_min = float(settings.value(
+                'fitting/gisaxs_input/threshold_mask_min',
+                global_params.get_parameter('fitting', 'gisaxs_input.threshold_mask_min', -1e12),
+            ))
+            self._threshold_mask_max = float(settings.value(
+                'fitting/gisaxs_input/threshold_mask_max',
+                global_params.get_parameter('fitting', 'gisaxs_input.threshold_mask_max', 1e12),
+            ))
             self._mirror_fill_detector_gaps = settings.value(
                 'fitting/gisaxs_input/mirror_fill_detector_gaps',
                 bool(global_params.get_parameter('fitting', 'gisaxs_input.mirror_fill_detector_gaps', False)),
@@ -4561,6 +4951,10 @@ class FittingController(QObject):
             self._show_cut_region = True
             self._show_center = True
             self._image_colormap = "viridis"
+            self._flip_ud = False
+            self._threshold_mask_enabled = False
+            self._threshold_mask_min = -1e12
+            self._threshold_mask_max = 1e12
             self._mirror_fill_detector_gaps = False
             self._mirror_gap_margin_px = 0
             try:
@@ -4581,12 +4975,26 @@ class FittingController(QObject):
     def _save_image_display_options(self):
         try:
             settings = QSettings()
+            settings.setValue('fitting/gisaxs_input/flip_ud', bool(self._flip_ud))
+            settings.setValue('fitting/gisaxs_input/threshold_mask_enabled', bool(self._threshold_mask_enabled))
+            settings.setValue('fitting/gisaxs_input/threshold_mask_min', float(self._threshold_mask_min))
+            settings.setValue('fitting/gisaxs_input/threshold_mask_max', float(self._threshold_mask_max))
             settings.setValue('fitting/gisaxs_input/mirror_fill_detector_gaps', bool(self._mirror_fill_detector_gaps))
             settings.setValue('fitting/gisaxs_input/mirror_gap_margin_px', int(self._mirror_gap_margin_px))
             from core.global_params import global_params
             global_params.set_parameter('fitting', 'gisaxs_input.show_cut_region', bool(self._show_cut_region))
             global_params.set_parameter('fitting', 'gisaxs_input.show_center', bool(self._show_center))
             global_params.set_parameter('fitting', 'gisaxs_input.colormap', self._image_colormap)
+            global_params.set_parameter('fitting', 'gisaxs_input.flip_ud', bool(self._flip_ud))
+            global_params.set_parameter(
+                'fitting', 'gisaxs_input.threshold_mask_enabled', bool(self._threshold_mask_enabled)
+            )
+            global_params.set_parameter(
+                'fitting', 'gisaxs_input.threshold_mask_min', float(self._threshold_mask_min)
+            )
+            global_params.set_parameter(
+                'fitting', 'gisaxs_input.threshold_mask_max', float(self._threshold_mask_max)
+            )
             global_params.set_parameter(
                 'fitting',
                 'gisaxs_input.mirror_fill_detector_gaps',
@@ -4625,6 +5033,31 @@ class FittingController(QObject):
                 center_cb.setChecked(bool(self._show_center))
                 center_cb.blockSignals(False)
                 center_cb.toggled.connect(self._on_main_show_center_toggled)
+            flip_cb = getattr(self.ui, 'gisaxsInputFlipUdCheckBox', None)
+            if flip_cb is not None:
+                flip_cb.blockSignals(True)
+                flip_cb.setChecked(bool(self._flip_ud))
+                flip_cb.blockSignals(False)
+                flip_cb.toggled.connect(self._on_main_flip_ud_toggled)
+            threshold_cb = getattr(self.ui, 'gisaxsInputThresholdMaskCheckBox', None)
+            if threshold_cb is not None:
+                threshold_cb.blockSignals(True)
+                threshold_cb.setChecked(bool(self._threshold_mask_enabled))
+                threshold_cb.blockSignals(False)
+                threshold_cb.toggled.connect(self._on_threshold_mask_toggled)
+            threshold_min = getattr(self.ui, 'gisaxsInputThresholdMinSpinBox', None)
+            if threshold_min is not None:
+                threshold_min.blockSignals(True)
+                threshold_min.setValue(float(self._threshold_mask_min))
+                threshold_min.blockSignals(False)
+                threshold_min.editingFinished.connect(self._on_threshold_limits_committed)
+            threshold_max = getattr(self.ui, 'gisaxsInputThresholdMaxSpinBox', None)
+            if threshold_max is not None:
+                threshold_max.blockSignals(True)
+                threshold_max.setValue(float(self._threshold_mask_max))
+                threshold_max.blockSignals(False)
+                threshold_max.editingFinished.connect(self._on_threshold_limits_committed)
+            self._set_threshold_mask_controls_enabled(bool(self._threshold_mask_enabled))
             mirror_cb = getattr(self.ui, 'gisaxsInputMirrorGapFillCheckBox', None)
             if mirror_cb is not None:
                 mirror_cb.blockSignals(True)
@@ -4667,6 +5100,27 @@ class FittingController(QObject):
                 center_cb.blockSignals(True)
                 center_cb.setChecked(bool(self._show_center))
                 center_cb.blockSignals(False)
+            flip_cb = getattr(self.ui, 'gisaxsInputFlipUdCheckBox', None)
+            if flip_cb is not None:
+                flip_cb.blockSignals(True)
+                flip_cb.setChecked(bool(self._flip_ud))
+                flip_cb.blockSignals(False)
+            threshold_cb = getattr(self.ui, 'gisaxsInputThresholdMaskCheckBox', None)
+            if threshold_cb is not None:
+                threshold_cb.blockSignals(True)
+                threshold_cb.setChecked(bool(self._threshold_mask_enabled))
+                threshold_cb.blockSignals(False)
+            threshold_min = getattr(self.ui, 'gisaxsInputThresholdMinSpinBox', None)
+            if threshold_min is not None:
+                threshold_min.blockSignals(True)
+                threshold_min.setValue(float(self._threshold_mask_min))
+                threshold_min.blockSignals(False)
+            threshold_max = getattr(self.ui, 'gisaxsInputThresholdMaxSpinBox', None)
+            if threshold_max is not None:
+                threshold_max.blockSignals(True)
+                threshold_max.setValue(float(self._threshold_mask_max))
+                threshold_max.blockSignals(False)
+            self._set_threshold_mask_controls_enabled(bool(self._threshold_mask_enabled))
             mirror_cb = getattr(self.ui, 'gisaxsInputMirrorGapFillCheckBox', None)
             if mirror_cb is not None:
                 mirror_cb.blockSignals(True)
@@ -4725,6 +5179,47 @@ class FittingController(QObject):
         self._show_center = bool(checked)
         self._apply_image_display_options()
 
+    def _on_main_flip_ud_toggled(self, checked: bool):
+        if self._syncing_image_display_options:
+            return
+        self._flip_ud = bool(checked)
+        self._save_image_display_options()
+        self._reapply_input_image_options()
+
+    def _set_threshold_mask_controls_enabled(self, enabled: bool):
+        for name in (
+            'gisaxsInputThresholdMinLabel',
+            'gisaxsInputThresholdMinSpinBox',
+            'gisaxsInputThresholdMaxLabel',
+            'gisaxsInputThresholdMaxSpinBox',
+        ):
+            widget = getattr(self.ui, name, None)
+            if widget is not None:
+                widget.setEnabled(bool(enabled))
+
+    def _on_threshold_mask_toggled(self, checked: bool):
+        if self._syncing_image_display_options:
+            return
+        self._threshold_mask_enabled = bool(checked)
+        self._set_threshold_mask_controls_enabled(self._threshold_mask_enabled)
+        self._save_image_display_options()
+        self._reapply_input_image_options()
+
+    def _on_threshold_limits_committed(self):
+        if self._syncing_image_display_options:
+            return
+        lower_widget = getattr(self.ui, 'gisaxsInputThresholdMinSpinBox', None)
+        upper_widget = getattr(self.ui, 'gisaxsInputThresholdMaxSpinBox', None)
+        if lower_widget is None or upper_widget is None:
+            return
+        lower = float(lower_widget.value())
+        upper = float(upper_widget.value())
+        self._threshold_mask_min, self._threshold_mask_max = sorted((lower, upper))
+        self._save_image_display_options()
+        self._sync_image_display_option_widgets()
+        if self._threshold_mask_enabled:
+            self._reapply_input_image_options()
+
     # 函数说明：处理main 颜色映射 changed事件。
     def _on_main_colormap_changed(self, text: str):
         if self._syncing_image_display_options:
@@ -4752,7 +5247,7 @@ class FittingController(QObject):
     def _get_mirror_gap_fill_center_x(self):
         try:
             from core.global_params import global_params
-            image_data = self.current_raw_image if self.current_raw_image is not None else self.current_stack_data
+            image_data = self.current_stack_data if self.current_stack_data is not None else self.current_raw_image
             if image_data is None:
                 return None
             _, width = image_data.shape
@@ -4761,53 +5256,80 @@ class FittingController(QObject):
             return None
 
     # 函数说明：按当前显示选项生成图像预览使用的数据。
+    def _reapply_input_image_options(self, refresh=True):
+        raw = self.current_raw_image
+        if raw is None:
+            return
+        processed = apply_input_image_options(
+            raw,
+            flip_ud=self._flip_ud,
+            threshold_enabled=self._threshold_mask_enabled,
+            threshold_min=self._threshold_mask_min,
+            threshold_max=self._threshold_mask_max,
+        )
+        self.current_stack_data = processed
+        self.data = processed
+        try:
+            stack_count = int(self.current_parameters.get('stack_count', 1))
+        except Exception:
+            stack_count = 1
+        self.summed_data = processed if stack_count > 1 else None
+        self._image_display_cache.clear()
+        if self._threshold_mask_enabled:
+            masked_count = int(np.count_nonzero(~np.isfinite(processed)))
+            self.status_updated.emit(
+                f"Threshold mask applied: {masked_count} pixel(s) excluded "
+                f"outside [{self._threshold_mask_min:.6g}, {self._threshold_mask_max:.6g}]"
+            )
+        if refresh:
+            display_image = self._get_current_display_image()
+            if display_image is not None and self._is_auto_scale_enabled():
+                self._handle_color_scale(display_image)
+            self._refresh_image_display()
+
     def _get_current_display_image(self):
-        image_data = self.current_raw_image if self.current_raw_image is not None else self.current_stack_data
+        image_data = self.current_stack_data if self.current_stack_data is not None else self.current_raw_image
         if image_data is None:
             return None
+        display_image = image_data
         if not self._mirror_fill_detector_gaps:
             self._last_mirror_fill_count = 0
             self._last_mirror_fill_status = ""
-            return image_data
-
-        center_x = self._get_mirror_gap_fill_center_x()
-        if center_x is None:
-            message = "Mirror gap fill requires beam center X to be defined"
-            if message != self._last_mirror_fill_status:
-                self.status_updated.emit(message)
-                self._last_mirror_fill_status = message
-            self._last_mirror_fill_count = 0
-            return image_data
-
-        try:
-            margin = int(np.clip(getattr(self, '_mirror_gap_margin_px', 0), 0, 20))
-            filled = mirror_fill_detector_gaps(
-                image_data,
-                center_x=center_x,
-                gap_value=-1,
-                gap_margin_px=margin,
-            )
-            original = np.asarray(image_data)
-            filled_arr = np.asarray(filled)
-            self._last_mirror_fill_count = int(np.count_nonzero((original == -1) & (filled_arr != -1)))
-            changed_mask = original != filled_arr
-            try:
-                changed_mask &= ~(np.isnan(original) & np.isnan(filled_arr))
-            except Exception:
-                pass
-            replaced_count = int(np.count_nonzero(changed_mask))
-            message = f"Mirror gap fill enabled: margin={margin} px, replaced {replaced_count} pixels"
-            if message != self._last_mirror_fill_status:
-                self.status_updated.emit(message)
-                self._last_mirror_fill_status = message
-            return filled
-        except Exception as exc:
-            message = f"Mirror gap fill skipped: {exc}"
-            if message != self._last_mirror_fill_status:
-                self.status_updated.emit(message)
-                self._last_mirror_fill_status = message
-            self._last_mirror_fill_count = 0
-            return image_data
+        else:
+            center_x = self._get_mirror_gap_fill_center_x()
+            if center_x is None:
+                message = "Mirror gap fill requires beam center X to be defined"
+                if message != self._last_mirror_fill_status:
+                    self.status_updated.emit(message)
+                    self._last_mirror_fill_status = message
+                self._last_mirror_fill_count = 0
+            else:
+                try:
+                    margin = int(np.clip(getattr(self, '_mirror_gap_margin_px', 0), 0, 20))
+                    display_image = mirror_fill_detector_gaps(
+                        image_data,
+                        center_x=center_x,
+                        gap_value=-1,
+                        gap_margin_px=margin,
+                    )
+                    original = np.asarray(image_data)
+                    filled_arr = np.asarray(display_image)
+                    self._last_mirror_fill_count = int(np.count_nonzero((original == -1) & (filled_arr != -1)))
+                    changed_mask = original != filled_arr
+                    changed_mask &= ~(np.isnan(original) & np.isnan(filled_arr))
+                    replaced_count = int(np.count_nonzero(changed_mask))
+                    message = f"Mirror gap fill enabled: margin={margin} px, replaced {replaced_count} pixels"
+                    if message != self._last_mirror_fill_status:
+                        self.status_updated.emit(message)
+                        self._last_mirror_fill_status = message
+                except Exception as exc:
+                    message = f"Mirror gap fill skipped: {exc}"
+                    if message != self._last_mirror_fill_status:
+                        self.status_updated.emit(message)
+                        self._last_mirror_fill_status = message
+                    self._last_mirror_fill_count = 0
+                    display_image = image_data
+        return display_image
 
     # 函数说明：处理独立 显示 options changed事件。
     def _on_independent_display_options_changed(self, options: dict):
@@ -5355,6 +5877,7 @@ class FittingController(QObject):
         session_data['display_mode'] = getattr(self, 'display_mode', 'normal')
         session_data['stack_value'] = self._get_stack_value_text()
         session_data['stack_count'] = self.current_parameters.get('stack_count', 1)
+        session_data['nxs_frame_index'] = self.current_parameters.get('nxs_frame_index', 0)
         session_data['insitu_range'] = self.current_parameters.get('insitu_range', '')
         session_data['fit_current_data'] = self._get_checkbox_state('fitCurrentDataCheckBox', False)
         session_data['fit_log_x'] = self._get_checkbox_state('fitLogXCheckBox', False)
@@ -5412,6 +5935,7 @@ class FittingController(QObject):
 
         if last_file and os.path.exists(last_file):
             self.current_parameters['imported_gisaxs_file'] = last_file
+            self._set_nxs_frame_state(last_file, session_data.get('nxs_frame_index', 0))
             if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
                 self.ui.gisaxsInputImportButtonValue.setText(os.path.basename(last_file))
 
@@ -5468,31 +5992,34 @@ class FittingController(QObject):
             self.main_window,
             "Import GISAXS",
             "",
-            "GISAXS Files (*.tif *.tiff *.dat *.txt *.h5 *.hdf5 *.jpg *.png *.bmp *.cbf);;TIF Files (*.tif *.tiff);;Data Files (*.dat *.txt);;HDF5 Files (*.h5 *.hdf5 *cbf);;Image Files (*.jpg *.png *.bmp);;All Files (*)"
+            "GISAXS Files (*.nxs *.cbf *.tif *.tiff *.dat *.txt *.h5 *.hdf5 *.jpg *.png *.bmp);;NXS Files (*.nxs);;CBF Files (*.cbf);;TIF Files (*.tif *.tiff);;Data Files (*.dat *.txt);;HDF5 Files (*.h5 *.hdf5);;Image Files (*.jpg *.png *.bmp);;All Files (*)"
         )
 
         if file_path:
-            file_path = normalize_path(file_path)
-            self.current_parameters['imported_gisaxs_file'] = file_path
+            auto_show = bool(
+                hasattr(self.ui, 'gisaxsInputAutoShowCheckBox')
+                and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
+            )
+            self._apply_imported_gisaxs_file(file_path, show_image=auto_show)
 
-            if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
-                file_name = os.path.basename(file_path)
-                self.ui.gisaxsInputImportButtonValue.setText(file_name)
-
-            self._scan_folder_images_for_file(file_path)
-
-            self.status_updated.emit(f"Imported GISAXS file: {os.path.basename(file_path)}")
-            self.parameters_changed.emit(self.current_parameters)
-
-            if hasattr(self.parent, 'save_current_session'):
-                self.parent.save_current_session()
-
-            self._validate_imported_file(file_path)
-
-            self._update_stack_display()
-
-            if hasattr(self.ui, 'gisaxsInputAutoShowCheckBox') and self.ui.gisaxsInputAutoShowCheckBox.isChecked():
-                self._show_image()
+    def _apply_imported_gisaxs_file(self, file_path, show_image=False):
+        """Apply a dialog, text-entry, or dropped detector image through one path."""
+        file_path = normalize_path(file_path)
+        if not self._validate_imported_file(file_path):
+            return False
+        self.current_parameters['imported_gisaxs_file'] = file_path
+        self._set_nxs_frame_state(file_path, 0)
+        if hasattr(self.ui, 'gisaxsInputImportButtonValue'):
+            self.ui.gisaxsInputImportButtonValue.setText(os.path.basename(file_path))
+        self._scan_folder_images_for_file(file_path)
+        self._update_stack_display()
+        self.status_updated.emit(f"Imported GISAXS file: {os.path.basename(file_path)}")
+        self.parameters_changed.emit(self.current_parameters)
+        if hasattr(self.parent, 'save_current_session'):
+            self.parent.save_current_session()
+        if show_image:
+            self._show_image()
+        return True
 
     # 函数说明：校验imported 文件。
     def _validate_imported_file(self, file_path):
@@ -5513,7 +6040,7 @@ class FittingController(QObject):
                 return False
 
             file_ext = os.path.splitext(file_path)[1].lower()
-            supported_extensions = ['.tif', '.tiff', '.dat', '.txt', '.h5', '.hdf5', '.jpg', '.png', '.bmp', '.cbf']
+            supported_extensions = ['.nxs', '.cbf', '.tif', '.tiff', '.dat', '.txt', '.h5', '.hdf5', '.jpg', '.png', '.bmp']
 
             if file_ext not in supported_extensions:
                 reply = QMessageBox.question(
@@ -5560,6 +6087,7 @@ class FittingController(QObject):
                 return
 
             self.current_parameters['imported_gisaxs_file'] = file_path_input
+            self._set_nxs_frame_state(file_path_input, 0)
 
             file_name = os.path.basename(file_path_input)
             self.ui.gisaxsInputImportButtonValue.setText(file_name)
@@ -5604,6 +6132,8 @@ class FittingController(QObject):
                 return
 
             self.current_parameters['stack_count'] = stack_count
+            if getattr(self, 'load_mode', 'Single') == 'Stack':
+                stack_count = self._clamp_stack_count(stack_count)
             self._update_stack_display()
             self._refresh_vmin_vmax_display()
 
@@ -5613,7 +6143,7 @@ class FittingController(QObject):
                 should_reload_image = True
             elif self.current_stack_data is not None:
                 imported_file = self.current_parameters.get('imported_gisaxs_file', '')
-                if imported_file and os.path.splitext(imported_file)[1].lower() == '.cbf':
+                if imported_file and os.path.splitext(imported_file)[1].lower() in {'.cbf', '.nxs', '.tif', '.tiff'}:
                     should_reload_image = True
 
             if should_reload_image:
@@ -5636,7 +6166,23 @@ class FittingController(QObject):
             mode = getattr(self, 'load_mode', 'Single')
             stack_count = self.current_parameters.get('stack_count', 1)
 
-            if file_ext != '.cbf':
+            if mode == 'Stack':
+                stack_count = self._clamp_stack_count(stack_count)
+
+            if file_ext == '.nxs':
+                if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
+                    if mode == 'Stack':
+                        end_frame = self._nxs_frame_index + stack_count
+                        self.ui.gisaxsInputStackDisplayLabel.setText(
+                            f"NXS Stack: frames {self._nxs_frame_index + 1} - {end_frame} / {self._nxs_frame_count}"
+                        )
+                    else:
+                        self.ui.gisaxsInputStackDisplayLabel.setText(
+                            f"NXS frame: {self._nxs_frame_index + 1} / {self._nxs_frame_count}"
+                        )
+                return
+
+            if file_ext not in {'.cbf', '.tif', '.tiff'}:
                 if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
                     self.ui.gisaxsInputStackDisplayLabel.setText(f"File: {os.path.basename(imported_file)}")
                 return
@@ -5647,38 +6193,21 @@ class FittingController(QObject):
                 return
 
             if mode == 'Stack':
-                file_dir = os.path.dirname(imported_file)
-                base_name = os.path.basename(imported_file)
-                if is_cloud_or_network_path(file_dir):
-                    cached_paths = self._folder_image_scan_cache.get(normalize_path(file_dir))
-                    if not cached_paths:
-                        if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
-                            self.ui.gisaxsInputStackDisplayLabel.setText("Stack: scanning remote folder...")
-                        self._scan_folder_images_for_file(imported_file)
-                        return
-                    cbf_files = [os.path.basename(p) for p in cached_paths]
-                else:
-                    cbf_files = [f for f in os.listdir(file_dir) if f.lower().endswith('.cbf')]
-                    cbf_files.sort()
-                try:
-                    start_index = cbf_files.index(base_name)
-                    available_files = len(cbf_files) - start_index
-                    if stack_count > available_files:
-                        if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
-                            self.ui.gisaxsInputStackDisplayLabel.setText(f"Maximum available: {available_files}")
-                    else:
-                        start_file = cbf_files[start_index]
-                        end_file = cbf_files[start_index + stack_count - 1]
-                        start_name = os.path.splitext(start_file)[0]
-                        end_name = os.path.splitext(end_file)[0]
-                        if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
-                            self.ui.gisaxsInputStackDisplayLabel.setText(f"Stack: {start_name} - {end_name}")
-                except ValueError:
-                    if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
-                        self.ui.gisaxsInputStackDisplayLabel.setText("File not found in directory")
+                sequence = self._ordinary_stack_sequence(imported_file)
+                selected = sequence[:stack_count]
+                if selected and hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
+                    start_name = os.path.splitext(os.path.basename(selected[0]))[0]
+                    end_name = os.path.splitext(os.path.basename(selected[-1]))[0]
+                    self.ui.gisaxsInputStackDisplayLabel.setText(f"Stack: {start_name} - {end_name}")
                 return
 
             if mode == 'In-situ':
+                if file_ext != '.cbf':
+                    if hasattr(self.ui, 'gisaxsInputStackDisplayLabel'):
+                        self.ui.gisaxsInputStackDisplayLabel.setText(
+                            f"File: {os.path.basename(imported_file)}"
+                        )
+                    return
                 dir_path = os.path.dirname(imported_file)
                 sv = ''
                 try:
@@ -5779,7 +6308,8 @@ class FittingController(QObject):
 
             self._scan_folder_images_for_file(imported_file)
 
-            if not is_fabio_available():
+            file_ext = os.path.splitext(imported_file)[1].lower()
+            if file_ext == '.cbf' and not is_fabio_available():
                 QMessageBox.warning(self.main_window, "Missing Library",
                                   "fabio library is required for CBF file processing.\nPlease install it using: pip install fabio")
                 return
@@ -5789,17 +6319,43 @@ class FittingController(QObject):
                                   "matplotlib library is required for image display.\nPlease install it using: pip install matplotlib")
                 return
 
-            file_ext = os.path.splitext(imported_file)[1].lower()
-            if file_ext != '.cbf':
-                self.status_updated.emit("Image display only supports CBF files currently")
+            if file_ext not in {'.cbf', '.nxs', '.tif', '.tiff'}:
+                self.status_updated.emit("Image display supports CBF, NXS, and TIFF detector images")
                 return
 
             mode = getattr(self, 'load_mode', 'Single')
+            if file_ext == '.nxs':
+                frame_index = self._nxs_frame_index
+                stack_count = self._clamp_stack_count() if mode == 'Stack' else 1
+                if stack_count > 1:
+                    self.status_updated.emit(
+                        f"Please wait while stacking NXS frames {frame_index + 1}-{frame_index + stack_count}..."
+                    )
+                else:
+                    self.status_updated.emit(
+                        f"Please wait while loading {os.path.basename(imported_file)} "
+                        f"frame {frame_index + 1}/{self._nxs_frame_count}..."
+                    )
+                self.async_image_loader.load_image(
+                    imported_file,
+                    stack_count,
+                    frame_index=frame_index,
+                )
+                return
+
+            if file_ext in {'.tif', '.tiff'}:
+                stack_count = self._clamp_stack_count() if mode == 'Stack' else 1
+                self.status_updated.emit(
+                    f"Please wait while loading {stack_count} TIFF file(s)..."
+                )
+                self.async_image_loader.load_image(imported_file, stack_count)
+                return
+
             if mode == 'Single':
                 self.status_updated.emit("Please wait while the image starts loading (Single)...")
                 self.async_image_loader.load_image(imported_file, 1)
             elif mode == 'Stack':
-                stack_count = self.current_parameters.get('stack_count', 1)
+                stack_count = self._clamp_stack_count()
                 self.status_updated.emit(f"Please wait while stacking {stack_count} files...")
                 self.async_image_loader.load_image(imported_file, stack_count)
             else:
@@ -8253,14 +8809,13 @@ class FittingController(QObject):
     # 函数说明：实现 ingest 流程 图像 without 预览 相关逻辑。
     def _ingest_workflow_image_without_preview(self, image_data):
         """Update data needed for cut/fitting without repainting heavy image views."""
-        self.current_stack_data = image_data
-        self.current_raw_image = image_data
-        self.data = image_data
+        self.current_raw_image = np.asarray(image_data, dtype=np.float32)
+        self._reapply_input_image_options(refresh=False)
         try:
             sc = int(self.current_parameters.get('stack_count', 1))
         except Exception:
             sc = 1
-        self.summed_data = image_data if sc and sc > 1 else None
+        self.summed_data = self.current_stack_data if sc and sc > 1 else None
         try:
             self._compute_q_meshgrids_and_store()
         except Exception:
@@ -8280,20 +8835,18 @@ class FittingController(QObject):
     def _display_image(self, image_data):
         """No description."""
         try:
-            self.current_stack_data = image_data
-            self.current_raw_image = image_data
-            self.data = image_data
-            self._image_display_cache.clear()
+            self.current_raw_image = np.asarray(image_data, dtype=np.float32)
+            self._reapply_input_image_options(refresh=False)
             try:
                 sc = int(self.current_parameters.get('stack_count', 1))
             except Exception:
                 sc = 1
-            self.summed_data = image_data if sc and sc > 1 else None
+            self.summed_data = self.current_stack_data if sc and sc > 1 else None
             self._compute_q_meshgrids_and_store()
 
             display_image = self._get_current_display_image()
             if display_image is None:
-                display_image = image_data
+                display_image = self.current_stack_data
 
             self._handle_color_scale(display_image)
 
@@ -8391,7 +8944,11 @@ class FittingController(QObject):
 
             if is_log:
                 t0 = time.perf_counter()
-                safe_data = np.where(image_data > 0, image_data, 0.001)
+                safe_data = np.where(
+                    np.isfinite(image_data),
+                    np.maximum(image_data, 0.001),
+                    np.nan,
+                )
                 processed_data = np.log(safe_data, dtype=np.float32)
                 print(f"[Timing] log transform: {(time.perf_counter() - t0) * 1000:.2f} ms")
             else:
@@ -9087,13 +9644,18 @@ class FittingController(QObject):
             if show_q_axis and not q_ok:
                 show_q_axis = False
                 extent, _ = self._preview_extent(image_data.shape, False)
-            vmin = self._current_vmin if self._current_vmin is not None else np.min(processed_data)
-            vmax = self._current_vmax if self._current_vmax is not None else np.max(processed_data)
+            finite_values = processed_data[np.isfinite(processed_data)]
+            if finite_values.size == 0:
+                raise ValueError("No finite detector pixels remain after masking")
+            vmin = self._current_vmin if self._current_vmin is not None else np.min(finite_values)
+            vmax = self._current_vmax if self._current_vmax is not None else np.max(finite_values)
+            shape_changed = self._preview_shape != image_data.shape
             needs_create = (
                 self._figure_cache is None or self._canvas_cache is None or
-                self._preview_ax is None or self._preview_image_artist is None
+                self._preview_ax is None or self._preview_image_artist is None or
+                shape_changed
             )
-            mode_changed = self._preview_shape != image_data.shape or self._preview_show_q_axis != show_q_axis
+            mode_changed = shape_changed or self._preview_show_q_axis != show_q_axis
 
             if needs_create:
                 from matplotlib.figure import Figure
@@ -9199,8 +9761,11 @@ class FittingController(QObject):
 
             show_q_axis = self._should_show_q_axis()
 
-            vmin = self._current_vmin if self._current_vmin is not None else np.min(processed_data)
-            vmax = self._current_vmax if self._current_vmax is not None else np.max(processed_data)
+            finite_values = processed_data[np.isfinite(processed_data)]
+            if finite_values.size == 0:
+                raise ValueError("No finite detector pixels remain after masking")
+            vmin = self._current_vmin if self._current_vmin is not None else np.min(finite_values)
+            vmax = self._current_vmax if self._current_vmax is not None else np.max(finite_values)
 
             if show_q_axis:
                 try:
@@ -9279,13 +9844,19 @@ class FittingController(QObject):
         try:
             t0 = time.perf_counter()
             if use_log:
-                safe_data = np.where(image_data > 0, image_data, 0.001)
+                safe_data = np.where(
+                    np.isfinite(image_data),
+                    np.maximum(image_data, 0.001),
+                    np.nan,
+                )
                 log_data = np.log(safe_data)
-                vmin = np.percentile(log_data, 1)
-                vmax = np.percentile(log_data, 99)
+                finite_values = log_data[np.isfinite(log_data)]
             else:
-                vmin = np.percentile(image_data, 1)
-                vmax = np.percentile(image_data, 99)
+                finite_values = np.asarray(image_data)[np.isfinite(image_data)]
+            if finite_values.size == 0:
+                return None, None
+            vmin = np.percentile(finite_values, 1)
+            vmax = np.percentile(finite_values, 99)
 
             print(f"[Timing] autoscale calculation: {(time.perf_counter() - t0) * 1000:.2f} ms")
             return vmin, vmax
@@ -9738,8 +10309,27 @@ class FittingController(QObject):
     def eventFilter(self, watched, event):
         """Refit preview canvases after users resize their splitter regions."""
         try:
+            preview_view = getattr(self.ui, "gisaxsInputGraphicsView", None)
+            preview_targets = (
+                preview_view,
+                preview_view.viewport() if preview_view is not None else None,
+            )
+            if watched in preview_targets and event.type() in (QEvent.DragEnter, QEvent.DragMove):
+                if self._detector_path_from_drop_event(event):
+                    event.acceptProposedAction()
+                    return True
+                event.ignore()
+                return True
+            if watched in preview_targets and event.type() == QEvent.Drop:
+                file_path = self._detector_path_from_drop_event(event)
+                if file_path:
+                    event.acceptProposedAction()
+                    self._apply_imported_gisaxs_file(file_path, show_image=True)
+                    return True
+                event.ignore()
+                return True
             if event.type() == QEvent.Resize and watched in (
-                getattr(self.ui, "gisaxsInputGraphicsView", None),
+                preview_view,
                 getattr(self.ui, "fitGraphicsView", None),
             ):
                 if not self._preview_resize_refit_pending:
@@ -9748,6 +10338,18 @@ class FittingController(QObject):
         except Exception:
             pass
         return super().eventFilter(watched, event)
+
+    @staticmethod
+    def _detector_path_from_drop_event(event):
+        mime_data = event.mimeData()
+        if not mime_data.hasUrls():
+            return ""
+        supported = {'.cbf', '.nxs', '.tif', '.tiff'}
+        for url in mime_data.urls():
+            file_path = normalize_path(url.toLocalFile())
+            if file_path and os.path.splitext(file_path)[1].lower() in supported:
+                return file_path
+        return ""
 
     def _refit_resized_preview_canvases(self):
         self._preview_resize_refit_pending = False
@@ -9781,6 +10383,10 @@ class FittingController(QObject):
             if scene is None or item is None:
                 return
             scene.setSceneRect(item.sceneBoundingRect())
+            # Always discard the transform inherited from the previous image.
+            # Otherwise a large canvas followed by a smaller one can retain a
+            # stale scale and leave the new preview tiny inside the viewport.
+            graphics_view.resetTransform()
             if keep_aspect:
                 graphics_view.fitInView(item, Qt.KeepAspectRatio)
             else:
@@ -9866,15 +10472,17 @@ class FittingController(QObject):
         try:
             self.status_updated.emit("Searching for the center point automatically...")
 
-            data = np.log10(np.maximum(self.current_stack_data, 1))
-
-            vertical_profile = np.sum(data, axis=1)
+            vertical_profile, horizontal_profile = finite_log_profiles(self.current_stack_data)
             raw_center_y = np.argmax(vertical_profile)
-            height = data.shape[0]
+            height = self.current_stack_data.shape[0]
             pixel_center_y = float(height - 1 - raw_center_y)
 
-            horizontal_profile = np.sum(data, axis=0)
-            pixel_center_x = float(np.sum(np.arange(len(horizontal_profile)) * horizontal_profile) / np.sum(horizontal_profile))
+            profile_total = float(np.sum(horizontal_profile))
+            if not np.isfinite(profile_total) or profile_total <= 0:
+                raise ValueError("No positive detector intensity remains for center finding")
+            pixel_center_x = float(
+                np.sum(np.arange(len(horizontal_profile)) * horizontal_profile) / profile_total
+            )
 
             pixel_cutline_height = 20.0
 
@@ -10505,13 +11113,11 @@ class FittingController(QObject):
             if cut_type == 'horizontal':
                 q_mode_method = self._extract_horizontal_cut_q_mode
                 pixel_mode_method = self._extract_horizontal_cut_pixel_mode
-                pixel_to_q_method = self._convert_pixel_to_qy
                 x_label = r'$q_y$ (nm$^{-1}$)'
                 title = "Horizontal Cut"
             elif cut_type == 'vertical':
                 q_mode_method = self._extract_vertical_cut_q_mode
                 pixel_mode_method = self._extract_vertical_cut_pixel_mode
-                pixel_to_q_method = self._convert_pixel_to_qz
                 x_label = r'$q_z$ (nm$^{-1}$)'
                 title = "Vertical Cut"
                 self._last_vertical_cut_pixel_rows = None
@@ -10524,10 +11130,10 @@ class FittingController(QObject):
                 )
                 x_coordinates = q_coords
             else:
-                cut_data, pixel_coords = pixel_mode_method(
+                cut_data, q_coords = pixel_mode_method(
                     center_x, center_y, vertical_value, parallel_value, points_override=points_override
                 )
-                x_coordinates = pixel_to_q_method(pixel_coords)
+                x_coordinates = q_coords
 
             self._plot_cut_result(x_coordinates, cut_data, x_label, "Intensity (a.u.)", title)
 
@@ -10608,6 +11214,11 @@ class FittingController(QObject):
             else:
                 raise Exception(f"Unknown cut type: {cut_type}")
 
+            valid_q, valid_intensity = self._filter_cut_pairs_for_active_axis(
+                valid_q,
+                valid_intensity,
+                context=f"{cut_type.capitalize()} Q cut",
+            )
             n_points = self._resolve_cut_points(points_override)
             q_interp = np.linspace(valid_q.min(), valid_q.max(), n_points)
             method = None
@@ -10662,11 +11273,13 @@ class FittingController(QObject):
                 raise Exception("Empty region selected")
 
             if cut_type == 'horizontal':
-                intensity_sum = np.mean(region_data, axis=0)
+                intensity_sum = finite_mean_axis(region_data, axis=0)
                 pixel_coords = np.arange(x_min, x_max + 1)
+                native_q = self._convert_pixel_to_qy(pixel_coords)
             elif cut_type == 'vertical':
-                intensity_sum = np.mean(region_data, axis=1)
+                intensity_sum = finite_mean_axis(region_data, axis=1)
                 pixel_coords = np.arange(y_min_adj, y_max_adj + 1)
+                native_q = self._convert_pixel_to_qz(pixel_coords)
                 self._log_cut_debug(
                     f"Vertical Pixel cut: ROI display pixels x=[{x_min}, {x_max}], y=[{y_min}, {y_max}], "
                     f"array rows=[{y_min_adj}, {y_max_adj}], image_origin=lower"
@@ -10678,33 +11291,38 @@ class FittingController(QObject):
             else:
                 raise Exception(f"Unknown cut type: {cut_type}")
 
-            if len(pixel_coords) > 1:
-                n_points = self._resolve_cut_points(points_override)
-                pixel_coords_f, intensity_sum_f, _ = self._sort_filter_cut_pairs(
-                    pixel_coords, intensity_sum, context=f"{cut_type.capitalize()} Pixel cut pixels"
-                )
-                if len(pixel_coords_f) < 2:
-                    raise Exception("Not enough finite data points in the selected region")
-                pixel_interp = np.linspace(pixel_coords_f.min(), pixel_coords_f.max(), n_points)
-                method = None
-                try:
-                    method = self.ui.fitInterpolationMethodValue.currentText() if hasattr(self.ui, 'fitInterpolationMethodValue') else self._interp_method_default
-                except Exception:
-                    method = self._interp_method_default
-                intensity_interp = self._interpolate_series(pixel_coords_f, intensity_sum_f, pixel_interp, method)
-                if cut_type == 'vertical':
-                    self._last_vertical_cut_pixel_rows = np.asarray(pixel_interp, dtype=float).copy()
-                try:
-                    self.status_updated.emit(f"Cut(Pixel) extracted points: {len(pixel_interp)} (method={method})")
-                except Exception:
-                    pass
-            else:
-                pixel_interp = pixel_coords
-                intensity_interp = intensity_sum
-                if cut_type == 'vertical':
-                    self._last_vertical_cut_pixel_rows = np.asarray(pixel_interp, dtype=float).copy()
+            valid_q, valid_intensity, _ = self._sort_filter_cut_pairs(
+                native_q,
+                intensity_sum,
+                context=f"{cut_type.capitalize()} Pixel cut native q",
+                pixel_rows=pixel_coords if cut_type == 'vertical' else None,
+                log_vertical=(cut_type == 'vertical'),
+            )
+            valid_q, valid_intensity = self._filter_cut_pairs_for_active_axis(
+                valid_q,
+                valid_intensity,
+                context=f"{cut_type.capitalize()} Pixel cut",
+            )
+            if valid_q.size < 2:
+                raise Exception("Not enough finite q/intensity points in the selected region")
 
-            return intensity_interp, pixel_interp
+            n_points = self._resolve_cut_points(points_override)
+            q_interp = np.linspace(valid_q.min(), valid_q.max(), n_points)
+            try:
+                method = self.ui.fitInterpolationMethodValue.currentText() if hasattr(self.ui, 'fitInterpolationMethodValue') else self._interp_method_default
+            except Exception:
+                method = self._interp_method_default
+            intensity_interp = self._interpolate_series(valid_q, valid_intensity, q_interp, method)
+            if cut_type == 'vertical':
+                self._last_vertical_cut_pixel_rows = None
+            try:
+                self.status_updated.emit(
+                    f"Cut(Pixel) extracted {len(q_interp)} unique-q points from "
+                    f"{len(valid_q)} native samples (method={method})"
+                )
+            except Exception:
+                pass
+            return intensity_interp, q_interp
 
         except Exception as e:
             raise Exception(f"Pixel-mode {cut_type} cut extraction failed: {str(e)}")
@@ -10771,8 +11389,8 @@ class FittingController(QObject):
             if conversion_type == 'qy':
                 if qy_mesh is not None and getattr(qy_mesh, 'shape', None) == (height, width):
                     row = int(np.clip(round(height / 2.0), 0, height - 1))
-                    cols = np.clip(np.rint(coords).astype(int), 0, width - 1)
-                    return np.asarray(qy_mesh[row, cols], dtype=float)
+                    clipped = np.clip(coords, 0.0, width - 1.0)
+                    return np.interp(clipped, np.arange(width, dtype=float), qy_mesh[row, :])
 
                 detector = self._get_detector_for_pixel_conversion()
                 if detector is None:
@@ -10782,8 +11400,12 @@ class FittingController(QObject):
             elif conversion_type == 'qz':
                 if qz_mesh is not None and getattr(qz_mesh, 'shape', None) == (height, width):
                     col = int(np.clip(round(width / 2.0), 0, width - 1))
-                    rows = np.clip(np.rint(coords).astype(int), 0, height - 1)
-                    q_coords = np.asarray(qz_mesh[rows, col], dtype=float)
+                    clipped = np.clip(coords, 0.0, height - 1.0)
+                    q_coords = np.interp(
+                        clipped,
+                        np.arange(height, dtype=float),
+                        qz_mesh[:, col],
+                    )
                     if q_coords.size:
                         self._log_cut_debug(
                             f"Vertical Pixel cut: first/last q before sorting = {q_coords[0]:.8g}, {q_coords[-1]:.8g}"
@@ -17376,6 +17998,15 @@ class FittingController(QObject):
             self._sync_axis_filter_controls()
             current_filter_mode = self._get_independent_axis_filter_mode()
             self._last_axis_filter_mode = current_filter_mode
+            if (
+                getattr(self, 'data_source', None) == 'cut'
+                and getattr(self, 'current_stack_data', None) is not None
+            ):
+                self._perform_cut(points_override=self._resolve_cut_points())
+                self.status_updated.emit(
+                    "Cut recalculated for the selected q-axis range"
+                )
+                return
             try:
                 self._sync_roi_controls_to_current_display(reset_to_domain=(previous_mode != current_filter_mode))
                 self._apply_roi_to_data_and_refresh()

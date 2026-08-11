@@ -92,7 +92,9 @@ def detect_nxs_frame_count(file_path: str | Path, dataset_path: Optional[str] = 
         return int(dataset.shape[0]) if dataset.ndim == 3 else 1
 
 
-def _series_paths(path: Path) -> list[Path]:
+def nxs_series_paths(path: str | Path) -> list[Path]:
+    """Return all P03 module files belonging to the selected NXS source."""
+    path = Path(path)
     match = re.search(r"_m(\d+)\.nxs$", path.name, re.IGNORECASE)
     separator = "_"
     if match is None:
@@ -110,7 +112,7 @@ def _series_paths(path: Path) -> list[Path]:
 
 
 def _read_nxs(path: Path, frame_idx: int, dataset_path: Optional[str]) -> DetectorImage:
-    paths = _series_paths(path)
+    paths = nxs_series_paths(path)
     with h5py.File(str(paths[0]), "r") as handle:
         selected = select_nxs_dataset(handle, dataset_path)
         dataset = handle[selected]

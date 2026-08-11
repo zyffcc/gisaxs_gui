@@ -586,6 +586,15 @@ class GisaxsInputCard(CardFrame):
         show_row.setSpacing(CARD_SPACING)
         self.ui.gisaxsInputAutoShowCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         show_row.addWidget(self.ui.gisaxsInputAutoShowCheckBox, 0)
+        if not hasattr(self.ui, "gisaxsInputFlipUdCheckBox"):
+            self.ui.gisaxsInputFlipUdCheckBox = QCheckBox("Flip UD", show_section)
+            self.ui.gisaxsInputFlipUdCheckBox.setObjectName("gisaxsInputFlipUdCheckBox")
+            self.ui.gisaxsInputFlipUdCheckBox.setToolTip(
+                "Flip the loaded detector input vertically for display and all downstream processing."
+            )
+        normalize_checkbox(self.ui.gisaxsInputFlipUdCheckBox)
+        self.ui.gisaxsInputFlipUdCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        show_row.addWidget(self.ui.gisaxsInputFlipUdCheckBox, 0)
         show_row.addStretch(1)
         show_row.addWidget(self.ui.gisaxsInputShowButton, 0)
         show_section.layout().addLayout(show_row)
@@ -629,21 +638,57 @@ class GisaxsInputCard(CardFrame):
         if not hasattr(self.ui, "gisaxsInputMirrorGapMarginUnitLabel"):
             self.ui.gisaxsInputMirrorGapMarginUnitLabel = QLabel("px", scale_section)
             self.ui.gisaxsInputMirrorGapMarginUnitLabel.setObjectName("gisaxsInputMirrorGapMarginUnitLabel")
+        if not hasattr(self.ui, "gisaxsInputThresholdMaskCheckBox"):
+            self.ui.gisaxsInputThresholdMaskCheckBox = QCheckBox("Threshold Mask", scale_section)
+            self.ui.gisaxsInputThresholdMaskCheckBox.setObjectName("gisaxsInputThresholdMaskCheckBox")
+            self.ui.gisaxsInputThresholdMaskCheckBox.setToolTip(
+                "Exclude NaN values and intensities outside the lower/upper thresholds from all processing."
+            )
+        if not hasattr(self.ui, "gisaxsInputThresholdMinLabel"):
+            self.ui.gisaxsInputThresholdMinLabel = QLabel("Mask lower:", scale_section)
+            self.ui.gisaxsInputThresholdMinLabel.setObjectName("gisaxsInputThresholdMinLabel")
+        if not hasattr(self.ui, "gisaxsInputThresholdMinSpinBox"):
+            self.ui.gisaxsInputThresholdMinSpinBox = QDoubleSpinBox(scale_section)
+            self.ui.gisaxsInputThresholdMinSpinBox.setObjectName("gisaxsInputThresholdMinSpinBox")
+            self.ui.gisaxsInputThresholdMinSpinBox.setRange(-1e12, 1e12)
+            self.ui.gisaxsInputThresholdMinSpinBox.setDecimals(6)
+            self.ui.gisaxsInputThresholdMinSpinBox.setValue(-1e12)
+            self.ui.gisaxsInputThresholdMinSpinBox.setToolTip("Values below this threshold are excluded.")
+        if not hasattr(self.ui, "gisaxsInputThresholdMaxLabel"):
+            self.ui.gisaxsInputThresholdMaxLabel = QLabel("Mask upper:", scale_section)
+            self.ui.gisaxsInputThresholdMaxLabel.setObjectName("gisaxsInputThresholdMaxLabel")
+        if not hasattr(self.ui, "gisaxsInputThresholdMaxSpinBox"):
+            self.ui.gisaxsInputThresholdMaxSpinBox = QDoubleSpinBox(scale_section)
+            self.ui.gisaxsInputThresholdMaxSpinBox.setObjectName("gisaxsInputThresholdMaxSpinBox")
+            self.ui.gisaxsInputThresholdMaxSpinBox.setRange(-1e12, 1e12)
+            self.ui.gisaxsInputThresholdMaxSpinBox.setDecimals(6)
+            self.ui.gisaxsInputThresholdMaxSpinBox.setValue(1e12)
+            self.ui.gisaxsInputThresholdMaxSpinBox.setToolTip("Values above this threshold are excluded.")
         self.ui.gisaxsInputShowCutRegionCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.ui.gisaxsInputShowCenterCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.ui.gisaxsInputMirrorGapFillCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.ui.gisaxsInputMirrorGapMarginLabel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.ui.gisaxsInputMirrorGapMarginSpinBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.ui.gisaxsInputMirrorGapMarginUnitLabel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputThresholdMaskCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputThresholdMinLabel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputThresholdMinSpinBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputThresholdMaxLabel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.ui.gisaxsInputThresholdMaxSpinBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         normalize_checkbox(self.ui.gisaxsInputShowCutRegionCheckBox)
         normalize_checkbox(self.ui.gisaxsInputShowCenterCheckBox)
         normalize_checkbox(self.ui.gisaxsInputMirrorGapFillCheckBox)
+        normalize_checkbox(self.ui.gisaxsInputThresholdMaskCheckBox)
         normalize_input(self.ui.gisaxsInputColormapCombo)
         normalize_input(self.ui.gisaxsInputMirrorGapMarginSpinBox)
+        normalize_input(self.ui.gisaxsInputThresholdMinSpinBox)
+        normalize_input(self.ui.gisaxsInputThresholdMaxSpinBox)
         self.ui.gisaxsInputVminLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.ui.gisaxsInputVmaxLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.ui.gisaxsInputMirrorGapMarginLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.ui.gisaxsInputMirrorGapMarginUnitLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.ui.gisaxsInputThresholdMinLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.ui.gisaxsInputThresholdMaxLabel.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         scale_grid.addWidget(self.ui.gisaxsInputAutoScaleCheckBox, 0, 0)
         scale_grid.addWidget(self.ui.gisaxsInputVminLabel, 0, 1)
         scale_grid.addWidget(self.ui.gisaxsInputVminValue, 0, 2)
@@ -658,6 +703,11 @@ class GisaxsInputCard(CardFrame):
         scale_grid.addWidget(self.ui.gisaxsInputMirrorGapMarginLabel, 2, 2)
         scale_grid.addWidget(self.ui.gisaxsInputMirrorGapMarginSpinBox, 2, 3)
         scale_grid.addWidget(self.ui.gisaxsInputMirrorGapMarginUnitLabel, 2, 4)
+        scale_grid.addWidget(self.ui.gisaxsInputThresholdMaskCheckBox, 3, 0, 1, 2)
+        scale_grid.addWidget(self.ui.gisaxsInputThresholdMinLabel, 3, 2)
+        scale_grid.addWidget(self.ui.gisaxsInputThresholdMinSpinBox, 3, 3)
+        scale_grid.addWidget(self.ui.gisaxsInputThresholdMaxLabel, 3, 4)
+        scale_grid.addWidget(self.ui.gisaxsInputThresholdMaxSpinBox, 3, 5)
         scale_grid.setColumnStretch(6, 1)
         scale_section.layout().addLayout(scale_grid)
 
@@ -1656,13 +1706,18 @@ class DetectorPreviewCard(CollapsibleCardFrame):
         profile = profile or current_profile(graphics_view)
         self.setMinimumWidth(SECTION_MIN_WIDTH)
         self.setMinimumHeight(scale_value(260, profile, 210))
-        hint = QLabel("Double-click the detector preview to open a larger independent image window.", self)
+        hint = QLabel(
+            "Drop a CBF, NXS, or TIFF file here to load it. Double-click to open a larger independent image window.",
+            self,
+        )
         hint.setObjectName("DetectorPreviewDoubleClickHint")
         hint.setProperty("cardMeta", True)
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #64748b;")
         self.add_content(hint)
-        graphics_view.setToolTip("Double-click to open a larger independent image window.")
+        graphics_view.setToolTip(
+            "Drop a CBF, NXS, or TIFF file here to load it. Double-click to open a larger independent image window."
+        )
         graphics_view.setMinimumSize(scale_value(320, profile, 260), scale_value(240, profile, 190))
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
