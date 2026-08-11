@@ -85,6 +85,43 @@ The GUI contains dense scientific controls. Use a larger display, maximize the w
 
 The current fitting code includes sphere, cylinder, vertical cylinder components.
 
+## AI Auto Fitting
+
+The default AI fitting model is `modules/Fitting_1D_Model/k1_k2_k3_k4_phys`. It is a single K1-K4 slot model with an explicit optional-D head, relational D constraints, and a delayed physical-reconstruction loss. Its `manifest.json` records the checkpoint checksum, supported K values, required inputs/outputs, training state, and remote provenance. Model discovery validates this contract and loads the checkpoint lazily; the portable SavedModel is used automatically when the Python-version-specific `.keras` Lambda bytecode cannot be restored.
+
+The Cut & Fitting page opens one AI Auto Fitting workspace with the following flow:
+
+1. Prepare the current ROI/Yoneda 1D curve and its uncertainty.
+2. Select the versioned K1-K4 model and a Fast, Balanced, or Exhaustive profile.
+3. Build the same geometry-aware constraint payload used by prediction and refinement.
+4. Run one neural proposal pass, sample posterior parameter modes at multiple normalized scales, and verify every candidate with the physical forward model.
+5. Optionally refine the best modes while optimizing structural parameters and global background/resolution/scale parameters together. GUI runs rank with a hybrid log/relative score so narrow linear-intensity overshoots cannot win solely by touching few q points.
+6. Re-rank the verified modes with the simpler-K prior, display constraint violations explicitly, and automatically load/plot the valid candidate selected in the results table.
+
+Balanced is the default. Editing a profile parameter changes the workspace state to Custom; selecting a named profile again restores its defaults. Runs execute in a separate process and support progress, cancellation, a reproducible random seed, and an optional time budget. The in-situ workflow uses the same pipeline and profile definitions.
+
+| Profile | Candidates | Sampling scales | Refine modes | Max evaluations | q stride | Full per-K comparison | Time budget |
+|---|---:|---|---:|---:|---:|---|---:|
+| Fast | 48 | 1 | 0 | 24 | 8 | No | 30 s |
+| Balanced | 192 | 0.5, 1, 2 | 2 | 40 | 4 | No | 180 s |
+| Exhaustive | 512 | 0.5, 1, 2, 4 | 6 | 120 | 1 | Yes | None |
+
+Reference CPU benchmark on `TestSAXSdata/test_1d_data.dat` (Windows, Python 3.10, TensorFlow 2.15.1, seed 123, cold process/model load, default `max_diameter` constraints): Fast 15.76 s / best logRMSE 0.601; Balanced 39.47 s / 0.0699; Exhaustive 151.57 s / 0.0450. Each profile returned 20 valid parameter modes. Runtime depends strongly on CPU, curve length, geometry mix, and whether TensorFlow/model loading is already warm.
+
+The random-cylinder forward model uses the exact cylindrical Bessel function `J1`. Its independent radius/height averages are factorized and vectorized, avoiding the former `n_R*n_h*n_orient` Python loop during candidate verification and numerical refinement.
+
+Checkpoints trained before this forward-model revision do not contain the corresponding `forward_model.random_cylinder_radial_amplitude` metadata. They remain loadable and their candidates are re-scored/refined with the corrected NumPy physics, but the random-cylinder proposal head should be retrained on a regenerated dataset before its posterior probabilities are interpreted quantitatively.
+
+The default physical constraints are:
+
+- all parameters are finite and non-negative;
+- sphere and random-cylinder distribution widths are absolute and satisfy `0 < sigma <= 0.9 * size`;
+- vertical-cylinder `sigma_R` is fractional and satisfies `0 < sigma_R <= 0.9`;
+- `D=0, sigma_D=0` is a valid no-D state;
+- when D is present, sphere and vertical cylinder require `D > margin * 2R`;
+- a randomly oriented cylinder conservatively requires `D > margin * sqrt((2R)^2 + h^2)`;
+- multi-component max/mean spacing rules use the maximum or arithmetic mean of those geometry-specific exclusion sizes. The default margin is 1.001.
+
 ## GIMaP Predict Workflow
 
 1. Open the **GIMaP Predict** page.

@@ -17,6 +17,19 @@ DEFAULT_DATASET_PATH = "/entry/instrument/detector/data"
 DEFAULT_MASK_PATH = "/entry/instrument/detector/pixel_mask"
 DEFAULT_TRANSLATION_PATH = "/entry/instrument/detector/translation/distance"
 
+# NeXus NXdetector pixel masks are bit fields, not boolean arrays.  Reject the
+# bits with an explicitly defined invalid/unwanted meaning: gap (0), dead (1),
+# under/over responding (2/3), noisy (4), problematic cluster (6), and the
+# experiment user mask (8).  Undefined lower bits such as bit 10 and upper tag
+# bits such as bit 31 (virtual/interpolated pixel) must not erase valid data.
+NXS_REJECT_MASK_BITS = np.uint32(0x0000015F)
+
+
+def nxs_invalid_pixel_mask(raw_mask: Any) -> np.ndarray:
+    """Convert a NeXus bit-field pixel mask into the application's invalid mask."""
+    values = np.asarray(raw_mask, dtype=np.uint32)
+    return (values & NXS_REJECT_MASK_BITS) != 0
+
 
 class AmbiguousDatasetError(ValueError):
     def __init__(self, paths: list[str]):
@@ -120,9 +133,10 @@ def _read_nxs(path: Path, frame_idx: int, dataset_path: Optional[str]) -> Detect
             if DEFAULT_MASK_PATH in handle:
                 mask_data = handle[DEFAULT_MASK_PATH]
                 if mask_data.ndim == 3:
-                    mask = mask_data[min(safe_frame, mask_data.shape[0] - 1)] != 0
+                    raw_mask = mask_data[min(safe_frame, mask_data.shape[0] - 1)]
+                    mask = nxs_invalid_pixel_mask(raw_mask)
                 elif mask_data.ndim == 2:
-                    mask = mask_data[()] != 0
+                    mask = nxs_invalid_pixel_mask(mask_data[()])
             translation = handle[DEFAULT_TRANSLATION_PATH][()] if DEFAULT_TRANSLATION_PATH in handle else (0, 0)
             flat_translation = np.asarray(translation).reshape(-1)
             tx = int(flat_translation[1]) if flat_translation.size > 1 else 0
@@ -159,7 +173,11 @@ def _read_nxs(path: Path, frame_idx: int, dataset_path: Optional[str]) -> Detect
         "frame_index": int(frame_idx),
         "module_files": [str(item) for item in paths],
         "transformations": ["module transpose when required", "stitched using P03 translations", "canvas transpose", "vertical flip"],
-        "mask_semantics": "True is invalid",
+        "mask_semantics": (
+            "True is invalid; rejects NeXus-defined bits 0, 1, 2, 3, 4, 6, and 8; "
+            "preserves undefined/tag bits including 10 and virtual-pixel bit 31"
+        ),
+        "pixel_mask_reject_bits": "0x0000015F",
     })
     if metadata["wavelength_angstrom"] is None and metadata["energy_kev"]:
         metadata["wavelength_angstrom"] = energy_to_wavelength(metadata["energy_kev"])

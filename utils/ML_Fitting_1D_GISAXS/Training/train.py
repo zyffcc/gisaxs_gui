@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import re
 import shutil
+import signal
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import matplotlib
@@ -26,6 +27,15 @@ from Training.model import build_model
 from TrainSetBuild import schema
 
 
+STOP_REQUESTED = False
+
+
+def request_graceful_stop(signum, _frame):
+    global STOP_REQUESTED
+    STOP_REQUESTED = True
+    print(f"Received signal {signum}; checkpoint will be saved after the current step.", flush=True)
+
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--dataset_dir", default="/data/dust/user/zhaiyufe/TrainSet/ML_1D_Fitting_GISAXS")
@@ -36,11 +46,16 @@ def parse_args():
     p.add_argument("--max_points", type=int, default=schema.MAX_POINTS)
     p.add_argument("--quick_test", action="store_true")
     p.add_argument("--reconstruction_loss_weight", type=float, default=0.0)
+    p.add_argument("--reconstruction_start_epoch", type=int, default=6)
+    p.add_argument("--reconstruction_ramp_epochs", type=int, default=5)
+    p.add_argument("--reconstruction_q_stride", type=int, default=16)
+    p.add_argument("--reconstruction_samples_per_batch", type=int, default=2)
     p.add_argument("--mixed_precision", action="store_true")
     p.add_argument("--multi_gpu", action="store_true")
     p.add_argument("--log_interval", type=int, default=10)
     p.add_argument("--save_interval", type=int, default=10)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--max_skipped_nonfinite_batches", type=int, default=10)
     return p.parse_args()
 
 
@@ -75,6 +90,15 @@ def write_json_atomic(path: Path, data):
     tmp.replace(path)
 
 
+def update_runtime_status(model_dir: Path, state: str, **fields):
+    payload = {
+        "state": state,
+        "updated": datetime.now().isoformat(timespec="seconds"),
+        **fields,
+    }
+    write_json_atomic(model_dir / "training_status.json", payload)
+
+
 def load_json_list(path: Path):
     if not path.exists():
         return []
@@ -90,7 +114,11 @@ def scalar_dict(metrics):
 
 
 def write_step_history_csv(path: Path, step_history):
-    fieldnames = ["global_step", "epoch", "step", "total_loss", "exist_loss", "type_loss", "param_loss", "weight_loss", "global_loss"]
+    fieldnames = [
+        "global_step", "epoch", "step", "total_loss", "exist_loss", "type_loss",
+        "param_loss", "weight_loss", "global_loss", "d_presence_loss", "spacing_loss", "reconstruction_loss",
+        "count_loss", "component_count_accuracy",
+    ]
     tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -108,6 +136,11 @@ def write_step_history_csv(path: Path, step_history):
                     "param_loss": train.get("param_loss"),
                     "weight_loss": train.get("weight_loss"),
                     "global_loss": train.get("global_loss"),
+                    "d_presence_loss": train.get("d_presence_loss"),
+                    "spacing_loss": train.get("spacing_loss"),
+                    "reconstruction_loss": train.get("reconstruction_loss"),
+                    "count_loss": train.get("count_loss"),
+                    "component_count_accuracy": train.get("component_count_accuracy"),
                 }
             )
     tmp.replace(path)
@@ -158,12 +191,24 @@ def main():
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(line_buffering=True)
     args = parse_args()
+    signal.signal(signal.SIGTERM, request_graceful_stop)
+    signal.signal(signal.SIGINT, request_graceful_stop)
     if args.max_points != schema.MAX_POINTS:
         raise ValueError(f"This first version expects max_points={schema.MAX_POINTS}; got {args.max_points}")
     if args.mixed_precision:
         tf.keras.mixed_precision.set_global_policy("mixed_float16")
-    if args.reconstruction_loss_weight != 0.0:
-        print("Note: differentiable reconstruction loss is not used in this first version; physics verification runs in predict_topk.py.", flush=True)
+    if args.reconstruction_loss_weight < 0:
+        raise ValueError("--reconstruction_loss_weight must be >= 0")
+    if args.reconstruction_start_epoch < 1:
+        raise ValueError("--reconstruction_start_epoch must be >= 1")
+    if args.reconstruction_ramp_epochs < 1:
+        raise ValueError("--reconstruction_ramp_epochs must be >= 1")
+    if args.reconstruction_q_stride < 1:
+        raise ValueError("--reconstruction_q_stride must be >= 1")
+    if args.reconstruction_samples_per_batch < 1:
+        raise ValueError("--reconstruction_samples_per_batch must be >= 1")
+    if args.max_skipped_nonfinite_batches < 0:
+        raise ValueError("--max_skipped_nonfinite_batches must be >= 0")
 
     tf.keras.utils.set_random_seed(args.seed)
     dataset_dir = Path(args.dataset_dir)
@@ -179,11 +224,31 @@ def main():
         val_count = min(val_count, 32)
         args.epochs = min(args.epochs, 2)
         args.save_interval = min(args.save_interval, 2)
-    train_steps = max(1, math.ceil(train_count / args.batch_size))
-    val_steps = max(1, math.ceil(val_count / args.batch_size))
+    train_steps = max(1, train_count // args.batch_size)
+    val_steps = max(1, val_count // args.batch_size)
 
-    train_ds = data_loader.make_dataset(dataset_dir, "train", args.batch_size, shuffle=True, seed=args.seed, max_samples=train_count)
-    val_ds = data_loader.make_dataset(dataset_dir, "val", args.batch_size, shuffle=False, seed=args.seed + 1, max_samples=val_count)
+    train_ds = data_loader.make_dataset(
+        dataset_dir,
+        "train",
+        args.batch_size,
+        shuffle=True,
+        seed=args.seed,
+        max_samples=train_count,
+        drop_remainder=True,
+    )
+    val_ds = data_loader.make_dataset(
+        dataset_dir,
+        "val",
+        args.batch_size,
+        shuffle=False,
+        seed=args.seed + 1,
+        max_samples=val_count,
+        drop_remainder=True,
+    )
+    # Apply cardinality limits while these are still regular tf.data.Dataset
+    # objects. DistributedDataset intentionally does not expose .take().
+    train_ds = train_ds.take(train_steps)
+    val_ds = val_ds.take(val_steps)
 
     logical_gpus = tf.config.list_logical_devices("GPU")
     strategy = None
@@ -192,17 +257,24 @@ def main():
             strategy = tf.distribute.MirroredStrategy()
             print(f"Using MirroredStrategy with {strategy.num_replicas_in_sync} replicas.", flush=True)
         else:
-            print("--multi_gpu was passed, but fewer than two logical GPUs are visible; using single-device training.", flush=True)
-
-    loss_weights = LossWeights()
+            raise RuntimeError(f"--multi_gpu requires at least two visible GPUs; found {len(logical_gpus)}")
 
     if strategy is not None:
         with strategy.scope():
             model = build_model()
             optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate, clipnorm=1.0)
+            optimizer.build(model.trainable_variables)
+            reconstruction_weight_var = tf.Variable(0.0, dtype=tf.float32, trainable=False, name="reconstruction_loss_weight")
     else:
         model = build_model()
         optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate, clipnorm=1.0)
+        optimizer.build(model.trainable_variables)
+        reconstruction_weight_var = tf.Variable(0.0, dtype=tf.float32, trainable=False, name="reconstruction_loss_weight")
+    loss_weights = LossWeights(
+        reconstruction=reconstruction_weight_var,
+        reconstruction_q_stride=args.reconstruction_q_stride,
+        reconstruction_samples_per_batch=args.reconstruction_samples_per_batch,
+    )
 
     ckpt_epoch = tf.Variable(1, dtype=tf.int64, trainable=False)
     ckpt_step = tf.Variable(0, dtype=tf.int64, trainable=False)
@@ -234,14 +306,53 @@ def main():
         global_step.assign(int(step_history[-1]["global_step"]))
         print(f"No checkpoint found, but loaded existing step history through global_step={int(global_step.numpy())}.", flush=True)
 
+    update_runtime_status(
+        model_dir,
+        "initialized",
+        epoch=int(ckpt_epoch.numpy()),
+        step=int(ckpt_step.numpy()),
+        global_step=int(global_step.numpy()),
+        train_steps=train_steps,
+        val_steps=val_steps,
+        replicas=1 if strategy is None else strategy.num_replicas_in_sync,
+    )
+
     def train_step_fn(inputs, labels):
         with tf.GradientTape() as tape:
             preds = model(inputs, training=True)
             losses = compute_losses(labels, preds, loss_weights)
             loss = losses["total_loss"]
-        grads = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(grads, model.trainable_variables))
-        return losses
+            optimization_loss = loss if strategy is None else loss / float(strategy.num_replicas_in_sync)
+        grads = tape.gradient(optimization_loss, model.trainable_variables)
+        finite_grads = [tf.reduce_all(tf.math.is_finite(g)) for g in grads if g is not None]
+        local_finite = tf.reduce_all(
+            tf.stack([tf.reduce_all(tf.math.is_finite(v)) for v in losses.values()] + finite_grads)
+        )
+        if strategy is not None:
+            replica_context = tf.distribute.get_replica_context()
+            # TensorFlow 2.15 only exposes SUM and MEAN for distributed
+            # reductions.  Every replica must report a finite result.
+            finite_replica_count = replica_context.all_reduce(
+                tf.distribute.ReduceOp.SUM, tf.cast(local_finite, tf.int32)
+            )
+            globally_finite = finite_replica_count == strategy.num_replicas_in_sync
+        else:
+            globally_finite = local_finite
+
+        # Keras' distributed optimizer performs a merge_call internally, so it
+        # cannot live inside tf.cond while tracing strategy.run.  Keep one
+        # unconditional optimizer path and feed it zero gradients whenever any
+        # replica is non-finite.  The outer loop records/rejects such batches.
+        safe_grads = [
+            None if grad is None else tf.where(globally_finite, grad, tf.zeros_like(grad))
+            for grad in grads
+        ]
+        optimizer.apply_gradients(zip(safe_grads, model.trainable_variables))
+        update_applied = tf.cast(globally_finite, tf.float32)
+        result = dict(losses)
+        result["gradient_global_norm"] = tf.linalg.global_norm([g for g in grads if g is not None])
+        result["update_applied"] = update_applied
+        return result
 
     def val_step_fn(inputs, labels):
         preds = model(inputs, training=False)
@@ -266,6 +377,14 @@ def main():
 
     print(f"Training samples={train_count}, val samples={val_count}, steps={train_steps}/{val_steps}", flush=True)
     print(f"Intervals: log_interval={args.log_interval}, save_interval={args.save_interval}", flush=True)
+    print(
+        f"Fixed train batches: drop_remainder=True, discarded_per_epoch={train_count - train_steps * args.batch_size}",
+        flush=True,
+    )
+    print(
+        f"Fixed validation batches: drop_remainder=True, discarded_per_epoch={val_count - val_steps * args.batch_size}",
+        flush=True,
+    )
 
     start_epoch = int(ckpt_epoch.numpy())
     resume_step = int(ckpt_step.numpy())
@@ -279,16 +398,82 @@ def main():
         write_training_artifacts(model_dir, history, step_history)
         return
 
+    nonfinite_events = load_json_list(model_dir / "nonfinite_batches.json")
+    skipped_nonfinite_batches = len(nonfinite_events)
+
     for epoch in range(start_epoch, args.epochs + 1):
+        if args.reconstruction_loss_weight > 0.0 and epoch >= args.reconstruction_start_epoch:
+            ramp_step = epoch - args.reconstruction_start_epoch + 1
+            physical_weight = args.reconstruction_loss_weight * min(ramp_step / args.reconstruction_ramp_epochs, 1.0)
+        else:
+            physical_weight = 0.0
+        reconstruction_weight_var.assign(physical_weight)
+        print(f"epoch {epoch}: reconstruction_loss_weight={physical_weight:.6g}", flush=True)
+        update_runtime_status(
+            model_dir,
+            "running",
+            epoch=epoch,
+            step=resume_step if epoch == start_epoch else 0,
+            global_step=int(global_step.numpy()),
+            train_steps=train_steps,
+            reconstruction_loss_weight=float(physical_weight),
+        )
         train_metrics = []
-        for step, (inputs, labels) in enumerate(train_ds.take(train_steps), start=1):
+        for step, (inputs, labels) in enumerate(train_ds, start=1):
             if epoch == start_epoch and step <= resume_step:
                 continue
             m = train_step(inputs, labels)
-            loss_value = float(m["total_loss"].numpy())
+            raw_metrics = {k: v.numpy() for k, v in m.items()}
+            train_row = scalar_dict(raw_metrics)
+            update_applied = train_row.pop("update_applied")
+            loss_value = float(train_row["total_loss"])
+            if update_applied < 0.5:
+                skipped_nonfinite_batches += 1
+                if strategy is None:
+                    bad_slot_type = np.asarray(labels["slot_type"]).astype(int)
+                    bad_slot_exist = np.asarray(labels["slot_exist"]).astype(float)
+                else:
+                    bad_slot_type = np.concatenate(
+                        [np.asarray(v).astype(int) for v in strategy.experimental_local_results(labels["slot_type"])],
+                        axis=0,
+                    )
+                    bad_slot_exist = np.concatenate(
+                        [np.asarray(v).astype(float) for v in strategy.experimental_local_results(labels["slot_exist"])],
+                        axis=0,
+                    )
+                event = {
+                    "epoch": int(epoch),
+                    "step": int(step),
+                    "global_step": int(global_step.numpy()),
+                    "losses": train_row,
+                    "slot_type": bad_slot_type.tolist(),
+                    "slot_exist": bad_slot_exist.tolist(),
+                }
+                nonfinite_events.append(event)
+                write_json_atomic(model_dir / "nonfinite_batches.json", nonfinite_events)
+                update_runtime_status(
+                    model_dir,
+                    "skipped_nonfinite_batch",
+                    epoch=epoch,
+                    step=step,
+                    global_step=int(global_step.numpy()),
+                    train_steps=train_steps,
+                    skipped_nonfinite_batches=skipped_nonfinite_batches,
+                    diagnostic=event,
+                )
+                print(
+                    f"WARNING: skipped non-finite batch epoch={epoch} step={step}; "
+                    f"skipped_total={skipped_nonfinite_batches}",
+                    flush=True,
+                )
+                if skipped_nonfinite_batches > args.max_skipped_nonfinite_batches:
+                    raise RuntimeError(
+                        f"Exceeded --max_skipped_nonfinite_batches={args.max_skipped_nonfinite_batches}; "
+                        f"see {model_dir / 'nonfinite_batches.json'}"
+                    )
+                continue
             if not np.isfinite(loss_value):
                 raise RuntimeError(f"Non-finite total_loss at epoch={epoch}, step={step}: {loss_value}")
-            train_row = scalar_dict({k: v.numpy() for k, v in m.items()})
             train_metrics.append(train_row)
             global_step_value = int(global_step.assign_add(1).numpy())
             step_history.append(
@@ -304,6 +489,16 @@ def main():
                     tf.summary.scalar(f"train_step/{k}", v, step=global_step_value)
             if args.log_interval > 0 and (step % args.log_interval == 0 or step == train_steps):
                 print(f"epoch {epoch} train step {step}/{train_steps} global_step={global_step_value} loss={loss_value:.5f}", flush=True)
+                update_runtime_status(
+                    model_dir,
+                    "running",
+                    epoch=epoch,
+                    step=step,
+                    global_step=global_step_value,
+                    train_steps=train_steps,
+                    reconstruction_loss_weight=float(physical_weight),
+                    latest_train=train_row,
+                )
             if args.save_interval > 0 and (global_step_value % args.save_interval == 0 or step == train_steps):
                 ckpt_epoch.assign(epoch)
                 ckpt_step.assign(step)
@@ -312,17 +507,52 @@ def main():
                 writer.flush()
                 model.save(model_dir / "model.keras", overwrite=True)
                 print(f"saved progress at epoch {epoch} step {step}/{train_steps} global_step={global_step_value}", flush=True)
+            if STOP_REQUESTED:
+                ckpt_epoch.assign(epoch)
+                ckpt_step.assign(step)
+                manager.save(checkpoint_number=global_step_value)
+                write_training_artifacts(model_dir, history, step_history)
+                writer.flush()
+                model.save(model_dir / "model.keras", overwrite=True)
+                update_runtime_status(
+                    model_dir,
+                    "interrupted_checkpoint_saved",
+                    epoch=epoch,
+                    step=step,
+                    global_step=global_step_value,
+                    train_steps=train_steps,
+                    latest_train=train_row,
+                )
+                print(f"Graceful stop checkpoint saved at epoch {epoch} step {step}.", flush=True)
+                return
 
         if not train_metrics:
             print(f"epoch {epoch}: no new training steps after resume skip; moving to validation.", flush=True)
 
         val_metrics = []
-        for step, (inputs, labels) in enumerate(val_ds.take(val_steps), start=1):
+        for step, (inputs, labels) in enumerate(val_ds, start=1):
             m = val_step(inputs, labels)
             loss_value = float(m["total_loss"].numpy())
             if not np.isfinite(loss_value):
                 raise RuntimeError(f"Non-finite validation total_loss at epoch={epoch}, step={step}: {loss_value}")
             val_metrics.append(scalar_dict({k: v.numpy() for k, v in m.items()}))
+            if STOP_REQUESTED:
+                ckpt_epoch.assign(epoch)
+                ckpt_step.assign(train_steps)
+                manager.save(checkpoint_number=int(global_step.numpy()))
+                write_training_artifacts(model_dir, history, step_history)
+                writer.flush()
+                model.save(model_dir / "model.keras", overwrite=True)
+                update_runtime_status(
+                    model_dir,
+                    "interrupted_checkpoint_saved",
+                    epoch=epoch,
+                    step=train_steps,
+                    global_step=int(global_step.numpy()),
+                    train_steps=train_steps,
+                )
+                print(f"Graceful stop checkpoint saved during epoch {epoch} validation.", flush=True)
+                return
 
         tr = mean_metrics(train_metrics)
         va = mean_metrics(val_metrics)
@@ -330,8 +560,23 @@ def main():
         history.append(row)
         print(
             f"epoch {epoch}: train_loss={tr['total_loss']:.5f} val_loss={va['total_loss']:.5f} "
-            f"val_type_acc={va['slot_type_accuracy']:.3f} val_nonempty_acc={va['nonempty_type_accuracy']:.3f}",
+            f"val_type_acc={va['slot_type_accuracy']:.3f} val_nonempty_acc={va['nonempty_type_accuracy']:.3f} "
+            f"val_K_acc={va['component_count_accuracy']:.3f}",
             flush=True,
+        )
+        best_row = min(history, key=lambda item: float(item["val"]["total_loss"]))
+        update_runtime_status(
+            model_dir,
+            "epoch_complete",
+            epoch=epoch,
+            step=train_steps,
+            global_step=int(global_step.numpy()),
+            train_steps=train_steps,
+            reconstruction_loss_weight=float(physical_weight),
+            latest_train=tr,
+            latest_val=va,
+            best_val_loss=float(best_row["val"]["total_loss"]),
+            best_val_epoch=int(best_row["epoch"]),
         )
         with writer.as_default():
             for k, v in tr.items():
@@ -354,6 +599,14 @@ def main():
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "reconstruction_loss_weight": args.reconstruction_loss_weight,
+        "reconstruction_start_epoch": args.reconstruction_start_epoch,
+        "reconstruction_ramp_epochs": args.reconstruction_ramp_epochs,
+        "reconstruction_q_stride": args.reconstruction_q_stride,
+        "reconstruction_samples_per_batch": args.reconstruction_samples_per_batch,
+        "d_constraint_model": {
+            "explicit_presence_head": True,
+            "spacing_rules": schema.D_RULE_NAMES,
+        },
     }
     with (model_dir / "model_config.json").open("w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
@@ -364,6 +617,16 @@ def main():
     model.save(model_dir / "model.keras", overwrite=True)
     model.save(model_dir / "saved_model")
     write_training_artifacts(model_dir, history, step_history)
+    update_runtime_status(
+        model_dir,
+        "complete",
+        epoch=args.epochs,
+        step=train_steps,
+        global_step=int(global_step.numpy()),
+        train_steps=train_steps,
+        latest_train=history[-1]["train"] if history else None,
+        latest_val=history[-1]["val"] if history else None,
+    )
     print(f"Training complete. Model written to {model_dir}", flush=True)
 
 

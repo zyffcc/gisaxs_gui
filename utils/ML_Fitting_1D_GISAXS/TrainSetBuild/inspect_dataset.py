@@ -74,6 +74,10 @@ def sample_ground_truth(sample, shard_path: Path, storage: str, sample_index: in
     }
     point_mask = sample["point_mask"].astype(bool)
     sampling_mode = int(np.asarray(sample.get("sampling_mode", -1)).item())
+    d_rule_id = int(np.argmax(sample.get("d_spacing_rule", np.eye(schema.NUM_D_RULES)[schema.D_RULE_FREE])))
+    d_threshold = sampling.d_spacing_threshold(
+        sample["slot_type"], sample["slot_params_phys"], sample["slot_exist"], d_rule_id
+    )
     return {
         "source": {
             "storage": storage,
@@ -82,6 +86,8 @@ def sample_ground_truth(sample, shard_path: Path, storage: str, sample_index: in
         },
         "sampling_mode": sampling_mode,
         "sampling_mode_name": sampling.SAMPLING_MODE_NAMES.get(sampling_mode, "unknown"),
+        "d_spacing_rule": schema.D_RULE_NAMES[d_rule_id],
+        "d_spacing_threshold": float(d_threshold),
         "n_points": int(np.sum(point_mask)),
         "q_min": float(np.min(sample["q"][point_mask])),
         "q_max": float(np.max(sample["q"][point_mask])),

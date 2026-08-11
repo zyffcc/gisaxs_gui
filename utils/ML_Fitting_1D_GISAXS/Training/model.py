@@ -82,6 +82,8 @@ def build_model(
         "global_low_norm": tf.keras.Input(shape=(g_max,), dtype=tf.float32, name="global_low_norm"),
         "global_high_norm": tf.keras.Input(shape=(g_max,), dtype=tf.float32, name="global_high_norm"),
         "global_range_mask": tf.keras.Input(shape=(g_max,), dtype=tf.float32, name="global_range_mask"),
+        "d_allowed": tf.keras.Input(shape=(max_slots, 2), dtype=tf.float32, name="d_allowed"),
+        "d_spacing_rule": tf.keras.Input(shape=(schema.NUM_D_RULES,), dtype=tf.float32, name="d_spacing_rule"),
     }
 
     z = tf.keras.layers.Dense(dim, name="point_dense1")(inputs["x"])
@@ -108,6 +110,8 @@ def build_model(
             inputs["global_low_norm"],
             inputs["global_high_norm"],
             inputs["global_range_mask"],
+            tf.keras.layers.Flatten()(inputs["d_allowed"]),
+            inputs["d_spacing_rule"],
         ]
     )
     cons = tf.keras.layers.Dense(max_slots * dim, activation=tf.nn.gelu, name="constraint_dense1")(flat_cons)
@@ -156,6 +160,17 @@ def build_model(
     param_logstd_raw = tf.keras.layers.Reshape((max_slots, num_types, p_max), name="param_logstd_raw_reshape")(param_logstd_raw)
     param_logstd_raw = tf.keras.layers.Lambda(lambda t: tf.clip_by_value(t, -5.0, 1.0), name="param_logstd_raw")(param_logstd_raw)
 
+    d_present_logit_raw = tf.keras.layers.Dense(1, name="d_present_logit_dense")(q)
+    d_present_logit_raw = tf.keras.layers.Lambda(lambda t: tf.squeeze(t, axis=-1), name="d_present_logit_raw")(d_present_logit_raw)
+    d_present_logit = tf.keras.layers.Lambda(
+        lambda xs: tf.where(
+            xs[1][:, :, 0] < 0.5,
+            tf.ones_like(xs[0]) * FORCE_EXIST_LOGIT,
+            tf.where(xs[1][:, :, 1] < 0.5, tf.ones_like(xs[0]) * FORCE_EMPTY_LOGIT, xs[0]),
+        ),
+        name="d_present_logit",
+    )([d_present_logit_raw, inputs["d_allowed"]])
+
     weight_logit = tf.keras.layers.Dense(1, name="weight_logit_dense")(q)
     weight_logit = tf.keras.layers.Lambda(lambda t: tf.squeeze(t, axis=-1), name="weight_logit")(weight_logit)
 
@@ -182,6 +197,7 @@ def build_model(
         "param_mu_raw": param_raw,
         "param_mu_norm": param_mu_norm,
         "param_logstd_raw": param_logstd_raw,
+        "d_present_logit": d_present_logit,
         "weight_logit": weight_logit,
         "global_mu_raw": g_raw,
         "global_mu_norm": global_mu_norm,

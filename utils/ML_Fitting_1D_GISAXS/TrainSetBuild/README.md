@@ -43,6 +43,44 @@ Parameter sampling is q-conditioned by default: 70% observable, 20% edge, and 10
 Use `--no-q_conditioned_sampling` to restore global sampling, or tune with
 `--visible_fraction`, `--edge_fraction`, and `--out_of_window_fraction`.
 
+## Optional D and hard spacing constraints
+
+Every active component may have no structure-factor period (`D=sigma_D=0`), with
+probability 0.25 by default. Change this with `--d_absent_probability`.
+
+Datasets mix three D-spacing rules by default:
+
+- `free`: no relational lower bound on a present D;
+- `max_diameter`: D is greater than the largest active component exclusion size;
+- `mean_diameter`: D is greater than the arithmetic mean active exclusion size.
+
+Sphere and vertical-cylinder exclusion size is `2*R`. For a randomly oriented
+cylinder it is the conservative circumscribed-sphere diameter
+`sqrt((2*R)^2 + h^2)`. A factor of 1.001 makes the generated inequality strict.
+If that lower bound reaches the schema maximum `D=500`, the component is stored
+without D rather than violating the constraint.
+
+Choose a single rule or custom mixture when building:
+
+```bash
+python TrainSetBuild/build_dataset.py \
+  --output_dir /path/to/dataset \
+  --num_samples 100000 \
+  --d_spacing_rules max_diameter,mean_diameter \
+  --d_spacing_rule_probs 0.5,0.5 \
+  --d_absent_probability 0.25
+```
+
+The Slurm wrapper accepts the same settings as positional arguments after
+`K_PROBS`: `D_SPACING_RULES`, `D_SPACING_RULE_PROBS`, and
+`D_ABSENT_PROBABILITY`. For an array job, for example:
+
+```bash
+sbatch --array=0-3 TrainSetBuild/build_trainset_pscpu.sbatch \
+  100000 1000 42 4 /path/to/dataset 1,2 0.5,0.5 \
+  max_diameter,mean_diameter 0.5,0.5 0.25
+```
+
 By default, each synthetic noisy curve also gets short detector-gap style intensity drops:
 1-3 local regions, 1-10 points per region, dropped to 1%-70% intensity, capped at 5% of the curve points.
 Disable with `--gap_drop_prob 0` or change the cap with `--gap_drop_max_fraction`.

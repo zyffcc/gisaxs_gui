@@ -26,6 +26,7 @@ VERTICAL_CYLINDER_R_COEFF = 3.83
 CYLINDER_R_COEFF = 3.83
 CYLINDER_R_MARGIN_MULTIPLIER = 2.0
 STRUCTURE_PERIOD_COEFF = 2.0 * np.pi
+D_HARD_CORE_MARGIN = 1.001
 
 
 def log_uniform(rng: np.random.Generator, low: float, high: float) -> float:
@@ -155,6 +156,7 @@ def sample_component_params(
     q_min: float | None = None,
     q_max: float | None = None,
     sampling_mode: int = SAMPLING_MODE_GLOBAL,
+    sample_d: bool = True,
 ) -> np.ndarray:
     p = np.zeros(schema.P_MAX, dtype=np.float32)
     q_conditioned = sampling_mode != SAMPLING_MODE_GLOBAL and q_min is not None and q_max is not None
@@ -186,7 +188,7 @@ def sample_component_params(
         p[2] = h
         p[3] = rng.uniform(schema.PARAM_RANGES["sigma_h_frac"].low, schema.PARAM_RANGES["sigma_h_frac"].high) * h
 
-    if rng.random() < 0.25:
+    if not sample_d or rng.random() < 0.25:
         p[4] = 0.0
         p[5] = 0.0
     else:
@@ -197,6 +199,69 @@ def sample_component_params(
         p[4] = d
         p[5] = rng.uniform(schema.PARAM_RANGES["sigma_D_frac"].low, schema.PARAM_RANGES["sigma_D_frac"].high) * d
     return p
+
+
+def characteristic_exclusion_size(type_id: int, params_phys: np.ndarray) -> float:
+    """Conservative center-distance size for one particle geometry.
+
+    A sphere and a vertical cylinder use their lateral diameter. A randomly
+    oriented cylinder uses the diameter of its circumscribed sphere, which is
+    conservative for every orientation.
+    """
+    r = float(params_phys[0])
+    if type_id == schema.TYPE_CYLINDER:
+        h = float(params_phys[2])
+        return float(np.hypot(2.0 * r, h))
+    return 2.0 * r
+
+
+def d_spacing_threshold(
+    slot_type: np.ndarray,
+    slot_params_phys: np.ndarray,
+    slot_exist: np.ndarray,
+    rule_id: int,
+) -> float:
+    if int(rule_id) == schema.D_RULE_FREE:
+        return 0.0
+    sizes = [
+        characteristic_exclusion_size(int(slot_type[j]), slot_params_phys[j])
+        for j in np.where(np.asarray(slot_exist) > 0.5)[0]
+    ]
+    if not sizes:
+        return 0.0
+    if int(rule_id) == schema.D_RULE_MAX:
+        return float(np.max(sizes))
+    if int(rule_id) == schema.D_RULE_MEAN:
+        return float(np.mean(sizes))
+    raise ValueError(f"Unknown D spacing rule id: {rule_id}")
+
+
+def sample_d_spacing_rule(rng: np.random.Generator, rule_ids, rule_probs) -> int:
+    ids = np.asarray(rule_ids, dtype=np.int32)
+    probs = np.ones(len(ids), dtype=np.float64) if rule_probs is None else np.asarray(rule_probs, dtype=np.float64)
+    return int(rng.choice(ids, p=probs / probs.sum()))
+
+
+def sample_constrained_d(
+    rng: np.random.Generator,
+    threshold: float,
+    q_min: float,
+    q_max: float,
+    sampling_mode: int,
+) -> float | None:
+    required_low = max(schema.PARAM_RANGES["D"].low, float(threshold) * D_HARD_CORE_MARGIN)
+    d_high = schema.PARAM_RANGES["D"].high
+    if required_low >= d_high:
+        return None
+    for _ in range(32):
+        if sampling_mode == SAMPLING_MODE_GLOBAL:
+            d = log_uniform(rng, schema.PARAM_RANGES["D"].low, d_high)
+        else:
+            margin = 2.0 if sampling_mode == SAMPLING_MODE_OBSERVABLE else 5.0
+            d = sample_visible_length(rng, q_min, q_max, STRUCTURE_PERIOD_COEFF, "D", sampling_mode, margin)
+        if d > threshold:
+            return d
+    return log_uniform(rng, required_low, d_high)
 
 
 def sample_component_weights(k: int, rng: np.random.Generator) -> np.ndarray:
@@ -356,6 +421,9 @@ def generate_sample(
     k_probs: np.ndarray | None = None,
     gap_drop_prob: float = 1.0,
     gap_drop_max_fraction: float = 0.05,
+    d_absent_probability: float = 0.25,
+    d_rule_ids: np.ndarray | None = None,
+    d_rule_probs: np.ndarray | None = None,
     max_attempts: int = 100,
 ) -> Dict[str, np.ndarray]:
     for _ in range(max_attempts):
@@ -379,6 +447,10 @@ def generate_sample(
         slot_param_mask = np.zeros((schema.MAX_SLOTS, schema.P_MAX), dtype=np.float32)
         slot_weight = np.zeros(schema.MAX_SLOTS, dtype=np.float32)
 
+        if d_rule_ids is None:
+            d_rule_ids = np.array([schema.D_RULE_FREE, schema.D_RULE_MAX, schema.D_RULE_MEAN], dtype=np.int32)
+        d_rule_id = sample_d_spacing_rule(rng, d_rule_ids, d_rule_probs)
+
         for j in range(k_active):
             tid = sample_component_type(rng)
             params = sample_component_params(
@@ -387,13 +459,27 @@ def generate_sample(
                 q_min=q_min,
                 q_max=q_max,
                 sampling_mode=sampling_mode,
+                sample_d=False,
             )
             slot_type[j] = tid
             slot_exist[j] = 1.0
             slot_params_phys[j] = params
+            slot_weight[j] = weights[j]
+
+        d_threshold = d_spacing_threshold(slot_type, slot_params_phys, slot_exist, d_rule_id)
+        for j in range(k_active):
+            if rng.random() >= d_absent_probability:
+                d = sample_constrained_d(rng, d_threshold, q_min, q_max, sampling_mode)
+                if d is not None:
+                    slot_params_phys[j, 4] = d
+                    slot_params_phys[j, 5] = rng.uniform(
+                        schema.PARAM_RANGES["sigma_D_frac"].low,
+                        schema.PARAM_RANGES["sigma_D_frac"].high,
+                    ) * d
+            tid = int(slot_type[j])
+            params = slot_params_phys[j]
             slot_params_norm[j] = schema.normalize_params(params, tid)
             slot_param_mask[j] = schema.effective_param_mask(tid, params)
-            slot_weight[j] = weights[j]
             components.append(component_array_to_dict(tid, params, float(weights[j])))
 
         try:
@@ -455,6 +541,7 @@ def generate_sample(
             "global_params_phys": global_phys.astype(np.float32),
             "global_params_norm": schema.normalize_global(global_phys).astype(np.float32),
             "sampling_mode": np.array(sampling_mode, dtype=np.int32),
+            "d_spacing_rule": np.eye(schema.NUM_D_RULES, dtype=np.float32)[d_rule_id],
         }
         sample.update(constraints.augment_constraints(sample, rng))
         if all(np.all(np.isfinite(v)) for v in sample.values() if np.asarray(v).dtype.kind in "fc"):

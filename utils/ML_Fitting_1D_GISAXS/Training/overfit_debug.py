@@ -116,6 +116,8 @@ def build_low_noise_inputs(sample: dict, noise_frac: float, actual_max_points: i
         "global_low_norm": np.asarray(sample["global_low_norm"], dtype=np.float32),
         "global_high_norm": np.asarray(sample["global_high_norm"], dtype=np.float32),
         "global_range_mask": np.asarray(sample["global_range_mask"], dtype=np.float32),
+        "d_allowed": np.asarray(sample["d_allowed"], dtype=np.float32),
+        "d_spacing_rule": np.asarray(sample["d_spacing_rule"], dtype=np.float32),
     }
 
     slot_type = np.asarray(sample["slot_type"], dtype=np.int32)
@@ -133,6 +135,7 @@ def build_low_noise_inputs(sample: dict, noise_frac: float, actual_max_points: i
         "slot_weight": np.asarray(sample["slot_weight"], dtype=np.float32),
         "global_params_norm": np.asarray(sample["global_params_norm"], dtype=np.float32),
         "global_params_phys": np.asarray(sample["global_params_phys"], dtype=np.float32),
+        "d_spacing_rule": np.asarray(sample["d_spacing_rule"], dtype=np.float32),
     }
     return inputs, labels, q[:n], i_clean[:n]
 

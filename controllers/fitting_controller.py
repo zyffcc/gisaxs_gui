@@ -45,6 +45,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
     QAbstractItemView,
+    QGroupBox,
 )
 
 
@@ -123,6 +124,9 @@ from utils.ai_fitting_models import (
     discover_ai_fitting_models,
     discover_model_in_path,
 )
+from utils.ai_fitting_constraints import ConstraintSet, constraint_registry, normalize_geometry
+from utils.ai_fitting_pipeline import FittingRequest, fitting_pipeline
+from utils.ai_fitting_profiles import DEFAULT_PROFILE_NAME, PROFILE_DEFAULTS, profile_registry
 from PyQt5.QtWidgets import QShortcut
 from PyQt5.QtGui import QKeySequence, QDesktopServices
 
@@ -5358,6 +5362,7 @@ class FittingController(QObject):
         session_data['fit_norm'] = self._get_checkbox_state('fitNormCheckBox', False)
         session_data['auto_show'] = self._is_auto_show_enabled()
         session_data['load_mode'] = getattr(self, 'load_mode', 'Single')
+        session_data['ai_fitting'] = copy.deepcopy(self._ai_run_settings())
         return session_data
 
     # 函数说明：恢复session。
@@ -5365,6 +5370,8 @@ class FittingController(QObject):
         """Restore the last opened fitting session with the current UI pathways."""
         if not isinstance(session_data, dict):
             return
+
+        self._restore_ai_session_settings(session_data.get('ai_fitting'))
 
         last_file = session_data.get('last_opened_file') or session_data.get('imported_gisaxs_file')
         if last_file:
@@ -6006,6 +6013,11 @@ class FittingController(QObject):
             workflow_grid.addWidget(use_previous, 3, 0, 1, 2)
             workflow_grid.addWidget(full_auto_fit, 4, 0)
             workflow_grid.addWidget(auto_refine, 4, 1)
+            insitu_profile = QComboBox(dialog)
+            insitu_profile.addItems(list(PROFILE_DEFAULTS))
+            insitu_profile.setCurrentText(str(self._ai_run_settings().get("profile", DEFAULT_PROFILE_NAME)))
+            workflow_grid.addWidget(QLabel("AI profile:", dialog), 5, 0)
+            workflow_grid.addWidget(insitu_profile, 5, 1)
             left_layout.addLayout(workflow_grid)
 
             watch_grid = QGridLayout()
@@ -6139,6 +6151,7 @@ class FittingController(QObject):
                 "use_previous": use_previous,
                 "full_auto_fit": full_auto_fit,
                 "auto_refine": auto_refine,
+                "profile": insitu_profile,
                 "live_settings": live_settings_widget,
                 "sequence_settings": sequence_settings_widget,
                 "sequence_folder": sequence_folder,
@@ -6170,6 +6183,7 @@ class FittingController(QObject):
             for checkbox in (auto_show, auto_cut, auto_fit, use_previous, full_auto_fit, auto_refine):
                 checkbox.toggled.connect(self._refresh_insitu_workflow_step_styles)
             run_mode.currentTextChanged.connect(lambda _text: self._update_insitu_run_mode_ui())
+            insitu_profile.currentTextChanged.connect(self._set_ai_profile)
             sequence_browse.clicked.connect(self._browse_insitu_sequence_folder)
             start_btn.clicked.connect(self._start_insitu_workflow)
             process_btn.clicked.connect(self._start_insitu_sequence_processing)
@@ -6498,6 +6512,7 @@ class FittingController(QObject):
             "auto_fit": bool(widgets.get("auto_fit").isChecked()) if widgets.get("auto_fit") else False,
             "use_previous": bool(widgets.get("use_previous").isChecked()) if widgets.get("use_previous") else True,
             "full_auto_fit": bool(widgets.get("full_auto_fit").isChecked()) if widgets.get("full_auto_fit") else False,
+            "profile": str(widgets.get("profile").currentText()) if widgets.get("profile") else DEFAULT_PROFILE_NAME,
             "auto_refine": bool(widgets.get("auto_refine").isChecked()) if widgets.get("auto_refine") else False,
             "poll_interval": float(widgets.get("poll").value()) if widgets.get("poll") else 2.0,
             "fit_every": int(widgets.get("fit_every").value()) if widgets.get("fit_every") else 1,
@@ -13013,6 +13028,12 @@ class FittingController(QObject):
     # 函数说明：实现 默认 ai run settings 相关逻辑。
     def _default_ai_run_settings(self) -> dict:
         return {
+            "profile": DEFAULT_PROFILE_NAME,
+            "profile_overrides": {},
+            "random_seed": 123,
+            "time_budget_seconds": PROFILE_DEFAULTS[DEFAULT_PROFILE_NAME].time_budget_seconds,
+            "constraint_set": ConstraintSet.defaults().to_dict(),
+            "d_spacing_rule": "max_diameter",
             "full_num_samples": 2000,
             "full_top_k": 20,
             "full_refine_top_n": 5,
@@ -13040,74 +13061,132 @@ class FittingController(QObject):
                 settings[key] = stored[key]
         return settings
 
+    def _restore_ai_session_settings(self, payload) -> None:
+        """Migrate saved AI settings while keeping old sessions loadable."""
+        if not isinstance(payload, dict):
+            return
+        defaults = self._default_ai_run_settings()
+        updates = {key: copy.deepcopy(value) for key, value in payload.items() if key in defaults}
+        if not updates:
+            return
+        self._save_ai_fitting_settings(**updates)
+        self._restore_ai_run_settings_to_widgets()
+        self._sync_workspace_ai_run_widgets()
+
+    def _current_ai_profile(self):
+        settings = self._ai_run_settings()
+        selected = str(settings.get("profile") or DEFAULT_PROFILE_NAME)
+        if selected not in PROFILE_DEFAULTS:
+            selected = DEFAULT_PROFILE_NAME
+        profile = profile_registry.get(selected)
+        overrides = settings.get("profile_overrides")
+        if isinstance(overrides, dict) and overrides:
+            allowed = set(profile.to_dict()) - {"name"}
+            cleaned = {key: value for key, value in overrides.items() if key in allowed}
+            if cleaned:
+                profile = profile.with_updates(**cleaned)
+        seed = int(settings.get("random_seed", profile.random_seed))
+        budget = settings.get("time_budget_seconds", profile.time_budget_seconds)
+        if budget in ("", 0, 0.0):
+            budget = None
+        return profile.with_updates(random_seed=seed, time_budget_seconds=budget) if (
+            seed != profile.random_seed or budget != profile.time_budget_seconds
+        ) else profile
+
+    def _set_ai_profile(self, name: str) -> None:
+        if name not in PROFILE_DEFAULTS:
+            return
+        profile = profile_registry.restore(name)
+        self._save_ai_fitting_settings(
+            profile=name,
+            profile_overrides={},
+            random_seed=profile.random_seed,
+            time_budget_seconds=profile.time_budget_seconds,
+        )
+        self._sync_workspace_ai_run_widgets()
+        label = getattr(self, "_ai_profile_state_label", None)
+        if label is not None:
+            label.setText(name)
+        self._set_ai_workspace_status(f"{name} profile restored.", None)
+
+    def _mark_ai_profile_custom(self, **updates) -> None:
+        settings = self._ai_run_settings()
+        overrides = settings.get("profile_overrides")
+        overrides = dict(overrides) if isinstance(overrides, dict) else {}
+        overrides.update(updates)
+        self._save_ai_fitting_settings(profile_overrides=overrides)
+        label = getattr(self, "_ai_profile_state_label", None)
+        if label is not None:
+            label.setText("Custom")
+
     # 函数说明：连接ai 拟合 settings 控件相关信号。
     def _connect_ai_fitting_settings_widgets(self) -> None:
         self._restore_ai_run_settings_to_widgets()
         widget_map = {
-            "aiFittingSamplesSpinBox": "full_num_samples",
-            "aiFittingRefineTopNSpinBox": "full_refine_top_n",
-            "aiFittingRefineMaxEvalSpinBox": "full_refine_max_nfev",
-            "aiFittingProgressEverySpinBox": "full_refine_progress_interval",
-            "aiFittingRefineFtolSpinBox": "full_refine_ftol",
-            "aiFittingRefineXtolSpinBox": "full_refine_xtol",
-            "aiFittingRefineGtolSpinBox": "full_refine_gtol",
-            "aiFittingSamplingStdSpinBox": "full_sampling_std",
-            "aiFittingTargetLogRmseSpinBox": "full_refine_target_logrmse",
+            "aiFittingSamplesSpinBox": "candidate_count",
+            "aiFittingRefineTopNSpinBox": "refinement_count",
+            "aiFittingRefineMaxEvalSpinBox": "max_evaluations",
+            "aiFittingProgressEverySpinBox": "progress_interval",
+            "aiFittingRefineFtolSpinBox": "tolerance",
+            "aiFittingRefineXtolSpinBox": "tolerance",
+            "aiFittingRefineGtolSpinBox": "tolerance",
+            "aiFittingSamplingStdSpinBox": "sampling_std",
+            "aiFittingTargetLogRmseSpinBox": "target_log_rmse",
         }
         for widget_name, setting_key in widget_map.items():
             widget = getattr(self.ui, widget_name, None)
             if widget is None or widget.property("aiSettingConnected"):
                 continue
-            widget.valueChanged.connect(lambda value, key=setting_key: self._save_ai_fitting_settings(**{key: value}))
+            widget.valueChanged.connect(lambda value, key=setting_key: self._mark_ai_profile_custom(**{key: value}))
             widget.setProperty("aiSettingConnected", True)
 
     # 函数说明：恢复ai run settings to 控件。
     def _restore_ai_run_settings_to_widgets(self) -> None:
-        settings = self._ai_run_settings()
+        profile = self._current_ai_profile()
         widget_map = {
-            "aiFittingSamplesSpinBox": "full_num_samples",
-            "aiFittingRefineTopNSpinBox": "full_refine_top_n",
-            "aiFittingRefineMaxEvalSpinBox": "full_refine_max_nfev",
-            "aiFittingProgressEverySpinBox": "full_refine_progress_interval",
-            "aiFittingRefineFtolSpinBox": "full_refine_ftol",
-            "aiFittingRefineXtolSpinBox": "full_refine_xtol",
-            "aiFittingRefineGtolSpinBox": "full_refine_gtol",
-            "aiFittingSamplingStdSpinBox": "full_sampling_std",
-            "aiFittingTargetLogRmseSpinBox": "full_refine_target_logrmse",
+            "aiFittingSamplesSpinBox": profile.candidate_count,
+            "aiFittingRefineTopNSpinBox": profile.refinement_count,
+            "aiFittingRefineMaxEvalSpinBox": profile.max_evaluations,
+            "aiFittingProgressEverySpinBox": profile.progress_interval,
+            "aiFittingRefineFtolSpinBox": profile.tolerance,
+            "aiFittingRefineXtolSpinBox": profile.tolerance,
+            "aiFittingRefineGtolSpinBox": profile.tolerance,
+            "aiFittingSamplingStdSpinBox": profile.sampling_std,
+            "aiFittingTargetLogRmseSpinBox": profile.target_log_rmse,
         }
-        for widget_name, setting_key in widget_map.items():
+        for widget_name, value in widget_map.items():
             widget = getattr(self.ui, widget_name, None)
             if widget is None:
                 continue
             try:
                 widget.blockSignals(True)
-                widget.setValue(settings[setting_key])
+                widget.setValue(value)
             finally:
                 widget.blockSignals(False)
 
     # 函数说明：同步workspace ai run 控件。
     def _sync_workspace_ai_run_widgets(self) -> None:
-        settings = self._ai_run_settings()
+        profile = self._current_ai_profile()
         workspace_map = {
-            "_ai_full_samples_spin": "full_num_samples",
-            "_ai_refine_top_n_spin": "full_refine_top_n",
-            "_ai_refine_max_nfev_spin": "full_refine_max_nfev",
-            "_ai_progress_every_spin": "full_refine_progress_interval",
-            "_ai_refine_ftol_spin": "full_refine_ftol",
-            "_ai_refine_xtol_spin": "full_refine_xtol",
-            "_ai_refine_gtol_spin": "full_refine_gtol",
-            "_ai_stall_patience_spin": "full_refine_stall_patience",
-            "_ai_stall_tol_spin": "full_refine_stall_tol",
-            "_ai_sampling_std_spin": "full_sampling_std",
-            "_ai_target_logrmse_spin": "full_refine_target_logrmse",
+            "_ai_full_samples_spin": profile.candidate_count,
+            "_ai_refine_top_n_spin": profile.refinement_count,
+            "_ai_refine_max_nfev_spin": profile.max_evaluations,
+            "_ai_progress_every_spin": profile.progress_interval,
+            "_ai_refine_ftol_spin": profile.tolerance,
+            "_ai_refine_xtol_spin": profile.tolerance,
+            "_ai_refine_gtol_spin": profile.tolerance,
+            "_ai_stall_patience_spin": profile.stall_patience,
+            "_ai_stall_tol_spin": profile.stall_tolerance,
+            "_ai_sampling_std_spin": profile.sampling_std,
+            "_ai_target_logrmse_spin": profile.target_log_rmse,
         }
-        for attr, key in workspace_map.items():
+        for attr, value in workspace_map.items():
             widget = getattr(self, attr, None)
             if widget is None:
                 continue
             try:
                 widget.blockSignals(True)
-                widget.setValue(settings[key])
+                widget.setValue(value)
             finally:
                 widget.blockSignals(False)
 
@@ -13146,12 +13225,29 @@ class FittingController(QObject):
             return
 
         dialog = QDialog(self.main_window or self.ui)
-        dialog.setWindowTitle("AI Fitting Workspace")
-        dialog.resize(760, 460)
+        dialog.setWindowTitle("AI Auto Fitting Workspace")
+        dialog.resize(980, 760)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(8)
 
+        input_group = QGroupBox("A. Input / Data", dialog)
+        input_layout = QHBoxLayout(input_group)
+        arrays = self._current_ai_curve_arrays()
+        point_count = len(arrays[0]) if arrays is not None else 0
+        self._ai_input_summary_label = QLabel(
+            f"Current fitting curve: {point_count} valid points | ROI and preprocessing are applied before inference.",
+            input_group,
+        )
+        self._ai_input_summary_label.setWordWrap(True)
+        input_layout.addWidget(self._ai_input_summary_label, 1)
+        inspect_input_btn = QPushButton("Inspect Input...", input_group)
+        inspect_input_btn.clicked.connect(self._show_ai_input_data_dialog)
+        input_layout.addWidget(inspect_input_btn)
+        layout.addWidget(input_group)
+
+        model_group = QGroupBox("B. Model", dialog)
+        model_group_layout = QVBoxLayout(model_group)
         model_row = QHBoxLayout()
         model_row.addWidget(QLabel("AI Model:", dialog))
         self._ai_model_combo = QComboBox(dialog)
@@ -13161,7 +13257,41 @@ class FittingController(QObject):
         browse_btn = QPushButton("Browse...", dialog)
         model_row.addWidget(refresh_btn)
         model_row.addWidget(browse_btn)
-        layout.addLayout(model_row)
+        model_group_layout.addLayout(model_row)
+        self._ai_model_status_label = QLabel("Checkpoint status: not inspected", model_group)
+        self._ai_model_status_label.setWordWrap(True)
+        model_group_layout.addWidget(self._ai_model_status_label)
+        layout.addWidget(model_group)
+
+        strategy_group = QGroupBox("C. Fitting Strategy", dialog)
+        strategy_layout = QVBoxLayout(strategy_group)
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(QLabel("Profile:", strategy_group))
+        self._ai_profile_combo = QComboBox(strategy_group)
+        self._ai_profile_combo.addItems(list(PROFILE_DEFAULTS))
+        selected_profile = str(self._ai_run_settings().get("profile", DEFAULT_PROFILE_NAME))
+        self._ai_profile_combo.setCurrentText(selected_profile if selected_profile in PROFILE_DEFAULTS else DEFAULT_PROFILE_NAME)
+        profile_row.addWidget(self._ai_profile_combo)
+        profile_row.addWidget(QLabel("State:", strategy_group))
+        self._ai_profile_state_label = QLabel(
+            "Custom" if self._ai_run_settings().get("profile_overrides") else self._ai_profile_combo.currentText(),
+            strategy_group,
+        )
+        profile_row.addWidget(self._ai_profile_state_label)
+        profile_row.addWidget(QLabel("Random seed:", strategy_group))
+        self._ai_random_seed_spin = QSpinBox(strategy_group)
+        self._ai_random_seed_spin.setRange(0, 2_147_483_647)
+        self._ai_random_seed_spin.setValue(int(self._ai_run_settings().get("random_seed", 123)))
+        profile_row.addWidget(self._ai_random_seed_spin)
+        profile_row.addWidget(QLabel("Time budget (s, 0=none):", strategy_group))
+        self._ai_time_budget_spin = QDoubleSpinBox(strategy_group)
+        self._ai_time_budget_spin.setRange(0.0, 86400.0)
+        self._ai_time_budget_spin.setDecimals(1)
+        budget = self._ai_run_settings().get("time_budget_seconds")
+        self._ai_time_budget_spin.setValue(float(budget or 0.0))
+        profile_row.addWidget(self._ai_time_budget_spin)
+        profile_row.addStretch(1)
+        strategy_layout.addLayout(profile_row)
 
         constraint_row = QHBoxLayout()
         constraint_row.addWidget(QLabel("Constraint Mode:", dialog))
@@ -13176,7 +13306,7 @@ class FittingController(QObject):
         self._ai_constraint_combination_button.setVisible(False)
         constraint_row.addWidget(self._ai_constraint_combination_button)
         constraint_row.addStretch(1)
-        layout.addLayout(constraint_row)
+        strategy_layout.addLayout(constraint_row)
 
         self._ai_status_label = QLabel("Status: Ready", dialog)
         self._ai_progress = QProgressBar(dialog)
@@ -13194,72 +13324,93 @@ class FittingController(QObject):
         self._ai_refine_top_n_spin = QSpinBox(dialog)
         self._ai_refine_top_n_spin.setRange(0, 100)
         settings_grid.addWidget(self._ai_refine_top_n_spin, 0, 3)
-        settings_grid.addWidget(QLabel("Max eval:", dialog), 0, 4)
+        settings_grid.addWidget(QLabel("Max eval:", dialog), 1, 0)
         self._ai_refine_max_nfev_spin = QSpinBox(dialog)
         self._ai_refine_max_nfev_spin.setRange(1, 100000)
-        settings_grid.addWidget(self._ai_refine_max_nfev_spin, 0, 5)
-        settings_grid.addWidget(QLabel("Progress every:", dialog), 0, 6)
+        settings_grid.addWidget(self._ai_refine_max_nfev_spin, 1, 1)
+        settings_grid.addWidget(QLabel("Progress every:", dialog), 1, 2)
         self._ai_progress_every_spin = QSpinBox(dialog)
         self._ai_progress_every_spin.setRange(0, 10000)
-        settings_grid.addWidget(self._ai_progress_every_spin, 0, 7)
-        settings_grid.addWidget(QLabel("Sample std:", dialog), 1, 0)
+        settings_grid.addWidget(self._ai_progress_every_spin, 1, 3)
+        settings_grid.addWidget(QLabel("Sample std:", dialog), 2, 0)
         self._ai_sampling_std_spin = QDoubleSpinBox(dialog)
         self._ai_sampling_std_spin.setDecimals(5)
         self._ai_sampling_std_spin.setRange(0.00001, 10.0)
         self._ai_sampling_std_spin.setSingleStep(0.001)
-        settings_grid.addWidget(self._ai_sampling_std_spin, 1, 1)
-        settings_grid.addWidget(QLabel("Target logRMSE:", dialog), 1, 2)
+        settings_grid.addWidget(self._ai_sampling_std_spin, 2, 1)
+        settings_grid.addWidget(QLabel("Target logRMSE:", dialog), 2, 2)
         self._ai_target_logrmse_spin = QDoubleSpinBox(dialog)
         self._ai_target_logrmse_spin.setDecimals(8)
         self._ai_target_logrmse_spin.setRange(0.0, 10.0)
         self._ai_target_logrmse_spin.setSingleStep(0.00000001)
-        settings_grid.addWidget(self._ai_target_logrmse_spin, 1, 3)
-        settings_grid.addWidget(QLabel("ftol:", dialog), 2, 0)
+        settings_grid.addWidget(self._ai_target_logrmse_spin, 2, 3)
+        settings_grid.addWidget(QLabel("ftol:", dialog), 3, 0)
         self._ai_refine_ftol_spin = QDoubleSpinBox(dialog)
         self._ai_refine_ftol_spin.setDecimals(10)
         self._ai_refine_ftol_spin.setRange(0.0, 1.0)
         self._ai_refine_ftol_spin.setSingleStep(0.00000001)
-        settings_grid.addWidget(self._ai_refine_ftol_spin, 2, 1)
-        settings_grid.addWidget(QLabel("xtol:", dialog), 2, 2)
+        settings_grid.addWidget(self._ai_refine_ftol_spin, 3, 1)
+        settings_grid.addWidget(QLabel("xtol:", dialog), 3, 2)
         self._ai_refine_xtol_spin = QDoubleSpinBox(dialog)
         self._ai_refine_xtol_spin.setDecimals(10)
         self._ai_refine_xtol_spin.setRange(0.0, 1.0)
         self._ai_refine_xtol_spin.setSingleStep(0.00000001)
-        settings_grid.addWidget(self._ai_refine_xtol_spin, 2, 3)
-        settings_grid.addWidget(QLabel("gtol:", dialog), 2, 4)
+        settings_grid.addWidget(self._ai_refine_xtol_spin, 3, 3)
+        settings_grid.addWidget(QLabel("gtol:", dialog), 4, 0)
         self._ai_refine_gtol_spin = QDoubleSpinBox(dialog)
         self._ai_refine_gtol_spin.setDecimals(10)
         self._ai_refine_gtol_spin.setRange(0.0, 1.0)
         self._ai_refine_gtol_spin.setSingleStep(0.00000001)
-        settings_grid.addWidget(self._ai_refine_gtol_spin, 2, 5)
-        settings_grid.addWidget(QLabel("Stall patience:", dialog), 3, 0)
+        settings_grid.addWidget(self._ai_refine_gtol_spin, 4, 1)
+        settings_grid.addWidget(QLabel("Stall patience:", dialog), 4, 2)
         self._ai_stall_patience_spin = QSpinBox(dialog)
         self._ai_stall_patience_spin.setRange(0, 100000)
         self._ai_stall_patience_spin.setToolTip("0 disables stall early stop.")
-        settings_grid.addWidget(self._ai_stall_patience_spin, 3, 1)
-        settings_grid.addWidget(QLabel("Stall tol:", dialog), 3, 2)
+        settings_grid.addWidget(self._ai_stall_patience_spin, 4, 3)
+        settings_grid.addWidget(QLabel("Stall tol:", dialog), 5, 0)
         self._ai_stall_tol_spin = QDoubleSpinBox(dialog)
         self._ai_stall_tol_spin.setDecimals(10)
         self._ai_stall_tol_spin.setRange(0.0, 1.0)
         self._ai_stall_tol_spin.setSingleStep(0.00000001)
-        settings_grid.addWidget(self._ai_stall_tol_spin, 3, 3)
-        layout.addLayout(settings_grid)
+        settings_grid.addWidget(self._ai_stall_tol_spin, 5, 1)
+        self._ai_advanced_settings_toggle = QPushButton("Advanced settings...", strategy_group)
+        self._ai_advanced_settings_toggle.setCheckable(True)
+        self._ai_advanced_settings_container = QWidget(strategy_group)
+        self._ai_advanced_settings_container.setLayout(settings_grid)
+        self._ai_advanced_settings_container.setVisible(False)
+        self._ai_advanced_settings_toggle.toggled.connect(self._ai_advanced_settings_container.setVisible)
+        strategy_layout.addWidget(self._ai_advanced_settings_toggle)
+        strategy_layout.addWidget(self._ai_advanced_settings_container)
+        layout.addWidget(strategy_group)
+
+        physical_group = QGroupBox("D. Physical Constraints", dialog)
+        physical_layout = QHBoxLayout(physical_group)
+        self._ai_constraint_summary_label = QLabel(
+            "Geometry-aware defaults: positivity, size-distribution bounds, and optional-D hard-core spacing.",
+            physical_group,
+        )
+        self._ai_constraint_summary_label.setWordWrap(True)
+        physical_layout.addWidget(self._ai_constraint_summary_label, 1)
+        physical_btn = QPushButton("Configure...", physical_group)
+        physical_btn.clicked.connect(self._show_advanced_constraints_dialog)
+        physical_layout.addWidget(physical_btn)
+        layout.addWidget(physical_group)
 
         action_row = QHBoxLayout()
         self._ai_action_buttons = []
-        for text in ("Fast Predict", "Full Auto Fit", "Show Input Data", "Show Results", "Advanced Constraints"):
+        for text in ("Run AI Auto Fit", "Show Input Data", "Show Results", "Refine Selected Candidate", "Reset"):
             btn = QPushButton(text, dialog)
             btn.setMinimumHeight(28)
-            if text == "Fast Predict":
-                btn.clicked.connect(lambda _checked=False: self._start_ai_prediction("fast"))
-            elif text == "Full Auto Fit":
-                btn.clicked.connect(lambda _checked=False: self._start_ai_prediction("full"))
+            if text == "Run AI Auto Fit":
+                btn.clicked.connect(lambda _checked=False: self._start_ai_prediction("profile"))
             elif text == "Show Input Data":
                 btn.clicked.connect(lambda _checked=False: self._show_ai_input_data_dialog())
             elif text == "Show Results":
                 btn.clicked.connect(lambda _checked=False: self._show_ai_candidate_table())
+            elif text == "Refine Selected Candidate":
+                btn.clicked.connect(lambda _checked=False: self._show_ai_candidate_table())
             else:
-                btn.clicked.connect(lambda _checked=False, label=text: self._ai_workspace_placeholder(label))
+                btn.clicked.connect(lambda _checked=False: self._reset_ai_workspace_defaults())
             action_row.addWidget(btn)
             self._ai_action_buttons.append(btn)
         self._ai_stop_button = QPushButton("Stop", dialog)
@@ -13296,22 +13447,32 @@ class FittingController(QObject):
         self._ai_constraint_combo.currentTextChanged.connect(self._on_ai_constraint_mode_changed)
         self._ai_constraint_k_combo.currentTextChanged.connect(lambda text: self._on_ai_fixed_k_changed(text))
         self._ai_constraint_combination_button.clicked.connect(self._show_ai_fixed_combination_dialog)
+        self._ai_profile_combo.currentTextChanged.connect(self._set_ai_profile)
+        self._ai_random_seed_spin.valueChanged.connect(
+            lambda value: (self._save_ai_fitting_settings(random_seed=int(value)), self._mark_ai_profile_custom(random_seed=int(value)))
+        )
+        self._ai_time_budget_spin.valueChanged.connect(
+            lambda value: (
+                self._save_ai_fitting_settings(time_budget_seconds=(float(value) if value > 0 else None)),
+                self._mark_ai_profile_custom(time_budget_seconds=(float(value) if value > 0 else None)),
+            )
+        )
         self._sync_workspace_ai_run_widgets()
         workspace_setting_map = {
-            self._ai_full_samples_spin: "full_num_samples",
-            self._ai_refine_top_n_spin: "full_refine_top_n",
-            self._ai_refine_max_nfev_spin: "full_refine_max_nfev",
-            self._ai_progress_every_spin: "full_refine_progress_interval",
-            self._ai_refine_ftol_spin: "full_refine_ftol",
-            self._ai_refine_xtol_spin: "full_refine_xtol",
-            self._ai_refine_gtol_spin: "full_refine_gtol",
-            self._ai_stall_patience_spin: "full_refine_stall_patience",
-            self._ai_stall_tol_spin: "full_refine_stall_tol",
-            self._ai_sampling_std_spin: "full_sampling_std",
-            self._ai_target_logrmse_spin: "full_refine_target_logrmse",
+            self._ai_full_samples_spin: "candidate_count",
+            self._ai_refine_top_n_spin: "refinement_count",
+            self._ai_refine_max_nfev_spin: "max_evaluations",
+            self._ai_progress_every_spin: "progress_interval",
+            self._ai_refine_ftol_spin: "tolerance",
+            self._ai_refine_xtol_spin: "tolerance",
+            self._ai_refine_gtol_spin: "tolerance",
+            self._ai_stall_patience_spin: "stall_patience",
+            self._ai_stall_tol_spin: "stall_tolerance",
+            self._ai_sampling_std_spin: "sampling_std",
+            self._ai_target_logrmse_spin: "target_log_rmse",
         }
         for widget, key in workspace_setting_map.items():
-            widget.valueChanged.connect(lambda value, setting_key=key: self._save_ai_fitting_settings(**{setting_key: value}))
+            widget.valueChanged.connect(lambda value, setting_key=key: self._mark_ai_profile_custom(**{setting_key: value}))
         dialog.finished.connect(lambda _result: setattr(self, "_ai_fitting_dialog", None))
         self._ai_fitting_dialog = dialog
         self._refresh_ai_fitting_models()
@@ -13333,6 +13494,14 @@ class FittingController(QObject):
         self._restore_ai_model_selection()
         if models:
             self._set_ai_workspace_status(f"Found {len(models)} AI fitting model(s).", 0)
+            selected_path = self._selected_ai_model_path()
+            info = next((item for item in models if selected_path is not None and item.artifact_path == selected_path), models[0])
+            label = getattr(self, "_ai_model_status_label", None)
+            if label is not None:
+                label.setText(
+                    f"Checkpoint: {info.artifact_type} | version {info.version} | K={list(info.contract.supported_k)} "
+                    f"| max_points={info.contract.max_points} | training={info.training_status.get('state', 'unknown')}"
+                )
         else:
             self._set_ai_workspace_status("No AI fitting model found in modules/Fitting_1D_Model/ or modules/Fitting_1D_model/", 0)
 
@@ -13365,6 +13534,14 @@ class FittingController(QObject):
     # 函数说明：恢复ai 模型 选区。
     def _restore_ai_model_selection(self) -> None:
         selected = self._ai_fitting_settings().get("last_selected_model")
+        if not selected:
+            preferred = next(
+                (model for model in getattr(self, "_ai_fitting_models", []) if model.model_id == "gisaxs-k1-k4-phys-constraints"),
+                None,
+            )
+            selected = str(preferred.artifact_path) if preferred is not None else None
+            if selected:
+                self._save_ai_fitting_settings(last_selected_model=selected)
         if not selected:
             return
         for combo in (getattr(self, "_ai_model_combo", None), getattr(self.ui, "aiFittingModelComboBox", None)):
@@ -13421,6 +13598,17 @@ class FittingController(QObject):
         if path:
             self._save_ai_fitting_settings(last_selected_model=str(path))
             self._sync_ai_model_combos(str(path))
+            info = next(
+                (item for item in getattr(self, "_ai_fitting_models", []) if str(item.artifact_path) == str(path)),
+                None,
+            )
+            label = getattr(self, "_ai_model_status_label", None)
+            if label is not None and info is not None:
+                state = info.training_status.get("state", "unknown")
+                label.setText(
+                    f"Checkpoint: {info.artifact_type} | version {info.version} | K={list(info.contract.supported_k)} "
+                    f"| max_points={info.contract.max_points} | training={state}"
+                )
 
     # 函数说明：同步ai 模型 combos。
     def _sync_ai_model_combos(self, selected_path: str) -> None:
@@ -13493,6 +13681,24 @@ class FittingController(QObject):
         constraints = self._ai_run_settings().get("parameter_constraints", {})
         components = constraints.get("components") if isinstance(constraints, dict) else None
         return [str(c) for c in components] if isinstance(components, list) else []
+
+    def _ai_constraint_geometries(self) -> list[str]:
+        mode = str(self._ai_fitting_settings().get("last_constraint_mode", "Free")).replace(" Prediction", "")
+        if mode == "Fixed Combination":
+            geometries = self._ai_fixed_combination()
+        elif mode == "Current Manual Model":
+            geometries = []
+            try:
+                geometries = [
+                    normalize_geometry(self.get_particle_shape(widget_id))
+                    for widget_id in self._iter_particle_widget_ids()
+                    if self.get_particle_shape(widget_id) not in (None, "None")
+                ]
+            except Exception:
+                geometries = []
+        else:
+            geometries = ["sphere", "cylinder", "vertical_cylinder"]
+        return sorted({normalize_geometry(item) for item in geometries if item})
 
     # 函数说明：实现 ai fixed combination label 相关逻辑。
     def _ai_fixed_combination_label(self) -> str:
@@ -13602,6 +13808,18 @@ class FittingController(QObject):
             f"{action_name} is available after a prediction run.",
             0,
         )
+
+    def _reset_ai_workspace_defaults(self) -> None:
+        self._set_ai_profile(DEFAULT_PROFILE_NAME)
+        self._save_ai_fitting_settings(
+            constraint_set=ConstraintSet.defaults().to_dict(),
+            d_spacing_rule="max_diameter",
+            parameter_constraints={},
+        )
+        combo = getattr(self, "_ai_constraint_combo", None)
+        if combo is not None:
+            combo.setCurrentText("Free")
+        self._set_ai_workspace_status("Balanced profile and model-default constraints restored.", 0)
 
     # 函数说明：实现 selected ai 模型 路径 相关逻辑。
     def _selected_ai_model_path(self) -> Path | None:
@@ -14036,50 +14254,31 @@ class FittingController(QObject):
             return
         input_csv, out_dir = io_paths
 
-        script = Path.cwd() / "utils" / "predict_topK.py"
+        script = fitting_pipeline.script_path
         if not script.is_file():
             QMessageBox.warning(self.main_window or self.ui, "AI Fitting", f"Prediction script not found:\n{script}")
             return
 
         exact = self._ai_exact_nonempty_arg()
-        run_settings = self._ai_run_settings()
         constraints_path = self._write_ai_constraints_json(out_dir)
-        args = [
-            str(script),
-            "--model_dir", str(model_path),
-            "--input_csv", str(input_csv),
-            "--output_dir", str(out_dir),
-            "--score_mode", "unweighted_log",
-            "--sampling_std", str(run_settings["full_sampling_std"] if run_mode == "full" else 0.005),
-            "--include_mean_candidate",
-            "--allow_unsafe_lambda",
-        ]
-        if run_mode == "full":
-            args.extend([
-                "--num_samples", str(int(run_settings["full_num_samples"])),
-                "--top_k", str(int(run_settings["full_top_k"])),
-                "--refine_top_n", str(int(run_settings["full_refine_top_n"])),
-                "--refine_max_nfev", str(int(run_settings["full_refine_max_nfev"])),
-                "--refine_progress_interval", str(int(run_settings["full_refine_progress_interval"])),
-                "--refine_ftol", str(float(run_settings["full_refine_ftol"])),
-                "--refine_xtol", str(float(run_settings["full_refine_xtol"])),
-                "--refine_gtol", str(float(run_settings["full_refine_gtol"])),
-                "--refine_stall_patience", str(int(run_settings["full_refine_stall_patience"])),
-                "--refine_stall_tol", str(float(run_settings["full_refine_stall_tol"])),
-                "--refine_target_logrmse", str(float(run_settings["full_refine_target_logrmse"])),
-                "--progress_interval", "100",
-            ])
+        if run_mode == "fast":
+            profile = profile_registry.get("Fast")
         else:
-            args.extend([
-                "--num_samples", str(int(run_settings["fast_num_samples"])),
-                "--top_k", str(int(run_settings["fast_top_k"])),
-                "--refine_top_n", "0",
-                "--progress_interval", str(int(run_settings["fast_progress_interval"])),
-            ])
-        if exact is not None:
-            args.extend(["--exact_nonempty", str(exact)])
-        if constraints_path is not None:
-            args.extend(["--constraints_json", str(constraints_path)])
+            profile = self._current_ai_profile()
+        request = FittingRequest(
+            model_dir=model_path,
+            input_csv=input_csv,
+            output_dir=out_dir,
+            profile=profile,
+            constraints_json=constraints_path,
+            exact_nonempty=exact,
+        )
+        try:
+            args = fitting_pipeline.build_args(request)
+            fitting_pipeline.write_request_metadata(request)
+        except Exception as exc:
+            QMessageBox.warning(self.main_window or self.ui, "AI Fitting", str(exc))
+            return
 
         process = QProcess(self.main_window or self.ui)
         process.setWorkingDirectory(str(Path.cwd()))
@@ -14088,17 +14287,25 @@ class FittingController(QObject):
         process.finished.connect(self._on_ai_process_finished)
         process.errorOccurred.connect(self._on_ai_process_error)
         self._ai_process = process
+        self._ai_active_profile = profile
+        self._ai_run_started_at = time.perf_counter()
+        self._ai_run_cancelled = False
         self._ai_candidate_rows = []
         self._set_ai_running_state(True)
-        self._set_ai_workspace_status(f"Starting {run_mode} AI fitting run...", 0)
+        self._set_ai_workspace_status(f"Starting {profile.name} AI fitting run...", 0)
         self._append_ai_log(f"Command: {sys.executable} {' '.join(args)}")
         process.start(sys.executable, args)
+        if profile.time_budget_seconds:
+            QTimer.singleShot(
+                max(1, int(float(profile.time_budget_seconds) * 1000)),
+                self._stop_ai_fitting_on_budget,
+            )
 
     # 函数说明：设置ai running 状态。
     def _set_ai_running_state(self, running: bool) -> None:
         for button in getattr(self, "_ai_action_buttons", []) or []:
             text = button.text()
-            if text in ("Fast Predict", "Full Auto Fit"):
+            if text in ("Fast Predict", "Full Auto Fit", "Run AI Auto Fit"):
                 button.setEnabled(not running)
         for name in ("aiFittingFastPredictButton", "aiFittingFullAutoFitButton"):
             button = getattr(self.ui, name, None)
@@ -14180,12 +14387,35 @@ class FittingController(QObject):
     # 函数说明：处理ai process finished事件。
     def _on_ai_process_finished(self, exit_code: int, exit_status) -> None:
         self._set_ai_running_state(False)
+        runtime = max(0.0, time.perf_counter() - float(getattr(self, "_ai_run_started_at", time.perf_counter())))
+        profile = getattr(self, "_ai_active_profile", profile_registry.get(DEFAULT_PROFILE_NAME))
+        summary = fitting_pipeline.summarize(
+            Path(getattr(self, "_ai_output_dir", "") or self._ai_current_prediction_dir()),
+            profile,
+            runtime,
+            int(exit_code),
+            cancelled=bool(getattr(self, "_ai_run_cancelled", False)),
+        )
+        try:
+            fitting_pipeline.write_summary(Path(self._ai_output_dir), summary)
+        except Exception as exc:
+            self._append_ai_log(f"Failed to write run summary: {exc}")
+        self._append_ai_log(
+            f"Run summary: profile={summary.profile}, runtime={summary.runtime_seconds:.3f}s, "
+            f"configured_candidates={summary.configured_candidates}, results={summary.result_candidates}, "
+            f"best_logRMSE={summary.best_log_rmse}"
+        )
         workflow_record = getattr(self, "_insitu_workflow_ai_record", None)
         if workflow_record is not None:
             self._on_insitu_ai_full_fit_finished(workflow_record, int(exit_code))
             return
-        if exit_code == 0:
-            self._set_ai_workspace_status(f"AI fitting finished. Output: {self._ai_output_dir}", 100)
+        if summary.cancelled:
+            self._set_ai_workspace_status(f"AI fitting cancelled after {runtime:.2f}s.", 0)
+        elif exit_code == 0:
+            self._set_ai_workspace_status(
+                f"AI fitting finished in {runtime:.2f}s. Output: {self._ai_output_dir}",
+                100,
+            )
             self._show_ai_candidate_table(self._ai_output_dir)
         else:
             self._set_ai_workspace_status(f"AI fitting failed with exit code {exit_code}. See log for details.", 0)
@@ -14209,8 +14439,19 @@ class FittingController(QObject):
         if process is None or process.state() == QProcess.NotRunning:
             return
         self._append_ai_log("Stopping AI fitting process...")
+        self._ai_run_cancelled = True
         process.terminate()
         QTimer.singleShot(2500, lambda: process.kill() if process.state() != QProcess.NotRunning else None)
+
+    def _stop_ai_fitting_on_budget(self) -> None:
+        process = getattr(self, "_ai_process", None)
+        if process is None or process.state() == QProcess.NotRunning:
+            return
+        profile = getattr(self, "_ai_active_profile", None)
+        self._append_ai_log(
+            f"Time budget reached ({getattr(profile, 'time_budget_seconds', None)} s); cancelling safely."
+        )
+        self._stop_ai_fitting_process()
 
     # 函数说明：实现 打开 ai output 文件夹 相关逻辑。
     def _open_ai_output_folder(self) -> None:
@@ -14295,12 +14536,17 @@ class FittingController(QObject):
             return
         self._ai_candidate_rows = rows
 
+        constraint_set = ConstraintSet.from_dict(self._ai_run_settings().get("constraint_set"))
+        for row in rows:
+            violations = constraint_set.validate_components(row.get("components") or [])
+            row["constraint_violations"] = [violation.message for violation in violations]
+
         dialog = QDialog(self.main_window or self.ui)
         dialog.setWindowTitle("AI Fitting Candidates")
         dialog.resize(900, 520)
         layout = QVBoxLayout(dialog)
-        table = QTableWidget(len(rows), 7, dialog)
-        table.setHorizontalHeaderLabels(["Rank", "Combination", "Score Prob.", "Posterior", "logRMSE", "Chi2", "Source"])
+        table = QTableWidget(len(rows), 8, dialog)
+        table.setHorizontalHeaderLabels(["Rank", "Combination", "Score Prob.", "Posterior", "logRMSE", "Chi2", "Constraints", "Source"])
         table.setSelectionBehavior(QTableWidget.SelectRows)
         table.setSelectionMode(QTableWidget.SingleSelection)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -14312,16 +14558,23 @@ class FittingController(QObject):
                 f"{float(row.get('posterior_frequency', 0.0)) * 100:.2f}%",
                 f"{float(row.get('best_log_rmse', np.nan)):.5g}",
                 f"{float(row.get('best_chi2_weighted', np.nan)):.5g}",
+                "Valid" if not row.get("constraint_violations") else "; ".join(row["constraint_violations"]),
                 row.get("best_source", ""),
             ]
             for col, value in enumerate(values):
                 table.setItem(row_idx, col, QTableWidgetItem(str(value)))
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        for col in range(2, 7):
+        for col in range(2, 8):
             table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
-        table.selectRow(0)
         layout.addWidget(table, 1)
+
+        preview_hint = QLabel(
+            "Selecting a row automatically loads its parameters and refreshes the fitting plot.",
+            dialog,
+        )
+        preview_hint.setWordWrap(True)
+        layout.addWidget(preview_hint)
 
         button_row = QHBoxLayout()
         load_btn = QPushButton("Load Selected Params", dialog)
@@ -14329,6 +14582,11 @@ class FittingController(QObject):
         close_btn = QPushButton("Close", dialog)
         load_btn.clicked.connect(lambda: self._load_selected_ai_candidate_from_table(table, rows, dialog))
         table.doubleClicked.connect(lambda _index: self._load_selected_ai_candidate_from_table(table, rows, dialog))
+        table.currentCellChanged.connect(
+            lambda current_row, _current_column, _previous_row, _previous_column: self._preview_ai_candidate_from_table(
+                current_row, rows
+            )
+        )
         open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_dir))))
         close_btn.clicked.connect(dialog.close)
         button_row.addWidget(load_btn)
@@ -14337,22 +14595,40 @@ class FittingController(QObject):
         button_row.addWidget(close_btn)
         layout.addLayout(button_row)
         self._ai_results_dialog = dialog
+        table.selectRow(0)
         dialog.show()
+
+    def _preview_ai_candidate_from_table(self, selected: int, rows: list) -> None:
+        """Load and render the currently selected candidate without closing the table."""
+        if selected < 0 or selected >= len(rows):
+            return
+        self._load_ai_candidate_params(rows[selected], refresh_plot=True)
 
     # 函数说明：加载selected ai candidate from table。
     def _load_selected_ai_candidate_from_table(self, table: QTableWidget, rows: list, dialog: QDialog | None = None) -> None:
         selected = table.currentRow()
         if selected < 0 or selected >= len(rows):
             return
-        if self._load_ai_candidate_params(rows[selected]):
+        if self._load_ai_candidate_params(rows[selected], refresh_plot=True):
             if dialog is not None:
                 dialog.accept()
 
     # 函数说明：加载ai candidate 参数。
-    def _load_ai_candidate_params(self, row: dict) -> bool:
+    def _load_ai_candidate_params(self, row: dict, *, refresh_plot: bool = True) -> bool:
         components = row.get("components") or []
         if not isinstance(components, list) or not components:
             QMessageBox.warning(self.main_window or self.ui, "AI Fitting", "Selected candidate has no component parameters.")
+            return False
+        violations = ConstraintSet.from_dict(
+            self._ai_run_settings().get("constraint_set")
+        ).validate_components(components)
+        if violations:
+            detail = "\n".join(f"- {item.message} ({item.formula})" for item in violations)
+            QMessageBox.warning(
+                self.main_window or self.ui,
+                "AI Fitting Constraint Violation",
+                "The selected candidate violates enabled physical constraints:\n" + detail,
+            )
             return False
         try:
             while len(self._iter_particle_widget_ids()) < len(components):
@@ -14410,7 +14686,10 @@ class FittingController(QObject):
                 if target is not None:
                     self.model_params_manager.set_global_parameter("fitting", target, float(value))
             self.model_params_manager.save_parameters()
-            self.reload_particle_parameters()
+            if not self.reload_particle_parameters():
+                raise RuntimeError("candidate parameters were saved but could not be reloaded into the GUI")
+            if refresh_plot:
+                self._perform_manual_fitting()
             self._set_ai_workspace_status(f"Loaded AI candidate #{row.get('rank', '')}: {row.get('combination', '')}", None)
             return True
         except Exception as exc:
@@ -14452,12 +14731,16 @@ class FittingController(QObject):
         elif mode == "Fixed Combination":
             components = settings_constraints.get("components") if isinstance(settings_constraints, dict) else None
             payload["components"] = components if isinstance(components, list) else []
+        constraint_set = ConstraintSet.from_dict(self._ai_run_settings().get("constraint_set"))
+        spacing_rule = str(self._ai_run_settings().get("d_spacing_rule", "max_diameter"))
+        payload["d_constraint"] = constraint_set.d_constraint_payload(spacing_rule)
+        payload["physical_constraints"] = constraint_set.to_dict()
         return payload
 
     # 函数说明：实现 write ai constraints JSON 相关逻辑。
     def _write_ai_constraints_json(self, out_dir: Path) -> Path | None:
         payload = self.build_ai_constraints_json_from_ui()
-        has_constraints = any(payload.get(key) for key in ("components", "type_parameter_ranges", "global_ranges", "parameter_ranges"))
+        has_constraints = any(payload.get(key) for key in ("components", "type_parameter_ranges", "global_ranges", "parameter_ranges", "d_constraint"))
         if not has_constraints and payload.get("mode") in ("Free", "Free Prediction"):
             return None
         path = Path(out_dir) / "constraints.json"
@@ -14477,11 +14760,59 @@ class FittingController(QObject):
         dialog.resize(760, 560)
         layout = QVBoxLayout(dialog)
         hint = QLabel(
-            "Enable ranges to constrain posterior sampling and final least-squares refinement.",
+            "Constraints are filtered by geometry and are applied to AI proposals, bounds, refinement and final validation.",
             dialog,
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
+
+        geometries = self._ai_constraint_geometries()
+        geometry_label = QLabel(
+            "Applicable geometry: " + (", ".join(name.replace("_", " ") for name in geometries) or "none"),
+            dialog,
+        )
+        geometry_label.setStyleSheet("font-weight: 600;")
+        layout.addWidget(geometry_label)
+
+        physical_set = ConstraintSet.from_dict(self._ai_run_settings().get("constraint_set"))
+        applicable = physical_set.applicable(geometries)
+        physical_table = QTableWidget(len(applicable), 4, dialog)
+        physical_table.setHorizontalHeaderLabels(["Enable", "Constraint", "Formula / meaning", "Margin"])
+        physical_table.verticalHeader().setVisible(False)
+        physical_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        physical_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        physical_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        physical_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        physical_widgets = []
+        for row_idx, (definition, option) in enumerate(applicable):
+            enabled = QCheckBox(physical_table)
+            enabled.setChecked(option.enabled)
+            margin_box = QDoubleSpinBox(physical_table)
+            margin_box.setDecimals(6)
+            margin_box.setRange(definition.minimum_margin, definition.maximum_margin)
+            margin_box.setSingleStep(0.001)
+            margin_box.setValue(option.margin)
+            margin_box.setEnabled(definition.maximum_margin > definition.minimum_margin)
+            formula = QTableWidgetItem(f"{definition.formula}\n{definition.meaning}")
+            formula.setToolTip(definition.meaning)
+            physical_table.setCellWidget(row_idx, 0, enabled)
+            physical_table.setItem(row_idx, 1, QTableWidgetItem(definition.label))
+            physical_table.setItem(row_idx, 2, formula)
+            physical_table.setCellWidget(row_idx, 3, margin_box)
+            physical_widgets.append((definition, enabled, margin_box))
+        physical_table.setMaximumHeight(190)
+        layout.addWidget(physical_table)
+
+        d_rule_row = QHBoxLayout()
+        d_rule_row.addWidget(QLabel("Multi-component D rule:", dialog))
+        d_rule_combo = QComboBox(dialog)
+        d_rule_combo.addItem("Maximum exclusion size", "max_diameter")
+        d_rule_combo.addItem("Mean exclusion size", "mean_diameter")
+        current_d_rule = str(self._ai_run_settings().get("d_spacing_rule", "max_diameter"))
+        d_rule_combo.setCurrentIndex(max(0, d_rule_combo.findData(current_d_rule)))
+        d_rule_row.addWidget(d_rule_combo)
+        d_rule_row.addStretch(1)
+        layout.addLayout(d_rule_row)
 
         rows = [
             ("type", "R", 1.0, 100.0),
@@ -14572,6 +14903,15 @@ class FittingController(QObject):
                 payload["global_ranges"] = global_constraints
             return payload
 
+        def collect_physical_constraints() -> dict:
+            payload = physical_set.to_dict()
+            for definition, enabled, margin_box in physical_widgets:
+                payload[definition.id] = {
+                    "enabled": bool(enabled.isChecked()),
+                    "margin": float(margin_box.value()),
+                }
+            return payload
+
         # 函数说明：刷新预览。
         def refresh_preview() -> None:
             settings = self._ai_fitting_settings()
@@ -14592,7 +14932,11 @@ class FittingController(QObject):
         # 函数说明：保存constraints。
         def save_constraints() -> None:
             constraints_payload = collect_constraints()
-            self._save_ai_fitting_settings(parameter_constraints=constraints_payload)
+            self._save_ai_fitting_settings(
+                parameter_constraints=constraints_payload,
+                constraint_set=collect_physical_constraints(),
+                d_spacing_rule=str(d_rule_combo.currentData()),
+            )
             preview.setPlainText(json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False))
             self._set_ai_workspace_status("Advanced parameter constraints saved.", None)
             dialog.accept()
@@ -14601,7 +14945,17 @@ class FittingController(QObject):
         def clear_constraints() -> None:
             for _scope, _name, check, _min_box, _max_box in row_widgets:
                 check.setChecked(False)
-            self._save_ai_fitting_settings(parameter_constraints={})
+            defaults = ConstraintSet.defaults().to_dict()
+            for definition, enabled, margin_box in physical_widgets:
+                default_option = defaults[definition.id]
+                enabled.setChecked(bool(default_option["enabled"]))
+                margin_box.setValue(float(default_option["margin"]))
+            d_rule_combo.setCurrentIndex(max(0, d_rule_combo.findData("max_diameter")))
+            self._save_ai_fitting_settings(
+                parameter_constraints={},
+                constraint_set=defaults,
+                d_spacing_rule="max_diameter",
+            )
             preview.setPlainText(json.dumps(self.build_ai_constraints_json_from_ui(), indent=2, ensure_ascii=False))
 
         save.clicked.connect(save_constraints)

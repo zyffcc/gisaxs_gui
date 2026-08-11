@@ -26,6 +26,17 @@ MAX_POINTS = 1000
 P_MAX = 6
 G_MAX = 5
 
+D_RULE_FREE = 0
+D_RULE_MAX = 1
+D_RULE_MEAN = 2
+D_RULE_NAMES = {
+    D_RULE_FREE: "free",
+    D_RULE_MAX: "max_diameter",
+    D_RULE_MEAN: "mean_diameter",
+}
+NAME_TO_D_RULE = {v: k for k, v in D_RULE_NAMES.items()}
+NUM_D_RULES = len(D_RULE_NAMES)
+
 PARAM_NAMES = ["R", "sigma_R", "h", "sigma_h", "D", "sigma_D"]
 GLOBAL_PARAM_NAMES = ["BG", "sigma_Res", "nu_Res", "int_Res", "k"]
 
@@ -178,6 +189,7 @@ def metadata_dict() -> dict:
         "max_points": MAX_POINTS,
         "component_param_names": PARAM_NAMES,
         "global_param_names": GLOBAL_PARAM_NAMES,
+        "d_spacing_rule_ids": D_RULE_NAMES,
         "q_range": [Q_MIN_GLOBAL, Q_MAX_GLOBAL],
         "q_spacing": Q_SPACING,
         "param_norm_ranges": {k: vars(v) for k, v in PARAM_NORM_RANGES.items()},

@@ -184,3 +184,6 @@ plots/
 *.rar
 *.7z
 
+* Raman临时处理
+raman_*
+raman_*/

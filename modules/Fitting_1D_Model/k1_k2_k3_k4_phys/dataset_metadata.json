@@ -1,0 +1,190 @@
+{
+  "type_ids": {
+    "0": "empty",
+    "1": "sphere",
+    "2": "cylinder",
+    "3": "vertical_cylinder"
+  },
+  "max_slots": 4,
+  "num_types": 4,
+  "max_points": 1000,
+  "component_param_names": [
+    "R",
+    "sigma_R",
+    "h",
+    "sigma_h",
+    "D",
+    "sigma_D"
+  ],
+  "global_param_names": [
+    "BG",
+    "sigma_Res",
+    "nu_Res",
+    "int_Res",
+    "k"
+  ],
+  "d_spacing_rule_ids": {
+    "0": "free",
+    "1": "max_diameter",
+    "2": "mean_diameter"
+  },
+  "q_range": [
+    0.001,
+    10.0
+  ],
+  "q_spacing": "linear",
+  "param_norm_ranges": {
+    "R": {
+      "low": 1.0,
+      "high": 100.0,
+      "transform": "log"
+    },
+    "sigma_R": {
+      "low": 0.02,
+      "high": 90.0,
+      "transform": "log"
+    },
+    "h": {
+      "low": 2.0,
+      "high": 500.0,
+      "transform": "log"
+    },
+    "sigma_h": {
+      "low": 0.04,
+      "high": 400.0,
+      "transform": "log"
+    },
+    "D": {
+      "low": 3.0,
+      "high": 500.0,
+      "transform": "log"
+    },
+    "sigma_D": {
+      "low": 0.06,
+      "high": 400.0,
+      "transform": "log"
+    }
+  },
+  "global_norm_ranges": {
+    "BG": {
+      "low": 1e-18,
+      "high": 100000000.0,
+      "transform": "log"
+    },
+    "sigma_Res": {
+      "low": 0.002,
+      "high": 0.3,
+      "transform": "log"
+    },
+    "nu_Res": {
+      "low": 1.0,
+      "high": 10.0,
+      "transform": "linear"
+    },
+    "int_Res": {
+      "low": 1e-18,
+      "high": 100000000.0,
+      "transform": "log"
+    },
+    "k": {
+      "low": 0.01,
+      "high": 1000000.0,
+      "transform": "log"
+    }
+  },
+  "created": "2026-08-04T20:26:36",
+  "git_commit": null,
+  "num_samples": 100000,
+  "split_counts": {
+    "train": 90000,
+    "val": 5000,
+    "test": 5000
+  },
+  "samples_per_shard": 1000,
+  "storage_format": "tfrecord",
+  "k_values": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "k_probs": [
+    0.25,
+    0.25,
+    0.25,
+    0.25
+  ],
+  "noise": {
+    "poisson_scale_min": 200.0,
+    "poisson_scale_max": 3000.0,
+    "rel_noise_min": 0.001,
+    "rel_noise_max": 0.02,
+    "drop_noisy_floor": 1e-20
+  },
+  "q_conditioned_sampling": {
+    "enabled": true,
+    "mode_ids": {
+      "-1": "global",
+      "0": "observable",
+      "1": "edge",
+      "2": "out_of_window"
+    },
+    "visible_fraction": 0.7,
+    "edge_fraction": 0.2,
+    "out_of_window_fraction": 0.1,
+    "coefficients": {
+      "sphere_R": 4.49,
+      "vertical_cylinder_R": 3.83,
+      "cylinder_R": 3.83,
+      "D": 6.283185307179586,
+      "h": 6.283185307179586
+    },
+    "observable_margin": 2.0,
+    "edge_margin": 5.0,
+    "cylinder_R_margin_multiplier": 2.0
+  },
+  "gap_drop": {
+    "probability": 1.0,
+    "max_fraction": 0.05,
+    "regions_per_curve": [
+      1,
+      3
+    ],
+    "points_per_region": [
+      1,
+      10
+    ],
+    "intensity_factor_range": [
+      0.01,
+      0.7
+    ]
+  },
+  "d_constraints": {
+    "absent_probability": 0.25,
+    "spacing_rules": [
+      "free",
+      "max_diameter",
+      "mean_diameter"
+    ],
+    "spacing_rule_probs": [
+      0.333333,
+      0.333333,
+      0.333334
+    ],
+    "sphere_and_vertical_cylinder_exclusion_size": "2*R",
+    "random_cylinder_exclusion_size": "sqrt((2*R)^2 + h^2)",
+    "strict_margin_multiplier": 1.001
+  },
+  "parallel_num_tasks": 4,
+  "quick_test": false,
+  "normalization": {
+    "input": "[logq_norm, logI_norm, logsigma_norm]",
+    "global_features": [
+      "q_min_norm",
+      "q_max_norm",
+      "N_points/max_points",
+      "I_offset",
+      "I_scale"
+    ]
+  }
+}

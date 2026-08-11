@@ -33,6 +33,8 @@ SAMPLE_SPECS = {
     "global_low_norm": (np.float32, tf.float32, (schema.G_MAX,)),
     "global_high_norm": (np.float32, tf.float32, (schema.G_MAX,)),
     "global_range_mask": (np.float32, tf.float32, (schema.G_MAX,)),
+    "d_allowed": (np.float32, tf.float32, (schema.MAX_SLOTS, 2)),
+    "d_spacing_rule": (np.float32, tf.float32, (schema.NUM_D_RULES,)),
 }
 
 OPTIONAL_INT_FEATURES = {
@@ -51,6 +53,8 @@ INPUT_KEYS = [
     "global_low_norm",
     "global_high_norm",
     "global_range_mask",
+    "d_allowed",
+    "d_spacing_rule",
 ]
 
 LABEL_KEYS = [
@@ -60,6 +64,10 @@ LABEL_KEYS = [
     "slot_param_mask",
     "slot_weight",
     "global_params_norm",
+    "d_spacing_rule",
+    "q",
+    "I_clean",
+    "point_mask",
 ]
 
 
@@ -90,6 +98,13 @@ def serialize_sample(sample: Dict[str, np.ndarray]) -> bytes:
 
 def parse_example(example_proto):
     feature_spec = {key: tf.io.FixedLenFeature([], tf.string) for key in SAMPLE_SPECS}
+    # Backward-compatible defaults for datasets built before relational D constraints.
+    feature_spec["d_allowed"] = tf.io.FixedLenFeature(
+        [], tf.string, default_value=np.ones((schema.MAX_SLOTS, 2), dtype=np.float32).tobytes()
+    )
+    feature_spec["d_spacing_rule"] = tf.io.FixedLenFeature(
+        [], tf.string, default_value=np.eye(schema.NUM_D_RULES, dtype=np.float32)[schema.D_RULE_FREE].tobytes()
+    )
     feature_spec["sampling_mode"] = tf.io.FixedLenFeature([], tf.int64, default_value=-1)
     parsed = tf.io.parse_single_example(example_proto, feature_spec)
     out = {}

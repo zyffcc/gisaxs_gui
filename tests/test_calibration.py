@@ -14,7 +14,7 @@ from calibration.candidate_ranker import rank_candidates
 from calibration.center_estimator import estimate_center_candidates
 from calibration.engine import CalibrationEngine
 from calibration.geometry_model import energy_to_wavelength, q_to_ring_radius_px
-from calibration.image_loader import load_detector_image
+from calibration.image_loader import load_detector_image, nxs_invalid_pixel_mask
 from calibration.models import CalibrationCandidate, CalibrationResult, DetectorImage
 from calibration.peak_detector import DetectedPeak
 from calibration.peak_matcher import generate_distance_candidates
@@ -65,6 +65,32 @@ class CalibrationTests(unittest.TestCase):
             np.testing.assert_array_equal(detector.data, expected)
             np.testing.assert_array_equal(legacy_api, expected)
             self.assertAlmostEqual(detector.pixel_size_x_m, 75e-6)
+
+    def test_nxs_mask_preserves_undefined_and_virtual_pixel_bits(self):
+        source = np.arange(24, dtype=np.float32).reshape(1, 4, 6) + 10.0
+        mask = np.zeros(source.shape, dtype=np.uint32)
+        mask[0, 0, 0] = np.uint32(1 << 10)  # Undefined bit used by this LAMBDA file.
+        mask[0, 0, 1] = np.uint32(1 << 31)  # Virtual/interpolated pixel.
+        mask[0, 0, 2] = np.uint32(1 << 1)   # Dead pixel: reject.
+        mask[0, 0, 3] = np.uint32(1 << 8)   # User mask: reject.
+
+        invalid = nxs_invalid_pixel_mask(mask[0])
+        self.assertFalse(invalid[0, 0])
+        self.assertFalse(invalid[0, 1])
+        self.assertTrue(invalid[0, 2])
+        self.assertTrue(invalid[0, 3])
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "masked.nxs"
+            with h5py.File(path, "w") as handle:
+                handle.create_dataset("/entry/instrument/detector/data", data=source)
+                handle.create_dataset("/entry/instrument/detector/pixel_mask", data=mask)
+            detector = load_detector_image(path)
+            expected = np.flipud(source[0].T)
+            expected_mask = np.flipud(invalid.T)
+            np.testing.assert_array_equal(detector.mask, expected_mask)
+            np.testing.assert_array_equal(detector.data[~expected_mask], expected[~expected_mask])
+            self.assertEqual(int(np.count_nonzero(~np.isfinite(detector.data))), 2)
 
     def test_cbf_loader_uses_fabio_without_reorientation(self):
         try:

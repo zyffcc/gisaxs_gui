@@ -34,6 +34,16 @@ def parse_float_list(text: str) -> list[float]:
     return values
 
 
+def parse_d_rule_list(text: str) -> list[int]:
+    names = [part.strip() for part in text.split(",") if part.strip()]
+    try:
+        return [schema.NAME_TO_D_RULE[name] for name in names]
+    except KeyError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Unknown D rule {exc.args[0]!r}; choose from {sorted(schema.NAME_TO_D_RULE)}"
+        ) from exc
+
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--output_dir", default="/data/dust/user/zhaiyufe/TrainSet/ML_1D_Fitting_GISAXS")
@@ -52,6 +62,14 @@ def parse_args():
     p.add_argument("--out_of_window_fraction", type=float, default=0.10)
     p.add_argument("--gap_drop_prob", type=float, default=1.0, help="Probability of applying short intensity-drop gap augmentation per curve.")
     p.add_argument("--gap_drop_max_fraction", type=float, default=0.05, help="Maximum fraction of points allowed to be intensity-dropped.")
+    p.add_argument("--d_absent_probability", type=float, default=0.25, help="Probability that an active component has no D/structure factor.")
+    p.add_argument(
+        "--d_spacing_rules",
+        type=parse_d_rule_list,
+        default=[schema.D_RULE_FREE, schema.D_RULE_MAX, schema.D_RULE_MEAN],
+        help="Comma-separated: free,max_diameter,mean_diameter.",
+    )
+    p.add_argument("--d_spacing_rule_probs", type=parse_float_list, default=None)
     p.add_argument("--format", choices=["tfrecord", "npz"], default="tfrecord")
     p.add_argument("--k_values", type=parse_int_list, default=[1, 2, 3, 4], help="Allowed active component counts, e.g. 1 or 1,2 or 3,4.")
     p.add_argument("--k_probs", type=parse_float_list, default=None, help="Optional probabilities matching --k_values, e.g. 0.5,0.5.")
@@ -128,6 +146,18 @@ def write_metadata(output_dir: Path, args, counts):
                 "points_per_region": [1, 10],
                 "intensity_factor_range": [0.01, 0.70],
             },
+            "d_constraints": {
+                "absent_probability": float(args.d_absent_probability),
+                "spacing_rules": [schema.D_RULE_NAMES[int(v)] for v in args.d_spacing_rules],
+                "spacing_rule_probs": None if args.d_spacing_rule_probs is None else list(map(float, args.d_spacing_rule_probs)),
+                "sphere_and_vertical_cylinder_exclusion_size": "2*R",
+                "random_cylinder_exclusion_size": "sqrt((2*R)^2 + h^2)",
+                "strict_margin_multiplier": sampling.D_HARD_CORE_MARGIN,
+            },
+            "forward_model": {
+                "random_cylinder_radial_amplitude": "2*cylindrical_J1(x)/x",
+                "random_cylinder_size_average": "independent_R_h_factorized",
+            },
             "parallel_num_tasks": int(args.num_tasks),
             "quick_test": bool(args.quick_test),
             "normalization": {
@@ -189,6 +219,9 @@ def build_split(split: str, count: int, output_dir: Path, args, seed_offset: int
                         k_probs=args.k_probs,
                         gap_drop_prob=args.gap_drop_prob,
                         gap_drop_max_fraction=args.gap_drop_max_fraction,
+                        d_absent_probability=args.d_absent_probability,
+                        d_rule_ids=args.d_spacing_rules,
+                        d_rule_probs=args.d_spacing_rule_probs,
                     )
                     writer.write(serialize_sample(sample))
                     if args.sample_log_interval > 0 and ((i + 1) % args.sample_log_interval == 0 or (i + 1) == shard_n):
@@ -214,6 +247,9 @@ def build_split(split: str, count: int, output_dir: Path, args, seed_offset: int
                         k_probs=args.k_probs,
                         gap_drop_prob=args.gap_drop_prob,
                         gap_drop_max_fraction=args.gap_drop_max_fraction,
+                        d_absent_probability=args.d_absent_probability,
+                        d_rule_ids=args.d_spacing_rules,
+                        d_rule_probs=args.d_spacing_rule_probs,
                     )
                 )
                 if args.sample_log_interval > 0 and ((i + 1) % args.sample_log_interval == 0 or (i + 1) == shard_n):
@@ -267,6 +303,14 @@ def main():
         raise ValueError("--gap_drop_prob must be between 0 and 1.")
     if not 0.0 <= args.gap_drop_max_fraction <= 1.0:
         raise ValueError("--gap_drop_max_fraction must be between 0 and 1.")
+    if not 0.0 <= args.d_absent_probability <= 1.0:
+        raise ValueError("--d_absent_probability must be between 0 and 1.")
+    if not args.d_spacing_rules:
+        raise ValueError("--d_spacing_rules must not be empty.")
+    if args.d_spacing_rule_probs is not None and len(args.d_spacing_rule_probs) != len(args.d_spacing_rules):
+        raise ValueError("--d_spacing_rule_probs length must match --d_spacing_rules.")
+    if args.d_spacing_rule_probs is not None and (any(p < 0 for p in args.d_spacing_rule_probs) or sum(args.d_spacing_rule_probs) <= 0):
+        raise ValueError("--d_spacing_rule_probs must be non-negative with a positive sum.")
     if not 0 <= args.task_id < args.num_tasks:
         raise ValueError(f"--task_id must satisfy 0 <= task_id < num_tasks; got {args.task_id}/{args.num_tasks}")
     if args.shard_log_interval < 1:

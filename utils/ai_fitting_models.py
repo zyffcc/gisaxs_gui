@@ -3,9 +3,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from threading import RLock
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 import json
+
+
+class ModelRegistryError(RuntimeError):
+    """Base error for friendly model discovery/loading failures."""
+
+
+class ModelCompatibilityError(ModelRegistryError):
+    """Raised when an artifact does not match its declared architecture."""
+
+
+@dataclass(frozen=True)
+class ModelContract:
+    version: str = "legacy"
+    architecture: str = "ML1DGISAXSSlotModel"
+    max_points: int = 1000
+    max_slots: int = 4
+    num_types: int = 4
+    supported_k: tuple[int, ...] = (1, 2, 3, 4)
+    required_inputs: tuple[str, ...] = ()
+    required_outputs: tuple[str, ...] = ()
 
 
 @dataclass
@@ -18,6 +40,17 @@ class ModelInfo:
     config: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     history_summary: Dict[str, Any] = field(default_factory=dict)
+    manifest: Dict[str, Any] = field(default_factory=dict)
+    training_status: Dict[str, Any] = field(default_factory=dict)
+    contract: ModelContract = field(default_factory=ModelContract)
+
+    @property
+    def model_id(self) -> str:
+        return str(self.manifest.get("id") or self.name)
+
+    @property
+    def version(self) -> str:
+        return self.contract.version
 
 
 def default_ai_fitting_model_base_dirs(root: Path | None = None) -> List[Path]:
@@ -55,6 +88,43 @@ def _first_known(*values: Any) -> Any:
         if value is not None and value != "":
             return value
     return None
+
+
+def _tuple_of_ints(value: Any, default: tuple[int, ...]) -> tuple[int, ...]:
+    if not isinstance(value, (list, tuple)):
+        return default
+    try:
+        result = tuple(int(item) for item in value)
+    except (TypeError, ValueError):
+        return default
+    return result or default
+
+
+def _tuple_of_strings(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(str(item) for item in value if str(item).strip())
+
+
+def _contract_from_metadata(manifest: Mapping[str, Any], config: Mapping[str, Any], metadata: Mapping[str, Any]) -> ModelContract:
+    return ModelContract(
+        version=str(_first_known(manifest.get("version"), config.get("version"), "legacy")),
+        architecture=str(_first_known(manifest.get("architecture"), config.get("architecture"), "ML1DGISAXSSlotModel")),
+        max_points=int(_first_known(manifest.get("max_points"), config.get("max_points"), metadata.get("max_points"), 1000)),
+        max_slots=int(_first_known(manifest.get("max_slots"), config.get("max_slots"), metadata.get("max_slots"), 4)),
+        num_types=int(_first_known(manifest.get("num_types"), config.get("num_types"), metadata.get("num_types"), 4)),
+        supported_k=_tuple_of_ints(manifest.get("supported_k"), (1, 2, 3, 4)),
+        required_inputs=_tuple_of_strings(manifest.get("required_inputs")),
+        required_outputs=_tuple_of_strings(manifest.get("required_outputs")),
+    )
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _display_name(name: str, artifact_type: str, config: Dict[str, Any], metadata: Dict[str, Any], history_summary: Dict[str, Any]) -> str:
@@ -101,19 +171,31 @@ def _display_name(name: str, artifact_type: str, config: Dict[str, Any], metadat
 
 
 def _model_info_for_artifact(model_dir: Path, artifact_path: Path, artifact_type: str) -> ModelInfo:
-    config = _read_json(model_dir / "config.json")
-    metadata = _read_json(model_dir / "metadata.json")
+    config = _read_json(model_dir / "model_config.json") or _read_json(model_dir / "config.json")
+    metadata = _read_json(model_dir / "dataset_metadata.json") or _read_json(model_dir / "metadata.json")
+    manifest = _read_json(model_dir / "manifest.json")
+    training_status = _read_json(model_dir / "training_status.json")
     history_summary = _summarize_history(_read_json(model_dir / "history.json"))
     name = model_dir.name if model_dir.is_dir() else artifact_path.stem
+    contract = _contract_from_metadata(manifest, config, metadata)
+    display_name = _display_name(name, artifact_type, config, metadata, history_summary)
+    if contract.version != "legacy":
+        display_name += f" | v={contract.version}"
+    state = training_status.get("state")
+    if state:
+        display_name += f" | {state}"
     return ModelInfo(
         name=name,
-        display_name=_display_name(name, artifact_type, config, metadata, history_summary),
+        display_name=display_name,
         model_dir=model_dir,
         artifact_path=artifact_path,
         artifact_type=artifact_type,
         config=config,
         metadata=metadata,
         history_summary=history_summary,
+        manifest=manifest,
+        training_status=training_status,
+        contract=contract,
     )
 
 
@@ -168,6 +250,115 @@ def discover_ai_fitting_models(base_dirs: Iterable[Path]) -> List[ModelInfo]:
                 seen.add(key)
                 models.append(info)
     return models
+
+
+def validate_model_info(info: ModelInfo, verify_checksum: bool = True) -> None:
+    if not info.artifact_path.exists():
+        raise ModelRegistryError(f"Model artifact is missing: {info.artifact_path}")
+    if info.contract.max_points != 1000:
+        raise ModelCompatibilityError(
+            f"{info.display_name} expects max_points={info.contract.max_points}; this GUI adapter requires 1000."
+        )
+    if info.contract.max_slots != 4 or info.contract.num_types != 4:
+        raise ModelCompatibilityError(
+            f"{info.display_name} declares max_slots={info.contract.max_slots}, num_types={info.contract.num_types}; expected 4/4."
+        )
+    expected = str(info.manifest.get("sha256") or "").strip().lower()
+    if verify_checksum and expected and info.artifact_path.is_file():
+        actual = file_sha256(info.artifact_path)
+        if actual.lower() != expected:
+            raise ModelCompatibilityError(
+                f"Checksum mismatch for {info.artifact_path.name}: expected {expected}, got {actual}."
+            )
+
+
+def _tensor_names(tensors: Any) -> set[str]:
+    if isinstance(tensors, Mapping):
+        values = tensors.values()
+    elif isinstance(tensors, (list, tuple)):
+        values = tensors
+    else:
+        values = [tensors]
+    names = set()
+    for tensor in values:
+        name = str(getattr(tensor, "name", "")).split(":", 1)[0]
+        if name:
+            names.add(name.split("/")[-1])
+    return names
+
+
+def validate_loaded_model(model: Any, info: ModelInfo) -> None:
+    required_inputs = set(info.contract.required_inputs)
+    if required_inputs:
+        actual_inputs = set(getattr(model, "input_names", ()) or ()) or _tensor_names(getattr(model, "inputs", ()))
+        missing = required_inputs - actual_inputs
+        if missing:
+            raise ModelCompatibilityError(
+                f"Model {info.model_id} is missing required inputs: {', '.join(sorted(missing))}. "
+                f"Available: {', '.join(sorted(actual_inputs)) or 'unknown'}."
+            )
+    required_outputs = set(info.contract.required_outputs)
+    if required_outputs:
+        actual_outputs = set(getattr(model, "output_names", ()) or ()) or _tensor_names(getattr(model, "outputs", ()))
+        missing = required_outputs - actual_outputs
+        if missing:
+            raise ModelCompatibilityError(
+                f"Model {info.model_id} is missing required outputs: {', '.join(sorted(missing))}. "
+                f"Available: {', '.join(sorted(actual_outputs)) or 'unknown'}."
+            )
+
+
+class ModelRegistry:
+    """Discover models once and lazily cache successfully loaded artifacts."""
+
+    def __init__(self, base_dirs: Iterable[Path]) -> None:
+        self.base_dirs = tuple(Path(path) for path in base_dirs)
+        self._lock = RLock()
+        self._models: Dict[str, ModelInfo] = {}
+        self._loaded: Dict[str, Any] = {}
+
+    def refresh(self) -> tuple[ModelInfo, ...]:
+        with self._lock:
+            models = discover_ai_fitting_models(self.base_dirs)
+            self._models = {model.model_id: model for model in models}
+            return tuple(models)
+
+    def models(self) -> tuple[ModelInfo, ...]:
+        with self._lock:
+            if not self._models:
+                return self.refresh()
+            return tuple(self._models.values())
+
+    def get(self, model_id: str) -> ModelInfo:
+        with self._lock:
+            if not self._models:
+                self.refresh()
+            try:
+                return self._models[model_id]
+            except KeyError as exc:
+                raise ModelRegistryError(
+                    f"Unknown AI fitting model {model_id!r}; available: {', '.join(self._models) or 'none'}"
+                ) from exc
+
+    def load(self, model_id: str, allow_unsafe_lambda: bool = True):
+        with self._lock:
+            if model_id in self._loaded:
+                return self._loaded[model_id]
+            info = self.get(model_id)
+            validate_model_info(info)
+            model, artifact = load_tensorflow_model_compatible(
+                info.model_dir,
+                custom_objects=None,
+                allow_unsafe_lambda=allow_unsafe_lambda,
+            )
+            validate_loaded_model(model, info)
+            loaded = (model, artifact, info)
+            self._loaded[model_id] = loaded
+            return loaded
+
+    def clear_loaded(self) -> None:
+        with self._lock:
+            self._loaded.clear()
 
 
 def model_artifact_candidates(model_dir: Path) -> List[Path]:

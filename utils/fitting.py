@@ -112,34 +112,23 @@ def _F_cylinder_amp(q, R, h, alpha):
     alpha 为圆柱轴与 q 的夹角。
     """
     q = np.asarray(q, dtype=float)
-    sa = np.sin(alpha)
-    ca = np.cos(alpha)
-    qr = q * R * sa
-    qz = q * h * ca / 2.0
+    qr = q * float(R) * np.sin(alpha)
+    qz = q * float(h) * np.cos(alpha) / 2.0
+    return _cylinder_radial_amplitude(qr) * np.sinc(qz / np.pi)
 
-    # 2*J1(x)/x
-    # 用近似：J1(x) ~ x/2 - x^3/16 + ...
-    out = np.empty_like(q, dtype=float)
-    small_r = np.abs(qr) < 1e-6
-    xs = qr[small_r]
-    j1_over_x = 0.5 - xs**2/16.0 + xs**4/384.0
-    fr_small = 2.0 * j1_over_x
-    fr = np.empty_like(q, dtype=float)
-    fr[small_r] = fr_small
-    xr = qr[~small_r]
-    # 用 numpy 的近似：J1(x)≈sin(x)/x^2 - cos(x)/x
-    j1 = np.sin(xr) / (xr**2) - np.cos(xr) / xr
-    fr[~small_r] = 2.0 * j1 / xr
 
-    # sinc(qz)
-    small_z = np.abs(qz) < 1e-6
-    sinc = np.empty_like(q, dtype=float)
-    xz = qz[small_z]
-    sinc[small_z] = 1.0 - xz**2/6.0 + xz**4/120.0
-    xz2 = qz[~small_z]
-    sinc[~small_z] = np.sin(xz2) / xz2
+def _cylinder_radial_amplitude(x):
+    """Return the exact normalized radial cylinder amplitude ``2*J1(x)/x``."""
+    from scipy.special import j1
 
-    return fr * sinc
+    x = np.asarray(x, dtype=float)
+    out = np.empty_like(x, dtype=float)
+    small = np.abs(x) < 1e-5
+    xs = x[small]
+    out[small] = 1.0 - xs**2 / 8.0 + xs**4 / 192.0
+    xr = x[~small]
+    out[~small] = 2.0 * j1(xr) / xr
+    return out
 
 def cylinder_form_factor_pd(
     q, R, sigma_R, h, sigma_h,
@@ -163,17 +152,22 @@ def cylinder_form_factor_pd(
     WA = np.sin(alphas)
     WA /= (WA.sum() + 1e-300)
 
-    P = np.zeros_like(q, dtype=float)
-    for Ri, wi in zip(Rs, WR):
-        for hi, wh in zip(Hs, WH):
-            w_size = wi * wh
-            # 各向平均
-            F2_avg = np.zeros_like(q, dtype=float)
-            for a, wa in zip(alphas, WA):
-                Fi = _F_cylinder_amp(q, Ri, hi, a)
-                F2_avg += wa * (Fi * Fi)
-            P += w_size * F2_avg
-    return P
+    # F(q,R,h,alpha)^2 is separable into radial(R)^2 * axial(h)^2.
+    # Factorizing the independent R/h averages removes the old
+    # n_R*n_h*n_orient Python loop without changing the quadrature.
+    q_col = q[:, np.newaxis, np.newaxis]
+    sin_alpha = np.sin(alphas)[np.newaxis, np.newaxis, :]
+    cos_alpha = np.cos(alphas)[np.newaxis, np.newaxis, :]
+
+    radial_x = q_col * Rs[np.newaxis, :, np.newaxis] * sin_alpha
+    radial_sq = _cylinder_radial_amplitude(radial_x) ** 2
+    radial_avg = np.sum(radial_sq * WR[np.newaxis, :, np.newaxis], axis=1)
+
+    axial_x = q_col * Hs[np.newaxis, :, np.newaxis] * cos_alpha / 2.0
+    axial_sq = np.sinc(axial_x / np.pi) ** 2
+    axial_avg = np.sum(axial_sq * WH[np.newaxis, :, np.newaxis], axis=1)
+
+    return np.sum(radial_avg * axial_avg * WA[np.newaxis, :], axis=1)
 
 
 def vertical_cylinder_form_factor_pd(q, R, sigma_R, n_samples=25, nsig=3.0):

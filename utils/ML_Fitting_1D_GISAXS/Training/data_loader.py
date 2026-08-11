@@ -23,12 +23,16 @@ EXPECTED_SAMPLE_SHAPES = {
     "global_low_norm": (schema.G_MAX,),
     "global_high_norm": (schema.G_MAX,),
     "global_range_mask": (schema.G_MAX,),
+    "d_allowed": (schema.MAX_SLOTS, 2),
+    "d_spacing_rule": (schema.NUM_D_RULES,),
     "slot_type": (schema.MAX_SLOTS,),
     "slot_exist": (schema.MAX_SLOTS,),
     "slot_params_norm": (schema.MAX_SLOTS, schema.P_MAX),
     "slot_param_mask": (schema.MAX_SLOTS, schema.P_MAX),
     "slot_weight": (schema.MAX_SLOTS,),
     "global_params_norm": (schema.G_MAX,),
+    "q": (schema.MAX_POINTS,),
+    "I_clean": (schema.MAX_POINTS,),
 }
 
 
@@ -80,6 +84,11 @@ def _signature():
         "global_low_norm": tf.TensorSpec((schema.G_MAX,), tf.float32),
         "global_high_norm": tf.TensorSpec((schema.G_MAX,), tf.float32),
         "global_range_mask": tf.TensorSpec((schema.G_MAX,), tf.float32),
+        "d_allowed": tf.TensorSpec((schema.MAX_SLOTS, 2), tf.float32),
+        "d_spacing_rule": tf.TensorSpec((schema.NUM_D_RULES,), tf.float32),
+        "q": tf.TensorSpec((schema.MAX_POINTS,), tf.float32),
+        "I_clean": tf.TensorSpec((schema.MAX_POINTS,), tf.float32),
+        "point_mask": tf.TensorSpec((schema.MAX_POINTS,), tf.bool),
     }
     labels = {
         "slot_type": tf.TensorSpec((schema.MAX_SLOTS,), tf.int32),
@@ -88,6 +97,7 @@ def _signature():
         "slot_param_mask": tf.TensorSpec((schema.MAX_SLOTS, schema.P_MAX), tf.float32),
         "slot_weight": tf.TensorSpec((schema.MAX_SLOTS,), tf.float32),
         "global_params_norm": tf.TensorSpec((schema.G_MAX,), tf.float32),
+        "d_spacing_rule": tf.TensorSpec((schema.NUM_D_RULES,), tf.float32),
     }
     return inputs, labels
 
@@ -126,6 +136,10 @@ def sample_generator(shards: Iterable[Path], shuffle_samples: bool = True, seed:
                         "slot_param_mask": slot_param_mask,
                         "slot_weight": data["slot_weight"][i].astype(np.float32),
                         "global_params_norm": data["global_params_norm"][i].astype(np.float32),
+                        "d_spacing_rule": data["d_spacing_rule"][i].astype(np.float32),
+                        "q": data["q"][i].astype(np.float32),
+                        "I_clean": data["I_clean"][i].astype(np.float32),
+                        "point_mask": data["point_mask"][i].astype(bool),
                     }
                     yield inputs, labels
                     emitted += 1
@@ -139,6 +153,7 @@ def make_tfrecord_dataset(
     shuffle: bool = True,
     seed: int = 0,
     max_samples: int | None = None,
+    drop_remainder: bool = False,
 ):
     files = [str(p) for p in shards]
     ds = tf.data.Dataset.from_tensor_slices(files)
@@ -155,7 +170,7 @@ def make_tfrecord_dataset(
         ds = ds.take(max_samples)
     if shuffle:
         ds = ds.shuffle(buffer_size=min(8192, max(batch_size * 64, 1024)), seed=seed, reshuffle_each_iteration=True)
-    return ds.batch(batch_size, drop_remainder=False).prefetch(tf.data.AUTOTUNE)
+    return ds.batch(batch_size, drop_remainder=drop_remainder).prefetch(tf.data.AUTOTUNE)
 
 
 def make_dataset(
@@ -165,13 +180,21 @@ def make_dataset(
     shuffle: bool = True,
     seed: int = 0,
     max_samples: int | None = None,
+    drop_remainder: bool = False,
 ):
     shards = list_shards(dataset_dir, split)
     if not shards:
         raise FileNotFoundError(f"No {split} shards found under {Path(dataset_dir) / split}")
     validate_shards(shards)
     if shards[0].suffix == ".tfrecord":
-        return make_tfrecord_dataset(shards, batch_size=batch_size, shuffle=shuffle, seed=seed, max_samples=max_samples)
+        return make_tfrecord_dataset(
+            shards,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            seed=seed,
+            max_samples=max_samples,
+            drop_remainder=drop_remainder,
+        )
 
     ds = tf.data.Dataset.from_generator(
         lambda: sample_generator(shards, shuffle_samples=shuffle, seed=seed, max_samples=max_samples),
@@ -179,5 +202,5 @@ def make_dataset(
     )
     if shuffle:
         ds = ds.shuffle(buffer_size=min(2048, max(batch_size * 16, 128)), seed=seed, reshuffle_each_iteration=True)
-    ds = ds.batch(batch_size, drop_remainder=False).prefetch(tf.data.AUTOTUNE)
+    ds = ds.batch(batch_size, drop_remainder=drop_remainder).prefetch(tf.data.AUTOTUNE)
     return ds

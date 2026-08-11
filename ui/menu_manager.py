@@ -55,6 +55,25 @@ class MenuManager(QObject):
                 action.triggered.connect(self.open_geometry_calibration)
                 tools_menu.addAction(action)
                 self.main_window.actionGeometryCalibration = action
+
+            tools_menu.addSeparator()
+            if not hasattr(self.main_window, "actionFormatConverter"):
+                action = QAction("Format Converter...", self.main_window)
+                action.setShortcut("Ctrl+Shift+C")
+                action.setStatusTip("Convert NXS, CBF, and TIFF detector images")
+                action.triggered.connect(lambda: self.open_format_converter(include_current=True))
+                tools_menu.addAction(action)
+                self.main_window.actionFormatConverter = action
+
+                shortcuts = tools_menu.addMenu("Format Converter shortcuts")
+                current_action = shortcuts.addAction("Convert current file")
+                current_action.setStatusTip("Add the currently opened file to a new conversion task")
+                current_action.triggered.connect(lambda: self.open_format_converter(include_current=True))
+                open_action = shortcuts.addAction("Open converter...")
+                open_action.setStatusTip("Open an empty format conversion task")
+                open_action.triggered.connect(lambda: self.open_format_converter(include_current=False))
+                self.main_window.actionConvertCurrentFile = current_action
+                self.main_window.actionOpenFormatConverter = open_action
         except Exception as exc:
             print(f"Failed to create Tools menu: {exc}")
 
@@ -73,6 +92,53 @@ class MenuManager(QObject):
             dialog.activateWindow()
         except Exception as exc:
             QMessageBox.warning(self.main_window, "Geometry Calibration", f"The calibration tool could not be opened:\n{exc}")
+
+    def _current_detector_file(self) -> str:
+        """Return the file belonging to the active image page when possible."""
+        components = getattr(self.main_window, "components", None)
+        waxs_page = getattr(components, "waxs_page", None)
+        current_index = None
+        try:
+            current_index = self.main_window.mainWindowWidget.currentIndex()
+        except Exception:
+            pass
+        waxs_index = getattr(self.main_window, "waxsPageIndex", None)
+        if waxs_page is not None and current_index == waxs_index:
+            path = getattr(waxs_page, "current_file", "")
+            if path:
+                return str(path)
+
+        controller = self._fitting_controller()
+        if controller is not None:
+            path = controller.get_imported_file()
+            if path:
+                return str(path)
+        if waxs_page is not None:
+            return str(getattr(waxs_page, "current_file", "") or "")
+        return ""
+
+    def open_format_converter(self, *, include_current: bool = True):
+        """Open one modeless converter; adding a current file never starts work."""
+        try:
+            dialog = getattr(self, "_format_converter_dialog", None)
+            if dialog is None:
+                from ui.format_converter_dialog import FormatConverterDialog
+
+                current_file = self._current_detector_file() if include_current else ""
+                dialog = FormatConverterDialog(self.main_window, current_file=current_file)
+                dialog.destroyed.connect(lambda: setattr(self, "_format_converter_dialog", None))
+                self._format_converter_dialog = dialog
+            elif include_current:
+                current_file = self._current_detector_file()
+                if current_file:
+                    dialog.current_file = current_file
+                    dialog.current_button.setEnabled(True)
+                    dialog.add_paths([current_file])
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+        except Exception as exc:
+            QMessageBox.warning(self.main_window, "Format Converter", f"The converter could not be opened:\n{exc}")
     
     def create_parameters_menu(self):
         """Create Parameters menu"""

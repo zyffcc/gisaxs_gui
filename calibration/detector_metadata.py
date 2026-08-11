@@ -77,6 +77,17 @@ def extract_nxs_metadata(handle: h5py.File) -> dict[str, Any]:
         "/entry/instrument/detector/beam_center_y",
         "/entry/instrument/detector/beam_center_y_pixel",
     ))
+    exposure_time = _optional(handle, (
+        "/entry/instrument/detector/count_time",
+        "/entry/instrument/detector/frame_time",
+        "/entry/instrument/detector/exposure_time",
+        "/entry/instrument/detector/collection/count_time",
+    ))
+    timestamp = _optional(handle, (
+        "/entry/start_time",
+        "/entry/instrument/detector/timestamp",
+        "/entry/instrument/detector/collection/date",
+    ))
     return {
         "energy_kev": energy_kev,
         "wavelength_angstrom": wavelength_a,
@@ -87,6 +98,8 @@ def extract_nxs_metadata(handle: h5py.File) -> dict[str, Any]:
         "distance_m": _metric(handle, "/entry/instrument/detector/distance"),
         "beam_center_x_px": float(center_x) if center_x is not None else None,
         "beam_center_y_px": float(center_y) if center_y is not None else None,
+        "exposure_time_s": float(exposure_time) if exposure_time is not None else None,
+        "timestamp": str(timestamp) if timestamp is not None else None,
     }
 
 
@@ -95,6 +108,8 @@ def extract_cbf_metadata(header: dict[str, Any], shape: tuple[int, int]) -> dict
     detector_match = re.search(r"^#\s*Detector:\s*([^,\r\n]+)", contents, re.MULTILINE | re.IGNORECASE)
     pixel_match = re.search(r"Pixel_size\s+([0-9.eE+-]+)\s*m\s*x\s*([0-9.eE+-]+)\s*m", contents, re.IGNORECASE)
     energy_match = re.search(r"(?:Beam_energy|Energy)\s*[:=]?\s*([0-9.eE+-]+)\s*(eV|keV)", contents, re.IGNORECASE)
+    exposure_match = re.search(r"Exposure_time\s+([0-9.eE+-]+)\s*s", contents, re.IGNORECASE)
+    timestamp_match = re.search(r"^#\s*(\d{4}-\d{2}-\d{2}T[^\r\n]+)", contents, re.MULTILINE)
     energy = None
     if energy_match:
         energy = float(energy_match.group(1)) / (1000.0 if energy_match.group(2).lower() == "ev" else 1.0)
@@ -111,6 +126,8 @@ def extract_cbf_metadata(header: dict[str, Any], shape: tuple[int, int]) -> dict
         "distance_m": None,
         "beam_center_x_px": None,
         "beam_center_y_px": None,
+        "exposure_time_s": float(exposure_match.group(1)) if exposure_match else None,
+        "timestamp": timestamp_match.group(1).strip() if timestamp_match else None,
         "format": "cbf",
         "header": {str(key): str(value) for key, value in header.items()},
         "transformations": [],

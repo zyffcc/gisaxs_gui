@@ -1,0 +1,21 @@
+{
+  "max_points": 1000,
+  "max_slots": 4,
+  "num_types": 4,
+  "learning_rate": 0.0001,
+  "batch_size": 64,
+  "epochs": 50,
+  "reconstruction_loss_weight": 0.05,
+  "reconstruction_start_epoch": 6,
+  "reconstruction_ramp_epochs": 5,
+  "reconstruction_q_stride": 16,
+  "reconstruction_samples_per_batch": 2,
+  "d_constraint_model": {
+    "explicit_presence_head": true,
+    "spacing_rules": {
+      "0": "free",
+      "1": "max_diameter",
+      "2": "mean_diameter"
+    }
+  }
+}

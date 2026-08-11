@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "gisaxs-k1-k4-phys-constraints",
+  "display_name": "GISAXS K1-K4 Physical Constraints",
+  "version": "2026.08.07-phys-v1",
+  "architecture": "ML1DGISAXSSlotModel",
+  "artifact": "model.keras",
+  "sha256": "30f07f88a702db5e8808e9cb27978121471c298c76508b5be76caf9c8e6d5153",
+  "max_points": 1000,
+  "max_slots": 4,
+  "num_types": 4,
+  "supported_k": [1, 2, 3, 4],
+  "required_inputs": [
+    "x",
+    "point_mask",
+    "global_features",
+    "type_allowed",
+    "param_low_norm",
+    "param_high_norm",
+    "param_range_mask",
+    "force_exist",
+    "global_low_norm",
+    "global_high_norm",
+    "global_range_mask",
+    "d_allowed",
+    "d_spacing_rule"
+  ],
+  "required_outputs": [
+    "exist_logit",
+    "type_logits",
+    "param_mu_norm",
+    "param_logstd_raw",
+    "d_present_logit",
+    "weight_logit",
+    "global_mu_norm",
+    "global_logstd_raw"
+  ],
+  "training": {
+    "dataset": "ML_1D_Fitting_GISAXS_K1K2K3K4_ALL_CONSTRAINTS_100K",
+    "epochs": 50,
+    "state": "complete",
+    "physical_reconstruction_loss": true,
+    "d_spacing_rules": ["free", "max_diameter", "mean_diameter"]
+  },
+  "provenance": "/data/dust/user/zhaiyufe/Models/ML_1D_Fitting_GISAXS_K1K2K3K4_ALL_CONSTRAINTS_100K_PHYS"
+}
