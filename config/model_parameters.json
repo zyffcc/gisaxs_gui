@@ -1,10 +1,10 @@
 {
     "fitting": {
         "global_parameters": {
-            "sigma_res": 0.0169,
-            "k_value": 1310.549674747558,
+            "sigma_res": 0.0159,
+            "k_value": 811.3856876605233,
             "int_res": 22.117123,
-            "nu_res": 7.8,
+            "nu_res": 7.7,
             "background": 0.0001
         },
         "particles": {
