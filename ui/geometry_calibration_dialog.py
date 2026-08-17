@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import json
 import logging
 from pathlib import Path
 from typing import Optional
@@ -30,7 +29,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -40,14 +38,27 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from calibration.application import apply_calibration_result
-from calibration.engine import CalibrationCancelled, CalibrationEngine
-from calibration.geometry_model import distance_from_ring_radius, q_to_ring_radius_m
-from calibration.image_loader import AmbiguousDatasetError, load_detector_image
-from calibration.models import CalibrationCandidate, CalibrationResult, DetectorImage
-from calibration.serialization import load_calibration, save_calibration
-from calibration.standards import STANDARDS, available_standards
-from core.global_params import global_params
+from src.gimap.app.presentation import (
+    AdvancedSection,
+    JobStatus,
+    ParameterSection,
+    PlotPanel,
+)
+from src.gimap.features.calibration.application import (
+    AmbiguousImageDatasetError,
+    CalibrationCancelledError,
+)
+from src.gimap.features.calibration.bootstrap import create_calibration_view_model
+from src.gimap.app.bootstrap import create_standalone_legacy_context
+from src.gimap.features.calibration.domain import (
+    STANDARDS,
+    CalibrationCandidate,
+    CalibrationResult,
+    DetectorImage,
+    available_standards,
+    distance_from_ring_radius,
+    q_to_ring_radius_m,
+)
 from ui.app_assets import app_icon
 from utils.path_utils import normalize_path
 
@@ -64,14 +75,15 @@ class ImageLoaderWorker(QObject):
     finished = pyqtSignal(object)
     failed = pyqtSignal(object)
 
-    def __init__(self, path: str, dataset_path: Optional[str] = None):
+    def __init__(self, path: str, view_model, dataset_path: Optional[str] = None):
         super().__init__()
         self.path = path
+        self.view_model = view_model
         self.dataset_path = dataset_path
 
     def run(self) -> None:
         try:
-            self.finished.emit(load_detector_image(self.path, dataset_path=self.dataset_path))
+            self.finished.emit(self.view_model.load_image(self.path, self.dataset_path))
         except Exception as exc:
             LOGGER.exception("Failed to load calibration image")
             self.failed.emit(exc)
@@ -82,9 +94,9 @@ class CalibrationWorker(QObject):
     finished = pyqtSignal(object)
     failed = pyqtSignal(object)
 
-    def __init__(self, image: DetectorImage, options: dict):
+    def __init__(self, view_model, options: dict):
         super().__init__()
-        self.image = image
+        self.view_model = view_model
         self.options = options
         self.cancel_requested = False
 
@@ -93,13 +105,15 @@ class CalibrationWorker(QObject):
 
     def run(self) -> None:
         try:
-            engine = CalibrationEngine(
-                progress=lambda value, stage: self.progress.emit(value, stage),
-                cancelled=lambda: self.cancel_requested,
+            self.finished.emit(
+                self.view_model.run_calibration(
+                    self.options,
+                    progress=lambda value, stage: self.progress.emit(value, stage),
+                    cancelled=lambda: self.cancel_requested,
+                )
             )
-            self.finished.emit(engine.calibrate(self.image, **self.options))
         except Exception as exc:
-            if not isinstance(exc, CalibrationCancelled):
+            if not isinstance(exc, CalibrationCancelledError):
                 LOGGER.exception("Geometry calibration failed")
             self.failed.emit(exc)
 
@@ -116,9 +130,31 @@ def _spin(minimum: float, maximum: float, value: float, decimals: int = 4) -> QD
 class GeometryCalibrationDialog(QDialog):
     calibrationApplied = pyqtSignal(object)
 
-    def __init__(self, main_window=None):
+    @property
+    def image(self) -> Optional[DetectorImage]:
+        return self.view_model.image
+
+    @image.setter
+    def image(self, value: Optional[DetectorImage]) -> None:
+        self.view_model.image = value
+
+    @property
+    def result(self) -> Optional[CalibrationResult]:
+        return self.view_model.result
+
+    @result.setter
+    def result(self, value: Optional[CalibrationResult]) -> None:
+        self.view_model.result = value
+
+    def __init__(self, main_window=None, app_context=None):
         super().__init__(main_window)
         self.main_window = main_window
+        self.app_context = (
+            app_context
+            or getattr(main_window, "app_context", None)
+            or create_standalone_legacy_context()
+        )
+        self.view_model = create_calibration_view_model(self.app_context)
         self.image: Optional[DetectorImage] = None
         self.result: Optional[CalibrationResult] = None
         self._load_thread: Optional[QThread] = None
@@ -133,11 +169,7 @@ class GeometryCalibrationDialog(QDialog):
         self._overlay_timer.setSingleShot(True)
         self._overlay_timer.setInterval(80)
         self._overlay_timer.timeout.connect(self.redraw_preview)
-        try:
-            detector_path = Path(__file__).resolve().parents[1] / "config" / "detectors.json"
-            self.detector_models = json.loads(detector_path.read_text(encoding="utf-8"))
-        except Exception:
-            self.detector_models = {}
+        self.detector_models = self.view_model.detector_models
         self.setWindowTitle("Geometry Calibration")
         self.setWindowIcon(app_icon())
         self.setWindowFlags(
@@ -229,6 +261,12 @@ class GeometryCalibrationDialog(QDialog):
         left = QVBoxLayout(controls)
         left.setContentsMargins(0, 0, 6, 0)
 
+        self.calibration_input_section = ParameterSection(
+            "Input",
+            "Choose a calibration image and the essential experiment metadata.",
+            controls,
+        )
+
         file_group = QGroupBox("Calibration image")
         file_layout = QHBoxLayout(file_group)
         self.path_edit = QLineEdit()
@@ -236,7 +274,7 @@ class GeometryCalibrationDialog(QDialog):
         self.open_button = QPushButton("Open...")
         file_layout.addWidget(self.path_edit, 1)
         file_layout.addWidget(self.open_button)
-        left.addWidget(file_group)
+        self.calibration_input_section.add_widget(file_group)
 
         input_group = QGroupBox("Input")
         input_form = QFormLayout(input_group)
@@ -266,11 +304,15 @@ class GeometryCalibrationDialog(QDialog):
         input_form.addRow("Pixel size:", self.pixel_label)
         input_form.addRow("Detector:", self.detector_label)
         input_form.addRow("Detector model:", self.detector_combo)
-        left.addWidget(input_group)
+        self.calibration_input_section.add_widget(input_group)
+        left.addWidget(self.calibration_input_section)
 
-        self.advanced_group = QGroupBox("Advanced Settings")
-        self.advanced_group.setCheckable(True)
-        self.advanced_group.setChecked(False)
+        self.calibration_advanced_section = AdvancedSection(
+            "Advanced configuration",
+            "Detector overrides, custom search bounds and preview overlays.",
+            controls,
+        )
+        self.advanced_group = QGroupBox("Detector and display overrides")
         advanced_form = QFormLayout(self.advanced_group)
         self.pixel_x_spin = _spin(1.0, 1000.0, 172.0, 4)
         self.pixel_y_spin = _spin(1.0, 1000.0, 172.0, 4)
@@ -295,8 +337,14 @@ class GeometryCalibrationDialog(QDialog):
         advanced_form.addRow(self.log_check)
         advanced_form.addRow(self.mask_check)
         advanced_form.addRow(self.rings_check)
-        left.addWidget(self.advanced_group)
+        self.calibration_advanced_section.add_widget(self.advanced_group)
+        left.addWidget(self.calibration_advanced_section)
 
+        self.calibration_run_section = ParameterSection(
+            "Run",
+            "Run automatic calibration, monitor the current stage, or cancel safely.",
+            controls,
+        )
         run_row = QHBoxLayout()
         self.calibrate_button = QPushButton("Auto Calibration")
         self.calibrate_button.setObjectName("primaryCalibrationButton")
@@ -304,13 +352,13 @@ class GeometryCalibrationDialog(QDialog):
         self.cancel_button = QPushButton("Cancel")
         run_row.addWidget(self.calibrate_button, 1)
         run_row.addWidget(self.cancel_button)
-        left.addLayout(run_row)
-        self.progress = QProgressBar()
-        self.progress.setValue(0)
-        self.stage_label = QLabel("Open a calibration image to begin.")
-        self.stage_label.setWordWrap(True)
-        left.addWidget(self.progress)
-        left.addWidget(self.stage_label)
+        self.calibration_run_section.add_layout(run_row)
+        self.job_status = JobStatus(controls)
+        self.job_status.set_actions_visible(pause=False, cancel=False, details=False)
+        self.progress = self.job_status.progress_bar
+        self.stage_label = self.job_status.message_label
+        self.calibration_run_section.add_widget(self.job_status)
+        left.addWidget(self.calibration_run_section)
         left.addStretch(1)
         controls_scroll = QScrollArea()
         controls_scroll.setObjectName("calibrationControlsScroll")
@@ -326,7 +374,12 @@ class GeometryCalibrationDialog(QDialog):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(6, 0, 0, 0)
         self.right_splitter = QSplitter(Qt.Vertical)
-        figure_group = QGroupBox("Image Preview")
+        self.calibration_preview_panel = PlotPanel(
+            "Preview",
+            "Inspect the detector image, detected rings and candidate overlays.",
+            right,
+        )
+        figure_group = QWidget(self.calibration_preview_panel)
         figure_layout = QVBoxLayout(figure_group)
         self.figure = Figure(figsize=(7, 5), constrained_layout=False)
         self.figure.subplots_adjust(left=0.08, right=0.98, bottom=0.10, top=0.96)
@@ -380,7 +433,8 @@ class GeometryCalibrationDialog(QDialog):
         self.overlay_legend.setVisible(False)
         figure_layout.addWidget(self.overlay_legend)
         figure_layout.addWidget(self.canvas, 1)
-        self.right_splitter.addWidget(figure_group)
+        self.calibration_preview_panel.set_plot_widget(figure_group)
+        self.right_splitter.addWidget(self.calibration_preview_panel)
 
         lower = QSplitter(Qt.Horizontal)
         result_group = QGroupBox("Results")
@@ -407,7 +461,13 @@ class GeometryCalibrationDialog(QDialog):
         lower.setStretchFactor(0, 1)
         lower.setStretchFactor(1, 2)
         self.results_splitter = lower
-        self.right_splitter.addWidget(lower)
+        self.calibration_results_section = ParameterSection(
+            "Results",
+            "Review the selected solution and alternative candidates before applying it.",
+            right,
+        )
+        self.calibration_results_section.add_widget(lower, 1)
+        self.right_splitter.addWidget(self.calibration_results_section)
         self.right_splitter.setStretchFactor(0, 4)
         self.right_splitter.setStretchFactor(1, 2)
         self.right_splitter.setSizes([430, 150])
@@ -450,8 +510,19 @@ class GeometryCalibrationDialog(QDialog):
         manual_group_layout.addWidget(self.manual_panel)
         self.manual_panel.setVisible(False)
         self.manual_group.setMaximumHeight(40)
-        root.addWidget(self.manual_group)
+        self.calibration_manual_section = AdvancedSection(
+            "Advanced manual refinement",
+            "Fine-tune the selected center, distance or ring correspondence.",
+            self,
+        )
+        self.calibration_manual_section.add_widget(self.manual_group)
+        root.addWidget(self.calibration_manual_section)
 
+        self.calibration_export_section = ParameterSection(
+            "Export",
+            "Import or save a calibration, or apply the selected result to the project.",
+            self,
+        )
         buttons = QHBoxLayout()
         self.import_button = QPushButton("Import Calibration...")
         self.export_button = QPushButton("Export Calibration...")
@@ -462,7 +533,8 @@ class GeometryCalibrationDialog(QDialog):
         buttons.addStretch(1)
         buttons.addWidget(self.apply_button)
         buttons.addWidget(self.close_button)
-        root.addLayout(buttons)
+        self.calibration_export_section.add_layout(buttons)
+        root.addWidget(self.calibration_export_section)
 
     def _connect_signals(self) -> None:
         self.open_button.clicked.connect(self.open_image_dialog)
@@ -481,6 +553,9 @@ class GeometryCalibrationDialog(QDialog):
         self.clean_preview_button.toggled.connect(self._clean_preview_toggled)
         self.expand_preview_button.clicked.connect(self._toggle_preview_expanded)
         self.manual_refine_button.toggled.connect(self.manual_group.setChecked)
+        self.calibration_manual_section.expandedChanged.connect(
+            self.manual_group.setChecked
+        )
         self.manual_group.toggled.connect(self._manual_group_toggled)
         self.standard_combo.currentIndexChanged.connect(self._populate_theory_rings)
         self.detector_combo.currentIndexChanged.connect(self._detector_model_changed)
@@ -509,6 +584,7 @@ class GeometryCalibrationDialog(QDialog):
         self.manual_group.setEnabled(not running and self.result is not None)
 
     def _manual_group_toggled(self, checked: bool) -> None:
+        self.calibration_manual_section.set_expanded(checked)
         self.manual_panel.setVisible(checked)
         self.manual_group.setMaximumHeight(16777215 if checked else 40)
         blocker = QSignalBlocker(self.manual_refine_button)
@@ -547,11 +623,10 @@ class GeometryCalibrationDialog(QDialog):
         if self._load_thread is not None and self._load_thread.isRunning():
             return
         self.path_edit.setText(path)
-        self.progress.setRange(0, 0)
-        self.stage_label.setText("Reading image...")
+        self.job_status.set_state("running", "Reading image...", progress=None)
         self._set_running(True)
         self._load_thread = QThread(self)
-        self._load_worker = ImageLoaderWorker(path, dataset_path)
+        self._load_worker = ImageLoaderWorker(path, self.view_model, dataset_path)
         self._load_worker.moveToThread(self._load_thread)
         self._load_thread.started.connect(self._load_worker.run)
         self._load_worker.finished.connect(self._image_loaded)
@@ -579,14 +654,20 @@ class GeometryCalibrationDialog(QDialog):
         if image.distance_m:
             self.estimated_distance_spin.setValue(image.distance_m * 1000.0)
         else:
-            current_distance = global_params.get_parameter("fitting", "detector.distance", 0.0)
+            current_distance = self.view_model.current_geometry(
+                {
+                    "distance": 0.0,
+                    "beam_center_x": 0.0,
+                    "beam_center_y": 0.0,
+                }
+            )["distance"]
             if current_distance and float(current_distance) > 0:
                 self.estimated_distance_spin.setValue(float(current_distance))
         if image.pixel_size_x_m and image.pixel_size_y_m:
             self.pixel_label.setText(f"{image.pixel_size_x_m * 1e6:.3f} × {image.pixel_size_y_m * 1e6:.3f} µm (metadata)")
         else:
             self.pixel_label.setText("Not detected — enter in Advanced Settings")
-            self.advanced_group.setChecked(True)
+            self.calibration_advanced_section.set_expanded(True)
         self.detector_label.setText(image.detector_name or "Not identified")
         detector_index = 0
         if image.detector_name:
@@ -627,6 +708,11 @@ class GeometryCalibrationDialog(QDialog):
             f"{energy_note}{standard_note}. "
             "Click Auto Calibration."
         )
+        self.job_status.set_state(
+            "succeeded",
+            self.stage_label.text(),
+            progress=1.0,
+        )
         self.preview_info_label.setText(
             f"{Path(image.source_path).name}  ·  {image.data.shape[1]} × {image.data.shape[0]} px"
         )
@@ -639,7 +725,7 @@ class GeometryCalibrationDialog(QDialog):
         model_name = self.detector_combo.currentData()
         if not model_name or model_name == "custom":
             if model_name == "custom":
-                self.advanced_group.setChecked(True)
+                self.calibration_advanced_section.set_expanded(True)
             return
         model = self.detector_models.get(model_name, {})
         pixel_x = model.get("pixel_size_x")
@@ -652,10 +738,8 @@ class GeometryCalibrationDialog(QDialog):
         self.detector_label.setText(model_name)
 
     def _image_failed(self, path: str, exc: Exception) -> None:
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self.stage_label.setText("Failed to load image.")
-        if isinstance(exc, AmbiguousDatasetError):
+        self.job_status.set_state("failed", "Failed to load image.", progress=0.0)
+        if isinstance(exc, AmbiguousImageDatasetError):
             from PyQt5.QtWidgets import QInputDialog
             selected, ok = QInputDialog.getItem(self, "Select NXS Dataset", "Detector image dataset:", exc.paths, 0, False)
             if ok and selected:
@@ -701,12 +785,14 @@ class GeometryCalibrationDialog(QDialog):
         except ValueError as exc:
             QMessageBox.warning(self, "Calibration Input", str(exc))
             return
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self.stage_label.setText("Starting calibration...")
+        self.job_status.set_state(
+            "running",
+            "Starting calibration...",
+            progress=0.0,
+        )
         self._set_running(True)
         self._cal_thread = QThread(self)
-        self._cal_worker = CalibrationWorker(self.image, options)
+        self._cal_worker = CalibrationWorker(self.view_model, options)
         self._cal_worker.moveToThread(self._cal_thread)
         self._cal_thread.started.connect(self._cal_worker.run)
         self._cal_worker.progress.connect(self._calibration_progress)
@@ -720,17 +806,23 @@ class GeometryCalibrationDialog(QDialog):
     def cancel_calibration(self) -> None:
         if self._cal_worker is not None:
             self._cal_worker.cancel()
-            self.stage_label.setText("Cancelling after the current numerical step...")
+            self.job_status.set_state(
+                "running",
+                "Cancelling after the current numerical step...",
+                progress=self.progress.value() / max(1, self.progress.maximum()),
+            )
             self.cancel_button.setEnabled(False)
 
     def _calibration_progress(self, value: int, stage: str) -> None:
-        self.progress.setValue(value)
-        self.stage_label.setText(stage)
+        self.job_status.set_state("running", stage, progress=value / 100.0)
 
     def _calibration_finished(self, result: CalibrationResult) -> None:
         self.result = result
-        self.progress.setValue(100)
-        self.stage_label.setText("Calibration complete. Review the selected candidate, then Apply.")
+        self.job_status.set_state(
+            "succeeded",
+            "Calibration complete. Review the selected candidate, then Apply.",
+            progress=1.0,
+        )
         candidate_blocker = QSignalBlocker(self.candidate_table)
         self._populate_candidates()
         self.candidate_table.selectRow(0)
@@ -740,11 +832,16 @@ class GeometryCalibrationDialog(QDialog):
         self.manual_group.setChecked(True)
 
     def _calibration_failed(self, exc: Exception) -> None:
-        self.progress.setValue(0)
-        if isinstance(exc, CalibrationCancelled):
-            self.stage_label.setText("Calibration cancelled.")
+        if isinstance(exc, CalibrationCancelledError):
+            self.job_status.set_state(
+                "cancelled", "Calibration cancelled.", progress=0.0
+            )
         else:
-            self.stage_label.setText("Calibration failed. Adjust the inputs and try again.")
+            self.job_status.set_state(
+                "failed",
+                "Calibration failed. Adjust the inputs and try again.",
+                progress=0.0,
+            )
             QMessageBox.warning(self, "Geometry Calibration", str(exc))
         self._set_running(False)
 
@@ -1010,14 +1107,49 @@ class GeometryCalibrationDialog(QDialog):
             if "Geometry was manually adjusted after automatic calibration." not in candidate.warnings:
                 candidate.warnings.append("Geometry was manually adjusted after automatic calibration.")
 
+    def _sync_main_window_geometry(self) -> None:
+        """把已保存的 calibration 结果反映到现有 PyQt controls。"""
+        if self.result is None or self.main_window is None:
+            return
+        candidate = self.result.selected_candidate
+        page = getattr(getattr(self.main_window, "components", None), "waxs_page", None)
+        if page is not None:
+            controls = {
+                "center_x_spin": candidate.center_x_px,
+                "center_y_spin": candidate.center_y_px,
+                "distance_spin": candidate.distance_mm,
+                "pixel_x_spin": self.result.pixel_size_x_m * 1e6,
+                "pixel_y_spin": self.result.pixel_size_y_m * 1e6,
+                "wavelength_spin": self.result.wavelength_angstrom,
+            }
+            for name, value in controls.items():
+                widget = getattr(page, name, None)
+                if widget is not None:
+                    widget.setValue(float(value))
+            if hasattr(page, "refresh_view"):
+                page.refresh_view()
+        if hasattr(self.main_window, "statusbar"):
+            self.main_window.statusbar.showMessage(
+                "Geometry calibration applied: center "
+                f"({candidate.center_x_px:.2f}, {candidate.center_y_px:.2f}), "
+                f"distance {candidate.distance_mm:.2f} mm"
+            )
+
     def apply_result(self) -> None:
         if self.result is None:
             return
         self._commit_manual_values()
-        current_distance = float(global_params.get_parameter("fitting", "detector.distance", self.result.selected_candidate.distance_mm))
-        current_x = float(global_params.get_parameter("fitting", "detector.beam_center_x", self.result.selected_candidate.center_x_px))
-        current_y = float(global_params.get_parameter("fitting", "detector.beam_center_y", self.result.selected_candidate.center_y_px))
         candidate = self.result.selected_candidate
+        current = self.view_model.current_geometry(
+            {
+                "distance": candidate.distance_mm,
+                "beam_center_x": candidate.center_x_px,
+                "beam_center_y": candidate.center_y_px,
+            }
+        )
+        current_distance = current["distance"]
+        current_x = current["beam_center_x"]
+        current_y = current["beam_center_y"]
         significant = (
             abs(current_distance - candidate.distance_mm) / max(abs(current_distance), 1.0) > 0.05
             or abs(current_x - candidate.center_x_px) > 10.0
@@ -1031,8 +1163,8 @@ class GeometryCalibrationDialog(QDialog):
             )
             if answer != QMessageBox.Yes:
                 return
-        apply_calibration_result(self.result, self.main_window)
-        global_params.save_user_parameters()
+        self.view_model.apply_result()
+        self._sync_main_window_geometry()
         self.calibrationApplied.emit(self.result)
         QMessageBox.information(self, "Geometry Calibration", "The calibrated geometry was applied to SAXS, GISAXS, and GIWAXS state.")
 
@@ -1044,7 +1176,7 @@ class GeometryCalibrationDialog(QDialog):
         path, _ = QFileDialog.getSaveFileName(self, "Export Calibration", default, "JSON Files (*.json)")
         if path:
             try:
-                save_calibration(self.result, normalize_path(path))
+                self.view_model.export_result(normalize_path(path))
                 self.stage_label.setText(f"Calibration exported to {path}")
             except Exception as exc:
                 LOGGER.exception("Failed to export calibration")
@@ -1055,10 +1187,10 @@ class GeometryCalibrationDialog(QDialog):
         if not path:
             return
         try:
-            self.result = load_calibration(normalize_path(path))
+            previous_image = self.image
+            self.result = self.view_model.import_result(normalize_path(path))
             self.path_edit.setText(self.result.source_image)
-            if Path(self.result.source_image).exists():
-                self.image = load_detector_image(self.result.source_image)
+            if self.image is not previous_image:
                 self._preview_cache.clear()
             self.energy_spin.setValue(self.result.energy_kev)
             self.pixel_x_spin.setValue(self.result.pixel_size_x_m * 1e6)

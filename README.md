@@ -40,7 +40,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 python main.py
 ```
@@ -57,9 +57,29 @@ Conda can also be used if preferred:
 ```powershell
 conda create -n GUI python=3.11 -y
 conda activate GUI
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python main.py
 ```
+
+#### BornAgain on Windows and macOS
+
+GIMaP requires BornAgain 24.1. On Windows (and Linux), BornAgain provides a PyPI
+wheel for supported Python versions, so `requirements.txt` installs it directly.
+
+BornAgain does not publish a prebuilt macOS wheel on PyPI. On macOS, first install
+the official Homebrew formula:
+
+```bash
+brew tap mlz/homebrew https://jugit.fz-juelich.de/mlz/homebrew/
+brew install mlz/homebrew/bornagain@24.1
+bornagain_info
+```
+
+The Homebrew wheel must have the same CPython ABI tag as the GIMaP environment:
+for example, a `cp314` wheel cannot be installed into Python 3.10. Do not force an
+ABI-mismatched wheel; use a matching project wheel or build BornAgain 24.1 against
+the same Python interpreter. See [the development guide](docs/development.md) for
+the complete platform-specific setup and verification steps.
 
 
 ### GUI Layout Too Large for Small Screen
@@ -161,6 +181,19 @@ AI fitting models are discovered from fitting-model folders under `modules/`, in
 - A display large enough for scientific control panels is recommended.
 - CPU execution is supported. GPU TensorFlow setups are not configured by this repository and must be installed separately if required.
 
+## Development
+
+Install the development dependencies and run the unified verification command:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python tools/check.py
+```
+
+This runs the existing pytest suite and a deliberately narrow Ruff baseline
+without formatting legacy code. Configuration and known lint exclusions are in
+`pyproject.toml`; details are in [docs/development.md](docs/development.md).
+
 ## Dependencies
 
 Dependencies are listed in `requirements.txt`:
@@ -168,7 +201,7 @@ Dependencies are listed in `requirements.txt`:
 - numpy>=1.24,<2.0
 - scipy>=1.10
 - matplotlib>=3.7
-- BornAgain==24.1
+- BornAgain==24.1 on Windows and Linux; installed separately on macOS
 - PyQt5>=5.15
 - opencv-python>=4.8
 - h5py>=3.9

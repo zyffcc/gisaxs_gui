@@ -9,13 +9,12 @@ import re
 import time
 import datetime
 import copy
-import sys
 import shutil
 import hashlib
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint, QProcess, QUrl, QSettings, QEvent
+from PyQt5.QtCore import QObject, pyqtSignal, Qt, QThread, QTimer, QPoint, QUrl, QSettings, QEvent
 from PyQt5.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -61,109 +60,48 @@ GISAXS_IMAGE_COLORMAPS = (
     "gray",
 )
 
-
-def apply_threshold_mask(image, enabled=False, lower=-1e12, upper=1e12):
-    """Return input intensities with invalid/thresholded pixels represented as NaN."""
-    array = np.asarray(image, dtype=np.float32)
-    if not enabled:
-        return array
-    low, high = sorted((float(lower), float(upper)))
-    masked = array.copy()
-    invalid = ~np.isfinite(masked) | (masked < low) | (masked > high)
-    masked[invalid] = np.nan
-    return masked
-
-
-def apply_input_image_options(
-    image,
-    *,
-    flip_ud=False,
-    threshold_enabled=False,
-    threshold_min=-1e12,
-    threshold_max=1e12,
-):
-    """Apply read-level transforms used by every Cut Fitting consumer."""
-    transformed = np.asarray(image, dtype=np.float32)
-    if flip_ud:
-        transformed = np.ascontiguousarray(np.flipud(transformed))
-    return apply_threshold_mask(
-        transformed,
-        enabled=threshold_enabled,
-        lower=threshold_min,
-        upper=threshold_max,
-    )
-
-
-def finite_mean_axis(data, axis):
-    """Mean along an axis while giving masked/NaN pixels zero statistical weight."""
-    array = np.asarray(data, dtype=float)
-    finite = np.isfinite(array)
-    counts = np.sum(finite, axis=axis)
-    totals = np.sum(np.where(finite, array, 0.0), axis=axis)
-    result = np.full(np.shape(totals), np.nan, dtype=float)
-    np.divide(totals, counts, out=result, where=counts > 0)
-    return result
-
-
-def finite_log_profiles(data):
-    """Build center-finding profiles without giving masked pixels any weight."""
-    array = np.asarray(data, dtype=float)
-    finite = np.isfinite(array)
-    if not np.any(finite):
-        raise ValueError("No valid detector pixels remain after masking")
-    log_data = np.full(array.shape, np.nan, dtype=float)
-    log_data[finite] = np.log10(np.maximum(array[finite], 1.0))
-    vertical = np.nansum(log_data, axis=1)
-    vertical[~np.any(finite, axis=1)] = -np.inf
-    horizontal = np.nansum(log_data, axis=0)
-    horizontal[~np.any(finite, axis=0)] = 0.0
-    return vertical, horizontal
-
-
-# 函数说明：使用束心左右镜像补全 detector gap 像素。
-def mirror_fill_detector_gaps(image, center_x=None, gap_value=-1, gap_margin_px=0):
-    if center_x is None:
-        raise ValueError("center_x is required for mirror gap fill")
-    arr = np.asarray(image)
-    if arr.ndim != 2:
-        raise ValueError("mirror gap fill expects a 2D image")
-
-    filled = arr.copy()
-    source = arr.copy()
-    gap_mask = arr == gap_value
-    if not np.any(gap_mask):
-        return filled
-
-    margin = max(0, int(gap_margin_px or 0))
-    replace_mask = gap_mask.copy()
-    if margin > 0:
-        for dx in range(-margin, margin + 1):
-            if dx == 0:
-                continue
-            shifted = np.zeros_like(gap_mask, dtype=bool)
-            if dx < 0:
-                shifted[:, :dx] = gap_mask[:, -dx:]
-            else:
-                shifted[:, dx:] = gap_mask[:, :-dx]
-            replace_mask |= shifted
-
-    gap_y, gap_x = np.where(replace_mask)
-    if gap_x.size == 0:
-        return filled
-
-    x_mirror = np.rint((2.0 * float(center_x)) - gap_x).astype(int)
-    in_bounds = (x_mirror >= 0) & (x_mirror < arr.shape[1])
-    if not np.any(in_bounds):
-        return filled
-
-    target_y = gap_y[in_bounds]
-    target_x = gap_x[in_bounds]
-    source_x = x_mirror[in_bounds]
-    source_values = source[target_y, source_x]
-    valid_source = (source_values != gap_value) & np.isfinite(source_values)
-    if np.any(valid_source):
-        filled[target_y[valid_source], target_x[valid_source]] = source_values[valid_source]
-    return filled
+from src.gimap.features.fitting.domain import (
+    CutSelection,
+    ConstraintSet,
+    ManualFitRequest,
+    ai_q_key,
+    apply_input_image_options,
+    apply_threshold_mask,
+    chi_square,
+    default_refine_bounds,
+    default_refine_selected,
+    extract_pixel_profile,
+    extract_q_profile,
+    filter_axis,
+    filter_for_display,
+    finite_log_profiles,
+    finite_mean_axis,
+    interpolate_series,
+    mirror_fill_detector_gaps,
+    normalize_intensity,
+    normalize_geometry,
+    optimize_scale_factor,
+    q_values_for_display,
+    q_values_for_model,
+    prepare_ai_curve,
+    run_manual_refinement,
+    sample_q_mesh_line,
+    sort_filter_pairs,
+    valid_y_values_for_limits,
+    constraint_registry,
+)
+from src.gimap.features.fitting.application import (
+    CandidateGenerationRequest,
+    ExportFitResultRequest,
+    LoadCurveRequest,
+    LoadScatteringFile,
+    LoadScatteringFileRequest,
+    ScatteringFileData,
+)
+from src.gimap.features.fitting.presentation import AiCandidateWorker
+from src.gimap.features.fitting.infrastructure.adapters import (
+    LocalScatteringFileRepository,
+)
 
 from ui.detector_parameters_dialog import DetectorParametersDialog
 from ui.responsive_layout import (
@@ -183,8 +121,6 @@ from utils.ai_fitting_models import (
     discover_ai_fitting_models,
     discover_model_in_path,
 )
-from utils.ai_fitting_constraints import ConstraintSet, constraint_registry, normalize_geometry
-from utils.ai_fitting_pipeline import FittingRequest, fitting_pipeline
 from utils.ai_fitting_profiles import DEFAULT_PROFILE_NAME, PROFILE_DEFAULTS, profile_registry
 from PyQt5.QtWidgets import QShortcut
 from PyQt5.QtGui import QKeySequence, QDesktopServices
@@ -2842,29 +2778,11 @@ class AsyncImageLoader(QThread):
                 return
 
             read_start = time.perf_counter()
-            if file_ext == '.nxs' and self.stack_count > 1:
-                self.progress_updated.emit(30, f"Loading and stacking {self.stack_count} NXS frames...")
-                image_data = self._load_multiple_nxs_frames(
-                    self.file_path,
-                    self.frame_index,
-                    self.stack_count,
-                )
-            elif file_ext in {'.tif', '.tiff'} and self.stack_count > 1:
-                self.progress_updated.emit(30, f"Loading and stacking {self.stack_count} TIFF files...")
-                image_data = self._load_multiple_detector_files(
-                    self.file_path,
-                    self.stack_count,
-                    {'.tif', '.tiff'},
-                )
-            elif file_ext in {'.nxs', '.tif', '.tiff'}:
-                self.progress_updated.emit(50, f"Loading {file_ext[1:].upper()} detector image...")
-                image_data = self._load_detector_file(self.file_path, self.frame_index)
-            elif self.stack_count == 1:
-                self.progress_updated.emit(50, "Loading single CBF file...")
-                image_data = self._load_single_cbf_file(self.file_path)
-            else:
-                self.progress_updated.emit(30, f"Loading and stacking {self.stack_count} files...")
-                image_data = self._load_multiple_cbf_files(self.file_path, self.stack_count)
+            image_data = self._load_scattering_file_compat(
+                self.file_path,
+                frame_index=self.frame_index,
+                stack_count=self.stack_count,
+            )
             print(f"[Timing] fabio read: {(time.perf_counter() - read_start) * 1000:.2f} ms ({os.path.basename(self.file_path)})")
 
             if image_data is not None:
@@ -2882,143 +2800,67 @@ class AsyncImageLoader(QThread):
         except Exception as e:
             self.error_occurred.emit(f"Error loading image: {str(e)}")
 
+    def _load_scattering_file_compat(self, file_path, frame_index=0, stack_count=1):
+        repository = LocalScatteringFileRepository(
+            prepare_path=self._prepare_file_for_read,
+            progress=self.progress_updated.emit,
+        )
+        result = LoadScatteringFile(repository).execute(
+            LoadScatteringFileRequest(
+                path=Path(normalize_path(file_path)),
+                frame_index=int(frame_index),
+                stack_count=int(stack_count),
+            )
+        )
+        if result.error is not None:
+            raise RuntimeError(f"[{result.error.code}] {result.error.message}")
+        loaded = result.value
+        self._last_source_files = [str(path) for path in loaded.source_files]
+        self._last_effective_files = list(loaded.metadata.get("effective_files", ()))
+        return loaded.image
+
     def _load_detector_file(self, file_path, frame_index=0):
-        """Reuse the WAXS/calibration detector loader for NXS and TIFF input."""
-        file_path = normalize_path(file_path)
-        # P03 NXS module series are discovered from sibling names by the shared
-        # loader, so retain the source path instead of isolating one module in
-        # the remote-file cache.
-        effective_file = file_path if file_path.lower().endswith('.nxs') else self._prepare_file_for_read(file_path)
-        self._last_source_files = [file_path]
-        self._last_effective_files = [effective_file]
-        detector_image = load_detector_image(effective_file, frame_idx=frame_index)
-        return np.asarray(detector_image.data, dtype=np.float32)
+        """Legacy loader entry delegated to the fitting file use case."""
+        return self._load_scattering_file_compat(
+            file_path,
+            frame_index=frame_index,
+            stack_count=1,
+        )
 
     def _load_multiple_nxs_frames(self, file_path, frame_index, stack_count):
-        """Sum consecutive frames from one logical NXS source via the shared loader."""
-        file_path = normalize_path(file_path)
-        frame_count = max(1, int(detect_nxs_frame_count(file_path)))
-        start_frame = max(0, min(int(frame_index), frame_count - 1))
-        actual_count = min(max(1, int(stack_count)), frame_count - start_frame)
-        summed_data = None
-        self._last_source_files = [file_path] * actual_count
-        self._last_effective_files = [file_path] * actual_count
-        for offset in range(actual_count):
-            frame = start_frame + offset
-            self.progress_updated.emit(
-                40 + int((offset / actual_count) * 40),
-                f"Processing NXS frame {frame + 1}/{frame_count}",
-            )
-            data = np.asarray(load_detector_image(file_path, frame_idx=frame).data, dtype=np.float32)
-            if summed_data is None:
-                summed_data = data.copy()
-            else:
-                summed_data += data
-        return summed_data
+        """Legacy NXS stack entry delegated to the fitting file use case."""
+        return self._load_scattering_file_compat(
+            file_path,
+            frame_index=frame_index,
+            stack_count=stack_count,
+        )
 
     def _load_multiple_detector_files(self, start_file, stack_count, extensions):
-        """Sum consecutive ordinary detector files such as TIFF images."""
-        start_file = normalize_path(start_file)
-        file_dir = os.path.dirname(start_file)
-        base_name = os.path.basename(start_file)
-        names = sorted(
-            (
-                name for name in os.listdir(file_dir)
-                if os.path.splitext(name)[1].lower() in set(extensions)
-            ),
-            key=self._natural_sort_key,
+        """Legacy ordinary-stack entry; extensions remain validated by the adapter."""
+        del extensions
+        return self._load_scattering_file_compat(
+            start_file,
+            frame_index=0,
+            stack_count=stack_count,
         )
-        try:
-            start_index = names.index(base_name)
-        except ValueError:
-            return None
-        actual_count = min(max(1, int(stack_count)), len(names) - start_index)
-        selected = names[start_index:start_index + actual_count]
-        self._last_source_files = [normalize_path(os.path.join(file_dir, name)) for name in selected]
-        self._last_effective_files = []
-        summed_data = None
-        for index, source_path in enumerate(self._last_source_files):
-            self.progress_updated.emit(
-                40 + int((index / actual_count) * 40),
-                f"Processing file {index + 1}/{actual_count}: {os.path.basename(source_path)}",
-            )
-            effective_file = self._prepare_file_for_read(source_path)
-            self._last_effective_files.append(effective_file)
-            data = np.asarray(load_detector_image(effective_file).data, dtype=np.float32)
-            if summed_data is None:
-                summed_data = data.copy()
-            else:
-                summed_data += data
-        return summed_data
 
-    # 函数说明：加载single cbf 文件。
     def _load_single_cbf_file(self, cbf_file):
-        """CBF"""
+        """Legacy CBF entry preserves the historical None-on-error contract."""
         try:
-            import fabio
-            cbf_file = normalize_path(cbf_file)
-            effective_file = self._prepare_file_for_read(cbf_file)
-            self._last_source_files = [cbf_file]
-            self._last_effective_files = [effective_file]
-            cbf_image = fabio.open(effective_file)
-            data = cbf_image.data
-
-            if data.dtype != np.float32:
-                data = data.astype(np.float32, copy=False)
-
-            return data
-
-        except Exception as e:
+            return self._load_scattering_file_compat(cbf_file, stack_count=1)
+        except Exception:
             return None
 
-    # 函数说明：加载multiple cbf 文件。
     def _load_multiple_cbf_files(self, start_file, stack_count):
-        """BF"""
+        """Legacy CBF stack entry preserves the historical None-on-error contract."""
         try:
-            start_file = normalize_path(start_file)
-            file_dir = os.path.dirname(start_file)
-            base_name = os.path.basename(start_file)
-
-            cbf_files = [f for f in os.listdir(file_dir) if f.lower().endswith('.cbf')]
-            cbf_files.sort(key=self._natural_sort_key)
-
-            try:
-                start_index = cbf_files.index(base_name)
-            except ValueError:
-                return None
-
-            available_files = len(cbf_files) - start_index
-            stack_count = min(max(1, int(stack_count)), available_files)
-
-            summed_data = None
-            files_to_stack = cbf_files[start_index:start_index + stack_count]
-            self._last_source_files = [normalize_path(os.path.join(file_dir, name)) for name in files_to_stack]
-            self._last_effective_files = []
-
-            import fabio
-            for i, file_name in enumerate(files_to_stack):
-                file_path = os.path.join(file_dir, file_name)
-                progress = 40 + int((i / len(files_to_stack)) * 40)
-                self.progress_updated.emit(progress, f"Processing file {i+1}/{len(files_to_stack)}: {file_name}")
-
-                try:
-                    effective_file = self._prepare_file_for_read(file_path)
-                    self._last_effective_files.append(effective_file)
-                    cbf_image = fabio.open(effective_file)
-                    data = cbf_image.data.astype(np.float32, copy=False) if cbf_image.data.dtype != np.float32 else cbf_image.data
-
-                    if summed_data is None:
-                        summed_data = data.copy() if data.dtype == np.float32 else data.astype(np.float32)
-                    else:
-                        summed_data += data
-
-                except Exception as e:
-                    continue
-
-            return summed_data
-
-        except Exception as e:
+            return self._load_scattering_file_compat(
+                start_file,
+                stack_count=stack_count,
+            )
+        except Exception:
             return None
+
 
 
 class FittingController(QObject):
@@ -3030,11 +2872,19 @@ class FittingController(QObject):
     fitting_completed = pyqtSignal(dict)
 
     # 函数说明：初始化对象状态和相关资源。
-    def __init__(self, ui, parent=None):
+    def __init__(self, ui, parent=None, fitting_view_model=None):
         super().__init__(parent)
         self.ui = ui
         self.parent = parent
         self.main_window = parent.parent if hasattr(parent, 'parent') else None
+        if fitting_view_model is None:
+            from src.gimap.app.bootstrap import create_standalone_legacy_context
+            from src.gimap.features.fitting.bootstrap import create_fitting_view_model
+
+            fitting_view_model = create_fitting_view_model(
+                create_standalone_legacy_context()
+            )
+        self.fitting_view_model = fitting_view_model
 
         self.q = None
         self.I = None
@@ -3206,7 +3056,8 @@ class FittingController(QObject):
         self._dynamic_show_layout = None
         self._dynamic_show_container = None
         self._particle_checkbox_host_name = ''
-        self._ai_process = None
+        self._ai_job_thread = None
+        self._ai_job_worker = None
         self._ai_output_dir = None
         self._ai_input_csv = None
         self._ai_action_buttons = []
@@ -4516,24 +4367,7 @@ class FittingController(QObject):
 
     # 函数说明：实现 interpolate series 相关逻辑。
     def _interpolate_series(self, x, y, x_new, method: str):
-        m = (method or 'Linear').lower()
-        if m == 'linear':
-            return np.interp(x_new, x, y)
-        if m == 'quadratic':
-            try:
-                from scipy.interpolate import interp1d
-                f = interp1d(x, y, kind='quadratic', bounds_error=False, fill_value='extrapolate')
-                return f(x_new)
-            except Exception:
-                coeff = np.polyfit(x, y, deg=min(2, max(1, len(x)-1)))
-                return np.polyval(coeff, x_new)
-        if m == 'spline':
-            try:
-                from scipy.interpolate import CubicSpline
-                return CubicSpline(x, y, extrapolate=True)(x_new)
-            except Exception:
-                return np.interp(x_new, x, y)
-        return np.interp(x_new, x, y)
+        return interpolate_series(x, y, x_new, method)
 
     # 函数说明：实现 对数 切线 debug 相关逻辑。
     def _log_cut_debug(self, message: str):
@@ -4564,88 +4398,53 @@ class FittingController(QObject):
     # 函数说明：实现 排序 过滤 切线 pairs 相关逻辑。
     def _sort_filter_cut_pairs(self, x_values, intensity_values, context: str = "cut", pixel_rows=None, log_vertical: bool = False):
         """Keep cut x/intensity arrays paired while removing bad values and sorting by x."""
-        x_arr = np.asarray(x_values, dtype=float).reshape(-1)
-        y_arr = np.asarray(intensity_values, dtype=float).reshape(-1)
-        n = min(x_arr.size, y_arr.size)
-        if x_arr.size != y_arr.size:
-            self._log_cut_debug(f"{context}: length mismatch x={x_arr.size}, intensity={y_arr.size}; truncating to {n}.")
-        x_arr = x_arr[:n]
-        y_arr = y_arr[:n]
-
-        rows_arr = None
-        if pixel_rows is not None:
-            rows_arr = np.asarray(pixel_rows).reshape(-1)[:n]
-
-        finite_mask = np.isfinite(x_arr) & np.isfinite(y_arr)
-        removed = int(n - np.sum(finite_mask))
-        if removed:
-            self._log_cut_debug(f"{context}: removed {removed} non-finite q/intensity point(s).")
-        x_arr = x_arr[finite_mask]
-        y_arr = y_arr[finite_mask]
-        if rows_arr is not None:
-            rows_arr = rows_arr[finite_mask]
-        if x_arr.size == 0:
-            raise Exception(f"{context}: no finite q/intensity pairs")
-
-        if log_vertical:
-            self._log_cut_debug(f"{context}: first/last q before sorting = {x_arr[0]:.8g}, {x_arr[-1]:.8g}")
-
-        order = np.argsort(x_arr, kind='mergesort')
-        x_arr = x_arr[order]
-        y_arr = y_arr[order]
-        if rows_arr is not None:
-            rows_arr = rows_arr[order]
-
-        if x_arr.size > 1:
-            unique_x, inverse, counts = np.unique(x_arr, return_inverse=True, return_counts=True)
-            if unique_x.size != x_arr.size:
-                summed_y = np.zeros(unique_x.size, dtype=float)
-                np.add.at(summed_y, inverse, y_arr)
-                y_arr = summed_y / counts
-                if rows_arr is not None:
-                    summed_rows = np.zeros(unique_x.size, dtype=float)
-                    np.add.at(summed_rows, inverse, rows_arr.astype(float))
-                    rows_arr = summed_rows / counts
-                duplicate_count = int(x_arr.size - unique_x.size)
-                self._log_cut_debug(
-                    f"{context}: merged {duplicate_count} duplicate q coordinate(s) before interpolation."
-                )
-                x_arr = unique_x
-
+        raw_x = np.asarray(x_values, dtype=float).reshape(-1)
+        if log_vertical and raw_x.size:
+            self._log_cut_debug(
+                f"{context}: first/last q before sorting = {raw_x[0]:.8g}, {raw_x[-1]:.8g}"
+            )
+        x_arr, y_arr, rows_arr = sort_filter_pairs(
+            x_values,
+            intensity_values,
+            context=context,
+            pixel_rows=pixel_rows,
+            on_diagnostic=self._log_cut_debug,
+        )
         if log_vertical:
             monotonic = bool(np.all(np.diff(x_arr) >= 0)) if x_arr.size > 1 else True
-            self._log_cut_debug(f"{context}: first/last q after sorting = {x_arr[0]:.8g}, {x_arr[-1]:.8g}; monotonic={monotonic}")
+            self._log_cut_debug(
+                f"{context}: first/last q after sorting = {x_arr[0]:.8g}, "
+                f"{x_arr[-1]:.8g}; monotonic={monotonic}"
+            )
             try:
                 max_idx = int(np.nanargmax(y_arr))
                 if rows_arr is not None and rows_arr.size:
-                    self._log_cut_debug(f"{context}: max intensity row={int(rows_arr[max_idx])}, q={x_arr[max_idx]:.8g}")
+                    self._log_cut_debug(
+                        f"{context}: max intensity row={int(rows_arr[max_idx])}, "
+                        f"q={x_arr[max_idx]:.8g}"
+                    )
                 else:
                     self._log_cut_debug(f"{context}: max intensity q={x_arr[max_idx]:.8g}")
             except Exception as exc:
                 self._log_cut_debug(f"{context}: max intensity diagnostic failed: {exc}")
             mode, count = self._get_axis_filter_debug_count(x_arr)
-            self._log_cut_debug(f"{context}: points after {mode} axis filter would be {count}/{x_arr.size}")
-
+            self._log_cut_debug(
+                f"{context}: points after {mode} axis filter would be {count}/{x_arr.size}"
+            )
         return x_arr, y_arr, rows_arr
 
     def _filter_cut_pairs_for_active_axis(self, q_values, intensity_values, context="cut"):
         """Apply Positive/Negative Only before resampling so all points cover the visible domain."""
-        q_arr = np.asarray(q_values, dtype=float)
-        intensity_arr = np.asarray(intensity_values, dtype=float)
         try:
             mode = self._get_independent_axis_filter_mode()
         except Exception:
             mode = 'all'
-        if mode == 'positive':
-            keep = q_arr > 0
-        elif mode == 'negative':
-            keep = q_arr < 0
-        else:
-            keep = np.ones(q_arr.shape, dtype=bool)
-        q_arr = q_arr[keep]
-        intensity_arr = intensity_arr[keep]
-        if q_arr.size < 2:
-            raise Exception(f"{context}: not enough points remain after {mode} axis filtering")
+        q_arr, intensity_arr = filter_axis(
+            q_values,
+            intensity_values,
+            mode,
+            context=context,
+        )
         self._log_cut_debug(f"{context}: {q_arr.size} native point(s) remain after {mode} axis filtering.")
         return q_arr, intensity_arr
 
@@ -5886,6 +5685,7 @@ class FittingController(QObject):
         session_data['auto_show'] = self._is_auto_show_enabled()
         session_data['load_mode'] = getattr(self, 'load_mode', 'Single')
         session_data['ai_fitting'] = copy.deepcopy(self._ai_run_settings())
+        session_data['insitu_workflow'] = self.fitting_view_model.snapshot_insitu_workflow()
         return session_data
 
     # 函数说明：恢复session。
@@ -5895,6 +5695,12 @@ class FittingController(QObject):
             return
 
         self._restore_ai_session_settings(session_data.get('ai_fitting'))
+        insitu_snapshot = session_data.get('insitu_workflow')
+        if isinstance(insitu_snapshot, dict):
+            try:
+                self.fitting_view_model.restore_insitu_workflow(insitu_snapshot)
+            except (KeyError, TypeError, ValueError):
+                pass
 
         last_file = session_data.get('last_opened_file') or session_data.get('imported_gisaxs_file')
         if last_file:
@@ -6322,6 +6128,8 @@ class FittingController(QObject):
             if file_ext not in {'.cbf', '.nxs', '.tif', '.tiff'}:
                 self.status_updated.emit("Image display supports CBF, NXS, and TIFF detector images")
                 return
+
+            self.fitting_view_model.begin_image_load(os.path.basename(imported_file))
 
             mode = getattr(self, 'load_mode', 'Single')
             if file_ext == '.nxs':
@@ -7300,6 +7108,9 @@ class FittingController(QObject):
                 self._insitu_workflow_last_fit_status = "-"
                 self._insitu_workflow_last_chi_square = None
                 self._reset_insitu_heatmap_data()
+                self.fitting_view_model.start_insitu_workflow(())
+            else:
+                self.fitting_view_model.resume_insitu_workflow()
             self._insitu_workflow_stop_requested = False
             if self._insitu_workflow_timer is None:
                 self._insitu_workflow_timer = QTimer()
@@ -7342,6 +7153,11 @@ class FittingController(QObject):
                 if not self._insitu_workflow_queue:
                     QMessageBox.information(self._insitu_workflow_parent_widget(), "In-situ Workflow", "No files matched the sequence settings.")
                     return
+                self.fitting_view_model.start_insitu_workflow(
+                    tuple(self._insitu_workflow_queue)
+                )
+            else:
+                self.fitting_view_model.resume_insitu_workflow()
             self._insitu_workflow_stop_requested = False
             if self._insitu_workflow_timer is not None:
                 self._insitu_workflow_timer.stop()
@@ -7397,6 +7213,7 @@ class FittingController(QObject):
         try:
             if self._insitu_workflow_timer is not None:
                 self._insitu_workflow_timer.stop()
+            self.fitting_view_model.pause_insitu_workflow()
             self._set_insitu_workflow_state("Paused", "Workflow paused after the current operation")
         except Exception:
             pass
@@ -7407,6 +7224,7 @@ class FittingController(QObject):
             if self._insitu_workflow_timer is not None:
                 self._insitu_workflow_timer.stop()
             self._insitu_workflow_stop_requested = True
+            self.fitting_view_model.cancel_insitu_workflow()
             self._insitu_workflow_queue = []
             self._insitu_workflow_busy = False
             self._insitu_workflow_processing_file = None
@@ -7480,6 +7298,7 @@ class FittingController(QObject):
                     continue
                 self._insitu_workflow_seen.add(path)
                 self._insitu_workflow_queue.append(path)
+                self.fitting_view_model.enqueue_insitu_files((path,))
                 self._log_insitu_workflow(f"Queued {os.path.basename(path)}")
             self._refresh_insitu_workflow_status()
             self._process_next_insitu_workflow_file()
@@ -7509,14 +7328,24 @@ class FittingController(QObject):
             self._refresh_insitu_workflow_status()
             return
         batch_size = max(1, int(self._insitu_workflow_settings().get("fit_every", 1)))
-        batch_paths = [self._insitu_workflow_queue.pop(0)]
-        while self._insitu_workflow_queue and len(batch_paths) < batch_size:
-            batch_paths.append(self._insitu_workflow_queue.pop(0))
+        workflow_record = self.fitting_view_model.begin_next_insitu_file(batch_size)
+        if workflow_record is None:
+            # Compatibility for dynamic callers that filled the legacy queue directly.
+            self.fitting_view_model.start_insitu_workflow(
+                tuple(self._insitu_workflow_queue)
+            )
+            workflow_record = self.fitting_view_model.begin_next_insitu_file(batch_size)
+        if workflow_record is None:
+            return
+        batch_paths = list(workflow_record.paths)
+        del self._insitu_workflow_queue[:len(batch_paths)]
         path = batch_paths[0]
         self._insitu_workflow_busy = True
         self._insitu_workflow_processing_file = path
         self._insitu_workflow_processing_batch = batch_paths
-        self._insitu_workflow_current_record = self._new_insitu_workflow_record(batch_paths)
+        self._insitu_workflow_current_record = self._new_insitu_workflow_record(
+            batch_paths, workflow_record=workflow_record
+        )
         self._refresh_insitu_workflow_status()
         self._log_insitu_workflow(
             f"Loading batch of {len(batch_paths)} file(s): {os.path.basename(batch_paths[0])}"
@@ -7540,19 +7369,27 @@ class FittingController(QObject):
             self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc))
 
     # 函数说明：实现 new 原位 流程 record 相关逻辑。
-    def _new_insitu_workflow_record(self, path_or_paths) -> dict:
+    def _new_insitu_workflow_record(self, path_or_paths, workflow_record=None) -> dict:
         paths = list(path_or_paths) if isinstance(path_or_paths, (list, tuple)) else [str(path_or_paths)]
         first = paths[0] if paths else ""
         last = paths[-1] if paths else first
         batch_name = os.path.basename(first) if len(paths) == 1 else f"{os.path.basename(first)} -> {os.path.basename(last)}"
         return {
-            "file_index": len(getattr(self, "_insitu_workflow_results", []) or []) + 1,
+            "file_index": (
+                int(workflow_record.index)
+                if workflow_record is not None
+                else len(getattr(self, "_insitu_workflow_results", []) or []) + 1
+            ),
             "file_name": batch_name,
             "file_path": str(first),
             "batch_size": len(paths),
             "batch_files": json.dumps([os.path.basename(path) for path in paths], ensure_ascii=False),
             "batch_paths": json.dumps(paths, ensure_ascii=False),
-            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+            "timestamp": (
+                workflow_record.started_at
+                if workflow_record is not None
+                else datetime.datetime.now().isoformat(timespec="seconds")
+            ),
             "run_mode": self._insitu_workflow_settings().get("run_mode", "Process Existing Sequence"),
             "load_status": "pending",
             "cut_status": "skipped",
@@ -7822,8 +7659,8 @@ class FittingController(QObject):
                 self._insitu_workflow_ai_then_refine = bool(settings["auto_refine"])
                 self._log_insitu_workflow("Full Auto Fit started")
                 self._start_ai_prediction("full")
-                process = getattr(self, "_ai_process", None)
-                if process is None or process.state() == QProcess.NotRunning:
+                thread = getattr(self, "_ai_job_thread", None)
+                if thread is None:
                     self._insitu_workflow_ai_record = None
                     raise RuntimeError("Full Auto Fit did not start. Check the selected AI fitting model and input curve.")
                 return
@@ -8033,17 +7870,17 @@ class FittingController(QObject):
         self._insitu_workflow_refine_thread = None
 
     # 函数说明：处理原位 ai full 拟合 finished事件。
-    def _on_insitu_ai_full_fit_finished(self, record: dict, exit_code: int):
+    def _on_insitu_ai_full_fit_finished(self, record: dict, exit_code: int, result=None):
         try:
             if exit_code != 0:
                 raise RuntimeError(f"Full Auto Fit failed with exit code {exit_code}")
             output_dir = Path(getattr(self, "_ai_output_dir", "") or "")
-            results_path = output_dir / "top20_candidates.json"
-            if not results_path.is_file():
-                raise RuntimeError(f"Full Auto Fit results not found: {results_path}")
-            with results_path.open("r", encoding="utf-8") as fh:
-                rows = json.load(fh)
-            if not isinstance(rows, list) or not rows:
+            rows = (
+                tuple(result.candidates)
+                if result is not None
+                else self.fitting_view_model.load_candidate_results(output_dir)
+            )
+            if not rows:
                 raise RuntimeError("Full Auto Fit produced no candidates")
             if not self._load_ai_candidate_params(rows[0]):
                 raise RuntimeError("Failed to load the best Full Auto Fit candidate")
@@ -8114,16 +7951,8 @@ class FittingController(QObject):
                 exp_y = np.asarray(self.current_1d_data.get("I", []), dtype=float).reshape(-1)
             if exp_y is None:
                 return None
-            n = min(fit_y.size, exp_y.size)
-            if n <= 0:
-                return None
-            fit_y = fit_y[:n]
-            exp_y = exp_y[:n]
-            mask = np.isfinite(fit_y) & np.isfinite(exp_y)
-            if not np.any(mask):
-                return None
-            residual = fit_y[mask] - exp_y[mask]
-            return float(np.mean(residual * residual))
+            value = chi_square(exp_y, fit_y)
+            return value if np.isfinite(value) else None
         except Exception:
             return None
 
@@ -8135,12 +7964,29 @@ class FittingController(QObject):
             record["load_status"] = load_status
         if error_message:
             record["error_message"] = error_message
-        if failed or record.get("error_message") or str(record.get("load_status", "")).startswith("failed") or str(record.get("fit_status", "")).startswith("failed"):
-            self._insitu_workflow_failed_count += 1
+        failed = bool(failed or record.get("error_message") or str(record.get("load_status", "")).startswith("failed") or str(record.get("fit_status", "")).startswith("failed"))
+        if failed:
             self._log_insitu_workflow(f"{record.get('file_name', 'file')} failed: {record.get('error_message', '')}", "ERROR")
         else:
             self._log_insitu_workflow(f"{record.get('file_name', 'file')} processed", "SUCCESS")
-        self._insitu_workflow_processed_count += 1
+        serializable_record = json.loads(
+            json.dumps(record, ensure_ascii=False, default=str)
+        )
+        try:
+            if failed:
+                self.fitting_view_model.fail_insitu_file(
+                    str(record.get("error_message", "failed")), serializable_record
+                )
+            else:
+                self.fitting_view_model.complete_insitu_file(serializable_record)
+            workflow_state = self.fitting_view_model.state.insitu_workflow
+            self._insitu_workflow_processed_count = workflow_state.processed_count
+            self._insitu_workflow_failed_count = workflow_state.failed_count
+        except RuntimeError:
+            # Retain the legacy callback contract for out-of-order dynamic callers.
+            self._insitu_workflow_processed_count += 1
+            if failed:
+                self._insitu_workflow_failed_count += 1
         self._insitu_workflow_results.append(record.copy())
         self._append_insitu_session_cache(record)
         self._insitu_workflow_busy = False
@@ -8774,6 +8620,18 @@ class FittingController(QObject):
     def _on_image_loaded(self, image_data, file_path):
         """No description."""
         try:
+            source_files = tuple(
+                Path(path)
+                for path in getattr(self.async_image_loader, "_last_source_files", ())
+            ) or (Path(file_path),)
+            self.fitting_view_model.accept_loaded_image(
+                ScatteringFileData(
+                    image=image_data,
+                    source_path=Path(file_path),
+                    source_files=source_files,
+                    frame_index=int(getattr(self, "_nxs_frame_index", 0)),
+                )
+            )
             self.status_updated.emit(f"Image loading complete: {os.path.basename(file_path)}")
             workflow_frame = (
                 getattr(self, "_insitu_workflow_busy", False)
@@ -8785,6 +8643,7 @@ class FittingController(QObject):
                 self._display_image(image_data)
             self._after_insitu_workflow_image_loaded(image_data, file_path)
         except Exception as e:
+            self.fitting_view_model.fail_image_load(str(e))
             self.status_updated.emit(f"Error while displaying image: {str(e)}")
             if getattr(self, "_insitu_workflow_processing_file", None) == file_path:
                 self._finalize_insitu_workflow_file(load_status="failed", error_message=str(e), failed=True)
@@ -8801,6 +8660,7 @@ class FittingController(QObject):
     # 函数说明：处理图像 loading 错误事件。
     def _on_image_loading_error(self, error_message):
         """No description."""
+        self.fitting_view_model.fail_image_load(str(error_message))
         if getattr(self, "_insitu_workflow_busy", False):
             self._finalize_insitu_workflow_file(load_status="failed", error_message=str(error_message), failed=True)
             return
@@ -10217,20 +10077,26 @@ class FittingController(QObject):
     def _load_1d_data(self, file_path):
         """No description."""
         try:
-            from utils.load_SAXS_data import load_xy_any
-
             self.status_updated.emit(f"Loading 1D data from {os.path.basename(file_path)}...")
-            data = load_xy_any(file_path)
+            outcome = self.fitting_view_model.load_curve(
+                LoadCurveRequest(
+                    path=Path(file_path),
+                    q_source_unit=self._imported_1d_q_unit,
+                )
+            )
+            if outcome.error is not None:
+                raise RuntimeError(f"[{outcome.error.code}] {outcome.error.message}")
+            data = outcome.value
 
             self.q = data.q
-            self.I = data.I
+            self.I = data.intensity
 
             self.current_1d_data = {
                 'q': data.q,
-                'I': data.I,
-                'err': getattr(data, 'err', None) if hasattr(data, 'err') else None,
+                'I': data.intensity,
+                'err': data.error,
                 'file_path': file_path,
-                'q_source_unit': self._imported_1d_q_unit
+                'q_source_unit': data.q_source_unit,
             }
 
             self.data_source = '1d'
@@ -11152,68 +11018,41 @@ class FittingController(QObject):
 
     # 函数说明：提取切线 Q 模式。
     def _extract_cut_q_mode(self, center_qy, center_qz, height_q, width_q, cut_type: str, points_override: int = None):
-        """Extract a horizontal or vertical cut from the selected Q-space region.
-
-        Args:
-            center_qy, center_qz: Q-space center coordinates.
-            height_q, width_q: Q-space region size.
-            cut_type: Either ``horizontal`` or ``vertical``.
-        """
+        """Extract a horizontal or vertical cut from the selected Q-space region."""
         try:
             qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
             if qy_mesh is None or qz_mesh is None:
                 raise Exception("Q-space meshgrids not available")
-
-            qy_min = center_qy - width_q / 2
-            qy_max = center_qy + width_q / 2
-            qz_min = center_qz - height_q / 2
-            qz_max = center_qz + height_q / 2
-
-            mask = ((qy_mesh >= qy_min) & (qy_mesh <= qy_max) &
-                    (qz_mesh >= qz_min) & (qz_mesh <= qz_max))
-
-            data = np.asarray(self.current_stack_data, dtype=float)
-            finite_mask = mask & np.isfinite(data) & np.isfinite(qy_mesh) & np.isfinite(qz_mesh)
-
-            if cut_type == 'horizontal':
-                selected_cols = np.where(np.any(finite_mask, axis=0))[0]
-                if selected_cols.size == 0:
-                    raise Exception("No valid data in the selected region")
-                intensity_sum = np.array([
-                    np.mean(data[finite_mask[:, col], col])
-                    for col in selected_cols
-                ], dtype=float)
-                q_line = np.array([
-                    np.mean(qy_mesh[finite_mask[:, col], col])
-                    for col in selected_cols
-                ], dtype=float)
-                valid_q, valid_intensity, _ = self._sort_filter_cut_pairs(
-                    q_line, intensity_sum, context="Horizontal Q cut"
-                )
-            elif cut_type == 'vertical':
-                selected_rows = np.where(np.any(finite_mask, axis=1))[0]
-                if selected_rows.size == 0:
-                    raise Exception("No valid data in the selected region")
-                intensity_sum = np.array([
-                    np.mean(data[row, finite_mask[row, :]])
-                    for row in selected_rows
-                ], dtype=float)
-                q_line = np.array([
-                    np.mean(qz_mesh[row, finite_mask[row, :]])
-                    for row in selected_rows
-                ], dtype=float)
+            selection = CutSelection(
+                center_x=float(center_qy),
+                center_y=float(center_qz),
+                height=float(height_q),
+                width=float(width_q),
+                orientation=cut_type,
+            )
+            intensity_native, q_native, pixel_indices = extract_q_profile(
+                self.current_stack_data,
+                qy_mesh,
+                qz_mesh,
+                selection,
+            )
+            if cut_type == "vertical":
                 self._log_cut_debug(
-                    f"Vertical Q cut: ROI q range qy=[{qy_min:.8g}, {qy_max:.8g}], qz=[{qz_min:.8g}, {qz_max:.8g}]"
+                    f"Vertical Q cut: ROI q range qy=[{center_qy - width_q / 2:.8g}, "
+                    f"{center_qy + width_q / 2:.8g}], qz=[{center_qz - height_q / 2:.8g}, "
+                    f"{center_qz + height_q / 2:.8g}]"
                 )
                 self._log_cut_debug(
-                    f"Vertical Q cut: first/last pixel row used = {int(selected_rows[0])}, {int(selected_rows[-1])}"
+                    f"Vertical Q cut: first/last pixel row used = "
+                    f"{int(pixel_indices[0])}, {int(pixel_indices[-1])}"
                 )
-                valid_q, valid_intensity, _ = self._sort_filter_cut_pairs(
-                    q_line, intensity_sum, context="Vertical Q cut", pixel_rows=selected_rows, log_vertical=True
-                )
-            else:
-                raise Exception(f"Unknown cut type: {cut_type}")
-
+            valid_q, valid_intensity, _ = self._sort_filter_cut_pairs(
+                q_native,
+                intensity_native,
+                context=f"{cut_type.capitalize()} Q cut",
+                pixel_rows=pixel_indices if cut_type == "vertical" else None,
+                log_vertical=cut_type == "vertical",
+            )
             valid_q, valid_intensity = self._filter_cut_pairs_for_active_axis(
                 valid_q,
                 valid_intensity,
@@ -11221,20 +11060,27 @@ class FittingController(QObject):
             )
             n_points = self._resolve_cut_points(points_override)
             q_interp = np.linspace(valid_q.min(), valid_q.max(), n_points)
-            method = None
             try:
-                method = self.ui.fitInterpolationMethodValue.currentText() if hasattr(self.ui, 'fitInterpolationMethodValue') else self._interp_method_default
+                method = (
+                    self.ui.fitInterpolationMethodValue.currentText()
+                    if hasattr(self.ui, "fitInterpolationMethodValue")
+                    else self._interp_method_default
+                )
             except Exception:
                 method = self._interp_method_default
-            intensity_interp = self._interpolate_series(valid_q, valid_intensity, q_interp, method)
+            intensity_interp = interpolate_series(valid_q, valid_intensity, q_interp, method)
             try:
-                self.status_updated.emit(f"Cut(Q) extracted points: {len(q_interp)} (method={method})")
+                self.status_updated.emit(
+                    f"Cut(Q) extracted points: {len(q_interp)} (method={method})"
+                )
             except Exception:
                 pass
             return intensity_interp, q_interp
+        except Exception as exc:
+            raise Exception(
+                f"Q-mode {cut_type} cut extraction failed: {str(exc)}"
+            ) from exc
 
-        except Exception as e:
-            raise Exception(f"Q-mode {cut_type} cut extraction failed: {str(e)}")
 
     # 函数说明：提取horizontal 切线 Q 模式。
     def _extract_horizontal_cut_q_mode(self, center_qy, center_qz, height_q, width_q, points_override: int = None):
@@ -11248,55 +11094,43 @@ class FittingController(QObject):
 
     # 函数说明：提取切线 像素 模式。
     def _extract_cut_pixel_mode(self, center_x, center_y, height, width, cut_type: str, points_override: int = None):
-        """Extract a horizontal or vertical cut from the selected pixel-space region.
-
-        Args:
-            center_x, center_y: Pixel-space center coordinates.
-            height, width: Pixel-space region size.
-            cut_type: Either ``horizontal`` or ``vertical``.
-        """
+        """Extract a horizontal or vertical cut from the selected pixel-space region."""
         try:
-            img_height, img_width = self.current_stack_data.shape
-
-            x_min = max(0, int(center_x - width / 2))
-            x_max = min(img_width - 1, int(center_x + width / 2))
-            y_min = max(0, int(center_y - height / 2))
-            y_max = min(img_height - 1, int(center_y + height / 2))
-
-            y_min_adj = img_height - 1 - y_max
-            y_max_adj = img_height - 1 - y_min
-            y_min_adj, y_max_adj = max(0, y_min_adj), min(img_height - 1, y_max_adj)
-
-            region_data = self.current_stack_data[y_min_adj:y_max_adj+1, x_min:x_max+1]
-
-            if region_data.size == 0:
-                raise Exception("Empty region selected")
-
-            if cut_type == 'horizontal':
-                intensity_sum = finite_mean_axis(region_data, axis=0)
-                pixel_coords = np.arange(x_min, x_max + 1)
+            selection = CutSelection(
+                center_x=float(center_x),
+                center_y=float(center_y),
+                height=float(height),
+                width=float(width),
+                orientation=cut_type,
+            )
+            intensity_native, pixel_coords = extract_pixel_profile(
+                self.current_stack_data,
+                selection,
+            )
+            if cut_type == "horizontal":
                 native_q = self._convert_pixel_to_qy(pixel_coords)
-            elif cut_type == 'vertical':
-                intensity_sum = finite_mean_axis(region_data, axis=1)
-                pixel_coords = np.arange(y_min_adj, y_max_adj + 1)
+            else:
                 native_q = self._convert_pixel_to_qz(pixel_coords)
+                image_height, image_width = self.current_stack_data.shape
+                x_min = max(0, int(center_x - width / 2))
+                x_max = min(image_width - 1, int(center_x + width / 2))
                 self._log_cut_debug(
-                    f"Vertical Pixel cut: ROI display pixels x=[{x_min}, {x_max}], y=[{y_min}, {y_max}], "
-                    f"array rows=[{y_min_adj}, {y_max_adj}], image_origin=lower"
+                    f"Vertical Pixel cut: ROI display pixels x=[{x_min}, {x_max}], "
+                    f"y=[{int(center_y - height / 2)}, {int(center_y + height / 2)}], "
+                    f"array rows=[{int(pixel_coords[0])}, {int(pixel_coords[-1])}], "
+                    "image_origin=lower"
                 )
                 if pixel_coords.size:
                     self._log_cut_debug(
-                        f"Vertical Pixel cut: first/last pixel row used = {int(pixel_coords[0])}, {int(pixel_coords[-1])}"
+                        f"Vertical Pixel cut: first/last pixel row used = "
+                        f"{int(pixel_coords[0])}, {int(pixel_coords[-1])}"
                     )
-            else:
-                raise Exception(f"Unknown cut type: {cut_type}")
-
             valid_q, valid_intensity, _ = self._sort_filter_cut_pairs(
                 native_q,
-                intensity_sum,
+                intensity_native,
                 context=f"{cut_type.capitalize()} Pixel cut native q",
-                pixel_rows=pixel_coords if cut_type == 'vertical' else None,
-                log_vertical=(cut_type == 'vertical'),
+                pixel_rows=pixel_coords if cut_type == "vertical" else None,
+                log_vertical=cut_type == "vertical",
             )
             valid_q, valid_intensity = self._filter_cut_pairs_for_active_axis(
                 valid_q,
@@ -11305,15 +11139,18 @@ class FittingController(QObject):
             )
             if valid_q.size < 2:
                 raise Exception("Not enough finite q/intensity points in the selected region")
-
             n_points = self._resolve_cut_points(points_override)
             q_interp = np.linspace(valid_q.min(), valid_q.max(), n_points)
             try:
-                method = self.ui.fitInterpolationMethodValue.currentText() if hasattr(self.ui, 'fitInterpolationMethodValue') else self._interp_method_default
+                method = (
+                    self.ui.fitInterpolationMethodValue.currentText()
+                    if hasattr(self.ui, "fitInterpolationMethodValue")
+                    else self._interp_method_default
+                )
             except Exception:
                 method = self._interp_method_default
-            intensity_interp = self._interpolate_series(valid_q, valid_intensity, q_interp, method)
-            if cut_type == 'vertical':
+            intensity_interp = interpolate_series(valid_q, valid_intensity, q_interp, method)
+            if cut_type == "vertical":
                 self._last_vertical_cut_pixel_rows = None
             try:
                 self.status_updated.emit(
@@ -11323,9 +11160,11 @@ class FittingController(QObject):
             except Exception:
                 pass
             return intensity_interp, q_interp
+        except Exception as exc:
+            raise Exception(
+                f"Pixel-mode {cut_type} cut extraction failed: {str(exc)}"
+            ) from exc
 
-        except Exception as e:
-            raise Exception(f"Pixel-mode {cut_type} cut extraction failed: {str(e)}")
 
     # 函数说明：提取horizontal 切线 像素 模式。
     def _extract_horizontal_cut_pixel_mode(self, center_x, center_y, height, width, points_override: int = None):
@@ -11388,9 +11227,12 @@ class FittingController(QObject):
 
             if conversion_type == 'qy':
                 if qy_mesh is not None and getattr(qy_mesh, 'shape', None) == (height, width):
-                    row = int(np.clip(round(height / 2.0), 0, height - 1))
-                    clipped = np.clip(coords, 0.0, width - 1.0)
-                    return np.interp(clipped, np.arange(width, dtype=float), qy_mesh[row, :])
+                    return sample_q_mesh_line(
+                        qy_mesh,
+                        coords,
+                        orientation="horizontal",
+                        image_shape=(height, width),
+                    )
 
                 detector = self._get_detector_for_pixel_conversion()
                 if detector is None:
@@ -11399,12 +11241,11 @@ class FittingController(QObject):
                 _, q_coords, _ = detector.pixel_to_q_space(coords, center_y)
             elif conversion_type == 'qz':
                 if qz_mesh is not None and getattr(qz_mesh, 'shape', None) == (height, width):
-                    col = int(np.clip(round(width / 2.0), 0, width - 1))
-                    clipped = np.clip(coords, 0.0, height - 1.0)
-                    q_coords = np.interp(
-                        clipped,
-                        np.arange(height, dtype=float),
-                        qz_mesh[:, col],
+                    q_coords = sample_q_mesh_line(
+                        qz_mesh,
+                        coords,
+                        orientation="vertical",
+                        image_shape=(height, width),
                     )
                     if q_coords.size:
                         self._log_cut_debug(
@@ -11666,18 +11507,16 @@ class FittingController(QObject):
     # 函数说明：转换Q 值 for 模型。
     def _convert_q_values_for_model(self, q_values, source=None):
         """No description."""
-        q_arr = np.asarray([] if q_values is None else q_values, dtype=float)
-        if q_arr.size == 0:
-            return q_arr
-        return q_arr * 10.0 if self._get_q_source_unit(source) == 'angstrom' else q_arr
+        return q_values_for_model(q_values, self._get_q_source_unit(source))
 
     # 函数说明：转换Q 值 for 显示。
     def _convert_q_values_for_display(self, q_values, source=None):
         """No description."""
-        q_nm = self._convert_q_values_for_model(q_values, source=source)
-        if q_nm.size == 0:
-            return q_nm
-        return q_nm * self._get_q_display_scale()
+        return q_values_for_display(
+            q_values,
+            self._get_q_source_unit(source),
+            self._get_q_display_unit(),
+        )
 
     # 函数说明：构建Q 坐标轴 label。
     def _build_q_axis_label(self, filter_mode: str = 'all', absolute: bool = False, mathtext: bool = True):
@@ -11782,38 +11621,8 @@ class FittingController(QObject):
     # 函数说明：实现 过滤 Q 数据 for 独立 显示 相关逻辑。
     def _filter_q_data_for_independent_display(self, q_data, y_data=None):
         """No description."""
-        q_arr = np.asarray([] if q_data is None else q_data)
-        y_arr = None if y_data is None else np.asarray(y_data)
-
-        finite_mask = np.isfinite(q_arr)
-        if y_arr is not None:
-            finite_mask &= np.isfinite(y_arr)
-
-        q_arr = q_arr[finite_mask]
-        if y_arr is not None:
-            y_arr = y_arr[finite_mask]
-
         filter_mode = self._get_independent_axis_filter_mode()
-        if filter_mode == 'positive':
-            axis_mask = q_arr > 0
-        elif filter_mode == 'negative':
-            axis_mask = q_arr < 0
-        else:
-            axis_mask = np.ones(q_arr.shape, dtype=bool)
-
-        q_raw = q_arr[axis_mask]
-        if y_arr is not None:
-            y_arr = y_arr[axis_mask]
-
-        q_plot = np.abs(q_raw) if filter_mode == 'negative' else np.array(q_raw, copy=True)
-        if q_plot.size > 0 and filter_mode == 'negative':
-            sort_idx = np.argsort(q_plot)
-            q_raw = q_raw[sort_idx]
-            q_plot = q_plot[sort_idx]
-            if y_arr is not None:
-                y_arr = y_arr[sort_idx]
-
-        return q_raw, q_plot, y_arr, filter_mode
+        return filter_for_display(q_data, y_data, filter_mode)
 
     # 函数说明：获取拟合 y 范围 模式。
     def _get_fit_y_range_mode(self):
@@ -11831,13 +11640,7 @@ class FittingController(QObject):
     def _valid_y_values_for_limits(self, y_values, log_y=False):
         """No description."""
         try:
-            arr = np.asarray([] if y_values is None else y_values, dtype=float).ravel()
-            if arr.size == 0:
-                return arr
-            mask = np.isfinite(arr)
-            if log_y:
-                mask &= arr > 0
-            return arr[mask]
+            return valid_y_values_for_limits(y_values, log_y=log_y)
         except Exception:
             return np.asarray([], dtype=float)
 
@@ -11892,12 +11695,7 @@ class FittingController(QObject):
     # 函数说明：实现 归一化 intensity 数据 相关逻辑。
     def _normalize_intensity_data(self, I_data):
         """No description."""
-        if len(I_data) == 0:
-            return I_data
-        max_I = np.max(I_data)
-        if max_I > 0:
-            return I_data / max_I
-        return I_data
+        return normalize_intensity(I_data)
 
     # 函数说明：应用对数 scales。
     def _apply_log_scales(self, ax, log_x=False, log_y=False):
@@ -14456,116 +14254,53 @@ class FittingController(QObject):
 
     # 函数说明：实现 当前 ai 曲线 arrays 相关逻辑。
     def _current_ai_curve_arrays(self, apply_exclusions: bool = True):
-        filter_mode = self._get_independent_axis_filter_mode()
+        """Map current legacy curve state to the pure AI curve preparation service."""
+        axis_filter = self._get_independent_axis_filter_mode()
+        excluded = (
+            set(getattr(self, "_ai_excluded_input_q", set()) or set())
+            if apply_exclusions
+            else set()
+        )
+        roi = None
+        if (
+            getattr(self, "_roi_controls_enabled", True)
+            and self._roi_min is not None
+            and self._roi_max is not None
+        ):
+            roi = (float(self._roi_min), float(self._roi_max))
 
-        # 函数说明：应用坐标轴 过滤。
-        def apply_axis_filter(q_arr, i_arr, sigma_arr=None):
-            q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
-            i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
-            n = min(q_arr.size, i_arr.size)
-            q_arr, i_arr = q_arr[:n], i_arr[:n]
-            if sigma_arr is not None:
-                sigma_arr = np.asarray(sigma_arr, dtype=np.float64).reshape(-1)[:n]
-
-            if filter_mode == "positive":
-                axis_mask = q_arr > 0
-                q_arr = q_arr[axis_mask]
-                i_arr = i_arr[axis_mask]
-                if sigma_arr is not None:
-                    sigma_arr = sigma_arr[axis_mask]
-            elif filter_mode == "negative":
-                axis_mask = q_arr < 0
-                q_arr = np.abs(q_arr[axis_mask])
-                i_arr = i_arr[axis_mask]
-                if sigma_arr is not None:
-                    sigma_arr = sigma_arr[axis_mask]
-                if q_arr.size > 0:
-                    order = np.argsort(q_arr)
-                    q_arr = q_arr[order]
-                    i_arr = i_arr[order]
-                    if sigma_arr is not None:
-                        sigma_arr = sigma_arr[order]
-            return q_arr, i_arr, sigma_arr
-
-        # 函数说明：实现 clean 相关逻辑。
-        def clean(q_arr, i_arr, sigma_arr=None):
-            q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
-            i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
-            n = min(q_arr.size, i_arr.size)
-            q_arr, i_arr = q_arr[:n], i_arr[:n]
-            if sigma_arr is None:
-                sigma_arr = np.maximum(0.05 * np.maximum(i_arr, 1e-30), 1e-30)
-            else:
-                sigma_arr = np.asarray(sigma_arr, dtype=np.float64).reshape(-1)[:n]
-            mask = np.isfinite(q_arr) & np.isfinite(i_arr) & np.isfinite(sigma_arr) & (q_arr > 0) & (i_arr > 0) & (sigma_arr > 0)
-            if np.sum(mask) < 16:
-                return None
-            return q_arr[mask], i_arr[mask], sigma_arr[mask]
-
-        # 函数说明：应用拟合 区域。
-        def apply_fit_region(q_arr, i_arr, sigma_arr=None):
-            q_arr = np.asarray(q_arr, dtype=np.float64).reshape(-1)
-            i_arr = np.asarray(i_arr, dtype=np.float64).reshape(-1)
-            n = min(q_arr.size, i_arr.size)
-            q_arr, i_arr = q_arr[:n], i_arr[:n]
-            if sigma_arr is not None:
-                sigma_arr = np.asarray(sigma_arr, dtype=np.float64).reshape(-1)[:n]
-            q_arr, i_arr, sigma_arr = apply_axis_filter(q_arr, i_arr, sigma_arr)
-            if getattr(self, "_roi_controls_enabled", True) and self._roi_min is not None and self._roi_max is not None:
-                lo = min(float(self._roi_min), float(self._roi_max))
-                hi = max(float(self._roi_min), float(self._roi_max))
-                region_mask = np.isfinite(q_arr) & (q_arr >= lo) & (q_arr <= hi)
-                if np.sum(region_mask) >= 16:
-                    q_arr = q_arr[region_mask]
-                    i_arr = i_arr[region_mask]
-                    if sigma_arr is not None:
-                        sigma_arr = sigma_arr[region_mask]
-            return clean(q_arr, i_arr, sigma_arr)
-
-        # 函数说明：应用excluded Q。
-        def apply_excluded_q(result):
-            if not apply_exclusions or result is None:
-                return result
-            excluded = getattr(self, "_ai_excluded_input_q", set()) or set()
-            if not excluded:
-                return result
-            q_arr, i_arr, sigma_arr = result
-            keep = np.array([self._ai_q_key(q_val) not in excluded for q_val in q_arr], dtype=bool)
-            if int(np.sum(keep)) < 16:
-                self._add_fitting_error("AI input outlier filter would leave fewer than 16 points; using unfiltered data.")
-                return result
-            return q_arr[keep], i_arr[keep], sigma_arr[keep]
-
-        try:
-            if self.q_ROI is not None and self.I_ROI is not None:
-                q_arr, i_arr, sigma_arr = apply_axis_filter(self.q_ROI, self.I_ROI)
-                result = clean(q_arr, i_arr, sigma_arr)
-                if result is not None:
-                    return apply_excluded_q(result)
-        except Exception:
-            pass
+        sources = []
+        if self.q_ROI is not None and self.I_ROI is not None:
+            sources.append((self.q_ROI, self.I_ROI, None, None))
         if self.q is not None and self.I is not None:
-            result = apply_fit_region(self.q, self.I)
-            if result is not None:
-                return apply_excluded_q(result)
+            sources.append((self.q, self.I, None, roi))
         if isinstance(getattr(self, "current_1d_data", None), dict):
             data = self.current_1d_data
-            result = apply_fit_region(data.get("q", []), data.get("I", []), data.get("err"))
-            if result is not None:
-                return apply_excluded_q(result)
+            sources.append((data.get("q", []), data.get("I", []), data.get("err"), roi))
         if isinstance(getattr(self, "cut", None), dict):
-            result = apply_fit_region(self.cut.get("q", []), self.cut.get("I", []))
-            if result is not None:
-                return apply_excluded_q(result)
+            sources.append((self.cut.get("q", []), self.cut.get("I", []), None, roi))
+
+        for q_values, intensities, sigma, source_roi in sources:
+            try:
+                curve = prepare_ai_curve(
+                    q_values,
+                    intensities,
+                    sigma,
+                    axis_filter=axis_filter,
+                    roi=source_roi,
+                    excluded_q=excluded,
+                    minimum_points=16,
+                )
+                return curve.q, curve.intensity, curve.sigma
+            except (TypeError, ValueError):
+                continue
         return None
+
 
     # 函数说明：实现 ai Q key 相关逻辑。
     @staticmethod
     def _ai_q_key(q_value) -> str:
-        try:
-            return f"{float(q_value):.12g}"
-        except Exception:
-            return str(q_value)
+        return ai_q_key(q_value)
 
     # 函数说明：实现 过滤 ai excluded points for 显示 相关逻辑。
     def _filter_ai_excluded_points_for_display(self, q_arr, *value_arrays):
@@ -14804,20 +14539,6 @@ class FittingController(QObject):
     def _ai_current_prediction_dir(self) -> Path:
         return self._ai_prediction_output_root() / "current_prediction"
 
-    # 函数说明：清除ai 当前 prediction dir。
-    def _clear_ai_current_prediction_dir(self, out_dir: Path) -> None:
-        root = self._ai_prediction_output_root().resolve()
-        target = Path(out_dir).resolve()
-        expected = (root / "current_prediction").resolve()
-        if target != expected:
-            raise RuntimeError(f"Refusing to clear unexpected AI output directory: {target}")
-        target.mkdir(parents=True, exist_ok=True)
-        for child in target.iterdir():
-            if child.is_dir():
-                shutil.rmtree(child)
-            else:
-                child.unlink()
-
     # 函数说明：实现 prepare ai prediction io 相关逻辑。
     def _prepare_ai_prediction_io(self) -> tuple[Path, Path] | None:
         arrays = self._current_ai_curve_arrays()
@@ -14830,18 +14551,8 @@ class FittingController(QObject):
             return None
         q_arr, i_arr, sigma_arr = arrays
         out_dir = self._ai_current_prediction_dir()
-        try:
-            self._clear_ai_current_prediction_dir(out_dir)
-        except Exception as exc:
-            QMessageBox.warning(
-                self.main_window or self.ui,
-                "AI Fitting",
-                f"Failed to prepare the reusable AI output folder:\n{exc}",
-            )
-            return None
         input_csv = out_dir / "input_curve.csv"
-        table = np.column_stack([q_arr, i_arr, sigma_arr])
-        np.savetxt(input_csv, table, delimiter=",", header="q,I,sigma", comments="")
+        self._ai_prepared_curve = (q_arr, i_arr, sigma_arr)
         self._ai_output_dir = out_dir
         self._ai_input_csv = input_csv
         return input_csv, out_dir
@@ -14858,8 +14569,8 @@ class FittingController(QObject):
 
     # 函数说明：启动ai prediction。
     def _start_ai_prediction(self, run_mode: str = "fast") -> None:
-        process = getattr(self, "_ai_process", None)
-        if process is not None and process.state() != QProcess.NotRunning:
+        thread = getattr(self, "_ai_job_thread", None)
+        if thread is not None and thread.isRunning():
             self._set_ai_workspace_status("AI prediction is already running.", None)
             return
 
@@ -14874,54 +14585,57 @@ class FittingController(QObject):
         io_paths = self._prepare_ai_prediction_io()
         if io_paths is None:
             return
-        input_csv, out_dir = io_paths
-
-        script = fitting_pipeline.script_path
-        if not script.is_file():
-            QMessageBox.warning(self.main_window or self.ui, "AI Fitting", f"Prediction script not found:\n{script}")
-            return
-
-        exact = self._ai_exact_nonempty_arg()
-        constraints_path = self._write_ai_constraints_json(out_dir)
-        if run_mode == "fast":
-            profile = profile_registry.get("Fast")
-        else:
-            profile = self._current_ai_profile()
-        request = FittingRequest(
-            model_dir=model_path,
-            input_csv=input_csv,
-            output_dir=out_dir,
-            profile=profile,
-            constraints_json=constraints_path,
-            exact_nonempty=exact,
+        _input_csv, output_dir = io_paths
+        q_values, intensity, sigma = self._ai_prepared_curve
+        profile = (
+            profile_registry.get("Fast")
+            if run_mode == "fast"
+            else self._current_ai_profile()
         )
-        try:
-            args = fitting_pipeline.build_args(request)
-            fitting_pipeline.write_request_metadata(request)
-        except Exception as exc:
-            QMessageBox.warning(self.main_window or self.ui, "AI Fitting", str(exc))
-            return
+        constraints = self.build_ai_constraints_json_from_ui()
+        request = CandidateGenerationRequest(
+            model_path=model_path,
+            output_dir=output_dir,
+            q=q_values,
+            intensity=intensity,
+            sigma=sigma,
+            profile=profile.to_dict(),
+            constraints=constraints,
+            exact_nonempty=self._ai_exact_nonempty_arg(),
+            clear_output_dir=True,
+        )
 
-        process = QProcess(self.main_window or self.ui)
-        process.setWorkingDirectory(str(Path.cwd()))
-        process.readyReadStandardOutput.connect(self._on_ai_process_stdout)
-        process.readyReadStandardError.connect(self._on_ai_process_stderr)
-        process.finished.connect(self._on_ai_process_finished)
-        process.errorOccurred.connect(self._on_ai_process_error)
-        self._ai_process = process
+        thread = QThread(self.main_window or self.ui)
+        worker = AiCandidateWorker(
+            self.fitting_view_model,
+            request,
+            refine=run_mode != "fast",
+        )
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._on_ai_job_progress)
+        worker.completed.connect(self._on_ai_job_finished)
+        worker.failed.connect(self._on_ai_job_error)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._cleanup_ai_job_thread)
+        self._ai_job_thread = thread
+        self._ai_job_worker = worker
         self._ai_active_profile = profile
         self._ai_run_started_at = time.perf_counter()
         self._ai_run_cancelled = False
         self._ai_candidate_rows = []
         self._set_ai_running_state(True)
-        self._set_ai_workspace_status(f"Starting {profile.name} AI fitting run...", 0)
-        self._append_ai_log(f"Command: {sys.executable} {' '.join(args)}")
-        process.start(sys.executable, args)
-        if profile.time_budget_seconds:
-            QTimer.singleShot(
-                max(1, int(float(profile.time_budget_seconds) * 1000)),
-                self._stop_ai_fitting_on_budget,
-            )
+        self._set_ai_workspace_status(
+            f"Starting {profile.name} AI fitting run...",
+            0,
+        )
+        self._append_ai_log(
+            f"JobRunner request: profile={profile.name}, model={model_path}"
+        )
+        thread.start()
+
 
     # 函数说明：设置ai running 状态。
     def _set_ai_running_state(self, running: bool) -> None:
@@ -14969,111 +14683,111 @@ class FittingController(QObject):
                 pass
 
     # 函数说明：处理ai process stdout事件。
-    def _on_ai_process_stdout(self) -> None:
-        process = getattr(self, "_ai_process", None)
-        if process is None:
-            return
-        text = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace")
-        self._handle_ai_process_text(text)
-
-    # 函数说明：处理ai process stderr事件。
-    def _on_ai_process_stderr(self) -> None:
-        process = getattr(self, "_ai_process", None)
-        if process is None:
-            return
-        text = bytes(process.readAllStandardError()).decode("utf-8", errors="replace")
-        self._handle_ai_process_text(text)
-
-    # 函数说明：处理ai process text。
-    def _handle_ai_process_text(self, text: str) -> None:
-        for line in str(text).splitlines():
+    def _on_ai_job_progress(self, progress) -> None:
+        line = str(getattr(progress, "message", "") or "")
+        if line:
             self._append_ai_log(line)
+            self._handle_ai_process_text(line, append_log=False)
+        else:
+            self._set_ai_workspace_status(
+                "AI fitting running...",
+                int(100 * float(getattr(progress, "fraction", 0.0))),
+            )
+
+    def _handle_ai_process_text(self, text: str, *, append_log: bool = True) -> None:
+        for line in str(text).splitlines():
+            if append_log:
+                self._append_ai_log(line)
             match = re.search(r"Progress\s+(\d+)/(\d+)", line)
             if match:
                 current = int(match.group(1))
                 total = max(1, int(match.group(2)))
-                self._set_ai_workspace_status(f"Sampling progress {current}/{total}", int(current * 100 / total))
-            elif re.search(r"refine\s+#(\d+)/(\d+)\s+nfev~(\d+)/(\d+)", line):
-                refine_match = re.search(r"refine\s+#(\d+)/(\d+)\s+nfev~(\d+)/(\d+)", line)
-                idx = int(refine_match.group(1))
+                self._set_ai_workspace_status(
+                    f"Sampling progress {current}/{total}",
+                    int(current * 100 / total),
+                )
+                continue
+            refine_match = re.search(
+                r"refine\s+#(\d+)/(\d+)\s+nfev~(\d+)/(\d+)",
+                line,
+            )
+            if refine_match:
+                index = int(refine_match.group(1))
                 total = max(1, int(refine_match.group(2)))
                 nfev = int(refine_match.group(3))
                 max_nfev = max(1, int(refine_match.group(4)))
-                refine_fraction = ((idx - 1) + min(1.0, nfev / max_nfev)) / total
-                self._set_ai_workspace_status(line[:180], int(100 * refine_fraction))
+                fraction = ((index - 1) + min(1.0, nfev / max_nfev)) / total
+                self._set_ai_workspace_status(line[:180], int(100 * fraction))
             elif "Refine #" in line:
                 self._set_ai_workspace_status(line[:180], None)
             elif line.startswith("Wrote "):
                 self._set_ai_workspace_status(line, 100)
 
-    # 函数说明：处理ai process finished事件。
-    def _on_ai_process_finished(self, exit_code: int, exit_status) -> None:
+    def _on_ai_job_finished(self, result) -> None:
         self._set_ai_running_state(False)
-        runtime = max(0.0, time.perf_counter() - float(getattr(self, "_ai_run_started_at", time.perf_counter())))
-        profile = getattr(self, "_ai_active_profile", profile_registry.get(DEFAULT_PROFILE_NAME))
-        summary = fitting_pipeline.summarize(
-            Path(getattr(self, "_ai_output_dir", "") or self._ai_current_prediction_dir()),
-            profile,
-            runtime,
-            int(exit_code),
-            cancelled=bool(getattr(self, "_ai_run_cancelled", False)),
-        )
-        try:
-            fitting_pipeline.write_summary(Path(self._ai_output_dir), summary)
-        except Exception as exc:
-            self._append_ai_log(f"Failed to write run summary: {exc}")
+        self._ai_output_dir = Path(result.output_dir)
+        self._ai_candidate_rows = [dict(row) for row in result.candidates]
         self._append_ai_log(
-            f"Run summary: profile={summary.profile}, runtime={summary.runtime_seconds:.3f}s, "
-            f"configured_candidates={summary.configured_candidates}, results={summary.result_candidates}, "
-            f"best_logRMSE={summary.best_log_rmse}"
+            f"Run summary: profile={result.profile_name}, "
+            f"runtime={result.runtime_seconds:.3f}s, "
+            f"configured_candidates={result.configured_candidates}, "
+            f"results={len(result.candidates)}, "
+            f"best_logRMSE={result.best_log_rmse}"
         )
         workflow_record = getattr(self, "_insitu_workflow_ai_record", None)
         if workflow_record is not None:
-            self._on_insitu_ai_full_fit_finished(workflow_record, int(exit_code))
-            return
-        if summary.cancelled:
-            self._set_ai_workspace_status(f"AI fitting cancelled after {runtime:.2f}s.", 0)
-        elif exit_code == 0:
-            self._set_ai_workspace_status(
-                f"AI fitting finished in {runtime:.2f}s. Output: {self._ai_output_dir}",
-                100,
+            self._on_insitu_ai_full_fit_finished(
+                workflow_record,
+                int(result.exit_code),
+                result=result,
             )
-            self._show_ai_candidate_table(self._ai_output_dir)
-        else:
-            self._set_ai_workspace_status(f"AI fitting failed with exit code {exit_code}. See log for details.", 0)
+            return
+        self._set_ai_workspace_status(
+            f"AI fitting finished in {result.runtime_seconds:.2f}s. "
+            f"Output: {result.output_dir}",
+            100,
+        )
+        self._show_ai_candidate_table(result.output_dir, rows=result.candidates)
 
-    # 函数说明：处理ai process 错误事件。
-    def _on_ai_process_error(self, error) -> None:
+    def _on_ai_job_error(self, code: str, message: str) -> None:
         self._set_ai_running_state(False)
+        self._append_ai_log(f"AI fitting error [{code}]: {message}")
         workflow_record = getattr(self, "_insitu_workflow_ai_record", None)
         if workflow_record is not None:
             workflow_record["fit_status"] = "failed"
-            workflow_record["error_message"] = f"AI process error: {error}"
+            workflow_record["error_message"] = f"AI job error [{code}]: {message}"
             self._insitu_workflow_ai_record = None
             self._insitu_workflow_ai_then_refine = False
-            self._finalize_insitu_workflow_file(record=workflow_record, failed=True)
+            self._finalize_insitu_workflow_file(
+                record=workflow_record,
+                failed=True,
+            )
             return
-        self._set_ai_workspace_status(f"AI process error: {error}", 0)
+        if code == "cancelled":
+            self._set_ai_workspace_status("AI fitting cancelled.", 0)
+        else:
+            self._set_ai_workspace_status(
+                f"AI fitting failed [{code}]: {message}",
+                0,
+            )
 
-    # 函数说明：停止ai 拟合 process。
+    def _cleanup_ai_job_thread(self) -> None:
+        self._ai_job_worker = None
+        self._ai_job_thread = None
+
     def _stop_ai_fitting_process(self) -> None:
-        process = getattr(self, "_ai_process", None)
-        if process is None or process.state() == QProcess.NotRunning:
+        thread = getattr(self, "_ai_job_thread", None)
+        if thread is None or not thread.isRunning():
             return
-        self._append_ai_log("Stopping AI fitting process...")
+        self._append_ai_log("Stopping AI fitting job...")
         self._ai_run_cancelled = True
-        process.terminate()
-        QTimer.singleShot(2500, lambda: process.kill() if process.state() != QProcess.NotRunning else None)
+        if not self.fitting_view_model.cancel_ai_candidates():
+            self._append_ai_log("AI fitting job is already stopping or finished.")
 
     def _stop_ai_fitting_on_budget(self) -> None:
-        process = getattr(self, "_ai_process", None)
-        if process is None or process.state() == QProcess.NotRunning:
-            return
-        profile = getattr(self, "_ai_active_profile", None)
-        self._append_ai_log(
-            f"Time budget reached ({getattr(profile, 'time_budget_seconds', None)} s); cancelling safely."
-        )
+        self._append_ai_log("AI fitting time budget reached; requesting cancellation.")
         self._stop_ai_fitting_process()
+
 
     # 函数说明：实现 打开 ai output 文件夹 相关逻辑。
     def _open_ai_output_folder(self) -> None:
@@ -15141,27 +14855,20 @@ class FittingController(QObject):
         )
 
     # 函数说明：显示ai candidate table。
-    def _show_ai_candidate_table(self, output_dir: Path | None = None) -> None:
+    def _show_ai_candidate_table(self, output_dir: Path | None = None, rows=None) -> None:
         output_dir = Path(output_dir or getattr(self, "_ai_output_dir", "") or "")
-        results_path = output_dir / "top20_candidates.json"
-        if not results_path.is_file():
-            self._set_ai_workspace_status("No AI candidate results found yet.", None)
-            return
-        try:
-            with results_path.open("r", encoding="utf-8") as fh:
-                rows = json.load(fh)
-        except Exception as exc:
-            QMessageBox.warning(self.main_window or self.ui, "AI Fitting Results", f"Failed to read results:\n{exc}")
-            return
-        if not isinstance(rows, list) or not rows:
+        if rows is None:
+            rows = self.fitting_view_model.load_candidate_results(output_dir)
+        if not rows:
             self._set_ai_workspace_status("AI fitting produced no candidates.", None)
             return
+        rows = list(
+            self.fitting_view_model.review_candidates(
+                rows,
+                self._ai_run_settings().get("constraint_set"),
+            )
+        )
         self._ai_candidate_rows = rows
-
-        constraint_set = ConstraintSet.from_dict(self._ai_run_settings().get("constraint_set"))
-        for row in rows:
-            violations = constraint_set.validate_components(row.get("components") or [])
-            row["constraint_violations"] = [violation.message for violation in violations]
 
         dialog = QDialog(self.main_window or self.ui)
         dialog.setWindowTitle("AI Fitting Candidates")
@@ -15237,15 +14944,14 @@ class FittingController(QObject):
 
     # 函数说明：加载ai candidate 参数。
     def _load_ai_candidate_params(self, row: dict, *, refresh_plot: bool = True) -> bool:
-        components = row.get("components") or []
-        if not isinstance(components, list) or not components:
-            QMessageBox.warning(self.main_window or self.ui, "AI Fitting", "Selected candidate has no component parameters.")
-            return False
-        violations = ConstraintSet.from_dict(
-            self._ai_run_settings().get("constraint_set")
-        ).validate_components(components)
+        reviewed = self.fitting_view_model.review_candidates(
+            [row],
+            self._ai_run_settings().get("constraint_set"),
+        )
+        candidate = reviewed[0] if reviewed else dict(row)
+        violations = candidate.get("constraint_violations") or []
         if violations:
-            detail = "\n".join(f"- {item.message} ({item.formula})" for item in violations)
+            detail = "\n".join(f"- {message}" for message in violations)
             QMessageBox.warning(
                 self.main_window or self.ui,
                 "AI Fitting Constraint Violation",
@@ -15253,60 +14959,36 @@ class FittingController(QObject):
             )
             return False
         try:
-            while len(self._iter_particle_widget_ids()) < len(components):
+            mapping = self.fitting_view_model.map_candidate_parameters(row)
+            while len(self._iter_particle_widget_ids()) < len(mapping.components):
                 self._on_add_particle_clicked()
             for widget_id in self._iter_particle_widget_ids():
                 self.set_particle_shape(widget_id, "None")
 
-            shape_map = {
-                "sphere": "Sphere",
-                "cylinder": "Cylinder",
-                "vertical_cylinder": "Vertical Cylinder",
-                "vertical cylinder": "Vertical Cylinder",
-                "verticalcylinder": "Vertical Cylinder",
-            }
-            param_map = {
-                "R": "radius",
-                "sigma_R": "sigma_radius",
-                "h": "height",
-                "sigma_h": "sigma_height",
-                "D": "diameter",
-                "sigma_D": "sigma_diameter",
-            }
             widget_ids = self._iter_particle_widget_ids()
-            for idx, component in enumerate(components):
+            for idx, component in enumerate(mapping.components):
                 widget_id = widget_ids[idx]
-                raw_type = str(component.get("type", "")).strip()
-                shape = shape_map.get(raw_type.lower().replace("-", "_"), raw_type)
+                shape = component.shape
                 if shape not in COMPONENT_PARAMETER_SCHEMAS:
                     shape = "Sphere"
                 particle_id = f"particle_{widget_id}"
                 self.model_params_manager.set_particle_shape("fitting", particle_id, shape)
                 self.model_params_manager.set_particle_enabled("fitting", particle_id, True)
-                self.model_params_manager.set_particle_parameter("fitting", particle_id, shape, "intensity", float(component.get("weight", 1.0)))
-                params = component.get("params") or {}
-                for source_key, target_key in param_map.items():
-                    if source_key in params:
-                        self.model_params_manager.set_particle_parameter(
-                            "fitting", particle_id, shape, target_key, float(params[source_key])
-                        )
+                for parameter_name, value in component.parameters.items():
+                    self.model_params_manager.set_particle_parameter(
+                        "fitting",
+                        particle_id,
+                        shape,
+                        parameter_name,
+                        float(value),
+                    )
 
-            global_map = {
-                "background": "background",
-                "BG": "background",
-                "sigma_res": "sigma_res",
-                "sigma_Res": "sigma_res",
-                "nu_res": "nu_res",
-                "nu_Res": "nu_res",
-                "int_res": "int_res",
-                "int_Res": "int_res",
-                "k": "k_value",
-                "k_value": "k_value",
-            }
-            for key, value in (row.get("global_params") or {}).items():
-                target = global_map.get(str(key), global_map.get(str(key).lower()))
-                if target is not None:
-                    self.model_params_manager.set_global_parameter("fitting", target, float(value))
+            for key, value in mapping.global_parameters.items():
+                self.model_params_manager.set_global_parameter(
+                    "fitting",
+                    key,
+                    float(value),
+                )
             self.model_params_manager.save_parameters()
             if not self.reload_particle_parameters():
                 raise RuntimeError("candidate parameters were saved but could not be reloaded into the GUI")
@@ -15358,22 +15040,6 @@ class FittingController(QObject):
         payload["d_constraint"] = constraint_set.d_constraint_payload(spacing_rule)
         payload["physical_constraints"] = constraint_set.to_dict()
         return payload
-
-    # 函数说明：实现 write ai constraints JSON 相关逻辑。
-    def _write_ai_constraints_json(self, out_dir: Path) -> Path | None:
-        payload = self.build_ai_constraints_json_from_ui()
-        has_constraints = any(payload.get(key) for key in ("components", "type_parameter_ranges", "global_ranges", "parameter_ranges", "d_constraint"))
-        if not has_constraints and payload.get("mode") in ("Free", "Free Prediction"):
-            return None
-        path = Path(out_dir) / "constraints.json"
-        try:
-            with path.open("w", encoding="utf-8") as fh:
-                json.dump(payload, fh, indent=2, ensure_ascii=False)
-            self._append_ai_log(f"Constraints: {path}")
-            return path
-        except Exception as exc:
-            self._append_ai_log(f"Failed to write constraints JSON: {exc}")
-            return None
 
     # 函数说明：显示advanced constraints 对话框。
     def _show_advanced_constraints_dialog(self) -> None:
@@ -15717,161 +15383,108 @@ class FittingController(QObject):
 
     # 函数说明：实现 optimize k 值 相关逻辑。
     def _optimize_k_value(self):
-        """K"""
+        """Optimize the legacy multiplicative K value through the fitting domain."""
+        current_k = None
         try:
-            if not hasattr(self, 'I') or not hasattr(self, 'I_fitting') or \
-               self.I is None or self.I_fitting is None:
+            if (
+                not hasattr(self, "I")
+                or not hasattr(self, "I_fitting")
+                or self.I is None
+                or self.I_fitting is None
+            ):
                 self._add_fitting_error("No fitting data available for K-value optimization")
                 return
-
-            if self.I.size == 0 or self.I_fitting.size == 0:
+            observed_full = np.asarray(self.I, dtype=float)
+            fitted_full = np.asarray(self.I_fitting, dtype=float)
+            if observed_full.size == 0 or fitted_full.size == 0:
                 self._add_fitting_error("Empty data arrays for K-value optimization")
                 return
-
-            if self.I.shape != self.I_fitting.shape:
-                self._add_fitting_error(f"Data shape mismatch: I{self.I.shape} vs I_fitting{self.I_fitting.shape}")
+            if observed_full.shape != fitted_full.shape:
+                self._add_fitting_error(
+                    f"Data shape mismatch: I{observed_full.shape} vs "
+                    f"I_fitting{fitted_full.shape}"
+                )
                 return
+            current_k = float(self.get_global_parameter("k_value"))
+            self._add_fitting_message(
+                f"Starting K-value optimization from {current_k:.6f}..."
+            )
 
-            if np.any(~np.isfinite(self.I)) or np.any(~np.isfinite(self.I_fitting)):
-                self._add_fitting_error("Data contains NaN or infinite values")
-                return
-
-            current_k = self.get_global_parameter('k_value')
-            self._add_fitting_message(f"Starting K-value optimization from {current_k:.6f}...")
-
+            observed_used = observed_full
+            fitted_used = fitted_full
+            q_values = None
             try:
-                q_arr = np.asarray(self.q) if hasattr(self, 'q') and self.q is not None else None
+                if getattr(self, "q", None) is not None:
+                    q_values = np.asarray(self.q)
             except Exception:
-                q_arr = None
-            roi_min = getattr(self, '_roi_min', None)
-            roi_max = getattr(self, '_roi_max', None)
-
-            I_exp_full = self.I
-            I_fit_full = self.I_fitting
-
+                q_values = None
+            roi_min = getattr(self, "_roi_min", None)
+            roi_max = getattr(self, "_roi_max", None)
             if (
-                q_arr is not None and q_arr.size == I_exp_full.size == I_fit_full.size and
-                roi_min is not None and roi_max is not None and
-                np.isfinite(roi_min) and np.isfinite(roi_max) and roi_min < roi_max
+                q_values is not None
+                and q_values.size == observed_full.size == fitted_full.size
+                and roi_min is not None
+                and roi_max is not None
+                and np.isfinite(roi_min)
+                and np.isfinite(roi_max)
+                and roi_min < roi_max
             ):
                 mask = (
-                    np.isfinite(q_arr) & np.isfinite(I_exp_full) & np.isfinite(I_fit_full) &
-                    (q_arr >= float(roi_min)) & (q_arr <= float(roi_max))
+                    np.isfinite(q_values)
+                    & np.isfinite(observed_full)
+                    & np.isfinite(fitted_full)
+                    & (q_values >= float(roi_min))
+                    & (q_values <= float(roi_max))
                 )
                 if np.any(mask):
-                    I_exp_used = I_exp_full[mask]
-                    I_fit_used = I_fit_full[mask]
-                else:
-                    I_exp_used = I_exp_full
-                    I_fit_used = I_fit_full
-            else:
-                I_exp_used = I_exp_full
-                I_fit_used = I_fit_full
+                    observed_used = observed_full[mask]
+                    fitted_used = fitted_full[mask]
 
-            k_safe = max(abs(current_k), 1e-12)
-            I_base = I_fit_used / k_safe
+            optimized = optimize_scale_factor(observed_used, fitted_used, current_k)
+            k_opt = optimized.scale
+            safe_k = max(abs(current_k), 1e-12)
+            self.I_fitting = k_opt * (fitted_full / safe_k)
 
-            I_exp_flat = I_exp_used.flatten()
-            I_base_flat = I_base.flatten()
-
-            valid_mask = np.isfinite(I_exp_flat) & np.isfinite(I_base_flat) & (I_base_flat != 0)
-
-            if not np.any(valid_mask):
-                self._add_fitting_error("No valid data points for K optimization")
-                return
-
-            I_exp_valid = I_exp_flat[valid_mask]
-            I_base_valid = I_base_flat[valid_mask]
-
-            numerator = np.dot(I_base_valid, I_exp_valid)
-            denominator = np.dot(I_base_valid, I_base_valid)
-
-            if denominator <= 1e-12:
-                self._add_fitting_error("Base function has zero norm, cannot optimize K")
-                return
-
-            k_opt = numerator / denominator
-
-            if k_opt <= 0:
-                try:
-                    from scipy.optimize import nnls
-                    A = I_base_valid.reshape(-1, 1)
-                    b = I_exp_valid
-                    k_nnls, residual = nnls(A, b)
-                    k_opt = k_nnls[0] if len(k_nnls) > 0 else 1.0
-                    optimization_method = "NNLS"
-                except ImportError:
-                    self._add_fitting_warning("scipy.optimize.nnls not available, using absolute value of analytical solution")
-                    k_opt = abs(k_opt)
-                    optimization_method = "Analytical (abs)"
-            else:
-                optimization_method = "Analytical"
-
-            if not np.isfinite(k_opt) or k_opt <= 0:
-                self._add_fitting_error(f"Invalid optimized K-value: {k_opt}")
-                return
-
-            residual_before = np.sum((current_k * I_base_valid - I_exp_valid) ** 2)
-            residual_after = np.sum((k_opt * I_base_valid - I_exp_valid) ** 2)
-
-            if I_base.size == self.I_fitting.size:
-                self.I_fitting = k_opt * (self.I_fitting / k_safe)
-            else:
-                try:
-                    if 'mask' in locals() and mask is not None and mask.size == self.I_fitting.size:
-                        I_base_full = self.I_fitting / k_safe
-                        I_base_full = np.asarray(I_base_full)
-                        I_base_full[mask] = I_base
-                        self.I_fitting = k_opt * I_base_full
-                    else:
-                        self.I_fitting = k_opt * (self.I_fitting / k_safe)
-                except Exception:
-                    self.I_fitting = k_opt * (self.I_fitting / k_safe)
-
-            success = self.set_global_parameter('k_value', k_opt)
-            if not success:
+            if not self.set_global_parameter("k_value", k_opt):
                 self._add_fitting_error("Failed to set optimized K-value")
                 return
-
-            if hasattr(self.ui, 'fitKValue'):
+            if hasattr(self.ui, "fitKValue"):
                 self.ui.fitKValue.blockSignals(True)
                 self.ui.fitKValue.setValue(k_opt)
                 self.ui.fitKValue.blockSignals(False)
                 self._add_fitting_message(f"UI K-value updated to {k_opt:.6f}")
+            if isinstance(getattr(self, "fitting", None), dict):
+                meta = self.fitting.get("meta") or {}
+                parameters = meta.get("params") or {}
+                parameters["k"] = float(k_opt)
+                meta["params"] = parameters
+                self.fitting["meta"] = meta
 
-            try:
-                if isinstance(getattr(self, 'fitting', None), dict):
-                    meta = self.fitting.get('meta') or {}
-                    params_meta = meta.get('params') or {}
-                    params_meta['k'] = float(k_opt)
-                    meta['params'] = params_meta
-                    self.fitting['meta'] = meta
-            except Exception:
-                pass
-
-            self._update_GUI_image('fitting')
-            self._update_outside_window('fitting')
-
-            improvement = ((residual_before - residual_after) / max(residual_before, 1e-12)) * 100
-
+            self._update_GUI_image("fitting")
+            self._update_outside_window("fitting")
+            improvement = (
+                (optimized.residual_before - optimized.residual_after)
+                / max(optimized.residual_before, 1e-12)
+            ) * 100
             self._add_fitting_success(
-                f"K-value optimized ({optimization_method}): {current_k:.6f} -> {k_opt:.6f}"
+                f"K-value optimized ({optimized.method}): "
+                f"{current_k:.6f} -> {k_opt:.6f}"
             )
             self._add_fitting_success(
                 f"Residual improvement: {improvement:.2f}% "
-                f"({residual_before:.6e} -> {residual_after:.6e})"
+                f"({optimized.residual_before:.6e} -> "
+                f"{optimized.residual_after:.6e})"
             )
+            self._add_fitting_message(
+                f"Data range - I_exp: [{np.min(optimized.observed):.3e}, "
+                f"{np.max(optimized.observed):.3e}], I_base: "
+                f"[{np.min(optimized.base):.3e}, {np.max(optimized.base):.3e}]"
+            )
+        except Exception as exc:
+            self._add_fitting_error(f"Error during K-value optimization: {exc}")
+            if current_k is not None:
+                self.set_global_parameter("k_value", current_k)
 
-            data_info = f"Data range - I_exp: [{np.min(I_exp_valid):.3e}, {np.max(I_exp_valid):.3e}], "
-            data_info += f"I_base: [{np.min(I_base_valid):.3e}, {np.max(I_base_valid):.3e}]"
-            self._add_fitting_message(data_info)
-
-        except ImportError:
-            self._add_fitting_error("scipy.optimize.nnls not available, using analytical solution only")
-        except Exception as e:
-            self._add_fitting_error(f"Error during K-value optimization: {e}")
-            if 'current_k' in locals():
-                self.set_global_parameter('k_value', current_k)
 
     # ================================
     # ================================
@@ -16161,18 +15774,19 @@ class FittingController(QObject):
             x_data = self._convert_q_values_for_display(x_data, source=q_source_kind)
             x_column_name = self._build_q_axis_label(filter_mode='all', mathtext=False)
             y_column_name = 'Intensity (a.u.)'
-
-            combined_data = np.column_stack([x_data, y_data])
             header_lines = self._build_export_header_lines(choice, data_name)
-
-            delimiter = ',' if filename.lower().endswith('.csv') else '\t'
-            column_header = f'{x_column_name},{y_column_name}' if delimiter == ',' else f'{x_column_name}\t{y_column_name}'
-
-            with open(filename, 'w', encoding='utf-8', newline='\n') as f:
-                if header_lines:
-                    f.write('\n'.join(header_lines) + '\n')
-                f.write(column_header + '\n')
-                np.savetxt(f, combined_data, delimiter=delimiter, fmt='%.6e')
+            outcome = self.fitting_view_model.export_fit_result(
+                ExportFitResultRequest(
+                    path=Path(filename),
+                    q=x_data,
+                    intensity=y_data,
+                    header_lines=tuple(header_lines),
+                    x_column_name=x_column_name,
+                    y_column_name=y_column_name,
+                )
+            )
+            if outcome.error is not None:
+                raise RuntimeError(f"[{outcome.error.code}] {outcome.error.message}")
 
             self._add_fitting_success(f"{data_name} exported successfully to: {filename}")
 
@@ -16710,8 +16324,7 @@ class FittingController(QObject):
 
     # 函数说明：实现 手动 refine 默认 selected 相关逻辑。
     def _manual_refine_default_selected(self, name: str) -> bool:
-        base = re.sub(r'\d+$', '', str(name))
-        return base in {"Int", "BG", "int_Res", "k"}
+        return default_refine_selected(name)
 
     # 函数说明：实现 手动 refine 对话框 状态 相关逻辑。
     def _manual_refine_dialog_state(self) -> dict:
@@ -16735,170 +16348,17 @@ class FittingController(QObject):
 
     # 函数说明：实现 默认 手动 refine bounds 相关逻辑。
     def _default_manual_refine_bounds(self, name: str, value: float):
-        base = re.sub(r'\d+$', '', str(name))
-        value = float(value)
-        if base == "BG":
-            return 0.0, max(abs(value) * 10.0, 1.0)
-        if base in {"sigma_R", "sigma_h", "sigma_D"}:
-            return 0.0, max(abs(value) * 5.0, 1.0)
-        if base in {"nu_Res"}:
-            return 0.1, max(abs(value) * 4.0, 50.0)
-        return 0.0, max(abs(value) * 10.0, 1.0)
+        return default_refine_bounds(name, value)
 
     # 函数说明：实现 run 手动 自动 refine 相关逻辑。
     def _run_manual_auto_refine(self, setup, selected, options, progress_callback=None, stop_callback=None):
-        model_func = setup["model_func"]
-        q_model = np.asarray(setup["q_model"], dtype=float)
-        y = np.asarray(setup["y"], dtype=float)
-        params0 = np.array([float(desc["value"]) for desc in setup["params"]], dtype=float)
-        variable_indices = [int(desc["index"]) for desc, _lo, _hi in selected]
-        selected_indices = [int(idx) for idx in variable_indices]
-        lower = np.array([float(lo) for _desc, lo, _hi in selected], dtype=float)
-        upper = np.array([float(hi) for _desc, _lo, hi in selected], dtype=float)
-        x0 = params0[variable_indices].copy()
-        x0 = np.minimum(np.maximum(x0, lower + 1e-15), upper - 1e-15)
-
-        n_variables = max(1, int(x0.size))
-        calls_per_nfev_estimate = n_variables + 1
-        progress = {
-            "best": np.inf,
-            "best_x": x0.copy(),
-            "calls": 0,
-            "current": np.inf,
-            "last_report_nfev": -1,
-            "last_report_time": 0.0,
-        }
-        target_logrmse = float(options.get("target_logrmse", 0.0) or 0.0)
-        progress_interval = max(1, int(options.get("progress_interval", 5) or 5))
-        show_interval = int(options.get("show_interval", 0) or 0)
-        max_nfev = int(options.get("max_nfev", 120))
-        min_progress_seconds = max(0.3, float(options.get("min_progress_seconds", 0.5) or 0.5))
-
-        # 函数说明：构建参数。
-        def build_params(x):
-            params = params0.copy()
-            params[variable_indices] = x
-            return params
-
-        # 函数说明：实现 对数 rmse for 参数 相关逻辑。
-        def log_rmse_for_params(params):
-            y_model = np.asarray(model_func(q_model, *params), dtype=float)
-            if y_model.shape != y.shape:
-                y_model = y_model[:y.shape[0]]
-            if not np.all(np.isfinite(y_model)):
-                return np.inf, y_model
-            eps = 1e-30
-            residual = np.log10(np.maximum(y_model, eps)) - np.log10(np.maximum(y, eps))
-            return float(np.sqrt(np.mean(residual * residual))), y_model
-
-        initial_log_rmse, _ = log_rmse_for_params(params0)
-        if progress_callback:
-            progress_callback({
-                "params": params0.copy(),
-                "selected_indices": selected_indices,
-                "initial_log_rmse": initial_log_rmse,
-                "final_log_rmse": initial_log_rmse,
-                "best_log_rmse": initial_log_rmse,
-                "current_log_rmse": initial_log_rmse,
-                "nfev": 0,
-                "nfev_est": 0,
-                "calls": 0,
-                "max_nfev": max_nfev,
-                "show_interval": show_interval,
-                "message": "started",
-                "stopped": False,
-            })
-
-        # 函数说明：实现 residuals 相关逻辑。
-        def residuals(x):
-            if stop_callback and stop_callback():
-                raise RuntimeError("__AUTO_REFINE_STOP_REQUESTED__")
-            params = build_params(x)
-            y_model = np.asarray(model_func(q_model, *params), dtype=float)
-            eps = 1e-30
-            if y_model.shape != y.shape or not np.all(np.isfinite(y_model)):
-                return np.full_like(y, 1e6, dtype=float)
-            residual = np.log10(np.maximum(y_model, eps)) - np.log10(np.maximum(y, eps))
-            current = float(np.sqrt(np.mean(residual * residual)))
-            progress["calls"] += 1
-            progress["current"] = current
-            nfev_est = max(1, int(np.ceil(progress["calls"] / calls_per_nfev_estimate)))
-            if current < progress["best"]:
-                progress["best"] = current
-                progress["best_x"] = np.array(x, dtype=float, copy=True)
-            now = time.perf_counter()
-            interval_due = (
-                nfev_est != progress["last_report_nfev"]
-                and nfev_est % progress_interval == 0
-                and (now - float(progress.get("last_report_time", 0.0))) >= min_progress_seconds
-            )
-            if progress_callback and (
-                progress["calls"] == 1
-                or interval_due
-            ):
-                progress["last_report_nfev"] = nfev_est
-                progress["last_report_time"] = now
-                best_params = build_params(progress["best_x"])
-                progress_callback({
-                    "params": best_params,
-                    "selected_indices": selected_indices,
-                    "initial_log_rmse": initial_log_rmse,
-                    "final_log_rmse": float(progress["best"]),
-                    "best_log_rmse": float(progress["best"]),
-                    "current_log_rmse": current,
-                    "nfev": int(nfev_est),
-                    "nfev_est": int(nfev_est),
-                    "calls": int(progress["calls"]),
-                    "max_nfev": max_nfev,
-                    "show_interval": show_interval,
-                    "message": "running",
-                    "stopped": False,
-                })
-            if target_logrmse > 0 and current <= target_logrmse:
-                raise RuntimeError("__AUTO_REFINE_TARGET_REACHED__")
-            return residual
-
-        stopped = False
-        try:
-            result = least_squares(
-                residuals,
-                x0,
-                bounds=(lower, upper),
-                max_nfev=max_nfev,
-                ftol=options.get("ftol"),
-                xtol=options.get("xtol"),
-                gtol=options.get("gtol"),
-            )
-            x_final = result.x
-            message = str(result.message)
-            nfev = int(result.nfev)
-        except RuntimeError as exc:
-            text = str(exc)
-            if "__AUTO_REFINE_TARGET_REACHED__" not in text and "__AUTO_REFINE_STOP_REQUESTED__" not in text:
-                raise
-            x_final = np.array(progress.get("best_x", x0), dtype=float, copy=True)
-            stopped = "__AUTO_REFINE_STOP_REQUESTED__" in text
-            message = "Stopped by user." if stopped else "Stopped after reaching target logRMSE."
-            nfev = max(1, int(np.ceil(int(progress.get("calls", 0)) / calls_per_nfev_estimate)))
-
-        final_params = build_params(x_final)
-        final_log_rmse, _ = log_rmse_for_params(final_params)
-        result_payload = {
-            "params": final_params,
-            "selected_indices": [int(idx) for idx in variable_indices],
-            "initial_log_rmse": initial_log_rmse,
-            "final_log_rmse": final_log_rmse,
-            "nfev": nfev,
-            "nfev_est": nfev,
-            "calls": int(progress.get("calls", nfev)),
-            "max_nfev": max_nfev,
-            "show_interval": show_interval,
-            "message": message,
-            "stopped": stopped,
-        }
-        if progress_callback:
-            progress_callback(result_payload)
-        return result_payload
+        return run_manual_refinement(
+            setup,
+            selected,
+            options,
+            progress_callback=progress_callback,
+            stop_callback=stop_callback,
+        )
 
     # 函数说明：应用手动 refine 结果。
     def _apply_manual_refine_result(self, setup, refined_params, apply_indices=None):
@@ -16992,49 +16452,32 @@ class FittingController(QObject):
 
     # 函数说明：执行手动 拟合。
     def _perform_manual_fitting(self):
-        """No description."""
+        """Bridge legacy parameter widgets to the manual fitting ViewModel command."""
         try:
-            from utils.fitting import make_mixed_model, params_template, mixed_model_components
-
             active_shapes, shape_configs = self._collect_active_particles()
-
             if not active_shapes:
                 self._add_fitting_error("No active particle shapes selected for fitting")
                 return
-
             self._add_fitting_success(f"Active shapes: {active_shapes}")
             self._last_active_particle_ids = shape_configs.copy()
 
-            q_data = None
-            q_source_kind = None
-            if hasattr(self.ui, 'fitCurrentDataCheckBox') and self.ui.fitCurrentDataCheckBox.isChecked():
-                if hasattr(self, 'current_cut_data') and self.current_cut_data is not None:
-                    q_data = np.array(self.current_cut_data['x_coords'])
-                    q_source_kind = 'cut'
-                else:
+            if (
+                hasattr(self.ui, "fitCurrentDataCheckBox")
+                and self.ui.fitCurrentDataCheckBox.isChecked()
+            ):
+                if getattr(self, "current_cut_data", None) is None:
                     self._add_fitting_error("No Cut data available for fitting")
                     return
+                q_data = np.asarray(self.current_cut_data["x_coords"], dtype=float)
+                q_source_kind = "cut"
             else:
-                if hasattr(self, 'current_1d_data') and self.current_1d_data is not None:
-                    q_data = np.array(self.current_1d_data['q'])
-                    q_source_kind = '1d'
-                else:
+                if getattr(self, "current_1d_data", None) is None:
                     self._add_fitting_error("No 1D file data available for fitting")
                     return
+                q_data = np.asarray(self.current_1d_data["q"], dtype=float)
+                q_source_kind = "1d"
 
-            q_model = self._convert_q_values_for_model(q_data, source=q_source_kind)
-            self._add_fitting_success(
-                f"q converted to internal model unit nm^-1 (source={self._get_q_source_unit(q_source_kind)}, display={self._get_q_display_unit()})"
-            )
-
-            model_func = make_mixed_model(active_shapes)
-            param_names = params_template(active_shapes)
-
-            self._add_fitting_success(f"Created model with parameters: {param_names}")
-
-            # 4. Read current component parameter values from the dynamic schema.
-            params = []
-            param_aliases = {
+            parameter_aliases = {
                 "intensity": "Int",
                 "radius": "R",
                 "sigma_radius": "sigma_R",
@@ -17043,124 +16486,122 @@ class FittingController(QObject):
                 "diameter": "D",
                 "sigma_diameter": "sigma_D",
             }
-            for i, shape in enumerate(active_shapes, 1):
-                shape_idx = shape_configs[i - 1]
+            parameters = []
+            for index, shape in enumerate(active_shapes, 1):
+                widget_id = shape_configs[index - 1]
                 shape_display = self._shape_display_name(shape)
-                schema = COMPONENT_PARAMETER_SCHEMAS.get(shape_display, [])
                 shape_values = {}
-                for param_key, _suffix, _label, default_value, _decimals, _step in schema:
-                    alias = param_aliases[param_key]
-                    value = self._get_particle_parameter(shape_idx, alias, default_value)
-                    params.append(value)
+                for parameter_key, _suffix, _label, default, _decimals, _step in (
+                    COMPONENT_PARAMETER_SCHEMAS.get(shape_display, [])
+                ):
+                    alias = parameter_aliases[parameter_key]
+                    value = self._get_particle_parameter(widget_id, alias, default)
+                    parameters.append(value)
                     shape_values[alias] = value
+                diameter = shape_values.get("D", 0.0)
+                diameter_sigma = shape_values.get("sigma_D", 0.0)
+                state = (
+                    "disabled"
+                    if diameter == 0 or diameter_sigma == 0
+                    else "enabled"
+                )
+                self._add_fitting_success(
+                    f"Shape {index} ({shape_display}): Structure factor {state} "
+                    f"(D={diameter}, sigma_D={diameter_sigma})"
+                )
 
-                d_param = shape_values.get("D", 0.0)
-                sigma_d_param = shape_values.get("sigma_D", 0.0)
-                if d_param == 0 or sigma_d_param == 0:
-                    self._add_fitting_success(
-                        f"Shape {i} ({shape_display}): Structure factor disabled (D={d_param}, sigma_D={sigma_d_param})"
-                    )
+            global_inputs = (
+                ("fitBGValue", "background", 0.0),
+                ("fitSigmaResValue", "sigma_res", 0.1),
+                ("fitNuResValue", "nu_res", 5.0),
+                ("fitIntResValue", "int_res", 0.0),
+                ("fitKValue", "k_value", 1.0),
+            )
+            global_values = []
+            for widget_name, global_key, default in global_inputs:
+                if hasattr(self.ui, widget_name):
+                    value = float(getattr(self.ui, widget_name).value())
+                elif hasattr(self, "get_global_parameter"):
+                    value = float(self.get_global_parameter(global_key))
                 else:
-                    self._add_fitting_success(
-                        f"Shape {i} ({shape_display}): Structure factor enabled (D={d_param}, sigma_D={sigma_d_param})"
-                    )
+                    value = float(default)
+                global_values.append(value)
+            parameters.extend(global_values)
 
-
-            if hasattr(self.ui, 'fitBGValue'):
-                bg_param = self.ui.fitBGValue.value()
-            else:
-                bg_param = self.get_global_parameter('background') if hasattr(self, 'get_global_parameter') else 0.0
-
-            if hasattr(self.ui, 'fitSigmaResValue'):
-                sigma_res_param = self.ui.fitSigmaResValue.value()
-            else:
-                sigma_res_param = self.get_global_parameter('sigma_res') if hasattr(self, 'get_global_parameter') else 0.1
-
-            if hasattr(self.ui, 'fitNuResValue'):
-                nu_res_param = self.ui.fitNuResValue.value()
-            else:
-                nu_res_param = self.get_global_parameter('nu_res') if hasattr(self, 'get_global_parameter') else 5.0
-
-            if hasattr(self.ui, 'fitIntResValue'):
-                int_res_param = self.ui.fitIntResValue.value()
-            else:
-                int_res_param = self.get_global_parameter('int_res') if hasattr(self, 'get_global_parameter') else 0.0
-
-            if hasattr(self.ui, 'fitKValue'):
-                k_param = self.ui.fitKValue.value()
-            else:
-                k_param = self.get_global_parameter('k_value') if hasattr(self, 'get_global_parameter') else 1.0
-
-            if sigma_res_param == 0 or int_res_param == 0:
-                self._add_fitting_success(
-                    f"Lorentzian resolution component disabled (sigma_res={sigma_res_param}, int_res={int_res_param})"
+            sigma_res, nu_res, int_res = global_values[1:4]
+            resolution_state = (
+                "disabled" if sigma_res == 0 or int_res == 0 else "active"
+            )
+            self._add_fitting_success(
+                f"Lorentzian resolution {resolution_state}: "
+                f"sigma_res={sigma_res}, nu_res={nu_res}, int_res={int_res}"
+            )
+            request = ManualFitRequest(
+                q=q_data,
+                q_source_unit=self._get_q_source_unit(q_source_kind),
+                shapes=tuple(active_shapes),
+                parameters=tuple(parameters),
+            )
+            result = self.fitting_view_model.run_manual_fit(request)
+            if result is None:
+                message = (
+                    self.fitting_view_model.state.error_message
+                    or "Manual fitting calculation failed"
                 )
-            else:
-                self._add_fitting_success(
-                    f"Lorentzian resolution active: sigma_res={sigma_res_param}, nu_res={nu_res_param}, int_res={int_res_param}"
-                )
+                self._add_fitting_error(message)
+                return
 
-            params.extend([bg_param, sigma_res_param, nu_res_param, int_res_param, k_param])
-
-            param_dict = dict(zip(param_names, params))
+            param_dict = dict(zip(result.parameter_names, result.parameters))
+            self._add_fitting_success(
+                "q converted to internal model unit nm^-1 "
+                f"(source={request.q_source_unit}, display={self._get_q_display_unit()})"
+            )
+            self._add_fitting_success(
+                f"Created model with parameters: {list(result.parameter_names)}"
+            )
             self._add_fitting_success(f"Using parameters: {param_dict}")
-
             self._validate_parameter_retrieval(active_shapes, shape_configs)
 
-            try:
-                fitting_result = model_func(q_model, *params)
-                self._add_fitting_success(f"Fitting calculation completed successfully")
-
-                result_stats = {
-                    'min': float(np.min(fitting_result)),
-                    'max': float(np.max(fitting_result)),
-                    'mean': float(np.mean(fitting_result)),
-                    'sum': float(np.sum(fitting_result))
-                }
-                self._add_fitting_success(f"Result stats: {result_stats}")
-
-                self.I_fitting = fitting_result
-                self.has_fitting_data = True
+            fitting_result = result.intensity
+            stats = {
+                "min": float(np.min(fitting_result)),
+                "max": float(np.max(fitting_result)),
+                "mean": float(np.mean(fitting_result)),
+                "sum": float(np.sum(fitting_result)),
+            }
+            self._add_fitting_success("Fitting calculation completed successfully")
+            self._add_fitting_success(f"Result stats: {stats}")
+            self.I_fitting = fitting_result
+            self.has_fitting_data = True
+            self._has_fitting_data = True
+            self.fitting = {
+                "q": np.array(result.q, copy=True),
+                "I": np.array(fitting_result, copy=True),
+                "meta": {
+                    "shapes": list(result.shapes),
+                    "params": param_dict,
+                    "timestamp": time.time(),
+                    "source": "fitting",
+                    "data_source": q_source_kind,
+                    "q_source_unit": request.q_source_unit,
+                    "q_model_unit": "nm",
+                },
+            }
+            self.display_mode = "fitting"
+            self._fitting_mode_active = True
+            if not getattr(self, "_suppress_workflow_plot_updates", False):
+                self._update_GUI_image("fitting")
+                self._update_outside_window("fitting")
+            if self._auto_k_enabled and getattr(self, "I", None) is not None:
                 try:
-                    self._has_fitting_data = True
-                except Exception:
-                    pass
-                try:
-                    import time
-                    self.fitting = {
-                        'q': np.array(q_data, copy=True),
-                        'I': np.array(fitting_result, copy=True),
-                        'meta': {
-                            'shapes': active_shapes,
-                            'params': param_dict,
-                            'timestamp': time.time(),
-                            'source': 'fitting',
-                            'data_source': q_source_kind,
-                            'q_source_unit': self._get_q_source_unit(q_source_kind),
-                            'q_model_unit': 'nm'
-                        }
-                    }
-                except Exception:
-                    self.fitting = {'q': q_data, 'I': fitting_result, 'meta': {'source': 'fitting'}}
+                    self._optimize_k_value()
+                except Exception as exc:
+                    self._add_fitting_error(
+                        f"Auto K-value optimization failed: {exc}"
+                    )
+        except Exception as exc:
+            self._add_fitting_error(f"Manual fitting failed: {exc}")
 
-                self.display_mode = 'fitting'
-                self._fitting_mode_active = True
-
-                if not getattr(self, "_suppress_workflow_plot_updates", False):
-                    self._update_GUI_image('fitting')
-                    self._update_outside_window('fitting')
-
-                if self._auto_k_enabled and hasattr(self, 'I') and self.I is not None:
-                    try:
-                        self._optimize_k_value()
-                    except Exception as opt_error:
-                        self._add_fitting_error(f"Auto K-value optimization failed: {opt_error}")
-
-            except Exception as calc_error:
-                self._add_fitting_error(f"Fitting calculation failed: {str(calc_error)}")
-
-        except Exception as e:
-            self._add_fitting_error(f"Manual fitting failed: {str(e)}")
 
     # 函数说明：实现 store 拟合 数据 相关逻辑。
     def _store_fitting_data(self, q_data, intensity_data, active_shapes):

@@ -8,6 +8,8 @@ import subprocess
 import re
 import json
 import datetime
+import importlib.util
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -33,14 +35,27 @@ from PyQt5.QtWidgets import (
     QTextBrowser,
 )
 
-from core.global_params import global_params
 from ui.responsive_layout import (
     apply_density_profile,
     install_adaptive_window_profile,
     move_window_to_cursor_screen,
 )
 from utils.path_utils import normalize_path
-from .fitting_controller import AsyncImageLoader, is_matplotlib_available, is_fabio_available
+from src.gimap.features.prediction.domain import (
+    build_complete_batches,
+    coerce_array_to_shape,
+    extract_cbf_index,
+    nearest_resize_nhwc,
+    normalize_input_rank,
+    normalize_parameter_prediction,
+    normalize_prediction_output,
+    parse_index_range,
+)
+from src.gimap.features.prediction.infrastructure import module_to_legacy_dict
+from src.gimap.features.prediction.presentation import (
+    PredictionImageLoader,
+    PredictionViewModel,
+)
 from .multifile_predict_results import (
     MultiFilePredictResultsWidget,
     MultiFilePredictManager,
@@ -48,6 +63,13 @@ from .multifile_predict_results import (
     PredictStatus,
     ExportDialog
 )
+
+
+def _dependency_available(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, ValueError):
+        return False
 
 
 class GisaxsPredictController(QObject):
@@ -73,11 +95,20 @@ class GisaxsPredictController(QObject):
 
     _mpl_cm = None
 
-    def __init__(self, ui, parent=None) -> None:
+    def __init__(
+        self,
+        ui,
+        parent=None,
+        *,
+        prediction_view_model: PredictionViewModel | None = None,
+    ) -> None:
         super().__init__(parent)
         self.ui = ui
         self.parent = parent
         self.main_window = parent.parent if hasattr(parent, "parent") else None
+        if prediction_view_model is None:
+            raise ValueError("GisaxsPredictController requires PredictionViewModel")
+        self.prediction_view_model = prediction_view_model
 
         self.current_parameters: Dict[str, Optional[str]] = {}
         self.prediction_results: Dict[str, object] = {}
@@ -106,7 +137,7 @@ class GisaxsPredictController(QObject):
 
         self._load_request_seq = 0
         self._latest_display_request = 0
-        self._active_loaders: Dict[int, AsyncImageLoader] = {}
+        self._active_loaders: Dict[int, PredictionImageLoader] = {}
         self._pending_contexts: Dict[int, Dict[str, object]] = {}
 
         # Module system state
@@ -153,7 +184,7 @@ class GisaxsPredictController(QObject):
     # ------------------------------------------------------------------
     def _load_saved_parameters(self) -> None:
         try:
-            saved = global_params.get_module_parameters("gisaxs_predict")
+            saved = self.prediction_view_model.load_settings()
             if saved:
                 self.current_parameters.update(saved)
         except Exception:
@@ -918,7 +949,7 @@ class GisaxsPredictController(QObject):
             return
         self._synchronizing = True
         try:
-            global_params.set_module_parameters("gisaxs_predict", dict(self.current_parameters))
+            self.prediction_view_model.save_settings(dict(self.current_parameters))
             self.parameters_changed.emit(dict(self.current_parameters))
         finally:
             self._synchronizing = False
@@ -1088,17 +1119,7 @@ class GisaxsPredictController(QObject):
             self._append_status_message(f"Failed to scan folder: {exc}", level="ERROR")
 
     def _extract_index(self, file_name: str) -> Optional[int]:
-        match = re.search(r"_(\d+)(?=\.cbf$)", file_name, re.IGNORECASE)
-        if not match:
-            match = re.search(r"(\d+)(?=\.cbf$)", file_name, re.IGNORECASE)
-        if match:
-            try:
-                return int(match.group(1))
-            except ValueError:
-                return None
-        if file_name.lower().endswith(".cbf"):
-            return 1
-        return None
+        return extract_cbf_index(file_name)
 
     def _update_range_tooltip(self) -> None:
         if not self._available_indices:
@@ -1213,14 +1234,7 @@ class GisaxsPredictController(QObject):
         self._start_image_loading(self._index_to_file[index], 1, {"mode": "multi_files", "index": index})
 
     def _parse_range_text(self, text: str) -> List[int]:
-        match = re.match(r"\s*(\d+)\s*(?:-\s*(\d+))?\s*", text)
-        if not match:
-            return []
-        start = int(match.group(1))
-        end = int(match.group(2)) if match.group(2) else start
-        if end < start:
-            start, end = end, start
-        return list(range(start, end + 1))
+        return parse_index_range(text)
 
     def _trigger_data_reload(self) -> None:
         if self.current_parameters.get("mode", "single_file") == "single_file":
@@ -1317,7 +1331,7 @@ class GisaxsPredictController(QObject):
         if not os.path.exists(file_path):
             QMessageBox.warning(self.main_window, "File Not Found", file_path)
             return
-        if not is_fabio_available():
+        if not _dependency_available("fabio"):
             QMessageBox.warning(
                 self.main_window,
                 "Missing Dependency",
@@ -1327,7 +1341,7 @@ class GisaxsPredictController(QObject):
 
         self._load_request_seq += 1
         request_id = self._load_request_seq
-        loader = AsyncImageLoader()
+        loader = PredictionImageLoader(self.prediction_view_model)
         self._active_loaders[request_id] = loader
 
         # Precompute stack file names for logging so we can show per-file progress
@@ -1532,7 +1546,7 @@ class GisaxsPredictController(QObject):
         return QPixmap.fromImage(image_q.copy())
 
     def _get_mpl_cm(self):
-        if not is_matplotlib_available():
+        if not _dependency_available("matplotlib"):
             return None
         if self.__class__._mpl_cm is None:
             try:
@@ -1558,6 +1572,25 @@ class GisaxsPredictController(QObject):
                 pass
         if image is None:
             return None
+        typed_module = (
+            self._current_module.get("_prediction_module")
+            if isinstance(self._current_module, dict)
+            else None
+        )
+        if typed_module is not None:
+            prepared = self.prediction_view_model.prepare_input(image, typed_module)
+            if prepared is None:
+                self._append_status_message(
+                    self.prediction_view_model.state.error_message
+                    or "Module preprocessing failed",
+                    level="ERROR",
+                )
+                return None
+            self._latest_preprocess_steps = list(prepared.steps)
+            self._append_status_message(
+                f"Module preprocess output shape {prepared.values.shape}"
+            )
+            return prepared.values
         img = image.astype(np.float32, copy=True)
         try:
             self._append_status_message(f"Preprocess input shape {img.shape}")
@@ -1725,16 +1758,9 @@ class GisaxsPredictController(QObject):
         if isinstance(resize_cfg, dict):
             target_h = int(resize_cfg.get("height", img.shape[0]))
             target_w = int(resize_cfg.get("width", img.shape[1]))
-            try:
-                import tensorflow as tf  # type: ignore
-                t = tf.convert_to_tensor(img[None, ..., None], dtype=tf.float32)
-                r = tf.image.resize(t, [target_h, target_w], method='bilinear')
-                img = r.numpy()[0, ..., 0]
-            except Exception:
-                # Simple nearest-neighbor numpy resize
-                ys = np.linspace(0, img.shape[0] - 1, target_h).astype(np.int32)
-                xs = np.linspace(0, img.shape[1] - 1, target_w).astype(np.int32)
-                img = img[np.ix_(ys, xs)]
+            img = nearest_resize_nhwc(
+                img[None, ..., None], target_h, target_w
+            )[0, ..., 0]
             try:
                 self._append_status_message(f"Fallback resize -> {img.shape}")
             except Exception:
@@ -1742,15 +1768,9 @@ class GisaxsPredictController(QObject):
         elif isinstance(resize_cfg, (list, tuple)) and len(resize_cfg) == 2:
             target_h = int(resize_cfg[0])
             target_w = int(resize_cfg[1])
-            try:
-                import tensorflow as tf  # type: ignore
-                t = tf.convert_to_tensor(img[None, ..., None], dtype=tf.float32)
-                r = tf.image.resize(t, [target_h, target_w], method='bilinear')
-                img = r.numpy()[0, ..., 0]
-            except Exception:
-                ys = np.linspace(0, img.shape[0] - 1, target_h).astype(np.int32)
-                xs = np.linspace(0, img.shape[1] - 1, target_w).astype(np.int32)
-                img = img[np.ix_(ys, xs)]
+            img = nearest_resize_nhwc(
+                img[None, ..., None], target_h, target_w
+            )[0, ..., 0]
             try:
                 self._append_status_message(f"Fallback resize -> {img.shape}")
             except Exception:
@@ -1784,15 +1804,9 @@ class GisaxsPredictController(QObject):
                     target_h = int(m_resize.get("height", target_h))
                     target_w = int(m_resize.get("width", target_w))
                 if mask.shape != (target_h, target_w):
-                    try:
-                        import tensorflow as tf  # type: ignore
-                        mt = tf.convert_to_tensor(mask[None, ..., None], dtype=tf.float32)
-                        mr = tf.image.resize(mt, [target_h, target_w], method='nearest')
-                        mask = mr.numpy()[0, ..., 0]
-                    except Exception:
-                        ys = np.linspace(0, mask.shape[0] - 1, target_h).astype(np.int32)
-                        xs = np.linspace(0, mask.shape[1] - 1, target_w).astype(np.int32)
-                        mask = mask[np.ix_(ys, xs)]
+                    mask = nearest_resize_nhwc(
+                        mask[None, ..., None], target_h, target_w
+                    )[0, ..., 0]
 
                 # Apply mask value
                 mask_value = spec.get("mask_value") if isinstance(spec, dict) else None
@@ -1822,166 +1836,61 @@ class GisaxsPredictController(QObject):
 
     def _normalize_parameter_prediction(self, pred: object) -> Optional[Dict[str, object]]:
         spec = self._current_module if isinstance(self._current_module, dict) else {}
-        output_type = str(spec.get("output_type") or "").lower()
-        is_sf = output_type in {"sf_4_parameters", "sf_parameters", "parameters"}
-        if not is_sf and isinstance(pred, dict):
-            is_sf = "branch_thickness" in pred and "branch_size" in pred
-        if not is_sf:
-            return None
-
-        normalized = None
-        if isinstance(pred, dict):
-            if "branch_thickness" in pred and "branch_size" in pred:
-                thickness = np.asarray(pred["branch_thickness"], dtype=np.float32)
-                size = np.asarray(pred["branch_size"], dtype=np.float32)
-                normalized = np.concatenate([thickness, size], axis=-1)
-            elif "parameters" in pred:
-                normalized = np.asarray(pred["parameters"], dtype=np.float32)
-            elif pred:
-                values = [np.asarray(value, dtype=np.float32) for value in pred.values()]
-                if values:
-                    normalized = np.concatenate(values, axis=-1)
-        else:
-            arr = np.asarray(pred, dtype=np.float32)
-            if arr.size:
-                normalized = arr
-
-        if normalized is None:
-            return None
-        arr = np.asarray(normalized, dtype=np.float32)
-        if arr.ndim > 1:
-            arr = arr.reshape((-1, arr.shape[-1]))[0]
-        arr = arr.reshape(-1)
-
-        names = spec.get("parameter_names") if isinstance(spec.get("parameter_names"), list) else []
-        names = [str(name) for name in names] if names else ["t_Cu", "t_polymer", "D", "sigma"]
-        target_min = np.asarray(spec.get("target_min") or [0.0, 10.0, 4.0, 0.2], dtype=np.float32)
-        target_max = np.asarray(spec.get("target_max") or [25.0, 50.0, 20.0, 4.0], dtype=np.float32)
-
-        count = min(arr.size, len(names), target_min.size, target_max.size)
-        if count <= 0:
-            return None
-        arr = arr[:count]
-        values = arr * (target_max[:count] - target_min[:count]) + target_min[:count]
-        return {
-            "parameters": values.astype(np.float32),
-            "parameters_normalized": arr.astype(np.float32),
-            "parameter_names": names[:count],
-        }
+        return normalize_parameter_prediction(pred, spec)
 
     def _predict_with_current_model(self, inp: np.ndarray) -> Optional[Dict[str, np.ndarray]]:
         if self._current_model is None or inp is None:
             return None
-        out_image: Optional[np.ndarray] = None
-        scalar_out: Optional[np.ndarray] = None
-        # Coerce input to model's expected input shape if available
+        typed_module = (
+            self._current_module.get("_prediction_module")
+            if isinstance(self._current_module, dict)
+            else None
+        )
+        model_path = str(self.current_parameters.get("module_model_path") or "")
+        if typed_module is not None and model_path:
+            result = self.prediction_view_model.predict_prepared(
+                inp,
+                typed_module,
+                Path(model_path),
+                getattr(self, "_latest_preprocess_steps", ()),
+            )
+            if result is None:
+                self._append_status_message(
+                    self.prediction_view_model.state.error_message
+                    or "Isolated prediction failed",
+                    level="ERROR",
+                )
+                return None
+            return dict(result.outputs)  # type: ignore[return-value]
         exp_shape = None
         try:
             exp_shape = self._model_input_shape(self._current_model)
             if isinstance(exp_shape, tuple):
                 inp = self._coerce_array_to_shape(inp, exp_shape)
-            # Log effective shapes
-            try:
-                self._append_status_message(f"Model expected input_shape={exp_shape}, sending {tuple(inp.shape)}")
-            except Exception:
-                pass
+            self._append_status_message(
+                f"Model expected input_shape={exp_shape}, sending {tuple(inp.shape)}"
+            )
         except Exception:
-            # If anything goes wrong, proceed with original inp
             pass
-        predict_error = None
+
         try:
-            # Keras/tf.keras model path. Do not require top-level ``keras`` here:
-            # TensorFlow 2.13 installations often expose only ``tensorflow.keras``.
-            if hasattr(self._current_model, 'predict'):
-                pred = self._current_model.predict(inp, verbose=0)
-                parameter_out = self._normalize_parameter_prediction(pred)
-                if parameter_out is not None:
-                    return parameter_out  # type: ignore[return-value]
-                if isinstance(pred, (list, tuple)) and len(pred) > 0:
-                    # Prefer 2D-like output if present, else capture scalar
-                    cand0 = np.array(pred[0])
-                    if cand0.squeeze().ndim >= 2:
-                        out_image = cand0
-                    else:
-                        scalar_out = cand0.squeeze()
-                elif isinstance(pred, dict):
-                    # Try common keys
-                    val = pred.get('hr', None)
-                    if val is None:
-                        val = pred.get('output', None)
-                    if val is None and len(pred) > 0:
-                        val = list(pred.values())[0]
-                    if val is not None:
-                        val_arr = np.array(val)
-                        if val_arr.squeeze().ndim >= 2:
-                            out_image = val_arr
-                        else:
-                            scalar_out = val_arr.squeeze()
-                else:
-                    arr = np.array(pred)
-                    if arr.squeeze().ndim >= 2:
-                        out_image = arr
-                    else:
-                        scalar_out = arr.squeeze()
-            else:
-                raise Exception("Model has no predict method")
+            if not hasattr(self._current_model, "predict"):
+                raise TypeError("Model proxy has no prediction interface.")
+            pred = self._current_model.predict(inp, verbose=0)
         except Exception as exc:
-            predict_error = exc
-            # Try TF SavedModel signature
-            try:
-                import tensorflow as tf  # type: ignore
-                if hasattr(self._current_model, 'signatures'):
-                    fn = self._current_model.signatures.get('serving_default') or next(iter(self._current_model.signatures.values()))
-                    # Build input dict from structured input signature
-                    sig = fn.structured_input_signature
-                    # sig is (args, kwargs); use kwargs keys
-                    input_kwargs = sig[1] if isinstance(sig, tuple) and len(sig) > 1 and isinstance(sig[1], dict) else {}
-                    input_keys = list(input_kwargs.keys())
-                    input_spec = input_kwargs.get(input_keys[0]) if input_keys else None
-                    x = self._coerce_array_to_tensor_spec(inp, input_spec)
-                    t = tf.convert_to_tensor(x, dtype=getattr(input_spec, "dtype", tf.float32) if input_spec is not None else tf.float32)
-                    if input_keys:
-                        res = fn(**{input_keys[0]: t})
-                    else:
-                        res = fn(t)
-                    # res is a dict of tensors
-                    vals = list(res.values())
-                    if vals:
-                        pred_dict = {str(key): value.numpy() for key, value in res.items()}
-                        parameter_out = self._normalize_parameter_prediction(pred_dict)
-                        if parameter_out is not None:
-                            return parameter_out  # type: ignore[return-value]
-                        tmp = vals[0].numpy()
-                        if np.squeeze(tmp).ndim >= 2:
-                            out_image = tmp
-                        else:
-                            scalar_out = np.squeeze(tmp)
-            except Exception as exc:
-                if predict_error is not None:
-                    self._append_status_message(f"Keras predict failed: {predict_error}", level="ERROR")
-                self._append_status_message(f"SavedModel prediction failed: {exc}", level="ERROR")
-                return None
-
-        # If scalar output (e.g., two numbers), return as 'scalars'
-        if out_image is None and scalar_out is not None:
-            scal = np.array(scalar_out).reshape(-1)
-            return {"scalars": scal}
-        if out_image is None:
-            self._append_status_message("Prediction produced no output", level="WARN")
+            self._append_status_message(
+                f"Isolated TensorFlow prediction failed: {exc}",
+                level="ERROR",
+            )
             return None
 
-        # Ensure 2D image from batch
-        img2d = out_image.squeeze()
-        if img2d.ndim == 3:
-            img2d = img2d[..., 0]
-        if img2d.ndim != 2:
-            self._append_status_message(f"Unexpected prediction shape: {out_image.shape}", level="WARN")
-            return None
-
-        # Derive h and r distributions
-        h_sum = np.sum(img2d, axis=0)
-        r_sum = np.sum(img2d, axis=1)
-        return {"hr": img2d, "h": h_sum, "r": r_sum}
+        normalized = normalize_prediction_output(
+            pred,
+            self._current_module if isinstance(self._current_module, dict) else {},
+        )
+        if normalized is None:
+            self._append_status_message("Prediction produced no compatible output", level="WARN")
+        return normalized  # type: ignore[return-value]
 
     def _coerce_array_to_tensor_spec(self, arr: np.ndarray, tensor_spec: object) -> np.ndarray:
         """Best-effort NHWC reshape/resize for TensorFlow SavedModel signatures."""
@@ -2008,63 +1917,13 @@ class GisaxsPredictController(QObject):
         return tuple(exp_shape) if isinstance(exp_shape, (list, tuple)) else None
 
     def _normalize_input_rank(self, arr: np.ndarray) -> np.ndarray:
-        x = np.asarray(arr, dtype=np.float32)
-        while x.ndim > 4 and 1 in x.shape:
-            x = np.squeeze(x, axis=x.shape.index(1))
-        if x.ndim == 2:
-            return x[None, ..., None].astype(np.float32, copy=False)
-        if x.ndim == 3:
-            if x.shape[0] == 1:
-                return x[..., None].astype(np.float32, copy=False)
-            if x.shape[-1] in (1, 2, 3, 4):
-                return x[None, ...].astype(np.float32, copy=False)
-            return x[..., None].astype(np.float32, copy=False)
-        return x.astype(np.float32, copy=False)
+        return normalize_input_rank(arr)
 
     def _coerce_array_to_shape(self, arr: np.ndarray, shape: Tuple[object, ...]) -> np.ndarray:
-        x = self._normalize_input_rank(arr)
-        if len(shape) == 4:
-            _, h, w, c = shape
-            target_h = int(h) if isinstance(h, (int, np.integer)) else (x.shape[1] if x.ndim >= 3 else x.shape[0])
-            target_w = int(w) if isinstance(w, (int, np.integer)) else (x.shape[2] if x.ndim >= 4 else x.shape[1])
-            target_c = int(c) if isinstance(c, (int, np.integer)) else (x.shape[-1] if x.ndim == 4 else 1)
-            if x.ndim != 4:
-                x = self._normalize_input_rank(x)
-            if x.ndim == 4:
-                x = self._resize_nhwc(x, target_h, target_w)
-                if x.shape[-1] != target_c:
-                    if target_c == 1:
-                        x = x[..., :1]
-                    elif x.shape[-1] == 1:
-                        x = np.repeat(x, target_c, axis=-1)
-                    else:
-                        x = x[..., :target_c]
-            return x.astype(np.float32, copy=False)
-
-        if len(shape) == 3:
-            _, h, w = shape
-            target_h = int(h) if isinstance(h, (int, np.integer)) else (x.shape[1] if x.ndim >= 3 else x.shape[0])
-            target_w = int(w) if isinstance(w, (int, np.integer)) else (x.shape[2] if x.ndim >= 3 else x.shape[1])
-            if x.ndim == 4 and x.shape[-1] == 1:
-                x = x[..., 0]
-            elif x.ndim == 2:
-                x = x[None, ...]
-            if x.ndim == 3:
-                x4 = self._resize_nhwc(x[..., None], target_h, target_w)
-                return x4[..., 0].astype(np.float32, copy=False)
-        return x.astype(np.float32, copy=False)
+        return coerce_array_to_shape(arr, shape, self._resize_nhwc)
 
     def _resize_nhwc(self, x: np.ndarray, target_h: int, target_w: int) -> np.ndarray:
-        if x.ndim != 4 or (x.shape[1], x.shape[2]) == (target_h, target_w):
-            return x
-        try:
-            import tensorflow as tf  # type: ignore
-            t = tf.convert_to_tensor(x, dtype=tf.float32)
-            return tf.image.resize(t, [target_h, target_w], method='bilinear').numpy()
-        except Exception:
-            ys = np.linspace(0, x.shape[1] - 1, target_h).astype(np.int32)
-            xs = np.linspace(0, x.shape[2] - 1, target_w).astype(np.int32)
-            return x[:, ys][:, :, xs]
+        return nearest_resize_nhwc(x, target_h, target_w)
 
     def _get_or_create_predict2d_tabs(self) -> Optional[QTabWidget]:
         # Embed inner tabs inside the existing Predict-2D tab of the main tab widget
@@ -2613,6 +2472,16 @@ class GisaxsPredictController(QObject):
     def _collect_preprocess_steps(self, image: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[List[Dict[str, object]]]]:
         if image is None:
             return None, None
+        typed_module = (
+            self._current_module.get("_prediction_module")
+            if isinstance(self._current_module, dict)
+            else None
+        )
+        if typed_module is not None:
+            prepared = self.prediction_view_model.prepare_input(image, typed_module)
+            if prepared is None:
+                return None, None
+            return prepared.values, list(prepared.steps)
         try:
             spec = self._current_module or {}
             entry = spec.get("preprocess_entry") if isinstance(spec, dict) else ""
@@ -3186,68 +3055,19 @@ class GisaxsPredictController(QObject):
         return os.path.join(base_dir, "modules")
 
     def _scan_modules(self) -> Dict[str, Dict[str, object]]:
-        root = self._modules_root()
-        result: Dict[str, Dict[str, object]] = {}
-        if not os.path.isdir(root):
-            return result
         try:
-            for entry in sorted(os.listdir(root)):
-                folder = os.path.join(root, entry)
-                if not os.path.isdir(folder):
-                    continue
-                yaml_path = os.path.join(folder, "module.yaml")
-                if not os.path.isfile(yaml_path):
-                    continue
-                spec = self._parse_module_yaml(yaml_path)
-                if not spec:
-                    continue
-                # Enrich with paths
-                spec["folder"] = folder
-                spec["yaml_path"] = yaml_path
-                # Normalize model path to absolute if set
-                model_path = spec.get("model_path") or ""
-                if model_path and not os.path.isabs(model_path):
-                    spec["model_path"] = os.path.abspath(os.path.join(folder, model_path))
-                # Normalize mask path
-                mask_path = spec.get("mask_path") or ""
-                if mask_path and not os.path.isabs(mask_path):
-                    spec["mask_path"] = os.path.abspath(os.path.join(folder, mask_path))
-                name = spec.get("name") or entry
-                result[name] = spec
+            modules = self.prediction_view_model.discover_modules()
+            return {module.name: module_to_legacy_dict(module) for module in modules}
         except Exception as exc:
             self._append_status_message(f"Module scan failed: {exc}", level="ERROR")
-        return result
+            return {}
 
     def _parse_module_yaml(self, yaml_path: str) -> Optional[Dict[str, object]]:
         try:
-            with open(yaml_path, "r", encoding="utf-8") as f:
-                text = f.read()
+            module = self.prediction_view_model.load_module(Path(yaml_path))
+            return module_to_legacy_dict(module) if module is not None else None
         except Exception:
             return None
-
-        # Best effort: try PyYAML if available
-        data = None
-        try:
-            import yaml  # type: ignore
-
-            try:
-                data = yaml.safe_load(text)
-            except Exception:
-                # Try parsing only head (before 'outputs:') to avoid YAML errors later in file
-                head_lines = []
-                for line in text.splitlines():
-                    if line.strip().startswith("outputs:"):
-                        break
-                    head_lines.append(line)
-                data = yaml.safe_load("\n".join(head_lines))
-        except Exception:
-            data = None
-
-        if isinstance(data, dict):
-            return self._extract_spec_from_dict(data)
-
-        # Fallback: manual lightweight parse for key fields
-        return self._extract_spec_fallback(text)
 
     def _extract_spec_from_dict(self, data: Dict[str, object]) -> Dict[str, object]:
         spec: Dict[str, object] = {}
@@ -3541,95 +3361,6 @@ class GisaxsPredictController(QObject):
         )
         return os.path.abspath(normalize_path(folder)) if folder else ""
 
-    def _install_legacy_keras_load_shims(self) -> None:
-        """Allow older Keras 2.x .keras files to load in newer Keras 3.x runtimes."""
-        try:
-            import types
-            import sys as _sys
-            import keras  # type: ignore
-            from keras.src.models.functional import Functional  # type: ignore
-            from keras.src.layers.core.lambda_layer import Lambda  # type: ignore
-            from keras.src.layers.normalization.batch_normalization import BatchNormalization  # type: ignore
-            from keras.src.utils import python_utils  # type: ignore
-
-            engine_pkg = types.ModuleType("keras.src.engine")
-            functional_mod = types.ModuleType("keras.src.engine.functional")
-            functional_mod.Functional = Functional
-            _sys.modules.setdefault("keras.src.engine", engine_pkg)
-            _sys.modules.setdefault("keras.src.engine.functional", functional_mod)
-
-            if not getattr(Lambda, "_gimap_legacy_from_config", False):
-                original_from_config = Lambda.from_config
-
-                @classmethod
-                def _legacy_lambda_from_config(cls, config, custom_objects=None, safe_mode=None):
-                    if isinstance(config, dict):
-                        config = dict(config)
-                        for key in ("function_type", "module", "output_shape_type", "output_shape_module"):
-                            config.pop(key, None)
-                        fn = config.get("function")
-                        if isinstance(fn, (list, tuple)) and fn:
-                            try:
-                                defaults = fn[1] if len(fn) > 1 else None
-                                closure = fn[2] if len(fn) > 2 else None
-                                config["function"] = python_utils.func_load(fn[0], defaults=defaults, closure=closure)
-                            except Exception:
-                                pass
-                        if callable(config.get("function")):
-                            return cls(**config)
-                    try:
-                        return original_from_config(config, custom_objects=custom_objects, safe_mode=safe_mode)
-                    except TypeError:
-                        return original_from_config(config)
-
-                Lambda.from_config = _legacy_lambda_from_config  # type: ignore[method-assign]
-                Lambda._gimap_legacy_from_config = True  # type: ignore[attr-defined]
-
-            if not getattr(BatchNormalization, "_gimap_legacy_from_config", False):
-                original_bn_from_config = BatchNormalization.from_config
-
-                @classmethod
-                def _legacy_bn_from_config(cls, config):
-                    if isinstance(config, dict):
-                        config = dict(config)
-                        axis = config.get("axis")
-                        if isinstance(axis, list) and len(axis) == 1:
-                            config["axis"] = axis[0]
-                    return original_bn_from_config(config)
-
-                BatchNormalization.from_config = _legacy_bn_from_config  # type: ignore[method-assign]
-                BatchNormalization._gimap_legacy_from_config = True  # type: ignore[attr-defined]
-
-            if "keras.src.layers.core.tf_op_layer" not in _sys.modules:
-                tf_op_mod = types.ModuleType("keras.src.layers.core.tf_op_layer")
-
-                @keras.saving.register_keras_serializable(package="keras.src.layers.core.tf_op_layer")
-                class SlicingOpLambda(keras.layers.Layer):  # type: ignore[misc]
-                    def __init__(self, function=None, **kwargs):
-                        super().__init__(**kwargs)
-                        self.function = function
-
-                    def call(self, inputs, slice_spec=None, **kwargs):
-                        if slice_spec is None:
-                            return inputs
-                        slices = []
-                        for spec in slice_spec:
-                            if isinstance(spec, dict):
-                                slices.append(slice(spec.get("start"), spec.get("stop"), spec.get("step")))
-                            else:
-                                slices.append(spec)
-                        return inputs[tuple(slices)]
-
-                    def get_config(self):
-                        config = super().get_config()
-                        config["function"] = self.function
-                        return config
-
-                tf_op_mod.SlicingOpLambda = SlicingOpLambda
-                _sys.modules["keras.src.layers.core.tf_op_layer"] = tf_op_mod
-        except Exception as exc:
-            self._append_status_message(f"Legacy Keras compatibility shim unavailable: {exc}", level="WARN")
-
     def _on_module_selected(self, name: str) -> None:
         if not name:
             return
@@ -3637,6 +3368,7 @@ class GisaxsPredictController(QObject):
         if not spec:
             return
         self._current_module = spec
+        self.prediction_view_model.select_module(name)
         self.current_parameters["module_name"] = spec.get("name", name)
         self.current_parameters["module_model_path"] = ""
         self._current_model = None
@@ -3805,7 +3537,6 @@ class GisaxsPredictController(QObject):
         self._append_status_message(f"Module config reloaded: {new_name}; preprocess steps: {step_text}")
 
     def _on_model_import_clicked(self) -> None:
-        # Ensure a module is selected
         combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
         name = combo.currentText().strip() if combo else ""
         spec = self._modules_by_name.get(name) if name else None
@@ -3814,7 +3545,9 @@ class GisaxsPredictController(QObject):
             return
         model_path = (spec.get("model_path") or "") if isinstance(spec, dict) else ""
         if not model_path or not os.path.exists(model_path):
-            model_path = self._select_model_folder(spec.get("folder", "") if isinstance(spec, dict) else "")
+            model_path = self._select_model_folder(
+                spec.get("folder", "") if isinstance(spec, dict) else ""
+            )
             if not model_path:
                 return
             self.current_parameters["module_model_path"] = model_path
@@ -3826,7 +3559,6 @@ class GisaxsPredictController(QObject):
             model_path = os.path.abspath(model_path)
             self.current_parameters["module_model_path"] = model_path
 
-        # Run load in background
         self._append_status_message("Loading model (this may take a while)...")
         self.progress_updated.emit(5)
         self._model_loading = True
@@ -3835,65 +3567,36 @@ class GisaxsPredictController(QObject):
         btn_import = getattr(self.ui, "gisaxsPredictModelImportButton", None)
         if btn_import:
             btn_import.setEnabled(False)
-        def _load():
-            try:
-                # Inform UI about what is being loaded
-                self._append_status_message(f"Loading model from: {model_path}")
-                # Set mixed precision policy based on GPU availability
-                try:
-                    import tensorflow as tf  # type: ignore
-                    from tensorflow.keras import mixed_precision as tf_mixed_precision  # type: ignore
-                    gpus = tf.config.list_physical_devices('GPU')
-                    if not gpus:
-                        tf_mixed_precision.set_global_policy('float32')
-                        self._append_status_message("No GPU detected: using float32 precision.")
-                    else:
-                        tf_mixed_precision.set_global_policy('mixed_float16')
-                        self._append_status_message("GPU detected: using mixed_float16 precision.")
-                except Exception:
-                    # If TensorFlow is not available or policy cannot be set, continue without setting
-                    pass
-                model = None
-                # Support both Keras .keras files and TensorFlow SavedModel directories
-                import os
-                if os.path.isdir(model_path):
-                    try:
-                        import tensorflow as tf  # type: ignore
-                        try:
-                            # Try TF-Keras loader on SavedModel directory
-                            model = tf.keras.models.load_model(model_path, compile=False)
-                        except Exception:
-                            # Fallback to raw TF SavedModel loader (returns a trackable object)
-                            model = tf.saved_model.load(model_path)
-                        self._append_status_message(f"Model successfully loaded from: {model_path}")
-                        return model, None
-                    except Exception as exc:
-                        self._append_status_message(f"Failed to load model from: {model_path} | {exc}", level="ERROR")
-                        return None, str(exc)
-                try:
-                    import keras  # type: ignore
-                    self._install_legacy_keras_load_shims()
-                    try:
-                        model = keras.models.load_model(model_path, safe_mode=False, compile=False)  # type: ignore[call-arg]
-                    except TypeError:
-                        model = keras.models.load_model(model_path, compile=False)
-                except Exception:
-                    import tensorflow as tf  # type: ignore
-                    self._install_legacy_keras_load_shims()
-                    # Fallback to TF Keras, also disable compile to speed import
-                    model = tf.keras.models.load_model(model_path, compile=False)
-                self._append_status_message(f"Model successfully loaded from: {model_path}")
-                return model, None
-            except Exception as exc:
-                self._append_status_message(f"Unexpected error loading model from: {model_path} | {exc}", level="ERROR")
-                return None, str(exc)
 
-        import threading
+        def _load():
+            self._append_status_message(f"Loading model from: {model_path}")
+            try:
+                model = self.prediction_view_model.inspect_model(
+                    Path(model_path),
+                    allow_unsafe_lambda=True,
+                )
+                if model is None:
+                    raise RuntimeError(
+                        self.prediction_view_model.state.error_message
+                        or "Model validation failed"
+                    )
+            except Exception as exc:
+                self._append_status_message(
+                    f"Failed to load model from: {model_path} | {exc}",
+                    level="ERROR",
+                )
+                return None, str(exc)
+            self._append_status_message(
+                f"Model successfully validated in isolated worker: {model.artifact_path}"
+            )
+            return model, None
+
         def _run():
             model, err = _load()
             self.model_load_finished.emit(model, err or "", model_path)
 
         import threading as _threading
+
         self._model_loader_thread = _threading.Thread(target=_run, daemon=True)
         self._model_loader_thread.start()
 
@@ -3951,59 +3654,20 @@ class GisaxsPredictController(QObject):
         self._refresh_predict_readiness()
 
     def _write_model_path_to_yaml(self, spec: Dict[str, object], model_path: str) -> None:
-        yaml_path = spec.get("yaml_path") if isinstance(spec, dict) else None
-        if not isinstance(yaml_path, str) or not os.path.isfile(yaml_path):
+        module = spec.get("_prediction_module") if isinstance(spec, dict) else None
+        if module is None:
             return
-        yaml_model_path = "'" + str(model_path).replace("'", "''") + "'"
-        try:
-            with open(yaml_path, "r", encoding="utf-8") as f:
-                text = f.read()
-
-            lines = text.splitlines()
-            out: List[str] = []
-            in_model = False
-            model_indent = 0
-            wrote = False
-            for i, line in enumerate(lines):
-                if not in_model:
-                    m = re.match(r"(\s*)model\s*:\s*$", line)
-                    if m:
-                        in_model = True
-                        model_indent = len(m.group(1))
-                        out.append(line)
-                        continue
-                    out.append(line)
-                else:
-                    leading = len(line) - len(line.lstrip(" "))
-                    # leaving model block
-                    if leading <= model_indent:
-                        if not wrote:
-                            out.append(" " * (model_indent + 2) + f"model_path: {yaml_model_path}")
-                            wrote = True
-                        in_model = False
-                        out.append(line)
-                        continue
-                    # inside model block: replace model_path
-                    m2 = re.match(r"(\s*)model_path\s*:\s*(.*)$", line)
-                    if m2:
-                        indent = m2.group(1)
-                        out.append(f"{indent}model_path: {yaml_model_path}")
-                        wrote = True
-                    else:
-                        out.append(line)
-
-            # If file ended while still in model block
-            if in_model and not wrote:
-                out.append(" " * (model_indent + 2) + f"model_path: {yaml_model_path}")
-                wrote = True
-
-            if wrote:
-                new_text = "\n".join(out) + ("\n" if text.endswith("\n") else "")
-                with open(yaml_path, "w", encoding="utf-8") as f:
-                    f.write(new_text)
-                self._append_status_message(f"Updated model_path in {os.path.basename(yaml_path)}")
-        except Exception as exc:
-            self._append_status_message(f"Failed to update module.yaml: {exc}", level="ERROR")
+        if self.prediction_view_model.update_model_path(module, Path(model_path)):
+            yaml_path = spec.get("yaml_path", "module.yaml")
+            self._append_status_message(
+                f"Updated model_path in {os.path.basename(str(yaml_path))}"
+            )
+            return
+        self._append_status_message(
+            self.prediction_view_model.state.error_message
+            or "Failed to update module.yaml",
+            level="ERROR",
+        )
 
     # ------------------------------------------------------------------
     # 预测逻辑（当前为占位实现，无TensorFlow依赖）
@@ -4151,7 +3815,7 @@ class GisaxsPredictController(QObject):
             self._append_status_message("Every must be a positive integer; using 1.", level="WARN")
 
         if every > 1:
-            batches = [files[i : i + every] for i in range(0, len(files), every) if len(files[i : i + every]) == every]
+            batches = [list(batch) for batch in build_complete_batches(files, every)]
             skipped = len(files) - (len(batches) * every)
             if skipped:
                 self._append_status_message(
@@ -4239,6 +3903,27 @@ class GisaxsPredictController(QObject):
 
     def _execute_single_file_prediction(self, file_path: str, stack_files: Optional[List[str]] = None) -> Dict[str, object]:
         """执行单个文件的预测逻辑 - 真正调用预测流程"""
+        typed_module = (
+            self._current_module.get("_prediction_module")
+            if isinstance(self._current_module, dict)
+            else None
+        )
+        model_path = str(self.current_parameters.get("module_model_path") or "")
+        if typed_module is not None and model_path:
+            paths = tuple(stack_files or [file_path])
+            item = self.prediction_view_model.predict_file_batch(
+                paths,
+                typed_module,
+                Path(model_path),
+            )
+            if item.status != "succeeded" or item.prediction is None:
+                raise RuntimeError(item.error_message or "Prediction failed")
+            return {
+                "file": file_path,
+                "stack_count": len(paths),
+                "stack_files": list(paths),
+                "prediction_data": dict(item.prediction.outputs),
+            }
         try:
             # 保存原有参数和状态
             old_input_file = self.current_parameters.get("input_file", "")
@@ -4585,33 +4270,27 @@ class GisaxsPredictController(QObject):
     def _load_cbf_stack_sync(self, file_paths: Optional[List[str]]) -> Optional[np.ndarray]:
         if not file_paths:
             return None
-        summed: Optional[np.ndarray] = None
-        for file_path in file_paths:
-            data = self._load_cbf_file_sync(file_path)
-            if data is None:
-                continue
-            if summed is None:
-                summed = data.astype(np.float32, copy=True)
-            else:
-                summed += data.astype(np.float32, copy=False)
-        if summed is None:
-            self._append_status_message("Failed to load any file in this stack.", level="ERROR")
-        return summed
+        loaded = self.prediction_view_model.load_paths(file_paths)
+        if loaded is not None:
+            return loaded.image
+        self._append_status_message(
+            self.prediction_view_model.state.error_message
+            or "Failed to load this stack.",
+            level="ERROR",
+        )
+        return None
 
     def _load_cbf_file_sync(self, file_path: str) -> Optional[np.ndarray]:
         """同步加载CBF文件"""
-        try:
-            import fabio
-            cbf_image = fabio.open(file_path)
-            data = cbf_image.data
-            
-            if data.dtype != np.float32:
-                data = data.astype(np.float32, copy=False)
-            
-            return data
-        except Exception as e:
-            self._append_status_message(f"Failed to load CBF file {file_path}: {e}", level="ERROR")
-            return None
+        loaded = self.prediction_view_model.load_paths((file_path,))
+        if loaded is not None:
+            return loaded.image
+        self._append_status_message(
+            self.prediction_view_model.state.error_message
+            or f"Failed to load CBF file {file_path}",
+            level="ERROR",
+        )
+        return None
 
     def _save_array_as_image(self, array: np.ndarray, image_path: str) -> None:
         """将数组保存为图像文件"""

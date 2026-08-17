@@ -1,20 +1,22 @@
+"""Calibration JSON 旧入口的兼容门面。"""
+
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from src.gimap.features.calibration.infrastructure.adapters import (
+    JsonCalibrationStorageAdapter,
+)
 
 from .models import CalibrationResult
 
 
+_storage = JsonCalibrationStorageAdapter()
+
+
 def save_calibration(result: CalibrationResult, path: str | Path) -> None:
-    target = Path(path)
-    target.write_text(json.dumps(result.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+    _storage.save(result, path)
 
 
 def load_calibration(path: str | Path) -> CalibrationResult:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    if payload.get("format") != "gimap-geometry-calibration":
-        raise ValueError("This file is not a GIMaP geometry calibration.")
-    if int(payload.get("format_version", 0)) != 1:
-        raise ValueError("Unsupported geometry calibration file version.")
-    return CalibrationResult.from_dict(payload)
+    return _storage.load(path)

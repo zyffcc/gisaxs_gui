@@ -1,7 +1,7 @@
 numpy>=1.24,<2.0
 scipy>=1.10
 matplotlib>=3.7
-BornAgain
+BornAgain==24.1; platform_system != "Darwin"
 PyQt5>=5.15
 opencv-python>=4.8
 h5py>=3.9

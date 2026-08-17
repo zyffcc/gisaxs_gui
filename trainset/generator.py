@@ -11,6 +11,8 @@ import numpy as np
 
 from scipy.stats import qmc
 
+from src.gimap.features.trainset.application.ports import SimulationPort
+
 from .config import synchronize_parameter_specs
 
 
@@ -469,19 +471,22 @@ class PreviewResult:
 class DatasetGenerator:
     """Shared generator facade used by Preview, Dry run, local and Slurm backends."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        simulation_port: SimulationPort | None = None,
+    ):
         self.config = synchronize_parameter_specs(config)
         self.rng = np.random.default_rng(int(config.get("project", {}).get("seed", 42)))
         self._grid_cache_data: Optional[Dict[str, Any]] = None
+        self.simulation_port = simulation_port
 
     @property
     def bornagain_available(self) -> bool:
-        try:
-            import bornagain  # type: ignore  # noqa: F401
-
-            return True
-        except Exception:
-            return False
+        return bool(
+            self.simulation_port is not None
+            and self.simulation_port.is_available()
+        )
 
     def preview_reference(self, image: Optional[np.ndarray] = None) -> PreviewResult:
         if image is None:
@@ -539,6 +544,7 @@ class DatasetGenerator:
 
             self._grid_cache_data = load_or_build_grid(
                 self.config,
+                simulation_port=self.simulation_port,
                 progress=progress,
                 pause=pause,
             )
@@ -560,7 +566,11 @@ class DatasetGenerator:
                     self.rng,
                 )
             else:
-                raw = simulate_pattern(self.config, simulation_values)
+                raw = simulate_pattern(
+                    self.config,
+                    simulation_values,
+                    simulator=self.simulation_port,
+                )
             mask = (
                 build_random_mask(raw.shape, self.config, self.rng)
                 if self.config.get("mask", {}).get("mode") == "random"

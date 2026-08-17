@@ -27,7 +27,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QProgressBar,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -42,17 +41,22 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from calibration.image_loader import load_detector_image
+from src.gimap.app.presentation import (
+    AdvancedSection,
+    JobStatus,
+    ParameterSection,
+    PlotPanel,
+    apply_design_system,
+)
+from src.gimap.features.format_converter.bootstrap import (
+    create_format_converter_view_model,
+)
+from src.gimap.app.bootstrap import create_standalone_legacy_context
 from ui.app_assets import app_icon
 from utils.format_converter import (
-    ConversionEngine,
     ConversionOptions,
     InputSource,
-    estimate_output,
-    inspect_source,
     parse_custom_frames,
-    scan_folder,
-    select_dataset,
 )
 from utils.path_utils import normalize_path
 
@@ -93,39 +97,15 @@ class _PreviewWorker(QObject):
     finished = pyqtSignal(int, object)
     failed = pyqtSignal(int, str)
 
-    def __init__(self, request_id: int, source: InputSource):
+    def __init__(self, request_id: int, source: InputSource, view_model):
         super().__init__()
         self.request_id = request_id
         self.source = source
+        self.view_model = view_model
 
     def run(self) -> None:
         try:
-            frames = self.source.selected_frames or [0]
-            picks = [frames[0], frames[len(frames) // 2], frames[-1]]
-            payload = []
-            for label, frame in zip(("First", "Middle", "Last"), picks):
-                image = load_detector_image(
-                    self.source.path,
-                    frame_idx=frame,
-                    dataset_path=self.source.dataset_path,
-                )
-                data = np.asarray(image.data)
-                finite = data[np.isfinite(data)]
-                minimum = float(np.min(finite)) if finite.size else None
-                maximum = float(np.max(finite)) if finite.size else None
-                max_count = int(np.count_nonzero(data == maximum)) if maximum is not None else 0
-                payload.append({
-                    "label": label,
-                    "frame": frame + 1,
-                    "data": data,
-                    "shape": tuple(data.shape),
-                    "dtype": str(data.dtype),
-                    "minimum": minimum,
-                    "maximum": maximum,
-                    "nan_count": int(np.count_nonzero(~np.isfinite(data))),
-                    "negative_count": int(np.count_nonzero(np.isfinite(data) & (data < 0))),
-                    "max_count": max_count,
-                })
+            payload = self.view_model.load_preview(self.source)
             self.finished.emit(self.request_id, payload)
         except Exception as exc:
             self.failed.emit(self.request_id, str(exc))
@@ -136,23 +116,23 @@ class _ConversionWorker(QObject):
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, sources: list[InputSource], options: ConversionOptions):
+    def __init__(self, options: ConversionOptions, view_model):
         super().__init__()
-        self.sources = sources
-        self.engine = ConversionEngine(options)
+        self.options = options
+        self.view_model = view_model
 
     def run(self) -> None:
         try:
-            report = self.engine.run(self.sources, self.progress.emit)
+            report = self.view_model.convert(self.options, self.progress.emit)
             self.finished.emit(report)
         except Exception as exc:
             self.failed.emit(str(exc))
 
     def cancel(self) -> None:
-        self.engine.cancel()
+        self.view_model.cancel()
 
     def set_paused(self, paused: bool) -> None:
-        self.engine.set_paused(paused)
+        self.view_model.set_paused(paused)
 
 
 class FolderImportDialog(QDialog):
@@ -221,27 +201,27 @@ class ConversionProgressDialog(QDialog):
         self.title = QLabel("Preparing conversion…", self)
         self.title.setStyleSheet("font-size: 14px; font-weight: 600;")
         self.detail = QLabel("", self)
-        self.bar = QProgressBar(self)
         self.time_label = QLabel("Elapsed: 00:00:00", self)
         self.time_label.setStyleSheet("color: #64748b;")
         self.result = QLabel("", self)
         self.result.setWordWrap(True)
         layout.addWidget(self.title)
         layout.addWidget(self.detail)
-        layout.addWidget(self.bar)
+        self.job_status = JobStatus(self)
+        self.job_status.set_actions_visible(details=False)
+        self.bar = self.job_status.progress_bar
+        self.pause_button = self.job_status.pause_button
+        self.cancel_button = self.job_status.cancel_button
+        layout.addWidget(self.job_status)
         layout.addWidget(self.time_label)
         layout.addWidget(self.result)
         row = QHBoxLayout()
-        self.pause_button = QPushButton("Pause", self)
-        self.cancel_button = QPushButton("Cancel", self)
         self.open_button = QPushButton("Open output folder", self)
         self.report_button = QPushButton("View report", self)
         self.close_button = QPushButton("Close", self)
         self.open_button.hide()
         self.report_button.hide()
         self.close_button.hide()
-        row.addWidget(self.pause_button)
-        row.addWidget(self.cancel_button)
         row.addStretch(1)
         row.addWidget(self.open_button)
         row.addWidget(self.report_button)
@@ -250,6 +230,7 @@ class ConversionProgressDialog(QDialog):
         self.open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.destination)))
         self.report_button.clicked.connect(self._open_report)
         self.close_button.clicked.connect(self.accept)
+        apply_design_system(self)
 
     def complete(self, report) -> None:
         self.running = False
@@ -257,8 +238,10 @@ class ConversionProgressDialog(QDialog):
         self.bar.setValue(self.bar.maximum())
         if report.cancelled:
             self.title.setText("Conversion cancelled")
+            self.job_status.set_state("cancelled", "Conversion cancelled", progress=1.0)
         else:
             self.title.setText("Conversion completed")
+            self.job_status.set_state("succeeded", "Conversion completed", progress=1.0)
         self.result.setText(f"{len(report.succeeded)} succeeded\n{len(report.failed)} failed")
         self.pause_button.hide()
         self.cancel_button.hide()
@@ -270,6 +253,7 @@ class ConversionProgressDialog(QDialog):
         self.running = False
         self.title.setText("Conversion could not be completed")
         self.result.setText(message)
+        self.job_status.set_state("failed", message, progress=0.0)
         self.pause_button.hide()
         self.cancel_button.hide()
         self.open_button.show()
@@ -289,14 +273,25 @@ class ConversionProgressDialog(QDialog):
 class FormatConverterDialog(QDialog):
     """Full converter. Inputs are detected; there is no single/batch mode."""
 
-    def __init__(self, parent: QWidget | None = None, current_file: str = ""):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        current_file: str = "",
+        app_context=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Format Converter")
         self.setWindowIcon(app_icon())
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.resize(1080, 760)
         self.setMinimumSize(920, 650)
-        self.sources: list[InputSource] = []
+        self.app_context = (
+            app_context
+            or getattr(parent, "app_context", None)
+            or create_standalone_legacy_context()
+        )
+        self.view_model = create_format_converter_view_model(self.app_context)
+        self.sources = self.view_model.sources
         self.current_file = current_file
         self._preview_thread: Optional[QThread] = None
         self._preview_worker: Optional[_PreviewWorker] = None
@@ -316,7 +311,11 @@ class FormatConverterDialog(QDialog):
         outer.setContentsMargins(18, 16, 18, 16)
         self.step_header = QHBoxLayout()
         self.step_labels = []
-        for number, text in ((1, "Choose input"), (2, "Select images / frames"), (3, "Output settings")):
+        for number, text in (
+            (1, "Input"),
+            (2, "Configure & Preview"),
+            (3, "Run, Results & Export"),
+        ):
             label = QLabel(f"{number}  {text}", self)
             label.setAlignment(Qt.AlignCenter)
             label.setMinimumHeight(38)
@@ -341,13 +340,19 @@ class FormatConverterDialog(QDialog):
         self.next_button.clicked.connect(self._next)
         self.cancel_button.clicked.connect(self.close)
         self._update_step_header()
+        apply_design_system(self)
 
     def _build_input_page(self) -> QWidget:
         page = QWidget(self)
         layout = QVBoxLayout(page)
+        self.format_input_section = ParameterSection(
+            "Input",
+            "Add detector files or folders. Sources are inspected without changing them.",
+            page,
+        )
         intro = QLabel("Add any combination of NXS, CBF, and TIFF files. GIMaP detects single images and multi-frame inputs automatically.", page)
         intro.setWordWrap(True)
-        layout.addWidget(intro)
+        self.format_input_section.add_widget(intro)
         actions = QHBoxLayout()
         add_files = QPushButton("Add files", page)
         add_folder = QPushButton("Add folder", page)
@@ -357,7 +362,7 @@ class FormatConverterDialog(QDialog):
         actions.addWidget(add_folder)
         actions.addWidget(self.current_button)
         actions.addStretch(1)
-        layout.addLayout(actions)
+        self.format_input_section.add_layout(actions)
         self.input_tree = QTreeWidget(page)
         self.input_tree.setColumnCount(5)
         self.input_tree.setHeaderLabels(("Source", "Type", "Images / frames", "Selection", "Status"))
@@ -365,7 +370,7 @@ class FormatConverterDialog(QDialog):
         self.input_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
         for column in range(1, 5):
             self.input_tree.header().setSectionResizeMode(column, QHeaderView.ResizeToContents)
-        layout.addWidget(self.input_tree, 1)
+        self.format_input_section.add_widget(self.input_tree, 1)
         dataset_row = QHBoxLayout()
         self.dataset_label = QLabel("Dataset:", page)
         self.dataset_combo = QComboBox(page)
@@ -374,13 +379,14 @@ class FormatConverterDialog(QDialog):
         dataset_row.addWidget(self.dataset_label)
         dataset_row.addWidget(self.dataset_combo, 1)
         dataset_row.addWidget(self.dataset_note)
-        layout.addLayout(dataset_row)
+        self.format_input_section.add_layout(dataset_row)
         self.dataset_label.hide()
         self.dataset_combo.hide()
         self.dataset_note.hide()
         self.input_note = QLabel("No input files yet.", page)
         self.input_note.setStyleSheet("color: #64748b;")
-        layout.addWidget(self.input_note)
+        self.format_input_section.add_widget(self.input_note)
+        layout.addWidget(self.format_input_section, 1)
         add_files.clicked.connect(self._choose_files)
         add_folder.clicked.connect(self._choose_folder)
         self.current_button.clicked.connect(lambda: self.add_paths([self.current_file]))
@@ -391,6 +397,11 @@ class FormatConverterDialog(QDialog):
     def _build_selection_page(self) -> QWidget:
         page = QWidget(self)
         layout = QVBoxLayout(page)
+        self.format_configure_section = ParameterSection(
+            "Configure",
+            "Choose sources and frame ranges. Existing selection semantics are preserved.",
+            page,
+        )
         tools = QHBoxLayout()
         select_all = QPushButton("Select all", page)
         select_none = QPushButton("Select none", page)
@@ -404,7 +415,7 @@ class FormatConverterDialog(QDialog):
         tools.addWidget(sort_button)
         tools.addStretch(1)
         tools.addWidget(self.filter_edit, 1)
-        layout.addLayout(tools)
+        self.format_configure_section.add_layout(tools)
         splitter = QSplitter(Qt.Horizontal, page)
         left = QWidget(splitter)
         left_layout = QVBoxLayout(left)
@@ -437,12 +448,25 @@ class FormatConverterDialog(QDialog):
         frame_layout.addWidget(QLabel("Every N:"), 3, 0)
         frame_layout.addWidget(self.nth_frame, 3, 1)
         frame_layout.addWidget(self.apply_frames, 3, 3)
-        left_layout.addWidget(frame_group)
+        self.frame_advanced_section = AdvancedSection(
+            "Advanced frame selection",
+            "Use ranges, custom expressions or Every N for multi-frame NXS inputs.",
+            left,
+        )
+        self.frame_advanced_section.add_widget(frame_group)
+        left_layout.addWidget(self.frame_advanced_section)
         right_scroll = QScrollArea(splitter)
         right_scroll.setWidgetResizable(True)
         preview = QWidget(right_scroll)
         preview_layout = QVBoxLayout(preview)
-        preview_layout.addWidget(QLabel("Preview", preview))
+        self.format_preview_panel = PlotPanel(
+            "Preview",
+            "Inspect representative frames before conversion.",
+            right_scroll,
+        )
+        preview_content = QWidget(self.format_preview_panel)
+        preview_content_layout = QVBoxLayout(preview_content)
+        preview_content_layout.setContentsMargins(0, 0, 0, 0)
         self.preview_labels = []
         self.preview_captions = []
         for title in ("First", "Middle", "Last"):
@@ -452,20 +476,23 @@ class FormatConverterDialog(QDialog):
             image.setAlignment(Qt.AlignCenter)
             image.setMinimumSize(220, 150)
             image.setFrameShape(QFrame.StyledPanel)
-            preview_layout.addWidget(caption)
-            preview_layout.addWidget(image)
+            preview_content_layout.addWidget(caption)
+            preview_content_layout.addWidget(image)
             self.preview_captions.append(caption)
             self.preview_labels.append(image)
         self.preview_stats = QLabel("Select an input to inspect its frames.", preview)
         self.preview_stats.setWordWrap(True)
         self.preview_stats.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        preview_layout.addWidget(self.preview_stats)
-        preview_layout.addStretch(1)
+        preview_content_layout.addWidget(self.preview_stats)
+        preview_content_layout.addStretch(1)
+        self.format_preview_panel.set_plot_widget(preview_content)
+        preview_layout.addWidget(self.format_preview_panel)
         right_scroll.setWidget(preview)
         splitter.addWidget(left)
         splitter.addWidget(right_scroll)
         splitter.setSizes((650, 340))
-        layout.addWidget(splitter, 1)
+        self.format_configure_section.add_widget(splitter, 1)
+        layout.addWidget(self.format_configure_section, 1)
         select_all.clicked.connect(lambda: self._set_all_included(True))
         select_none.clicked.connect(lambda: self._set_all_included(False))
         remove.clicked.connect(self._remove_selected)
@@ -484,6 +511,11 @@ class FormatConverterDialog(QDialog):
         scroll.setWidgetResizable(True)
         content = QWidget(scroll)
         layout = QVBoxLayout(content)
+        self.format_output_section = ParameterSection(
+            "Configure output",
+            "Choose the destination and primary output contract.",
+            content,
+        )
         format_group = QGroupBox("Output format", content)
         format_layout = QHBoxLayout(format_group)
         self.format_group = QButtonGroup(format_group)
@@ -497,7 +529,7 @@ class FormatConverterDialog(QDialog):
             format_layout.addWidget(button)
         format_layout.addStretch(1)
         self.format_buttons["TIFF"].setChecked(True)
-        layout.addWidget(format_group)
+        self.format_output_section.add_widget(format_group)
         destination_group = QGroupBox("Destination and naming", content)
         form = QFormLayout(destination_group)
         destination_row = QHBoxLayout()
@@ -516,7 +548,13 @@ class FormatConverterDialog(QDialog):
         self.add_suffix = QCheckBox("Add suffix automatically when names collide", destination_group)
         self.add_suffix.setChecked(True)
         form.addRow("", self.add_suffix)
-        layout.addWidget(destination_group)
+        self.format_output_section.add_widget(destination_group)
+        layout.addWidget(self.format_output_section)
+        self.format_output_advanced = AdvancedSection(
+            "Advanced output options",
+            "Data type conversion, metadata layout and container options.",
+            content,
+        )
         values_group = QGroupBox("Pixel values and data type", content)
         values_layout = QVBoxLayout(values_group)
         self.preserve_values = QCheckBox("Preserve original values and data type when supported", values_group)
@@ -532,7 +570,7 @@ class FormatConverterDialog(QDialog):
         self.dtype_warning.setWordWrap(True)
         self.dtype_warning.setStyleSheet("color: #a16207;")
         values_layout.addWidget(self.dtype_warning)
-        layout.addWidget(values_group)
+        self.format_output_advanced.add_widget(values_group)
         metadata_group = QGroupBox("Metadata", content)
         metadata_layout = QVBoxLayout(metadata_group)
         self.preserve_metadata = QCheckBox("Preserve metadata where supported", metadata_group)
@@ -546,16 +584,23 @@ class FormatConverterDialog(QDialog):
         metadata_layout.addWidget(self.write_sidecar)
         metadata_layout.addWidget(self.single_json)
         metadata_layout.addWidget(self.per_image_json)
-        layout.addWidget(metadata_group)
+        self.format_output_advanced.add_widget(metadata_group)
         advanced = QGroupBox("Advanced", content)
         advanced_layout = QVBoxLayout(advanced)
         self.container_check = QCheckBox("Export as one NeXus/HDF5 container", advanced)
         self.container_check.setToolTip("Stores all selected images as compressed datasets in converted_images.h5.")
         advanced_layout.addWidget(self.container_check)
-        layout.addWidget(advanced)
+        self.format_output_advanced.add_widget(advanced)
+        layout.addWidget(self.format_output_advanced)
+        self.format_run_section = ParameterSection(
+            "Run, Results & Export",
+            "Review the estimate, then start conversion. The job dialog provides progress and result links.",
+            content,
+        )
         self.output_summary = QLabel("", content)
         self.output_summary.setWordWrap(True)
-        layout.addWidget(self.output_summary)
+        self.format_run_section.add_widget(self.output_summary)
+        layout.addWidget(self.format_run_section)
         layout.addStretch(1)
         scroll.setWidget(content)
         page_layout = QVBoxLayout(page)
@@ -571,28 +616,17 @@ class FormatConverterDialog(QDialog):
         return page
 
     def add_paths(self, paths: list[str]) -> None:
-        existing = {os.path.normcase(source.path) for source in self.sources}
-        added = 0
-        errors = []
-        for raw_path in paths:
-            if not raw_path:
-                continue
-            normalized = normalize_path(raw_path)
-            key = os.path.normcase(str(Path(normalized).resolve()))
-            if key in existing:
-                continue
-            try:
-                source = inspect_source(normalized)
-                self.sources.append(source)
-                existing.add(key)
-                added += 1
-            except Exception as exc:
-                errors.append(f"{Path(normalized).name}: {exc}")
+        normalized_paths = [normalize_path(path) for path in paths if path]
+        result = self.view_model.add_paths(normalized_paths)
         self._refresh_input_tree()
         self._refresh_selection_table()
-        if errors:
-            QMessageBox.warning(self, "Some inputs could not be added", "\n".join(errors[:12]))
-        elif not added and paths:
+        if result.errors:
+            QMessageBox.warning(
+                self,
+                "Some inputs could not be added",
+                "\n".join(result.errors[:12]),
+            )
+        elif not result.added and paths:
             self.input_note.setText("The selected inputs are already in the task list.")
 
     def _choose_files(self) -> None:
@@ -604,7 +638,7 @@ class FormatConverterDialog(QDialog):
         dialog = FolderImportDialog(self)
         if dialog.exec_() != QDialog.Accepted:
             return
-        paths = scan_folder(
+        paths = self.view_model.scan_folder(
             dialog.path_edit.text(),
             include_cbf=dialog.cbf.isChecked(),
             include_tiff=dialog.tiff.isChecked(),
@@ -666,7 +700,7 @@ class FormatConverterDialog(QDialog):
         if not dataset_path or not isinstance(index, int) or index >= len(self.sources):
             return
         try:
-            select_dataset(self.sources[index], dataset_path)
+            self.view_model.select_dataset(self.sources[index], dataset_path)
             self._refresh_input_tree()
             self._refresh_selection_table()
         except Exception as exc:
@@ -713,12 +747,12 @@ class FormatConverterDialog(QDialog):
         selected = self._selected_source_indices()
         if not selected:
             return
-        self.sources = [source for index, source in enumerate(self.sources) if index not in selected]
+        self.view_model.remove_indices(selected)
         self._refresh_input_tree()
         self._refresh_selection_table()
 
     def _sort_sources(self) -> None:
-        self.sources.sort(key=lambda source: source.name.lower())
+        self.view_model.sort_sources()
         self._refresh_input_tree()
         self._refresh_selection_table()
 
@@ -798,7 +832,7 @@ class FormatConverterDialog(QDialog):
             return
         self._pending_preview_source = None
         self._preview_thread = QThread(self)
-        self._preview_worker = _PreviewWorker(request_id, source)
+        self._preview_worker = _PreviewWorker(request_id, source, self.view_model)
         self._preview_worker.moveToThread(self._preview_thread)
         self._preview_thread.started.connect(self._preview_worker.run)
         self._preview_worker.finished.connect(self._preview_ready)
@@ -903,7 +937,7 @@ class FormatConverterDialog(QDialog):
         self.naming_example.setText(f"Example: {example}")
         try:
             options = self._options()
-            count, size = estimate_output(self.sources, options)
+            count, size = self.view_model.estimate_output(options)
             files = 1 if self.container_check.isChecked() and count else count
             self.output_summary.setText(
                 f"Estimated output: {count:,} image(s) in {files:,} file(s), approximately {_human_bytes(size)}"
@@ -978,7 +1012,7 @@ class FormatConverterDialog(QDialog):
             QMessageBox.warning(self, "Output settings", f"Invalid output settings:\n{exc}")
             return
         selected_sources = [source for source in self.sources if source.included]
-        frame_count, estimated_bytes = estimate_output(selected_sources, options)
+        frame_count, estimated_bytes = self.view_model.estimate_output(options)
         type_counts = {}
         for source in selected_sources:
             type_counts[source.file_type] = type_counts.get(source.file_type, 0) + 1
@@ -1009,7 +1043,7 @@ class FormatConverterDialog(QDialog):
     def _start_conversion(self, options: ConversionOptions) -> None:
         self._progress_dialog = ConversionProgressDialog(str(Path(options.destination).resolve()), self.parent())
         self._conversion_thread = QThread(self)
-        self._conversion_worker = _ConversionWorker(self.sources, options)
+        self._conversion_worker = _ConversionWorker(options, self.view_model)
         self._conversion_worker.moveToThread(self._conversion_thread)
         self._conversion_thread.started.connect(self._conversion_worker.run)
         self._conversion_worker.progress.connect(self._conversion_progress)
@@ -1033,6 +1067,11 @@ class FormatConverterDialog(QDialog):
         self._progress_dialog.bar.setValue(completed)
         self._progress_dialog.title.setText(f"Converting {source_name}")
         self._progress_dialog.detail.setText(f"Frame {frame_index + 1} · {completed} / {total}")
+        self._progress_dialog.job_status.set_state(
+            "running",
+            f"{source_name} · frame {frame_index + 1} · {completed} / {total}",
+            progress=completed / total,
+        )
         elapsed = time.time() - self._conversion_started_at
         remaining = (elapsed / completed * (total - completed)) if completed else 0
         remaining_text = _duration(remaining) if completed else "calculating…"
@@ -1046,12 +1085,31 @@ class FormatConverterDialog(QDialog):
         self._progress_dialog.pause_button.setText("Resume" if self._paused else "Pause")
         if self._paused:
             self._progress_dialog.title.setText("Conversion paused")
+            self._progress_dialog.job_status.set_state(
+                "paused",
+                "Conversion paused",
+                progress=self._progress_dialog.bar.value()
+                / max(1, self._progress_dialog.bar.maximum()),
+            )
+        else:
+            self._progress_dialog.job_status.set_state(
+                "running",
+                "Conversion resumed",
+                progress=self._progress_dialog.bar.value()
+                / max(1, self._progress_dialog.bar.maximum()),
+            )
 
     def _cancel_conversion(self) -> None:
         if self._conversion_worker is not None:
             self._conversion_worker.cancel()
         if self._progress_dialog is not None:
             self._progress_dialog.title.setText("Cancelling after the current image…")
+            self._progress_dialog.job_status.set_state(
+                "running",
+                "Cancelling after the current image…",
+                progress=self._progress_dialog.bar.value()
+                / max(1, self._progress_dialog.bar.maximum()),
+            )
             self._progress_dialog.cancel_button.setEnabled(False)
 
     def _conversion_finished(self, report) -> None:

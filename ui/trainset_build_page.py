@@ -42,6 +42,12 @@ from PyQt5.QtWidgets import (
 
 from trainset.config import PHYSICAL_BACKGROUND_PARAMETERS
 from trainset.plugins import REGISTRY
+from src.gimap.app.presentation import (
+    AdvancedSection,
+    JobStatus,
+    ParameterSection,
+    PlotPanel,
+)
 
 
 class ArrayCanvas(QWidget):
@@ -1060,10 +1066,32 @@ class TrainsetBuildPage(QWidget):
         form_stack.addWidget(dataset_group)
         form_stack.addStretch(1)
 
+        self.trainset_input_section = ParameterSection(
+            "Input",
+            "Load an experimental reference for geometry guidance. Generated training images remain simulation-based.",
+        )
+        self.trainset_input_section.add_widget(reference)
+        self.trainset_configure_section = ParameterSection(
+            "Configure",
+            "Define the detector, ROI, particle population and dataset sampling used by the training workflow.",
+        )
+        for group in (beam_detector, roi_group, form_factor, dataset_group):
+            self.trainset_configure_section.add_widget(group)
+        self.trainset_advanced_section = AdvancedSection(
+            "Advanced configuration",
+            "Mask geometry, interference and layer composition are retained without changing their values.",
+        )
+        for group in (mask_group, structure_factor, layer_group):
+            self.trainset_advanced_section.add_widget(group)
+        form_stack.insertWidget(0, self.trainset_input_section)
+        form_stack.insertWidget(1, self.trainset_configure_section)
+        form_stack.insertWidget(2, self.trainset_advanced_section)
+
         self.dataset_splitter.addWidget(self._scroll(content))
         preview_side = QVBoxLayout()
         preview_title = QLabel("Design preview")
         preview_title.setProperty("sectionTitle", True)
+        preview_title.setVisible(False)
         preview_hint = QLabel("Hover for detector coordinates and intensity. Pick the beam center, then draw a rectangular ROI and inspect its mask.")
         preview_hint.setWordWrap(True)
         preview_hint.setProperty("cardBody", True)
@@ -1102,7 +1130,12 @@ class TrainsetBuildPage(QWidget):
         side = QWidget()
         side.setObjectName("designPreviewCard")
         side.setLayout(preview_side)
-        self.dataset_splitter.addWidget(side)
+        self.trainset_design_preview_panel = PlotPanel(
+            "Preview",
+            "Inspect the detector, ROI and mask before generating any training data.",
+        )
+        self.trainset_design_preview_panel.set_plot_widget(side)
+        self.dataset_splitter.addWidget(self.trainset_design_preview_panel)
         self.dataset_splitter.setStretchFactor(0, 7)
         self.dataset_splitter.setStretchFactor(1, 3)
         self.dataset_splitter.setSizes((720, 420))
@@ -1130,7 +1163,9 @@ class TrainsetBuildPage(QWidget):
         orientation_hint.setProperty("infoPanel", True)
         layout.addWidget(orientation_hint)
 
-        controls = QVBoxLayout()
+        controls_widget = QWidget()
+        controls = QVBoxLayout(controls_widget)
+        controls.setContentsMargins(0, 0, 0, 0)
         selection_controls = QGridLayout()
         selection_controls.addWidget(QLabel("Compare range"), 0, 0)
         self.impact_parameter_combo = QComboBox()
@@ -1178,17 +1213,21 @@ class TrainsetBuildPage(QWidget):
         self.preview_cache_status = QLabel("BornAgain cache: empty")
         self.preview_cache_status.setWordWrap(True)
         controls.addWidget(self.preview_cache_status)
-        self.preview_progress = QProgressBar()
+        self.preview_job_status = JobStatus()
+        self.preview_job_status.set_actions_visible(
+            pause=False,
+            cancel=False,
+            details=False,
+        )
+        self.preview_job_status.setVisible(False)
+        self.preview_progress = self.preview_job_status.progress_bar
         self.preview_progress.setRange(0, 100)
         self.preview_progress.setValue(0)
         self.preview_progress.setTextVisible(True)
-        self.preview_progress.setVisible(False)
-        controls.addWidget(self.preview_progress)
-        self.preview_activity = QLabel("")
+        self.preview_activity = self.preview_job_status.message_label
         self.preview_activity.setWordWrap(True)
-        self.preview_activity.setVisible(False)
-        controls.addWidget(self.preview_activity)
-        layout.addLayout(controls)
+        controls.addWidget(self.preview_job_status)
+        layout.addWidget(controls_widget)
 
         # Kept as an internal compatibility field for local-run code. Local
         # Preview itself is always simulated.
@@ -1436,7 +1475,26 @@ class TrainsetBuildPage(QWidget):
         diagnostics_layout.addWidget(self.storage_accept_check)
         diagnostics_layout.addWidget(self.preview_gate_table)
         self.preview_views.addTab(diagnostics, "Diagnostics")
-        layout.addWidget(self.preview_views, 1)
+        self.trainset_preview_run_section = ParameterSection(
+            "Run",
+            "Generate a cached BornAgain comparison or refresh only the stochastic preprocessing realization.",
+        )
+        self.trainset_preview_run_section.add_widget(intro)
+        self.trainset_preview_run_section.add_widget(controls_widget)
+        self.trainset_preview_advanced_section = AdvancedSection(
+            "Advanced preprocessing",
+            "Physical background, noise, masking and transforms apply exactly as before.",
+        )
+        self.trainset_preview_advanced_section.add_widget(self.preprocessing_tabs)
+        self.trainset_preview_panel = PlotPanel(
+            "Preview",
+            orientation_hint.text(),
+        )
+        orientation_hint.setVisible(False)
+        self.trainset_preview_panel.set_plot_widget(self.preview_views)
+        layout.addWidget(self.trainset_preview_run_section)
+        layout.addWidget(self.trainset_preview_advanced_section)
+        layout.addWidget(self.trainset_preview_panel, 1)
         self.preview_capability = self.preview_cache_status
         outer_layout.addWidget(self._scroll(content))
         return page
@@ -1453,7 +1511,9 @@ class TrainsetBuildPage(QWidget):
         self.model_layer_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.model_layer_table.setMinimumHeight(280)
         layout.addWidget(self.model_layer_table, 2)
-        layer_actions = QHBoxLayout()
+        layer_actions_widget = QWidget()
+        layer_actions = QHBoxLayout(layer_actions_widget)
+        layer_actions.setContentsMargins(0, 0, 0, 0)
         self.add_model_layer_button = QPushButton("Add layer")
         self.remove_model_layer_button = QPushButton("Remove selected")
         self.move_model_layer_up_button = QPushButton("Move up")
@@ -1461,7 +1521,7 @@ class TrainsetBuildPage(QWidget):
         for button in (self.add_model_layer_button, self.remove_model_layer_button, self.move_model_layer_up_button, self.move_model_layer_down_button):
             layer_actions.addWidget(button)
         layer_actions.addStretch(1)
-        layout.addLayout(layer_actions)
+        layout.addWidget(layer_actions_widget)
 
         lower = QHBoxLayout()
         training = QGroupBox("Training controls")
@@ -1484,6 +1544,29 @@ class TrainsetBuildPage(QWidget):
         self.model_validate_button = QPushButton("Build model and validate one forward pass")
         self.model_validate_button.setObjectName("primaryAction")
         layout.addWidget(self.model_validate_button)
+        self.trainset_model_configure_section = ParameterSection(
+            "Configure",
+            "Set the training controls independently of the model architecture.",
+        )
+        self.trainset_model_configure_section.add_widget(training)
+        self.trainset_model_advanced_section = AdvancedSection(
+            "Advanced model architecture",
+            "Edit, remove and reorder the feature-extractor layers.",
+        )
+        self.trainset_model_advanced_section.add_widget(intro)
+        self.trainset_model_advanced_section.add_widget(self.model_layer_table, 1)
+        self.trainset_model_advanced_section.add_widget(layer_actions_widget)
+        self.trainset_model_preview_section = ParameterSection(
+            "Preview",
+            "Review the tensor contract before starting a local run.",
+        )
+        self.trainset_model_preview_section.add_widget(summary)
+        self.trainset_model_run_section = ParameterSection("Run")
+        self.trainset_model_run_section.add_widget(self.model_validate_button)
+        layout.addWidget(self.trainset_model_configure_section)
+        layout.addWidget(self.trainset_model_advanced_section, 2)
+        layout.addWidget(self.trainset_model_preview_section, 2)
+        layout.addWidget(self.trainset_model_run_section)
         self.add_model_layer_button.clicked.connect(lambda: self.add_model_layer({"type": "conv2d", "units": 32, "kernel": 3, "activation": "relu"}))
         self.remove_model_layer_button.clicked.connect(lambda: self._remove_selected_rows(self.model_layer_table))
         self.move_model_layer_up_button.clicked.connect(lambda: self._move_model_layer(-1))
@@ -1553,9 +1636,16 @@ class TrainsetBuildPage(QWidget):
             self.local_smoke_button,
         ):
             local_form.addRow(button)
-        self.local_activity = QLabel("Idle")
+        self.trainset_job_status = JobStatus()
+        self.trainset_job_status.set_actions_visible(
+            pause=False,
+            cancel=False,
+            details=False,
+        )
+        self.trainset_job_status.set_state("idle", "Idle", progress=0.0)
+        self.local_activity = self.trainset_job_status.message_label
         self.local_activity.setWordWrap(True)
-        self.local_progress = QProgressBar()
+        self.local_progress = self.trainset_job_status.progress_bar
         self.local_progress.setRange(0, 100)
         self.local_progress.setValue(0)
         local_controls = QHBoxLayout()
@@ -1566,8 +1656,7 @@ class TrainsetBuildPage(QWidget):
         local_controls.addWidget(self.local_pause_button)
         local_controls.addWidget(self.local_stop_button)
         local_controls.addStretch(1)
-        local_form.addRow("Current task", self.local_activity)
-        local_form.addRow("Progress", self.local_progress)
+        local_form.addRow(self.trainset_job_status)
         local_form.addRow(local_controls)
         output_help = QLabel(
             "Generation writes HDF5 shards under <output>/<project name>/dataset. Progress and errors appear in Monitor & Results."
@@ -1602,11 +1691,21 @@ class TrainsetBuildPage(QWidget):
         self.hpc_prepare_button.setEnabled(False)
         self.hpc_submit_button.setEnabled(False)
         tabs.addTab(maxwell, "Maxwell")
-        layout.addWidget(tabs)
+        self.trainset_run_section = ParameterSection(
+            "Run",
+            "Prepare and execute the local workflow, or export the same reproducible package for Maxwell.",
+        )
+        self.trainset_run_section.add_widget(tabs)
+        layout.addWidget(self.trainset_run_section)
         self.package_tree = QTextEdit()
         self.package_tree.setReadOnly(True)
         self.package_tree.setPlainText("Prepare a job package to see its path and reproducibility manifest.")
-        layout.addWidget(self.package_tree, 1)
+        self.trainset_export_section = ParameterSection(
+            "Export",
+            "The package manifest and generated job files appear here.",
+        )
+        self.trainset_export_section.add_widget(self.package_tree, 1)
+        layout.addWidget(self.trainset_export_section, 1)
         return self._scroll(page)
 
     def _monitor_page(self) -> QWidget:
@@ -1629,7 +1728,13 @@ class TrainsetBuildPage(QWidget):
         self.job_log = QTextEdit()
         self.job_log.setReadOnly(True)
         self.job_log.setPlaceholderText("Slurm/local process output will appear here. Closing the GUI does not stop remote jobs.")
-        splitter.addWidget(self.job_log)
+        self.trainset_log_section = AdvancedSection(
+            "Log",
+            "Local process and future remote scheduler output.",
+            expanded=True,
+        )
+        self.trainset_log_section.add_widget(self.job_log)
+        splitter.addWidget(self.trainset_log_section)
         result = QWidget()
         result_layout = QVBoxLayout(result)
         self.metrics_table = QTableWidget(0, 4)
@@ -1638,7 +1743,12 @@ class TrainsetBuildPage(QWidget):
         result_layout.addWidget(self.metrics_table)
         self.register_model_button = QPushButton("Register best model in 2D Prediction")
         result_layout.addWidget(self.register_model_button)
-        splitter.addWidget(result)
+        self.trainset_results_section = ParameterSection(
+            "Results",
+            "Inspect training metrics and register the selected model for Prediction.",
+        )
+        self.trainset_results_section.add_widget(result)
+        splitter.addWidget(self.trainset_results_section)
         layout.addWidget(splitter, 1)
         return page
 
@@ -1866,14 +1976,40 @@ class TrainsetBuildPage(QWidget):
     def set_preview_busy(self, busy: bool, progress: int = 0, message: str = "") -> None:
         for button in (self.generate_preview_button, self.force_simulation_button, self.new_realization_button):
             button.setEnabled(not busy)
-        self.preview_progress.setVisible(busy)
-        self.preview_activity.setVisible(busy or bool(message))
+        self.preview_job_status.setVisible(busy or bool(message))
+        if busy:
+            state = "running"
+        elif message.lower().startswith("preview failed"):
+            state = "failed"
+        elif progress >= 100:
+            state = "succeeded"
+        else:
+            state = "idle"
+        self.preview_job_status.set_state(state, message, progress=progress / 100.0)
+        self.preview_progress.setRange(0, 100)
         self.preview_progress.setValue(max(0, min(100, int(progress))))
-        self.preview_activity.setText(message)
 
     def set_preview_progress(self, progress: int, message: str) -> None:
         self.preview_progress.setValue(max(0, min(100, int(progress))))
         self.preview_activity.setText(message)
+
+    def set_local_job_status(
+        self,
+        state: str,
+        message: str,
+        progress: Optional[int] = None,
+    ) -> None:
+        """Update the shared status view while preserving legacy percent semantics。"""
+
+        normalized_progress = None if progress is None else progress / 100.0
+        self.trainset_job_status.set_state(
+            state,
+            message,
+            progress=normalized_progress,
+        )
+        if progress is not None:
+            self.local_progress.setRange(0, 100)
+            self.local_progress.setValue(max(0, min(100, int(progress))))
 
     def set_comparison_details(
         self,

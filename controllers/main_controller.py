@@ -28,15 +28,54 @@ class MainController(QObject):
         from .fitting_controller import FittingController
         from .classification_controller import ClassificationController
         from .gisaxs_predict_controller import GisaxsPredictController
+        from src.gimap.features.fitting.bootstrap import create_fitting_view_model
+        from src.gimap.features.prediction.bootstrap import create_prediction_view_model
+        from src.gimap.features.classification.bootstrap import create_classification_view_model
+        from src.gimap.integrations.bornagain import BornAgainSimulator
         
         # 快速初始化基础组件
         self.current_parameters = {}
         
+        self.app_context = getattr(parent, "app_context", None) or getattr(ui, "app_context", None)
+        simulation_port = BornAgainSimulator(
+            runner=getattr(self.app_context, "jobs", None)
+        )
         # 创建控制器（但不立即初始化）
-        self.trainset_controller = TrainsetController(ui, self)
-        self.fitting_controller = FittingController(ui, self)
-        self.classification_controller = ClassificationController(ui, self)
-        self.gisaxs_predict_controller = GisaxsPredictController(ui, self)
+        self.trainset_controller = TrainsetController(
+            ui,
+            self,
+            simulation_port=simulation_port,
+        )
+        fitting_view_model = (
+            create_fitting_view_model(self.app_context)
+            if self.app_context is not None
+            else None
+        )
+        prediction_view_model = (
+            create_prediction_view_model(self.app_context)
+            if self.app_context is not None
+            else None
+        )
+        classification_view_model = (
+            create_classification_view_model(self.app_context)
+            if self.app_context is not None
+            else None
+        )
+        self.fitting_controller = FittingController(
+            ui,
+            self,
+            fitting_view_model=fitting_view_model,
+        )
+        self.classification_controller = ClassificationController(
+            ui,
+            self,
+            classification_view_model=classification_view_model,
+        )
+        self.gisaxs_predict_controller = GisaxsPredictController(
+            ui,
+            self,
+            prediction_view_model=prediction_view_model,
+        )
         
         # 注册控制器到全局参数管理器
         self._register_controllers()

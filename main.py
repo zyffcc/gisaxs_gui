@@ -16,9 +16,9 @@ from ui.components import MainWindowComponents
 from ui.menu_manager import MenuManager
 from controllers.main_controller import MainController
 from core.window_manager import window_manager
+from src.gimap.app import AppContext
+from src.gimap.app.bootstrap import create_app_context
 
-# 导入参数访问系统
-from core.global_params import global_params
 from utils.parameter_access import (
     get_all_software_params, 
     get_physics_params_for_calculation,
@@ -38,8 +38,9 @@ def configure_application_font(app: QApplication, point_size: int = 9) -> None:
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
-    def __init__(self):
+    def __init__(self, app_context: AppContext):
         super().__init__()
+        self.app_context = app_context
         import time
         self._startup_time = time.time()
         
@@ -252,6 +253,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.components.save_state()
             except Exception:
                 pass
+            self.app_context.save_session()
+            if self.app_context.jobs is not None:
+                self.app_context.jobs.shutdown()
             
             event.accept()
         except Exception as e:
@@ -266,8 +270,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 具体的UI同步由各个控制器负责
         try:
             # 检查参数系统是否正常工作
-            beam_params = global_params.get_module_parameters('beam')
-            detector_params = global_params.get_module_parameters('detector')
+            beam_params = self.app_context.settings.get_section('beam')
+            detector_params = self.app_context.settings.get_section('detector')
             
             if beam_params and detector_params:
                 print("Global parameter system initialized successfully")
@@ -292,6 +296,7 @@ def main():
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
+    app_context = create_app_context()
     configure_application_font(app, point_size=9)
     
     # 设置应用程序属性
@@ -301,7 +306,7 @@ def main():
     app.setWindowIcon(app_icon())
     
     # 创建主窗口
-    window = MainWindow()
+    window = MainWindow(app_context)
     requested_size = os.environ.get("GIMAP_WINDOW_SIZE", "").strip().lower()
     if "x" in requested_size:
         try:

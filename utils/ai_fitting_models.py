@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
 from threading import RLock
-from typing import Any, Dict, Iterable, List, Mapping, Tuple
+from typing import Any, Dict, Iterable, List, Mapping
 import json
 
 
@@ -384,60 +384,15 @@ def load_tensorflow_model_compatible(
     custom_objects: Dict[str, Any] | None = None,
     allow_unsafe_lambda: bool = True,
 ):
-    """Load a Keras/SavedModel artifact and return ``(model, artifact_path)``.
+    """Return a legacy-compatible proxy backed by an isolated TensorFlow worker."""
+    from src.gimap.integrations.tensorflow import create_tensorflow_model_proxy
 
-    Raises RuntimeError with all attempted artifacts when loading fails.
-    """
-    import tensorflow as tf  # type: ignore
-
-    attempts: List[Tuple[Path, str]] = []
-    for candidate in model_artifact_candidates(Path(model_dir)):
-        try:
-            try:
-                model = tf.keras.models.load_model(
-                    str(candidate),
-                    custom_objects=custom_objects,
-                    compile=False,
-                    safe_mode=not allow_unsafe_lambda,
-                )
-            except TypeError:
-                model = tf.keras.models.load_model(
-                    str(candidate),
-                    custom_objects=custom_objects,
-                    compile=False,
-                )
-            print(f"Loaded model artifact: {candidate}")
-            return model, candidate
-        except ValueError as exc:
-            message = str(exc)
-            if "Lambda layer" in message and not allow_unsafe_lambda:
-                raise ValueError(
-                    "Model contains Lambda layers and Keras safe deserialization blocked loading. "
-                    "If you trust this model source, rerun with --allow_unsafe_lambda."
-                ) from exc
-            attempts.append((candidate, message))
-        except Exception as exc:
-            attempts.append((candidate, str(exc)))
-            if (candidate / "saved_model.pb").is_file() if candidate.is_dir() else False:
-                try:
-                    loaded = tf.saved_model.load(str(candidate))
-                    signature = loaded.signatures.get("serving_default")
-                    if signature is None:
-                        attempts.append((candidate, "SavedModel has no serving_default signature"))
-                        continue
-
-                    class SavedModelSignatureWrapper:
-                        def __init__(self, fn):
-                            self._fn = fn
-
-                        def __call__(self, inputs, training=False):
-                            del training
-                            return self._fn(**inputs)
-
-                    print(f"Loaded SavedModel serving signature: {candidate}")
-                    return SavedModelSignatureWrapper(signature), candidate
-                except Exception as sig_exc:
-                    attempts.append((candidate, f"saved_model signature fallback failed: {sig_exc}"))
-
-    detail = "\n".join(f"- {path}: {err}" for path, err in attempts) or "- no candidate artifacts found"
-    raise RuntimeError(f"Failed to load AI fitting model from {model_dir}. Tried:\n{detail}")
+    # Python class objects cannot cross the Job protocol boundary. The worker
+    # registers the project's known legacy custom objects by stable name.
+    del custom_objects
+    model = create_tensorflow_model_proxy(
+        Path(model_dir),
+        allow_unsafe_lambda=allow_unsafe_lambda,
+    )
+    print(f"Validated model artifact in isolated worker: {model.artifact_path}")
+    return model, model.artifact_path

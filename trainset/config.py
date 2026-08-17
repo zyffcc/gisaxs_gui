@@ -451,7 +451,11 @@ def merge_config(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]
     return result
 
 
-def validate_project_config(config: Dict[str, Any], require_reference: bool = False) -> Tuple[bool, List[str], List[str]]:
+def validate_project_config(
+    config: Dict[str, Any],
+    require_reference: bool = False,
+    simulation_available: bool | None = None,
+) -> Tuple[bool, List[str], List[str]]:
     config = synchronize_parameter_specs(copy.deepcopy(config))
     errors: List[str] = []
     warnings: List[str] = []
@@ -566,11 +570,11 @@ def validate_project_config(config: Dict[str, Any], require_reference: bool = Fa
         if radius and distance and float(distance.get("maximum", 0.0)) <= 2.0 * float(radius.get("minimum", 0.0)):
             errors.append("Constraint D > 2R has no feasible values in the selected D/radius ranges.")
 
-    if config.get("simulation", {}).get("engine") == "bornagain_yuxin":
-        try:
-            import bornagain  # type: ignore  # noqa: F401
-        except Exception:
-            warnings.append("BornAgain is not installed locally; simulation preview and local physical generation are unavailable.")
+    if (
+        config.get("simulation", {}).get("engine") == "bornagain_yuxin"
+        and simulation_available is False
+    ):
+        warnings.append("BornAgain is not installed locally; simulation preview and local physical generation are unavailable.")
     if config.get("hpc", {}).get("enabled", False):
         if not str(config.get("hpc", {}).get("user", "")).strip():
             warnings.append("Maxwell user is not configured.")

@@ -51,6 +51,7 @@ from trainset.job_package import prepare_job_package
 from trainset.modeling import build_keras_model, normalized_layers, static_contract
 from trainset.plugins import REGISTRY
 from trainset.simulation import simulate_pattern
+from src.gimap.features.trainset.application.ports import SimulationPort
 from ui.trainset_build_page import TrainsetBuildPage
 
 
@@ -122,11 +123,20 @@ class TrainsetController(QObject):
     progress_updated = pyqtSignal(int)
     status_updated = pyqtSignal(str)
 
-    def __init__(self, ui, parent=None):
+    def __init__(
+        self,
+        ui,
+        parent=None,
+        *,
+        simulation_port: SimulationPort | None = None,
+    ):
         super().__init__(parent)
         self.ui = ui
         self.parent_controller = parent
         self.window = getattr(parent, "parent", None)
+        if simulation_port is None:
+            raise ValueError("TrainsetController requires SimulationPort")
+        self.simulation_port = simulation_port
         self.project_root = Path(__file__).resolve().parents[1]
         self.config: Dict[str, Any] = default_project_config()
         self.reference_image: Optional[np.ndarray] = None
@@ -896,7 +906,11 @@ class TrainsetController(QObject):
         key = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
         if key in self._bornagain_preview_cache:
             return self._bornagain_preview_cache[key].copy(), True
-        image = simulate_pattern(config, sampled)
+        image = simulate_pattern(
+            config,
+            sampled,
+            simulator=self.simulation_port,
+        )
         if len(self._bornagain_preview_cache) >= 24:
             self._bornagain_preview_cache.pop(next(iter(self._bornagain_preview_cache)))
         self._bornagain_preview_cache[key] = np.asarray(image, dtype=np.float32).copy()
@@ -921,11 +935,15 @@ class TrainsetController(QObject):
             return
         config = self._collect_config()
         self._refresh_impact_options(config)
-        valid, errors, warnings = validate_project_config(config, require_reference=False)
+        valid, errors, warnings = validate_project_config(
+            config,
+            require_reference=False,
+            simulation_available=self.simulation_port.is_available(),
+        )
         if not valid:
             QMessageBox.warning(self.window, "Preview blocked", "\n".join(errors))
             return
-        generator = DatasetGenerator(config)
+        generator = DatasetGenerator(config, simulation_port=self.simulation_port)
         if not generator.bornagain_available:
             QMessageBox.warning(
                 self.window,
@@ -975,7 +993,7 @@ class TrainsetController(QObject):
         if force:
             self._bornagain_preview_cache.clear()
         started = time.perf_counter()
-        generator = DatasetGenerator(config)
+        generator = DatasetGenerator(config, simulation_port=self.simulation_port)
         midpoint = 0.5 * (minimum + maximum)
         comparison_values = (("minimum", minimum), ("midpoint", midpoint), ("maximum", maximum))
         base_sample = {
@@ -999,7 +1017,9 @@ class TrainsetController(QObject):
                 sampled[key] = value
             else:
                 overrides[f"{plugin}.{key}"] = value
-            mixture_generator = DatasetGenerator(config)
+            mixture_generator = DatasetGenerator(
+                config, simulation_port=self.simulation_port
+            )
             mixture_generator.rng = np.random.default_rng(simulation_seed)
             simulation_values = mixture_generator._mixture_values(sampled)
             raw, cache_hit = self._cached_simulation(config, simulation_values)
@@ -1184,7 +1204,7 @@ class TrainsetController(QObject):
             raise ValueError("Manual simulation violates D > 2R. Adjust spacing/radius or disable the physical constraint.")
 
         seed = int(config.get("project", {}).get("seed", 42))
-        generator = DatasetGenerator(config)
+        generator = DatasetGenerator(config, simulation_port=self.simulation_port)
         generator.rng = np.random.default_rng(seed)
         simulation_values = generator._mixture_values(sampled)
         raw, cache_hit = self._cached_simulation(config, simulation_values)
@@ -1235,7 +1255,10 @@ class TrainsetController(QObject):
 
     def _validate_and_report(self) -> bool:
         config = self._collect_config()
-        valid, errors, warnings = validate_project_config(config)
+        valid, errors, warnings = validate_project_config(
+            config,
+            simulation_available=self.simulation_port.is_available(),
+        )
         if valid:
             self.page.validation_badge.setText("Configuration valid")
             self.page.preview_gate_table.item(0, 1).setText("Ready")
@@ -1364,7 +1387,10 @@ class TrainsetController(QObject):
     def _prepare_job(self, local: bool) -> None:
         config = self._collect_config()
         config["training"]["backend"] = "local" if local else "slurm"
-        valid, errors, _warnings = validate_project_config(config)
+        valid, errors, _warnings = validate_project_config(
+            config,
+            simulation_available=self.simulation_port.is_available(),
+        )
         if not valid:
             QMessageBox.warning(self.window, "Job package blocked", "\n".join(errors))
             return
@@ -1405,8 +1431,7 @@ class TrainsetController(QObject):
                 self.generation_started.emit(),
                 self.page.job_state.setText("RUNNING"),
                 self.page.set_step_state(4, "RUNNING"),
-                self.page.local_activity.setText("Starting local process…"),
-                self.page.local_progress.setValue(0),
+                self.page.set_local_job_status("running", "Starting local process…", 0),
                 self.page.local_pause_button.setEnabled(True),
                 self.page.local_stop_button.setEnabled(True),
             )
@@ -1438,8 +1463,7 @@ class TrainsetController(QObject):
             if match:
                 completed, total, message = int(match.group(1)), max(1, int(match.group(2))), match.group(3)
                 percent = max(0, min(100, int(round(100.0 * completed / total))))
-                self.page.local_progress.setValue(percent)
-                self.page.local_activity.setText(message)
+                self.page.set_local_job_status("running", message, percent)
                 self.progress_updated.emit(percent)
             else:
                 self.page.job_log.append(line)
@@ -1450,16 +1474,24 @@ class TrainsetController(QObject):
         self._local_paused = not self._local_paused
         self._local_control_file.write_text("paused" if self._local_paused else "running", encoding="utf-8")
         self.page.local_pause_button.setText("Resume" if self._local_paused else "Pause")
-        self.page.local_activity.setText(
-            "Paused safely between BornAgain simulations/batches."
-            if self._local_paused
-            else "Resuming local process…"
+        self.page.set_local_job_status(
+            "paused" if self._local_paused else "running",
+            (
+                "Paused safely between BornAgain simulations/batches."
+                if self._local_paused
+                else "Resuming local process…"
+            ),
+            self.page.local_progress.value(),
         )
 
     def _stop_local_process(self) -> None:
         if self._local_control_file and self.local_process and self.local_process.state() != QProcess.NotRunning:
             self._local_control_file.write_text("cancelled", encoding="utf-8")
-            self.page.local_activity.setText("Stopping safely after the current simulation/batch…")
+            self.page.set_local_job_status(
+                "running",
+                "Stopping safely after the current simulation/batch…",
+                self.page.local_progress.value(),
+            )
             self.page.local_pause_button.setEnabled(False)
 
     def _run_local_physical_test(self) -> None:
@@ -1516,9 +1548,10 @@ class TrainsetController(QObject):
         self.page.local_pause_button.setEnabled(False)
         self.page.local_stop_button.setEnabled(False)
         self.page.local_pause_button.setText("Pause")
-        self.page.local_progress.setValue(100 if exit_code == 0 else self.page.local_progress.value())
-        self.page.local_activity.setText(
-            "Completed." if exit_code == 0 else f"Stopped or failed (exit code {exit_code})."
+        self.page.set_local_job_status(
+            "succeeded" if exit_code == 0 else "failed",
+            "Completed." if exit_code == 0 else f"Stopped or failed (exit code {exit_code}).",
+            100 if exit_code == 0 else self.page.local_progress.value(),
         )
         if exit_code == 0:
             self.generation_finished.emit()
@@ -1781,7 +1814,10 @@ def preprocess(image, preprocess_config, module_folder=None, return_steps=False)
         QMessageBox.information(self.window, "Model registered", f"Registered prediction module:\n{module_dir}")
 
     def _update_capabilities(self) -> None:
-        available = DatasetGenerator(self.config).bornagain_available
+        available = DatasetGenerator(
+            self.config,
+            simulation_port=self.simulation_port,
+        ).bornagain_available
         self.page.preview_capability.setText("BornAgain local simulation available" if available else "BornAgain not installed locally · reference preview only")
 
     def get_parameters(self) -> Dict[str, Any]:
@@ -1803,7 +1839,10 @@ def preprocess(image, preprocess_config, module_folder=None, return_steps=False)
             self.monitor_timer.start()
 
     def validate_parameters(self):
-        valid, errors, warnings = validate_project_config(self._collect_config())
+        valid, errors, warnings = validate_project_config(
+            self._collect_config(),
+            simulation_available=self.simulation_port.is_available(),
+        )
         return valid, "\n".join(errors or warnings)
 
     def reset_to_defaults(self) -> None:

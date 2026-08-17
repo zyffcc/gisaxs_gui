@@ -9,7 +9,6 @@ import os
 import time
 import traceback
 from dataclasses import asdict
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -39,7 +38,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from core.global_params import global_params
 from controllers.classification_data_service import ClassificationDataService
 from controllers.classification_models import (
     AlgorithmConfig,
@@ -57,6 +55,7 @@ from controllers.classification_models import (
 )
 from controllers.classification_training_service import ClassificationTrainingService
 from controllers.classification_workers import EmbeddingWorker, ImportWorker, PredictionWorker, TrainingWorker
+from src.gimap.features.classification.presentation import ClassificationViewModel
 from ui.classification_page import ClassificationPage
 
 
@@ -75,11 +74,20 @@ class ClassificationController(QObject):
     parameters_changed = pyqtSignal(dict)
     classification_completed = pyqtSignal(dict)
 
-    def __init__(self, ui, parent=None):
+    def __init__(
+        self,
+        ui,
+        parent=None,
+        *,
+        classification_view_model: ClassificationViewModel | None = None,
+    ):
         super().__init__(parent)
         self.ui = ui
         self.parent = parent
         self.main_window = getattr(parent, "parent", None)
+        if classification_view_model is None:
+            raise ValueError("ClassificationController requires ClassificationViewModel")
+        self.classification_view_model = classification_view_model
 
         self.data_service = ClassificationDataService()
         self.training_service = ClassificationTrainingService()
@@ -366,7 +374,7 @@ class ClassificationController(QObject):
 
     def _restore_global_parameters(self) -> None:
         try:
-            params = global_params.get_module_parameters("classification")
+            params = self.classification_view_model.load_settings()
             self.set_parameters(params)
         except Exception as exc:
             self.log(f"[Session] Failed to restore Classification parameters: {exc}")
@@ -677,7 +685,7 @@ class ClassificationController(QObject):
             return
         self._set_state(ClassificationPageState.IMPORTING)
         self.page.taskProgressBar.setValue(0)
-        worker = ImportWorker(selected_sources, self.data_service)
+        worker = ImportWorker(selected_sources, self.classification_view_model)
         self.current_worker = worker
         worker.signals.progress.connect(self._on_worker_progress)
         worker.signals.finished.connect(lambda payload: self._on_import_finished(payload, labels))
@@ -789,8 +797,7 @@ class ClassificationController(QObject):
             self._collect_validation_config(),
             self._collect_projection_config(),
             self._ranking_metric(),
-            self.data_service,
-            self.training_service,
+            self.classification_view_model,
         )
         self.current_worker = worker
         self._set_state(ClassificationPageState.TRAINING)
@@ -940,37 +947,33 @@ class ClassificationController(QObject):
         if not path:
             return
         package = self._build_saved_model_package(self.active_result)
-        try:
-            import joblib
-
-            joblib.dump(package, path)
+        saved_path = self.classification_view_model.save_model(Path(path), package)
+        if saved_path is not None:
             self.active_model_package = package
             self.log(f"[Model] Saved active model to {path}")
-        except Exception as exc:
-            QMessageBox.warning(self.main_window, "Save Model", str(exc))
+            return
+        QMessageBox.warning(
+            self.main_window,
+            "Save Model",
+            self.classification_view_model.state.error_message
+            or "Model save failed",
+        )
 
     def _load_model(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self.main_window, "Load Model", "", "Joblib (*.joblib);;Pickle (*.pkl);;All files (*.*)")
         if not path:
             return
-        try:
-            import joblib
-
-            package = joblib.load(path)
-            if isinstance(package, SavedModelPackage):
-                self.active_model_package = package
-                self.log(f"[Model] Loaded model: {package.display_name}")
-                return
-            if isinstance(package, dict) and package.get("dr_type") == "t-SNE":
-                QMessageBox.warning(
-                    self.main_window,
-                    "Load Model",
-                    "This legacy model uses t-SNE as a classification feature and cannot transform new samples.",
-                )
-                return
-            QMessageBox.warning(self.main_window, "Load Model", "Unsupported legacy model package.")
-        except Exception as exc:
-            QMessageBox.warning(self.main_window, "Load Model", str(exc))
+        package = self.classification_view_model.load_model(Path(path))
+        if package is not None:
+            self.active_model_package = package
+            self.log(f"[Model] Loaded model: {package.display_name}")
+            return
+        QMessageBox.warning(
+            self.main_window,
+            "Load Model",
+            self.classification_view_model.state.error_message
+            or "Unsupported legacy model package.",
+        )
 
     def _predict_new_data_menu(self) -> None:
         menu = QMenu(self.page.predictNewDataButton)
@@ -998,7 +1001,7 @@ class ClassificationController(QObject):
             else:
                 QMessageBox.warning(self.main_window, "Prediction", "Train, load, or save an active model first.")
                 return
-        worker = PredictionWorker(paths, package, self.data_service)
+        worker = PredictionWorker(paths, package, self.classification_view_model)
         self.current_worker = worker
         self._set_state(ClassificationPageState.PREDICTING)
         worker.signals.progress.connect(self._on_worker_progress)
@@ -1024,7 +1027,7 @@ class ClassificationController(QObject):
             self.samples,
             self._collect_preprocessing_config(),
             self.page.embeddingMethodCombo.currentText(),
-            self.data_service,
+            self.classification_view_model,
         )
         self.current_worker = worker
         worker.signals.progress.connect(self._on_worker_progress)
@@ -1041,27 +1044,18 @@ class ClassificationController(QObject):
         self.log(f"[Embedding] {payload.get('method', 'Embedding')} complete.")
 
     def _build_saved_model_package(self, result: ModelEvaluationResult) -> SavedModelPackage:
-        import sklearn
-
         algorithm = next((config for config in self.algorithm_configs if config.algorithm_id == result.algorithm_id), None)
         data_type = self.feature_matrix.data_type if self.feature_matrix is not None else "unknown"
         input_shape = self.experiment_result.input_shape if self.experiment_result else None
-        return SavedModelPackage(
-            pipeline=result.fitted_pipeline,
-            algorithm_id=result.algorithm_id,
-            display_name=result.display_name,
-            class_names=list(result.labels),
+        return self.classification_view_model.build_model_package(
+            result,
+            class_names=result.labels,
             data_type=data_type,
             input_shape=input_shape,
-            preprocessing_config=self.experiment_result.preprocessing_config,
-            projection_config=self.experiment_result.projection_config,
-            algorithm_parameters=dict(algorithm.parameters if algorithm else {}),
-            sklearn_version=sklearn.__version__,
-            numpy_version=np.__version__,
-            software_version="gisaxs_gui",
-            training_date=datetime.now().isoformat(timespec="seconds"),
-            validation_config=self.experiment_result.validation_config,
-            evaluation_metrics=dict(result.metrics_mean),
+            preprocessing=self.experiment_result.preprocessing_config,
+            projection=self.experiment_result.projection_config,
+            algorithm_parameters=algorithm.parameters if algorithm else {},
+            validation=self.experiment_result.validation_config,
         )
 
     def _update_dataset_table(self) -> None:
@@ -1405,6 +1399,17 @@ class ClassificationController(QObject):
         page.predictNewDataButton.setEnabled(not busy)
         self.progress_updated.emit(0 if not busy else page.taskProgressBar.value())
         self._update_run_summary()
+        job_state = {
+            ClassificationPageState.IMPORTING: "running",
+            ClassificationPageState.TRAINING: "running",
+            ClassificationPageState.PREDICTING: "running",
+            ClassificationPageState.RESULTS_AVAILABLE: "succeeded",
+            ClassificationPageState.ERROR: "failed",
+        }.get(state, "idle")
+        page.set_job_state(
+            job_state,
+            progress=page.taskProgressBar.value() if busy else (100 if job_state == "succeeded" else 0),
+        )
 
     def _on_worker_progress(self, percent: int, message: str) -> None:
         if self.page is not None:
@@ -1489,14 +1494,7 @@ class ClassificationController(QObject):
     def _persist_parameters(self) -> None:
         try:
             params = self.get_parameters()
-            global_params.set_parameter("classification", "import_cache", params["import_cache"])
-            global_params.set_parameter("classification", "sources", params["sources"])
-            global_params.set_parameter("classification", "preprocessing", params["preprocessing"])
-            global_params.set_parameter("classification", "validation", params["validation"])
-            global_params.set_parameter("classification", "projection", params["projection"])
-            global_params.set_parameter("classification", "algorithms", params["algorithms"])
-            global_params.set_parameter("classification", "ranking_metric", params["ranking_metric"])
-            global_params.save_user_parameters()
+            self.classification_view_model.save_settings(params)
             self.parameters_changed.emit(params)
         except Exception as exc:
             self.log(f"[Session] Parameter persistence failed: {exc}")

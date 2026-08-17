@@ -1,0 +1,136 @@
+QFrame[gimapSection="true"],
+QWidget[gimapSection="true"] {
+    background: #ffffff;
+    border: 1px solid #dbe3ec;
+    border-radius: 10px;
+}
+
+QLabel[gimapSectionTitle="true"] {
+    color: #172033;
+    font-size: 10pt;
+    font-weight: 700;
+    border: 0;
+    background: transparent;
+}
+
+QLabel[gimapSectionDescription="true"],
+QLabel[gimapMeta="true"] {
+    color: #64748b;
+    border: 0;
+    background: transparent;
+}
+
+QToolButton[gimapAdvancedToggle="true"] {
+    color: #334155;
+    font-weight: 600;
+    text-align: left;
+    background: #f8fafc;
+    border: 1px solid #dbe3ec;
+    border-radius: 8px;
+    padding: 7px 10px;
+}
+
+QToolButton[gimapAdvancedToggle="true"]:checked {
+    background: #eef5ff;
+    border-color: #9ec5ff;
+}
+
+QPushButton[gimapPrimaryAction="true"] {
+    background: #2367d1;
+    border: 1px solid #1f5dbd;
+    color: white;
+    border-radius: 7px;
+    padding: 6px 14px;
+    font-weight: 600;
+}
+
+QPushButton[gimapPrimaryAction="true"]:disabled {
+    background: #a8b9d1;
+    border-color: #a8b9d1;
+}
+
+QFrame[gimapEmptyState="true"] {
+    background: #f8fafc;
+    border: 1px dashed #b8c5d6;
+    border-radius: 9px;
+}
+
+QLabel[gimapEmptyTitle="true"] {
+    color: #334155;
+    font-weight: 700;
+    font-size: 10pt;
+    border: 0;
+}
+
+QFrame[gimapBannerLevel="error"] {
+    background: #fff1f2;
+    border: 1px solid #fda4af;
+    border-radius: 8px;
+}
+
+QFrame[gimapBannerLevel="warning"] {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+}
+
+QFrame[gimapBannerLevel="info"] {
+    background: #eff6ff;
+    border: 1px solid #93c5fd;
+    border-radius: 8px;
+}
+
+QFrame[gimapBannerLevel="success"] {
+    background: #ecfdf5;
+    border: 1px solid #6ee7b7;
+    border-radius: 8px;
+}
+
+QLabel[gimapBannerTitle="true"] {
+    color: #172033;
+    font-weight: 700;
+    border: 0;
+    background: transparent;
+}
+
+QFrame[gimapJobStatus="true"] {
+    background: #f8fafc;
+    border: 1px solid #dbe3ec;
+    border-radius: 9px;
+}
+
+QLabel[gimapJobState="true"] {
+    background: #e2e8f0;
+    color: #334155;
+    border-radius: 9px;
+    padding: 2px 8px;
+    font-weight: 700;
+}
+
+QLabel[gimapJobState="running"] { background: #dbeafe; color: #1d4ed8; }
+QLabel[gimapJobState="paused"] { background: #fef3c7; color: #92400e; }
+QLabel[gimapJobState="succeeded"] { background: #d1fae5; color: #047857; }
+QLabel[gimapJobState="failed"],
+QLabel[gimapJobState="timed_out"] { background: #ffe4e6; color: #be123c; }
+QLabel[gimapJobState="cancelled"] { background: #e2e8f0; color: #475569; }
+
+QLineEdit[gimapFilePath="true"] {
+    min-height: 26px;
+}
+
+QTableWidget[gimapResultTable="true"] {
+    background: #ffffff;
+    alternate-background-color: #f8fafc;
+    border: 1px solid #dbe3ec;
+    border-radius: 7px;
+    gridline-color: #e5eaf1;
+}
+
+QHeaderView::section {
+    background: #eef2f7;
+    color: #334155;
+    border: 0;
+    border-bottom: 1px solid #d5dde8;
+    padding: 6px;
+    font-weight: 600;
+}

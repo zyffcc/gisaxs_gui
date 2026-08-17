@@ -20,7 +20,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -33,6 +32,13 @@ from PyQt5.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
+)
+
+from src.gimap.app.presentation import (
+    AdvancedSection,
+    JobStatus,
+    ParameterSection,
+    PlotPanel,
 )
 
 
@@ -164,8 +170,22 @@ class ClassificationPage(QWidget):
         dataset_layout.setContentsMargins(0, 0, 0, 0)
         self.datasetInspectionSplitter = QSplitter(Qt.Horizontal, self.datasetStepContent)
         self.datasetInspectionSplitter.setObjectName("datasetInspectionSplitter")
-        self.datasetPanel = self._build_dataset_panel()
-        self.inspectionPanel = self._build_inspection_panel()
+        dataset_panel = self._build_dataset_panel()
+        inspection_panel = self._build_inspection_panel()
+        self.classification_input_section = ParameterSection(
+            "Input",
+            "Create labeled classes, scan files and review dataset quality before training.",
+        )
+        self.classification_input_section.setObjectName("classificationInputSection")
+        self.classification_input_section.add_widget(dataset_panel)
+        self.classification_preview_panel = PlotPanel(
+            "Preview",
+            "Inspect the selected sample and its quality checks.",
+        )
+        self.classification_preview_panel.setObjectName("classificationPreviewPanel")
+        self.classification_preview_panel.set_plot_widget(inspection_panel)
+        self.datasetPanel = self.classification_input_section
+        self.inspectionPanel = self.classification_preview_panel
         self.datasetInspectionSplitter.addWidget(self.datasetPanel)
         self.datasetInspectionSplitter.addWidget(self.inspectionPanel)
         self.datasetInspectionSplitter.setChildrenCollapsible(False)
@@ -174,13 +194,58 @@ class ClassificationPage(QWidget):
         dataset_layout.addWidget(self.datasetInspectionSplitter)
         self.workflowStack.addWidget(self._scroll_step(self.datasetStepContent, "datasetStepScrollArea"))
 
-        self.preprocessingStepContent = self._build_preprocessing_panel()
+        preprocessing_panel = self._build_preprocessing_panel()
+        self.classification_configure_section = ParameterSection(
+            "Configure",
+            "Build the shared preprocessing pipeline used by every selected classifier.",
+        )
+        self.classification_configure_section.setObjectName("classificationConfigureSection")
+        self.classification_configure_section.add_widget(preprocessing_panel)
+        self.preprocessingStepContent = self.classification_configure_section
         self.workflowStack.addWidget(self._scroll_step(self.preprocessingStepContent, "preprocessingStepScrollArea"))
 
-        self.algorithmsStepContent = self._build_experiment_panel()
+        experiment_panel = self._build_experiment_panel()
+        self.classification_algorithm_section = ParameterSection(
+            "Configure",
+            "Select classifiers and keep validation/projection options in the Advanced section.",
+        )
+        self.classification_algorithm_section.setObjectName("classificationAlgorithmSection")
+        self.classification_algorithm_section.add_widget(experiment_panel)
+        self.algorithmsStepContent = self.classification_algorithm_section
         self.workflowStack.addWidget(self._scroll_step(self.algorithmsStepContent, "algorithmsStepScrollArea"))
 
-        self.resultsPanel = self._build_results_panel()
+        results_panel = self._build_results_panel()
+        self.classification_results_section = ParameterSection(
+            "Results",
+            "Compare ranked models, confusion matrices, class metrics and predictions.",
+        )
+        self.classification_results_section.setObjectName("classificationResultsSection")
+        self.classification_results_section.add_widget(results_panel)
+        for button in (
+            self.saveActiveModelButton,
+            self.exportResultsButton,
+            self.exportPredictionsButton,
+        ):
+            self._detach_widget(button)
+        export_actions = QHBoxLayout()
+        export_actions.setContentsMargins(0, 0, 0, 0)
+        export_actions.setSpacing(8)
+        export_actions.addWidget(self.saveActiveModelButton)
+        export_actions.addWidget(self.exportResultsButton)
+        export_actions.addWidget(self.exportPredictionsButton)
+        export_actions.addStretch(1)
+        self.classification_export_section = ParameterSection(
+            "Export",
+            "Save the active model, experiment summary or prediction CSV with the original commands.",
+        )
+        self.classification_export_section.setObjectName("classificationExportSection")
+        self.classification_export_section.add_layout(export_actions)
+        self.resultsPanel = QWidget(self)
+        results_layout = QVBoxLayout(self.resultsPanel)
+        results_layout.setContentsMargins(0, 0, 0, 0)
+        results_layout.setSpacing(8)
+        results_layout.addWidget(self.classification_results_section, 1)
+        results_layout.addWidget(self.classification_export_section)
         self.workflowStack.addWidget(self._scroll_step(self.resultsPanel, "resultsStepScrollArea"))
         root.addWidget(self.workflowStack, 1)
 
@@ -347,22 +412,24 @@ class ClassificationPage(QWidget):
         self.datasetTable.setSortingEnabled(True)
         layout.addWidget(self.datasetTable, 3)
 
-        sample_tools = QHBoxLayout()
+        sample_tools = QGridLayout()
+        sample_tools.setHorizontalSpacing(8)
+        sample_tools.setVerticalSpacing(6)
         self.excludeSelectedButton = QPushButton("Exclude", panel)
         self.includeSelectedButton = QPushButton("Include", panel)
         self.removeSelectedSamplesButton = QPushButton("Remove", panel)
         self.openSelectedLocationButton = QPushButton("Open", panel)
         self.copySelectedPathsButton = QPushButton("Copy Paths", panel)
         self.exportSelectedFilesButton = QPushButton("Export List", panel)
-        for button in (
+        for index, button in enumerate((
             self.excludeSelectedButton,
             self.includeSelectedButton,
             self.removeSelectedSamplesButton,
             self.openSelectedLocationButton,
             self.copySelectedPathsButton,
             self.exportSelectedFilesButton,
-        ):
-            sample_tools.addWidget(button)
+        )):
+            sample_tools.addWidget(button, index // 3, index % 3)
         layout.addLayout(sample_tools)
         return panel
 
@@ -487,9 +554,6 @@ class ClassificationPage(QWidget):
             ("1D preprocessing", self.oneDPreprocessingCombo),
             ("2D preprocessing", self.twoDPreprocessingCombo),
             ("Normalize", self.normalizeCombo),
-            ("Smoothing", self.smoothingSpinBox),
-            ("Resize rows", self.resizeRowsSpinBox),
-            ("Resize cols", self.resizeColsSpinBox),
         )
         for label, widget in rows:
             grid.addRow(label, widget)
@@ -498,6 +562,26 @@ class ClassificationPage(QWidget):
         self.inputSummaryLabel.setWordWrap(True)
         grid.addRow("Input summary", self.inputSummaryLabel)
         layout.addWidget(preprocessing)
+        preprocessing_advanced_frame = QWidget(panel)
+        preprocessing_advanced_form = QFormLayout(preprocessing_advanced_frame)
+        preprocessing_advanced_form.setContentsMargins(0, 0, 0, 0)
+        preprocessing_advanced_form.setFieldGrowthPolicy(
+            QFormLayout.AllNonFixedFieldsGrow
+        )
+        preprocessing_advanced_form.addRow("Smoothing", self.smoothingSpinBox)
+        preprocessing_advanced_form.addRow("Resize rows", self.resizeRowsSpinBox)
+        preprocessing_advanced_form.addRow("Resize cols", self.resizeColsSpinBox)
+        self.classification_preprocessing_advanced = AdvancedSection(
+            "Advanced preprocessing",
+            "Tune smoothing and explicit 2D resize dimensions.",
+        )
+        self.classification_preprocessing_advanced.setObjectName(
+            "classificationPreprocessingAdvancedSection"
+        )
+        self.classification_preprocessing_advanced.add_widget(
+            preprocessing_advanced_frame
+        )
+        layout.addWidget(self.classification_preprocessing_advanced)
         layout.addStretch(1)
         return panel
 
@@ -630,7 +714,15 @@ class ClassificationPage(QWidget):
         self.algorithmTable.setMinimumHeight(360)
         algorithm_layout.addWidget(self.algorithmTable, 1)
 
-        self.algorithmConfigSplitter.addWidget(config_column)
+        self.classification_algorithm_advanced = AdvancedSection(
+            "Advanced validation and projection",
+            "Control split strategy, reproducibility and optional dimensionality reduction.",
+        )
+        self.classification_algorithm_advanced.setObjectName(
+            "classificationAlgorithmAdvancedSection"
+        )
+        self.classification_algorithm_advanced.add_widget(config_column)
+        self.algorithmConfigSplitter.addWidget(self.classification_algorithm_advanced)
         self.algorithmConfigSplitter.addWidget(algorithm_column)
         layout.addWidget(self.algorithmConfigSplitter, 1)
 
@@ -642,14 +734,28 @@ class ClassificationPage(QWidget):
         self.runComparisonButton.setObjectName("runComparisonButton")
         self.cancelTaskButton = QPushButton("Cancel", run_frame)
         self.cancelTaskButton.setEnabled(False)
-        self.runStatusLabel = QLabel("Selected algorithms: 0 | Valid samples: 0 | Estimated runs: 0 | EMPTY", run_frame)
-        self.taskProgressBar = QProgressBar(run_frame)
+        self.classification_job_status = JobStatus(run_frame)
+        self.classification_job_status.set_actions_visible(
+            pause=False,
+            cancel=False,
+            details=False,
+        )
+        self.runStatusLabel = self.classification_job_status.message_label
+        self.runStatusLabel.setText(
+            "Selected algorithms: 0 | Valid samples: 0 | Estimated runs: 0 | EMPTY"
+        )
+        self.taskProgressBar = self.classification_job_status.progress_bar
         self.taskProgressBar.setRange(0, 100)
         run_layout.addWidget(self.runComparisonButton, 0, 0)
         run_layout.addWidget(self.cancelTaskButton, 0, 1)
-        run_layout.addWidget(self.runStatusLabel, 1, 0, 1, 2)
-        run_layout.addWidget(self.taskProgressBar, 2, 0, 1, 2)
-        layout.addWidget(run_frame)
+        run_layout.addWidget(self.classification_job_status, 1, 0, 1, 2)
+        self.classification_run_section = ParameterSection(
+            "Run",
+            "Training remains delegated to the existing ClassificationViewModel and JobRunner.",
+        )
+        self.classification_run_section.setObjectName("classificationRunSection")
+        self.classification_run_section.add_widget(run_frame)
+        layout.addWidget(self.classification_run_section)
         return panel
 
     def _build_results_panel(self) -> QWidget:
@@ -832,27 +938,60 @@ class ClassificationPage(QWidget):
         return panel
 
     def _build_log_panel(self) -> QWidget:
-        panel = QFrame(self)
-        panel.setObjectName("logPanel")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.logToggleButton = QToolButton(panel)
-        self.logToggleButton.setText("Show Operation Log")
-        self.logToggleButton.setCheckable(True)
-        self.logToggleButton.setChecked(False)
+        panel = AdvancedSection(
+            "Log",
+            "Dataset import, training, prediction and export messages.",
+        )
+        panel.setObjectName("classificationLogSection")
+        self.classification_log_section = panel
+        self.logToggleButton = panel.toggle_button
         self.logTextBrowser = QTextBrowser(panel)
         self.logTextBrowser.setObjectName("classificationPageTextBrowser")
-        self.logTextBrowser.setVisible(False)
         self.logTextBrowser.setMaximumHeight(220)
         self.logTextBrowser.setMinimumHeight(140)
-        self.logToggleButton.toggled.connect(self._set_log_visible)
-        layout.addWidget(self.logToggleButton)
-        layout.addWidget(self.logTextBrowser)
+        panel.add_widget(self.logTextBrowser)
         return panel
 
     def _set_log_visible(self, visible: bool) -> None:
-        self.logTextBrowser.setVisible(visible)
-        self.logToggleButton.setText("Hide Operation Log" if visible else "Show Operation Log")
+        self.classification_log_section.set_expanded(visible)
+
+    def set_job_state(
+        self,
+        state: str,
+        *,
+        progress: int | None = None,
+    ) -> None:
+        """Update shared status presentation while keeping percent-based aliases。"""
+
+        message = self.runStatusLabel.text()
+        normalized_progress = None if progress is None else progress / 100.0
+        self.classification_job_status.set_state(
+            state,
+            message,
+            progress=normalized_progress,
+        )
+        if progress is not None:
+            self.taskProgressBar.setRange(0, 100)
+            self.taskProgressBar.setValue(max(0, min(100, int(progress))))
+
+    @staticmethod
+    def _detach_widget(widget: QWidget) -> None:
+        parent = widget.parentWidget()
+        if parent is None or parent.layout() is None:
+            return
+
+        def remove_from(layout) -> bool:
+            index = layout.indexOf(widget)
+            if index >= 0:
+                layout.takeAt(index)
+                return True
+            for item_index in range(layout.count()):
+                child_layout = layout.itemAt(item_index).layout()
+                if child_layout is not None and remove_from(child_layout):
+                    return True
+            return False
+
+        remove_from(parent.layout())
 
     def _section(self, title: str) -> QFrame:
         frame = QFrame(self)

@@ -40,6 +40,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core.user_settings import user_settings
+from src.gimap.app.presentation import AdvancedSection, ParameterSection, PlotPanel
 from ui.app_assets import app_colored_logo_pixmap, app_icon
 from ui.layout_utils import (
     BUTTON_HEIGHT,
@@ -2129,10 +2130,56 @@ class GisaxsFittingWorkspace:
         cut_line_card = CutLineCard(self.ui, self.profile)
         fitting_controls_card = FittingControlsCard(self.ui, self.profile)
         model_parameters_card = ModelParameterCard(self.ui, self.profile)
-        fixed_layout.addWidget(gisaxs_card, 0)
-        fixed_layout.addWidget(cut_line_card, 0)
-        fixed_layout.addWidget(fitting_controls_card, 0)
-        fixed_layout.addWidget(model_parameters_card, 0)
+
+        self.fitting_input_section = ParameterSection(
+            "Input",
+            "Load the current detector image or stack before defining the cut.",
+        )
+        self.fitting_input_section.setObjectName("fittingInputSection")
+        self.fitting_input_section.add_widget(gisaxs_card)
+        self.fitting_configure_section = ParameterSection(
+            "Configure",
+            "Define detector center and cut geometry using the existing pixel-based controls.",
+        )
+        self.fitting_configure_section.setObjectName("fittingConfigureSection")
+        self.fitting_configure_section.add_widget(cut_line_card)
+        self.fitting_advanced_section = AdvancedSection(
+            "Advanced model configuration",
+            "Edit the component model and its scientific parameters.",
+        )
+        self.fitting_advanced_section.setObjectName("fittingAdvancedSection")
+        self.fitting_advanced_section.add_widget(model_parameters_card)
+        self.fitting_run_section = ParameterSection(
+            "Run",
+            "Use the existing manual, AI and refinement commands without changing their profiles or constraints.",
+        )
+        self.fitting_run_section.setObjectName("fittingRunSection")
+        self.fitting_run_section.add_widget(fitting_controls_card)
+
+        _detach_from_parent_layout(self.ui.FittingExportButton)
+        _detach_from_parent_layout(fitting_controls_card.fitExportPlotButton)
+        self.ui.fitExportPlotButton = fitting_controls_card.fitExportPlotButton
+        export_actions = QHBoxLayout()
+        export_actions.setContentsMargins(0, 0, 0, 0)
+        export_actions.setSpacing(CARD_SPACING)
+        export_actions.addWidget(self.ui.FittingExportButton)
+        export_actions.addWidget(fitting_controls_card.fitExportPlotButton)
+        export_actions.addStretch(1)
+        self.fitting_export_section = ParameterSection(
+            "Export",
+            "Export the fitted data or the current plot using the original actions.",
+        )
+        self.fitting_export_section.setObjectName("fittingExportSection")
+        self.fitting_export_section.add_layout(export_actions)
+
+        for section in (
+            self.fitting_input_section,
+            self.fitting_configure_section,
+            self.fitting_advanced_section,
+            self.fitting_run_section,
+            self.fitting_export_section,
+        ):
+            fixed_layout.addWidget(section, 0)
         fixed_layout.addStretch(1)
         fixed_stack_min_height = self._fixed_stack_min_height()
         self.fixed_controls_stack.setMinimumHeight(fixed_stack_min_height)
@@ -2183,10 +2230,37 @@ class GisaxsFittingWorkspace:
         self.ui.fittingPlotControlsCard = self.fitting_controls_card
         self.ui.runLogCard = self.run_log_card
 
-        right_layout.addWidget(self.detector_preview_card, 0, Qt.AlignTop)
-        right_layout.addWidget(self.fitting_plot_card, 0, Qt.AlignTop)
-        right_layout.addWidget(self.fitting_controls_card, 0, Qt.AlignTop)
-        right_layout.addWidget(self.run_log_card, 0, Qt.AlignTop)
+        self.fitting_preview_panel = PlotPanel(
+            "Preview",
+            "Inspect the detector image and selected cut region.",
+        )
+        self.fitting_preview_panel.setObjectName("fittingPreviewPanel")
+        self.fitting_preview_panel.set_plot_widget(self.detector_preview_card)
+        self.fitting_results_panel = PlotPanel(
+            "Results",
+            "Compare the measured curve, components and fitted result.",
+        )
+        self.fitting_results_panel.setObjectName("fittingResultsPanel")
+        self.fitting_results_panel.set_plot_widget(self.fitting_plot_card)
+        self.fitting_plot_advanced_section = AdvancedSection(
+            "Advanced plot controls",
+            "Adjust fitting region, sampling and plot display without changing the calculated data.",
+            expanded=True,
+        )
+        self.fitting_plot_advanced_section.setObjectName("fittingPlotAdvancedSection")
+        self.fitting_plot_advanced_section.add_widget(self.fitting_controls_card)
+        self.fitting_log_section = AdvancedSection(
+            "Log",
+            "Manual fitting, AI fitting and in-situ progress messages.",
+            expanded=True,
+        )
+        self.fitting_log_section.setObjectName("fittingLogSection")
+        self.fitting_log_section.add_widget(self.run_log_card)
+
+        right_layout.addWidget(self.fitting_preview_panel, 0, Qt.AlignTop)
+        right_layout.addWidget(self.fitting_results_panel, 0, Qt.AlignTop)
+        right_layout.addWidget(self.fitting_plot_advanced_section, 0, Qt.AlignTop)
+        right_layout.addWidget(self.fitting_log_section, 0, Qt.AlignTop)
         right_layout.addStretch(1)
 
         self.preview_scroll_area = make_scroll_area(self.right_panel, horizontal=True)
@@ -2378,6 +2452,23 @@ class GisaxsFittingWorkspace:
             self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
 
     def _fixed_stack_min_height(self) -> int:
+        sections = [
+            getattr(self, name, None)
+            for name in (
+                "fitting_input_section",
+                "fitting_configure_section",
+                "fitting_advanced_section",
+                "fitting_run_section",
+                "fitting_export_section",
+            )
+        ]
+        sections = [section for section in sections if section is not None]
+        if sections:
+            heights = [
+                max(section.minimumSizeHint().height(), section.sizeHint().height())
+                for section in sections
+            ]
+            return sum(heights) + (len(heights) - 1) * CARD_SPACING
         card_names = ("GisaxsInputCard", "CutLineCard", "FittingControlsCard", "ModelParameterCard")
         card_heights = [
             max(widget.minimumHeight(), widget.minimumSizeHint().height(), widget.sizeHint().height())
@@ -2645,14 +2736,82 @@ class GisaxsPredictWorkspace:
         self.results_card = self._build_results_card(contents)
         self.model_library_card = PredictModelLibraryCard(contents, self.profile)
 
-        for card in (
-            self.input_card,
-            self.model_card,
-            self.run_card,
-            self.results_card,
-            self.model_library_card,
+        self.prediction_input_section = ParameterSection(
+            "Input",
+            "Choose a single scattering file or a folder/range for multi-file prediction.",
+        )
+        self.prediction_input_section.setObjectName("predictionInputSection")
+        self.prediction_input_section.add_widget(self.input_card)
+        self.prediction_configure_section = ParameterSection(
+            "Configure",
+            "Select module.yaml, framework compatibility and the model used by the predictor.",
+        )
+        self.prediction_configure_section.setObjectName("predictionConfigureSection")
+        self.prediction_configure_section.add_widget(self.model_card)
+        self.prediction_advanced_section = AdvancedSection(
+            "Advanced model sources",
+            "Browse the shared model library only when a local model is not already available.",
+        )
+        self.prediction_advanced_section.setObjectName("predictionAdvancedSection")
+        self.model_library_card.set_expanded(True)
+        self.prediction_advanced_section.add_widget(self.model_library_card)
+        self.prediction_preview_panel = PlotPanel(
+            "Preview",
+            "Inspect the selected GISAXS input and, after a run, the corresponding 2D prediction.",
+        )
+        self.prediction_preview_panel.setObjectName("predictionPreviewPanel")
+        self.prediction_preview_panel.set_plot_widget(self.results_card)
+        self.prediction_run_section = ParameterSection(
+            "Run",
+            "Readiness, Predict and Stop keep their existing controller signals.",
+        )
+        self.prediction_run_section.setObjectName("predictionRunSection")
+        self.prediction_run_section.add_widget(self.run_card)
+
+        _detach_from_parent_layout(self.ui.gisaxsPredictRunLogTitle)
+        _detach_from_parent_layout(self.ui.predictStatusTextBrowser)
+        _detach_from_parent_layout(self.ui.gisaxsPredictShowMultiFileResultsButton)
+        self.prediction_results_section = ParameterSection(
+            "Results",
+            "Review run messages or open the aggregated multi-file result table.",
+        )
+        self.prediction_results_section.setObjectName("predictionResultsSection")
+        self.prediction_results_section.add_header_action(
+            self.ui.gisaxsPredictShowMultiFileResultsButton
+        )
+        self.prediction_results_section.add_widget(self.ui.gisaxsPredictRunLogTitle)
+        self.prediction_results_section.add_widget(self.ui.predictStatusTextBrowser)
+
+        for output_section in (
+            self.gisaxs_preview_output_section,
+            self.predict2d_preview_output_section,
         ):
-            layout.addWidget(card)
+            output_section.setVisible(False)
+        _detach_from_parent_layout(self.ui.gisaxsImageExportButton)
+        _detach_from_parent_layout(self.ui.predict2dExportButton)
+        export_actions = QHBoxLayout()
+        export_actions.setContentsMargins(0, 0, 0, 0)
+        export_actions.setSpacing(CARD_SPACING)
+        export_actions.addWidget(self.ui.gisaxsImageExportButton)
+        export_actions.addWidget(self.ui.predict2dExportButton)
+        export_actions.addStretch(1)
+        self.prediction_export_section = ParameterSection(
+            "Export",
+            "Export the current GISAXS input view or the 2D prediction using the original buttons.",
+        )
+        self.prediction_export_section.setObjectName("predictionExportSection")
+        self.prediction_export_section.add_layout(export_actions)
+
+        for section in (
+            self.prediction_input_section,
+            self.prediction_configure_section,
+            self.prediction_advanced_section,
+            self.prediction_preview_panel,
+            self.prediction_run_section,
+            self.prediction_results_section,
+            self.prediction_export_section,
+        ):
+            layout.addWidget(section)
         layout.addStretch(1)
 
         scroll_area = make_scroll_area(contents, horizontal=True)
@@ -2910,6 +3069,7 @@ class GisaxsPredictWorkspace:
         log_title = QLabel("Run Log", run)
         log_title.setObjectName("gisaxsPredictRunLogTitle")
         log_title.setProperty("sectionTitle", True)
+        self.ui.gisaxsPredictRunLogTitle = log_title
 
         layout.addLayout(status_grid)
         layout.addLayout(button_row)
@@ -3022,6 +3182,7 @@ class GisaxsPredictWorkspace:
         zoom_layout.addLayout(zoom_row)
 
         output_section, output_layout = self._make_preview_section("Output", panel)
+        self.gisaxs_preview_output_section = output_section
         normalize_button(self.ui.gisaxsImageExportButton, wide=True)
         self.ui.gisaxsImageExportButton.setMinimumWidth(scale_value(180, self.profile, 150))
         output_layout.addWidget(self.ui.gisaxsImageExportButton)
@@ -3086,6 +3247,7 @@ class GisaxsPredictWorkspace:
         zoom_layout.addLayout(zoom_row)
 
         output_section, output_layout = self._make_preview_section("Output", panel)
+        self.predict2d_preview_output_section = output_section
         normalize_button(self.ui.predict2dExportButton, wide=True)
         self.ui.predict2dExportButton.setMinimumWidth(scale_value(180, self.profile, 150))
         output_layout.addWidget(self.ui.predict2dExportButton)
@@ -3136,7 +3298,11 @@ class MainWindowComponents:
         QTimer.singleShot(0, self.shell.apply_initial_sidebar_state)
 
     def _create_waxs_page(self) -> InSituProcessingWidget:
-        page = InSituProcessingWidget()
+        from src.gimap.features.waxs.bootstrap import create_waxs_view_model
+
+        page = InSituProcessingWidget(
+            view_model=create_waxs_view_model(self.ui.app_context),
+        )
         self.ui.waxsPage = page
         self.ui.waxsPageIndex = self.ui.mainWindowWidget.addWidget(page)
         return page

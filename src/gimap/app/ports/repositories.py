@@ -1,0 +1,33 @@
+"""应用设置与会话持久化的 framework-neutral ports。"""
+
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class SettingsRepository(Protocol):
+    """跨应用启动保存的用户设置。"""
+
+    def get(self, section: str, key: str, default: Any = None) -> Any: ...
+
+    def set(self, section: str, key: str, value: Any) -> None: ...
+
+    def get_section(self, section: str) -> dict[str, Any]: ...
+
+    def update_section(self, section: str, values: dict[str, Any]) -> None: ...
+
+    def snapshot(self) -> dict[str, dict[str, Any]]: ...
+
+    def reload(self) -> None: ...
+
+    def save(self) -> None: ...
+
+
+class SessionRepository(Protocol):
+    """ProjectState 的持久化边界。"""
+
+    def load(self) -> dict[str, Any] | None: ...
+
+    def save(self, state: dict[str, Any]) -> None: ...
+
+    def clear(self) -> None: ...

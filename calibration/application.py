@@ -1,33 +1,21 @@
+"""Calibration application 旧入口的兼容门面。"""
+
 from __future__ import annotations
 
-from core.global_params import global_params
+from src.gimap.app.bootstrap import create_standalone_legacy_context
+from src.gimap.features.calibration.infrastructure.adapters import SettingsGeometryAdapter
 
 from .models import CalibrationResult
 
 
-def apply_calibration_result(result: CalibrationResult, main_window=None) -> dict[str, float]:
+def apply_calibration_result(
+    result: CalibrationResult,
+    main_window=None,
+) -> dict[str, float]:
+    """保留旧 API；参数写入由新 infrastructure adapter 负责。"""
+    context = create_standalone_legacy_context()
+    geometry = SettingsGeometryAdapter(context.settings).apply(result)
     candidate = result.selected_candidate
-    geometry = {
-        "distance": float(candidate.distance_mm),
-        "pixel_size_x": float(result.pixel_size_x_m * 1e6),
-        "pixel_size_y": float(result.pixel_size_y_m * 1e6),
-        "beam_center_x": float(candidate.center_x_px),
-        "beam_center_y": float(candidate.center_y_px),
-    }
-    for key, value in geometry.items():
-        global_params.set_parameter("detector", key, value)
-        global_params.set_parameter("fitting", f"detector.{key}", value)
-    global_params.set_parameter("detector", "rotation_deg", float(candidate.detector_rotation_deg))
-    global_params.set_parameter("beam", "wavelength", float(result.wavelength_angstrom / 10.0))
-    global_params.set_parameter("beam", "energy_kev", float(result.energy_kev))
-    global_params.set_parameter("system", "geometry_calibration", {
-        "source_image": result.source_image,
-        "timestamp": result.calibration_timestamp,
-        "standard": candidate.standard_key,
-        "confidence": candidate.confidence,
-        "residual_px": candidate.rms_residual_px,
-    })
-
     if main_window is not None:
         page = getattr(getattr(main_window, "components", None), "waxs_page", None)
         if page is not None:
@@ -47,7 +35,8 @@ def apply_calibration_result(result: CalibrationResult, main_window=None) -> dic
                 page.refresh_view()
         if hasattr(main_window, "statusbar"):
             main_window.statusbar.showMessage(
-                f"Geometry calibration applied: center ({candidate.center_x_px:.2f}, {candidate.center_y_px:.2f}), "
+                "Geometry calibration applied: center "
+                f"({candidate.center_x_px:.2f}, {candidate.center_y_px:.2f}), "
                 f"distance {candidate.distance_mm:.2f} mm"
             )
     return geometry

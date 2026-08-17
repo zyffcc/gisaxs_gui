@@ -7,7 +7,6 @@ It reuses the old loader and keeps the page embeddable in the existing
 
 from __future__ import annotations
 
-import glob
 import os
 import time
 from dataclasses import dataclass
@@ -30,8 +29,8 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
@@ -49,7 +48,16 @@ from matplotlib.patches import Circle, Rectangle, Wedge
 from matplotlib.widgets import RectangleSelector
 
 from utils.path_utils import normalize_path
-from calibration.image_loader import detect_nxs_frame_count, load_detector_image
+from src.gimap.app.presentation import (
+    AdvancedSection,
+    JobStatus,
+    ParameterSection,
+    PlotPanel,
+)
+from src.gimap.features.waxs.application import (
+    IntegrateWaxsImageRequest,
+    WaxsBatchRequest,
+)
 
 
 SUPPORTED_EXTENSIONS = {".nxs", ".tif", ".tiff"}
@@ -64,45 +72,29 @@ class ImageLoadResult:
     image: np.ndarray
 
 
-@dataclass
-class BatchSettings:
-    folder: str
-    pattern: str
-    output_folder: str
-    export_images: bool
-    export_curves: bool
-    export_background_subtracted: bool
-    log_scale: bool
-    colormap: str
-    auto_scale: bool
-    vmin: float
-    vmax: float
-    mask_min: float
-    mask_max: float
-    geometry: dict
-    integration: dict
-
-
 class ImageLoadWorker(QObject):
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, file_path: str, frame_index: int):
+    def __init__(self, file_path: str, frame_index: int, view_model):
         super().__init__()
         self.file_path = file_path
         self.frame_index = int(frame_index)
+        self.view_model = view_model
 
     def run(self) -> None:
         try:
-            frame_count = detect_nxs_frame_count(self.file_path)
-            frame_index = max(0, min(self.frame_index, max(0, frame_count - 1)))
-            image = load_image_matrix(self.file_path, frame_idx=frame_index)
+            loaded = self.view_model.load_image(Path(self.file_path), self.frame_index)
+            if loaded is None:
+                raise RuntimeError(
+                    self.view_model.state.error_message or "Failed to load image."
+                )
             self.finished.emit(
                 ImageLoadResult(
-                    file_path=self.file_path,
-                    frame_index=frame_index,
-                    frame_count=frame_count,
-                    image=np.asarray(image, dtype=np.float32),
+                    file_path=str(loaded.path),
+                    frame_index=loaded.frame_index,
+                    frame_count=loaded.frame_count,
+                    image=loaded.image,
                 )
             )
         except Exception as exc:
@@ -114,116 +106,41 @@ class BatchWorker(QObject):
     finished = pyqtSignal(str)
     failed = pyqtSignal(str)
 
-    def __init__(self, settings: BatchSettings):
+    def __init__(self, request: WaxsBatchRequest, view_model):
         super().__init__()
-        self.settings = settings
-        self._stop_requested = False
-        self._pause_requested = False
+        self.request = request
+        self.view_model = view_model
 
     def stop(self) -> None:
-        self._stop_requested = True
+        self.view_model.cancel_batch()
 
     def set_paused(self, paused: bool) -> None:
-        self._pause_requested = bool(paused)
+        self.view_model.set_batch_paused(paused)
 
     def run(self) -> None:
         try:
-            settings = self.settings
-            files = sorted(glob.glob(os.path.join(settings.folder, settings.pattern)))
-            files = [path for path in files if Path(path).suffix.lower() in SUPPORTED_EXTENSIONS]
-            if not files:
-                raise RuntimeError("No matching .nxs, .tif, or .tiff files found.")
+            def report(value) -> None:
+                total = max(1, int(value.total))
+                percent = int(round(int(value.completed) * 100 / total))
+                self.progress.emit(percent, f"Processed {value.name}")
 
-            os.makedirs(settings.output_folder, exist_ok=True)
-            image_dir = os.path.join(settings.output_folder, "images")
-            curve_dir = os.path.join(settings.output_folder, "1D")
-            if settings.export_images:
-                os.makedirs(image_dir, exist_ok=True)
-            if settings.export_curves or settings.export_background_subtracted:
-                os.makedirs(curve_dir, exist_ok=True)
-
-            curve_columns: list[np.ndarray] = []
-            curve_names: list[str] = []
-            x_axis: Optional[np.ndarray] = None
-            background_y: Optional[np.ndarray] = None
-            bg_columns: list[np.ndarray] = []
-
-            work_items: list[tuple[str, int, int]] = []
-            for file_path in files:
-                frame_count = detect_nxs_frame_count(file_path)
-                for frame_index in range(frame_count):
-                    work_items.append((file_path, frame_index, frame_count))
-
-            total = max(1, len(work_items))
-            for idx, (file_path, frame_index, frame_count) in enumerate(work_items):
-                if self._stop_requested:
-                    self.finished.emit("Batch stopped by user.")
-                    return
-                while self._pause_requested and not self._stop_requested:
-                    QThread.msleep(100)
-                if self._stop_requested:
-                    self.finished.emit("Batch stopped by user.")
-                    return
-
-                image = np.asarray(load_image_matrix(file_path, frame_idx=frame_index), dtype=np.float32)
-                stem = Path(file_path).stem
-                suffix = f"_f{frame_index + 1:04d}" if frame_count > 1 else ""
-                name = f"{stem}{suffix}"
-
-                if settings.export_images:
-                    export_image_png(
-                        image,
-                        os.path.join(image_dir, f"{name}.png"),
-                        log_scale=settings.log_scale,
-                        colormap=settings.colormap,
-                        auto_scale=settings.auto_scale,
-                        vmin=settings.vmin,
-                        vmax=settings.vmax,
-                        mask_min=settings.mask_min,
-                        mask_max=settings.mask_max,
-                    )
-
-                if settings.export_curves or settings.export_background_subtracted:
-                    x, y = integrate_image(
-                        image,
-                        settings.geometry,
-                        settings.integration,
-                        settings.mask_min,
-                        settings.mask_max,
-                    )
-                    if x_axis is None:
-                        x_axis = x
-                        curve_columns.append(x)
-                    curve_columns.append(y)
-                    curve_names.append(name)
-
-                    if settings.export_curves:
-                        export_curve_csv(os.path.join(curve_dir, f"{name}.csv"), x, y)
-
-                    if settings.export_background_subtracted:
-                        if background_y is None:
-                            background_y = y
-                        corrected = y - background_y
-                        bg_columns.append(corrected)
-                        export_curve_csv(os.path.join(curve_dir, f"{name}_subbg.csv"), x, corrected)
-
-                pct = int(round((idx + 1) * 100 / total))
-                self.progress.emit(pct, f"Processed {name}")
-
-            if curve_columns:
-                write_matrix_csv(
-                    os.path.join(curve_dir, "output.csv"),
-                    curve_columns,
-                    ["x"] + curve_names,
+            result = self.view_model.run_batch(self.request, on_progress=report)
+            if result is None:
+                raise RuntimeError(
+                    self.view_model.state.error_message
+                    or "Batch processing failed."
                 )
-            if bg_columns and x_axis is not None:
-                write_matrix_csv(
-                    os.path.join(curve_dir, "output_subbg.csv"),
-                    [x_axis] + bg_columns,
-                    ["x"] + curve_names[: len(bg_columns)],
-                )
-
-            self.finished.emit("Batch processing completed.")
+            if result.cancelled:
+                self.finished.emit("Batch stopped by user.")
+            elif result.failed_count:
+                failures = [
+                    item.error_message or item.name
+                    for item in result.items
+                    if item.status == "failed"
+                ]
+                self.failed.emit("; ".join(failures))
+            else:
+                self.finished.emit("Batch processing completed.")
         except Exception as exc:
             self.failed.emit(str(exc))
 
@@ -231,8 +148,11 @@ class BatchWorker(QObject):
 class ScatteringImageViewer(QWidget):
     fileDropped = pyqtSignal(str)
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, parent: QWidget | None = None, *, view_model=None):
         super().__init__(parent)
+        if view_model is None:
+            raise ValueError("ScatteringImageViewer requires WaxsViewModel")
+        self.view_model = view_model
         self.setAcceptDrops(True)
         self.figure = Figure(figsize=(6, 5), constrained_layout=False)
         self.canvas = FigureCanvas(self.figure)
@@ -289,7 +209,7 @@ class ScatteringImageViewer(QWidget):
         render_start = time.perf_counter()
         raw = np.asarray(image)
         preview_source, preview_extent = self._preview_image(raw, extent)
-        preview = prepare_display_array(
+        preview = self.view_model.prepare_display(
             preview_source,
             log_scale=log_scale,
             mask_min=mask_min,
@@ -299,7 +219,7 @@ class ScatteringImageViewer(QWidget):
         preview = np.ascontiguousarray(preview)
         if auto_scale:
             limits_start = time.perf_counter()
-            limits = estimate_display_limits(
+            limits = self.view_model.estimate_display_limits(
                 raw,
                 log_scale=log_scale,
                 mask_min=mask_min,
@@ -398,7 +318,7 @@ class ScatteringImageViewer(QWidget):
     ) -> tuple[float, float] | None:
         del flip_vertical
         limits_start = time.perf_counter()
-        limits = estimate_display_limits(
+        limits = self.view_model.estimate_display_limits(
             image,
             log_scale=log_scale,
             mask_min=mask_min,
@@ -426,8 +346,11 @@ class InSituProcessingWidget(QWidget):
 
     statusChanged = pyqtSignal(str)
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, parent: QWidget | None = None, *, view_model=None):
         super().__init__(parent)
+        if view_model is None:
+            raise ValueError("InSituProcessingWidget requires WaxsViewModel")
+        self.view_model = view_model
         self.setObjectName("waxsEmbeddedPage")
         self.current_file: Optional[str] = None
         self.current_image: Optional[np.ndarray] = None
@@ -454,7 +377,14 @@ class InSituProcessingWidget(QWidget):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
 
-        root.addWidget(self._build_toolbar(), 0)
+        toolbar = self._build_toolbar()
+        self.waxs_input_section = ParameterSection(
+            "Input",
+            "Open a detector file, reload it or select a frame from an NXS stack.",
+        )
+        self.waxs_input_section.setObjectName("waxsInputSection")
+        self.waxs_input_section.add_widget(toolbar)
+        root.addWidget(self.waxs_input_section, 0)
 
         splitter = QSplitter(Qt.Horizontal, self)
         splitter.setObjectName("waxsContentSplitter")
@@ -472,7 +402,7 @@ class InSituProcessingWidget(QWidget):
         self.view_tabs.addTab("2D Image")
         self.view_tabs.addTab("1D Curve")
 
-        self.viewer = ScatteringImageViewer(center)
+        self.viewer = ScatteringImageViewer(center, view_model=self.view_model)
         self.meta_label = QLabel("No file loaded", center)
         self.meta_label.setObjectName("waxsMetadataLabel")
         self.meta_label.setWordWrap(True)
@@ -480,32 +410,108 @@ class InSituProcessingWidget(QWidget):
         center_layout.addWidget(self.viewer, 1)
         center_layout.addWidget(self.meta_label, 0)
 
-        self.tabs = QTabWidget(splitter)
+        self.tabs = QTabWidget()
         self.tabs.setObjectName("waxsControlTabs")
-        self.tabs.setMinimumWidth(360)
-        self.tabs.setMaximumWidth(520)
-        self.tabs.addTab(self._display_tab(), "Display")
-        self.tabs.addTab(self._mask_tab(), "Mask")
-        self.tabs.addTab(self._geometry_tab(), "Geometry")
-        self.tabs.addTab(self._roi_tab(), "ROI / Cut")
-        self.tabs.addTab(self._integration_tab(), "1D Integration")
-        self.tabs.addTab(self._batch_tab(), "Batch / In-situ")
+        roi_tab = self._roi_tab()
+        integration_tab = self._integration_tab()
+        self.tabs.addTab(roi_tab, "ROI / Cut")
+        self.tabs.addTab(integration_tab, "1D Integration")
 
-        splitter.addWidget(center)
-        splitter.addWidget(self.tabs)
+        self.advanced_tabs = QTabWidget()
+        self.advanced_tabs.setObjectName("waxsAdvancedControlTabs")
+        self.advanced_tabs.addTab(self._display_tab(), "Display")
+        self.advanced_tabs.addTab(self._mask_tab(), "Mask")
+        self.advanced_tabs.addTab(self._geometry_tab(), "Geometry")
+        batch_tab = self._batch_tab()
+
+        self.waxs_configure_section = ParameterSection(
+            "Configure",
+            "Choose the ROI/cut definition and 1D integration settings.",
+        )
+        self.waxs_configure_section.setObjectName("waxsConfigureSection")
+        self.waxs_configure_section.add_widget(self.tabs)
+        self.waxs_advanced_section = AdvancedSection(
+            "Advanced display, mask and geometry",
+            "Tune rendering, detector masking and reciprocal-space geometry.",
+        )
+        self.waxs_advanced_section.setObjectName("waxsAdvancedSection")
+        self.waxs_advanced_section.add_widget(self.advanced_tabs)
+        self.waxs_job_status = JobStatus()
+        self.waxs_job_status.set_actions_visible(
+            pause=False,
+            cancel=False,
+            details=False,
+        )
+        self.status_label = self.waxs_job_status.message_label
+        self.progress = self.waxs_job_status.progress_bar
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.waxs_run_section = ParameterSection(
+            "Run",
+            "Batch and in-situ processing continue through the existing WaxsViewModel and JobRunner adapter.",
+        )
+        self.waxs_run_section.setObjectName("waxsRunSection")
+        self.waxs_run_section.add_widget(batch_tab)
+        self.waxs_run_section.add_widget(self.waxs_job_status)
+
+        side = QWidget()
+        side_layout = QVBoxLayout(side)
+        side_layout.setContentsMargins(0, 0, 0, 0)
+        side_layout.setSpacing(8)
+        side_layout.addWidget(self.waxs_configure_section)
+        side_layout.addWidget(self.waxs_advanced_section)
+        side_layout.addWidget(self.waxs_run_section)
+        side_layout.addStretch(1)
+        controls_scroll = QScrollArea(splitter)
+        controls_scroll.setObjectName("waxsControlsScrollArea")
+        controls_scroll.setWidgetResizable(True)
+        controls_scroll.setFrameShape(QFrame.NoFrame)
+        controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        controls_scroll.setMinimumWidth(380)
+        controls_scroll.setMaximumWidth(540)
+        controls_scroll.setWidget(side)
+        self.controls_scroll = controls_scroll
+
+        self.waxs_preview_panel = PlotPanel(
+            "Preview",
+            "Inspect the 2D detector image or the calculated 1D curve.",
+        )
+        self.waxs_preview_panel.setObjectName("waxsPreviewPanel")
+        self.waxs_preview_panel.set_plot_widget(center)
+        splitter.addWidget(self.waxs_preview_panel)
+        splitter.addWidget(controls_scroll)
         splitter.setStretchFactor(0, 5)
         splitter.setStretchFactor(1, 0)
         root.addWidget(splitter, 1)
 
-        bottom = QHBoxLayout()
-        self.status_label = QLabel("Ready", self)
-        self.progress = QProgressBar(self)
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self.progress.setMaximumWidth(260)
-        bottom.addWidget(self.status_label, 1)
-        bottom.addWidget(self.progress, 0)
-        root.addLayout(bottom)
+        integration_tab.layout().removeWidget(self.integration_status)
+        self.waxs_results_section = ParameterSection(
+            "Results",
+            "The latest integration result and point count are reported here.",
+        )
+        self.waxs_results_section.setObjectName("waxsResultsSection")
+        self.waxs_results_section.add_widget(self.integration_status)
+
+        toolbar.layout().removeWidget(self.export_button)
+        integration_tab.layout().removeWidget(self.export_1d_button)
+        export_actions = QHBoxLayout()
+        export_actions.setContentsMargins(0, 0, 0, 0)
+        export_actions.setSpacing(8)
+        export_actions.addWidget(self.export_button)
+        export_actions.addWidget(self.export_1d_button)
+        export_actions.addStretch(1)
+        self.waxs_export_section = ParameterSection(
+            "Export",
+            "Export the current 2D image or calculated 1D curve with the original actions.",
+        )
+        self.waxs_export_section.setObjectName("waxsExportSection")
+        self.waxs_export_section.add_layout(export_actions)
+        outcome_layout = QHBoxLayout()
+        outcome_layout.setContentsMargins(0, 0, 0, 0)
+        outcome_layout.setSpacing(8)
+        outcome_layout.addWidget(self.waxs_results_section, 1)
+        outcome_layout.addWidget(self.waxs_export_section, 1)
+        root.addLayout(outcome_layout)
 
     def _build_toolbar(self) -> QWidget:
         bar = QFrame(self)
@@ -884,10 +890,16 @@ class InSituProcessingWidget(QWidget):
             self._set_status("A file is already loading...")
             return
 
-        self.progress.setRange(0, 0)
-        self._set_status(f"Loading {Path(file_path).name}...")
+        self.set_job_state(
+            "running",
+            f"Loading {Path(file_path).name}...",
+        )
         self._loader_thread = QThread(self)
-        self._loader_worker = ImageLoadWorker(file_path, frame_index)
+        self._loader_worker = ImageLoadWorker(
+            file_path,
+            frame_index,
+            self.view_model,
+        )
         self._loader_worker.moveToThread(self._loader_thread)
         self._loader_thread.started.connect(self._loader_worker.run)
         self._loader_worker.finished.connect(self._on_image_loaded)
@@ -903,9 +915,6 @@ class InSituProcessingWidget(QWidget):
         self.current_frame_count = max(1, result.frame_count)
         self._current_view_is_cut = False
         self._cut_extent = None
-        self.progress.setRange(0, 100)
-        self.progress.setValue(100)
-
         self.frame_spin.blockSignals(True)
         self.frame_spin.setMaximum(self.current_frame_count)
         self.frame_spin.setValue(result.frame_index + 1)
@@ -916,12 +925,14 @@ class InSituProcessingWidget(QWidget):
         self._update_auto_colorbar_limits()
         self._show_2d_view()
         self.refresh_view()
-        self._set_status(f"Loaded {Path(result.file_path).name}")
+        self.set_job_state(
+            "succeeded",
+            f"Loaded {Path(result.file_path).name}",
+            progress=100,
+        )
 
     def _on_image_load_failed(self, message: str) -> None:
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self._set_status("Failed to load file")
+        self.set_job_state("failed", "Failed to load file", progress=0)
         QMessageBox.warning(self, "Failed to Load File", f"Failed to load file:\n{message}")
 
     def _cleanup_loader(self) -> None:
@@ -1330,7 +1341,10 @@ class InSituProcessingWidget(QWidget):
                 row0, row1 = row1, row0
             if col1 < col0:
                 col0, col1 = col1, col0
-            qr, qz = compute_q_maps(self.current_image.shape, self._geometry_settings())
+            qr, qz = self.view_model.compute_q_maps(
+                self.current_image.shape,
+                self._geometry_settings(),
+            )
             roi_qr = qr[row0 : row1 + 1, col0 : col1 + 1]
             roi_qz = qz[row0 : row1 + 1, col0 : col1 + 1]
             if np.isfinite(roi_qr).any() and np.isfinite(roi_qz).any():
@@ -1351,38 +1365,44 @@ class InSituProcessingWidget(QWidget):
             QMessageBox.information(self, "Integrate", "No image loaded.")
             return
         try:
+            cut_kind = "full"
+            selection = None
             if self.cut_type_combo.currentText() == "Line Cut":
-                x, y = line_cut_profile(
-                    self.current_image,
-                    self.line_center_x_spin.value(),
-                    self.line_center_y_spin.value(),
-                    self.line_width_spin.value(),
-                    self.line_height_spin.value(),
-                    *self._mask_limits(),
-                )
+                cut_kind = "line"
+                selection = {
+                    "center_x": self.line_center_x_spin.value(),
+                    "center_y": self.line_center_y_spin.value(),
+                    "width": self.line_width_spin.value(),
+                    "height": self.line_height_spin.value(),
+                }
             elif self.cut_type_combo.currentText() == "Circle Cut":
-                x, y = circle_cut_profile(
-                    self.current_image,
-                    self.circle_center_x_spin.value(),
-                    self.circle_center_y_spin.value(),
-                    self.circle_inner_spin.value(),
-                    self.circle_outer_spin.value(),
-                    self.circle_start_spin.value(),
-                    self.circle_end_spin.value(),
-                    self.bin_spin.value(),
-                    mode=self.integration_mode.currentText().lower(),
+                cut_kind = "circle"
+                selection = {
+                    "center_x": self.circle_center_x_spin.value(),
+                    "center_y": self.circle_center_y_spin.value(),
+                    "inner_radius": self.circle_inner_spin.value(),
+                    "outer_radius": self.circle_outer_spin.value(),
+                    "start_angle": self.circle_start_spin.value(),
+                    "end_angle": self.circle_end_spin.value(),
+                }
+            integration = self._integration_settings()
+            integration["smooth"] = self.smooth_curve_check.isChecked()
+            curve = self.view_model.integrate(
+                IntegrateWaxsImageRequest(
+                    image=self.current_image,
+                    geometry=self._geometry_settings(),
+                    integration=integration,
                     mask_min=self._mask_limits()[0],
                     mask_max=self._mask_limits()[1],
+                    cut_kind=cut_kind,
+                    selection=selection,
                 )
-            else:
-                x, y = integrate_image(
-                    self.current_image,
-                    self._geometry_settings(),
-                    self._integration_settings(),
-                    *self._mask_limits(),
+            )
+            if curve is None:
+                raise RuntimeError(
+                    self.view_model.state.error_message or "Integration failed."
                 )
-            if self.smooth_curve_check.isChecked():
-                y = smooth_curve(y)
+            x, y = curve.x, curve.intensity
             self._last_curve = (x, y)
             self._show_1d_view()
             self._plot_curve(x, y)
@@ -1414,7 +1434,14 @@ class InSituProcessingWidget(QWidget):
         path, _ = QFileDialog.getSaveFileName(self, "Export 1D Curve", "curve.csv", "CSV Files (*.csv)")
         if not path:
             return
-        export_curve_csv(normalize_path(path), *self._last_curve)
+        exported = self.view_model.export_curve(Path(normalize_path(path)))
+        if exported is None:
+            QMessageBox.warning(
+                self,
+                "Export Failed",
+                self.view_model.state.error_message or "Failed to export curve.",
+            )
+            return
         self._set_status("1D export completed")
 
     def export_current_image(self) -> None:
@@ -1428,17 +1455,26 @@ class InSituProcessingWidget(QWidget):
         if self._current_view_is_cut:
             image, _extent = self._cut_image_by_q_range(image)
         mask_min, mask_max = self._display_mask_limits()
-        export_image_png(
+        exported = self.view_model.export_image(
+            Path(normalize_path(path)),
             image,
-            normalize_path(path),
-            log_scale=self.display_log.isChecked(),
-            colormap=self.display_cmap.currentText(),
-            auto_scale=self.display_auto_scale.isChecked(),
-            vmin=self.vmin_spin.value(),
-            vmax=self.vmax_spin.value(),
-            mask_min=mask_min,
-            mask_max=mask_max,
+            {
+                "log_scale": self.display_log.isChecked(),
+                "colormap": self.display_cmap.currentText(),
+                "auto_scale": self.display_auto_scale.isChecked(),
+                "vmin": self.vmin_spin.value(),
+                "vmax": self.vmax_spin.value(),
+                "mask_min": mask_min,
+                "mask_max": mask_max,
+            },
         )
+        if exported is None:
+            QMessageBox.warning(
+                self,
+                "Export Failed",
+                self.view_model.state.error_message or "Failed to export image.",
+            )
+            return
         self._set_status("Export completed")
 
     def select_batch_folder(self) -> None:
@@ -1459,35 +1495,47 @@ class InSituProcessingWidget(QWidget):
             QMessageBox.warning(self, "Batch Processing", "Please select a valid input folder.")
             return
         output_folder = self.batch_output_edit.text().strip() or os.getcwd()
-        settings = BatchSettings(
-            folder=folder,
+        request = WaxsBatchRequest(
+            folder=Path(folder),
             pattern=self.batch_pattern_edit.text().strip() or "*.tif",
-            output_folder=output_folder,
+            output_folder=Path(output_folder),
             export_images=self.batch_export_images.isChecked(),
             export_curves=self.batch_export_curves.isChecked(),
             export_background_subtracted=self.batch_export_subbg.isChecked(),
-            log_scale=self.display_log.isChecked(),
-            colormap=self.display_cmap.currentText(),
-            auto_scale=self.display_auto_scale.isChecked(),
-            vmin=self.vmin_spin.value(),
-            vmax=self.vmax_spin.value(),
+            display={
+                "log_scale": self.display_log.isChecked(),
+                "colormap": self.display_cmap.currentText(),
+                "auto_scale": self.display_auto_scale.isChecked(),
+                "vmin": self.vmin_spin.value(),
+                "vmax": self.vmax_spin.value(),
+                "mask_min": self._display_mask_limits()[0],
+                "mask_max": self._display_mask_limits()[1],
+            },
             mask_min=self._display_mask_limits()[0],
             mask_max=self._display_mask_limits()[1],
             geometry=self._geometry_settings(),
             integration=self._integration_settings(),
+            continue_on_error=False,
         )
-        if not (settings.export_images or settings.export_curves or settings.export_background_subtracted):
+        if not (
+            request.export_images
+            or request.export_curves
+            or request.export_background_subtracted
+        ):
             QMessageBox.information(self, "Batch Processing", "Select at least one export option.")
             return
 
-        self.progress.setValue(0)
-        self._set_status("Batch processing started...")
+        self.set_job_state(
+            "running",
+            "Batch processing started...",
+            progress=0,
+        )
         self.batch_start_button.setEnabled(False)
         self.batch_pause_button.setEnabled(True)
         self.batch_pause_button.setText("Pause")
         self.batch_stop_button.setEnabled(True)
         self._batch_thread = QThread(self)
-        self._batch_worker = BatchWorker(settings)
+        self._batch_worker = BatchWorker(request, self.view_model)
         self._batch_worker.moveToThread(self._batch_thread)
         self._batch_thread.started.connect(self._batch_worker.run)
         self._batch_worker.progress.connect(self._on_batch_progress)
@@ -1501,7 +1549,11 @@ class InSituProcessingWidget(QWidget):
     def stop_batch(self) -> None:
         if self._batch_worker is not None:
             self._batch_worker.stop()
-            self._set_status("Stopping batch processing...")
+            self.set_job_state(
+                "running",
+                "Stopping batch processing...",
+                progress=self.progress.value(),
+            )
 
     def toggle_batch_pause(self) -> None:
         if self._batch_worker is None:
@@ -1509,19 +1561,26 @@ class InSituProcessingWidget(QWidget):
         paused = self.batch_pause_button.text() == "Pause"
         self._batch_worker.set_paused(paused)
         self.batch_pause_button.setText("Resume" if paused else "Pause")
-        self._set_status("Batch processing paused." if paused else "Batch processing resumed.")
+        self.set_job_state(
+            "paused" if paused else "running",
+            "Batch processing paused." if paused else "Batch processing resumed.",
+            progress=self.progress.value(),
+        )
 
     def _on_batch_progress(self, value: int, message: str) -> None:
-        self.progress.setValue(value)
-        self._set_status(message)
+        self.set_job_state("running", message, progress=value)
 
     def _on_batch_finished(self, message: str) -> None:
         self.batch_start_button.setEnabled(True)
         self.batch_pause_button.setEnabled(False)
         self.batch_pause_button.setText("Pause")
         self.batch_stop_button.setEnabled(False)
-        self.progress.setValue(100 if "completed" in message.lower() else 0)
-        self._set_status(message)
+        completed = "completed" in message.lower()
+        self.set_job_state(
+            "succeeded" if completed else "cancelled",
+            message,
+            progress=100 if completed else 0,
+        )
         QMessageBox.information(self, "Batch Processing", message)
 
     def _on_batch_failed(self, message: str) -> None:
@@ -1529,8 +1588,7 @@ class InSituProcessingWidget(QWidget):
         self.batch_pause_button.setEnabled(False)
         self.batch_pause_button.setText("Pause")
         self.batch_stop_button.setEnabled(False)
-        self.progress.setValue(0)
-        self._set_status("Batch processing failed")
+        self.set_job_state("failed", "Batch processing failed", progress=0)
         QMessageBox.warning(self, "Batch Processing Failed", message)
 
     def _cleanup_batch(self) -> None:
@@ -1578,24 +1636,8 @@ class InSituProcessingWidget(QWidget):
         }
 
     def _cut_image_by_q_range(self, image: np.ndarray) -> tuple[np.ndarray, tuple[float, float, float, float] | None]:
-        qr, qz = compute_q_maps(image.shape, self._geometry_settings())
-        mask = np.ones(image.shape, dtype=bool)
-        for value, op, grid in (
-            (self.qr_min_spin.value(), np.greater_equal, qr),
-            (self.qr_max_spin.value(), np.less_equal, qr),
-            (self.qz_min_spin.value(), np.greater_equal, qz),
-            (self.qz_max_spin.value(), np.less_equal, qz),
-        ):
-            if value != -121.0:
-                mask &= op(grid, value)
-        cut = np.where(mask, image, np.nan)
-        finite_qr = qr[np.isfinite(qr)]
-        finite_qz = qz[np.isfinite(qz)]
-        if finite_qr.size and finite_qz.size:
-            extent = (float(np.nanmin(finite_qr)), float(np.nanmax(finite_qr)), float(np.nanmin(finite_qz)), float(np.nanmax(finite_qz)))
-        else:
-            extent = None
-        return cut, extent
+        result = self.view_model.cut_image(image, self._geometry_settings())
+        return result.image, result.extent
 
     def _update_auto_colorbar_limits(self) -> None:
         if self.current_image is None:
@@ -1633,18 +1675,31 @@ class InSituProcessingWidget(QWidget):
         self.status_label.setText(message)
         self.statusChanged.emit(message)
 
+    def set_job_state(
+        self,
+        state: str,
+        message: str,
+        *,
+        progress: int | None = None,
+    ) -> None:
+        """Update shared status presentation while retaining 0–100 aliases。"""
+
+        normalized_progress = None if progress is None else progress / 100.0
+        self.waxs_job_status.set_state(
+            state,
+            message,
+            progress=normalized_progress,
+        )
+        if progress is not None:
+            self.progress.setRange(0, 100)
+            self.progress.setValue(max(0, min(100, int(progress))))
+        self.statusChanged.emit(message)
+
 
 def detect_nxs_frame_count(file_path: str) -> int:
-    if Path(file_path).suffix.lower() != ".nxs":
-        return 1
-    try:
-        with h5py.File(file_path, "r") as handle:
-            dataset = handle["/entry/instrument/detector/data"]
-            if dataset.ndim == 3:
-                return int(dataset.shape[0])
-    except Exception:
-        return 1
-    return 1
+    from calibration.image_loader import detect_nxs_frame_count as detect
+
+    return int(detect(file_path))
 
 
 def load_image_matrix(
@@ -1661,7 +1716,11 @@ def load_image_matrix(
     multi-module stitching plus frame selection.
     """
     del dist_path, mask_path
-    return load_detector_image(file_path, frame_idx=frame_idx, dataset_path=dataset_path).data
+    from calibration.image_loader import load_detector_image
+
+    return load_detector_image(
+        file_path, frame_idx=frame_idx, dataset_path=dataset_path
+    ).data
 
 
 def load_tiff_matrix(path: Path) -> np.ndarray:
@@ -1687,326 +1746,3 @@ def make_double_spin(minimum: float, maximum: float, value: float) -> QDoubleSpi
     spin.setValue(value)
     spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
     return spin
-
-
-def prepare_display_array(
-    image: np.ndarray,
-    *,
-    log_scale: bool,
-    mask_min: float,
-    mask_max: float,
-    flip_vertical: bool,
-) -> np.ndarray:
-    source = np.asarray(image)
-    arr = np.asarray(source, dtype=np.float32).copy()
-    if log_scale:
-        valid = np.isfinite(arr) & (arr >= mask_min) & (arr <= mask_max) & (arr > 0)
-        arr[~valid] = np.nan
-        np.log10(arr, out=arr, where=valid)
-    else:
-        invalid = ~np.isfinite(arr) | (arr < mask_min) | (arr > mask_max)
-        arr[invalid] = np.nan
-    if flip_vertical:
-        arr = np.flipud(arr)
-    return arr
-
-
-def estimate_display_limits(
-    image: np.ndarray,
-    *,
-    log_scale: bool,
-    mask_min: float,
-    mask_max: float,
-    max_samples: int = 200_000,
-    stride_hint: int = 20,
-) -> tuple[float, float] | None:
-    arr = np.asarray(image)
-    flat = arr.ravel()
-    if flat.size == 0:
-        return None
-    stride = max(int(stride_hint), int(np.ceil(flat.size / max_samples)))
-    sample = np.asarray(flat[::stride], dtype=np.float32)
-    if sample.size == 0:
-        return None
-    valid = np.isfinite(sample) & (sample >= mask_min) & (sample <= mask_max)
-    if log_scale:
-        valid &= sample > 0
-    sample = sample[valid]
-    if sample.size == 0:
-        return None
-    if log_scale:
-        np.log10(sample, out=sample)
-    return percentile_limits(sample)
-
-
-def percentile_limits(arr: np.ndarray) -> tuple[float, float] | None:
-    vals = np.asarray(arr, dtype=float)
-    finite = np.isfinite(vals)
-    if not finite.any():
-        return None
-    if finite.all():
-        vals = vals.ravel()
-    else:
-        vals = vals[finite]
-    lo, hi = np.nanpercentile(vals, [0.5, 99.5])
-    if not np.isfinite(lo) or not np.isfinite(hi) or lo == hi:
-        lo = float(np.nanmin(vals))
-        hi = float(np.nanmax(vals))
-    if lo == hi:
-        hi = lo + 1e-9
-    return float(lo), float(hi)
-
-
-def compute_q_maps(shape: tuple[int, int], geometry: dict) -> tuple[np.ndarray, np.ndarray]:
-    height, width = shape[:2]
-    x_center = float(geometry["center_x"])
-    y_center = float(geometry["center_y"])
-    distance = float(geometry["distance"])
-    pixel_x = float(geometry["pixel_x"])
-    pixel_y = float(geometry["pixel_y"])
-    wavelength = float(geometry["wavelength"])
-    incidence = float(geometry["incidence"]) * np.pi / 180.0
-
-    yy, xx = np.indices((height, width), dtype=float)
-    qr_pix = (xx + 1.0) - x_center
-    y_c = height - y_center
-    qz_pix = (height - y_c) - (yy + 1.0)
-    qr_m = qr_pix * pixel_x * 1e-6
-    qz_m = qz_pix * pixel_y * 1e-6
-    theta_f = np.arctan(qr_m / (distance * 1e-3)) / 2.0
-    alpha_f = np.arctan(qz_m / np.sqrt((distance * 1e-3) ** 2 + qr_m**2))
-    qx = 2 * np.pi / wavelength * (np.cos(2 * theta_f) * np.cos(alpha_f) - np.cos(incidence))
-    qy = 2 * np.pi / wavelength * (np.sin(2 * theta_f) * np.cos(alpha_f))
-    qz = 2 * np.pi / wavelength * (np.sin(alpha_f) + np.sin(incidence))
-    qr = np.sign(qy) * np.sqrt(qx**2 + qy**2)
-    return qr, qz
-
-
-def integrate_image(
-    image: np.ndarray,
-    geometry: dict,
-    integration: dict,
-    mask_min: float,
-    mask_max: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    arr = np.asarray(image, dtype=float)
-    valid = np.isfinite(arr) & (arr >= mask_min) & (arr <= mask_max)
-
-    qr, qz = compute_q_maps(arr.shape, geometry)
-    for key, op, grid in (
-        ("qr_min", np.greater_equal, qr),
-        ("qr_max", np.less_equal, qr),
-        ("qz_min", np.greater_equal, qz),
-        ("qz_max", np.less_equal, qz),
-    ):
-        value = float(geometry.get(key, -121.0))
-        if value != -121.0:
-            valid &= op(grid, value)
-
-    mode = integration.get("mode", "radial")
-    bins = int(integration.get("bins", 500))
-    axis_mode = integration.get("x_axis", "q")
-
-    if mode == "azimuthal":
-        yy, xx = np.indices(arr.shape, dtype=float)
-        x_values = np.degrees(np.arctan2(yy - geometry["center_y"], xx - geometry["center_x"]))
-    elif axis_mode == "pixel":
-        yy, xx = np.indices(arr.shape, dtype=float)
-        x_values = np.sqrt((xx - geometry["center_x"]) ** 2 + (yy - geometry["center_y"]) ** 2)
-    elif axis_mode == "2theta":
-        yy, xx = np.indices(arr.shape, dtype=float)
-        radius_m = np.sqrt(((xx - geometry["center_x"]) * geometry["pixel_x"] * 1e-6) ** 2 + ((yy - geometry["center_y"]) * geometry["pixel_y"] * 1e-6) ** 2)
-        x_values = np.degrees(np.arctan(radius_m / (geometry["distance"] * 1e-3)))
-    else:
-        x_values = np.sqrt(qr**2 + qz**2)
-
-    x = x_values[valid]
-    y = arr[valid]
-    if x.size == 0:
-        raise RuntimeError("No valid pixels in the selected integration region.")
-
-    edges = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), bins + 1)
-    if edges[0] == edges[-1]:
-        edges[-1] = edges[0] + 1e-9
-    indices = np.digitize(x, edges) - 1
-    valid_bins = (indices >= 0) & (indices < bins)
-    indices = indices[valid_bins]
-    y = y[valid_bins]
-    sums = np.bincount(indices, weights=y, minlength=bins)
-    counts = np.bincount(indices, minlength=bins)
-    means = np.divide(sums, counts, out=np.full(bins, np.nan, dtype=float), where=counts > 0)
-    centers = 0.5 * (edges[:-1] + edges[1:])
-    finite = np.isfinite(means)
-    return centers[finite], means[finite]
-
-
-def line_cut_profile(
-    image: np.ndarray,
-    center_x: float,
-    center_y: float,
-    width: float,
-    height: float,
-    mask_min: float,
-    mask_max: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    arr = np.asarray(image, dtype=float)
-    h, w = arr.shape[:2]
-    x0 = max(0, int(np.floor(center_x - width / 2.0)))
-    x1 = min(w, int(np.ceil(center_x + width / 2.0)))
-    y0 = max(0, int(np.floor(center_y - height / 2.0)))
-    y1 = min(h, int(np.ceil(center_y + height / 2.0)))
-    if x1 <= x0 or y1 <= y0:
-        raise RuntimeError("Line cut region is empty.")
-    region = arr[y0:y1, x0:x1].copy()
-    region[(region < mask_min) | (region > mask_max)] = np.nan
-    if width >= height:
-        y = np.nanmean(region, axis=0)
-        x = np.arange(x0, x1, dtype=float)
-    else:
-        y = np.nanmean(region, axis=1)
-        x = np.arange(y0, y1, dtype=float)
-    finite = np.isfinite(y)
-    if not finite.any():
-        raise RuntimeError("No valid pixels in the selected line cut.")
-    return x[finite], y[finite]
-
-
-def circle_cut_profile(
-    image: np.ndarray,
-    center_x: float,
-    center_y: float,
-    inner_radius: float,
-    outer_radius: float,
-    start_angle: float,
-    end_angle: float,
-    bins: int,
-    *,
-    mode: str,
-    mask_min: float,
-    mask_max: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    arr = np.asarray(image, dtype=float)
-    start = normalize_angle_deg(float(start_angle))
-    end = normalize_angle_deg(float(end_angle))
-    inner = min(float(inner_radius), float(outer_radius))
-    outer = max(float(inner_radius), float(outer_radius))
-    h, w = arr.shape[:2]
-    cx = float(center_x)
-    cy = float(center_y)
-    x0 = max(0, int(np.floor(cx - outer)))
-    x1 = min(w, int(np.ceil(cx + outer)) + 1)
-    y0 = max(0, int(np.floor(cy - outer)))
-    y1 = min(h, int(np.ceil(cy + outer)) + 1)
-    if x1 <= x0 or y1 <= y0:
-        raise RuntimeError("Circle cut region is outside the image.")
-
-    region = arr[y0:y1, x0:x1]
-    yy, xx = np.indices(region.shape, dtype=np.float32)
-    xx += float(x0)
-    yy += float(y0)
-    dx = xx - cx
-    dy = yy - cy
-    radius = np.hypot(dx, dy)
-    angle = normalize_angle_deg(np.degrees(np.arctan2(dy, dx)))
-    sector = angle_between(angle, start, end)
-    valid = (
-        np.isfinite(region)
-        & (region >= mask_min)
-        & (region <= mask_max)
-        & (radius >= inner)
-        & (radius <= outer)
-        & sector
-    )
-    if not np.any(valid):
-        raise RuntimeError("No valid pixels in the selected circle cut.")
-
-    x_values = angle if mode == "azimuthal" else radius
-    x = x_values[valid]
-    y = region[valid]
-    bins = int(bins)
-    edges = np.linspace(float(np.nanmin(x)), float(np.nanmax(x)), bins + 1)
-    if edges[0] == edges[-1]:
-        edges[-1] = edges[0] + 1e-9
-    indices = np.digitize(x, edges) - 1
-    valid_bins = (indices >= 0) & (indices < bins)
-    indices = indices[valid_bins]
-    y = y[valid_bins]
-    sums = np.bincount(indices, weights=y, minlength=bins)
-    counts = np.bincount(indices, minlength=bins)
-    means = np.divide(sums, counts, out=np.full(bins, np.nan, dtype=float), where=counts > 0)
-    centers = 0.5 * (edges[:-1] + edges[1:])
-    finite = np.isfinite(means)
-    return centers[finite], means[finite]
-
-
-def normalize_angle_deg(angle):
-    return (np.asarray(angle) + 360.0) % 360.0
-
-
-def angle_between(angle: np.ndarray, start: float, end: float) -> np.ndarray:
-    if start <= end:
-        return (angle >= start) & (angle <= end)
-    return (angle >= start) | (angle <= end)
-
-
-def smooth_curve(y: np.ndarray, window: int = 7) -> np.ndarray:
-    if y.size < window:
-        return y
-    kernel = np.ones(window, dtype=float) / window
-    return np.convolve(y, kernel, mode="same")
-
-
-def export_curve_csv(path: str, x: np.ndarray, y: np.ndarray) -> None:
-    arr = np.column_stack([x, y])
-    np.savetxt(path, arr, delimiter=",", header="x,intensity", comments="", fmt="%.9g")
-
-
-def write_matrix_csv(path: str, columns: list[np.ndarray], headers: list[str]) -> None:
-    max_len = max((len(col) for col in columns), default=0)
-    padded = [
-        np.pad(np.asarray(col, dtype=float).ravel(), (0, max_len - len(col)), constant_values=np.nan)
-        for col in columns
-    ]
-    matrix = np.column_stack(padded) if padded else np.empty((0, 0))
-    np.savetxt(path, matrix, delimiter=",", header=",".join(headers), comments="", fmt="%.9g")
-
-
-def export_image_png(
-    image: np.ndarray,
-    path: str,
-    *,
-    log_scale: bool,
-    colormap: str,
-    auto_scale: bool,
-    vmin: float,
-    vmax: float,
-    mask_min: float,
-    mask_max: float,
-) -> None:
-    import matplotlib.pyplot as plt
-
-    if auto_scale:
-        limits = estimate_display_limits(
-            image,
-            log_scale=log_scale,
-            mask_min=mask_min,
-            mask_max=mask_max,
-        )
-        if limits is not None:
-            vmin, vmax = limits
-    arr = prepare_display_array(
-        image,
-        log_scale=log_scale,
-        mask_min=mask_min,
-        mask_max=mask_max,
-        flip_vertical=False,
-    )
-    fig, ax = plt.subplots()
-    cmap = colormaps.get_cmap(colormap).copy()
-    cmap.set_bad(cmap(0.0))
-    artist = ax.imshow(arr, cmap=cmap, vmin=vmin, vmax=vmax, aspect="equal")
-    fig.colorbar(artist, ax=ax)
-    ax.set_xlabel("X (pixel)")
-    ax.set_ylabel("Y (pixel)")
-    fig.savefig(path, dpi=300, bbox_inches="tight")
-    plt.close(fig)

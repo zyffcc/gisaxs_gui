@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Optional
 import numpy as np
 
 from .simulation import _simulate_pattern_once, apply_interference
+from src.gimap.features.trainset.application.ports import SimulationPort
 
 
 ProgressCallback = Optional[Callable[[int, int, str], None]]
@@ -116,6 +117,7 @@ def _is_valid_node(config: Dict[str, Any], sampled: Dict[str, float]) -> bool:
 
 def load_or_build_grid(
     config: Dict[str, Any],
+    simulation_port: SimulationPort | None = None,
     progress: ProgressCallback = None,
     pause: PauseCallback = None,
     force: bool = False,
@@ -155,7 +157,15 @@ def load_or_build_grid(
         sampled = dict(fixed)
         sampled.update({name: float(axes[name][index[i]]) for i, name in enumerate(names)})
         if _is_valid_node(config, sampled):
-            images[index] = np.asarray(_simulate_pattern_once(config, sampled), dtype=np.float16)
+            if simulation_port is None:
+                images[index] = np.asarray(
+                    _simulate_pattern_once(config, sampled), dtype=np.float16
+                )
+            else:
+                images[index] = np.asarray(
+                    _simulate_pattern_once(config, sampled, simulation_port),
+                    dtype=np.float16,
+                )
             valid[index] = 1
         if progress is not None:
             progress(completed, total, f"BornAgain form-factor grid {completed}/{total}")

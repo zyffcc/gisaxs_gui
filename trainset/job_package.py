@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 from trainset.config import load_project_config
 from trainset.generator import DatasetGenerator
+from src.gimap.integrations.bornagain import BornAgainSimulator
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", default="config.yaml")
@@ -56,7 +57,7 @@ if task_id is not None:
         raise SystemExit(f"array task {task_index} has no samples to generate")
     config["project"]["seed"] = int(config["project"]["seed"]) + task_index
     output = output / f"array_{task_index:04d}"
-files = DatasetGenerator(config).write_hdf5_shards(
+files = DatasetGenerator(config, simulation_port=BornAgainSimulator()).write_hdf5_shards(
     output, count, mode=args.mode, progress=report, pause=wait_for_control
 )
 print(f"generated_files={len(files)} samples={count} output={output}")
@@ -68,8 +69,12 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 from trainset.config import load_project_config, validate_project_config
 from trainset.geometry import roi_to_spherical_ranges
+from src.gimap.integrations.bornagain import BornAgainSimulator
 cfg = load_project_config(ROOT / "config.yaml")
-valid, errors, warnings = validate_project_config(cfg)
+simulation_port = BornAgainSimulator()
+valid, errors, warnings = validate_project_config(
+    cfg, simulation_available=simulation_port.is_available()
+)
 print("valid=", valid)
 print("spherical_ranges=", roi_to_spherical_ranges(cfg))
 for item in warnings: print("WARNING:", item)
@@ -287,6 +292,12 @@ def prepare_job_package(config: Dict[str, Any], output_root: str | Path, project
     shutil.copytree(
         project_root / "calibration",
         destination / "src" / "calibration",
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    shutil.copytree(
+        project_root / "src" / "gimap",
+        destination / "src" / "src" / "gimap",
         dirs_exist_ok=True,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
