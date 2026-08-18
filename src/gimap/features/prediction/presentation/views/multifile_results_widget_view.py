@@ -1,7 +1,7 @@
 """Hand-maintained Python View for prediction multi-file results."""
 
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 
 class MultiFileResultsWidgetView(object):

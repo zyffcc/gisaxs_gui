@@ -11,6 +11,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtWidgets import QApplication
 
 from main import MainWindow
+from src.gimap.features.prediction.presentation.bindings.module_catalog import (
+    ModuleCatalogMixin,
+)
 from src.gimap.app import AppContext
 from src.gimap.features.prediction.presentation import (
     GisaxsPredictWorkspace,
@@ -58,6 +61,17 @@ def _context() -> AppContext:
         preferences=InMemoryUserPreferencesRepository(),
         jobs=LocalProcessJobRunner(),
     )
+
+
+def test_module_catalog_ignores_final_event_from_deleted_qt_widget():
+    class DeletedQtBase:
+        def eventFilter(self, _obj, _event):  # noqa: N802 - Qt signature
+            raise RuntimeError("wrapped C/C++ object has been deleted")
+
+    class Binding(ModuleCatalogMixin, DeletedQtBase):
+        ui = object()
+
+    assert Binding().eventFilter(object(), None) is False
 
 
 def test_legacy_component_path_reexports_feature_owned_prediction_classes():

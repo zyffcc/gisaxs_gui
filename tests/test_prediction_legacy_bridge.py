@@ -16,6 +16,16 @@ ROOT = Path(__file__).resolve().parents[1]
 BINDING = ROOT / "src/gimap/features/prediction/presentation/view_binding.py"
 
 
+def _binding_paths():
+    yield BINDING
+    yield BINDING.parent / "dependency_detection.py"
+    yield from sorted((BINDING.parent / "bindings").glob("*.py"))
+
+
+def _binding_source():
+    return "\n".join(path.read_text(encoding="utf-8") for path in _binding_paths())
+
+
 def _imports(tree):
     names = []
     for node in ast.walk(tree):
@@ -27,9 +37,12 @@ def _imports(tree):
 
 
 def test_prediction_view_binding_has_only_presentation_dependencies():
-    source = BINDING.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    imports = _imports(tree)
+    source = _binding_source()
+    imports = [
+        name
+        for path in _binding_paths()
+        for name in _imports(ast.parse(path.read_text(encoding="utf-8")))
+    ]
 
     assert "core.global_params" not in imports
     assert "controllers.fitting_controller" not in imports

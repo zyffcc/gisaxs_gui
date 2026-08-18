@@ -6,6 +6,8 @@ import ast
 import os
 from pathlib import Path
 
+import numpy as np
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import QObject
@@ -16,6 +18,7 @@ from src.gimap.features.waxs.infrastructure import (
     load_image_matrix as infrastructure_load_image_matrix,
 )
 from src.gimap.features.waxs.presentation.page import (
+    ImageLoadResult,
     InSituProcessingWidget,
     ScatteringImageViewer,
 )
@@ -67,6 +70,15 @@ def test_legacy_waxs_entry_reexports_feature_owned_page_and_loader() -> None:
     assert "class InSituProcessingWidget" not in legacy_source
     assert "def load_image_matrix" not in legacy_source
     assert len(legacy_source.splitlines()) <= 35
+
+
+def test_waxs_image_load_result_remains_a_dataclass_after_module_split() -> None:
+    image = np.ones((2, 3), dtype=np.float32)
+    result = ImageLoadResult("scan.nxs", 1, 4, image)
+
+    assert result.frame_index == 1
+    assert result.frame_count == 4
+    assert result.image is image
 
 
 def test_feature_page_preserves_sections_controls_signals_and_job_status_offscreen() -> None:

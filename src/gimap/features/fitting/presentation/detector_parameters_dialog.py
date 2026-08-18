@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import pyqtSignal
 
 from src.gimap.app.bootstrap import create_standalone_legacy_context
-from src.gimap.features.fitting.domain import (
+from src.gimap.features.fitting.application import (
     DetectorSettings,
     energy_to_wavelength,
     wavelength_to_energy,

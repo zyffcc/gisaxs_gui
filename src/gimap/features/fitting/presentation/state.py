@@ -8,7 +8,7 @@ from typing import Literal
 from ..application.models import ScatteringFileData
 from ..application.ai_models import CandidateGenerationResult
 from ..application.insitu import InSituWorkflowState
-from ..domain import CurveData, ManualFitResult
+from ..application import CurveData, ManualFitResult
 
 
 LoadStatus = Literal["idle", "loading", "ready", "error"]

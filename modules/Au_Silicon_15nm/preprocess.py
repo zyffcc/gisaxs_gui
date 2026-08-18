@@ -108,7 +108,9 @@ def _mask(img: np.ndarray, cfg: dict, module_folder: str) -> np.ndarray:
 def _log_and_normalize(img: np.ndarray) -> np.ndarray:
     try:
         # Use the existing project utility for parity
-        from utils.tools.Preprocessing import Preprocessing  # type: ignore
+        from src.gimap.features.prediction.infrastructure.adapters.image_preprocessing import (
+            Preprocessing,
+        )
         return Preprocessing(img).log_and_normalize()
     except Exception:
         # Fallback: simple safe log1p and min-max

@@ -16,7 +16,7 @@ from ..application import (
     RunCalibration,
 )
 from ..application.ports import CancellationCheck, ProgressCallback
-from ..domain import (
+from ..application import (
     CalibrationCandidate,
     CalibrationRequest,
     CalibrationResult,

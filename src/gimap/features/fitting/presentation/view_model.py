@@ -24,7 +24,7 @@ from ..application import (
     InSituWorkflowCoordinator,
 )
 from ..application.models import ScatteringFileData
-from ..domain import ManualFitRequest
+from ..application import ManualFitRequest
 from .insitu_view_model import FittingInSituViewModel
 from .state import FittingState
 from .storage_view_model import FittingStorageViewModel

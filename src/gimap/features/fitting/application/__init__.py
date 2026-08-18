@@ -59,13 +59,18 @@ from .use_cases import (
 )
 from .detector_settings import LoadDetectorSettings, SaveDetectorSettings
 from ..domain import (
+    CurveData,
     CutSelection,
     ConstraintSet,
+    DetectorSettings,
     ManualFitRequest,
+    ManualFitResult,
     apply_input_image_options,
     apply_threshold_mask,
+    energy_to_wavelength,
     finite_log_profiles,
     finite_mean_axis,
+    wavelength_to_energy,
 )
 
 __all__ = [
@@ -102,12 +107,17 @@ __all__ = [
     "FittingModelCalculations",
     "FittingQSpaceCalculations",
     "CutSelection",
+    "CurveData",
     "ConstraintSet",
+    "DetectorSettings",
     "ManualFitRequest",
+    "ManualFitResult",
     "apply_input_image_options",
     "apply_threshold_mask",
+    "energy_to_wavelength",
     "finite_log_profiles",
     "finite_mean_axis",
+    "wavelength_to_energy",
     "OperationResult",
     "RunManualFit",
     "RefineCandidates",

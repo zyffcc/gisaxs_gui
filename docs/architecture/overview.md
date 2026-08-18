@@ -1,7 +1,8 @@
 # GIMaP 目标架构概览
 
-> 状态说明：本文档定义渐进式重构的目标架构。当前源码仍属于 legacy
-> architecture，尚未完全符合这些规则。
+> 状态说明：`src/gimap` 的 feature ownership、核心依赖方向和 presentation
+> 聚合入口已经符合本文档目标。生产源码不再反向导入顶层 `controllers`、`ui`、
+> `trainset`、`calibration` 或 `utils` 兼容包；这些路径只保留对外兼容别名。
 
 ## 架构风格
 
@@ -31,7 +32,8 @@ features/
     calibration/
 ```
 
-这只是渐进式迁移的目标，不代表现在就要创建空目录，或一次性移动现有源码。
+当前七个 workspace 已完成该迁移。渐进式原则继续用于约束后续功能扩展和仍需保留的
+外部 import 兼容入口，不表示主运行路径仍依赖第二套 legacy 实现。
 
 优先采用 feature-first 的原因包括：
 
@@ -240,15 +242,16 @@ Shared code 必须有明确的科学或 application 职责。禁止新增名为 
 `helpers.py`、`common.py` 或 `misc.py` 的 catch-all modules，也禁止让 `shared/` 成为
 新的 catch-all directory。
 
-## 当前 legacy architecture 与目标架构的关系
+## 当前兼容架构与目标架构的关系
 
-当前仓库包含大型 controllers、GUI-aware modules、全局技术目录、对外部库的直接调用
-和共享全局状态。部分 legacy code 目前必然违反目标依赖方向。这些 violation 是后续
-迁移的输入，不能作为在新代码中继续复制相同耦合的理由。
+当前 feature 源码已按 presentation、application、domain 和 infrastructure 分层；
+presentation 只通过 application 公共 API 使用 domain 能力。历史顶层 controller/UI
+路径仅保留薄 re-export，稳定科学实现只允许位于 infrastructure adapter 后方。
+这些兼容边界不能作为在新代码中继续复制旧耦合的理由。
 
 迁移期间：
 
-- 已有 violation 可以保留到对应 feature 开始迁移；
+- 已审计的兼容 seam 可以在外部 caller 仍存在时保留；
 - 新代码不得新增 violation，也不得扩大已有 violation；
 - 每次 refactor 都应减少 dependency violation；
 - compatibility shim 可以暂时连接 legacy caller 和新 use case；

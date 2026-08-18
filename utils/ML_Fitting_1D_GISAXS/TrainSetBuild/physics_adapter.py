@@ -6,14 +6,10 @@ from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 
-try:
-    from utils.fitting import make_mixed_model, params_template
-except ImportError:  # pragma: no cover - useful when imported from package context
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from utils.fitting import make_mixed_model, params_template
+from src.gimap.features.fitting.domain.scattering_model import (
+    make_mixed_model,
+    params_template,
+)
 
 from TrainSetBuild.schema import (
     GLOBAL_PARAM_NAMES,
@@ -74,4 +70,3 @@ def component_array_to_dict(type_id: int, params_phys: np.ndarray, weight: float
         "weight": float(weight),
         "param_names": PARAM_NAMES,
     }
-

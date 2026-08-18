@@ -5,7 +5,7 @@ from __future__ import annotations
 from src.gimap.app.bootstrap import create_standalone_legacy_context
 from src.gimap.features.calibration.bootstrap import create_calibration_view_model
 
-from ..domain.models import CalibrationResult
+from ..application import CalibrationResult
 
 
 def apply_calibration_result(

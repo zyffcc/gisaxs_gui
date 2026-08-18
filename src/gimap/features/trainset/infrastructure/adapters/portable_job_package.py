@@ -23,8 +23,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-from trainset.config import load_project_config
-from trainset.generator import DatasetGenerator
+from src.gimap.features.trainset.infrastructure.adapters.configuration import load_project_config
+from src.gimap.features.trainset.infrastructure.adapters.dataset_generator import DatasetGenerator
 from src.gimap.integrations.bornagain import BornAgainSimulator
 
 parser = argparse.ArgumentParser()
@@ -69,8 +69,8 @@ VALIDATE_SCRIPT = '''from pathlib import Path
 import sys
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-from trainset.config import load_project_config, validate_project_config
-from trainset.geometry import roi_to_spherical_ranges
+from src.gimap.features.trainset.infrastructure.adapters.configuration import load_project_config, validate_project_config
+from src.gimap.features.trainset.domain.geometry import roi_to_spherical_ranges
 from src.gimap.integrations.bornagain import BornAgainSimulator
 cfg = load_project_config(ROOT / "config.yaml")
 simulation_port = BornAgainSimulator()
@@ -96,8 +96,9 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
-from trainset.config import load_project_config, synchronize_parameter_specs, trainable_parameter_names
-from trainset.modeling import build_keras_model, build_optimizer, resolve_keras_api
+from src.gimap.features.trainset.infrastructure.adapters.configuration import load_project_config, synchronize_parameter_specs
+from src.gimap.features.trainset.domain import trainable_parameter_names
+from src.gimap.features.trainset.infrastructure.adapters.keras_modeling import build_keras_model, build_optimizer, resolve_keras_api
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--smoke", action="store_true", help="Cap records/model size for a quick local pipeline test")
@@ -281,22 +282,8 @@ def prepare_job_package(config: Dict[str, Any], output_root: str | Path, project
     # Refresh package code and scripts in place so preparing an updated package
     # never deletes already generated datasets, checkpoints, logs or caches.
     (destination / "src").mkdir(parents=True, exist_ok=True)
-    shutil.copytree(
-        project_root / "trainset",
-        destination / "src" / "trainset",
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
-    # Reference-derived detector masks must use exactly the same CBF/NXS
-    # orientation as the GUI.  The trainset loader delegates that work to the
-    # calibration package, so exported jobs need that package as well instead
-    # of silently depending on the source checkout being on PYTHONPATH.
-    shutil.copytree(
-        project_root / "calibration",
-        destination / "src" / "calibration",
-        dirs_exist_ok=True,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
+    # Export the actual feature owners. Generated jobs must not depend on the
+    # repository's compatibility packages under top-level trainset/calibration.
     shutil.copytree(
         project_root / "src" / "gimap",
         destination / "src" / "src" / "gimap",

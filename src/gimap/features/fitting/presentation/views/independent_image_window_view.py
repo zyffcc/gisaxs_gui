@@ -1,7 +1,7 @@
 """Hand-maintained Python View for the independent image window."""
 
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 
 class IndependentImageWindowView(object):

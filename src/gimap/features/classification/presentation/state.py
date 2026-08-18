@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from ..domain import DatasetSummary, ExperimentResult, FeatureMatrix, SavedModelPackage
+from ..application import DatasetSummary, ExperimentResult, FeatureMatrix, SavedModelPackage
 
 
 Status = Literal["idle", "loading", "running", "ready", "cancelled", "error"]

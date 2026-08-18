@@ -271,7 +271,17 @@ class TrainsetWorkspaceTests(unittest.TestCase):
                 Path(__file__).resolve().parents[1],
             )
 
-            self.assertTrue((package / "src" / "calibration" / "image_loader.py").is_file())
+            self.assertTrue(
+                (
+                    package
+                    / "src"
+                    / "src"
+                    / "gimap"
+                    / "shared"
+                    / "detector_io"
+                    / "loading.py"
+                ).is_file()
+            )
             self.assertIn("fabio", (package / "environment.yml").read_text(encoding="utf-8"))
 
             generated = package / "dataset" / "existing_shard.h5"

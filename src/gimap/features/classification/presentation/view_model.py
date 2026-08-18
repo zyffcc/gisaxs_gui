@@ -18,7 +18,7 @@ from ..application import (
     ImportDatasetRequest,
     SaveClassificationModelRequest,
 )
-from ..domain import DatasetSource
+from ..application import DatasetSource
 from .state import ClassificationState
 
 

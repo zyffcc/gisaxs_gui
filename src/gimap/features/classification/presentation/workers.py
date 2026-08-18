@@ -6,7 +6,7 @@ import traceback
 
 from PyQt5.QtCore import QObject, QRunnable, pyqtSignal
 
-from ..domain import (
+from ..application import (
     AlgorithmConfig,
     DatasetSource,
     PreprocessingConfig,

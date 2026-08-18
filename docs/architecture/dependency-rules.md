@@ -1,7 +1,8 @@
 # 依赖规则
 
-这些规则立即适用于所有新代码，以及重构时被修改的代码。现有 legacy violation
-可以按照下文的迁移策略暂时保留。
+这些规则适用于全部 `src/gimap` 生产代码。顶层兼容包可以继续向新 owner 转发，但
+`src/gimap` 禁止反向导入 `controllers`、`ui`、`trainset`、`calibration`、`WAXS` 或
+`utils`；架构测试会阻止这类依赖重新出现。
 
 ## 允许的依赖
 
@@ -236,7 +237,8 @@ infrastructure/
 
 ## Legacy violation 处理规则
 
-当前代码尚未完全符合这些规则。Legacy violation 可以暂时存在，但：
+`src/gimap` 新架构代码必须符合这些规则。已审计的 legacy adapter 或外部兼容入口可以
+暂时存在，但：
 
 - 新代码不得引入新的 violation；
 - 新代码不得扩大已有 violation 的影响范围；

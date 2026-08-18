@@ -69,11 +69,11 @@ Run the complete repository verification with one command:
 python tools/check.py
 ```
 
-The unified command sets Qt to the offscreen platform for tests, runs the full
-suite, and then runs the repository lint baseline. Ruff initially
-checks syntax, invalid control flow, and undefined names across the repository.
-Four explicitly listed legacy files are temporarily exempted from their known
-`F821` or `F823` findings in `pyproject.toml`; no broad formatting pass is enabled.
+The unified command sets Qt to the offscreen platform, runs the full test suite,
+starts and closes the real five-workspace window with in-memory repositories,
+and then runs the repository lint baseline. Ruff checks syntax, invalid control
+flow, and undefined names across the repository without legacy per-file exemptions;
+no broad formatting pass is enabled.
 
 ## Python Views
 

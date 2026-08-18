@@ -32,6 +32,18 @@ from src.gimap.features.trainset.application import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+TRAINSET_PRESENTATION = ROOT / "src/gimap/features/trainset/presentation"
+
+
+def _binding_paths():
+    yield TRAINSET_PRESENTATION / "view_binding.py"
+    yield TRAINSET_PRESENTATION / "background_tasks.py"
+    yield TRAINSET_PRESENTATION / "config_fields.py"
+    yield from sorted((TRAINSET_PRESENTATION / "bindings").glob("*.py"))
+
+
+def _binding_source():
+    return "\n".join(path.read_text(encoding="utf-8") for path in _binding_paths())
 
 
 class _Generator:
@@ -368,7 +380,7 @@ def test_trainset_view_binding_receives_simulation_port_from_composition_root():
 
 
 def test_trainset_view_binding_does_not_import_tensorflow_runtime():
-    imports = _imports(ROOT / "src/gimap/features/trainset/presentation/view_binding.py")
+    imports = [name for path in _binding_paths() for name in _imports(path)]
 
     assert not any(name.startswith("tensorflow") for name in imports)
     assert "create_trainset_view_model" in (
@@ -377,9 +389,7 @@ def test_trainset_view_binding_does_not_import_tensorflow_runtime():
 
 
 def test_trainset_view_binding_uses_settings_repository_not_global_singleton():
-    binding = (ROOT / "src/gimap/features/trainset/presentation/view_binding.py").read_text(
-        encoding="utf-8"
-    )
+    binding = _binding_source()
 
     assert "core.global_params" not in binding
     assert "TrainsetViewModel" in binding
@@ -388,9 +398,8 @@ def test_trainset_view_binding_uses_settings_repository_not_global_singleton():
 
 
 def test_trainset_presentation_does_not_import_infrastructure_or_manage_files_and_processes():
-    binding_path = ROOT / "src/gimap/features/trainset/presentation/view_binding.py"
-    source = binding_path.read_text(encoding="utf-8")
-    imports = _imports(binding_path)
+    source = _binding_source()
+    imports = [name for path in _binding_paths() for name in _imports(path)]
 
     assert not any("infrastructure" in name for name in imports)
     assert not any("trainset.domain" in name for name in imports)

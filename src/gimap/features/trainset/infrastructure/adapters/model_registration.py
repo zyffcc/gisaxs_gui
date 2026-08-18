@@ -18,7 +18,7 @@ from ...domain import trainable_parameter_names
 PREPROCESSING_MODULE = """from __future__ import annotations
 import copy
 import numpy as np
-from trainset.generator import apply_preprocessing, build_fixed_mask, crop_roi
+from src.gimap.features.trainset.infrastructure.adapters.dataset_generator import apply_preprocessing, build_fixed_mask, crop_roi
 
 def preprocess(image, preprocess_config, module_folder=None, return_steps=False):
     cfg = copy.deepcopy(preprocess_config["params"]["trainset_config"])

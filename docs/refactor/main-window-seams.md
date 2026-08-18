@@ -43,11 +43,11 @@ factories 替换 Prediction 和 Fitting 空 host；仓库不再存在 `.ui` 或 
 | --- | --- | --- | --- |
 | Format Converter | feature dialog | 菜单直连 feature；`ui/format_converter_dialog.py` 薄 re-export | 确认外部脚本不再使用后删除旧 import path |
 | Calibration | feature dialog | 菜单直连 feature；`ui/geometry_calibration_dialog.py` 薄 re-export | 同上 |
-| Fitting | feature controls、workspace、ViewBinding | 旧 controller 名称为薄别名 | 按稳定 UI 状态组拆分超大 binding |
-| Prediction | feature controls、workspace、ViewBinding | 旧 controller 名称为薄别名 | 按预览/模块/batch 状态组拆分 binding |
-| Trainset | feature page、ViewBinding | 旧 controller 名称为薄别名 | 按 design/local/remote 状态组拆分 binding |
-| Classification | feature page、ViewBinding | 无主窗口 widget aliases；旧 controller 为薄别名 | 按 dataset/results/rendering 状态组拆分 binding |
-| WAXS | feature page | shell 固定 slot；旧独立路径为薄启动器 | 继续按稳定 UI 区块缩小超大 presentation，不改变科学行为 |
+| Fitting | feature controls、workspace、focused bindings | 旧 controller 名称为薄别名 | 在对应具名 binding 内维护单一职责 |
+| Prediction | feature controls、workspace、focused bindings | 旧 controller 名称为薄别名 | module/preview/batch 分别维护 |
+| Trainset | feature page sections、focused bindings | 旧 controller 名称为薄别名 | design/local/HPC 分别维护 |
+| Classification | feature page、focused bindings | 无主窗口 widget aliases；旧 controller 为薄别名 | dataset/results/rendering 分别维护 |
+| WAXS | feature page、viewer、workers、focused bindings | shell 固定 slot；旧独立路径为薄启动器 | 不把 geometry/integration 放回 presentation |
 
 ## 本轮缩小的 violation
 

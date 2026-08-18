@@ -20,6 +20,7 @@ def main() -> int:
 
     checks = [
         [sys.executable, "-m", "pytest"],
+        [sys.executable, "tools/offscreen_smoke.py"],
         [sys.executable, "-m", "ruff", "check", "."],
     ]
     for command in checks:

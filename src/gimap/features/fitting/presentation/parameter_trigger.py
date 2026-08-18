@@ -5,7 +5,7 @@
 
 from PyQt5.QtCore import QObject, QTimer
 from PyQt5.QtWidgets import QDoubleSpinBox, QSpinBox
-from typing import Dict, Callable, Any, Optional
+from typing import Dict, Callable, Optional
 
 from .parameter_trigger_compatibility import LegacyParameterTriggerMixin
 from .parameter_trigger_diagnostics import ParameterTriggerDiagnosticsMixin

@@ -1,5 +1,7 @@
 """Prediction application public API。"""
 
+from ..domain import ModelRuntimeInfo, PredictionModule
+
 from .module_descriptions import describe_prediction_module
 from .sequence_rules import PredictionSequenceRules
 from .models import (
@@ -64,6 +66,7 @@ __all__ = [
     "LoadPredictionMask",
     "LoadPredictionModule",
     "LoadedPredictionImage",
+    "ModelRuntimeInfo",
     "ModuleRepository",
     "MultiplePredictionResult",
     "PredictFileBatch",
@@ -78,6 +81,7 @@ __all__ = [
     "PredictionImageRepository",
     "PredictionMaskRepository",
     "PredictionProgress",
+    "PredictionModule",
     "PredictionExportItem",
     "PredictionArrayExportRequest",
     "PredictionExportRepository",

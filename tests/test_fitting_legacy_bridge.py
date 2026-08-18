@@ -12,13 +12,36 @@ BINDING = (
 )
 
 
+def _binding_paths():
+    yield BINDING
+    yield BINDING.parent / "binding_primitives.py"
+    for name in (
+        "scientific_commands.py",
+        "refinement_workers.py",
+        "insitu_workers.py",
+        "independent_image_window.py",
+        "independent_fit_window.py",
+        "display_manager.py",
+        "image_loading_workers.py",
+    ):
+        yield BINDING.parent / name
+    yield from sorted((BINDING.parent / "bindings").glob("*.py"))
+
+
+def _binding_source():
+    return "\n".join(
+        path.read_text(encoding="utf-8") for path in _binding_paths()
+    )
+
+
 def _imports():
-    tree = ast.parse(BINDING.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            yield from (alias.name.casefold() for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            yield node.module.casefold()
+    for path in _binding_paths():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                yield from (alias.name.casefold() for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                yield node.module.casefold()
 
 
 def test_view_binding_does_not_load_heavy_runtime_integrations():
@@ -33,7 +56,7 @@ def test_view_binding_does_not_load_heavy_runtime_integrations():
 
 
 def test_view_binding_no_longer_owns_ai_process_or_pipeline():
-    source = BINDING.read_text(encoding="utf-8")
+    source = _binding_source()
     imported = tuple(_imports())
 
     assert "QProcess" not in source
@@ -57,7 +80,7 @@ def test_view_binding_no_longer_owns_ai_process_or_pipeline():
 
 
 def test_view_binding_routes_scientific_work_through_view_model():
-    source = BINDING.read_text(encoding="utf-8")
+    source = _binding_source()
     imported = tuple(_imports())
 
     assert not any("fitting.domain" in name for name in imported)
@@ -81,7 +104,7 @@ def test_legacy_controller_path_is_a_thin_compatibility_entry():
 
 
 def test_dynamic_particle_stack_receives_injected_fitting_view_model():
-    tree = ast.parse(BINDING.read_text(encoding="utf-8"))
+    tree = ast.parse(_binding_source())
     calls = [
         node
         for node in ast.walk(tree)

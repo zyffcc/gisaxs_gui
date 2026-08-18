@@ -14,8 +14,9 @@ def test_main_window_composes_waxs_view_model():
 
 
 def test_waxs_qt_workers_are_view_model_bridges():
-    source = (ROOT / "src/gimap/features/waxs/presentation/page.py").read_text(encoding="utf-8")
-    batch = source[source.index("class BatchWorker") : source.index("class ScatteringImageViewer")]
+    presentation = ROOT / "src/gimap/features/waxs/presentation"
+    source = (presentation / "page.py").read_text(encoding="utf-8")
+    batch = (presentation / "workers.py").read_text(encoding="utf-8")
 
     assert "view_model.run_batch" in batch
     assert "view_model.cancel_batch" in batch

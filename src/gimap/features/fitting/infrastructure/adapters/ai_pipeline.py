@@ -18,8 +18,8 @@ import numpy as np
 from src.gimap.app.jobs import JobRequest
 
 from ...application.ai_models import CandidateGenerationRequest, CandidateGenerationResult
-from utils.ai_fitting_pipeline import FittingRequest, fitting_pipeline
-from utils.ai_fitting_profiles import FittingProfile
+from ...application.fitting_profiles import FittingProfile
+from .fitting_pipeline import FittingRequest, fitting_pipeline
 
 
 class AiPipelinePredictor:

@@ -13,7 +13,7 @@ from src.gimap.shared.detector_io import (
     load_detector_image,
     nxs_series_paths,
 )
-from utils.load_SAXS_data import load_xy_any
+from .scattering_curve_files import load_xy_any
 
 from ...application.models import (
     ExportFitResultRequest,

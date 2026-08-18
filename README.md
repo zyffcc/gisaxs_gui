@@ -190,9 +190,10 @@ python -m pip install -r requirements-dev.txt
 python tools/check.py
 ```
 
-This runs the existing pytest suite and a deliberately narrow Ruff baseline
-without formatting legacy code. Configuration and known lint exclusions are in
-`pyproject.toml`; details are in [docs/development.md](docs/development.md).
+This runs pytest, a real offscreen five-workspace startup/close smoke check, and
+the deliberately narrow Ruff baseline without formatting unrelated code.
+Configuration is in `pyproject.toml`; details are in
+[docs/development.md](docs/development.md).
 
 ## Dependencies
 

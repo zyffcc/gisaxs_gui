@@ -11,17 +11,17 @@ import numpy as np
 from src.gimap.app import AppContext
 
 from ..application import (
+    ConversionOptions,
+    ConversionRequest,
+    ConversionResult,
     ConvertFile,
     EstimateOutput,
     InspectSource,
+    InputSource,
     LoadPreview,
     NormalizePath,
     ScanFolder,
     SelectDataset,
-)
-from ..application.ports import ConversionExecutorPort, ProgressCallback, SourceRepositoryPort
-from ..domain.models import ConversionOptions, ConversionRequest, ConversionResult, InputSource
-from ..domain.rules import (
     is_supported_input_path,
     output_may_lose_float_values,
     output_naming_summary,
@@ -30,6 +30,7 @@ from ..domain.rules import (
     validate_options,
     visible_output_formats,
 )
+from ..application.ports import ConversionExecutorPort, ProgressCallback, SourceRepositoryPort
 from .state import ConversionReviewState, FormatConverterState, OutputPreviewState
 
 

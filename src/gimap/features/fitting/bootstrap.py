@@ -38,7 +38,7 @@ from .application import (
     InSituWorkflowCoordinator,
 )
 from .infrastructure.adapters import (
-    LegacyMixedModelAdapter,
+    MixedScatteringModelAdapter,
     AiPipelinePredictor,
     LocalCurveRepository,
     JsonCandidateRepository,
@@ -50,9 +50,9 @@ from .infrastructure.adapters import (
     LocalAiFittingArtifactRepository,
     LocalFittingLogRepository,
     ImportlibFittingDependencyAvailabilityAdapter,
-    LegacyQSpaceAdapter,
-    LegacyFittingModelParametersAdapter,
-    LegacyAiFittingCatalogAdapter,
+    QSpaceGeometryAdapter,
+    FittingModelParametersAdapter,
+    AiFittingCatalogAdapter,
 )
 from .presentation import FittingScientificViewModel, FittingViewModel
 
@@ -70,7 +70,7 @@ def create_fitting_view_model(context: AppContext) -> FittingViewModel:
     if context.jobs is None:
         raise ValueError("FittingViewModel requires AppContext.jobs")
     candidate_generation = GenerateCandidates(AiPipelinePredictor(), context.jobs)
-    fitting_model = LegacyMixedModelAdapter()
+    fitting_model = MixedScatteringModelAdapter()
     return FittingViewModel(
         context=context,
         load_scattering_file=LoadScatteringFile(LocalScatteringFileRepository()),
@@ -104,9 +104,9 @@ def create_fitting_view_model(context: AppContext) -> FittingViewModel:
             ImportlibFittingDependencyAvailabilityAdapter()
         ),
         model_parameters=ManageFittingModelParameters(
-            LegacyFittingModelParametersAdapter()
+            FittingModelParametersAdapter()
         ),
-        ai_catalog=AiFittingCatalog(LegacyAiFittingCatalogAdapter()),
+        ai_catalog=AiFittingCatalog(AiFittingCatalogAdapter()),
         scientific=FittingScientificViewModel(
             image=FittingImageCalculations(),
             cut=FittingCutCalculations(),
@@ -115,6 +115,6 @@ def create_fitting_view_model(context: AppContext) -> FittingViewModel:
             refinement=ManualRefinementCalculations(),
             insitu_cut=ComputeInSituCut(),
             model=FittingModelCalculations(fitting_model),
-            q_space=FittingQSpaceCalculations(LegacyQSpaceAdapter()),
+            q_space=FittingQSpaceCalculations(QSpaceGeometryAdapter()),
         ),
     )

@@ -11,7 +11,7 @@ from ..application import (
     ImagePredictionResult,
     LoadedPredictionImage,
 )
-from ..domain import ModelRuntimeInfo, PredictionModule
+from ..application import ModelRuntimeInfo, PredictionModule
 
 
 Status = Literal["idle", "loading", "running", "ready", "cancelled", "error"]

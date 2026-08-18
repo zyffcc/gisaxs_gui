@@ -46,6 +46,11 @@ rewrite。
 不要重新建立一个以全局 `controllers/`、`services/`、`models/` 或 `utils/` 为核心的
 架构。Feature-first ownership 优先于全局技术分层。
 
+`src/gimap` 生产代码不得反向导入顶层 `controllers`、`ui`、`trainset`、`calibration`、
+`WAXS` 或 `utils` 兼容包。旧路径只能向 feature/app/shared owner 单向转发；不得在兼容文件中
+新增业务实现。`utils/ML_Fitting_1D_GISAXS` 仅作为专用 TensorFlow worker/training bundle
+维护，不是新增通用 helper 的位置。
+
 ## 依赖方向
 
 所有新增和迁移代码必须遵循：
@@ -112,6 +117,10 @@ ViewModel 禁止负责：
 - `QMessageBox`、`QFileDialog` 或 widget manipulation。
 
 View 负责渲染 ViewModel state 和用户 dialogs，use case 负责工作流编排。
+
+Presentation 不得直接导入本 feature 的 domain。需要展示的稳定 DTO、枚举或只读能力应由
+application 的 public API 明确导出；presentation 通过 application 获取它们，避免绕过
+use case 和 application boundary。
 
 新 presentation 默认采用：
 
@@ -228,6 +237,13 @@ Legacy architecture 可以暂时违反目标架构，但：
 - Controller 和 ViewModel 通常应保持在 300 行以内；
 - 这些是 architecture-review 阈值，不是机械硬限制；
 - 禁止仅为满足行数要求而进行没有明确职责边界的拆分。
+- `dialog.py`、`page.py`、`view_binding.py` 等 public presentation entrypoint 只负责组合、
+  依赖注入和稳定 re-export，不得重新承载完整页面实现；架构测试以 600 行作为入口退化门禁；
+- 仓库 runtime Python 文件另有 600 行 monolith 安全门禁；确有高内聚理由需要超过时，必须
+  先完成 architecture review 并记录显式例外，禁止通过压缩排版或无语义切片绕过；
+- 页面事件和展示绑定按职责放入命名明确的 `presentation/bindings/` 模块；大型 Python View
+  按有语义的视觉 section 或 component 拆分；
+- 禁止使用 `part1.py`、`part2.py` 等仅按大小切割、无法表达职责的模块名。
 
 ## Python View 与 UI source of truth
 

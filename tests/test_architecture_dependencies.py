@@ -36,7 +36,7 @@ APPLICATION_FORBIDDEN_SEGMENTS = frozenset(
 )
 
 ALLOWED_LAYER_DEPENDENCIES = {
-    "presentation": frozenset({"application", "domain"}),
+    "presentation": frozenset({"application"}),
     "application": frozenset({"domain"}),
     "domain": frozenset(),
     "infrastructure": frozenset({"application", "domain"}),
@@ -113,6 +113,20 @@ def test_domain_files_do_not_import_forbidden_runtimes() -> None:
 
 def test_presentation_can_depend_on_application() -> None:
     assert _layer_dependency_is_allowed("presentation", "application")
+
+
+def test_presentation_does_not_import_domain_directly() -> None:
+    violations: list[str] = []
+    for file_path in _python_files_in_layer("presentation"):
+        source = file_path.read_text(encoding="utf-8")
+        for module_name, line_number in _imported_names(source):
+            if "domain" in _module_segments(module_name):
+                relative_path = file_path.relative_to(PROJECT_ROOT)
+                violations.append(f"{relative_path}:{line_number}: {module_name}")
+
+    assert not violations, "Presentation 只能通过 application API 使用 domain：\n" + "\n".join(
+        violations
+    )
 
 
 def test_presentation_files_do_not_import_concrete_adapters() -> None:
@@ -195,7 +209,7 @@ def test_new_source_does_not_depend_on_legacy_compatibility_packages() -> None:
         source = file_path.read_text(encoding="utf-8")
         for module_name, line_number in _absolute_imported_names(source):
             root = module_name.split(".", maxsplit=1)[0].casefold()
-            if root in {"calibration", "controllers", "trainset", "ui", "waxs"}:
+            if root in {"calibration", "controllers", "trainset", "ui", "utils", "waxs"}:
                 relative_path = file_path.relative_to(PROJECT_ROOT)
                 violations.append(f"{relative_path}:{line_number}: {module_name}")
 
@@ -279,3 +293,50 @@ def test_legacy_user_preferences_singleton_is_confined_to_app_composition_root()
     assert not violations, "user_settings 只能在 AppContext composition adapter 适配：\n" + "\n".join(
         violations
     )
+
+
+def test_runtime_python_modules_do_not_regrow_into_monoliths() -> None:
+    """Require an explicit architecture review before a runtime module exceeds 600 lines."""
+
+    runtime_roots = ("src", "controllers", "ui", "trainset", "utils")
+    violations: list[str] = []
+    for root_name in runtime_roots:
+        for file_path in sorted((PROJECT_ROOT / root_name).rglob("*.py")):
+            line_count = len(file_path.read_text(encoding="utf-8-sig").splitlines())
+            if line_count > 600:
+                relative_path = file_path.relative_to(PROJECT_ROOT)
+                violations.append(f"{relative_path}: {line_count} lines")
+
+    assert not violations, "Runtime Python module 超过 600 行 monolith 门禁：\n" + "\n".join(
+        violations
+    )
+
+
+def test_presentation_composition_entries_do_not_regrow_into_monoliths() -> None:
+    """Keep stable entry points small while focused modules hold the behavior."""
+
+    entry_names = {"dialog.py", "multifile_results.py", "page.py", "view_binding.py"}
+    violations: list[str] = []
+    features_root = GIMAP_ROOT / "features"
+    for file_path in sorted(features_root.rglob("*.py")):
+        if file_path.name not in entry_names or "presentation" not in file_path.parts:
+            continue
+        line_count = len(file_path.read_text(encoding="utf-8").splitlines())
+        if line_count > 600:
+            relative_path = file_path.relative_to(PROJECT_ROOT)
+            violations.append(f"{relative_path}: {line_count} lines")
+
+    assert not violations, "Presentation 聚合入口超过 600 行 review 阈值：\n" + "\n".join(
+        violations
+    )
+
+
+def test_feature_view_models_stay_within_review_threshold() -> None:
+    violations: list[str] = []
+    for file_path in sorted((GIMAP_ROOT / "features").rglob("view_model.py")):
+        line_count = len(file_path.read_text(encoding="utf-8").splitlines())
+        if line_count > 300:
+            relative_path = file_path.relative_to(PROJECT_ROOT)
+            violations.append(f"{relative_path}: {line_count} lines")
+
+    assert not violations, "ViewModel 超过 300 行 review 阈值：\n" + "\n".join(violations)

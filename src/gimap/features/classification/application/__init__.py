@@ -1,5 +1,21 @@
 """Classification application public API。"""
 
+from src.gimap.features.classification.domain import (
+    AlgorithmConfig,
+    ClassificationPageState,
+    ClassificationSample,
+    DatasetSource,
+    DatasetSummary,
+    ExperimentResult,
+    FeatureMatrix,
+    ModelEvaluationResult,
+    PredictionResult,
+    PreprocessingConfig,
+    ProjectionConfig,
+    SavedModelPackage,
+    ValidationConfig,
+)
+
 from .models import (
     BuildFeatureMatrixRequest,
     BuildClassificationModelPackageRequest,
@@ -34,6 +50,7 @@ from .use_cases import (
 )
 
 __all__ = [
+    "AlgorithmConfig",
     "BuildClassificationFeatures",
     "BuildClassificationModelPackage",
     "BuildClassificationModelPackageRequest",
@@ -42,24 +59,36 @@ __all__ = [
     "ClassificationCsvRequest",
     "ClassificationSessionRequest",
     "ClassificationPredictionRequest",
+    "ClassificationPageState",
+    "ClassificationSample",
     "ClassificationTrainingOutput",
     "ClassificationTrainingRequest",
     "ComputeClassificationEmbedding",
+    "DatasetSource",
+    "DatasetSummary",
     "ExportClassificationCsv",
     "EstimateClassificationFeatureMemory",
     "EmbeddingRequest",
     "EmbeddingResult",
+    "ExperimentResult",
+    "FeatureMatrix",
     "ImportedDataset",
     "ImportClassificationDataset",
     "ImportDatasetRequest",
     "LoadClassificationModel",
     "LoadClassificationSession",
     "ListClassificationAlgorithms",
+    "ModelEvaluationResult",
+    "PredictionResult",
+    "PreprocessingConfig",
+    "ProjectionConfig",
     "PredictClassification",
     "SaveClassificationModel",
     "SaveClassificationSession",
     "SaveClassificationModelRequest",
+    "SavedModelPackage",
     "TrainClassifiers",
     "SummarizeClassificationDataset",
     "ValidateClassificationDataset",
+    "ValidationConfig",
 ]

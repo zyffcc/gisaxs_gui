@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -12,6 +13,8 @@ from src.gimap.features.prediction.presentation.multifile_results import (
     ExportDialog,
     MultiFilePredictResultsWidget,
     ParameterTrendWindow,
+    PredictResult,
+    PredictStatus,
 )
 from src.gimap.features.prediction.presentation.views import (
     DistributionHeatmapDialogView,
@@ -32,6 +35,19 @@ def _app() -> QApplication:
 
 def test_legacy_multifile_results_path_reexports_prediction_owner() -> None:
     assert LegacyMultiFilePredictResultsWidget is MultiFilePredictResultsWidget
+
+
+def test_predict_result_remains_a_typed_dataclass_after_module_split() -> None:
+    result = PredictResult(
+        file_path="/tmp/scan_001.cbf",
+        file_name="scan_001.cbf",
+        status=PredictStatus.COMPLETED,
+        start_time=datetime.now(),
+        processing_time=1.25,
+    )
+
+    assert result.duration_str == "1.25s"
+    assert result.status is PredictStatus.COMPLETED
 
 
 def test_multifile_result_widgets_use_feature_python_views() -> None:

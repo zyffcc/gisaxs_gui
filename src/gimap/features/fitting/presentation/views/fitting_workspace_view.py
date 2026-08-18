@@ -1,7 +1,7 @@
 """Hand-maintained Python View for the Fitting workspace layout."""
 
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 
 class FittingWorkspaceView(object):

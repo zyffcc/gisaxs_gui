@@ -1,7 +1,7 @@
 """Hand-maintained WAXS ROI panel layout."""
 
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 
 class WaxsRoiPanelView:

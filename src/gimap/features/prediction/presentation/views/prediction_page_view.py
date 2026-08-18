@@ -1,7 +1,7 @@
 """Hand-maintained Python View for the Prediction control surface."""
 
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 
 class PredictionPageView(object):

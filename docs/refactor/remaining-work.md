@@ -52,21 +52,24 @@ legacy compatibility package，也禁止 presentation 直接导入 feature infra
 - **Integrations**：BornAgain 和 TensorFlow 延迟到 worker process 加载；缺失、损坏或 worker
   崩溃不会终止 GUI 主进程。
 
-## 当前大型 presentation binding 与兼容层
+## 当前 presentation 聚合入口与兼容层
 
 | 层 | 当前规模 | 保留原因 | 允许的后续处理 |
 | --- | ---: | --- | --- |
-| Fitting `view_binding.py` | 17,301 行 | widget、Matplotlib、Qt signal 与历史动态 UI 契约；科学与 I/O 已有 seam | 只按有 characterization test 的 UI 状态组逐个拆分 |
-| Prediction `view_binding.py` | 3,709 行 | 单/多文件页面渲染与旧 signal/objectName 契约 | 按 module/preview/batch rendering 拆分 |
-| Trainset `view_binding.py` | 1,678 行 | 页面映射、dialogs 与任务状态展示 | 保持 JobRunner/port 边界，按 design/local/remote UI 区块拆分 |
-| Classification `view_binding.py` | 1,748 行 | 页面渲染、图表和 Qt worker signals | 不得把训练或 artifact I/O 放回 presentation |
+| Fitting `view_binding.py` | 386 行 | signals、注入状态与 focused binding 组合 | 新职责放入具名 `bindings/` 模块 |
+| Prediction `view_binding.py` | 174 行 | signals、运行时状态与 focused binding 组合 | module/preview/batch 各自维护 |
+| Trainset `page.py` / `view_binding.py` | 76 / 116 行 | section 与 design/local/HPC binding 组合 | 页面和任务绑定分开维护 |
+| Classification `page.py` / `view_binding.py` | 530 / 104 行 | 页面 panel 组合与事件 binding | 训练和 artifact I/O 继续通过 use case |
+| WAXS `page.py` | 87 行 | viewer、worker 与 focused page binding 组合 | geometry/integration 不进入 presentation |
+| Calibration / Format Converter `dialog.py` | 104 / 89 行 | 稳定 dialog API 与 focused binding 组合 | 预览、任务和持久化分别维护 |
 | `ApplicationRuntime` | 281 行 | workspace composition、navigation 和启动顺序 | 保持 composition-only；session/parameter coordination 已拆出 |
 | 顶层 wrappers/aliases | 通常数行 | 用户脚本、插件、portable job、动态 import 和 monkeypatch 兼容 | 经过 deprecation 与外部 caller 审计后独立删除 |
 
-这些 binding 行数超过 review 阈值，但已经由测试和依赖门禁约束。机械地把同一 Qt 类切成多个
-无语义文件不会改善架构，反而会扩大动态 signal 回归风险。因此它们不是本轮必须清零的 P0
-架构 violation。生产代码已经不再导入任何 `legacy_bridge` 或顶层 `controllers` 路径；这些
-文件现在仅为薄 re-export。
+原巨型 binding 已按生命周期、输入、预览、绘图、AI、in-situ、结果和任务状态等真实职责
+拆分；聚合入口不再保留第二套实现。架构测试限制 `dialog.py`、`page.py`、`view_binding.py`
+和 `multifile_results.py` 不得重新超过 600 行。当前 `src`、`controllers`、`ui`、`trainset`
+和 `utils` 范围内没有 600 行以上的 Python 文件。生产代码不导入 `legacy_bridge` 或任一
+顶层兼容包；这些文件仅为薄 re-export/module alias。
 
 ## 仍可单独安排的维护项
 
@@ -78,10 +81,14 @@ legacy compatibility package，也禁止 presentation 直接导入 feature infra
 - 菜单视图实现已迁入 feature-free 的 `app/presentation/menu_manager.py`；app 根路径仅负责注入
   Calibration/Format Converter dialog factories，`ui/menu_manager.py` 为兼容导出。所有
   `QFileDialog`/`QMessageBox` 均由架构测试限制在 presentation。
-- Fitting infrastructure 的 `legacy_*` adapters 仍委托既有 `utils` scientific/model 实现；
-  adapter 正是隔离这些稳定实现的边界。只有数值回归 fixture 完整时才应替换内部实现。
-- feature-owned 大型页面可按稳定 UI 区块继续缩小，但必须保持视觉、快捷键、objectName、信号和
-  scientific output，不以文件行数作为拆分依据。
+- Fitting 的 scattering model、q-space、curve loader、AI profiles、pipeline planning 和模型
+  registry 已由 feature 的 domain/application/infrastructure 持有；`legacy_*` 文件和顶层
+  `utils` 路径仅为旧 import 名称的别名，生产 composition root 使用无 `Legacy` 前缀的 adapter。
+- `utils/ML_Fitting_1D_GISAXS` 是权威、可独立执行的 TensorFlow worker/training bundle，不是
+  通用工具目录。其 TOP-K worker 已按 CLI、curve I/O、preprocessing、candidate、scoring、
+  refinement 和 output 拆分；禁止向该目录加入与此 runtime 无关的 utility。
+- feature-owned Python View 已按稳定 UI section 组织；继续调整时必须保持快捷键、objectName、
+  信号和 scientific output，不以文件行数作为唯一拆分依据。
 - Fitting、Prediction、Classification 与 Trainset 仍有按当前结果临时构造的 workflow dialogs；
   它们不是主页面所有权的 P0 问题。只有 widget hierarchy 稳定后，才按一个 dialog 一个
   seam 提取为 feature-owned Python View，禁止一次性搬迁全部瞬时 dialogs。
@@ -99,12 +106,13 @@ legacy compatibility package，也禁止 presentation 直接导入 feature infra
 
 ## 验证基线
 
-- 完整测试：`427 passed, 1 skipped`；唯一 skip 是外部 TFRecord shards 不存在；
+- 完整测试：`434 passed, 1 skipped`；唯一 skip 是外部 TFRecord shards 不存在；
 - Python View inventory：37 个 View 均具有明确 owner，并通过依赖门禁；
 - shared path primitive 另有 Unicode、`file://`、环境变量和旧入口回归测试；
 - TensorFlow 数值兼容测试在子进程加载 runtime，pytest 主进程不再混载 TF 与 PyQt；
 - pytest session 会在最终 GC 前显式释放 offscreen Qt/Matplotlib resources；
-- `python -m ruff check .`、`python -m compileall -q src/gimap main.py` 与
+- `python tools/check.py` 统一执行 pytest、真实离屏启动/关闭和 Ruff；不再保留 legacy
+  per-file lint 豁免；另有 `python -m compileall -q src/gimap main.py` 与
   `git diff --check` 通过；
 - 离屏真实主窗口完成延迟初始化：5 个 workspace pages、4 个 feature ViewBindings、默认 page
   index 2 均验证成功。

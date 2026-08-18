@@ -1,8 +1,7 @@
 # utils/widgets/qtrangeslider.py
 from PyQt5.QtWidgets import QSlider, QStyle, QStyleOptionSlider, QWidget
-from PyQt5.QtCore import Qt, pyqtSignal, QRect, QPoint
+from PyQt5.QtCore import Qt, pyqtSignal, QRect
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush
-import math
 
 class QRangeSlider(QSlider):
     # 原有整型信号（保留兼容）

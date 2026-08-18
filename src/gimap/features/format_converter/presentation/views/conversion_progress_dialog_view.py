@@ -1,7 +1,6 @@
 """Hand-maintained layout for the conversion progress dialog."""
 
-
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 
 class ConversionProgressDialogView:
@@ -32,7 +31,9 @@ class ConversionProgressDialogView:
         self.dialog_layout.addWidget(self.result)
         self.button_row = QtWidgets.QHBoxLayout()
         self.button_row.setObjectName("button_row")
-        spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        spacerItem = QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        )
         self.button_row.addItem(spacerItem)
         self.open_button = QtWidgets.QPushButton(ConversionProgressDialog)
         self.open_button.setVisible(False)
@@ -53,10 +54,14 @@ class ConversionProgressDialogView:
 
     def retranslateUi(self, ConversionProgressDialog):
         _translate = QtCore.QCoreApplication.translate
-        ConversionProgressDialog.setWindowTitle(_translate("ConversionProgressDialog", "Format Converter"))
+        ConversionProgressDialog.setWindowTitle(
+            _translate("ConversionProgressDialog", "Format Converter")
+        )
         self.title.setText(_translate("ConversionProgressDialog", "Preparing conversion…"))
         self.time_label.setText(_translate("ConversionProgressDialog", "Elapsed: 00:00:00"))
         self.open_button.setText(_translate("ConversionProgressDialog", "Open output folder"))
         self.report_button.setText(_translate("ConversionProgressDialog", "View report"))
         self.close_button.setText(_translate("ConversionProgressDialog", "Close"))
+
+
 from src.gimap.app.presentation import JobStatus

@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-import argparse
-import csv
 import json
 import re
 import shutil
 import signal
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
@@ -27,6 +23,18 @@ from Training.model import build_model
 from TrainSetBuild import schema
 
 
+from Training.training_artifacts import (
+    count_samples,
+    load_json_list,
+    mean_metrics,
+    scalar_dict,
+    update_runtime_status,
+    write_json_atomic,
+    write_training_artifacts,
+)
+from Training.training_cli import parse_args
+
+
 STOP_REQUESTED = False
 
 
@@ -34,155 +42,6 @@ def request_graceful_stop(signum, _frame):
     global STOP_REQUESTED
     STOP_REQUESTED = True
     print(f"Received signal {signum}; checkpoint will be saved after the current step.", flush=True)
-
-
-def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--dataset_dir", default="/data/dust/user/zhaiyufe/TrainSet/ML_1D_Fitting_GISAXS")
-    p.add_argument("--model_dir", default="/data/dust/user/zhaiyufe/Models/ML_1D_Fitting_GISAXS")
-    p.add_argument("--epochs", type=int, default=50)
-    p.add_argument("--batch_size", type=int, default=64)
-    p.add_argument("--learning_rate", type=float, default=1e-4)
-    p.add_argument("--max_points", type=int, default=schema.MAX_POINTS)
-    p.add_argument("--quick_test", action="store_true")
-    p.add_argument("--reconstruction_loss_weight", type=float, default=0.0)
-    p.add_argument("--reconstruction_start_epoch", type=int, default=6)
-    p.add_argument("--reconstruction_ramp_epochs", type=int, default=5)
-    p.add_argument("--reconstruction_q_stride", type=int, default=16)
-    p.add_argument("--reconstruction_samples_per_batch", type=int, default=2)
-    p.add_argument("--mixed_precision", action="store_true")
-    p.add_argument("--multi_gpu", action="store_true")
-    p.add_argument("--log_interval", type=int, default=10)
-    p.add_argument("--save_interval", type=int, default=10)
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--max_skipped_nonfinite_batches", type=int, default=10)
-    return p.parse_args()
-
-
-def count_samples(dataset_dir: Path, split: str) -> int:
-    meta_path = dataset_dir / "metadata.json"
-    if meta_path.exists():
-        with meta_path.open("r", encoding="utf-8") as f:
-            meta = json.load(f)
-        if "split_counts" in meta and split in meta["split_counts"]:
-            return int(meta["split_counts"][split])
-
-    total = 0
-    for shard in sorted((dataset_dir / split).glob("*.npz")):
-        with np.load(shard) as data:
-            total += int(data["x"].shape[0])
-    if total:
-        return total
-    for shard in sorted((dataset_dir / split).glob("*.tfrecord")):
-        total += sum(1 for _ in tf.data.TFRecordDataset([str(shard)]))
-    return total
-
-
-def mean_metrics(metrics_list):
-    keys = metrics_list[0].keys()
-    return {k: float(np.mean([float(m[k]) for m in metrics_list])) for k in keys}
-
-
-def write_json_atomic(path: Path, data):
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-    tmp.replace(path)
-
-
-def update_runtime_status(model_dir: Path, state: str, **fields):
-    payload = {
-        "state": state,
-        "updated": datetime.now().isoformat(timespec="seconds"),
-        **fields,
-    }
-    write_json_atomic(model_dir / "training_status.json", payload)
-
-
-def load_json_list(path: Path):
-    if not path.exists():
-        return []
-    with path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-    if not isinstance(data, list):
-        return []
-    return data
-
-
-def scalar_dict(metrics):
-    return {k: float(np.asarray(v)) for k, v in metrics.items()}
-
-
-def write_step_history_csv(path: Path, step_history):
-    fieldnames = [
-        "global_step", "epoch", "step", "total_loss", "exist_loss", "type_loss",
-        "param_loss", "weight_loss", "global_loss", "d_presence_loss", "spacing_loss", "reconstruction_loss",
-        "count_loss", "component_count_accuracy",
-    ]
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in step_history:
-            train = row.get("train", {})
-            writer.writerow(
-                {
-                    "global_step": row.get("global_step"),
-                    "epoch": row.get("epoch"),
-                    "step": row.get("step"),
-                    "total_loss": train.get("total_loss"),
-                    "exist_loss": train.get("exist_loss"),
-                    "type_loss": train.get("type_loss"),
-                    "param_loss": train.get("param_loss"),
-                    "weight_loss": train.get("weight_loss"),
-                    "global_loss": train.get("global_loss"),
-                    "d_presence_loss": train.get("d_presence_loss"),
-                    "spacing_loss": train.get("spacing_loss"),
-                    "reconstruction_loss": train.get("reconstruction_loss"),
-                    "count_loss": train.get("count_loss"),
-                    "component_count_accuracy": train.get("component_count_accuracy"),
-                }
-            )
-    tmp.replace(path)
-
-
-def plot_loss_curve(path: Path, step_history, epoch_history):
-    fig, axes = plt.subplots(2, 1, figsize=(9, 7), sharex=False)
-    if step_history:
-        x = [int(row["global_step"]) for row in step_history]
-        y = [float(row["train"]["total_loss"]) for row in step_history]
-        axes[0].plot(x, y, lw=0.9, label="train step total_loss")
-        axes[0].set_xlabel("global step")
-        axes[0].set_ylabel("loss")
-        axes[0].legend(fontsize=8)
-    else:
-        axes[0].text(0.5, 0.5, "No step history yet", ha="center", va="center")
-    axes[0].grid(True, alpha=0.25)
-
-    if epoch_history:
-        epochs = [int(row["epoch"]) for row in epoch_history]
-        train_loss = [float(row["train"]["total_loss"]) for row in epoch_history]
-        val_loss = [float(row["val"]["total_loss"]) for row in epoch_history]
-        axes[1].plot(epochs, train_loss, marker="o", label="train epoch total_loss")
-        axes[1].plot(epochs, val_loss, marker="o", label="val epoch total_loss")
-        axes[1].set_xlabel("epoch")
-        axes[1].set_ylabel("loss")
-        axes[1].legend(fontsize=8)
-    else:
-        axes[1].text(0.5, 0.5, "No completed epoch yet", ha="center", va="center")
-    axes[1].grid(True, alpha=0.25)
-    fig.tight_layout()
-    tmp = path.with_suffix(path.suffix + ".tmp.png")
-    fig.savefig(tmp, dpi=160)
-    plt.close(fig)
-    tmp.replace(path)
-
-
-def write_training_artifacts(model_dir: Path, history, step_history):
-    write_json_atomic(model_dir / "history.json", history)
-    write_json_atomic(model_dir / "step_history.json", step_history)
-    write_step_history_csv(model_dir / "step_history.csv", step_history)
-    plot_loss_curve(model_dir / "loss_curve.png", step_history, history)
 
 
 def main():
@@ -194,7 +53,9 @@ def main():
     signal.signal(signal.SIGTERM, request_graceful_stop)
     signal.signal(signal.SIGINT, request_graceful_stop)
     if args.max_points != schema.MAX_POINTS:
-        raise ValueError(f"This first version expects max_points={schema.MAX_POINTS}; got {args.max_points}")
+        raise ValueError(
+            f"This first version expects max_points={schema.MAX_POINTS}; got {args.max_points}"
+        )
     if args.mixed_precision:
         tf.keras.mixed_precision.set_global_policy("mixed_float16")
     if args.reconstruction_loss_weight < 0:
@@ -255,21 +116,29 @@ def main():
     if args.multi_gpu:
         if len(logical_gpus) > 1:
             strategy = tf.distribute.MirroredStrategy()
-            print(f"Using MirroredStrategy with {strategy.num_replicas_in_sync} replicas.", flush=True)
+            print(
+                f"Using MirroredStrategy with {strategy.num_replicas_in_sync} replicas.", flush=True
+            )
         else:
-            raise RuntimeError(f"--multi_gpu requires at least two visible GPUs; found {len(logical_gpus)}")
+            raise RuntimeError(
+                f"--multi_gpu requires at least two visible GPUs; found {len(logical_gpus)}"
+            )
 
     if strategy is not None:
         with strategy.scope():
             model = build_model()
             optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate, clipnorm=1.0)
             optimizer.build(model.trainable_variables)
-            reconstruction_weight_var = tf.Variable(0.0, dtype=tf.float32, trainable=False, name="reconstruction_loss_weight")
+            reconstruction_weight_var = tf.Variable(
+                0.0, dtype=tf.float32, trainable=False, name="reconstruction_loss_weight"
+            )
     else:
         model = build_model()
         optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate, clipnorm=1.0)
         optimizer.build(model.trainable_variables)
-        reconstruction_weight_var = tf.Variable(0.0, dtype=tf.float32, trainable=False, name="reconstruction_loss_weight")
+        reconstruction_weight_var = tf.Variable(
+            0.0, dtype=tf.float32, trainable=False, name="reconstruction_loss_weight"
+        )
     loss_weights = LossWeights(
         reconstruction=reconstruction_weight_var,
         reconstruction_q_stride=args.reconstruction_q_stride,
@@ -279,7 +148,9 @@ def main():
     ckpt_epoch = tf.Variable(1, dtype=tf.int64, trainable=False)
     ckpt_step = tf.Variable(0, dtype=tf.int64, trainable=False)
     global_step = tf.Variable(0, dtype=tf.int64, trainable=False)
-    ckpt = tf.train.Checkpoint(model=model, optimizer=optimizer, epoch=ckpt_epoch, step=ckpt_step, global_step=global_step)
+    ckpt = tf.train.Checkpoint(
+        model=model, optimizer=optimizer, epoch=ckpt_epoch, step=ckpt_step, global_step=global_step
+    )
     manager = tf.train.CheckpointManager(ckpt, str(model_dir / "checkpoints"), max_to_keep=20)
     writer = tf.summary.create_file_writer(str(model_dir / "logs"))
 
@@ -287,7 +158,11 @@ def main():
     step_history = load_json_list(model_dir / "step_history.json")
     if manager.latest_checkpoint:
         ckpt.restore(manager.latest_checkpoint).expect_partial()
-        if int(ckpt_epoch.numpy()) == 1 and int(ckpt_step.numpy()) == 0 and int(global_step.numpy()) == 0:
+        if (
+            int(ckpt_epoch.numpy()) == 1
+            and int(ckpt_step.numpy()) == 0
+            and int(global_step.numpy()) == 0
+        ):
             match = re.search(r"ckpt-(\d+)$", manager.latest_checkpoint)
             if match and not step_history:
                 legacy_epoch = int(match.group(1))
@@ -304,7 +179,10 @@ def main():
         )
     elif step_history:
         global_step.assign(int(step_history[-1]["global_step"]))
-        print(f"No checkpoint found, but loaded existing step history through global_step={int(global_step.numpy())}.", flush=True)
+        print(
+            f"No checkpoint found, but loaded existing step history through global_step={int(global_step.numpy())}.",
+            flush=True,
+        )
 
     update_runtime_status(
         model_dir,
@@ -322,7 +200,9 @@ def main():
             preds = model(inputs, training=True)
             losses = compute_losses(labels, preds, loss_weights)
             loss = losses["total_loss"]
-            optimization_loss = loss if strategy is None else loss / float(strategy.num_replicas_in_sync)
+            optimization_loss = (
+                loss if strategy is None else loss / float(strategy.num_replicas_in_sync)
+            )
         grads = tape.gradient(optimization_loss, model.trainable_variables)
         finite_grads = [tf.reduce_all(tf.math.is_finite(g)) for g in grads if g is not None]
         local_finite = tf.reduce_all(
@@ -365,18 +245,30 @@ def main():
         @tf.function
         def train_step(inputs, labels):
             per_replica = strategy.run(train_step_fn, args=(inputs, labels))
-            return {k: strategy.reduce(tf.distribute.ReduceOp.MEAN, v, axis=None) for k, v in per_replica.items()}
+            return {
+                k: strategy.reduce(tf.distribute.ReduceOp.MEAN, v, axis=None)
+                for k, v in per_replica.items()
+            }
 
         @tf.function
         def val_step(inputs, labels):
             per_replica = strategy.run(val_step_fn, args=(inputs, labels))
-            return {k: strategy.reduce(tf.distribute.ReduceOp.MEAN, v, axis=None) for k, v in per_replica.items()}
+            return {
+                k: strategy.reduce(tf.distribute.ReduceOp.MEAN, v, axis=None)
+                for k, v in per_replica.items()
+            }
     else:
         train_step = tf.function(train_step_fn)
         val_step = tf.function(val_step_fn)
 
-    print(f"Training samples={train_count}, val samples={val_count}, steps={train_steps}/{val_steps}", flush=True)
-    print(f"Intervals: log_interval={args.log_interval}, save_interval={args.save_interval}", flush=True)
+    print(
+        f"Training samples={train_count}, val samples={val_count}, steps={train_steps}/{val_steps}",
+        flush=True,
+    )
+    print(
+        f"Intervals: log_interval={args.log_interval}, save_interval={args.save_interval}",
+        flush=True,
+    )
     print(
         f"Fixed train batches: drop_remainder=True, discarded_per_epoch={train_count - train_steps * args.batch_size}",
         flush=True,
@@ -394,7 +286,10 @@ def main():
         ckpt_epoch.assign(start_epoch)
         ckpt_step.assign(0)
     if start_epoch > args.epochs:
-        print(f"Checkpoint already reached epoch {start_epoch}; requested epochs={args.epochs}. Nothing to train.", flush=True)
+        print(
+            f"Checkpoint already reached epoch {start_epoch}; requested epochs={args.epochs}. Nothing to train.",
+            flush=True,
+        )
         write_training_artifacts(model_dir, history, step_history)
         return
 
@@ -404,7 +299,9 @@ def main():
     for epoch in range(start_epoch, args.epochs + 1):
         if args.reconstruction_loss_weight > 0.0 and epoch >= args.reconstruction_start_epoch:
             ramp_step = epoch - args.reconstruction_start_epoch + 1
-            physical_weight = args.reconstruction_loss_weight * min(ramp_step / args.reconstruction_ramp_epochs, 1.0)
+            physical_weight = args.reconstruction_loss_weight * min(
+                ramp_step / args.reconstruction_ramp_epochs, 1.0
+            )
         else:
             physical_weight = 0.0
         reconstruction_weight_var.assign(physical_weight)
@@ -434,11 +331,17 @@ def main():
                     bad_slot_exist = np.asarray(labels["slot_exist"]).astype(float)
                 else:
                     bad_slot_type = np.concatenate(
-                        [np.asarray(v).astype(int) for v in strategy.experimental_local_results(labels["slot_type"])],
+                        [
+                            np.asarray(v).astype(int)
+                            for v in strategy.experimental_local_results(labels["slot_type"])
+                        ],
                         axis=0,
                     )
                     bad_slot_exist = np.concatenate(
-                        [np.asarray(v).astype(float) for v in strategy.experimental_local_results(labels["slot_exist"])],
+                        [
+                            np.asarray(v).astype(float)
+                            for v in strategy.experimental_local_results(labels["slot_exist"])
+                        ],
                         axis=0,
                     )
                 event = {
@@ -473,7 +376,9 @@ def main():
                     )
                 continue
             if not np.isfinite(loss_value):
-                raise RuntimeError(f"Non-finite total_loss at epoch={epoch}, step={step}: {loss_value}")
+                raise RuntimeError(
+                    f"Non-finite total_loss at epoch={epoch}, step={step}: {loss_value}"
+                )
             train_metrics.append(train_row)
             global_step_value = int(global_step.assign_add(1).numpy())
             step_history.append(
@@ -488,7 +393,10 @@ def main():
                 for k, v in train_row.items():
                     tf.summary.scalar(f"train_step/{k}", v, step=global_step_value)
             if args.log_interval > 0 and (step % args.log_interval == 0 or step == train_steps):
-                print(f"epoch {epoch} train step {step}/{train_steps} global_step={global_step_value} loss={loss_value:.5f}", flush=True)
+                print(
+                    f"epoch {epoch} train step {step}/{train_steps} global_step={global_step_value} loss={loss_value:.5f}",
+                    flush=True,
+                )
                 update_runtime_status(
                     model_dir,
                     "running",
@@ -499,14 +407,19 @@ def main():
                     reconstruction_loss_weight=float(physical_weight),
                     latest_train=train_row,
                 )
-            if args.save_interval > 0 and (global_step_value % args.save_interval == 0 or step == train_steps):
+            if args.save_interval > 0 and (
+                global_step_value % args.save_interval == 0 or step == train_steps
+            ):
                 ckpt_epoch.assign(epoch)
                 ckpt_step.assign(step)
                 manager.save(checkpoint_number=global_step_value)
                 write_training_artifacts(model_dir, history, step_history)
                 writer.flush()
                 model.save(model_dir / "model.keras", overwrite=True)
-                print(f"saved progress at epoch {epoch} step {step}/{train_steps} global_step={global_step_value}", flush=True)
+                print(
+                    f"saved progress at epoch {epoch} step {step}/{train_steps} global_step={global_step_value}",
+                    flush=True,
+                )
             if STOP_REQUESTED:
                 ckpt_epoch.assign(epoch)
                 ckpt_step.assign(step)
@@ -527,14 +440,19 @@ def main():
                 return
 
         if not train_metrics:
-            print(f"epoch {epoch}: no new training steps after resume skip; moving to validation.", flush=True)
+            print(
+                f"epoch {epoch}: no new training steps after resume skip; moving to validation.",
+                flush=True,
+            )
 
         val_metrics = []
         for step, (inputs, labels) in enumerate(val_ds, start=1):
             m = val_step(inputs, labels)
             loss_value = float(m["total_loss"].numpy())
             if not np.isfinite(loss_value):
-                raise RuntimeError(f"Non-finite validation total_loss at epoch={epoch}, step={step}: {loss_value}")
+                raise RuntimeError(
+                    f"Non-finite validation total_loss at epoch={epoch}, step={step}: {loss_value}"
+                )
             val_metrics.append(scalar_dict({k: v.numpy() for k, v in m.items()}))
             if STOP_REQUESTED:
                 ckpt_epoch.assign(epoch)
@@ -551,7 +469,9 @@ def main():
                     global_step=int(global_step.numpy()),
                     train_steps=train_steps,
                 )
-                print(f"Graceful stop checkpoint saved during epoch {epoch} validation.", flush=True)
+                print(
+                    f"Graceful stop checkpoint saved during epoch {epoch} validation.", flush=True
+                )
                 return
 
         tr = mean_metrics(train_metrics)

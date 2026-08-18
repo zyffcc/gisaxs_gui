@@ -15,7 +15,8 @@
   数学实现位于 domain，并有数值回归测试；
 - 文件/曲线加载、导出、远程 cache、in-situ records、参数快照、AI artifacts/log、模型参数、
   AI catalog、dependency availability、模型构建和 q-space 均通过 application command 或 port；
-- 具体文件系统、legacy scientific/model registry 和 q-space 实现位于 adapters；
+- 具体文件系统、model registry 和 q-space adapters 均由 fitting feature 持有；旧路径只作
+  import 兼容；
 - `FittingViewModel` 已把 storage、in-situ 与 scientific command groups 拆为独立协作者，主
   ViewModel 保持在 300 行 review 阈值；
 - AI fitting 使用 `Predictor`/model port 与 `JobRunner`，in-situ workflow 复用单文件 fitting
@@ -88,7 +89,8 @@ presentation ownership 与兼容边界以
 - 文件：fabio、h5py、`calibration.image_loader`、`utils.load_SAXS_data`、JSON/CSV/text；
 - scientific/model：`utils.fitting`、q-space calculator、AI fitting profiles/pipeline/constraints/model registry；
 - 状态：`core.global_params`、`core.user_settings`、`ModelParametersManager`；
-- 外部执行：AI fitting `QProcess` 和脚本 `utils/predict_topK.py`。
+- 外部执行：AI fitting worker 和权威脚本
+  `utils/ML_Fitting_1D_GISAXS/Training/predict_topk.py`。
 
 ### 1.3 必须冻结的跨组行为
 
@@ -350,7 +352,8 @@ dynamic widget registry、label/style、dialog state 和 signal connection 不�
 
 - 输入：Fast/Balanced/Exhaustive profile、模型路径、随机种子、candidate/refinement/sample-scale 参数、constraint mode/fixed geometry/advanced bounds、当前 q/I/误差和 excluded q points。
 - `_current_ai_curve_arrays` 负责选择 cut 或导入曲线、清洗有限/正值、axis/ROI 过滤；没有误差时生成 `max(5% × I, 1e-30)`，并要求至少 16 点。
-- controller 把曲线/constraints 写入临时输出目录，通过 `QProcess` 运行 `utils/predict_topK.py`。
+- application/adapter 把曲线与 constraints 写入任务目录，通过 `JobRunner` 运行
+  `utils/ML_Fitting_1D_GISAXS/Training/predict_topk.py`。
 - 输出：process log/progress、candidate/result 文件和 summary；失败以 process exit/error、日志和 UI 状态表达。
 
 ### 6.3 UI 依赖
@@ -398,7 +401,7 @@ workspace、profile/model/constraint widget、input data dialog、log view、按
 |---|---|
 | candidate 文件/表格 | `_show_ai_candidate_table` 读取 `top20_candidates.json` 并构造表格；`_preview_ai_candidate_from_table`、`_load_selected_ai_candidate_from_table`（15,144–15,236） |
 | candidate → 参数 | `_load_ai_candidate_params`（15,239–15,319） |
-| physical constraints | `build_ai_constraints_json_from_ui`、advanced constraints dialog（15,322–15,592）；主要 verification/ranking 实际在外部 `utils/predict_topK.py` pipeline 中完成 |
+| physical constraints | `build_ai_constraints_json_from_ui`、advanced constraints dialog（15,322–15,592）；主要 verification/ranking 由权威 `Training/predict_topk.py` worker 完成 |
 | manual candidate refinement | `_build_manual_refine_setup`、参数 descriptors/bounds、`_run_manual_auto_refine`、`_apply_manual_refine_result`、`_preview_manual_refine_curve`（16,563–16,990） |
 | in-situ refine bridge | `_start_insitu_auto_refine`、`_insitu_auto_refine_selected_params`、refine progress/finish/apply/fail/cleanup（7,851–8,033） |
 

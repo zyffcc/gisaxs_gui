@@ -1,7 +1,6 @@
 """Hand-maintained layout for the folder import dialog."""
 
-
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 
 class FolderImportDialogView:
@@ -41,7 +40,9 @@ class FolderImportDialogView:
         self.nxs.setChecked(True)
         self.nxs.setObjectName("nxs")
         self.include_row.addWidget(self.nxs)
-        spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        spacerItem = QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum
+        )
         self.include_row.addItem(spacerItem)
         self.folder_form.setLayout(1, QtWidgets.QFormLayout.FieldRole, self.include_row)
         self.recursive = QtWidgets.QCheckBox(FolderImportDialog)
@@ -53,7 +54,9 @@ class FolderImportDialogView:
         self.subfolder_note.setObjectName("subfolder_note")
         self.dialog_layout.addWidget(self.subfolder_note)
         self.buttons = QtWidgets.QDialogButtonBox(FolderImportDialog)
-        self.buttons.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.Ok)
+        self.buttons.setStandardButtons(
+            QtWidgets.QDialogButtonBox.Cancel | QtWidgets.QDialogButtonBox.Ok
+        )
         self.buttons.setObjectName("buttons")
         self.dialog_layout.addWidget(self.buttons)
 
@@ -69,6 +72,16 @@ class FolderImportDialogView:
         self.cbf.setText(_translate("FolderImportDialog", "CBF"))
         self.tiff.setText(_translate("FolderImportDialog", "TIFF"))
         self.nxs.setText(_translate("FolderImportDialog", "NXS"))
-        self.recursive.setToolTip(_translate("FolderImportDialog", "Disabled by default to avoid accidentally loading very large folder trees."))
+        self.recursive.setToolTip(
+            _translate(
+                "FolderImportDialog",
+                "Disabled by default to avoid accidentally loading very large folder trees.",
+            )
+        )
         self.recursive.setText(_translate("FolderImportDialog", "Include subfolders"))
-        self.subfolder_note.setText(_translate("FolderImportDialog", "Subfolders are not scanned unless you explicitly enable the option."))
+        self.subfolder_note.setText(
+            _translate(
+                "FolderImportDialog",
+                "Subfolders are not scanned unless you explicitly enable the option.",
+            )
+        )

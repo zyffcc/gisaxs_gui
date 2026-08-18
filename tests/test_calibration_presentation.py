@@ -53,6 +53,15 @@ from src.gimap.features.calibration.presentation.legacy_application import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _dialog_source() -> str:
+    presentation = (
+        PROJECT_ROOT / "src/gimap/features/calibration/presentation"
+    )
+    paths = [presentation / "dialog.py", presentation / "workers.py"]
+    paths.extend(sorted((presentation / "bindings").glob("*.py")))
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
 _TEST_APP = None
 
 
@@ -169,9 +178,7 @@ def test_calibration_layout_is_owned_by_feature_python_view() -> None:
         / "src/gimap/features/calibration/presentation/views"
         / "geometry_calibration_dialog_view.py"
     )
-    dialog_source = (
-        PROJECT_ROOT / "src/gimap/features/calibration/presentation/dialog.py"
-    ).read_text(encoding="utf-8")
+    dialog_source = _dialog_source()
 
     assert view.is_file()
     assert issubclass(GeometryCalibrationDialog, GeometryCalibrationDialogView)
@@ -218,7 +225,7 @@ def test_view_model_owns_calibration_presentation_commands_without_qapplication(
 
 def test_feature_dialog_has_no_migrated_business_or_file_implementation() -> None:
     presentation_root = PROJECT_ROOT / "src" / "gimap" / "features" / "calibration" / "presentation"
-    dialog_source = (presentation_root / "dialog.py").read_text(encoding="utf-8")
+    dialog_source = _dialog_source()
     view_model_source = (presentation_root / "view_model.py").read_text(encoding="utf-8")
 
     assert "ui.geometry_calibration_dialog" not in dialog_source
