@@ -9,12 +9,12 @@ import numpy as np
 
 class CalibrationWaxsImageRepository:
     def frame_count(self, path: Path) -> int:
-        from calibration.image_loader import detect_nxs_frame_count
+        from src.gimap.shared.detector_io import detect_nxs_frame_count
 
         return int(detect_nxs_frame_count(str(path)))
 
     def load_frame(self, path: Path, frame_index: int) -> np.ndarray:
-        from calibration.image_loader import load_detector_image
+        from src.gimap.shared.detector_io import load_detector_image
 
         loaded = load_detector_image(path, frame_idx=frame_index)
         return np.asarray(loaded.data, dtype=np.float32)

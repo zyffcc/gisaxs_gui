@@ -1,0 +1,67 @@
+"""Hand-maintained WAXS integration panel layout."""
+
+
+from PyQt5 import QtCore, QtGui, QtWidgets
+
+
+class WaxsIntegrationPanelView:
+    def setupUi(self, waxsIntegrationPanel):
+        waxsIntegrationPanel.setObjectName("waxsIntegrationPanel")
+        self.integrationPanelLayout = QtWidgets.QFormLayout(waxsIntegrationPanel)
+        self.integrationPanelLayout.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        self.integrationPanelLayout.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
+        self.integrationPanelLayout.setContentsMargins(12, 12, 12, 12)
+        self.integrationPanelLayout.setSpacing(8)
+        self.integrationPanelLayout.setObjectName("integrationPanelLayout")
+        self.integrationModeLabel = QtWidgets.QLabel(waxsIntegrationPanel)
+        self.integrationModeLabel.setObjectName("integrationModeLabel")
+        self.integrationPanelLayout.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.integrationModeLabel)
+        self.integration_mode = QtWidgets.QComboBox(waxsIntegrationPanel)
+        self.integration_mode.setObjectName("integration_mode")
+        self.integration_mode.addItem("")
+        self.integration_mode.addItem("")
+        self.integrationPanelLayout.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.integration_mode)
+        self.binCountLabel = QtWidgets.QLabel(waxsIntegrationPanel)
+        self.binCountLabel.setObjectName("binCountLabel")
+        self.integrationPanelLayout.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.binCountLabel)
+        self.bin_spin = QtWidgets.QSpinBox(waxsIntegrationPanel)
+        self.bin_spin.setMinimum(10)
+        self.bin_spin.setMaximum(20000)
+        self.bin_spin.setProperty("value", 500)
+        self.bin_spin.setObjectName("bin_spin")
+        self.integrationPanelLayout.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.bin_spin)
+        self.smooth_curve_check = QtWidgets.QCheckBox(waxsIntegrationPanel)
+        self.smooth_curve_check.setObjectName("smooth_curve_check")
+        self.integrationPanelLayout.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.smooth_curve_check)
+        self.xAxisModeLabel = QtWidgets.QLabel(waxsIntegrationPanel)
+        self.xAxisModeLabel.setObjectName("xAxisModeLabel")
+        self.integrationPanelLayout.setWidget(3, QtWidgets.QFormLayout.LabelRole, self.xAxisModeLabel)
+        self.x_axis_mode = QtWidgets.QComboBox(waxsIntegrationPanel)
+        self.x_axis_mode.setObjectName("x_axis_mode")
+        self.x_axis_mode.addItem("")
+        self.x_axis_mode.addItem("")
+        self.x_axis_mode.addItem("")
+        self.integrationPanelLayout.setWidget(3, QtWidgets.QFormLayout.FieldRole, self.x_axis_mode)
+        self.integrate_button = QtWidgets.QPushButton(waxsIntegrationPanel)
+        self.integrate_button.setObjectName("integrate_button")
+        self.integrationPanelLayout.setWidget(4, QtWidgets.QFormLayout.FieldRole, self.integrate_button)
+
+        self.retranslateUi(waxsIntegrationPanel)
+        QtCore.QMetaObject.connectSlotsByName(waxsIntegrationPanel)
+        waxsIntegrationPanel.setTabOrder(self.integration_mode, self.bin_spin)
+        waxsIntegrationPanel.setTabOrder(self.bin_spin, self.smooth_curve_check)
+        waxsIntegrationPanel.setTabOrder(self.smooth_curve_check, self.x_axis_mode)
+        waxsIntegrationPanel.setTabOrder(self.x_axis_mode, self.integrate_button)
+
+    def retranslateUi(self, waxsIntegrationPanel):
+        _translate = QtCore.QCoreApplication.translate
+        self.integrationModeLabel.setText(_translate("WaxsIntegrationPanel", "Integration Mode:"))
+        self.integration_mode.setItemText(0, _translate("WaxsIntegrationPanel", "Radial"))
+        self.integration_mode.setItemText(1, _translate("WaxsIntegrationPanel", "Azimuthal"))
+        self.binCountLabel.setText(_translate("WaxsIntegrationPanel", "Number of Bins:"))
+        self.smooth_curve_check.setText(_translate("WaxsIntegrationPanel", "Smooth curve"))
+        self.xAxisModeLabel.setText(_translate("WaxsIntegrationPanel", "X Axis Mode:"))
+        self.x_axis_mode.setItemText(0, _translate("WaxsIntegrationPanel", "q"))
+        self.x_axis_mode.setItemText(1, _translate("WaxsIntegrationPanel", "pixel"))
+        self.x_axis_mode.setItemText(2, _translate("WaxsIntegrationPanel", "2theta"))
+        self.integrate_button.setText(_translate("WaxsIntegrationPanel", "Integrate"))

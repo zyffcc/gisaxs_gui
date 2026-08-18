@@ -166,7 +166,7 @@ def build_sample(ba: Any, config: dict[str, Any], sampled: dict[str, float]) -> 
 
 
 def simulate_raw_24_1(ba: Any, config: dict[str, Any], sampled: dict[str, float]) -> np.ndarray:
-    from trainset.geometry import roi_to_spherical_ranges
+    from ...features.trainset.domain.geometry import roi_to_spherical_ranges
 
     ranges = roi_to_spherical_ranges(config)
     roi = config["roi"]

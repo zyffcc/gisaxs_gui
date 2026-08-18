@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +20,7 @@ from .models import (
     WaxsDisplayRequest,
     WaxsQMapRequest,
 )
-from .ports import WaxsExportPort, WaxsImageRepository
+from .ports import WaxsExportPort, WaxsImageRepository, WaxsPathPort
 from ..domain import (
     circle_cut_profile,
     compute_q_maps,
@@ -30,6 +31,30 @@ from ..domain import (
     prepare_display_array,
     smooth_curve,
 )
+
+
+@dataclass(frozen=True)
+class NormalizeWaxsPath:
+    paths: WaxsPathPort
+
+    def __call__(self, path: str | Path) -> str:
+        return self.paths.normalize(path)
+
+
+@dataclass(frozen=True)
+class GetWaxsWorkingDirectory:
+    paths: WaxsPathPort
+
+    def __call__(self) -> str:
+        return self.paths.current_directory()
+
+
+@dataclass(frozen=True)
+class ValidateWaxsDirectory:
+    paths: WaxsPathPort
+
+    def __call__(self, path: str | Path) -> bool:
+        return self.paths.is_directory(path)
 
 
 class LoadWaxsImage:

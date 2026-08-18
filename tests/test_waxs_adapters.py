@@ -8,6 +8,7 @@ from src.gimap.features.waxs.infrastructure import (
     JobRunnerWaxsBatchAdapter,
     LocalWaxsExportAdapter,
     LocalWaxsFileCatalog,
+    LocalWaxsPathAdapter,
 )
 
 
@@ -42,6 +43,14 @@ def test_local_catalog_filters_supported_extensions_and_sorts(tmp_path):
     paths = LocalWaxsFileCatalog().discover(tmp_path, "*")
 
     assert [path.name for path in paths] == ["a.nxs", "b.tif"]
+
+
+def test_local_path_adapter_normalizes_and_inspects_directories(tmp_path):
+    adapter = LocalWaxsPathAdapter()
+
+    assert adapter.normalize(tmp_path) == str(tmp_path)
+    assert adapter.is_directory(tmp_path)
+    assert Path(adapter.current_directory()).is_dir()
 
 
 def test_local_export_adapter_writes_curve_matrix_and_png(tmp_path):

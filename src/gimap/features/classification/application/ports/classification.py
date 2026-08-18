@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from ..models import (
     ClassificationPredictionRequest,
@@ -14,7 +14,10 @@ from ..models import (
     ImportedDataset,
 )
 from ...domain import (
+    AlgorithmConfig,
+    ClassificationSample,
     DatasetSource,
+    DatasetSummary,
     ExperimentResult,
     FeatureMatrix,
     PredictionResult,
@@ -44,6 +47,18 @@ class ClassificationDatasetPort(Protocol):
         require_labels: bool,
     ) -> FeatureMatrix: ...
 
+    def validate_dataset(
+        self, samples: tuple[ClassificationSample, ...]
+    ) -> DatasetSummary: ...
+
+    def summarize_by_label(
+        self, samples: tuple[ClassificationSample, ...]
+    ) -> dict[str, dict[str, object]]: ...
+
+
+class ClassifierCatalogPort(Protocol):
+    def default_algorithm_configs(self) -> list[AlgorithmConfig]: ...
+
 
 class ClassifierTrainerPort(Protocol):
     def train(
@@ -72,6 +87,19 @@ class ClassificationModelRepository(Protocol):
     def save(self, path: Path, package: SavedModelPackage) -> None: ...
 
     def load(self, path: Path) -> SavedModelPackage: ...
+
+
+class ClassificationArtifactRepository(Protocol):
+    def save_session(self, path: Path, values: dict[str, Any]) -> None: ...
+
+    def load_session(self, path: Path) -> dict[str, Any]: ...
+
+    def export_csv(
+        self,
+        path: Path,
+        columns: tuple[str, ...],
+        rows: tuple[tuple[object, ...], ...],
+    ) -> None: ...
 
 
 class RuntimeVersionPort(Protocol):

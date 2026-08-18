@@ -31,6 +31,9 @@ class WaxsViewModel:
         cut_image,
         prepare_display,
         estimate_display_limits,
+        normalize_path,
+        get_working_directory,
+        validate_directory,
     ):
         self._load_image = load_image
         self._integrate_image = integrate_image
@@ -41,7 +44,19 @@ class WaxsViewModel:
         self._cut_image = cut_image
         self._prepare_display = prepare_display
         self._estimate_display_limits = estimate_display_limits
+        self._normalize_path = normalize_path
+        self._get_working_directory = get_working_directory
+        self._validate_directory = validate_directory
         self.state = WaxsState()
+
+    def normalize_path(self, path: str | Path) -> str:
+        return self._normalize_path(path)
+
+    def working_directory(self) -> str:
+        return self._get_working_directory()
+
+    def is_directory(self, path: str | Path) -> bool:
+        return self._validate_directory(path)
 
     def load_image(self, path: Path, frame_index: int = 0):
         self.state = replace(self.state, image_status="loading", error_message=None)

@@ -47,7 +47,17 @@ class _BatchUseCase(_UseCase):
         return True
 
 
-def _view_model(*, loader=None, integrator=None, batch=None, curve=None, image=None):
+def _view_model(
+    *,
+    loader=None,
+    integrator=None,
+    batch=None,
+    curve=None,
+    image=None,
+    normalize_path=None,
+    get_working_directory=None,
+    validate_directory=None,
+):
     return WaxsViewModel(
         load_image=loader or _UseCase(),
         integrate_image=integrator or _UseCase(),
@@ -58,6 +68,9 @@ def _view_model(*, loader=None, integrator=None, batch=None, curve=None, image=N
         cut_image=_UseCase(),
         prepare_display=_UseCase(),
         estimate_display_limits=_UseCase((0.0, 1.0)),
+        normalize_path=normalize_path or (lambda path: str(path)),
+        get_working_directory=get_working_directory or (lambda: "/tmp"),
+        validate_directory=validate_directory or (lambda path: Path(path).is_dir()),
     )
 
 
@@ -134,3 +147,19 @@ def test_view_model_batch_error_does_not_escape_to_presentation():
     assert view_model.run_batch(object()) is None
     assert view_model.state.batch_status == "error"
     assert view_model.state.error_message == "worker crashed"
+
+
+def test_view_model_delegates_workspace_paths_without_qapplication(tmp_path):
+    normalized = []
+    checked = []
+    view_model = _view_model(
+        normalize_path=lambda path: normalized.append(path) or "normalized",
+        get_working_directory=lambda: "/workspace",
+        validate_directory=lambda path: checked.append(path) or True,
+    )
+
+    assert view_model.normalize_path("scan.nxs") == "normalized"
+    assert view_model.working_directory() == "/workspace"
+    assert view_model.is_directory(tmp_path)
+    assert normalized == ["scan.nxs"]
+    assert checked == [tmp_path]

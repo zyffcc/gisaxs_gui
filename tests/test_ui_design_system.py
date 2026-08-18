@@ -4,7 +4,8 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication, QLabel
+from PyQt5.QtCore import QEvent
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget
 
 from src.gimap.app.presentation import (
     AdvancedSection,
@@ -17,6 +18,7 @@ from src.gimap.app.presentation import (
     ResultTable,
 )
 from src.gimap.app.presentation.showcase import DesignSystemShowcase
+from src.gimap.app.presentation.responsive_layout import AdaptiveWindowProfileController
 
 
 _TEST_APP = None
@@ -54,6 +56,18 @@ def test_shared_components_construct_without_feature_or_scientific_dependencies(
     assert not any("gimap.features" in name for name in imports)
     assert not any(name.startswith("tensorflow") for name in imports)
     assert not any(name.startswith("bornagain") for name in imports)
+
+
+def test_adaptive_profile_event_filter_tolerates_partial_qt_teardown():
+    _app()
+    window = QWidget()
+    controller = AdaptiveWindowProfileController(window)
+    del controller.window
+
+    assert controller.eventFilter(window, QEvent(QEvent.Resize)) is False
+
+    controller.window = window
+    window.removeEventFilter(controller)
 
 
 def test_advanced_section_preserves_children_and_emits_expansion_state():

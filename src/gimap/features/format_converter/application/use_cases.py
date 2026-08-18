@@ -19,6 +19,14 @@ class InspectSource:
 
 
 @dataclass(frozen=True)
+class NormalizePath:
+    repository: SourceRepositoryPort
+
+    def __call__(self, path: str | Path) -> str:
+        return self.repository.normalize_path(path)
+
+
+@dataclass(frozen=True)
 class SelectDataset:
     repository: SourceRepositoryPort
 

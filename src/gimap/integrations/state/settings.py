@@ -33,7 +33,8 @@ class InMemorySettingsRepository:
     """测试、CLI 和无真实配置文件场景使用的 settings repository。"""
 
     def __init__(self, initial: dict[str, dict[str, Any]] | None = None):
-        self._values = deepcopy(initial or {})
+        self._initial_values = deepcopy(initial or {})
+        self._values = deepcopy(self._initial_values)
 
     def get(self, section: str, key: str, default: Any = None) -> Any:
         return _get_nested(self._values.get(section, {}), key, default)
@@ -55,6 +56,9 @@ class InMemorySettingsRepository:
 
     def save(self) -> None:
         return None
+
+    def reset(self) -> None:
+        self._values = deepcopy(self._initial_values)
 
 
 class JsonSettingsRepository(InMemorySettingsRepository):
@@ -115,3 +119,6 @@ class GlobalParamsSettingsRepository:
 
     def save(self) -> None:
         self._manager.save_user_parameters()
+
+    def reset(self) -> None:
+        self._manager.reset_to_initial_parameters()

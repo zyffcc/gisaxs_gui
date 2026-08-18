@@ -6,15 +6,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-from calibration.engine import (
+from ...domain.engine import (
     CalibrationCancelled as LegacyCalibrationCancelled,
     CalibrationEngine,
 )
-from calibration.image_loader import (
+from src.gimap.shared.detector_io import (
     AmbiguousDatasetError as LegacyAmbiguousDatasetError,
     load_detector_image,
 )
 from src.gimap.app import SettingsRepository
+from src.gimap.shared.file_paths import normalize_path
 
 from ...application.errors import (
     AmbiguousImageDatasetError,
@@ -39,6 +40,13 @@ class LocalCalibrationImageAdapter:
 
     def exists(self, path: str | Path) -> bool:
         return Path(path).is_file()
+
+
+class LocalCalibrationPathAdapter:
+    """Normalize user-selected paths at the filesystem boundary."""
+
+    def normalize(self, path: str | Path) -> str:
+        return normalize_path(path)
 
 
 class LegacyCalibrationRunnerAdapter:

@@ -22,6 +22,8 @@ class SettingsRepository(Protocol):
 
     def save(self) -> None: ...
 
+    def reset(self) -> None: ...
+
 
 class SessionRepository(Protocol):
     """ProjectState 的持久化边界。"""

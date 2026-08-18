@@ -13,11 +13,12 @@ from typing import Any
 import h5py
 import numpy as np
 
-from calibration.image_loader import (
+from src.gimap.shared.detector_io import (
     _dataset_candidates,
     load_detector_image,
     select_nxs_dataset,
 )
+from src.gimap.shared.file_paths import normalize_path
 
 from ...application.ports import ProgressCallback
 from ...domain.models import (
@@ -49,8 +50,11 @@ def _json_safe(value: Any) -> Any:
 class LocalSourceRepository:
     """读取并检查本地 detector image sources。"""
 
+    def normalize_path(self, path: str | Path) -> str:
+        return str(Path(normalize_path(path)).expanduser().resolve())
+
     def inspect_source(self, path: str | Path) -> InputSource:
-        source_path = Path(path).expanduser().resolve()
+        source_path = Path(self.normalize_path(path)).expanduser().resolve()
         suffix = source_path.suffix.lower()
         if suffix not in SUPPORTED_SUFFIXES:
             raise ValueError(f"Unsupported input format: {suffix or source_path.name}")
@@ -102,7 +106,7 @@ class LocalSourceRepository:
         include_nxs: bool = True,
         recursive: bool = False,
     ) -> list[str]:
-        root = Path(folder).expanduser().resolve()
+        root = Path(self.normalize_path(folder)).expanduser().resolve()
         if not root.is_dir():
             raise NotADirectoryError(str(root))
         suffixes = set()

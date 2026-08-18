@@ -3,7 +3,9 @@
 from .classification import (
     CancelCallback,
     ClassificationDatasetPort,
+    ClassificationArtifactRepository,
     ClassificationModelRepository,
+    ClassifierCatalogPort,
     ClassifierPredictorPort,
     ClassifierTrainerPort,
     EmbeddingPort,
@@ -14,7 +16,9 @@ from .classification import (
 __all__ = [
     "CancelCallback",
     "ClassificationDatasetPort",
+    "ClassificationArtifactRepository",
     "ClassificationModelRepository",
+    "ClassifierCatalogPort",
     "ClassifierPredictorPort",
     "ClassifierTrainerPort",
     "EmbeddingPort",

@@ -9,6 +9,9 @@ from src.gimap.app import AppContext
 
 from ..application import (
     DiscoverPredictionModules,
+    DiscoverNumberedPredictionFiles,
+    DiscoverPredictionFiles,
+    describe_prediction_module,
     InspectPredictionModel,
     LoadPredictionImage,
     LoadPredictionModule,
@@ -23,8 +26,11 @@ from ..application import (
     PreparePredictionInput,
     ResolvePredictionStack,
     UpdatePredictionModelPath,
+    PredictionSequenceRules,
 )
 from .state import PredictionState
+from .export_view_model import PredictionExportViewModel
+from .file_view_model import PredictionFileViewModel
 
 
 class PredictionViewModel:
@@ -37,12 +43,19 @@ class PredictionViewModel:
         update_model_path: UpdatePredictionModelPath,
         inspect_model: InspectPredictionModel,
         resolve_stack: ResolvePredictionStack,
+        discover_numbered_files: DiscoverNumberedPredictionFiles,
+        discover_files: DiscoverPredictionFiles,
         load_image: LoadPredictionImage,
+        load_mask=None,
         prepare_input: PreparePredictionInput,
         predict_prepared: PredictPreparedInput,
         predict_image: PredictImage,
         predict_file: PredictFileBatch,
         predict_multiple: PredictMultipleFiles,
+        export_jsonl=None,
+        export_ascii=None,
+        export_array=None,
+        sequence_rules: PredictionSequenceRules,
     ):
         self.context = context
         self._discover_modules = discover_modules
@@ -51,12 +64,21 @@ class PredictionViewModel:
         self._inspect_model = inspect_model
         self._resolve_stack = resolve_stack
         self._load_image = load_image
+        self._load_mask = load_mask
         self._prepare_input = prepare_input
         self._predict_prepared = predict_prepared
         self._predict_image = predict_image
         self._predict_file = predict_file
         self._predict_multiple = predict_multiple
         self.state = PredictionState()
+        self.files = PredictionFileViewModel(
+            numbered_files=discover_numbered_files, files=discover_files,
+            sequence_rules=sequence_rules, on_error=self._set_file_error,
+        )
+        self.exports = PredictionExportViewModel(
+            jsonl=export_jsonl, ascii=export_ascii, array=export_array,
+            on_error=self._set_export_error,
+        )
 
     def load_settings(self) -> dict[str, object]:
         return dict(self.context.settings.get_section("gisaxs_predict"))
@@ -109,6 +131,9 @@ class PredictionViewModel:
         if module is not None:
             self.state = replace(self.state, current_module=module, error_message=None)
         return module
+
+    def module_display_values(self, module):
+        return describe_prediction_module(module)
 
     def update_model_path(self, module, model_path: Path) -> bool:
         try:
@@ -164,6 +189,15 @@ class PredictionViewModel:
         )
         return loaded
 
+    def __getattr__(self, name):
+        files = self.__dict__.get("files")
+        if files is not None and hasattr(files, name):
+            return getattr(files, name)
+        raise AttributeError(name)
+
+    def _set_file_error(self, message):
+        self.state = replace(self.state, image_status="error", error_message=message)
+
     def load_paths(self, paths):
         try:
             loaded = self._load_image.execute(tuple(Path(path) for path in paths))
@@ -172,6 +206,16 @@ class PredictionViewModel:
             return None
         self.state = replace(self.state, image_status="ready", current_image=loaded)
         return loaded
+
+    def load_mask(self, path: Path):
+        if self._load_mask is None:
+            self.state = replace(self.state, error_message="Prediction mask loading is unavailable")
+            return None
+        try:
+            return self._load_mask.execute(Path(path))
+        except Exception as exc:
+            self.state = replace(self.state, error_message=str(exc), status_message=str(exc))
+            return None
 
     def prepare_input(self, image, module=None):
         selected = module or self.state.current_module
@@ -238,6 +282,18 @@ class PredictionViewModel:
             batch_progress=(len(result.items) / len(request.batches) if request.batches else 1.0),
         )
         return result
+
+    def _set_export_error(self, message):
+        self.state = replace(self.state, error_message=message, status_message=message)
+
+    def export_jsonl(self, items, export_path: Path, timestamp: str):
+        return self.exports.export_jsonl(items, export_path, timestamp)
+
+    def export_ascii(self, items, export_path: Path, timestamp: str):
+        return self.exports.export_ascii(items, export_path, timestamp)
+
+    def export_array(self, request):
+        return self.exports.export_array(request)
 
     def cancel_multiple(self) -> None:
         self._predict_multiple.cancel()

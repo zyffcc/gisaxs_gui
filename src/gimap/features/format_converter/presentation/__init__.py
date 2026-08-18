@@ -1,6 +1,16 @@
-"""Format Converter 的 ViewModel 与 legacy dialog bridge。"""
+"""Format Converter 的 Qt-free ViewModel 与 presentation state。"""
 
 from .view_model import AddPathsResult, FormatConverterViewModel
-from .state import FormatConverterState
+from .state import (
+    ConversionReviewState,
+    FormatConverterState,
+    OutputPreviewState,
+)
 
-__all__ = ["AddPathsResult", "FormatConverterState", "FormatConverterViewModel"]
+__all__ = [
+    "AddPathsResult",
+    "ConversionReviewState",
+    "FormatConverterState",
+    "FormatConverterViewModel",
+    "OutputPreviewState",
+]

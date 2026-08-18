@@ -7,18 +7,27 @@ from src.gimap.features.classification.application import (
     BuildClassificationModelPackage,
     BuildClassificationModelPackageRequest,
     BuildFeatureMatrixRequest,
+    ClassificationCsvRequest,
+    ClassificationSessionRequest,
     ClassificationPredictionRequest,
     ClassificationTrainingRequest,
     ComputeClassificationEmbedding,
+    EstimateClassificationFeatureMemory,
+    ExportClassificationCsv,
     EmbeddingRequest,
     EmbeddingResult,
     ImportClassificationDataset,
     ImportDatasetRequest,
     LoadClassificationModel,
+    LoadClassificationSession,
+    ListClassificationAlgorithms,
     PredictClassification,
     SaveClassificationModel,
+    SaveClassificationSession,
     SaveClassificationModelRequest,
     TrainClassifiers,
+    SummarizeClassificationDataset,
+    ValidateClassificationDataset,
 )
 from src.gimap.features.classification.application.models import ImportedDataset
 from src.gimap.features.classification.domain import (
@@ -62,6 +71,17 @@ class _Datasets:
     def build_feature_matrix(self, samples, preprocessing, *, require_labels):
         self.built = (samples, preprocessing, require_labels)
         return _matrix()
+
+    def validate_dataset(self, samples):
+        return DatasetSummary(classes=2, total_samples=len(samples))
+
+    def summarize_by_label(self, samples):
+        return {"A": {"files": len(samples)}}
+
+
+class _Catalog:
+    def default_algorithm_configs(self):
+        return [AlgorithmConfig("fake", "Fake", True)]
 
 
 class _Trainer:
@@ -107,6 +127,21 @@ class _Models:
         return self.saved[1]
 
 
+class _Artifacts:
+    def __init__(self):
+        self.sessions = {}
+        self.csv = None
+
+    def save_session(self, path, values):
+        self.sessions[Path(path)] = dict(values)
+
+    def load_session(self, path):
+        return dict(self.sessions[Path(path)])
+
+    def export_csv(self, path, columns, rows):
+        self.csv = (Path(path), columns, rows)
+
+
 class _Versions:
     def version(self, distribution):
         return {"scikit-learn": "fake-sklearn", "numpy": "fake-numpy"}[distribution]
@@ -146,6 +181,22 @@ def test_data_use_cases_separate_loading_and_feature_construction():
     assert imported.summary.total_samples == 1
     assert matrix.X.shape == (2, 2)
     assert datasets.built[2] is True
+
+
+def test_dataset_analysis_and_algorithm_catalog_use_application_ports():
+    datasets = _Datasets()
+    samples = (_sample("A"), _sample("B"))
+    matrix = _matrix()
+
+    summary = ValidateClassificationDataset(datasets).execute(samples)
+    by_label = SummarizeClassificationDataset(datasets).execute(samples)
+    memory = EstimateClassificationFeatureMemory().execute(matrix)
+    algorithms = ListClassificationAlgorithms(_Catalog()).execute()
+
+    assert summary.classes == 2
+    assert by_label["A"]["files"] == 2
+    assert memory == "32 B"
+    assert algorithms[0].algorithm_id == "fake"
 
 
 def test_training_use_case_uses_fake_classifier_without_ml_runtime():
@@ -210,3 +261,22 @@ def test_model_package_metadata_uses_version_port_without_importing_sklearn():
     assert package.sklearn_version == "fake-sklearn"
     assert package.numpy_version == "fake-numpy"
     assert package.training_date == "2026-01-02T03:04:05"
+
+
+def test_session_and_csv_use_cases_use_artifact_port_without_filesystem(tmp_path):
+    artifacts = _Artifacts()
+    session_path = tmp_path / "session.json"
+    csv_path = tmp_path / "results.csv"
+
+    saved = SaveClassificationSession(artifacts).execute(
+        ClassificationSessionRequest(session_path, {"ranking_metric": "macro_f1"})
+    )
+    loaded = LoadClassificationSession(artifacts).execute(session_path)
+    exported = ExportClassificationCsv(artifacts).execute(
+        ClassificationCsvRequest(csv_path, ("rank", "score"), ((1, 0.9),))
+    )
+
+    assert saved == session_path
+    assert loaded == {"ranking_metric": "macro_f1"}
+    assert exported == csv_path
+    assert artifacts.csv == (csv_path, ("rank", "score"), ((1, 0.9),))

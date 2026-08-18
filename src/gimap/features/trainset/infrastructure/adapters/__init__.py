@@ -9,6 +9,17 @@ from .keras_modeling import (
 )
 from .legacy_generation import LegacyDatasetGenerationAdapter
 from .project_config import LocalTrainsetConfigRepository
+from .preview import TrainsetPreviewAdapter
+from .job_packages import PortableTrainsetJobPackageAdapter
+from .qt_local_process import QtTrainsetLocalProcessAdapter
+from .model_registration import LocalTrainsetModelRegistrationAdapter
+from .remote_jobs import (
+    LocalTrainsetMetricsRepository,
+    SlurmTrainsetRemoteJobAdapter,
+)
+from .design import TrainsetDesignAdapter
+from .configuration_policy import TrainsetConfigurationAdapter
+from .model_contract import TensorFlowModelContractAdapter
 
 __all__ = [
     "build_keras_model",
@@ -18,4 +29,13 @@ __all__ = [
     "static_contract",
     "LegacyDatasetGenerationAdapter",
     "LocalTrainsetConfigRepository",
+    "TrainsetPreviewAdapter",
+    "PortableTrainsetJobPackageAdapter",
+    "QtTrainsetLocalProcessAdapter",
+    "LocalTrainsetModelRegistrationAdapter",
+    "LocalTrainsetMetricsRepository",
+    "SlurmTrainsetRemoteJobAdapter",
+    "TrainsetDesignAdapter",
+    "TrainsetConfigurationAdapter",
+    "TensorFlowModelContractAdapter",
 ]

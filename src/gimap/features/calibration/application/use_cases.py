@@ -8,6 +8,7 @@ from pathlib import Path
 from ..domain import CalibrationRequest, CalibrationResult, DetectorImage
 from .ports import (
     CalibrationImagePort,
+    CalibrationPathPort,
     CalibrationRunnerPort,
     CalibrationStoragePort,
     CancellationCheck,
@@ -33,6 +34,14 @@ class LoadCalibrationImage:
         dataset_path: str | None = None,
     ) -> DetectorImage:
         return self.images.load(path, dataset_path)
+
+
+@dataclass(frozen=True)
+class NormalizeCalibrationPath:
+    paths: CalibrationPathPort
+
+    def __call__(self, path: str | Path) -> str:
+        return self.paths.normalize(path)
 
 
 @dataclass(frozen=True)

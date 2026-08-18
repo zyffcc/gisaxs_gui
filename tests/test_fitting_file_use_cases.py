@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import h5py
 import numpy as np
 from PIL import Image
 
@@ -10,11 +11,20 @@ from src.gimap.features.fitting.application import (
     LoadCurveRequest,
     LoadScatteringFile,
     LoadScatteringFileRequest,
+    InspectScatteringSequence,
+    ManageRemoteFileCache,
+    ManageFittingParameterFiles,
+    SaveFittingLog,
+    CheckFittingDependency,
 )
 from src.gimap.features.fitting.infrastructure.adapters import (
     LocalCurveRepository,
     LocalFitResultRepository,
     LocalScatteringFileRepository,
+    LocalRemoteFileCacheAdapter,
+    LocalFittingParameterFileRepository,
+    LocalFittingLogRepository,
+    ImportlibFittingDependencyAvailabilityAdapter,
 )
 
 
@@ -73,6 +83,23 @@ def test_load_scattering_file_returns_structured_format_error(tmp_path):
     assert outcome.error.details["operation"] == "read"
 
 
+def test_inspect_scattering_sequence_uses_repository_without_qapplication(tmp_path):
+    paths = [tmp_path / f"scan_m0{index}.nxs" for index in (1, 2)]
+    for path in paths:
+        with h5py.File(path, "w") as handle:
+            handle.create_dataset(
+                "/entry/instrument/detector/data",
+                data=np.zeros((3, 4, 6), dtype=np.float32),
+            )
+
+    info = InspectScatteringSequence(LocalScatteringFileRepository()).execute(paths[1])
+
+    assert info.logical_path == paths[0].resolve()
+    assert info.series_paths == tuple(path.resolve() for path in paths)
+    assert info.frame_count == 3
+    assert info.uses_internal_frames
+
+
 def test_export_fit_result_preserves_legacy_txt_and_csv_format(tmp_path):
     use_case = ExportFitResult(LocalFitResultRepository())
     common = dict(
@@ -114,3 +141,70 @@ def test_export_fit_result_returns_structured_file_error(tmp_path):
     assert not outcome.succeeded
     assert outcome.error.code in {"not_found", "write_failed"}
     assert Path(outcome.error.path) == missing_parent
+
+
+def test_remote_cache_use_case_preserves_copy_reuse_and_clear_contract(tmp_path):
+    project_root = tmp_path / "project"
+    source_dir = tmp_path / "OneDrive" / "beamtime"
+    source_dir.mkdir(parents=True)
+    source = source_dir / "frame.cbf"
+    source.write_bytes(b"detector-data")
+    cache = ManageRemoteFileCache(LocalRemoteFileCacheAdapter(project_root))
+    progress = []
+
+    copied = cache.prepare(
+        str(source),
+        cache.default_directory(),
+        3.0,
+        on_progress=lambda *values: progress.append(values),
+    )
+    reused = cache.prepare(
+        str(source),
+        cache.default_directory(),
+        3.0,
+        on_progress=lambda *values: progress.append(values),
+    )
+    unrelated = copied.parent / "keep.txt"
+    unrelated.write_text("keep", encoding="utf-8")
+
+    assert cache.is_remote(str(source))
+    assert copied == reused
+    assert copied.read_bytes() == source.read_bytes()
+    assert progress[-1][0] == 100
+    assert cache.clear(cache.default_directory()) == 1
+    assert unrelated.is_file()
+
+
+def test_parameter_file_use_case_preserves_json_and_copy_contract(tmp_path):
+    files = ManageFittingParameterFiles(LocalFittingParameterFileRepository())
+    snapshot = tmp_path / "nested" / "fitting.json"
+    values = {"schema_version": 1, "fitting": {"points_num": 50}}
+
+    files.save_snapshot(snapshot, values)
+    assert files.load_snapshot(snapshot) == values
+    assert snapshot.read_text(encoding="utf-8").startswith("{\n    \"schema_version\"")
+
+    exported = tmp_path / "exported.json"
+    files.export_model_parameters(snapshot, exported)
+    assert exported.read_bytes() == snapshot.read_bytes()
+
+
+def test_fitting_log_use_case_preserves_plain_text(tmp_path):
+    target = tmp_path / "logs" / "fitting.log"
+
+    saved = SaveFittingLog(LocalFittingLogRepository()).execute(
+        target,
+        "first line\nsecond line",
+    )
+
+    assert saved == target
+    assert target.read_text(encoding="utf-8") == "first line\nsecond line"
+
+
+def test_optional_dependency_query_does_not_import_runtime():
+    availability = CheckFittingDependency(
+        ImportlibFittingDependencyAvailabilityAdapter()
+    )
+
+    assert availability.execute("numpy") is True
+    assert availability.execute("definitely_missing_gimap_runtime") is False

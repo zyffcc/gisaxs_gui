@@ -10,22 +10,14 @@ import warnings
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from ui.main_window import Ui_MainWindow  # 导入转换后的 UI 类
-from ui.app_assets import app_icon
-from ui.components import MainWindowComponents
-from ui.menu_manager import MenuManager
-from controllers.main_controller import MainController
-from core.window_manager import window_manager
+from src.gimap.app.window_view import ApplicationWindowView
+from src.gimap.app.presentation.assets import app_icon
+from src.gimap.app.main_window import MainWindowComponents
+from src.gimap.app.menu_manager import MenuManager
+from src.gimap.app.runtime import ApplicationRuntime
 from src.gimap.app import AppContext
 from src.gimap.app.bootstrap import create_app_context
-
-from utils.parameter_access import (
-    get_all_software_params, 
-    get_physics_params_for_calculation,
-    get_param_by_path,
-    validate_params_for_physics
-)
-
+from src.gimap.integrations.bornagain import BornAgainSimulator
 
 def configure_application_font(app: QApplication, point_size: int = 9) -> None:
     """Install the normal UI font once, immediately after QApplication exists."""
@@ -37,7 +29,7 @@ def configure_application_font(app: QApplication, point_size: int = 9) -> None:
     app.setFont(font)
 
 
-class MainWindow(QMainWindow, Ui_MainWindow):
+class MainWindow(QMainWindow, ApplicationWindowView):
     def __init__(self, app_context: AppContext):
         super().__init__()
         self.app_context = app_context
@@ -81,14 +73,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.statusbar.showMessage("Initializing menus...")
             
             # 初始化菜单管理器
-            self.menu_manager = MenuManager(self)
+            self.menu_manager = MenuManager(self, settings=self.app_context.settings)
             
             # 更新状态栏
             if hasattr(self, 'statusbar'):
-                self.statusbar.showMessage("Initializing controllers...")
+                self.statusbar.showMessage("Initializing feature workspaces...")
             
-            # 初始化主控制器
-            self.main_controller = MainController(self, self)
+            # 初始化 application runtime
+            self.runtime = ApplicationRuntime(
+                self,
+                self,
+                simulation_port=BornAgainSimulator(runner=self.app_context.jobs),
+            )
 
             
             
@@ -128,8 +124,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def show_display_settings(self):
         """显示显示设置对话框"""
         try:
-            from ui.settings_dialog import SettingsDialog
-            dialog = SettingsDialog(self)
+            from src.gimap.app.presentation.settings_dialog import SettingsDialog
+            dialog = SettingsDialog(
+                self,
+                preferences=self.app_context.preferences,
+            )
             dialog.exec_()
         except ImportError:
             # If settings_dialog is missing, show a notice
@@ -137,116 +136,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             QMessageBox.information(self, "Information", "Display settings are under development...")
     
     def setup_window(self):
-        """设置窗口属性"""
-        # 使用窗口管理器设置自适应窗口（使用配置中的默认值）
-        if hasattr(self, 'components'):
-            scale = 1.0
-        else:
-            scale = window_manager.setup_adaptive_window(self)
-        
-        # 应用自适应字体
-        window_manager.apply_adaptive_font(self)
-        
-        # 存储缩放比例供其他组件使用
+        """Apply the injected UI scale after the app-owned shell is composed."""
+        from src.gimap.app.presentation.responsive_layout import effective_ui_scale
+
+        scale = effective_ui_scale(
+            self,
+            preferences=self.app_context.preferences,
+        ) / 100.0
+        app = QApplication.instance()
+        font = QFont(app.font() if app is not None else self.font())
+        font.setPointSizeF(max(4.0, 9.0 * scale))
+        if app is not None:
+            app.setFont(font)
         self.scale_factor = scale
-        
-        # 设置StackedWidget的自适应行为
-        self._setup_stacked_widget()
-    
-    def _setup_stacked_widget(self):
-        """设置StackedWidget的自适应行为"""
-        if hasattr(self, 'components'):
-            return
-        try:
-            from utils.layout_utils import LayoutUtils
-            if hasattr(self, 'mainWindowWidget'):
-                LayoutUtils.setup_adaptive_stacked_widget(self.mainWindowWidget)
-        except ImportError as e:
-            # 布局工具导入失败，使用默认设置
-            pass
-        except Exception as e:
-            # StackedWidget设置失败，使用默认设置
-            pass
-
-    def _install_splitter(self):
-        """在中央区域为侧边栏与主内容添加可调整比例的分割器（不改 .ui）。"""
-        try:
-            from PyQt5.QtWidgets import QSplitter
-            from PyQt5.QtCore import Qt
-
-            # 中央部件已有水平布局，包含侧边栏与主内容
-            if not hasattr(self, 'horizontalLayout') or not hasattr(self, 'sideBarScrollArea') or not hasattr(self, 'mainContentWidget'):
-                return
-
-            # 如果已经安装过分割器则跳过
-            # 通过检查父子关系或类型来判断
-            if isinstance(self.sideBarScrollArea.parentWidget(), QSplitter) and isinstance(self.mainContentWidget.parentWidget(), QSplitter):
-                return
-
-            splitter = QSplitter(self.centralwidget)
-            splitter.setOrientation(Qt.Horizontal)
-            splitter.setHandleWidth(6)
-
-            # 解除原布局中的控件占位并加入分割器
-            # 从布局中移除元素但不删除控件
-            idx = self.horizontalLayout.indexOf(self.sideBarScrollArea)
-            if idx != -1:
-                self.horizontalLayout.takeAt(idx)
-            idx = self.horizontalLayout.indexOf(self.mainContentWidget)
-            if idx != -1:
-                self.horizontalLayout.takeAt(idx)
-
-            splitter.addWidget(self.sideBarScrollArea)
-            splitter.addWidget(self.mainContentWidget)
-
-            # 侧边栏当前是固定150宽度（minimum/maximum都为150），为了允许拖动，
-            # 放宽最大宽度并保留最小宽度以保证最小显示。
-            try:
-                self.sideBarScrollArea.setMaximumWidth(16777215)
-                self.mainAreaWidgetContents.setMaximumWidth(16777215)
-            except Exception:
-                pass
-
-            # 设置初始比例：侧边栏150，主内容其余
-            # 使用总宽度的近似值来初始化
-            total = max(self.width(), 800)
-            sidebar = 150
-            main = max(total - sidebar, 400)
-            splitter.setSizes([sidebar, main])
-
-            # 将分割器加入到原有水平布局
-            self.horizontalLayout.addWidget(splitter)
-            # 记住分割器引用
-            self._main_splitter = splitter
-
-            # 允许两个面板都可拉伸
-            splitter.setStretchFactor(0, 0)  # 保持侧边栏最小占比
-            splitter.setStretchFactor(1, 1)  # 主内容随窗口扩展
-
-        except Exception as e:
-            # 分割器安装失败则忽略，不影响原布局
-            print(f"Install splitter failed: {e}")
-
-    def _restore_splitter_sizes(self):
-        """从用户设置恢复分割器比例。"""
-        try:
-            from core.user_settings import user_settings
-            sizes = user_settings.get('main_splitter_sizes', None)
-            if sizes and hasattr(self, '_main_splitter'):
-                # 验证为两个整数
-                if isinstance(sizes, (list, tuple)) and len(sizes) == 2:
-                    s0 = max(50, int(sizes[0]))
-                    s1 = max(100, int(sizes[1]))
-                    self._main_splitter.setSizes([s0, s1])
-        except Exception:
-            pass
     
     def closeEvent(self, event):
         """窗口关闭事件 - 通过主控制器统一保存会话"""
         try:
             # 通过主控制器统一保存当前会话
-            if hasattr(self, 'main_controller'):
-                self.main_controller.handle_window_close()
+            if hasattr(self, 'runtime'):
+                self.runtime.handle_window_close()
             # 保存分割器比例到用户设置
             try:
                 if hasattr(self, 'components'):
@@ -284,11 +193,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     
     def get_software_parameters(self):
         """提供给外部调用的参数获取方法"""
-        return get_all_software_params()
+        return self.app_context.settings.snapshot()
     
     def get_physics_parameters(self):
         """提供给外部调用的物理参数获取方法"""
-        return get_physics_params_for_calculation()
+        return {
+            section: self.app_context.settings.get_section(section)
+            for section in ("beam", "detector", "sample", "system")
+        }
 
 
 def main():

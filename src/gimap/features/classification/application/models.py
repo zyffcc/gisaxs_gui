@@ -82,6 +82,19 @@ class SaveClassificationModelRequest:
 
 
 @dataclass(frozen=True)
+class ClassificationSessionRequest:
+    path: Path
+    values: dict
+
+
+@dataclass(frozen=True)
+class ClassificationCsvRequest:
+    path: Path
+    columns: tuple[str, ...]
+    rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class BuildClassificationModelPackageRequest:
     pipeline: object
     algorithm_id: str

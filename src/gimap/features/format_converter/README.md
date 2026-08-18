@@ -7,5 +7,7 @@ presentation → application → domain
 infrastructure → implements application ports
 ```
 
-`utils.format_converter` 和 `ui.format_converter_dialog` 暂时保留为兼容入口。核心转换
-不依赖 QApplication；Qt dialog 通过 ViewModel 调用 application use cases。
+`utils.format_converter` 暂时保留 domain/infrastructure 旧 API，
+`ui.format_converter_dialog` 暂时保留为 presentation import 兼容入口。PyQt dialog 的
+唯一实现已经由本 feature 拥有，并通过 ViewModel 调用 application use cases；核心
+转换不依赖 QApplication。

@@ -8,8 +8,10 @@ from .context import AppContext
 from .ports import SessionRepository
 from ..integrations.state import (
     GlobalParamsSettingsRepository,
+    LegacyUserPreferencesRepository,
     InMemorySessionRepository,
     JsonSessionRepository,
+    JsonProjectParametersRepository,
 )
 from ..integrations.jobs import LocalProcessJobRunner
 
@@ -21,11 +23,14 @@ def create_app_context(
 ) -> AppContext:
     """包装现有 global_params；本函数不缓存或创建新的全局 context。"""
     from core.global_params import global_params
+    from core.user_settings import user_settings
 
     context = AppContext(
         settings=GlobalParamsSettingsRepository(global_params),
+        preferences=LegacyUserPreferencesRepository(user_settings),
         session=session or JsonSessionRepository(Path(".gimap_cache") / "session.json"),
         jobs=LocalProcessJobRunner(),
+        project_parameters=JsonProjectParametersRepository(),
     )
     if restore_session:
         context.restore_session()

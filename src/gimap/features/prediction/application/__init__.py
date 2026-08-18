@@ -1,8 +1,11 @@
 """Prediction application public API。"""
 
+from .module_descriptions import describe_prediction_module
+from .sequence_rules import PredictionSequenceRules
 from .models import (
     FilePredictionResult,
     ImagePredictionResult,
+    IndexedPredictionFile,
     LoadedPredictionImage,
     MultiplePredictionResult,
     PredictFileBatchRequest,
@@ -10,19 +13,29 @@ from .models import (
     PredictMultipleFilesRequest,
     PredictPreparedInputRequest,
     PredictionProgress,
+    PredictionExportItem,
+    PredictionArrayExportRequest,
     PreprocessedPredictionInput,
 )
 from .ports import (
     ModuleRepository,
     PredictionFileCatalog,
     PredictionImageRepository,
+    PredictionMaskRepository,
     Predictor,
     Preprocessor,
+    PredictionExportRepository,
 )
 from .use_cases import (
+    DiscoverNumberedPredictionFiles,
+    DiscoverPredictionFiles,
     DiscoverPredictionModules,
+    ExportPredictionAscii,
+    ExportPredictionArray,
+    ExportPredictionJsonl,
     InspectPredictionModel,
     LoadPredictionImage,
+    LoadPredictionMask,
     LoadPredictionModule,
     PredictFileBatch,
     PredictImage,
@@ -35,11 +48,20 @@ from .use_cases import (
 )
 
 __all__ = [
+    "DiscoverNumberedPredictionFiles",
+    "DiscoverPredictionFiles",
     "DiscoverPredictionModules",
+    "describe_prediction_module",
+    "PredictionSequenceRules",
+    "ExportPredictionAscii",
+    "ExportPredictionArray",
+    "ExportPredictionJsonl",
     "FilePredictionResult",
     "ImagePredictionResult",
+    "IndexedPredictionFile",
     "InspectPredictionModel",
     "LoadPredictionImage",
+    "LoadPredictionMask",
     "LoadPredictionModule",
     "LoadedPredictionImage",
     "ModuleRepository",
@@ -54,7 +76,11 @@ __all__ = [
     "PredictPreparedInputRequest",
     "PredictionFileCatalog",
     "PredictionImageRepository",
+    "PredictionMaskRepository",
     "PredictionProgress",
+    "PredictionExportItem",
+    "PredictionArrayExportRequest",
+    "PredictionExportRepository",
     "Predictor",
     "PreprocessedPredictionInput",
     "Preprocessor",

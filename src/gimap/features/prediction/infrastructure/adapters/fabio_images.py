@@ -6,7 +6,8 @@ from pathlib import Path
 
 import numpy as np
 
-from ...application import LoadedPredictionImage
+from ...application import IndexedPredictionFile, LoadedPredictionImage
+from ...domain import extract_cbf_index
 
 
 class LocalPredictionFileCatalog:
@@ -33,6 +34,38 @@ class LocalPredictionFileCatalog:
                 f"Requested {requested} stack files from {start.name}, found {len(selected)}"
             )
         return selected
+
+    def numbered_files(
+        self, folder: Path, suffix: str = ".cbf"
+    ) -> tuple[IndexedPredictionFile, ...]:
+        root = Path(folder)
+        normalized_suffix = suffix.casefold()
+        if not root.is_dir():
+            raise NotADirectoryError(root)
+        indexed = []
+        for path in sorted(root.iterdir(), key=lambda item: item.name.casefold()):
+            if not path.is_file() or path.suffix.casefold() != normalized_suffix:
+                continue
+            index = extract_cbf_index(path.name)
+            if index is not None:
+                indexed.append(IndexedPredictionFile(path.resolve(), index))
+        return tuple(indexed)
+
+    def compatible_files(
+        self, folder: Path, suffixes: tuple[str, ...]
+    ) -> tuple[Path, ...]:
+        root = Path(folder)
+        if not root.is_dir():
+            raise NotADirectoryError(root)
+        allowed = {
+            suffix.casefold() if suffix.startswith(".") else f".{suffix.casefold()}"
+            for suffix in suffixes
+        }
+        return tuple(
+            path.resolve()
+            for path in sorted(root.iterdir(), key=lambda item: item.name.casefold())
+            if path.is_file() and path.suffix.casefold() in allowed
+        )
 
 
 class FabioPredictionImageRepository:

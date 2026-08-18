@@ -8,7 +8,11 @@ from pathlib import Path
 
 import numpy as np
 
-from calibration.image_loader import detect_nxs_frame_count, load_detector_image
+from src.gimap.shared.detector_io import (
+    detect_nxs_frame_count,
+    load_detector_image,
+    nxs_series_paths,
+)
 from utils.load_SAXS_data import load_xy_any
 
 from ...application.models import (
@@ -17,6 +21,7 @@ from ...application.models import (
     LoadCurveRequest,
     LoadScatteringFileRequest,
     ScatteringFileData,
+    ScatteringSequenceInfo,
 )
 from ...domain import CurveData
 
@@ -79,6 +84,15 @@ class LocalScatteringFileRepository:
                 "effective_files": tuple(str(item) for item in effective_files),
             },
         )
+
+    def inspect_sequence(self, path) -> ScatteringSequenceInfo:
+        source = Path(path).expanduser().resolve()
+        if source.suffix.lower() != ".nxs":
+            return ScatteringSequenceInfo(source, source, (source,), 1)
+        series = tuple(nxs_series_paths(source))
+        logical_path = series[0] if series else source
+        frame_count = max(1, int(detect_nxs_frame_count(source)))
+        return ScatteringSequenceInfo(source, logical_path, series or (source,), frame_count)
 
     def _load_nxs(self, source: Path, frame_index: int, stack_count: int):
         frame_count = max(1, int(detect_nxs_frame_count(source)))

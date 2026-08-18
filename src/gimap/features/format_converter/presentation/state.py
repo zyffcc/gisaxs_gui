@@ -3,6 +3,26 @@
 from dataclasses import dataclass
 
 
+@dataclass(frozen=True)
+class OutputPreviewState:
+    example: str
+    image_count: int
+    file_count: int
+    estimated_bytes: int
+    dtype_warning: str
+
+
+@dataclass(frozen=True)
+class ConversionReviewState:
+    input_summary: str
+    image_count: int
+    output_files: int
+    estimated_bytes: int
+    destination: str
+    naming: str
+    is_large_output: bool
+
+
 @dataclass
 class FormatConverterState:
     destination: str = ""

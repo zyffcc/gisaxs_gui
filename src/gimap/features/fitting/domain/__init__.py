@@ -18,6 +18,11 @@ from .curve_transformations import (
     valid_y_values_for_limits,
 )
 from .cut_math import extract_pixel_profile, extract_q_profile, sample_q_mesh_line
+from .detector_settings import (
+    DetectorSettings,
+    energy_to_wavelength,
+    wavelength_to_energy,
+)
 from .image_transforms import (
     apply_input_image_options,
     apply_threshold_mask,
@@ -26,6 +31,7 @@ from .image_transforms import (
     mirror_fill_detector_gaps,
 )
 from .manual_refinement import run_manual_refinement
+from .insitu_cut import compute_insitu_cut
 from .manual_fit import ManualFitRequest, ManualFitResult
 from .models import CurveData, CutResult, CutSelection, FittingParameterSet, ParameterValue
 from .physical_constraints import (
@@ -43,6 +49,7 @@ __all__ = [
     "CandidateParameterMapping",
     "CutResult",
     "CutSelection",
+    "DetectorSettings",
     "ConstraintSet",
     "ConstraintViolation",
     "FittingParameterSet",
@@ -59,6 +66,7 @@ __all__ = [
     "default_refine_selected",
     "extract_pixel_profile",
     "extract_q_profile",
+    "energy_to_wavelength",
     "exclusion_size",
     "filter_axis",
     "filter_for_display",
@@ -75,8 +83,10 @@ __all__ = [
     "q_values_for_model",
     "prepare_ai_curve",
     "run_manual_refinement",
+    "compute_insitu_cut",
     "sample_q_mesh_line",
     "sort_filter_pairs",
     "valid_y_values_for_limits",
     "verify_and_rank_candidates",
+    "wavelength_to_energy",
 ]

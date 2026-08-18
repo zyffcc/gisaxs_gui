@@ -5,14 +5,12 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-import tensorflow as tf
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from TrainSetBuild import schema
 from TrainSetBuild.physics_adapter import component_array_to_dict, evaluate_clean, global_array_to_dict
-from TrainSetBuild.tfrecord_io import parse_example
 
 
 def log_rmse(a, b):
@@ -37,6 +35,10 @@ class ParamMaskingTest(unittest.TestCase):
         shards = sorted(train_dir.glob("*.tfrecord"))
         if not shards:
             self.skipTest(f"No TFRecord shards found in {train_dir}")
+
+        import tensorflow as tf
+
+        from TrainSetBuild.tfrecord_io import parse_example
 
         sample = None
         ds = tf.data.TFRecordDataset([str(s) for s in shards]).map(parse_example)

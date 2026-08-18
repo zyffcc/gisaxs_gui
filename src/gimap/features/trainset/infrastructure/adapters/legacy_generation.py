@@ -10,7 +10,7 @@ class LegacyDatasetGenerationAdapter:
         self.simulation_port = simulation_port
 
     def generate(self, request, *, on_progress=None, pause=None):
-        from trainset.generator import DatasetGenerator
+        from .dataset_generator import DatasetGenerator
 
         generator = DatasetGenerator(
             request.config,

@@ -25,7 +25,6 @@ select = ["E9", "F63", "F7", "F82"]
 [tool.ruff.lint.per-file-ignores]
 # Baseline exclusions: these legacy modules currently contain known F821/F823
 # findings. Keep the exceptions narrow so new modules are checked by default.
-"WAXS/WAXS.py" = ["F821"]
-"controllers/fitting_controller.py" = ["F823"]
+"src/gimap/features/fitting/presentation/legacy_bridge.py" = ["F823"]
 "ui/waxs_page.py" = ["F821"]
 "utils/tools/Preprocessing.py" = ["F821"]

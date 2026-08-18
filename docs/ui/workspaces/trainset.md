@@ -1,5 +1,30 @@
 # Trainset 布局迁移记录
 
+- 状态：Trainset 页面和交互画布已由 Trainset feature 拥有；旧 UI 路径仅为兼容入口。
+- 当前调用链：`TrainsetBuildPage → TrainsetViewBinding → TrainsetViewModel → application use cases/ports`。
+- Python workflow shell：`src/gimap/features/trainset/presentation/views/page_view.py`。
+- Dataset Design 布局：`src/gimap/features/trainset/presentation/views/dataset_page_view.py`。
+- Local Preview、Model Design、Local Run、Monitor & Results 布局分别位于
+  `preview_page_view.py`、`model_page_view.py`、`run_page_view.py`、
+  `monitor_page_view.py`。
+- 页面行为与动态 workspace panels：`src/gimap/features/trainset/presentation/page.py`。
+- 兼容入口：`ui/trainset_build_page.py`。
+- 最近验证：2026-08-18。
+
+`TrainsetViewBinding` 只负责页面 signal、控件值映射、文件对话框和结果渲染；配置、preview、
+simulation、job package、local/Slurm workflow 和模型注册均经 `TrainsetViewModel` 调用
+application use cases/ports。旧 `TrainsetController` 名称只 re-export 同一个 binding，不存在
+第二套页面或运行时实现。
+
+`Ui_MainWindow` 只保留无业务控件的 `trainsetBuildPage` host。启动时不再创建随后会被
+隐藏的 2,022 行旧 beam、detector、particle、preprocessing 和 generation widgets；app
+composition root 把唯一的 feature-owned 页面装入 host，并通过构造函数注入
+`TrainsetViewBinding`。Binding 强制要求页面和 ViewModel 依赖，不再包含 host/layout fallback、
+页面创建或 legacy widget 清理逻辑。
+
+Physical-background 参数定义现由 trainset domain 单一拥有；legacy `trainset.config` 与
+feature presentation 引用同一个对象，因此参数键、范围、精度和帮助文本保持不变。
+
 ## 控件映射
 
 | 迁移前控件/区域 | 迁移后位置 | 行为 |
@@ -15,14 +40,23 @@
 | layer editor | `Model Design > Advanced model architecture / AdvancedSection` | layer 类型、顺序和 tensor contract 不变 |
 | model contract、forward-pass validation | `Preview` 与 `Run` sections | 原 validation command 不变 |
 | Local/Maxwell tabs | `Run / ParameterSection` | local process、package generation 和 disabled Maxwell submit 行为不变 |
-| local activity/progress | shared `JobStatus` | controller 的旧 label/progress 接口通过别名保留，百分比仍为 0–100 |
+| local activity/progress | shared `JobStatus` | binding 的 label/progress 映射保持百分比 0–100 |
 | package manifest/tree | `Export / ParameterSection` | package 路径、manifest 和 Slurm 文件不变 |
 | process output | `Monitor & Results > Log / AdvancedSection` | 原 append、refresh 和 sync 路径不变 |
 | metrics/register model | `Monitor & Results > Results / ParameterSection` | metric columns 和 model registration 不变 |
 
 Trainset 原有五步导航继续有效；本轮只在各步骤内部建立 Input → Configure → Preview →
-Run → Results → Export 的统一信息层级。现有 legacy controller 仍是兼容桥，没有新增第二层
-workflow orchestration，也没有改动 BornAgain、preprocessing、generation 或 training 算法。
+Run → Results → Export 的统一信息层级。旧 controller 文件仅为兼容别名，没有第二层
+workflow orchestration。页面所有权迁移没有改动 BornAgain、preprocessing、generation、
+training、module.yaml、project YAML/JSON、HDF5 schema 或模型格式；所有 objectName、signals、
+快捷键、错误行为和内嵌样式保持不变。
+
+页面顶层标题、项目名、验证状态、五步导航、五个固定 page host 和底部 action bar 现在由
+`views/page_view.py` 单一维护，`TrainsetBuildPage` 注入各步骤内容，不再保留顶层
+`_build()` 实现。Dataset Design 的 Input / Configure / Advanced / Preview 容器和 splitter
+也已迁入独立 Python View。其余四个步骤也各有独立 View，负责 section hierarchy、滚动区、
+固定表格、按钮和语义 host。catalog/plugin 参数字段、交互画布、BornAgain 比较和任务状态组件
+仍按运行时数据注入；这些动态 presentation 不复制到另一套静态实现。
 
 ## 手动验收清单
 

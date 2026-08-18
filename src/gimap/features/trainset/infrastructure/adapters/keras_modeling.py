@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Tuple
 
-
-SUPPORTED_LAYER_TYPES = (
-    "conv2d",
-    "maxpool2d",
-    "batch_normalization",
-    "dropout",
-    "global_average_pooling2d",
-    "flatten",
-    "dense",
+from ...domain import (
+    SUPPORTED_LAYER_TYPES,
+    normalized_layers,
+    static_contract,
 )
 
 
@@ -55,28 +50,6 @@ def build_optimizer(keras_api: Any, name: str, learning_rate: float) -> Any:
     if normalized == "sgd":
         return gradient_descent.SGD(learning_rate)
     return adam.Adam(learning_rate)
-
-
-def normalized_layers(model_config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    layers = model_config.get("layers")
-    if isinstance(layers, list) and layers:
-        return [dict(layer) for layer in layers if isinstance(layer, dict)]
-    # Compatibility with schema v1 projects.
-    output: List[Dict[str, Any]] = []
-    for channels in model_config.get("channels", [32, 64, 128]):
-        output.append(
-            {
-                "type": "conv2d",
-                "units": int(channels),
-                "kernel": int(model_config.get("kernel_size", 3)),
-                "activation": "relu",
-            }
-        )
-        output.append({"type": "maxpool2d", "pool": 2})
-    output.append({"type": "global_average_pooling2d"})
-    if float(model_config.get("dropout", 0.0)) > 0:
-        output.append({"type": "dropout", "rate": float(model_config["dropout"])})
-    return output
 
 
 def build_keras_model(
@@ -133,23 +106,3 @@ def build_keras_model(
         x = keras_api.layers.GlobalAveragePooling2D(name="automatic_global_average_pooling")(x)
     outputs = keras_api.layers.Dense(int(output_size), name="parameter_output")(x)
     return keras_api.Model(inputs, outputs)
-
-
-def static_contract(
-    input_shape: Tuple[int, int, int],
-    output_size: int,
-    layers: Iterable[Dict[str, Any]],
-) -> str:
-    rows = [f"Input  {input_shape}"]
-    spatial = True
-    for index, spec in enumerate(layers, start=1):
-        kind = str(spec.get("type", ""))
-        rows.append(f"{index:02d}  {kind}")
-        if kind in {"global_average_pooling2d", "flatten"}:
-            spatial = False
-        if kind == "dense" and spatial:
-            rows.append("    ! Dense needs Flatten or GlobalAveragePooling2D first")
-    if spatial:
-        rows.append("Auto  global_average_pooling2d")
-    rows.append(f"Output ({output_size},) regression parameters")
-    return "\n".join(rows)

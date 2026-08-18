@@ -1,0 +1,3709 @@
+"""Feature-owned binding between the Prediction workspace and ViewModel."""
+
+from __future__ import annotations
+
+import os
+import datetime
+import importlib.util
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+from PyQt5.QtCore import QObject, pyqtSignal, Qt, QSignalBlocker, QRectF, QEvent, QTimer, QUrl
+from PyQt5.QtGui import QDesktopServices, QImage, QPixmap, QKeySequence
+from PyQt5.QtWidgets import (
+    QFileDialog,
+    QMessageBox,
+    QGraphicsScene,
+    QLabel,
+    QShortcut,
+    QTabWidget,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGridLayout,
+    QPushButton,
+    QSizePolicy,
+    QCheckBox,
+    QDoubleSpinBox,
+    QFrame,
+    QDialog,
+    QTextBrowser,
+)
+
+from src.gimap.app.presentation.responsive_layout import (
+    apply_density_profile,
+    install_adaptive_window_profile,
+    move_window_to_cursor_screen,
+)
+from src.gimap.shared.file_paths import normalize_path
+from src.gimap.features.prediction.application import (
+    PredictionArrayExportRequest,
+    PredictionExportItem,
+)
+from src.gimap.features.prediction.presentation.image_worker import PredictionImageLoader
+from src.gimap.features.prediction.presentation.view_model import PredictionViewModel
+from src.gimap.features.prediction.presentation.multifile_results import (
+    MultiFilePredictResultsWidget,
+    MultiFilePredictManager,
+    PredictResult,
+    PredictStatus,
+    ExportDialog
+)
+
+
+def _dependency_available(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+class PredictionViewBinding(QObject):
+    """Translate Prediction Qt events and render ViewModel results."""
+
+    status_updated = pyqtSignal(str)
+    progress_updated = pyqtSignal(int)
+    parameters_changed = pyqtSignal(dict)
+    prediction_completed = pyqtSignal(dict)
+    model_load_finished = pyqtSignal(object, str, str)
+
+    _DEFAULT_COLORMAPS = [
+        "viridis",
+        "cividis",
+        "plasma",
+        "magma",
+        "inferno",
+        "turbo",
+        "jet",
+        "coolwarm",
+        "gray",
+    ]
+
+    _mpl_cm = None
+
+    def __init__(
+        self,
+        ui,
+        parent=None,
+        *,
+        prediction_view_model: PredictionViewModel | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.ui = ui
+        self.main_window = parent.parent if hasattr(parent, "parent") else None
+        if prediction_view_model is None:
+            raise ValueError("PredictionViewBinding requires PredictionViewModel")
+        self.prediction_view_model = prediction_view_model
+
+        self.current_parameters: Dict[str, Optional[str]] = {}
+        self.prediction_results: Dict[str, object] = {}
+
+        # 初始化运行时状态
+        self._initialized = False
+        self._ui_updating = False
+        self._synchronizing = False
+
+        self._graphics_scene: Optional[QGraphicsScene] = None
+        self._current_pixmap: Optional[QPixmap] = None
+        self._current_image: Optional[np.ndarray] = None
+        self._view_zoom_steps = 0
+
+
+        # Predict-2D view state
+        self._predict_scene: Optional[QGraphicsScene] = None
+        self._predict_pixmap: Optional[QPixmap] = None
+        self._predict_zoom_steps = 0
+
+        self._index_to_file: Dict[int, str] = {}
+        self._available_indices: List[int] = []
+        self._sequence_indices: List[int] = []
+        self._current_file_index: Optional[int] = None
+        self._folder_entries: List[Tuple[str, int]] = []
+
+        self._load_request_seq = 0
+        self._latest_display_request = 0
+        self._active_loaders: Dict[int, PredictionImageLoader] = {}
+        self._pending_contexts: Dict[int, Dict[str, object]] = {}
+
+        # Module system state
+        self._modules_by_name: Dict[str, Dict[str, object]] = {}
+        self._modules_by_id: Dict[str, Dict[str, object]] = {}
+        self._current_module: Optional[Dict[str, object]] = None
+        self._module_edit_watch_timer: Optional[QTimer] = None
+        self._module_edit_watch_path: Optional[str] = None
+        self._module_edit_watch_mtime: Optional[float] = None
+        self._module_edit_watch_ticks: int = 0
+        self._current_mask: Optional[np.ndarray] = None
+        self._current_model: Optional[object] = None
+        self._model_loading: bool = False
+        self._model_cancel_requested: bool = False
+        self._model_loader_thread = None
+        self._model_status_label: Optional[QLabel] = None
+        self._status_text_window: Optional[QDialog] = None
+        self._status_text_window_browser: Optional[QTextBrowser] = None
+        self._cancel_shortcut: Optional[QShortcut] = None
+        self._predict_tabs: Optional[QTabWidget] = None
+        self._predict_panel: Optional[QWidget] = None
+        self._predict_panel_layout: Optional[QVBoxLayout] = None
+        self._predict_import_button: Optional[QPushButton] = None
+        self._predict_tab_specs: List[Dict[str, object]] = []
+        self._predict_current_kind: Optional[str] = None
+        self._predict_current_image: Optional[np.ndarray] = None
+        self._predict_current_curve: Optional[np.ndarray] = None
+        self._predict_curve_controls: Dict[str, object] = {}
+        self._current_step_index: int = 0
+
+        # 多文件预测相关
+        self._multifile_results_widget: Optional[MultiFilePredictResultsWidget] = None
+        self._multifile_manager: Optional[MultiFilePredictManager] = None
+        self._multifile_prediction_active: bool = False
+        self._multifile_batch_map: Dict[str, List[str]] = {}
+
+        # 读取全局参数
+        self._set_default_parameters()
+        self._load_saved_parameters()
+        self.model_load_finished.connect(self._on_model_load_finished)
+
+    # ------------------------------------------------------------------
+    # 初始化 & UI
+    # ------------------------------------------------------------------
+    def _load_saved_parameters(self) -> None:
+        try:
+            saved = self.prediction_view_model.load_settings()
+            if saved:
+                self.current_parameters.update(saved)
+        except Exception:
+            pass
+
+    def initialize(self) -> None:
+        if self._initialized:
+            return
+
+        self._setup_display_resources()
+        self._setup_status_text_browser()
+        self._setup_connections()
+        self._initialize_ui()
+        # 初始化模块选择和列表
+        self._initialize_modules_ui()
+        # 初始化模型状态指示灯与快捷键
+        self._init_model_status_ui()
+        # 初始化多文件预测UI
+        self._setup_multifile_ui()
+        self._initialized = True
+
+    def _setup_display_resources(self) -> None:
+        view = getattr(self.ui, "gisaxsImageGraphicsView", None)
+        if view is None:
+            return
+        self._graphics_scene = QGraphicsScene(view)
+        view.setScene(self._graphics_scene)
+        view.setTransformationAnchor(view.AnchorUnderMouse)
+        view.setDragMode(view.ScrollHandDrag)
+
+        self._populate_colormap_combos()
+
+        # Setup predict2dGraphicsView scene as well
+        pview = getattr(self.ui, "predict2dGraphicsView", None)
+        if pview is not None and self._predict_scene is None:
+            self._predict_scene = QGraphicsScene(pview)
+            pview.setScene(self._predict_scene)
+            pview.setTransformationAnchor(pview.AnchorUnderMouse)
+            pview.setDragMode(pview.ScrollHandDrag)
+
+    def _setup_status_text_browser(self) -> None:
+        browser = getattr(self.ui, "predictStatusTextBrowser", None)
+        scroll_area = getattr(self.ui, "predictStatusScrollArea", None)
+        top_panel = getattr(self.ui, "widget_2", None)
+        if browser is None:
+            return
+
+        if top_panel is not None:
+            top_panel.setMaximumHeight(16777215)
+        if scroll_area is not None:
+            scroll_area.setVisible(False)
+            scroll_area.setMaximumHeight(0)
+        browser.setMinimumHeight(120)
+        browser.setMaximumHeight(180)
+        browser.setOpenExternalLinks(False)
+        browser.setContextMenuPolicy(Qt.CustomContextMenu)
+        browser.customContextMenuRequested.connect(self._show_status_text_context_menu)
+
+    def _show_status_text_context_menu(self, pos) -> None:
+        browser = getattr(self.ui, "predictStatusTextBrowser", None)
+        if browser is None:
+            return
+        menu = browser.createStandardContextMenu(pos)
+        menu.addSeparator()
+        menu.addAction("Open in Separate Window", self._open_status_text_window)
+        menu.exec_(browser.mapToGlobal(pos))
+
+    def _open_status_text_window(self) -> None:
+        source = getattr(self.ui, "predictStatusTextBrowser", None)
+        if source is None:
+            return
+        if self._status_text_window is not None:
+            if not self._status_text_window.isVisible():
+                move_window_to_cursor_screen(self._status_text_window)
+            self._status_text_window.show()
+            self._status_text_window.raise_()
+            self._status_text_window.activateWindow()
+            return
+
+        win = QDialog(self.main_window)
+        win.setWindowTitle("Predict Log")
+        win.resize(900, 560)
+        layout = QVBoxLayout(win)
+        viewer = QTextBrowser(win)
+        viewer.setReadOnly(True)
+        viewer.setLineWrapMode(QTextBrowser.NoWrap)
+        viewer.setPlainText(source.toPlainText())
+        layout.addWidget(viewer)
+        self._status_text_window = win
+        self._status_text_window_browser = viewer
+        install_adaptive_window_profile(
+            win,
+            lambda profile, screen, window=win: self._apply_floating_screen_profile(window, profile),
+            apply_window_minimum=False,
+        )
+        win.finished.connect(self._on_status_text_window_closed)
+        move_window_to_cursor_screen(win)
+        win.show()
+
+    def _on_status_text_window_closed(self) -> None:
+        self._status_text_window = None
+        self._status_text_window_browser = None
+
+    def _apply_floating_screen_profile(self, window, profile) -> None:
+        try:
+            apply_density_profile(window, profile)
+        except Exception:
+            pass
+
+    def _set_predict_main_tab(self, target_label: str) -> None:
+        tabs = getattr(self.ui, "gisaxsPredictImageShowTabWidget", None)
+        if tabs is None:
+            return
+        target = (target_label or "").strip().lower()
+        try:
+            for i in range(tabs.count()):
+                text = tabs.tabText(i)
+                if isinstance(text, str) and text.strip().lower() == target:
+                    blocker = QSignalBlocker(tabs)
+                    tabs.setCurrentIndex(i)
+                    del blocker
+                    return
+        except Exception:
+            return
+
+    def _populate_colormap_combos(self) -> None:
+        combos = []
+        gisaxs_combo = getattr(self.ui, "gisaxsImageColormapCombox", None)
+        if gisaxs_combo is not None:
+            combos.append(gisaxs_combo)
+
+        predict_combo = getattr(self.ui, "predict2dLabelCombox", None)
+        if predict_combo is not None:
+            combos.append(predict_combo)
+
+        if not combos:
+            return
+
+        # Ensure the active colormap is present in the options even if defaults change later
+        options = list(self._DEFAULT_COLORMAPS)
+        active = self.current_parameters.get("colormap") or options[0]
+        if active not in options:
+            options.insert(0, active)
+
+        for combo in combos:
+            blocker = QSignalBlocker(combo)
+            combo.clear()
+            combo.addItems(options)
+            # Set the active selection without emitting change events
+            idx = combo.findText(active)
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+            del blocker
+
+    def _initialize_ui(self) -> None:
+        self._ui_updating = True
+        try:
+            framework_combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
+            if framework_combo is not None:
+                self._populate_framework_combo(framework_combo)
+                idx = framework_combo.findText(self.current_parameters.get("framework", ""))
+                framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
+                self._refresh_framework_status()
+
+            mode = self.current_parameters.get("mode", "single_file")
+            single_btn = getattr(self.ui, "gisaxsPredictSingleFileRadioButton", None)
+            multi_btn = getattr(self.ui, "gisaxsPredictMultiFilesRadioButton", None)
+            if single_btn is not None and multi_btn is not None:
+                if mode == "multi_files":
+                    multi_btn.setChecked(True)
+                else:
+                    single_btn.setChecked(True)
+
+            self._set_line_edit("gisaxsPredictChooseGisaxsFileValue", os.path.basename(self.current_parameters.get("input_file", "")))
+            self._set_line_edit("gisaxsPredictChooseFolderValue", self.current_parameters.get("input_folder", ""))
+            self._set_line_edit("gisaxsPredictExportFolderValue", self.current_parameters.get("export_path", ""))
+
+            stack_text = self.current_parameters.get("stack_value", "1")
+            if mode == "multi_files":
+                stack_text = self.current_parameters.get("range_value", "") or stack_text
+            self._set_line_edit("gisaxsPredictStackValue", stack_text)
+            self._set_line_edit("gisaxsImageShowingValue", self.current_parameters.get("showing_value", ""))
+
+            auto_scale = bool(self.current_parameters.get("auto_scale", True))
+            self._configure_color_spin("gisaxsImageVminValue")
+            self._configure_color_spin("gisaxsImageVmaxValue")
+            self._configure_color_spin("predict2dVminValue")
+            self._configure_color_spin("predict2dVmaxValue")
+            self._set_checkbox("gisaxsImageAutoScaleCheckBox", auto_scale)
+            self._set_checkbox("gisaxsImageLogScaleCheckBox", bool(self.current_parameters.get("gisaxs_log_scale", False)))
+            self._set_double_spin("gisaxsImageVminValue", self.current_parameters.get("vmin"))
+            self._set_double_spin("gisaxsImageVmaxValue", self.current_parameters.get("vmax"))
+
+            predict_auto_scale = bool(self.current_parameters.get("predict_auto_scale", True))
+            self._set_checkbox("predict2dAutoScaleCheckBox", predict_auto_scale)
+            self._set_double_spin("predict2dVminValue", self.current_parameters.get("predict_vmin"))
+            self._set_double_spin("predict2dVmaxValue", self.current_parameters.get("predict_vmax"))
+
+            colormap = self.current_parameters.get("colormap") or self._DEFAULT_COLORMAPS[0]
+            self._set_combobox_text("gisaxsImageColormapCombox", colormap)
+            self._set_combobox_text("predict2dLabelCombox", colormap)
+
+            self._set_checkbox("predict2dLogScaleCheckBox", bool(self.current_parameters.get("predict_log_scale", False)))
+
+            btn = getattr(self.ui, "gisaxsImageSaveButton", None)
+            if btn is not None:
+                btn.setVisible(False)
+            btn = getattr(self.ui, "predict2SaveButton", None)
+            if btn is not None:
+                btn.setVisible(False)
+
+            self._update_mode_controls(mode)
+
+            # Default to GISAXS tab on initial load
+            self._set_predict_main_tab("GISAXS")
+            self._refresh_predict_readiness()
+
+        finally:
+            self._ui_updating = False
+
+    def _setup_connections(self) -> None:
+        btn = getattr(self.ui, "gisaxsPredictChooseFolderButton", None)
+        if btn:
+            btn.clicked.connect(self._choose_gisaxs_folder)
+
+        btn = getattr(self.ui, "gisaxsPredictChooseGisaxsFileButton", None)
+        if btn:
+            btn.clicked.connect(self._choose_gisaxs_file)
+
+        btn = getattr(self.ui, "gisaxsPredictExportFolderButton", None)
+        if btn:
+            btn.clicked.connect(self._choose_export_folder)
+
+        btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
+        if btn:
+            btn.clicked.connect(self._run_gisaxs_predict)
+
+        btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if btn:
+            btn.clicked.connect(self._stop_gisaxs_predict)
+
+        btn = getattr(self.ui, "gisaxsPredictShowMultiFileResultsButton", None)
+        if btn:
+            btn.clicked.connect(self._show_multifile_results_window)
+
+        # Inline import button on stack row (new ui name)
+        inline_import = getattr(self.ui, "gisaxsPredictImportimagesButton", None)
+        if inline_import:
+            inline_import.clicked.connect(self._on_import_images_clicked)
+
+        single_btn = getattr(self.ui, "gisaxsPredictSingleFileRadioButton", None)
+        multi_btn = getattr(self.ui, "gisaxsPredictMultiFilesRadioButton", None)
+        if single_btn:
+            single_btn.toggled.connect(self._on_mode_changed)
+        if multi_btn:
+            multi_btn.toggled.connect(self._on_mode_changed)
+
+        file_edit = getattr(self.ui, "gisaxsPredictChooseGisaxsFileValue", None)
+        if file_edit is not None:
+            file_edit.returnPressed.connect(self._handle_file_line_edit_committed)
+        stack_edit = getattr(self.ui, "gisaxsPredictStackValue", None)
+        if stack_edit is not None:
+            stack_edit.returnPressed.connect(self._on_stack_field_committed)
+        showing_edit = getattr(self.ui, "gisaxsImageShowingValue", None)
+        if showing_edit is not None:
+            showing_edit.returnPressed.connect(self._on_showing_value_committed)
+
+        cb = getattr(self.ui, "gisaxsImageAutoScaleCheckBox", None)
+        if cb:
+            cb.toggled.connect(self._on_auto_scale_toggled)
+
+        cb = getattr(self.ui, "gisaxsImageLogScaleCheckBox", None)
+        if cb:
+            cb.toggled.connect(self._on_gisaxs_log_scale_toggled)
+
+        btn = getattr(self.ui, "gisaxsImageAutoScaleResetButton", None)
+        if btn:
+            btn.clicked.connect(self._on_auto_scale_reset)
+
+        btn = getattr(self.ui, "gisaxsImageExportButton", None)
+        if btn:
+            btn.clicked.connect(self._export_gisaxs_image)
+
+        self._connect_double_spin("gisaxsImageVminValue", self._on_vmin_changed)
+        self._connect_double_spin("gisaxsImageVmaxValue", self._on_vmax_changed)
+
+        predict_auto_cb = getattr(self.ui, "predict2dAutoScaleCheckBox", None)
+        if predict_auto_cb:
+            predict_auto_cb.toggled.connect(self._on_predict_auto_scale_toggled)
+        predict_auto_reset = getattr(self.ui, "predict2dAutoScaleResetButton", None)
+        if predict_auto_reset:
+            predict_auto_reset.clicked.connect(self._on_predict_auto_scale_reset)
+        self._connect_double_spin("predict2dVminValue", self._on_predict_vmin_changed)
+        self._connect_double_spin("predict2dVmaxValue", self._on_predict_vmax_changed)
+
+        combo = getattr(self.ui, "gisaxsImageColormapCombox", None)
+        if combo:
+            combo.currentTextChanged.connect(self._on_colormap_changed)
+
+        p_combo = getattr(self.ui, "predict2dLabelCombox", None)
+        if p_combo:
+            p_combo.currentTextChanged.connect(self._on_colormap_changed)
+
+        framework_combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
+        if framework_combo:
+            framework_combo.currentTextChanged.connect(lambda _=None: (self._refresh_framework_status(), self._refresh_predict_readiness()))
+
+        zoom_in = getattr(self.ui, "gisaxsImageZoomInButton", None)
+        zoom_out = getattr(self.ui, "gisaxsImageZoomOutButton", None)
+        zoom_reset = getattr(self.ui, "gisaxsImageZoomResetButton", None)
+        if zoom_in:
+            zoom_in.clicked.connect(self._zoom_in)
+        if zoom_out:
+            zoom_out.clicked.connect(self._zoom_out)
+        if zoom_reset:
+            zoom_reset.clicked.connect(self._zoom_reset)
+
+        p_zoom_in = getattr(self.ui, "predict2dZoomInButton", None)
+        p_zoom_out = getattr(self.ui, "predict2dZoomOutButton", None)
+        p_zoom_reset = getattr(self.ui, "predict2dZoomResetButton", None)
+        if p_zoom_in:
+            p_zoom_in.clicked.connect(self._predict_zoom_in)
+        if p_zoom_out:
+            p_zoom_out.clicked.connect(self._predict_zoom_out)
+        if p_zoom_reset:
+            p_zoom_reset.clicked.connect(self._predict_zoom_reset)
+
+        # Predict-2D controls
+        cb = getattr(self.ui, "predict2dLogScaleCheckBox", None)
+        if cb:
+            cb.toggled.connect(self._on_predict_log_scale_toggled)
+        btn = getattr(self.ui, "predict2dExportButton", None)
+        if btn:
+            btn.clicked.connect(self._on_predict_export_clicked)
+
+        # Module select combobox
+        module_combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
+        if module_combo:
+            module_combo.currentTextChanged.connect(self._on_module_selected)
+            module_combo.installEventFilter(self)
+
+        # Module action buttons
+        btn_edit = getattr(self.ui, "gisaxsPredictEditButton", None)
+        if btn_edit:
+            btn_edit.clicked.connect(self._on_edit_module_clicked)
+        btn_reload = getattr(self.ui, "gisaxsPredictReloadConfigButton", None)
+        if btn_reload:
+            btn_reload.clicked.connect(self._on_reload_module_config_clicked)
+        btn_import = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+        if btn_import:
+            btn_import.clicked.connect(self._on_model_import_clicked)
+
+    def _init_model_status_ui(self) -> None:
+        text_label = getattr(self.ui, "gisaxsPredictModelStatusTextLabel", None)
+        if text_label is not None:
+            self._model_status_label = text_label
+            self._set_model_status_color("gray", "Not loaded")
+            self._refresh_predict_readiness()
+            return
+
+        # Fallback for older generated layouts: create a status label in the button row.
+        layout = getattr(self.ui, "horizontalLayout_15", None)
+        if layout is None:
+            return
+        if self._model_status_label is None:
+            lbl = QLabel("Not loaded")
+            lbl.setMinimumWidth(76)
+            lbl.setToolTip("Model status")
+            self._model_status_label = lbl
+            try:
+                layout.addWidget(lbl)
+            except Exception:
+                pass
+        self._set_model_status_color("gray", "Not loaded")
+
+        # Create predict panel with tabs on the right side (under the same row)
+        try:
+            if self._predict_panel is None:
+                panel = QWidget()
+                vlayout = QVBoxLayout(panel)
+                tabs = QTabWidget(panel)
+                vlayout.addWidget(tabs)
+                hlayout = QHBoxLayout()
+                btn = QPushButton("Import")
+                btn.setToolTip("Import/Reload Model")
+                btn.clicked.connect(self._on_model_import_clicked)
+                hlayout.addStretch(1)
+                hlayout.addWidget(btn)
+                vlayout.addLayout(hlayout)
+                layout.addWidget(panel)
+                self._predict_panel = panel
+                self._predict_panel_layout = vlayout
+                self._predict_tabs = tabs
+                self._predict_import_button = btn
+                try:
+                    panel.setVisible(False)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Register Ctrl+C to cancel loading
+        parent_widget = getattr(self.ui, "widget_4", None) or getattr(self.ui, "centralwidget", None) or self.main_window
+        try:
+            if parent_widget is not None:
+                self._cancel_shortcut = QShortcut(QKeySequence("Ctrl+C"), parent_widget)
+                self._cancel_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+                self._cancel_shortcut.activated.connect(self._on_cancel_loading_shortcut)
+        except Exception:
+            pass
+
+    def _set_model_status_color(self, color: str, tooltip: str = "") -> None:
+        text_map = {
+            "green": "Loaded",
+            "red": "Loading",
+            "gray": "Not loaded",
+        }
+        status_text = tooltip if tooltip in ("Loaded", "Not loaded", "Canceled") else text_map.get(color, tooltip or "Not loaded")
+        style = (
+            "QLabel {"
+            f"background-color: {color};"
+            "border: 1px solid #94a3b8;"
+            "border-radius: 6px;"
+            "color: white;"
+            "font-weight: 600;"
+            "padding: 4px 8px;"
+            "}"
+        )
+        labels = []
+        if self._model_status_label is not None:
+            labels.append(self._model_status_label)
+        for name in ("gisaxsPredictModelStatusTextLabel",):
+            label = getattr(self.ui, name, None)
+            if label is not None and label not in labels:
+                labels.append(label)
+        for label in labels:
+            label.setStyleSheet(style)
+            label.setText(status_text)
+            if tooltip:
+                label.setToolTip(tooltip)
+        self._refresh_predict_readiness()
+
+    def _on_cancel_loading_shortcut(self) -> None:
+        if not self._model_loading:
+            return
+        self._model_cancel_requested = True
+        self._set_model_status_color("gray", "Canceled")
+        self.status_updated.emit("Model load cancel requested (Ctrl+C).")
+        self.progress_updated.emit(0)
+        # Re-enable import button now for UX; background thread may still finish but will be ignored
+        btn_import = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+        if btn_import:
+            btn_import.setEnabled(True)
+
+    def _setup_multifile_ui(self) -> None:
+        """初始化多文件预测的外置窗口，不改动主窗口布局"""
+        try:
+            if getattr(self, "_multifile_window", None) is not None:
+                return
+
+            # 创建一个无模式的外置对话框，独立显示多文件结果
+            win = QDialog(self.main_window)
+            win.setWindowTitle("Multi-File Results")
+            win.setModal(False)
+            win.setMinimumSize(700, 600)
+            win.resize(820, 680)
+            try:
+                win.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            except Exception:
+                pass
+
+            outer = QVBoxLayout(win)
+            outer.setContentsMargins(10, 8, 10, 8)
+            outer.setSpacing(8)
+            install_adaptive_window_profile(
+                win,
+                lambda profile, screen, window=win: self._apply_floating_screen_profile(window, profile),
+                apply_window_minimum=False,
+            )
+
+            # === 1. 当前文件显示区域 ===
+            current_file_frame = QFrame(win)
+            current_file_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+            current_file_frame.setStyleSheet(
+                """
+                QFrame {
+                    background-color: #ffffff;
+                    border: 1px solid #ced4da;
+                    border-radius: 6px;
+                    margin: 2px;
+                }
+                """
+            )
+            current_file_layout = QVBoxLayout(current_file_frame)
+            current_file_layout.setContentsMargins(8, 6, 8, 6)
+            current_file_layout.setSpacing(4)
+
+            current_file_title = QLabel("Current File", current_file_frame)
+            current_file_title.setStyleSheet(
+                """
+                QLabel {
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #495057;
+                    border-bottom: 1px solid #dee2e6;
+                    padding-bottom: 3px;
+                    margin-bottom: 3px;
+                }
+                """
+            )
+            current_file_layout.addWidget(current_file_title)
+
+            self._current_file_label = QLabel("No file selected", current_file_frame)
+            self._current_file_label.setStyleSheet(
+                """
+                QLabel {
+                    background-color: #f8f9fa;
+                    border: 1px solid #e9ecef;
+                    border-radius: 4px;
+                    padding: 8px;
+                    font-size: 10px;
+                    color: #6c757d;
+                    font-family: 'Consolas', 'Courier New', monospace;
+                }
+                """
+            )
+            self._current_file_label.setWordWrap(True)
+            self._current_file_label.setMinimumHeight(50)
+            current_file_layout.addWidget(self._current_file_label)
+            outer.addWidget(current_file_frame)
+
+            # === 2. 多文件结果列表区域 ===
+            results_frame = QFrame(win)
+            results_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+            results_frame.setStyleSheet(
+                """
+                QFrame {
+                    background-color: #ffffff;
+                    border: 1px solid #ced4da;
+                    border-radius: 6px;
+                    margin: 2px;
+                }
+                """
+            )
+            results_layout = QVBoxLayout(results_frame)
+            results_layout.setContentsMargins(8, 6, 8, 6)
+            results_layout.setSpacing(4)
+
+            results_title = QLabel("Multi-File Results", results_frame)
+            results_title.setStyleSheet(
+                """
+                QLabel {
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #495057;
+                    border-bottom: 1px solid #dee2e6;
+                    padding-bottom: 3px;
+                    margin-bottom: 3px;
+                }
+                """
+            )
+            results_layout.addWidget(results_title)
+
+            self._multifile_results_widget = MultiFilePredictResultsWidget(parent=results_frame)
+            self._multifile_results_widget.setStyleSheet(
+                """
+                MultiFilePredictResultsWidget {
+                    border: none;
+                    background-color: transparent;
+                }
+                """
+            )
+            results_layout.addWidget(self._multifile_results_widget)
+            outer.addWidget(results_frame, stretch=1)
+
+            # === 3. 快捷操作按钮区域 ===
+            actions_frame = QFrame(win)
+            actions_frame.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+            actions_frame.setStyleSheet(
+                """
+                QFrame {
+                    background-color: #ffffff;
+                    border: 1px solid #ced4da;
+                    border-radius: 6px;
+                    margin: 2px;
+                }
+                """
+            )
+            actions_layout = QVBoxLayout(actions_frame)
+            actions_layout.setContentsMargins(8, 6, 8, 6)
+            actions_layout.setSpacing(6)
+
+            actions_title = QLabel("Quick Actions", actions_frame)
+            actions_title.setStyleSheet(
+                """
+                QLabel {
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #495057;
+                    border-bottom: 1px solid #dee2e6;
+                    padding-bottom: 3px;
+                    margin-bottom: 3px;
+                }
+                """
+            )
+            actions_layout.addWidget(actions_title)
+
+            buttons_layout = QHBoxLayout()
+            buttons_layout.setSpacing(8)
+            clear_button = QPushButton("Clear All", actions_frame)
+            clear_button.setMinimumHeight(28)
+            clear_button.clicked.connect(self._clear_multifile_results)
+            export_all_button = QPushButton("Export All", actions_frame)
+            export_all_button.setMinimumHeight(28)
+            export_all_button.clicked.connect(self._export_all_results)
+            buttons_layout.addWidget(clear_button)
+            buttons_layout.addWidget(export_all_button)
+            actions_layout.addLayout(buttons_layout)
+            outer.addWidget(actions_frame)
+
+            # 连接信号
+            self._multifile_results_widget.result_selected.connect(self._on_multifile_result_selected)
+            self._multifile_results_widget.result_double_clicked.connect(self._on_multifile_result_selected)
+            self._multifile_results_widget.export_requested.connect(self._on_multifile_export_requested)
+
+            # 创建多文件管理器
+            if self._multifile_manager is None:
+                self._multifile_manager = MultiFilePredictManager(self)
+                self._multifile_manager.prediction_started.connect(self._on_multifile_prediction_started)
+                self._multifile_manager.prediction_completed.connect(self._on_multifile_prediction_completed)
+                self._multifile_manager.result_updated.connect(self._on_multifile_result_updated)
+                self._multifile_manager.progress_updated.connect(self._on_multifile_progress_updated)
+
+            # 初始不显示，仅在切换到 multi_files 模式时显示
+            self._multifile_window = win
+            self._append_status_message("Multi-file external window initialized", level="INFO")
+
+        except Exception as e:
+            self._append_status_message(f"Failed to setup multi-file UI: {e}", level="ERROR")
+
+    def _show_multifile_results_window(self) -> None:
+        if getattr(self, "_multifile_window", None) is None:
+            self._setup_multifile_ui()
+        win = getattr(self, "_multifile_window", None)
+        if win is None:
+            QMessageBox.information(self.main_window, "Multi-File Results", "The multi-file results window is not available yet.")
+            return
+        if self._multifile_results_widget is not None:
+            self._multifile_results_widget.setVisible(True)
+        if not win.isVisible():
+            move_window_to_cursor_screen(win)
+        win.show()
+        try:
+            win.raise_()
+            win.activateWindow()
+        except Exception:
+            pass
+
+    def _clear_multifile_results(self) -> None:
+        """清空所有多文件结果"""
+        if self._multifile_results_widget:
+            self._multifile_results_widget.clear_all_results()
+
+    def _export_all_results(self) -> None:
+        """导出所有结果"""
+        if self._multifile_results_widget:
+            all_results = self._multifile_results_widget.get_all_results()
+            if all_results:
+                self._multifile_results_widget.onExportClicked()
+            else:
+                QMessageBox.information(self.main_window, "Export", "No results to export.")
+
+    def _stop_gisaxs_predict(self) -> None:
+        if not self._multifile_prediction_active:
+            self._append_status_message("No active multi-file prediction to stop.", level="INFO")
+            return
+        if self._multifile_manager:
+            self._multifile_manager.cancel_prediction()
+            self._append_status_message("Stopping multi-file prediction after the current file...", level="WARN")
+        stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if stop_btn:
+            stop_btn.setEnabled(False)
+
+    def _adjust_predict_layout_for_mode(self, mode: str) -> None:
+        """根据模式调整预测布局"""
+        # 显示/隐藏外置的多文件窗口
+        try:
+            win = getattr(self, "_multifile_window", None)
+            if win is not None and mode == "multi_files" and win.isVisible():
+                win.raise_()
+        except Exception:
+            pass
+
+        # 更新当前文件标签的可见性
+        if hasattr(self, '_current_file_label'):
+            if mode == "multi_files":
+                self._current_file_label.setVisible(True)
+                if not self._current_file_label.text() or self._current_file_label.text() == "Current: No file selected":
+                    self._current_file_label.setText("No file selected")
+            else:
+                self._current_file_label.setVisible(False)
+
+    def _update_current_file_display(self, file_path: str, stack_count: int = 1) -> None:
+        """更新当前文件显示"""
+        if hasattr(self, '_current_file_label'):
+            if file_path:
+                file_name = os.path.basename(file_path)
+                suffix = f" ({stack_count} files stacked)" if stack_count and stack_count > 1 else " (1 file)"
+                self._current_file_label.setText(f"{file_name}{suffix}")
+                self._current_file_label.setToolTip(file_path)
+            else:
+                self._current_file_label.setText("No file selected")
+                self._current_file_label.setToolTip("")
+
+    def _connect_line_edit(self, name: str, slot) -> None:
+        widget = getattr(self.ui, name, None)
+        if widget is None:
+            return
+        widget.returnPressed.connect(slot)
+
+    def _connect_double_spin(self, name: str, slot) -> None:
+        widget = getattr(self.ui, name, None)
+        if widget is None:
+            return
+        widget.editingFinished.connect(slot)
+
+    # ------------------------------------------------------------------
+    # 参数与持久化
+    # ------------------------------------------------------------------
+    def _set_default_parameters(self) -> None:
+        self.current_parameters = {
+            "framework": "tensorflow 2.15.0",
+            "mode": "single_file",
+            "input_file": "",
+            "input_folder": "",
+            "export_path": "",
+            "stack_value": "1",
+            "range_value": "",
+            "showing_value": "",
+            "auto_scale": True,
+            "vmin": None,
+            "vmax": None,
+            "predict_auto_scale": True,
+            "predict_vmin": None,
+            "predict_vmax": None,
+            "colormap": self._DEFAULT_COLORMAPS[0],
+            "gisaxs_log_scale": False,
+            "predict_log_scale": False,
+            "predict_curve_logx": False,
+            "predict_curve_logy": False,
+            "predict_curve_autoscale": True,
+            "predict_curve_xmin": None,
+            "predict_curve_xmax": None,
+            "predict_curve_ymin": None,
+            "predict_curve_ymax": None,
+            # module selection
+            "module_name": "",
+            "module_model_path": "",
+        }
+
+    def _persist_parameters(self) -> None:
+        if self._synchronizing:
+            return
+        self._synchronizing = True
+        try:
+            self.prediction_view_model.save_settings(dict(self.current_parameters))
+            self.parameters_changed.emit(dict(self.current_parameters))
+        finally:
+            self._synchronizing = False
+
+    def get_parameters(self) -> Dict[str, object]:
+        return dict(self.current_parameters)
+
+    def set_parameters(self, parameters: Dict[str, object]) -> None:
+        if not parameters:
+            return
+        self.current_parameters.update(parameters)
+        if self._initialized:
+            self._initialize_ui()
+
+    # ------------------------------------------------------------------
+    # 文件与模式处理
+    # ------------------------------------------------------------------
+    def _choose_gisaxs_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self.main_window, "Select GISAXS Folder", "")
+        if not folder:
+            return
+        folder = normalize_path(folder)
+        self.current_parameters["input_folder"] = folder
+        self._set_line_edit("gisaxsPredictChooseFolderValue", folder)
+        self._scan_directory_for_cbf(folder)
+        self._persist_parameters()
+        self._refresh_predict_readiness()
+
+    def _choose_gisaxs_file(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.main_window,
+            "Select GISAXS File",
+            self.current_parameters.get("input_folder", ""),
+            "GISAXS Files (*.cbf);;All Files (*)",
+        )
+        if file_path:
+            file_path = normalize_path(file_path)
+            self._handle_new_file_selection(file_path)
+
+    def _choose_export_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self.main_window,
+            "Select Export Folder",
+            self.current_parameters.get("export_path", ""),
+        )
+        if not folder:
+            return
+        folder = normalize_path(folder)
+        self.current_parameters["export_path"] = folder
+        self._set_line_edit("gisaxsPredictExportFolderValue", folder)
+        self._persist_parameters()
+        self._append_status_message(f"Export folder selected: {folder}")
+
+    def _prompt_export_folder(self, title: str = "Select Export Folder") -> str:
+        folder = QFileDialog.getExistingDirectory(
+            self.main_window,
+            title,
+            self.current_parameters.get("export_path", "") or "",
+        )
+        if not folder:
+            return ""
+        folder = normalize_path(folder)
+        self.current_parameters["export_path"] = folder
+        self._set_line_edit("gisaxsPredictExportFolderValue", folder)
+        self._persist_parameters()
+        return folder
+
+    def _handle_file_line_edit_committed(self) -> None:
+        widget = getattr(self.ui, "gisaxsPredictChooseGisaxsFileValue", None)
+        if not widget:
+            return
+        text = normalize_path(widget.text())
+        if not text:
+            return
+        if os.path.isabs(text) and os.path.exists(text):
+            self._handle_new_file_selection(text)
+            return
+
+        folder = normalize_path(self.current_parameters.get("input_folder", ""))
+        candidate = normalize_path(os.path.join(folder, text) if folder else text)
+        if os.path.exists(candidate):
+            self._handle_new_file_selection(candidate)
+            return
+        self._append_status_message(f"Unable to locate file: {text}", level="WARN")
+        QMessageBox.warning(self.main_window, "File Not Found", f"Unable to locate file: {text}")
+
+    def _on_import_images_clicked(self) -> None:
+        # Behaves like pressing Enter in the file input: try to load the typed file
+        self._sync_pending_text_fields()
+        self._handle_file_line_edit_committed()
+
+    def _handle_new_file_selection(self, file_path: str) -> None:
+        file_path = normalize_path(file_path)
+        if not os.path.exists(file_path):
+            QMessageBox.warning(self.main_window, "File Not Found", file_path)
+            return
+        if not file_path.lower().endswith(".cbf"):
+            QMessageBox.warning(self.main_window, "Unsupported Format", "Only CBF files are supported.")
+            return
+
+        folder = os.path.dirname(file_path)
+        base_name = os.path.basename(file_path)
+        index = self._extract_index(base_name)
+
+        self.current_parameters.update(
+            {
+                "input_file": file_path,
+                "input_folder": folder,
+                "showing_value": str(index or ""),
+            }
+        )
+
+        self._set_line_edit("gisaxsPredictChooseGisaxsFileValue", base_name)
+        self._set_line_edit("gisaxsPredictChooseFolderValue", folder)
+        self._set_line_edit("gisaxsImageShowingValue", self.current_parameters.get("showing_value", ""))
+
+        self._scan_directory_for_cbf(folder)
+        if index is not None:
+            self._current_file_index = index
+        elif self._available_indices:
+            self._current_file_index = self._available_indices[0]
+
+        mode = self.current_parameters.get("mode", "single_file")
+        if mode == "multi_files":
+            typed_range = self._get_line_edit_text("gisaxsPredictStackValue")
+            if typed_range.strip():
+                self.current_parameters["range_value"] = typed_range
+                self._set_line_edit("gisaxsPredictStackValue", typed_range)
+            else:
+                default_range = f"{self._current_file_index}-{self._current_file_index}"
+                self.current_parameters["range_value"] = default_range
+                self._set_line_edit("gisaxsPredictStackValue", default_range)
+        else:
+            stack_text = self._get_line_edit_text("gisaxsPredictStackValue") or self.current_parameters.get("stack_value", "1")
+            self.current_parameters["stack_value"] = stack_text or "1"
+            self._set_line_edit("gisaxsPredictStackValue", stack_text or "1")
+
+        self._update_range_tooltip()
+        self._persist_parameters()
+        self._trigger_data_reload()
+        self._refresh_predict_readiness()
+
+    def _scan_directory_for_cbf(self, folder: str) -> None:
+        folder = normalize_path(folder)
+        entries: List[Tuple[str, int]] = []
+        index_to_file: Dict[int, str] = {}
+
+        try:
+            discovered = self.prediction_view_model.files.discover_numbered_files(
+                Path(folder), ".cbf"
+            )
+            for item in discovered:
+                entries.append((item.path.name, item.index))
+                index_to_file[item.index] = str(item.path)
+
+            if not entries:
+                self._append_status_message("No numbered CBF files detected in the current folder", level="WARN")
+
+            self._folder_entries = entries
+            self._index_to_file = index_to_file
+            self._available_indices = sorted(index_to_file.keys())
+            self._update_range_tooltip()
+        except Exception as exc:
+            self._append_status_message(f"Failed to scan folder: {exc}", level="ERROR")
+
+    def _extract_index(self, file_name: str) -> Optional[int]:
+        return self.prediction_view_model.files.file_index(file_name)
+
+    def _update_range_tooltip(self) -> None:
+        if not self._available_indices:
+            tooltip = "No valid indices detected yet"
+        else:
+            tooltip = f"Available index range: {self._available_indices[0]} - {self._available_indices[-1]}"
+
+        label = getattr(self.ui, "gisaxsPredictStackLabel", None)
+        line_edit = getattr(self.ui, "gisaxsPredictStackValue", None)
+        if label:
+            label.setToolTip(tooltip)
+        if line_edit:
+            line_edit.setToolTip(tooltip)
+
+    def _on_mode_changed(self) -> None:
+        if self._ui_updating:
+            return
+        single_btn = getattr(self.ui, "gisaxsPredictSingleFileRadioButton", None)
+        if single_btn is not None and single_btn.isChecked():
+            self.current_parameters["mode"] = "single_file"
+        else:
+            self.current_parameters["mode"] = "multi_files"
+
+        self._update_mode_controls(self.current_parameters["mode"])
+        self._persist_parameters()
+        self._refresh_predict_readiness()
+
+    def _update_mode_controls(self, mode: str) -> None:
+        label = getattr(self.ui, "gisaxsPredictStackLabel", None)
+        stack_edit = getattr(self.ui, "gisaxsPredictStackValue", None)
+        showing = getattr(self.ui, "gisaxsImageShowingValue", None)
+        every_label = getattr(self.ui, "gisaxsPredictEveryLabel", None)
+        every_value = getattr(self.ui, "gisaxsPredictEveryValue", None)
+
+        if label:
+            label.setText("Range:" if mode == "multi_files" else "Stack:")
+        if stack_edit:
+            text = (
+                self.current_parameters.get("range_value", "")
+                if mode == "multi_files"
+                else self.current_parameters.get("stack_value", "1")
+            )
+            self._set_line_edit("gisaxsPredictStackValue", text or ("1" if mode == "single_file" else ""))
+        if showing:
+            showing.setEnabled(mode == "multi_files")
+        # Only show the "Every" controls in multi-file mode
+        if every_label:
+            every_label.setVisible(mode == "multi_files")
+        if every_value:
+            every_value.setVisible(mode == "multi_files")
+
+        # 显示/隐藏多文件结果列表
+        if self._multifile_results_widget:
+            self._multifile_results_widget.setVisible(mode == "multi_files")
+
+        # 在多文件模式下调整布局
+        self._adjust_predict_layout_for_mode(mode)
+
+    def _sync_pending_text_fields(self) -> None:
+        """Apply user-typed values without triggering loads."""
+        mode = self.current_parameters.get("mode", "single_file")
+        stack_text = self._get_line_edit_text("gisaxsPredictStackValue")
+        if mode == "multi_files":
+            if stack_text.strip():
+                self.current_parameters["range_value"] = stack_text
+        else:
+            if stack_text.strip():
+                self.current_parameters["stack_value"] = stack_text
+
+        if mode == "multi_files":
+            showing_text = self._get_line_edit_text("gisaxsImageShowingValue")
+            if showing_text.strip():
+                self.current_parameters["showing_value"] = showing_text
+
+    def _on_stack_field_committed(self) -> None:
+        if self._ui_updating:
+            return
+        mode = self.current_parameters.get("mode", "single_file")
+        text = self._get_line_edit_text("gisaxsPredictStackValue")
+        if mode == "multi_files":
+            self.current_parameters["range_value"] = text
+            self._persist_parameters()
+            self._trigger_data_reload()
+            return
+
+        try:
+            count = max(1, int(text or "1"))
+        except ValueError:
+            count = 1
+        self.current_parameters["stack_value"] = str(count)
+        self._set_line_edit("gisaxsPredictStackValue", str(count))
+        self._persist_parameters()
+        self._trigger_data_reload()
+
+    def _on_showing_value_committed(self) -> None:
+        if self._ui_updating:
+            return
+        mode = self.current_parameters.get("mode", "single_file")
+        if mode != "multi_files":
+            return
+        text = self._get_line_edit_text("gisaxsImageShowingValue")
+        try:
+            index = int(text)
+        except ValueError:
+            self._append_status_message("Showing Value must be a valid index", level="WARN")
+            return
+        if index not in self._index_to_file:
+            self._append_status_message("Index is outside the available range", level="WARN")
+            return
+        self.current_parameters["showing_value"] = str(index)
+        self._persist_parameters()
+        self._start_image_loading(self._index_to_file[index], 1, {"mode": "multi_files", "index": index})
+
+    def _parse_range_text(self, text: str) -> List[int]:
+        return self.prediction_view_model.files.index_range(text)
+
+    def _trigger_data_reload(self) -> None:
+        if self.current_parameters.get("mode", "single_file") == "single_file":
+            self._load_single_stack()
+        else:
+            self._load_multi_sequence()
+
+    def _load_single_stack(self) -> None:
+        file_path = self.current_parameters.get("input_file")
+        if not file_path:
+            return
+        try:
+            stack = max(1, int(self.current_parameters.get("stack_value", "1")))
+        except ValueError:
+            stack = 1
+            self.current_parameters["stack_value"] = "1"
+        self._start_image_loading(file_path, stack, {"mode": "single_file", "stack": stack})
+
+    def _load_multi_sequence(self) -> None:
+        if not self._index_to_file:
+            if self.current_parameters.get("input_folder"):
+                self._scan_directory_for_cbf(self.current_parameters["input_folder"])
+            if not self._index_to_file:
+                return
+
+        range_text = self.current_parameters.get("range_value") or self._get_line_edit_text("gisaxsPredictStackValue")
+        indices = [idx for idx in self._parse_range_text(range_text) if idx in self._index_to_file]
+        if not indices:
+            if self._available_indices:
+                indices = [self._available_indices[0]]
+            else:
+                self._append_status_message("No Multi File indices available", level="WARN")
+                return
+
+        self._sequence_indices = indices
+        first = indices[0]
+        self.current_parameters["range_value"] = range_text
+        self.current_parameters["showing_value"] = str(first)
+        self._set_line_edit("gisaxsImageShowingValue", str(first))
+        self._persist_parameters()
+        self._start_image_loading(self._index_to_file[first], 1, {"mode": "multi_files", "index": first})
+        self._refresh_predict_readiness()
+
+    def _input_ready(self) -> bool:
+        mode = self.current_parameters.get("mode", "single_file")
+        if mode == "single_file":
+            file_path = self.current_parameters.get("input_file")
+            return bool(file_path and os.path.exists(file_path))
+        folder = self.current_parameters.get("input_folder")
+        if not folder or not os.path.isdir(folder):
+            return False
+        range_text = self.current_parameters.get("range_value") or self._get_line_edit_text("gisaxsPredictStackValue")
+        return bool(range_text.strip() or self._available_indices or self._folder_entries)
+
+    def _model_ready(self) -> bool:
+        return self._current_model is not None and not self._model_loading
+
+    def _refresh_predict_readiness(self) -> None:
+        if not hasattr(self, "ui"):
+            return
+        input_ready = self._input_ready()
+        model_ready = self._model_ready()
+        framework_ready = self._framework_ready()
+        mode = self.current_parameters.get("mode", "single_file")
+
+        labels = {
+            "gisaxsPredictInputReadyLabel": ("Input: Ready" if input_ready else "Input: Missing", input_ready),
+            "gisaxsPredictModelReadyLabel": ("Model: Loaded" if model_ready else "Model: Not loaded", model_ready),
+            "gisaxsPredictFrameworkReadyLabel": ("Framework: OK" if framework_ready else "Framework: Missing/Incompatible", framework_ready),
+            "gisaxsPredictModeLabel": (f"Mode: {'Multi Files' if mode == 'multi_files' else 'Single File'}", True),
+        }
+        for name, (text, ok) in labels.items():
+            label = getattr(self.ui, name, None)
+            if label is not None:
+                label.setText(text)
+                label.setStyleSheet("color: #166534;" if ok else "color: #b91c1c;")
+
+        btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
+        if btn is not None and not self._multifile_prediction_active:
+            btn.setEnabled(input_ready and model_ready and framework_ready)
+        stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if stop_btn is not None:
+            stop_btn.setEnabled(bool(self._multifile_prediction_active))
+
+        for export_name in ("gisaxsImageExportButton", "predict2dExportButton"):
+            export_btn = getattr(self.ui, export_name, None)
+            if export_btn is not None:
+                export_btn.setEnabled(bool(self.prediction_results))
+
+    # ------------------------------------------------------------------
+    # 图像加载与显示
+    # ------------------------------------------------------------------
+    def _start_image_loading(self, file_path: str, stack_count: int, context: Dict[str, object]) -> None:
+        if not os.path.exists(file_path):
+            QMessageBox.warning(self.main_window, "File Not Found", file_path)
+            return
+        if not _dependency_available("fabio"):
+            QMessageBox.warning(
+                self.main_window,
+                "Missing Dependency",
+                "Install the fabio package to read CBF files (pip install fabio)",
+            )
+            return
+
+        self._load_request_seq += 1
+        request_id = self._load_request_seq
+        loader = PredictionImageLoader(self.prediction_view_model)
+        self._active_loaders[request_id] = loader
+
+        # Precompute stack file names for logging so we can show per-file progress
+        stack_files: List[str] = []
+        if stack_count > 1:
+            try:
+                directory = os.path.dirname(file_path)
+                start_name = os.path.basename(file_path)
+                cbf_files = [
+                    path.name
+                    for path in self.prediction_view_model.files.discover_files(
+                        Path(directory), (".cbf",)
+                    )
+                ]
+                start_idx = cbf_files.index(start_name)
+                stack_files = cbf_files[start_idx : start_idx + stack_count]
+            except Exception:
+                stack_files = []
+
+        self._pending_contexts[request_id] = {
+            **context,
+            "file": file_path,
+            "stack": stack_count,
+            "stack_files": stack_files,
+            "_last_progress_file": None,
+        }
+
+        loader.image_loaded.connect(lambda data, path, rid=request_id: self._on_image_loaded(rid, data, path))
+        loader.progress_updated.connect(lambda progress, msg, rid=request_id: self._on_loader_progress(rid, progress, msg))
+        loader.error_occurred.connect(lambda err, rid=request_id: self._on_loader_error(rid, err))
+        loader.finished.connect(lambda rid=request_id: self._cleanup_loader(rid))
+
+        loader.load_image(file_path, stack_count)
+        self._latest_display_request = request_id
+        self._append_status_message(f"Loading {os.path.basename(file_path)} (Stack={stack_count}) ...")
+
+    def _on_loader_progress(self, request_id: int, progress: int, message: str) -> None:
+        if request_id != self._latest_display_request:
+            return
+
+        context = self._pending_contexts.get(request_id, {})
+        stack_files = context.get("stack_files") or []
+        if stack_files and "Processing file" in message:
+            # Example message: "Processing file 2/5: foo.cbf"
+            parts = message.split(":", 1)
+            fname = parts[1].strip() if len(parts) == 2 else ""
+            last_file = context.get("_last_progress_file")
+            if fname and fname != last_file:
+                self._append_status_message(f"Loading {fname} ...")
+                context["_last_progress_file"] = fname
+                self._pending_contexts[request_id] = context
+        self.status_updated.emit(f"Image loading {progress}%: {message}")
+        self.progress_updated.emit(progress)
+
+    def _on_loader_error(self, request_id: int, error: str) -> None:
+        if request_id == self._latest_display_request:
+            QMessageBox.critical(self.main_window, "Image Load Failed", error)
+            self.status_updated.emit(error)
+        self._cleanup_loader(request_id)
+
+    def _cleanup_loader(self, request_id: int) -> None:
+        loader = self._active_loaders.pop(request_id, None)
+        if loader:
+            loader.deleteLater()
+        self._pending_contexts.pop(request_id, None)
+
+    def _on_image_loaded(self, request_id: int, image_data: np.ndarray, file_path: str) -> None:
+        context = self._pending_contexts.get(request_id)
+        if context is None:
+            return
+        if request_id != self._latest_display_request:
+            return
+
+        self._current_image = image_data.astype(np.float32, copy=False)
+
+        stack_files = context.get("stack_files") or []
+        if context.get("stack", 1) and context.get("stack", 1) > 1 and stack_files:
+            first = stack_files[0]
+            last = stack_files[-1]
+            self._append_status_message(f"Image loaded: {first} - {last}")
+        else:
+            self._append_status_message(f"Image loaded: {os.path.basename(file_path)}")
+
+        if context.get("mode") == "multi_files" and context.get("index") is not None:
+            self.current_parameters["showing_value"] = str(context["index"])
+            self._set_line_edit("gisaxsImageShowingValue", str(context["index"]))
+
+        self._update_image_display()
+
+    def _maybe_log_scale(self, image: np.ndarray, enabled: bool) -> np.ndarray:
+        if not enabled:
+            return image
+        img = np.array(image, dtype=np.float32, copy=False)
+        finite = np.isfinite(img)
+        if not finite.any():
+            return img
+        positives = img[finite & (img > 0)]
+        floor = float(np.min(positives)) if positives.size else 1e-6
+        floor = max(floor, 1e-6)
+        return np.log10(np.maximum(img, floor))
+
+    def _on_gisaxs_log_scale_toggled(self, checked: bool) -> None:
+        if self._ui_updating:
+            return
+        self.current_parameters["gisaxs_log_scale"] = bool(checked)
+        self._persist_parameters()
+        self._update_image_display()
+
+    def _export_gisaxs_image(self) -> None:
+        if not self.prediction_results:
+            QMessageBox.information(self.main_window, "Export", "Run a prediction before exporting the current result.")
+            self._append_status_message("No prediction result to export", level="WARN")
+            return
+        if self._current_pixmap is None:
+            self._append_status_message("No GISAXS image to export", level="WARN")
+            return
+        export_path = self._prompt_export_folder("Save GISAXS Image To")
+        if not export_path:
+            return
+        if not os.path.isdir(export_path):
+            QMessageBox.warning(self.main_window, "Export Path", f"Export folder not found: {export_path}")
+            return
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_path = os.path.join(export_path, f"gisaxs_{timestamp}.jpg")
+        try:
+            if not self._current_pixmap.save(file_path, "JPG"):
+                raise IOError("Save returned False")
+            self._append_status_message(f"GISAXS image exported: {file_path}")
+        except Exception as exc:
+            self._append_status_message(f"Export failed: {exc}", level="ERROR")
+
+    def _update_image_display(self) -> None:
+        if self._current_image is None or self._graphics_scene is None:
+            return
+
+        display_img = self._maybe_log_scale(self._current_image, bool(self.current_parameters.get("gisaxs_log_scale", False)))
+
+        auto_scale = bool(self.current_parameters.get("auto_scale", True))
+        vmin = self.current_parameters.get("vmin")
+        vmax = self.current_parameters.get("vmax")
+
+        if auto_scale or vmin is None or vmax is None:
+            vmin, vmax = self._auto_scale_percentiles(display_img, 0.5, 99.5)
+            self.current_parameters["vmin"] = vmin
+            self.current_parameters["vmax"] = vmax
+            self._set_double_spin("gisaxsImageVminValue", vmin)
+            self._set_double_spin("gisaxsImageVmaxValue", vmax)
+        self._set_checkbox("gisaxsImageAutoScaleCheckBox", auto_scale)
+
+        pixmap = self._create_pixmap_from_array(
+            display_img,
+            vmin,
+            vmax,
+            self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0]),
+        )
+        if pixmap is None:
+            return
+
+        self._graphics_scene.clear()
+        self._graphics_scene.addPixmap(pixmap)
+        self._graphics_scene.setSceneRect(QRectF(pixmap.rect()))
+        self._current_pixmap = pixmap
+        self._zoom_reset()
+
+        cmap_name = self.current_parameters.get("colormap", "")
+        self.status_updated.emit(f"Display complete (vmin={vmin:.3f}, vmax={vmax:.3f}, cmap={cmap_name})")
+        self._persist_parameters()
+
+    def _auto_scale_values(self, image: np.ndarray) -> Tuple[float, float]:
+        finite = np.isfinite(image)
+        if not np.any(finite):
+            return 0.0, 1.0
+        data = image[finite]
+        vmin = float(np.min(data))
+        vmax = float(np.max(data))
+        if vmin == vmax:
+            vmax = vmin + 1.0
+        return vmin, vmax
+
+    def _auto_scale_percentiles(self, image: np.ndarray, low: float, high: float) -> Tuple[float, float]:
+        finite = np.isfinite(image)
+        if not np.any(finite):
+            return 0.0, 1.0
+        data = image[finite]
+        vmin = float(np.percentile(data, low))
+        vmax = float(np.percentile(data, high))
+        if vmin == vmax:
+            vmax = vmin + 1.0
+        return vmin, vmax
+
+    def _create_pixmap_from_array(self, image: np.ndarray, vmin: float, vmax: float, cmap_name: str) -> Optional[QPixmap]:
+        data = np.clip(image, vmin, vmax)
+        norm = (data - vmin) / max(vmax - vmin, 1e-9)
+        norm = np.nan_to_num(norm, nan=0.0, posinf=1.0, neginf=0.0)
+
+        mpl_cm = self._get_mpl_cm()
+        if mpl_cm is None:
+            gray = (norm * 255).astype(np.uint8)
+            rgba = np.dstack([gray, gray, gray, np.full_like(gray, 255)])
+        else:
+            cmap = mpl_cm.get_cmap(cmap_name or self._DEFAULT_COLORMAPS[0])
+            rgba = (cmap(norm) * 255).astype(np.uint8)
+
+        height, width = rgba.shape[:2]
+        bytes_per_line = rgba.strides[0]
+        image_q = QImage(rgba.data, width, height, bytes_per_line, QImage.Format_RGBA8888)
+        return QPixmap.fromImage(image_q.copy())
+
+    def _get_mpl_cm(self):
+        if not _dependency_available("matplotlib"):
+            return None
+        if self.__class__._mpl_cm is None:
+            try:
+                from matplotlib import cm as mpl_cm  # type: ignore
+                self.__class__._mpl_cm = mpl_cm
+            except Exception:
+                self.__class__._mpl_cm = False
+        return None if self.__class__._mpl_cm is False else self.__class__._mpl_cm
+
+    # ------------------------------------------------------------------
+    # Preprocessing & Prediction
+    # ------------------------------------------------------------------
+    def _preprocess_for_module(self, image: np.ndarray) -> Optional[np.ndarray]:
+        # Ensure a module is selected; fall back to saved name or first available
+        if not self._current_module:
+            try:
+                name = self.current_parameters.get("module_name", "") if isinstance(self.current_parameters, dict) else ""
+                if not name and self._modules_by_name:
+                    name = sorted(self._modules_by_name.keys())[0]
+                if name and name in self._modules_by_name:
+                    self._current_module = self._modules_by_name.get(name)
+            except Exception:
+                pass
+        if image is None:
+            return None
+        typed_module = (
+            self._current_module.get("_prediction_module")
+            if isinstance(self._current_module, dict)
+            else None
+        )
+        if typed_module is None:
+            self._append_status_message(
+                "Selected module has no typed prediction contract",
+                level="ERROR",
+            )
+            return None
+        prepared = self.prediction_view_model.prepare_input(image, typed_module)
+        if prepared is None:
+            self._append_status_message(
+                self.prediction_view_model.state.error_message
+                or "Module preprocessing failed",
+                level="ERROR",
+            )
+            return None
+        self._latest_preprocess_steps = list(prepared.steps)
+        self._append_status_message(
+            f"Module preprocess output shape {prepared.values.shape}"
+        )
+        return prepared.values
+
+    def _predict_with_current_model(self, inp: np.ndarray) -> Optional[Dict[str, np.ndarray]]:
+        if self._current_model is None or inp is None:
+            return None
+        typed_module = (
+            self._current_module.get("_prediction_module")
+            if isinstance(self._current_module, dict)
+            else None
+        )
+        model_path = str(self.current_parameters.get("module_model_path") or "")
+        if typed_module is None or not model_path:
+            self._append_status_message(
+                "Selected module has no typed prediction contract or model path",
+                level="ERROR",
+            )
+            return None
+        result = self.prediction_view_model.predict_prepared(
+            inp,
+            typed_module,
+            Path(model_path),
+            getattr(self, "_latest_preprocess_steps", ()),
+        )
+        if result is None:
+            self._append_status_message(
+                self.prediction_view_model.state.error_message
+                or "Isolated prediction failed",
+                level="ERROR",
+            )
+            return None
+        return dict(result.outputs)  # type: ignore[return-value]
+
+    def _get_or_create_predict2d_tabs(self) -> Optional[QTabWidget]:
+        # Embed inner tabs inside the existing Predict-2D tab of the main tab widget
+        main_tabs = getattr(self.ui, "gisaxsPredictImageShowTabWidget", None)
+        if main_tabs is None:
+            return None
+        pred_index = -1
+        try:
+            for i in range(main_tabs.count()):
+                try:
+                    label = main_tabs.tabText(i)
+                    if isinstance(label, str) and label.lower().strip() in ("predict-2d", "predict 2d", "predict"):
+                        pred_index = i
+                        break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        if pred_index < 0:
+            # fallback to current tab
+            try:
+                pred_index = main_tabs.currentIndex()
+            except Exception:
+                pred_index = 0
+        pred_page = main_tabs.widget(pred_index)
+        if pred_page is None:
+            return None
+        layout = pred_page.layout()
+        if layout is None:
+            layout = QVBoxLayout(pred_page)
+        # Reuse existing inner tabs if present
+        try:
+            inner_tabs = next(iter(pred_page.findChildren(QTabWidget)), None)
+        except Exception:
+            inner_tabs = None
+        if inner_tabs is None:
+            inner_tabs = QTabWidget(pred_page)
+            # 允许横向扩展，不限制最大宽度，避免挤压父容器
+            try:
+                inner_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            except Exception:
+                pass
+            layout.addWidget(inner_tabs)
+        self._predict_tabs = inner_tabs
+        return inner_tabs
+
+    def _rebuild_predict_tabs(self, tabs: QTabWidget) -> None:
+        blocker = QSignalBlocker(tabs)
+        try:
+            while tabs.count() > 0:
+                w = tabs.widget(0)
+                tabs.removeTab(0)
+                if w:
+                    w.deleteLater()
+            for spec in self._predict_tab_specs:
+                page = QWidget()
+                # 不要将页面最大高度设为0，保持可扩展的尺寸策略
+                try:
+                    page.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                except Exception:
+                    pass
+                tabs.addTab(page, str(spec.get("title", "Panel")))
+        finally:
+            del blocker
+        try:
+            tabs.currentChanged.disconnect(self._on_predict_tab_changed)
+        except Exception:
+            pass
+        tabs.currentChanged.connect(self._on_predict_tab_changed)
+        if self._predict_tab_specs:
+            tabs.setCurrentIndex(0)
+
+    def _on_predict_tab_changed(self, index: int) -> None:
+        self._render_predict_tab_by_index(index)
+
+    def _render_predict_tab_by_index(self, index: int) -> None:
+        if index < 0 or index >= len(self._predict_tab_specs):
+            return
+        spec = self._predict_tab_specs[index]
+        self._render_predict_panel(spec)
+
+    def _render_predict_panel(self, spec: Dict[str, object]) -> None:
+        # Clear any step buttons when switching kinds
+        if getattr(self, "_step_buttons", None):
+            try:
+                for b in self._step_buttons:
+                    if b and hasattr(b, "deleteLater"):
+                        b.deleteLater()
+            except Exception:
+                pass
+        self._step_buttons = []
+
+        kind = spec.get("kind") if isinstance(spec, dict) else None
+        data = spec.get("data") if isinstance(spec, dict) else None
+        self._predict_current_kind = kind if isinstance(kind, str) else None
+        self._predict_current_curve = None
+        if kind == "hr" and isinstance(data, np.ndarray):
+            self._render_predict2d_into_view(data)
+            self._refresh_predict_controls("hr")
+            return
+        if kind == "array" and isinstance(data, np.ndarray):
+            self._predict_current_image = data
+            disp, vmin, vmax = self._prepare_predict_image(data)
+            cmap = spec.get("colormap") if isinstance(spec.get("colormap"), str) else self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0])
+            pix = self._create_pixmap_from_array(disp, vmin, vmax, cmap)
+            self._show_pixmap_in_predict_view(pix)
+            self._refresh_predict_controls("array")
+            return
+        if kind == "curve" and isinstance(data, np.ndarray):
+            title = spec.get("title", "Curve")
+            xlabel = spec.get("xlabel", "Index")
+            self._predict_current_curve = data
+            pix = self._render_curve_figure(
+                data,
+                x_label=str(xlabel),
+                title=str(title),
+                log_x=bool(self.current_parameters.get("predict_curve_logx", False)),
+                log_y=bool(self.current_parameters.get("predict_curve_logy", False)),
+                xlim=self._get_curve_xlim(),
+                ylim=self._get_curve_ylim(),
+            )
+            self._show_pixmap_in_predict_view(pix)
+            self._refresh_predict_controls("curve")
+            return
+        if kind == "parameters" and isinstance(data, np.ndarray):
+            names = spec.get("names") if isinstance(spec.get("names"), list) else None
+            pix = self._render_parameters_figure(data, [str(name) for name in names] if names else None)
+            if pix is not None:
+                self._show_pixmap_in_predict_view(pix)
+            self._refresh_predict_controls("array")
+            return
+        if kind == "steps":
+            steps = spec.get("steps") if isinstance(spec.get("steps"), list) else []
+            if not steps:
+                return
+            self._step_snapshots = steps
+            # Show the final model input by default when the preprocess panel provides it.
+            default_idx = spec.get("default_index") if isinstance(spec, dict) else None
+            if isinstance(default_idx, int) and 0 <= default_idx < len(steps):
+                start_idx = default_idx
+            else:
+                start_idx = self._current_step_index if 0 <= self._current_step_index < len(steps) else 0
+            self._render_step_snapshot(start_idx)
+            self._refresh_predict_controls("steps")
+            # Build buttons under the tabs page to switch steps
+            tabs = getattr(self, "_predict_tabs", None)
+            page = tabs.currentWidget() if tabs else None
+            if page is None:
+                return
+            layout = page.layout()
+            if layout is None:
+                layout = QVBoxLayout(page)
+            # Clear existing items in page layout
+            while layout.count():
+                item = layout.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+            # Estimate columns based on viewport width to avoid stretching right side
+            cols = 4
+            try:
+                pview = getattr(self.ui, "predict2dGraphicsView", None)
+                if pview is not None:
+                    vw = max(1, pview.viewport().size().width())
+                    cols = max(1, vw // 120)
+            except Exception:
+                pass
+            grid = QGridLayout()
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setSpacing(6)
+            btns = []
+            for idx, st in enumerate(steps):
+                lbl = st.get("label") or st.get("step") or f"Step {idx+1}"
+                btn = QPushButton(str(lbl))
+                btn.setCheckable(True)
+                btn.setChecked(idx == start_idx)
+                btn.clicked.connect(lambda checked, i=idx: self._render_step_snapshot(i))
+                r, c = divmod(idx, cols)
+                grid.addWidget(btn, r, c)
+                btns.append(btn)
+            layout.addLayout(grid)
+            try:
+                row_count = (len(btns) + cols - 1) // cols
+                row_h = btns[0].sizeHint().height() if btns else 24
+                # 仅设置最小高度，允许父布局根据可用空间扩展
+                page.setMinimumHeight(row_count * (row_h + 6) + 4)
+                try:
+                    page.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            self._step_buttons = btns
+            return
+
+    def _predict_viewport_pixels(self) -> Optional[Tuple[int, int]]:
+        pview = getattr(self.ui, "predict2dGraphicsView", None)
+        if pview is None:
+            return None
+        viewport = pview.viewport().size()
+        return (max(400, viewport.width()), max(320, viewport.height()))
+
+    def _render_step_snapshot(self, idx: int) -> None:
+        steps = getattr(self, "_step_snapshots", None)
+        if not isinstance(steps, list) or idx < 0 or idx >= len(steps):
+            return
+        snap = steps[idx].get("image") if isinstance(steps[idx], dict) else None
+        if not isinstance(snap, np.ndarray):
+            return
+        self._current_step_index = idx
+        self._predict_current_image = snap
+        # update buttons state
+        for i, b in enumerate(getattr(self, "_step_buttons", []) or []):
+            try:
+                b.setChecked(i == idx)
+            except Exception:
+                pass
+        display, vmin, vmax = self._prepare_predict_image(snap)
+        cmap = self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0])
+        pix = self._create_pixmap_from_array(display, vmin, vmax, cmap)
+        self._show_pixmap_in_predict_view(pix)
+
+    def _render_parameters_figure(self, values: np.ndarray, names: Optional[List[str]] = None) -> Optional[QPixmap]:
+        try:
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+            vals = np.asarray(values, dtype=np.float32).reshape(-1)
+            labels = names if names and len(names) >= vals.size else [f"p{i + 1}" for i in range(vals.size)]
+            fig = Figure(figsize=(7.2, 3.8), dpi=120)
+            canvas = FigureCanvasAgg(fig)
+            ax = fig.add_subplot(111)
+            x = np.arange(vals.size)
+            bars = ax.bar(x, vals, color=["#2563eb", "#16a34a", "#f59e0b", "#dc2626"][: vals.size])
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels[: vals.size])
+            ax.set_ylabel("Predicted value")
+            ax.set_title("SF Predicted Parameters")
+            ax.grid(axis="y", alpha=0.25)
+            for bar, value in zip(bars, vals):
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2.0,
+                    bar.get_height(),
+                    f"{float(value):.5g}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=9,
+                )
+            fig.tight_layout()
+            canvas.draw()
+            buf = np.asarray(canvas.buffer_rgba())
+            height, width = buf.shape[:2]
+            qimg = QImage(buf.data, width, height, buf.strides[0], QImage.Format_RGBA8888)
+            return QPixmap.fromImage(qimg.copy())
+        except Exception as exc:
+            self._append_status_message(f"Parameter plot failed: {exc}", level="ERROR")
+            return None
+
+    def _refresh_predict_controls(self, kind: str) -> None:
+        param_widget = getattr(self.ui, "predict2dParameterWidget", None)
+        if param_widget is None:
+            return
+        two_d_widgets = [
+            "predict2dColorScaleLabel",
+            "predict2dAutoScaleCheckBox",
+            "predict2dAutoScaleResetButton",
+            "predict2dVminLabel",
+            "predict2dVmaxLabel",
+            "predict2dVminValue",
+            "predict2dVmaxValue",
+            "predict2dColormapLabel",
+            "predict2dLabelCombox",
+            "predict2dLogScaleCheckBox",
+            "predict2dCountourCheckBox",
+            "predict2dCountourLevelsLabel",
+            "predict2dCountourLevelsValue",
+        ]
+        is_curve = kind == "curve"
+        for name in two_d_widgets:
+            w = getattr(self.ui, name, None)
+            if w is not None:
+                w.setVisible(not is_curve)
+
+        controls = self._ensure_predict_curve_controls()
+        if not controls:
+            return
+
+        # 显示/隐藏整个1D参数部分
+        curve_widget = getattr(self.ui, "predict2dParameter1dpartWidget", None)
+        if curve_widget is not None:
+            curve_widget.setVisible(is_curve)
+
+        if not is_curve:
+            return
+
+        self._ui_updating = True
+        try:
+            controls["logx"].setChecked(bool(self.current_parameters.get("predict_curve_logx", False)))
+            controls["logy"].setChecked(bool(self.current_parameters.get("predict_curve_logy", False)))
+            autoscale = bool(self.current_parameters.get("predict_curve_autoscale", True))
+            controls["autoscale"].setChecked(autoscale)
+            for key in ("xmin", "xmax", "ymin", "ymax"):
+                val = self.current_parameters.get(f"predict_curve_{key}")
+                box = controls.get(key)
+                if isinstance(box, QDoubleSpinBox):
+                    if val is None:
+                        box.setValue(0.0)
+                    else:
+                        box.setValue(float(val))
+                    box.setEnabled(not autoscale)
+        finally:
+            self._ui_updating = False
+
+    def _ensure_predict_curve_controls(self) -> Dict[str, object]:
+        if self._predict_curve_controls:
+            return self._predict_curve_controls
+        parent = getattr(self.ui, "predict2dParameter1dpartWidget", None)
+        if parent is None:
+            return {}
+
+        # 检查是否已经有布局，如果没有则创建一个
+        grid = parent.layout()
+        if grid is None:
+            grid = QGridLayout(parent)
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setSpacing(6)
+
+        logx = QCheckBox("Log X")
+        logy = QCheckBox("Log Y")
+        autoscale = QCheckBox("AutoScale")
+
+        xmin = QDoubleSpinBox()
+        xmax = QDoubleSpinBox()
+        ymin = QDoubleSpinBox()
+        ymax = QDoubleSpinBox()
+        for box in (xmin, xmax, ymin, ymax):
+            box.setRange(-1e9, 1e9)
+            box.setDecimals(6)
+            box.setSingleStep(0.1)
+
+        grid.addWidget(logx, 0, 0)
+        grid.addWidget(logy, 0, 1)
+        grid.addWidget(autoscale, 0, 2)
+        grid.addWidget(QLabel("X min"), 1, 0)
+        grid.addWidget(xmin, 1, 1)
+        grid.addWidget(QLabel("X max"), 1, 2)
+        grid.addWidget(xmax, 1, 3)
+        grid.addWidget(QLabel("Y min"), 2, 0)
+        grid.addWidget(ymin, 2, 1)
+        grid.addWidget(QLabel("Y max"), 2, 2)
+        grid.addWidget(ymax, 2, 3)
+
+        logx.toggled.connect(self._on_predict_curve_control_changed)
+        logy.toggled.connect(self._on_predict_curve_control_changed)
+        autoscale.toggled.connect(self._on_predict_curve_control_changed)
+        for box in (xmin, xmax, ymin, ymax):
+            box.editingFinished.connect(self._on_predict_curve_control_changed)
+
+        self._predict_curve_controls = {
+            "logx": logx,
+            "logy": logy,
+            "autoscale": autoscale,
+            "xmin": xmin,
+            "xmax": xmax,
+            "ymin": ymin,
+            "ymax": ymax,
+        }
+        # Hide initially until a curve is shown
+        parent.setVisible(False)
+        return self._predict_curve_controls
+
+    def _on_predict_curve_control_changed(self) -> None:
+        if self._ui_updating:
+            return
+        controls = self._ensure_predict_curve_controls()
+        if not controls:
+            return
+        self.current_parameters["predict_curve_logx"] = bool(controls.get("logx").isChecked()) if controls.get("logx") else False
+        self.current_parameters["predict_curve_logy"] = bool(controls.get("logy").isChecked()) if controls.get("logy") else False
+        autoscale = bool(controls.get("autoscale").isChecked()) if controls.get("autoscale") else True
+        self.current_parameters["predict_curve_autoscale"] = autoscale
+        for key in ("xmin", "xmax", "ymin", "ymax"):
+            box = controls.get(key)
+            if isinstance(box, QDoubleSpinBox):
+                box.setEnabled(not autoscale)
+                if not autoscale:
+                    self.current_parameters[f"predict_curve_{key}"] = float(box.value())
+                else:
+                    self.current_parameters[f"predict_curve_{key}"] = None
+        self._persist_parameters()
+        if self._predict_current_kind == "curve":
+            self._rerender_predict_view()
+
+    def _get_curve_xlim(self) -> Optional[Tuple[float, float]]:
+        if self.current_parameters.get("predict_curve_autoscale", True):
+            return None
+        xmin = self.current_parameters.get("predict_curve_xmin")
+        xmax = self.current_parameters.get("predict_curve_xmax")
+        if xmin is None or xmax is None:
+            return None
+        return float(xmin), float(xmax)
+
+    def _get_curve_ylim(self) -> Optional[Tuple[float, float]]:
+        if self.current_parameters.get("predict_curve_autoscale", True):
+            return None
+        ymin = self.current_parameters.get("predict_curve_ymin")
+        ymax = self.current_parameters.get("predict_curve_ymax")
+        if ymin is None or ymax is None:
+            return None
+        return float(ymin), float(ymax)
+
+    def _show_pixmap_in_predict_view(self, pix: Optional[QPixmap]) -> None:
+        if pix is None:
+            return
+        pview = getattr(self.ui, "predict2dGraphicsView", None)
+        if pview is None:
+            return
+        if self._predict_scene is None:
+            self._predict_scene = QGraphicsScene(pview)
+            pview.setScene(self._predict_scene)
+            pview.setTransformationAnchor(pview.AnchorUnderMouse)
+            pview.setDragMode(pview.ScrollHandDrag)
+        self._predict_scene.clear()
+        self._predict_scene.addPixmap(pix)
+        self._predict_scene.setSceneRect(QRectF(pix.rect()))
+        self._predict_pixmap = pix
+        self._predict_zoom_steps = 0
+        self._apply_predict_zoom(reset=True)
+
+    def _rerender_predict_view(self) -> None:
+        tabs = getattr(self, "_predict_tabs", None)
+        idx = 0
+        try:
+            if tabs is not None:
+                idx = max(0, tabs.currentIndex())
+        except Exception:
+            idx = 0
+        self._render_predict_tab_by_index(idx)
+
+    def _on_predict_log_scale_toggled(self, checked: bool) -> None:
+        if self._ui_updating:
+            return
+        self.current_parameters["predict_log_scale"] = bool(checked)
+        self._persist_parameters()
+        self._rerender_predict_view()
+
+    def _on_predict_export_clicked(self) -> None:
+        """Export prediction results for single-file or multi-file mode."""
+
+        # 检查当前模式
+        mode = self.current_parameters.get("mode", "single_file")
+
+        if mode == "multi_files" and self._multifile_results_widget:
+            # 多文件模式：触发多文件导出界面
+            self._multifile_results_widget.onExportClicked()
+            return
+
+        if not self.prediction_results:
+            QMessageBox.information(self.main_window, "Export", "Run a prediction before exporting the current result.")
+            self._append_status_message("No prediction result to export", level="WARN")
+            return
+
+        # 单文件模式：使用原有逻辑
+        spec = None
+        tabs = getattr(self, "_predict_tabs", None)
+        try:
+            if tabs is not None and 0 <= tabs.currentIndex() < len(self._predict_tab_specs):
+                spec = self._predict_tab_specs[tabs.currentIndex()]
+        except Exception:
+            spec = None
+        if spec is None and self._predict_tab_specs:
+            spec = self._predict_tab_specs[0]
+        if spec is None:
+            self._append_status_message("No prediction output to export", level="WARN")
+            return
+
+        kind = self._predict_current_kind
+        if kind is None and isinstance(spec, dict):
+            kind = spec.get("kind")
+
+        dialog = QMessageBox(self.main_window)
+        dialog.setWindowTitle("Export Predict-2D")
+        dialog.setText("Select what to export")
+        btn_img = dialog.addButton("Image (JPG)", QMessageBox.AcceptRole)
+        btn_data = dialog.addButton("Data (ASCII)", QMessageBox.AcceptRole)
+        btn_both = dialog.addButton("Both", QMessageBox.AcceptRole)
+        dialog.addButton(QMessageBox.Cancel)
+        dialog.exec_()
+        clicked = dialog.clickedButton()
+        if clicked is None or clicked == dialog.button(QMessageBox.Cancel):
+            return
+        export_image = clicked in (btn_img, btn_both)
+        export_data = clicked in (btn_data, btn_both)
+
+        export_path = self._prompt_export_folder("Save Prediction Output To")
+        if not export_path:
+            return
+        if not os.path.isdir(export_path):
+            QMessageBox.warning(self.main_window, "Export Path", f"Export folder not found: {export_path}")
+            return
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        if export_image:
+            if self._predict_pixmap is None:
+                self._append_status_message("No predict view image to export", level="WARN")
+            else:
+                img_path = os.path.join(export_path, f"predict_{kind or 'view'}_{timestamp}.jpg")
+                try:
+                    if not self._predict_pixmap.save(img_path, "JPG"):
+                        raise IOError("Save returned False")
+                    self._append_status_message(f"Predict image exported: {img_path}")
+                except Exception as exc:
+                    self._append_status_message(f"Predict image export failed: {exc}", level="ERROR")
+
+        if export_data:
+            try:
+                if kind == "curve" and isinstance(self._predict_current_curve, np.ndarray):
+                    curve = np.array(self._predict_current_curve, dtype=np.float32)
+                    x = np.arange(len(curve), dtype=np.float32)
+                    data = np.column_stack([x, curve])
+                    data_path = os.path.join(export_path, f"predict_curve_{timestamp}.txt")
+                    exported = self.prediction_view_model.export_array(
+                        PredictionArrayExportRequest(
+                            Path(data_path), data, fmt="%.6g", header="x y", comments=""
+                        )
+                    )
+                    if exported is None:
+                        raise OSError(
+                            self.prediction_view_model.state.error_message
+                            or "Curve data export failed"
+                        )
+                    self._append_status_message(f"Curve data exported: {exported}")
+                elif kind in ("hr", "array", "steps") and isinstance(self._predict_current_image, np.ndarray):
+                    arr = np.array(self._predict_current_image, dtype=np.float32)
+                    step_suffix = ""
+                    if kind == "steps" and isinstance(getattr(self, "_step_snapshots", None), list):
+                        try:
+                            lbl = self._step_snapshots[self._current_step_index].get("label")
+                            if lbl:
+                                step_suffix = f"_{str(lbl)}"
+                        except Exception:
+                            step_suffix = ""
+                    data_path = os.path.join(export_path, f"predict_{kind}{step_suffix}_{timestamp}.txt")
+                    exported = self.prediction_view_model.export_array(
+                        PredictionArrayExportRequest(Path(data_path), arr, fmt="%.6g")
+                    )
+                    if exported is None:
+                        raise OSError(
+                            self.prediction_view_model.state.error_message
+                            or "Matrix data export failed"
+                        )
+                    self._append_status_message(f"Matrix data exported: {exported}")
+                else:
+                    self._append_status_message("No data available to export", level="WARN")
+            except Exception as exc:
+                self._append_status_message(f"Predict data export failed: {exc}", level="ERROR")
+
+    # ------------------------------------------------------------------
+    # Preprocess steps collection
+    # ------------------------------------------------------------------
+    def _collect_preprocess_steps(self, image: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[List[Dict[str, object]]]]:
+        if image is None:
+            return None, None
+        typed_module = (
+            self._current_module.get("_prediction_module")
+            if isinstance(self._current_module, dict)
+            else None
+        )
+        if typed_module is None:
+            self._append_status_message(
+                "Selected module has no typed prediction contract",
+                level="ERROR",
+            )
+            return None, None
+        prepared = self.prediction_view_model.prepare_input(image, typed_module)
+        if prepared is None:
+            return None, None
+        return prepared.values, list(prepared.steps)
+
+    def _display_prediction(self, outputs: Dict[str, np.ndarray]) -> None:
+        if not outputs:
+            return
+        self.prediction_results = outputs
+        self._refresh_predict_readiness()
+        # 1) If only scalar outputs, print to status and return
+        scal = outputs.get("scalars") if isinstance(outputs, dict) else None
+        if isinstance(scal, np.ndarray):
+            vals = ", ".join(f"{float(x):.4g}" for x in scal.reshape(-1))
+            self._append_status_message(f"Predicted scalars: [{vals}]", level="INFO")
+            return
+        panels: List[Dict[str, object]] = []
+        params = outputs.get("parameters") if isinstance(outputs, dict) else None
+        param_names = outputs.get("parameter_names") if isinstance(outputs, dict) else None
+        if isinstance(params, np.ndarray):
+            names = [str(name) for name in param_names] if isinstance(param_names, list) else [f"p{i + 1}" for i in range(params.size)]
+            text = ", ".join(
+                f"{name}={float(value):.6g}"
+                for name, value in zip(names, np.asarray(params).reshape(-1))
+            )
+            self._append_status_message(f"Predicted parameters: {text}", level="INFO")
+            panels.append({
+                "kind": "parameters",
+                "title": "Parameters",
+                "data": np.asarray(params, dtype=np.float32).reshape(-1),
+                "names": names,
+            })
+
+        # Optional: Preprocessed steps panel with buttons following YAML order
+        try:
+            if self._current_image is not None:
+                pre_img, pre_steps = self._collect_preprocess_steps(self._current_image)
+                if pre_steps:
+                    display_steps = list(pre_steps)
+                    if isinstance(pre_img, np.ndarray):
+                        final_input = np.squeeze(pre_img)
+                        if isinstance(final_input, np.ndarray) and final_input.ndim == 3 and final_input.shape[-1] >= 2:
+                            display_steps = [{
+                                "step": "Final Input: intensity",
+                                "label": "Final Input: intensity",
+                                "image": final_input[..., 0],
+                            }, {
+                                "step": "Final Input: mask channel",
+                                "label": "Final Input: mask channel",
+                                "image": final_input[..., 1],
+                            }] + display_steps
+                        elif isinstance(final_input, np.ndarray) and final_input.ndim == 2:
+                            display_steps = [{
+                                "step": "Final Input",
+                                "label": "Final Input",
+                                "image": final_input,
+                            }] + display_steps
+                    panels.append({
+                        "kind": "steps",
+                        "title": "Preprocessed",
+                        "steps": display_steps,
+                        "default_index": 0,
+                    })
+                elif isinstance(pre_img, np.ndarray):
+                    pre_img2d = np.squeeze(pre_img)
+                    if isinstance(pre_img2d, np.ndarray) and pre_img2d.ndim == 2:
+                        panels.append({
+                            "kind": "array",
+                            "title": "Preprocessed",
+                            "data": pre_img2d,
+                            "colormap": self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0]),
+                        })
+        except Exception as exc:
+            self._append_status_message(f"Preprocessed panel failed: {exc}", level="ERROR")
+
+        # HR panel
+        hr = outputs.get("hr") if isinstance(outputs, dict) else None
+        if isinstance(hr, np.ndarray) and hr.ndim == 2:
+            panels.append({"kind": "hr", "title": "hr distribution", "data": hr})
+
+        # 1D curves
+        h = outputs.get("h") if isinstance(outputs, dict) else None
+        if isinstance(h, np.ndarray):
+            panels.append({"kind": "curve", "title": "h distribution (nm)", "xlabel": "h (nm)", "data": h})
+        r = outputs.get("r") if isinstance(outputs, dict) else None
+        if isinstance(r, np.ndarray):
+            panels.append({"kind": "curve", "title": "R distribution (nm)", "xlabel": "R (nm)", "data": r})
+
+        if not panels:
+            self._append_status_message("No plottable prediction outputs", level="WARN")
+            return
+
+        self._predict_tab_specs = panels
+        tabs = self._get_or_create_predict2d_tabs()
+        if tabs is not None:
+            self._rebuild_predict_tabs(tabs)
+            if hasattr(tabs, "setTabBarAutoHide"):
+                tabs.setTabBarAutoHide(len(panels) <= 1)
+            hr_index = next((idx for idx, spec in enumerate(self._predict_tab_specs) if spec.get("kind") == "hr"), None)
+            target_index = hr_index if hr_index is not None else (tabs.currentIndex() if tabs.currentIndex() >= 0 else 0)
+            if target_index is not None:
+                blocker = QSignalBlocker(tabs)
+                tabs.setCurrentIndex(target_index)
+                del blocker
+            self._render_predict_tab_by_index(target_index if target_index is not None else 0)
+            # Ensure the outer tab switches to Predict-2D when results are ready
+            self._set_predict_main_tab("Predict-2D")
+        else:
+            self._render_predict_tab_by_index(0)
+
+    def _render_predict2d_into_view(self, image2d: np.ndarray) -> None:
+        try:
+            self._predict_current_image = image2d
+            disp, vmin, vmax = self._prepare_predict_image(image2d)
+            target_pixels = self._predict_viewport_pixels()
+            pix = self._render_hr_figure(disp, vmin=vmin, vmax=vmax, target_pixels=target_pixels)
+            if pix is None:
+                pix = self._create_pixmap_from_array(disp, vmin, vmax, self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0]))
+            if pix is None:
+                return
+            self._show_pixmap_in_predict_view(pix)
+            self._append_status_message("Predict-2D image updated.")
+        except Exception as exc:
+            self._append_status_message(f"Predict-2D draw failed: {exc}", level="ERROR")
+
+    def _prepare_predict_image(self, image: np.ndarray) -> Tuple[np.ndarray, float, float]:
+        disp = self._maybe_log_scale(np.array(image, dtype=np.float32), bool(self.current_parameters.get("predict_log_scale", False)))
+        auto = bool(self.current_parameters.get("predict_auto_scale", True))
+        vmin = self.current_parameters.get("predict_vmin")
+        vmax = self.current_parameters.get("predict_vmax")
+
+        if auto or vmin is None or vmax is None:
+            vmin, vmax = self._auto_scale_percentiles(disp, 0, 100)
+            self.current_parameters["predict_vmin"] = vmin
+            self.current_parameters["predict_vmax"] = vmax
+
+        self._ui_updating = True
+        try:
+            self._set_checkbox("predict2dAutoScaleCheckBox", auto)
+            self._set_double_spin("predict2dVminValue", vmin)
+            self._set_double_spin("predict2dVmaxValue", vmax)
+        finally:
+            self._ui_updating = False
+        self._persist_parameters()
+        return disp, float(vmin), float(vmax)
+
+    def _render_hr_figure(self, image: np.ndarray, vmin: Optional[float] = None, vmax: Optional[float] = None, target_pixels: Optional[Tuple[int, int]] = None) -> Optional[QPixmap]:
+        try:
+            import matplotlib.pyplot as plt  # type: ignore
+            import numpy as np
+            from matplotlib.backends.backend_agg import FigureCanvasAgg  # type: ignore
+
+            img = np.array(image, dtype=np.float32)
+            vertical_sum = np.sum(img, axis=0)
+            horizontal_sum = np.sum(img, axis=1)
+            vmin_calc, vmax_calc = self._auto_scale_values(img)
+            cmin = vmin if vmin is not None else vmin_calc
+            cmax = vmax if vmax is not None else vmax_calc
+
+            R_bins = np.linspace(0.05, 15, img.shape[0] + 1)
+            h_bins = np.linspace(0.05, 15, img.shape[1] + 1)
+            R_centers = (R_bins[:-1] + R_bins[1:]) / 2
+            h_centers = (h_bins[:-1] + h_bins[1:]) / 2
+
+            dpi = 120.0
+            if target_pixels:
+                fig_w = max(4.0, target_pixels[0] / dpi)
+                fig_h = max(4.0, target_pixels[1] / dpi)
+            else:
+                fig_w = fig_h = 10.0
+            fig, ax = plt.subplots(2, 2, figsize=(fig_w, fig_h), dpi=dpi,
+                                   gridspec_kw={'width_ratios': [4, 1], 'height_ratios': [1, 4]})
+            scale = max(0.6, min(2.0, fig_w / 10.0))
+            title_size = 14 * scale
+            tick_size = 12 * scale
+            cbar_label_size = 14 * scale
+            cbar_tick_size = 12 * scale
+
+            cmap_name = self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0])
+            im = ax[1, 0].imshow(img, cmap=cmap_name, vmin=cmin, vmax=cmax)
+            ax[1, 0].axis('off')
+
+            ax[0, 0].plot(h_centers, vertical_sum, color='red', linewidth=2)
+            ax[0, 0].set_title('h distribution (nm)', fontsize=title_size, fontweight='bold')
+            ax[0, 0].set_facecolor('#f0f0f0')
+            ax[0, 0].grid(True, which='both', linestyle='--', linewidth=0.5)
+            ax[0, 0].tick_params(axis='both', which='major', labelsize=tick_size)
+
+            ax[1, 1].plot(horizontal_sum, R_centers, color='red', linewidth=2)
+            ax[1, 1].set_title('R distribution (nm)', fontsize=title_size, fontweight='bold')
+            ax[1, 1].set_facecolor('#f0f0f0')
+            ax[1, 1].grid(True, which='both', linestyle='--', linewidth=0.5)
+            ax[1, 1].tick_params(axis='both', which='major', labelsize=tick_size)
+            ax[1, 1].invert_yaxis()
+
+            ax[0, 1].axis('off')
+
+            cax = fig.add_axes([0.95, 0.11, 0.02, 0.56])
+            cbar = fig.colorbar(im, cax=cax)
+            cbar.set_label('Intensity', fontsize=cbar_label_size, fontweight='bold')
+            cbar.ax.tick_params(labelsize=cbar_tick_size)
+
+            canvas = FigureCanvasAgg(fig)
+            canvas.draw()
+            buf = canvas.buffer_rgba()
+            img_rgba = np.asarray(buf)
+            plt.close(fig)
+
+            height, width = img_rgba.shape[:2]
+            bytes_per_line = img_rgba.strides[0]
+            image_q = QImage(img_rgba.data, width, height, bytes_per_line, QImage.Format_RGBA8888)
+            return QPixmap.fromImage(image_q.copy())
+        except Exception as exc:
+            self._append_status_message(f"HR figure render error: {exc}", level="ERROR")
+            return None
+
+    def _render_curve_figure(
+        self,
+        curve: np.ndarray,
+        x_label: str,
+        title: str,
+        log_x: bool = False,
+        log_y: bool = False,
+        xlim: Optional[Tuple[float, float]] = None,
+        ylim: Optional[Tuple[float, float]] = None,
+    ) -> Optional[QPixmap]:
+        try:
+            import matplotlib.pyplot as plt  # type: ignore
+            from matplotlib.backends.backend_agg import FigureCanvasAgg  # type: ignore
+
+            y = np.array(curve, dtype=np.float32)
+            x = np.arange(len(y), dtype=np.float32)
+            if log_x:
+                x = np.arange(1, len(y) + 1, dtype=np.float32)
+
+            y_plot = y.copy()
+            if log_y:
+                y_plot = np.where(y_plot > 0, y_plot, np.nan)
+
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.plot(x, y_plot, color='red', linewidth=2)
+            ax.set_title(title, fontsize=14, fontweight='bold')
+            ax.set_xlabel(x_label)
+            ax.set_facecolor('#f0f0f0')
+            ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+            ax.tick_params(axis='both', which='major', labelsize=12)
+
+            if log_x:
+                ax.set_xscale('log')
+            if log_y:
+                ax.set_yscale('log')
+
+            if xlim:
+                low, high = xlim
+                if log_x and low <= 0:
+                    low = max(low, 1e-6)
+                if log_x and high <= 0:
+                    high = max(high, low + 1e-6)
+                ax.set_xlim(low, high)
+            if ylim:
+                low, high = ylim
+                if log_y and low <= 0:
+                    low = max(low, 1e-6)
+                if log_y and high <= 0:
+                    high = max(high, low + 1e-6)
+                ax.set_ylim(low, high)
+
+            canvas = FigureCanvasAgg(fig)
+            canvas.draw()
+            buf = canvas.buffer_rgba()
+            img_rgba = np.asarray(buf)
+            plt.close(fig)
+
+            height, width = img_rgba.shape[:2]
+            bytes_per_line = img_rgba.strides[0]
+            image_q = QImage(img_rgba.data, width, height, bytes_per_line, QImage.Format_RGBA8888)
+            return QPixmap.fromImage(image_q.copy())
+        except Exception as exc:
+            self._append_status_message(f"Curve figure render error: {exc}", level="ERROR")
+            return None
+
+    # ------------------------------------------------------------------
+    # 显示控制
+    # ------------------------------------------------------------------
+    def _zoom_in(self) -> None:
+        self._view_zoom_steps += 1
+        self._apply_zoom()
+
+    def _zoom_out(self) -> None:
+        self._view_zoom_steps -= 1
+        self._apply_zoom()
+
+    def _zoom_reset(self) -> None:
+        self._view_zoom_steps = 0
+        self._apply_zoom(reset=True)
+
+    def _predict_zoom_in(self) -> None:
+        self._predict_zoom_steps += 1
+        self._apply_predict_zoom()
+
+    def _predict_zoom_out(self) -> None:
+        self._predict_zoom_steps -= 1
+        self._apply_predict_zoom()
+
+    def _predict_zoom_reset(self) -> None:
+        self._predict_zoom_steps = 0
+        self._apply_predict_zoom(reset=True)
+
+    def _apply_zoom(self, reset: bool = False) -> None:
+        view = getattr(self.ui, "gisaxsImageGraphicsView", None)
+        if view is None or self._current_pixmap is None:
+            return
+        view.resetTransform()
+        if reset:
+            view.fitInView(QRectF(self._current_pixmap.rect()), Qt.KeepAspectRatio)
+            return
+        factor = 1.15 ** self._view_zoom_steps
+        view.scale(factor, factor)
+
+    def _apply_predict_zoom(self, reset: bool = False) -> None:
+        view = getattr(self.ui, "predict2dGraphicsView", None)
+        if view is None or self._predict_pixmap is None:
+            return
+        view.resetTransform()
+        if reset:
+            view.fitInView(QRectF(self._predict_pixmap.rect()), Qt.KeepAspectRatio)
+            return
+        factor = 1.15 ** self._predict_zoom_steps
+        view.scale(factor, factor)
+
+    def _on_auto_scale_toggled(self) -> None:
+        if self._ui_updating:
+            return
+        auto = getattr(self.ui, "gisaxsImageAutoScaleCheckBox", None)
+        checked = bool(auto.isChecked()) if auto else True
+        self.current_parameters["auto_scale"] = checked
+        self._persist_parameters()
+        if checked:
+            self._update_image_display()
+
+    def _on_auto_scale_reset(self) -> None:
+        self.current_parameters["auto_scale"] = True
+        self._set_checkbox("gisaxsImageAutoScaleCheckBox", True)
+        self._persist_parameters()
+        self._update_image_display()
+
+    def _on_vmin_changed(self) -> None:
+        if self._ui_updating:
+            return
+        value = self._get_double_spin_value("gisaxsImageVminValue")
+        if value is None:
+            return
+        self.current_parameters["auto_scale"] = False
+        self._set_checkbox("gisaxsImageAutoScaleCheckBox", False)
+        self.current_parameters["vmin"] = value
+        self._persist_parameters()
+        self._update_image_display()
+
+    def _on_vmax_changed(self) -> None:
+        if self._ui_updating:
+            return
+        value = self._get_double_spin_value("gisaxsImageVmaxValue")
+        if value is None:
+            return
+        self.current_parameters["auto_scale"] = False
+        self._set_checkbox("gisaxsImageAutoScaleCheckBox", False)
+        self.current_parameters["vmax"] = value
+        self._persist_parameters()
+        self._update_image_display()
+
+    def _on_colormap_changed(self, text: str) -> None:
+        if self._ui_updating:
+            return
+        self.current_parameters["colormap"] = text or self._DEFAULT_COLORMAPS[0]
+        self._update_image_display()
+        self._rerender_predict_view()
+
+    def _on_predict_auto_scale_toggled(self) -> None:
+        if self._ui_updating:
+            return
+        cb = getattr(self.ui, "predict2dAutoScaleCheckBox", None)
+        checked = bool(cb.isChecked()) if cb else True
+        self.current_parameters["predict_auto_scale"] = checked
+        self._persist_parameters()
+        self._rerender_predict_view()
+
+    def _on_predict_auto_scale_reset(self) -> None:
+        self.current_parameters["predict_auto_scale"] = True
+        self._set_checkbox("predict2dAutoScaleCheckBox", True)
+        self._persist_parameters()
+        self._rerender_predict_view()
+
+    def _on_predict_vmin_changed(self) -> None:
+        if self._ui_updating:
+            return
+        value = self._get_double_spin_value("predict2dVminValue")
+        if value is None:
+            return
+        self.current_parameters["predict_auto_scale"] = False
+        self._set_checkbox("predict2dAutoScaleCheckBox", False)
+        self.current_parameters["predict_vmin"] = value
+        self._persist_parameters()
+        self._rerender_predict_view()
+
+    def _on_predict_vmax_changed(self) -> None:
+        if self._ui_updating:
+            return
+        value = self._get_double_spin_value("predict2dVmaxValue")
+        if value is None:
+            return
+        self.current_parameters["predict_auto_scale"] = False
+        self._set_checkbox("predict2dAutoScaleCheckBox", False)
+        self.current_parameters["predict_vmax"] = value
+        self._persist_parameters()
+        self._rerender_predict_view()
+
+    # ------------------------------------------------------------------
+    # Module selection (scan modules/, parse module.yaml, select & load)
+    # ------------------------------------------------------------------
+    def eventFilter(self, obj, event):  # noqa: N802 - Qt signature
+        try:
+            combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
+            if combo and obj is combo and event is not None:
+                if event.type() in (QEvent.MouseButtonPress, QEvent.FocusIn):
+                    # Refresh module list when user is about to open/select
+                    self._refresh_modules()
+
+        except Exception:
+            pass
+        return super().eventFilter(obj, event)
+
+    def _populate_framework_combo(self, combo) -> None:
+        available = self.detect_available_frameworks()
+        options = [label for label in available.values() if self.is_framework_compatible(self._current_module, label)]
+        if not options:
+            options = ["No compatible framework installed"]
+        try:
+            if options and not options[0].startswith("No compatible"):
+                self.current_parameters["framework"] = options[0]
+        except Exception:
+            pass
+        blocker = QSignalBlocker(combo)
+        combo.clear()
+        combo.addItems(options)
+        combo.setEnabled(bool(options) and not options[0].startswith("No compatible"))
+        del blocker
+        self._refresh_framework_status()
+
+    def detect_available_frameworks(self) -> Dict[str, str]:
+        frameworks: Dict[str, str] = {}
+        try:
+            from importlib.metadata import version
+
+            try:
+                frameworks["tensorflow"] = f"tensorflow {version('tensorflow')}"
+            except Exception:
+                pass
+            try:
+                frameworks["torch"] = f"torch {version('torch')}"
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return frameworks
+
+    def is_framework_compatible(self, module: Optional[Dict[str, object]], framework_text: str) -> bool:
+        framework = (framework_text or "").lower()
+        if not framework or framework.startswith("no compatible"):
+            return False
+        spec = module or {}
+        model_format = str(spec.get("model_format") or "").lower() if isinstance(spec, dict) else ""
+        model_path = str(spec.get("model_path") or "").lower() if isinstance(spec, dict) else ""
+
+        if any(token in model_format for token in ("torch", "pytorch")) or model_path.endswith((".pt", ".pth")):
+            return "torch" in framework
+        if any(token in model_format for token in ("tensorflow", "keras", "savedmodel", "h5")) or model_path.endswith((".keras", ".h5")) or os.path.isdir(model_path):
+            return "tensorflow" in framework
+        return "tensorflow" in framework or "torch" in framework
+
+    def refresh_framework_options_for_current_module(self) -> None:
+        combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
+        if combo is None:
+            return
+        current = combo.currentText()
+        self._populate_framework_combo(combo)
+        if current and self.is_framework_compatible(self._current_module, current):
+            idx = combo.findText(current)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        self._refresh_framework_status()
+        self._refresh_predict_readiness()
+
+    def _framework_ready(self) -> bool:
+        combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
+        if combo is None:
+            return False
+        return combo.isEnabled() and self.is_framework_compatible(self._current_module, combo.currentText())
+
+    def _refresh_framework_status(self) -> None:
+        label = getattr(self.ui, "gisaxsPredictFrameworkStatusLabel", None)
+        if label is None:
+            return
+        combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
+        text = combo.currentText() if combo is not None else ""
+        if self._framework_ready():
+            label.setText(f"Framework OK: {text}")
+            label.setStyleSheet("color: #166534;")
+        elif text.startswith("No compatible"):
+            label.setText("Framework missing or incompatible")
+            label.setStyleSheet("color: #b91c1c;")
+        else:
+            label.setText("Framework incompatible")
+            label.setStyleSheet("color: #b91c1c;")
+
+    def _initialize_modules_ui(self) -> None:
+        self._refresh_modules()
+        # Restore last selected module if available
+        module_name = self.current_parameters.get("module_name") or ""
+        self._set_combobox_text("gisaxsPredictModuleSelectCombox", module_name)
+        if module_name:
+            self._on_module_selected(module_name)
+
+    def _refresh_modules(self) -> None:
+        modules = self._scan_modules()
+        new_names = sorted(modules.keys())
+        old_names = sorted(self._modules_by_name.keys())
+        current_name = self.current_parameters.get("module_name", "")
+        self._modules_by_name = modules
+        self._modules_by_id = {m.get("id", name): m for name, m in modules.items()}
+        if new_names != old_names:
+            self._populate_module_combo()
+        elif current_name and current_name in modules:
+            self._current_module = modules[current_name]
+
+    def _scan_modules(self) -> Dict[str, Dict[str, object]]:
+        try:
+            modules = self.prediction_view_model.discover_modules()
+            return {
+                module.name: self.prediction_view_model.module_display_values(module)
+                for module in modules
+            }
+        except Exception as exc:
+            self._append_status_message(f"Module scan failed: {exc}", level="ERROR")
+            return {}
+
+    def _parse_module_yaml(self, yaml_path: str) -> Optional[Dict[str, object]]:
+        try:
+            module = self.prediction_view_model.load_module(Path(yaml_path))
+            return (
+                self.prediction_view_model.module_display_values(module)
+                if module is not None
+                else None
+            )
+        except Exception:
+            return None
+
+    def _populate_module_combo(self) -> None:
+        combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
+        if combo is None:
+            return
+        current = combo.currentText()
+        names = sorted(self._modules_by_name.keys())
+        blocker = QSignalBlocker(combo)
+        combo.clear()
+        combo.addItems(names)
+        # Try restore
+        idx = combo.findText(self.current_parameters.get("module_name", ""))
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        elif current:
+            idx2 = combo.findText(current)
+            if idx2 >= 0:
+                combo.setCurrentIndex(idx2)
+        del blocker
+
+    def _select_model_folder(self, start_dir: str = "") -> str:
+        folder = QFileDialog.getExistingDirectory(
+            self.main_window,
+            "Select TensorFlow SavedModel Folder",
+            start_dir or "",
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
+        )
+        return os.path.abspath(normalize_path(folder)) if folder else ""
+
+    def _on_module_selected(self, name: str) -> None:
+        if not name:
+            return
+        spec = self._modules_by_name.get(name)
+        if not spec:
+            return
+        self._current_module = spec
+        self.prediction_view_model.select_module(name)
+        self.current_parameters["module_name"] = spec.get("name", name)
+        self.current_parameters["module_model_path"] = ""
+        self._current_model = None
+        self._set_model_status_color("gray", "Not loaded")
+        self.refresh_framework_options_for_current_module()
+
+        # The selected module owns its model path. Do not inherit a previous
+        # module's model path here, or the wrong model can be silently loaded.
+        model_path = spec.get("model_path") or ""
+        if not model_path or not os.path.exists(model_path):
+            self._load_module_mask(self._current_module)
+            self._persist_parameters()
+            self._append_status_message("Module selected. Use Import Model to choose and load a model.", level="INFO")
+            self._refresh_predict_readiness()
+            return
+
+        # Persist chosen model path in session parameters (not writing back to YAML)
+        abs_model = os.path.abspath(model_path)
+        self.current_parameters["module_model_path"] = abs_model
+        self._current_module["model_path"] = abs_model
+
+        # Load mask if available
+        self._load_module_mask(self._current_module)
+
+        self._persist_parameters()
+        self._append_status_message(f"Module selected: {self.current_parameters['module_name']}")
+
+    def _load_module_mask(self, spec: Dict[str, object]) -> None:
+        self._current_mask = None
+        mask_path = spec.get("mask_path") if isinstance(spec, dict) else None
+        if not isinstance(mask_path, str) or not mask_path:
+            return
+        mask_path = normalize_path(mask_path)
+        self._current_mask = self.prediction_view_model.load_mask(Path(mask_path))
+        if self._current_mask is not None:
+            self._append_status_message(f"Mask loaded: {os.path.basename(mask_path)}")
+            return
+        message = (
+            self.prediction_view_model.state.error_message
+            or "Failed to load mask"
+        )
+        if message == "Mask file found but unsupported format (only .npy)":
+            self._append_status_message(message, level="WARN")
+        else:
+            self._append_status_message(f"Failed to load mask: {message}", level="ERROR")
+
+    # ------------------------------------------------------------------
+    # Module actions: Edit and Model Import
+    # ------------------------------------------------------------------
+    def _on_edit_module_clicked(self) -> None:
+        combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
+        name = combo.currentText().strip() if combo else ""
+        spec = self._modules_by_name.get(name) if name else None
+        yaml_path = spec.get("yaml_path") if isinstance(spec, dict) else None
+        if not isinstance(yaml_path, str) or not os.path.isfile(yaml_path):
+            QMessageBox.information(self.main_window, "File Missing", "module.yaml not found for this module.")
+            return
+        try:
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(yaml_path)):
+                raise OSError("The operating system did not accept the file request")
+            self._start_module_edit_watch(yaml_path)
+        except Exception as exc:
+            QMessageBox.warning(self.main_window, "Open Failed", f"Cannot open file:\n{yaml_path}\n\n{exc}")
+
+    def _start_module_edit_watch(self, yaml_path: str) -> None:
+        try:
+            self._module_edit_watch_mtime = os.path.getmtime(yaml_path)
+        except OSError:
+            self._module_edit_watch_mtime = None
+        self._module_edit_watch_path = yaml_path
+        self._module_edit_watch_ticks = 0
+        if self._module_edit_watch_timer is None:
+            self._module_edit_watch_timer = QTimer(self)
+            self._module_edit_watch_timer.timeout.connect(self._check_module_edit_watch)
+        self._module_edit_watch_timer.start(1000)
+        self._append_status_message("Watching module.yaml for saved edits...")
+
+    def _check_module_edit_watch(self) -> None:
+        path = self._module_edit_watch_path
+        if not path:
+            return
+        self._module_edit_watch_ticks += 1
+        if self._module_edit_watch_ticks > 300:
+            if self._module_edit_watch_timer:
+                self._module_edit_watch_timer.stop()
+            self._module_edit_watch_path = None
+            return
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return
+        if self._module_edit_watch_mtime is not None and mtime == self._module_edit_watch_mtime:
+            return
+
+        if self._module_edit_watch_timer:
+            self._module_edit_watch_timer.stop()
+        self._module_edit_watch_path = None
+        self._module_edit_watch_mtime = mtime
+        selected_name = self.current_parameters.get("module_name", "")
+        self._refresh_modules()
+        if selected_name and selected_name in self._modules_by_name:
+            self._current_module = self._modules_by_name[selected_name]
+            self._load_module_mask(self._current_module)
+        self._append_status_message("module.yaml saved; module settings reloaded.")
+
+    def _on_reload_module_config_clicked(self) -> None:
+        combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
+        selected_name = combo.currentText().strip() if combo else ""
+        old_spec = self._modules_by_name.get(selected_name) if selected_name else self._current_module
+        old_yaml_path = old_spec.get("yaml_path") if isinstance(old_spec, dict) else None
+        old_model_path = ""
+        if isinstance(self._current_module, dict):
+            old_model_path = str(self._current_module.get("model_path") or "")
+
+        self._refresh_modules()
+
+        refreshed_spec = None
+        if isinstance(old_yaml_path, str) and old_yaml_path:
+            old_yaml_abs = os.path.normcase(os.path.abspath(old_yaml_path))
+            for spec in self._modules_by_name.values():
+                yaml_path = spec.get("yaml_path") if isinstance(spec, dict) else None
+                if isinstance(yaml_path, str) and os.path.normcase(os.path.abspath(yaml_path)) == old_yaml_abs:
+                    refreshed_spec = spec
+                    break
+
+        if refreshed_spec is None and selected_name:
+            refreshed_spec = self._modules_by_name.get(selected_name)
+
+        if not isinstance(refreshed_spec, dict):
+            QMessageBox.warning(
+                self.main_window,
+                "Reload Config",
+                "Could not reload the selected module. Please check module.yaml."
+            )
+            self._append_status_message("Module config reload failed: selected module not found after scan.", level="ERROR")
+            return
+
+        new_name = str(refreshed_spec.get("name") or selected_name)
+        new_model_path = str(refreshed_spec.get("model_path") or "")
+        self._current_module = refreshed_spec
+        self.current_parameters["module_name"] = new_name
+
+        if combo is not None and combo.findText(new_name) >= 0:
+            blocker = QSignalBlocker(combo)
+            combo.setCurrentText(new_name)
+            del blocker
+
+        if new_model_path:
+            self.current_parameters["module_model_path"] = os.path.abspath(new_model_path)
+        else:
+            self.current_parameters["module_model_path"] = ""
+            self._current_model = None
+            self._set_model_status_color("gray", "Not loaded")
+        if old_model_path and new_model_path and os.path.abspath(old_model_path) != os.path.abspath(new_model_path):
+            self._current_model = None
+            self._set_model_status_color("gray", "Not loaded")
+
+        self.refresh_framework_options_for_current_module()
+        self._load_module_mask(self._current_module)
+        self._persist_parameters()
+        self._refresh_predict_readiness()
+
+        steps = refreshed_spec.get("preprocess_steps")
+        step_text = ", ".join(str(s) for s in steps) if isinstance(steps, list) and steps else "default"
+        self._append_status_message(f"Module config reloaded: {new_name}; preprocess steps: {step_text}")
+
+    def _on_model_import_clicked(self) -> None:
+        combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
+        name = combo.currentText().strip() if combo else ""
+        spec = self._modules_by_name.get(name) if name else None
+        if not spec:
+            QMessageBox.information(self.main_window, "No Module", "Please select a module first.")
+            return
+        model_path = (spec.get("model_path") or "") if isinstance(spec, dict) else ""
+        if not model_path or not os.path.exists(model_path):
+            model_path = self._select_model_folder(
+                spec.get("folder", "") if isinstance(spec, dict) else ""
+            )
+            if not model_path:
+                return
+            self.current_parameters["module_model_path"] = model_path
+            self._current_module = spec
+            self._current_module["model_path"] = model_path
+            self._write_model_path_to_yaml(self._current_module, model_path)
+            self.refresh_framework_options_for_current_module()
+        else:
+            model_path = os.path.abspath(model_path)
+            self.current_parameters["module_model_path"] = model_path
+
+        self._append_status_message("Loading model (this may take a while)...")
+        self.progress_updated.emit(5)
+        self._model_loading = True
+        self._model_cancel_requested = False
+        self._set_model_status_color("red", "Loading...")
+        btn_import = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+        if btn_import:
+            btn_import.setEnabled(False)
+
+        def _load():
+            self._append_status_message(f"Loading model from: {model_path}")
+            try:
+                model = self.prediction_view_model.inspect_model(
+                    Path(model_path),
+                    allow_unsafe_lambda=True,
+                )
+                if model is None:
+                    raise RuntimeError(
+                        self.prediction_view_model.state.error_message
+                        or "Model validation failed"
+                    )
+            except Exception as exc:
+                self._append_status_message(
+                    f"Failed to load model from: {model_path} | {exc}",
+                    level="ERROR",
+                )
+                return None, str(exc)
+            self._append_status_message(
+                f"Model successfully validated in isolated worker: {model.artifact_path}"
+            )
+            return model, None
+
+        def _run():
+            model, err = _load()
+            self.model_load_finished.emit(model, err or "", model_path)
+
+        import threading as _threading
+
+        self._model_loader_thread = _threading.Thread(target=_run, daemon=True)
+        self._model_loader_thread.start()
+
+    def _on_model_load_finished(self, model: object, err: str, model_path: str) -> None:
+        """Finalize model loading on the Qt UI thread."""
+        expected_model_path = str(self.current_parameters.get("module_model_path") or "")
+        if expected_model_path and os.path.abspath(model_path) != os.path.abspath(expected_model_path):
+            self._append_status_message(
+                f"Ignored stale model load result from: {model_path}",
+                level="WARN",
+            )
+            self._model_loading = False
+            btn = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+            if btn:
+                btn.setEnabled(True)
+            self._refresh_predict_readiness()
+            return
+        if not expected_model_path:
+            self._append_status_message(
+                f"Ignored model load result because no module model is selected: {model_path}",
+                level="WARN",
+            )
+            self._model_loading = False
+            btn = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+            if btn:
+                btn.setEnabled(True)
+            self._refresh_predict_readiness()
+            return
+        if err:
+            self._append_status_message(f"Model load failed: {err}", level="ERROR")
+            self.progress_updated.emit(0)
+            self._current_model = None
+            self._model_loading = False
+            self._set_model_status_color("gray", "Not loaded")
+        else:
+            self._current_model = model
+            self.current_parameters["module_model_path"] = model_path
+            if self._current_module is not None:
+                self._current_module["model_path"] = model_path
+            if self._model_cancel_requested:
+                self._current_model = None
+                self._append_status_message("Model load canceled.")
+                self.progress_updated.emit(0)
+                self._set_model_status_color("gray", "Canceled")
+            else:
+                self._append_status_message("Model loaded successfully.")
+                self.progress_updated.emit(100)
+                self._set_model_status_color("green", "Loaded")
+            self._model_loading = False
+
+        btn = getattr(self.ui, "gisaxsPredictModelImportButton", None)
+        if btn:
+            btn.setEnabled(True)
+        self._persist_parameters()
+        self._refresh_predict_readiness()
+
+    def _write_model_path_to_yaml(self, spec: Dict[str, object], model_path: str) -> None:
+        module = spec.get("_prediction_module") if isinstance(spec, dict) else None
+        if module is None:
+            return
+        if self.prediction_view_model.update_model_path(module, Path(model_path)):
+            yaml_path = spec.get("yaml_path", "module.yaml")
+            self._append_status_message(
+                f"Updated model_path in {os.path.basename(str(yaml_path))}"
+            )
+            return
+        self._append_status_message(
+            self.prediction_view_model.state.error_message
+            or "Failed to update module.yaml",
+            level="ERROR",
+        )
+
+    # ------------------------------------------------------------------
+    # 预测逻辑（当前为占位实现，无TensorFlow依赖）
+    # ------------------------------------------------------------------
+    def _run_gisaxs_predict(self) -> None:
+        self._execute_prediction()
+
+    def _execute_prediction(self) -> None:
+        self._update_parameters_from_ui()
+        if not self._validate_parameters():
+            return
+        try:
+            self.status_updated.emit("Starting GISAXS prediction...")
+            self.progress_updated.emit(0)
+            mode = self.current_parameters.get("mode", "single_file")
+            if mode == "single_file":
+                # Predict for the currently loaded image
+                if self._current_image is None:
+                    self._append_status_message("No image loaded for prediction", level="WARN")
+                    return
+                self.progress_updated.emit(10)
+                inp = self._preprocess_for_module(self._current_image)
+                if inp is None:
+                    self._append_status_message("Preprocessing failed", level="ERROR")
+                    return
+                self.progress_updated.emit(40)
+                outs = self._predict_with_current_model(inp)
+                if not outs:
+                    self._append_status_message("Prediction failed", level="ERROR")
+                    self.progress_updated.emit(0)
+                    return
+                self.progress_updated.emit(70)
+                self._display_prediction(outs)
+                self.progress_updated.emit(100)
+                self.status_updated.emit("GISAXS prediction finished!")
+            else:
+                # Multi-files: use new queue-based processing
+                results = self._predict_multi_files()
+                if results and results.get("processing_started"):
+                    # 不需要等待完成，处理在后台进行
+                    # progress和completion信号会由multifile_manager发出
+                    pass
+                else:
+                    self.progress_updated.emit(0)
+                    self.status_updated.emit("Failed to start multi-file prediction")
+        except Exception as exc:  # pragma: no cover - runtime safety
+            QMessageBox.critical(self.main_window, "Prediction Error", str(exc))
+            self.status_updated.emit(f"GISAXS prediction error: {exc}")
+            # 重置多文件预测状态
+            if self._multifile_prediction_active:
+                self._on_multifile_prediction_completed()
+
+    def _update_parameters_from_ui(self) -> None:
+        combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
+        if combo is not None:
+            self.current_parameters["framework"] = combo.currentText()
+        export_edit = getattr(self.ui, "gisaxsPredictExportFolderValue", None)
+        if export_edit is not None:
+            text = export_edit.text().strip()
+            if text:
+                self.current_parameters["export_path"] = text
+
+    def _validate_parameters(self) -> bool:
+        mode = self.current_parameters.get("mode", "single_file")
+        if mode == "single_file":
+            file_path = self.current_parameters.get("input_file")
+            if not file_path or not os.path.exists(file_path):
+                QMessageBox.warning(self.main_window, "Invalid Parameters", "Please select a valid input file")
+                return False
+        else:
+            folder = self.current_parameters.get("input_folder")
+            if not folder or not os.path.exists(folder):
+                QMessageBox.warning(self.main_window, "Invalid Parameters", "Please select a valid folder")
+                return False
+        if not self._framework_ready():
+            QMessageBox.warning(self.main_window, "Framework", "The selected model requires a compatible installed framework.")
+            return False
+        if not self._model_ready():
+            QMessageBox.warning(self.main_window, "Model", "Please import a model before running prediction.")
+            return False
+        return True
+
+    def _predict_single_file(self) -> Optional[Dict[str, object]]:
+        file_path = self.current_parameters.get("input_file")
+        if not file_path:
+            return None
+        self.status_updated.emit(f"Processing file: {os.path.basename(file_path)}")
+        self.progress_updated.emit(25)
+        results = {
+            "file": file_path,
+            "predictions": [],
+            "confidence": 0.95,
+            "processing_time": 1.5,
+        }
+        self.progress_updated.emit(75)
+        return results
+
+    def _predict_multi_files(self) -> Optional[Dict[str, object]]:
+        """多文件预测 - 使用新的队列处理系统"""
+        folder = self.current_parameters.get("input_folder")
+        if not folder:
+            self._append_status_message("No input folder selected", level="WARN")
+            return None
+
+        files = [
+            str(path)
+            for path in self.prediction_view_model.files.discover_files(
+                Path(folder), (".cbf", ".tif", ".tiff")
+            )
+        ]
+        if not files and self.prediction_view_model.state.error_message:
+            self._append_status_message(
+                f"Error scanning folder: {self.prediction_view_model.state.error_message}",
+                level="ERROR",
+            )
+            return None
+
+        if not files:
+            self._append_status_message("No compatible image files found in folder", level="WARN")
+            return None
+
+        # 应用范围过滤
+        range_text = self.current_parameters.get("range_value", "")
+        if range_text:
+            try:
+                indices = self._parse_range_text(range_text)
+                if indices:
+                    self._scan_directory_for_cbf(folder)
+                    missing = [idx for idx in indices if idx not in self._index_to_file]
+                    files = [self._index_to_file[idx] for idx in indices if idx in self._index_to_file]
+                    if missing:
+                        missing_text = ", ".join(f"{idx:05d}" for idx in missing[:10])
+                        if len(missing) > 10:
+                            missing_text += ", ..."
+                        self._append_status_message(f"Range skipped missing CBF indices: {missing_text}", level="WARN")
+            except Exception as e:
+                self._append_status_message(f"Error parsing range: {e}", level="WARN")
+
+        if not files:
+            self._append_status_message("No files selected by range", level="WARN")
+            return None
+
+        try:
+            every = max(1, int(self._get_line_edit_text("gisaxsPredictEveryValue") or "1"))
+        except ValueError:
+            every = 1
+            self._set_line_edit("gisaxsPredictEveryValue", "1")
+            self._append_status_message("Every must be a positive integer; using 1.", level="WARN")
+
+        if every > 1:
+            batches = [
+                list(batch)
+                for batch in self.prediction_view_model.files.complete_batches(
+                    files, every
+                )
+            ]
+            skipped = len(files) - (len(batches) * every)
+            if skipped:
+                self._append_status_message(
+                    f"Skipped {skipped} trailing file(s) that do not make a full Every={every} stack.",
+                    level="WARN",
+                )
+        else:
+            batches = [[file_path] for file_path in files]
+        self._multifile_batch_map = {batch[0]: batch for batch in batches if batch}
+        files_to_process = list(self._multifile_batch_map.keys())
+        if not files_to_process:
+            self._append_status_message("No complete multi-file stacks selected by range/every.", level="WARN")
+            return None
+        if every > 1:
+            self._append_status_message(
+                f"Multi-file range grouped into {len(files_to_process)} batch(es), Every={every}.",
+                level="INFO",
+            )
+
+        # 清空现有结果并添加新的待处理项目
+        if self._multifile_results_widget:
+            self._multifile_results_widget.clearResults()
+
+            # 添加所有文件到结果列表
+            for file_path in files_to_process:
+                row = self._multifile_results_widget.addPredictResult(file_path)
+                batch = self._multifile_batch_map.get(file_path, [])
+                if len(batch) > 1:
+                    result = self._multifile_results_widget.table_model.getResult(row)
+                    if result is not None:
+                        result.file_name = f"{os.path.basename(batch[0])} - {os.path.basename(batch[-1])}"
+                        result.file_path = "\n".join(batch)
+                        result.stack_count = len(batch)
+                        self._multifile_results_widget.table_model.updateResult(row, result)
+                        self._append_status_message(
+                            f"Queued stack: {os.path.basename(batch[0])} - {os.path.basename(batch[-1])} ({len(batch)} files)",
+                            level="INFO",
+                        )
+                elif batch:
+                    result = self._multifile_results_widget.table_model.getResult(row)
+                    if result is not None:
+                        result.stack_count = 1
+                        self._multifile_results_widget.table_model.updateResult(row, result)
+
+        # 开始批量预测
+        if self._multifile_manager:
+            self._multifile_prediction_active = True
+            self._show_multifile_results_window()
+            self._multifile_manager.start_batch_prediction(files_to_process, self._predict_single_file_for_batch)
+
+        # 立即返回，实际处理将在后台进行
+        return {
+            "folder": folder,
+            "total_files": len(files_to_process),
+            "processing_started": True
+        }
+
+    def _predict_single_file_for_batch(self, file_path: str) -> Dict[str, object]:
+        """为批量处理执行单文件预测"""
+        try:
+            # 临时设置当前文件用于预测
+            old_file = self.current_parameters.get("input_file", "")
+            self.current_parameters["input_file"] = file_path
+            batch = self._multifile_batch_map.get(file_path) or [file_path]
+            if len(batch) > 1:
+                self.status_updated.emit(
+                    f"Predicting stack ({len(batch)} files): {os.path.basename(batch[0])} - {os.path.basename(batch[-1])}"
+                )
+            else:
+                self.status_updated.emit(f"Predicting file: {os.path.basename(file_path)}")
+
+            # 执行实际预测逻辑（这里需要调用真正的预测代码）
+            result = self._execute_single_file_prediction(file_path, batch)
+
+            # 恢复原来的文件设置
+            self.current_parameters["input_file"] = old_file
+
+            return result
+
+        except Exception as e:
+            # 恢复原来的文件设置
+            if 'old_file' in locals():
+                self.current_parameters["input_file"] = old_file
+            raise e
+
+    def _execute_single_file_prediction(self, file_path: str, stack_files: Optional[List[str]] = None) -> Dict[str, object]:
+        """执行单个文件的预测逻辑 - 真正调用预测流程"""
+        typed_module = (
+            self._current_module.get("_prediction_module")
+            if isinstance(self._current_module, dict)
+            else None
+        )
+        model_path = str(self.current_parameters.get("module_model_path") or "")
+        if typed_module is not None and model_path:
+            paths = tuple(stack_files or [file_path])
+            item = self.prediction_view_model.predict_file_batch(
+                paths,
+                typed_module,
+                Path(model_path),
+            )
+            if item.status != "succeeded" or item.prediction is None:
+                raise RuntimeError(item.error_message or "Prediction failed")
+            return {
+                "file": file_path,
+                "stack_count": len(paths),
+                "stack_files": list(paths),
+                "prediction_data": dict(item.prediction.outputs),
+            }
+        try:
+            # 保存原有参数和状态
+            old_input_file = self.current_parameters.get("input_file", "")
+            old_mode = self.current_parameters.get("mode", "single_file")
+            old_current_image = self._current_image
+
+            # 临时设置为单文件模式
+            self.current_parameters["input_file"] = file_path
+            self.current_parameters["mode"] = "single_file"
+
+            # 加载图像（使用同步方法）
+            image_data = self._load_cbf_stack_sync(stack_files) if stack_files and len(stack_files) > 1 else self._load_cbf_file_sync(file_path)
+
+            if image_data is None:
+                raise Exception(f"Failed to load image: {file_path}")
+
+            # 设置当前图像
+            self._current_image = image_data
+
+            # 执行真正的预测流程（与单文件相同）
+            # 1. 预处理
+            inp = self._preprocess_for_module(self._current_image)
+            if inp is None:
+                raise Exception("Preprocessing failed")
+
+            # 2. 模型预测
+            outs = self._predict_with_current_model(inp)
+            if not outs:
+                raise Exception("Prediction failed")
+
+            # 恢复原有参数和状态
+            self.current_parameters["input_file"] = old_input_file
+            self.current_parameters["mode"] = old_mode
+            self._current_image = old_current_image
+
+            # 返回结果（只包含预测数据，预处理步骤按需计算）
+            return {
+                "file": file_path,
+                "stack_count": len(stack_files) if stack_files else 1,
+                "stack_files": list(stack_files) if stack_files else [file_path],
+                "prediction_data": outs  # 真正的预测结果
+            }
+
+        except Exception as e:
+            # 确保恢复原有参数和状态
+            if 'old_input_file' in locals():
+                self.current_parameters["input_file"] = old_input_file
+            if 'old_mode' in locals():
+                self.current_parameters["mode"] = old_mode
+            if 'old_current_image' in locals():
+                self._current_image = old_current_image
+            raise e
+
+    def _on_multifile_result_selected(self, result: PredictResult) -> None:
+        """多文件结果选中处理 - 双击显示单文件结果"""
+        if result.status != PredictStatus.COMPLETED or not result.prediction_data:
+            # 如果结果还未完成，只更新当前文件显示
+            self._update_current_file_display(result.file_path.splitlines()[0], getattr(result, "stack_count", 1))
+            return
+
+        try:
+            # 更新当前文件显示
+            self._update_current_file_display(result.file_path.splitlines()[0], getattr(result, "stack_count", 1))
+
+            # 获取预测结果数据
+            prediction_data = result.prediction_data.get("prediction_data", {})
+
+            if prediction_data:
+                # 临时加载当前图像以支持预处理显示（按需计算）
+                try:
+                    temp_image = self._load_cbf_stack_sync(result.file_path.splitlines()) if "\n" in result.file_path else self._load_cbf_file_sync(result.file_path)
+                    if temp_image is not None:
+                        # 临时设置当前图像用于预处理显示
+                        old_current_image = self._current_image
+                        self._current_image = temp_image
+
+                        # 使用标准显示方法（会实时计算预处理步骤）
+                        self._display_prediction(prediction_data)
+
+                        # 恢复原来的图像
+                        self._current_image = old_current_image
+                    else:
+                        # 如果无法加载图像，仅显示预测结果（无预处理tab）
+                        self._current_image = None
+                        self._display_prediction(prediction_data)
+                except Exception as e:
+                    # 如果图像加载失败，仍然显示预测结果
+                    self._append_status_message(f"Could not load image for preprocessing display: {e}", level="WARN")
+                    self._current_image = None
+                    self._display_prediction(prediction_data)
+
+                # 设置当前参数
+                self.current_parameters["input_file"] = result.file_path.splitlines()[0]
+
+                # 切换到Predict-2D tab
+                self._set_predict_main_tab("Predict-2D")
+
+                # 更新状态
+                self._append_status_message(f"Displaying results for: {os.path.basename(result.file_path.splitlines()[0])}", level="INFO")
+            else:
+                self._append_status_message(f"No prediction data available for: {os.path.basename(result.file_path.splitlines()[0])}", level="WARN")
+
+        except Exception as e:
+            self._append_status_message(f"Error displaying result: {e}", level="ERROR")
+
+    def _on_multifile_export_requested(self, config: dict, results: List[PredictResult]) -> None:
+        """多文件导出请求处理"""
+        if not results:
+            QMessageBox.information(self.main_window, "Export", "No results to export.")
+            return
+
+        export_path = self._prompt_export_folder("Save Multi-File Prediction Output To")
+        if not export_path:
+            return
+
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # 过滤只导出已完成的结果
+            completed_results = [r for r in results if r.status == PredictStatus.COMPLETED]
+            if not completed_results:
+                QMessageBox.information(self.main_window, "Export", "No completed results to export.")
+                return
+
+            # 导出JSONL格式
+            if config.get('jsonl', False):
+                self._export_results_jsonl(completed_results, export_path, timestamp)
+
+            # 导出JPG图像
+            if config.get('jpg', False):
+                self._export_results_jpg(completed_results, export_path, timestamp)
+
+            # 导出ASCII 1D曲线
+            if config.get('ascii', False):
+                self._export_results_ascii(completed_results, export_path, timestamp)
+
+            self._append_status_message(f"Export completed to {export_path}", level="INFO")
+
+        except Exception as e:
+            QMessageBox.critical(self.main_window, "Export Error", f"Export failed: {e}")
+            self._append_status_message(f"Export error: {e}", level="ERROR")
+
+    def _on_multifile_prediction_started(self) -> None:
+        """多文件预测开始"""
+        self._multifile_prediction_active = True
+        # 禁用Predict按钮
+        btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
+        if btn:
+            btn.setEnabled(False)
+            btn.setText("Predicting...")
+        stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if stop_btn:
+            stop_btn.setEnabled(True)
+
+    def _on_multifile_prediction_completed(self) -> None:
+        """多文件预测完成"""
+        self._multifile_prediction_active = False
+        # 重新启用Predict按钮
+        btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
+        if btn:
+            btn.setEnabled(True)
+            btn.setText("Predict")
+        stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
+        if stop_btn:
+            stop_btn.setEnabled(False)
+
+        self._append_status_message("Multi-file prediction completed!", level="INFO")
+
+    def _on_multifile_result_updated(self, index: int, update_data: dict) -> None:
+        """多文件预测结果更新"""
+        if self._multifile_results_widget:
+            self._multifile_results_widget.updatePredictResult(index, **update_data)
+            if update_data.get("status") == PredictStatus.RUNNING:
+                result = self._multifile_results_widget.table_model.getResult(index)
+                if result is not None:
+                    first = result.file_path.splitlines()[0] if result.file_path else result.file_name
+                    stack_count = max(1, int(getattr(result, "stack_count", 1)))
+                    self._append_status_message(
+                        f"Running stack ({stack_count} file{'s' if stack_count != 1 else ''}): {os.path.basename(first)}",
+                        level="INFO",
+                    )
+
+    def _on_multifile_progress_updated(self, completed: int, total: int) -> None:
+        """多文件预测进度更新"""
+        if self._multifile_results_widget:
+            self._multifile_results_widget.updateProgress(completed, total)
+
+        # 更新主进度条
+        if total > 0:
+            progress = int((completed / total) * 100)
+            self.progress_updated.emit(progress)
+
+    def _export_results_jsonl(self, results: List[PredictResult], export_path: str, timestamp: str) -> None:
+        """导出JSONL格式结果"""
+        exported = self.prediction_view_model.export_jsonl(
+            self._prediction_export_items(results), Path(export_path), timestamp
+        )
+        if exported is None:
+            raise OSError(
+                self.prediction_view_model.state.error_message
+                or "Failed to export prediction JSONL"
+            )
+
+    def _result_confidence(self, result: PredictResult) -> Optional[float]:
+        """Return confidence when older/newer prediction payloads provide it."""
+        value = getattr(result, "confidence", None)
+        if isinstance(value, (int, float)):
+            return float(value)
+        payload = result.prediction_data if isinstance(result.prediction_data, dict) else {}
+        value = payload.get("confidence")
+        if isinstance(value, (int, float)):
+            return float(value)
+        inner = payload.get("prediction_data")
+        if isinstance(inner, dict):
+            value = inner.get("confidence")
+            if isinstance(value, (int, float)):
+                return float(value)
+        return None
+
+    def _export_results_jpg(self, results: List[PredictResult], export_path: str, timestamp: str) -> None:
+        """导出JPG图像到文件夹"""
+        jpg_folder = os.path.join(export_path, f"prediction_images_{timestamp}")
+        os.makedirs(jpg_folder, exist_ok=True)
+
+        for i, result in enumerate(results):
+            if not result.prediction_data:
+                continue
+
+            # 导出2D结果图像
+            prediction_data = result.prediction_data.get("prediction_data", {})
+            hr_data = prediction_data.get("hr")
+
+            if isinstance(hr_data, np.ndarray):
+                # 创建图像
+                image_path = os.path.join(jpg_folder, f"{result.file_name}_{i:04d}_hr.jpg")
+                self._save_array_as_image(hr_data, image_path)
+
+    def _export_results_ascii(self, results: List[PredictResult], export_path: str, timestamp: str) -> None:
+        """导出ASCII 1D曲线数据"""
+        exported = self.prediction_view_model.export_ascii(
+            self._prediction_export_items(results), Path(export_path), timestamp
+        )
+        if exported is None and any(result.prediction_data for result in results):
+            error = self.prediction_view_model.state.error_message
+            if error:
+                raise OSError(error)
+
+    def _prediction_export_items(
+        self, results: List[PredictResult]
+    ) -> tuple[PredictionExportItem, ...]:
+        return tuple(
+            PredictionExportItem(
+                filename=result.file_name,
+                filepath=result.file_path,
+                stack_count=max(1, int(getattr(result, "stack_count", 1))),
+                timestamp=result.start_time.isoformat() if result.start_time else None,
+                processing_time=result.processing_time,
+                confidence=self._result_confidence(result),
+                prediction_data=result.prediction_data,
+            )
+            for result in results
+        )
+
+    def _load_cbf_stack_sync(self, file_paths: Optional[List[str]]) -> Optional[np.ndarray]:
+        if not file_paths:
+            return None
+        loaded = self.prediction_view_model.load_paths(file_paths)
+        if loaded is not None:
+            return loaded.image
+        self._append_status_message(
+            self.prediction_view_model.state.error_message
+            or "Failed to load this stack.",
+            level="ERROR",
+        )
+        return None
+
+    def _load_cbf_file_sync(self, file_path: str) -> Optional[np.ndarray]:
+        """同步加载CBF文件"""
+        loaded = self.prediction_view_model.load_paths((file_path,))
+        if loaded is not None:
+            return loaded.image
+        self._append_status_message(
+            self.prediction_view_model.state.error_message
+            or f"Failed to load CBF file {file_path}",
+            level="ERROR",
+        )
+        return None
+
+    def _save_array_as_image(self, array: np.ndarray, image_path: str) -> None:
+        """将数组保存为图像文件"""
+        try:
+            # 标准化数组到0-255范围
+            if array.dtype != np.uint8:
+                array_norm = (array - array.min()) / (array.max() - array.min()) * 255
+                array = array_norm.astype(np.uint8)
+
+            # 创建QImage并保存
+            height, width = array.shape
+            qimage = QImage(array.data, width, height, width, QImage.Format_Grayscale8)
+            qimage.save(image_path, "JPEG", 90)
+
+        except Exception as e:
+            self._append_status_message(f"Failed to save image {image_path}: {e}", level="WARN")
+
+    # ------------------------------------------------------------------
+    # UI 辅助方法
+    # ------------------------------------------------------------------
+    def _set_line_edit(self, name: str, text: Optional[str]) -> None:
+        widget = getattr(self.ui, name, None)
+        if widget is None:
+            return
+        blocker = QSignalBlocker(widget)
+        widget.setText(text or "")
+        del blocker
+
+    def _get_line_edit_text(self, name: str) -> str:
+        widget = getattr(self.ui, name, None)
+        return widget.text().strip() if widget else ""
+
+    def _set_checkbox(self, name: str, checked: bool) -> None:
+        widget = getattr(self.ui, name, None)
+        if widget is None:
+            return
+        blocker = QSignalBlocker(widget)
+        widget.setChecked(bool(checked))
+        del blocker
+
+    def _set_double_spin(self, name: str, value: Optional[float]) -> None:
+        widget = getattr(self.ui, name, None)
+        if widget is None or value is None:
+            return
+        blocker = QSignalBlocker(widget)
+        widget.setValue(float(value))
+        del blocker
+
+    def _configure_color_spin(self, name: str) -> None:
+        widget = getattr(self.ui, name, None)
+        if not isinstance(widget, QDoubleSpinBox):
+            return
+        widget.setDecimals(6)
+        widget.setRange(-1e12, 1e12)
+        widget.setSingleStep(0.1)
+
+    def _set_combobox_text(self, name: str, text: str) -> None:
+        widget = getattr(self.ui, name, None)
+        if widget is None or text is None:
+            return
+        blocker = QSignalBlocker(widget)
+        index = widget.findText(text)
+        widget.setCurrentIndex(index if index >= 0 else 0)
+        del blocker
+
+    def _get_double_spin_value(self, name: str) -> Optional[float]:
+        widget = getattr(self.ui, name, None)
+        return float(widget.value()) if widget is not None else None
+
+    def _append_status_message(self, message: str, level: str = "INFO") -> None:
+        self.status_updated.emit(message)
+        browser = getattr(self.ui, "predictStatusTextBrowser", None)
+        line = f"[{level}] {message}"
+        if browser is not None:
+            browser.append(line)
+        if self._status_text_window_browser is not None:
+            self._status_text_window_browser.append(line)

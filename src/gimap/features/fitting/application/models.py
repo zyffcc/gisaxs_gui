@@ -37,6 +37,20 @@ class LoadScatteringFileRequest:
 
 
 @dataclass(frozen=True)
+class ScatteringSequenceInfo:
+    """Navigation metadata for one logical detector-file sequence."""
+
+    source_path: Path
+    logical_path: Path
+    series_paths: tuple[Path, ...]
+    frame_count: int
+
+    @property
+    def uses_internal_frames(self) -> bool:
+        return len(self.series_paths) > 1
+
+
+@dataclass(frozen=True)
 class ScatteringFileData:
     image: np.ndarray
     source_path: Path

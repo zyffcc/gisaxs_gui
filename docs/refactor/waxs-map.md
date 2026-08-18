@@ -2,8 +2,8 @@
 
 ## 运行入口与 legacy 关系
 
-- 主 GUI 实际入口是 `ui.waxs_page.InSituProcessingWidget`（迁移前 2012 行，本阶段后 1625 行），由 `ui/components/main_window_components.py` 嵌入 stacked widget。
-- `WAXS/WAXS.py`（3740 行）是独立 legacy 窗口；主 GUI 明确不实例化它。它保留兼容启动，不在本阶段一次性改写。
+- 主 GUI 入口是 feature-owned `src/gimap/features/waxs/presentation/page.py`，由 app composition root 嵌入 stacked widget。
+- 历史 `WAXS/WAXS.py` 已从 3740 行收缩为薄兼容启动器；它和主 GUI 都装配同一个 feature page。
 - `controllers/waxs_controller.py` 为空，不应重新发展成第二个 orchestration layer。目标入口是 View → ViewModel → use cases。
 
 ## 职责地图
@@ -49,9 +49,9 @@ InSituProcessingWidget / ScatteringImageViewer
 ```
 
 - Qt 的 `ImageLoadWorker` 和 `BatchWorker` 仅保留线程/信号桥，不再实现文件发现、科学计算、导出或进程管理。
-- `ui/waxs_page.py` 不再导入 WAXS domain 或 infrastructure；页面仅调用 ViewModel。
-- `WAXS/WAXS.py` 仍是 3740 行的独立 legacy 入口，本阶段没有修改。
-- `load_image_matrix`/`load_tiff_matrix` 保留在 UI 模块作为旧校准测试和潜在外部调用方的兼容 API，不再被新的 WAXS 页面工作流调用。
+- `ui/waxs_page.py` 不再定义页面、domain、loader 或 batch 实现，只 re-export 历史名称。
+- `WAXS/WAXS.py` 保留 `MainWindow`、直接执行和 loader 名称，但实现统一委托给 feature composition root/infrastructure。
+- `load_image_matrix`/`load_tiff_matrix` 保留为 infrastructure-owned 兼容 API，不再被新的 WAXS 页面工作流调用。
 
 ## 必须保持的数值与行为
 
@@ -75,4 +75,4 @@ InSituProcessingWidget / ScatteringImageViewer
 
 ## 迁移顺序
 
-严格按文件加载 → geometry → mask → integration → batch → export → presentation。每一步先引入 dependency seam 与测试，再让 `ui/waxs_page.py` 委托；`WAXS/WAXS.py` 暂不拆分，避免 big-bang rewrite。
+迁移已严格按文件加载 → geometry → mask → integration → batch → export → presentation 完成。每一步先引入 dependency seam 与测试，最后才将旧独立入口替换为同一 feature page 的兼容启动器。

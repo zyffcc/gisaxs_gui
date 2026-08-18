@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ...application.models import ImportedDataset
+from .dataset import ClassificationDataService
 
 
 class LegacyClassificationDatasetAdapter:
@@ -10,8 +11,6 @@ class LegacyClassificationDatasetAdapter:
 
     def __init__(self, service=None):
         if service is None:
-            from controllers.classification_data_service import ClassificationDataService
-
             service = ClassificationDataService()
         self.service = service
 
@@ -28,3 +27,9 @@ class LegacyClassificationDatasetAdapter:
         return self.service.build_feature_matrix(
             list(samples), preprocessing, require_labels=require_labels
         )
+
+    def validate_dataset(self, samples):
+        return self.service.validate_dataset(list(samples))
+
+    def summarize_by_label(self, samples):
+        return self.service.summarize_by_label(list(samples))

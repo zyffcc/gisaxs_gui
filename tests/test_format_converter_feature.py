@@ -7,10 +7,13 @@ import pytest
 from src.gimap.app import AppContext
 from src.gimap.features.format_converter.bootstrap import create_format_converter_view_model
 from src.gimap.features.format_converter.application import ConvertFile
+from src.gimap.features.format_converter.application import NormalizePath
 from src.gimap.features.format_converter.domain import (
     ConversionOptions,
     ConversionRequest,
     InputSource,
+    select_frame_indices,
+    visible_output_formats,
 )
 from src.gimap.features.format_converter.infrastructure.adapters import (
     LocalConversionExecutor,
@@ -19,6 +22,7 @@ from src.gimap.features.format_converter.infrastructure.adapters import (
 from src.gimap.integrations.state import (
     InMemorySessionRepository,
     InMemorySettingsRepository,
+    InMemoryUserPreferencesRepository,
 )
 
 
@@ -89,6 +93,7 @@ def test_format_converter_runs_with_in_memory_app_context(tmp_path: Path) -> Non
     context = AppContext(
         settings=InMemorySettingsRepository(),
         session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
     )
     view_model = create_format_converter_view_model(context)
     assert view_model.add_paths([str(source_path)]).added == 1
@@ -100,3 +105,35 @@ def test_format_converter_runs_with_in_memory_app_context(tmp_path: Path) -> Non
 
     assert len(result.succeeded) == 2
     assert view_model.state.destination == str(destination)
+
+
+def test_normalize_path_use_case_delegates_to_file_repository(tmp_path: Path) -> None:
+    repository = LocalSourceRepository()
+
+    normalized = NormalizePath(repository)(tmp_path)
+
+    assert normalized == str(tmp_path)
+
+
+def test_frame_selection_rules_preserve_all_legacy_modes() -> None:
+    assert select_frame_indices(6, "All") == [0, 1, 2, 3, 4, 5]
+    assert select_frame_indices(6, "Current frame", current_frame=4) == [3]
+    assert select_frame_indices(6, "Frame range", range_start=2, range_end=4) == [1, 2, 3]
+    assert select_frame_indices(12, "Custom", custom_frames="1, 5, 8–10") == [
+        0,
+        4,
+        7,
+        8,
+        9,
+    ]
+    assert select_frame_indices(6, "Every Nth frame", nth_frame=2) == [0, 2, 4]
+    with pytest.raises(ValueError, match="frame range is empty"):
+        select_frame_indices(6, "Frame range", range_start=5, range_end=4)
+
+
+def test_output_format_visibility_preserves_no_op_hiding_rules() -> None:
+    assert not visible_output_formats(["TIFF"])["TIFF"]
+    assert not visible_output_formats(["CBF"])["CBF"]
+    assert not visible_output_formats(["NXS"])["HDF5"]
+    assert visible_output_formats(["NXS"], container=True)["HDF5"]
+    assert all(visible_output_formats(["NXS", "TIFF"]).values())

@@ -94,13 +94,18 @@ ViewModel 禁止负责：
 - 具体文件系统 implementations；
 - `QMessageBox`、`QFileDialog` 或 widget manipulation。
 
-### Controller
+### ViewBinding 与 Controller
 
 新 presentation 的默认调用链必须是：
 
 ```text
 PyQt View → ViewModel → Use Case
 ```
+
+历史 Qt 页面可以使用 feature-owned `ViewBinding` 连接 widget signals、dialogs、rendering 与
+ViewModel。ViewBinding 视为 View 的实现细节，只能做控件值映射和展示，不得调用具体 adapter、
+执行科学计算或形成第二层 workflow orchestration。生产代码不得同时保留同一页面的
+ViewBinding 实现和 Controller 实现。
 
 Legacy Controller 可以暂时存在。新代码不得同时发展 Controller 和 ViewModel 两层
 orchestration，也不得建立以下链路：

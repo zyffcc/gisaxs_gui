@@ -5,6 +5,7 @@ from .local import (
     JsonDetectorCatalogAdapter,
     LegacyCalibrationRunnerAdapter,
     LocalCalibrationImageAdapter,
+    LocalCalibrationPathAdapter,
     SettingsGeometryAdapter,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "JsonDetectorCatalogAdapter",
     "LegacyCalibrationRunnerAdapter",
     "LocalCalibrationImageAdapter",
+    "LocalCalibrationPathAdapter",
     "SettingsGeometryAdapter",
 ]

@@ -45,11 +45,18 @@ class CutFittingStackTests(unittest.TestCase):
             selected = []
             controller = SimpleNamespace(
                 current_parameters={"imported_gisaxs_file": str(paths[0])},
+                fitting_view_model=SimpleNamespace(
+                    storage=SimpleNamespace(
+                        inspect_scattering_sequence=lambda _path: SimpleNamespace(
+                            frame_count=3
+                        )
+                    )
+                ),
                 _nxs_frame_index=0,
                 _nxs_frame_count=1,
                 _folder_image_files=[str(path) for path in paths],
                 _folder_image_index=0,
-                _nxs_uses_internal_frames=FITTING_MODULE.FittingController._nxs_uses_internal_frames,
+                _nxs_uses_internal_frames=lambda _path: False,
                 _update_folder_navigation_buttons=lambda: None,
                 _scan_folder_images_for_file=lambda _path: None,
                 _select_folder_image=lambda path, frame_index=0: selected.append((path, frame_index)),
@@ -84,7 +91,7 @@ class CutFittingStackTests(unittest.TestCase):
                 _nxs_frame_count=3,
                 _folder_image_files=[str(paths[0])],
                 _folder_image_index=0,
-                _nxs_uses_internal_frames=FITTING_MODULE.FittingController._nxs_uses_internal_frames,
+                _nxs_uses_internal_frames=lambda _path: True,
                 _update_stack_display=lambda: None,
                 _update_folder_navigation_buttons=lambda: None,
                 _select_folder_image=lambda path, frame_index=0: selected.append((path, frame_index)),

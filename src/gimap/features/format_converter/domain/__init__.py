@@ -7,7 +7,18 @@ from .models import (
     ConversionResult,
     InputSource,
 )
-from .rules import build_jobs, compact_frame_summary, parse_custom_frames
+from .rules import (
+    build_jobs,
+    compact_frame_summary,
+    is_supported_input_path,
+    output_may_lose_float_values,
+    output_naming_summary,
+    parse_custom_frames,
+    render_output_example,
+    select_frame_indices,
+    select_source_frame_indices,
+    visible_output_formats,
+)
 
 __all__ = [
     "ConversionJob",
@@ -17,5 +28,12 @@ __all__ = [
     "InputSource",
     "build_jobs",
     "compact_frame_summary",
+    "is_supported_input_path",
+    "output_may_lose_float_values",
+    "output_naming_summary",
     "parse_custom_frames",
+    "render_output_example",
+    "select_frame_indices",
+    "select_source_frame_indices",
+    "visible_output_formats",
 ]

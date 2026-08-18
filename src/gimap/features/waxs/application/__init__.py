@@ -25,7 +25,10 @@ from .use_cases import (
     ExportWaxsImage,
     IntegrateWaxsImage,
     LoadWaxsImage,
+    GetWaxsWorkingDirectory,
+    NormalizeWaxsPath,
     PrepareWaxsDisplay,
+    ValidateWaxsDirectory,
 )
 from .batch import ProcessWaxsBatch, RunWaxsBatch
 
@@ -35,6 +38,8 @@ __all__ = [
     "LoadedWaxsImage",
     "LoadWaxsImage",
     "LoadWaxsImageRequest",
+    "GetWaxsWorkingDirectory",
+    "NormalizeWaxsPath",
     "WaxsCurve",
     "ProcessWaxsBatch",
     "RunWaxsBatch",
@@ -50,6 +55,7 @@ __all__ = [
     "CutWaxsImage",
     "EstimateWaxsDisplayLimits",
     "PrepareWaxsDisplay",
+    "ValidateWaxsDirectory",
     "WaxsCutImageRequest",
     "WaxsCutImageResult",
     "WaxsDisplayLimitsRequest",

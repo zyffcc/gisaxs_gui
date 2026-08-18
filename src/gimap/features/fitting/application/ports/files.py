@@ -10,12 +10,15 @@ from ..models import (
     LoadCurveRequest,
     LoadScatteringFileRequest,
     ScatteringFileData,
+    ScatteringSequenceInfo,
 )
 from ...domain import CurveData
 
 
 class ScatteringFileRepository(Protocol):
     def load(self, request: LoadScatteringFileRequest) -> ScatteringFileData: ...
+
+    def inspect_sequence(self, path) -> ScatteringSequenceInfo: ...
 
 
 class CurveRepository(Protocol):

@@ -9,6 +9,7 @@ from .adapters.keras_modeling import (
 )
 from .adapters.legacy_generation import LegacyDatasetGenerationAdapter
 from .adapters.project_config import LocalTrainsetConfigRepository
+from .adapters.preview import TrainsetPreviewAdapter
 
 __all__ = [
     "build_keras_model",
@@ -18,4 +19,5 @@ __all__ = [
     "static_contract",
     "LegacyDatasetGenerationAdapter",
     "LocalTrainsetConfigRepository",
+    "TrainsetPreviewAdapter",
 ]

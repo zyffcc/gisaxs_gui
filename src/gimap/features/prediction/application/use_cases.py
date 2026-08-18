@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import threading
+import json
 from collections.abc import Callable
 from pathlib import Path
+
+import numpy as np
 
 from .models import (
     FilePredictionResult,
@@ -16,13 +19,17 @@ from .models import (
     PredictPreparedInputRequest,
     PredictMultipleFilesRequest,
     PredictionProgress,
+    PredictionExportItem,
+    PredictionArrayExportRequest,
 )
 from .ports import (
     ModuleRepository,
     PredictionFileCatalog,
     PredictionImageRepository,
+    PredictionMaskRepository,
     Predictor,
     Preprocessor,
+    PredictionExportRepository,
 )
 from ..domain import (
     ModelRuntimeInfo,
@@ -39,6 +46,165 @@ def _module_output_values(module) -> dict[str, object]:
         "target_min": list(module.outputs.target_min),
         "target_max": list(module.outputs.target_max),
     }
+
+
+def _serialized_prediction_data(
+    prediction_data: dict[str, object] | None,
+) -> dict[str, object] | None:
+    if not prediction_data:
+        return None
+    try:
+        serialized: dict[str, object] = {}
+        inner_data = prediction_data.get("prediction_data", {})
+        if not isinstance(inner_data, dict):
+            return serialized
+        for key, value in inner_data.items():
+            if hasattr(value, "ndim") and hasattr(value, "dtype"):
+                if value.ndim > 1:
+                    serialized[key] = {
+                        "type": "array_2d",
+                        "shape": list(value.shape),
+                        "dtype": str(value.dtype),
+                    }
+                else:
+                    serialized[key] = value.tolist()
+            else:
+                serialized[key] = value
+        return serialized
+    except Exception:
+        return {"error": "Failed to serialize prediction data"}
+
+
+class ExportPredictionJsonl:
+    def __init__(self, repository: PredictionExportRepository):
+        self._repository = repository
+
+    def execute(
+        self,
+        items: tuple[PredictionExportItem, ...],
+        export_path: Path,
+        timestamp: str,
+    ) -> Path:
+        records = []
+        for index, item in enumerate(items):
+            records.append(
+                json.dumps(
+                    {
+                        "index": index,
+                        "filename": item.filename,
+                        "filepath": item.filepath,
+                        "stack_count": max(1, int(item.stack_count)),
+                        "timestamp": item.timestamp,
+                        "processing_time": item.processing_time,
+                        "confidence": item.confidence,
+                        "prediction_data": _serialized_prediction_data(
+                            dict(item.prediction_data) if item.prediction_data else None
+                        ),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        content = "\n".join(records) + ("\n" if records else "")
+        return self._repository.write_text(
+            Path(export_path) / f"prediction_results_{timestamp}.jsonl",
+            content,
+        )
+
+
+class ExportPredictionAscii:
+    def __init__(self, repository: PredictionExportRepository):
+        self._repository = repository
+
+    def execute(
+        self,
+        items: tuple[PredictionExportItem, ...],
+        export_path: Path,
+        timestamp: str,
+    ) -> Path | None:
+        all_h_data = []
+        all_r_data = []
+        headers = []
+        parameter_rows = []
+        parameter_names: list[str] = []
+
+        for item in items:
+            payload = item.prediction_data or {}
+            inner = payload.get("prediction_data", {})
+            if not isinstance(inner, dict):
+                continue
+            h_data = inner.get("h")
+            r_data = inner.get("r")
+            p_data = inner.get("parameters")
+            p_names = inner.get("parameter_names")
+            if isinstance(p_data, np.ndarray):
+                values = np.asarray(p_data, dtype=np.float32).reshape(-1)
+                if isinstance(p_names, list) and len(p_names) >= values.size:
+                    names = [str(name) for name in p_names[: values.size]]
+                else:
+                    names = [f"p{index + 1}" for index in range(values.size)]
+                if not parameter_names:
+                    parameter_names = names
+                parameter_rows.append((item.filename, values))
+            if isinstance(h_data, np.ndarray):
+                all_h_data.append(h_data)
+                headers.append(f"{item.filename}_h")
+            if isinstance(r_data, np.ndarray):
+                all_r_data.append(r_data)
+                headers.append(f"{item.filename}_r")
+
+        if all_h_data or all_r_data:
+            lines = [
+                "# Prediction 1D Curves Export",
+                f"# Generated: {timestamp}",
+                "# Columns: " + " | ".join(headers),
+                "# Index\t" + "\t".join(headers),
+            ]
+            all_data = all_h_data + all_r_data
+            max_len = max(len(data) for data in all_data)
+            for index in range(max_len):
+                row = [str(index)]
+                for data in all_data:
+                    row.append(f"{data[index]:.6g}" if index < len(data) else "NaN")
+                lines.append("\t".join(row))
+            return self._repository.write_text(
+                Path(export_path) / f"prediction_curves_{timestamp}.txt",
+                "\n".join(lines) + "\n",
+            )
+
+        if parameter_rows:
+            lines = [
+                "# Prediction Parameters Export",
+                f"# Generated: {timestamp}",
+                "filename\t" + "\t".join(parameter_names),
+            ]
+            for filename, values in parameter_rows:
+                lines.append(
+                    str(filename)
+                    + "\t"
+                    + "\t".join(f"{float(value):.8g}" for value in values)
+                )
+            return self._repository.write_text(
+                Path(export_path) / f"prediction_parameters_{timestamp}.txt",
+                "\n".join(lines) + "\n",
+            )
+        return None
+
+
+class ExportPredictionArray:
+    def __init__(self, repository: PredictionExportRepository):
+        self._repository = repository
+
+    def execute(self, request: PredictionArrayExportRequest) -> Path:
+        values = np.asarray(request.values)
+        if values.ndim not in (1, 2) or values.size == 0:
+            raise ValueError("Prediction array export requires a non-empty 1D or 2D array")
+        return self._repository.write_array(
+            Path(request.path),
+            values,
+            fmt=request.fmt,
+            header=request.header,
+            comments=request.comments,
+        )
 
 
 class RunPrediction:
@@ -91,12 +257,36 @@ class LoadPredictionImage:
         return self._repository.load(paths)
 
 
+class LoadPredictionMask:
+    def __init__(self, repository: PredictionMaskRepository):
+        self._repository = repository
+
+    def execute(self, path: Path) -> np.ndarray:
+        return self._repository.load(Path(path))
+
+
 class ResolvePredictionStack:
     def __init__(self, catalog: PredictionFileCatalog):
         self._catalog = catalog
 
     def execute(self, start_path: Path, count: int) -> tuple[Path, ...]:
         return self._catalog.stack_paths(start_path, count)
+
+
+class DiscoverNumberedPredictionFiles:
+    def __init__(self, catalog: PredictionFileCatalog):
+        self._catalog = catalog
+
+    def execute(self, folder: Path, suffix: str = ".cbf"):
+        return self._catalog.numbered_files(Path(folder), suffix)
+
+
+class DiscoverPredictionFiles:
+    def __init__(self, catalog: PredictionFileCatalog):
+        self._catalog = catalog
+
+    def execute(self, folder: Path, suffixes: tuple[str, ...]):
+        return self._catalog.compatible_files(Path(folder), suffixes)
 
 
 class PreparePredictionInput:

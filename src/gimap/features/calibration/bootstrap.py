@@ -8,6 +8,7 @@ from .application import (
     ImportCalibration,
     LoadCalibrationImage,
     LoadDetectorCatalog,
+    NormalizeCalibrationPath,
     RunCalibration,
 )
 from .infrastructure.adapters import (
@@ -15,6 +16,7 @@ from .infrastructure.adapters import (
     JsonDetectorCatalogAdapter,
     LegacyCalibrationRunnerAdapter,
     LocalCalibrationImageAdapter,
+    LocalCalibrationPathAdapter,
     SettingsGeometryAdapter,
 )
 from .presentation import CalibrationViewModel
@@ -31,4 +33,5 @@ def create_calibration_view_model(app_context: AppContext) -> CalibrationViewMod
         import_calibration=ImportCalibration(storage, images),
         apply_calibration=ApplyCalibration(SettingsGeometryAdapter(app_context.settings)),
         load_detector_catalog=LoadDetectorCatalog(JsonDetectorCatalogAdapter()),
+        normalize_path=NormalizeCalibrationPath(LocalCalibrationPathAdapter()),
     )

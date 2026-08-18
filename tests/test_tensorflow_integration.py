@@ -137,7 +137,7 @@ def test_tensorflow_worker_crash_becomes_adapter_error(tmp_path):
         predictor.inspect(model_dir)
 
 
-def test_existing_keras_model_is_accepted_by_isolated_worker():
+def test_existing_keras_model_is_accepted_by_isolated_worker(tmp_path):
     model_dir = (
         Path(__file__).resolve().parents[1]
         / "modules"
@@ -181,11 +181,38 @@ def test_existing_keras_model_is_accepted_by_isolated_worker():
         )
     ).outputs
 
-    import tensorflow as tf
+    input_path = tmp_path / "direct-inputs.npz"
+    output_path = tmp_path / "direct-outputs.npz"
+    np.savez(input_path, **inputs)
+    direct_script = """
+import sys
+import numpy as np
+import tensorflow as tf
 
-    direct_model = tf.saved_model.load(str(runtime.artifact_path))
-    direct_function = direct_model.signatures["serving_default"]
-    direct = {key: value.numpy() for key, value in direct_function(**inputs).items()}
+model = tf.saved_model.load(sys.argv[1])
+function = model.signatures["serving_default"]
+with np.load(sys.argv[2]) as archive:
+    values = {key: archive[key] for key in archive.files}
+outputs = {key: value.numpy() for key, value in function(**values).items()}
+np.savez(sys.argv[3], **outputs)
+"""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            direct_script,
+            str(runtime.artifact_path),
+            str(input_path),
+            str(output_path),
+        ],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    with np.load(output_path) as archive:
+        direct = {key: archive[key] for key in archive.files}
     assert set(direct).issubset(isolated)
     for key, expected in direct.items():
         np.testing.assert_allclose(isolated[key], expected, rtol=1e-6, atol=1e-6)

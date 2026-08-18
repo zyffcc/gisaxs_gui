@@ -69,7 +69,17 @@ Run the complete repository verification with one command:
 python tools/check.py
 ```
 
-The unified command sets Qt to the offscreen platform for tests. Ruff initially
+The unified command sets Qt to the offscreen platform for tests, runs the full
+suite, and then runs the repository lint baseline. Ruff initially
 checks syntax, invalid control flow, and undefined names across the repository.
 Four explicitly listed legacy files are temporarily exempted from their known
 `F821` or `F823` findings in `pyproject.toml`; no broad formatting pass is enabled.
+
+## Python Views
+
+GIMaP no longer uses Qt Designer forms or pyuic output. Each application or feature
+presentation owns hand-maintained layout files under `presentation/views/`. The
+View defines only widgets, layouts, object names, tab order, and visual defaults;
+`page.py` or `dialog.py` injects ViewModels and connects behavior. Update the
+explicit inventory in `tests/test_ui_source_of_truth.py` whenever a View is added,
+removed, or renamed.

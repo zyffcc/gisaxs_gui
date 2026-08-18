@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import sys
 
 import numpy as np
+import pytest
 
 from src.gimap.features.prediction.domain import (
     ModelSpec,
@@ -11,7 +12,10 @@ from src.gimap.features.prediction.domain import (
 )
 from src.gimap.features.prediction.infrastructure import (
     FabioPredictionImageRepository,
+    LocalPredictionFileCatalog,
+    LocalPredictionExportRepository,
     ModuleEntryPreprocessor,
+    NumpyPredictionMaskRepository,
     YamlModuleRepository,
     module_to_legacy_dict,
 )
@@ -93,6 +97,55 @@ def test_fabio_repository_sums_stack_as_float32(tmp_path, monkeypatch):
     assert loaded.image.dtype == np.float32
     np.testing.assert_array_equal(loaded.image, [[11, 22], [33, 44]])
     assert loaded.source_paths == paths
+
+
+def test_numpy_mask_adapter_loads_npy_and_rejects_unavailable_masks(tmp_path):
+    path = tmp_path / "mask.npy"
+    expected = np.arange(6, dtype=np.uint8).reshape(2, 3)
+    np.save(path, expected)
+    repository = NumpyPredictionMaskRepository()
+
+    np.testing.assert_array_equal(repository.load(path), expected)
+    with pytest.raises(ValueError, match="only .npy"):
+        repository.load(tmp_path / "missing.npy")
+
+
+def test_local_file_catalog_discovers_numbered_and_compatible_files(tmp_path):
+    for name in (
+        "frame_00003.cbf",
+        "frame_00001.cbf",
+        "frame_00002.tif",
+        "notes.txt",
+    ):
+        (tmp_path / name).write_bytes(b"test")
+    catalog = LocalPredictionFileCatalog()
+
+    numbered = catalog.numbered_files(tmp_path)
+    compatible = catalog.compatible_files(tmp_path, (".cbf", ".tif"))
+
+    assert [(item.path.name, item.index) for item in numbered] == [
+        ("frame_00001.cbf", 1),
+        ("frame_00003.cbf", 3),
+    ]
+    assert [path.name for path in compatible] == [
+        "frame_00001.cbf",
+        "frame_00002.tif",
+        "frame_00003.cbf",
+    ]
+
+
+def test_local_export_adapter_preserves_numpy_text_format(tmp_path):
+    target = tmp_path / "curve.txt"
+
+    LocalPredictionExportRepository().write_array(
+        target,
+        np.array([[0.0, 1.25]], dtype=np.float32),
+        fmt="%.6g",
+        header="x y",
+        comments="",
+    )
+
+    assert target.read_text(encoding="utf-8").splitlines() == ["x y", "0 1.25"]
 
 
 def test_module_entry_preprocessor_is_lazy_and_preserves_step_order(tmp_path):

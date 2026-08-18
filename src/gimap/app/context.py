@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .jobs import JobRunner
-from .ports import SessionRepository, SettingsRepository
+from .ports import (
+    ProjectParametersRepository,
+    SessionRepository,
+    SettingsRepository,
+    UserPreferencesRepository,
+)
 from .state import ProjectState
 
 
@@ -15,7 +20,9 @@ class AppContext:
 
     settings: SettingsRepository
     session: SessionRepository
+    preferences: UserPreferencesRepository
     jobs: JobRunner | None = None
+    project_parameters: ProjectParametersRepository | None = None
     project_state: ProjectState = field(default_factory=ProjectState)
 
     def restore_session(self) -> bool:

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from src.gimap.app import AppContext
 from src.gimap.features.calibration.application import (
@@ -10,19 +11,29 @@ from src.gimap.features.calibration.application import (
     ImportCalibration,
     LoadCalibrationImage,
     LoadDetectorCatalog,
+    NormalizeCalibrationPath,
     RunCalibration,
 )
 from src.gimap.features.calibration.domain import (
+    MANUAL_REFINEMENT_WARNING,
     CalibrationCandidate,
     CalibrationRequest,
     CalibrationResult,
     DetectorImage,
+    commit_manual_refinement,
+    detect_standard_keys,
     energy_to_wavelength,
+    geometry_change_is_significant,
+    manual_ring_distance,
+    preview_manual_candidate,
+    standard_q_values,
+    theoretical_ring_overlays,
 )
 from src.gimap.features.calibration.bootstrap import create_calibration_view_model
 from src.gimap.integrations.state import (
     InMemorySessionRepository,
     InMemorySettingsRepository,
+    InMemoryUserPreferencesRepository,
 )
 
 
@@ -110,6 +121,15 @@ class CatalogPortStub:
         return {"Pilatus 2M": {"pixel_size_x": 172.0}}
 
 
+class PathPortStub:
+    def __init__(self):
+        self.received = None
+
+    def normalize(self, path):
+        self.received = path
+        return f"normalized/{Path(path).name}"
+
+
 def test_load_and_run_calibration_use_cases_are_port_driven(tmp_path: Path) -> None:
     image = DetectorImage(
         np.ones((8, 10), dtype=np.float32),
@@ -166,6 +186,71 @@ def test_load_detector_catalog_uses_catalog_port() -> None:
     }
 
 
+def test_normalize_calibration_path_is_port_driven(tmp_path: Path) -> None:
+    paths = PathPortStub()
+    source = tmp_path / "image.cbf"
+
+    normalized = NormalizeCalibrationPath(paths)(source)
+
+    assert paths.received == source
+    assert normalized == "normalized/image.cbf"
+
+
+def test_standard_detection_preserves_legacy_filename_aliases() -> None:
+    assert detect_standard_keys("scan_silver_behenate_001.cbf") == ("agbh",)
+    assert detect_standard_keys("scan_lab6_ceo2_001.nxs") == ("lab6", "ceo2")
+    assert detect_standard_keys("unknown.cbf") == ()
+
+
+def test_ring_geometry_preserves_overlay_and_manual_distance_results(tmp_path: Path) -> None:
+    result = _result(tmp_path / "source.cbf")
+    overlays = theoretical_ring_overlays(result.selected_candidate, result)
+
+    assert len(overlays) == len(standard_q_values("agbh"))
+    radius_px = overlays[0].width_px / 2.0
+    recovered = manual_ring_distance(result, radius_px, standard_q_values("agbh")[0])
+    assert recovered == pytest.approx(result.selected_candidate.distance_mm)
+
+
+def test_manual_refinement_preview_commit_and_significant_change_are_stable(
+    tmp_path: Path,
+) -> None:
+    result = _result(tmp_path / "source.cbf")
+    original = result.selected_candidate
+
+    preview = preview_manual_candidate(
+        original,
+        enabled=True,
+        center_x_px=130.0,
+        center_y_px=240.0,
+        distance_mm=1500.0,
+    )
+
+    assert preview is not original
+    assert original.center_x_px == 123.5
+    assert preview.center_x_px == 130.0
+    committed = commit_manual_refinement(
+        result,
+        enabled=True,
+        center_x_px=130.0,
+        center_y_px=240.0,
+        distance_mm=1500.0,
+    )
+    commit_manual_refinement(
+        result,
+        enabled=True,
+        center_x_px=130.0,
+        center_y_px=240.0,
+        distance_mm=1500.0,
+    )
+    assert committed is original
+    assert committed.warnings.count(MANUAL_REFINEMENT_WARNING) == 1
+    assert geometry_change_is_significant(
+        {"distance": 1000.0, "beam_center_x": 130.0, "beam_center_y": 240.0},
+        committed,
+    )
+
+
 def test_calibration_applies_with_in_memory_context_and_no_qapplication(tmp_path: Path) -> None:
     settings = InMemorySettingsRepository(
         {
@@ -178,7 +263,11 @@ def test_calibration_applies_with_in_memory_context_and_no_qapplication(tmp_path
             }
         }
     )
-    context = AppContext(settings=settings, session=InMemorySessionRepository())
+    context = AppContext(
+        settings=settings,
+        session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
+    )
     view_model = create_calibration_view_model(context)
     view_model.result = _result(tmp_path / "source.cbf")
 

@@ -5,9 +5,12 @@ from src.gimap.app import AppContext, ProjectState
 from src.gimap.integrations.state import (
     GlobalParamsSettingsRepository,
     InMemorySettingsRepository,
+    InMemoryUserPreferencesRepository,
     JsonSessionRepository,
     JsonSettingsRepository,
+    JsonProjectParametersRepository,
 )
+from src.gimap.app import LoadProjectParameters, SaveProjectParameters
 
 
 @dataclass
@@ -83,11 +86,38 @@ def test_json_settings_preserve_legacy_user_parameter_shape(tmp_path: Path) -> N
     assert "settings" not in restored.snapshot()
 
 
+def test_in_memory_settings_reset_restores_injected_defaults() -> None:
+    repository = InMemorySettingsRepository({"beam": {"wavelength": 0.015}})
+    repository.set("beam", "wavelength", 0.02)
+    repository.set("fitting", "detector.distance", 1600.0)
+
+    repository.reset()
+
+    assert repository.snapshot() == {"beam": {"wavelength": 0.015}}
+
+
+def test_in_memory_user_preferences_preserve_flat_legacy_keys() -> None:
+    repository = InMemoryUserPreferencesRepository(
+        {"fit.points_num": 50, "ai_fitting": {"profile": "Balanced"}}
+    )
+
+    repository.set("fit.points_num", 80)
+    repository.save()
+
+    assert repository.get("fit.points_num") == 80
+    assert repository.get("ai_fitting") == {"profile": "Balanced"}
+    assert repository.snapshot() == {
+        "fit.points_num": 80,
+        "ai_fitting": {"profile": "Balanced"},
+    }
+
+
 def test_app_context_persists_project_and_registered_feature_state(tmp_path: Path) -> None:
     session = JsonSessionRepository(tmp_path / "session.json")
     first = AppContext(
         settings=InMemorySettingsRepository(),
         session=session,
+        preferences=InMemoryUserPreferencesRepository(),
         project_state=ProjectState(project_path="project.gimap", dirty=True),
     )
     feature = first.project_state.feature_state("example", ExampleFeatureState)
@@ -98,6 +128,7 @@ def test_app_context_persists_project_and_registered_feature_state(tmp_path: Pat
     second = AppContext(
         settings=InMemorySettingsRepository(),
         session=session,
+        preferences=InMemoryUserPreferencesRepository(),
     )
     assert second.restore_session()
     restored = second.project_state.feature_state("example", ExampleFeatureState)
@@ -119,3 +150,19 @@ def test_global_params_compatibility_adapter_delegates_without_new_singleton() -
     assert repository.get("fitting", "detector.distance") == 999.0
     assert repository.get_section("beam")["energy_kev"] == 10.0
     assert manager.saved
+
+
+def test_project_parameter_commands_preserve_legacy_json_shape(tmp_path: Path) -> None:
+    repository = JsonProjectParametersRepository()
+    save = SaveProjectParameters(repository)
+    load = LoadProjectParameters(repository)
+    path = tmp_path / "project-parameters.json"
+    values = {
+        "trainset": {"samples": 10},
+        "fitting": {"points_num": 50},
+        "fitting_model_parameters": {"fitting": {"BG": 0.1}},
+    }
+
+    assert save.execute(path, values) == path
+    assert load.execute(path) == values
+    assert path.read_text(encoding="utf-8").startswith("{\n    \"trainset\"")

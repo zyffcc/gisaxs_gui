@@ -183,7 +183,7 @@ class WindowManager:
             base_font_size = self.config.DEFAULT_FONT_SIZE
 
         try:
-            from ui.responsive_layout import effective_ui_scale
+            from src.gimap.app.presentation.responsive_layout import effective_ui_scale
             scale = effective_ui_scale(window) / 100.0
         except Exception:
             scale = user_settings.get_visual_font_scale() / 100.0

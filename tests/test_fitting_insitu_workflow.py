@@ -5,6 +5,10 @@ from src.gimap.features.fitting.application import (
     InSituWorkflowCoordinator,
     InSituWorkflowRequest,
     RunInSituWorkflow,
+    ManageInSituRecords,
+)
+from src.gimap.features.fitting.infrastructure.adapters import (
+    LocalInSituRecordRepository,
 )
 
 
@@ -88,3 +92,28 @@ def test_non_serializable_worker_output_is_rejected():
         assert "JSON serializable" in str(exc)
     else:
         raise AssertionError("non-serializable worker output was accepted")
+
+
+def test_insitu_record_repository_preserves_jsonl_and_csv_formats(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    records = ManageInSituRecords(LocalInSituRecordRepository())
+    row = {
+        "file_index": 1,
+        "file_name": "frame_001.cbf",
+        "fit_status": "ok",
+        "custom": "kept",
+    }
+
+    records.reset()
+    records.append(row)
+    loaded = records.load()
+    target = records.export_csv(tmp_path / "export" / "records.csv", loaded)
+
+    assert records.session_path().read_text(encoding="utf-8").endswith("\n")
+    assert loaded == [row]
+    lines = target.read_text(encoding="utf-8").splitlines()
+    assert lines[0].endswith(",custom")
+    assert lines[1].endswith(",kept")

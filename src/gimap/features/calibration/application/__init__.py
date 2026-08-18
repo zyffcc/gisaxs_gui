@@ -8,6 +8,7 @@ from .use_cases import (
     ImportedCalibration,
     LoadCalibrationImage,
     LoadDetectorCatalog,
+    NormalizeCalibrationPath,
     RunCalibration,
 )
 
@@ -20,5 +21,6 @@ __all__ = [
     "ImportedCalibration",
     "LoadCalibrationImage",
     "LoadDetectorCatalog",
+    "NormalizeCalibrationPath",
     "RunCalibration",
 ]

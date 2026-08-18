@@ -3,7 +3,9 @@
 from .adapters import (
     FabioPredictionImageRepository,
     LocalPredictionFileCatalog,
+    LocalPredictionExportRepository,
     ModuleEntryPreprocessor,
+    NumpyPredictionMaskRepository,
     YamlModuleRepository,
     module_to_legacy_dict,
 )
@@ -11,7 +13,9 @@ from .adapters import (
 __all__ = [
     "FabioPredictionImageRepository",
     "LocalPredictionFileCatalog",
+    "LocalPredictionExportRepository",
     "ModuleEntryPreprocessor",
+    "NumpyPredictionMaskRepository",
     "YamlModuleRepository",
     "module_to_legacy_dict",
 ]

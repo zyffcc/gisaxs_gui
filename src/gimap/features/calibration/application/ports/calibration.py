@@ -23,6 +23,10 @@ class CalibrationImagePort(Protocol):
     def exists(self, path: str | Path) -> bool: ...
 
 
+class CalibrationPathPort(Protocol):
+    def normalize(self, path: str | Path) -> str: ...
+
+
 class CalibrationRunnerPort(Protocol):
     def calibrate(
         self,

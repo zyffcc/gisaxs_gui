@@ -10,6 +10,7 @@ from src.gimap.features.fitting.application import (
     CandidateGenerationResult,
     GenerateCandidates,
     LoadCandidateResults,
+    ManageAiFittingArtifacts,
     MapCandidateParameters,
     RefineCandidates,
     ReviewCandidates,
@@ -18,6 +19,7 @@ from src.gimap.features.fitting.domain import prepare_ai_curve
 from src.gimap.features.fitting.infrastructure.adapters import (
     AiPipelinePredictor,
     JsonCandidateRepository,
+    LocalAiFittingArtifactRepository,
 )
 from src.gimap.integrations.jobs import LocalProcessJobRunner
 from utils.ai_fitting_pipeline import FittingPipeline
@@ -251,3 +253,22 @@ def test_load_candidate_results_uses_json_repository_without_gui(tmp_path):
     loaded = LoadCandidateResults(JsonCandidateRepository()).execute(output)
 
     assert loaded == tuple(rows)
+
+
+def test_ai_artifact_use_case_preserves_log_and_unique_export_contract(tmp_path):
+    source = tmp_path / "current_prediction"
+    source.mkdir()
+    (source / "top20_candidates.json").write_text("[]", encoding="utf-8")
+    artifacts = ManageAiFittingArtifacts(LocalAiFittingArtifactRepository())
+
+    log = artifacts.append_log(source, "Progress 1/2")
+    first = artifacts.export_output(source, tmp_path, "20260817_120000")
+    second = artifacts.export_output(source, tmp_path, "20260817_120000")
+
+    assert log.read_text(encoding="utf-8") == "Progress 1/2\n"
+    assert first.name == "ai_prediction_20260817_120000"
+    assert second.name == "ai_prediction_20260817_120000_1"
+    assert (first / "top20_candidates.json").is_file()
+
+    with pytest.raises(ValueError, match="outside"):
+        artifacts.export_output(source, source / "nested", "stamp")

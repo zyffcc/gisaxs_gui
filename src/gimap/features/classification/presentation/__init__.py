@@ -2,5 +2,18 @@
 
 from .state import ClassificationState
 from .view_model import ClassificationViewModel
+from .view_binding import ClassificationViewBinding
+from .workers import EmbeddingWorker, ImportWorker, PredictionWorker, TrainingWorker
 
-__all__ = ["ClassificationState", "ClassificationViewModel"]
+ClassificationController = ClassificationViewBinding
+
+__all__ = [
+    "ClassificationState",
+    "ClassificationController",
+    "ClassificationViewBinding",
+    "ClassificationViewModel",
+    "EmbeddingWorker",
+    "ImportWorker",
+    "PredictionWorker",
+    "TrainingWorker",
+]

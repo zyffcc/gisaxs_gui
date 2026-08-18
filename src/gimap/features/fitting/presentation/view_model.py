@@ -1,9 +1,7 @@
 """Fitting 的 framework-neutral ViewModel。"""
-
 from __future__ import annotations
 
 from dataclasses import replace
-
 from src.gimap.app import AppContext
 
 from ..application import (
@@ -12,6 +10,7 @@ from ..application import (
     ExportFitResult,
     ExportFitResultRequest,
     LoadCurve,
+    LoadDetectorSettings,
     LoadCurveRequest,
     LoadScatteringFile,
     LoadScatteringFileRequest,
@@ -21,11 +20,14 @@ from ..application import (
     MapCandidateParameters,
     RefineCandidates,
     ReviewCandidates,
+    SaveDetectorSettings,
     InSituWorkflowCoordinator,
 )
 from ..application.models import ScatteringFileData
 from ..domain import ManualFitRequest
+from .insitu_view_model import FittingInSituViewModel
 from .state import FittingState
+from .storage_view_model import FittingStorageViewModel
 
 
 class FittingViewModel:
@@ -34,6 +36,7 @@ class FittingViewModel:
         *,
         context: AppContext,
         load_scattering_file: LoadScatteringFile,
+        inspect_scattering_sequence,
         load_curve: LoadCurve,
         export_fit_result: ExportFitResult,
         run_manual_fit: RunManualFit,
@@ -43,6 +46,16 @@ class FittingViewModel:
         map_candidate_parameters: MapCandidateParameters,
         load_candidate_results: LoadCandidateResults,
         insitu_workflow: InSituWorkflowCoordinator,
+        load_detector_settings: LoadDetectorSettings,
+        save_detector_settings: SaveDetectorSettings,
+        scattering_loader_factory=None,
+        remote_file_cache=None,
+        insitu_records=None,
+        parameter_files=None,
+        ai_artifacts=None,
+        save_fitting_log=None,
+        check_dependency=None,
+        scientific=None, model_parameters=None, ai_catalog=None,
     ):
         self.context = context
         self._load_scattering_file = load_scattering_file
@@ -54,8 +67,50 @@ class FittingViewModel:
         self._review_candidates = review_candidates
         self._map_candidate_parameters = map_candidate_parameters
         self._load_candidate_results = load_candidate_results
-        self._insitu_workflow = insitu_workflow
+        self._load_detector_settings = load_detector_settings
+        self._save_detector_settings = save_detector_settings
         self.state = FittingState(insitu_workflow=insitu_workflow.state)
+        self.storage = FittingStorageViewModel(
+            load_scattering_file=load_scattering_file,
+            inspect_scattering_sequence=inspect_scattering_sequence,
+            scattering_loader_factory=scattering_loader_factory,
+            remote_file_cache=remote_file_cache,
+            insitu_records=insitu_records,
+            parameter_files=parameter_files,
+            ai_artifacts=ai_artifacts,
+            save_fitting_log=save_fitting_log,
+            check_dependency=check_dependency,
+            model_parameters=model_parameters,
+            ai_catalog=ai_catalog,
+        )
+        self.insitu = FittingInSituViewModel(
+            insitu_workflow, self._sync_insitu_state
+        )
+        self.science = scientific
+
+    def __getattr__(self, name):
+        """Keep migrated legacy callers working while they adopt command groups."""
+
+        for group_name in ("storage", "insitu", "science"):
+            group = self.__dict__.get(group_name)
+            if group is not None and hasattr(group, name):
+                return getattr(group, name)
+        raise AttributeError(name)
+
+    def get_setting(self, section: str, key: str, default=None):
+        return self.context.settings.get(section, key, default)
+
+    def set_setting(self, section: str, key: str, value) -> None:
+        self.context.settings.set(section, key, value)
+
+    def save_settings(self) -> None:
+        self.context.settings.save()
+
+    def load_detector_settings(self):
+        return self._load_detector_settings.execute()
+
+    def save_detector_settings(self, settings) -> None:
+        self._save_detector_settings.execute(settings)
 
     def load_scattering(self, request: LoadScatteringFileRequest):
         self.state = replace(
@@ -239,51 +294,7 @@ class FittingViewModel:
         )
         return rows
 
-    def start_insitu_workflow(self, paths, *, continue_on_error=True) -> None:
-        self._insitu_workflow.start(paths, continue_on_error=continue_on_error)
-        self._sync_insitu_state("In-situ workflow started")
-
-    def enqueue_insitu_files(self, paths) -> None:
-        self._insitu_workflow.enqueue(paths)
-        self._sync_insitu_state("In-situ files queued")
-
-    def begin_next_insitu_file(self, batch_size=1):
-        record = self._insitu_workflow.begin_next(batch_size)
-        self._sync_insitu_state("Processing in-situ file")
-        return record
-
-    def complete_insitu_file(self, values=None):
-        record = self._insitu_workflow.complete_current(values)
-        self._sync_insitu_state("In-situ file completed")
-        return record
-
-    def fail_insitu_file(self, error_message, values=None):
-        record = self._insitu_workflow.fail_current(error_message, values)
-        self._sync_insitu_state("In-situ file failed")
-        return record
-
-    def pause_insitu_workflow(self) -> None:
-        self._insitu_workflow.pause()
-        self._sync_insitu_state("In-situ workflow paused")
-
-    def resume_insitu_workflow(self) -> None:
-        self._insitu_workflow.resume()
-        self._sync_insitu_state("In-situ workflow resumed")
-
-    def cancel_insitu_workflow(self) -> None:
-        self._insitu_workflow.cancel()
-        self._sync_insitu_state("In-situ workflow cancelled")
-
-    def snapshot_insitu_workflow(self):
-        return self._insitu_workflow.snapshot()
-
-    def restore_insitu_workflow(self, snapshot) -> None:
-        self._insitu_workflow.restore(snapshot)
-        self._sync_insitu_state("In-situ workflow restored")
-
-    def _sync_insitu_state(self, message: str) -> None:
+    def _sync_insitu_state(self, workflow_state, message: str) -> None:
         self.state = replace(
-            self.state,
-            insitu_workflow=self._insitu_workflow.state,
-            status_message=message,
+            self.state, insitu_workflow=workflow_state, status_message=message
         )

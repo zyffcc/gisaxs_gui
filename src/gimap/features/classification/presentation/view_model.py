@@ -9,6 +9,8 @@ from src.gimap.app import AppContext
 
 from ..application import (
     BuildFeatureMatrixRequest,
+    ClassificationCsvRequest,
+    ClassificationSessionRequest,
     BuildClassificationModelPackageRequest,
     ClassificationPredictionRequest,
     ClassificationTrainingRequest,
@@ -27,22 +29,36 @@ class ClassificationViewModel:
         context: AppContext,
         import_dataset,
         build_features,
+        validate_dataset,
+        summarize_dataset,
+        estimate_feature_memory,
+        list_algorithms,
         train_classifiers,
         compute_embedding,
         predict_classification,
         save_model,
         load_model,
         build_model_package,
+        save_session,
+        load_session,
+        export_csv,
     ):
         self.context = context
         self._import_dataset = import_dataset
         self._build_features = build_features
+        self._validate_dataset = validate_dataset
+        self._summarize_dataset = summarize_dataset
+        self._estimate_feature_memory = estimate_feature_memory
+        self._list_algorithms = list_algorithms
         self._train_classifiers = train_classifiers
         self._compute_embedding = compute_embedding
         self._predict_classification = predict_classification
         self._save_model = save_model
         self._load_model = load_model
         self._build_model_package = build_model_package
+        self._save_session = save_session
+        self._load_session = load_session
+        self._export_csv = export_csv
         self.state = ClassificationState()
 
     def load_settings(self) -> dict[str, object]:
@@ -90,6 +106,18 @@ class ClassificationViewModel:
             return None
         self.state = replace(self.state, feature_matrix=matrix, error_message=None)
         return matrix
+
+    def validate_dataset(self, samples):
+        return self._validate_dataset.execute(tuple(samples))
+
+    def summarize_dataset(self, samples):
+        return self._summarize_dataset.execute(tuple(samples))
+
+    def estimate_feature_memory(self, matrix) -> str:
+        return self._estimate_feature_memory.execute(matrix)
+
+    def default_algorithms(self):
+        return self._list_algorithms.execute()
 
     def train(
         self,
@@ -211,6 +239,23 @@ class ClassificationViewModel:
             return None
         self.state = replace(self.state, active_package=package, error_message=None)
         return package
+
+    def save_session(self, path: Path, values: dict) -> Path:
+        return self._save_session.execute(
+            ClassificationSessionRequest(Path(path), dict(values))
+        )
+
+    def load_session(self, path: Path) -> dict:
+        return self._load_session.execute(Path(path))
+
+    def export_csv(self, path: Path, columns, rows) -> Path:
+        return self._export_csv.execute(
+            ClassificationCsvRequest(
+                Path(path),
+                tuple(str(column) for column in columns),
+                tuple(tuple(row) for row in rows),
+            )
+        )
 
     def build_model_package(
         self,

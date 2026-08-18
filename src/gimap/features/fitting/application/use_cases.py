@@ -12,9 +12,10 @@ from .models import (
     LoadScatteringFileRequest,
     CurveOperationResult,
     ScatteringOperationResult,
+    ScatteringSequenceInfo,
 )
 from .ports import CurveRepository, FitResultRepository, ScatteringFileRepository
-from .ports import FittingModelPort
+from .ports import FittingModelPort, RemoteFileCachePort
 from ..domain import ManualFitRequest, ManualFitResult, q_values_for_model
 
 
@@ -47,6 +48,16 @@ class LoadScatteringFile:
             return ScatteringOperationResult(
                 error=_structured_file_error(request.path, "read", exc)
             )
+
+
+class InspectScatteringSequence:
+    """Read detector navigation metadata through the file repository port."""
+
+    def __init__(self, repository: ScatteringFileRepository):
+        self._repository = repository
+
+    def execute(self, path: Path) -> ScatteringSequenceInfo:
+        return self._repository.inspect_sequence(Path(path))
 
 
 class LoadCurve:
@@ -91,3 +102,34 @@ class RunManualFit:
             parameter_names=parameter_names,
             parameters=request.parameters,
         )
+
+
+class ManageRemoteFileCache:
+    def __init__(self, cache: RemoteFileCachePort):
+        self._cache = cache
+
+    def default_directory(self) -> str:
+        return self._cache.default_directory()
+
+    def display_directory(self, cache_dir: str) -> str:
+        return self._cache.display_directory(cache_dir)
+
+    def resolve_directory(self, cache_dir: str) -> Path:
+        return self._cache.resolve_directory(cache_dir)
+
+    def is_remote(self, path: str) -> bool:
+        return self._cache.is_remote(path)
+
+    def target_path(self, source_path: str, cache_dir: str) -> Path:
+        return self._cache.target_path(source_path, cache_dir)
+
+    def prepare(self, source_path: str, cache_dir: str, max_gb: float, **callbacks):
+        return self._cache.prepare(
+            source_path,
+            cache_dir,
+            max_gb,
+            **callbacks,
+        )
+
+    def clear(self, cache_dir: str) -> int:
+        return self._cache.clear(cache_dir)

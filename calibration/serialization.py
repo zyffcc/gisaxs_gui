@@ -1,22 +1,8 @@
-"""Calibration JSON 旧入口的兼容门面。"""
+"""Legacy import path for feature-owned calibration JSON serialization."""
 
-from __future__ import annotations
-
-from pathlib import Path
-
-from src.gimap.features.calibration.infrastructure.adapters import (
-    JsonCalibrationStorageAdapter,
+from src.gimap.features.calibration.infrastructure.adapters.serialization import (
+    load_calibration,
+    save_calibration,
 )
 
-from .models import CalibrationResult
-
-
-_storage = JsonCalibrationStorageAdapter()
-
-
-def save_calibration(result: CalibrationResult, path: str | Path) -> None:
-    _storage.save(result, path)
-
-
-def load_calibration(path: str | Path) -> CalibrationResult:
-    return _storage.load(path)
+__all__ = ["load_calibration", "save_calibration"]

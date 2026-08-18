@@ -86,6 +86,11 @@ ViewModel
 Use Case
 ```
 
+对于历史 Qt 页面，允许使用 feature-owned `ViewBinding` 把既有 widget signals、dialogs 和
+rendering 连接到 ViewModel。ViewBinding 在架构上属于 View 的实现细节，不是额外的
+orchestration 层；它不得绕过 ViewModel 调用 use case，也不得包含科学计算或具体 I/O。
+因此实际文件结构可能是 `View + ViewBinding → ViewModel → Use Case`，依赖含义仍与上图一致。
+
 Legacy Controller 可以在迁移期间暂时存在，但不能继续发展成与 ViewModel 并列的第二层
 orchestration。新代码不得建立 `View → Controller → ViewModel → Use Case` 链路。如果
 确实需要保留 controller，它只能承担极薄的 composition 或 navigation 职责，不得包含

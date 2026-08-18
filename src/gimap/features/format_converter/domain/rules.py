@@ -43,6 +43,94 @@ def parse_custom_frames(text: str, frame_count: int) -> list[int]:
     return sorted(result)
 
 
+def is_supported_input_path(path: str | Path) -> bool:
+    from .models import SUPPORTED_SUFFIXES
+
+    return Path(path).suffix.lower() in SUPPORTED_SUFFIXES
+
+
+def select_frame_indices(
+    frame_count: int,
+    mode: str,
+    *,
+    current_frame: int = 1,
+    range_start: int = 1,
+    range_end: int | None = None,
+    custom_frames: str = "",
+    nth_frame: int = 1,
+) -> list[int]:
+    """Apply the dialog's one-based frame-selection contract."""
+    if frame_count <= 1:
+        return [0]
+    if mode == "All":
+        return list(range(frame_count))
+    if mode == "Current frame":
+        return [max(0, min(frame_count - 1, int(current_frame) - 1))]
+    if mode == "Frame range":
+        end = frame_count if range_end is None else int(range_end)
+        frames = list(range(int(range_start) - 1, end))
+        if not frames:
+            raise ValueError("The frame range is empty.")
+        return frames
+    if mode == "Custom":
+        return parse_custom_frames(custom_frames, frame_count)
+    return list(range(0, frame_count, max(1, int(nth_frame))))
+
+
+def select_source_frame_indices(
+    file_type: str,
+    frame_count: int,
+    mode: str,
+    **selection,
+) -> list[int]:
+    if file_type != "NXS":
+        return [0]
+    return select_frame_indices(frame_count, mode, **selection)
+
+
+def visible_output_formats(
+    input_types: Iterable[str],
+    *,
+    container: bool = False,
+) -> dict[str, bool]:
+    """Return the legacy format-button visibility policy as data."""
+    source_types = set(input_types)
+    same_format = {"TIFF": "TIFF", "CBF": "CBF", "NXS": "HDF5"}
+    visibility: dict[str, bool] = {}
+    for output_format in ("TIFF", "CBF", "HDF5", "NumPy"):
+        hidden = len(source_types) == 1 and any(
+            same_format.get(source_type) == output_format
+            for source_type in source_types
+        )
+        if output_format == "HDF5" and (len(source_types) > 1 or container):
+            hidden = False
+        visibility[output_format] = not hidden
+    return visibility
+
+
+def render_output_example(options: ConversionOptions) -> str:
+    if options.container:
+        return "converted_images.h5"
+    rendered = options.naming_template.format(
+        source="scan_001",
+        frame=123,
+        img="img",
+    )
+    return rendered + options.suffix
+
+
+def output_naming_summary(options: ConversionOptions) -> str:
+    return (
+        "converted_images.h5"
+        if options.container
+        else options.naming_template + options.suffix
+    )
+
+
+def output_may_lose_float_values(output_format: str, data_mode: str) -> bool:
+    return output_format == "CBF" and data_mode in ("original", "float32")
+
+
 def compact_frame_summary(frames: Iterable[int], frame_count: int) -> str:
     values = sorted(set(int(value) for value in frames))
     if not values:

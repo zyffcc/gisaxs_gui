@@ -12,6 +12,12 @@ from ..domain import ModelRuntimeInfo, PredictionModule
 
 
 @dataclass(frozen=True)
+class IndexedPredictionFile:
+    path: Path
+    index: int
+
+
+@dataclass(frozen=True)
 class LoadedPredictionImage:
     image: np.ndarray
     source_paths: tuple[Path, ...]
@@ -116,3 +122,25 @@ class MultiplePredictionResult:
     @property
     def failed_count(self) -> int:
         return sum(item.status == "failed" for item in self.items)
+
+
+@dataclass(frozen=True)
+class PredictionExportItem:
+    """Framework-neutral snapshot of one completed legacy prediction row."""
+
+    filename: str
+    filepath: str
+    stack_count: int
+    timestamp: str | None
+    processing_time: float
+    confidence: float | None
+    prediction_data: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class PredictionArrayExportRequest:
+    path: Path
+    values: np.ndarray
+    fmt: str = "%.6g"
+    header: str = ""
+    comments: str = "# "

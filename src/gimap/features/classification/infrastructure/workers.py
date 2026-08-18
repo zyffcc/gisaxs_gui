@@ -10,13 +10,13 @@ from .adapters.job_serialization import decode_array, encode_array, serialize_ex
 
 
 def train_classifiers_job(payload, report, is_cancelled):
-    from controllers.classification_training_service import ClassificationTrainingService
     from ..domain import (
         AlgorithmConfig,
         ClassificationSample,
         ProjectionConfig,
         ValidationConfig,
     )
+    from .adapters.training import ClassificationTrainingService
 
     X = decode_array(payload["X"])
     y = decode_array(payload["y"])

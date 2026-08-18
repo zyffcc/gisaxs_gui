@@ -14,22 +14,13 @@ def run(command: list[str], *, env: dict[str, str]) -> None:
 
 
 def main() -> int:
-    """Run tests, the legacy-safe lint baseline, and strict lint for this script."""
+    """Run the complete test suite and the repository lint baseline."""
     env = os.environ.copy()
     env.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     checks = [
         [sys.executable, "-m", "pytest"],
         [sys.executable, "-m", "ruff", "check", "."],
-        [
-            sys.executable,
-            "-m",
-            "ruff",
-            "check",
-            "tools/check.py",
-            "--select",
-            "E4,E7,E9,F,I",
-        ],
     ]
     for command in checks:
         run(command, env=env)

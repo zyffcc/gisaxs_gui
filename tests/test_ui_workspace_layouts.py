@@ -1,4 +1,6 @@
+import ast
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -10,6 +12,7 @@ from src.gimap.integrations.jobs import LocalProcessJobRunner
 from src.gimap.integrations.state import (
     InMemorySessionRepository,
     InMemorySettingsRepository,
+    InMemoryUserPreferencesRepository,
 )
 from ui.classification_page import ClassificationPage
 from ui.format_converter_dialog import ConversionProgressDialog, FormatConverterDialog
@@ -18,6 +21,7 @@ from ui.trainset_build_page import TrainsetBuildPage
 
 
 _TEST_APP = None
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _app():
@@ -30,7 +34,49 @@ def _context():
     return AppContext(
         settings=InMemorySettingsRepository(),
         session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
         jobs=LocalProcessJobRunner(),
+    )
+
+
+def test_main_window_composition_is_owned_by_app_composition_boundary() -> None:
+    from main import MainWindowComponents
+    from src.gimap.app.presentation.navigation import NavigationSidebar
+    from src.gimap.app.presentation.shell import ContentStack, MainShell
+    from ui.components.main_window_components import (
+        MainWindowComponents as LegacyMainWindowComponents,
+    )
+    from ui.components.main_window_components import (
+        NavigationSidebar as LegacyNavigationSidebar,
+    )
+    from ui.components.main_window_components import ContentStack as LegacyContentStack
+    from ui.components.main_window_components import MainShell as LegacyMainShell
+
+    assert LegacyMainWindowComponents is MainWindowComponents
+    assert MainWindowComponents.__module__ == "src.gimap.app.main_window"
+    assert LegacyNavigationSidebar is NavigationSidebar
+    assert LegacyContentStack is ContentStack
+    assert LegacyMainShell is MainShell
+
+    legacy_source = (PROJECT_ROOT / "ui" / "components" / "main_window_components.py").read_text(
+        encoding="utf-8"
+    )
+    legacy_tree = ast.parse(legacy_source)
+    assert not any(isinstance(node, ast.ClassDef) for node in legacy_tree.body)
+    assert len(legacy_source.splitlines()) <= 70
+
+    main_source = (PROJECT_ROOT / "main.py").read_text(encoding="utf-8")
+    assert "src.gimap.app.main_window" in main_source
+    assert "from ui.components import MainWindowComponents" not in main_source
+
+    composition_source = (PROJECT_ROOT / "src" / "gimap" / "app" / "main_window.py").read_text(
+        encoding="utf-8"
+    )
+    composition_tree = ast.parse(composition_source)
+    assert not any(
+        isinstance(node, ast.ClassDef)
+        and node.name in {"ContentStack", "MainShell", "NavigationSidebar"}
+        for node in composition_tree.body
     )
 
 
@@ -184,6 +230,11 @@ def test_waxs_layout_uses_shared_stages_basic_advanced_and_job_status():
     window = MainWindow(_context())
     page = window.components.waxs_page
 
+    assert window.waxsPageIndex == 4
+    assert window.mainWindowWidget.count() == 5
+    assert window.mainWindowWidget.widget(4) is page
+    assert not hasattr(window, "waxsPageHost")
+
     assert page.waxs_input_section.title_label.text() == "Input"
     assert page.waxs_configure_section.title_label.text() == "Configure"
     assert page.waxs_preview_panel.title_label.text() == "Preview"
@@ -195,10 +246,11 @@ def test_waxs_layout_uses_shared_stages_basic_advanced_and_job_status():
         "ROI / Cut",
         "1D Integration",
     ]
-    assert [
-        page.advanced_tabs.tabText(index)
-        for index in range(page.advanced_tabs.count())
-    ] == ["Display", "Mask", "Geometry"]
+    assert [page.advanced_tabs.tabText(index) for index in range(page.advanced_tabs.count())] == [
+        "Display",
+        "Mask",
+        "Geometry",
+    ]
 
     page.set_job_state("running", "Processing frame", progress=35)
     assert page.progress is page.waxs_job_status.progress_bar

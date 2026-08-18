@@ -8,6 +8,8 @@ from .models import (
     BuildFeatureMatrixRequest,
     BuildClassificationModelPackageRequest,
     ClassificationPredictionOutput,
+    ClassificationCsvRequest,
+    ClassificationSessionRequest,
     ClassificationPredictionRequest,
     ClassificationTrainingOutput,
     ClassificationTrainingRequest,
@@ -17,7 +19,9 @@ from .models import (
 )
 from .ports import (
     ClassificationDatasetPort,
+    ClassificationArtifactRepository,
     ClassificationModelRepository,
+    ClassifierCatalogPort,
     ClassifierPredictorPort,
     ClassifierTrainerPort,
     EmbeddingPort,
@@ -48,6 +52,40 @@ class BuildClassificationFeatures:
             request.preprocessing,
             require_labels=request.require_labels,
         )
+
+
+class ValidateClassificationDataset:
+    def __init__(self, datasets: ClassificationDatasetPort):
+        self._datasets = datasets
+
+    def execute(self, samples):
+        return self._datasets.validate_dataset(tuple(samples))
+
+
+class SummarizeClassificationDataset:
+    def __init__(self, datasets: ClassificationDatasetPort):
+        self._datasets = datasets
+
+    def execute(self, samples):
+        return self._datasets.summarize_by_label(tuple(samples))
+
+
+class EstimateClassificationFeatureMemory:
+    def execute(self, matrix) -> str:
+        bytes_used = int(matrix.X.shape[0] * matrix.X.shape[1] * 8)
+        if bytes_used < 1024:
+            return f"{bytes_used} B"
+        if bytes_used < 1024**2:
+            return f"{bytes_used / 1024:.1f} KB"
+        return f"{bytes_used / 1024**2:.1f} MB"
+
+
+class ListClassificationAlgorithms:
+    def __init__(self, catalog: ClassifierCatalogPort):
+        self._catalog = catalog
+
+    def execute(self):
+        return self._catalog.default_algorithm_configs()
 
 
 class TrainClassifiers:
@@ -100,6 +138,34 @@ class LoadClassificationModel:
 
     def execute(self, path: Path):
         return self._repository.load(Path(path))
+
+
+class SaveClassificationSession:
+    def __init__(self, repository: ClassificationArtifactRepository):
+        self._repository = repository
+
+    def execute(self, request: ClassificationSessionRequest) -> Path:
+        path = Path(request.path)
+        self._repository.save_session(path, request.values)
+        return path
+
+
+class LoadClassificationSession:
+    def __init__(self, repository: ClassificationArtifactRepository):
+        self._repository = repository
+
+    def execute(self, path: Path) -> dict:
+        return self._repository.load_session(Path(path))
+
+
+class ExportClassificationCsv:
+    def __init__(self, repository: ClassificationArtifactRepository):
+        self._repository = repository
+
+    def execute(self, request: ClassificationCsvRequest) -> Path:
+        path = Path(request.path)
+        self._repository.export_csv(path, request.columns, request.rows)
+        return path
 
 
 class BuildClassificationModelPackage:

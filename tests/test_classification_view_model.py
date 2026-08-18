@@ -25,6 +25,7 @@ from src.gimap.features.classification.presentation import ClassificationViewMod
 from src.gimap.integrations.state import (
     InMemorySessionRepository,
     InMemorySettingsRepository,
+    InMemoryUserPreferencesRepository,
 )
 
 
@@ -68,6 +69,10 @@ def _view_model(**overrides):
             ImportedDataset(samples, DatasetSummary(classes=2, total_samples=2))
         ),
         "build_features": _Call(matrix),
+        "validate_dataset": _Call(DatasetSummary(classes=2, total_samples=2)),
+        "summarize_dataset": _Call({"A": {"files": 1}}),
+        "estimate_feature_memory": _Call("16 B"),
+        "list_algorithms": _Call((AlgorithmConfig("fake", "Fake", True),)),
         "train_classifiers": _Call(ClassificationTrainingOutput(experiment, matrix)),
         "compute_embedding": _Call(
             EmbeddingResult(np.array([[0.0, 1.0], [1.0, 0.0]]), "PCA 2D")
@@ -80,11 +85,15 @@ def _view_model(**overrides):
         "save_model": _Call(Path("model.joblib")),
         "load_model": _Call(object()),
         "build_model_package": _Call(object()),
+        "save_session": _Call(Path("session.json")),
+        "load_session": _Call({"ranking_metric": "macro_f1"}),
+        "export_csv": _Call(Path("results.csv")),
     }
     defaults.update(overrides)
     context = AppContext(
         settings=InMemorySettingsRepository(),
         session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
     )
     return ClassificationViewModel(context=context, **defaults), samples
 
@@ -99,6 +108,16 @@ def test_view_model_import_and_settings_without_qapplication():
     assert view_model.load_settings()["ranking_metric"] == "macro_f1"
     assert imported.summary.classes == 2
     assert view_model.state.dataset_status == "ready"
+
+
+def test_view_model_exposes_dataset_analysis_through_application_commands():
+    view_model, samples = _view_model()
+    matrix = view_model.build_features(samples, PreprocessingConfig())
+
+    assert view_model.validate_dataset(samples).classes == 2
+    assert view_model.summarize_dataset(samples)["A"]["files"] == 1
+    assert view_model.estimate_feature_memory(matrix) == "16 B"
+    assert view_model.default_algorithms()[0].algorithm_id == "fake"
 
 
 def test_view_model_training_and_embedding_state_use_fake_ml_ports():

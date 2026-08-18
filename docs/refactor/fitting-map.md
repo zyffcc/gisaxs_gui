@@ -1,5 +1,36 @@
 # Fitting Controller 渐进式拆分地图
 
+- **Status**: Historical
+- **Scope**: 第 12A 步的 `FittingController` 静态审计快照与迁移顺序
+- **Related code**: [`controllers/fitting_controller.py`](../../controllers/fitting_controller.py)
+- **Related tests**: [`tests/test_fitting_legacy_bridge.py`](../../tests/test_fitting_legacy_bridge.py)、
+  [`tests/test_fitting_presentation.py`](../../tests/test_fitting_presentation.py)
+- **Last verified**: 2026-08-18
+
+## 当前迁移结果
+
+第 12B–12G 的目标边界已经渐进落实：
+
+- constraints、scoring、curve transformations、ROI/cut、detector settings 和 in-situ cut 的
+  数学实现位于 domain，并有数值回归测试；
+- 文件/曲线加载、导出、远程 cache、in-situ records、参数快照、AI artifacts/log、模型参数、
+  AI catalog、dependency availability、模型构建和 q-space 均通过 application command 或 port；
+- 具体文件系统、legacy scientific/model registry 和 q-space 实现位于 adapters；
+- `FittingViewModel` 已把 storage、in-situ 与 scientific command groups 拆为独立协作者，主
+  ViewModel 保持在 300 行 review 阈值；
+- AI fitting 使用 `Predictor`/model port 与 `JobRunner`，in-situ workflow 复用单文件 fitting
+  use case，不复制算法；
+- 生产运行时直接构造 feature-owned `FittingViewBinding`。顶层
+  `controllers/fitting_controller.py` 与 feature `legacy_bridge.py` 仅 re-export；17,341 行
+  binding 负责 Qt signal、widget、Matplotlib rendering 和动态 UI 契约，不再拥有上述计算或
+  I/O 实现；它只能按有 characterization test 的 UI 状态组继续拆分，禁止机械重写。
+
+当前验证基线见 [`remaining-work.md`](remaining-work.md)。以下内容保留为最初静态审计快照。
+
+本文保留最初拆分依据，行号和“当前实现”描述不代表现在的完整架构。当前 Fitting
+presentation ownership 与兼容边界以
+[`docs/ui/workspaces/fitting.md`](../ui/workspaces/fitting.md) 为准。
+
 - 审计日期：2026-08-17
 - 审计对象：`controllers/fitting_controller.py`
 - 文件规模：18,230 行；其中 `FittingController` 为 3,024–18,230 行，共 15,207 行。

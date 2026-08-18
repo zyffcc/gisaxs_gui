@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from pathlib import Path
+from typing import Mapping, Protocol, Sequence
 
 from ..insitu import InSituFileFitRequest, InSituFileFitResult
 
@@ -12,3 +13,23 @@ class SingleFileFitUseCase(Protocol):
 
     def execute(self, request: InSituFileFitRequest) -> InSituFileFitResult:
         ...
+
+
+class InSituRecordRepository(Protocol):
+    def cache_directory(self) -> Path: ...
+
+    def session_path(self) -> Path: ...
+
+    def ensure_directory(self) -> Path: ...
+
+    def reset(self) -> None: ...
+
+    def append(self, record: Mapping[str, object]) -> None: ...
+
+    def load(self) -> list[dict[str, object]]: ...
+
+    def export_csv(
+        self,
+        path: Path,
+        rows: Sequence[Mapping[str, object]],
+    ) -> Path: ...

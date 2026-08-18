@@ -10,7 +10,10 @@ from src.gimap.features.waxs.application import (
     ExportWaxsCurveRequest,
     ExportWaxsImage,
     ExportWaxsImageRequest,
+    GetWaxsWorkingDirectory,
+    NormalizeWaxsPath,
     PrepareWaxsDisplay,
+    ValidateWaxsDirectory,
     WaxsCutImageRequest,
     WaxsDisplayLimitsRequest,
     WaxsDisplayRequest,
@@ -46,6 +49,24 @@ class _Exporter:
 
     def export_matrix(self, path, columns, headers):
         raise AssertionError("matrix export is not part of these use cases")
+
+
+class _Paths:
+    def __init__(self, root: Path):
+        self.root = root
+        self.normalized = None
+        self.checked = None
+
+    def normalize(self, path):
+        self.normalized = path
+        return str(self.root / Path(path).name)
+
+    def current_directory(self):
+        return str(self.root)
+
+    def is_directory(self, path):
+        self.checked = path
+        return Path(path) == self.root
 
 
 def test_geometry_application_use_cases_preserve_domain_results():
@@ -95,3 +116,13 @@ def test_export_application_use_cases_only_use_export_port(tmp_path):
     assert image_path == Path(tmp_path / "image.png")
     assert exporter.curve[0] == curve_path
     assert exporter.image[0] == image_path
+
+
+def test_workspace_path_use_cases_only_use_path_port(tmp_path):
+    paths = _Paths(tmp_path)
+
+    assert NormalizeWaxsPath(paths)("scan.nxs") == str(tmp_path / "scan.nxs")
+    assert GetWaxsWorkingDirectory(paths)() == str(tmp_path)
+    assert ValidateWaxsDirectory(paths)(tmp_path)
+    assert paths.normalized == "scan.nxs"
+    assert paths.checked == tmp_path
