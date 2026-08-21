@@ -36,6 +36,8 @@ from .application import (
     RunManualFit,
     SaveDetectorSettings,
     InSituWorkflowCoordinator,
+    CreateInSituRecipe,
+    ReviseInSituRecipe,
 )
 from .infrastructure.adapters import (
     MixedScatteringModelAdapter,
@@ -86,6 +88,8 @@ def create_fitting_view_model(context: AppContext) -> FittingViewModel:
         map_candidate_parameters=MapCandidateParameters(),
         load_candidate_results=LoadCandidateResults(JsonCandidateRepository()),
         insitu_workflow=InSituWorkflowCoordinator(),
+        create_insitu_recipe=CreateInSituRecipe(),
+        revise_insitu_recipe=ReviseInSituRecipe(),
         load_detector_settings=LoadDetectorSettings(context.settings),
         save_detector_settings=SaveDetectorSettings(context.settings),
         scattering_loader_factory=_create_scattering_loader,

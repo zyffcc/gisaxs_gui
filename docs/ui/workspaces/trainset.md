@@ -1,6 +1,6 @@
-# Trainset 布局迁移记录
+# Trainset 界面与交互说明
 
-- 状态：Trainset 页面和交互画布已由 Trainset feature 拥有；旧 UI 路径仅为兼容入口。
+- 状态：Trainset 页面和交互画布由 Trainset feature 拥有；顶层 UI 路径仅为 public alias。
 - 当前调用链：`TrainsetBuildPage → TrainsetViewBinding → TrainsetViewModel → application use cases/ports`。
 - Python workflow shell：`src/gimap/features/trainset/presentation/views/page_view.py`。
 - Dataset Design 布局：`src/gimap/features/trainset/presentation/views/dataset_page_view.py`。
@@ -9,7 +9,21 @@
   `monitor_page_view.py`。
 - 页面行为与动态 workspace panels：`src/gimap/features/trainset/presentation/page.py`。
 - 兼容入口：`ui/trainset_build_page.py`。
-- 最近验证：2026-08-18。
+- 最近验证：2026-08-19。
+
+## 当前现代化工作流
+
+Trainset 保留五个具有明确产物的步骤：
+
+```text
+1 Dataset Design → 2 Local Preview → 3 Model Design → 4 Local Run → 5 Monitor & Results
+```
+
+第一步不再把 detector、particle 和 sampling 参数铺成一条超长表单，而是在同一
+Configure section 内分为 `Geometry + ROI`、`Particle population` 和
+`Sampling + files`。右侧 detector/ROI/mask preview 始终保留。底部 action bar 只显示
+当前步骤相关的全局动作；Load/Save 始终可用，Validate design 和 Prepare job package
+分别只在需要的步骤出现。字段、默认值和命令实例未复制。
 
 `TrainsetViewBinding` 只负责页面 signal、控件值映射、文件对话框和结果渲染；配置、preview、
 simulation、job package、local/Slurm workflow 和模型注册均经 `TrainsetViewModel` 调用
@@ -20,17 +34,19 @@ application use cases/ports。旧 `TrainsetController` 名称只 re-export 同�
 隐藏的 2,022 行旧 beam、detector、particle、preprocessing 和 generation widgets；app
 composition root 把唯一的 feature-owned 页面装入 host，并通过构造函数注入
 `TrainsetViewBinding`。Binding 强制要求页面和 ViewModel 依赖，不再包含 host/layout fallback、
-页面创建或 legacy widget 清理逻辑。
+页面创建或兼容 widget 清理逻辑。
 
-Physical-background 参数定义现由 trainset domain 单一拥有；legacy `trainset.config` 与
+Physical-background 参数定义由 trainset domain 单一拥有；public alias `trainset.config` 与
 feature presentation 引用同一个对象，因此参数键、范围、精度和帮助文本保持不变。
 
 ## 控件映射
 
-| 迁移前控件/区域 | 迁移后位置 | 行为 |
+| 功能/控件区域 | 当前位置 | 行为 |
 | --- | --- | --- |
 | real scattering reference | `Input / ParameterSection` | reference 仍只用于几何、ROI 和 mask 指导，不作为模拟训练图像 |
-| beam/detector、ROI、particle population、dataset sampling | `Configure / ParameterSection` | 字段 path、默认值、单位和采样含义不变 |
+| beam/detector、ROI | `Configure > Geometry + ROI` | 字段 path、默认值、单位和几何含义不变 |
+| particle population | `Configure > Particle population` | form factor、分布、constraints 和参数表不变 |
+| dataset sampling/files/split | `Configure > Sampling + files` | 样本数、shard 和 train/validation/test 语义不变 |
 | mask、interference、layers/substrate | `Advanced configuration / AdvancedSection` | 默认折叠；所有原表格、draw action 和 constraints 保留 |
 | Full detector/ROI/Masked image/Mask only | `Preview / PlotPanel` | canvas、坐标方向、beam/ROI/mask 交互不变 |
 | Local Preview 的 range、coverage、三种 update action | `Run / ParameterSection` | BornAgain cache 和 realization 行为不变 |
@@ -45,9 +61,9 @@ feature presentation 引用同一个对象，因此参数键、范围、精度�
 | process output | `Monitor & Results > Log / AdvancedSection` | 原 append、refresh 和 sync 路径不变 |
 | metrics/register model | `Monitor & Results > Results / ParameterSection` | metric columns 和 model registration 不变 |
 
-Trainset 原有五步导航继续有效；本轮只在各步骤内部建立 Input → Configure → Preview →
-Run → Results → Export 的统一信息层级。旧 controller 文件仅为兼容别名，没有第二层
-workflow orchestration。页面所有权迁移没有改动 BornAgain、preprocessing、generation、
+Trainset 原有五步导航继续有效；当前页面在各步骤内部建立 Input → Configure → Preview →
+Run → Results → Export 的统一信息层级，并用 contextual action bar 强化当前阶段。顶层
+controller 文件仅为 public alias，没有第二层 workflow orchestration。页面布局不改动 BornAgain、preprocessing、generation、
 training、module.yaml、project YAML/JSON、HDF5 schema 或模型格式；所有 objectName、signals、
 快捷键、错误行为和内嵌样式保持不变。
 
@@ -71,4 +87,6 @@ training、module.yaml、project YAML/JSON、HDF5 schema 或模型格式；所�
 - [ ] JobStatus 在 running、paused、succeeded、failed 时显示正确，Pause/Stop safely 仍可用；
 - [ ] package tree、job log、metrics table 和 Register best model 正常；
 - [ ] Save/Load、Remember changes、Reset defaults 和 step readiness 状态不变；
+- [ ] 三个 Dataset Design 配置页签切换不重置任何字段；
+- [ ] 每个步骤只突出与当前阶段相关的全局动作；
 - [ ] Maxwell 远端提交仍按原设计保持禁用，package export 可用。

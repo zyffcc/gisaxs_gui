@@ -20,7 +20,7 @@ from ..binding_primitives import (
 class ManualFitExecutionMixin:
     """Own manual fit execution behavior."""
 
-    def _perform_manual_fitting(self):
+    def _perform_manual_fitting(self, *, reveal_result: bool = False):
         """Bridge legacy parameter widgets to the manual fitting ViewModel command."""
         try:
             active_shapes, shape_configs = self._collect_active_particles()
@@ -38,13 +38,20 @@ class ManualFitExecutionMixin:
                     self._add_fitting_error("No Cut data available for fitting")
                     return
                 q_data = np.asarray(self.current_cut_data["x_coords"], dtype=float)
+                intensity_data = np.asarray(
+                    self.current_cut_data["y_intensity"], dtype=float
+                )
                 q_source_kind = "cut"
             else:
                 if getattr(self, "current_1d_data", None) is None:
                     self._add_fitting_error("No 1D file data available for fitting")
                     return
                 q_data = np.asarray(self.current_1d_data["q"], dtype=float)
+                intensity_data = np.asarray(self.current_1d_data["I"], dtype=float)
                 q_source_kind = "1d"
+
+            prepared_curve = self._prepare_signed_q_data(q_data, intensity_data)
+            q_data = prepared_curve.q
 
             parameter_aliases = {
                 "intensity": "Int",
@@ -111,10 +118,11 @@ class ManualFitExecutionMixin:
                 parameters=tuple(parameters),
             )
             result = self.fitting_view_model.run_manual_fit(request)
+            self._sync_fitting_workflow()
             if result is None:
                 message = (
                     self.fitting_view_model.state.error_message
-                    or "Manual fitting calculation failed"
+                    or "Current model calculation failed"
                 )
                 self._add_fitting_error(message)
                 return
@@ -153,20 +161,28 @@ class ManualFitExecutionMixin:
                     "data_source": q_source_kind,
                     "q_source_unit": request.q_source_unit,
                     "q_model_unit": "nm",
+                    "q_branch": prepared_curve.branch,
+                    "q_combination": prepared_curve.combination,
                 },
             }
             self.display_mode = "fitting"
             self._fitting_mode_active = True
+            if reveal_result and hasattr(self, "_set_curve_view_mode"):
+                self._set_curve_view_mode("compare", refresh=False)
             if not getattr(self, "_suppress_workflow_plot_updates", False):
                 self._update_GUI_image("fitting")
                 self._update_outside_window("fitting")
+                tabs = getattr(self.ui, "fittingPreviewTabs", None)
+                if reveal_result and tabs is not None and np.asarray(fitting_result).size:
+                    tabs.setCurrentIndex(1)
             if self._auto_k_enabled and getattr(self, "I", None) is not None:
                 try:
                     self._optimize_k_value()
                 except Exception as exc:
                     self._add_fitting_error(f"Auto K-value optimization failed: {exc}")
         except Exception as exc:
-            self._add_fitting_error(f"Manual fitting failed: {exc}")
+            self._fail_fitting_step("fit", str(exc))
+            self._add_fitting_error(f"Current model calculation failed: {exc}")
 
     def _store_fitting_data(self, q_data, intensity_data, active_shapes):
         """No description."""
@@ -280,7 +296,7 @@ class ManualFitExecutionMixin:
 
             x_label = self._build_q_axis_label()
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
-            title = f"Manual Fitting Result - {', '.join(self._fitting_shapes)}"
+            title = f"Current Model Result - {', '.join(self._fitting_shapes)}"
 
             self._update_independent_window_with_fitting(
                 original_x_data,

@@ -27,21 +27,25 @@ class FitGraphicsEventsMixin:
         except Exception:
             pass
 
+    def _active_curve_graphics_view(self):
+        return getattr(self.ui, "fitGraphicsView", None)
+
     def _setup_fit_graphics_scene(self):
         """itGraphicsView"""
         try:
             self._expand_right_card("fittingPlotCard")
-            if not hasattr(self.ui, "fitGraphicsView"):
+            view = self._active_curve_graphics_view()
+            if view is None:
                 return None
-
-            if not hasattr(self, "_fit_graphics_scene") or self._fit_graphics_scene is None:
-                self._fit_graphics_scene = QGraphicsScene()
-                self.ui.fitGraphicsView.setScene(self._fit_graphics_scene)
+            scene = getattr(self, "_curve_graphics_scene", None)
+            if scene is None:
+                scene = QGraphicsScene()
+                self._curve_graphics_scene = scene
+                view.setScene(scene)
                 # Configure the view for a fixed-size, scroll-less canvas
                 try:
                     from PyQt5.QtWidgets import QGraphicsView, QFrame
 
-                    view = self.ui.fitGraphicsView
                     view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
                     view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
                     view.setDragMode(QGraphicsView.NoDrag)
@@ -57,9 +61,9 @@ class FitGraphicsEventsMixin:
                 except Exception:
                     pass
             else:
-                self._fit_graphics_scene.clear()
+                scene.clear()
 
-            return self._fit_graphics_scene
+            return scene
 
         except Exception as e:
             self.status_updated.emit(f"Failed to setup fit graphics scene: {str(e)}")
@@ -119,14 +123,14 @@ class FitGraphicsEventsMixin:
             ),
             (
                 getattr(self.ui, "fitGraphicsView", None),
-                self._current_fit_proxy_item(),
+                self._current_curve_proxy_item(),
             ),
         ):
             if view is not None and item is not None:
                 self._fit_view_to_item(view, item, keep_aspect=True)
 
-    def _current_fit_proxy_item(self):
-        scene = getattr(self, "_fit_graphics_scene", None)
+    def _current_curve_proxy_item(self):
+        scene = getattr(self, "_curve_graphics_scene", None)
         if scene is None:
             return None
         try:
@@ -134,6 +138,9 @@ class FitGraphicsEventsMixin:
             return items[0] if items else None
         except Exception:
             return None
+
+    def _current_fit_proxy_item(self):
+        return self._current_curve_proxy_item()
 
     def _fit_view_to_item(self, graphics_view, item, keep_aspect=True):
         """Fit the view to the given item bounds; disable scrollbars by sizing the scene to the item."""

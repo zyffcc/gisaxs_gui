@@ -116,6 +116,7 @@ class PredictionViewBinding(
         self._graphics_scene: Optional[QGraphicsScene] = None
         self._current_pixmap: Optional[QPixmap] = None
         self._current_image: Optional[np.ndarray] = None
+        self._current_image_path: Optional[str] = None
         self._view_zoom_steps = 0
 
         # Predict-2D view state
@@ -166,6 +167,7 @@ class PredictionViewBinding(
         self._multifile_results_widget: Optional[MultiFilePredictResultsWidget] = None
         self._multifile_manager: Optional[MultiFilePredictManager] = None
         self._multifile_prediction_active: bool = False
+        self._prediction_active: bool = False
         self._multifile_batch_map: Dict[str, List[str]] = {}
 
         # 读取全局参数

@@ -258,6 +258,44 @@ class CutFittingImageInputTests(unittest.TestCase):
         np.testing.assert_array_equal(controller.current_stack_data, np.flipud(input_data))
         np.testing.assert_array_equal(controller.data, np.flipud(input_data))
 
+    def test_controller_mirror_fill_becomes_the_canonical_analysis_image(self):
+        input_data = np.array([[10.0, -1.0, 30.0, 40.0, 50.0]], dtype=np.float32)
+        messages = []
+        controller = SimpleNamespace(
+            current_raw_image=input_data,
+            current_stack_data=input_data,
+            data=input_data,
+            summed_data=None,
+            current_parameters={"stack_count": 1},
+            _analysis_revision=0,
+            _flip_ud=False,
+            _threshold_mask_enabled=False,
+            _threshold_mask_min=-1e12,
+            _threshold_mask_max=1e12,
+            _mirror_fill_detector_gaps=True,
+            _mirror_gap_margin_px=0,
+            _get_mirror_gap_fill_center_x=lambda: 2.0,
+            _last_mirror_fill_count=0,
+            _last_mirror_fill_status="",
+            _image_display_cache={},
+            status_updated=SimpleNamespace(emit=messages.append),
+        )
+
+        FITTING_MODULE.FittingController._reapply_input_image_options(
+            controller,
+            refresh=False,
+        )
+
+        expected = np.array([[10.0, 40.0, 30.0, 40.0, 50.0]], dtype=np.float32)
+        np.testing.assert_array_equal(controller.current_raw_image, input_data)
+        np.testing.assert_array_equal(controller.current_analysis_image, expected)
+        np.testing.assert_array_equal(controller.current_stack_data, expected)
+        assert controller.current_stack_data is controller.current_analysis_image
+        assert controller.current_detector_image.revision == 1
+        displayed = FITTING_MODULE.FittingController._get_current_display_image(controller)
+        assert displayed is controller.current_analysis_image
+        assert any("applied to analysis data" in message for message in messages)
+
 
 class CutFittingSamplingTests(unittest.TestCase):
     def test_fractional_pixel_positions_map_to_distinct_q_values(self):

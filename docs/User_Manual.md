@@ -60,6 +60,27 @@ The application also exposes settings and parameter-related actions through the 
 
 The Cut & Fitting page is used to inspect GISAXS data, create 1D cuts, and fit model curves.
 
+At the top of Fitting, choose **Single analysis** for one representative file or **In-situ series**
+for Live monitor, Review history, and Batch process. Switching between them preserves each page's
+current state.
+
+The visible workflow is `Import data → Experiment setup → Yoneda & cut → Fit`. Yoneda finding and
+cut extraction share one task page so the center and cut band can be checked together, while GIMaP
+still validates their results separately. These steps only change the controls shown on the left; they
+do not reset the right-side `Detector` or `Curve` view.
+
+### Passing a Single Analysis to In-situ
+
+First complete and verify the setup on a representative file in **Single analysis**. Open
+**In-situ series** and choose **Use current Single setup**. GIMaP creates a versioned processing
+Recipe containing detector setup, preprocessing, cut geometry, model parameters, tracking policy,
+and fitting policy. Display-only options such as colormap, zoom, and vmin/vmax are not copied.
+
+The transfer is explicit and one-way. Later In-situ changes create a new Recipe version and never
+silently modify the Single analysis. Before applying an In-situ change, choose whether it affects
+future frames, selected and future frames, or all frames (which explicitly requests reprocessing).
+Live, Review, and Batch use the same Recipe and the same single-frame scientific pipeline.
+
 ### Import GISAXS Image
 
 Use the file loading controls to import detector images or data files. The codebase includes support for scientific image loading through libraries such as `fabio`, `h5py`, OpenCV, and custom loaders. Existing documentation and code references indicate support for common image files and GISAXS detector formats such as `.cbf`, with actual behavior depending on the loader and file structure.
@@ -88,21 +109,91 @@ Log display helps inspect weak scattering features and high-dynamic-range detect
 
 The detector preview shows the current 2D data and cut geometry. Use it to confirm that the loaded image, detector orientation, and selected region are reasonable before cutting or fitting.
 
+### Detector Data Flow
+
+GIMaP keeps the imported detector array as an unchanged **RawImage**. Options in **Preprocessing**—
+including Flip UD, threshold/mask and mirror gap fill—build one **AnalysisImage**. The detector preview,
+automatic Yoneda/center finding, ROI/cut and fitting all use that same AnalysisImage. Therefore, when
+mirror fill or Flip UD is enabled, later analysis uses exactly the processed data shown in the preview.
+
+Display controls such as colormap, vmin/vmax, auto scale, log intensity, zoom and overlays only change
+the rendering. They do not change scientific input or fitting results.
+
+Double-clicking/opening a detector or curve viewer creates an enlarged projection of the current view,
+not a second analysis state. The embedded and independent detector views share the same processed image,
+intensity scale, colormap, coordinate mode and overlays. The embedded and independent curve views share
+q preparation, visible data/model layers, log/normalization settings, units, ROI and legends. Controls in
+either projection update the other. Window size, zoom/pan and temporary toolbar tools remain local so the
+independent viewer can be used for detailed inspection without disturbing the main layout.
+
+```mermaid
+flowchart LR
+    A["Import file"] --> B["RawImage<br/>unchanged source array"]
+    B --> C["PreprocessingConfig<br/>Flip / Threshold / Mask / Mirror-fill"]
+    C --> D["AnalysisImage<br/>single scientific input"]
+
+    D --> E["Detector Preview"]
+    D --> F["Yoneda / Center Finding"]
+    D --> G["ROI / Cut"]
+    G --> H["Fitting"]
+    D --> I["Processed Data Export"]
+
+    B --> J["Explicit Raw Export"]
+    K["DisplayState<br/>Colormap / Vmin / Vmax / Log intensity / Overlay"] --> E
+```
+
+Changing a preprocessing option invalidates older center/cut/fitting results; run the relevant analysis
+step again. Changing only a display control does not invalidate scientific results. Mirror fill uses the
+beam-center X value saved in Experiment Setup, so verify the detector setup before relying on filled gaps.
+
 ### Cut Line Settings
 
-Cut settings define how the 2D scattering image is converted into a 1D curve. The current GUI includes controls for selecting or configuring the cutting region and related detector/cut parameters.
+Cut settings define how the 2D scattering image is converted into a 1D curve. `Find Yoneda & Set Cut`
+locates the center and prepares a horizontal cut band. `Auto horizontal cut thickness` controls the
+number of detector rows averaged around the Yoneda location and defaults to 5 px. You can then adjust
+the center or cut geometry before using `Extract / Update Cut` to generate the 1D curve.
 
 ### Detector Parameters
 
 Detector parameters are used for coordinate conversion and interpretation of scattering data. Set these carefully before quantitative analysis. Incorrect detector parameters can produce incorrect q-space values and fitting results.
 
+Enable **Show detector axes in q** to draw the detector on its calculated two-dimensional q grid. The
+horizontal coordinate can be **qy** or signed **qr**; the vertical coordinate is always **qz**. Signed
+`qr = sign(qy)·sqrt(qx²+qy²)` preserves the left/right detector branch. The embedded preview and the
+independent viewer share this choice. Clicking or dragging in q mode snaps to the nearest detector cell,
+and switching qy/qr keeps the same detector-cell region while updating the Yoneda/cut coordinates.
+
+For responsive interaction, q-space images are drawn with an adaptive screen-resolution preview when the
+detector has more cells than the viewport can reveal. This affects rendering only: center picking, region
+snapping, Yoneda cuts, fitting and export continue to use the cached full-resolution detector image and q
+grids. Changing color, intensity scale, overlays or qy/qr reuses that cache; changing detector geometry
+rebuilds it once.
+
 ### Cutting Selected Region
 
 After selecting the desired region or cut geometry, run the cut/integration action to generate a 1D curve. Inspect the generated curve before fitting.
 
-### Manual Fitting
+If a cut already exists, changing center, cut geometry, sampling, or detector setup refreshes that cut
+after a short debounce without changing the current page. Press Enter to apply a typed parameter
+immediately. Arrow-key and focused Alt/Option-wheel adjustments apply after the brief debounce so rapid
+changes remain smooth. Ordinary wheel scrolling never changes a numeric field.
 
-Manual fitting uses the currently selected model and parameter values. The current fitting code includes physical-model components such as sphere, cylinder, vertical cylinder, structure factor, global scale/background, and resolution-related terms.
+### Curve Layers
+
+The right-side `Curve` page uses one stable plot for both cut data and fitting output. Choose `Data only`
+to inspect the measured curve, `Compare` to overlay data and the current model, or `Model only` to inspect
+model layers. A successful explicit cut opens `Data only`; a successful `Plot Current Model` opens
+`Compare`. Automatic parameter refreshes never take the view away from the page you are inspecting.
+In `Overlay ±q`, positive-q measurements are blue and mirrored negative-q measurements are red in both
+the embedded and independent plots, so branch identity remains visible after both branches share `|q|`.
+
+### Plot Current Model
+
+`Plot Current Model` evaluates the currently selected model and parameter values without optimizing
+them. The command remains visible above the `Components`, `Global`, `Data & refine`, and `Auto fit`
+tabs, so parameters can be edited and replotted without switching to another tab. The fitting code
+includes physical-model components such as sphere, cylinder, vertical cylinder, structure factor,
+global scale/background, and resolution-related terms.
 
 ### Auto Fitting / Auto Refine
 
@@ -130,7 +221,11 @@ The output may include:
 
 ### Resolution Function Parameters
 
-Resolution-related controls are available in the fitting workflow. These parameters affect the model calculation and should be matched to the experiment when quantitative fitting is required.
+Resolution-related controls are available in the fitting workflow. These parameters affect the model
+calculation and should be matched to the experiment when quantitative fitting is required. The Global
+tab's `Default step` column controls intentional arrow-key or Alt/Option-wheel increments and saves the
+chosen values for later sessions. Resolution Sigma uses an initial default step of `0.0001`; Reset
+restores the built-in value.
 
 ### Global Scale / Background
 

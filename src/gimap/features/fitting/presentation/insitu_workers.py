@@ -28,7 +28,6 @@ from src.gimap.shared.file_paths import normalize_path
 
 from .scientific_commands import (
     _create_default_fitting_view_model,
-    _scientific_commands,
 )
 
 
@@ -50,9 +49,6 @@ class InsituBatchImageLoader(QThread):
         copy_remote_to_cache=True,
         cache_dir=None,
         cache_limit_gb=3.0,
-        mirror_fill_gaps=False,
-        mirror_center_x=None,
-        mirror_gap_margin_px=0,
     ):
         super().__init__()
         self.file_paths = list(file_paths or [])
@@ -62,9 +58,6 @@ class InsituBatchImageLoader(QThread):
             cache_dir or self.fitting_view_model.storage.default_remote_cache_directory()
         )
         self.cache_limit_gb = float(cache_limit_gb or 3.0)
-        self.mirror_fill_gaps = bool(mirror_fill_gaps)
-        self.mirror_center_x = mirror_center_x
-        self.mirror_gap_margin_px = int(mirror_gap_margin_px or 0)
 
     # 函数说明：实现 prepare 文件 for read 相关逻辑。
     def _prepare_file_for_read(self, source_path: str) -> str:
@@ -110,19 +103,6 @@ class InsituBatchImageLoader(QThread):
                 if outcome.error is not None:
                     raise RuntimeError(f"[{outcome.error.code}] {outcome.error.message}")
                 data = outcome.value.image.astype(np.float32, copy=False)
-                if self.mirror_fill_gaps:
-                    if self.mirror_center_x is None:
-                        raise RuntimeError("Mirror gap fill requires beam center X")
-                    data = (
-                        _scientific_commands(self)
-                        .image.mirror_gaps(
-                            data,
-                            center_x=float(self.mirror_center_x),
-                            gap_value=-1,
-                            gap_margin_px=self.mirror_gap_margin_px,
-                        )
-                        .astype(np.float32, copy=False)
-                    )
                 if summed is None:
                     summed = data.copy()
                 else:

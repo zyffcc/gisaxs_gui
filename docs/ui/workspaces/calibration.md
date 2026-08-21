@@ -1,4 +1,4 @@
-# Calibration 布局迁移记录
+# Calibration 界面与交互说明
 
 - **Status**: Current
 - **Scope**: Geometry Calibration 的 PyQt presentation 所有权、控件映射与手动验收
@@ -30,13 +30,12 @@ Qt signals、`QFileDialog` 和 `QMessageBox` 留在 dialog。路径规范化
 通过 application port；standard detection、理论环 geometry、manual refinement 和显著差异
 阈值位于 domain，并由 ViewModel commands 调用。
 
-旧文件 `ui/geometry_calibration_dialog.py` 只保留 9 行 import compatibility，直接 re-export
-feature 的三个 class。生产 caller `ui/menu_manager.py` 已直接按需导入 feature-owned dialog；
-旧路径仅服务尚未迁移的外部脚本和回归测试，不再被生产代码调用。
+`ui/geometry_calibration_dialog.py` 是 9 行 public import alias，直接 re-export feature 的三个
+class。生产 caller 按需导入 feature-owned dialog；该 alias 只服务已有外部脚本和 API 回归测试。
 
 ## 控件映射
 
-| 迁移前控件/区域 | Python View object / 迁移后位置 | 行为 |
+| 功能/控件区域 | Python View object / 当前位置 | 行为 |
 | --- | --- | --- |
 | Calibration image path/Open、energy、standard、distance、detector | `calibration_input_section` | loader、detector auto-detection 和 defaults 不变 |
 | pixel X/Y、custom range、background、log/mask/rings | `calibration_advanced_section` | 默认折叠；metadata 缺失或 Custom detector 时自动展开 |
@@ -52,7 +51,7 @@ feature 的三个 class。生产 caller `ui/menu_manager.py` 已直接按需导�
 ## 手动验收清单
 
 - [ ] Open CBF/NXS、粘贴路径和 ambiguous NXS dataset 选择正常；
-- [ ] energy、standard、estimated distance、range 和 detector defaults 与迁移前一致；
+- [ ] energy、standard、estimated distance、range 和 detector defaults 与配置契约一致；
 - [ ] 无 pixel metadata 或选择 Custom detector 时 Advanced 自动展开；
 - [ ] Advanced 折叠/展开不改变 pixel、distance bounds 或 overlay toggles；
 - [ ] Preview 保持原 image orientation、log display、mask 和 ring colors；

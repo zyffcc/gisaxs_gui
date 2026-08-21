@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .detector_q_grid import HorizontalQAxis
+
 
 HC_KEV_NM = 1.239841984
 
@@ -30,6 +32,7 @@ class DetectorSettings:
     pixel_size_x: float = 172.0
     pixel_size_y: float = 172.0
     show_q_axis: bool = False
+    horizontal_q_axis: HorizontalQAxis = "qy"
 
     @property
     def energy(self) -> float:

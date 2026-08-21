@@ -16,6 +16,7 @@ from src.gimap.shared.file_paths import normalize_path
 from ..binding_primitives import (
     is_matplotlib_available,
 )
+from ..detector_data_access import analysis_image_for
 
 
 class ScatteringFilesMixin:
@@ -31,11 +32,7 @@ class ScatteringFilesMixin:
         )
 
         if file_path:
-            auto_show = bool(
-                hasattr(self.ui, "gisaxsInputAutoShowCheckBox")
-                and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
-            )
-            self._apply_imported_gisaxs_file(file_path, show_image=auto_show)
+            self._apply_imported_gisaxs_file(file_path, show_image=True)
 
     def _apply_imported_gisaxs_file(self, file_path, show_image=False):
         """Apply a dialog, text-entry, or dropped detector image through one path."""
@@ -163,13 +160,7 @@ class ScatteringFilesMixin:
                 self._update_stack_display()
                 self._refresh_vmin_vmax_display()
 
-                if (
-                    hasattr(self.ui, "gisaxsInputAutoShowCheckBox")
-                    and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
-                ):
-                    self._show_image()
-                else:
-                    self.status_updated.emit("File updated. Click 'Show' to display the image")
+                self._show_image()
 
         except Exception as e:
             self.status_updated.emit(f"Import value processing error: {str(e)}")
@@ -213,7 +204,7 @@ class ScatteringFilesMixin:
                 and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
             ):
                 should_reload_image = True
-            elif self.current_stack_data is not None:
+            elif analysis_image_for(self) is not None:
                 imported_file = self.current_parameters.get("imported_gisaxs_file", "")
                 if imported_file and os.path.splitext(imported_file)[1].lower() in {
                     ".cbf",
@@ -283,40 +274,6 @@ class ScatteringFilesMixin:
                     )
                 return
 
-            if mode == "In-situ":
-                if file_ext != ".cbf":
-                    if hasattr(self.ui, "gisaxsInputStackDisplayLabel"):
-                        self.ui.gisaxsInputStackDisplayLabel.setText(
-                            f"File: {os.path.basename(imported_file)}"
-                        )
-                    return
-                dir_path = os.path.dirname(imported_file)
-                sv = ""
-                try:
-                    if hasattr(self.ui, "gisaxsInputStackValue"):
-                        sv = self.ui.gisaxsInputStackValue.text().strip()
-                except Exception:
-                    sv = ""
-                latest = ""
-                if self.fitting_view_model.storage.is_remote_source(dir_path):
-                    cached_paths = self._folder_image_scan_cache.get(normalize_path(dir_path))
-                    if cached_paths:
-                        latest = cached_paths[-1]
-                    else:
-                        self._scan_folder_images_for_file(imported_file)
-                else:
-                    latest = self._find_latest_cbf(dir_path)
-                if hasattr(self.ui, "gisaxsInputStackDisplayLabel"):
-                    if sv == "" or sv.endswith("-"):
-                        self.ui.gisaxsInputStackDisplayLabel.setText(
-                            f"In-situ: latest -> {os.path.splitext(os.path.basename(latest or 'scanning...'))[0]}"
-                        )
-                    elif "-" in sv:
-                        self.ui.gisaxsInputStackDisplayLabel.setText(f"In-situ range: {sv}")
-                    else:
-                        self.ui.gisaxsInputStackDisplayLabel.setText(f"In-situ index: {sv}")
-                return
-
         except Exception as e:
             self.status_updated.emit(f"Display update error: {str(e)}")
 
@@ -376,8 +333,6 @@ class ScatteringFilesMixin:
                         self.current_parameters["stack_count"] = max(1, int(sv or "1"))
                     except Exception:
                         self.current_parameters["stack_count"] = 1
-                elif self.load_mode == "In-situ":
-                    self.current_parameters["insitu_range"] = sv
 
         except Exception as e:
             self.status_updated.emit(f"Failed to sync UI parameters: {str(e)}")
@@ -430,6 +385,7 @@ class ScatteringFilesMixin:
                 return
 
             self.fitting_view_model.begin_image_load(os.path.basename(imported_file))
+            self._sync_fitting_workflow()
 
             mode = getattr(self, "load_mode", "Single")
             if file_ext == ".nxs":
@@ -457,27 +413,13 @@ class ScatteringFilesMixin:
                 self.async_image_loader.load_image(imported_file, stack_count)
                 return
 
-            if mode == "Single":
+            if mode != "Stack":
                 self.status_updated.emit("Please wait while the image starts loading (Single)...")
                 self.async_image_loader.load_image(imported_file, 1)
-            elif mode == "Stack":
+            else:
                 stack_count = self._clamp_stack_count()
                 self.status_updated.emit(f"Please wait while stacking {stack_count} files...")
                 self.async_image_loader.load_image(imported_file, stack_count)
-            else:
-                sv = ""
-                try:
-                    if hasattr(self.ui, "gisaxsInputStackValue"):
-                        sv = self.ui.gisaxsInputStackValue.text().strip()
-                except Exception:
-                    sv = ""
-                dir_path = os.path.dirname(imported_file)
-                target = self._resolve_insitu_target(dir_path, imported_file, sv)
-                if not target:
-                    self.status_updated.emit("No CBF file found for In-situ mode")
-                    return
-                self._insitu_last_file = target
-                self._show_image_insitu(target)
 
         except Exception as e:
             self.status_updated.emit(f"Show image error: {str(e)}")
@@ -493,16 +435,30 @@ class ScatteringFilesMixin:
             except Exception:
                 pass
             self._update_stack_controls_visibility()
-            if self.load_mode == "In-situ":
-                if self._is_auto_show_enabled():
-                    self._start_insitu_timer()
-            else:
-                self._stop_insitu_timer()
-                self._stop_insitu_workflow()
-                dialog = getattr(self, "_insitu_workflow_dialog", None)
-                if dialog is not None and dialog.isVisible():
-                    dialog.close()
             self._update_stack_display()
-            self._update_insitu_workflow_button_visibility()
         except Exception:
             pass
+
+    def _update_stack_controls_visibility(self):
+        """Show stack count only for the Single analysis Stack mode."""
+        try:
+            from PyQt5.QtGui import QIntValidator
+
+            is_stack = getattr(self, "load_mode", "Single") == "Stack"
+            value = getattr(self.ui, "gisaxsInputStackValue", None)
+            editor = getattr(self.ui, "gisaxsInputStackEditorWidget", None)
+            if value is not None:
+                value.setVisible(is_stack)
+                value.setValidator(QIntValidator(1, 9999, value))
+                value.setPlaceholderText("e.g. 5")
+            if editor is not None:
+                editor.setVisible(is_stack)
+            label = getattr(self.ui, "gisaxsInputStackDisplayLabel", None)
+            if label is not None:
+                label.setVisible(True)
+        except Exception:
+            pass
+
+    def _enforce_insitu_visibility_once(self):
+        """Compatibility name retained for lifecycle callers; only Single/Stack remain."""
+        self._update_stack_controls_visibility()

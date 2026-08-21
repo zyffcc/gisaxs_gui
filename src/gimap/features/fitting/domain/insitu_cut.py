@@ -36,6 +36,7 @@ def compute_insitu_cut(payload: dict) -> dict:
         or ("horizontal" if vertical <= parallel else "vertical")
     )
     show_q_axis = bool(payload.get("show_q_axis", False))
+    horizontal_q_axis = "qr" if payload.get("horizontal_q_axis") == "qr" else "qy"
     point_count = max(10, int(payload.get("n_points", 300)))
     method = str(payload.get("method", "Linear"))
 
@@ -74,7 +75,11 @@ def compute_insitu_cut(payload: dict) -> dict:
                 [np.mean(qy_mesh[finite[:, column], column]) for column in indices],
                 dtype=float,
             )
-            x_label = r"$q_y$ (nm$^{-1}$)"
+            x_label = (
+                r"$q_r$ (nm$^{-1}$)"
+                if horizontal_q_axis == "qr"
+                else r"$q_y$ (nm$^{-1}$)"
+            )
             title = "Horizontal Cut"
         else:
             indices = np.where(np.any(finite, axis=1))[0]

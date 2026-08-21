@@ -15,6 +15,9 @@ from src.gimap.features.fitting.application import (
     ScatteringFileData,
     SaveDetectorSettings,
     InSituWorkflowCoordinator,
+    CreateInSituRecipe,
+    ReviseInSituRecipe,
+    SingleAnalysisRecipeSnapshot,
     LoadCandidateResults,
     ComputeInSituCut,
     FittingAiCalculations,
@@ -27,7 +30,12 @@ from src.gimap.features.fitting.application import (
 )
 from src.gimap.features.fitting.application.errors import FileOperationError
 from src.gimap.features.fitting.application.models import ExportedFitResult
-from src.gimap.features.fitting.domain import CurveData, ManualFitRequest
+from src.gimap.features.fitting.domain import (
+    CurveData,
+    InSituFittingPolicy,
+    InSituTrackingPolicy,
+    ManualFitRequest,
+)
 from src.gimap.features.fitting.presentation import (
     FittingScientificViewModel,
     FittingViewModel,
@@ -237,6 +245,8 @@ def _view_model(curve_loader=None):
         map_candidate_parameters=MapCandidateParameters(),
         load_candidate_results=LoadCandidateResults(_CandidateRepository()),
         insitu_workflow=InSituWorkflowCoordinator(),
+        create_insitu_recipe=CreateInSituRecipe(),
+        revise_insitu_recipe=ReviseInSituRecipe(),
         load_detector_settings=LoadDetectorSettings(detector_settings),
         save_detector_settings=SaveDetectorSettings(detector_settings),
         scattering_loader_factory=lambda **_options: _SuccessfulScatteringLoader(),
@@ -273,6 +283,63 @@ def test_view_model_load_transitions_without_qapplication(tmp_path):
     assert view_model.state.current_image.source_path == image_path
     assert view_model.state.current_curve.source_path == str(curve_path)
     assert view_model.state.error_message is None
+    assert view_model.state.workflow.step("import").status == "complete"
+    assert view_model.state.workflow.step("setup").status == "available"
+
+
+def test_view_model_workflow_uses_verified_transitions_and_stale_state():
+    view_model = _view_model()
+
+    for key in ("import", "setup", "center", "cut", "fit"):
+        view_model.complete_workflow_step(key, f"{key} complete")
+
+    assert [step.status for step in view_model.state.workflow.steps] == [
+        "complete",
+        "complete",
+        "complete",
+        "complete",
+        "complete",
+    ]
+
+    view_model.complete_workflow_step("center", "center changed")
+
+    assert view_model.state.workflow.step("center").status == "complete"
+    assert view_model.state.workflow.step("cut").status == "stale"
+    assert view_model.state.workflow.step("fit").status == "stale"
+
+    view_model.fail_workflow_step("cut", "invalid region")
+    assert view_model.state.workflow.step("cut").status == "error"
+    assert view_model.state.workflow.step("cut").message == "invalid region"
+
+
+def test_cut_geometry_draft_invalidates_results_without_recalculating():
+    view_model = _view_model()
+    for key in ("import", "setup", "center", "cut", "fit"):
+        view_model.complete_workflow_step(key, f"{key} complete")
+
+    assert view_model.state.cut_status == "ready"
+    assert view_model.update_cut_geometry(
+        center_x=12.0,
+        center_y=34.0,
+        width=20.0,
+        height=8.0,
+    )
+
+    assert view_model.state.cut_geometry.revision == 1
+    assert view_model.state.cut_status == "stale"
+    assert view_model.state.workflow.step("center").status == "complete"
+    assert view_model.state.workflow.step("cut").status == "stale"
+    assert view_model.state.workflow.step("fit").status == "stale"
+    assert not view_model.update_cut_geometry(
+        center_x=12.0,
+        center_y=34.0,
+        width=20.0,
+        height=8.0,
+    )
+
+    view_model.complete_workflow_step("cut", "updated")
+    assert view_model.state.cut_status == "ready"
+    assert view_model.state.cut_result_geometry_revision == 1
 
 
 def test_view_model_background_loader_uses_injected_factory_without_qapplication(
@@ -468,3 +535,27 @@ def test_view_model_maps_insitu_commands_to_typed_state_without_qapplication():
 
     view_model.cancel_insitu_workflow()
     assert view_model.state.insitu_workflow.status == "cancelled"
+
+
+def test_view_model_maps_explicit_insitu_recipe_to_typed_state_without_qapplication():
+    view_model = _view_model()
+
+    recipe = view_model.insitu.create_recipe_from_single(
+        SingleAnalysisRecipeSnapshot(
+            experiment_setup={"distance_mm": 2000.0},
+            preprocessing={"flip_ud": True},
+            cut={"width_px": 5},
+            model={"shapes": ["sphere"]},
+            tracking=InSituTrackingPolicy(),
+            fitting=InSituFittingPolicy(),
+        )
+    )
+    snapshot = view_model.insitu.snapshot_recipe()
+
+    assert recipe is view_model.state.insitu_recipe
+    assert view_model.state.insitu_recipe_scope == "future"
+    assert snapshot["schema"] == "gimap_insitu_recipe_v1"
+
+    restored = _view_model()
+    restored.insitu.restore_recipe(snapshot)
+    assert restored.state.insitu_recipe.to_dict() == recipe.to_dict()

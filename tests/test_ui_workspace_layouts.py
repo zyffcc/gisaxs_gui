@@ -174,7 +174,7 @@ def test_fitting_layout_uses_shared_six_stage_sections_without_replacing_actions
     assert workspace.fitting_input_section.title_label.text() == "Input"
     assert workspace.fitting_configure_section.title_label.text() == "Configure"
     assert workspace.fitting_preview_panel.title_label.text() == "Preview"
-    assert workspace.fitting_run_section.title_label.text() == "Run"
+    assert workspace.fitting_run_section.title_label.text() == "Fit"
     assert workspace.fitting_results_panel.title_label.text() == "Results"
     assert workspace.fitting_export_section.title_label.text() == "Export"
     assert workspace.fitting_advanced_section.is_expanded() is False
@@ -183,21 +183,25 @@ def test_fitting_layout_uses_shared_six_stage_sections_without_replacing_actions
     window.close()
 
 
-def test_prediction_layout_uses_shared_six_stage_sections_and_original_actions():
+def test_prediction_layout_uses_modern_three_step_workbench_and_original_actions():
     _app()
     window = MainWindow(_context())
     workspace = window.components.predict_workspace
 
-    assert workspace.prediction_input_section.title_label.text() == "Input"
-    assert workspace.prediction_configure_section.title_label.text() == "Configure"
+    assert workspace.prediction_input_section.title_label.text() == "1. Import data"
+    assert workspace.prediction_configure_section.title_label.text() == "2. Import model"
     assert workspace.prediction_preview_panel.title_label.text() == "Preview"
-    assert workspace.prediction_run_section.title_label.text() == "Run"
+    assert workspace.prediction_run_section.title_label.text() == "3. Predict"
     assert workspace.prediction_results_section.title_label.text() == "Results"
-    assert workspace.prediction_export_section.title_label.text() == "Export"
     assert workspace.prediction_advanced_section.is_expanded() is False
+    assert window.gisaxsPredictWorkspaceSplitter.count() == 2
+    assert window.predictionPlotPanel.title_label.text() == "Prediction canvas"
+    assert window.predictionBatchResultsSection.title_label.text() == "Batch results"
+    assert workspace.prediction_export_section.isHidden()
     assert window.predictStatusTextBrowser.parent() is workspace.prediction_results_section.content
-    assert window.gisaxsImageExportButton.parent() is workspace.prediction_export_section.content
-    assert window.predict2dExportButton.parent() is workspace.prediction_export_section.content
+    toolbar = workspace.workbench_layout.plot_panel.toolbar_widget
+    assert window.gisaxsImageExportButton.parent() is toolbar
+    assert window.predict2dExportButton.parent() is toolbar
     window.close()
 
 
@@ -235,13 +239,14 @@ def test_waxs_layout_uses_shared_stages_basic_advanced_and_job_status():
     assert window.mainWindowWidget.widget(4) is page
     assert not hasattr(window, "waxsPageHost")
 
-    assert page.waxs_input_section.title_label.text() == "Input"
-    assert page.waxs_configure_section.title_label.text() == "Configure"
+    assert page.waxs_input_section.title_label.text() == "Load data"
+    assert page.waxs_configure_section.title_label.text() == "Cut and integrate"
     assert page.waxs_preview_panel.title_label.text() == "Preview"
-    assert page.waxs_run_section.title_label.text() == "Run"
+    assert page.waxs_run_section.title_label.text() == "Batch processing"
     assert page.waxs_results_section.title_label.text() == "Results"
     assert page.waxs_export_section.title_label.text() == "Export"
-    assert page.waxs_advanced_section.is_expanded() is False
+    assert page.waxs_advanced_section.is_expanded() is True
+    assert page.waxs_workflow_tabs.count() == 3
     assert [page.tabs.tabText(index) for index in range(page.tabs.count())] == [
         "ROI / Cut",
         "1D Integration",

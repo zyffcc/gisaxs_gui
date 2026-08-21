@@ -15,24 +15,36 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.ports import UserPreferencesRepository
 from src.gimap.app.presentation.layout_primitives import BUTTON_HEIGHT, FORM_ROW_SPACING, normalize_button, set_expanding_x
 from src.gimap.app.presentation.responsive_layout import current_profile, scale_value
 
 from .ai_controls import build_ai_controls
 from .global_parameter_controls import build_global_parameter_controls
-from .layout_primitives import CardFrame, NoWheelDoubleSpinBox
+from .layout_primitives import CardFrame, CurrentPageHeightTabWidget, NoWheelDoubleSpinBox
 from .layout_primitives import detach_from_parent_layout as _detach_from_parent_layout
+from .parameter_step_preferences import ParameterStepPreferences
 
 
 class FittingControlsCard(CardFrame):
-    def __init__(self, ui, profile=None):
-        super().__init__("Fitting Controls", "FittingControlsCard")
+    def __init__(
+        self,
+        ui,
+        profile=None,
+        *,
+        model_parameters_card,
+        preferences: UserPreferencesRepository,
+    ):
+        super().__init__("Fit workspace", "FittingControlsCard")
+        self.title_label.hide()
         self.ui = ui
+        self.preferences = preferences
+        self.parameter_step_preferences = ParameterStepPreferences(preferences)
         self.profile = profile or current_profile(ui.centralwidget)
         group_spacing = scale_value(12, self.profile, 8)
         group_margin = scale_value(10, self.profile, 8)
         group_top = scale_value(18, self.profile, 14)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._managed_group_layouts = []
         self._managed_buttons = []
         self._managed_inputs = []
@@ -84,6 +96,7 @@ class FittingControlsCard(CardFrame):
             widget.setMaximumWidth(16777215)
 
         ui.fitIntResLabel.setText("Intensity (Res.)")
+        ui.fitCurrentDataCheckBox.setText("Use current cut")
         ui.fitMethodLabel.setText("Method:")
         ui.fitKLabel.setText("k:")
         ui.fitBGLabel = QLabel("BG:", self)
@@ -95,44 +108,26 @@ class FittingControlsCard(CardFrame):
         ui.fitBGValue.setSingleStep(0.1)
         ui.fitBGStep = NoWheelDoubleSpinBox(self)
         ui.fitBGStep.setObjectName("fitBGStep")
-        ui.fitBGStep.setDecimals(6)
-        ui.fitBGStep.setRange(1e-9, 1e9)
-        ui.fitBGStep.setValue(0.1)
-        ui.fitBGStep.setProperty("defaultStepValue", 0.1)
-        ui.fitBGStep.valueChanged.connect(lambda value: ui.fitBGValue.setSingleStep(float(value)))
+        self.parameter_step_preferences.bind(
+            ui.fitBGStep, ui.fitBGValue, "background", 0.1
+        )
         ui.fitKStep = NoWheelDoubleSpinBox(self)
         ui.fitKStep.setObjectName("fitKStep")
-        ui.fitKStep.setDecimals(6)
-        ui.fitKStep.setRange(1e-9, 1e9)
-        ui.fitKStep.setValue(0.1)
-        ui.fitKStep.setProperty("defaultStepValue", 0.1)
-        ui.fitKStep.valueChanged.connect(lambda value: ui.fitKValue.setSingleStep(float(value)))
+        self.parameter_step_preferences.bind(ui.fitKStep, ui.fitKValue, "scale", 0.1)
         ui.fitIntResStep = NoWheelDoubleSpinBox(self)
         ui.fitIntResStep.setObjectName("fitIntResStep")
-        ui.fitIntResStep.setDecimals(6)
-        ui.fitIntResStep.setRange(1e-9, 1e9)
-        ui.fitIntResStep.setValue(0.01)
-        ui.fitIntResStep.setProperty("defaultStepValue", 0.01)
-        ui.fitIntResStep.valueChanged.connect(
-            lambda value: ui.fitIntResValue.setSingleStep(float(value))
+        self.parameter_step_preferences.bind(
+            ui.fitIntResStep, ui.fitIntResValue, "resolution_intensity", 0.01
         )
         ui.fitSigmaResStep = NoWheelDoubleSpinBox(self)
         ui.fitSigmaResStep.setObjectName("fitSigmaResStep")
-        ui.fitSigmaResStep.setDecimals(6)
-        ui.fitSigmaResStep.setRange(1e-9, 1e9)
-        ui.fitSigmaResStep.setValue(0.1)
-        ui.fitSigmaResStep.setProperty("defaultStepValue", 0.1)
-        ui.fitSigmaResStep.valueChanged.connect(
-            lambda value: ui.fitSigmaResValue.setSingleStep(float(value))
+        self.parameter_step_preferences.bind(
+            ui.fitSigmaResStep, ui.fitSigmaResValue, "resolution_sigma", 0.0001
         )
         ui.fitNuResStep = NoWheelDoubleSpinBox(self)
         ui.fitNuResStep.setObjectName("fitNuResStep")
-        ui.fitNuResStep.setDecimals(6)
-        ui.fitNuResStep.setRange(1e-9, 1e9)
-        ui.fitNuResStep.setValue(0.1)
-        ui.fitNuResStep.setProperty("defaultStepValue", 0.1)
-        ui.fitNuResStep.valueChanged.connect(
-            lambda value: ui.fitNuResValue.setSingleStep(float(value))
+        self.parameter_step_preferences.bind(
+            ui.fitNuResStep, ui.fitNuResValue, "resolution_nu", 0.1
         )
         ui.FittingAutoKButton.setText("Auto-K: OFF")
         ui.fitMethodValue.setToolTip("Method selection is not implemented yet.")
@@ -222,41 +217,87 @@ class FittingControlsCard(CardFrame):
         ui.FittingAutoRefineButton.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self._managed_buttons.append(ui.FittingAutoRefineButton)
         actions_layout.addWidget(ui.FittingClearFittingButton_2)
-        actions_layout.addWidget(ui.FittingManualFittingButton)
         actions_layout.addWidget(ui.FittingAutoRefineButton)
         actions_layout.addWidget(ui.FittingExportButton)
+        ui.FittingManualFittingButton.setText("Plot Current Model")
+        ui.FittingManualFittingButton.setProperty("gimapPrimaryAction", True)
+        ui.FittingAutoRefineButton.setProperty("gimapPrimaryAction", True)
+
+        manual_page = QWidget(self)
+        manual_page.setObjectName("fittingManualModePage")
+        manual_layout = QVBoxLayout(manual_page)
+        manual_layout.setContentsMargins(8, 10, 8, 10)
+        manual_layout.setSpacing(group_spacing)
+        manual_layout.addWidget(data_options_group)
+        manual_layout.addWidget(external_group)
+        manual_layout.addWidget(actions_group)
+
+        ai_page = QWidget(self)
+        ai_page.setObjectName("fittingAiModePage")
+        ai_layout = QVBoxLayout(ai_page)
+        ai_layout.setContentsMargins(8, 10, 8, 10)
+        ai_layout.setSpacing(group_spacing)
+        ai_layout.addWidget(method_group)
+
+        self.mode_tabs = CurrentPageHeightTabWidget(self)
+        self.mode_tabs.setObjectName("fittingModeTabs")
+        self.mode_tabs.addTab(model_parameters_card, "Components")
+        self.mode_tabs.addTab(global_group, "Global")
+        self.mode_tabs.addTab(manual_page, "Data & refine")
+        self.mode_tabs.addTab(ai_page, "Auto fit")
+        self.mode_tabs.setDocumentMode(True)
+        self.mode_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.mode_tabs.currentChanged.connect(
+            lambda _index: QTimer.singleShot(0, self._sync_mode_tab_height)
+        )
+        tuning_disclosure = getattr(ui, "fittingAiTuningDisclosure", None)
+        if tuning_disclosure is not None:
+            tuning_disclosure.toggle.toggled.connect(
+                lambda _expanded: QTimer.singleShot(0, self._sync_mode_tab_height)
+            )
+        self.ui.fittingModeTabs = self.mode_tabs
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(group_spacing)
         self._main_controls_layout = layout
         self.body_layout.addLayout(layout)
-        layout.addWidget(data_options_group)
-        layout.addWidget(external_group)
-        layout.addWidget(actions_group)
-        layout.addWidget(method_group)
-        layout.addWidget(global_group)
+        self.fit_command_bar = QWidget(self)
+        self.fit_command_bar.setObjectName("fittingPersistentCommandBar")
+        self.fit_command_bar.setProperty("gimapPersistentCommandBar", True)
+        command_layout = QHBoxLayout(self.fit_command_bar)
+        command_layout.setContentsMargins(8, 6, 8, 6)
+        command_layout.setSpacing(group_spacing)
+        command_label = QLabel(
+            "Preview the current component and global parameter values", self.fit_command_bar
+        )
+        command_label.setProperty("cardMeta", True)
+        command_label.setWordWrap(True)
+        command_layout.addWidget(command_label, 1)
+        command_layout.addWidget(ui.FittingManualFittingButton, 0)
+        layout.addWidget(self.fit_command_bar)
+        layout.addWidget(self.mode_tabs)
+        self._sync_mode_tab_height()
         self.apply_responsive_profile(self.profile)
-        self.lock_to_natural_height()
 
     def _make_group(self, title: str) -> QGroupBox:
         group = QGroupBox(title, self)
         group.setObjectName(title.replace(" ", "").replace("/", "") + "Group")
         group.setStyleSheet(
             "QGroupBox {"
-            "border: 1px solid #d7dee8;"
-            "border-radius: 7px;"
+            "border: none;"
             "margin-top: 10px;"
-            "padding-top: 12px;"
-            "background: #ffffff;"
+            "padding-top: 10px;"
+            "background: transparent;"
             "}"
             "QGroupBox::title {"
             "subcontrol-origin: margin;"
-            "left: 8px;"
-            "padding: 0 4px;"
+            "left: 0;"
+            "padding: 0;"
+            "font-weight: 650;"
             "}"
         )
-        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return group
 
     def _style_info_label(self, label: QLabel) -> None:
@@ -283,12 +324,8 @@ class FittingControlsCard(CardFrame):
         self._managed_step_reset_buttons.append(button)
         return button
 
-    @staticmethod
-    def _reset_step_spinbox(step_spinbox: QDoubleSpinBox) -> None:
-        default_value = step_spinbox.property("defaultStepValue")
-        if default_value is None:
-            return
-        step_spinbox.setValue(float(default_value))
+    def _reset_step_spinbox(self, step_spinbox: QDoubleSpinBox) -> None:
+        self.parameter_step_preferences.reset(step_spinbox)
 
     def _configure_group_layout(self, layout, margin: int, top: int, spacing: int) -> None:
         layout.setContentsMargins(margin, top, margin, margin)
@@ -360,9 +397,64 @@ class FittingControlsCard(CardFrame):
         global_group = self.findChild(QGroupBox, "GlobalParametersGroup")
         if global_group is not None:
             global_group.setMinimumHeight(scale_value(238, profile, 210))
-            global_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        self.lock_to_natural_height()
+            global_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._sync_mode_tab_height()
+        self.setMinimumHeight(0)
+        if self.layout() is not None:
+            self.layout().activate()
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.updateGeometry()
+
+    def _sync_mode_tab_height(self) -> None:
+        if not hasattr(self, "mode_tabs"):
+            return
+        page = self.mode_tabs.currentWidget()
+        if page is None:
+            return
+        if page.layout() is not None:
+            page.layout().activate()
+        self.mode_tabs.setMinimumHeight(0)
+        # A page can inherit a stale, oversized viewport allocation while the
+        # outer Single/In-situ context changes. The current page's minimum
+        # hint is its allocation-independent natural control height.
+        height = self.mode_tabs.minimumSizeHint().height()
+        self.mode_tabs.setMinimumHeight(height)
+        self.mode_tabs.setMaximumHeight(16777215)
+        self.mode_tabs.updateGeometry()
+        self._main_controls_layout.invalidate()
+        self.body_layout.invalidate()
+        self.setMinimumHeight(0)
+        if self.layout() is not None:
+            self.layout().activate()
+        self.updateGeometry()
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        if hasattr(self, "mode_tabs"):
+            margins = self.body_layout.contentsMargins()
+            command_height = self.fit_command_bar.sizeHint().height()
+            hint.setHeight(
+                margins.top()
+                + command_height
+                + self._main_controls_layout.spacing()
+                + self.mode_tabs.sizeHint().height()
+                + margins.bottom()
+            )
+        return hint
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        if hasattr(self, "mode_tabs"):
+            margins = self.body_layout.contentsMargins()
+            command_height = self.fit_command_bar.minimumSizeHint().height()
+            hint.setHeight(
+                margins.top()
+                + command_height
+                + self._main_controls_layout.spacing()
+                + self.mode_tabs.minimumSizeHint().height()
+                + margins.bottom()
+            )
+        return hint
 
     def _show_method_not_implemented(self) -> None:
         self._method_notice_queued = False

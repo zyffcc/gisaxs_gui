@@ -15,6 +15,7 @@ from src.gimap.features.fitting.application import (
 from ..binding_primitives import (
     _scientific_commands,
 )
+from ..detector_data_access import analysis_image_for
 
 
 class CutExtractionMixin:
@@ -58,10 +59,17 @@ class CutExtractionMixin:
         except Exception:
             return max(10, int(getattr(self, "_points_num_default", 300)))
 
-    def _perform_cut(self, points_override: int = None):
+    def _perform_cut(
+        self,
+        points_override: int = None,
+        *,
+        reveal_result: bool = True,
+    ):
         """Execute the current Cut operation using existing horizontal/vertical cut logic."""
         try:
-            if self.current_stack_data is None:
+            self._begin_fitting_step("cut", "Extracting cut")
+            if analysis_image_for(self) is None:
+                self._fail_fitting_step("cut", "Import an image first")
                 QMessageBox.warning(self.main_window, "Warning", "Please import an image first.")
                 return
 
@@ -77,6 +85,7 @@ class CutExtractionMixin:
             )
 
             if vertical_value <= 0 or parallel_value <= 0:
+                self._fail_fitting_step("cut", "Select a valid cut region")
                 QMessageBox.warning(self.main_window, "Warning", "Please select a valid region.")
                 return
 
@@ -122,12 +131,28 @@ class CutExtractionMixin:
             except Exception:
                 pass
 
+            if hasattr(self, "_set_curve_view_mode"):
+                self._set_curve_view_mode("data", refresh=False)
             self._apply_roi_to_data_and_refresh()
             if not getattr(self, "_suppress_workflow_plot_updates", False):
                 self._update_GUI_image("normal")
                 self._update_outside_window("normal")
+                cut = getattr(self, "current_cut_data", None)
+                if (
+                    isinstance(cut, dict)
+                    and np.asarray(cut.get("x_coords", [])).size
+                    and np.asarray(
+                        cut.get("y_intensity", cut.get("intensity", cut.get("I", [])))
+                    ).size
+                ):
+                    tabs = getattr(self.ui, "fittingPreviewTabs", None)
+                    if reveal_result and tabs is not None:
+                        tabs.setCurrentIndex(1)
+                    self._complete_fitting_step("cut", f"Cut ready · {n_points_cut} points")
+                    self._set_fitting_inline_feedback("", "info")
 
         except Exception as e:
+            self._fail_fitting_step("cut", str(e))
             self.status_updated.emit(f"Cut operation failed: {str(e)}")
             QMessageBox.critical(self.main_window, "Error", f"Cut operation failed:\n{str(e)}")
 
@@ -149,7 +174,7 @@ class CutExtractionMixin:
             if cut_type == "horizontal":
                 q_mode_method = self._extract_horizontal_cut_q_mode
                 pixel_mode_method = self._extract_horizontal_cut_pixel_mode
-                x_label = r"$q_y$ (nm$^{-1}$)"
+                x_label = self._horizontal_q_label()
                 title = "Horizontal Cut"
             elif cut_type == "vertical":
                 q_mode_method = self._extract_vertical_cut_q_mode
@@ -212,14 +237,15 @@ class CutExtractionMixin:
                 orientation=cut_type,
             )
             intensity_native, q_native, pixel_indices = _scientific_commands(self).cut.extract_q(
-                self.current_stack_data,
+                analysis_image_for(self),
                 qy_mesh,
                 qz_mesh,
                 selection,
             )
             if cut_type == "vertical":
                 self._log_cut_debug(
-                    f"Vertical Q cut: ROI q range qy=[{center_qy - width_q / 2:.8g}, "
+                    f"Vertical Q cut: ROI q range {self._horizontal_q_axis()}="
+                    f"[{center_qy - width_q / 2:.8g}, "
                     f"{center_qy + width_q / 2:.8g}], qz=[{center_qz - height_q / 2:.8g}, "
                     f"{center_qz + height_q / 2:.8g}]"
                 )
@@ -291,14 +317,14 @@ class CutExtractionMixin:
                 orientation=cut_type,
             )
             intensity_native, pixel_coords = _scientific_commands(self).cut.extract_pixel(
-                self.current_stack_data,
+                analysis_image_for(self),
                 selection,
             )
             if cut_type == "horizontal":
                 native_q = self._convert_pixel_to_qy(pixel_coords)
             else:
                 native_q = self._convert_pixel_to_qz(pixel_coords)
-                image_height, image_width = self.current_stack_data.shape
+                image_height, image_width = analysis_image_for(self).shape
                 x_min = max(0, int(center_x - width / 2))
                 x_max = min(image_width - 1, int(center_x + width / 2))
                 self._log_cut_debug(
@@ -371,7 +397,7 @@ class CutExtractionMixin:
     def _get_detector_for_pixel_conversion(self):
         """No description."""
         try:
-            height, width = self.current_stack_data.shape
+            height, width = analysis_image_for(self).shape
 
             pixel_size_x = self.fitting_view_model.get_setting(
                 "fitting", "detector.pixel_size_x", 172.0
@@ -411,7 +437,7 @@ class CutExtractionMixin:
             conversion_type: Target coordinate type, either ``qy`` or ``qz``.
         """
         try:
-            height, width = self.current_stack_data.shape
+            height, width = analysis_image_for(self).shape
             coords = np.asarray(pixel_coords, dtype=float)
 
             try:

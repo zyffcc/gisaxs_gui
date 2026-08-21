@@ -169,13 +169,24 @@ class ResultRenderingMixin:
         page.summaryBalanceLabel.setText(
             ", ".join(f"{k}:{v}" for k, v in summary.valid_class_counts.items()) or "-"
         )
-        page.qualityStatusLabel.setText(summary.status)
         page.qualityListWidget.clear()
-        if not summary.issues:
+        if summary.total_samples == 0:
+            page.qualityStatusLabel.setText("Waiting for data")
+            page.qualityStatusLabel.setProperty("qualityState", "empty")
+            page.qualityListWidget.addItem(
+                "Add at least two labeled classes, then scan or drop their files here."
+            )
+        elif not summary.issues:
+            page.qualityStatusLabel.setText(summary.status)
+            page.qualityStatusLabel.setProperty("qualityState", "ready")
             page.qualityListWidget.addItem("Ready: dataset checks passed.")
         else:
+            page.qualityStatusLabel.setText(summary.status)
+            page.qualityStatusLabel.setProperty("qualityState", "attention")
             for issue in summary.issues[:20]:
                 fix = f" Fix: {issue.fix}" if issue.fix else ""
                 page.qualityListWidget.addItem(f"{issue.severity.title()}: {issue.message}{fix}")
+        page.qualityStatusLabel.style().unpolish(page.qualityStatusLabel)
+        page.qualityStatusLabel.style().polish(page.qualityStatusLabel)
         data_type = summary.data_types[0] if len(summary.data_types) == 1 else "auto"
         page.dataTypeBadgeLabel.setText(data_type)

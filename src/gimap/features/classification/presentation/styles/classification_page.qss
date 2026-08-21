@@ -72,6 +72,18 @@ QPushButton#runComparisonButton:hover {
     background: #0f56a5;
 }
 
+QPushButton[classificationPrimaryAction="true"] {
+    min-height: 34px;
+    background: #1767c2;
+    color: #ffffff;
+    border-color: #1767c2;
+    font-weight: 700;
+}
+
+QPushButton[classificationPrimaryAction="true"]:hover {
+    background: #0f56a5;
+}
+
 QPushButton#addClassButton,
 QPushButton#scanImportButton {
     font-weight: 600;
@@ -136,6 +148,28 @@ QProgressBar::chunk {
 
 QLabel#validationWarningLabel {
     color: #a15c00;
+}
+
+QLabel#qualityStatusLabel[qualityState="empty"] {
+    background: #f2f4f7;
+    color: #475467;
+}
+
+QLabel#qualityStatusLabel[qualityState="ready"] {
+    background: #ecfdf3;
+    color: #067647;
+}
+
+QLabel#classificationPreviewEmptyState {
+    background: rgba(248, 250, 253, 0.96);
+    border: 1px dashed #b8c4d4;
+    border-radius: 10px;
+    color: #667085;
+    padding: 18px;
+}
+
+QPushButton#preprocessingContinueButton {
+    min-width: 240px;
 }
 
 QLabel#metricChartLabel {

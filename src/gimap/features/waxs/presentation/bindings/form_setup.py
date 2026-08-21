@@ -32,6 +32,8 @@ from ..views import (
 )
 
 from ..image_viewer import ScatteringImageViewer
+from ..theme import waxs_stylesheet
+from ..workflow_layout import install_waxs_workflow
 
 
 class FormSetupMixin:
@@ -286,6 +288,8 @@ class FormSetupMixin:
         self.waxsContentSplitter.setStretchFactor(0, 5)
         self.waxsContentSplitter.setStretchFactor(1, 0)
         apply_design_system(self)
+        install_waxs_workflow(self)
+        self.setStyleSheet(self.styleSheet() + "\n" + waxs_stylesheet())
 
     def _expose_form(self, form, names: tuple[str, ...]) -> None:
         """Expose stable widget attributes from one generated subform."""

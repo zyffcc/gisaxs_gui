@@ -16,6 +16,7 @@ from src.gimap.shared.file_paths import normalize_path
 from ..binding_primitives import (
     _ai_catalog,
 )
+from ..detector_data_access import analysis_image_for
 
 
 class InsituWatchSettingsMixin:
@@ -27,60 +28,8 @@ class InsituWatchSettingsMixin:
             and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
         )
 
-    def _start_insitu_timer(self):
-        try:
-            if self._insitu_timer is None:
-                from PyQt5.QtCore import QTimer
-
-                self._insitu_timer = QTimer()
-                self._insitu_timer.setSingleShot(False)
-                self._insitu_timer.timeout.connect(self._insitu_poll_latest)
-            self._insitu_timer.start(2000)
-        except Exception:
-            pass
-
-    def _stop_insitu_timer(self):
-        try:
-            if self._insitu_timer is not None:
-                self._insitu_timer.stop()
-        except Exception:
-            pass
-
-    def _insitu_poll_latest(self):
-        try:
-            if self.load_mode != "In-situ":
-                return
-            imported_file = self.current_parameters.get("imported_gisaxs_file", "")
-            if not imported_file:
-                return
-            dir_path = os.path.dirname(imported_file)
-            latest = self._find_latest_cbf(dir_path)
-            if not latest and self.fitting_view_model.storage.is_remote_source(dir_path):
-                self._scan_folder_images_for_file(imported_file)
-                return
-            if latest and latest != self._insitu_last_file:
-                sv = ""
-                try:
-                    if hasattr(self.ui, "gisaxsInputStackValue"):
-                        sv = self.ui.gisaxsInputStackValue.text().strip()
-                except Exception:
-                    sv = ""
-                if (
-                    sv.endswith("-") or sv.strip() == "" or sv.strip().endswith("-")
-                ) and self._is_auto_show_enabled():
-                    self._insitu_last_file = latest
-                    self._show_image_insitu(latest)
-        except Exception:
-            pass
-
     def _get_stack_value_text(self) -> str:
         try:
-            if (
-                getattr(self, "load_mode", "Single") == "In-situ"
-                and hasattr(self, "_insitu_lineedit")
-                and self._insitu_lineedit is not None
-            ):
-                return self._insitu_lineedit.text().strip()
             if hasattr(self.ui, "gisaxsInputStackValue"):
                 return self.ui.gisaxsInputStackValue.text().strip()
         except Exception:
@@ -90,100 +39,8 @@ class InsituWatchSettingsMixin:
     def _set_stack_value_text(self, value: str):
         try:
             stack_text = str(value).strip()
-            if (
-                getattr(self, "load_mode", "Single") == "In-situ"
-                and hasattr(self, "_insitu_lineedit")
-                and self._insitu_lineedit is not None
-            ):
-                self._insitu_lineedit.setText(stack_text or "1-")
-                return
             if hasattr(self.ui, "gisaxsInputStackValue"):
                 self.ui.gisaxsInputStackValue.setText(stack_text)
-        except Exception:
-            pass
-
-    def _resolve_insitu_target(self, dir_path: str, imported_file: str, sv_text: str) -> str:
-        try:
-            if self.fitting_view_model.storage.is_remote_source(dir_path):
-                cached = self._folder_image_scan_cache.get(normalize_path(dir_path))
-                if not cached:
-                    self._scan_folder_images_for_file(imported_file)
-                    return None
-                files = [os.path.basename(p) for p in cached]
-            else:
-                files = [f for f in os.listdir(dir_path) if f.lower().endswith(".cbf")]
-            if not files:
-                return None
-            files.sort(key=lambda name: self._natural_sort_key(name))
-
-            # 函数说明：实现 index from name 相关逻辑。
-            def _index_from_name(name: str):
-                base = os.path.splitext(name)[0]
-                import re
-
-                m = re.search(r"(\d+)$", base)
-                return int(m.group(1)) if m else None
-
-            indexed = [(fn, _index_from_name(fn)) for fn in files]
-            latest_file = files[-1]
-            t = (sv_text or "").strip()
-            if t == "":
-                return os.path.join(dir_path, latest_file)
-            if "-" in t:
-                parts = t.split("-")
-                try:
-                    a = int(parts[0]) if parts[0] != "" else None
-                except Exception:
-                    a = None
-                b = None
-                try:
-                    if len(parts) > 1 and parts[1] != "":
-                        b = int(parts[1])
-                except Exception:
-                    b = None
-                if b is None:
-                    return os.path.join(dir_path, latest_file)
-                for fn, idx in indexed:
-                    if idx == b:
-                        return os.path.join(dir_path, fn)
-                return os.path.join(dir_path, latest_file)
-            else:
-                try:
-                    n = int(t)
-                    for fn, idx in indexed:
-                        if idx == n:
-                            return os.path.join(dir_path, fn)
-                except Exception:
-                    pass
-                return os.path.join(dir_path, latest_file)
-        except Exception:
-            return None
-
-    def _find_latest_cbf(self, dir_path: str) -> str:
-        try:
-            if self.fitting_view_model.storage.is_remote_source(dir_path):
-                cached = self._folder_image_scan_cache.get(normalize_path(dir_path))
-                if cached:
-                    return cached[-1]
-                return None
-            files = [f for f in os.listdir(dir_path) if f.lower().endswith(".cbf")]
-            if not files:
-                return None
-            files.sort(key=lambda name: self._natural_sort_key(name))
-            return os.path.join(dir_path, files[-1])
-        except Exception:
-            return None
-
-    def _show_image_insitu(self, target_path: str):
-        try:
-            if not target_path:
-                return
-            self.async_image_loader.load_image(target_path, 1)
-            if hasattr(self.ui, "gisaxsInputStackDisplayLabel"):
-                base = os.path.basename(target_path)
-                self.ui.gisaxsInputStackDisplayLabel.setText(
-                    f"In-situ: {os.path.splitext(base)[0]}"
-                )
         except Exception:
             pass
 
@@ -269,6 +126,8 @@ class InsituWatchSettingsMixin:
         if message:
             self._log_insitu_workflow(message)
         self._refresh_insitu_workflow_status()
+        if state == "Error":
+            self._restore_single_analysis_runtime()
 
     def _log_insitu_workflow(self, message: str, level: str = "INFO"):
         text = f"[In-situ Workflow][{level}] {message}"
@@ -316,7 +175,16 @@ class InsituWatchSettingsMixin:
             }
             for key, value in values.items():
                 if key in labels and labels[key] is not None:
-                    labels[key].setText(value)
+                    if key == "file":
+                        labels[key].setText(f"Current image: {value}")
+                    elif key == "processed":
+                        labels[key].setText(f"Done: {value}")
+                    elif key == "failed":
+                        labels[key].setText(f"Failed: {value}")
+                    elif key == "queue":
+                        labels[key].setText(f"Queue: {value}")
+                    else:
+                        labels[key].setText(value)
             start_btn = widgets.get("start")
             pause_btn = widgets.get("pause")
             stop_btn = widgets.get("stop")
@@ -336,6 +204,49 @@ class InsituWatchSettingsMixin:
                 pause_btn.setEnabled(self._insitu_workflow_state in ("Watching", "Processing"))
             if stop_btn is not None:
                 stop_btn.setEnabled(running or bool(getattr(self, "_insitu_workflow_busy", False)))
+            page = getattr(self.ui, "fittingInsituSeriesPage", None)
+            if page is not None:
+                status_map = {
+                    "Idle": "idle",
+                    "Watching": "running",
+                    "Processing": "running",
+                    "Paused": "paused",
+                    "Error": "failed",
+                }
+                total = int(getattr(self, "_insitu_workflow_processed_count", 0)) + len(
+                    getattr(self, "_insitu_workflow_queue", []) or []
+                )
+                processed = int(getattr(self, "_insitu_workflow_processed_count", 0))
+                progress = None if self._insitu_workflow_state == "Watching" else (
+                    0.0 if total == 0 else processed / total
+                )
+                page.ui.jobStatus.set_state(
+                    status_map.get(self._insitu_workflow_state, "idle"),
+                    f"{processed} processed · "
+                    f"{int(getattr(self, '_insitu_workflow_failed_count', 0))} failed",
+                    progress=progress,
+                )
+                rows = self._load_insitu_session_records()
+                page.render_records(rows)
+                current = getattr(self, "_insitu_workflow_current_record", None)
+                if isinstance(current, dict):
+                    page.set_step_state(
+                        "source", page._normalize_step_state(current.get("load_status"))
+                    )
+                    page.set_step_state(
+                        "preprocess",
+                        page._normalize_step_state(current.get("preprocess_status")),
+                    )
+                    page.set_step_state(
+                        "geometry",
+                        page._normalize_step_state(current.get("geometry_status")),
+                    )
+                    page.set_step_state(
+                        "cut", page._normalize_step_state(current.get("cut_status"))
+                    )
+                    page.set_step_state(
+                        "fit", page._normalize_step_state(current.get("fit_status"))
+                    )
         except Exception:
             pass
 
@@ -363,7 +274,7 @@ class InsituWatchSettingsMixin:
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         cut_valid, _message = self._validate_current_cut_settings()
         show_valid = bool(
-            getattr(self, "current_stack_data", None) is not None
+            analysis_image_for(self) is not None
             or self.current_parameters.get("imported_gisaxs_file")
         )
         fit_valid = self._has_active_fitting_template()
@@ -393,24 +304,30 @@ class InsituWatchSettingsMixin:
             heatmap_button.setEnabled(
                 bool(widgets.get("auto_cut") and widgets["auto_cut"].isChecked())
             )
+        page = getattr(self.ui, "fittingInsituSeriesPage", None)
+        if page is not None:
+            page.set_step_state("source", "configured" if show_valid else "pending")
+            page.set_step_state("preprocess", "configured")
+            page.set_step_state("geometry", "configured")
+            page.set_step_state("cut", "configured" if cut_valid else "error")
+            page.set_step_state("fit", "configured" if fit_valid else "pending")
         self._draw_insitu_workflow_region_preview()
 
     def _validate_current_cut_settings(self):
         try:
-            if self.current_stack_data is None:
+            analysis_image = analysis_image_for(self)
+            if analysis_image is None:
                 return False, "No image loaded"
-            required = ("gisaxsInputCutLineVerticalValue", "gisaxsInputCutLineParallelValue")
-            if not all(hasattr(self.ui, name) for name in required):
-                return False, "Cut controls unavailable"
-            vertical_value = float(self.ui.gisaxsInputCutLineVerticalValue.value())
-            parallel_value = float(self.ui.gisaxsInputCutLineParallelValue.value())
+            geometry = self._insitu_cut_geometry()
+            vertical_value = geometry.get("cut_vertical_px", 0.0)
+            parallel_value = geometry.get("cut_parallel_px", 0.0)
             if vertical_value <= 0 or parallel_value <= 0:
                 return False, "Cut width/height must be positive"
             info = self._create_selection_from_current_cut_controls()
             if not info:
                 return False, "Cut ROI unavailable"
             bounds = info.get("bounds", {})
-            height, width = self.current_stack_data.shape
+            height, width = analysis_image.shape
             if (
                 bounds.get("x_max", 0) <= 0
                 or bounds.get("y_max", 0) <= 0

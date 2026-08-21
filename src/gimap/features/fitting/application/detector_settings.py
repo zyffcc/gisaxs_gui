@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.gimap.app.ports import SettingsRepository
 
 from ..domain.detector_settings import DetectorSettings
+from ..domain.detector_q_grid import normalize_horizontal_q_axis
 
 
 class LoadDetectorSettings:
@@ -22,6 +23,9 @@ class LoadDetectorSettings:
             pixel_size_x=float(get("fitting", "detector.pixel_size_x", 172.0)),
             pixel_size_y=float(get("fitting", "detector.pixel_size_y", 172.0)),
             show_q_axis=bool(get("fitting", "detector.show_q_axis", False)),
+            horizontal_q_axis=normalize_horizontal_q_axis(
+                get("fitting", "detector.horizontal_q_axis", "qy")
+            ),
         )
 
 
@@ -37,6 +41,7 @@ class SaveDetectorSettings:
             "pixel_size_x": settings.pixel_size_x,
             "pixel_size_y": settings.pixel_size_y,
             "show_q_axis": settings.show_q_axis,
+            "horizontal_q_axis": settings.horizontal_q_axis,
         }
         for key, value in detector_values.items():
             self._repository.set("fitting", f"detector.{key}", value)

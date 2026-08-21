@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PyQt5.QtWidgets import (
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -13,7 +12,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation import apply_design_system
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
@@ -21,8 +19,6 @@ from src.gimap.app.presentation.section_bindings import (
 from src.gimap.app.presentation.layout_primitives import (
     CARD_SPACING,
     FORM_ROW_SPACING,
-    SECTION_MIN_WIDTH,
-    make_scroll_area,
     normalize_button,
 )
 from src.gimap.app.presentation.responsive_layout import current_profile, scale_value
@@ -31,6 +27,11 @@ from .cards import PredictCard, PredictModelLibraryCard
 from .control_style import apply_prediction_control_style
 from .views import PredictionWorkspaceView
 from .preview_layout import PredictionPreviewLayout
+from .workbench_layout import PredictionWorkbenchLayout
+from .workflow_components import (
+    PredictionDisclosure,
+    PredictionInputModePanel,
+)
 
 
 def _take_widget(layout, widget: QWidget) -> None:
@@ -62,13 +63,13 @@ class GisaxsPredictWorkspace:
         source_layout = getattr(self.ui, "verticalLayout_16", None)
         if (
             source_layout is None
-            or page.findChild(QWidget, "gisaxsPredictOuterScrollArea") is not None
+            or page.findChild(QWidget, "gisaxsPredictWorkspaceSplitter") is not None
         ):
             return
 
         for widget in (self.ui.widget_2, self.ui.gisaxsPredictImageShowWidget):
             _take_widget(source_layout, widget)
-        self._relax_predict_sizes()
+        apply_prediction_control_style(self.ui, self.profile)
 
         contents = QWidget(page)
         workspace_ui = PredictionWorkspaceView()
@@ -152,10 +153,6 @@ class GisaxsPredictWorkspace:
 
         _detach_from_parent_layout(self.ui.gisaxsPredictRunLogTitle)
         _detach_from_parent_layout(self.ui.predictStatusTextBrowser)
-        _detach_from_parent_layout(self.ui.gisaxsPredictShowMultiFileResultsButton)
-        workspace_ui.predictionResultsHeaderActionsLayout.addWidget(
-            self.ui.gisaxsPredictShowMultiFileResultsButton
-        )
         workspace_ui.predictionResultsContentLayout.addWidget(
             self.ui.gisaxsPredictRunLogTitle
         )
@@ -177,29 +174,33 @@ class GisaxsPredictWorkspace:
             self.ui.predict2dExportButton
         )
         workspace_ui.predictionExportContentLayout.addStretch(1)
-        apply_design_system(contents)
+        self.workbench_layout = PredictionWorkbenchLayout(
+            self.ui,
+            self.profile,
+            contents,
+            workspace_ui,
+            input_mode_panel=self.input_mode_panel,
+            input_section=self.prediction_input_section,
+            configure_section=self.prediction_configure_section,
+            advanced_section=self.prediction_advanced_section,
+            run_section=self.prediction_run_section,
+            results_section=self.prediction_results_section,
+            export_section=self.prediction_export_section,
+            input_card=self.input_card,
+            model_card=self.model_card,
+            run_card=self.run_card,
+            results_card=self.results_card,
+        )
+        self._expose_workbench_layout()
+        source_layout.addWidget(contents)
 
-        scroll_area = make_scroll_area(contents, horizontal=True)
-        scroll_area.setObjectName("gisaxsPredictOuterScrollArea")
-        scroll_area.setMinimumWidth(SECTION_MIN_WIDTH)
-        source_layout.addWidget(scroll_area)
-
-        self.ui.gisaxsPredictOuterScrollArea = scroll_area
         self.ui.gisaxsPredictInputCard = self.input_card
         self.ui.gisaxsPredictModelCard = self.model_card
         self.ui.gisaxsPredictRunCard = self.run_card
         self.ui.gisaxsPredictResultsCard = self.results_card
         self.ui.predictModelLibraryCard = self.model_library_card
-    def _relax_predict_sizes(self) -> None:
-        apply_prediction_control_style(self.ui, self.profile)
-
     def _build_input_card(self, parent: QWidget) -> PredictCard:
-        card = PredictCard("Input", "GisaxsPredictInputCard", parent)
-        form = QWidget(card.content_widget)
-        grid = QGridLayout(form)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(CARD_SPACING)
-        grid.setVerticalSpacing(FORM_ROW_SPACING)
+        card = PredictCard("Import data", "GisaxsPredictInputCard", parent)
 
         for widget in (
             self.ui.gisaxsPredictSingleFileRadioButton,
@@ -218,72 +219,19 @@ class GisaxsPredictWorkspace:
         self.ui.widget_5.setVisible(False)
 
         self.ui.gisaxsPredictShowMultiFileResultsButton = QPushButton(
-            "Show Multi-File Results", form
+            "Open batch results", card
         )
         self.ui.gisaxsPredictShowMultiFileResultsButton.setObjectName(
             "gisaxsPredictShowMultiFileResultsButton"
         )
         normalize_button(self.ui.gisaxsPredictShowMultiFileResultsButton, wide=True)
-
-        mode_row = QWidget(form)
-        mode_layout = QHBoxLayout(mode_row)
-        mode_layout.setContentsMargins(0, 0, 0, 0)
-        mode_layout.setSpacing(CARD_SPACING)
-        mode_layout.addWidget(self.ui.gisaxsPredictSingleFileRadioButton)
-        mode_layout.addWidget(self.ui.gisaxsPredictMultiFilesRadioButton)
-        mode_layout.addStretch(1)
-
-        range_panel = QFrame(form)
-        range_panel.setObjectName("gisaxsPredictRangePanel")
-        range_panel.setStyleSheet(
-            """
-            QFrame#gisaxsPredictRangePanel {
-                background: #f8fafc;
-                border: 1px solid #dbe3ec;
-                border-radius: 8px;
-                padding: 4px;
-            }
-            QLabel { color: #334155; font-weight: 600; }
-            """
-        )
-        range_layout = QHBoxLayout(range_panel)
-        range_layout.setContentsMargins(8, 6, 8, 6)
-        range_layout.setSpacing(8)
-        self.ui.gisaxsPredictStackLabel.setMinimumWidth(scale_value(48, self.profile, 42))
-        self.ui.gisaxsPredictEveryLabel.setMinimumWidth(scale_value(44, self.profile, 38))
-        self.ui.gisaxsPredictStackValue.setMinimumWidth(scale_value(180, self.profile, 150))
-        self.ui.gisaxsPredictStackValue.setMaximumWidth(16777215)
-        self.ui.gisaxsPredictStackValue.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.ui.gisaxsPredictEveryValue.setMinimumWidth(scale_value(72, self.profile, 64))
-        self.ui.gisaxsPredictEveryValue.setMaximumWidth(scale_value(96, self.profile, 84))
-        range_layout.addWidget(self.ui.gisaxsPredictStackLabel)
-        range_layout.addWidget(self.ui.gisaxsPredictStackValue, 1)
-        range_layout.addWidget(self.ui.gisaxsPredictEveryLabel)
-        range_layout.addWidget(self.ui.gisaxsPredictEveryValue)
-
-        hint = QLabel("Inclusive range. Every = files stacked per prediction.", form)
-        hint.setObjectName("gisaxsPredictRangeHintLabel")
-        hint.setProperty("cardMeta", True)
-        hint.setWordWrap(True)
-
-        grid.addWidget(QLabel("Mode:", form), 0, 0)
-        grid.addWidget(mode_row, 0, 1, 1, 2)
-        grid.addWidget(self.ui.gisaxsPredictChooseGisaxsFileButton, 1, 0)
-        grid.addWidget(self.ui.gisaxsPredictChooseGisaxsFileValue, 1, 1, 1, 2)
-        grid.addWidget(self.ui.gisaxsPredictChooseFolderButton, 2, 0)
-        grid.addWidget(self.ui.gisaxsPredictChooseFolderValue, 2, 1, 1, 2)
-        grid.addWidget(range_panel, 3, 0, 1, 2)
-        grid.addWidget(self.ui.gisaxsPredictShowMultiFileResultsButton, 3, 2)
-        grid.addWidget(hint, 4, 0, 1, 3)
-        grid.setColumnStretch(0, 0)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(2, 0)
-
-        card.add_content(form)
+        self.input_mode_panel = PredictionInputModePanel(self.ui, card.content_widget)
+        self.ui.predictionInputModePanel = self.input_mode_panel
+        card.add_content(self.input_mode_panel)
         return card
 
     def _build_model_card(self, parent: QWidget) -> PredictCard:
-        card = PredictCard("Model", "GisaxsPredictModelCard", parent)
+        card = PredictCard("Import model", "GisaxsPredictModelCard", parent)
         form = QWidget(card.content_widget)
         grid = QGridLayout(form)
         grid.setContentsMargins(0, 0, 0, 0)
@@ -298,10 +246,17 @@ class GisaxsPredictWorkspace:
             self.ui.widget_4,
         ):
             _detach_from_parent_layout(widget)
+        for widget in (
+            self.ui.gisaxsPredictEditButton,
+            self.ui.gisaxsPredictModelImportButton,
+        ):
+            _detach_from_parent_layout(widget)
+        self.ui.widget_4.hide()
 
         self.ui.gisaxsPredictModelStatusTextLabel = QLabel("Not loaded", form)
         self.ui.gisaxsPredictModelStatusTextLabel.setObjectName("gisaxsPredictModelStatusTextLabel")
-        self.ui.gisaxsPredictModelStatusTextLabel.setProperty("cardMeta", True)
+        self.ui.gisaxsPredictModelStatusTextLabel.setProperty("predictionModelStatus", True)
+        self.ui.gisaxsPredictModelStatusTextLabel.setProperty("modelState", "idle")
         self.ui.gisaxsPredictFrameworkStatusLabel = QLabel("Framework: checking...", form)
         self.ui.gisaxsPredictFrameworkStatusLabel.setObjectName("gisaxsPredictFrameworkStatusLabel")
         self.ui.gisaxsPredictFrameworkStatusLabel.setProperty("cardMeta", True)
@@ -311,18 +266,38 @@ class GisaxsPredictWorkspace:
             normalize_button(self.ui.gisaxsPredictReloadConfigButton)
         else:
             self.ui.gisaxsPredictReloadConfigButton.setParent(form)
-
+        self.ui.gisaxsPredictModuleSelectLabel.setText("Prediction setup")
+        self.ui.gisaxsPredictModelImportButton.setText("Import model...")
+        self.ui.gisaxsPredictModelImportButton.setProperty("gimapPrimaryAction", True)
         grid.addWidget(self.ui.gisaxsPredictModuleSelectLabel, 0, 0)
         grid.addWidget(self.ui.gisaxsPredictModuleSelectCombox, 0, 1)
-        grid.addWidget(self.ui.gisaxsPredictReloadConfigButton, 0, 2)
-        grid.addWidget(self.ui.gisaxsPredictFrameworkLabel, 1, 0)
-        grid.addWidget(self.ui.gisaxsPredictFrameworkCombox, 1, 1)
-        grid.addWidget(self.ui.gisaxsPredictFrameworkStatusLabel, 1, 2)
-        grid.addWidget(QLabel("Model:", form), 2, 0)
-        grid.addWidget(self.ui.gisaxsPredictModelStatusTextLabel, 2, 1)
-        grid.addWidget(self.ui.widget_4, 2, 2)
+        grid.addWidget(self.ui.gisaxsPredictModelImportButton, 1, 0, 1, 2)
+        grid.addWidget(self.ui.gisaxsPredictModelStatusTextLabel, 2, 0, 1, 2)
         grid.setColumnStretch(1, 1)
         card.add_content(form)
+
+        technical = PredictionDisclosure(
+            "Advanced model configuration",
+            "predictionTechnicalModelDisclosure",
+            card.content_widget,
+        )
+        technical_form = QWidget(technical.content)
+        technical_grid = QGridLayout(technical_form)
+        technical_grid.setContentsMargins(0, 0, 0, 0)
+        technical_grid.setHorizontalSpacing(CARD_SPACING)
+        technical_grid.setVerticalSpacing(FORM_ROW_SPACING)
+        technical_grid.addWidget(self.ui.gisaxsPredictFrameworkLabel, 0, 0)
+        technical_grid.addWidget(self.ui.gisaxsPredictFrameworkCombox, 0, 1)
+        technical_grid.addWidget(self.ui.gisaxsPredictFrameworkStatusLabel, 1, 0, 1, 2)
+        actions = QHBoxLayout()
+        actions.addWidget(self.ui.gisaxsPredictReloadConfigButton)
+        actions.addWidget(self.ui.gisaxsPredictEditButton)
+        actions.addStretch(1)
+        technical_grid.addLayout(actions, 2, 0, 1, 2)
+        technical_grid.setColumnStretch(1, 1)
+        technical.add_widget(technical_form)
+        card.add_content(technical)
+        self.ui.predictionTechnicalModelDisclosure = technical
         return card
 
     def _build_run_card(self, parent: QWidget) -> PredictCard:
@@ -337,6 +312,7 @@ class GisaxsPredictWorkspace:
         self.ui.gisaxsPredictStopButton = QPushButton("Stop", run)
         self.ui.gisaxsPredictStopButton.setObjectName("gisaxsPredictStopButton")
         self.ui.gisaxsPredictStopButton.setEnabled(False)
+        self.ui.gisaxsPredictStopButton.setVisible(False)
         normalize_button(self.ui.gisaxsPredictStopButton)
 
         status_grid = QGridLayout()
@@ -353,15 +329,17 @@ class GisaxsPredictWorkspace:
             self.ui.gisaxsPredictFrameworkReadyLabel,
             self.ui.gisaxsPredictModeLabel,
         ):
-            label.setProperty("cardMeta", True)
+            label.setProperty("predictionReadiness", True)
         status_grid.addWidget(self.ui.gisaxsPredictInputReadyLabel, 0, 0)
         status_grid.addWidget(self.ui.gisaxsPredictModelReadyLabel, 0, 1)
         status_grid.addWidget(self.ui.gisaxsPredictFrameworkReadyLabel, 1, 0)
         status_grid.addWidget(self.ui.gisaxsPredictModeLabel, 1, 1)
 
+        self.ui.gisaxsPredictPredictButton.setProperty("gimapPrimaryAction", True)
+        self.ui.gisaxsPredictStopButton.setProperty("gimapDangerAction", True)
         button_row = QHBoxLayout()
-        button_row.addStretch(1)
-        button_row.addWidget(self.ui.gisaxsPredictPredictButton)
+        button_row.setSpacing(8)
+        button_row.addWidget(self.ui.gisaxsPredictPredictButton, 1)
         button_row.addWidget(self.ui.gisaxsPredictStopButton)
 
         log_title = QLabel("Run Log", run)
@@ -370,6 +348,12 @@ class GisaxsPredictWorkspace:
         self.ui.gisaxsPredictRunLogTitle = log_title
 
         layout.addLayout(status_grid)
+        readiness_hint = QLabel(
+            "Prediction becomes available when input, model and framework are ready.", run
+        )
+        readiness_hint.setProperty("cardMeta", True)
+        readiness_hint.setWordWrap(True)
+        layout.addWidget(readiness_hint)
         layout.addLayout(button_row)
         layout.addWidget(log_title)
         layout.addWidget(self.ui.predictStatusTextBrowser)
@@ -395,9 +379,19 @@ class GisaxsPredictWorkspace:
         card.add_content(self.ui.gisaxsPredictImageShowWidget, 1)
         return card
 
+    def _expose_workbench_layout(self) -> None:
+        self.page_splitter = self.workbench_layout.splitter
+        self.left_rail = self.workbench_layout.left_rail
+        self.left_scroll_area = self.workbench_layout.left_scroll_area
+        self.right_scroll_area = self.workbench_layout.right_scroll_area
+        self.workflow_header = self.workbench_layout.workflow_header
+        self.activity_disclosure = self.workbench_layout.activity_disclosure
+        self.input_empty_state = self.workbench_layout.input_empty_state
+        self.result_empty_state = self.workbench_layout.result_empty_state
+
     def apply_responsive_profile(self, profile) -> None:
         self.profile = profile
-        self._relax_predict_sizes()
-
-
+        apply_prediction_control_style(self.ui, self.profile)
+        if hasattr(self, "workbench_layout"):
+            self.workbench_layout.apply_responsive_profile(profile)
 __all__ = ["GisaxsPredictWorkspace"]

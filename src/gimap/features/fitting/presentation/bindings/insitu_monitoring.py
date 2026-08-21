@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QDialog,
+    QWidget,
     QComboBox,
     QLabel,
     QDoubleSpinBox,
@@ -38,21 +39,14 @@ class InsituMonitoringMixin:
 
     def _create_selection_from_current_cut_controls(self):
         try:
-            if not all(
-                hasattr(self.ui, name)
-                for name in (
-                    "gisaxsInputCenterParallelValue",
-                    "gisaxsInputCenterVerticalValue",
-                    "gisaxsInputCutLineParallelValue",
-                    "gisaxsInputCutLineVerticalValue",
-                )
-            ):
+            geometry = self._insitu_cut_geometry()
+            if not geometry:
                 return None
             return self._create_selection_from_parameters(
-                float(self.ui.gisaxsInputCenterParallelValue.value()),
-                float(self.ui.gisaxsInputCenterVerticalValue.value()),
-                float(self.ui.gisaxsInputCutLineParallelValue.value()),
-                float(self.ui.gisaxsInputCutLineVerticalValue.value()),
+                geometry["center_parallel_px"],
+                geometry["center_vertical_px"],
+                geometry["cut_parallel_px"],
+                geometry["cut_vertical_px"],
             )
         except Exception:
             return None
@@ -69,8 +63,6 @@ class InsituMonitoringMixin:
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
-            filter_mode = self._get_independent_axis_filter_mode()
-
             # 函数说明：实现 prepare pair 相关逻辑。
             def prepare_pair(x_values, y_values, source="cut"):
                 x = np.asarray(x_values, dtype=float).reshape(-1)
@@ -79,14 +71,8 @@ class InsituMonitoringMixin:
                 x, y = x[:n], y[:n]
                 mask = np.isfinite(x) & np.isfinite(y)
                 x, y = x[mask], y[mask]
-                if filter_mode == "positive":
-                    keep = x > 0
-                    x, y = x[keep], y[keep]
-                elif filter_mode == "negative":
-                    keep = x < 0
-                    x, y = np.abs(x[keep]), y[keep]
-                    order = np.argsort(x)
-                    x, y = x[order], y[order]
+                prepared = self._prepare_signed_q_data(x, y)
+                x, y = prepared.q, prepared.intensity
                 if normalize and y.size:
                     max_y = float(np.nanmax(y))
                     if np.isfinite(max_y) and max_y > 0:
@@ -111,8 +97,7 @@ class InsituMonitoringMixin:
                 )
                 if fx.size and fy.size:
                     ax.plot(fx, fy, linewidth=2.0, color="#d62728", label="Fit")
-            if log_x:
-                ax.set_xscale("log")
+            self._apply_x_axis_scale(ax)
             if log_y:
                 ax.set_yscale("log")
             self._apply_fit_y_axis_limits(ax, log_y=log_y)
@@ -225,7 +210,7 @@ class InsituMonitoringMixin:
                     controls.addWidget(QLabel(label, dialog))
                 controls.addWidget(widget)
             layout.addLayout(controls)
-            holder = self._make_insitu_workflow_canvas(dialog)
+            holder = self._make_insitu_monitor_canvas(dialog)
             layout.addWidget(holder, 1)
             status = QLabel("Waiting for auto-cut data...", dialog)
             layout.addWidget(status)
@@ -392,7 +377,7 @@ class InsituMonitoringMixin:
             table.horizontalHeader().setStretchLastSection(True)
             plot_holder = None
             if is_matplotlib_available():
-                plot_holder = self._make_insitu_workflow_canvas(dialog)
+                plot_holder = self._make_insitu_monitor_canvas(dialog)
                 layout.addWidget(plot_holder, 1)
             close = QPushButton("Close", dialog)
             close.clicked.connect(dialog.close)
@@ -413,6 +398,29 @@ class InsituMonitoringMixin:
         self._insitu_trend_table = None
         self._insitu_trend_combo = None
         self._insitu_trend_plot_holder = None
+
+    def _make_insitu_monitor_canvas(self, parent):
+        """Create a Matplotlib holder for optional detached result monitors."""
+        holder = QWidget(parent)
+        layout = QVBoxLayout(holder)
+        layout.setContentsMargins(0, 0, 0, 0)
+        if is_matplotlib_available():
+            try:
+                from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+                from matplotlib.figure import Figure
+
+                figure = Figure(figsize=(5.5, 3.1), dpi=80)
+                canvas = FigureCanvasQTAgg(figure)
+                holder._insitu_figure = figure
+                holder._insitu_canvas = canvas
+                layout.addWidget(canvas)
+                return holder
+            except (ImportError, RuntimeError):
+                pass
+        label = QLabel("Matplotlib preview unavailable", holder)
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+        return holder
 
     def _insitu_trend_parameter_keys(self, rows: list[dict]) -> list[str]:
         keys = ["chi_square"]

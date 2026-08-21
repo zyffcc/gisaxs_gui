@@ -15,6 +15,11 @@ from PyQt5.QtWidgets import (
 from ..binding_primitives import (
     is_matplotlib_available,
 )
+from ..detector_data_access import analysis_image_for
+from ..detector_render_lod import (
+    choose_detector_render_level,
+    detector_render_cell_budget,
+)
 
 
 class SelectionPreviewMixin:
@@ -28,12 +33,26 @@ class SelectionPreviewMixin:
             graphics_view = self.ui.gisaxsInputGraphicsView
             processed_data, _ = self._prepare_image_data_for_display(image_data)
             processed_data = np.flipud(processed_data)
-            preview_data, _ = self._downsample_for_preview(processed_data)
             show_q_axis = self._should_show_q_axis()
             extent, q_ok = self._preview_extent(image_data.shape, show_q_axis)
             if show_q_axis and not q_ok:
                 show_q_axis = False
                 extent, _ = self._preview_extent(image_data.shape, False)
+            if show_q_axis:
+                viewport = graphics_view.viewport()
+                budget = detector_render_cell_budget(
+                    viewport.width(),
+                    viewport.height(),
+                    maximum_cells=160_000,
+                )
+                render_level = choose_detector_render_level(
+                    processed_data.shape,
+                    max_cells=budget,
+                )
+                preview_data = render_level.sample(processed_data)
+                preview_step = render_level.stride
+            else:
+                preview_data, preview_step = self._downsample_for_preview(processed_data)
             finite_values = processed_data[np.isfinite(processed_data)]
             if finite_values.size == 0:
                 raise ValueError("No finite detector pixels remain after masking")
@@ -47,7 +66,15 @@ class SelectionPreviewMixin:
                 or self._preview_image_artist is None
                 or shape_changed
             )
-            mode_changed = shape_changed or self._preview_show_q_axis != show_q_axis
+            horizontal_q_axis = self._horizontal_q_axis()
+            q_mesh_cache_key = self._q_mesh_cache_key if show_q_axis else None
+            mode_changed = (
+                shape_changed
+                or self._preview_show_q_axis != show_q_axis
+                or self._preview_horizontal_q_axis != horizontal_q_axis
+                or self._preview_q_mesh_cache_key != q_mesh_cache_key
+                or self._preview_render_step != preview_step
+            )
 
             if needs_create:
                 from matplotlib.figure import Figure
@@ -67,26 +94,41 @@ class SelectionPreviewMixin:
                 else:
                     self._graphics_scene.clear()
                 self._preview_proxy_widget = self._graphics_scene.addWidget(self._canvas_cache)
+                self._ensure_main_preview_interaction()
 
             ax = self._preview_ax
             if needs_create or mode_changed:
                 ax.clear()
                 self._preview_selection_artists = []
-                self._preview_image_artist = ax.imshow(
-                    preview_data,
-                    cmap=self._image_colormap,
-                    aspect="equal",
-                    origin="lower",
-                    interpolation="nearest",
-                    vmin=vmin,
-                    vmax=vmax,
-                    extent=extent,
-                )
                 if show_q_axis:
-                    ax.set_xlabel(r"$q_y$ (nm$^{-1}$)")
+                    horizontal_mesh, qz_mesh = self._get_display_q_meshgrids()
+                    horizontal_mesh = horizontal_mesh[::preview_step, ::preview_step]
+                    qz_mesh = qz_mesh[::preview_step, ::preview_step]
+                    self._preview_image_artist = ax.pcolormesh(
+                        horizontal_mesh,
+                        qz_mesh,
+                        preview_data,
+                        cmap=self._image_colormap,
+                        shading="nearest",
+                        vmin=vmin,
+                        vmax=vmax,
+                        rasterized=True,
+                    )
+                    ax.set_xlabel(self._horizontal_q_label())
                     ax.set_ylabel(r"$q_z$ (nm$^{-1}$)")
+                    ax.set_aspect("equal")
                     ax.autoscale()
                 else:
+                    self._preview_image_artist = ax.imshow(
+                        preview_data,
+                        cmap=self._image_colormap,
+                        aspect="equal",
+                        origin="lower",
+                        interpolation="nearest",
+                        vmin=vmin,
+                        vmax=vmax,
+                        extent=extent,
+                    )
                     ax.set_xlabel("Pixels (Horizontal)")
                     ax.set_ylabel("Pixels (Vertical)")
                     ax.axis("off")
@@ -94,8 +136,11 @@ class SelectionPreviewMixin:
                     ax.set_ylim(-0.5, image_data.shape[0] - 0.5)
                 self._figure_cache.tight_layout(pad=0.05)
             else:
-                self._preview_image_artist.set_data(preview_data)
-                self._preview_image_artist.set_extent(extent)
+                if show_q_axis:
+                    self._preview_image_artist.set_array(preview_data.ravel())
+                else:
+                    self._preview_image_artist.set_data(preview_data)
+                    self._preview_image_artist.set_extent(extent)
                 self._preview_image_artist.set_clim(vmin, vmax)
                 self._preview_image_artist.set_cmap(self._image_colormap)
 
@@ -109,6 +154,9 @@ class SelectionPreviewMixin:
                 self._fit_view_to_item(graphics_view, self._preview_proxy_widget, keep_aspect=True)
             self._preview_shape = image_data.shape
             self._preview_show_q_axis = show_q_axis
+            self._preview_horizontal_q_axis = horizontal_q_axis
+            self._preview_q_mesh_cache_key = q_mesh_cache_key
+            self._preview_render_step = preview_step
             print(f"[Timing] preview rendering: {(time.perf_counter() - t_total) * 1000:.2f} ms")
             return True
         except Exception as e:
@@ -170,26 +218,23 @@ class SelectionPreviewMixin:
 
             if show_q_axis:
                 try:
-                    qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+                    qy_mesh, qz_mesh = self._get_display_q_meshgrids()
 
                     if qy_mesh is not None and qz_mesh is not None:
-                        qy_min, qy_max = qy_mesh.min(), qy_mesh.max()
-                        qz_min, qz_max = qz_mesh.min(), qz_mesh.max()
-                        q_extent = [qy_min, qy_max, qz_min, qz_max]
-
-                        im = ax.imshow(
+                        im = ax.pcolormesh(
+                            qy_mesh,
+                            qz_mesh,
                             processed_data,
                             cmap=self._image_colormap,
-                            aspect="equal",
-                            origin="lower",
-                            interpolation="nearest",
+                            shading="nearest",
                             vmin=vmin,
                             vmax=vmax,
-                            extent=q_extent,
+                            rasterized=True,
                         )
 
-                        ax.set_xlabel(r"$q_y$ (nm$^{-1}$)")
+                        ax.set_xlabel(self._horizontal_q_label())
                         ax.set_ylabel(r"$q_z$ (nm$^{-1}$)")
+                        ax.set_aspect("equal")
                     else:
                         show_q_axis = False
                 except Exception as e:
@@ -258,3 +303,117 @@ class SelectionPreviewMixin:
 
         except Exception as e:
             self.status_updated.emit(f"Display error: {str(e)}")
+
+    def _downsample_for_preview(self, data, max_pixels=700_000):
+        try:
+            h, w = data.shape
+            pixels = max(1, h * w)
+            step = max(1, int(np.ceil(np.sqrt(pixels / max_pixels))))
+            return data[::step, ::step], step
+        except Exception:
+            return data, 1
+
+    def _preview_extent(self, image_shape, show_q_axis):
+        if show_q_axis:
+            horizontal_mesh, qz_mesh = self._get_display_q_meshgrids()
+            if horizontal_mesh is not None and qz_mesh is not None:
+                return [
+                    horizontal_mesh.min(),
+                    horizontal_mesh.max(),
+                    qz_mesh.min(),
+                    qz_mesh.max(),
+                ], True
+            return None, False
+        height, width = image_shape
+        return [-0.5, width - 0.5, -0.5, height - 0.5], False
+
+    def _draw_preview_selection(self, ax, selection_info):
+        try:
+            for artist in getattr(self, "_preview_selection_artists", []):
+                try:
+                    artist.remove()
+                except Exception:
+                    pass
+            self._preview_selection_artists = []
+            artists = []
+            if selection_info and self._show_cut_region:
+                bounds = selection_info.get("bounds", {})
+                x_min = bounds.get("x_min", 0)
+                x_max = bounds.get("x_max", 0)
+                y_min = bounds.get("y_min", 0)
+                y_max = bounds.get("y_max", 0)
+                from matplotlib.patches import Rectangle
+
+                rect = Rectangle(
+                    (x_min, y_min),
+                    x_max - x_min,
+                    y_max - y_min,
+                    linewidth=2,
+                    edgecolor="red",
+                    facecolor="none",
+                    alpha=0.8,
+                )
+                ax.add_patch(rect)
+                artists.append(rect)
+            artists.extend(self._draw_detector_center_on_axis(ax))
+            self._preview_selection_artists = artists
+        except Exception:
+            pass
+
+    def _draw_detector_center_on_axis(self, ax):
+        try:
+            if not self._show_center:
+                return []
+            center = self._get_detector_center_for_controller_axis()
+            if center is None:
+                return []
+            marker = ax.plot(
+                float(center[0]),
+                float(center[1]),
+                marker="+",
+                color="cyan",
+                markersize=14,
+                markeredgewidth=2.5,
+            )[0]
+            return [marker]
+        except Exception:
+            return []
+
+    def _get_detector_center_for_controller_axis(self):
+        try:
+            analysis_image = analysis_image_for(self)
+            if analysis_image is not None:
+                height, width = analysis_image.shape
+            else:
+                height, width = (1, 1)
+            beam_x = float(
+                self.fitting_view_model.get_setting(
+                    "fitting", "detector.beam_center_x", width / 2.0
+                )
+            )
+            beam_y = float(
+                self.fitting_view_model.get_setting(
+                    "fitting", "detector.beam_center_y", height / 2.0
+                )
+            )
+            if self._should_show_q_axis():
+                horizontal_mesh, qz_mesh = self._get_cached_q_meshgrids()
+                if horizontal_mesh is None or qz_mesh is None:
+                    return None
+                row = int(
+                    np.clip(
+                        horizontal_mesh.shape[0] - 1 - round(beam_y),
+                        0,
+                        horizontal_mesh.shape[0] - 1,
+                    )
+                )
+                column = int(
+                    np.clip(round(beam_x), 0, horizontal_mesh.shape[1] - 1)
+                )
+                return (
+                    float(horizontal_mesh[row, column]),
+                    float(qz_mesh[row, column]),
+                )
+            return beam_x, beam_y
+        except Exception:
+            return None

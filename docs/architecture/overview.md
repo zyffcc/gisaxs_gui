@@ -1,16 +1,18 @@
-# GIMaP 目标架构概览
+# GIMaP 当前架构概览
 
-> 状态说明：`src/gimap` 的 feature ownership、核心依赖方向和 presentation
-> 聚合入口已经符合本文档目标。生产源码不再反向导入顶层 `controllers`、`ui`、
-> `trainset`、`calibration` 或 `utils` 兼容包；这些路径只保留对外兼容别名。
+> **Status**：Current
+>
+> **Scope**：生产代码的 feature ownership、分层职责和依赖方向
+>
+> **Last verified**：2026-08-20
 
 ## 架构风格
 
-GIMaP 将逐步演进为 **feature-first modular monolith（按功能组织的模块化单体）**。
-它仍然是一个桌面应用和一个可部署仓库，但每个面向用户的功能都拥有自己的
+GIMaP 采用 **feature-first modular monolith（按功能组织的模块化单体）**。它是一个
+桌面应用和一个可部署仓库，但每个面向用户的功能都拥有自己的
 presentation、application、domain 和 infrastructure 代码。
 
-目标结构如下：
+当前结构如下：
 
 ```text
 features/
@@ -32,9 +34,6 @@ features/
     calibration/
 ```
 
-当前七个 workspace 已完成该迁移。渐进式原则继续用于约束后续功能扩展和仍需保留的
-外部 import 兼容入口，不表示主运行路径仍依赖第二套 legacy 实现。
-
 优先采用 feature-first 的原因包括：
 
 - 将一个用户工作流及其实现代码放在一起；
@@ -42,12 +41,12 @@ features/
   建立清晰的所有权边界；
 - 减少对全局 `controllers/`、`services/`、`models/` 和 `utils/` 技术目录的依赖，
   避免其职责随时间逐渐模糊；
-- 允许单个 feature 通过 dependency seam 迁移，而不影响整个 GUI；
-- 便于编写聚焦测试，也便于将后续 coding-agent 任务控制在清晰范围内。
+- 允许单个 feature 独立维护，而不影响整个 GUI；
+- 便于编写聚焦测试，也便于将 coding-agent 任务控制在清晰范围内。
 
 ## 依赖方向
 
-目标依赖方向为：
+依赖方向为：
 
 ```text
 presentation → application → domain
@@ -78,7 +77,7 @@ Presentation 包含 PyQt views、widgets、dialogs、presenters 和 ViewModels�
 Presentation 可以依赖本 feature 的 public application API，但不能包含科学计算、
 BornAgain simulation、TensorFlow inference 或具体文件系统实现。
 
-新 presentation 默认采用以下调用链：
+Presentation 采用以下调用链：
 
 ```text
 PyQt View
@@ -88,15 +87,15 @@ ViewModel
 Use Case
 ```
 
-对于历史 Qt 页面，允许使用 feature-owned `ViewBinding` 把既有 widget signals、dialogs 和
-rendering 连接到 ViewModel。ViewBinding 在架构上属于 View 的实现细节，不是额外的
+Feature-owned `ViewBinding` 可以把 widget signals、dialogs 和 rendering 连接到 ViewModel。
+ViewBinding 在架构上属于 View 的实现细节，不是额外的
 orchestration 层；它不得绕过 ViewModel 调用 use case，也不得包含科学计算或具体 I/O。
 因此实际文件结构可能是 `View + ViewBinding → ViewModel → Use Case`，依赖含义仍与上图一致。
 
-Legacy Controller 可以在迁移期间暂时存在，但不能继续发展成与 ViewModel 并列的第二层
-orchestration。新代码不得建立 `View → Controller → ViewModel → Use Case` 链路。如果
-确实需要保留 controller，它只能承担极薄的 composition 或 navigation 职责，不得包含
-工作流编排、科学计算、外部引擎调用或具体 I/O。
+顶层旧 Controller import path 仅允许薄 re-export 当前 feature owner，不能发展成与
+ViewModel 并列的第二层 orchestration，也不得建立
+`View → Controller → ViewModel → Use Case` 链路。Presentation 中确有 composition 或
+navigation 对象时，它不得包含工作流编排、科学计算、外部引擎调用或具体 I/O。
 
 ### Application
 
@@ -113,6 +112,14 @@ Application 不依赖 PyQt，也不能操作 `QWidget`、`QMessageBox`、`QFileD
 应当如何打开。
 
 每个新的 application use case 都必须有测试。
+
+跨多个科学步骤的数据还必须遵守
+[`scientific-data-flow.md`](scientific-data-flow.md)：RawImage 保持不可变，application 从
+RawImage 和 framework-neutral preprocessing config 生成唯一 AnalysisImage，presentation 的
+DisplayState 不能成为 scientific input。
+
+Fitting 的总强度、form factor、结构因子、resolution、单位和 q–intensity 对齐以
+[`fitting-scientific-model.md`](fitting-scientific-model.md) 为权威科学契约。
 
 ### Domain
 
@@ -169,6 +176,10 @@ ViewModel 不得负责：
 
 Dialogs 和 message boxes 必须留在 view/presentation 边界。ViewModel 可以暴露错误
 状态或类似事件的结果，再由 view 决定如何展示。
+
+参数控件的 draft、commit、自动刷新和页面导航必须保持解耦。Enter/结束编辑立即提交，连续修改
+采用防抖；自动刷新不得抢占用户当前视图，只有成功的显式 command 可以主动揭示结果。完整规则见
+[`ui-interaction-contract.md`](ui-interaction-contract.md)。
 
 Use case 负责 application 工作流编排。它接收与框架无关的输入，使用 domain 逻辑
 和注入的 ports，并返回与框架无关的结果。它不应知道由哪个 widget、window 或
@@ -242,43 +253,17 @@ Shared code 必须有明确的科学或 application 职责。禁止新增名为 
 `helpers.py`、`common.py` 或 `misc.py` 的 catch-all modules，也禁止让 `shared/` 成为
 新的 catch-all directory。
 
-## 当前兼容架构与目标架构的关系
+## Public import 兼容边界
 
-当前 feature 源码已按 presentation、application、domain 和 infrastructure 分层；
-presentation 只通过 application 公共 API 使用 domain 能力。历史顶层 controller/UI
-路径仅保留薄 re-export，稳定科学实现只允许位于 infrastructure adapter 后方。
-这些兼容边界不能作为在新代码中继续复制旧耦合的理由。
+Feature 源码按 presentation、application、domain 和 infrastructure 分层；presentation
+只通过 application 公共 API 使用 domain 能力。顶层 `controllers`、`ui`、`trainset`、
+`calibration`、`WAXS` 和 `utils` 路径只允许为用户脚本或第三方 import 提供薄别名，不能
+包含第二套业务实现，也不能被 `src/gimap` 生产代码反向导入。
 
-迁移期间：
+## 修改范围与科学安全
 
-- 已审计的兼容 seam 可以在外部 caller 仍存在时保留；
-- 新代码不得新增 violation，也不得扩大已有 violation；
-- 每次 refactor 都应减少 dependency violation；
-- compatibility shim 可以暂时连接 legacy caller 和新 use case；
-- 只有 caller 已迁移且行为验证通过后，才删除 legacy implementation。
-
-## 渐进式迁移
-
-GIMaP 禁止 big-bang rewrite。默认迁移顺序为：
-
-```text
-legacy code
-    ↓
-introduce dependency seam
-    ↓
-introduce new abstraction / use case
-    ↓
-migrate caller
-    ↓
-verify behavior
-    ↓
-remove legacy implementation
-```
-
-每次重构优先遵循 **one dependency seam per refactor**。不要因为附近代码同样陈旧，
-就在一个任务中合并多个无关 feature 的迁移。
-
-移动行为之前，应增加 characterization tests 或记录可信输出。结构重构必须保持：
+每项维护任务应保持边界内聚，不在同一修改中混入无关 feature。改变已有行为之前，应增加
+characterization tests 或记录可信输出。架构、UI 和性能修改必须保持：
 
 - numerical definitions 和结果；
 - 参数含义和单位；

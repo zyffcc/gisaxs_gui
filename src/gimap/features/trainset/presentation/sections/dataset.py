@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -96,6 +97,24 @@ class DatasetMixin:
         ref_form.setColumnStretch(1, 1)
         ui.trainsetInputContentLayout.addWidget(reference)
 
+        self.dataset_configuration_tabs = QTabWidget()
+        self.dataset_configuration_tabs.setObjectName("trainsetConfigurationTabs")
+        self.dataset_configuration_tabs.tabBar().setExpanding(True)
+        self.dataset_configuration_tabs.tabBar().setUsesScrollButtons(False)
+        geometry_page = QWidget()
+        geometry_layout = QVBoxLayout(geometry_page)
+        sample_page = QWidget()
+        sample_layout = QVBoxLayout(sample_page)
+        sampling_page = QWidget()
+        sampling_layout = QVBoxLayout(sampling_page)
+        for layout in (geometry_layout, sample_layout, sampling_layout):
+            layout.setContentsMargins(8, 8, 8, 8)
+            layout.setSpacing(8)
+        self.dataset_configuration_tabs.addTab(geometry_page, "Geometry + ROI")
+        self.dataset_configuration_tabs.addTab(sample_page, "Particle population")
+        self.dataset_configuration_tabs.addTab(sampling_page, "Sampling + files")
+        ui.trainsetConfigureContentLayout.addWidget(self.dataset_configuration_tabs)
+
         beam_detector = QGroupBox("2 · Beam and detector geometry")
         grid = QGridLayout(beam_detector)
         entries = (
@@ -124,7 +143,7 @@ class DatasetMixin:
         grid.addWidget(self.pick_beam_center_button, len(entries), 0, 1, 2)
         grid.addWidget(self.beam_cursor_label, len(entries) + 1, 0, 1, 2)
         grid.setColumnStretch(1, 1)
-        ui.trainsetConfigureContentLayout.addWidget(beam_detector)
+        geometry_layout.addWidget(beam_detector)
 
         roi_group = QGroupBox("3 · ROI and simulation angular range")
         roi_grid = QGridLayout(roi_group)
@@ -149,7 +168,8 @@ class DatasetMixin:
         roi_grid.addWidget(roi_help, 5, 0, 1, 2)
         roi_grid.addWidget(self.roi_range_label, 6, 0, 1, 2)
         roi_grid.setColumnStretch(1, 1)
-        ui.trainsetConfigureContentLayout.addWidget(roi_group)
+        geometry_layout.addWidget(roi_group)
+        geometry_layout.addStretch(1)
 
         mask_group = QGroupBox("4 · Mask design")
         mask_grid = QGridLayout(mask_group)
@@ -374,7 +394,8 @@ class DatasetMixin:
         )
         sample_grid.addWidget(self.segment_constraint_check, 10, 0, 1, 2)
         sample_grid.setColumnStretch(1, 1)
-        ui.trainsetConfigureContentLayout.addWidget(form_factor)
+        sample_layout.addWidget(form_factor)
+        sample_layout.addStretch(1)
 
         structure_factor = QGroupBox("6 · Interference / structure factor")
         structure_grid = QGridLayout(structure_factor)
@@ -491,8 +512,8 @@ class DatasetMixin:
                 self._double(f"dataset.split.{name.lower()}", value, 0.0, 1.0, 3), row, 1
             )
         dataset_grid.setColumnStretch(1, 1)
-        ui.trainsetConfigureContentLayout.addWidget(dataset_group)
-        ui.trainsetConfigureContentLayout.addStretch(1)
+        sampling_layout.addWidget(dataset_group)
+        sampling_layout.addStretch(1)
 
         self.design_tabs = QTabWidget()
         self.design_tabs.setObjectName("designStageTabs")

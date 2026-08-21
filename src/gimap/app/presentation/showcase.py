@@ -24,6 +24,7 @@ from .components import (
     ParameterSection,
     PlotPanel,
     ResultTable,
+    SafeWheelDoubleSpinBox,
 )
 from .styles import apply_design_system
 
@@ -53,7 +54,12 @@ class DesignSystemShowcase(QWidget):
             content,
         )
         form = QFormLayout()
+        numeric = SafeWheelDoubleSpinBox()
+        numeric.setRange(-1000.0, 1000.0)
+        numeric.setValue(1.0)
+        numeric.setToolTip("Focus and hold Alt/Option to edit with the wheel")
         form.addRow("Optional value", QLineEdit("Default"))
+        form.addRow("Safe numeric input", numeric)
         form.addRow(QCheckBox("Enable expert behavior"))
         advanced.add_layout(form)
         layout.addWidget(advanced)

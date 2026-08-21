@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..detector_data_access import analysis_image_for
+
 import time
 
 import numpy as np
@@ -138,7 +140,7 @@ class ColorDisplayControlsMixin:
             self._current_vmin = vmin
             self._current_vmax = vmax
             self._refresh_vmin_vmax_display()
-            if self.current_stack_data is not None:
+            if analysis_image_for(self) is not None:
                 self._refresh_image_display()
             self.status_updated.emit(f"Color scale updated: Vmin={vmin:.3f}, Vmax={vmax:.3f}")
         except Exception as e:
@@ -150,11 +152,11 @@ class ColorDisplayControlsMixin:
             is_enabled = self._is_auto_scale_enabled()
             self.status_updated.emit(f"AutoScale {'enabled' if is_enabled else 'disabled'}")
 
-            if is_enabled and self.current_stack_data is not None:
+            if is_enabled and analysis_image_for(self) is not None:
                 is_log = self._is_log_mode_enabled()
                 display_image = self._get_current_display_image()
                 if display_image is None:
-                    display_image = self.current_stack_data
+                    return
                 vmin, vmax = self._calculate_vmin_vmax(display_image, use_log=is_log)
                 if vmin is not None and vmax is not None:
                     self._update_vmin_vmax_ui(vmin, vmax)
@@ -168,7 +170,7 @@ class ColorDisplayControlsMixin:
             vmin, vmax = self._get_vmin_vmax_from_ui()
             if vmin is not None:
                 self._current_vmin = vmin
-                if self.current_stack_data is not None:
+                if analysis_image_for(self) is not None:
                     self._refresh_image_display()
         except Exception:
             pass
@@ -179,7 +181,7 @@ class ColorDisplayControlsMixin:
             vmin, vmax = self._get_vmin_vmax_from_ui()
             if vmax is not None:
                 self._current_vmax = vmax
-                if self.current_stack_data is not None:
+                if analysis_image_for(self) is not None:
                     self._refresh_image_display()
         except Exception:
             pass
@@ -191,14 +193,6 @@ class ColorDisplayControlsMixin:
             and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
         )
         self.status_updated.emit(f"AutoShow {'enabled' if auto_show else 'disabled'}")
-        try:
-            if getattr(self, "load_mode", "Single") == "In-situ":
-                if auto_show:
-                    self._start_insitu_timer()
-                else:
-                    self._stop_insitu_timer()
-        except Exception:
-            pass
 
     def _on_log_changed(self):
         """Handle log-scale display changes and refresh image views."""
@@ -207,11 +201,11 @@ class ColorDisplayControlsMixin:
 
             self._refresh_vmin_vmax_display()
 
-            if self.current_stack_data is not None:
+            if analysis_image_for(self) is not None:
                 if self._is_auto_scale_enabled():
                     display_image = self._get_current_display_image()
                     if display_image is None:
-                        display_image = self.current_stack_data
+                        return
                     vmin, vmax = self._calculate_vmin_vmax(display_image, use_log=is_log)
                     if vmin is not None and vmax is not None:
                         self._update_vmin_vmax_ui(vmin, vmax)
@@ -226,27 +220,17 @@ class ColorDisplayControlsMixin:
             self.status_updated.emit(f"Log mode change error: {str(e)}")
 
     def _on_fit_display_option_changed(self):
-        """No description."""
+        """Refresh presentation only; display controls never recalculate a cut."""
         try:
             if getattr(self, "_initializing", True):
                 return
-
-            if (
-                hasattr(self.ui, "fitCurrentDataCheckBox")
-                and self.ui.fitCurrentDataCheckBox.isChecked()
-            ):
-                self._perform_cut()
-                self.status_updated.emit("Fit display options changed - Cut results updated")
+            mode = self.display_mode if hasattr(self, "display_mode") else "normal"
+            if getattr(self, "q", None) is not None:
+                self._update_GUI_image(mode)
+                self._update_outside_window(mode)
+                self.status_updated.emit("Fit display options updated")
             else:
-                if self.current_1d_data is not None and hasattr(self, "q") and self.q is not None:
-                    mode = self.display_mode if hasattr(self, "display_mode") else "normal"
-                    self._update_GUI_image(mode)
-                    self._update_outside_window(mode)
-                    self.status_updated.emit(
-                        "Fit display options changed - 1D data display updated"
-                    )
-                else:
-                    self.status_updated.emit("Fit display options changed - no data to update")
+                self.status_updated.emit("Fit display options changed - no data to display")
 
         except Exception as e:
             self.status_updated.emit(f"Fit display option change error: {str(e)}")
@@ -258,12 +242,15 @@ class ColorDisplayControlsMixin:
                 return
 
             if checked:
-                if self.current_stack_data is not None:
-                    self._perform_cut()
-                    self.status_updated.emit("Current Data enabled - Cut operation performed")
+                if self.current_cut_data is not None:
+                    self.q = self.current_cut_data["x_coords"]
+                    self.I = self.current_cut_data["y_intensity"]
+                    self.data_source = "cut"
+                    self._apply_roi_to_data_and_refresh()
+                    self.status_updated.emit("Current cut data selected")
                 else:
                     self.status_updated.emit(
-                        "Current Data enabled - No GISAXS data available for cut operation"
+                        "Current cut data is not available; extract a cut first"
                     )
             else:
                 if self.current_1d_data is not None:

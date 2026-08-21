@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QEvent, QTimer, Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QFrame,
     QGraphicsView,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -29,10 +31,11 @@ from src.gimap.app.presentation.responsive_layout import current_profile, scale_
 
 from .layout_primitives import detach_from_parent_layout as _detach_from_parent_layout
 from .layout_primitives import take_widget as _take_widget
+from .detector_preview_controls import DetectorDisplayInspector, DetectorToolBar
 
 
 class DetectorPreviewCard(CollapsibleCardFrame):
-    def __init__(self, graphics_view: QGraphicsView, profile=None):
+    def __init__(self, ui, graphics_view: QGraphicsView, profile=None):
         super().__init__("Detector Preview", "DetectorPreviewCard", default_expanded=True)
         profile = profile or current_profile(graphics_view)
         self.setMinimumWidth(SECTION_MIN_WIDTH)
@@ -53,13 +56,72 @@ class DetectorPreviewCard(CollapsibleCardFrame):
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.add_content(graphics_view, 1)
-        base_height = scale_value(260, profile, 210)
-        self.enable_content_resize(base_height, base_height * 2)
+        self.display_inspector = DetectorDisplayInspector(ui, self, profile)
+        self.display_inspector.setVisible(True)
+        self.toolbar = DetectorToolBar(ui, self.display_inspector, self)
+        self.add_content(self.toolbar)
+        body = QWidget(self)
+        body.setObjectName("fittingDetectorPreviewBody")
+        body_layout = QHBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(10)
+        body_layout.addWidget(graphics_view, 1)
+        body_layout.addWidget(self.display_inspector)
+        self.add_content(body, 1)
+        ui.fittingDetectorDisplayInspector = self.display_inspector
+        self.empty_state = GraphicsViewEmptyState(
+            graphics_view,
+            "Import detector data to preview the image\nand locate the Yoneda feature.",
+        )
+
+
+class GraphicsViewEmptyState(QLabel):
+    """Non-interactive empty state that disappears when a scene has content."""
+
+    def __init__(self, graphics_view: QGraphicsView, text: str) -> None:
+        super().__init__(text, graphics_view.viewport())
+        self.graphics_view = graphics_view
+        self.setObjectName(f"{graphics_view.objectName()}EmptyState")
+        self.setProperty("fittingEmptyState", True)
+        self.setAlignment(Qt.AlignCenter)
+        self.setWordWrap(True)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        graphics_view.viewport().installEventFilter(self)
+        scene = graphics_view.scene()
+        if scene is not None:
+            scene.changed.connect(lambda _regions: self.refresh())
+        self.refresh()
+
+    def eventFilter(self, watched, event):
+        if watched is self.graphics_view.viewport() and event.type() in (
+            QEvent.Resize,
+            QEvent.Show,
+            QEvent.Paint,
+        ):
+            self._place()
+            self.refresh()
+        return False
+
+    def refresh(self) -> None:
+        scene = self.graphics_view.scene()
+        self.setVisible(scene is None or not scene.items())
+        self._place()
+
+    def _place(self) -> None:
+        rect = self.graphics_view.viewport().rect().adjusted(24, 24, -24, -24)
+        self.setGeometry(rect)
+        self.raise_()
 
 
 class PlotCanvasArea(QFrame):
-    def __init__(self, graphics_view: QGraphicsView, parent: QWidget | None = None, profile=None):
+    def __init__(
+        self,
+        graphics_view: QGraphicsView,
+        parent: QWidget | None = None,
+        profile=None,
+        *,
+        empty_text: str | None = None,
+    ):
         super().__init__(parent)
         profile = profile or current_profile(parent or graphics_view)
         self.setObjectName("plotCanvasContainer")
@@ -74,6 +136,11 @@ class PlotCanvasArea(QFrame):
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(graphics_view, 1)
+        self.empty_state = GraphicsViewEmptyState(
+            graphics_view,
+            empty_text
+            or "Run a manual or AI-assisted fit to compare\nmeasured data and the fitted curve.",
+        )
 
 
 class SectionCard(QFrame):
@@ -150,8 +217,15 @@ class FittingRegionControl(SectionCard):
         ui.fitRegionNegativeOnlyCheckBox.setObjectName("fitRegionNegativeOnlyCheckBox")
         normalize_checkbox(ui.fitRegionPositiveOnlyCheckBox)
         normalize_checkbox(ui.fitRegionNegativeOnlyCheckBox)
-        filter_layout.addWidget(ui.fitRegionPositiveOnlyCheckBox)
-        filter_layout.addWidget(ui.fitRegionNegativeOnlyCheckBox)
+        ui.fitRegionPositiveOnlyCheckBox.hide()
+        ui.fitRegionNegativeOnlyCheckBox.hide()
+        filter_note = QLabel(
+            "The q display mode above the curve is shared by preview, fitting and export.",
+            filter_widget,
+        )
+        filter_note.setWordWrap(True)
+        filter_note.setProperty("cardMeta", True)
+        filter_layout.addWidget(filter_note)
         filter_layout.addStretch(1)
 
         hint_label = QLabel(
@@ -315,17 +389,19 @@ class PlotOptionsControl(SectionCard):
 
 class PlotPreviewCard(CollapsibleCardFrame):
     def __init__(self, ui, content: QWidget, graphics_view: QGraphicsView, profile=None):
-        super().__init__("Fitting Plot", "PlotPreviewCard", default_expanded=True)
+        super().__init__("Curve", "PlotPreviewCard", default_expanded=True)
         profile = profile or current_profile(content)
         self._base_min_height = scale_value(360, profile, 280)
         hint = QLabel(
-            "Double-click the fitting plot to open a larger independent fit window.", self
+            "Inspect the experimental curve alone or compare it with the current model.", self
         )
         hint.setObjectName("FittingPlotDoubleClickHint")
         hint.setProperty("cardMeta", True)
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #64748b;")
         self.add_content(hint)
+        self.toolbar = self._build_toolbar(ui)
+        self.add_content(self.toolbar)
         graphics_view.setToolTip("Double-click to open a larger independent fit window.")
         self._build_plot_layout(content, graphics_view, profile)
 
@@ -333,7 +409,86 @@ class PlotPreviewCard(CollapsibleCardFrame):
         self.setMinimumHeight(self._base_min_height)
         self.add_content(content, 1)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.enable_content_resize(self._base_min_height, self._base_min_height * 2)
+
+    @staticmethod
+    def _build_toolbar(ui) -> QFrame:
+        toolbar = QFrame()
+        toolbar.setObjectName("fittingResultToolBar")
+        toolbar.setProperty("previewToolbar", True)
+        root_layout = QVBoxLayout(toolbar)
+        root_layout.setContentsMargins(8, 6, 8, 6)
+        root_layout.setSpacing(5)
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(8)
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(8)
+        root_layout.addLayout(controls_layout)
+        root_layout.addLayout(actions_layout)
+        _detach_from_parent_layout(ui.fitLogXCheckBox)
+        ui.fitLogXCheckBox.setParent(toolbar)
+        ui.fitLogXCheckBox.setText("Log X")
+        ui.fitLogYCheckBox.setText("Log Y")
+        ui.fitNormCheckBox.setText("Normalize")
+
+        def _add_combo(label_text, object_name, items, minimum_width=112):
+            group = QWidget(toolbar)
+            group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            group_layout = QVBoxLayout(group)
+            group_layout.setContentsMargins(0, 0, 0, 0)
+            group_layout.setSpacing(2)
+            label = QLabel(label_text, group)
+            label.setProperty("toolbarLabel", True)
+            combo = QComboBox(group)
+            combo.setObjectName(object_name)
+            combo.setMinimumWidth(minimum_width)
+            combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            for text, value in items:
+                combo.addItem(text, value)
+            group_layout.addWidget(label)
+            group_layout.addWidget(combo)
+            controls_layout.addWidget(group, 1)
+            return combo
+
+        ui.fitCurveViewModeComboBox = _add_combo(
+            "Curve layers",
+            "fitCurveViewModeComboBox",
+            (
+                ("Data only", "data"),
+                ("Compare", "compare"),
+                ("Model only", "model"),
+            ),
+            150,
+        )
+        ui.fitQViewModeComboBox = _add_combo(
+            "q display",
+            "fitQViewModeComboBox",
+            (
+                ("Signed ±q", "signed"),
+                ("Positive +q", "positive"),
+                ("Negative −q", "negative"),
+                ("Negative as |q|", "negative_abs"),
+                ("Overlay ±q as |q|", "fold"),
+                ("Average ±q", "average"),
+            ),
+            210,
+        )
+        controls_layout.addStretch(1)
+        ui.fitQViewHintLabel = QLabel("Signed q · linear axis", toolbar)
+        ui.fitQViewHintLabel.setObjectName("fitQViewHintLabel")
+        ui.fitQViewHintLabel.setProperty("cardMeta", True)
+        controls_layout.addWidget(ui.fitQViewHintLabel)
+        for widget in (ui.fitLogXCheckBox, ui.fitLogYCheckBox, ui.fitNormCheckBox):
+            _detach_from_parent_layout(widget)
+            actions_layout.addWidget(widget)
+        actions_layout.addStretch(1)
+        ui.fittingResultStatusChip = QLabel("Waiting for cut data", toolbar)
+        ui.fittingResultStatusChip.setObjectName("fittingResultStatusChip")
+        ui.fittingResultStatusChip.setProperty("statusKind", "idle")
+        actions_layout.addWidget(ui.fittingResultStatusChip)
+        ui.fittingOpenResultWindowButton = QPushButton("Open plot", toolbar)
+        ui.fittingOpenResultWindowButton.setObjectName("fittingOpenResultWindowButton")
+        actions_layout.addWidget(ui.fittingOpenResultWindowButton)
+        return toolbar
 
     @staticmethod
     def _build_plot_layout(content: QWidget, graphics_view: QGraphicsView, profile) -> None:
@@ -400,12 +555,13 @@ class StatusCard(CollapsibleCardFrame):
         browser.setMaximumHeight(16777215)
         browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.add_content(browser, 1)
-        base_height = scale_value(230, profile, 176)
-        self.enable_content_resize(base_height, base_height * 2)
 
 
 __all__ = [
     "DetectorPreviewCard",
+    "DetectorDisplayInspector",
+    "DetectorToolBar",
+    "GraphicsViewEmptyState",
     "PlotCanvasArea",
     "SectionCard",
     "FittingRegionControl",

@@ -3,17 +3,11 @@
 from __future__ import annotations
 
 
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 
 from PyQt5.QtWidgets import (
     QMainWindow,
 )
-
-from src.gimap.app.presentation.responsive_layout import (
-    install_adaptive_window_profile,
-)
-
-from .views import IndependentImageWindowView
 
 from src.gimap.app.presentation.responsive_layout import (
     install_adaptive_window_profile,
@@ -30,6 +24,7 @@ from .independent_image_display import IndependentImageDisplayMixin
 from .independent_image_interaction import IndependentImageInteractionMixin
 from .independent_image_rendering import IndependentImageRenderingMixin
 from .independent_image_selection import IndependentImageSelectionMixin
+from ..application import normalize_horizontal_q_axis
 
 
 class IndependentMatplotlibWindow(
@@ -54,6 +49,8 @@ class IndependentMatplotlibWindow(
 
     display_options_changed = pyqtSignal(dict)
 
+    display_state_changed = pyqtSignal(object)
+
     def __init__(self, parent=None, *, fitting_view_model=None):
         super().__init__(parent)
         self.fitting_view_model = fitting_view_model or _create_default_fitting_view_model()
@@ -68,6 +65,20 @@ class IndependentMatplotlibWindow(
         self.show_cut_region = True
         self.show_center = True
         self.colormap = "viridis"
+        self.log_intensity = True
+        self.auto_scale = True
+        self.vmin = None
+        self.vmax = None
+        self.show_q_axis = bool(
+            self.fitting_view_model.get_setting(
+                "fitting", "detector.show_q_axis", False
+            )
+        )
+        self.horizontal_q_axis = normalize_horizontal_q_axis(
+            self.fitting_view_model.get_setting(
+                "fitting", "detector.horizontal_q_axis", "qy"
+            )
+        )
         self._dragging_overlay = None
         self._drag_start = None
         self._drag_original_info = None
@@ -100,11 +111,15 @@ class IndependentMatplotlibWindow(
         self.last_image_shape = None
         self._last_use_log = None
         self._last_show_q_axis = None
+        self._last_horizontal_q_axis = None
+        self._last_q_cache_key = None
+        self._last_render_step = None
 
         self._q_detector = None
         self._q_cache_key = None
         self._qy_mesh = None
         self._qz_mesh = None
+        self._qr_mesh = None
 
         self.selection_mode = False
         self.pick_center_mode = False

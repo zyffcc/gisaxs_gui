@@ -27,6 +27,10 @@ from src.gimap.app.presentation.responsive_layout import (
     install_adaptive_window_profile,
     move_window_to_cursor_screen,
 )
+from src.gimap.features.prediction.presentation.workflow_state import (
+    PredictionWorkflowSnapshot,
+)
+from .display_controls import PredictionGraphicsFitFilter
 
 
 class SetupStatusMixin:
@@ -64,6 +68,13 @@ class SetupStatusMixin:
         view.setScene(self._graphics_scene)
         view.setTransformationAnchor(view.AnchorUnderMouse)
         view.setDragMode(view.ScrollHandDrag)
+        self._input_fit_filter = PredictionGraphicsFitFilter(
+            lambda: self._apply_zoom(reset=True)
+            if self._view_zoom_steps == 0
+            else None,
+            view,
+        )
+        view.viewport().installEventFilter(self._input_fit_filter)
 
         self._populate_colormap_combos()
 
@@ -74,6 +85,13 @@ class SetupStatusMixin:
             pview.setScene(self._predict_scene)
             pview.setTransformationAnchor(pview.AnchorUnderMouse)
             pview.setDragMode(pview.ScrollHandDrag)
+            self._result_fit_filter = PredictionGraphicsFitFilter(
+                lambda: self._apply_predict_zoom(reset=True)
+                if self._predict_zoom_steps == 0
+                else None,
+                pview,
+            )
+            pview.viewport().installEventFilter(self._result_fit_filter)
 
     def _setup_status_text_browser(self) -> None:
         browser = getattr(self.ui, "predictStatusTextBrowser", None)
@@ -151,7 +169,25 @@ class SetupStatusMixin:
         if tabs is None:
             return
         target = (target_label or "").strip().lower()
+        target_widget = None
+        if target in {"input", "input preview", "gisaxs"}:
+            target_widget = getattr(self.ui, "gisaxsImageTab", None)
+        elif target in {
+            "result",
+            "prediction result",
+            "predict-2d",
+            "predict 2d",
+            "predict",
+        }:
+            target_widget = getattr(self.ui, "predict2dImageTab", None)
         try:
+            if target_widget is not None:
+                index = tabs.indexOf(target_widget)
+                if index >= 0:
+                    blocker = QSignalBlocker(tabs)
+                    tabs.setCurrentIndex(index)
+                    del blocker
+                    return
             for i in range(tabs.count()):
                 text = tabs.tabText(i)
                 if isinstance(text, str) and text.strip().lower() == target:
@@ -161,6 +197,28 @@ class SetupStatusMixin:
                     return
         except Exception:
             return
+
+    def _render_prediction_workflow(self, *, error_step: int | None = None) -> None:
+        header = getattr(self.ui, "predictionWorkflowHeader", None)
+        if header is None:
+            return
+        snapshot = PredictionWorkflowSnapshot(
+            input_ready=self._input_ready(),
+            model_ready=self._model_ready(),
+            framework_ready=self._framework_ready(),
+            prediction_running=bool(
+                self._prediction_active or self._multifile_prediction_active
+            ),
+            prediction_succeeded=bool(self.prediction_results),
+            error_step=error_step,
+        )
+        header.render(snapshot)
+        workbench = getattr(self.ui, "predictionWorkbenchLayout", None)
+        if workbench is not None:
+            workbench.sync_canvas_state(
+                input_ready=self._current_pixmap is not None,
+                result_ready=snapshot.prediction_succeeded,
+            )
 
     def _populate_colormap_combos(self) -> None:
         combos = []
@@ -264,8 +322,8 @@ class SetupStatusMixin:
 
             self._update_mode_controls(mode)
 
-            # Default to GISAXS tab on initial load
-            self._set_predict_main_tab("GISAXS")
+            # Always start from the imported detector preview.
+            self._set_predict_main_tab("input")
             self._refresh_predict_readiness()
 
         finally:
@@ -311,9 +369,16 @@ class SetupStatusMixin:
         file_edit = getattr(self.ui, "gisaxsPredictChooseGisaxsFileValue", None)
         if file_edit is not None:
             file_edit.returnPressed.connect(self._handle_file_line_edit_committed)
+        folder_edit = getattr(self.ui, "gisaxsPredictChooseFolderValue", None)
+        if folder_edit is not None:
+            folder_edit.returnPressed.connect(self._handle_folder_line_edit_committed)
         stack_edit = getattr(self.ui, "gisaxsPredictStackValue", None)
         if stack_edit is not None:
             stack_edit.returnPressed.connect(self._on_stack_field_committed)
+        every_edit = getattr(self.ui, "gisaxsPredictEveryValue", None)
+        if every_edit is not None:
+            every_edit.returnPressed.connect(self._on_every_field_committed)
+            every_edit.textChanged.connect(lambda _text: self._refresh_batch_plan_summary())
         showing_edit = getattr(self.ui, "gisaxsImageShowingValue", None)
         if showing_edit is not None:
             showing_edit.returnPressed.connect(self._on_showing_value_committed)
@@ -479,16 +544,11 @@ class SetupStatusMixin:
             if tooltip in ("Loaded", "Not loaded", "Canceled")
             else text_map.get(color, tooltip or "Not loaded")
         )
-        style = (
-            "QLabel {"
-            f"background-color: {color};"
-            "border: 1px solid #94a3b8;"
-            "border-radius: 6px;"
-            "color: white;"
-            "font-weight: 600;"
-            "padding: 4px 8px;"
-            "}"
-        )
+        state_map = {
+            "green": "ready",
+            "red": "working",
+            "gray": "idle",
+        }
         labels = []
         if self._model_status_label is not None:
             labels.append(self._model_status_label)
@@ -497,7 +557,10 @@ class SetupStatusMixin:
             if label is not None and label not in labels:
                 labels.append(label)
         for label in labels:
-            label.setStyleSheet(style)
+            label.setStyleSheet("")
+            label.setProperty("modelState", state_map.get(color, "idle"))
+            label.style().unpolish(label)
+            label.style().polish(label)
             label.setText(status_text)
             if tooltip:
                 label.setToolTip(tooltip)

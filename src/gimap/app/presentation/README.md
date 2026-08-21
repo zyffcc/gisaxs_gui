@@ -14,11 +14,11 @@ workflow，也不导入 feature modules。
 同样不依赖 feature。Composition root 只负责把这些 shell primitives 与 feature pages 组装。
 
 `layout_primitives.py`、`responsive_layout.py`、`assets.py` 和 `style_loader.py` 拥有应用级
-布局、屏幕适配、图标和 QSS 加载。历史 `ui/` 同名路径仅作薄 re-export；新代码不得再从
-这些 legacy 路径导入。
+布局、屏幕适配、图标和 QSS 加载。顶层 `ui/` 同名 public import alias 仅作薄 re-export；
+生产代码从本目录的 public API 导入。
 
 Display Settings dialog 由 `settings_dialog.py` 拥有，静态布局来源是
-`views/settings_dialog_view.py`；`ui/settings_dialog.py` 只保留旧 import path。应用 shell 的
+`views/settings_dialog_view.py`；`ui/settings_dialog.py` 只提供 public import 兼容。应用 shell 的
 Python View 位于 `views/main_window_view.py`，只包含 sidebar、menu/status bar 和 workspace
 hosts。`app/window_view.py` 是 composition wrapper，负责装配 Fitting/Prediction feature
 controls；它不包含科学或业务流程。

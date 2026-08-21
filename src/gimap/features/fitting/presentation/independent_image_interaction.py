@@ -89,13 +89,27 @@ class IndependentImageInteractionMixin:
                 "y": y_value,
             }
             if show_q_axis:
-                pixel_coords = self._convert_q_to_pixel_coordinates(x_value, y_value, 1e-9, 1e-9)
+                grid = self._detector_q_grid()
+                if grid is None:
+                    raise RuntimeError("Q-space grid is not available")
+                point = grid.nearest_point(
+                    x_value,
+                    y_value,
+                    self._horizontal_q_axis(),
+                )
+                x_value, y_value = point.horizontal_q, point.qz
+                pixel_coords = {
+                    "center_x": point.column,
+                    "center_y": grid.qz.shape[0] - 1 - point.row,
+                }
+                payload.update(x=x_value, y=y_value)
                 payload.update(
                     {
                         "center_qy": x_value,
                         "center_qz": y_value,
                         "beam_center_x": float(pixel_coords.get("center_x", 0.0)),
                         "beam_center_y": float(pixel_coords.get("center_y", 0.0)),
+                        "horizontal_q_axis": self._horizontal_q_axis(),
                     }
                 )
                 self.status_updated.emit(
@@ -156,8 +170,8 @@ class IndependentImageInteractionMixin:
             self.selection_mode
             and self.selection_start
             and event.inaxes == self.ax
-            and event.xdata
-            and event.ydata
+            and event.xdata is not None
+            and event.ydata is not None
         ):
             if self.selection_rect:
                 self.selection_rect.remove()
@@ -217,8 +231,8 @@ class IndependentImageInteractionMixin:
             and self.selection_start
             and event.button == 1
             and event.inaxes == self.ax
-            and event.xdata
-            and event.ydata
+            and event.xdata is not None
+            and event.ydata is not None
         ):
             x0, y0 = self.selection_start
             x1, y1 = event.xdata, event.ydata
@@ -236,24 +250,45 @@ class IndependentImageInteractionMixin:
                 img_height, img_width = image_shape
 
                 if show_q_axis:
+                    grid = self._detector_q_grid()
+                    if grid is None:
+                        raise RuntimeError("Q-space grid is not available")
+                    region = grid.snap_region(
+                        min(x0, x1),
+                        max(x0, x1),
+                        min(y0, y1),
+                        max(y0, y1),
+                        self._horizontal_q_axis(),
+                    )
                     selection_info = {
-                        "center_x": center_x,
-                        "center_y": center_y,
-                        "width": width,
-                        "height": height,
+                        "center_x": region.center_horizontal,
+                        "center_y": region.center_qz,
+                        "width": region.width,
+                        "height": region.height,
+                        "pixel_center_x": (region.column_min + region.column_max) / 2.0,
+                        "pixel_center_y": img_height
+                        - 1
+                        - ((region.row_min + region.row_max) / 2.0),
+                        "pixel_width": region.column_max - region.column_min + 1,
+                        "pixel_height": region.row_max - region.row_min + 1,
+                        "pixel_row_min": region.row_min,
+                        "pixel_row_max": region.row_max,
+                        "pixel_column_min": region.column_min,
+                        "pixel_column_max": region.column_max,
                         "is_q_space": True,
+                        "horizontal_q_axis": self._horizontal_q_axis(),
                         "bounds": {
-                            "x_min": min(x0, x1),
-                            "x_max": max(x0, x1),
-                            "y_min": min(y0, y1),
-                            "y_max": max(y0, y1),
+                            "x_min": region.horizontal_min,
+                            "x_max": region.horizontal_max,
+                            "y_min": region.qz_min,
+                            "y_max": region.qz_max,
                         },
                     }
 
                     self.setWindowTitle(
-                        f"GIMaP Image Viewer - Q selection: "
-                        f"center=({center_x:.6f}, {center_y:.6f}) nm^-1, "
-                        f"size=({width:.6f} x {height:.6f}) nm^-1"
+                        f"GIMaP Image Viewer - {self._horizontal_q_axis()}/qz selection: "
+                        f"center=({region.center_horizontal:.6f}, {region.center_qz:.6f}) nm^-1, "
+                        f"size=({region.width:.6f} x {region.height:.6f}) nm^-1"
                     )
                 else:
                     original_center_y = center_y
@@ -378,7 +413,13 @@ class IndependentImageInteractionMixin:
                     self._get_q_axis_extent(shape)
                     qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
                 if qy_mesh is not None and qz_mesh is not None:
-                    row = int(np.clip(round(beam_y), 0, qy_mesh.shape[0] - 1))
+                    row = int(
+                        np.clip(
+                            qy_mesh.shape[0] - 1 - round(beam_y),
+                            0,
+                            qy_mesh.shape[0] - 1,
+                        )
+                    )
                     col = int(np.clip(round(beam_x), 0, qy_mesh.shape[1] - 1))
                     return float(qy_mesh[row, col]), float(qz_mesh[row, col]), beam_x, beam_y
             return beam_x, beam_y, beam_x, beam_y

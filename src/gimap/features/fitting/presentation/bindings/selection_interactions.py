@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..detector_data_access import analysis_image_for
+
 from PyQt5.QtCore import Qt
 
 from PyQt5.QtWidgets import (
@@ -30,6 +32,7 @@ class SelectionInteractionsMixin:
         """ut Line"""
         try:
             is_q_space = selection_info.get("is_q_space", False)
+            had_cut = self._has_existing_cut_result()
 
             updated_controls = []
 
@@ -38,27 +41,51 @@ class SelectionInteractionsMixin:
                 center_qz = selection_info.get("center_y", 0)
                 width_q = selection_info.get("width", 0)
                 height_q = selection_info.get("height", 0)
+                bounds = selection_info.get("bounds", {})
+                snapped = self._snap_q_region(
+                    bounds.get("x_min", center_qy - width_q / 2.0),
+                    bounds.get("x_max", center_qy + width_q / 2.0),
+                    bounds.get("y_min", center_qz - height_q / 2.0),
+                    bounds.get("y_max", center_qz + height_q / 2.0),
+                )
+                if snapped is None:
+                    self.status_updated.emit("Q-space grid is not available")
+                    return
+                center_qy = snapped.center_horizontal
+                center_qz = snapped.center_qz
+                width_q = snapped.width
+                height_q = snapped.height
+                horizontal_name = self._horizontal_q_axis()
 
                 self.status_updated.emit(
-                    f"Q-space region selected: center=({center_qy:.6f}, {center_qz:.6f}) nm^-1, "
+                    f"Q-space region selected: center {horizontal_name}/qz="
+                    f"({center_qy:.6f}, {center_qz:.6f}) nm^-1, "
                     f"size=({width_q:.6f} x {height_q:.6f}) nm^-1"
                 )
 
                 try:
                     if hasattr(self.ui, "gisaxsInputCenterVerticalValue"):
-                        self.ui.gisaxsInputCenterVerticalValue.setValue(center_qz)
+                        self._set_numeric_control_silently(
+                            "gisaxsInputCenterVerticalValue", center_qz
+                        )
                         updated_controls.append("gisaxsInputCenterVerticalValue")
 
                     if hasattr(self.ui, "gisaxsInputCenterParallelValue"):
-                        self.ui.gisaxsInputCenterParallelValue.setValue(center_qy)
+                        self._set_numeric_control_silently(
+                            "gisaxsInputCenterParallelValue", center_qy
+                        )
                         updated_controls.append("gisaxsInputCenterParallelValue")
 
                     if hasattr(self.ui, "gisaxsInputCutLineVerticalValue"):
-                        self.ui.gisaxsInputCutLineVerticalValue.setValue(height_q)
+                        self._set_numeric_control_silently(
+                            "gisaxsInputCutLineVerticalValue", height_q
+                        )
                         updated_controls.append("gisaxsInputCutLineVerticalValue")
 
                     if hasattr(self.ui, "gisaxsInputCutLineParallelValue"):
-                        self.ui.gisaxsInputCutLineParallelValue.setValue(width_q)
+                        self._set_numeric_control_silently(
+                            "gisaxsInputCutLineParallelValue", width_q
+                        )
                         updated_controls.append("gisaxsInputCutLineParallelValue")
 
                     pixel_coords = self._convert_q_to_pixel_coordinates(
@@ -83,19 +110,27 @@ class SelectionInteractionsMixin:
                 )
 
                 if hasattr(self.ui, "gisaxsInputCenterVerticalValue"):
-                    self.ui.gisaxsInputCenterVerticalValue.setValue(center_y)
+                    self._set_numeric_control_silently(
+                        "gisaxsInputCenterVerticalValue", center_y
+                    )
                     updated_controls.append("gisaxsInputCenterVerticalValue")
 
                 if hasattr(self.ui, "gisaxsInputCenterParallelValue"):
-                    self.ui.gisaxsInputCenterParallelValue.setValue(center_x)
+                    self._set_numeric_control_silently(
+                        "gisaxsInputCenterParallelValue", center_x
+                    )
                     updated_controls.append("gisaxsInputCenterParallelValue")
 
                 if hasattr(self.ui, "gisaxsInputCutLineVerticalValue"):
-                    self.ui.gisaxsInputCutLineVerticalValue.setValue(height)
+                    self._set_numeric_control_silently(
+                        "gisaxsInputCutLineVerticalValue", height
+                    )
                     updated_controls.append("gisaxsInputCutLineVerticalValue")
 
                 if hasattr(self.ui, "gisaxsInputCutLineParallelValue"):
-                    self.ui.gisaxsInputCutLineParallelValue.setValue(width)
+                    self._set_numeric_control_silently(
+                        "gisaxsInputCutLineParallelValue", width
+                    )
                     updated_controls.append("gisaxsInputCutLineParallelValue")
 
             if is_q_space:
@@ -111,6 +146,11 @@ class SelectionInteractionsMixin:
                     "width": width_q,
                     "height": height_q,
                     "is_q_space": True,
+                    "horizontal_q_axis": self._horizontal_q_axis(),
+                    "pixel_row_min": snapped.row_min,
+                    "pixel_row_max": snapped.row_max,
+                    "pixel_column_min": snapped.column_min,
+                    "pixel_column_max": snapped.column_max,
                 }
                 self._persist_cut_region_parameters(center_qy, center_qz, width_q, height_q)
             else:
@@ -136,10 +176,13 @@ class SelectionInteractionsMixin:
                 self.status_updated.emit(
                     f"Updated Cut Line parameters ({coord_mode}): {', '.join(updated_controls)}"
                 )
+                self._record_cut_geometry_draft(center_x, center_y, width, height)
+                if had_cut:
+                    self._refresh_existing_cut_preserving_view()
                 if self.independent_window and self.independent_window.isVisible():
                     if is_q_space:
                         self.independent_window.setWindowTitle(
-                            f"GIMaP Image Viewer - Q selection "
+                            f"GIMaP Image Viewer - {self._horizontal_q_axis()}/qz selection "
                             f"center=({center_qy:.6f}, {center_qz:.6f}) nm^-1, "
                             f"size=({width_q:.6f} x {height_q:.6f}) nm^-1"
                         )
@@ -199,27 +242,17 @@ class SelectionInteractionsMixin:
                     lambda _obj=None: setattr(self, "independent_fit_window", None)
                 )
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
-                self.independent_fit_window.show_positive_cb.toggled.connect(
-                    self._on_positive_only_changed
+                self.independent_fit_window.view_state_changed.connect(
+                    self._on_independent_curve_view_state_changed
                 )
-                if hasattr(self.independent_fit_window, "show_negative_cb"):
-                    self.independent_fit_window.show_negative_cb.toggled.connect(
-                        self._on_positive_only_changed
-                    )
-                if hasattr(self.independent_fit_window, "q_unit_combo"):
-                    self.independent_fit_window.q_unit_combo.currentTextChanged.connect(
-                        self._on_positive_only_changed
-                    )
-                if hasattr(self.independent_fit_window, "y_range_combo"):
-                    self.independent_fit_window.y_range_combo.currentTextChanged.connect(
-                        self._on_positive_only_changed
-                    )
                 if hasattr(self.independent_fit_window, "input_point_delete_requested"):
                     self.independent_fit_window.input_point_delete_requested.connect(
                         self._exclude_ai_input_point_from_plot
                     )
                 try:
-                    self._sync_axis_filter_controls()
+                    self.independent_fit_window.set_curve_view_state(
+                        self._current_curve_view_state(sync_window=False)
+                    )
                 except Exception:
                     pass
 
@@ -318,19 +351,11 @@ class SelectionInteractionsMixin:
 
             self._update_parameter_selection_display(selection_info)
 
-            if (
-                self.current_cut_data is not None
-                and hasattr(self, "current_stack_data")
-                and self.current_stack_data is not None
-            ):
-                self._perform_cut()
-                self.status_updated.emit(
-                    f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width} x {height})"
-                )
-            else:
-                self.status_updated.emit(
-                    f"Parameter selection: Center({center_x}, {center_y}), Size({width} x {height}) - Perform Cut to see results"
-                )
+            self._record_cut_geometry_draft(center_x, center_y, width, height)
+            self.status_updated.emit(
+                f"Cut geometry draft updated: Center({center_x}, {center_y}), "
+                f"Size({width} x {height}) - click Extract / Update Cut to recalculate"
+            )
 
         except Exception as e:
             self.status_updated.emit(f"Error updating parameter selection: {str(e)}")
@@ -338,6 +363,34 @@ class SelectionInteractionsMixin:
     def _create_selection_from_parameters(self, center_x, center_y, width, height):
         """No description."""
         is_q_space = self._should_show_q_axis()
+        existing = getattr(self, "current_parameter_selection", None)
+        if is_q_space and existing and existing.get("is_q_space", False):
+            same_axis = existing.get("horizontal_q_axis") == self._horizontal_q_axis()
+            same_values = all(
+                np.isclose(
+                    float(existing.get(key, np.nan)),
+                    float(value),
+                    rtol=1.0e-6,
+                    atol=1.0e-6,
+                )
+                for key, value in (
+                    ("center_x", center_x),
+                    ("center_y", center_y),
+                    ("width", width),
+                    ("height", height),
+                )
+            )
+            has_cell_bounds = all(
+                existing.get(key) is not None
+                for key in (
+                    "pixel_row_min",
+                    "pixel_row_max",
+                    "pixel_column_min",
+                    "pixel_column_max",
+                )
+            )
+            if same_axis and same_values and has_cell_bounds:
+                return dict(existing)
         half_width = width / 2
         half_height = height / 2
 
@@ -360,6 +413,37 @@ class SelectionInteractionsMixin:
             "is_parameter_based": True,
         }
 
+        if is_q_space:
+            snapped = self._snap_q_region(x_min, x_max, y_min, y_max)
+            image = analysis_image_for(self)
+            if snapped is not None and image is not None:
+                image_height = image.shape[0]
+                selection_info.update(
+                    {
+                        "center_x": snapped.center_horizontal,
+                        "center_y": snapped.center_qz,
+                        "width": snapped.width,
+                        "height": snapped.height,
+                        "pixel_center_x": (snapped.column_min + snapped.column_max) / 2.0,
+                        "pixel_center_y": image_height
+                        - 1
+                        - ((snapped.row_min + snapped.row_max) / 2.0),
+                        "pixel_width": snapped.column_max - snapped.column_min + 1,
+                        "pixel_height": snapped.row_max - snapped.row_min + 1,
+                        "pixel_row_min": snapped.row_min,
+                        "pixel_row_max": snapped.row_max,
+                        "pixel_column_min": snapped.column_min,
+                        "pixel_column_max": snapped.column_max,
+                        "horizontal_q_axis": self._horizontal_q_axis(),
+                        "bounds": {
+                            "x_min": snapped.horizontal_min,
+                            "x_max": snapped.horizontal_max,
+                            "y_min": snapped.qz_min,
+                            "y_max": snapped.qz_max,
+                        },
+                    }
+                )
+
         return selection_info
 
     def _update_parameter_selection_display(self, selection_info):
@@ -367,8 +451,9 @@ class SelectionInteractionsMixin:
         try:
             self.current_parameter_selection = selection_info
 
-            if self.current_stack_data is not None:
-                self._update_graphics_view_with_selection(self.current_stack_data, selection_info)
+            display_image = self._get_current_display_image()
+            if display_image is not None:
+                self._update_graphics_view_with_selection(display_image, selection_info)
 
             self._sync_independent_window_selection()
 
@@ -429,8 +514,9 @@ class SelectionInteractionsMixin:
         try:
             self.current_parameter_selection = None
 
-            if self.current_stack_data is not None:
-                self._update_graphics_view_with_selection(self.current_stack_data, None)
+            display_image = self._get_current_display_image()
+            if display_image is not None:
+                self._update_graphics_view_with_selection(display_image, None)
 
             if self.independent_window is not None and self.independent_window.isVisible():
                 self.independent_window.clear_parameter_selection()
@@ -443,109 +529,15 @@ class SelectionInteractionsMixin:
     def _draw_selection_on_main_view(self, selection_info):
         """raphicsView"""
         try:
-            if not hasattr(self.ui, "gisaxsInputGraphicsView") or self.current_stack_data is None:
+            if not hasattr(self.ui, "gisaxsInputGraphicsView"):
                 return
 
             self.current_parameter_selection = selection_info
-            self._update_graphics_view_with_selection(self.current_stack_data, selection_info)
+            display_image = self._get_current_display_image()
+            if display_image is None:
+                return
+            self._update_graphics_view_with_selection(display_image, selection_info)
             self._sync_independent_window_selection()
 
         except Exception as e:
             self.status_updated.emit(f"Error drawing selection on main view: {str(e)}")
-
-    def _downsample_for_preview(self, data, max_pixels=700_000):
-        try:
-            h, w = data.shape
-            pixels = max(1, h * w)
-            step = max(1, int(np.ceil(np.sqrt(pixels / max_pixels))))
-            return data[::step, ::step], step
-        except Exception:
-            return data, 1
-
-    def _preview_extent(self, image_shape, show_q_axis):
-        if show_q_axis:
-            qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
-            if qy_mesh is not None and qz_mesh is not None:
-                return [qy_mesh.min(), qy_mesh.max(), qz_mesh.min(), qz_mesh.max()], True
-            return None, False
-        height, width = image_shape
-        return [-0.5, width - 0.5, -0.5, height - 0.5], False
-
-    def _draw_preview_selection(self, ax, selection_info):
-        try:
-            for artist in getattr(self, "_preview_selection_artists", []):
-                try:
-                    artist.remove()
-                except Exception:
-                    pass
-            self._preview_selection_artists = []
-            artists = []
-            if selection_info and self._show_cut_region:
-                bounds = selection_info.get("bounds", {})
-                x_min = bounds.get("x_min", 0)
-                x_max = bounds.get("x_max", 0)
-                y_min = bounds.get("y_min", 0)
-                y_max = bounds.get("y_max", 0)
-                from matplotlib.patches import Rectangle
-
-                rect = Rectangle(
-                    (x_min, y_min),
-                    x_max - x_min,
-                    y_max - y_min,
-                    linewidth=2,
-                    edgecolor="red",
-                    facecolor="none",
-                    alpha=0.8,
-                )
-                ax.add_patch(rect)
-                artists.append(rect)
-            artists.extend(self._draw_detector_center_on_axis(ax))
-            self._preview_selection_artists = artists
-        except Exception:
-            pass
-
-    def _draw_detector_center_on_axis(self, ax):
-        try:
-            if not self._show_center:
-                return []
-            center = self._get_detector_center_for_controller_axis()
-            if center is None:
-                return []
-            marker = ax.plot(
-                float(center[0]),
-                float(center[1]),
-                marker="+",
-                color="cyan",
-                markersize=14,
-                markeredgewidth=2.5,
-            )[0]
-            return [marker]
-        except Exception:
-            return []
-
-    def _get_detector_center_for_controller_axis(self):
-        try:
-            if self.current_stack_data is not None:
-                height, width = self.current_stack_data.shape
-            else:
-                height, width = (1, 1)
-            beam_x = float(
-                self.fitting_view_model.get_setting(
-                    "fitting", "detector.beam_center_x", width / 2.0
-                )
-            )
-            beam_y = float(
-                self.fitting_view_model.get_setting(
-                    "fitting", "detector.beam_center_y", height / 2.0
-                )
-            )
-            if self._should_show_q_axis():
-                qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
-                if qy_mesh is None or qz_mesh is None:
-                    return None
-                row = int(np.clip(round(beam_y), 0, qy_mesh.shape[0] - 1))
-                col = int(np.clip(round(beam_x), 0, qy_mesh.shape[1] - 1))
-                return float(qy_mesh[row, col]), float(qz_mesh[row, col])
-            return beam_x, beam_y
-        except Exception:
-            return None

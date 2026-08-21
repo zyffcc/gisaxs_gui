@@ -231,7 +231,7 @@ class RenderingSetupMixin:
             )
             if pix is not None:
                 self._show_pixmap_in_predict_view(pix)
-            self._refresh_predict_controls("array")
+            self._refresh_predict_controls("parameters")
             return
         if kind == "steps":
             steps = spec.get("steps") if isinstance(spec.get("steps"), list) else []

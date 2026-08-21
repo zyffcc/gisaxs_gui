@@ -156,8 +156,10 @@ class CurveFilesMixin:
             self.status_updated.emit(
                 f"Successfully loaded 1D data: {os.path.basename(file_path)} ({len(self.q)} points)"
             )
+            self._sync_fitting_workflow()
 
         except Exception as e:
+            self._set_fitting_inline_feedback(str(e), "error")
             self.status_updated.emit(f"Failed to load 1D data: {str(e)}")
             QMessageBox.critical(
                 self.main_window,

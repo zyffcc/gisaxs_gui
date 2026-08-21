@@ -34,10 +34,10 @@ def extract_pixel_profile(image, selection: CutSelection):
     return finite_mean_axis(region, axis=1), np.arange(row_min, row_max + 1)
 
 
-def extract_q_profile(image, qy_mesh, qz_mesh, selection: CutSelection):
-    """从矩形 q-space region 提取普通 fitting profile。"""
+def extract_q_profile(image, horizontal_q_mesh, qz_mesh, selection: CutSelection):
+    """从 qy/qz 或 signed-qr/qz 矩形 region 提取 fitting profile。"""
     data = np.asarray(image, dtype=float)
-    qy = np.asarray(qy_mesh, dtype=float)
+    qy = np.asarray(horizontal_q_mesh, dtype=float)
     qz = np.asarray(qz_mesh, dtype=float)
     if data.ndim != 2 or qy.shape != data.shape or qz.shape != data.shape:
         raise ValueError("Image and q meshgrids must have the same 2D shape")

@@ -87,7 +87,7 @@ class MultifileResultsMixin:
                 self.current_parameters["input_file"] = result.file_path.splitlines()[0]
 
                 # 切换到Predict-2D tab
-                self._set_predict_main_tab("Predict-2D")
+                self._set_predict_main_tab("result")
 
                 # 更新状态
                 self._append_status_message(
@@ -153,6 +153,8 @@ class MultifileResultsMixin:
         stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
         if stop_btn:
             stop_btn.setEnabled(True)
+            stop_btn.setVisible(True)
+        self._render_prediction_workflow()
 
     def _on_multifile_prediction_completed(self) -> None:
         """多文件预测完成"""
@@ -165,8 +167,10 @@ class MultifileResultsMixin:
         stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
         if stop_btn:
             stop_btn.setEnabled(False)
+            stop_btn.setVisible(False)
 
         self._append_status_message("Multi-file prediction completed!", level="INFO")
+        self._render_prediction_workflow()
 
     def _on_multifile_result_updated(self, index: int, update_data: dict) -> None:
         """多文件预测结果更新"""

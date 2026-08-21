@@ -169,6 +169,30 @@ def test_feature_page_preserves_steps_sections_signals_and_status_offscreen() ->
     page.close()
 
 
+def test_trainset_modern_workflow_groups_design_and_contextual_actions() -> None:
+    _app()
+    page = TrainsetBuildPage()
+
+    assert page.pageTitle.text() == "Trainset builder"
+    assert [
+        page.dataset_configuration_tabs.tabText(index)
+        for index in range(page.dataset_configuration_tabs.count())
+    ] == ["Geometry + ROI", "Particle population", "Sampling + files"]
+    assert page.trainset_action_hint.text().startswith("Validate the detector")
+    assert page.validate_button.property("trainsetPrimaryAction") is True
+    assert page.prepare_button.isHidden()
+
+    page.step_list.setCurrentRow(3)
+
+    assert not page.prepare_button.isHidden()
+    assert page.prepare_button.property("trainsetPrimaryAction") is True
+    assert page.validate_button.isHidden()
+    assert page.trainset_action_hint.text() == (
+        "Run locally or export a portable job package."
+    )
+    page.close()
+
+
 def test_feature_page_has_no_controller_runtime_or_io_dependencies() -> None:
     source = (PROJECT_ROOT / "src/gimap/features/trainset/presentation/page.py").read_text(
         encoding="utf-8"

@@ -233,6 +233,17 @@ class Detector:
         _, qy, qz, _ = self.calculate_q_vectors()
         return qy, qz
 
+    def get_q_coordinate_meshgrids(self):
+        """Return qy, qz, and signed in-plane qr detector grids.
+
+        ``qr`` is derived from ``qx`` and ``qy`` by ``calculate_q_vectors``.  It
+        must not be approximated from qy and qz because qz is the out-of-plane
+        coordinate and is not part of the in-plane radial magnitude.
+        """
+
+        _, qy, qz, qr = self.calculate_q_vectors()
+        return qy, qz, qr
+
     def get_q_extents(self):
         """
         Get the extents of q-space for plotting.

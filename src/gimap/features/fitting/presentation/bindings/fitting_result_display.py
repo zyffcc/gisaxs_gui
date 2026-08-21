@@ -23,6 +23,47 @@ from ..binding_primitives import (
 class FittingResultDisplayMixin:
     """Own fitting result display behavior."""
 
+    def _get_curve_view_mode(self) -> str:
+        combo = getattr(self.ui, "fitCurveViewModeComboBox", None)
+        if combo is None:
+            return "compare" if getattr(self, "has_fitting_data", False) else "data"
+        return str(combo.currentData() or "data")
+
+    def _set_curve_view_mode(self, mode: str, *, refresh: bool = True) -> None:
+        combo = getattr(self.ui, "fitCurveViewModeComboBox", None)
+        if combo is None:
+            return
+        index = combo.findData(str(mode))
+        if index < 0:
+            raise ValueError(f"Unknown curve view mode: {mode}")
+        old_block = combo.blockSignals(True)
+        try:
+            combo.setCurrentIndex(index)
+        finally:
+            combo.blockSignals(old_block)
+        if refresh:
+            self._refresh_curve_layers()
+
+    def _on_curve_view_mode_changed(self, _index: int) -> None:
+        self._current_curve_view_state()
+        self._refresh_curve_layers()
+
+    def _refresh_curve_layers(self) -> None:
+        mode = self._get_curve_view_mode()
+        has_model = bool(
+            getattr(self, "has_fitting_data", False)
+            and getattr(self, "I_fitting", None) is not None
+        )
+        if mode in {"compare", "model"} and not has_model:
+            self._set_curve_view_mode("data", refresh=False)
+            self._set_fitting_inline_feedback(
+                "Plot the current model before enabling model layers.", "info"
+            )
+            mode = "data"
+        self._current_curve_view_state()
+        self._update_GUI_image("fitting" if has_model else "normal")
+        self._update_outside_window("fitting" if has_model else "normal")
+
     def _plot_fitting_result(self, q_data, intensity_data, active_shapes):
         """No description."""
         try:
@@ -36,6 +77,9 @@ class FittingResultDisplayMixin:
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
+            curve_mode = self._get_curve_view_mode()
+            show_data = curve_mode in {"data", "compare"}
+            show_model = curve_mode in {"compare", "model"}
 
             original_x_data = None
             original_y_data = None
@@ -70,11 +114,18 @@ class FittingResultDisplayMixin:
             plot_original_y = original_y_data.copy() if original_y_data is not None else None
             norm_divisor = None
 
-            if normalize and original_y_data is not None:
-                max_original = np.max(original_y_data)
+            if original_x_data is not None and plot_original_y is not None:
+                prepared_original = self._prepare_signed_q_data(
+                    original_x_data, plot_original_y
+                )
+                original_x_data = prepared_original.q
+                plot_original_y = prepared_original.intensity
+
+            if normalize and plot_original_y is not None:
+                max_original = np.max(plot_original_y)
                 if max_original > 0:
                     norm_divisor = max_original
-                    plot_original_y = original_y_data / max_original
+                    plot_original_y = plot_original_y / max_original
                     fitting_y_data = fitting_y_data / max_original
 
             original_x_plot = (
@@ -84,7 +135,7 @@ class FittingResultDisplayMixin:
             )
             fitting_x_plot = self._convert_q_values_for_display(q_data)
 
-            if original_x_plot is not None and plot_original_y is not None:
+            if show_data and original_x_plot is not None and plot_original_y is not None:
                 ax.scatter(
                     original_x_plot,
                     plot_original_y,
@@ -95,14 +146,15 @@ class FittingResultDisplayMixin:
                     zorder=2,
                 )
 
-            ax.plot(
-                fitting_x_plot,
-                fitting_y_data,
-                color="red",
-                linewidth=2,
-                label=f"Fitting ({', '.join(active_shapes)})",
-                zorder=3,
-            )
+            if show_model:
+                ax.plot(
+                    fitting_x_plot,
+                    fitting_y_data,
+                    color="red",
+                    linewidth=2,
+                    label=f"Model ({', '.join(active_shapes)})",
+                    zorder=3,
+                )
 
             x_label = (
                 self._build_q_axis_label()
@@ -110,26 +162,31 @@ class FittingResultDisplayMixin:
                 else "Position"
             )
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
-            title = f"Manual Fitting Result - {', '.join(active_shapes)}"
+            title = {
+                "data": "Experimental Curve",
+                "model": "Current Model",
+                "compare": "Data / Model Comparison",
+            }.get(curve_mode, "Curve")
 
             ax.set_xlabel(x_label)
             ax.set_ylabel(y_label)
             ax.set_title(title)
             ax.grid(True, alpha=0.3)
-            ax.legend()
+            handles, labels = ax.get_legend_handles_labels()
+            if handles:
+                ax.legend(handles, labels)
 
             for axis in ["top", "bottom", "left", "right"]:
                 ax.spines[axis].set_linewidth(1.8)
             ax.tick_params(axis="both", which="both", width=1.6, labelsize=12)
 
-            if log_x:
-                ax.set_xscale("log")
+            self._apply_x_axis_scale(ax)
             if log_y:
                 ax.set_yscale("log")
             self._apply_fit_y_axis_limits(
                 ax,
-                experimental_y=plot_original_y,
-                fitting_y=fitting_y_data,
+                experimental_y=plot_original_y if show_data else None,
+                fitting_y=fitting_y_data if show_model else None,
                 log_y=log_y,
             )
 
@@ -138,7 +195,9 @@ class FittingResultDisplayMixin:
             fig.tight_layout()
 
             proxy_widget = scene.addWidget(canvas)
-            self._fit_view_to_item(self.ui.fitGraphicsView, proxy_widget, keep_aspect=True)
+            self._fit_view_to_item(
+                self._active_curve_graphics_view(), proxy_widget, keep_aspect=True
+            )
 
             self._current_fit_figure = fig
             self._current_fit_canvas = canvas
@@ -293,27 +352,17 @@ class FittingResultDisplayMixin:
                 )
 
                 self.independent_fit_window.status_updated.connect(self.status_updated.emit)
-                self.independent_fit_window.show_positive_cb.toggled.connect(
-                    self._on_positive_only_changed
+                self.independent_fit_window.view_state_changed.connect(
+                    self._on_independent_curve_view_state_changed
                 )
-                if hasattr(self.independent_fit_window, "show_negative_cb"):
-                    self.independent_fit_window.show_negative_cb.toggled.connect(
-                        self._on_positive_only_changed
-                    )
-                if hasattr(self.independent_fit_window, "q_unit_combo"):
-                    self.independent_fit_window.q_unit_combo.currentTextChanged.connect(
-                        self._on_positive_only_changed
-                    )
-                if hasattr(self.independent_fit_window, "y_range_combo"):
-                    self.independent_fit_window.y_range_combo.currentTextChanged.connect(
-                        self._on_positive_only_changed
-                    )
                 if hasattr(self.independent_fit_window, "input_point_delete_requested"):
                     self.independent_fit_window.input_point_delete_requested.connect(
                         self._exclude_ai_input_point_from_plot
                     )
                 try:
-                    self._sync_axis_filter_controls()
+                    self.independent_fit_window.set_curve_view_state(
+                        self._current_curve_view_state(sync_window=False)
+                    )
                 except Exception:
                     pass
 
@@ -323,7 +372,7 @@ class FittingResultDisplayMixin:
                 else "Position"
             )
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
-            title = f"Manual Fitting Result - {', '.join(active_shapes)}"
+            title = f"Current Model Result - {', '.join(active_shapes)}"
 
             self._update_independent_window_with_fitting(
                 original_x_data,
@@ -371,7 +420,10 @@ class FittingResultDisplayMixin:
         log_y,
         normalize,
     ):
-        """No description."""
+        """Compatibility seam delegating to the shared curve projection."""
+        if _qobject_is_alive(self.independent_fit_window):
+            self._update_outside_window("fitting")
+            return
         try:
             if not _qobject_is_alive(self.independent_fit_window) or not hasattr(
                 self.independent_fit_window, "ax"
@@ -504,8 +556,7 @@ class FittingResultDisplayMixin:
             for axis in ["top", "bottom", "left", "right"]:
                 ax.spines[axis].set_linewidth(1.8)
 
-            if log_x:
-                ax.set_xscale("log")
+            self._apply_x_axis_scale(ax)
             if log_y:
                 ax.set_yscale("log")
             self._apply_fit_y_axis_limits(

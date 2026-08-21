@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..detector_data_access import analysis_image_for
+
 
 import numpy as np
 
@@ -149,8 +151,7 @@ class PlotRefreshMixin:
             ax.grid(True, alpha=0.3)
             ax.legend()
 
-            if log_x:
-                ax.set_xscale("log")
+            self._apply_x_axis_scale(ax)
             if log_y:
                 ax.set_yscale("log")
 
@@ -173,7 +174,7 @@ class PlotRefreshMixin:
                 self._current_fit_figure.clear()
                 ax = self._current_fit_figure.add_subplot(111)
 
-                log_x = self._get_checkbox_state("fitLogXCheckBox", False)
+                log_x = self._is_fit_log_x_enabled()
                 log_y = self._get_checkbox_state("fitLogYCheckBox", False)
 
                 cut_data = self.current_cut_data
@@ -190,8 +191,7 @@ class PlotRefreshMixin:
                     x_plot = self._convert_q_values_for_display(x_data)
                     ax.scatter(x_plot, y_data, c="blue", s=20, alpha=0.7, label="Data")
 
-                    if log_x:
-                        ax.set_xscale("log")
+                    self._apply_x_axis_scale(ax)
                     if log_y:
                         ax.set_yscale("log")
 
@@ -209,6 +209,8 @@ class PlotRefreshMixin:
     def _on_fit_log_changed(self):
         """Log-x/Log-y"""
         try:
+            self._current_curve_view_state()
+            self._update_q_view_hint()
             mode = self.display_mode if hasattr(self, "display_mode") else "normal"
             try:
                 self._sync_roi_controls_to_current_display(reset_to_domain=True)
@@ -225,9 +227,58 @@ class PlotRefreshMixin:
         except Exception as e:
             self.status_updated.emit(f"Error updating log scale: {str(e)}")
 
+    def _on_q_preparation_changed(self, _index=None):
+        """Refresh every curve consumer from the same signed-q preparation state."""
+        if getattr(self, "_syncing_q_preparation", False):
+            return
+        self._syncing_q_preparation = True
+        try:
+            self._current_curve_view_state()
+            self._update_q_view_hint()
+            self._sync_axis_filter_controls()
+            if (
+                getattr(self, "data_source", None) == "cut"
+                and analysis_image_for(self) is not None
+            ):
+                self._mark_cut_stale(
+                    "q display mode changed; update the cut before fitting"
+                )
+            self._sync_roi_controls_to_current_display(reset_to_domain=True)
+            self._apply_roi_to_data_and_refresh()
+            mode = getattr(self, "display_mode", "normal")
+            self._update_GUI_image(mode)
+            self._update_outside_window(mode)
+            self.status_updated.emit(
+                "q preparation updated for preview, fitting region and export"
+            )
+        except Exception as exc:
+            self._add_fitting_error(f"Unable to apply q preparation: {exc}")
+        finally:
+            self._syncing_q_preparation = False
+
+    def _update_q_view_hint(self) -> None:
+        label = getattr(self.ui, "fitQViewHintLabel", None)
+        if label is None:
+            return
+        mode_text = {
+            "signed": "Signed q",
+            "positive": "Positive q",
+            "negative": "Negative q",
+            "negative_abs": "Negative branch folded to |q|",
+            "fold": "±q overlaid as |q|",
+            "average": "±q averaged as |q|",
+        }.get(self._get_q_view_mode(), "Signed q")
+        scale_text = {
+            "linear": "linear axis",
+            "log": "log axis",
+            "symlog": "symmetric-log axis",
+        }[self._get_x_axis_scale()]
+        label.setText(f"{mode_text} · {scale_text}")
+
     def _on_normalize_changed(self):
         """Normalize"""
         try:
+            self._current_curve_view_state()
             mode = self.display_mode if hasattr(self, "display_mode") else "normal"
             self._update_GUI_image(mode)
             self._update_outside_window(mode)
@@ -247,11 +298,11 @@ class PlotRefreshMixin:
             self._last_axis_filter_mode = current_filter_mode
             if (
                 getattr(self, "data_source", None) == "cut"
-                and getattr(self, "current_stack_data", None) is not None
+                and analysis_image_for(self) is not None
             ):
-                self._perform_cut(points_override=self._resolve_cut_points())
-                self.status_updated.emit("Cut recalculated for the selected q-axis range")
-                return
+                self._mark_cut_stale(
+                    "q-branch selection changed; review the curve and update the cut if needed"
+                )
             try:
                 self._sync_roi_controls_to_current_display(
                     reset_to_domain=(previous_mode != current_filter_mode)
@@ -280,7 +331,7 @@ class PlotRefreshMixin:
                 self._current_fit_figure.clear()
                 ax = self._current_fit_figure.add_subplot(111)
 
-                log_x = self._get_checkbox_state("fitLogXCheckBox", False)
+                log_x = self._is_fit_log_x_enabled()
                 log_y = self._get_checkbox_state("fitLogYCheckBox", False)
 
                 if hasattr(self, "current_cut_data") and self.current_cut_data is not None:
@@ -314,8 +365,7 @@ class PlotRefreshMixin:
                         label="Fit",
                     )
 
-                if log_x:
-                    ax.set_xscale("log")
+                self._apply_x_axis_scale(ax)
                 if log_y:
                     ax.set_yscale("log")
 
@@ -412,8 +462,7 @@ class PlotRefreshMixin:
             for axis in ["top", "bottom", "left", "right"]:
                 ax.spines[axis].set_linewidth(1.8)
 
-            if log_x:
-                ax.set_xscale("log")
+            self._apply_x_axis_scale(ax)
             if log_y:
                 ax.set_yscale("log")
 
@@ -490,8 +539,7 @@ class PlotRefreshMixin:
                 ax.legend()
 
                 # Setting logarithmic coordinates
-                if log_x:
-                    ax.set_xscale("log")
+                self._apply_x_axis_scale(ax)
                 if log_y:
                     ax.set_yscale("log")
 

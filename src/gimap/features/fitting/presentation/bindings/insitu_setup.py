@@ -1,10 +1,17 @@
-"""Compose focused insitu setup bindings."""
+"""Compose focused In-situ page, Recipe and execution settings bindings."""
 
-from .insitu_dialog import InsituDialogMixin
+from .insitu_page_binding import InsituPageBindingMixin
+from .insitu_recipe_binding import InsituRecipeBindingMixin
+from .insitu_recipe_runtime import InsituRecipeRuntimeMixin
 from .insitu_watch_settings import InsituWatchSettingsMixin
 
 
-class InsituSetupMixin(InsituDialogMixin, InsituWatchSettingsMixin):
-    """Compatibility composition for focused insitu setup bindings."""
+class InsituSetupMixin(
+    InsituPageBindingMixin,
+    InsituRecipeBindingMixin,
+    InsituRecipeRuntimeMixin,
+    InsituWatchSettingsMixin,
+):
+    """Compose In-situ setup concerns without a second dialog implementation."""
 
     pass

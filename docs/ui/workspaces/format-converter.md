@@ -1,4 +1,4 @@
-# Format Converter 布局迁移记录
+# Format Converter 界面与交互说明
 
 - **Status**: Current
 - **Scope**: Format Converter 的 PyQt presentation 所有权、控件映射与手动验收
@@ -33,13 +33,13 @@ PyQt Dialog → FormatConverterViewModel → application use cases → ports
 `views/folder_import_dialog_view.py` 与 `views/conversion_progress_dialog_view.py` 独立拥有，
 与主对话框共用同一 behavior module，但不存在第二套布局实现。
 
-旧文件 `ui/format_converter_dialog.py` 只保留 9 行 import compatibility，直接 re-export
-feature 的三个 dialog class，不包含第二套实现。生产 caller `ui/menu_manager.py` 已直接按需
-导入 feature-owned dialog；旧路径仅服务尚未迁移的外部脚本和回归测试。
+`ui/format_converter_dialog.py` 是 9 行 public import alias，直接 re-export feature 的三个
+dialog class，不包含第二套实现。生产 caller 按需导入 feature-owned dialog；该 alias 只服务
+已有外部脚本和 API 回归测试。
 
 ## 控件映射
 
-| 旧实现中的控件/区域 | Python View object / feature-owned 位置 | 保持的行为 |
+| 功能/控件区域 | Python View object / feature-owned 位置 | 行为 |
 | --- | --- | --- |
 | step 1 source actions、`input_tree`、dataset selector | `format_input_section` / Input | 原 signal、source model 和 dataset 选择不变 |
 | step 2 tools、`selection_table` | `format_configure_section` / Configure | include、filter、sort、remove 不变 |
@@ -51,9 +51,9 @@ feature 的三个 dialog class，不包含第二套实现。生产 caller `ui/me
 | conversion title/detail/progress/pause/cancel | shared `JobStatus` | 原 worker pause/cancel 信号不变 |
 | succeeded/failed、Open folder、View report | conversion result area | 原 report path 和按钮不变 |
 
-没有重命名现有 Python 控件属性；现有属性现在对应 Python View 中清晰可见的 objectName。旧实现
-没有自定义快捷键，本次没有新增或改变。输入过滤器、四种输出格式、metadata JSON、frame selection、dtype
-conversion、progress/pause/cancel 和错误文案保持原行为。
+Python 控件属性对应 Python View 中清晰可见的 objectName。该 dialog 没有自定义快捷键。输入
+过滤器、四种输出格式、metadata JSON、frame selection、dtype conversion、progress/pause/cancel
+和错误文案是受测试保护的当前行为。
 
 ## 手动验收清单
 

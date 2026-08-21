@@ -30,6 +30,23 @@ class SignalConnectionsMixin:
         if hasattr(self.ui, "gisaxsInputShowButton"):
             self.ui.gisaxsInputShowButton.clicked.connect(self._show_image)
 
+        if hasattr(self.ui, "fittingPickCenterButton"):
+            self.ui.fittingPickCenterButton.toggled.connect(
+                self._toggle_main_center_tool
+            )
+        if hasattr(self.ui, "fittingSelectRegionButton"):
+            self.ui.fittingSelectRegionButton.toggled.connect(
+                self._toggle_main_region_tool
+            )
+        if hasattr(self.ui, "fittingResetDetectorViewButton"):
+            self.ui.fittingResetDetectorViewButton.clicked.connect(
+                self._reset_main_detector_view
+            )
+        if hasattr(self.ui, "fittingOpenDetectorWindowButton"):
+            self.ui.fittingOpenDetectorWindowButton.clicked.connect(
+                self._show_independent_window
+            )
+
         if hasattr(self.ui, "gisaxsInputAutoShowCheckBox"):
             self.ui.gisaxsInputAutoShowCheckBox.toggled.connect(self._on_auto_show_changed)
 
@@ -52,22 +69,16 @@ class SignalConnectionsMixin:
         if hasattr(self.ui, "gisaxsInputDisplayModePixel"):
             self.ui.gisaxsInputDisplayModePixel.toggled.connect(self._on_q_mode_changed)
 
-        if hasattr(self.ui, "gisaxsInputVminValue"):
-            self.ui.gisaxsInputVminValue.editingFinished.connect(
-                self._on_color_scale_value_committed
-            )
-        if hasattr(self.ui, "gisaxsInputVmaxValue"):
-            self.ui.gisaxsInputVmaxValue.editingFinished.connect(
-                self._on_color_scale_value_committed
-            )
-
         if hasattr(self.ui, "gisaxsInputCenterAutoFindingButton"):
             self.ui.gisaxsInputCenterAutoFindingButton.clicked.connect(self._auto_find_center)
 
         if hasattr(self.ui, "gisaxsInputCutButton"):
             self.ui.gisaxsInputCutButton.clicked.connect(lambda _checked=False: self._perform_cut())
 
-        if hasattr(self.ui, "gisaxsInputDetectorParaButton"):
+        detector_panel = getattr(self.ui, "fittingDetectorSetupPanel", None)
+        if detector_panel is not None:
+            detector_panel.settings_applied.connect(self._on_detector_parameters_changed)
+        elif hasattr(self.ui, "gisaxsInputDetectorParaButton"):
             self.ui.gisaxsInputDetectorParaButton.clicked.connect(self._show_detector_parameters)
 
         if hasattr(self.ui, "gisaxsInputGraphicsView"):
@@ -93,6 +104,10 @@ class SignalConnectionsMixin:
             self.ui.fitGraphicsView.setAlignment(Qt.AlignCenter)
             self.ui.fitGraphicsView.mouseDoubleClickEvent = self._on_fit_graphics_view_double_click
             self.ui.fitGraphicsView.installEventFilter(self)
+        if hasattr(self.ui, "fittingOpenResultWindowButton"):
+            self.ui.fittingOpenResultWindowButton.clicked.connect(
+                lambda _checked=False: self._on_fit_graphics_view_double_click(None)
+            )
 
         if hasattr(self.ui, "fitStartButton"):
             self.ui.fitStartButton.clicked.connect(self._start_fitting)
@@ -104,6 +119,14 @@ class SignalConnectionsMixin:
             self.ui.fitLogXCheckBox.toggled.connect(self._on_fit_log_changed)
         if hasattr(self.ui, "fitLogYCheckBox"):
             self.ui.fitLogYCheckBox.toggled.connect(self._on_fit_log_changed)
+        if hasattr(self.ui, "fitQViewModeComboBox"):
+            self.ui.fitQViewModeComboBox.currentIndexChanged.connect(
+                self._on_q_preparation_changed
+            )
+        if hasattr(self.ui, "fitCurveViewModeComboBox"):
+            self.ui.fitCurveViewModeComboBox.currentIndexChanged.connect(
+                self._on_curve_view_mode_changed
+            )
 
         for _name in ["fitBGShowCheckBox", "fitResShowCheckBox"]:
             if hasattr(self.ui, _name):
@@ -137,7 +160,9 @@ class SignalConnectionsMixin:
             self.ui.FittingExportButton.clicked.connect(self._export_fitting_data)
 
         if hasattr(self.ui, "FittingManualFittingButton"):
-            self.ui.FittingManualFittingButton.clicked.connect(self._perform_manual_fitting)
+            self.ui.FittingManualFittingButton.clicked.connect(
+                lambda _checked=False: self._perform_manual_fitting(reveal_result=True)
+            )
 
         if hasattr(self.ui, "FittingAutoRefineButton"):
             self.ui.FittingAutoRefineButton.clicked.connect(self._show_manual_auto_refine_dialog)

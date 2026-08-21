@@ -47,6 +47,7 @@ from .bindings.ai_review import AiReviewMixin
 from .bindings.fit_export import FitExportMixin
 from .bindings.manual_fitting import ManualFittingMixin
 from .bindings.plot_refresh import PlotRefreshMixin
+from .bindings.workflow_feedback import WorkflowFeedbackMixin
 
 __all__ = [
     "AsyncImageLoader",
@@ -81,6 +82,7 @@ class FittingViewBinding(
     FitExportMixin,
     ManualFittingMixin,
     PlotRefreshMixin,
+    WorkflowFeedbackMixin,
     QObject,
 ):
     """Translate Fitting Qt events and render ViewModel results."""
@@ -134,6 +136,9 @@ class FittingViewBinding(
         self.fitting_results = {}
 
         self.current_stack_data = None
+        self.current_analysis_image = None
+        self.current_detector_image = None
+        self._analysis_revision = 0
         self.current_file_list = []
         self._folder_image_files = []
         self._folder_image_index = -1
@@ -180,8 +185,15 @@ class FittingViewBinding(
         self._preview_proxy_widget = None
         self._preview_shape = None
         self._preview_show_q_axis = None
+        self._preview_horizontal_q_axis = None
+        self._preview_q_mesh_cache_key = None
+        self._preview_render_step = None
         self._preview_colorbar = None
         self._preview_resize_refit_pending = False
+        self._main_preview_tool = None
+        self._main_preview_selection_start = None
+        self._main_preview_drag_artist = None
+        self._main_preview_event_canvas = None
         self._image_display_cache = OrderedDict()
         self._image_display_cache_limit = 12
 
@@ -210,7 +222,7 @@ class FittingViewBinding(
         except Exception:
             pass
 
-        self._fit_graphics_scene = None
+        self._curve_graphics_scene = None
         self._current_fit_canvas = None
         self._current_fit_figure = None
 
@@ -286,10 +298,6 @@ class FittingViewBinding(
         self._ai_input_dialog_arrays = None
 
         self.load_mode = "Single"
-        self._insitu_timer = None
-        self._insitu_last_file = None
-        self._insitu_workflow_button = None
-        self._insitu_workflow_dialog = None
         self._insitu_workflow_timer = None
         self._insitu_workflow_state = "Idle"
         self._insitu_workflow_queue = []
@@ -324,8 +332,9 @@ class FittingViewBinding(
         self._insitu_heatmap_artist = None
         self._insitu_heatmap_colorbar = None
         self._insitu_heatmap_refresh_pending = False
+        self._insitu_runtime_snapshot = None
 
-        self._default_signal_mode = "finished"
+        self._default_signal_mode = "changed"
         self._signal_mode_overrides = {
             "fitFittingRegionSlider": "changed",
             # 'detectorBeamCenterX': 'changed',
@@ -348,7 +357,7 @@ class FittingViewBinding(
 
         # ==========================
         # ==========================
-        self._param_debounce_ms = 280
+        self._param_debounce_ms = 220
         self._param_abs_eps = 1e-12
         self._param_rel_eps = 1e-10
         self._roi_debounce_ms = 140
@@ -367,10 +376,11 @@ class FittingViewBinding(
 
         self._initialize_ui()
         self._setup_folder_navigation_ui()
-        self._setup_insitu_workflow_button()
+        self._connect_insitu_series_page()
         self._load_remote_cache_settings()
         self._setup_remote_cache_controls()
         self._setup_connections()
+        self._sync_fitting_workflow()
         self._initialized = True
         self._initializing = False
         self._setup_meta_debug_shortcut()
@@ -379,8 +389,5 @@ class FittingViewBinding(
                 mode_now = self.ui.gisaxsInputModelCombox.currentText()
                 self.load_mode = mode_now or getattr(self, "load_mode", "Single")
                 self._update_stack_controls_visibility()
-                self._update_insitu_workflow_button_visibility()
-                if self.load_mode == "In-situ" and hasattr(self.ui, "gisaxsInputStackValue"):
-                    self.ui.gisaxsInputStackValue.setVisible(False)
         except Exception:
             pass

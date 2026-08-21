@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 
 from PyQt5.QtWidgets import (
     QMainWindow,
@@ -19,21 +19,9 @@ from src.gimap.app.presentation.responsive_layout import (
 
 
 from .views import IndependentFitWindowView
-
-
-from src.gimap.app.presentation.responsive_layout import (
-    apply_density_profile,
-    install_adaptive_window_profile,
-)
-
-
-from .views import IndependentFitWindowView
-
-
-from .scientific_commands import (
-    is_matplotlib_available,
-)
+from .scientific_commands import is_matplotlib_available
 from .curve_plotting import plot_cut_data_with_log_handling
+from .state import CurveViewState
 
 
 class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
@@ -42,6 +30,7 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
     status_updated = pyqtSignal(str)
     display_unit_changed = pyqtSignal(str)
     input_point_delete_requested = pyqtSignal(float)
+    view_state_changed = pyqtSignal(object)
 
     # 函数说明：初始化对象状态和相关资源。
     def __init__(self, parent=None):
@@ -119,36 +108,82 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
     # 函数说明：创建control buttons。
     def _bind_control_widgets(self):
         """Connect behavior to the fixed controls owned by the Python View."""
-        self.show_positive_cb.toggled.connect(self._on_show_positive_toggled)
-        self.show_negative_cb.toggled.connect(self._on_show_negative_toggled)
-        self.q_unit_combo.setItemData(0, "angstrom")
-        self.q_unit_combo.setItemData(1, "nm")
-        self.q_unit_combo.setCurrentIndex(1)
+        for text, value in (
+            ("Signed q", "signed"),
+            ("Positive q", "positive"),
+            ("Negative q", "negative"),
+            ("Negative as |q|", "negative_abs"),
+            ("Overlay ±q", "fold"),
+            ("Average ±q", "average"),
+        ):
+            self.q_view_combo.addItem(text, value)
+        for text, value in (
+            ("Data", "data"),
+            ("Data + Fit", "compare"),
+            ("Fit", "model"),
+        ):
+            self.curve_mode_combo.addItem(text, value)
+        self.q_unit_combo.addItem("nm⁻¹", "nm")
+        self.q_unit_combo.addItem("Å⁻¹", "angstrom")
         self.q_unit_combo.currentTextChanged.connect(self._on_q_unit_changed)
-        self.y_range_combo.setItemData(0, "experimental")
-        self.y_range_combo.setItemData(1, "fitting")
-        self.y_range_combo.setItemData(2, "all")
-        self.y_range_combo.setCurrentIndex(2)
+        self.y_range_combo.addItem("All", "all")
+        self.y_range_combo.addItem("Data", "experimental")
+        self.y_range_combo.addItem("Fit", "fitting")
         self.y_range_combo.currentTextChanged.connect(self._on_y_range_changed)
         self.delete_input_points_cb.toggled.connect(self._on_delete_input_points_toggled)
+        for widget in (
+            self.q_view_combo,
+            self.curve_mode_combo,
+            self.log_x_cb,
+            self.log_y_cb,
+            self.normalize_cb,
+        ):
+            signal = (
+                widget.currentIndexChanged
+                if hasattr(widget, "currentIndexChanged")
+                else widget.toggled
+            )
+            signal.connect(self._emit_view_state_changed)
 
-    # 函数说明：处理正值 toggled事件。
-    def _on_show_positive_toggled(self, checked):
-        """No description."""
-        if checked and hasattr(self, "show_negative_cb") and self.show_negative_cb.isChecked():
-            self.show_negative_cb.blockSignals(True)
-            self.show_negative_cb.setChecked(False)
-            self.show_negative_cb.blockSignals(False)
-        self.status_updated.emit(f"Positive Only mode: {'enabled' if checked else 'disabled'}")
+    def current_curve_view_state(self) -> CurveViewState:
+        """Read the controls as one state shared with the embedded curve view."""
+        return CurveViewState(
+            q_mode=str(self.q_view_combo.currentData() or "signed"),
+            layer_mode=str(self.curve_mode_combo.currentData() or "data"),
+            log_x=self.log_x_cb.isChecked(),
+            log_y=self.log_y_cb.isChecked(),
+            normalize=self.normalize_cb.isChecked(),
+            q_unit=str(self.q_unit_combo.currentData() or "nm"),
+            y_range=str(self.y_range_combo.currentData() or "all"),
+        )
 
-    # 函数说明：处理负值 toggled事件。
-    def _on_show_negative_toggled(self, checked):
-        """No description."""
-        if checked and hasattr(self, "show_positive_cb") and self.show_positive_cb.isChecked():
-            self.show_positive_cb.blockSignals(True)
-            self.show_positive_cb.setChecked(False)
-            self.show_positive_cb.blockSignals(False)
-        self.status_updated.emit(f"Negative Only mode: {'enabled' if checked else 'disabled'}")
+    def set_curve_view_state(self, state: CurveViewState) -> None:
+        """Mirror the authoritative state without feeding a signal loop."""
+        if not isinstance(state, CurveViewState):
+            return
+        combo_values = (
+            (self.q_view_combo, state.q_mode),
+            (self.curve_mode_combo, state.layer_mode),
+            (self.q_unit_combo, state.q_unit),
+            (self.y_range_combo, state.y_range),
+        )
+        for combo, value in combo_values:
+            old_block = combo.blockSignals(True)
+            index = combo.findData(value)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+            combo.blockSignals(old_block)
+        for checkbox, checked in (
+            (self.log_x_cb, state.log_x),
+            (self.log_y_cb, state.log_y),
+            (self.normalize_cb, state.normalize),
+        ):
+            old_block = checkbox.blockSignals(True)
+            checkbox.setChecked(bool(checked))
+            checkbox.blockSignals(old_block)
+
+    def _emit_view_state_changed(self, *_args) -> None:
+        self.view_state_changed.emit(self.current_curve_view_state())
 
     # 函数说明：获取Q unit key。
     def _get_q_unit_key(self):
@@ -185,6 +220,7 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
         unit_text = "nm^-1" if self._get_q_unit_key() == "nm" else "Angstrom^-1"
         self.status_updated.emit(f"q unit changed to {unit_text}")
         self.display_unit_changed.emit(unit_text)
+        self._emit_view_state_changed()
 
     # 函数说明：处理y 范围 changed事件。
     def _on_y_range_changed(self, _text):
@@ -196,6 +232,7 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
             "all": "all visible data",
         }.get(mode, "all visible data")
         self.status_updated.emit(f"Y range based on {label}")
+        self._emit_view_state_changed()
 
     # 函数说明：获取y 范围 模式。
     def _get_y_range_mode(self):
@@ -287,6 +324,8 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
         log_y=False,
         normalize=False,
         y_errors=None,
+        *,
+        x_scale=None,
     ):
         """No description."""
         try:
@@ -338,16 +377,14 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
                     if err_data is not None:
                         err_data = err_data[sort_idx]
 
+            resolved_x_scale = x_scale or ("log" if log_x else "linear")
+
             if is_q_axis:
                 x_data = x_data * self._get_q_unit_scale_factor()
                 if hasattr(self, "show_positive_cb") and self.show_positive_cb.isChecked():
                     x_label = self._format_q_axis_label(filter_mode="positive")
                 elif hasattr(self, "show_negative_cb") and self.show_negative_cb.isChecked():
                     x_label = self._format_q_axis_label(filter_mode="negative")
-                else:
-                    original_x = np.asarray(x_coords)
-                    has_negative = np.any(np.isfinite(original_x) & (original_x < 0))
-                    x_label = self._format_q_axis_label(absolute=(log_x and has_negative))
 
             if normalize:
                 max_intensity = np.max(y_data) if y_data.size > 0 else 0.0
@@ -357,10 +394,10 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
                         err_data = err_data / float(max_intensity)
                     y_label = "Normalized Intensity"
 
-            if log_x:
+            if resolved_x_scale == "log":
                 positive_x = x_data > 0
                 if not np.any(positive_x):
-                    log_x = False
+                    resolved_x_scale = "linear"
                 else:
                     x_data = x_data[positive_x]
                     y_data = y_data[positive_x]
@@ -435,7 +472,11 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
             self.ax.set_ylabel(y_lbl, fontsize=13)
             self.ax.set_title(title, fontsize=15)
 
-            if log_x:
+            if resolved_x_scale == "symlog":
+                nonzero = np.abs(x_data[np.isfinite(x_data) & (x_data != 0)])
+                linthresh = float(np.min(nonzero) * 0.5) if nonzero.size else 1e-6
+                self.ax.set_xscale("symlog", linthresh=max(linthresh, 1e-12))
+            elif resolved_x_scale == "log":
                 self.ax.set_xscale("log")
             else:
                 self.ax.set_xscale("linear")

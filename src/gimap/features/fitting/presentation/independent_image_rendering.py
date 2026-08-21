@@ -13,6 +13,11 @@ from PyQt5.QtCore import QTimer
 from .scientific_commands import (
     _scientific_commands,
 )
+from .detector_render_lod import (
+    choose_detector_render_level,
+    detector_render_cell_budget,
+)
+from ..application import DetectorQGrid, normalize_horizontal_q_axis
 
 
 class IndependentImageRenderingMixin:
@@ -24,6 +29,20 @@ class IndependentImageRenderingMixin:
             t_total_update = time.perf_counter()
             current_shape = image_data.shape
             shape_changed = self.last_image_shape is None or self.last_image_shape != current_shape
+            show_q_axis = self._should_show_q_axis()
+            render_level = None
+            if show_q_axis:
+                budget = detector_render_cell_budget(
+                    self.canvas.width(),
+                    self.canvas.height(),
+                    minimum_cells=30_000,
+                    maximum_cells=220_000,
+                )
+                render_level = choose_detector_render_level(
+                    current_shape,
+                    max_cells=budget,
+                )
+            render_step = render_level.stride if render_level is not None else 1
 
             self.current_image_shape = current_shape
 
@@ -39,7 +58,10 @@ class IndependentImageRenderingMixin:
                 self.current_image is not None
                 and not shape_changed
                 and self._last_use_log == bool(use_log)
-                and self._last_show_q_axis == self._should_show_q_axis()
+                and self._last_show_q_axis == show_q_axis
+                and self._last_horizontal_q_axis == self._horizontal_q_axis()
+                and self._last_q_cache_key == self._q_cache_key
+                and self._last_render_step == render_step
             )
             if can_reuse_artist:
                 t_total = time.perf_counter()
@@ -67,7 +89,10 @@ class IndependentImageRenderingMixin:
                         f"[Timing] autoscale calculation: {(time.perf_counter() - t0) * 1000:.2f} ms (independent window)"
                     )
                 processed_data = np.flipud(processed_data)
-                self.current_image.set_data(processed_data)
+                if show_q_axis:
+                    self.current_image.set_array(render_level.sample(processed_data).ravel())
+                else:
+                    self.current_image.set_data(processed_data)
                 self.current_image.set_clim(vmin, vmax)
                 self.current_image.set_cmap(self.colormap)
                 if self.colorbar is not None:
@@ -157,27 +182,23 @@ class IndependentImageRenderingMixin:
 
             processed_data = np.flipud(processed_data)
 
-            show_q_axis = self._should_show_q_axis()
-
             if show_q_axis:
-                extent = self._get_q_axis_extent(image_data.shape)
-
-                qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
+                self._get_q_axis_extent(image_data.shape)
+                qy_mesh, qz_mesh = self._get_display_q_meshgrids()
 
                 if qy_mesh is not None and qz_mesh is not None:
-                    qy_min, qy_max = qy_mesh.min(), qy_mesh.max()
-                    qz_min, qz_max = qz_mesh.min(), qz_mesh.max()
-                    q_extent = [qy_min, qy_max, qz_min, qz_max]
-
-                    self.current_image = self.ax.imshow(
-                        processed_data,
+                    render_data = render_level.sample(processed_data)
+                    render_qy = render_level.sample(qy_mesh)
+                    render_qz = render_level.sample(qz_mesh)
+                    self.current_image = self.ax.pcolormesh(
+                        render_qy,
+                        render_qz,
+                        render_data,
                         cmap=self.colormap,
-                        aspect="equal",
-                        origin="lower",
-                        interpolation="nearest",
+                        shading="nearest",
                         vmin=vmin,
                         vmax=vmax,
-                        extent=q_extent,
+                        rasterized=True,
                     )
                 else:
                     self.current_image = self.ax.imshow(
@@ -188,10 +209,9 @@ class IndependentImageRenderingMixin:
                         interpolation="nearest",
                         vmin=vmin,
                         vmax=vmax,
-                        extent=extent,
                     )
 
-                self.ax.set_xlabel(r"$q_y$ (nm$^{-1}$)")
+                self.ax.set_xlabel(self._horizontal_q_label())
                 self.ax.set_ylabel(r"$q_z$ (nm$^{-1}$)")
             else:
                 self.current_image = self.ax.imshow(
@@ -251,6 +271,9 @@ class IndependentImageRenderingMixin:
 
             self._last_use_log = bool(use_log)
             self._last_show_q_axis = show_q_axis
+            self._last_horizontal_q_axis = self._horizontal_q_axis()
+            self._last_q_cache_key = self._q_cache_key
+            self._last_render_step = render_step
             render_start = time.perf_counter()
             self.canvas.draw()
             print(
@@ -283,46 +306,31 @@ class IndependentImageRenderingMixin:
             pass
 
     def _convert_q_to_pixel_coordinates(self, center_qy, center_qz, width_q, height_q):
-        """No description."""
+        """Map a q point/region to the nearest detector cells."""
         try:
-            qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
-
-            if qy_mesh is None or qz_mesh is None:
-                return {"center_x": 0, "center_y": 0, "width": 100, "height": 100}
-
-            if hasattr(self, "current_stack_data") and self.current_stack_data is not None:
-                img_height, img_width = self.current_stack_data.shape
-            else:
-                img_height, img_width = qy_mesh.shape
-
-            qy_diff = np.abs(qy_mesh - center_qy)
-            qz_diff = np.abs(qz_mesh - center_qz)
-            combined_diff = qy_diff + qz_diff
-            center_idx = np.unravel_index(np.argmin(combined_diff), qy_mesh.shape)
-            center_pixel_y, center_pixel_x = center_idx
-
-            qy_range = qy_mesh.max() - qy_mesh.min()
-            qz_range = qz_mesh.max() - qz_mesh.min()
-            pixel_x_range = img_width
-            pixel_y_range = img_height
-
-            qy_to_pixel_ratio = pixel_x_range / qy_range
-            qz_to_pixel_ratio = pixel_y_range / qz_range
-
-            width_pixel = width_q * qy_to_pixel_ratio
-            height_pixel = height_q * qz_to_pixel_ratio
-
-            result = {
-                "center_x": int(center_pixel_x),
-                "center_y": int(center_pixel_y),
-                "width": int(width_pixel),
-                "height": int(height_pixel),
+            grid = self._detector_q_grid()
+            if grid is None:
+                return {"center_x": 0, "center_y": 0, "width": 1, "height": 1}
+            point = grid.nearest_point(
+                center_qy,
+                center_qz,
+                self._horizontal_q_axis(),
+            )
+            region = grid.snap_region(
+                center_qy - width_q / 2.0,
+                center_qy + width_q / 2.0,
+                center_qz - height_q / 2.0,
+                center_qz + height_q / 2.0,
+                self._horizontal_q_axis(),
+            )
+            return {
+                "center_x": point.column,
+                "center_y": grid.qz.shape[0] - 1 - point.row,
+                "width": region.column_max - region.column_min + 1,
+                "height": region.row_max - region.row_min + 1,
             }
-
-            return result
-
-        except Exception as e:
-            return {"center_x": 0, "center_y": 0, "width": 100, "height": 100}
+        except Exception:
+            return {"center_x": 0, "center_y": 0, "width": 1, "height": 1}
 
     def _update_cutline_labels_units(self):
         """No description."""
@@ -330,31 +338,41 @@ class IndependentImageRenderingMixin:
             show_q_axis = self._should_show_q_axis()
 
             if show_q_axis:
-                unit_suffix = " (nm^-1)"
+                horizontal_name = self._horizontal_q_axis()
+                vertical_label = "qz center (nm^-1)"
+                horizontal_label = f"{horizontal_name} center (nm^-1)"
+                vertical_size_label = "qz span (nm^-1)"
+                horizontal_size_label = f"{horizontal_name} span (nm^-1)"
             else:
-                unit_suffix = " (pixel)"
+                vertical_label = "Vertical (pixel)"
+                horizontal_label = "Parallel (pixel)"
+                vertical_size_label = "Vertical (pixel)"
+                horizontal_size_label = "Parallel (pixel)"
 
             if hasattr(self.ui, "gisaxsInputCenterVerticalLabel"):
-                self.ui.gisaxsInputCenterVerticalLabel.setText(f"Vertical.{unit_suffix}")
+                self.ui.gisaxsInputCenterVerticalLabel.setText(vertical_label)
 
             if hasattr(self.ui, "gisaxsInputCenterParallelLabel"):
-                self.ui.gisaxsInputCenterParallelLabel.setText(f"Parallel.{unit_suffix}")
+                self.ui.gisaxsInputCenterParallelLabel.setText(horizontal_label)
 
             if hasattr(self.ui, "gisaxsInputCutLineVerticalLabel"):
-                self.ui.gisaxsInputCutLineVerticalLabel.setText(f"Vertical.{unit_suffix}")
+                self.ui.gisaxsInputCutLineVerticalLabel.setText(vertical_size_label)
 
             if hasattr(self.ui, "gisaxsInputCutLineParallelLabel"):
-                self.ui.gisaxsInputCutLineParallelLabel.setText(f"Parallel.{unit_suffix}")
+                self.ui.gisaxsInputCutLineParallelLabel.setText(horizontal_size_label)
 
         except Exception:
             pass
 
     def _should_show_q_axis(self):
-        """No description."""
-        try:
-            return self.fitting_view_model.get_setting("fitting", "detector.show_q_axis", False)
-        except Exception:
-            return False
+        """Return the q-axis flag from the shared detector display state."""
+        return bool(getattr(self, "show_q_axis", False))
+
+    def _horizontal_q_axis(self):
+        return normalize_horizontal_q_axis(getattr(self, "horizontal_q_axis", "qy"))
+
+    def _horizontal_q_label(self):
+        return r"$q_r$ (nm$^{-1}$)" if self._horizontal_q_axis() == "qr" else r"$q_y$ (nm$^{-1}$)"
 
     def _get_q_axis_extent(self, image_shape):
         """Return the display extent for the Q-space axes."""
@@ -380,9 +398,22 @@ class IndependentImageRenderingMixin:
 
             # Q-axis calculation parameters
 
-            cache_key = f"{width}x{height}_{pixel_size_x}_{pixel_size_y}_{beam_center_x}_{beam_center_y}_{distance}_{theta_in_deg}_{wavelength}"
+            cache_key = (
+                height,
+                width,
+                float(pixel_size_x),
+                float(pixel_size_y),
+                float(beam_center_x),
+                float(beam_center_y),
+                float(distance),
+                float(theta_in_deg),
+                float(wavelength),
+            )
 
-            if self._q_cache_key != cache_key or self._q_detector is None:
+            grids_missing = any(
+                grid is None for grid in (self._qy_mesh, self._qz_mesh, self._qr_mesh)
+            )
+            if self._q_cache_key != cache_key or grids_missing:
                 self._q_detector = _scientific_commands(self).q_space.create_detector(
                     image_shape=(height, width),
                     pixel_size_x=pixel_size_x,
@@ -395,18 +426,57 @@ class IndependentImageRenderingMixin:
                     crop_params=None,
                 )
 
-                self._qy_mesh, self._qz_mesh = self._q_detector.get_qy_qz_meshgrids()
+                (
+                    self._qy_mesh,
+                    self._qz_mesh,
+                    self._qr_mesh,
+                ) = self._q_detector.get_q_coordinate_meshgrids()
                 self._q_cache_key = cache_key
 
-            _, _, extent = _scientific_commands(self).q_space.axis_labels_and_extent(
-                self._q_detector
-            )
-            return extent
+            horizontal_mesh, qz_mesh = self._get_cached_q_meshgrids()
+            return [
+                float(np.nanmin(horizontal_mesh)),
+                float(np.nanmax(horizontal_mesh)),
+                float(np.nanmin(qz_mesh)),
+                float(np.nanmax(qz_mesh)),
+            ]
 
         except Exception:
             height, width = image_shape
             return [-0.5, width - 0.5, -0.5, height - 0.5]
 
+    def seed_q_grid_cache(self, cache_key, qy_mesh, qz_mesh, qr_mesh) -> None:
+        """Reuse the owning fitting view's immutable full-resolution q grids."""
+
+        if cache_key is None or any(grid is None for grid in (qy_mesh, qz_mesh, qr_mesh)):
+            self._q_cache_key = None
+            self._qy_mesh = None
+            self._qz_mesh = None
+            self._qr_mesh = None
+            return
+        DetectorQGrid(qy_mesh, qz_mesh, qr_mesh)
+        self._q_cache_key = cache_key
+        self._qy_mesh = qy_mesh
+        self._qz_mesh = qz_mesh
+        self._qr_mesh = qr_mesh
+
     def _get_cached_q_meshgrids(self):
-        """No description."""
-        return self._qy_mesh, self._qz_mesh
+        """Return active horizontal-q and qz grids in analysis-array order."""
+        grid = self._detector_q_grid()
+        return grid.meshes(self._horizontal_q_axis()) if grid is not None else (None, None)
+
+    def _get_display_q_meshgrids(self):
+        grid = self._detector_q_grid()
+        return grid.display_meshes(self._horizontal_q_axis()) if grid is not None else (None, None)
+
+    def _detector_q_grid(self):
+        if self._qy_mesh is None or self._qz_mesh is None or self._qr_mesh is None:
+            shape = getattr(self, "current_image_shape", None) or self.last_image_shape
+            if shape is not None:
+                self._get_q_axis_extent(shape)
+        if self._qy_mesh is None or self._qz_mesh is None or self._qr_mesh is None:
+            return None
+        try:
+            return DetectorQGrid(self._qy_mesh, self._qz_mesh, self._qr_mesh)
+        except ValueError:
+            return None

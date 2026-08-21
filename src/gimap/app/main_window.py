@@ -76,10 +76,14 @@ class MainWindowComponents:
         self.waxs_page = self._create_waxs_page()
         self.sidebar = self._create_sidebar()
         self.content = ContentStack(ui.mainWindowWidget)
+        from src.gimap.features.fitting.bootstrap import create_fitting_view_model
+
+        self.fitting_view_model = create_fitting_view_model(ui.app_context)
         self.fitting_workspace = GisaxsFittingWorkspace(
             ui,
             self.responsive_profile,
             preferences=ui.app_context.preferences,
+            view_model=self.fitting_view_model,
         )
         self.predict_workspace = GisaxsPredictWorkspace(ui, self.responsive_profile)
         self.shell = MainShell(

@@ -9,6 +9,7 @@ from ..domain import (
     compute_insitu_cut,
     default_refine_bounds,
     default_refine_selected,
+    DetectorPreprocessing,
     extract_pixel_profile,
     extract_q_profile,
     filter_axis,
@@ -20,6 +21,8 @@ from ..domain import (
     normalize_intensity,
     optimize_scale_factor,
     prepare_ai_curve,
+    prepare_detector_image,
+    prepare_signed_q_curve,
     q_values_for_display,
     q_values_for_model,
     run_manual_refinement,
@@ -31,6 +34,12 @@ from .ports import FittingModelPort, QSpacePort
 
 
 class FittingImageCalculations:
+    def prepare(self, image, *, revision=0, **options):
+        """Create the one immutable analysis image for a preprocessing revision."""
+
+        preprocessing = DetectorPreprocessing(**options)
+        return prepare_detector_image(image, preprocessing, revision=revision)
+
     def transform(self, image, **options):
         return apply_input_image_options(image, **options)
 
@@ -45,8 +54,8 @@ class FittingCutCalculations:
     def extract_pixel(self, image, selection):
         return extract_pixel_profile(image, selection)
 
-    def extract_q(self, image, qy_mesh, qz_mesh, selection):
-        return extract_q_profile(image, qy_mesh, qz_mesh, selection)
+    def extract_q(self, image, horizontal_q_mesh, qz_mesh, selection):
+        return extract_q_profile(image, horizontal_q_mesh, qz_mesh, selection)
 
     def sample_mesh_line(self, mesh, pixel_coords, **options):
         return sample_q_mesh_line(mesh, pixel_coords, **options)
@@ -62,6 +71,9 @@ class FittingCutCalculations:
 
 
 class FittingCurveCalculations:
+    def prepare_signed(self, q_values, intensity, **options):
+        return prepare_signed_q_curve(q_values, intensity, **options)
+
     def filter_for_display(self, q_values, intensity=None, mode="all"):
         return filter_for_display(q_values, intensity, mode)
 

@@ -83,7 +83,12 @@ class ApplicationRuntime(QObject):
         self.fitting = FittingViewBinding(
             self.ui,
             self,
-            fitting_view_model=create_fitting_view_model(self.app_context),
+            fitting_view_model=getattr(
+                components,
+                "fitting_view_model",
+                None,
+            )
+            or create_fitting_view_model(self.app_context),
         )
         self.classification = ClassificationViewBinding(
             self.ui,

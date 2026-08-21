@@ -74,6 +74,10 @@ class ResponsiveStyleMixin:
                 #freshTrainsetBuildPage QRadioButton { color: #334155; }
                 #pageTitle { color: #0f172a; font-size: 22px; font-weight: 700; }
                 #pageSubtitle { color: #64748b; font-size: 13px; }
+                #trainsetActionHint {
+                    color: #64748b;
+                    padding: 4px 8px;
+                }
                 #validationBadge, #jobState {
                     background: #eff6ff;
                     color: #1d4ed8;
@@ -193,6 +197,15 @@ class ResponsiveStyleMixin:
                     font-weight: 600;
                 }
                 #freshTrainsetBuildPage QPushButton#primaryAction:hover { background: #1d4ed8; }
+                #freshTrainsetBuildPage QPushButton[trainsetPrimaryAction="true"] {
+                    background: #2563eb;
+                    color: #ffffff;
+                    border-color: #2563eb;
+                    font-weight: 650;
+                }
+                #freshTrainsetBuildPage QPushButton[trainsetPrimaryAction="true"]:hover {
+                    background: #1d4ed8;
+                }
                 #freshTrainsetBuildPage QHeaderView::section {
                     background: #f8fafc;
                     color: #475569;
@@ -224,6 +237,14 @@ class ResponsiveStyleMixin:
                     font-weight: 600;
                 }
                 #designStageTabs QTabBar::tab { padding: 8px 7px; }
+                #trainsetConfigurationTabs::pane {
+                    background: #f8fafc;
+                    border-color: #d7dee8;
+                }
+                #trainsetConfigurationTabs QTabBar::tab {
+                    min-width: 132px;
+                    padding: 9px 12px;
+                }
                 #freshTrainsetBuildPage QScrollArea,
                 #freshTrainsetBuildPage QStackedWidget { background: transparent; border: 0; }
                 """

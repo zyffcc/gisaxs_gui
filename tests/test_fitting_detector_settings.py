@@ -21,6 +21,7 @@ def test_detector_settings_round_trip_preserves_legacy_keys() -> None:
         pixel_size_x=75.0,
         pixel_size_y=75.0,
         show_q_axis=True,
+        horizontal_q_axis="qr",
     )
 
     SaveDetectorSettings(repository).execute(expected)
@@ -28,6 +29,7 @@ def test_detector_settings_round_trip_preserves_legacy_keys() -> None:
     assert LoadDetectorSettings(repository).execute() == expected
     assert repository.get("fitting", "detector.distance") == 1840.5
     assert repository.get("beam", "wavelength") == 0.0103
+    assert repository.get("fitting", "detector.horizontal_q_axis") == "qr"
 
 
 def test_detector_energy_conversion_is_numerically_reversible() -> None:

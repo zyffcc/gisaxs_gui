@@ -11,9 +11,6 @@ from PyQt5.QtCore import QTimer
 from .scientific_commands import (
     is_matplotlib_available,
 )
-from .curve_plotting import plot_cut_data_with_log_handling
-
-
 class UnifiedDisplayManager:
     """Manage unified plot display updates."""
 
@@ -39,6 +36,11 @@ class UnifiedDisplayManager:
             plot_q = np.array(q)
             plot_I = np.array(intensity)
             plot_err = np.array(err) if err is not None else None
+            prepared = self.controller._prepare_signed_q_data(plot_q, plot_I)
+            plot_q = prepared.q
+            plot_I = prepared.intensity
+            if plot_err is not None and plot_err.size != plot_q.size:
+                plot_err = None
 
             if normalize and len(plot_I) > 0:
                 max_I = np.max(plot_I)
@@ -90,7 +92,9 @@ class UnifiedDisplayManager:
             if scene is not None:
                 proxy_widget = scene.addWidget(canvas)
                 self.controller._fit_view_to_item(
-                    self.ui.fitGraphicsView, proxy_widget, keep_aspect=True
+                    self.controller._active_curve_graphics_view(),
+                    proxy_widget,
+                    keep_aspect=True,
                 )
 
                 self.controller._current_fit_canvas = canvas
@@ -124,22 +128,25 @@ class UnifiedDisplayManager:
                     label="Data with error bars",
                 )
             else:
-                plot_cut_data_with_log_handling(
-                    ax, q_plot, intensity, log_x, markersize=3, linewidth=1
+                ax.plot(
+                    q_plot,
+                    intensity,
+                    "o-",
+                    markersize=3,
+                    linewidth=1,
                 )
 
-            has_negative = np.any(np.isfinite(np.asarray(q)) & (np.asarray(q) < 0))
             ax.set_xlabel(
-                self.controller._build_q_axis_label(absolute=(log_x and has_negative)), fontsize=13
+                self.controller._build_q_axis_label(
+                    absolute=self.controller._get_q_combination_mode() in ("fold", "average")
+                ),
+                fontsize=13,
             )
             ax.set_ylabel("Intensity" + (" (normalized)" if normalize else ""), fontsize=13)
             ax.set_title(title, fontsize=15)
             ax.grid(True, alpha=0.3)
 
-            if log_x:
-                ax.set_xscale("log")
-            else:
-                ax.set_xscale("linear")
+            self.controller._apply_x_axis_scale(ax)
 
             if log_y:
                 ax.set_yscale("log")
@@ -161,9 +168,11 @@ class UnifiedDisplayManager:
                 )
             else:
                 ax.plot(q_plot, intensity, "o-", markersize=3, linewidth=1)
-            has_negative = np.any(np.isfinite(np.asarray(q)) & (np.asarray(q) < 0))
             ax.set_xlabel(
-                self.controller._build_q_axis_label(absolute=(log_x and has_negative)), fontsize=13
+                self.controller._build_q_axis_label(
+                    absolute=self.controller._get_q_combination_mode() in ("fold", "average")
+                ),
+                fontsize=13,
             )
             ax.set_ylabel("Intensity" + (" (normalized)" if normalize else ""), fontsize=13)
             ax.set_title(title, fontsize=15)
@@ -171,27 +180,13 @@ class UnifiedDisplayManager:
 
     # 函数说明：更新独立 1d 显示。
     def _update_independent_1d_display(self, q, intensity, err, title, log_x, log_y, normalize):
-        """D"""
+        """Compatibility seam: all q curves now use the shared CurvePlotSpec."""
         try:
-            if self.controller.independent_fit_window and hasattr(
-                self.controller.independent_fit_window, "update_plot"
-            ):
-                y_label = "Intensity" + (" (normalized)" if normalize else "")
-                q_internal_nm = self.controller._convert_q_values_for_model(
-                    q, source=getattr(self.controller, "data_source", None)
-                )
-                self.controller.independent_fit_window.update_plot(
-                    q_internal_nm,
-                    intensity,
-                    self.controller._build_q_axis_label(),
-                    y_label,
-                    title,
-                    log_x,
-                    log_y,
-                    normalize,
-                    err,
-                )
-
+            self.controller._update_outside_window(
+                "fitting"
+                if getattr(self.controller, "has_fitting_data", False)
+                else "normal"
+            )
         except Exception as e:
             self.controller.status_updated.emit(
                 f"Failed to update independent 1D display: {str(e)}"
@@ -201,7 +196,8 @@ class UnifiedDisplayManager:
     def get_display_options(self):
         """No description."""
         return {
-            "log_x": hasattr(self.ui, "fitLogXCheckBox") and self.ui.fitLogXCheckBox.isChecked(),
+            "log_x": self.controller._get_x_axis_scale() == "log",
+            "x_scale": self.controller._get_x_axis_scale(),
             "log_y": hasattr(self.ui, "fitLogYCheckBox") and self.ui.fitLogYCheckBox.isChecked(),
             "normalize": hasattr(self.ui, "fitNormCheckBox")
             and self.ui.fitNormCheckBox.isChecked(),

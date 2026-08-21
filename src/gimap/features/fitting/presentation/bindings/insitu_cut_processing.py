@@ -24,17 +24,11 @@ class InsituCutProcessingMixin:
             if not valid:
                 record["cut_status"] = f"failed: {message}"
                 raise RuntimeError(message)
-            vertical_value = (
-                float(self.ui.gisaxsInputCutLineVerticalValue.value())
-                if hasattr(self.ui, "gisaxsInputCutLineVerticalValue")
-                else 0.0
-            )
-            parallel_value = (
-                float(self.ui.gisaxsInputCutLineParallelValue.value())
-                if hasattr(self.ui, "gisaxsInputCutLineParallelValue")
-                else 0.0
-            )
-            center_x, center_y = self._get_cut_center_coordinates()
+            geometry = self._insitu_cut_geometry()
+            vertical_value = geometry.get("cut_vertical_px", 0.0)
+            parallel_value = geometry.get("cut_parallel_px", 0.0)
+            center_x = geometry.get("center_parallel_px", 0.0)
+            center_y = geometry.get("center_vertical_px", 0.0)
             show_q_axis = self._should_show_q_axis()
             qy_mesh = qz_mesh = None
             if show_q_axis:
@@ -59,6 +53,7 @@ class InsituCutProcessingMixin:
                 "show_q_axis": bool(show_q_axis),
                 "qy_mesh": qy_mesh,
                 "qz_mesh": qz_mesh,
+                "horizontal_q_axis": self._horizontal_q_axis(),
                 "n_points": self._resolve_cut_points(None),
                 "method": method,
             }
@@ -104,7 +99,7 @@ class InsituCutProcessingMixin:
                     x_label = r"$q_z$ (nm$^{-1}$)"
                 else:
                     x_coords = self._convert_pixel_to_qy(x_coords)
-                    x_label = r"$q_y$ (nm$^{-1}$)"
+                    x_label = self._horizontal_q_label()
             else:
                 x_label = str(result.get("x_label") or r"$q$ (nm$^{-1}$)")
             old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)

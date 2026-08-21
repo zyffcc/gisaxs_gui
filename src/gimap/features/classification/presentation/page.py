@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QFrame,
     QHeaderView,
+    QSizePolicy,
     QWidget,
 )
 
@@ -25,6 +26,7 @@ from .views import (
     ClassificationPreprocessingPanelView,
     ClassificationResultsPanelView,
 )
+from .workflow_polish import polish_classification_workflow
 
 
 STYLE_PATH = Path(__file__).resolve().parent / "styles" / "classification_page.qss"
@@ -220,9 +222,10 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self.classificationPreviewContentLayout.addWidget(
             self._create_inspection_panel()
         )
-        self.classificationConfigureContentLayout.addWidget(
-            self._create_preprocessing_panel()
-        )
+        preprocessing_panel = self._create_preprocessing_panel()
+        preprocessing_panel.setMaximumWidth(1100)
+        preprocessing_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.classificationConfigureContentLayout.addWidget(preprocessing_panel)
         self.classificationAlgorithmContentLayout.addWidget(
             self._create_experiment_panel()
         )
@@ -251,6 +254,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self.datasetInspectionSplitter.setStretchFactor(0, 0)
         self.datasetInspectionSplitter.setStretchFactor(1, 1)
         self.logToggleButton = self.classification_log_section.toggle_button
+        polish_classification_workflow(self)
         self.set_step("Dataset")
 
     def _create_dataset_panel(self) -> QWidget:

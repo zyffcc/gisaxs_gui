@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import os
-
-
 import re
-
-
 from pathlib import Path
 
 
@@ -51,6 +47,9 @@ class ImageNavigationMixin:
             self._next_image_button.setToolTip("No next image")
             self._previous_image_button.setEnabled(False)
             self._next_image_button.setEnabled(False)
+            self._image_position_label = QLabel("— / —", parent)
+            self._image_position_label.setObjectName("gisaxsInputImagePositionLabel")
+            self._image_position_label.setToolTip("Current file position in this folder")
 
             nav_layout = getattr(self.ui, "gisaxsInputFileNavigationLayout", None)
             if nav_layout is not None:
@@ -60,8 +59,12 @@ class ImageNavigationMixin:
                 self._next_image_button.setParent(
                     getattr(self.ui, "gisaxsInputFileNavigationWidget", parent)
                 )
-                nav_layout.addWidget(self._previous_image_button)
-                nav_layout.addWidget(self._next_image_button)
+                show_button = getattr(self.ui, "gisaxsInputShowButton", None)
+                show_index = nav_layout.indexOf(show_button) if show_button is not None else -1
+                insert_at = show_index if show_index >= 0 else nav_layout.count()
+                nav_layout.insertWidget(insert_at, self._previous_image_button)
+                nav_layout.insertWidget(insert_at + 1, self._next_image_button)
+                nav_layout.insertWidget(insert_at + 2, self._image_position_label)
             elif hasattr(self.ui, "gridLayout_23"):
                 self.ui.gridLayout_23.addWidget(self._previous_image_button, 0, 5, 1, 1)
                 self.ui.gridLayout_23.addWidget(self._next_image_button, 0, 6, 1, 1)
@@ -112,8 +115,17 @@ class ImageNavigationMixin:
         try:
             if getattr(self, "_remote_cache_controls", None):
                 return
-            parent = getattr(self.ui, "gisaxsInputBox", None)
-            if parent is None or parent.layout() is None:
+            parent = getattr(
+                self.ui,
+                "gisaxsRemoteCacheControlsHost",
+                getattr(self.ui, "gisaxsInputBox", None),
+            )
+            target_layout = getattr(
+                self.ui,
+                "gisaxsRemoteCacheControlsLayout",
+                parent.layout() if parent is not None else None,
+            )
+            if parent is None or target_layout is None:
                 return
             row = QWidget(parent)
             row.setObjectName("gisaxsRemoteCacheRow")
@@ -145,7 +157,7 @@ class ImageNavigationMixin:
             layout.addWidget(limit_spin)
             layout.addWidget(clear_btn)
             row.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-            parent.layout().addWidget(row)
+            target_layout.addWidget(row)
 
             self._remote_cache_controls = {
                 "row": row,
@@ -473,6 +485,14 @@ class ImageNavigationMixin:
             if self._next_image_button is not None:
                 self._next_image_button.setEnabled(has_next)
                 self._next_image_button.setToolTip("Next" if has_next else "No next image")
+            label = getattr(self, "_image_position_label", None)
+            if label is not None:
+                if uses_internal_navigation:
+                    label.setText(f"{self._nxs_frame_index + 1} / {self._nxs_frame_count}")
+                elif count and index >= 0:
+                    label.setText(f"{index + 1} / {count}")
+                else:
+                    label.setText("— / —")
         except Exception:
             pass
 

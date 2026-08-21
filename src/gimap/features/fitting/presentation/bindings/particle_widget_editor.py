@@ -17,6 +17,8 @@ from PyQt5.QtWidgets import (
     QPushButton,
 )
 
+from src.gimap.app.presentation import install_safe_wheel_behavior
+
 from src.gimap.features.fitting.presentation.layout_primitives import (
     CurrentPageHeightStackedWidget,
     NoWheelDoubleSpinBox,
@@ -112,6 +114,9 @@ class ParticleWidgetEditorMixin:
         container.setMaximumWidth(16777215)
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._register_ui_children(container)
+        setattr(self.ui, f"fitParticleShapeCombox_{widget_id}", combo)
+        setattr(self.ui, f"fitParticleStackWidget_{widget_id}", stack)
+        install_safe_wheel_behavior(container)
         QTimer.singleShot(0, lambda widget=container: self._sync_particle_widget_height(widget))
 
     def _create_particle_parameter_page(
@@ -313,10 +318,9 @@ class ParticleWidgetEditorMixin:
         if layout is not None:
             layout.invalidate()
             layout.activate()
-        height = max(1, widget.sizeHint().height())
-        widget.setMinimumHeight(height)
-        widget.setMaximumHeight(height)
-        widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        widget.setMinimumHeight(0)
+        widget.setMaximumHeight(16777215)
+        widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         widget.updateGeometry()
 
     def _schedule_model_parameters_region_refresh(self):
@@ -328,11 +332,6 @@ class ParticleWidgetEditorMixin:
     def _refresh_model_parameters_region_height(self):
         model_card = (
             self.ui.gisaxsFittingPage.findChild(QWidget, "ModelParameterCard")
-            if hasattr(self.ui, "gisaxsFittingPage")
-            else None
-        )
-        work_splitter = (
-            self.ui.gisaxsFittingPage.findChild(QWidget, "gisaxsMainWorkSplitter")
             if hasattr(self.ui, "gisaxsFittingPage")
             else None
         )
@@ -358,47 +357,15 @@ class ParticleWidgetEditorMixin:
                     self._sync_particle_widget_height(widget)
 
         if model_card is not None:
-            base_min_height = model_card.property("baseMinHeight")
-            if base_min_height is None:
-                base_min_height = model_card.minimumHeight()
-                model_card.setProperty("baseMinHeight", base_min_height)
             model_card.layout().activate() if model_card.layout() is not None else None
+            model_card.setMinimumHeight(0)
+            model_card.setMaximumHeight(16777215)
+            model_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
             model_card.updateGeometry()
-            model_min_height = max(int(base_min_height), model_card.sizeHint().height())
-            model_card.setMinimumHeight(model_min_height)
-            model_card.setMaximumHeight(model_min_height)
-            model_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        else:
-            model_min_height = 0
 
         if fixed_controls_stack is not None:
             fixed_controls_stack.updateGeometry()
-            fixed_controls_stack.adjustSize()
-            fixed_min_height = max(
-                fixed_controls_stack.minimumHeight(), fixed_controls_stack.sizeHint().height()
-            )
-            fixed_controls_stack.setMinimumHeight(fixed_min_height)
-        else:
-            fixed_min_height = 0
-
-        if work_splitter is not None:
-            handle_width = (
-                work_splitter.handleWidth() if hasattr(work_splitter, "handleWidth") else 0
-            )
-            work_splitter.setMinimumHeight(fixed_min_height + model_min_height + handle_width)
-            work_splitter.updateGeometry()
-            current_sizes = work_splitter.sizes() if hasattr(work_splitter, "sizes") else []
-            if len(current_sizes) == 2 and current_sizes[1] < model_min_height:
-                work_splitter.setSizes([max(current_sizes[0], fixed_min_height), model_min_height])
-
-        if work_area_contents is not None and work_splitter is not None:
-            margins = (
-                work_area_contents.layout().contentsMargins()
-                if work_area_contents.layout() is not None
-                else None
-            )
-            vertical_margins = (margins.top() + margins.bottom()) if margins is not None else 0
-            work_area_contents.setMinimumHeight(work_splitter.minimumHeight() + vertical_margins)
+        if work_area_contents is not None:
             work_area_contents.updateGeometry()
 
     def _install_particle_context_menu(self, widget: QWidget, widget_id: int):

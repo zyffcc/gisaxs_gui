@@ -26,10 +26,10 @@ git stash
 
 除非用户明确要求，否则不得 commit 或 push。
 
-## 目标架构
+## 当前架构
 
-采用 feature-first modular monolith。目标 feature 边界包括 fitting、prediction、
-trainset、classification、WAXS 和 calibration。每个 feature 内采用：
+采用 feature-first modular monolith。当前 feature 边界包括 format converter、fitting、
+prediction、trainset、classification、WAXS 和 calibration。每个 feature 内采用：
 
 ```text
 presentation/
@@ -40,8 +40,8 @@ infrastructure/
     adapters/
 ```
 
-这是渐进式迁移目标。不得创建空架构目录，不得移动无关源码，不得进行 big-bang
-rewrite。
+目录必须对应真实职责和运行代码。不得创建空架构目录，不得移动无关源码，也不得在单个
+任务中混入无关的大范围改写。
 
 不要重新建立一个以全局 `controllers/`、`services/`、`models/` 或 `utils/` 为核心的
 架构。Feature-first ownership 优先于全局技术分层。
@@ -53,7 +53,7 @@ rewrite。
 
 ## 依赖方向
 
-所有新增和迁移代码必须遵循：
+所有生产代码必须遵循：
 
 ```text
 presentation → application → domain
@@ -122,21 +122,16 @@ Presentation 不得直接导入本 feature 的 domain。需要展示的稳定 DT
 application 的 public API 明确导出；presentation 通过 application 获取它们，避免绕过
 use case 和 application boundary。
 
-新 presentation 默认采用：
+Presentation 采用：
 
 ```text
 PyQt View → ViewModel → Use Case
 ```
 
-迁移历史 Qt 页面时，可以使用 feature-owned `ViewBinding` 连接既有 widget signals、dialogs、
-rendering 与 ViewModel。ViewBinding 属于 View 的实现细节，只能做控件值映射和展示；不得
-绕过 ViewModel 调用 use case，不得执行科学计算或具体 I/O，也不得与同一页面的 Controller
-实现并存。
-
-Legacy Controller 可以暂时存在，但新代码不得同时发展 Controller 和 ViewModel 两层
-orchestration，也不得建立 `View → Controller → ViewModel → Use Case`。确实需要保留
-controller 时，它只能承担极薄的 composition 或 navigation 职责，不得包含工作流编排、
-科学计算、外部引擎调用或具体 I/O。
+Feature-owned `ViewBinding` 可以连接 widget signals、dialogs、rendering 与 ViewModel。
+ViewBinding 属于 View 的实现细节，只能做控件值映射和展示；不得绕过 ViewModel 调用 use
+case，不得执行科学计算或具体 I/O。顶层旧 import path 只能薄 re-export 当前 owner，不能
+形成第二套 Controller orchestration。
 
 ## Ports 与 adapters
 
@@ -187,37 +182,9 @@ FittingUseCase 来完成 q conversion。
 禁止新增 catch-all modules：`utils.py`、`helpers.py`、`common.py`、`misc.py`。
 模块名称必须表达明确职责。
 
-## 渐进式重构
-
-禁止 big-bang rewrite。每次 refactor 优先只处理一个 dependency seam，不得在请求范围
-之外顺便进行无关清理。
-
-采用以下顺序：
-
-```text
-legacy code
-    ↓
-introduce dependency seam
-    ↓
-introduce new abstraction / use case
-    ↓
-migrate caller
-    ↓
-verify behavior
-    ↓
-remove legacy implementation
-```
-
-Legacy architecture 可以暂时违反目标架构，但：
-
-- 新代码不得新增 violation；
-- 新代码不得扩大已有 violation；
-- 每次 refactor 必须减少或缩小 dependency violation；
-- 只有 caller 已迁移且行为验证通过后，才能删除 legacy code。
-
 ## 保持科学行为不变
 
-结构重构不得改变：
+架构、UI、性能和维护性修改不得静默改变：
 
 - numerical definitions 或结果；
 - parameter meanings；
@@ -228,8 +195,8 @@ Legacy architecture 可以暂时违反目标架构，但：
 - fitting behavior；
 - preprocessing behavior。
 
-只有任务明确要求时才能修改科学行为。科学行为修改必须与结构重构隔离，并通过适当
-测试和 scientific review 验证。
+只有任务明确要求时才能修改科学行为。科学行为修改必须单独说明，并通过适当测试和
+scientific review 验证。
 
 ## 文件大小与内聚性
 
@@ -271,19 +238,128 @@ monolithic Python UI 文件。
   拆为 `views/` 或 `components/`，禁止形成新的千行通用 UI 文件；
 - 禁止把业务流程、科学计算、文件读写或进程管理放进 View；
 - 禁止保留同一页面的 `.ui`、pyuic 生成文件和 Python View 三套实现；
-- UI 迁移必须保持 objectName、快捷键、默认值、tab order、signals 和视觉行为，并增加离屏
-  characterization tests；
+- UI 维护必须审计 objectName、快捷键、默认值、tab order 和 signals；有意改变交互或视觉行为
+  时必须更新离屏测试与 workspace 文档；
 - `tests/test_ui_source_of_truth.py` 维护显式 Python View inventory 和依赖门禁；新增、删除或
   重命名 View 必须同步清单并说明 owner；
-- 禁止重新新增 legacy `.ui`、pyuic 输出或 UI 编译步骤；历史视觉参考应使用文档或截图保存。
+- 禁止重新新增 `.ui`、pyuic 输出或 UI 编译步骤；视觉参考应使用文档或截图保存。
+
+## 公共 Presentation 组件
+
+修改或新增页面前，必须先检查 `src/gimap/app/presentation/components/` 的公共组件 API，
+优先复用已有 `ParameterSection`、`AdvancedSection`、`FilePicker`、`PlotPanel`、
+`ResultTable`、`JobStatus`、`EmptyState`、`ErrorBanner` 和 safe-wheel numeric inputs。
+
+- 公共组件只能包含跨 feature 稳定的视觉、布局、可访问性和输入安全行为，不得包含科学计算、
+  use-case 调用、文件格式判断或 feature 状态；
+- feature presentation 只能通过 `src.gimap.app.presentation` 或其 `components` public API 导入，
+  禁止导入另一个 feature 的私有 presentation component；
+- 至少两个 feature 已有稳定相同需求，或属于全应用必须一致的交互安全规则时，才提升为公共组件；
+  禁止为了“将来可能复用”提前抽象；
+- 新公共组件必须从 `components/__init__.py` 和 `app/presentation/__init__.py` 显式导出，增加
+  offscreen test；有视觉状态时同步 showcase；
+- 动态创建的 spin box/combo box 必须再次调用 `install_safe_wheel_behavior`；普通滚轮用于滚动页面，
+  只有控件获得焦点且按住 Alt/Option 时才允许滚轮改值；
+- 公共组件目录不得出现 `utils.py`、`helpers.py`、`common.py` 等 catch-all 文件。
+
+详细组件清单、选择规则和新增流程见
+[`docs/architecture/ui-components.md`](docs/architecture/ui-components.md)。
+
+## 现代 UI 与布局门禁
+
+任何 workspace、page、dialog 或公共组件的新增与重构，都必须先阅读并遵守
+[`docs/architecture/ui-design-principles.md`](docs/architecture/ui-design-principles.md)。该文档是
+视觉层级、响应式布局、progressive disclosure 和 UI 验收的唯一权威来源。
+
+- 页面采用单层画布，通过留白、标题、对齐和分隔线建立层级；同一视觉区域最多一层带边框或背景
+  的容器，禁止 `Section → Card → GroupBox → Frame` 连续显示“框套框”；
+- Input、主要参数、Preview、主命令和 Results 必须默认可见。Advanced 只允许低频或专家选项，
+  标准工作流不得依赖展开面板；
+- 面向开发者的需求备注、实现说明和用户对 agent 的指导不得放入 UI；
+- 可变内容必须由 layout、`QSizePolicy` 和当前内容的 size hint 管理；禁止把动态页的 minimum 与
+  maximum height 锁为同一个值，禁止用固定高度掩盖裁切问题；
+- 一个方向只保留一个主要滚动容器；tab/stack 必须跟随当前页自然高度；
+- tab 和步骤导航必须保持位置、顺序稳定；仅当前页需要的 toolbar、banner、filter 必须位于 tab
+  内容内部或固定占位区，不得因显示/隐藏而把导航栏推上推下；
+- 图像显示控制紧邻 Preview，核心手势必须同时有显式 command；纯显示操作不得触发 cut、fit 或
+  页面跳转；
+- 曲线 q/log 控件必须使用用户任务语言。Signed q 的 Log X 使用 symlog，折叠后的 `|q|` 才使用
+  普通 log；不得把 branch、combination、axis scale 三个底层维度直接堆给用户；
+- 每次 UI 修改必须检查 1280×800、1440×900、1920×1080 的逻辑 viewport，运行 offscreen test，
+  并用截图检查裁切、重复边框、核心命令可见性和唯一主操作。
+
+## 科学数据流门禁
+
+Detector image 和其他会被多个科学步骤消费的数据必须遵守
+[`docs/architecture/scientific-data-flow.md`](docs/architecture/scientific-data-flow.md)。
+
+- 导入数据保存为不可变 RawImage；scientific preprocessing 必须从 RawImage 确定性生成唯一的
+  AnalysisImage，禁止在上一版处理结果上累计变换；
+- Preview、Yoneda/center finding、ROI、cut、fitting、batch analysis 和 processed export 默认且
+  只能消费 AnalysisImage，禁止缺失时静默回退到 RawImage；
+- Flip、threshold/mask、detector correction 和 mirror-fill 属于 scientific preprocessing；
+  colormap、vmin/vmax、auto scale、log intensity、zoom 和 overlay 属于 DisplayState；
+- DisplayState 不得改变科学数组、触发 scientific command 或使分析结果失效；preprocessing 改变
+  必须产生新 revision，并把依赖旧 revision 的 center、cut 和 fitting result 标记为 stale；
+- 嵌入 preview 与独立窗口只能是同一 AnalysisImage/CurvePlotSpec 和 typed display state 的两个
+  projection；禁止在独立窗口重复过滤、归一化或保存第二份科学状态。独立窗口可单独拥有 zoom、
+  pan、窗口几何和临时工具模式；
+- `Overlay ±q` 必须保留正负 source branch metadata，并以稳定、可辨识的不同颜色展示；
+- RawImage 只能用于重新 preprocessing、明确的 Raw Preview/Raw Export 或具名诊断；禁止通过
+  presentation display helper 给 application/domain 提供计算输入；
+- 裸数组兼容字段只能是 AnalysisImage 的只读别名，不能拥有第二份状态。代码必须使用语义明确的
+  data-flow API，并用测试证明 preview 和下游算法消费同一 revision。
+
+## Fitting 科学模型门禁
+
+Fitting 的总强度、Sphere/Cylinder/Vertical Cylinder form factor、结构因子、resolution、参数
+顺序、q 单位和分量缩放以
+[`docs/architecture/fitting-scientific-model.md`](docs/architecture/fitting-scientific-model.md)
+为唯一权威说明。
+
+当前核心公式为：
+
+```text
+I_model(q) = BG + K(k) × [Σᵢ Intᵢ Pᵢ(q) Sᵢ(q) + int_Res R(q)]
+R(q) = 1 / [1 + (|q| / sigma_Res)^nu_Res]
+F_sphere(q,R) = 3[sin(qR) - qR cos(qR)] / (qR)^3
+P_sphere(q) = <F_sphere(q,R)^2>
+phi(q) = exp(-pi q^2 sigma_D^2)
+S(q) = (1 - phi^2) / [1 + phi^2 - 2 phi cos(qD)]
+```
+
+`BG` 不乘 `k`；粒子分量与 resolution 分量乘相同的 `K(k)`。完整的圆柱公式、采样定义、
+参数语义和边界行为只在上述科学契约中维护，禁止在其他文档复制另一套定义。
+
+- 总曲线必须逐点满足 `Total = BG_total + Resolution + Σ Particle`；
+- 模型的所有分量必须在用于绘图的同一个 prepared q 数组上计算；
+- q、intensity 和 source-branch metadata 的过滤、fold 与排序必须使用同一个索引；
+- 禁止将 prepared model intensity 与 raw q 重新配对或再次独立 fold/sort；
+- 修改公式、采样、参数语义、单位或累加顺序时，必须同步更新公式文档并增加固定数值回归测试。
+
+## 参数提交与导航门禁
+
+所有 workspace 和 dialog 必须遵守
+[`docs/architecture/ui-interaction-contract.md`](docs/architecture/ui-interaction-contract.md)。
+
+- workflow step、workflow completion 和 preview tab 必须是独立状态；点击左侧任务不得重置右侧视图；
+- 参数编辑、鼠标选区和自动刷新不得隐式切 tab、滚动、抢焦点或打开 dialog；
+- 数值输入 Enter/结束编辑立即提交，方向键和有意滚轮采用默认 `220 ms` trailing debounce；普通
+  滚轮不得改值；相同 draft 不得重复提交；
+- 轻量 preview 可以节流刷新，scientific commit 必须通过 ViewModel command/use case；长任务必须
+  由显式 command 通过 JobRunner 启动；
+- 只有显式 Run/Plot/Extract 等命令成功产生有效结果后，才允许主动揭示结果页；失败和自动刷新
+  必须保留用户当前 view；
+- 已有派生结果可以在相关参数 commit 后防抖重算；尚无结果时不得把普通参数修改升级为隐式运行；
+- Qt signal 合并应复用公共 `ParameterCommitCoordinator`，不得在各 feature 重复 timer glue，也不得
+  把 scientific calculation 放入公共 coordinator。
 
 ## 文档治理
 
 文档必须与代码保持同步，但禁止为没有文档影响的修改制造无意义的文档变更。不同目录
 承担不同职责：
 
-- `docs/architecture/`：当前架构、目标架构和稳定依赖规则；
-- `docs/refactor/`：只读审计、迁移地图、阶段状态和 compatibility layer；
+- `docs/architecture/`：当前架构、科学契约和稳定依赖规则；
 - `docs/ui/`：workspace 信息架构、控件映射和手动验收清单；
 - `docs/development.md`：开发环境、依赖安装、统一检查命令和平台差异；
 - `docs/adr/`：需要长期保留原因和权衡的重要架构决策；仅在确有此类决策时创建。
@@ -294,15 +370,11 @@ monolithic Python UI 文件。
 
 新的重要文档应在开头明确：
 
-- `Status`：`Current`、`Target`、`Historical` 或 `Draft`；
+- `Status`：`Current` 或 `Draft`；
 - `Scope`；
 - `Related code`；
 - `Related tests`；
 - `Last verified`。
-
-历史审计和迁移地图不得描述成当前架构。重构完成后，应更新剩余 compatibility layer，
-或者把阶段文档明确标记为 `Historical`。不得使用没有具体对象和条件的“以后处理”或
-“已经完成”。
 
 发生以下变化时，必须在同一任务中更新对应的权威文档：
 
@@ -310,7 +382,7 @@ monolithic Python UI 文件。
 - application port、public application API 或配置格式变化；
 - 用户工作流、启动流程或后台任务模型变化；
 - BornAgain、TensorFlow 或其他外部依赖的安装和兼容方式变化；
-- compatibility layer、legacy entry point 或 public API 被增加、迁移或删除。
+- public import alias、entry point 或 public API 被增加、修改或删除。
 
 文档质量要求：
 
@@ -326,16 +398,34 @@ monolithic Python UI 文件。
 
 ## 验证要求
 
-每个新的 application use case 都必须增加测试。交付重构前：
+每个新的 application use case 都必须增加测试。交付修改前：
 
 - 运行与修改行为相关的 focused tests；
 - 可行时运行仓库统一验证命令；
 - 移动计算逻辑时比较可信科学输出；
 - 检查 `git status` 和 `git diff`，确认修改范围；
 - 检查文档影响和仓库内链接，避免实现与文档状态漂移；
-- 应明确报告 legacy violations，不得静默扩大 lint 或架构豁免范围。
+- 应明确报告 architecture violations，不得静默扩大 lint 或架构豁免范围。
 
 完整架构说明位于：
 
 - `docs/architecture/overview.md`；
 - `docs/architecture/dependency-rules.md`。
+
+## In-situ 序列分析契约
+
+Fitting 的实时、历史回看和批量处理必须遵守
+`docs/architecture/insitu-series-workflow.md`：
+
+- In-situ 复用单文件的 preprocessing、cut 和 fitting use cases，不得复制科学算法；
+- 单文件配置只能经用户显式操作创建不可变 Recipe 快照；
+- In-situ 修改必须创建新 Recipe 版本，不得反向或隐式同步到 Single analysis；
+- Recipe 更新必须声明 `future`、`selected_and_future` 或 `all` 作用范围；
+- display-only state 不进入 Recipe；worker 和持久化数据必须可 JSON 序列化；
+- 相同源数据与 Recipe 经 Single/In-situ 入口执行时必须保持数值兼容。
+- Single analysis 的 Load Mode 只能包含 Single/Stack；Live、历史回看和批量序列操作只能位于
+  feature-owned In-situ 页面，禁止重新增加 In-situ mode、轮询 timer 或第二个 runner dialog；
+- In-situ 页面采用 `Source → Preprocess → Geometry → Yoneda & cut → Fit → Results` 可点击流程。
+  点击节点只负责导航参数；完成/失败状态必须来自实际 frame record，不能来自点击历史；
+- Live 与 Batch 必须共享 Recipe、folder/pattern 输入、JobStatus、预览和结果缓存；不得复制单帧
+  preprocessing、cut、fit 算法或维护第二份运行状态。

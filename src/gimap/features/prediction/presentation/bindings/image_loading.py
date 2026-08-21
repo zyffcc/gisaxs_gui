@@ -128,6 +128,7 @@ class ImageLoadingMixin:
             return
 
         self._current_image = image_data.astype(np.float32, copy=False)
+        self._current_image_path = file_path
 
         stack_files = context.get("stack_files") or []
         if context.get("stack", 1) and context.get("stack", 1) > 1 and stack_files:
@@ -142,6 +143,8 @@ class ImageLoadingMixin:
             self._set_line_edit("gisaxsImageShowingValue", str(context["index"]))
 
         self._update_image_display()
+        self._set_predict_main_tab("input")
+        self._refresh_predict_readiness()
 
     def _maybe_log_scale(self, image: np.ndarray, enabled: bool) -> np.ndarray:
         if not enabled:
@@ -163,14 +166,13 @@ class ImageLoadingMixin:
         self._update_image_display()
 
     def _export_gisaxs_image(self) -> None:
-        if not self.prediction_results:
-            QMessageBox.information(
-                self.main_window, "Export", "Run a prediction before exporting the current result."
-            )
-            self._append_status_message("No prediction result to export", level="WARN")
-            return
         if self._current_pixmap is None:
-            self._append_status_message("No GISAXS image to export", level="WARN")
+            QMessageBox.information(
+                self.main_window,
+                "Export",
+                "Import a detector image before exporting the input preview.",
+            )
+            self._append_status_message("No input preview to export", level="WARN")
             return
         export_path = self._prompt_export_folder("Save GISAXS Image To")
         if not export_path:

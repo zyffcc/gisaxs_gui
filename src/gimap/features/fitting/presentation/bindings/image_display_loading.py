@@ -28,6 +28,7 @@ from ..binding_primitives import (
     _scientific_commands,
     is_matplotlib_available,
 )
+from ..detector_data_access import analysis_image_for
 
 
 class ImageDisplayLoadingMixin:
@@ -47,6 +48,7 @@ class ImageDisplayLoadingMixin:
                     frame_index=int(getattr(self, "_nxs_frame_index", 0)),
                 )
             )
+            self._sync_fitting_workflow()
             self.status_updated.emit(f"Image loading complete: {os.path.basename(file_path)}")
             workflow_frame = getattr(self, "_insitu_workflow_busy", False) and file_path == getattr(
                 self, "_insitu_workflow_processing_file", None
@@ -55,9 +57,12 @@ class ImageDisplayLoadingMixin:
                 self._ingest_workflow_image_without_preview(image_data)
             else:
                 self._display_image(image_data)
-            self._after_insitu_workflow_image_loaded(image_data, file_path)
+            analysis_image = analysis_image_for(self)
+            if analysis_image is not None:
+                self._after_insitu_workflow_image_loaded(analysis_image, file_path)
         except Exception as e:
             self.fitting_view_model.fail_image_load(str(e))
+            self._sync_fitting_workflow()
             self.status_updated.emit(f"Error while displaying image: {str(e)}")
             if getattr(self, "_insitu_workflow_processing_file", None) == file_path:
                 self._finalize_insitu_workflow_file(
@@ -75,6 +80,7 @@ class ImageDisplayLoadingMixin:
     def _on_image_loading_error(self, error_message):
         """No description."""
         self.fitting_view_model.fail_image_load(str(error_message))
+        self._sync_fitting_workflow()
         if getattr(self, "_insitu_workflow_busy", False):
             self._finalize_insitu_workflow_file(
                 load_status="failed", error_message=str(error_message), failed=True
@@ -90,7 +96,8 @@ class ImageDisplayLoadingMixin:
             sc = int(self.current_parameters.get("stack_count", 1))
         except Exception:
             sc = 1
-        self.summed_data = self.current_stack_data if sc and sc > 1 else None
+        analysis_image = analysis_image_for(self)
+        self.summed_data = analysis_image if sc and sc > 1 else None
         try:
             self._compute_q_meshgrids_and_store()
         except Exception:
@@ -115,12 +122,13 @@ class ImageDisplayLoadingMixin:
                 sc = int(self.current_parameters.get("stack_count", 1))
             except Exception:
                 sc = 1
-            self.summed_data = self.current_stack_data if sc and sc > 1 else None
+            analysis_image = analysis_image_for(self)
+            self.summed_data = analysis_image if sc and sc > 1 else None
             self._compute_q_meshgrids_and_store()
 
             display_image = self._get_current_display_image()
             if display_image is None:
-                display_image = self.current_stack_data
+                raise RuntimeError("Analysis image is not ready")
 
             self._handle_color_scale(display_image)
 
@@ -131,9 +139,11 @@ class ImageDisplayLoadingMixin:
                 self._update_graphics_view(display_image)
 
             if self.independent_window is not None and self.independent_window.isVisible():
-                is_log = self._is_log_mode_enabled()
+                state = self._current_detector_display_state()
+                self.independent_window.set_detector_display_state(state)
+                self._seed_independent_q_cache()
                 self.independent_window.update_image(
-                    display_image, self._current_vmin, self._current_vmax, use_log=is_log
+                    display_image, state.vmin, state.vmax, use_log=state.log_intensity
                 )
                 self._sync_independent_window_selection()
 
@@ -158,9 +168,10 @@ class ImageDisplayLoadingMixin:
     def _compute_q_meshgrids_and_store(self):
         """No description."""
         try:
-            if self.current_stack_data is None:
+            analysis_image = analysis_image_for(self)
+            if analysis_image is None:
                 return
-            height, width = self.current_stack_data.shape
+            height, width = analysis_image.shape
             pixel_size_x = self.fitting_view_model.get_setting(
                 "fitting", "detector.pixel_size_x", 172.0
             )
@@ -191,6 +202,7 @@ class ImageDisplayLoadingMixin:
                 self._q_mesh_cache_key == cache_key
                 and self.qy_matrix is not None
                 and self.qz_matrix is not None
+                and self.qr_matrix is not None
             ):
                 return
             t0 = time.perf_counter()
@@ -205,13 +217,10 @@ class ImageDisplayLoadingMixin:
                 wavelength=wavelength,
                 crop_params=None,
             )
-            qy_mesh, qz_mesh = detector.get_qy_qz_meshgrids()
+            qy_mesh, qz_mesh, qr_mesh = detector.get_q_coordinate_meshgrids()
             self.qy_matrix = qy_mesh
             self.qz_matrix = qz_mesh
-            try:
-                self.qr_matrix = np.sqrt(np.square(qy_mesh) + np.square(qz_mesh))
-            except Exception:
-                self.qr_matrix = None
+            self.qr_matrix = qr_mesh
             self._q_mesh_cache_key = cache_key
             print(f"[Timing] q-space mesh calculation: {(time.perf_counter() - t0) * 1000:.2f} ms")
         except Exception:
@@ -262,18 +271,20 @@ class ImageDisplayLoadingMixin:
     def _refresh_image_display(self):
         """No description."""
         try:
-            if self.current_stack_data is not None:
+            if analysis_image_for(self) is not None:
                 self._refresh_current_parameter_selection_from_ui()
                 display_image = self._get_current_display_image()
                 if display_image is None:
-                    display_image = self.current_stack_data
+                    return
                 if hasattr(self.ui, "gisaxsInputGraphicsView"):
                     self._update_graphics_view(display_image)
 
                 if self.independent_window is not None and self.independent_window.isVisible():
-                    is_log = self._is_log_mode_enabled()
+                    state = self._current_detector_display_state()
+                    self.independent_window.set_detector_display_state(state)
+                    self._seed_independent_q_cache()
                     self.independent_window.update_image(
-                        display_image, self._current_vmin, self._current_vmax, use_log=is_log
+                        display_image, state.vmin, state.vmax, use_log=state.log_intensity
                     )
                     self._sync_independent_window_selection()
         except Exception as e:
@@ -290,7 +301,7 @@ class ImageDisplayLoadingMixin:
                 )
                 return
 
-            if self.current_stack_data is None:
+            if analysis_image_for(self) is None:
                 QMessageBox.information(
                     self.main_window, "No Image", "Please import and display an image first."
                 )
@@ -311,25 +322,23 @@ class ImageDisplayLoadingMixin:
                 )
                 self.independent_window.region_selected.connect(self._on_region_selected)
                 self.independent_window.center_picked.connect(self._on_detector_center_picked)
-                self.independent_window.display_options_changed.connect(
-                    self._on_independent_display_options_changed
+                self.independent_window.display_state_changed.connect(
+                    self._on_independent_detector_display_state_changed
                 )
                 self.independent_window.status_updated.connect(self.status_updated.emit)
 
-            if self.current_stack_data is not None:
-                is_log = self._is_log_mode_enabled()
+            analysis_image = analysis_image_for(self)
+            if analysis_image is not None:
                 self._refresh_current_parameter_selection_from_ui()
                 display_image = self._get_current_display_image()
                 if display_image is None:
-                    display_image = self.current_stack_data
-                self.independent_window.current_image_shape = self.current_stack_data.shape
-                self.independent_window.set_display_options(
-                    show_cut_region=self._show_cut_region,
-                    show_center=self._show_center,
-                    colormap=self._image_colormap,
-                )
+                    return
+                self.independent_window.current_image_shape = analysis_image.shape
+                state = self._current_detector_display_state()
+                self.independent_window.set_detector_display_state(state)
+                self._seed_independent_q_cache()
                 self.independent_window.update_image(
-                    display_image, self._current_vmin, self._current_vmax, use_log=is_log
+                    display_image, state.vmin, state.vmax, use_log=state.log_intensity
                 )
                 self._sync_independent_window_selection()
 
@@ -348,6 +357,19 @@ class ImageDisplayLoadingMixin:
 
         except Exception as e:
             self.status_updated.emit(f"Independent window error: {str(e)}")
+
+    def _seed_independent_q_cache(self) -> None:
+        """Share immutable q grids instead of recalculating them in the viewer."""
+
+        window = getattr(self, "independent_window", None)
+        if window is None:
+            return
+        window.seed_q_grid_cache(
+            self._q_mesh_cache_key,
+            self.qy_matrix,
+            self.qz_matrix,
+            self.qr_matrix,
+        )
 
     def _on_detector_center_picked(self, center_info: dict):
         try:
@@ -390,9 +412,7 @@ class ImageDisplayLoadingMixin:
 
             try:
                 if self.independent_window is not None:
-                    self.independent_window._q_cache_key = None
-                    self.independent_window._qy_mesh = None
-                    self.independent_window._qz_mesh = None
+                    self._seed_independent_q_cache()
                     self.independent_window._drag_current_center = None
             except Exception:
                 pass
@@ -406,6 +426,7 @@ class ImageDisplayLoadingMixin:
                 }
             )
             self._refresh_image_display()
+            self._complete_fitting_step("center", "Detector center selected")
             self.status_updated.emit(
                 f"Detector beam center set from image: X={beam_x:.2f}, Y={beam_y:.2f}"
             )

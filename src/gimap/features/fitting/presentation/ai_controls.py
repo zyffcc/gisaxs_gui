@@ -12,12 +12,14 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from src.gimap.app.presentation.layout_primitives import normalize_button
 from src.gimap.app.presentation.responsive_layout import scale_value
 
 from .layout_primitives import (
+    DisclosurePanel,
     detach_from_parent_layout as _detach_from_parent_layout,
 )
 
@@ -54,6 +56,7 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     ui.aiFittingFastPredictButton = QPushButton("Fast Predict", method_group)
     ui.aiFittingFullAutoFitButton = QPushButton("Full Auto Fit", method_group)
     ui.aiFittingStopButton = QPushButton("Stop", method_group)
+    ui.aiFittingStopButton.setProperty("gimapDangerAction", True)
     ui.aiFittingStopButton.setEnabled(False)
     ui.aiFittingSamplesSpinBox = QSpinBox(method_group)
     ui.aiFittingSamplesSpinBox.setObjectName("aiFittingSamplesSpinBox")
@@ -130,14 +133,14 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     ui.aiFittingConstraintComboBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     button_specs = (
-        (ui.aiFittingRefreshButton, scale_value(96, card.profile, 88)),
-        (ui.aiFittingOpenWorkspaceButton, scale_value(166, card.profile, 146)),
-        (ui.aiFittingExportOutputButton, scale_value(146, card.profile, 128)),
-        (ui.aiFittingCombinationButton, scale_value(176, card.profile, 150)),
-        (ui.aiFittingAdvancedConstraintsButton, scale_value(138, card.profile, 120)),
-        (ui.aiFittingFastPredictButton, scale_value(136, card.profile, 120)),
-        (ui.aiFittingFullAutoFitButton, scale_value(136, card.profile, 120)),
-        (ui.aiFittingStopButton, scale_value(86, card.profile, 76)),
+        (ui.aiFittingRefreshButton, scale_value(82, card.profile, 74)),
+        (ui.aiFittingOpenWorkspaceButton, scale_value(128, card.profile, 112)),
+        (ui.aiFittingExportOutputButton, scale_value(116, card.profile, 104)),
+        (ui.aiFittingCombinationButton, scale_value(148, card.profile, 132)),
+        (ui.aiFittingAdvancedConstraintsButton, scale_value(112, card.profile, 100)),
+        (ui.aiFittingFastPredictButton, scale_value(112, card.profile, 100)),
+        (ui.aiFittingFullAutoFitButton, scale_value(112, card.profile, 100)),
+        (ui.aiFittingStopButton, scale_value(72, card.profile, 66)),
     )
     for button in (
         ui.aiFittingRefreshButton,
@@ -154,6 +157,8 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
         button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
     for button, width in button_specs:
         button.setMinimumWidth(width)
+    ui.aiFittingFastPredictButton.setProperty("gimapPrimaryAction", True)
+    ui.aiFittingFullAutoFitButton.setProperty("gimapPrimaryAction", True)
 
     def make_ai_label(text: str) -> QLabel:
         label = QLabel(text, method_group)
@@ -171,7 +176,7 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     model_row.addWidget(ui.aiFittingModelComboBox, 1)
 
     model_actions_row = QHBoxLayout()
-    model_actions_row.setContentsMargins(scale_value(84, card.profile, 72), 0, 0, 0)
+    model_actions_row.setContentsMargins(0, 0, 0, 0)
     model_actions_row.setSpacing(scale_value(8, card.profile, 6))
     model_actions_row.addWidget(ui.aiFittingRefreshButton)
     model_actions_row.addWidget(ui.aiFittingOpenWorkspaceButton)
@@ -183,20 +188,31 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     control_row.setSpacing(scale_value(8, card.profile, 6))
     control_row.addWidget(ui.aiFittingConstraintLabel)
     control_row.addWidget(ui.aiFittingConstraintComboBox, 1)
-    control_row.addWidget(ui.aiFittingFixedKComboBox)
-    control_row.addWidget(ui.aiFittingCombinationButton)
-    control_row.addWidget(ui.aiFittingAdvancedConstraintsButton)
+
+    constraint_actions_row = QHBoxLayout()
+    constraint_actions_row.setContentsMargins(0, 0, 0, 0)
+    constraint_actions_row.setSpacing(scale_value(8, card.profile, 6))
+    constraint_actions_row.addWidget(ui.aiFittingFixedKComboBox)
+    constraint_actions_row.addWidget(ui.aiFittingCombinationButton)
+    constraint_actions_row.addWidget(ui.aiFittingAdvancedConstraintsButton)
+    constraint_actions_row.addStretch(1)
 
     predict_row = QHBoxLayout()
-    predict_row.setContentsMargins(scale_value(84, card.profile, 72), 0, 0, 0)
+    predict_row.setContentsMargins(0, 0, 0, 0)
     predict_row.setSpacing(scale_value(8, card.profile, 6))
     predict_row.addWidget(ui.aiFittingFastPredictButton)
     predict_row.addWidget(ui.aiFittingFullAutoFitButton)
     predict_row.addWidget(ui.aiFittingStopButton)
     predict_row.addStretch(1)
 
-    tuning_grid = QGridLayout()
-    tuning_grid.setContentsMargins(scale_value(84, card.profile, 72), 0, 0, 0)
+    tuning_disclosure = DisclosurePanel(
+        "Advanced AI tuning",
+        "fittingAiTuningDisclosure",
+        method_group,
+    )
+    tuning_content = QWidget(tuning_disclosure.content)
+    tuning_grid = QGridLayout(tuning_content)
+    tuning_grid.setContentsMargins(0, 0, 0, 0)
     tuning_grid.setHorizontalSpacing(scale_value(8, card.profile, 6))
     tuning_grid.setVerticalSpacing(scale_value(6, card.profile, 5))
     tuning_specs = (
@@ -208,7 +224,7 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     for idx, (label_text, editor) in enumerate(tuning_specs):
         label = QLabel(label_text, method_group)
         label.setStyleSheet("font-size: 11px; color: #475569;")
-        row, col = divmod(idx, 3)
+        row, col = divmod(idx, 2)
         tuning_grid.addWidget(label, row, col * 2)
         tuning_grid.addWidget(editor, row, col * 2 + 1)
         editor.setMinimumWidth(scale_value(82, card.profile, 72))
@@ -218,8 +234,11 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     method_layout.addLayout(model_row)
     method_layout.addLayout(model_actions_row)
     method_layout.addLayout(control_row)
+    method_layout.addLayout(constraint_actions_row)
     method_layout.addLayout(predict_row)
-    method_layout.addLayout(tuning_grid)
+    tuning_disclosure.add_widget(tuning_content)
+    ui.fittingAiTuningDisclosure = tuning_disclosure
+    method_layout.addWidget(tuning_disclosure)
     method_layout.addWidget(card.methodInfoLabel)
 
     return method_group

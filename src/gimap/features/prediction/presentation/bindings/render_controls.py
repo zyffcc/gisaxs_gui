@@ -102,7 +102,6 @@ class RenderControlsMixin:
         if param_widget is None:
             return
         two_d_widgets = [
-            "predict2dColorScaleLabel",
             "predict2dAutoScaleCheckBox",
             "predict2dAutoScaleResetButton",
             "predict2dVminLabel",
@@ -117,6 +116,7 @@ class RenderControlsMixin:
             "predict2dCountourLevelsValue",
         ]
         is_curve = kind == "curve"
+        is_image = kind in {"hr", "array", "steps"}
         for name in two_d_widgets:
             w = getattr(self.ui, name, None)
             if w is not None:
@@ -130,6 +130,12 @@ class RenderControlsMixin:
         curve_widget = getattr(self.ui, "predict2dParameter1dpartWidget", None)
         if curve_widget is not None:
             curve_widget.setVisible(is_curve)
+        display_section = getattr(self.ui, "predict2dPreviewDisplaySection", None)
+        if display_section is not None:
+            display_section.setVisible(is_image)
+        curve_section = getattr(self.ui, "predict2dPreviewCurveSection", None)
+        if curve_section is not None:
+            curve_section.setVisible(is_curve)
 
         if not is_curve:
             return
@@ -185,15 +191,16 @@ class RenderControlsMixin:
 
         grid.addWidget(logx, 0, 0)
         grid.addWidget(logy, 0, 1)
-        grid.addWidget(autoscale, 0, 2)
-        grid.addWidget(QLabel("X min"), 1, 0)
-        grid.addWidget(xmin, 1, 1)
-        grid.addWidget(QLabel("X max"), 1, 2)
-        grid.addWidget(xmax, 1, 3)
-        grid.addWidget(QLabel("Y min"), 2, 0)
-        grid.addWidget(ymin, 2, 1)
-        grid.addWidget(QLabel("Y max"), 2, 2)
-        grid.addWidget(ymax, 2, 3)
+        grid.addWidget(autoscale, 1, 0, 1, 2)
+        grid.addWidget(QLabel("X min"), 2, 0)
+        grid.addWidget(xmin, 2, 1)
+        grid.addWidget(QLabel("X max"), 3, 0)
+        grid.addWidget(xmax, 3, 1)
+        grid.addWidget(QLabel("Y min"), 4, 0)
+        grid.addWidget(ymin, 4, 1)
+        grid.addWidget(QLabel("Y max"), 5, 0)
+        grid.addWidget(ymax, 5, 1)
+        grid.setColumnStretch(1, 1)
 
         logx.toggled.connect(self._on_predict_curve_control_changed)
         logy.toggled.connect(self._on_predict_curve_control_changed)

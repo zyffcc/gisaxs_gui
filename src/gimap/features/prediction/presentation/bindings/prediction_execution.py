@@ -22,6 +22,8 @@ class PredictionExecutionMixin:
         self._update_parameters_from_ui()
         if not self._validate_parameters():
             return
+        self._prediction_active = True
+        self._refresh_predict_readiness()
         try:
             self.status_updated.emit("Starting GISAXS prediction...")
             self.progress_updated.emit(0)
@@ -62,6 +64,9 @@ class PredictionExecutionMixin:
             # 重置多文件预测状态
             if self._multifile_prediction_active:
                 self._on_multifile_prediction_completed()
+        finally:
+            self._prediction_active = False
+            self._refresh_predict_readiness()
 
     def _update_parameters_from_ui(self) -> None:
         combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)

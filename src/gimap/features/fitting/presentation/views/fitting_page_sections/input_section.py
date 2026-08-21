@@ -170,6 +170,5 @@ class InputSectionMixin:
         self.gisaxsInputModelCombox.setObjectName("gisaxsInputModelCombox")
         self.gisaxsInputModelCombox.addItem("")
         self.gisaxsInputModelCombox.addItem("")
-        self.gisaxsInputModelCombox.addItem("")
         self.gridLayout_23.addWidget(self.gisaxsInputModelCombox, 1, 0, 1, 1)
         self.gridLayout_38.addWidget(self.gisaxsInputBox, 0, 0, 1, 1)

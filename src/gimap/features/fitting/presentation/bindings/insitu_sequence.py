@@ -26,6 +26,7 @@ from src.gimap.shared.file_paths import normalize_path
 from ..binding_primitives import (
     InsituBatchImageLoader,
 )
+from ..detector_data_access import analysis_image_for
 
 
 class InsituSequenceMixin:
@@ -40,22 +41,27 @@ class InsituSequenceMixin:
 
     def _start_insitu_workflow(self):
         try:
-            if getattr(self, "load_mode", "Single") != "In-situ":
-                QMessageBox.information(
+            recipe_error = self._insitu_recipe_start_error()
+            if recipe_error:
+                QMessageBox.warning(
                     self._insitu_workflow_parent_widget(),
-                    "In-situ Workflow",
-                    "Set Load Mode to In-situ first.",
+                    "In-situ Recipe changed",
+                    recipe_error,
                 )
                 return
-            imported_file = self.current_parameters.get("imported_gisaxs_file", "")
-            if not imported_file:
-                QMessageBox.information(
-                    self._insitu_workflow_parent_widget(),
-                    "In-situ Workflow",
-                    "Import one GISAXS file from the watch folder first.",
+            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+            folder = (
+                widgets.get("sequence_folder").text().strip()
+                if widgets.get("sequence_folder")
+                else ""
+            )
+            if not folder:
+                self._populate_insitu_sequence_folder_default()
+                folder = (
+                    widgets.get("sequence_folder").text().strip()
+                    if widgets.get("sequence_folder")
+                    else ""
                 )
-                return
-            folder = os.path.dirname(imported_file)
             if not self.fitting_view_model.storage.is_remote_source(folder) and not os.path.isdir(
                 folder
             ):
@@ -73,13 +79,14 @@ class InsituSequenceMixin:
                     "Enable at least one workflow step.",
                 )
                 return
+            self._activate_insitu_recipe_runtime()
             if self._insitu_workflow_state != "Paused":
                 self._insitu_workflow_queue = []
                 if (
                     self.fitting_view_model.storage.is_remote_source(folder)
                     and normalize_path(folder) not in self._folder_image_scan_cache
                 ):
-                    self._scan_folder_images_for_file(imported_file)
+                    self._scan_folder_images_for_file(folder)
                 self._insitu_workflow_seen = set(self._list_insitu_watch_files(folder))
                 self._insitu_workflow_file_sizes = {}
                 self._reset_insitu_session_cache()
@@ -96,7 +103,6 @@ class InsituSequenceMixin:
                 self._insitu_workflow_timer.setSingleShot(False)
                 self._insitu_workflow_timer.timeout.connect(self._insitu_workflow_poll)
             self._insitu_workflow_timer.start(max(200, int(settings["poll_interval"] * 1000)))
-            self._stop_insitu_timer()
             self._set_insitu_workflow_state("Watching", f"Watching {folder}")
             self._insitu_workflow_poll()
         except Exception as exc:
@@ -104,11 +110,12 @@ class InsituSequenceMixin:
 
     def _start_insitu_sequence_processing(self):
         try:
-            if getattr(self, "load_mode", "Single") != "In-situ":
-                QMessageBox.information(
+            recipe_error = self._insitu_recipe_start_error()
+            if recipe_error:
+                QMessageBox.warning(
                     self._insitu_workflow_parent_widget(),
-                    "In-situ Workflow",
-                    "Set Load Mode to In-situ first.",
+                    "In-situ Recipe changed",
+                    recipe_error,
                 )
                 return
             settings = self._insitu_workflow_settings()
@@ -163,10 +170,10 @@ class InsituSequenceMixin:
                 )
             else:
                 self.fitting_view_model.insitu.resume_insitu_workflow()
+            self._activate_insitu_recipe_runtime()
             self._insitu_workflow_stop_requested = False
             if self._insitu_workflow_timer is not None:
                 self._insitu_workflow_timer.stop()
-            self._stop_insitu_timer()
             self._set_insitu_workflow_state(
                 "Processing", f"Processing {len(self._insitu_workflow_queue)} existing file(s)"
             )
@@ -271,20 +278,25 @@ class InsituSequenceMixin:
                 self._insitu_workflow_ai_record = None
                 self._insitu_workflow_ai_then_refine = False
             self._set_insitu_workflow_state("Idle", "Watch stopped")
-            if getattr(self, "load_mode", "Single") == "In-situ" and self._is_auto_show_enabled():
-                self._start_insitu_timer()
+            self._restore_single_analysis_runtime()
         except Exception:
             pass
 
     def _list_insitu_watch_files(self, folder: str):
         try:
+            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+            pattern = (
+                widgets.get("sequence_pattern").text().strip()
+                if widgets.get("sequence_pattern")
+                else "*.cbf"
+            ) or "*.cbf"
             if self.fitting_view_model.storage.is_remote_source(folder):
                 cached = self._folder_image_scan_cache.get(normalize_path(folder))
-                return list(cached or [])
+                return [path for path in (cached or []) if Path(path).match(pattern)]
             return [
-                os.path.join(folder, name)
-                for name in sorted(os.listdir(folder), key=self._natural_sort_key)
-                if name.lower().endswith(self._supported_folder_image_extensions())
+                str(path)
+                for path in sorted(Path(folder).glob(pattern), key=lambda p: self._natural_sort_key(str(p)))
+                if path.is_file()
             ]
         except Exception:
             return []
@@ -293,8 +305,12 @@ class InsituSequenceMixin:
         try:
             if self._insitu_workflow_state != "Watching":
                 return
-            imported_file = self.current_parameters.get("imported_gisaxs_file", "")
-            folder = os.path.dirname(imported_file) if imported_file else ""
+            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+            folder = (
+                widgets.get("sequence_folder").text().strip()
+                if widgets.get("sequence_folder")
+                else ""
+            )
             if not folder or (
                 not self.fitting_view_model.storage.is_remote_source(folder)
                 and not os.path.isdir(folder)
@@ -305,7 +321,7 @@ class InsituSequenceMixin:
                 self.fitting_view_model.storage.is_remote_source(folder)
                 and normalize_path(folder) not in self._folder_image_scan_cache
             ):
-                self._scan_folder_images_for_file(imported_file)
+                self._scan_folder_images_for_file(folder)
                 self._set_insitu_workflow_state("Watching", "Scanning remote watch folder...")
                 return
             settings = self._insitu_workflow_settings()
@@ -344,6 +360,7 @@ class InsituSequenceMixin:
         if not self._insitu_workflow_queue:
             if self._insitu_workflow_state == "Processing":
                 self._set_insitu_workflow_state("Idle", "Sequence processing complete")
+                self._restore_single_analysis_runtime()
             self._refresh_insitu_workflow_status()
             return
         batch_size = max(1, int(self._insitu_workflow_settings().get("fit_every", 1)))
@@ -421,7 +438,14 @@ class InsituSequenceMixin:
             "run_mode": self._insitu_workflow_settings().get(
                 "run_mode", "Process Existing Sequence"
             ),
+            "recipe_version": (
+                self.fitting_view_model.insitu.recipe.version
+                if self.fitting_view_model.insitu.recipe is not None
+                else ""
+            ),
             "load_status": "pending",
+            "preprocess_status": "pending",
+            "geometry_status": "pending",
             "cut_status": "skipped",
             "fit_status": "skipped",
             "chi_square": "",
@@ -434,7 +458,7 @@ class InsituSequenceMixin:
             mirror_fill_enabled = bool(getattr(self, "_mirror_fill_detector_gaps", False))
             if mirror_fill_enabled:
                 self._log_insitu_workflow(
-                    f"Mirror-filling detector gaps before stacking/cutting "
+                    f"Mirror-filling detector gaps in canonical preprocessing "
                     f"(margin={int(getattr(self, '_mirror_gap_margin_px', 0))} px)"
                 )
                 if isinstance(self._insitu_workflow_current_record, dict):
@@ -448,9 +472,6 @@ class InsituSequenceMixin:
                 copy_remote_to_cache=self._remote_copy_enabled,
                 cache_dir=self._remote_cache_dir,
                 cache_limit_gb=self._remote_cache_limit_gb,
-                mirror_fill_gaps=mirror_fill_enabled,
-                mirror_center_x=self._get_mirror_gap_fill_center_x(),
-                mirror_gap_margin_px=int(getattr(self, "_mirror_gap_margin_px", 0)),
             )
             loader.image_loaded.connect(self._on_insitu_batch_image_loaded)
             loader.error_occurred.connect(self._on_insitu_batch_image_error)
@@ -481,10 +502,14 @@ class InsituSequenceMixin:
                     f"In-situ batch loading complete: {len(batch_paths)} files "
                     f"({os.path.basename(batch_paths[0])} -> {os.path.basename(batch_paths[-1])})"
                 )
-            self._ingest_workflow_image_without_preview(image_data)
             if self._should_refresh_insitu_views_for_current_file():
                 self._display_image(image_data)
-            self._after_insitu_workflow_image_loaded(image_data, first_file_path)
+            else:
+                self._ingest_workflow_image_without_preview(image_data)
+            analysis_image = analysis_image_for(self)
+            if analysis_image is None:
+                raise RuntimeError("Analysis image is not ready after in-situ preprocessing")
+            self._after_insitu_workflow_image_loaded(analysis_image, first_file_path)
         except Exception as exc:
             self._finalize_insitu_workflow_file(
                 load_status="failed", error_message=str(exc), failed=True
@@ -505,6 +530,8 @@ class InsituSequenceMixin:
         refresh_views = self._should_refresh_insitu_views_for_current_file()
         try:
             record["load_status"] = "ok"
+            record["preprocess_status"] = "ok"
+            record["geometry_status"] = "ok"
             widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
             image_label = widgets.get("image_label")
             if image_label is not None:

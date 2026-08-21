@@ -3,7 +3,20 @@
 from __future__ import annotations
 
 
-from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtCore import QEvent, QObject, QRectF, QTimer, Qt
+
+
+class PredictionGraphicsFitFilter(QObject):
+    """Keep an unzoomed graphics view fitted when the workspace is resized."""
+
+    def __init__(self, callback, parent=None) -> None:
+        super().__init__(parent)
+        self._callback = callback
+
+    def eventFilter(self, watched, event):  # noqa: N802 - Qt API
+        if event.type() == QEvent.Resize:
+            QTimer.singleShot(0, self._callback)
+        return False
 
 
 class DisplayControlsMixin:

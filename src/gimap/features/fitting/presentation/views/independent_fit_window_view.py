@@ -1,92 +1,83 @@
-"""Hand-maintained Python View for the independent fit window."""
-
+"""Hand-maintained Python View for the independent fitting curve window."""
 
 from PyQt5 import QtCore, QtWidgets
 
 
-class IndependentFitWindowView(object):
-    def setupUi(self, IndependentFitWindow):
-        IndependentFitWindow.setObjectName("IndependentFitWindow")
-        IndependentFitWindow.resize(800, 600)
-        self.centralwidget = QtWidgets.QWidget(IndependentFitWindow)
+class IndependentFitWindowView:
+    """Create the enlarged curve projection and its display-only controls."""
+
+    def setupUi(self, window):
+        window.setObjectName("IndependentFitWindow")
+        window.resize(1040, 720)
+        self.centralwidget = QtWidgets.QWidget(window)
         self.centralwidget.setObjectName("centralwidget")
         self.fitWindowLayout = QtWidgets.QVBoxLayout(self.centralwidget)
-        self.fitWindowLayout.setObjectName("fitWindowLayout")
+        self.fitWindowLayout.setContentsMargins(12, 10, 12, 12)
+        self.fitWindowLayout.setSpacing(8)
+
         self.toolbarHost = QtWidgets.QWidget(self.centralwidget)
         self.toolbarHost.setObjectName("toolbarHost")
         self.toolbarHostLayout = QtWidgets.QVBoxLayout(self.toolbarHost)
         self.toolbarHostLayout.setContentsMargins(0, 0, 0, 0)
-        self.toolbarHostLayout.setObjectName("toolbarHostLayout")
         self.fitWindowLayout.addWidget(self.toolbarHost)
+
         self.fitControls = QtWidgets.QWidget(self.centralwidget)
         self.fitControls.setObjectName("fitControls")
         self.fitControlsLayout = QtWidgets.QHBoxLayout(self.fitControls)
-        self.fitControlsLayout.setObjectName("fitControlsLayout")
-        self.dataFilterLabel = QtWidgets.QLabel(self.fitControls)
-        self.dataFilterLabel.setObjectName("dataFilterLabel")
-        self.fitControlsLayout.addWidget(self.dataFilterLabel)
-        self.show_positive_cb = QtWidgets.QCheckBox(self.fitControls)
-        self.show_positive_cb.setObjectName("show_positive_cb")
-        self.fitControlsLayout.addWidget(self.show_positive_cb)
-        self.show_negative_cb = QtWidgets.QCheckBox(self.fitControls)
-        self.show_negative_cb.setObjectName("show_negative_cb")
-        self.fitControlsLayout.addWidget(self.show_negative_cb)
-        spacerItem = QtWidgets.QSpacerItem(12, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
-        self.fitControlsLayout.addItem(spacerItem)
-        self.qUnitLabel = QtWidgets.QLabel(self.fitControls)
-        self.qUnitLabel.setObjectName("qUnitLabel")
-        self.fitControlsLayout.addWidget(self.qUnitLabel)
+        self.fitControlsLayout.setContentsMargins(0, 0, 0, 0)
+        self.fitControlsLayout.setSpacing(8)
+
+        self.qViewLabel = QtWidgets.QLabel("q View", self.fitControls)
+        self.q_view_combo = QtWidgets.QComboBox(self.fitControls)
+        self.q_view_combo.setObjectName("q_view_combo")
+        self.fitControlsLayout.addWidget(self.qViewLabel)
+        self.fitControlsLayout.addWidget(self.q_view_combo)
+
+        self.layersLabel = QtWidgets.QLabel("Layers", self.fitControls)
+        self.curve_mode_combo = QtWidgets.QComboBox(self.fitControls)
+        self.curve_mode_combo.setObjectName("curve_mode_combo")
+        self.fitControlsLayout.addWidget(self.layersLabel)
+        self.fitControlsLayout.addWidget(self.curve_mode_combo)
+
+        self.log_x_cb = QtWidgets.QCheckBox("Log X", self.fitControls)
+        self.log_x_cb.setObjectName("log_x_cb")
+        self.log_y_cb = QtWidgets.QCheckBox("Log Y", self.fitControls)
+        self.log_y_cb.setObjectName("log_y_cb")
+        self.normalize_cb = QtWidgets.QCheckBox("Normalize", self.fitControls)
+        self.normalize_cb.setObjectName("normalize_cb")
+        self.fitControlsLayout.addWidget(self.log_x_cb)
+        self.fitControlsLayout.addWidget(self.log_y_cb)
+        self.fitControlsLayout.addWidget(self.normalize_cb)
+
+        self.qUnitLabel = QtWidgets.QLabel("Unit", self.fitControls)
         self.q_unit_combo = QtWidgets.QComboBox(self.fitControls)
         self.q_unit_combo.setObjectName("q_unit_combo")
-        self.q_unit_combo.addItem("")
-        self.q_unit_combo.addItem("")
+        self.fitControlsLayout.addWidget(self.qUnitLabel)
         self.fitControlsLayout.addWidget(self.q_unit_combo)
-        spacerItem1 = QtWidgets.QSpacerItem(12, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
-        self.fitControlsLayout.addItem(spacerItem1)
-        self.yRangeLabel = QtWidgets.QLabel(self.fitControls)
-        self.yRangeLabel.setObjectName("yRangeLabel")
-        self.fitControlsLayout.addWidget(self.yRangeLabel)
+
+        self.yRangeLabel = QtWidgets.QLabel("Y Range", self.fitControls)
         self.y_range_combo = QtWidgets.QComboBox(self.fitControls)
         self.y_range_combo.setObjectName("y_range_combo")
-        self.y_range_combo.addItem("")
-        self.y_range_combo.addItem("")
-        self.y_range_combo.addItem("")
+        self.fitControlsLayout.addWidget(self.yRangeLabel)
         self.fitControlsLayout.addWidget(self.y_range_combo)
-        spacerItem2 = QtWidgets.QSpacerItem(12, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
-        self.fitControlsLayout.addItem(spacerItem2)
-        self.delete_input_points_cb = QtWidgets.QCheckBox(self.fitControls)
+
+        self.delete_input_points_cb = QtWidgets.QCheckBox("Delete Points", self.fitControls)
         self.delete_input_points_cb.setObjectName("delete_input_points_cb")
+        self.delete_input_points_cb.setToolTip(
+            "Enable, then left-click a plotted point to exclude it from AI fitting input."
+        )
         self.fitControlsLayout.addWidget(self.delete_input_points_cb)
-        spacerItem3 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.fitControlsLayout.addItem(spacerItem3)
+        self.fitControlsLayout.addStretch(1)
         self.fitWindowLayout.addWidget(self.fitControls)
+
         self.canvasHost = QtWidgets.QWidget(self.centralwidget)
         self.canvasHost.setObjectName("canvasHost")
         self.canvasHostLayout = QtWidgets.QVBoxLayout(self.canvasHost)
         self.canvasHostLayout.setContentsMargins(0, 0, 0, 0)
-        self.canvasHostLayout.setObjectName("canvasHostLayout")
-        self.fitWindowLayout.addWidget(self.canvasHost)
-        IndependentFitWindow.setCentralWidget(self.centralwidget)
+        self.fitWindowLayout.addWidget(self.canvasHost, 1)
+        window.setCentralWidget(self.centralwidget)
+        window.setWindowTitle("GIMaP Curve Viewer")
+        QtCore.QMetaObject.connectSlotsByName(window)
 
-        self.retranslateUi(IndependentFitWindow)
-        QtCore.QMetaObject.connectSlotsByName(IndependentFitWindow)
-        IndependentFitWindow.setTabOrder(self.show_positive_cb, self.show_negative_cb)
-        IndependentFitWindow.setTabOrder(self.show_negative_cb, self.q_unit_combo)
-        IndependentFitWindow.setTabOrder(self.q_unit_combo, self.y_range_combo)
-        IndependentFitWindow.setTabOrder(self.y_range_combo, self.delete_input_points_cb)
 
-    def retranslateUi(self, IndependentFitWindow):
-        _translate = QtCore.QCoreApplication.translate
-        IndependentFitWindow.setWindowTitle(_translate("IndependentFitWindow", "GIMaP Cut Analysis - Independent Fit Window"))
-        self.dataFilterLabel.setText(_translate("IndependentFitWindow", "Data Filter:"))
-        self.show_positive_cb.setText(_translate("IndependentFitWindow", "Positive Only"))
-        self.show_negative_cb.setText(_translate("IndependentFitWindow", "Negative Only"))
-        self.qUnitLabel.setText(_translate("IndependentFitWindow", "q Unit:"))
-        self.q_unit_combo.setItemText(0, _translate("IndependentFitWindow", "q (Angstrom^-1)"))
-        self.q_unit_combo.setItemText(1, _translate("IndependentFitWindow", "q (nm^-1)"))
-        self.yRangeLabel.setText(_translate("IndependentFitWindow", "Y Range:"))
-        self.y_range_combo.setItemText(0, _translate("IndependentFitWindow", "Experiment"))
-        self.y_range_combo.setItemText(1, _translate("IndependentFitWindow", "Fit"))
-        self.y_range_combo.setItemText(2, _translate("IndependentFitWindow", "All"))
-        self.delete_input_points_cb.setToolTip(_translate("IndependentFitWindow", "Enable, then left-click a plotted input point to exclude it from AI fitting input."))
-        self.delete_input_points_cb.setText(_translate("IndependentFitWindow", "Delete Points"))
+__all__ = ["IndependentFitWindowView"]

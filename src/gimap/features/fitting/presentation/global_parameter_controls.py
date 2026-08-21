@@ -13,8 +13,9 @@ def build_global_parameter_controls(
 ):
     global_group = card._make_group("Global Parameters")
     global_layout = QGridLayout(global_group)
+    global_layout.setAlignment(Qt.AlignTop)
     card._configure_group_layout(global_layout, group_margin, group_top, group_spacing)
-    for col, text in enumerate(("Parameter", "Value", "Step", "Reset")):
+    for col, text in enumerate(("Parameter", "Value", "Default step", "Action")):
         header_label = QLabel(text, global_group)
         header_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
         global_layout.addWidget(header_label, 0, col)
@@ -80,7 +81,7 @@ def build_global_parameter_controls(
     resolution_tooltip = (
         "<b>Resolution component</b><br>"
         "R(q) = <i>I</i><sub>res</sub> / "
-        "[1 + (q / &sigma;<sub>res</sub>)<sup>2</sup>]<sup>&nu;</sup><br>"
+        "[1 + (|q| / &sigma;<sub>res</sub>)<sup>&nu;</sup>]<br>"
         "The fitting model receives "
         "&sigma;<sub>res</sub>, &nu;<sub>res</sub>, "
         "<i>I</i><sub>res</sub>, and k as global parameters."
@@ -98,6 +99,15 @@ def build_global_parameter_controls(
     ):
         widget.setToolTip(resolution_tooltip)
     global_layout.addWidget(card.kInfoLabel, 6, 0, 1, 4)
+    step_hint = QLabel(
+        "Default step controls the arrow-key and intentional Alt/Option + wheel increment. "
+        "Edits are saved for the next session; Reset restores the built-in value.",
+        global_group,
+    )
+    step_hint.setObjectName("fittingParameterStepHint")
+    step_hint.setProperty("cardMeta", True)
+    step_hint.setWordWrap(True)
+    global_layout.addWidget(step_hint, 7, 0, 1, 4)
     global_layout.setColumnStretch(1, 1)
     global_layout.setColumnStretch(2, 0)
     global_layout.setColumnStretch(3, 0)

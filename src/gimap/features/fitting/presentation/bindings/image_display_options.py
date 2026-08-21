@@ -10,6 +10,7 @@ from ..binding_primitives import (
     GISAXS_IMAGE_COLORMAPS,
     _scientific_commands,
 )
+from ..detector_data_access import analysis_image_for
 
 
 class ImageDisplayOptionsMixin:
@@ -290,16 +291,13 @@ class ImageDisplayOptionsMixin:
         self._save_image_display_options()
         self._refresh_current_parameter_selection_from_ui()
         self._sync_image_display_option_widgets()
+        state = self._current_detector_display_state()
         if sync_window and self.independent_window is not None:
             try:
-                self.independent_window.set_display_options(
-                    show_cut_region=self._show_cut_region,
-                    show_center=self._show_center,
-                    colormap=self._image_colormap,
-                )
+                self.independent_window.set_detector_display_state(state)
             except Exception:
                 pass
-        if refresh and self.current_stack_data is not None:
+        if refresh and analysis_image_for(self) is not None:
             try:
                 if self._is_auto_scale_enabled():
                     display_image = self._get_current_display_image()
@@ -373,22 +371,21 @@ class ImageDisplayOptionsMixin:
             return
         self._mirror_fill_detector_gaps = bool(checked)
         self._image_display_cache.clear()
-        self._apply_image_display_options()
+        self._save_image_display_options()
+        self._reapply_input_image_options()
 
     def _on_main_mirror_gap_margin_changed(self, value: int):
         if self._syncing_image_display_options:
             return
         self._mirror_gap_margin_px = int(np.clip(int(value), 0, 20))
         self._image_display_cache.clear()
-        self._apply_image_display_options()
+        self._save_image_display_options()
+        if self._mirror_fill_detector_gaps:
+            self._reapply_input_image_options()
 
     def _get_mirror_gap_fill_center_x(self):
         try:
-            image_data = (
-                self.current_stack_data
-                if self.current_stack_data is not None
-                else self.current_raw_image
-            )
+            image_data = self.current_raw_image
             if image_data is None:
                 return None
             _, width = image_data.shape
@@ -404,21 +401,65 @@ class ImageDisplayOptionsMixin:
         raw = self.current_raw_image
         if raw is None:
             return
-        processed = _scientific_commands(self).image.transform(
-            raw,
-            flip_ud=self._flip_ud,
-            threshold_enabled=self._threshold_mask_enabled,
-            threshold_min=self._threshold_mask_min,
-            threshold_max=self._threshold_mask_max,
-        )
-        self.current_stack_data = processed
-        self.data = processed
+        next_revision = int(getattr(self, "_analysis_revision", 0)) + 1
+        mirror_enabled = bool(getattr(self, "_mirror_fill_detector_gaps", False))
         try:
-            stack_count = int(self.current_parameters.get("stack_count", 1))
+            stack_count = max(1, int(self.current_parameters.get("stack_count", 1)))
         except Exception:
             stack_count = 1
+        try:
+            detector_image = _scientific_commands(self).image.prepare(
+                raw,
+                revision=next_revision,
+                flip_ud=bool(getattr(self, "_flip_ud", False)),
+                threshold_enabled=bool(getattr(self, "_threshold_mask_enabled", False)),
+                threshold_min=float(getattr(self, "_threshold_mask_min", -1e12)),
+                threshold_max=float(getattr(self, "_threshold_mask_max", 1e12)),
+                mirror_fill_gaps=mirror_enabled,
+                mirror_center_x=(
+                    self._get_mirror_gap_fill_center_x() if mirror_enabled else None
+                ),
+                mirror_gap_margin_px=int(getattr(self, "_mirror_gap_margin_px", 0)),
+                mirror_gap_value=-float(stack_count),
+            )
+        except Exception as exc:
+            message = f"Image preprocessing failed: {exc}"
+            emitter = getattr(getattr(self, "status_updated", None), "emit", None)
+            if callable(emitter):
+                emitter(message)
+            self._last_mirror_fill_status = message
+            return
+
+        self.current_detector_image = detector_image
+        self.current_raw_image = detector_image.raw_image
+        self.current_analysis_image = detector_image.analysis_image
+        self.current_stack_data = detector_image.analysis_image  # legacy read-only alias
+        self.data = detector_image.analysis_image  # legacy read-only alias
+        self._analysis_revision = detector_image.revision
+        processed = detector_image.analysis_image
         self.summed_data = processed if stack_count > 1 else None
         self._image_display_cache.clear()
+        self._last_mirror_fill_count = detector_image.mirror_filled_gap_pixels
+        if mirror_enabled:
+            message = (
+                "Mirror gap fill applied to analysis data: "
+                f"margin={detector_image.preprocessing.mirror_gap_margin_px} px, "
+                f"replaced {detector_image.mirror_replaced_pixels} pixels"
+            )
+            if message != getattr(self, "_last_mirror_fill_status", ""):
+                emitter = getattr(getattr(self, "status_updated", None), "emit", None)
+                if callable(emitter):
+                    emitter(message)
+            self._last_mirror_fill_status = message
+        else:
+            self._last_mirror_fill_status = ""
+        view_model = getattr(self, "fitting_view_model", None)
+        accept_revision = getattr(view_model, "accept_analysis_revision", None)
+        if callable(accept_revision):
+            accept_revision(detector_image.revision)
+            sync_workflow = getattr(self, "_sync_fitting_workflow", None)
+            if callable(sync_workflow):
+                sync_workflow()
         if self._threshold_mask_enabled:
             masked_count = int(np.count_nonzero(~np.isfinite(processed)))
             self.status_updated.emit(
@@ -432,56 +473,12 @@ class ImageDisplayOptionsMixin:
             self._refresh_image_display()
 
     def _get_current_display_image(self):
-        image_data = (
-            self.current_stack_data
-            if self.current_stack_data is not None
-            else self.current_raw_image
-        )
-        if image_data is None:
-            return None
-        display_image = image_data
-        if not self._mirror_fill_detector_gaps:
-            self._last_mirror_fill_count = 0
-            self._last_mirror_fill_status = ""
-        else:
-            center_x = self._get_mirror_gap_fill_center_x()
-            if center_x is None:
-                message = "Mirror gap fill requires beam center X to be defined"
-                if message != self._last_mirror_fill_status:
-                    self.status_updated.emit(message)
-                    self._last_mirror_fill_status = message
-                self._last_mirror_fill_count = 0
-            else:
-                try:
-                    margin = int(np.clip(getattr(self, "_mirror_gap_margin_px", 0), 0, 20))
-                    display_image = _scientific_commands(self).image.mirror_gaps(
-                        image_data,
-                        center_x=center_x,
-                        gap_value=-1,
-                        gap_margin_px=margin,
-                    )
-                    original = np.asarray(image_data)
-                    filled_arr = np.asarray(display_image)
-                    self._last_mirror_fill_count = int(
-                        np.count_nonzero((original == -1) & (filled_arr != -1))
-                    )
-                    changed_mask = original != filled_arr
-                    changed_mask &= ~(np.isnan(original) & np.isnan(filled_arr))
-                    replaced_count = int(np.count_nonzero(changed_mask))
-                    message = f"Mirror gap fill enabled: margin={margin} px, replaced {replaced_count} pixels"
-                    if message != self._last_mirror_fill_status:
-                        self.status_updated.emit(message)
-                        self._last_mirror_fill_status = message
-                except Exception as exc:
-                    message = f"Mirror gap fill skipped: {exc}"
-                    if message != self._last_mirror_fill_status:
-                        self.status_updated.emit(message)
-                        self._last_mirror_fill_status = message
-                    self._last_mirror_fill_count = 0
-                    display_image = image_data
-        return display_image
+        # Display-only state is applied by the renderer. Scientific preprocessing
+        # has already produced the one canonical analysis array.
+        return analysis_image_for(self)
 
     def _on_independent_display_options_changed(self, options: dict):
+        """Compatibility bridge for older independent image windows."""
         try:
             self._show_cut_region = bool(options.get("show_cut_region", self._show_cut_region))
             self._show_center = bool(options.get("show_center", self._show_center))

@@ -24,27 +24,40 @@ class RoiRangeControlsMixin:
 
     def _get_roi_active_arrays(self):
         """Return (q_plot, I_plot) using ROI subset if active, else full arrays."""
-        if self.q is None or self.I is None:
-            return None, None
+        q_values, intensity, _source_sign = self._get_roi_active_prepared_arrays()
+        return q_values, intensity
 
-        # Helper: filter out non-finite pairs to avoid None/inf/NaN issues
-        # 函数说明：实现 过滤 finite 相关逻辑。
-        def _filter_finite(q_arr, I_arr):
-            q_arr = np.asarray(q_arr)
-            I_arr = np.asarray(I_arr)
-            mask = np.isfinite(q_arr) & np.isfinite(I_arr)
-            if not np.any(mask):
-                return q_arr[:0], I_arr[:0]
-            return q_arr[mask], I_arr[mask]
+    def _get_roi_active_prepared_arrays(self, intensity_override=None):
+        """Return prepared q, intensity and original branch sign for one view revision."""
+        if self.q is None or (self.I is None and intensity_override is None):
+            return None, None, None
 
-        if (
-            self._roi_active()
-            and self.q_ROI is not None
-            and self.I_ROI is not None
-            and len(self.q_ROI) > 0
-        ):
-            return _filter_finite(self.q_ROI, self.I_ROI)
-        return _filter_finite(self.q, self.I)
+        source_intensity = self.I if intensity_override is None else intensity_override
+        q_array = np.asarray(self.q, dtype=float).reshape(-1)
+        intensity_array = np.asarray(source_intensity, dtype=float).reshape(-1)
+        count = min(q_array.size, intensity_array.size)
+        q_array, intensity_array = q_array[:count], intensity_array[:count]
+        finite = np.isfinite(q_array) & np.isfinite(intensity_array)
+        if not np.any(finite):
+            return q_array[:0], intensity_array[:0], np.array([], dtype=np.int8)
+
+        try:
+            prepared = self._prepare_signed_q_data(
+                q_array[finite], intensity_array[finite]
+            )
+        except Exception:
+            return q_array[:0], intensity_array[:0], np.array([], dtype=np.int8)
+
+        q_values = prepared.q
+        intensity = prepared.intensity
+        source_sign = np.asarray(prepared.source_sign, dtype=np.int8)
+        if self._roi_active():
+            lower, upper = sorted((float(self._roi_min), float(self._roi_max)))
+            keep = (q_values >= lower) & (q_values <= upper)
+            q_values = q_values[keep]
+            intensity = intensity[keep]
+            source_sign = source_sign[keep]
+        return q_values, intensity, source_sign
 
     def _draw_roi_guides_if_active(self, ax):
         try:
@@ -57,11 +70,6 @@ class RoiRangeControlsMixin:
                 source=getattr(self, "data_source", None),
             )
             if q_bounds.size >= 2:
-                try:
-                    if self._get_independent_axis_filter_mode() == "negative":
-                        q_bounds = np.abs(q_bounds)
-                except Exception:
-                    pass
                 q_bounds = np.sort(q_bounds)
                 ax.axvline(
                     float(q_bounds[0]), color="red", linestyle="--", linewidth=1.2, alpha=0.8
@@ -82,15 +90,8 @@ class RoiRangeControlsMixin:
             return False
 
     def _roi_editing_should_be_enabled(self) -> bool:
-        """ROI is ambiguous only when log-x folds positive and negative q together."""
-        try:
-            return not (
-                self._is_fit_log_x_enabled()
-                and self._current_q_has_negative_values()
-                and self._get_independent_axis_filter_mode() == "all"
-            )
-        except Exception:
-            return True
+        """Explicit branch/combination rules make the fitting domain unambiguous."""
+        return True
 
     def _set_roi_controls_enabled(self, enabled: bool):
         self._roi_controls_enabled = bool(enabled)
@@ -127,24 +128,19 @@ class RoiRangeControlsMixin:
             return None
 
         q_valid = q_all[valid]
-        log_x = self._is_fit_log_x_enabled()
-        filter_mode = self._get_independent_axis_filter_mode()
-        if filter_mode == "positive":
-            q_valid = q_valid[q_valid > 0]
-        elif filter_mode == "negative":
-            q_valid = q_valid[q_valid < 0]
-        elif log_x and not self._current_q_has_negative_values():
-            q_valid = q_valid[q_valid > 0]
+        intensity_valid = I_all[valid]
+        try:
+            prepared = self._prepare_signed_q_data(q_valid, intensity_valid)
+            q_valid = prepared.q
+        except Exception:
+            return None
 
         if q_valid.size == 0:
             return None
         return float(np.min(q_valid)), float(np.max(q_valid))
 
     def _roi_controls_use_abs_negative(self) -> bool:
-        try:
-            return self._get_independent_axis_filter_mode() == "negative"
-        except Exception:
-            return False
+        return False
 
     def _roi_data_to_control_range(self, q_min: float, q_max: float):
         if self._roi_controls_use_abs_negative():
@@ -263,19 +259,12 @@ class RoiRangeControlsMixin:
                         self._points_num_current = int(value)
                     except Exception:
                         self._points_num_current = int(self._points_num_default)
-                    was_fitting = (
-                        self._is_in_fitting_mode()
-                        if hasattr(self, "_is_in_fitting_mode")
-                        else False
-                    )
-
                     if getattr(self, "data_source", None) == "cut":
-                        self._perform_cut(points_override=int(self._points_num_current))
+                        self._mark_cut_stale(
+                            "Sampling changed; click Extract / Update Cut to apply it"
+                        )
                     elif getattr(self, "data_source", None) == "1d":
                         self._resample_1d(n_points=int(self._points_num_current))
-
-                    if was_fitting:
-                        self._perform_manual_fitting()
 
                 mode = self._signal_mode_overrides.get(
                     "fitDataPointsNumValue", self._default_signal_mode

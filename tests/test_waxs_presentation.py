@@ -98,7 +98,10 @@ def test_feature_page_preserves_sections_controls_signals_and_job_status_offscre
         "waxsConfigureSection",
         "waxsAdvancedSection",
         "waxsRunSection",
+        "waxsWorkflowTabs",
         "waxsControlsScrollArea",
+        "waxsAdvancedScrollArea",
+        "waxsBatchScrollArea",
         "waxsPreviewPanel",
         "waxsResultsSection",
         "waxsExportSection",
@@ -122,7 +125,15 @@ def test_feature_page_preserves_sections_controls_signals_and_job_status_offscre
     assert page.pixel_x_spin.value() == 75.0
     assert page.wavelength_spin.value() == 1.0332
     assert page.batch_pattern_edit.text() == "*.tif"
-    assert page.waxs_advanced_section.is_expanded() is False
+    assert [
+        page.waxs_workflow_tabs.tabText(index)
+        for index in range(page.waxs_workflow_tabs.count())
+    ] == ["1  Cut + integrate", "2  Advanced", "3  Batch"]
+    assert page.waxs_advanced_section.is_expanded() is True
+    assert page.waxsAdvancedToggle.isHidden()
+    assert page.open_button.property("waxsPrimaryAction") is True
+    assert page.integrate_button.property("waxsPrimaryAction") is True
+    assert page.batch_start_button.property("waxsPrimaryAction") is True
     for button in (
         page.open_button,
         page.reload_button,

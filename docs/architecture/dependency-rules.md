@@ -1,6 +1,12 @@
 # 依赖规则
 
-这些规则适用于全部 `src/gimap` 生产代码。顶层兼容包可以继续向新 owner 转发，但
+> **Status**：Current
+>
+> **Scope**：`src/gimap` 生产代码的允许依赖和禁止依赖
+>
+> **Last verified**：2026-08-20
+
+这些规则适用于全部 `src/gimap` 生产代码。顶层 public import alias 可以向当前 owner 转发，但
 `src/gimap` 禁止反向导入 `controllers`、`ui`、`trainset`、`calibration`、`WAXS` 或
 `utils`；架构测试会阻止这类依赖重新出现。
 
@@ -95,27 +101,26 @@ ViewModel 禁止负责：
 - 具体文件系统 implementations；
 - `QMessageBox`、`QFileDialog` 或 widget manipulation。
 
-### ViewBinding 与 Controller
+### ViewBinding 与 public Controller aliases
 
-新 presentation 的默认调用链必须是：
+Presentation 的调用链必须是：
 
 ```text
 PyQt View → ViewModel → Use Case
 ```
 
-历史 Qt 页面可以使用 feature-owned `ViewBinding` 连接 widget signals、dialogs、rendering 与
+Feature-owned `ViewBinding` 可以连接 widget signals、dialogs、rendering 与
 ViewModel。ViewBinding 视为 View 的实现细节，只能做控件值映射和展示，不得调用具体 adapter、
 执行科学计算或形成第二层 workflow orchestration。生产代码不得同时保留同一页面的
 ViewBinding 实现和 Controller 实现。
 
-Legacy Controller 可以暂时存在。新代码不得同时发展 Controller 和 ViewModel 两层
-orchestration，也不得建立以下链路：
+顶层 Controller import path 只能薄 re-export 当前 feature owner。生产代码不得建立以下链路：
 
 ```text
 View → Controller → ViewModel → Use Case
 ```
 
-如果 controller 仍有必要，只能承担极薄的 composition 或 navigation 职责。它不得
+Presentation 中确有 composition 或 navigation 对象时，它不得
 包含 application workflow orchestration、scientific calculation、BornAgain/TensorFlow
 调用或具体文件系统实现。
 
@@ -214,7 +219,7 @@ infrastructure/
 
 ## 科学行为规则
 
-架构重构不得改变科学结果或语义，包括：
+架构、UI、性能和维护性修改不得静默改变科学结果或语义，包括：
 
 - numerical definitions；
 - parameter meanings；
@@ -235,39 +240,19 @@ infrastructure/
 - 以上数值用于触发 architecture review，并非机械硬限制；
 - 禁止仅为满足行数要求，将内聚逻辑拆成无意义的碎片。
 
-## Legacy violation 处理规则
+## Architecture violation 处理规则
 
-`src/gimap` 新架构代码必须符合这些规则。已审计的 legacy adapter 或外部兼容入口可以
-暂时存在，但：
+所有 `src/gimap` 生产代码必须符合这些规则：
 
-- 新代码不得引入新的 violation；
-- 新代码不得扩大已有 violation 的影响范围；
-- 每次 refactor 应消除或缩小至少一个 dependency violation；
-- compatibility code 必须有明确的迁移目的；
-- 只有 caller 已迁移且行为验证通过后，才能删除 legacy implementation；
-- 禁止 big-bang rewrite。
-
-采用以下迁移顺序：
-
-```text
-legacy code
-    ↓
-introduce dependency seam
-    ↓
-introduce new abstraction / use case
-    ↓
-migrate caller
-    ↓
-verify behavior
-    ↓
-remove legacy implementation
-```
-
-每次 refactor 优先只处理一个 dependency seam，不要同时重构无关模块。
+- 不得引入新的 violation；
+- 修改碰到已有 violation 时，不得扩大其影响范围；
+- public import alias 必须保持薄转发，不能承载业务实现；
+- 修复 violation 前先用 focused tests 固定科学和用户可见行为；
+- 一个任务只处理请求范围内的职责，不同时改写无关 feature。
 
 ## Review checklist
 
-接受新增或迁移代码之前，应检查：
+接受新增或修改代码之前，应检查：
 
 - 代码是否归属于一个 feature，而不是全局技术目录？
 - 所有依赖是否指向允许的方向？
@@ -279,4 +264,4 @@ remove legacy implementation
 - 模块名称是否表达明确职责？
 - 每个新 use case 是否有测试？
 - 科学输出和语义是否保持不变？
-- 本次修改是否只迁移一个 dependency seam，而不是大范围 rewrite？
+- 本次修改是否保持职责内聚，没有混入无关 feature？

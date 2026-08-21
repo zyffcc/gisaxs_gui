@@ -29,8 +29,36 @@ class DesignStateMixin:
             return
         self.stack.setCurrentIndex(index)
         self.back_button.setEnabled(index > 0)
+        self._sync_workflow_actions(index)
         self.step_changed.emit(index)
         QTimer.singleShot(0, self._apply_responsive_layout)
+
+    def _sync_workflow_actions(self, index: int) -> None:
+        """Show only global actions relevant to the selected workflow step."""
+        visibility = {
+            self.validate_button: index == 0,
+            self.preview_button: index == 0,
+            self.prepare_button: index == 3,
+            self.submit_button: index == 3,
+        }
+        for button, visible in visibility.items():
+            button.setVisible(visible)
+            button.setProperty("trainsetPrimaryAction", False)
+        primary = self.validate_button if index == 0 else self.prepare_button if index == 3 else None
+        if primary is not None:
+            primary.setProperty("trainsetPrimaryAction", True)
+        for button in visibility:
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+        hints = (
+            "Validate the detector, ROI, particle and sampling design.",
+            "Generate a small BornAgain comparison before scaling up.",
+            "Define and validate the model contract for this dataset.",
+            "Run locally or export a portable job package.",
+            "Inspect progress, logs, metrics and registered models.",
+        )
+        self.trainset_action_hint.setText(hints[index])
 
     def add_mask_shape(self, shape: Dict[str, Any]) -> None:
         row = self.mask_shape_table.rowCount()

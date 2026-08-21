@@ -173,6 +173,10 @@ class DetectorParametersDialog(QDialog, DetectorParametersDialogView):
         }
 
     def _current_settings(self) -> DetectorSettings:
+        try:
+            horizontal_q_axis = self.view_model.load_detector_settings().horizontal_q_axis
+        except Exception:
+            horizontal_q_axis = "qy"
         return DetectorSettings(
             distance=self.distance_spinbox.value(),
             grazing_angle=self.angle_spinbox.value(),
@@ -182,6 +186,7 @@ class DetectorParametersDialog(QDialog, DetectorParametersDialogView):
             pixel_size_x=self.pixel_size_x_spinbox.value(),
             pixel_size_y=self.pixel_size_y_spinbox.value(),
             show_q_axis=self.show_q_axis_checkbox.isChecked(),
+            horizontal_q_axis=horizontal_q_axis,
         )
 
     def _persist_detector_value(self, _name: str, _value: float) -> bool:

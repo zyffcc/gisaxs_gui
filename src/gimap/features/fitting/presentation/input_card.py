@@ -20,14 +20,14 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.layout_primitives import CARD_SPACING, FORM_ROW_SPACING, normalize_checkbox, normalize_input
 from src.gimap.app.presentation.responsive_layout import current_profile, scale_value
 
-from .layout_primitives import CardFrame
+from .layout_primitives import CardFrame, DisclosurePanel
 from .layout_primitives import detach_from_parent_layout as _detach_from_parent_layout
 from .layout_primitives import take_widget as _take_widget
 
 
 class GisaxsInputCard(CardFrame):
     def __init__(self, ui, profile=None):
-        super().__init__("GISAXS Image Input", "GisaxsInputCard")
+        super().__init__("Data source", "GisaxsInputCard")
         self.ui = ui
         content = ui.gisaxsInputBox
         profile = profile or current_profile(ui.centralwidget)
@@ -37,6 +37,7 @@ class GisaxsInputCard(CardFrame):
             content.setFlat(True)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self._rebuild_layout(content, profile)
+        self.ui.gisaxsInputAutoShowCheckBox.setChecked(True)
         self.add_content(content)
         self.lock_to_natural_height()
 
@@ -54,11 +55,16 @@ class GisaxsInputCard(CardFrame):
         self._detach_input_widgets()
         self._rebuild_stack_widget(profile)
 
-        file_section = self._create_section_widget("File Input", content)
-        file_row = QHBoxLayout()
+        file_section = self._create_section_widget("Detector data", content)
+        file_row = QGridLayout()
         file_row.setContentsMargins(0, 0, 0, 0)
-        file_row.setSpacing(CARD_SPACING)
+        file_row.setHorizontalSpacing(CARD_SPACING)
+        file_row.setVerticalSpacing(max(6, FORM_ROW_SPACING - 2))
         self._configure_file_controls(profile)
+        self.ui.gisaxsInputImportButton.setProperty("gimapPrimaryAction", True)
+        self.ui.gisaxsInputImportButtonValue.setPlaceholderText(
+            "Choose a CBF, NXS, TIFF, or supported detector file"
+        )
         self.ui.gisaxsInputFileNavigationWidget = QWidget(file_section)
         self.ui.gisaxsInputFileNavigationWidget.setObjectName("gisaxsInputFileNavigationWidget")
         self.ui.gisaxsInputFileNavigationLayout = QHBoxLayout(
@@ -67,12 +73,32 @@ class GisaxsInputCard(CardFrame):
         self.ui.gisaxsInputFileNavigationLayout.setContentsMargins(0, 0, 0, 0)
         self.ui.gisaxsInputFileNavigationLayout.setSpacing(max(6, CARD_SPACING - 2))
         self.ui.gisaxsInputFileNavigationWidget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        file_row.addWidget(self.ui.gisaxsInputImportButton, 0)
-        file_row.addWidget(self.ui.gisaxsInputImportButtonValue, 1)
-        file_row.addWidget(self.ui.gisaxsInputFileNavigationWidget, 0, Qt.AlignRight)
+        self.ui.gisaxsInputShowButton.setToolTip(
+            "Reload the current detector file and refresh the preview"
+        )
+        self.ui.gisaxsInputShowButton.setText("Show")
+        self.ui.gisaxsInputAutoShowCheckBox.setSizePolicy(
+            QSizePolicy.Fixed, QSizePolicy.Fixed
+        )
+        self.ui.gisaxsInputFileNavigationLayout.addWidget(
+            self.ui.gisaxsInputAutoShowCheckBox
+        )
+        self.ui.gisaxsInputFileNavigationLayout.addWidget(self.ui.gisaxsInputShowButton)
+        file_row.addWidget(self.ui.gisaxsInputImportButton, 0, 0)
+        file_row.addWidget(self.ui.gisaxsInputImportButtonValue, 0, 1)
+        file_row.addWidget(
+            self.ui.gisaxsInputFileNavigationWidget,
+            1,
+            0,
+            1,
+            2,
+            Qt.AlignRight,
+        )
+        file_row.setColumnStretch(0, 0)
+        file_row.setColumnStretch(1, 1)
         file_section.layout().addLayout(file_row)
 
-        mode_section = self._create_section_widget("Load Mode", content)
+        mode_section = self._create_section_widget("Series mode", content)
         mode_grid = QGridLayout()
         mode_grid.setContentsMargins(0, 0, 0, 0)
         mode_grid.setHorizontalSpacing(CARD_SPACING)
@@ -87,24 +113,14 @@ class GisaxsInputCard(CardFrame):
         mode_grid.setColumnStretch(1, 1)
         mode_section.layout().addLayout(mode_grid)
 
-        show_section = self._create_section_widget("Image Display", content)
-        show_row = QHBoxLayout()
-        show_row.setContentsMargins(0, 0, 0, 0)
-        show_row.setSpacing(CARD_SPACING)
-        self.ui.gisaxsInputAutoShowCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        show_row.addWidget(self.ui.gisaxsInputAutoShowCheckBox, 0)
         if not hasattr(self.ui, "gisaxsInputFlipUdCheckBox"):
-            self.ui.gisaxsInputFlipUdCheckBox = QCheckBox("Flip UD", show_section)
+            self.ui.gisaxsInputFlipUdCheckBox = QCheckBox("Flip UD", content)
             self.ui.gisaxsInputFlipUdCheckBox.setObjectName("gisaxsInputFlipUdCheckBox")
             self.ui.gisaxsInputFlipUdCheckBox.setToolTip(
                 "Flip the loaded detector input vertically for display and all downstream processing."
             )
         normalize_checkbox(self.ui.gisaxsInputFlipUdCheckBox)
         self.ui.gisaxsInputFlipUdCheckBox.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        show_row.addWidget(self.ui.gisaxsInputFlipUdCheckBox, 0)
-        show_row.addStretch(1)
-        show_row.addWidget(self.ui.gisaxsInputShowButton, 0)
-        show_section.layout().addLayout(show_row)
 
         scale_section = self._create_section_widget("Display Range", content)
         scale_grid = QGridLayout()
@@ -238,10 +254,24 @@ class GisaxsInputCard(CardFrame):
         scale_grid.setColumnStretch(6, 1)
         scale_section.layout().addLayout(scale_grid)
 
+        # Display and preprocessing controls live beside the detector preview.
+        # This hidden host only survives until DetectorDisplayInspector reparents
+        # the legacy controls; it is never exposed as an empty disclosure.
+        scale_section.hide()
+        cache_section = self._create_section_widget("", content)
+        self.ui.gisaxsRemoteCacheControlsHost = cache_section
+        self.ui.gisaxsRemoteCacheControlsLayout = cache_section.layout()
+        cache_disclosure = DisclosurePanel(
+            "Remote file cache",
+            "fittingRemoteCacheDisclosure",
+            content,
+        )
+        cache_disclosure.add_widget(cache_section)
+        self.ui.fittingRemoteCacheDisclosure = cache_disclosure
+
         layout.addWidget(file_section, 0, 0, 1, 4)
         layout.addWidget(mode_section, 1, 0, 1, 4)
-        layout.addWidget(show_section, 2, 0, 1, 4)
-        layout.addWidget(scale_section, 3, 0, 1, 4)
+        layout.addWidget(cache_disclosure, 2, 0, 1, 4)
         layout.setColumnStretch(0, 0)
         layout.setColumnStretch(1, 1)
         layout.setColumnStretch(2, 0)
@@ -327,9 +357,10 @@ class GisaxsInputCard(CardFrame):
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(0, 0, 0, 0)
         section_layout.setSpacing(max(6, CARD_SPACING - 2))
-        label = QLabel(title, section)
-        label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
-        section_layout.addWidget(label)
+        if title:
+            label = QLabel(title, section)
+            label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
+            section_layout.addWidget(label)
         return section
 
 

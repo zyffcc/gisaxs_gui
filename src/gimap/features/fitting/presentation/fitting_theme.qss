@@ -1,0 +1,436 @@
+/* Feature-owned visual layer for the Fitting workbench. */
+
+#gisaxsFittingWorkspaceSplitter,
+#gisaxsWorkAreaContents,
+#gisaxsRightCollapsiblePanel {
+    background: #f5f7fb;
+}
+
+#fittingContextBar {
+    background: #ffffff;
+    border: none;
+    border-bottom: 1px solid #dfe6ef;
+}
+
+#fittingContextLabel {
+    font-size: 15px;
+}
+
+QPushButton[fittingContextButton="true"] {
+    color: #536179;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    min-height: 28px;
+    padding: 2px 14px;
+    font-weight: 600;
+}
+
+QPushButton[fittingContextButton="true"]:hover {
+    background: #f1f5fa;
+}
+
+QPushButton[fittingContextButton="true"]:checked {
+    color: #1f5dbd;
+    background: #eaf2ff;
+    border-color: #a9c8f6;
+}
+
+#fittingInsituSeriesPage {
+    background: #f5f7fb;
+}
+
+#fittingInsituTitleLabel {
+    color: #172033;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+#fittingInsituRecipeStatusLabel {
+    border-radius: 7px;
+    padding: 7px 9px;
+    font-weight: 600;
+}
+
+#fittingInsituRecipeStatusLabel[statusKind="warning"] {
+    color: #7b5812;
+    background: #fff4d8;
+}
+
+#fittingInsituRecipeStatusLabel[statusKind="complete"] {
+    color: #176548;
+    background: #e8f7f1;
+}
+
+#fittingInsituModeTabs::pane {
+    background: #ffffff;
+    border: 1px solid #dde4ee;
+    border-radius: 10px;
+    top: -1px;
+}
+
+#fittingInsituModeTabs QTabBar::tab {
+    color: #637086;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    min-width: 72px;
+    min-height: 34px;
+    padding: 4px 6px;
+    font-weight: 600;
+}
+
+#fittingInsituModeTabs QTabBar::tab:selected {
+    color: #245dcb;
+    border-bottom-color: #245dcb;
+}
+
+QFrame[fittingWorkflowHeader="true"] {
+    background: #152238;
+    border: 1px solid #223451;
+    border-radius: 12px;
+}
+
+QLabel[workflowTitle="true"] {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel[workflowSubtitle="true"] {
+    color: #b9c7da;
+    font-size: 12px;
+}
+
+QFrame[fittingWorkflowStep="true"] {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+}
+
+QFrame[fittingWorkflowStep="true"][workflowState="available"] {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+QFrame[fittingWorkflowStep="true"][workflowState="running"] {
+    background: #245dcb;
+    border-color: #4f86e8;
+}
+
+QFrame[fittingWorkflowStep="true"][workflowState="complete"] {
+    background: #173e3b;
+    border-color: #2a756b;
+}
+
+QFrame[fittingWorkflowStep="true"][workflowState="error"] {
+    background: #5f2027;
+    border-color: #d05a67;
+}
+
+QFrame[fittingWorkflowStep="true"][workflowState="stale"] {
+    background: #5c441b;
+    border-color: #c89736;
+}
+
+QFrame[fittingWorkflowStep="true"][workflowState="blocked"] {
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Selection means navigation position; state colors above mean verified work. */
+QFrame[fittingWorkflowStep="true"][workflowSelected="true"] {
+    background: #245dcb;
+    border: 2px solid #8db7ff;
+}
+
+QLabel[workflowBadge="true"] {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 11px;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QLabel[workflowLabel="true"] {
+    color: #e8eef7;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel[workflowMessage="true"] {
+    color: #c9d5e7;
+    font-size: 9px;
+}
+
+#fittingWorkflowGuidedButton {
+    color: #dce7f7;
+    background: rgba(255, 255, 255, 0.09);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 7px;
+    padding: 5px 9px;
+}
+
+QFrame[previewToolbar="true"],
+QFrame[displayInspector="true"] {
+    background: #f8fafc;
+    border: 1px solid #dfe6ef;
+    border-radius: 8px;
+}
+
+QFrame[previewToolbar="true"] QToolButton:checked {
+    color: #ffffff;
+    background: #245dcb;
+    border-color: #245dcb;
+}
+
+#fittingDetectorToolHint {
+    color: #64748b;
+}
+
+#fittingInlineFeedback {
+    background: #fff5f5;
+    border: 1px solid #f4b8b8;
+    border-radius: 8px;
+    color: #a12626;
+    padding: 8px 10px;
+}
+
+#fittingInlineFeedback[feedbackKind="info"] {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+}
+
+#fittingInlineFeedback[feedbackKind="warning"] {
+    background: #fff8e8;
+    border-color: #e7c978;
+    color: #775514;
+}
+
+#fittingResultStatusChip {
+    border-radius: 9px;
+    padding: 4px 9px;
+    background: #eef2f7;
+    color: #56657a;
+    font-weight: 600;
+}
+
+#fittingResultStatusChip[statusKind="complete"],
+#fittingResultStatusChip[statusKind="ready"] {
+    background: #e8f7f1;
+    color: #176548;
+}
+
+#fittingResultStatusChip[statusKind="running"] {
+    background: #edf4ff;
+    color: #245dcb;
+}
+
+#fittingResultStatusChip[statusKind="error"] {
+    background: #fff0f0;
+    color: #a12626;
+}
+
+#fittingResultStatusChip[statusKind="stale"] {
+    background: #fff4d8;
+    color: #7b5812;
+}
+
+QFrame[gimapSection="true"] {
+    background: #ffffff;
+    border: 1px solid #e1e7f0;
+    border-radius: 10px;
+}
+
+#fittingInputSection,
+#fittingConfigureSection,
+#fittingRunSection,
+#fittingAdvancedSection,
+#GisaxsInputCard,
+#CutLineCard,
+#FittingControlsCard,
+#ModelParameterCard {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+#fittingPreviewPanel,
+#fittingResultsPanel,
+#fittingCutResultsPanel {
+    background: transparent;
+    border: none;
+}
+
+#fittingPreviewTabs::pane,
+#fittingModeTabs::pane {
+    background: #ffffff;
+    border: 1px solid #dde4ee;
+    border-radius: 10px;
+    top: -1px;
+}
+
+#fittingPreviewTabs QTabBar::tab {
+    background: transparent;
+    color: #637086;
+    border: none;
+    border-bottom: 2px solid transparent;
+    min-width: 120px;
+    min-height: 34px;
+    padding: 4px 12px;
+    font-weight: 600;
+}
+
+#fittingModeTabs QTabBar::tab {
+    background: transparent;
+    color: #637086;
+    border: none;
+    border-bottom: 2px solid transparent;
+    min-width: 76px;
+    min-height: 34px;
+    padding: 4px 7px;
+    font-weight: 600;
+}
+
+#fittingPreviewTabs QTabBar::tab:selected,
+#fittingModeTabs QTabBar::tab:selected {
+    color: #245dcb;
+    border-bottom-color: #245dcb;
+}
+
+QToolButton[fittingDisclosure="true"] {
+    background: transparent;
+    border: none;
+    color: #536177;
+    font-weight: 600;
+    padding: 5px 2px;
+    text-align: left;
+}
+
+QToolButton[fittingDisclosure="true"]:hover {
+    color: #245dcb;
+}
+
+QPushButton[gimapPrimaryAction="true"] {
+    background: #245dcb;
+    border: 1px solid #245dcb;
+    color: #ffffff;
+    font-weight: 650;
+}
+
+QPushButton[gimapPrimaryAction="true"]:hover {
+    background: #1e50b4;
+}
+
+QPushButton[gimapDangerAction="true"] {
+    color: #b42318;
+    border-color: #f0b4ad;
+    background: #fff7f6;
+}
+
+QLabel[fittingSetupBadge="true"] {
+    background: #edf4ff;
+    border: 1px solid #c9dcff;
+    border-radius: 7px;
+    color: #245dcb;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 8px;
+}
+
+QLabel[fittingEmptyState="true"] {
+    background: rgba(248, 250, 253, 0.94);
+    border: 1px dashed #b9c5d5;
+    border-radius: 10px;
+    color: #64748b;
+    font-size: 12px;
+    padding: 18px;
+}
+
+QFrame[card="true"],
+QFrame[sectionCard="true"] {
+    background: #ffffff;
+    border: 1px solid #e4e9f1;
+    border-radius: 8px;
+}
+
+QGroupBox {
+    border: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    background: transparent;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 8px;
+    padding: 0 4px;
+    color: #4b596d;
+    font-weight: 600;
+}
+
+QFrame[insituWorkflowBar="true"] {
+    background: #f5f8fc;
+    border: 1px solid #dfe6ef;
+    border-radius: 9px;
+}
+
+QToolButton[insituWorkflowStep="true"] {
+    min-height: 34px;
+    padding: 4px 8px;
+    color: #64748b;
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    font-weight: 600;
+}
+
+QToolButton[insituWorkflowStep="true"]:hover {
+    color: #245dcb;
+    background: #edf4ff;
+}
+
+QToolButton[insituWorkflowStep="true"]:checked {
+    color: #ffffff;
+    background: #245dcb;
+}
+
+QToolButton[insituWorkflowStep="true"][workflowState="complete"]:not(:checked),
+QToolButton[insituWorkflowStep="true"][workflowState="configured"]:not(:checked) {
+    color: #176548;
+    background: #e8f7f1;
+}
+
+QToolButton[insituWorkflowStep="true"][workflowState="running"]:not(:checked) {
+    color: #245dcb;
+    background: #edf4ff;
+}
+
+QToolButton[insituWorkflowStep="true"][workflowState="error"]:not(:checked) {
+    color: #a12626;
+    background: #fff0f0;
+}
+
+#fittingInsituParameterStack,
+#fittingInsituPreviewTabs::pane {
+    background: #ffffff;
+    border: 1px solid #dde4ee;
+    border-radius: 9px;
+}
+
+#fittingInsituPreviewTabs QTabBar::tab {
+    min-height: 32px;
+    min-width: 92px;
+    padding: 4px 10px;
+    color: #637086;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-weight: 600;
+}
+
+#fittingInsituPreviewTabs QTabBar::tab:selected {
+    color: #245dcb;
+    border-bottom-color: #245dcb;
+}

@@ -21,6 +21,8 @@ from PyQt5.QtWidgets import (
 
 from PyQt5.QtGui import QDesktopServices
 
+from ..detector_data_access import analysis_image_for
+
 
 class InsituPersistencePreviewMixin:
     """Own insitu persistence preview behavior."""
@@ -123,10 +125,11 @@ class InsituPersistencePreviewMixin:
         )
 
     def _draw_insitu_workflow_region_preview(self):
-        if getattr(self, "current_stack_data", None) is None:
+        analysis_image = analysis_image_for(self)
+        if analysis_image is None:
             return
         self._draw_insitu_workflow_image_preview(
-            self.current_stack_data, self._insitu_workflow_processing_file or ""
+            analysis_image, self._insitu_workflow_processing_file or ""
         )
 
     def _draw_insitu_image_on_holder(

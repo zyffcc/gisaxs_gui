@@ -120,6 +120,7 @@ class AiJobExecutionMixin:
         self._ai_run_started_at = time.perf_counter()
         self._ai_run_cancelled = False
         self._ai_candidate_rows = []
+        self._begin_fitting_step("fit", f"Running {profile.name} AI fitting")
         self._set_ai_running_state(True)
         self._set_ai_workspace_status(
             f"Starting {profile.name} AI fitting run...",
@@ -233,6 +234,9 @@ class AiJobExecutionMixin:
             f"AI fitting finished in {result.runtime_seconds:.2f}s. Output: {result.output_dir}",
             100,
         )
+        self._complete_fitting_step(
+            "fit", f"AI fitting completed · {len(result.candidates)} candidates"
+        )
         self._show_ai_candidate_table(result.output_dir, rows=result.candidates)
 
     def _on_ai_job_error(self, code: str, message: str) -> None:
@@ -250,8 +254,10 @@ class AiJobExecutionMixin:
             )
             return
         if code == "cancelled":
+            self._fail_fitting_step("fit", "AI fitting cancelled")
             self._set_ai_workspace_status("AI fitting cancelled.", 0)
         else:
+            self._fail_fitting_step("fit", message)
             self._set_ai_workspace_status(
                 f"AI fitting failed [{code}]: {message}",
                 0,

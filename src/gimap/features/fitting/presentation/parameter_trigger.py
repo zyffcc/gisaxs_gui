@@ -77,7 +77,7 @@ class UniversalParameterTriggerManager(
     def _register_meta_widget(self, widget, widget_id: str, category: str, meta: dict):
         # 设定默认 meta 值
         meta = dict(meta)  # 复制
-        meta.setdefault('debounce_ms', 280)
+        meta.setdefault('debounce_ms', 220)
         meta.setdefault('epsilon_abs', 1e-12)
         meta.setdefault('epsilon_rel', 1e-10)
         meta.setdefault('persist', 'none')  # none | model_particle | model_global | settings | custom
@@ -88,7 +88,9 @@ class UniversalParameterTriggerManager(
         # 连接模式: 'changed' | 'finished' | 'external'（不自动连接）
         connect_mode = meta.setdefault('connect_mode', 'changed')
 
-        timer = QTimer()
+        # Parent the timer so a closing workspace cannot leave a queued callback
+        # pointing at an already-destroyed manager.
+        timer = QTimer(self)
         timer.setSingleShot(True)
         timer.timeout.connect(lambda wid=widget_id: self._commit_meta_widget(wid))
 
@@ -125,9 +127,14 @@ class UniversalParameterTriggerManager(
                 # 不自动连接，由外部自行连接
                 pass
             else:
-                # 默认 changed 去抖
+                # changed provides a trailing debounce for arrows/intentional wheel
+                # edits; editingFinished flushes immediately for Enter/focus-out.
                 if hasattr(widget, 'valueChanged'):
                     widget.valueChanged.connect(lambda _v, wid=widget_id: self._on_meta_value_changed(wid))
+                if hasattr(widget, 'editingFinished'):
+                    widget.editingFinished.connect(
+                        lambda wid=widget_id: self._commit_meta_widget(wid)
+                    )
         except Exception:
             # 避免连接异常导致崩溃
             pass

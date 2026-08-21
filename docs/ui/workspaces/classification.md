@@ -1,4 +1,4 @@
-# Classification 布局迁移记录
+# Classification 界面与交互说明
 
 - 状态：当前页面与五个静态 panel 均已由 Classification feature 的 Python Views 拥有。
 - 当前调用链：`ClassificationPage → ClassificationViewBinding → ClassificationViewModel → application use cases`。
@@ -6,7 +6,20 @@
 - 页面行为与 View binding：`src/gimap/features/classification/presentation/page.py`。
 - 页面样式：`src/gimap/features/classification/presentation/styles/classification_page.qss`。
 - 兼容入口：`ui/classification_page.py`。
-- 最近验证：2026-08-18。
+- 最近验证：2026-08-19。
+
+## 当前现代化工作流
+
+页面采用动作导向的四步流程：
+
+```text
+1 Import dataset → 2 Preprocess → 3 Compare models → 4 Results
+```
+
+空数据集显示 `Waiting for data` 和下一步提示，不再把尚未开始误显示为 Error。Dataset
+步骤将 `Scan and import data` 作为主要动作；Preprocess 使用受控宽度表单并提供
+`Continue to model comparison`；Compare models 默认让算法表占满宽度，validation 和
+projection 仅在 Advanced 展开后出现，不再为空白 Advanced pane 永久预留一列。
 
 当前页面、`ClassificationViewBinding` 和 ViewModel 均由 app composition root 显式装配。
 Binding 只承担 Qt 信号、dialogs、表格/图表渲染和 ViewModel state 映射；数据导入、训练、
@@ -28,20 +41,20 @@ Python Views。`page.py` 不再包含对应 `_build_*_panel` 实现，只创建 
 
 ## 控件映射
 
-| 迁移前控件/区域 | 迁移后位置 | 行为 |
+| 功能/控件区域 | 当前位置 | 行为 |
 | --- | --- | --- |
-| class cards、Scan & Import、dataset table/QC | `Input / ParameterSection` | source、include/exclude、QC、search/filter 和 drag/drop 不变 |
+| class cards、Scan & Import、dataset table/QC | `1 Import dataset` | Import 为主操作；source、include/exclude、QC、search/filter 和 drag/drop 不变 |
 | sample browser、image controls、quality list | `Preview / PlotPanel` | sample order、shape、log/colormap/range 和 Fit 不变 |
-| 1D/2D pipeline、normalize/log、input summary | `Configure / ParameterSection` | shared preprocessing config 和 feature matrix 语义不变 |
+| 1D/2D pipeline、normalize/log、input summary | `2 Preprocess` | 使用受控宽度表单；shared preprocessing config 和 feature matrix 语义不变 |
 | smoothing、resize rows/cols | `Advanced preprocessing / AdvancedSection` | 默认折叠；值和 input shape 行为不变 |
-| algorithm selection/table | `Algorithms > Configure` | recommended/all/clear/defaults 和 classifier parameter dialogs 不变 |
+| algorithm selection/table | `3 Compare models` | 默认占满内容宽度；recommended/all/clear/defaults 和 parameter dialogs 不变 |
 | validation、seed、ranking、PCA/UMAP | `Advanced validation and projection / AdvancedSection` | 默认折叠；split、ranking 和 projection 行为不变 |
 | Run Comparison、Cancel、status/progress | `Run / ParameterSection + JobStatus` | 仍由现有 `ClassificationViewModel` 和 JobRunner 执行 |
 | leaderboard、confusion、metrics、misclassified、embedding、prediction | `Results / ParameterSection` | ranking、tables、active model 和 predictions 不变 |
 | Save Active Model、Export Results、Export Prediction CSV | `Export / ParameterSection` | 复用原按钮实例和保存/导出 adapters |
 | operation log | `Log / AdvancedSection` | 原 log browser 不变，默认折叠 |
 
-页面迁移没有修改 Classification domain、feature extraction、classifier adapters、降维算法、
+页面布局不改变 Classification domain、feature extraction、classifier adapters、降维算法、
 排名规则、模型格式或 application use cases。所有原 objectName、signals、drag/drop、按钮实例
 和输入输出控件保持不变。`ClassificationViewBinding` 只把 Qt events 映射到
 `ClassificationViewModel`；共享 `JobStatus` 通过旧 `runStatusLabel` 和 `taskProgressBar` 属性
@@ -52,7 +65,7 @@ Python Views。`page.py` 不再包含对应 `_build_*_panel` 实现，只创建 
 - [ ] Add Class、Scan & Import、drag/drop 和 class source editing 正常；
 - [ ] dataset search/filter、include/exclude/remove/open/copy/export list 正常；
 - [ ] Preview previous/next、log、colormap、auto/manual range、Fit 正常；
-- [ ] 1D/2D preprocessing、normalize/log 配置与迁移前一致；
+- [ ] 1D/2D preprocessing、normalize/log 配置与当前配置契约一致；
 - [ ] Advanced preprocessing 折叠/展开不重置 smoothing 或 resize；
 - [ ] classifier recommended/all/clear/defaults 与 parameter dialogs 正常；
 - [ ] validation、folds、repeat、seed、ranking、PCA/UMAP 配置不变；
@@ -63,3 +76,6 @@ Python Views。`page.py` 不再包含对应 `_build_*_panel` 实现，只创建 
 - [ ] active model、Predict New Data、prediction table 正常；
 - [ ] model/result/prediction 导出格式和内容不变；
 - [ ] New/Load/Save Session 与 operation log 正常。
+- [ ] 空数据页显示 Waiting for data，而非训练错误；
+- [ ] Advanced validation 展开/折叠不改变 split、seed、ranking 或 projection；
+- [ ] Preprocess 的 Continue action 只导航，不直接启动训练。

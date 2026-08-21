@@ -7,6 +7,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication, QDoubleSpinBox
+from PyQt5.QtTest import QTest
 
 from src.gimap.integrations.state import InMemorySettingsRepository
 from src.gimap.features.fitting.presentation.parameter_trigger import (
@@ -87,3 +88,35 @@ def test_split_trigger_keeps_legacy_callback_and_diagnostics_contract():
     assert delayed == [3.5]
     assert manager.get_meta_entry("meta-value")["widget_id"] == "meta-value"
     assert manager.debug_dump_meta()["meta-value"]["current"] == widget.value()
+
+
+def test_changed_mode_flushes_on_enter_and_debounces_rapid_numeric_edits():
+    app = _app()
+    manager = UniversalParameterTriggerManager()
+    widget = QDoubleSpinBox()
+    commits = []
+    manager.register_parameter_widget(
+        widget,
+        "geometry-value",
+        "fitting",
+        lambda _value: None,
+        meta={
+            "connect_mode": "changed",
+            "debounce_ms": 40,
+            "after_commit": lambda _info, value: commits.append(value),
+        },
+    )
+
+    widget.setValue(1.0)
+    widget.editingFinished.emit()
+    app.processEvents()
+    assert commits == [1.0]
+    QTest.qWait(55)
+    app.processEvents()
+    assert commits == [1.0]
+
+    widget.setValue(2.0)
+    widget.setValue(3.0)
+    QTest.qWait(55)
+    app.processEvents()
+    assert commits == [1.0, 3.0]

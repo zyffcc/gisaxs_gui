@@ -1,7 +1,7 @@
-# `gimap` 源码骨架
+# `gimap` 生产源码
 
-这里是 GIMaP 渐进式重构的目标源码根目录。现有业务代码仍由 legacy 目录和
-`main.py` 启动；在调用方完成迁移并通过行为验证之前，本目录不会替代现有入口。
+这里是 GIMaP 的生产源码根目录。`main.py` 通过 `app/` composition root 创建应用上下文、
+主窗口和各 feature；业务实现由对应 feature 拥有。
 
 目录职责：
 

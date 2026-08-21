@@ -104,7 +104,7 @@ def apply_density_profile(
     for name, base_min, min_floor, base_max in (
         ("GisaxsInputCard", 260, 210, None),
         ("CutLineCard", 230, 185, None),
-        ("FittingControlsCard", 760, 660, None),
+        ("FittingControlsCard", 440, 400, None),
         ("ModelParameterCard", 260, 210, None),
         ("DetectorPreviewCard", 260, 210, None),
         ("plotCanvasContainer", 260, 200, None),

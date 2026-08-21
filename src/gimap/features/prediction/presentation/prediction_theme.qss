@@ -1,0 +1,187 @@
+/* Feature-owned modern visual layer for Prediction. */
+
+#gisaxsPredictPageContents,
+#predictionLeftContents,
+#predictionRightContents {
+    background: #f5f7fb;
+}
+
+#predictionControlRail {
+    background: #f5f7fb;
+    border: none;
+}
+QFrame[predictionStickyRun="true"] {
+    background: white;
+    border: 1px solid #d7e0ec;
+    border-radius: 10px;
+}
+
+QFrame[predictionWorkflowHeader="true"] {
+    background: #152238;
+    border: 1px solid #223451;
+    border-radius: 12px;
+}
+QLabel[predictionWorkflowTitle="true"] {
+    color: white;
+    font-size: 18px;
+    font-weight: 700;
+}
+QLabel[predictionWorkflowSubtitle="true"] { color: #b9c7da; }
+QFrame[predictionWorkflowStep="true"] {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+}
+QFrame[predictionWorkflowStep="true"][workflowState="active"] {
+    background: #245dcb;
+    border-color: #4f86e8;
+}
+QFrame[predictionWorkflowStep="true"][workflowState="complete"] {
+    background: #173e3b;
+    border-color: #2a756b;
+}
+QFrame[predictionWorkflowStep="true"][workflowState="running"] {
+    background: #5b3a08;
+    border-color: #d99a2b;
+}
+QFrame[predictionWorkflowStep="true"][workflowState="error"] {
+    background: #5b2024;
+    border-color: #d86b72;
+}
+QLabel[predictionWorkflowBadge="true"] {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 11px;
+    color: white;
+    font-weight: 700;
+}
+QLabel[predictionWorkflowLabel="true"] {
+    color: #e8eef7;
+    font-weight: 600;
+}
+
+QFrame#gimapPredictSection,
+QFrame[gimapSection="true"] {
+    background: white;
+    border: 1px solid #e1e7f0;
+    border-radius: 10px;
+}
+
+QFrame#predictionModeSelector {
+    background: #edf1f7;
+    border: 1px solid #dce3ed;
+    border-radius: 9px;
+}
+QFrame#predictionModeSelector QRadioButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: #5b687c;
+    font-weight: 600;
+    padding: 8px 12px;
+}
+QFrame#predictionModeSelector QRadioButton::indicator { width: 0; height: 0; }
+QFrame#predictionModeSelector QRadioButton:checked {
+    background: white;
+    border-color: #cfd8e6;
+    color: #245dcb;
+}
+
+QFrame#gisaxsPredictRangePanel {
+    background: #f8fafc;
+    border: 1px solid #e0e6ef;
+    border-radius: 8px;
+}
+QLabel[predictionFieldLabel="true"] {
+    color: #4c5a6f;
+    font-size: 11px;
+    font-weight: 600;
+}
+QLabel[predictionBatchSummary="true"] {
+    background: #eef5ff;
+    border: 1px solid #cfe0fb;
+    border-radius: 7px;
+    color: #234b85;
+    font-weight: 600;
+    padding: 8px 10px;
+}
+
+QToolButton[predictionDisclosure="true"] {
+    background: transparent;
+    border: none;
+    color: #536177;
+    font-weight: 600;
+    padding: 5px 2px;
+    text-align: left;
+}
+QToolButton[predictionDisclosure="true"]:hover { color: #245dcb; }
+
+QPushButton[gimapPrimaryAction="true"] {
+    background: #245dcb;
+    border: 1px solid #245dcb;
+    color: white;
+    font-weight: 650;
+}
+QPushButton[gimapPrimaryAction="true"]:hover { background: #1e50b4; }
+QPushButton[gimapDangerAction="true"] {
+    background: #fff7f6;
+    border-color: #f0b4ad;
+    color: #b42318;
+}
+QPushButton[gimapDangerAction="true"]:disabled {
+    background: #f8fafc;
+    border-color: #d8e0ea;
+    color: #9aa6b5;
+}
+
+QLabel[predictionReadiness="true"] {
+    background: #f8fafc;
+    border: 1px solid #e0e6ef;
+    border-radius: 7px;
+    padding: 7px 9px;
+    font-weight: 600;
+}
+QLabel[predictionModelStatus="true"] {
+    background: #f8fafc;
+    border: 1px solid #dde4ee;
+    border-radius: 7px;
+    color: #536177;
+    padding: 8px 10px;
+}
+QLabel[predictionModelStatus="true"][modelState="ready"] {
+    background: #ecfdf3;
+    border-color: #abefc6;
+    color: #067647;
+}
+QLabel[predictionModelStatus="true"][modelState="working"] {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #c2410c;
+}
+QLabel[predictionEmptyState="true"] {
+    background: rgba(248, 250, 253, 0.95);
+    border: 1px dashed #b9c5d5;
+    border-radius: 10px;
+    color: #64748b;
+    padding: 18px;
+}
+
+#gisaxsPredictImageShowTabWidget::pane {
+    background: white;
+    border: 1px solid #dde4ee;
+    border-radius: 10px;
+    top: -1px;
+}
+#gisaxsPredictImageShowTabWidget QTabBar::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #637086;
+    min-width: 150px;
+    min-height: 34px;
+    padding: 4px 12px;
+    font-weight: 600;
+}
+#gisaxsPredictImageShowTabWidget QTabBar::tab:selected {
+    border-bottom-color: #245dcb;
+    color: #245dcb;
+}

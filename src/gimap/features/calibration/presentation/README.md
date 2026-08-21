@@ -5,4 +5,4 @@
 命名明确的 hosts。路径、standard detection、ring geometry、manual refinement 和显著差异
 判断不在 dialog 中实现；`QMessageBox` / `QFileDialog` 与 Matplotlib 渲染仍只在 dialog 中。
 
-旧入口 `ui.geometry_calibration_dialog` 只 re-export 本目录中的类，不再拥有第二套实现。
+Public alias `ui.geometry_calibration_dialog` 只 re-export 本目录中的类，不拥有第二套实现。

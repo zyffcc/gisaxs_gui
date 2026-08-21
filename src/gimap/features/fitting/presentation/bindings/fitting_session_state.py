@@ -57,15 +57,19 @@ class FittingSessionStateMixin:
         session_data["stack_value"] = self._get_stack_value_text()
         session_data["stack_count"] = self.current_parameters.get("stack_count", 1)
         session_data["nxs_frame_index"] = self.current_parameters.get("nxs_frame_index", 0)
-        session_data["insitu_range"] = self.current_parameters.get("insitu_range", "")
         session_data["fit_current_data"] = self._get_checkbox_state("fitCurrentDataCheckBox", False)
-        session_data["fit_log_x"] = self._get_checkbox_state("fitLogXCheckBox", False)
+        session_data["fit_log_x"] = self._is_fit_log_x_enabled()
+        session_data["fit_x_scale"] = self._get_x_axis_scale()
+        session_data["fit_q_branch"] = self._get_q_branch()
+        session_data["fit_q_combination"] = self._get_q_combination_mode()
+        session_data["fit_q_view_mode"] = self._get_q_view_mode()
         session_data["fit_log_y"] = self._get_checkbox_state("fitLogYCheckBox", False)
         session_data["fit_norm"] = self._get_checkbox_state("fitNormCheckBox", False)
         session_data["auto_show"] = self._is_auto_show_enabled()
         session_data["load_mode"] = getattr(self, "load_mode", "Single")
         session_data["ai_fitting"] = copy.deepcopy(self._ai_run_settings())
         session_data["insitu_workflow"] = self.fitting_view_model.insitu.snapshot_insitu_workflow()
+        session_data["insitu_recipe"] = self.fitting_view_model.insitu.snapshot_recipe()
         return session_data
 
     def restore_session(self, session_data):
@@ -80,6 +84,12 @@ class FittingSessionStateMixin:
                 self.fitting_view_model.insitu.restore_insitu_workflow(insitu_snapshot)
             except (KeyError, TypeError, ValueError):
                 pass
+        recipe_snapshot = session_data.get("insitu_recipe")
+        if isinstance(recipe_snapshot, dict):
+            try:
+                self.fitting_view_model.insitu.restore_recipe(recipe_snapshot)
+            except (KeyError, TypeError, ValueError):
+                pass
 
         last_file = session_data.get("last_opened_file") or session_data.get("imported_gisaxs_file")
         if last_file:
@@ -88,9 +98,9 @@ class FittingSessionStateMixin:
         if hasattr(self.ui, "gisaxsInputAutoShowCheckBox"):
             try:
                 self.ui.gisaxsInputAutoShowCheckBox.blockSignals(True)
-                self.ui.gisaxsInputAutoShowCheckBox.setChecked(
-                    bool(session_data.get("auto_show", self._is_auto_show_enabled()))
-                )
+                # Retain the legacy JSON field when saving, but do not restore
+                # a stale unchecked value into the manual import workflow.
+                self.ui.gisaxsInputAutoShowCheckBox.setChecked(True)
                 self.ui.gisaxsInputAutoShowCheckBox.blockSignals(False)
             except Exception:
                 pass
@@ -109,9 +119,7 @@ class FittingSessionStateMixin:
                 except Exception:
                     pass
 
-        stack_value = str(
-            session_data.get("stack_value", "") or session_data.get("insitu_range", "")
-        ).strip()
+        stack_value = str(session_data.get("stack_value", "")).strip()
         if stack_value:
             self._set_stack_value_text(stack_value)
 
@@ -149,11 +157,7 @@ class FittingSessionStateMixin:
                 pass
 
             try:
-                if (
-                    hasattr(self.ui, "gisaxsInputAutoShowCheckBox")
-                    and self.ui.gisaxsInputAutoShowCheckBox.isChecked()
-                ):
-                    self._show_image()
+                self._show_image()
             except Exception:
                 pass
 

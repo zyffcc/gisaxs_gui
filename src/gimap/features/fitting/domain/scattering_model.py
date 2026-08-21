@@ -252,7 +252,8 @@ def make_mixed_model(
 ):
     """
     根据 spec(list[str]) 生成 f(q,*params)：
-    I(q) = sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_Di) + BG + I_res * R(q; Br, Nu)
+    I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_Di)
+                     + I_res * R(q; Br, Nu)]
 
     spec 例子：
       ["sphere"]
@@ -387,7 +388,8 @@ def mixed_model_components(
       {
         'particles': [ {'shape': 'sphere'|'cylinder', 'index': i, 'I': np.ndarray}, ... ],
         'BG_total': np.ndarray,
-        'resolution': np.ndarray
+        'resolution': np.ndarray,
+        'total': np.ndarray
       }
 
     约定：
@@ -500,9 +502,13 @@ def mixed_model_components(
     # 分辨率曲线
     res_curve_raw = _resolution_component(q_arr, sigma_Res, nu_Res, int_Res)
     res_curve = apply_scaling_factor(res_curve_raw, k)
+    total_curve = BG_curve + res_curve
+    for item in parts:
+        total_curve = total_curve + item["I"]
 
     return {
         "particles": parts,  # list of {shape,index,I}
         "BG_total": BG_curve,  # ndarray
         "resolution": res_curve,  # ndarray
+        "total": total_curve,
     }

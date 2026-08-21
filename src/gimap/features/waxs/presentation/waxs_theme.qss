@@ -1,0 +1,54 @@
+QWidget#waxsEmbeddedPage {
+    background: #f5f7fb;
+    color: #172033;
+}
+
+QTabWidget#waxsWorkflowTabs::pane {
+    background: #ffffff;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    top: -1px;
+}
+
+QTabWidget#waxsWorkflowTabs QTabBar::tab {
+    min-width: 112px;
+    min-height: 34px;
+    padding: 5px 8px;
+    color: #5b687c;
+    background: #edf1f7;
+    border: 1px solid #dbe3ef;
+}
+
+QTabWidget#waxsWorkflowTabs QTabBar::tab:selected {
+    color: #175cd3;
+    background: #ffffff;
+    border-bottom-color: #ffffff;
+    font-weight: 650;
+}
+
+QWidget#waxsControlsScrollAreaContent,
+QWidget#waxsAdvancedScrollAreaContent,
+QWidget#waxsBatchScrollAreaContent {
+    background: #f8fafc;
+}
+
+QPushButton[waxsPrimaryAction="true"] {
+    min-height: 34px;
+    color: #ffffff;
+    background: #175cd3;
+    border: 1px solid #175cd3;
+    border-radius: 7px;
+    font-weight: 700;
+}
+
+QPushButton[waxsPrimaryAction="true"]:hover {
+    background: #1849a9;
+}
+
+QLabel#integration_status {
+    color: #475467;
+    background: #f8fafc;
+    border: 1px solid #e1e7ef;
+    border-radius: 7px;
+    padding: 7px 9px;
+}

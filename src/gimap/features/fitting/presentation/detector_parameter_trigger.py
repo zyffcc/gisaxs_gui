@@ -29,7 +29,7 @@ class DetectorParameterTriggerManager(UniversalParameterTriggerManager):
             'custom_persist': lambda _info, value, p=param_name: (
                 self.detector_dialog._persist_detector_value(p, value)
             ),
-            'debounce_ms': 250,
+            'debounce_ms': 220,
             'epsilon_abs': 1e-12,
             'epsilon_rel': 1e-10,
             'after_commit': _after_commit,

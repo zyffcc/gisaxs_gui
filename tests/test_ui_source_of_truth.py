@@ -26,6 +26,7 @@ EXPECTED_VIEWS_BY_OWNER = {
         "fitting_workspace_view.py",
         "independent_fit_window_view.py",
         "independent_image_window_view.py",
+        "insitu_series_page_view.py",
     },
     "format_converter": {
         "conversion_progress_dialog_view.py",

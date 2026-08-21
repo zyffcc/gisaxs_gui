@@ -14,6 +14,8 @@ from ..binding_primitives import (
     _scientific_commands,
     is_matplotlib_available,
 )
+from ..detector_data_access import analysis_image_for
+from ...application import DetectorQGrid, normalize_horizontal_q_axis
 
 
 class FittingUiLifecycleMixin:
@@ -57,11 +59,6 @@ class FittingUiLifecycleMixin:
                 self.load_mode = self.ui.gisaxsInputModelCombox.currentText()
             except Exception:
                 self.load_mode = "Single"
-            try:
-                if self.load_mode == "In-situ" and hasattr(self.ui, "gisaxsInputStackValue"):
-                    self.ui.gisaxsInputStackValue.setVisible(False)
-            except Exception:
-                pass
             self._update_stack_controls_visibility()
 
         if hasattr(self.ui, "gisaxsInputIntLogCheckBox"):
@@ -69,6 +66,14 @@ class FittingUiLifecycleMixin:
 
         if hasattr(self.ui, "gisaxsInputAutoScaleCheckBox"):
             self.ui.gisaxsInputAutoScaleCheckBox.setChecked(True)
+
+        # Manual Single/Stack imports always render immediately.  Keep the
+        # legacy checkbox checked for session/JSON compatibility and for the
+        # separate in-situ refresh policy.
+        if hasattr(self.ui, "gisaxsInputAutoShowCheckBox"):
+            self.ui.gisaxsInputAutoShowCheckBox.blockSignals(True)
+            self.ui.gisaxsInputAutoShowCheckBox.setChecked(True)
+            self.ui.gisaxsInputAutoShowCheckBox.blockSignals(False)
 
         self._initialize_fit_checkboxes()
 
@@ -114,7 +119,7 @@ class FittingUiLifecycleMixin:
 
         self._restore_gisaxs_input_parameters()
         self._initialize_image_display_option_widgets()
-        if getattr(self, "current_stack_data", None) is not None:
+        if analysis_image_for(self) is not None:
             QTimer.singleShot(0, self._refresh_image_display)
 
         self._update_cutline_step_sizes()
@@ -130,12 +135,7 @@ class FittingUiLifecycleMixin:
 
         self._check_dependencies()
 
-        try:
-            if getattr(self, "load_mode", "Single") == "In-situ" and self._is_auto_show_enabled():
-                self._start_insitu_timer()
-            self._enforce_insitu_visibility_once()
-        except Exception:
-            pass
+        self._enforce_insitu_visibility_once()
 
     def _initialize_fit_checkboxes(self):
         """No description."""
@@ -149,6 +149,11 @@ class FittingUiLifecycleMixin:
                 self.ui.fitLogXCheckBox.blockSignals(True)
                 self.ui.fitLogXCheckBox.setChecked(False)
                 self.ui.fitLogXCheckBox.blockSignals(False)
+            combo = getattr(self.ui, "fitQViewModeComboBox", None)
+            if combo is not None:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(max(0, combo.findData("signed")))
+                combo.blockSignals(False)
 
             if hasattr(self.ui, "fitLogYCheckBox"):
                 self.ui.fitLogYCheckBox.blockSignals(True)
@@ -177,6 +182,18 @@ class FittingUiLifecycleMixin:
                 self.ui.fitLogXCheckBox.blockSignals(True)
                 self.ui.fitLogXCheckBox.setChecked(session_data.get("fit_log_x", False))
                 self.ui.fitLogXCheckBox.blockSignals(False)
+            combo = getattr(self.ui, "fitQViewModeComboBox", None)
+            if combo is not None:
+                q_view_mode = session_data.get("fit_q_view_mode")
+                if not q_view_mode:
+                    q_view_mode = self._q_view_mode_from_legacy(
+                        session_data.get("fit_q_branch", "both"),
+                        session_data.get("fit_q_combination", "separate"),
+                    )
+                combo.blockSignals(True)
+                combo.setCurrentIndex(max(0, combo.findData(q_view_mode)))
+                combo.blockSignals(False)
+            self._update_q_view_hint()
 
             if hasattr(self.ui, "fitLogYCheckBox"):
                 self.ui.fitLogYCheckBox.blockSignals(True)
@@ -196,8 +213,10 @@ class FittingUiLifecycleMixin:
         try:
             current_q_mode = self._should_show_q_axis()
             self._last_q_mode = current_q_mode
+            self._last_horizontal_q_axis = self._horizontal_q_axis()
         except Exception as e:
             self._last_q_mode = False
+            self._last_horizontal_q_axis = "qy"
 
     def _setup_smart_display(self, spinbox):
         """No description."""
@@ -288,6 +307,7 @@ class FittingUiLifecycleMixin:
         try:
             if getattr(self, "_initializing", False):
                 return
+            had_cut = self._has_existing_cut_result()
             if hasattr(self, "_update_stack_display"):
                 self._update_stack_display()
 
@@ -311,7 +331,9 @@ class FittingUiLifecycleMixin:
                 )
                 self._update_parameter_selection_display(selection_info)
 
-            self._trigger_delayed_cut_update()
+            self._delayed_cutline_update()
+            if had_cut:
+                self._refresh_existing_cut_preserving_view()
 
         except Exception as e:
             pass
@@ -333,31 +355,9 @@ class FittingUiLifecycleMixin:
             pass
 
     def _delayed_cut_image_update(self):
-        """Cut"""
+        """Update the detector overlay without implicitly recalculating the cut."""
         try:
-            if (
-                self.current_cut_data is not None
-                and hasattr(self, "current_stack_data")
-                and self.current_stack_data is not None
-            ):
-                center_x = 0
-                center_y = 0
-                width = 0
-                height = 0
-
-                if hasattr(self.ui, "gisaxsInputCenterParallelValue"):
-                    center_x = self.ui.gisaxsInputCenterParallelValue.value()
-                if hasattr(self.ui, "gisaxsInputCenterVerticalValue"):
-                    center_y = self.ui.gisaxsInputCenterVerticalValue.value()
-                if hasattr(self.ui, "gisaxsInputCutLineParallelValue"):
-                    width = self.ui.gisaxsInputCutLineParallelValue.value()
-                if hasattr(self.ui, "gisaxsInputCutLineVerticalValue"):
-                    height = self.ui.gisaxsInputCutLineVerticalValue.value()
-
-                self._perform_cut()
-                self.status_updated.emit(
-                    f"Auto-updated cut with new parameters: Center({center_x}, {center_y}), Size({width} x {height})"
-                )
+            self._delayed_cutline_update()
 
         except Exception as e:
             pass
@@ -379,9 +379,11 @@ class FittingUiLifecycleMixin:
             is_q_mode = self._is_q_space_mode()
 
             if is_q_mode:
-                step_size = 0.01
+                step_size = 0.0001
+                decimals = 6
             else:
                 step_size = 1.0
+                decimals = 2
 
             cutline_controls = [
                 "gisaxsInputCenterVerticalValue",
@@ -393,6 +395,8 @@ class FittingUiLifecycleMixin:
             for control_name in cutline_controls:
                 if hasattr(self.ui, control_name):
                     control = getattr(self.ui, control_name)
+                    if hasattr(control, "setDecimals"):
+                        control.setDecimals(decimals)
                     control.setSingleStep(step_size)
 
             cutline_step_controls = [
@@ -406,6 +410,8 @@ class FittingUiLifecycleMixin:
                     control = getattr(self.ui, control_name)
                     control.setProperty("defaultStepValue", step_size)
                     control.blockSignals(True)
+                    if hasattr(control, "setDecimals"):
+                        control.setDecimals(decimals)
                     control.setSingleStep(step_size)
                     control.setValue(step_size)
                     control.blockSignals(False)
@@ -423,21 +429,28 @@ class FittingUiLifecycleMixin:
             show_q_axis = self._should_show_q_axis()
 
             if show_q_axis:
-                unit_suffix = " (q)"
+                horizontal_name = self._horizontal_q_axis()
+                vertical_label = "Center qz (nm⁻¹)"
+                horizontal_label = f"Center {horizontal_name} (nm⁻¹)"
+                vertical_size_label = "qz span (nm⁻¹)"
+                horizontal_size_label = f"{horizontal_name} span (nm⁻¹)"
             else:
-                unit_suffix = " (px)"
+                vertical_label = "Center Vertical (px)"
+                horizontal_label = "Center Parallel (px)"
+                vertical_size_label = "Vertical (px)"
+                horizontal_size_label = "Parallel (px)"
 
             if hasattr(self.ui, "gisaxsInputCenterVerticalLabel"):
-                self.ui.gisaxsInputCenterVerticalLabel.setText(f"Center Vertical{unit_suffix}")
+                self.ui.gisaxsInputCenterVerticalLabel.setText(vertical_label)
 
             if hasattr(self.ui, "gisaxsInputCenterParallelLabel"):
-                self.ui.gisaxsInputCenterParallelLabel.setText(f"Center Parallel{unit_suffix}")
+                self.ui.gisaxsInputCenterParallelLabel.setText(horizontal_label)
 
             if hasattr(self.ui, "gisaxsInputCutLineVerticalLabel"):
-                self.ui.gisaxsInputCutLineVerticalLabel.setText(f"Vertical{unit_suffix}")
+                self.ui.gisaxsInputCutLineVerticalLabel.setText(vertical_size_label)
 
             if hasattr(self.ui, "gisaxsInputCutLineParallelLabel"):
-                self.ui.gisaxsInputCutLineParallelLabel.setText(f"Parallel{unit_suffix}")
+                self.ui.gisaxsInputCutLineParallelLabel.setText(horizontal_size_label)
 
         except Exception as e:
             pass
@@ -449,52 +462,97 @@ class FittingUiLifecycleMixin:
         except Exception:
             return False
 
-    def _get_cached_q_meshgrids(self):
-        """Return the active fitting-view state."""
+    def _horizontal_q_axis(self):
+        """Return the selected detector horizontal coordinate (qy or signed qr)."""
         try:
-            if (
-                self.independent_window is not None
-                and hasattr(self.independent_window, "_qy_mesh")
-                and self.independent_window._qy_mesh is not None
-            ):
-                return self.independent_window._qy_mesh, self.independent_window._qz_mesh
+            return normalize_horizontal_q_axis(
+                self.fitting_view_model.get_setting(
+                    "fitting", "detector.horizontal_q_axis", "qy"
+                )
+            )
+        except Exception:
+            return "qy"
 
-            if hasattr(self, "current_stack_data") and self.current_stack_data is not None:
-                height, width = self.current_stack_data.shape
+    def _horizontal_q_label(self):
+        return r"$q_r$ (nm$^{-1}$)" if self._horizontal_q_axis() == "qr" else r"$q_y$ (nm$^{-1}$)"
 
-                pixel_size_x = self.fitting_view_model.get_setting(
-                    "fitting", "detector.pixel_size_x", 172.0
-                )
-                pixel_size_y = self.fitting_view_model.get_setting(
-                    "fitting", "detector.pixel_size_y", 172.0
-                )
-                beam_center_x = self.fitting_view_model.get_setting(
-                    "fitting", "detector.beam_center_x", width / 2.0
-                )
-                beam_center_y = self.fitting_view_model.get_setting(
-                    "fitting", "detector.beam_center_y", height / 2.0
-                )
-                distance = self.fitting_view_model.get_setting(
-                    "fitting", "detector.distance", 2565.0
-                )
-                theta_in_deg = self.fitting_view_model.get_setting("beam", "grazing_angle", 0.4)
-                wavelength = self.fitting_view_model.get_setting("beam", "wavelength", 0.1045)
+    def _detector_q_grid(self):
+        """Return the q grid aligned with the canonical analysis image."""
+        if self.qy_matrix is None or self.qz_matrix is None or self.qr_matrix is None:
+            self._compute_q_meshgrids_and_store()
+        if self.qy_matrix is None or self.qz_matrix is None or self.qr_matrix is None:
+            return None
+        try:
+            return DetectorQGrid(self.qy_matrix, self.qz_matrix, self.qr_matrix)
+        except ValueError:
+            return None
 
-                detector = _scientific_commands(self).q_space.create_detector(
-                    image_shape=(height, width),
-                    pixel_size_x=pixel_size_x,
-                    pixel_size_y=pixel_size_y,
-                    beam_center_x=beam_center_x,
-                    beam_center_y=beam_center_y,
-                    distance=distance,
-                    theta_in_deg=theta_in_deg,
-                    wavelength=wavelength,
-                    crop_params=None,
-                )
-
-                return detector.get_qy_qz_meshgrids()
-
+    def _get_cached_q_meshgrids(self):
+        """Return active horizontal-q and qz grids in analysis-array order."""
+        try:
+            grid = self._detector_q_grid()
+            return grid.meshes(self._horizontal_q_axis()) if grid is not None else (None, None)
+        except Exception:
             return None, None
 
-        except Exception as e:
-            return None, None
+    def _get_display_q_meshgrids(self):
+        """Return q grids in the same row order as the detector preview image."""
+        grid = self._detector_q_grid()
+        return (
+            grid.display_meshes(self._horizontal_q_axis())
+            if grid is not None
+            else (None, None)
+        )
+
+    def _snap_q_point(self, horizontal_q, qz):
+        grid = self._detector_q_grid()
+        if grid is None:
+            return None
+        return grid.nearest_point(horizontal_q, qz, self._horizontal_q_axis())
+
+    def _snap_q_region(self, horizontal_min, horizontal_max, qz_min, qz_max):
+        grid = self._detector_q_grid()
+        if grid is None:
+            return None
+        return grid.snap_region(
+            horizontal_min,
+            horizontal_max,
+            qz_min,
+            qz_max,
+            self._horizontal_q_axis(),
+        )
+
+    def _convert_q_to_pixel_coordinates(
+        self,
+        center_horizontal,
+        center_qz,
+        width_q,
+        height_q,
+    ):
+        """Map q selection values to the nearest detector cells."""
+
+        grid = self._detector_q_grid()
+        if grid is None:
+            return {"center_x": 0, "center_y": 0, "width": 1, "height": 1}
+        point = grid.nearest_point(
+            center_horizontal,
+            center_qz,
+            self._horizontal_q_axis(),
+        )
+        region = grid.snap_region(
+            center_horizontal - width_q / 2.0,
+            center_horizontal + width_q / 2.0,
+            center_qz - height_q / 2.0,
+            center_qz + height_q / 2.0,
+            self._horizontal_q_axis(),
+        )
+        return {
+            "center_x": point.column,
+            "center_y": grid.qz.shape[0] - 1 - point.row,
+            "width": region.column_max - region.column_min + 1,
+            "height": region.row_max - region.row_min + 1,
+            "row_min": region.row_min,
+            "row_max": region.row_max,
+            "column_min": region.column_min,
+            "column_max": region.column_max,
+        }

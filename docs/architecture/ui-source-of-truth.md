@@ -92,8 +92,8 @@ QSS 优先放在 owner 的 `presentation/styles/` 或应用级 design system 中
 1. 确认页面 owner 与对应 `views/*_view.py`；
 2. 只在 View 中修改控件、布局和视觉默认值；
 3. 在 `page.py`/`dialog.py` 中连接交互，不把业务逻辑放进 View；
-4. 保持或明确迁移 objectName、signals、快捷键、默认值和 tab order；
-5. 为 View、ViewModel 状态转换与旧入口运行 focused tests；
+4. 审计并明确记录 objectName、signals、快捷键、默认值和 tab order 的变化；
+5. 为 View、ViewModel 状态转换与 public import aliases 运行 focused tests；
 6. 运行离屏页面测试和 `python tools/check.py`；
 7. 新增、删除或重命名 View 时同步显式 inventory 与 workspace 文档。
 

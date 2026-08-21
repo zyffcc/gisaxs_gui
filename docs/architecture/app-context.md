@@ -1,29 +1,42 @@
-# AppContext 与 global_params 渐进迁移
+# AppContext 与应用状态边界
 
-## 当前 `core/global_params.py` 的职责
+> **Status**：Current
+>
+> **Scope**：应用级依赖注入、settings、session、preferences 和 project state
+>
+> **Related code**：`src/gimap/app/context.py`、`src/gimap/app/bootstrap.py`、
+> `src/gimap/integrations/state/`
+>
+> **Last verified**：2026-08-20
 
-现有 `GlobalParameterManager` 同时负责：
+## AppContext
+
+`main.py` 的 composition root 为一个应用进程创建一个 `AppContext`，再通过构造函数把它交给
+workspace 和 feature。Context 当前包含：
+
+- `SettingsRepository`：跨启动持久化的用户设置；
+- `SessionRepository`：项目与 feature 会话快照；
+- `UserPreferencesRepository`：纯 UI/交互偏好；
+- `ProjectParametersRepository`：项目参数文件边界；
+- `JobRunner`：可取消、可超时的后台任务边界；
+- `ProjectState`：当前项目路径、dirty flag、metadata 和 feature state 聚合。
+
+Feature 不得创建自己的全局 context 或 application singleton。Application 和 ViewModel 只依赖
+所需的 repository/port，不应把完整 Context 当作 service locator 到处传递。
+
+## `core/global_params.py` 兼容边界
+
+`GlobalParameterManager` 仍为现有 JSON 参数格式和 Qt 参数注册提供兼容：
 
 - beam、detector、sample、trainset、fitting 等用户参数的内存存储；
 - `default_parameters.json` 与 `user_parameters.json` 的初始化、读取和写入；
 - 嵌套参数路径访问；
 - Qt 参数变化信号；
 - QWidget 注册和值同步；
-- legacy controller registry 与 controller 同步；
+- public controller alias 的注册和值同步；
 - process-wide singleton 生命周期。
 
-这些职责暂不一次性拆除。旧 controller 可以继续使用 `global_params`；新 feature 只依赖
-`SettingsRepository`、`SessionRepository` 和显式传入的 `AppContext`。
-
-## 第一版边界
-
-- `SettingsRepository`：跨启动持久化的用户设置，JSON 仍是原有顶层 module mapping，
-  不增加 schema envelope，也不改变嵌套参数名称。
-- `SessionRepository`：新的、可替换的临时 session 持久化边界。
-- `ProjectState`：当前项目路径、dirty flag、metadata 和 feature state 聚合。
-- `FeatureState`：feature state 的 `snapshot` / `restore` 最小协议。
-- `AppContext`：由 `main.py` 创建一次，通过构造函数传给新架构 feature。
-
-`GlobalParamsSettingsRepository` 是迁移适配器。它不会创建另一个 singleton，只包装现有
-manager。迁移完成前，Qt signal、widget registry 和 controller registry 仍属于 legacy
-`global_params`，不进入新的 repository contract。
+`GlobalParamsSettingsRepository` 只把该 manager 映射为 `SettingsRepository`，不会创建第二个
+singleton，也不会改变 `default_parameters.json` 或 `user_parameters.json` 的顶层 mapping、
+嵌套参数名和序列化格式。Qt signals、widget registry 和 controller alias registry 不属于
+repository contract，不能泄漏到 application/domain。

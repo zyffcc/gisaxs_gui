@@ -40,6 +40,10 @@ class ParticleConnectionsMixin:
         max_value = 1e10
         decimals = 2
 
+        def configured_step(step_name: str, fallback: float) -> float:
+            step_control = getattr(self.ui, step_name, None)
+            return float(step_control.value()) if step_control is not None else fallback
+
         widgets_set = 0
 
         # Configure component parameter controls from the dynamic schema.
@@ -66,31 +70,35 @@ class ParticleConnectionsMixin:
         if hasattr(self.ui, "fitBGValue"):
             self.ui.fitBGValue.setRange(min_value, max_value)
             self.ui.fitBGValue.setDecimals(6)
-            self.ui.fitBGValue.setSingleStep(0.1)
+            self.ui.fitBGValue.setSingleStep(configured_step("fitBGStep", 0.1))
             widgets_set += 1
 
         if hasattr(self.ui, "fitSigmaResValue"):
             self.ui.fitSigmaResValue.setRange(min_value, max_value)
             self.ui.fitSigmaResValue.setDecimals(6)
-            self.ui.fitSigmaResValue.setSingleStep(0.1)
+            self.ui.fitSigmaResValue.setSingleStep(
+                configured_step("fitSigmaResStep", 0.0001)
+            )
             widgets_set += 1
 
         if hasattr(self.ui, "fitNuResValue"):
             self.ui.fitNuResValue.setRange(min_value, max_value)
             self.ui.fitNuResValue.setDecimals(4)
-            self.ui.fitNuResValue.setSingleStep(0.1)
+            self.ui.fitNuResValue.setSingleStep(configured_step("fitNuResStep", 0.1))
             widgets_set += 1
 
         if hasattr(self.ui, "fitIntResValue"):
             self.ui.fitIntResValue.setRange(min_value, max_value)
             self.ui.fitIntResValue.setDecimals(6)
-            self.ui.fitIntResValue.setSingleStep(0.01)
+            self.ui.fitIntResValue.setSingleStep(
+                configured_step("fitIntResStep", 0.01)
+            )
             widgets_set += 1
 
         if hasattr(self.ui, "fitKValue"):
             self.ui.fitKValue.setRange(min_value, max_value)
             self.ui.fitKValue.setDecimals(4)
-            self.ui.fitKValue.setSingleStep(0.1)
+            self.ui.fitKValue.setSingleStep(configured_step("fitKStep", 0.1))
             widgets_set += 1
 
         self._add_fitting_success(
@@ -121,13 +129,7 @@ class ParticleConnectionsMixin:
                                 and self.current_1d_data is not None
                             )
                             if has_data:
-                                try:
-                                    self.display_mode = "fitting"
-                                    self._display_mode = "fitting"
-                                    self._fitting_mode_active = True
-                                except Exception:
-                                    pass
-                                self._perform_manual_fitting()
+                                self._perform_manual_fitting(reveal_result=False)
                         except Exception:
                             pass
 
@@ -139,7 +141,7 @@ class ParticleConnectionsMixin:
                         "particle_id": f"particle_{widget_id}",
                         "shape": shape_lower,
                         "param": param_key,
-                        "trigger_fit": True,
+                        "trigger_fit": False,
                         "debounce_ms": self._param_debounce_ms,
                         "epsilon_abs": self._param_abs_eps,
                         "epsilon_rel": self._param_rel_eps,
@@ -180,13 +182,7 @@ class ParticleConnectionsMixin:
                         hasattr(self, "current_cut_data") and self.current_cut_data is not None
                     ) or (hasattr(self, "current_1d_data") and self.current_1d_data is not None)
                     if has_data:
-                        try:
-                            self.display_mode = "fitting"
-                            self._display_mode = "fitting"
-                            self._fitting_mode_active = True
-                        except Exception:
-                            pass
-                        self._perform_manual_fitting()
+                        self._perform_manual_fitting(reveal_result=False)
                 except Exception:
                     pass
 
@@ -194,7 +190,7 @@ class ParticleConnectionsMixin:
             meta = {
                 "persist": "model_global",
                 "param": param_key,
-                "trigger_fit": True,
+                "trigger_fit": False,
                 "debounce_ms": self._param_debounce_ms,
                 "epsilon_abs": self._param_abs_eps,
                 "epsilon_rel": self._param_rel_eps,

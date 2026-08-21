@@ -100,6 +100,35 @@ def test_feature_page_preserves_widgets_signals_steps_and_job_status_offscreen()
     page.close()
 
 
+def test_classification_modern_workflow_uses_action_steps_and_progressive_disclosure() -> None:
+    _app()
+    page = ClassificationPage()
+
+    assert page.titleLabel.text() == "Classifier workbench"
+    assert [
+        page.datasetStepButton.text(),
+        page.preprocessingStepButton.text(),
+        page.algorithmsStepButton.text(),
+        page.resultsStepButton.text(),
+    ] == [
+        "1  Import dataset",
+        "2  Preprocess",
+        "3  Compare models",
+        "4  Results",
+    ]
+    assert page.scanImportButton.property("classificationPrimaryAction") is True
+    assert page.algorithmConfigSplitter.count() == 1
+    assert page.classification_algorithm_advanced.parentWidget() is not (
+        page.algorithmConfigSplitter
+    )
+    assert page.preview_empty_state.parentWidget() is page.previewGraphicsView.viewport()
+
+    page.set_step("Preprocessing")
+    page.preprocessing_continue_button.click()
+    assert page.workflowStack.currentIndex() == 2
+    page.close()
+
+
 def test_page_shell_and_panels_are_owned_by_feature_python_views() -> None:
     views = (
         PROJECT_ROOT
@@ -265,6 +294,8 @@ def test_app_composition_installs_classification_page_before_controller_binding(
     assert not hasattr(window, "classificationPageTextBrowser")
     assert not hasattr(binding, "_install_compatibility_aliases")
     assert not hasattr(binding, "_install_page")
+    assert page.qualityStatusLabel.text() == "Waiting for data"
+    assert "Add at least two labeled classes" in page.qualityListWidget.item(0).text()
 
     binding.log("Direct page logging")
     assert "Direct page logging" in page.logTextBrowser.toPlainText()

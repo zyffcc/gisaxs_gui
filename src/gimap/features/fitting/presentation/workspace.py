@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Sequence
-
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
+    QLabel,
     QSizePolicy,
     QSplitter,
+    QVBoxLayout,
     QWidget,
 )
 
 from src.gimap.app.ports import UserPreferencesRepository
-from src.gimap.app.presentation import apply_design_system
+from src.gimap.app.presentation import apply_design_system, install_safe_wheel_behavior
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
@@ -28,19 +28,31 @@ from src.gimap.app.presentation.responsive_layout import current_profile, scale_
 
 from .views import FittingWorkspaceView
 from .cut_card import CutLineCard
+from .fitting_theme import fitting_stylesheet
 from .input_card import GisaxsInputCard
 from .layout_primitives import configure_button as _configure_button
 from .layout_primitives import detach_from_parent_layout as _detach_from_parent_layout
 from .layout_primitives import take_widget as _take_widget
+from .layout_primitives import CurrentPageSizeTabWidget
 from .model_card import ModelParameterCard
-from .preview_cards import DetectorPreviewCard, FittingPlotControlsCard, PlotPreviewCard, StatusCard
+from .preview_cards import (
+    DetectorPreviewCard,
+    FittingPlotControlsCard,
+    PlotPreviewCard,
+    StatusCard,
+)
 from .run_card import FittingControlsCard
+from .workflow_header import FittingWorkflowHeader
+from .workflow_content import WorkflowContentStack
+from .workflow_navigation import navigate_workflow_step, save_guided_mode
+from .workspace_responsiveness import FittingWorkspaceResponsivenessMixin
+from .workspace_context import FittingContextContainer
 
 
-class GisaxsFittingWorkspace:
+class GisaxsFittingWorkspace(FittingWorkspaceResponsivenessMixin):
     """Three-region layout for the cut/fitting page."""
 
-    SETTINGS_KEY = "gisaxs_fitting_splitter_sizes"
+    SETTINGS_KEY = "gisaxs_fitting_splitter_sizes_v2"
     DEFAULT_WORK_SIZES = [760, 680]
 
     def __init__(
@@ -49,9 +61,11 @@ class GisaxsFittingWorkspace:
         profile=None,
         *,
         preferences: UserPreferencesRepository,
+        view_model,
     ):
         self.ui = ui
         self.preferences = preferences
+        self.view_model = view_model
         self.profile = profile or current_profile(ui.centralwidget)
         self.DEFAULT_WORK_SIZES = list(self.profile.work_sizes)
         self._legacy_fitting_scroll_area = ui.gisaxsFittingPageScrollArea
@@ -59,6 +73,7 @@ class GisaxsFittingWorkspace:
         self._workspace_ui = FittingWorkspaceView()
         self._workspace_ui.setupUi(self.page_splitter)
         self.fixed_controls_stack = self._workspace_ui.gisaxsFixedControlsStack
+        self.left_shell = self._workspace_ui.gisaxsFittingLeftShell
         self.work_area_contents = self._workspace_ui.gisaxsWorkAreaContents
         self.right_panel = self._workspace_ui.gisaxsRightCollapsiblePanel
         self.preview_scroll_area = self._workspace_ui.gisaxsPreviewScrollArea
@@ -68,7 +83,7 @@ class GisaxsFittingWorkspace:
         self.work_splitter.setHandleWidth(8)
         self.work_splitter.setChildrenCollapsible(False)
         self.work_splitter.setOpaqueResize(True)
-        self.work_splitter.setMinimumWidth(self.profile.workspace_min)
+        self.work_splitter.setMinimumWidth(self._control_min_width())
         self.work_splitter.setMinimumHeight(
             sum(self.DEFAULT_WORK_SIZES) + self.work_splitter.handleWidth()
         )
@@ -79,10 +94,13 @@ class GisaxsFittingWorkspace:
         self._install_page_splitter()
         self._build_left_work_area()
         self._build_preview_area()
+        self._build_workflow_content_stack()
         self._legacy_fitting_scroll_area.deleteLater()
         self._configure_button_responsiveness()
         self._apply_page_overflow_policy()
         self.restore_sizes()
+        install_safe_wheel_behavior(self.page_splitter)
+        QTimer.singleShot(0, self._refresh_fixed_stack_geometry)
 
     def _detach_preview_widgets(self) -> None:
         _take_widget(self.ui.gridLayout_23, self.ui.gisaxsInputGraphicsView)
@@ -96,7 +114,7 @@ class GisaxsFittingWorkspace:
         self.ui.gisaxsInputBox.setMaximumWidth(16777215)
         self.ui.curvePlotControlWidget.setMinimumWidth(0)
         self.ui.curvePlotControlWidget.setMaximumWidth(16777215)
-        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(self.profile.workspace_min)
+        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(self._control_min_width())
         self.ui.gisaxsFittingPageScrollArea.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Expanding,
@@ -111,6 +129,9 @@ class GisaxsFittingWorkspace:
         self.fitting_advanced_section = workspace_ui.fittingAdvancedSection
         self.fitting_run_section = workspace_ui.fittingRunSection
         self.fitting_export_section = workspace_ui.fittingExportSection
+        self.workflow_header = FittingWorkflowHeader(workspace_ui.fittingWorkflowHost)
+        workspace_ui.fittingWorkflowHostLayout.addWidget(self.workflow_header)
+        self.ui.fittingWorkflowHeader = self.workflow_header
 
         for section, title, description, content, layout in (
             (
@@ -152,13 +173,41 @@ class GisaxsFittingWorkspace:
         )
 
         gisaxs_card = GisaxsInputCard(self.ui, self.profile)
-        cut_line_card = CutLineCard(self.ui, self.profile)
-        fitting_controls_card = FittingControlsCard(self.ui, self.profile)
         model_parameters_card = ModelParameterCard(self.ui, self.profile)
+        cut_line_card = CutLineCard(
+            self.ui,
+            self.profile,
+            view_model=self.view_model,
+            preferences=self.preferences,
+        )
+        fitting_controls_card = FittingControlsCard(
+            self.ui,
+            self.profile,
+            model_parameters_card=model_parameters_card,
+            preferences=self.preferences,
+        )
+        self.model_parameters_card = model_parameters_card
+        fitting_controls_card.mode_tabs.currentChanged.connect(
+            lambda _index: QTimer.singleShot(
+                0,
+                lambda: QTimer.singleShot(0, self._refresh_fixed_stack_geometry),
+            )
+        )
+        fitting_controls_card.mode_tabs.currentChanged.connect(
+            lambda _index: QTimer.singleShot(40, self._refresh_fixed_stack_geometry)
+        )
         workspace_ui.fittingInputContentLayout.addWidget(gisaxs_card)
         workspace_ui.fittingConfigureContentLayout.addWidget(cut_line_card)
-        workspace_ui.fittingAdvancedContentLayout.addWidget(model_parameters_card)
         workspace_ui.fittingRunContentLayout.addWidget(fitting_controls_card)
+        guided = bool(self.preferences.get("fitting.guided_workflow", True))
+        self.workflow_header.set_guided(guided)
+        self.workflow_header.guided_changed.connect(
+            lambda value: save_guided_mode(self.preferences, value)
+        )
+        self.workflow_header.step_requested.connect(
+            lambda key: navigate_workflow_step(self, key)
+        )
+        self.cut_line_card = cut_line_card
 
         _detach_from_parent_layout(self.ui.FittingExportButton)
         _detach_from_parent_layout(fitting_controls_card.fitExportPlotButton)
@@ -171,21 +220,16 @@ class GisaxsFittingWorkspace:
         )
         workspace_ui.fittingExportContentLayout.addStretch(1)
 
-        fixed_stack_min_height = self._fixed_stack_min_height()
-        self.fixed_controls_stack.setMinimumHeight(fixed_stack_min_height)
+        self.fixed_controls_stack.setMinimumHeight(0)
         self.fixed_controls_stack.setSizePolicy(
             QSizePolicy.Expanding,
-            QSizePolicy.Minimum,
+            QSizePolicy.Fixed,
         )
         self.work_splitter.hide()
         self.work_splitter.setParent(None)
 
         layout = self.work_area_contents.layout()
-        self.work_area_contents.setMinimumHeight(
-            fixed_stack_min_height
-            + layout.contentsMargins().top()
-            + layout.contentsMargins().bottom()
-        )
+        self.work_area_contents.setMinimumHeight(0)
         self.work_area_contents.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Minimum,
@@ -232,6 +276,7 @@ class GisaxsFittingWorkspace:
         )
 
         self.detector_preview_card = DetectorPreviewCard(
+            self.ui,
             self.ui.gisaxsInputGraphicsView,
             self.profile,
         )
@@ -241,6 +286,7 @@ class GisaxsFittingWorkspace:
             self.ui.fitGraphicsView,
             self.profile,
         )
+        self.curve_plot_card = self.fitting_plot_card
         self.fitting_controls_card = FittingPlotControlsCard(
             self.ui,
             self.ui.curvePlotControlWidget,
@@ -262,25 +308,141 @@ class GisaxsFittingWorkspace:
         )
         workspace_ui.fittingLogContentLayout.addWidget(self.run_log_card)
 
-        self.right_panel.setMinimumWidth(self._preview_min_width())
-        self.right_panel.setMaximumWidth(self._preview_max_width())
-        self.right_panel.setSizePolicy(
-            QSizePolicy.Expanding,
-            QSizePolicy.Preferred,
+        self.preview_tabs = CurrentPageSizeTabWidget(self.right_panel)
+        self.preview_tabs.setObjectName("fittingPreviewTabs")
+        self.preview_tabs.setDocumentMode(True)
+        self.preview_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        workspace_ui.fittingPreviewAreaLayout.removeWidget(self.fitting_preview_panel)
+        workspace_ui.fittingPreviewAreaLayout.removeWidget(self.fitting_results_panel)
+        self.preview_tabs.addTab(self.fitting_preview_panel, "Detector")
+        self.preview_tabs.addTab(self.fitting_results_panel, "Curve")
+        self.inline_feedback = QLabel("", self.right_panel)
+        self.inline_feedback.setObjectName("fittingInlineFeedback")
+        self.inline_feedback.setProperty("feedbackKind", "error")
+        self.inline_feedback.setWordWrap(True)
+        self.inline_feedback.setVisible(False)
+        workspace_ui.fittingPreviewAreaLayout.insertWidget(0, self.preview_tabs, 1)
+        self.preview_tabs.currentChanged.connect(self._sync_preview_page_chrome)
+        workspace_ui.fittingPlotAdvancedToggle.toggled.connect(
+            lambda _expanded: QTimer.singleShot(
+                0, self.preview_tabs.refresh_current_page_geometry
+            )
         )
+        self._sync_preview_page_chrome(self.preview_tabs.currentIndex())
+        self.ui.fittingPreviewTabs = self.preview_tabs
+        self.ui.fittingInlineFeedback = self.inline_feedback
+        workspace_ui.fittingPreviewTitle.hide()
+        workspace_ui.fittingPreviewDescription.hide()
+        workspace_ui.fittingResultsTitle.hide()
+        workspace_ui.fittingResultsDescription.hide()
+
+        workspace_ui.fittingFixedControlsLayout.removeWidget(self.fitting_export_section)
+        self.fitting_export_section.setParent(self.fitting_results_panel)
+        workspace_ui.fittingResultsPanelLayout.addWidget(self.fitting_export_section)
+        workspace_ui.fittingPreviewAreaLayout.removeWidget(
+            self.fitting_plot_advanced_section
+        )
+        self.fitting_plot_advanced_section.setParent(self.fitting_results_panel)
+        workspace_ui.fittingResultsPanelLayout.addWidget(
+            self.fitting_plot_advanced_section
+        )
+        self.fitting_plot_advanced_section.set_expanded(False)
+        self.fitting_log_section.set_expanded(False)
+
+        self.right_panel.setMinimumWidth(self._preview_min_width())
+        self.right_panel.setMaximumWidth(16777215)
+        self.right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.preview_scroll_area.setMinimumWidth(self._preview_min_width())
-        self.preview_scroll_area.setMaximumWidth(self._preview_max_width())
-        self.page_splitter.setStretchFactor(0, 3)
-        self.page_splitter.setStretchFactor(1, 2)
+        self.preview_scroll_area.setMaximumWidth(16777215)
+        self.ui.gisaxsFittingPageScrollArea.setMaximumWidth(
+            self._control_target_width() + scale_value(80, self.profile, 60)
+        )
+        self.left_shell.setMinimumWidth(self._control_min_width())
+        self.left_shell.setMaximumWidth(
+            self._control_target_width() + scale_value(80, self.profile, 60)
+        )
+        self.left_shell.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        self.page_splitter.setStretchFactor(0, 0)
+        self.page_splitter.setStretchFactor(1, 1)
         self.page_splitter.setCollapsible(0, False)
         self.page_splitter.setCollapsible(1, False)
         apply_design_system(self.page_splitter)
+        self.page_splitter.setStyleSheet(
+            self.page_splitter.styleSheet() + "\n" + fitting_stylesheet()
+        )
+
+    def _build_workflow_content_stack(self) -> None:
+        """Show one left-side task at a time while preserving every legacy widget."""
+        layout = self.fixed_controls_stack.layout()
+        for section in (
+            self.fitting_input_section,
+            self.fitting_configure_section,
+            self.fitting_advanced_section,
+            self.fitting_run_section,
+        ):
+            layout.removeWidget(section)
+
+        self.fitting_fit_step_page = QWidget(self.fixed_controls_stack)
+        self.fitting_fit_step_page.setObjectName("fittingFitStepPage")
+        fit_layout = QVBoxLayout(self.fitting_fit_step_page)
+        fit_layout.setContentsMargins(0, 0, 0, 0)
+        fit_layout.setSpacing(CARD_SPACING)
+        if self.fitting_advanced_section.content.layout().count() == 0:
+            self.fitting_advanced_section.hide()
+        else:
+            fit_layout.addWidget(self.fitting_advanced_section)
+        fit_layout.addWidget(self.fitting_run_section)
+        fit_layout.addStretch(1)
+
+        self.workflow_content_stack = WorkflowContentStack(self.fixed_controls_stack)
+        self.workflow_content_stack.setObjectName("fittingWorkflowContentStack")
+        self.workflow_content_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.workflow_content_stack.addWidget(self.fitting_input_section)
+        self.workflow_content_stack.addWidget(self.fitting_configure_section)
+        self.workflow_content_stack.addWidget(self.fitting_fit_step_page)
+        layout.insertWidget(0, self.workflow_content_stack)
+        layout.setAlignment(Qt.AlignTop)
+        self.ui.fittingWorkflowContentStack = self.workflow_content_stack
+        self.show_workflow_step("import")
+        QTimer.singleShot(0, self.workflow_content_stack.sync_height)
+
+    def _sync_preview_page_chrome(self, tab_index: int) -> None:
+        """Keep persistent tab navigation above page-specific controls."""
+        index = int(tab_index)
+        if index == 0:
+            target_layout = self._workspace_ui.fittingPreviewPanelLayout
+        else:
+            target_layout = self._workspace_ui.fittingResultsPanelLayout
+
+        _detach_from_parent_layout(self.inline_feedback)
+        target_layout.insertWidget(0, self.inline_feedback)
+
+        toolbar = self.fitting_plot_card.toolbar
+        if index == 1:
+            _detach_from_parent_layout(toolbar)
+            target_layout.insertWidget(1, toolbar)
+            toolbar.show()
+        else:
+            toolbar.hide()
+
+    def show_workflow_step(self, key: str) -> None:
+        """Select navigation independently from verified workflow completion."""
+        configure_keys = {"setup", "center", "cut", "center_cut"}
+        page_index = 2 if key == "fit" else (1 if key in configure_keys else 0)
+        self.workflow_content_stack.setCurrentIndex(page_index)
+        if key in configure_keys:
+            self.cut_line_card.show_step(key)
+        self.workflow_header.set_selected_step(key)
+        self.ui.gisaxsFittingPageScrollArea.verticalScrollBar().setValue(0)
+        self.workflow_content_stack.sync_height()
+        QTimer.singleShot(0, self._refresh_fixed_stack_geometry)
 
     def _configure_button_responsiveness(self) -> None:
         expanding_actions = [
             "gisaxsInputImportButton",
             "gisaxsInputCenterAutoFindingButton",
             "gisaxsInputDetectorParaButton",
+            "gisaxsInputCutButton",
             "fitImport1dFileButton",
             "FittingManualFittingButton",
             "FittingAutoFittingButton",
@@ -289,7 +451,6 @@ class GisaxsFittingWorkspace:
             "FittingExportButton",
         ]
         preferred_actions = [
-            "gisaxsInputCutButton",
             "gisaxsInputShowButton",
         ]
 
@@ -332,7 +493,24 @@ class GisaxsFittingWorkspace:
         _take_widget(layout, self._legacy_fitting_scroll_area)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.page_splitter)
+        self.context_container = FittingContextContainer(
+            self.page_splitter,
+            self.view_model.insitu,
+            self.ui.gisaxsFittingPage,
+        )
+        self.context_bar = self.context_container.context_bar
+        self.context_stack = self.context_container.stack
+        self.context_button_group = self.context_container.button_group
+        self.single_context_button = self.context_container.single_button
+        self.insitu_context_button = self.context_container.insitu_button
+        self.insitu_series_page = self.context_container.insitu_page
+        layout.addWidget(self.context_container, 1)
+        self.ui.fittingWorkspace = self
+        self.ui.fittingContextStack = self.context_stack
+        self.ui.fittingInsituSeriesPage = self.insitu_series_page
+        self.ui.fittingSingleContextButton = self.single_context_button
+        self.ui.fittingInsituContextButton = self.insitu_context_button
+        self.show_context("single")
         self.ui.gisaxsFittingPageScrollArea = (
             self._workspace_ui.gisaxsFittingPageScrollArea
         )
@@ -340,172 +518,8 @@ class GisaxsFittingWorkspace:
             self.work_area_contents
         )
 
-    def _page_min_width(self) -> int:
-        return (
-            self.profile.workspace_min
-            + self._preview_min_width()
-            + self.page_splitter.handleWidth()
-        )
-
-    def _preview_min_width(self) -> int:
-        return max(self.profile.preview_min, scale_value(420, self.profile, 340))
-
-    def _preview_max_width(self) -> int:
-        """Allow the preview column to grow to twice its profile-default width."""
-        return max(self._preview_min_width(), int(self.profile.page_sizes[1]) * 2)
-
-    def _apply_page_overflow_policy(self) -> None:
-        min_width = self._page_min_width()
-        self.page_splitter.setMinimumWidth(min_width)
-        self.page_splitter.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
-        QTimer.singleShot(0, self._set_page_sizes)
-
-    def _available_page_width(self) -> int:
-        width = self.page_splitter.width()
-        if width > 0:
-            return width
-        width = self.ui.gisaxsFittingPage.width()
-        return width if width > 0 else self._page_min_width()
-
-    def _set_page_sizes(self, sizes: Sequence[int] | None = None) -> None:
-        try:
-            available = max(
-                1, self._available_page_width() - self.page_splitter.handleWidth()
-            )
-        except RuntimeError:
-            # A zero-delay layout callback can outlive its Qt splitter at shutdown.
-            return
-        left_min = self.profile.workspace_min
-        right_min = self._preview_min_width()
-
-        if available < left_min + right_min:
-            self.page_splitter.setSizes([left_min, right_min])
-            return
-
-        if sizes and len(sizes) == 2:
-            left = max(left_min, int(sizes[0]))
-            right = max(right_min, int(sizes[1]))
-        else:
-            left, right = self.profile.page_sizes
-            left = max(left_min, int(left))
-            right = max(right_min, int(right))
-
-        overflow = left + right - available
-        if overflow > 0:
-            reducible_left = max(0, left - left_min)
-            reduce_left = min(reducible_left, overflow)
-            left -= reduce_left
-            overflow -= reduce_left
-        if overflow > 0:
-            reducible_right = max(0, right - right_min)
-            reduce_right = min(reducible_right, overflow)
-            right -= reduce_right
-
-        self.page_splitter.setSizes([left, right])
-
-    def restore_sizes(self) -> None:
-        sizes = self.preferences.get(self.SETTINGS_KEY, None)
-        if isinstance(sizes, dict):
-            if sizes.get("profile") != self.profile.key:
-                self._set_page_sizes(self.profile.page_sizes)
-                self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
-                return
-            page_sizes = sizes.get("page")
-            work_sizes = sizes.get("work")
-            if isinstance(page_sizes, (list, tuple)) and len(page_sizes) == 2:
-                self._set_page_sizes(page_sizes)
-            else:
-                self._set_page_sizes(self.profile.page_sizes)
-            if (
-                self.work_splitter.count() >= 2
-                and isinstance(work_sizes, (list, tuple))
-                and len(work_sizes) == 2
-            ):
-                self.work_splitter.setSizes(
-                    [
-                        max(self.DEFAULT_WORK_SIZES[0], int(work_sizes[0])),
-                        max(self.DEFAULT_WORK_SIZES[1], int(work_sizes[1])),
-                    ]
-                )
-            elif self.work_splitter.count() >= 2:
-                self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
-            return
-
-        self._set_page_sizes(self.profile.page_sizes)
-        if self.work_splitter.count() >= 2:
-            self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
-
-    def save_state(self) -> None:
-        self.preferences.set(
-            self.SETTINGS_KEY,
-            {
-                "page": self.page_splitter.sizes(),
-                "work": self.work_splitter.sizes() if self.work_splitter.count() >= 2 else [],
-                "profile": self.profile.key,
-            },
-        )
-
-    def apply_responsive_profile(self, profile) -> None:
-        self.profile = profile
-        self.DEFAULT_WORK_SIZES = list(profile.work_sizes)
-        self._configure_button_responsiveness()
-        fitting_card = self.fixed_controls_stack.findChild(
-            FittingControlsCard, "FittingControlsCard"
-        )
-        if fitting_card is not None:
-            fitting_card.apply_responsive_profile(profile)
-        self.right_panel.setMinimumWidth(self._preview_min_width())
-        self.right_panel.setMaximumWidth(self._preview_max_width())
-        self.preview_scroll_area.setMinimumWidth(self._preview_min_width())
-        self.preview_scroll_area.setMaximumWidth(self._preview_max_width())
-        self.work_splitter.setMinimumWidth(profile.workspace_min)
-        self.ui.gisaxsFittingPageScrollArea.setMinimumWidth(profile.workspace_min)
-        self._apply_page_overflow_policy()
-
-        fixed_min = self._fixed_stack_min_height()
-        self.fixed_controls_stack.setMinimumHeight(fixed_min)
-        if self.work_area_contents.layout() is not None:
-            margins = self.work_area_contents.layout().contentsMargins()
-            self.work_area_contents.setMinimumHeight(fixed_min + margins.top() + margins.bottom())
-            self.work_area_contents.layout().invalidate()
-        self.fixed_controls_stack.layout().invalidate()
-        self.fixed_controls_stack.adjustSize()
-        self.work_area_contents.adjustSize()
-        self._set_page_sizes(profile.page_sizes)
-        if self.work_splitter.count() >= 2:
-            self.work_splitter.setSizes(self.DEFAULT_WORK_SIZES)
-
-    def _fixed_stack_min_height(self) -> int:
-        sections = [
-            getattr(self, name, None)
-            for name in (
-                "fitting_input_section",
-                "fitting_configure_section",
-                "fitting_advanced_section",
-                "fitting_run_section",
-                "fitting_export_section",
-            )
-        ]
-        sections = [section for section in sections if section is not None]
-        if sections:
-            heights = [
-                max(section.minimumSizeHint().height(), section.sizeHint().height())
-                for section in sections
-            ]
-            return sum(heights) + (len(heights) - 1) * CARD_SPACING
-        card_names = ("GisaxsInputCard", "CutLineCard", "FittingControlsCard", "ModelParameterCard")
-        card_heights = [
-            max(
-                widget.minimumHeight(),
-                widget.minimumSizeHint().height(),
-                widget.sizeHint().height(),
-            )
-            for name in card_names
-            if (widget := self.fixed_controls_stack.findChild(QWidget, name)) is not None
-        ]
-        if not card_heights:
-            return self.fixed_controls_stack.minimumHeight()
-        return sum(card_heights) + (len(card_heights) - 1) * CARD_SPACING
-
+    def show_context(self, context: str) -> None:
+        """Switch task context without resetting either page's local navigation."""
+        self.context_container.show_context(context)
 
 __all__ = ["GisaxsFittingWorkspace"]

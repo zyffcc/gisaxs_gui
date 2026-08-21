@@ -46,12 +46,50 @@ class ShellLayoutMixin:
             layout.addWidget(page)
 
         self.trainsetContentSplitter.setStretchFactor(1, 1)
+        self._polish_workflow_shell()
         self.back_button.clicked.connect(
             lambda: self.step_list.setCurrentRow(max(0, self.step_list.currentRow() - 1))
         )
         self.step_list.setCurrentRow(0)
         QTimer.singleShot(0, self._apply_responsive_layout)
         QTimer.singleShot(80, self._apply_responsive_layout)
+
+    def _polish_workflow_shell(self) -> None:
+        """Clarify project actions without changing their connected commands."""
+        self.pageTitle.setText("Trainset builder")
+        self.pageSubtitle.setText(
+            "Design a simulated GISAXS dataset, validate it locally, then prepare training jobs."
+        )
+        self.validate_button.setText("Validate design")
+        self.preview_button.setText("Open local preview")
+        self.prepare_button.setText("Prepare job package")
+        self.submit_button.setText("Maxwell (unavailable)")
+
+        self.trainset_action_hint = QLabel("Start by validating the dataset design.", self)
+        self.trainset_action_hint.setObjectName("trainsetActionHint")
+        self.trainset_action_hint.setWordWrap(True)
+        self.back_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        while self.trainsetActionsLayout.count():
+            self.trainsetActionsLayout.takeAt(0)
+        self.trainsetActionsLayout.addWidget(self.back_button)
+        self.trainsetActionsLayout.addWidget(self.trainset_action_hint)
+        self.trainsetActionsLayout.addStretch(1)
+        self.trainsetActionsLayout.addLayout(self.trainsetActionGrid)
+
+        while self.trainsetActionGrid.count():
+            self.trainsetActionGrid.takeAt(0)
+        for column, button in enumerate(
+            (
+                self.validate_button,
+                self.preview_button,
+                self.prepare_button,
+                self.submit_button,
+                self.load_button,
+                self.save_button,
+            )
+        ):
+            self.trainsetActionGrid.addWidget(button, 0, column)
 
     def set_step_state(self, index: int, state: str) -> None:
         if not 0 <= index < len(self.STEPS):

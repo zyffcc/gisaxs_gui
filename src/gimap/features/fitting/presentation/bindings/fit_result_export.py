@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PyQt5.QtWidgets import (
     QFileDialog,
-    QInputDialog,
+    QDialog,
 )
 
 from src.gimap.features.fitting.application import (
@@ -18,6 +18,7 @@ from src.gimap.features.fitting.application import (
 from ..binding_primitives import (
     _scientific_commands,
 )
+from ..export_dialog import FittingDataExportDialog
 
 
 class FitResultExportMixin:
@@ -138,6 +139,9 @@ class FitResultExportMixin:
             lines.append(f"# Log Y: {self._is_fit_log_y_enabled()}")
             lines.append(f"# Normalize: {self._is_fit_norm_enabled()}")
             lines.append(f"# Axis Filter: {self._get_independent_axis_filter_mode()}")
+            lines.append(f"# q Branch: {self._get_q_branch()}")
+            lines.append(f"# q Combination: {self._get_q_combination_mode()}")
+            lines.append(f"# X Scale: {self._get_x_axis_scale()}")
             lines.append(f"# Raw q Source Unit: {self._get_q_source_unit(q_source_kind)}")
             lines.append("# Internal Model q Unit: nm^-1")
             lines.append(f"# q Unit: {self._get_q_unit_label(mathtext=False)}")
@@ -189,12 +193,11 @@ class FitResultExportMixin:
                 )
                 return
 
-            default_index = 0
-            choice, ok = QInputDialog.getItem(
-                None, "Select Data to Export", "Data source:", options, default_index, False
-            )
-            if not ok:
+            dialog = FittingDataExportDialog(tuple(options), self.main_window)
+            if dialog.exec_() != QDialog.Accepted:
                 return
+            selection = dialog.selection()
+            choice = selection.source
 
             x_data = None
             y_data = None
@@ -235,10 +238,21 @@ class FitResultExportMixin:
             x_data = x_data[:min_length]
             y_data = y_data[:min_length]
 
+            if selection.preparation != "raw" and choice != "Fitting Data":
+                prepared = self._prepare_signed_q_data(x_data, y_data)
+                x_data, y_data = prepared.q, prepared.intensity
+            if selection.preparation == "fitting" and self._roi_active():
+                lower, upper = sorted((float(self._roi_min), float(self._roi_max)))
+                roi = (x_data >= lower) & (x_data <= upper)
+                x_data, y_data = x_data[roi], y_data[roi]
+                if x_data.size < 2:
+                    raise ValueError("The current fitting region contains fewer than two points")
+
             x_data = self._convert_q_values_for_display(x_data, source=q_source_kind)
             x_column_name = self._build_q_axis_label(filter_mode="all", mathtext=False)
             y_column_name = "Intensity (a.u.)"
             header_lines = self._build_export_header_lines(choice, data_name)
+            header_lines.append(f"# Export Representation: {selection.preparation}")
             outcome = self.fitting_view_model.export_fit_result(
                 ExportFitResultRequest(
                     path=Path(filename),

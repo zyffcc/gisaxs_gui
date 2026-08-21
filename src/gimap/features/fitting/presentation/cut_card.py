@@ -2,30 +2,48 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QBoxLayout,
     QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
+    QWidget,
 )
 
+from src.gimap.app.ports import UserPreferencesRepository
+from src.gimap.app.presentation import SafeWheelSpinBox
 from src.gimap.app.presentation.layout_primitives import BUTTON_HEIGHT, FORM_ROW_SPACING, normalize_button, normalize_input
 from src.gimap.app.presentation.responsive_layout import current_profile, scale_value
 
-from .layout_primitives import CardFrame, NoWheelDoubleSpinBox
+from .layout_primitives import CardFrame, DisclosurePanel, NoWheelDoubleSpinBox
 from .layout_primitives import detach_from_parent_layout as _detach_from_parent_layout
 from .layout_primitives import take_widget as _take_widget
+from .detector_setup_panel import DetectorSetupPanel
 
 
 class CutLineCard(CardFrame):
-    def __init__(self, ui, profile=None):
-        super().__init__("Cut Line and Detector", "CutLineCard")
+    AUTO_CUT_THICKNESS_KEY = "fitting.yoneda_cut.horizontal_thickness_pixels"
+    DEFAULT_AUTO_CUT_THICKNESS = 5
+
+    def __init__(
+        self,
+        ui,
+        profile=None,
+        *,
+        view_model,
+        preferences: UserPreferencesRepository,
+    ):
+        super().__init__("Experiment Setup & Cut", "CutLineCard")
         self.ui = ui
+        self.view_model = view_model
+        self.preferences = preferences
         self.profile = profile or current_profile(ui.centralwidget)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self._managed_value_spinboxes = []
@@ -37,30 +55,20 @@ class CutLineCard(CardFrame):
         self._detach_view_widgets()
         self._rebuild_center_controls()
 
-        cutline_group = self._make_group("Cut Line")
-        cutline_layout = QGridLayout(cutline_group)
-        self._configure_group_layout(cutline_layout)
-
-        for col, text in enumerate(("Parameter", "Value", "Step", "Reset")):
-            header_label = QLabel(text, cutline_group)
-            header_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
-            cutline_layout.addWidget(header_label, 0, col)
+        detector_page = QWidget(self)
+        detector_page.setObjectName("fittingDetectorSetupPage")
+        detector_page_layout = QVBoxLayout(detector_page)
+        detector_page_layout.setContentsMargins(0, 0, 0, 0)
+        detector_panel = DetectorSetupPanel(
+            view_model,
+            ui.gisaxsInputDetectorParaButton,
+            detector_page,
+        )
+        ui.fittingDetectorSetupPanel = detector_panel
+        detector_page_layout.addWidget(detector_panel)
+        detector_page_layout.addStretch(1)
 
         rows = (
-            (
-                ui.gisaxsInputCutLineVerticalLabel,
-                ui.gisaxsInputCutLineVerticalValue,
-                "Vertical (px)",
-                "gisaxsInputCutLineVerticalStep",
-                1.0,
-            ),
-            (
-                ui.gisaxsInputCutLineParallelLabel,
-                ui.gisaxsInputCutLineParallelValue,
-                "Parallel (px)",
-                "gisaxsInputCutLineParallelStep",
-                1.0,
-            ),
             (
                 ui.gisaxsInputCenterVerticalLabel,
                 ui.gisaxsInputCenterVerticalValue,
@@ -75,49 +83,28 @@ class CutLineCard(CardFrame):
                 "gisaxsInputCenterParallelStep",
                 1.0,
             ),
+            (
+                ui.gisaxsInputCutLineVerticalLabel,
+                ui.gisaxsInputCutLineVerticalValue,
+                "Cut Vertical (px)",
+                "gisaxsInputCutLineVerticalStep",
+                1.0,
+            ),
+            (
+                ui.gisaxsInputCutLineParallelLabel,
+                ui.gisaxsInputCutLineParallelValue,
+                "Cut Parallel (px)",
+                "gisaxsInputCutLineParallelStep",
+                1.0,
+            ),
         )
 
-        for row_index, (label, value_box, label_text, step_name, default_step) in enumerate(
-            rows, 1
-        ):
-            label.setText(label_text)
-            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            normalize_input(value_box)
-            step_box, reset_button = self._create_step_controls(step_name, value_box, default_step)
-            cutline_layout.addWidget(label, row_index, 0)
-            cutline_layout.addWidget(value_box, row_index, 1)
-            cutline_layout.addWidget(step_box, row_index, 2)
-            cutline_layout.addWidget(reset_button, row_index, 3)
-            self._managed_labels.append(label)
-            self._managed_value_spinboxes.append(value_box)
+        ui.gisaxsInputCenterAutoFindingButton.setText("Find Yoneda & Set Cut")
+        ui.gisaxsInputCenterAutoFindingButton.setProperty("gimapPrimaryAction", True)
+        ui.gisaxsInputCutButton.setText("Extract / Update Cut")
+        ui.gisaxsInputCutButton.setProperty("gimapPrimaryAction", True)
 
-        unit_hint = QLabel("All cut geometry values use pixel units.", cutline_group)
-        unit_hint.setStyleSheet("color: #64748b;")
-        unit_hint.setWordWrap(True)
-        self._managed_labels.append(unit_hint)
-        cutline_layout.addWidget(unit_hint, 5, 0, 1, 3)
-        cutline_layout.addWidget(ui.gisaxsInputCenterAutoFindingButton, 5, 3)
-        cutline_layout.setColumnStretch(0, 0)
-        cutline_layout.setColumnStretch(1, 1)
-        cutline_layout.setColumnStretch(2, 0)
-        cutline_layout.setColumnStretch(3, 0)
-
-        detector_group = self._make_group("Detector and Cut")
-        detector_layout = QGridLayout(detector_group)
-        self._configure_group_layout(detector_layout)
-        detector_hint = QLabel(
-            "Configure detector parameters here before cutting the selected region.",
-            detector_group,
-        )
-        detector_hint.setObjectName("cutLineDetectorHintLabel")
-        detector_hint.setWordWrap(True)
-        self._style_info_label(detector_hint)
-        detector_layout.addWidget(ui.gisaxsInputDetectorParaButton, 0, 0)
-        detector_layout.addWidget(detector_hint, 0, 1)
-        detector_layout.addWidget(ui.gisaxsInputCutButton, 0, 2)
-        detector_layout.setColumnStretch(0, 0)
-        detector_layout.setColumnStretch(1, 1)
-        detector_layout.setColumnStretch(2, 0)
+        center_cut_page = self._build_center_cut_page(rows)
 
         self._managed_action_buttons.extend(
             [
@@ -127,14 +114,147 @@ class CutLineCard(CardFrame):
             ]
         )
 
-        content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(scale_value(12, self.profile, 8))
-        content_layout.addWidget(cutline_group)
-        content_layout.addWidget(detector_group)
-        self.body_layout.addLayout(content_layout)
+        self.step_stack = QStackedWidget(self)
+        self.step_stack.setObjectName("fittingConfigureStepStack")
+        self.step_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        for page in (detector_page, center_cut_page):
+            self.step_stack.addWidget(page)
+        self.step_stack.currentChanged.connect(
+            lambda _index: QTimer.singleShot(0, self._sync_step_height)
+        )
+        self.body_layout.addWidget(self.step_stack)
+        self._step_index = {
+            "setup": 0,
+            "center": 1,
+            "cut": 1,
+            "center_cut": 1,
+        }
+        self.show_step("setup")
         self._apply_responsive_profile()
         self.lock_to_natural_height()
+
+    def _build_center_cut_page(self, rows) -> QWidget:
+        page = QWidget(self)
+        page.setObjectName("fittingYonedaCutPage")
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(scale_value(10, self.profile, 8))
+        group = self._make_group("Yoneda & Cut")
+        group.setTitle("")
+        grid = QGridLayout(group)
+        self._configure_group_layout(grid)
+        for column, text in enumerate(("Parameter", "Value")):
+            header = QLabel(text, group)
+            header.setProperty("fittingTableHeader", True)
+            grid.addWidget(header, 0, column)
+
+        disclosure = DisclosurePanel("Step sizes", "fittingCutStepDisclosure", group)
+        step_grid = QGridLayout()
+        step_grid.setContentsMargins(0, 0, 0, 0)
+        step_grid.setHorizontalSpacing(scale_value(8, self.profile, 6))
+        step_grid.setVerticalSpacing(scale_value(6, self.profile, 5))
+        for row_index, (label, value_box, label_text, step_name, default_step) in enumerate(
+            rows, 1
+        ):
+            label.setText(label_text)
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            normalize_input(value_box)
+            step_box, reset_button = self._create_step_controls(
+                step_name, value_box, default_step
+            )
+            grid.addWidget(label, row_index, 0)
+            grid.addWidget(value_box, row_index, 1)
+            step_grid.addWidget(QLabel(label_text, disclosure.content), row_index - 1, 0)
+            step_grid.addWidget(step_box, row_index - 1, 1)
+            step_grid.addWidget(reset_button, row_index - 1, 2)
+            self._managed_labels.append(label)
+            self._managed_value_spinboxes.append(value_box)
+
+        hint_label = QLabel(
+            "Find Yoneda sets the center and a horizontal cut band. Adjust the geometry, "
+            "then explicitly extract the 1D curve.",
+            group,
+        )
+        hint_label.setProperty("cardMeta", True)
+        hint_label.setWordWrap(True)
+        grid.addWidget(hint_label, len(rows) + 1, 0, 1, 2)
+        disclosure.content_layout.addLayout(step_grid)
+        grid.addWidget(disclosure, len(rows) + 2, 0, 1, 2)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
+        page_layout.addWidget(group)
+
+        auto_row = QHBoxLayout()
+        auto_row.setContentsMargins(0, 0, 0, 0)
+        auto_row.setSpacing(scale_value(8, self.profile, 6))
+        auto_label = QLabel("Auto horizontal cut thickness", page)
+        auto_label.setToolTip(
+            "Number of detector rows averaged around the automatically found Yoneda position."
+        )
+        auto_row.addWidget(auto_label)
+        self.auto_cut_thickness_spinbox = SafeWheelSpinBox(page)
+        self.auto_cut_thickness_spinbox.setObjectName(
+            "gisaxsAutoYonedaCutThicknessSpinBox"
+        )
+        self.auto_cut_thickness_spinbox.setRange(1, 999)
+        self.auto_cut_thickness_spinbox.setSuffix(" px")
+        self.auto_cut_thickness_spinbox.setValue(self._load_auto_cut_thickness())
+        self.auto_cut_thickness_spinbox.setToolTip(auto_label.toolTip())
+        self.auto_cut_thickness_spinbox.editingFinished.connect(
+            self._save_auto_cut_thickness
+        )
+        normalize_input(self.auto_cut_thickness_spinbox)
+        self.ui.gisaxsAutoYonedaCutThicknessSpinBox = self.auto_cut_thickness_spinbox
+        auto_row.addWidget(self.auto_cut_thickness_spinbox)
+        auto_row.addStretch(1)
+        auto_row.addWidget(self.ui.gisaxsInputCenterAutoFindingButton)
+        page_layout.addLayout(auto_row)
+        page_layout.addWidget(self.ui.gisaxsInputCutButton)
+        page_layout.addStretch(1)
+        # Both compatibility names now refer to the single merged disclosure.
+        self.ui.fittingCutStepDisclosure = disclosure
+        self.ui.fittingCenterStepDisclosure = disclosure
+        return page
+
+    def _load_auto_cut_thickness(self) -> int:
+        value = self.preferences.get(
+            self.AUTO_CUT_THICKNESS_KEY,
+            self.DEFAULT_AUTO_CUT_THICKNESS,
+        )
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            value = self.DEFAULT_AUTO_CUT_THICKNESS
+        return min(999, max(1, value))
+
+    def _save_auto_cut_thickness(self) -> None:
+        self.preferences.set(
+            self.AUTO_CUT_THICKNESS_KEY,
+            int(self.auto_cut_thickness_spinbox.value()),
+        )
+        self.preferences.save()
+
+    def show_step(self, key: str) -> None:
+        index = self._step_index.get(key, 0)
+        self.step_stack.setCurrentIndex(index)
+        self.title_label.setText(
+            {
+                "setup": "Detector Setup",
+                "center": "Yoneda & Cut",
+                "cut": "Yoneda & Cut",
+                "center_cut": "Yoneda & Cut",
+            }.get(key, "Experiment Setup & Cut")
+        )
+        QTimer.singleShot(0, self._sync_step_height)
+
+    def _sync_step_height(self) -> None:
+        page = self.step_stack.currentWidget()
+        if page is None:
+            return
+        height = max(page.minimumSizeHint().height(), page.sizeHint().height())
+        self.step_stack.setMinimumHeight(height)
+        self.step_stack.setMaximumHeight(16777215)
+        self.updateGeometry()
 
     def _detach_view_widgets(self) -> None:
         widgets = [
@@ -202,16 +322,16 @@ class CutLineCard(CardFrame):
         group.setObjectName(title.replace(" ", "") + "Group")
         group.setStyleSheet(
             "QGroupBox {"
-            "border: 1px solid #d7dee8;"
-            "border-radius: 7px;"
+            "border: none;"
             "margin-top: 10px;"
-            "padding-top: 12px;"
-            "background: #ffffff;"
+            "padding-top: 10px;"
+            "background: transparent;"
             "}"
             "QGroupBox::title {"
             "subcontrol-origin: margin;"
-            "left: 8px;"
-            "padding: 0 4px;"
+            "left: 0;"
+            "padding: 0;"
+            "font-weight: 650;"
             "}"
         )
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)

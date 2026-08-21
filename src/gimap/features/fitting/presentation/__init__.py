@@ -2,8 +2,10 @@
 
 from .cut_card import CutLineCard
 from .detector_parameters_dialog import DetectorParametersDialog
+from .detector_setup_panel import DetectorSetupPanel
 from .control_view_factory import build_fitting_controls, translate_fitting_controls
 from .input_card import GisaxsInputCard
+from .export_dialog import FittingDataExportDialog, FittingExportSelection
 from .layout_primitives import (
     CardFrame,
     CurrentPageHeightStackedWidget,
@@ -28,6 +30,7 @@ from .view_model import FittingViewModel
 from .view_binding import FittingViewBinding
 from .storage_view_model import FittingStorageViewModel
 from .insitu_view_model import FittingInSituViewModel
+from .insitu_series_page import InSituSeriesPage
 from .scientific_view_model import FittingScientificViewModel
 from .ai_worker import AiCandidateWorker
 from .workspace import GisaxsFittingWorkspace
@@ -39,12 +42,16 @@ __all__ = [
     "CurrentPageHeightStackedWidget",
     "DetectorPreviewCard",
     "DetectorParametersDialog",
+    "DetectorSetupPanel",
     "FittingControlsCard",
+    "FittingDataExportDialog",
+    "FittingExportSelection",
     "FittingPlotControlsCard",
     "FittingRegionControl",
     "FittingState",
     "FittingStorageViewModel",
     "FittingInSituViewModel",
+    "InSituSeriesPage",
     "FittingScientificViewModel",
     "FittingViewModel",
     "FittingViewBinding",

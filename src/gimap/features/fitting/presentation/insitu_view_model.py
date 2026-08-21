@@ -4,13 +4,68 @@ from __future__ import annotations
 
 
 class FittingInSituViewModel:
-    def __init__(self, workflow, on_state_changed):
+    def __init__(
+        self,
+        workflow,
+        create_recipe,
+        revise_recipe,
+        on_state_changed,
+        on_recipe_changed,
+    ):
         self._workflow = workflow
+        self._create_recipe = create_recipe
+        self._revise_recipe = revise_recipe
         self._on_state_changed = on_state_changed
+        self._on_recipe_changed = on_recipe_changed
+        self._recipe = None
+        self._recipe_scope = "future"
 
     @property
     def state(self):
         return self._workflow.state
+
+    @property
+    def recipe(self):
+        return self._recipe
+
+    @property
+    def recipe_scope(self) -> str:
+        return self._recipe_scope
+
+    def create_recipe_from_single(self, snapshot):
+        self._recipe = self._create_recipe.execute(snapshot, self._recipe)
+        self._recipe_scope = "future"
+        self._on_recipe_changed(
+            self._recipe,
+            self._recipe_scope,
+            f"In-situ Recipe v{self._recipe.version} created from Single analysis",
+        )
+        return self._recipe
+
+    def revise_recipe(self, request):
+        revision = self._revise_recipe.execute(request)
+        self._recipe = revision.recipe
+        self._recipe_scope = revision.scope
+        self._on_recipe_changed(
+            self._recipe,
+            self._recipe_scope,
+            f"In-situ Recipe v{self._recipe.version} applies to {revision.scope}",
+        )
+        return revision
+
+    def snapshot_recipe(self):
+        return None if self._recipe is None else self._recipe.to_dict()
+
+    def restore_recipe(self, snapshot) -> None:
+        from ..application import InSituProcessingRecipe
+
+        self._recipe = InSituProcessingRecipe.from_dict(snapshot)
+        self._recipe_scope = "future"
+        self._on_recipe_changed(
+            self._recipe,
+            self._recipe_scope,
+            f"In-situ Recipe v{self._recipe.version} restored",
+        )
 
     def start_insitu_workflow(self, paths, *, continue_on_error=True) -> None:
         self._workflow.start(paths, continue_on_error=continue_on_error)

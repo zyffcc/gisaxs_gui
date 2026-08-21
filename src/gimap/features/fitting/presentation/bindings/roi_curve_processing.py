@@ -162,15 +162,10 @@ class RoiCurveProcessingMixin:
             self.preferences.save()
         except Exception:
             pass
-        was_fitting = self._is_in_fitting_mode() if hasattr(self, "_is_in_fitting_mode") else False
-
         if getattr(self, "data_source", None) == "cut":
-            self._perform_cut(points_override=n)
+            self._mark_cut_stale("Sampling changed; update the cut to apply it")
         elif getattr(self, "data_source", None) == "1d":
             self._resample_1d(n_points=n)
-
-        if was_fitting:
-            self._perform_manual_fitting()
 
     def _on_interp_method_changed(self, method: str):
         meth = method or "Linear"
@@ -182,7 +177,7 @@ class RoiCurveProcessingMixin:
         if self.data_source == "1d" and self.q is not None:
             self._resample_1d(n_points=len(self.q), method=meth, keep_same_count=True)
         elif self.data_source == "cut":
-            self._perform_cut()
+            self._mark_cut_stale("Interpolation changed; update the cut to apply it")
 
     def _resample_1d(self, n_points: int, method: str = None, keep_same_count: bool = False):
         if self.current_1d_data is None or self.q is None or self.I is None:

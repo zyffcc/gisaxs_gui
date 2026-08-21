@@ -4,8 +4,8 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtCore import QEvent
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget
+from PyQt5.QtCore import QEvent, QPoint, Qt
+from PyQt5.QtWidgets import QApplication, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from src.gimap.app.presentation import (
     AdvancedSection,
@@ -16,6 +16,8 @@ from src.gimap.app.presentation import (
     ParameterSection,
     PlotPanel,
     ResultTable,
+    SafeWheelDoubleSpinBox,
+    install_safe_wheel_behavior,
 )
 from src.gimap.app.presentation.showcase import DesignSystemShowcase
 from src.gimap.app.presentation.responsive_layout import AdaptiveWindowProfileController
@@ -120,3 +122,46 @@ def test_result_table_empty_state_and_showcase_construct_offscreen():
     assert table.rowCount() == 1
     showcase = DesignSystemShowcase()
     assert showcase.windowTitle() == "GIMaP UI Design System"
+
+
+def test_safe_wheel_input_scrolls_page_unless_alt_option_is_explicit():
+    app = _app()
+    scroll_area = QScrollArea()
+    content = QWidget()
+    content.setMinimumHeight(1200)
+    layout = QVBoxLayout(content)
+    spin = SafeWheelDoubleSpinBox(content)
+    layout.addWidget(spin)
+    layout.addStretch(1)
+    scroll_area.setWidget(content)
+    scroll_area.resize(320, 240)
+    scroll_area.show()
+    app.processEvents()
+    scroll_area.verticalScrollBar().setValue(120)
+
+    class PlainWheelEvent:
+        accepted = False
+
+        def modifiers(self):
+            return Qt.NoModifier
+
+        def pixelDelta(self):
+            return QPoint()
+
+        def angleDelta(self):
+            return QPoint(0, 120)
+
+        def accept(self):
+            self.accepted = True
+
+        def ignore(self):
+            self.accepted = False
+
+    event = PlainWheelEvent()
+    spin.wheelEvent(event)
+
+    assert event.accepted is True
+    assert scroll_area.verticalScrollBar().value() < 120
+    install_safe_wheel_behavior(content)
+    assert spin.property("gimapSafeWheelInput") is True
+    scroll_area.close()

@@ -173,7 +173,8 @@ class PredictionResultsMixin:
                 del blocker
             self._render_predict_tab_by_index(target_index if target_index is not None else 0)
             # Ensure the outer tab switches to Predict-2D when results are ready
-            self._set_predict_main_tab("Predict-2D")
+            self._set_predict_main_tab("result")
+            self._refresh_predict_readiness()
         else:
             self._render_predict_tab_by_index(0)
 
