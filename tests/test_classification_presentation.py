@@ -20,6 +20,7 @@ from src.gimap.features.classification.presentation.page import (
     STYLE_PATH,
     ClassificationPage,
 )
+from src.gimap.features.classification.presentation.components import EmbeddingScatterView
 from src.gimap.features.classification.presentation.views import ClassificationPageView
 from src.gimap.features.classification.presentation.view_binding import (
     ClassificationViewBinding,
@@ -79,15 +80,19 @@ def test_feature_page_preserves_widgets_signals_steps_and_job_status_offscreen()
         "classificationConfigureSection",
         "classificationAlgorithmSection",
         "classificationResultsSection",
+        "classificationExploreSection",
+        "classificationApplySection",
         "classificationExportSection",
         "classificationLogSection",
         "classificationPageTextBrowser",
     ):
         assert page.findChild(QObject, object_name) is not None
 
-    page.set_step("Results")
+    page.set_step("Apply")
+    assert page.workflowStack.currentIndex() == 4
+    page.set_step("Train")
     assert page.workflowStack.currentIndex() == 3
-    assert emitted_steps == ["Results"]
+    assert emitted_steps == ["Apply", "Train"]
     page.filesDropped.emit(["one.npy", "two.npy"])
     assert dropped_paths == [["one.npy", "two.npy"]]
 
@@ -104,29 +109,116 @@ def test_classification_modern_workflow_uses_action_steps_and_progressive_disclo
     _app()
     page = ClassificationPage()
 
-    assert page.titleLabel.text() == "Classifier workbench"
+    assert page.titleLabel.text() == "Classifier"
+    assert page.classificationWorkflowHeader.property("classificationWorkflowHeader") is True
     assert [
         page.datasetStepButton.text(),
         page.preprocessingStepButton.text(),
         page.algorithmsStepButton.text(),
         page.resultsStepButton.text(),
+        page.applyStepButton.text(),
     ] == [
-        "1  Import dataset",
-        "2  Preprocess",
-        "3  Compare models",
-        "4  Results",
+        "Data",
+        "Prepare",
+        "Explore & label",
+        "Train & review",
+        "Apply & export",
     ]
-    assert page.scanImportButton.property("classificationPrimaryAction") is True
+    assert page.runEmbeddingButton.property("classificationPrimaryAction") is True
     assert page.algorithmConfigSplitter.count() == 1
     assert page.classification_algorithm_advanced.parentWidget() is not (
         page.algorithmConfigSplitter
     )
     assert page.preview_empty_state.parentWidget() is page.previewGraphicsView.viewport()
 
-    page.set_step("Preprocessing")
+    page.set_step("Prepare")
     page.preprocessing_continue_button.click()
     assert page.workflowStack.currentIndex() == 2
+    assert page.embeddingScatterView.objectName() == "embeddingScatterView"
+    assert page.resultTabs.count() == 4
+    assert page.predictionTable.parent() is page._apply_panel_ui.predictionTable.parent()
     page.close()
+
+
+def test_classification_workflow_progress_is_independent_from_navigation() -> None:
+    _app()
+    page = ClassificationPage()
+
+    states = {step.key: step.property("workflowState") for step in page.classificationWorkflowHeader.steps}
+    assert states == {
+        "Data": "available",
+        "Prepare": "blocked",
+        "Explore": "blocked",
+        "Train": "blocked",
+        "Apply": "blocked",
+    }
+
+    page.set_workflow_step_state("Explore", "complete", "24 accepted")
+    page.set_step("Apply")
+    explore = next(
+        step for step in page.classificationWorkflowHeader.steps if step.key == "Explore"
+    )
+    apply = next(
+        step for step in page.classificationWorkflowHeader.steps if step.key == "Apply"
+    )
+    assert explore.property("workflowState") == "complete"
+    assert explore.property("workflowSelected") is False
+    assert apply.property("workflowSelected") is True
+    assert explore.message_label.text() == "24 accepted"
+    page.close()
+
+
+@pytest.mark.parametrize("size", [(1280, 800), (1440, 900), (1920, 1080)])
+def test_classification_workflow_has_no_page_level_horizontal_overflow(size) -> None:
+    app = _app()
+    page = ClassificationPage()
+    page.resize(*size)
+    page.show()
+    app.processEvents()
+
+    for step, prefix in (
+        ("Data", "dataset"),
+        ("Prepare", "preprocessing"),
+        ("Explore", "algorithms"),
+        ("Train", "results"),
+        ("Apply", "apply"),
+    ):
+        page.set_step(step)
+        app.processEvents()
+        area = getattr(page, f"{prefix}StepScrollArea")
+        assert area.horizontalScrollBar().maximum() == 0
+
+    assert all(
+        button.width() > 0
+        for button in (
+            page.newSessionButton,
+            page.loadSessionButton,
+            page.saveSessionButton,
+            page.helpButton,
+        )
+    )
+    page.close()
+
+
+def test_embedding_scatter_supports_linked_multi_selection_offscreen() -> None:
+    _app()
+    scatter = EmbeddingScatterView()
+    changes = []
+    scatter.selectedSampleIdsChanged.connect(changes.append)
+    scatter.set_points(
+        [[0.0, 0.0], [1.0, 0.5], [0.5, 1.0]],
+        ["one", "two", "three"],
+        ["#2563eb", "#16a34a", "#dc2626"],
+        ["one.npy", "two.npy", "three.npy"],
+    )
+
+    scatter.select_sample_ids(["one", "three"])
+
+    assert set(scatter.selected_sample_ids()) == {"one", "three"}
+    assert set(changes[-1]) == {"one", "three"}
+    scatter.clear_selection()
+    assert scatter.selected_sample_ids() == []
+    scatter.close()
 
 
 def test_page_shell_and_panels_are_owned_by_feature_python_views() -> None:
@@ -144,8 +236,10 @@ def test_page_shell_and_panels_are_owned_by_feature_python_views() -> None:
     assert "def _build_stepper(" not in page_source
     assert "def _build_log_panel(" not in page_source
     assert {path.name for path in views.glob("*_view.py")} == {
+        "classification_apply_panel_view.py",
         "classification_dataset_panel_view.py",
         "classification_experiment_panel_view.py",
+        "classification_exploration_panel_view.py",
         "classification_inspection_panel_view.py",
         "classification_page_view.py",
         "classification_preprocessing_panel_view.py",
@@ -295,7 +389,18 @@ def test_app_composition_installs_classification_page_before_controller_binding(
     assert not hasattr(binding, "_install_compatibility_aliases")
     assert not hasattr(binding, "_install_page")
     assert page.qualityStatusLabel.text() == "Waiting for data"
-    assert "Add at least two labeled classes" in page.qualityListWidget.item(0).text()
+    assert "Labels are optional until model training" in page.qualityListWidget.item(0).text()
+    assert page.stateBadgeLabel.text() == "Waiting for data"
+    assert {
+        step.key: step.property("workflowState")
+        for step in page.classificationWorkflowHeader.steps
+    } == {
+        "Data": "available",
+        "Prepare": "blocked",
+        "Explore": "blocked",
+        "Train": "blocked",
+        "Apply": "blocked",
+    }
 
     binding.log("Direct page logging")
     assert "Direct page logging" in page.logTextBrowser.toPlainText()

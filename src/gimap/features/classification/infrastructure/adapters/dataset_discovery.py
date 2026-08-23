@@ -76,7 +76,7 @@ class ClassificationDatasetDiscoveryMixin:
                         files.append(normalized)
 
         files.sort(key=lambda item: item.lower())
-        return [self._sample_from_file(file_path, source.label) for file_path in files]
+        return [self._sample_from_file(file_path, source) for file_path in files]
 
     def scan_sources(self, sources: Iterable[DatasetSource]) -> list[ClassificationSample]:
         """Scan all sources while avoiding duplicate files across classes."""
@@ -108,7 +108,11 @@ class ClassificationDatasetDiscoveryMixin:
                 )
                 samples.extend(self.scan_source(source))
             elif os.path.isfile(path) and self.detect_data_type_for_path(path) is not None:
-                samples.append(self._sample_from_file(os.path.abspath(path), label))
+                samples.append(
+                    self._sample_from_file(
+                        os.path.abspath(path), DatasetSource(label=label, paths=[path])
+                    )
+                )
         return samples
 
     def load_samples(
@@ -178,10 +182,13 @@ class ClassificationDatasetDiscoveryMixin:
             return np.load(path, allow_pickle=False)
         return None
 
-    def _sample_from_file(self, path: str, label: str) -> ClassificationSample:
+    def _sample_from_file(self, path: str, source: DatasetSource) -> ClassificationSample:
         data_type = self.detect_data_type_for_path(path) or "unknown"
+        accepted = source.label_mode == "accepted"
+        provisional = source.label_mode == "provisional"
+        label = source.label if accepted else ""
         digest = hashlib.sha1(
-            f"{label}|{os.path.abspath(path).lower()}".encode("utf-8")
+            f"{source.label}|{os.path.abspath(path).lower()}".encode("utf-8")
         ).hexdigest()[:16]
         return ClassificationSample(
             sample_id=digest,
@@ -191,6 +198,13 @@ class ClassificationDatasetDiscoveryMixin:
             data_type=data_type,
             load_status="pending",
             qc_status="pending",
+            label_status=(
+                "accepted" if accepted else ("provisional" if provisional else "unlabeled")
+            ),
+            label_source="folder" if source.source_type == "folder" else "source",
+            suggested_label=source.label if provisional else None,
+            suggestion_source="folder" if provisional else None,
+            source_name=source.label,
         )
 
     def _name_matches(self, name: str, pattern: str) -> bool:

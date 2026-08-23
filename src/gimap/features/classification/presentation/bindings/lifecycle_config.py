@@ -52,6 +52,7 @@ class LifecycleConfigMixin:
                     "rule": source.file_pattern,
                     "source_type": source.source_type,
                     "color": source.color,
+                    "label_mode": source.label_mode,
                 }
                 for label, source in self.sources.items()
             },
@@ -66,6 +67,16 @@ class LifecycleConfigMixin:
             else asdict(ProjectionConfig()),
             "algorithms": [asdict(config) for config in self.algorithm_configs],
             "ranking_metric": self._ranking_metric(),
+            "label_overrides": {
+                sample.file_path: {
+                    "label": sample.label,
+                    "label_status": sample.label_status,
+                    "label_source": sample.label_source,
+                }
+                for sample in self.samples
+                if sample.label_source not in {"folder", "source"}
+                or sample.label_status != "accepted"
+            },
         }
 
     def set_parameters(self, parameters):
@@ -74,6 +85,20 @@ class LifecycleConfigMixin:
         if not isinstance(parameters, dict):
             return
         self.sources = self._sources_from_parameters(parameters)
+        raw_overrides = parameters.get("label_overrides", {})
+        self._label_overrides = (
+            {
+                str(path): {
+                    "label": str(value.get("label", "")),
+                    "label_status": str(value.get("label_status", "unlabeled")),
+                    "label_source": str(value.get("label_source", "session")),
+                }
+                for path, value in raw_overrides.items()
+                if isinstance(value, dict)
+            }
+            if isinstance(raw_overrides, dict)
+            else {}
+        )
         algorithms = parameters.get("algorithms")
         if isinstance(algorithms, list):
             defaults = {
@@ -106,10 +131,15 @@ class LifecycleConfigMixin:
         self.parameters_changed.emit(self.get_parameters())
 
     def validate_parameters(self):
-        if self.summary.classes < 2:
-            return False, "At least two classes are required."
-        if self.summary.valid_samples < 2:
-            return False, "At least two valid samples are required."
+        summary = self.classification_view_model.validate_dataset(
+            self._active_samples(), require_labels=True
+        )
+        if not summary.training_ready:
+            issue = next(
+                (item for item in summary.issues if item.severity == "error"),
+                None,
+            )
+            return False, issue.message if issue else "Accepted labels are not ready."
         return True, "OK"
 
     def reset_to_defaults(self):
@@ -122,6 +152,10 @@ class LifecycleConfigMixin:
         self.active_result = None
         self.active_model_package = None
         self.prediction_results = []
+        self.embedding_payload = None
+        self.compatibility_groups = ()
+        self._experiment_group_key = None
+        self._label_overrides = {}
         self._results_outdated = False
         self.algorithm_configs = self.classification_view_model.default_algorithms()
         if self.page is not None:
@@ -149,6 +183,10 @@ class LifecycleConfigMixin:
         page.loadSessionButton.clicked.connect(self._load_session)
         page.saveSessionButton.clicked.connect(self._save_session)
         page.helpButton.clicked.connect(self._show_help)
+        page.dataGroupCombo.currentIndexChanged.connect(
+            lambda *_: self._on_active_group_changed()
+        )
+        page.addDataButton.clicked.connect(self._add_unlabeled_data_menu)
         page.addClassButton.clicked.connect(self._add_class_dialog)
         page.scanImportButton.clicked.connect(lambda: self._start_import())
         page.filesDropped.connect(self._on_files_dropped)
@@ -239,6 +277,34 @@ class LifecycleConfigMixin:
         page.predictNewDataButton.clicked.connect(self._predict_new_data_menu)
         page.exportPredictionsButton.clicked.connect(self._export_predictions_csv)
         page.runEmbeddingButton.clicked.connect(self._start_embedding)
+        page.embeddingColorCombo.currentTextChanged.connect(
+            lambda *_: self._render_exploration_embedding()
+        )
+        page.fitEmbeddingButton.clicked.connect(page.embeddingScatterView.fit_data)
+        page.suggestGroupsButton.clicked.connect(self._start_clustering)
+        page.embeddingScatterView.selectedSampleIdsChanged.connect(
+            self._update_exploration_selection
+        )
+        page.embeddingScatterView.sampleActivated.connect(
+            self._preview_activated_embedding_sample
+        )
+        page.selectAllEmbeddingButton.clicked.connect(
+            page.embeddingScatterView.select_all_points
+        )
+        page.clearEmbeddingSelectionButton.clicked.connect(
+            page.embeddingScatterView.clear_selection
+        )
+        page.assignLabelButton.clicked.connect(self._assign_selected_label)
+        page.clearLabelButton.clicked.connect(self._clear_selected_labels)
+        page.acceptSuggestionsButton.clicked.connect(
+            lambda: self._accept_suggestions(all_samples=False)
+        )
+        page.acceptAllSuggestionsButton.clicked.connect(
+            lambda: self._accept_suggestions(all_samples=True)
+        )
+        page.selectionTable.currentCellChanged.connect(
+            lambda *_: self._preview_selected_exploration_row()
+        )
         page.misclassifiedTable.currentCellChanged.connect(
             lambda *_: self._preview_selected_misclassification()
         )
@@ -267,6 +333,7 @@ class LifecycleConfigMixin:
                     file_pattern=str(raw.get("file_pattern", "*")),
                     color=str(raw.get("color", self._next_color(len(sources)))),
                     recursive=bool(raw.get("recursive", True)),
+                    label_mode=str(raw.get("label_mode", "accepted")),
                 )
         cache = parameters.get("import_cache")
         if not sources and isinstance(cache, dict):
@@ -281,6 +348,7 @@ class LifecycleConfigMixin:
                     paths=paths,
                     file_pattern=str(raw.get("rule", "*")),
                     color=str(raw.get("color", self._next_color(len(sources)))),
+                    label_mode=str(raw.get("label_mode", "accepted")),
                 )
         return sources
 
@@ -330,10 +398,14 @@ class LifecycleConfigMixin:
         page.rankingMetricCombo.setCurrentText(reverse.get(metric, "Macro F1"))
 
     def _refresh_everything(self) -> None:
-        self.summary = self.classification_view_model.validate_dataset(self.samples)
+        self._refresh_group_selector()
+        self.summary = self.classification_view_model.validate_dataset(
+            self._active_samples(), require_labels=False
+        )
         self._render_dataset_cards()
         self._update_dataset_table()
         self._update_quality()
         self._update_input_summary()
         self._update_run_summary()
         self._update_results_views()
+        self._update_workflow_header()

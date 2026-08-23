@@ -5,24 +5,30 @@ from __future__ import annotations
 from src.gimap.app import AppContext
 
 from .application import (
+    AcceptClassificationSuggestions,
+    AssignClassificationLabels,
     BuildClassificationFeatures,
     BuildClassificationModelPackage,
     ComputeClassificationEmbedding,
+    ClearClassificationLabels,
     EstimateClassificationFeatureMemory,
     ExportClassificationCsv,
     ImportClassificationDataset,
+    GroupClassificationSamples,
     LoadClassificationModel,
     LoadClassificationSession,
     ListClassificationAlgorithms,
     PredictClassification,
     SaveClassificationModel,
     SaveClassificationSession,
+    SuggestClassificationClusters,
     TrainClassifiers,
     SummarizeClassificationDataset,
     ValidateClassificationDataset,
 )
 from .infrastructure import (
     JobRunnerClassifierTrainer,
+    JobRunnerClusteringAdapter,
     JobRunnerEmbeddingAdapter,
     JoblibClassificationModelRepository,
     ImportlibRuntimeVersionAdapter,
@@ -53,6 +59,13 @@ def create_classification_view_model(context: AppContext) -> ClassificationViewM
         train_classifiers=TrainClassifiers(JobRunnerClassifierTrainer(context.jobs)),
         compute_embedding=ComputeClassificationEmbedding(
             JobRunnerEmbeddingAdapter(context.jobs)
+        ),
+        group_samples=GroupClassificationSamples(),
+        assign_labels=AssignClassificationLabels(),
+        clear_labels=ClearClassificationLabels(),
+        accept_suggestions=AcceptClassificationSuggestions(),
+        suggest_clusters=SuggestClassificationClusters(
+            JobRunnerClusteringAdapter(context.jobs)
         ),
         predict_classification=PredictClassification(
             LocalClassifierPredictorAdapter()

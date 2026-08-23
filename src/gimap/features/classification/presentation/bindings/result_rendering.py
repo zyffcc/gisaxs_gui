@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.features.classification.application import (
-    ClassificationSample,
     ModelEvaluationResult,
 )
 
@@ -134,29 +133,6 @@ class ResultRenderingMixin:
             for col, value in enumerate(values):
                 table.setItem(row, col, QTableWidgetItem(str(value)))
 
-    def _render_embedding(self, embedding: np.ndarray, samples: list[ClassificationSample]) -> None:
-        try:
-            import matplotlib
-
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-
-            fig, ax = plt.subplots(figsize=(5, 3), dpi=120)
-            labels = [sample.label for sample in samples]
-            unique = sorted(set(labels))
-            for label in unique:
-                mask = np.asarray([item == label for item in labels])
-                ax.scatter(embedding[mask, 0], embedding[mask, 1], s=26, label=label, alpha=0.85)
-            ax.legend(fontsize=8, loc="best")
-            ax.grid(True, alpha=0.2)
-            ax.set_xlabel("Component 1")
-            ax.set_ylabel("Component 2")
-            fig.tight_layout()
-            self._set_graphics_pixmap(self.page.embeddingGraphicsView, self._figure_to_pixmap(fig))
-            plt.close(fig)
-        except Exception as exc:
-            self._set_graphics_text(self.page.embeddingGraphicsView, str(exc))
-
     def _update_quality(self) -> None:
         page = self.page
         if page is None:
@@ -167,19 +143,27 @@ class ResultRenderingMixin:
         page.summaryValidLabel.setText(str(summary.valid_samples))
         page.summaryInvalidLabel.setText(str(summary.invalid_samples))
         page.summaryBalanceLabel.setText(
-            ", ".join(f"{k}:{v}" for k, v in summary.valid_class_counts.items()) or "-"
+            (
+                ", ".join(f"{k}:{v}" for k, v in summary.valid_class_counts.items())
+                or "No accepted labels"
+            )
+            + (f" · {summary.unlabeled_samples} unlabeled" if summary.unlabeled_samples else "")
         )
         page.qualityListWidget.clear()
         if summary.total_samples == 0:
             page.qualityStatusLabel.setText("Waiting for data")
             page.qualityStatusLabel.setProperty("qualityState", "empty")
             page.qualityListWidget.addItem(
-                "Add at least two labeled classes, then scan or drop their files here."
+                "Add files or folders. Labels are optional until model training."
             )
         elif not summary.issues:
             page.qualityStatusLabel.setText(summary.status)
             page.qualityStatusLabel.setProperty("qualityState", "ready")
-            page.qualityListWidget.addItem("Ready: dataset checks passed.")
+            page.qualityListWidget.addItem(
+                "Ready for exploration. Accept at least two labels before training."
+                if summary.classes < 2
+                else "Ready: data and accepted labels passed checks."
+            )
         else:
             page.qualityStatusLabel.setText(summary.status)
             page.qualityStatusLabel.setProperty("qualityState", "attention")

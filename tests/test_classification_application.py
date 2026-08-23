@@ -3,6 +3,10 @@ from pathlib import Path
 import numpy as np
 
 from src.gimap.features.classification.application import (
+    AcceptClassificationSuggestions,
+    AcceptSuggestedLabelsRequest,
+    AssignClassificationLabels,
+    AssignLabelsRequest,
     BuildClassificationFeatures,
     BuildClassificationModelPackage,
     BuildClassificationModelPackageRequest,
@@ -11,6 +15,9 @@ from src.gimap.features.classification.application import (
     ClassificationSessionRequest,
     ClassificationPredictionRequest,
     ClassificationTrainingRequest,
+    ClusteringRequest,
+    ClusteringResult,
+    GroupClassificationSamples,
     ComputeClassificationEmbedding,
     EstimateClassificationFeatureMemory,
     ExportClassificationCsv,
@@ -27,6 +34,7 @@ from src.gimap.features.classification.application import (
     SaveClassificationModelRequest,
     TrainClassifiers,
     SummarizeClassificationDataset,
+    SuggestClassificationClusters,
     ValidateClassificationDataset,
 )
 from src.gimap.features.classification.application.models import ImportedDataset
@@ -72,7 +80,7 @@ class _Datasets:
         self.built = (samples, preprocessing, require_labels)
         return _matrix()
 
-    def validate_dataset(self, samples):
+    def validate_dataset(self, samples, *, require_labels=True, allow_mixed=False):
         return DatasetSummary(classes=2, total_samples=len(samples))
 
     def summarize_by_label(self, samples):
@@ -103,6 +111,14 @@ class _Trainer:
 class _Embedding:
     def embed(self, request):
         return EmbeddingResult(request.values[:, :2], request.method)
+
+    def cancel(self):
+        return True
+
+
+class _Clustering:
+    def cluster(self, request):
+        return ClusteringResult(np.arange(len(request.values)) % 2, request.method)
 
     def cancel(self):
         return True
@@ -238,6 +254,36 @@ def test_embedding_prediction_and_model_repository_ports_need_no_sklearn(tmp_pat
     assert embedding.values.shape == (2, 2)
     assert prediction.items[0].predicted_label == "A"
     assert loaded is package
+
+
+def test_unlabeled_grouping_label_assignment_and_cluster_suggestions_are_framework_neutral():
+    one_d = _sample("")
+    one_d.label_status = "unlabeled"
+    two_d = ClassificationSample("two", "/tmp/two.npy", "two.npy", "", "2D")
+    two_d.label_status = "unlabeled"
+    unresolved = ClassificationSample(
+        "bad", "/tmp/bad.npy", "bad.npy", "", "auto", load_status="failed"
+    )
+
+    groups = GroupClassificationSamples().execute((one_d, two_d, unresolved))
+    assigned = AssignClassificationLabels().execute(
+        AssignLabelsRequest((one_d, two_d), (one_d.sample_id,), "Phase A")
+    )
+    two_d.suggested_label = "Group 1"
+    two_d.suggestion_source = "HDBSCAN"
+    accepted = AcceptClassificationSuggestions().execute(
+        AcceptSuggestedLabelsRequest((one_d, two_d), (two_d.sample_id,))
+    )
+    clustered = SuggestClassificationClusters(_Clustering()).execute(
+        ClusteringRequest(np.ones((4, 3)), "K-Means", n_clusters=2)
+    )
+
+    assert [group.key for group in groups] == ["1D", "2D", "auto"]
+    assert assigned.sample_ids == (one_d.sample_id,)
+    assert one_d.label == "Phase A" and one_d.label_status == "accepted"
+    assert accepted == (two_d.sample_id,)
+    assert two_d.label == "Group 1" and two_d.label_source == "HDBSCAN"
+    assert clustered.labels.tolist() == [0, 1, 0, 1]
 
 
 def test_model_package_metadata_uses_version_port_without_importing_sklearn():

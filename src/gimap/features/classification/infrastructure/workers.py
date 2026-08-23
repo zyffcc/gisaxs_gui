@@ -80,3 +80,27 @@ def classification_embedding_job(payload, report, is_cancelled):
         embedding = np.column_stack([embedding[:, 0], np.zeros(embedding.shape[0])])
     report(1, 1, f"{method} complete")
     return {"method": method, "values": encode_array(embedding)}
+
+
+def classification_clustering_job(payload, report, is_cancelled):
+    X = decode_array(payload["X"])
+    method = payload["method"]
+    if X.shape[0] < 2:
+        raise ValueError("At least two samples are required for grouping.")
+    report(0, 1, f"Computing {method} groups")
+    if is_cancelled():
+        raise RuntimeError("Grouping was cancelled")
+    if method == "K-Means":
+        from sklearn.cluster import KMeans
+
+        n_clusters = max(2, min(int(payload.get("n_clusters", 4)), X.shape[0]))
+        labels = KMeans(n_clusters=n_clusters, n_init="auto", random_state=42).fit_predict(X)
+    else:
+        from sklearn.cluster import HDBSCAN
+
+        min_cluster_size = max(
+            2, min(int(payload.get("min_cluster_size", 5)), X.shape[0])
+        )
+        labels = HDBSCAN(min_cluster_size=min_cluster_size).fit_predict(X)
+    report(1, 1, f"{method} groups complete")
+    return {"method": method, "labels": encode_array(np.asarray(labels, dtype=int))}

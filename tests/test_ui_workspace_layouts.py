@@ -209,12 +209,13 @@ def test_classification_layout_uses_shared_stages_advanced_sections_and_job_stat
     _app()
     page = ClassificationPage()
 
-    assert page.classification_input_section.title_label.text() == "Input"
-    assert page.classification_configure_section.title_label.text() == "Configure"
-    assert page.classification_preview_panel.title_label.text() == "Preview"
-    assert page.classification_run_section.title_label.text() == "Run"
-    assert page.classification_results_section.title_label.text() == "Results"
-    assert page.classification_export_section.title_label.text() == "Export"
+    assert page.classification_input_section.title_label.text() == "Import data"
+    assert page.classification_configure_section.title_label.text() == "Feature recipe"
+    assert page.classification_preview_panel.title_label.text() == "Sample preview"
+    assert page.classification_run_section.title_label.text() == "Train selected models"
+    assert page.classification_results_section.title_label.text() == "Model results"
+    assert page.classification_apply_section.title_label.text() == "Classify new data"
+    assert page.classification_export_section.title_label.text() == "Save & export"
     assert page.classification_preprocessing_advanced.is_expanded() is False
     assert page.classification_algorithm_advanced.is_expanded() is False
     assert page.classification_log_section.is_expanded() is False
@@ -226,6 +227,7 @@ def test_classification_layout_uses_shared_stages_advanced_sections_and_job_stat
     assert page.taskProgressBar.value() == 40
     assert page.classification_job_status.state_label.text() == "RUNNING"
     assert page.exportResultsButton.parent() is page.classification_export_section.content
+    assert page.workflowStack.count() == 5
     page.close()
 
 

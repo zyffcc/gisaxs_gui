@@ -8,16 +8,19 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QFrame,
     QHeaderView,
+    QPushButton,
     QSizePolicy,
     QWidget,
 )
 
-from src.gimap.app.presentation import apply_design_system
+from src.gimap.app.presentation import apply_design_system, install_safe_wheel_behavior
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
 )
 
+from .components import ClassificationEmptyState
+from .panel_wiring import create_apply_panel, create_exploration_panel
 from .views import (
     ClassificationDatasetPanelView,
     ClassificationExperimentPanelView,
@@ -26,19 +29,24 @@ from .views import (
     ClassificationPreprocessingPanelView,
     ClassificationResultsPanelView,
 )
-from .workflow_polish import polish_classification_workflow
 
 
 STYLE_PATH = Path(__file__).resolve().parent / "styles" / "classification_page.qss"
 
 
 class ClassificationPage(QWidget, ClassificationPageView):
-    """Single-page workflow UI for labeled dataset classification."""
+    """Five-stage workbench for unlabeled exploration and supervised classification."""
 
     filesDropped = pyqtSignal(list)
     stepChanged = pyqtSignal(str)
 
-    _STEP_NAMES = ("Dataset", "Preprocessing", "Algorithms", "Results")
+    _STEP_NAMES = ("Data", "Prepare", "Explore", "Train", "Apply")
+    _STEP_ALIASES = {
+        "Dataset": "Data",
+        "Preprocessing": "Prepare",
+        "Algorithms": "Train",
+        "Results": "Train",
+    }
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -46,6 +54,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self._responsive_mode = ""
         self._bind_form()
         self._load_stylesheet()
+        install_safe_wheel_behavior(self)
         self.apply_responsive_mode()
         QTimer.singleShot(0, self._apply_initial_splitter_sizes)
 
@@ -62,6 +71,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self.datasetCardsLayout.insertWidget(stretch_index, card)
 
     def set_step(self, step: str) -> None:
+        step = self._STEP_ALIASES.get(step, step)
         if step not in self._STEP_NAMES:
             return
         index = self._STEP_NAMES.index(step)
@@ -69,8 +79,16 @@ class ClassificationPage(QWidget, ClassificationPageView):
             self.workflowStack.setCurrentIndex(index)
         for name, button in self._step_buttons.items():
             button.setChecked(name == step)
+        self.classificationWorkflowHeader.set_selected_step(step)
         self._current_step = step
         self.stepChanged.emit(step)
+
+    def set_workflow_step_state(
+        self, step: str, state: str, message: str = ""
+    ) -> None:
+        """Render verified progress without changing the user's current view."""
+        if step in self._STEP_NAMES:
+            self.classificationWorkflowHeader.set_step_state(step, state, message)
 
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
@@ -102,7 +120,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         height = max(1, self.height())
         if width >= 1500 and height >= 850:
             mode = "wide"
-        elif width >= 1100 and height >= 760:
+        elif width >= 1360 and height >= 760:
             mode = "medium"
         else:
             mode = "compact"
@@ -111,14 +129,16 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self._responsive_mode = mode
         if mode == "compact":
             self.datasetInspectionSplitter.setOrientation(Qt.Vertical)
-            self.algorithmConfigSplitter.setOrientation(Qt.Vertical)
+            self.explorationSplitter.setOrientation(Qt.Vertical)
+            self.explorationSelectionPanel.setMaximumWidth(16777215)
             self.datasetPanel.setMinimumWidth(0)
             self.inspectionPanel.setMinimumWidth(0)
             self.datasetStepContent.setMinimumHeight(960)
             self.algorithmsStepContent.setMinimumHeight(980)
         else:
             self.datasetInspectionSplitter.setOrientation(Qt.Horizontal)
-            self.algorithmConfigSplitter.setOrientation(Qt.Horizontal)
+            self.explorationSplitter.setOrientation(Qt.Horizontal)
+            self.explorationSelectionPanel.setMaximumWidth(460)
             self.datasetPanel.setMinimumWidth(320)
             self.inspectionPanel.setMinimumWidth(500 if mode == "wide" else 420)
             self.datasetStepContent.setMinimumHeight(560)
@@ -130,13 +150,13 @@ class ClassificationPage(QWidget, ClassificationPageView):
             return
         if self._responsive_mode == "compact":
             self.datasetInspectionSplitter.setSizes([430, 520])
-            self.algorithmConfigSplitter.setSizes([420, 540])
+            self.explorationSplitter.setSizes([560, 400])
         elif self._responsive_mode == "wide":
             self.datasetInspectionSplitter.setSizes([430, 900])
-            self.algorithmConfigSplitter.setSizes([520, 900])
+            self.explorationSplitter.setSizes([980, 420])
         else:
             self.datasetInspectionSplitter.setSizes([380, 680])
-            self.algorithmConfigSplitter.setSizes([440, 680])
+            self.explorationSplitter.setSizes([760, 360])
         self.overviewSplitter.setSizes([390, 260])
 
     def _bind_form(self) -> None:
@@ -146,10 +166,11 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self.classification_configure_section = self.classificationConfigureSection
         self.classification_algorithm_section = self.classificationAlgorithmSection
         self.classification_results_section = self.classificationResultsSection
+        self.classification_apply_section = self.classificationApplySection
         self.classification_export_section = self.classificationExportSection
         self.classification_log_section = self.classificationLogSection
         self.preprocessingStepContent = self.classificationConfigureSection
-        self.algorithmsStepContent = self.classificationAlgorithmSection
+        self.algorithmsStepContent = self.algorithmsStepContent
         self.datasetPanel = self.classificationInputSection
         self.inspectionPanel = self.classificationPreviewPanel
 
@@ -188,6 +209,13 @@ class ClassificationPage(QWidget, ClassificationPageView):
                 self.classificationResultsDescription,
                 self.classificationResultsContent,
                 self.classificationResultsContentLayout,
+            ),
+            (
+                self.classification_apply_section,
+                self.classificationApplyTitle,
+                self.classificationApplyDescription,
+                self.classificationApplyContent,
+                self.classificationApplyContentLayout,
             ),
             (
                 self.classification_export_section,
@@ -229,8 +257,13 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self.classificationAlgorithmContentLayout.addWidget(
             self._create_experiment_panel()
         )
+        self.classificationExploreContentLayout.addWidget(
+            create_exploration_panel(self)
+        )
         results_panel = self._create_results_panel()
         self.classificationResultsContentLayout.addWidget(results_panel)
+        apply_panel = create_apply_panel(self)
+        self.classificationApplyContentLayout.addWidget(apply_panel)
         for button in (
             self.saveActiveModelButton,
             self.exportResultsButton,
@@ -241,21 +274,27 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self.classificationExportContentLayout.addStretch(1)
 
         self._step_buttons = {
-            "Dataset": self.datasetStepButton,
-            "Preprocessing": self.preprocessingStepButton,
-            "Algorithms": self.algorithmsStepButton,
-            "Results": self.resultsStepButton,
+            "Data": self.datasetStepButton,
+            "Prepare": self.preprocessingStepButton,
+            "Explore": self.algorithmsStepButton,
+            "Train": self.resultsStepButton,
+            "Apply": self.applyStepButton,
         }
-        for name, button in self._step_buttons.items():
-            button.clicked.connect(
-                lambda _checked=False, step=name: self.set_step(step)
-            )
+        self.classificationWorkflowHeader.step_requested.connect(self.set_step)
 
         self.datasetInspectionSplitter.setStretchFactor(0, 0)
         self.datasetInspectionSplitter.setStretchFactor(1, 1)
         self.logToggleButton = self.classification_log_section.toggle_button
-        polish_classification_workflow(self)
-        self.set_step("Dataset")
+        self.preview_empty_state = ClassificationEmptyState(self.previewGraphicsView)
+        self.preprocessing_continue_button.clicked.connect(
+            lambda _checked=False: self.set_step("Explore")
+        )
+        self.set_workflow_step_state("Data", "available", "Add files or folders")
+        self.set_workflow_step_state("Prepare", "blocked", "Import data first")
+        self.set_workflow_step_state("Explore", "blocked", "Prepare a compatible group")
+        self.set_workflow_step_state("Train", "blocked", "Accept at least two classes")
+        self.set_workflow_step_state("Apply", "blocked", "Train or load a model")
+        self.set_step("Data")
 
     def _create_dataset_panel(self) -> QWidget:
         panel = QFrame(self)
@@ -264,6 +303,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         self._dataset_panel_ui = ui
         for name in (
             "addClassButton",
+            "addDataButton",
             "scanImportButton",
             "datasetCardsScrollArea",
             "datasetCardsContainer",
@@ -292,6 +332,8 @@ class ClassificationPage(QWidget, ClassificationPageView):
             2,
             QHeaderView.Stretch,
         )
+        self.addDataButton.setProperty("classificationPrimaryAction", True)
+        self.addDataButton.setProperty("gimapPrimaryAction", True)
         return panel
 
     def _create_inspection_panel(self) -> QWidget:
@@ -348,6 +390,16 @@ class ClassificationPage(QWidget, ClassificationPageView):
             ui.preprocessingAdvancedContentLayout,
         )
         apply_design_system(self.classification_preprocessing_advanced)
+        self.preprocessing_continue_button = QPushButton("Continue to explore", panel)
+        self.preprocessing_continue_button.setObjectName("preprocessingContinueButton")
+        self.preprocessing_continue_button.setProperty("classificationPrimaryAction", True)
+        self.preprocessing_continue_button.setProperty("gimapPrimaryAction", True)
+        ui.preprocessingPanelLayout.insertWidget(
+            max(0, ui.preprocessingPanelLayout.count() - 1),
+            self.preprocessing_continue_button,
+            0,
+            Qt.AlignRight,
+        )
         return panel
 
     def _create_experiment_panel(self) -> QWidget:
@@ -394,6 +446,10 @@ class ClassificationPage(QWidget, ClassificationPageView):
             ui.algorithmAdvancedContentLayout,
         )
         apply_design_system(self.classification_algorithm_advanced)
+        self.classification_algorithm_advanced.setParent(panel)
+        ui.experimentPanelLayout.insertWidget(1, self.classification_algorithm_advanced)
+        self.algorithmConfigSplitter.setHandleWidth(0)
+        self.algorithmConfigSplitter.setSizes([1200])
         self.classification_run_section = ui.classificationRunSection
         bind_parameter_section(
             self.classification_run_section,
@@ -403,6 +459,8 @@ class ClassificationPage(QWidget, ClassificationPageView):
             ui.classificationRunContentLayout,
         )
         apply_design_system(self.classification_run_section)
+        ui.experimentPanelLayout.removeWidget(self.classification_run_section)
+        ui.experimentPanelLayout.insertWidget(1, self.classification_run_section)
 
         self.algorithmTable.setObjectName("algorithmList")
         self.algorithmTable.verticalHeader().setVisible(False)
@@ -433,10 +491,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
         for name in (
             "activeModelCombo",
             "setActiveModelButton",
-            "saveActiveModelButton",
-            "loadModelButton",
-            "exportResultsButton",
-            "predictNewDataButton",
             "bestModelLabel",
             "bestMacroF1Label",
             "bestBalancedAccuracyLabel",
@@ -453,12 +507,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
             "confusionMatrixTable",
             "perClassTable",
             "misclassifiedTable",
-            "embeddingMethodCombo",
-            "embeddingColorCombo",
-            "runEmbeddingButton",
-            "embeddingGraphicsView",
-            "exportPredictionsButton",
-            "predictionTable",
         ):
             setattr(self, name, getattr(ui, name))
 
@@ -478,11 +526,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
         )
         self.misclassifiedTable.verticalHeader().setVisible(False)
         self.misclassifiedTable.horizontalHeader().setSectionResizeMode(
-            0,
-            QHeaderView.Stretch,
-        )
-        self.predictionTable.verticalHeader().setVisible(False)
-        self.predictionTable.horizontalHeader().setSectionResizeMode(
             0,
             QHeaderView.Stretch,
         )

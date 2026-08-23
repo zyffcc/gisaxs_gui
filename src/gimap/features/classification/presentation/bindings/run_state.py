@@ -18,6 +18,20 @@ from src.gimap.features.classification.application import (
 from ..ranking_labels import RANKING_METRIC_BY_LABEL
 
 
+_STATE_LABELS = {
+    ClassificationPageState.EMPTY: "Waiting for data",
+    ClassificationPageState.SCANNED: "Ready to import",
+    ClassificationPageState.IMPORTING: "Importing",
+    ClassificationPageState.READY: "Ready",
+    ClassificationPageState.EXPLORING: "Building map",
+    ClassificationPageState.CLUSTERING: "Suggesting groups",
+    ClassificationPageState.TRAINING: "Training",
+    ClassificationPageState.RESULTS_AVAILABLE: "Results ready",
+    ClassificationPageState.PREDICTING: "Classifying",
+    ClassificationPageState.ERROR: "Needs attention",
+}
+
+
 class RunStateMixin:
     """Own run state presentation behavior."""
 
@@ -27,9 +41,9 @@ class RunStateMixin:
             return
         try:
             matrix = self.classification_view_model.build_features(
-                self.samples,
+                self._active_samples(),
                 self._collect_preprocessing_config(),
-                require_labels=True,
+                require_labels=False,
             )
             if matrix is None:
                 raise ValueError("Feature construction is not available")
@@ -49,12 +63,16 @@ class RunStateMixin:
             if page.algorithmTable.rowCount()
             else 0
         )
-        valid = self.summary.valid_samples
+        training_summary = self.classification_view_model.validate_dataset(
+            self._active_samples(), require_labels=True
+        )
+        valid = sum(training_summary.valid_class_counts.values())
         folds = page.foldsSpinBox.value()
         method = page.validationMethodCombo.currentText()
         runs = selected * (folds if "K-fold" in method else 1)
         page.runStatusLabel.setText(
-            f"Selected algorithms: {selected} | Valid samples: {valid} | Estimated runs: {runs} | {self.state.value}"
+            f"Selected algorithms: {selected} | Valid samples: {valid} | "
+            f"Estimated runs: {runs} | {_STATE_LABELS[self.state]}"
         )
 
     def _set_state(self, state: ClassificationPageState) -> None:
@@ -62,33 +80,46 @@ class RunStateMixin:
         page = self.page
         if page is None:
             return
-        page.stateBadgeLabel.setText(state.value)
-        if state in {ClassificationPageState.EMPTY, ClassificationPageState.SCANNED}:
-            page.set_step("Dataset")
-        elif state == ClassificationPageState.READY:
-            page.set_step("Algorithms")
-        elif state in {
-            ClassificationPageState.IMPORTING,
-            ClassificationPageState.TRAINING,
-            ClassificationPageState.PREDICTING,
-        }:
-            page.set_step("Algorithms" if state == ClassificationPageState.TRAINING else "Dataset")
-        elif state == ClassificationPageState.RESULTS_AVAILABLE:
-            page.set_step("Results")
+        page.stateBadgeLabel.setText(_STATE_LABELS[state])
         busy = state in {
             ClassificationPageState.IMPORTING,
+            ClassificationPageState.EXPLORING,
+            ClassificationPageState.CLUSTERING,
             ClassificationPageState.TRAINING,
             ClassificationPageState.PREDICTING,
         }
+        tone = (
+            "error"
+            if state == ClassificationPageState.ERROR
+            else "running"
+            if busy
+            else "ready"
+            if state in {
+                ClassificationPageState.READY,
+                ClassificationPageState.RESULTS_AVAILABLE,
+            }
+            else "idle"
+        )
+        page.stateBadgeLabel.setProperty("classificationState", tone)
+        page.stateBadgeLabel.style().unpolish(page.stateBadgeLabel)
+        page.stateBadgeLabel.style().polish(page.stateBadgeLabel)
+        training_summary = self.classification_view_model.validate_dataset(
+            self._active_samples(), require_labels=True
+        )
         page.cancelTaskButton.setEnabled(busy)
-        page.runComparisonButton.setEnabled(not busy and self.summary.valid_samples >= 2)
+        page.runComparisonButton.setEnabled(not busy and training_summary.training_ready)
         page.scanImportButton.setEnabled(not busy)
+        page.addDataButton.setEnabled(not busy)
         page.addClassButton.setEnabled(not busy)
         page.predictNewDataButton.setEnabled(not busy)
+        page.runEmbeddingButton.setEnabled(not busy and len(self._active_samples()) >= 2)
+        page.suggestGroupsButton.setEnabled(not busy and len(self._active_samples()) >= 2)
         self.progress_updated.emit(0 if not busy else page.taskProgressBar.value())
         self._update_run_summary()
         job_state = {
             ClassificationPageState.IMPORTING: "running",
+            ClassificationPageState.EXPLORING: "running",
+            ClassificationPageState.CLUSTERING: "running",
             ClassificationPageState.TRAINING: "running",
             ClassificationPageState.PREDICTING: "running",
             ClassificationPageState.RESULTS_AVAILABLE: "succeeded",
@@ -100,6 +131,7 @@ class RunStateMixin:
             if busy
             else (100 if job_state == "succeeded" else 0),
         )
+        self._update_workflow_header()
 
     def _on_worker_progress(self, percent: int, message: str) -> None:
         if self.page is not None:
@@ -174,9 +206,18 @@ class RunStateMixin:
 
     def _on_configuration_changed(self) -> None:
         self._mark_results_outdated()
+        self.embedding_payload = None
+        if self.page is not None:
+            self.page.embeddingScatterView.show_empty(
+                "Preprocessing changed; run a new reduction for this feature revision."
+            )
+            self.page.explorationStatusLabel.setText(
+                "Preprocessing changed; previous reduction and grouping are stale."
+            )
         self._update_input_summary()
         self._update_run_summary()
         self._update_results_views()
+        self._update_workflow_header()
         self._persist_parameters()
 
     def _on_algorithm_selection_changed(self) -> None:
@@ -184,11 +225,13 @@ class RunStateMixin:
         self._mark_results_outdated()
         self._update_run_summary()
         self._update_results_views()
+        self._update_workflow_header()
         self._persist_parameters()
 
     def _persist_parameters(self) -> None:
         try:
             params = self.get_parameters()
+            self._label_overrides = dict(params.get("label_overrides", {}))
             self.classification_view_model.save_settings(params)
             self.parameters_changed.emit(params)
         except Exception as exc:

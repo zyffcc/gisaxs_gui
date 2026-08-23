@@ -17,6 +17,8 @@ class ClassificationPageState(str, Enum):
     SCANNED = "SCANNED"
     IMPORTING = "IMPORTING"
     READY = "READY"
+    EXPLORING = "EXPLORING"
+    CLUSTERING = "CLUSTERING"
     TRAINING = "TRAINING"
     RESULTS_AVAILABLE = "RESULTS_AVAILABLE"
     PREDICTING = "PREDICTING"
@@ -25,7 +27,7 @@ class ClassificationPageState(str, Enum):
 
 @dataclass
 class DatasetSource:
-    """A labeled source of training samples."""
+    """A file source whose label meaning is explicit and auditable."""
 
     label: str
     source_type: str = "folder"
@@ -33,6 +35,7 @@ class DatasetSource:
     file_pattern: str = "*"
     color: str = "#3b82f6"
     recursive: bool = True
+    label_mode: str = "accepted"
 
 
 @dataclass
@@ -54,6 +57,11 @@ class ClassificationSample:
     predicted_label: Optional[str] = None
     confidence: Optional[float] = None
     decision_score: Optional[float] = None
+    label_status: str = "accepted"
+    label_source: str = "source"
+    suggested_label: Optional[str] = None
+    suggestion_source: Optional[str] = None
+    source_name: str = ""
 
 
 @dataclass
@@ -76,11 +84,13 @@ class DatasetSummary:
     invalid_samples: int = 0
     included_samples: int = 0
     loaded_samples: int = 0
+    unlabeled_samples: int = 0
     class_counts: dict[str, int] = field(default_factory=dict)
     valid_class_counts: dict[str, int] = field(default_factory=dict)
     data_types: list[str] = field(default_factory=list)
     shapes: list[tuple[int, ...]] = field(default_factory=list)
     issues: list[DataQualityIssue] = field(default_factory=list)
+    labels_required: bool = True
 
     @property
     def status(self) -> str:
@@ -88,9 +98,15 @@ class DatasetSummary:
             return "Error"
         if any(issue.severity == "warning" for issue in self.issues):
             return "Warning"
-        if self.valid_samples >= 2 and self.classes >= 2:
+        if self.valid_samples >= 2 and (self.classes >= 2 or not self.labels_required):
             return "Ready"
         return "Warning"
+
+    @property
+    def training_ready(self) -> bool:
+        return self.valid_samples >= 2 and self.classes >= 2 and not any(
+            issue.severity == "error" for issue in self.issues
+        )
 
 
 @dataclass

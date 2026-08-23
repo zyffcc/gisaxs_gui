@@ -1,6 +1,10 @@
 """Classification infrastructure adapters。"""
 
-from .job_runner_ml import JobRunnerClassifierTrainer, JobRunnerEmbeddingAdapter
+from .job_runner_ml import (
+    JobRunnerClassifierTrainer,
+    JobRunnerClusteringAdapter,
+    JobRunnerEmbeddingAdapter,
+)
 from .local_artifacts import LocalClassificationArtifactRepository
 from .dataset import ClassificationDataService
 from .legacy_dataset import LegacyClassificationDatasetAdapter
@@ -17,6 +21,7 @@ __all__ = [
     "ClassificationDataService",
     "ClassificationTrainingService",
     "JobRunnerEmbeddingAdapter",
+    "JobRunnerClusteringAdapter",
     "JoblibClassificationModelRepository",
     "ImportlibRuntimeVersionAdapter",
     "LazyJoblibPipeline",

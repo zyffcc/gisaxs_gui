@@ -28,7 +28,9 @@ class SelectionControlsMixin:
         page = self.page
         combo = page.classFilterCombo
         current = combo.currentText()
-        labels = ["All classes"] + list(self.sources.keys())
+        labels = ["All classes"] + sorted(
+            {sample.label or "Unlabeled" for sample in self._active_samples()}
+        )
         combo.blockSignals(True)
         combo.clear()
         combo.addItems(labels)
@@ -64,7 +66,7 @@ class SelectionControlsMixin:
         QMessageBox.information(
             self.main_window,
             "Classification",
-            "Workflow: add at least two labeled classes, scan/import data, choose preprocessing and algorithms, then run a shared validation comparison.",
+            "Workflow: add any 1D or 2D data, prepare the active compatible group, explore and accept labels, train reviewed models, then apply the active model to new files.",
         )
 
     def _quality_message(self) -> str:

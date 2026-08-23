@@ -29,6 +29,9 @@ from src.gimap.features.classification.presentation.view_model import (
 )
 
 from .bindings.lifecycle_config import LifecycleConfigMixin
+from .bindings.exploration import ExplorationMixin
+from .bindings.workflow_groups import WorkflowGroupsMixin
+from .bindings.workflow_progress import WorkflowProgressMixin
 from .bindings.dataset_sources import DatasetSourcesMixin
 from .bindings.algorithms_training import AlgorithmsTrainingMixin
 from .bindings.dataset_table import DatasetTableMixin
@@ -44,6 +47,9 @@ __all__ = ["ClassificationViewBinding"]
 
 class ClassificationViewBinding(
     LifecycleConfigMixin,
+    WorkflowGroupsMixin,
+    WorkflowProgressMixin,
+    ExplorationMixin,
     DatasetSourcesMixin,
     AlgorithmsTrainingMixin,
     DatasetTableMixin,
@@ -98,6 +104,10 @@ class ClassificationViewBinding(
         self.prediction_results: list[PredictionResult] = []
         self.current_preview_sample_id: Optional[str] = None
         self.current_worker = None
+        self.compatibility_groups = ()
+        self.embedding_payload = None
+        self._experiment_group_key: Optional[str] = None
+        self._label_overrides: dict[str, dict[str, str]] = {}
         self._initialized = False
         self._table_updating = False
         self._results_outdated = False

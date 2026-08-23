@@ -6,6 +6,9 @@ from pathlib import Path
 
 from .models import (
     BuildFeatureMatrixRequest,
+    AcceptSuggestedLabelsRequest,
+    AssignLabelsRequest,
+    ClusteringRequest,
     BuildClassificationModelPackageRequest,
     ClassificationPredictionOutput,
     ClassificationCsvRequest,
@@ -25,9 +28,11 @@ from .ports import (
     ClassifierPredictorPort,
     ClassifierTrainerPort,
     EmbeddingPort,
+    ClusteringPort,
     RuntimeVersionPort,
 )
 from ..domain import SavedModelPackage
+from .models import CompatibilityGroup, LabelAssignmentResult
 
 
 class ImportClassificationDataset:
@@ -58,8 +63,10 @@ class ValidateClassificationDataset:
     def __init__(self, datasets: ClassificationDatasetPort):
         self._datasets = datasets
 
-    def execute(self, samples):
-        return self._datasets.validate_dataset(tuple(samples))
+    def execute(self, samples, *, require_labels: bool = True, allow_mixed: bool = False):
+        return self._datasets.validate_dataset(
+            tuple(samples), require_labels=require_labels, allow_mixed=allow_mixed
+        )
 
 
 class SummarizeClassificationDataset:
@@ -112,6 +119,98 @@ class ComputeClassificationEmbedding:
 
     def cancel(self) -> bool:
         return self._embedding.cancel()
+
+
+class GroupClassificationSamples:
+    def execute(self, samples):
+        groups = []
+        data_types = {sample.data_type or "unresolved" for sample in samples}
+        ordered_types = [
+            data_type
+            for data_type in ("1D", "2D", *sorted(data_types - {"1D", "2D"}))
+            if data_type in data_types
+        ]
+        for data_type in ordered_types:
+            members = [
+                sample
+                for sample in samples
+                if (sample.data_type or "unresolved") == data_type
+            ]
+            if not members:
+                continue
+            shapes = tuple(sorted({sample.raw_shape for sample in members if sample.raw_shape}))
+            groups.append(
+                CompatibilityGroup(
+                    key=data_type,
+                    data_type=data_type,
+                    sample_ids=tuple(sample.sample_id for sample in members),
+                    shapes=shapes,
+                    total_samples=len(members),
+                    included_samples=sum(1 for sample in members if sample.included),
+                )
+            )
+        return tuple(groups)
+
+
+class AssignClassificationLabels:
+    def execute(self, request: AssignLabelsRequest):
+        label = request.label.strip()
+        if not label:
+            raise ValueError("A non-empty label is required.")
+        selected = set(request.sample_ids)
+        updated = []
+        for sample in request.samples:
+            if sample.sample_id not in selected:
+                continue
+            sample.label = label
+            sample.label_status = "accepted"
+            sample.label_source = request.source
+            sample.suggested_label = None
+            sample.suggestion_source = None
+            updated.append(sample.sample_id)
+        return LabelAssignmentResult(tuple(updated), label)
+
+
+class ClearClassificationLabels:
+    def execute(self, samples, sample_ids):
+        selected = set(sample_ids)
+        updated = []
+        for sample in samples:
+            if sample.sample_id in selected:
+                sample.label = ""
+                sample.label_status = "unlabeled"
+                sample.label_source = "manual"
+                updated.append(sample.sample_id)
+        return tuple(updated)
+
+
+class AcceptClassificationSuggestions:
+    def execute(self, request: AcceptSuggestedLabelsRequest):
+        selected = set(request.sample_ids)
+        updated = []
+        for sample in request.samples:
+            if selected and sample.sample_id not in selected:
+                continue
+            if not sample.suggested_label:
+                continue
+            sample.label = sample.suggested_label
+            sample.label_status = "accepted"
+            sample.label_source = sample.suggestion_source or "suggestion"
+            sample.suggested_label = None
+            sample.suggestion_source = None
+            updated.append(sample.sample_id)
+        return tuple(updated)
+
+
+class SuggestClassificationClusters:
+    def __init__(self, clustering: ClusteringPort):
+        self._clustering = clustering
+
+    def execute(self, request: ClusteringRequest):
+        return self._clustering.cluster(request)
+
+    def cancel(self) -> bool:
+        return self._clustering.cancel()
 
 
 class PredictClassification:

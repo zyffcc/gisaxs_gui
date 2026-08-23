@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from src.gimap.app.jobs import JobRequest
 
-from ...application.models import EmbeddingResult
+from ...application.models import ClusteringResult, EmbeddingResult
 from .job_serialization import decode_array, deserialize_experiment, encode_array
 
 
@@ -97,3 +97,34 @@ class JobRunnerEmbeddingAdapter:
         return bool(
             self._active_job_id and self.runner.cancel(self._active_job_id)
         )
+
+
+class JobRunnerClusteringAdapter:
+    def __init__(self, runner):
+        self.runner = runner
+        self._active_job_id = None
+
+    def cluster(self, request):
+        job = JobRequest(
+            handler="src.gimap.features.classification.infrastructure.workers:classification_clustering_job",
+            payload={
+                "X": encode_array(request.values),
+                "method": request.method,
+                "n_clusters": request.n_clusters,
+                "min_cluster_size": request.min_cluster_size,
+            },
+            timeout_seconds=request.timeout_seconds,
+        )
+        self._active_job_id = job.job_id
+        try:
+            result = self.runner.run(job)
+        finally:
+            self._active_job_id = None
+        if not result.succeeded:
+            raise RuntimeError(result.error.message if result.error else result.status)
+        return ClusteringResult(
+            decode_array(result.value["labels"]).astype(int), result.value["method"]
+        )
+
+    def cancel(self) -> bool:
+        return bool(self._active_job_id and self.runner.cancel(self._active_job_id))

@@ -65,6 +65,51 @@ class EmbeddingResult:
 
 
 @dataclass(frozen=True)
+class CompatibilityGroup:
+    key: str
+    data_type: str
+    sample_ids: tuple[str, ...]
+    shapes: tuple[tuple[int, ...], ...]
+    total_samples: int
+    included_samples: int
+
+
+@dataclass(frozen=True)
+class AssignLabelsRequest:
+    samples: tuple
+    sample_ids: tuple[str, ...]
+    label: str
+    source: str = "manual"
+
+
+@dataclass(frozen=True)
+class LabelAssignmentResult:
+    sample_ids: tuple[str, ...]
+    label: str
+
+
+@dataclass(frozen=True)
+class AcceptSuggestedLabelsRequest:
+    samples: tuple
+    sample_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ClusteringRequest:
+    values: np.ndarray
+    method: str
+    n_clusters: int = 4
+    min_cluster_size: int = 5
+    timeout_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class ClusteringResult:
+    labels: np.ndarray
+    method: str
+
+
+@dataclass(frozen=True)
 class ClassificationPredictionRequest:
     feature_matrix: FeatureMatrix
     package: SavedModelPackage

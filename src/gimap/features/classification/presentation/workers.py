@@ -188,3 +188,46 @@ class EmbeddingWorker(CancellableWorker):
             )
         except Exception:
             self.signals.error.emit(traceback.format_exc())
+
+
+class ClusteringWorker(CancellableWorker):
+    def __init__(
+        self,
+        samples,
+        preprocessing: PreprocessingConfig,
+        method: str,
+        n_clusters: int,
+        min_cluster_size: int,
+        view_model: ClassificationViewModel,
+    ) -> None:
+        super().__init__()
+        self.samples = samples
+        self.preprocessing = preprocessing
+        self.method = method
+        self.n_clusters = n_clusters
+        self.min_cluster_size = min_cluster_size
+        self.view_model = view_model
+
+    def cancel(self) -> None:
+        super().cancel()
+        self.view_model.cancel()
+
+    def run(self) -> None:
+        try:
+            payload = self.view_model.suggest_clusters(
+                self.samples,
+                self.preprocessing,
+                self.method,
+                n_clusters=self.n_clusters,
+                min_cluster_size=self.min_cluster_size,
+            )
+            if payload is None:
+                raise RuntimeError(
+                    self.view_model.state.error_message or "Grouping failed"
+                )
+            result, matrix = payload
+            self.signals.finished.emit(
+                {"labels": result.labels, "matrix": matrix, "method": result.method}
+            )
+        except Exception:
+            self.signals.error.emit(traceback.format_exc())

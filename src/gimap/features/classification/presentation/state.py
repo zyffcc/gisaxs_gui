@@ -21,6 +21,8 @@ class ClassificationState:
     feature_matrix: FeatureMatrix | None = None
     embedding_status: Status = "idle"
     embedding: object | None = None
+    clustering_status: Status = "idle"
+    clustering: object | None = None
     prediction_status: Status = "idle"
     predictions: tuple = ()
     active_package: SavedModelPackage | None = None

@@ -6,6 +6,8 @@ from src.gimap.app import AppContext
 from src.gimap.features.classification.application import (
     ClassificationPredictionOutput,
     ClassificationTrainingOutput,
+    ClusteringResult,
+    CompatibilityGroup,
     EmbeddingResult,
 )
 from src.gimap.features.classification.application.models import ImportedDataset
@@ -77,6 +79,13 @@ def _view_model(**overrides):
         "compute_embedding": _Call(
             EmbeddingResult(np.array([[0.0, 1.0], [1.0, 0.0]]), "PCA 2D")
         ),
+        "group_samples": _Call(
+            (CompatibilityGroup("1D", "1D", ("one", "two"), (), 2, 2),)
+        ),
+        "assign_labels": _Call(object()),
+        "clear_labels": _Call(()),
+        "accept_suggestions": _Call(()),
+        "suggest_clusters": _Call(ClusteringResult(np.array([0, 1]), "K-Means")),
         "predict_classification": _Call(
             ClassificationPredictionOutput(
                 (PredictionResult("/tmp/one.npy", "one.npy", "A", 0.8, None, "ok"),)
@@ -139,6 +148,21 @@ def test_view_model_training_and_embedding_state_use_fake_ml_ports():
     assert trained.experiment.ranking_metric == "macro_f1"
     assert view_model.state.training_status == "ready"
     assert embedded.values.shape == (2, 2)
+    assert matrix.X.shape == (2, 1)
+    build_request = view_model._build_features.calls[-1][0][0]
+    assert build_request.require_labels is False
+
+
+def test_view_model_exposes_compatibility_groups_and_unlabeled_cluster_flow():
+    view_model, samples = _view_model()
+
+    groups = view_model.group_samples(samples)
+    clustered, matrix = view_model.suggest_clusters(
+        samples, PreprocessingConfig(), "K-Means", n_clusters=2
+    )
+
+    assert groups[0].key == "1D"
+    assert clustered.labels.tolist() == [0, 1]
     assert matrix.X.shape == (2, 1)
 
 

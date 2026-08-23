@@ -21,6 +21,9 @@ class ClassificationDatasetPanelView:
         self.datasetPanelLayout.addWidget(self.sectionTitle)
         self.datasetActionsLayout = QtWidgets.QHBoxLayout()
         self.datasetActionsLayout.setObjectName("datasetActionsLayout")
+        self.addDataButton = QtWidgets.QPushButton(DatasetSection)
+        self.addDataButton.setObjectName("addDataButton")
+        self.datasetActionsLayout.addWidget(self.addDataButton)
         self.addClassButton = QtWidgets.QPushButton(DatasetSection)
         self.addClassButton.setObjectName("addClassButton")
         self.datasetActionsLayout.addWidget(self.addClassButton)
@@ -154,6 +157,7 @@ class ClassificationDatasetPanelView:
 
         self.retranslateUi(DatasetSection)
         QtCore.QMetaObject.connectSlotsByName(DatasetSection)
+        DatasetSection.setTabOrder(self.addDataButton, self.addClassButton)
         DatasetSection.setTabOrder(self.addClassButton, self.scanImportButton)
         DatasetSection.setTabOrder(self.scanImportButton, self.datasetCardsScrollArea)
         DatasetSection.setTabOrder(self.datasetCardsScrollArea, self.datasetSearchEdit)
@@ -170,8 +174,9 @@ class ClassificationDatasetPanelView:
     def retranslateUi(self, DatasetSection):
         _translate = QtCore.QCoreApplication.translate
         self.sectionTitle.setText(_translate("ClassificationDatasetPanel", "Dataset"))
-        self.addClassButton.setText(_translate("ClassificationDatasetPanel", "+ Add Class"))
-        self.scanImportButton.setText(_translate("ClassificationDatasetPanel", "Scan && Import"))
+        self.addDataButton.setText(_translate("ClassificationDatasetPanel", "Add data"))
+        self.addClassButton.setText(_translate("ClassificationDatasetPanel", "Add labeled source"))
+        self.scanImportButton.setText(_translate("ClassificationDatasetPanel", "Scan and import"))
         self.summaryClassesTitle.setText(_translate("ClassificationDatasetPanel", "Classes"))
         self.summaryClassesLabel.setText(_translate("ClassificationDatasetPanel", "0"))
         self.summaryTotalTitle.setText(_translate("ClassificationDatasetPanel", "Total samples"))

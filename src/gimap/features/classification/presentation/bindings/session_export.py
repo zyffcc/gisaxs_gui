@@ -132,7 +132,6 @@ class SessionExportMixin:
         for sample in self.samples:
             if sample.sample_id in selected_ids:
                 sample.included = included
-        self.summary = self.classification_view_model.validate_dataset(self.samples)
         self._mark_results_outdated()
         self._refresh_everything()
 
@@ -163,7 +162,9 @@ class SessionExportMixin:
             self.log(f"[Dataset] Copied {len(paths)} path(s).")
 
     def _move_preview(self, delta: int) -> None:
-        loaded = [sample for sample in self.samples if sample.load_status == "loaded"]
+        loaded = [
+            sample for sample in self._active_samples() if sample.load_status == "loaded"
+        ]
         if not loaded:
             return
         current = self._sample_by_id(self.current_preview_sample_id)

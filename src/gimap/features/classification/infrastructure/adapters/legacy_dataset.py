@@ -21,15 +21,24 @@ class LegacyClassificationDatasetAdapter:
             progress=on_progress,
             is_cancelled=is_cancelled,
         )
-        return ImportedDataset(tuple(samples), self.service.validate_dataset(samples))
+        return ImportedDataset(
+            tuple(samples),
+            self.service.validate_dataset(
+                samples, require_labels=False, allow_mixed=True
+            ),
+        )
 
     def build_feature_matrix(self, samples, preprocessing, *, require_labels):
         return self.service.build_feature_matrix(
             list(samples), preprocessing, require_labels=require_labels
         )
 
-    def validate_dataset(self, samples):
-        return self.service.validate_dataset(list(samples))
+    def validate_dataset(
+        self, samples, *, require_labels: bool = True, allow_mixed: bool = False
+    ):
+        return self.service.validate_dataset(
+            list(samples), require_labels=require_labels, allow_mixed=allow_mixed
+        )
 
     def summarize_by_label(self, samples):
         return self.service.summarize_by_label(list(samples))

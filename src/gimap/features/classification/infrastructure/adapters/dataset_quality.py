@@ -22,7 +22,13 @@ CancelCallback = Optional[Callable[[], bool]]
 class ClassificationDatasetQualityMixin:
     """Own one cohesive part of classification dataset handling."""
 
-    def validate_dataset(self, samples: list[ClassificationSample]) -> DatasetSummary:
+    def validate_dataset(
+        self,
+        samples: list[ClassificationSample],
+        *,
+        require_labels: bool = True,
+        allow_mixed: bool = False,
+    ) -> DatasetSummary:
         """Return aggregate QC and update per-sample QC statuses."""
 
         for sample in samples:
@@ -34,13 +40,21 @@ class ClassificationDatasetQualityMixin:
             for sample in included
             if sample.load_status == "loaded" and sample.qc_status in {"ready", "warning"}
         ]
-        counts = Counter(sample.label for sample in included)
-        valid_counts = Counter(sample.label for sample in valid)
+        counts = Counter(
+            sample.label
+            for sample in included
+            if sample.label and sample.label_status == "accepted"
+        )
+        valid_counts = Counter(
+            sample.label
+            for sample in valid
+            if sample.label and sample.label_status == "accepted"
+        )
         data_types = sorted({sample.data_type for sample in valid if sample.data_type})
         shapes = sorted({sample.raw_shape for sample in valid if sample.raw_shape})
         issues: list[DataQualityIssue] = []
 
-        if len(valid_counts) < 2:
+        if require_labels and len(valid_counts) < 2:
             issues.append(
                 DataQualityIssue(
                     "error",
@@ -49,7 +63,7 @@ class ClassificationDatasetQualityMixin:
                 )
             )
 
-        if len(data_types) > 1:
+        if len(data_types) > 1 and not allow_mixed:
             issues.append(
                 DataQualityIssue(
                     "error",
@@ -67,7 +81,7 @@ class ClassificationDatasetQualityMixin:
                 )
             )
 
-        if valid_counts:
+        if require_labels and valid_counts:
             min_count = min(valid_counts.values())
             max_count = max(valid_counts.values())
             if min_count < 2:
@@ -136,11 +150,19 @@ class ClassificationDatasetQualityMixin:
             ),
             included_samples=len(included),
             loaded_samples=len([sample for sample in samples if sample.load_status == "loaded"]),
+            unlabeled_samples=len(
+                [
+                    sample
+                    for sample in included
+                    if not sample.label or sample.label_status != "accepted"
+                ]
+            ),
             class_counts=dict(counts),
             valid_class_counts=dict(valid_counts),
             data_types=data_types,
             shapes=shapes,
             issues=issues,
+            labels_required=require_labels,
         )
 
     def summarize_by_label(
@@ -148,7 +170,7 @@ class ClassificationDatasetQualityMixin:
     ) -> dict[str, dict[str, object]]:
         grouped: dict[str, list[ClassificationSample]] = defaultdict(list)
         for sample in samples:
-            grouped[sample.label].append(sample)
+            grouped[sample.label or "Unlabeled"].append(sample)
 
         summary: dict[str, dict[str, object]] = {}
         for label, label_samples in grouped.items():

@@ -33,7 +33,10 @@ class ClassificationFeatureConstructionMixin:
             if sample.included
             and sample.load_status == "loaded"
             and sample.raw_data is not None
-            and (not require_labels or bool(sample.label))
+            and (
+                not require_labels
+                or (bool(sample.label) and sample.label_status == "accepted")
+            )
         ]
         if not selected:
             raise ValueError("No included loaded samples are available.")

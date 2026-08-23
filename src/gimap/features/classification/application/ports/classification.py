@@ -11,6 +11,8 @@ from ..models import (
     ClassificationTrainingRequest,
     EmbeddingRequest,
     EmbeddingResult,
+    ClusteringRequest,
+    ClusteringResult,
     ImportedDataset,
 )
 from ...domain import (
@@ -48,7 +50,11 @@ class ClassificationDatasetPort(Protocol):
     ) -> FeatureMatrix: ...
 
     def validate_dataset(
-        self, samples: tuple[ClassificationSample, ...]
+        self,
+        samples: tuple[ClassificationSample, ...],
+        *,
+        require_labels: bool = True,
+        allow_mixed: bool = False,
     ) -> DatasetSummary: ...
 
     def summarize_by_label(
@@ -73,6 +79,12 @@ class ClassifierTrainerPort(Protocol):
 
 class EmbeddingPort(Protocol):
     def embed(self, request: EmbeddingRequest) -> EmbeddingResult: ...
+
+    def cancel(self) -> bool: ...
+
+
+class ClusteringPort(Protocol):
+    def cluster(self, request: ClusteringRequest) -> ClusteringResult: ...
 
     def cancel(self) -> bool: ...
 

@@ -3,7 +3,13 @@
 from .state import ClassificationState
 from .view_model import ClassificationViewModel
 from .view_binding import ClassificationViewBinding
-from .workers import EmbeddingWorker, ImportWorker, PredictionWorker, TrainingWorker
+from .workers import (
+    ClusteringWorker,
+    EmbeddingWorker,
+    ImportWorker,
+    PredictionWorker,
+    TrainingWorker,
+)
 
 ClassificationController = ClassificationViewBinding
 
@@ -12,6 +18,7 @@ __all__ = [
     "ClassificationController",
     "ClassificationViewBinding",
     "ClassificationViewModel",
+    "ClusteringWorker",
     "EmbeddingWorker",
     "ImportWorker",
     "PredictionWorker",

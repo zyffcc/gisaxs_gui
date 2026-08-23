@@ -31,7 +31,6 @@ from src.gimap.features.classification.application import (
 )
 
 from src.gimap.features.classification.presentation.workers import (
-    EmbeddingWorker,
     PredictionWorker,
     TrainingWorker,
 )
@@ -118,7 +117,10 @@ class AlgorithmsTrainingMixin:
                 self.main_window, "Classification", "A Classification task is already running."
             )
             return
-        self.summary = self.classification_view_model.validate_dataset(self.samples)
+        active_samples = self._active_samples()
+        self.summary = self.classification_view_model.validate_dataset(
+            active_samples, require_labels=True
+        )
         if any(issue.severity == "error" for issue in self.summary.issues):
             QMessageBox.warning(self.main_window, "Classification", self._quality_message())
             self._refresh_everything()
@@ -130,7 +132,7 @@ class AlgorithmsTrainingMixin:
             )
             return
         worker = TrainingWorker(
-            self.samples,
+            active_samples,
             self._collect_preprocessing_config(),
             algorithms,
             self._collect_validation_config(),
@@ -154,7 +156,13 @@ class AlgorithmsTrainingMixin:
         self.experiment_result = payload["result"]
         self.feature_matrix = payload.get("feature_matrix")
         self._results_outdated = False
+        self._experiment_group_key = self._active_group_key()
         self.active_result = self.experiment_result.best_result
+        if self.active_result is not None:
+            self.page.activePackageLabel.setText(
+                f"Training result · {self.active_result.display_name} · "
+                f"{self.feature_matrix.data_type if self.feature_matrix else 'unknown'}"
+            )
         self._write_predictions_from_active_result()
         self._update_dataset_table()
         self._update_results_views()
@@ -284,6 +292,10 @@ class AlgorithmsTrainingMixin:
                 self._update_dataset_table()
                 self._update_selected_result_details()
                 self.log(f"[Model] Active model set to {name}.")
+                self.page.activePackageLabel.setText(
+                    f"Training result · {name} · {self.feature_matrix.data_type if self.feature_matrix else 'unknown'}"
+                )
+                self._update_workflow_header()
                 return
 
     def _save_active_model(self) -> None:
@@ -305,7 +317,11 @@ class AlgorithmsTrainingMixin:
         saved_path = self.classification_view_model.save_model(Path(path), package)
         if saved_path is not None:
             self.active_model_package = package
+            self.page.activePackageLabel.setText(
+                f"Saved model · {package.display_name} · {package.data_type}"
+            )
             self.log(f"[Model] Saved active model to {path}")
+            self._update_workflow_header()
             return
         QMessageBox.warning(
             self.main_window,
@@ -322,7 +338,11 @@ class AlgorithmsTrainingMixin:
         package = self.classification_view_model.load_model(Path(path))
         if package is not None:
             self.active_model_package = package
+            self.page.activePackageLabel.setText(
+                f"Loaded model · {package.display_name} · {package.data_type}"
+            )
             self.log(f"[Model] Loaded model: {package.display_name}")
+            self._update_workflow_header()
             return
         QMessageBox.warning(
             self.main_window,
@@ -387,34 +407,3 @@ class AlgorithmsTrainingMixin:
             else ClassificationPageState.READY
         )
         self.log(f"[Prediction] Predicted {len(self.prediction_results)} file(s).")
-
-    def _start_embedding(self) -> None:
-        if self.current_worker is not None:
-            QMessageBox.information(
-                self.main_window, "Classification", "A Classification task is already running."
-            )
-            return
-        if not self.samples:
-            QMessageBox.warning(
-                self.main_window, "Embedding", "Import data before running embedding visualization."
-            )
-            return
-        worker = EmbeddingWorker(
-            self.samples,
-            self._collect_preprocessing_config(),
-            self.page.embeddingMethodCombo.currentText(),
-            self.classification_view_model,
-        )
-        self.current_worker = worker
-        worker.signals.progress.connect(self._on_worker_progress)
-        worker.signals.finished.connect(self._on_embedding_finished)
-        worker.signals.error.connect(self._on_worker_error)
-        self.thread_pool.start(worker)
-
-    def _on_embedding_finished(self, payload) -> None:
-        self.current_worker = None
-        if not isinstance(payload, dict):
-            self._on_worker_error("Embedding returned an invalid payload.")
-            return
-        self._render_embedding(payload["embedding"], payload["matrix"].samples)
-        self.log(f"[Embedding] {payload.get('method', 'Embedding')} complete.")

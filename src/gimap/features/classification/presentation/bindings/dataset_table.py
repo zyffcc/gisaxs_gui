@@ -52,14 +52,15 @@ class DatasetTableMixin:
         class_filter = page.classFilterCombo.currentText()
         qc_filter = page.qcFilterCombo.currentText()
         rows = []
-        for sample in self.samples:
+        for sample in self._active_samples():
             if (
                 search
                 and search not in sample.file_name.lower()
                 and search not in sample.file_path.lower()
             ):
                 continue
-            if class_filter != "All classes" and sample.label != class_filter:
+            display_label = sample.label or "Unlabeled"
+            if class_filter != "All classes" and display_label != class_filter:
                 continue
             if qc_filter != "All QC" and sample.qc_status.lower() != qc_filter.lower():
                 continue
@@ -75,7 +76,7 @@ class DatasetTableMixin:
             include_item.setData(Qt.UserRole, sample.sample_id)
             table.setItem(row, 0, include_item)
             values = [
-                sample.label,
+                sample.label or "Unlabeled",
                 sample.file_name,
                 sample.data_type,
                 self._shape_text(sample.raw_shape),
@@ -102,7 +103,9 @@ class DatasetTableMixin:
         if sample is None:
             return
         sample.included = item.checkState() == Qt.Checked
-        self.summary = self.classification_view_model.validate_dataset(self.samples)
+        self.summary = self.classification_view_model.validate_dataset(
+            self._active_samples(), require_labels=False
+        )
         self._mark_results_outdated()
         self._refresh_everything()
 
@@ -140,7 +143,9 @@ class DatasetTableMixin:
         data = sample.raw_data
         page.sampleFileLabel.setText(sample.file_name)
         page.sampleShapeLabel.setText(self._shape_text(sample.raw_shape))
-        loaded_samples = [item for item in self.samples if item.load_status == "loaded"]
+        loaded_samples = [
+            item for item in self._active_samples() if item.load_status == "loaded"
+        ]
         try:
             index = loaded_samples.index(sample) + 1
         except ValueError:
