@@ -125,6 +125,21 @@ QToolButton#classificationWorkflowGuidedButton:checked {
     border-color: rgba(255, 255, 255, 0.28);
 }
 
+QToolButton[workflowUtility="true"] {
+    min-height: 24px;
+    padding: 4px 8px;
+    color: #dce7f7;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+}
+
+QToolButton[workflowUtility="true"]:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
 QFrame#classificationContextBar,
 QFrame#explorationSelectionPanel {
     background: transparent;

@@ -120,29 +120,30 @@ class ClassificationPage(QWidget, ClassificationPageView):
         height = max(1, self.height())
         if width >= 1500 and height >= 850:
             mode = "wide"
-        elif width >= 1360 and height >= 760:
+        elif width >= 900:
             mode = "medium"
         else:
             mode = "compact"
+        self.classificationWorkflowHeader.set_compact(
+            width < 1360 or height < 850
+        )
         if mode == self._responsive_mode:
             return
         self._responsive_mode = mode
+        self.datasetStepContent.setMinimumHeight(0)
+        self.algorithmsStepContent.setMinimumHeight(0)
         if mode == "compact":
             self.datasetInspectionSplitter.setOrientation(Qt.Vertical)
             self.explorationSplitter.setOrientation(Qt.Vertical)
             self.explorationSelectionPanel.setMaximumWidth(16777215)
             self.datasetPanel.setMinimumWidth(0)
             self.inspectionPanel.setMinimumWidth(0)
-            self.datasetStepContent.setMinimumHeight(960)
-            self.algorithmsStepContent.setMinimumHeight(980)
         else:
             self.datasetInspectionSplitter.setOrientation(Qt.Horizontal)
             self.explorationSplitter.setOrientation(Qt.Horizontal)
             self.explorationSelectionPanel.setMaximumWidth(460)
             self.datasetPanel.setMinimumWidth(320)
             self.inspectionPanel.setMinimumWidth(500 if mode == "wide" else 420)
-            self.datasetStepContent.setMinimumHeight(560)
-            self.algorithmsStepContent.setMinimumHeight(620)
         QTimer.singleShot(0, self._apply_initial_splitter_sizes)
 
     def _apply_initial_splitter_sizes(self) -> None:
@@ -236,8 +237,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
         )
         apply_design_system(self.classification_log_section)
 
-        self.titleLabel.setObjectName("classificationTitle")
-        self.subtitleLabel.setObjectName("classificationSubtitle")
         self.newSessionButton.setObjectName("NewSessionButton")
         self.loadSessionButton.setObjectName("LoadSessionButton")
         self.saveSessionButton.setObjectName("SaveSessionButton")
@@ -300,6 +299,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         panel = QFrame(self)
         ui = ClassificationDatasetPanelView()
         ui.setupUi(panel)
+        ui.sectionTitle.hide()
         self._dataset_panel_ui = ui
         for name in (
             "addClassButton",
@@ -340,6 +340,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         panel = QFrame(self)
         ui = ClassificationInspectionPanelView()
         ui.setupUi(panel)
+        ui.sectionTitle.hide()
         self._inspection_panel_ui = ui
         for name in (
             "prevSampleButton",
@@ -366,6 +367,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         panel = QFrame(self)
         ui = ClassificationPreprocessingPanelView()
         ui.setupUi(panel)
+        ui.sectionTitle.hide()
         self._preprocessing_panel_ui = ui
         for name in (
             "dataTypeBadgeLabel",
@@ -406,6 +408,7 @@ class ClassificationPage(QWidget, ClassificationPageView):
         panel = QFrame(self)
         ui = ClassificationExperimentPanelView()
         ui.setupUi(panel)
+        ui.sectionTitle.hide()
         self._experiment_panel_ui = ui
         for name in (
             "algorithmConfigSplitter",

@@ -9,8 +9,8 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PyQt5.QtCore import QObject
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PyQt5.QtCore import QObject, Qt
+from PyQt5.QtWidgets import QApplication, QGridLayout, QMainWindow, QStackedWidget
 
 from controllers.classification_controller import ClassificationController
 from src.gimap.app import AppContext
@@ -120,9 +120,9 @@ def test_classification_modern_workflow_uses_action_steps_and_progressive_disclo
     ] == [
         "Data",
         "Prepare",
-        "Explore & label",
-        "Train & review",
-        "Apply & export",
+        "Explore",
+        "Train",
+        "Apply",
     ]
     assert page.runEmbeddingButton.property("classificationPrimaryAction") is True
     assert page.algorithmConfigSplitter.count() == 1
@@ -197,6 +197,25 @@ def test_classification_workflow_has_no_page_level_horizontal_overflow(size) -> 
             page.helpButton,
         )
     )
+    page.close()
+
+
+def test_classification_small_screen_uses_dense_header_and_side_by_side_workspaces() -> None:
+    app = _app()
+    page = ClassificationPage()
+    page.resize(1280, 800)
+    page.show()
+    app.processEvents()
+
+    assert page._responsive_mode == "medium"
+    assert page.datasetInspectionSplitter.orientation() == Qt.Horizontal
+    assert page.explorationSplitter.orientation() == Qt.Horizontal
+    assert not page.classificationWorkflowHeader.subtitle_label.isVisible()
+    assert not page.classificationWorkflowHeader.mode_button.isVisible()
+    assert not page._dataset_panel_ui.sectionTitle.isVisible()
+    assert not page._inspection_panel_ui.sectionTitle.isVisible()
+    assert isinstance(page._dataset_panel_ui.datasetActionsLayout, QGridLayout)
+    assert page._dataset_panel_ui.datasetActionsLayout.rowCount() == 2
     page.close()
 
 

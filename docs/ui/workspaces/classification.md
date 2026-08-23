@@ -16,7 +16,7 @@
 
 工作流将“观察数据”和“训练分类器”解耦。导入和降维不要求标签；只有训练阶段要求至少两个已接受的类别。普通参数提交不会隐式启动降维、聚类或训练，也不会自动切换步骤。
 
-顶部深色 workflow header 与 Fitting 工作台使用同一套视觉语言，同时严格区分两种状态：蓝色选中态只表示当前正在查看的步骤；available/running/complete/stale/error/blocked 则来自实际 data、embedding、accepted labels、training result 与 prediction artifact。点击步骤只导航，不会伪造完成状态。`Guided / Compact` 只切换说明密度，不改变流程和数据。
+顶部深色 workflow header 与 Fitting 工作台使用同一套视觉语言，并合并页面标题与 New/Open/Save/Help，避免小屏重复占用一整行。蓝色选中态只表示当前正在查看的步骤；available/running/complete/stale/error/blocked 则来自实际 data、embedding、accepted labels、training result 与 prediction artifact。点击步骤只导航，不会伪造完成状态。空间不足时 header 自动隐藏说明文字，宽屏仍可用 `Guided / Compact` 调整说明密度；两者都不改变流程和数据。
 
 ## 1 Data：先接住数据
 
@@ -85,7 +85,7 @@ Presentation 只负责 Qt signals、dialogs、选择联动和 state rendering；
 
 ## 响应式与手动验收
 
-页面在 1280×800 使用纵向 Data/Explore splitter，在 1440×900 和 1920×1080 使用横向布局；workflow header 可由用户在 Guided/Compact 间切换说明密度。一个步骤只保留一个主要滚动容器；顶部 active group 和五步导航位置稳定。
+页面在 1280×800、1440×900 和 1920×1080 默认使用横向 Data/Preview 与 Map/Selection splitter；只有内容宽度低于 900 logical px 时才退化为纵向布局。高度或宽度不足时 workflow header 自动进入 dense mode，隐藏副标题和逐步说明，避免系统 DPI 缩放把首屏内容挤出。一个步骤只保留一个主要滚动容器；顶部 active group 和五步导航位置稳定。
 
 - [ ] 可分别导入 labeled folders、provisional folders、unlabeled files/folders；
 - [ ] 同批 1D/2D 自动出现两个 active groups，组间 preview/selection 不串数据；

@@ -12,7 +12,6 @@ class ClassificationPageView:
         self.rootLayout = QtWidgets.QVBoxLayout(root)
         self.rootLayout.setContentsMargins(16, 14, 16, 12)
         self.rootLayout.setSpacing(10)
-        self._build_header(root)
         self._build_stepper(root)
         self._build_context_bar(root)
         self.workflowStack = QtWidgets.QStackedWidget(root)
@@ -27,33 +26,6 @@ class ClassificationPageView:
         self.retranslateUi(root)
         self.workflowStack.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(root)
-
-    def _build_header(self, root):
-        self.classificationHeader = QtWidgets.QWidget(root)
-        layout = QtWidgets.QHBoxLayout(self.classificationHeader)
-        layout.setContentsMargins(0, 0, 0, 0)
-        titles = QtWidgets.QVBoxLayout()
-        self.titleLabel = QtWidgets.QLabel(self.classificationHeader)
-        self.subtitleLabel = QtWidgets.QLabel(self.classificationHeader)
-        self.subtitleLabel.setWordWrap(True)
-        titles.addWidget(self.titleLabel)
-        titles.addWidget(self.subtitleLabel)
-        layout.addLayout(titles, 1)
-        self.newSessionButton = QtWidgets.QPushButton(self.classificationHeader)
-        self.loadSessionButton = QtWidgets.QPushButton(self.classificationHeader)
-        self.saveSessionButton = QtWidgets.QPushButton(self.classificationHeader)
-        self.helpButton = QtWidgets.QPushButton(self.classificationHeader)
-        for button in (
-            self.newSessionButton,
-            self.loadSessionButton,
-            self.saveSessionButton,
-            self.helpButton,
-        ):
-            button.setSizePolicy(
-                QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed
-            )
-            layout.addWidget(button)
-        self.rootLayout.addWidget(self.classificationHeader)
 
     def _build_context_bar(self, root):
         self.contextBar = QtWidgets.QFrame(root)
@@ -78,6 +50,12 @@ class ClassificationPageView:
     def _build_stepper(self, root):
         self.classificationWorkflowHeader = ClassificationWorkflowHeader(root)
         self.classificationStepper = self.classificationWorkflowHeader
+        self.titleLabel = self.classificationWorkflowHeader.title_label
+        self.subtitleLabel = self.classificationWorkflowHeader.subtitle_label
+        self.newSessionButton = self.classificationWorkflowHeader.new_session_button
+        self.loadSessionButton = self.classificationWorkflowHeader.open_session_button
+        self.saveSessionButton = self.classificationWorkflowHeader.save_session_button
+        self.helpButton = self.classificationWorkflowHeader.help_button
         buttons = self.classificationWorkflowHeader.buttons
         self.datasetStepButton = buttons["Data"]
         self.preprocessingStepButton = buttons["Prepare"]
@@ -145,7 +123,7 @@ class ClassificationPageView:
             "classificationPreviewPanel",
         )
         self.classificationPreviewPanel = self.classificationPreviewSection
-        layout.addWidget(self.datasetInspectionSplitter)
+        layout.addWidget(self.datasetInspectionSplitter, 1)
 
     def _build_prepare_step(self):
         content, layout = self._scroll_step("preprocessing")
@@ -202,7 +180,7 @@ class ClassificationPageView:
     def retranslateUi(self, root):
         self.titleLabel.setText("Classifier")
         self.subtitleLabel.setText(
-            "Turn mixed 1D curves or 2D images into an auditable map, accepted labels, and a reusable model."
+            "Import, map, label, train, and reuse a model in one verified workflow."
         )
         self.newSessionButton.setText("New")
         self.newSessionButton.setToolTip("Start a new Classification session")

@@ -113,9 +113,11 @@ class DatasetSourcesMixin:
             details.addWidget(value_label, row, 1)
         layout.addLayout(details)
 
-        buttons = QHBoxLayout()
-        choose_folder = QPushButton("Choose Folder", card)
-        choose_files = QPushButton("Choose Files", card)
+        buttons = QGridLayout()
+        buttons.setHorizontalSpacing(6)
+        buttons.setVerticalSpacing(6)
+        choose_folder = QPushButton("Folder…", card)
+        choose_files = QPushButton("Files…", card)
         edit = QPushButton("Edit", card)
         remove = QPushButton("Remove", card)
         rescan = QPushButton("Rescan", card)
@@ -124,8 +126,11 @@ class DatasetSourcesMixin:
         edit.clicked.connect(lambda: self._edit_source_dialog(source.label))
         remove.clicked.connect(lambda: self._remove_source(source.label))
         rescan.clicked.connect(lambda: self._start_import([source.label]))
-        for button in (choose_folder, choose_files, edit, remove, rescan):
-            buttons.addWidget(button)
+        buttons.addWidget(choose_folder, 0, 0)
+        buttons.addWidget(choose_files, 0, 1)
+        buttons.addWidget(rescan, 0, 2)
+        buttons.addWidget(edit, 1, 0, 1, 2)
+        buttons.addWidget(remove, 1, 2)
         layout.addLayout(buttons)
         return card
 

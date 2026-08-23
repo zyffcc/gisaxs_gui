@@ -103,9 +103,9 @@ class ClassificationWorkflowHeader(QFrame):
     STEPS = (
         ("Data", "Data", "datasetStepButton"),
         ("Prepare", "Prepare", "preprocessingStepButton"),
-        ("Explore", "Explore & label", "algorithmsStepButton"),
-        ("Train", "Train & review", "resultsStepButton"),
-        ("Apply", "Apply & export", "applyStepButton"),
+        ("Explore", "Explore", "algorithmsStepButton"),
+        ("Train", "Train", "resultsStepButton"),
+        ("Apply", "Apply", "applyStepButton"),
     )
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -119,8 +119,13 @@ class ClassificationWorkflowHeader(QFrame):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(7)
         title_row = QHBoxLayout()
-        self.title_label = QLabel("Classification workbench", self)
+        self.title_label = QLabel("Classifier", self)
+        self.title_label.setObjectName("classificationWorkflowTitle")
         self.title_label.setProperty("workflowTitle", True)
+        self.new_session_button = self._utility_button("New", "NewSessionButton")
+        self.open_session_button = self._utility_button("Open", "LoadSessionButton")
+        self.save_session_button = self._utility_button("Save", "SaveSessionButton")
+        self.help_button = self._utility_button("?", "classificationHelpButton")
         self.mode_button = QToolButton(self)
         self.mode_button.setObjectName("classificationWorkflowGuidedButton")
         self.mode_button.setText("Guided")
@@ -130,6 +135,10 @@ class ClassificationWorkflowHeader(QFrame):
         self.mode_button.toggled.connect(self._on_guided_changed)
         title_row.addWidget(self.title_label)
         title_row.addStretch(1)
+        title_row.addWidget(self.new_session_button)
+        title_row.addWidget(self.open_session_button)
+        title_row.addWidget(self.save_session_button)
+        title_row.addWidget(self.help_button)
         title_row.addWidget(self.mode_button)
         layout.addLayout(title_row)
 
@@ -137,6 +146,7 @@ class ClassificationWorkflowHeader(QFrame):
             "Progress reflects completed data, reduction, labels, and model results—not click history.",
             self,
         )
+        self.subtitle_label.setObjectName("classificationWorkflowSubtitle")
         self.subtitle_label.setProperty("workflowSubtitle", True)
         self.subtitle_label.setWordWrap(True)
         layout.addWidget(self.subtitle_label)
@@ -169,6 +179,7 @@ class ClassificationWorkflowHeader(QFrame):
 
     def set_compact(self, compact: bool) -> None:
         self._compact = bool(compact)
+        self.mode_button.setVisible(not self._compact)
         self._apply_guidance_visibility()
 
     def _on_guided_changed(self, guided: bool) -> None:
@@ -185,6 +196,13 @@ class ClassificationWorkflowHeader(QFrame):
 
     def _step(self, key: str) -> ClassificationWorkflowStep | None:
         return next((step for step in self.steps if step.key == key), None)
+
+    def _utility_button(self, text: str, object_name: str) -> QToolButton:
+        button = QToolButton(self)
+        button.setObjectName(object_name)
+        button.setText(text)
+        button.setProperty("workflowUtility", True)
+        return button
 
 
 __all__ = ["ClassificationWorkflowHeader", "ClassificationWorkflowStep"]
