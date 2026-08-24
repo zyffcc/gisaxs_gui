@@ -19,6 +19,12 @@ def _create_format_converter_dialog(parent, *, current_file=""):
     return FormatConverterDialog(parent, current_file=current_file)
 
 
+def _create_xrr_series_dialog(parent):
+    from src.gimap.features.xrr.presentation import XrrSeriesDialog
+
+    return XrrSeriesDialog(parent)
+
+
 class MenuManager(PresentationMenuManager):
     def __init__(self, main_window, *, settings):
         super().__init__(
@@ -26,6 +32,8 @@ class MenuManager(PresentationMenuManager):
             settings=settings,
             calibration_dialog_factory=_create_geometry_calibration_dialog,
             format_converter_dialog_factory=_create_format_converter_dialog,
+            xrr_series_dialog_factory=_create_xrr_series_dialog,
         )
+
 
 __all__ = ["MenuManager"]

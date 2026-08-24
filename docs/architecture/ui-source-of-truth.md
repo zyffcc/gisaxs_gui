@@ -4,7 +4,7 @@
 - **Scope**: application shell、workspace pages、dialogs、windows、QSS
 - **Related code**: `src/gimap/app/presentation/`、`src/gimap/features/*/presentation/`
 - **Related tests**: `tests/test_ui_source_of_truth.py`、`tests/test_ui_workspace_layouts.py`
-- **Last verified**: 2026-08-18
+- **Last verified**: 2026-08-25
 
 ## 决策
 
@@ -83,8 +83,9 @@ QSS 优先放在 owner 的 `presentation/styles/` 或应用级 design system 中
 | Trainset | shell + Dataset/Preview/Model/Run/Monitor 五步页面 | catalog/plugin 字段、交互画布、JobStatus |
 | Prediction | controls、workspace、multi-file results、export/heatmap/trend dialogs | model-driven controls、Matplotlib canvas |
 | Fitting | controls、workspace、detector dialog、两个独立绘图窗口 | 动态模型参数、Matplotlib canvas/toolbar |
+| XRR | series extractor dialog | detector/ROI 与 XRR curve Matplotlib canvases、worker progress |
 
-当前共有 37 个显式 Python View。`tests/test_ui_source_of_truth.py` 维护完整 owner inventory，并
+当前共有 41 个显式 Python View。`tests/test_ui_source_of_truth.py` 维护完整 owner inventory，并
 阻止 `.ui`、`_generated`、pyuic 标记和非法 runtime/workflow 依赖重新进入仓库。
 
 ## 修改页面的标准流程

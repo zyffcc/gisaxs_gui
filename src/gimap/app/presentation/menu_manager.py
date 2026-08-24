@@ -31,12 +31,14 @@ class MenuManager(QObject):
         settings: SettingsRepository,
         calibration_dialog_factory=None,
         format_converter_dialog_factory=None,
+        xrr_series_dialog_factory=None,
     ):
         super().__init__()
         self.main_window = main_window
         self.settings = settings
         self.calibration_dialog_factory = calibration_dialog_factory
         self.format_converter_dialog_factory = format_converter_dialog_factory
+        self.xrr_series_dialog_factory = xrr_series_dialog_factory
 
     def setup_menus(self):
         """Set up all menus"""
@@ -90,6 +92,17 @@ class MenuManager(QObject):
                 )
                 self.main_window.actionConvertCurrentFile = current_action
                 self.main_window.actionOpenFormatConverter = open_action
+
+            tools_menu.addSeparator()
+            if not hasattr(self.main_window, "actionXrrSeriesExtractor"):
+                action = QAction("XRR Series Extractor...", self.main_window)
+                action.setShortcut("Ctrl+Shift+R")
+                action.setStatusTip(
+                    "Extract XRR intensity from NXS or CBF detector series"
+                )
+                action.triggered.connect(self.open_xrr_series_extractor)
+                tools_menu.addAction(action)
+                self.main_window.actionXrrSeriesExtractor = action
         except Exception as exc:
             print(f"Failed to create Tools menu: {exc}")
 
@@ -166,6 +179,28 @@ class MenuManager(QObject):
         except Exception as exc:
             QMessageBox.warning(
                 self.main_window, "Format Converter", f"The converter could not be opened:\n{exc}"
+            )
+
+    def open_xrr_series_extractor(self):
+        """Show one modeless XRR window without changing the active workspace."""
+        try:
+            dialog = getattr(self, "_xrr_series_dialog", None)
+            if dialog is None:
+                if self.xrr_series_dialog_factory is None:
+                    raise RuntimeError("XRR series extractor is not configured")
+                dialog = self.xrr_series_dialog_factory(self.main_window)
+                dialog.destroyed.connect(
+                    lambda: setattr(self, "_xrr_series_dialog", None)
+                )
+                self._xrr_series_dialog = dialog
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+        except Exception as exc:
+            QMessageBox.warning(
+                self.main_window,
+                "XRR Series Extractor",
+                f"The XRR tool could not be opened:\n{exc}",
             )
 
     def create_parameters_menu(self):

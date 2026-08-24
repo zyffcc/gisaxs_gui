@@ -4,7 +4,7 @@
 >
 > **Scope**：生产代码的 feature ownership、分层职责和依赖方向
 >
-> **Last verified**：2026-08-20
+> **Last verified**：2026-08-25
 
 ## 架构风格
 
@@ -32,12 +32,13 @@ features/
     classification/
     waxs/
     calibration/
+    xrr/
 ```
 
 优先采用 feature-first 的原因包括：
 
 - 将一个用户工作流及其实现代码放在一起；
-- 为 fitting、prediction、trainset、classification、WAXS 和 calibration
+- 为 fitting、prediction、trainset、classification、WAXS、calibration 和 XRR
   建立清晰的所有权边界；
 - 减少对全局 `controllers/`、`services/`、`models/` 和 `utils/` 技术目录的依赖，
   避免其职责随时间逐渐模糊；

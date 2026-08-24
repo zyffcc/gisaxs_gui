@@ -61,6 +61,7 @@ EXPECTED_VIEWS_BY_OWNER = {
         "roi_panel_view.py",
         "toolbar_view.py",
     },
+    "xrr": {"xrr_series_dialog_view.py"},
 }
 
 

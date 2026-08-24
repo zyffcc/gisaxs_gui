@@ -202,6 +202,11 @@ RawImage 与 AnalysisImage 是逻辑上独立的数据状态，不要求无条�
 对于 multi-frame、stack 和 in-situ，必须明确记录 preprocessing 是逐 frame 还是聚合后执行；不得在
 worker 和 GUI 进程中各自隐式执行一次相同 transform。
 
+XRR angle series 采用逐 frame 的只读 streaming：全分辨率 detector frame 只在 worker 中完成一次
+ROI 提取，GUI 收到的降采样 preview 只能用于显示，不能成为 scientific input。NXS module/frame、
+CBF ordering、specular geometry 和 intensity 定义见
+[`xrr-series-workflow.md`](xrr-series-workflow.md)。
+
 ## 实现与 review 门禁
 
 - Domain 拥有 preprocessing config、科学变换和 framework-neutral 数据类型；

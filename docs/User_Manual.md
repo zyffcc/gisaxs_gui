@@ -340,7 +340,32 @@ Open **Tools > Geometry Calibration...** (`Ctrl+Shift+G`) to calibrate a SAXS, G
 
 Solid yellow overlays are matched theoretical rings, dashed orange overlays are unused theoretical rings, and dotted white overlays are detected experimental radii; the preview legend identifies each style. Partial WAXS arcs and centers outside the active detector area are supported. A low-confidence result or a one-ring result should be treated as ambiguous and reviewed manually.
 
-## 10. Model Configuration
+## 10. XRR Series Extractor
+
+Open **Tools > XRR Series Extractor...** (`Ctrl+Shift+R`) to obtain an XRR curve from a
+GIWAXS/GISAXS detector angle series without leaving the current workspace.
+
+1. Select one NXS detector-module file, or select a CBF file/folder and glob pattern. For NXS, the
+   sibling module files are stitched for each detector frame; for CBF, each naturally sorted file is
+   one point.
+2. Choose a linear sample-angle sequence (`theta start` and `theta step`) or enter an NXS motor
+   dataset containing one theta value per frame.
+3. Enter detector distance, beam energy, pixel sizes and the direct-beam center. Use **Load first
+   frame** and **Pick direct-beam center** to choose the center with the mouse. Select whether the
+   specular reflection moves up or down in detector-y.
+4. Choose an ROI radius and `Sum` or `Mean`. Radius 0 reads one pixel; larger values integrate a
+   circular neighborhood around the calculated specular beam.
+5. Click **Run extraction**. The worker loads one full frame at a time, displays the current detector
+   and ROI, records one scalar point, and then releases that frame. It does not load the full series
+   into memory.
+6. Switch freely between **Live frame** and **XRR points**. Processing updates both but never changes
+   the selected tab. Use **Export CSV** to save theta, qz, intensity, ROI position and valid-pixel
+   count.
+
+The current extractor reports the raw ROI sum or mean. It does not apply monitor/flux normalization,
+footprint correction, background subtraction or resolution correction.
+
+## 11. Model Configuration
 
 Prediction modules are configured with YAML files under `modules/`. Existing module files contain fields such as:
 
@@ -361,7 +386,7 @@ When adding a new module, make sure the model path, input type, preprocessing co
 
 AI fitting model discovery is handled separately and searches fitting-model folders under `modules/`, including `modules/Fitting_1D_Model`.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### File Cannot Be Loaded
 

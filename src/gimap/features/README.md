@@ -1,7 +1,7 @@
 # `features`
 
 每个业务能力在这里拥有独立 feature，例如 fitting、prediction、trainset、
-classification、WAXS 或 calibration。创建实际 feature 时采用：
+classification、WAXS、calibration 或 XRR。创建实际 feature 时采用：
 
 ```text
 feature_name/
