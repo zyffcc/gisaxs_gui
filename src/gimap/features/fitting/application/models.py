@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 import numpy as np
 
@@ -34,6 +34,63 @@ class LoadScatteringFileRequest:
     path: Path
     frame_index: int = 0
     stack_count: int = 1
+
+
+InSituSourceKind = Literal["cbf", "nxs"]
+_INSITU_FRAME_MARKER = "::gimap-frame="
+
+
+@dataclass(frozen=True)
+class DiscoverInSituFramesRequest:
+    """Describe one detector source tree without loading detector images."""
+
+    root: Path
+    source_kind: InSituSourceKind
+    pattern: str = ""
+    recursive: bool = True
+    expected_nxs_modules: int = 1
+
+    def __post_init__(self) -> None:
+        if self.expected_nxs_modules < 1:
+            raise ValueError("expected_nxs_modules must be at least one")
+
+
+@dataclass(frozen=True)
+class InSituSourceFrame:
+    """Lightweight locator with a JSON-safe token for one logical frame."""
+
+    path: Path
+    frame_index: int = 0
+    source_kind: InSituSourceKind = "cbf"
+    module_paths: tuple[Path, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.frame_index < 0:
+            raise ValueError("frame_index must be non-negative")
+
+    @property
+    def token(self) -> str:
+        path = str(self.path)
+        if self.source_kind == "cbf" and self.frame_index == 0:
+            return path
+        return f"{path}{_INSITU_FRAME_MARKER}{self.frame_index}"
+
+    @property
+    def display_name(self) -> str:
+        if self.source_kind == "nxs":
+            return f"{self.path.name} · frame {self.frame_index + 1}"
+        return self.path.name
+
+    @classmethod
+    def from_token(cls, token: str) -> "InSituSourceFrame":
+        path_text, marker, frame_text = str(token).rpartition(_INSITU_FRAME_MARKER)
+        if not marker:
+            path = Path(token)
+            kind: InSituSourceKind = "nxs" if path.suffix.lower() == ".nxs" else "cbf"
+            return cls(path=path, source_kind=kind)
+        path = Path(path_text)
+        kind = "nxs" if path.suffix.lower() == ".nxs" else "cbf"
+        return cls(path=path, frame_index=int(frame_text), source_kind=kind)
 
 
 @dataclass(frozen=True)

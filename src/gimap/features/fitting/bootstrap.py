@@ -14,6 +14,7 @@ from .application import (
     LoadCandidateResults,
     LoadScatteringFile,
     InspectScatteringSequence,
+    DiscoverInSituFrames,
     ManageRemoteFileCache,
     ManageInSituRecords,
     ManageFittingParameterFiles,
@@ -79,6 +80,7 @@ def create_fitting_view_model(context: AppContext) -> FittingViewModel:
         inspect_scattering_sequence=InspectScatteringSequence(
             LocalScatteringFileRepository()
         ),
+        discover_insitu_frames=DiscoverInSituFrames(LocalScatteringFileRepository()),
         load_curve=LoadCurve(LocalCurveRepository()),
         export_fit_result=ExportFitResult(LocalFitResultRepository()),
         run_manual_fit=RunManualFit(fitting_model),

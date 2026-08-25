@@ -449,6 +449,19 @@ def test_fitting_context_switch_preserves_single_navigation_and_versions_insitu_
         "Frames",
         "Log",
     ]
+    assert page.ui.workflowControls.sourceKindCombo.currentText() == "CBF images"
+    assert page.ui.workflowControls.recursiveCheckBox.isChecked()
+    assert page.ui.workflowControls.sequencePatternEdit.text() == "*.cbf"
+    page.ui.workflowControls.sourceKindCombo.setCurrentText("NXS module series")
+    app.processEvents()
+    assert page.ui.workflowControls.sequencePatternEdit.text() == "*.nxs"
+    assert page.ui.workflowControls.nxsModuleCountSpinBox.isVisible()
+    assert page.ui.workflowControls.nxsModuleCountSpinBox.value() == 11
+    assert page.ui.previewAutoScaleCheckBox.isChecked()
+    assert page.ui.previewLogCheckBox.isChecked()
+    assert page.ui.previewShowCenterCheckBox.isChecked()
+    assert page.ui.previewShowRoiCheckBox.isChecked()
+    assert not page.ui.previewVminSpinBox.isEnabled()
     assert tuple(page.ui.workflowButtons) == (
         "source",
         "preprocess",
@@ -521,6 +534,39 @@ def test_fitting_context_switch_preserves_single_navigation_and_versions_insitu_
     ).exists()
     QTest.mouseClick(workspace.insitu_context_button, Qt.LeftButton)
     assert workspace.context_stack.currentWidget() is page
+    window.close()
+
+
+def test_insitu_source_and_preview_display_fit_supported_viewports():
+    app = _app()
+    window = MainWindow(_context())
+    workspace = window.components.fitting_workspace
+    page = workspace.insitu_series_page
+    workspace.show_context("insitu")
+    page.ui.workflowControls.sourceKindCombo.setCurrentText("NXS module series")
+    window.show()
+
+    for width, height in ((1280, 800), (1440, 900), (1920, 1080)):
+        window.resize(width, height)
+        QTest.qWait(40)
+        app.processEvents()
+        assert page.ui.workflowControls.nxsModuleCountSpinBox.isVisible()
+        assert page.ui.previewAutoScaleCheckBox.isVisible()
+        assert page.ui.previewColormapCombo.isVisible()
+        assert page.ui.startProcessButton.isVisible()
+        assert page.ui.startWatchButton.parentWidget() is not None
+        browse_right = page.ui.workflowControls.sequenceBrowseButton.mapTo(
+            page, page.ui.workflowControls.sequenceBrowseButton.rect().bottomRight()
+        ).x()
+        source_right = page.ui.settingsScrollArea.viewport().mapTo(
+            page, page.ui.settingsScrollArea.viewport().rect().bottomRight()
+        ).x()
+        assert browse_right <= source_right
+        assert page.ui.settingsScrollArea.horizontalScrollBar().maximum() == 0
+        bottom = page.ui.jobStatus.mapTo(page, QPoint(0, page.ui.jobStatus.height())).y()
+        assert bottom <= page.height()
+        assert page.ui.mainSplitter.sizes()[1] > page.ui.mainSplitter.sizes()[0]
+
     window.close()
 
 

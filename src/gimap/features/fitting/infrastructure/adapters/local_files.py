@@ -17,11 +17,13 @@ from .scattering_curve_files import load_xy_any
 
 from ...application.models import (
     ExportFitResultRequest,
+    DiscoverInSituFramesRequest,
     ExportedFitResult,
     LoadCurveRequest,
     LoadScatteringFileRequest,
     ScatteringFileData,
     ScatteringSequenceInfo,
+    InSituSourceFrame,
 )
 from ...domain import CurveData
 
@@ -93,6 +95,53 @@ class LocalScatteringFileRepository:
         logical_path = series[0] if series else source
         frame_count = max(1, int(detect_nxs_frame_count(source)))
         return ScatteringSequenceInfo(source, logical_path, series or (source,), frame_count)
+
+    def discover_insitu_frames(
+        self, request: DiscoverInSituFramesRequest
+    ) -> tuple[InSituSourceFrame, ...]:
+        root = Path(request.root).expanduser().resolve()
+        if not root.is_dir():
+            raise FileNotFoundError(f"In-situ source root was not found: {root}")
+        suffix = ".nxs" if request.source_kind == "nxs" else ".cbf"
+        pattern = request.pattern.strip() or f"*{suffix}"
+        iterator = root.rglob(pattern) if request.recursive else root.glob(pattern)
+        paths = sorted(
+            (path.resolve() for path in iterator if path.is_file() and path.suffix.lower() == suffix),
+            key=lambda path: tuple(
+                int(value) if value.isdigit() else value.casefold()
+                for value in re.split(r"(\d+)", str(path.relative_to(root)))
+            ),
+        )
+        if request.source_kind == "cbf":
+            return tuple(InSituSourceFrame(path=path) for path in paths)
+
+        frames: list[InSituSourceFrame] = []
+        seen_groups: set[Path] = set()
+        for path in paths:
+            modules = tuple(item.resolve() for item in nxs_series_paths(path))
+            canonical = modules[0] if modules else path
+            if canonical in seen_groups:
+                continue
+            seen_groups.add(canonical)
+            if len(modules) < request.expected_nxs_modules:
+                continue
+            try:
+                counts = tuple(int(detect_nxs_frame_count(module)) for module in modules)
+            except (OSError, ValueError):
+                # A file that is still being created will be reconsidered on the next poll.
+                continue
+            if not counts or len(set(counts)) != 1:
+                continue
+            frames.extend(
+                InSituSourceFrame(
+                    path=canonical,
+                    frame_index=frame_index,
+                    source_kind="nxs",
+                    module_paths=modules,
+                )
+                for frame_index in range(counts[0])
+            )
+        return tuple(frames)
 
     def _load_nxs(self, source: Path, frame_index: int, stack_count: int):
         frame_count = max(1, int(detect_nxs_frame_count(source)))

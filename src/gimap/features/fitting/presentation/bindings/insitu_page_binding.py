@@ -36,6 +36,9 @@ class InsituPageBindingMixin:
         widgets["run_mode"].currentTextChanged.connect(
             lambda _text: self._update_insitu_run_mode_ui()
         )
+        widgets["source_kind"].currentTextChanged.connect(
+            lambda _text: self._update_insitu_source_kind_ui()
+        )
         widgets["profile"].currentTextChanged.connect(self._set_ai_profile)
         widgets["sequence_browse"].clicked.connect(self._browse_insitu_sequence_folder)
         widgets["start"].clicked.connect(self._start_insitu_workflow)
@@ -47,6 +50,22 @@ class InsituPageBindingMixin:
         widgets["export"].clicked.connect(self._export_insitu_workflow_results)
         widgets["clear_cache"].clicked.connect(self._clear_insitu_session_cache)
         widgets["open_cache"].clicked.connect(self._open_insitu_cache_folder)
+        for key in (
+            "preview_auto_scale",
+            "preview_log",
+            "preview_show_center",
+            "preview_show_roi",
+        ):
+            widgets[key].toggled.connect(self._on_insitu_preview_display_changed)
+        widgets["preview_colormap"].currentTextChanged.connect(
+            self._on_insitu_preview_display_changed
+        )
+        widgets["preview_vmin"].editingFinished.connect(
+            self._on_insitu_preview_display_changed
+        )
+        widgets["preview_vmax"].editingFinished.connect(
+            self._on_insitu_preview_display_changed
+        )
 
         profile_combo = widgets["profile"]
         profile_combo.blockSignals(True)
@@ -60,6 +79,7 @@ class InsituPageBindingMixin:
         )
         profile_combo.setCurrentText(profile)
         self._populate_insitu_sequence_folder_default()
+        self._update_insitu_source_kind_ui()
         self._update_insitu_run_mode_ui()
         self._refresh_insitu_workflow_step_styles()
         self._refresh_insitu_workflow_status()

@@ -11,14 +11,7 @@ from PyQt5.QtCore import pyqtSignal, QThread
 
 
 from src.gimap.features.fitting.application import (
-    LoadScatteringFileRequest,
-)
-
-
-from src.gimap.shared.file_paths import normalize_path
-
-
-from src.gimap.features.fitting.application import (
+    InSituSourceFrame,
     LoadScatteringFileRequest,
 )
 
@@ -88,16 +81,27 @@ class InsituBatchImageLoader(QThread):
             if not self.file_paths:
                 raise RuntimeError("No files to load")
             summed = None
-            for index, path in enumerate(self.file_paths):
+            first_token = self.file_paths[0]
+            for index, token in enumerate(self.file_paths):
                 if self.isInterruptionRequested():
                     raise RuntimeError("Batch loading stopped")
+                frame = InSituSourceFrame.from_token(token)
                 self.progress_updated.emit(
                     int(10 + (index / max(1, len(self.file_paths))) * 70),
                     f"Loading in-situ file {index + 1}/{len(self.file_paths)}",
                 )
+                # NXS module filenames encode the logical detector group. Copying only
+                # the canonical module into the flat remote cache would break stitching.
+                prepared_path = (
+                    str(frame.path)
+                    if frame.source_kind == "nxs"
+                    else self._prepare_file_for_read(str(frame.path))
+                )
                 outcome = self.fitting_view_model.storage.load_scattering_background(
-                    LoadScatteringFileRequest(Path(normalize_path(path))),
-                    prepare_path=self._prepare_file_for_read,
+                    LoadScatteringFileRequest(
+                        Path(normalize_path(prepared_path)),
+                        frame_index=frame.frame_index,
+                    ),
                     on_progress=self.progress_updated.emit,
                 )
                 if outcome.error is not None:
@@ -107,9 +111,9 @@ class InsituBatchImageLoader(QThread):
                     summed = data.copy()
                 else:
                     if summed.shape != data.shape:
-                        raise RuntimeError(f"Image shape mismatch in batch: {path}")
+                        raise RuntimeError(f"Image shape mismatch in batch: {frame.display_name}")
                     summed += data
-            self.image_loaded.emit(summed, self.file_paths[0])
+            self.image_loaded.emit(summed, first_token)
         except Exception as exc:
             self.error_occurred.emit(str(exc))
 

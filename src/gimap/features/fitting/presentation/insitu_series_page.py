@@ -78,8 +78,20 @@ class InSituSeriesPage(QWidget):
                 text == "Every N frames"
             )
         )
+        self.ui.workflowControls.sourceKindCombo.currentTextChanged.connect(
+            self._sync_source_pattern
+        )
         self.ui.resultsTable.itemSelectionChanged.connect(self._render_selected_record_status)
         self.ui.workflowControls.refineEverySpinBox.setEnabled(False)
+
+    def _sync_source_pattern(self, text: str) -> None:
+        editor = self.ui.workflowControls.sequencePatternEdit
+        current = editor.text().strip().lower()
+        if not current or current in {"*.cbf", "*.nxs"}:
+            editor.setText("*.nxs" if text == "NXS module series" else "*.cbf")
+        is_nxs = text == "NXS module series"
+        self.ui.workflowControls.nxsModuleCountLabel.setVisible(is_nxs)
+        self.ui.workflowControls.nxsModuleCountSpinBox.setVisible(is_nxs)
 
     def _show_workflow_step(self, index: int) -> None:
         key = self.ui.STEP_DEFINITIONS[index][0]
@@ -100,7 +112,10 @@ class InSituSeriesPage(QWidget):
             "sequence_settings": controls.sequenceSettingsWidget,
             "sequence_folder": controls.sequenceFolderEdit,
             "sequence_browse": controls.sequenceBrowseButton,
+            "source_kind": controls.sourceKindCombo,
             "sequence_pattern": controls.sequencePatternEdit,
+            "recursive": controls.recursiveCheckBox,
+            "nxs_module_count": controls.nxsModuleCountSpinBox,
             "sequence_start": controls.sequenceStartSpinBox,
             "sequence_end": controls.sequenceEndSpinBox,
             "sequence_step": controls.sequenceStepSpinBox,
@@ -120,6 +135,13 @@ class InSituSeriesPage(QWidget):
             "status_labels": self.ui.statusValueLabels,
             "log": self.ui.logBrowser,
             "image_label": self.ui.currentImageLabel,
+            "preview_auto_scale": self.ui.previewAutoScaleCheckBox,
+            "preview_log": self.ui.previewLogCheckBox,
+            "preview_show_center": self.ui.previewShowCenterCheckBox,
+            "preview_show_roi": self.ui.previewShowRoiCheckBox,
+            "preview_vmin": self.ui.previewVminSpinBox,
+            "preview_vmax": self.ui.previewVmaxSpinBox,
+            "preview_colormap": self.ui.previewColormapCombo,
         }
 
     def render_recipe(self, recipe) -> None:

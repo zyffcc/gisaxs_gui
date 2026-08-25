@@ -7,6 +7,9 @@ from PIL import Image
 from src.gimap.features.fitting.application import (
     ExportFitResult,
     ExportFitResultRequest,
+    DiscoverInSituFrames,
+    DiscoverInSituFramesRequest,
+    InSituSourceFrame,
     LoadCurve,
     LoadCurveRequest,
     LoadScatteringFile,
@@ -98,6 +101,71 @@ def test_inspect_scattering_sequence_uses_repository_without_qapplication(tmp_pa
     assert info.series_paths == tuple(path.resolve() for path in paths)
     assert info.frame_count == 3
     assert info.uses_internal_frames
+
+
+def test_discover_insitu_cbf_frames_recurses_below_acquisition_root(tmp_path):
+    nested = tmp_path / "scan_001" / "detector"
+    nested.mkdir(parents=True)
+    (nested / "image_002.cbf").write_bytes(b"cbf")
+    (nested / "image_001.cbf").write_bytes(b"cbf")
+    (tmp_path / "root.cbf").write_bytes(b"cbf")
+    use_case = DiscoverInSituFrames(LocalScatteringFileRepository())
+
+    recursive = use_case.execute(
+        DiscoverInSituFramesRequest(tmp_path, "cbf", recursive=True)
+    )
+    direct = use_case.execute(
+        DiscoverInSituFramesRequest(tmp_path, "cbf", recursive=False)
+    )
+
+    assert [frame.path.name for frame in recursive] == [
+        "root.cbf",
+        "image_001.cbf",
+        "image_002.cbf",
+    ]
+    assert [frame.path.name for frame in direct] == ["root.cbf"]
+
+
+def test_discover_insitu_nxs_groups_modules_and_detects_appended_frames(tmp_path):
+    scan = tmp_path / "scan_001"
+    scan.mkdir()
+    modules = [scan / f"detector_m0{index}.nxs" for index in (1, 2)]
+    for path in modules:
+        with h5py.File(path, "w") as handle:
+            handle.create_dataset(
+                "/entry/instrument/detector/data",
+                data=np.zeros((2, 4, 6), dtype=np.float32),
+                maxshape=(None, 4, 6),
+            )
+    use_case = DiscoverInSituFrames(LocalScatteringFileRepository())
+    incomplete = use_case.execute(
+        DiscoverInSituFramesRequest(
+            tmp_path, "nxs", recursive=True, expected_nxs_modules=3
+        )
+    )
+    assert incomplete == ()
+    request = DiscoverInSituFramesRequest(
+        tmp_path, "nxs", recursive=True, expected_nxs_modules=2
+    )
+
+    initial = use_case.execute(request)
+    assert [(frame.path.name, frame.frame_index) for frame in initial] == [
+        ("detector_m01.nxs", 0),
+        ("detector_m01.nxs", 1),
+    ]
+    assert all(frame.module_paths == tuple(path.resolve() for path in modules) for frame in initial)
+
+    for path in modules:
+        with h5py.File(path, "a") as handle:
+            dataset = handle["/entry/instrument/detector/data"]
+            dataset.resize((3, 4, 6))
+            dataset[2] = 2.0
+
+    updated = use_case.execute(request)
+    assert [frame.frame_index for frame in updated] == [0, 1, 2]
+    restored = InSituSourceFrame.from_token(updated[-1].token)
+    assert restored.path == modules[0].resolve()
+    assert restored.frame_index == 2
 
 
 def test_export_fit_result_preserves_legacy_txt_and_csv_format(tmp_path):

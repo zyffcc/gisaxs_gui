@@ -5,7 +5,12 @@ from __future__ import annotations
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -125,6 +130,7 @@ class InSituSeriesPageView:
         self.settingsScrollArea.setObjectName("fittingInsituSettingsScrollArea")
         self.settingsScrollArea.setFrameShape(QScrollArea.NoFrame)
         self.settingsScrollArea.setWidgetResizable(True)
+        self.settingsScrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.settingsScrollArea.setMinimumWidth(340)
         self.settingsScrollArea.setMaximumWidth(500)
         content = QWidget()
@@ -204,14 +210,75 @@ class InSituSeriesPageView:
         layout = QVBoxLayout(page)
         layout.setContentsMargins(6, 6, 6, 6)
         self.imageCanvas = self._make_canvas_holder(page, "Detector / processed image")
+        image_row = QSplitter(Qt.Horizontal, page)
+        image_row.setChildrenCollapsible(False)
+        image_row.addWidget(self.imageCanvas)
+        image_row.addWidget(self._build_preview_display_inspector(page))
+        image_row.setStretchFactor(0, 1)
+        image_row.setSizes([700, 240])
         self.curveCanvas = self._make_canvas_holder(page, "Cut / fitting curve")
         splitter = QSplitter(Qt.Vertical, page)
         splitter.setChildrenCollapsible(False)
-        splitter.addWidget(self.imageCanvas)
+        splitter.addWidget(image_row)
         splitter.addWidget(self.curveCanvas)
         splitter.setSizes([420, 320])
         layout.addWidget(splitter, 1)
         self.previewTabs.addTab(page, "Preview")
+
+    def _build_preview_display_inspector(self, parent: QWidget) -> QWidget:
+        inspector = QFrame(parent)
+        inspector.setObjectName("fittingInsituPreviewDisplayInspector")
+        inspector.setMinimumWidth(210)
+        inspector.setMaximumWidth(285)
+        layout = QVBoxLayout(inspector)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(9)
+        title = QLabel("Image display", inspector)
+        title.setProperty("gimapSectionTitle", True)
+        layout.addWidget(title)
+        hint = QLabel("Display only — Recipe and analysis data are unchanged.", inspector)
+        hint.setProperty("gimapMeta", True)
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        quick = QGridLayout()
+        self.previewAutoScaleCheckBox = QCheckBox("Auto scale", inspector)
+        self.previewAutoScaleCheckBox.setChecked(True)
+        self.previewLogCheckBox = QCheckBox("Log intensity", inspector)
+        self.previewLogCheckBox.setChecked(True)
+        self.previewShowCenterCheckBox = QCheckBox("Center", inspector)
+        self.previewShowCenterCheckBox.setChecked(True)
+        self.previewShowRoiCheckBox = QCheckBox("Cut ROI", inspector)
+        self.previewShowRoiCheckBox.setChecked(True)
+        quick.addWidget(self.previewAutoScaleCheckBox, 0, 0)
+        quick.addWidget(self.previewLogCheckBox, 0, 1)
+        quick.addWidget(self.previewShowCenterCheckBox, 1, 0)
+        quick.addWidget(self.previewShowRoiCheckBox, 1, 1)
+        layout.addLayout(quick)
+
+        self.previewVminSpinBox = self._display_spin(inspector)
+        self.previewVmaxSpinBox = self._display_spin(inspector)
+        self.previewVminSpinBox.setEnabled(False)
+        self.previewVmaxSpinBox.setEnabled(False)
+        self.previewColormapCombo = QComboBox(inspector)
+        self.previewColormapCombo.addItems(
+            ("viridis", "plasma", "inferno", "magma", "cividis", "gray", "turbo")
+        )
+        form = QFormLayout()
+        form.addRow("Vmin", self.previewVminSpinBox)
+        form.addRow("Vmax", self.previewVmaxSpinBox)
+        form.addRow("Color map", self.previewColormapCombo)
+        layout.addLayout(form)
+        layout.addStretch(1)
+        return inspector
+
+    @staticmethod
+    def _display_spin(parent: QWidget) -> QDoubleSpinBox:
+        editor = QDoubleSpinBox(parent)
+        editor.setRange(-1e15, 1e15)
+        editor.setDecimals(5)
+        editor.setKeyboardTracking(False)
+        return editor
 
     def _build_frames_tab(self) -> None:
         page = QWidget(self.previewTabs)

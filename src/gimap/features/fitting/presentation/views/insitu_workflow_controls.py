@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QVBoxLayout,
@@ -31,6 +32,7 @@ class InSituWorkflowControls(QWidget):
         root.setSpacing(0)
         self.stack = QStackedWidget(self)
         self.stack.setObjectName("fittingInsituParameterStack")
+        self.stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
         root.addWidget(self.stack)
         self._build_source_page()
         self._build_preprocess_page()
@@ -67,25 +69,52 @@ class InSituWorkflowControls(QWidget):
         )
         form = QFormLayout()
         form.setSpacing(8)
+        form.setRowWrapPolicy(QFormLayout.WrapLongRows)
         self.runModeCombo = QComboBox(page)
         self.runModeCombo.setObjectName("fittingInsituRunModeCombo")
         self.runModeCombo.addItems(("Process Existing Sequence", "Live Watch"))
         form.addRow("Mode", self.runModeCombo)
+
+        self.sourceKindCombo = QComboBox(page)
+        self.sourceKindCombo.setObjectName("fittingInsituSourceKindCombo")
+        self.sourceKindCombo.addItems(("CBF images", "NXS module series"))
+        self.sourceKindCombo.setToolTip(
+            "CBF treats each file as one frame; NXS groups detector modules and watches internal frames."
+        )
+        form.addRow("Detector source", self.sourceKindCombo)
 
         folder_row = QWidget(page)
         folder_layout = QHBoxLayout(folder_row)
         folder_layout.setContentsMargins(0, 0, 0, 0)
         self.sequenceFolderEdit = QLineEdit(folder_row)
         self.sequenceFolderEdit.setObjectName("fittingInsituSequenceFolderEdit")
-        self.sequenceFolderEdit.setPlaceholderText("Folder containing detector images")
-        self.sequenceBrowseButton = QPushButton("Browse…", folder_row)
+        self.sequenceFolderEdit.setPlaceholderText(
+            "Acquisition root; child folders can be watched recursively"
+        )
+        self.sequenceBrowseButton = QPushButton("…", folder_row)
         self.sequenceBrowseButton.setObjectName("fittingInsituSequenceBrowseButton")
+        self.sequenceBrowseButton.setToolTip("Choose acquisition root folder")
         folder_layout.addWidget(self.sequenceFolderEdit, 1)
         folder_layout.addWidget(self.sequenceBrowseButton)
-        form.addRow("Folder", folder_row)
+        form.addRow("Root folder", folder_row)
         self.sequencePatternEdit = QLineEdit("*.cbf", page)
         self.sequencePatternEdit.setObjectName("fittingInsituSequencePatternEdit")
         form.addRow("File pattern", self.sequencePatternEdit)
+        self.recursiveCheckBox = QCheckBox("Include child folders", page)
+        self.recursiveCheckBox.setObjectName("fittingInsituRecursiveCheckBox")
+        self.recursiveCheckBox.setChecked(True)
+        form.addRow("", self.recursiveCheckBox)
+        self.nxsModuleCountSpinBox = QSpinBox(page)
+        self.nxsModuleCountSpinBox.setObjectName("fittingInsituNxsModuleCountSpinBox")
+        self.nxsModuleCountSpinBox.setRange(1, 100)
+        self.nxsModuleCountSpinBox.setValue(11)
+        self.nxsModuleCountSpinBox.setToolTip(
+            "Queue an NXS group only after at least this many module files exist."
+        )
+        form.addRow("NXS modules", self.nxsModuleCountSpinBox)
+        self.nxsModuleCountLabel = form.labelForField(self.nxsModuleCountSpinBox)
+        self.nxsModuleCountLabel.hide()
+        self.nxsModuleCountSpinBox.hide()
         layout.addLayout(form)
 
         self.liveSettingsWidget = QWidget(page)

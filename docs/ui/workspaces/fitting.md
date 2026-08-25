@@ -10,7 +10,7 @@
   [`tests/test_fitting_presentation.py`](../../../tests/test_fitting_presentation.py)、
   [`tests/test_fitting_view_model.py`](../../../tests/test_fitting_view_model.py)、
   [`tests/test_ui_workspace_layouts.py`](../../../tests/test_ui_workspace_layouts.py)
-- **Last verified**: 2026-08-21
+- **Last verified**: 2026-08-25
 
 ## 当前状态
 
@@ -34,7 +34,9 @@ In-situ 使用显式 Recipe 交接：先在 Single 分析一个代表文件，�
 fit initial values、refinement 或失败策略；保存时创建新版本，并明确应用到 future、selected +
 future 或 all frames，且不会反向覆盖 Single。Live/Batch 控件直接位于页面，旧 runner dialog 已
 删除。若用户在捕获后改过 Single model，必须显式重新捕获，不能静默用错模型。结果行记录 Recipe
-版本和 load/preprocess/geometry/cut/fit 的独立状态。
+版本和 load/preprocess/geometry/cut/fit 的独立状态。Source 以 acquisition root 为入口，可递归
+监控子文件夹，并显式选择 `CBF images` 或 `NXS module series`。NXS 默认等待 11 个 module files
+形成完整组，随后按内部 frame 逐帧排队；已存在 NXS 中追加 frame 与新建 NXS 组使用同一发现流程。
 完整契约见
 [`../../architecture/insitu-series-workflow.md`](../../architecture/insitu-series-workflow.md)。
 
@@ -157,6 +159,10 @@ calculation、文件格式判断、TensorFlow inference 或 fitting orchestratio
 | `Single analysis / In-situ series` | Fitting 顶部 context switch | 切换稳定上下文，不清空任一页面状态 |
 | `InSituSeriesPage` | `In-situ series` | 可点击逐帧 workflow、Recipe、内嵌 Live/Batch、Preview/Frames/Log 和统一 JobStatus |
 
+In-situ Preview 右侧也有独立的 `Image display` inspector，包含 Auto scale、Log intensity、
+Vmin/Vmax、Color map、Center 和 Cut ROI。它只控制当前 In-situ 图像的投影，不改变 Single 的
+display widgets，不写入 Recipe，也不会启动 preprocessing、cut 或 fitting。
+
 页面布局和 presentation ownership 不修改科学算法、参数、单位或 fitting domain 行为。
 所有 View 控件、objectName、button instances、默认参数、快捷操作和 signal targets 均保持不变。
 旧 controller 文件不再承载实现；布局层没有新增 controller/ViewModel 双重
@@ -205,6 +211,11 @@ application 行为。
 - [ ] in-situ 三文件以上运行、取消、单文件失败继续和恢复正常。
 - [ ] Single/In-situ 来回切换不重置左侧步骤、Detector/Curve 当前标签、Recipe 或结果表；
 - [ ] Single Load Mode 只有 Single/Stack；In-situ 页面无需切换 Single mode 即可选择 folder 并运行；
+- [ ] In-situ Source 可选择 acquisition root、CBF/NXS、pattern 和递归子目录；CBF 子目录中新文件可入队；
+- [ ] NXS 等待配置的 module 数且各 module frame count 一致；同一组追加内部 frame 和新建另一组
+      NXS 都只把新增 frame 入队，不重复已处理 frame；
+- [ ] In-situ Preview 的 Image display 可独立调节 log、色图、范围和 overlay；调节后不改变 Recipe、
+      AnalysisImage revision、当前 Preview/Frames/Log 标签或 Single 当前页面；
 - [ ] 点击 Source/Preprocess/Geometry/Yoneda & cut/Fit/Results 只切参数页，Start/Pause/Stop 位置不变；
 - [ ] Frames 选中任一行后，各流程节点显示该帧真实成功、失败或跳过状态；
 - [ ] 未加载代表文件时不能创建 Recipe；创建后显示版本和来源；In-situ policy 修改产生下一版本；

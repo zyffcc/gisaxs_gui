@@ -13,6 +13,7 @@ class FittingStorageViewModel:
         *,
         load_scattering_file,
         inspect_scattering_sequence,
+        discover_insitu_frames=None,
         scattering_loader_factory,
         remote_file_cache,
         insitu_records,
@@ -25,6 +26,7 @@ class FittingStorageViewModel:
     ):
         self._load_scattering_file = load_scattering_file
         self._inspect_scattering_sequence = inspect_scattering_sequence
+        self._discover_insitu_frames = discover_insitu_frames
         self._scattering_loader_factory = scattering_loader_factory
         self._remote_file_cache = remote_file_cache
         self._insitu_records = insitu_records
@@ -52,6 +54,11 @@ class FittingStorageViewModel:
 
     def inspect_scattering_sequence(self, path: Path):
         return self._inspect_scattering_sequence.execute(Path(path))
+
+    def discover_insitu_frames(self, request):
+        if self._discover_insitu_frames is None:
+            raise RuntimeError("In-situ frame discovery is not configured")
+        return self._discover_insitu_frames.execute(request)
 
     def default_remote_cache_directory(self) -> str:
         return self._remote_file_cache.default_directory()

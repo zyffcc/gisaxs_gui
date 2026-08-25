@@ -7,12 +7,14 @@ from pathlib import Path
 from .errors import FileOperationError
 from .models import (
     ExportFitResultRequest,
+    DiscoverInSituFramesRequest,
     ExportOperationResult,
     LoadCurveRequest,
     LoadScatteringFileRequest,
     CurveOperationResult,
     ScatteringOperationResult,
     ScatteringSequenceInfo,
+    InSituSourceFrame,
 )
 from .ports import CurveRepository, FitResultRepository, ScatteringFileRepository
 from .ports import FittingModelPort, RemoteFileCachePort
@@ -58,6 +60,18 @@ class InspectScatteringSequence:
 
     def execute(self, path: Path) -> ScatteringSequenceInfo:
         return self._repository.inspect_sequence(Path(path))
+
+
+class DiscoverInSituFrames:
+    """Discover lightweight frame locators below an acquisition root."""
+
+    def __init__(self, repository: ScatteringFileRepository):
+        self._repository = repository
+
+    def execute(
+        self, request: DiscoverInSituFramesRequest
+    ) -> tuple[InSituSourceFrame, ...]:
+        return self._repository.discover_insitu_frames(request)
 
 
 class LoadCurve:

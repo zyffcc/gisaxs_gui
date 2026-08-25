@@ -65,6 +65,7 @@ class FittingViewModel(FittingWorkflowViewModelMixin):
         save_fitting_log=None,
         check_dependency=None,
         scientific=None, model_parameters=None, ai_catalog=None,
+        discover_insitu_frames=None,
     ):
         self.context = context
         self._load_scattering_file = load_scattering_file
@@ -77,6 +78,7 @@ class FittingViewModel(FittingWorkflowViewModelMixin):
         self.storage = FittingStorageViewModel(
             load_scattering_file=load_scattering_file,
             inspect_scattering_sequence=inspect_scattering_sequence,
+            discover_insitu_frames=discover_insitu_frames,
             scattering_loader_factory=scattering_loader_factory,
             remote_file_cache=remote_file_cache,
             insitu_records=insitu_records,

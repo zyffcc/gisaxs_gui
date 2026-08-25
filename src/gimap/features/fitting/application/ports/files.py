@@ -9,6 +9,8 @@ from ..models import (
     ExportedFitResult,
     LoadCurveRequest,
     LoadScatteringFileRequest,
+    DiscoverInSituFramesRequest,
+    InSituSourceFrame,
     ScatteringFileData,
     ScatteringSequenceInfo,
 )
@@ -19,6 +21,10 @@ class ScatteringFileRepository(Protocol):
     def load(self, request: LoadScatteringFileRequest) -> ScatteringFileData: ...
 
     def inspect_sequence(self, path) -> ScatteringSequenceInfo: ...
+
+    def discover_insitu_frames(
+        self, request: DiscoverInSituFramesRequest
+    ) -> tuple[InSituSourceFrame, ...]: ...
 
 
 class CurveRepository(Protocol):

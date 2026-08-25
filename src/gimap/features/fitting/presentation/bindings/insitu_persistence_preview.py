@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QDesktopServices
 
 from ..detector_data_access import analysis_image_for
+from ...application import InSituSourceFrame
 
 
 class InsituPersistencePreviewMixin:
@@ -117,10 +118,16 @@ class InsituPersistencePreviewMixin:
     def _draw_insitu_workflow_image_preview(self, image_data, file_path: str = ""):
         holder = getattr(self, "_insitu_workflow_canvas_image", None)
         auto_cut = self._insitu_workflow_settings().get("auto_cut", False)
+        self._insitu_preview_image_data = image_data
+        self._insitu_preview_file_path = file_path
         self._draw_insitu_image_on_holder(
             holder,
             image_data,
-            title=os.path.basename(file_path) or "Current image",
+            title=(
+                InSituSourceFrame.from_token(file_path).display_name
+                if file_path
+                else "Current image"
+            ),
             selection=auto_cut,
         )
 
@@ -142,20 +149,50 @@ class InsituPersistencePreviewMixin:
             canvas = holder._insitu_canvas
             fig.clear()
             ax = fig.add_subplot(111)
-            processed, _ = self._prepare_image_data_for_display(image_data)
+            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+            log_enabled = bool(
+                widgets.get("preview_log") and widgets["preview_log"].isChecked()
+            )
+            processed = np.asarray(image_data, dtype=np.float32)
+            if log_enabled:
+                processed = np.log(
+                    np.where(np.isfinite(processed), np.maximum(processed, 0.001), np.nan)
+                )
             processed = np.flipud(processed)
             preview_data, _ = self._downsample_for_preview(processed, max_pixels=280_000)
-            vmin = self._current_vmin if self._current_vmin is not None else np.nanmin(processed)
-            vmax = self._current_vmax if self._current_vmax is not None else np.nanmax(processed)
+            finite = processed[np.isfinite(processed)]
+            if finite.size == 0:
+                raise ValueError("Preview image contains no finite intensity values")
+            auto_scale = bool(
+                not widgets.get("preview_auto_scale")
+                or widgets["preview_auto_scale"].isChecked()
+            )
+            if auto_scale:
+                vmin, vmax = np.percentile(finite, (1.0, 99.0))
+                self._set_insitu_preview_range(float(vmin), float(vmax))
+            else:
+                vmin = float(widgets["preview_vmin"].value())
+                vmax = float(widgets["preview_vmax"].value())
+                if vmax <= vmin:
+                    vmin, vmax = np.percentile(finite, (1.0, 99.0))
             ax.imshow(
                 preview_data,
-                cmap=self._image_colormap,
+                cmap=(
+                    widgets["preview_colormap"].currentText()
+                    if widgets.get("preview_colormap")
+                    else "viridis"
+                ),
                 origin="lower",
                 interpolation="nearest",
                 vmin=vmin,
                 vmax=vmax,
             )
-            if selection:
+            show_roi = bool(
+                selection
+                and widgets.get("preview_show_roi")
+                and widgets["preview_show_roi"].isChecked()
+            )
+            if show_roi:
                 try:
                     valid, message = self._validate_current_cut_settings()
                     info = self._create_selection_from_current_cut_controls()
@@ -187,9 +224,54 @@ class InsituPersistencePreviewMixin:
                         )
                 except Exception:
                     pass
+            if widgets.get("preview_show_center") and widgets[
+                "preview_show_center"
+            ].isChecked():
+                try:
+                    page = getattr(self.ui, "fittingInsituSeriesPage", None)
+                    controls = page.ui.workflowControls
+                    center_x = float(controls.centerXSpinBox.value())
+                    center_y = float(controls.centerYSpinBox.value())
+                    scale_y = preview_data.shape[0] / max(1, processed.shape[0])
+                    scale_x = preview_data.shape[1] / max(1, processed.shape[1])
+                    ax.plot(
+                        center_x * scale_x,
+                        center_y * scale_y,
+                        marker="+",
+                        markersize=14,
+                        markeredgewidth=2,
+                        color="#ffb000",
+                    )
+                except Exception:
+                    pass
             ax.set_title(title)
             ax.axis("off")
             fig.tight_layout(pad=0.3)
             canvas.draw_idle()
         except Exception:
             pass
+
+    def _set_insitu_preview_range(self, vmin: float, vmax: float) -> None:
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        for key, value in (("preview_vmin", vmin), ("preview_vmax", vmax)):
+            editor = widgets.get(key)
+            if editor is not None:
+                editor.blockSignals(True)
+                editor.setValue(value)
+                editor.blockSignals(False)
+
+    def _on_insitu_preview_display_changed(self, *_args) -> None:
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        auto = bool(
+            widgets.get("preview_auto_scale")
+            and widgets["preview_auto_scale"].isChecked()
+        )
+        for key in ("preview_vmin", "preview_vmax"):
+            if widgets.get(key) is not None:
+                widgets[key].setEnabled(not auto)
+        image_data = getattr(self, "_insitu_preview_image_data", None)
+        if image_data is not None:
+            self._draw_insitu_workflow_image_preview(
+                image_data,
+                getattr(self, "_insitu_preview_file_path", ""),
+            )

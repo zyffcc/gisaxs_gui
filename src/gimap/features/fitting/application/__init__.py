@@ -15,12 +15,15 @@ from .ai_use_cases import (
 )
 from .models import (
     ExportFitResultRequest,
+    DiscoverInSituFramesRequest,
     ExportedFitResult,
     LoadCurveRequest,
     LoadScatteringFileRequest,
     OperationResult,
     ScatteringFileData,
     ScatteringSequenceInfo,
+    InSituSourceFrame,
+    InSituSourceKind,
 )
 from .insitu import (
     InSituFileFitRequest,
@@ -61,6 +64,7 @@ from .use_cases import (
     LoadCurve,
     LoadScatteringFile,
     InspectScatteringSequence,
+    DiscoverInSituFrames,
     ManageRemoteFileCache,
     RunManualFit,
 )
@@ -97,6 +101,8 @@ __all__ = [
     "CandidateGenerationResult",
     "CandidateJobError",
     "ExportFitResultRequest",
+    "DiscoverInSituFrames",
+    "DiscoverInSituFramesRequest",
     "ExportedFitResult",
     "FileOperationError",
     "LoadCurve",
@@ -104,6 +110,8 @@ __all__ = [
     "LoadCurveRequest",
     "LoadScatteringFile",
     "InspectScatteringSequence",
+    "InSituSourceFrame",
+    "InSituSourceKind",
     "LoadScatteringFileRequest",
     "GenerateCandidates",
     "LoadCandidateResults",

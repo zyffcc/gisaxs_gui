@@ -21,6 +21,10 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.shared.file_paths import normalize_path
+from src.gimap.features.fitting.application import (
+    DiscoverInSituFramesRequest,
+    InSituSourceFrame,
+)
 
 
 from ..binding_primitives import (
@@ -84,6 +88,7 @@ class InsituSequenceMixin:
                 self._insitu_workflow_queue = []
                 if (
                     self.fitting_view_model.storage.is_remote_source(folder)
+                    and settings["source_kind"] == "cbf"
                     and normalize_path(folder) not in self._folder_image_scan_cache
                 ):
                     self._scan_folder_images_for_file(folder)
@@ -183,27 +188,7 @@ class InsituSequenceMixin:
 
     def _build_insitu_sequence_file_list(self, folder: str) -> list[str]:
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-        pattern = (
-            widgets.get("sequence_pattern").text().strip()
-            if widgets.get("sequence_pattern")
-            else "*.cbf"
-        )
-        pattern = pattern or "*.cbf"
-        if self.fitting_view_model.storage.is_remote_source(folder):
-            cached = self._folder_image_scan_cache.get(normalize_path(folder))
-            if cached is None:
-                self._scan_folder_images_for_file(folder)
-                self._set_insitu_workflow_state("Idle", "Scanning remote sequence folder...")
-                return []
-            files = [p for p in cached if Path(p).match(pattern)]
-        else:
-            try:
-                matches = sorted(
-                    Path(folder).glob(pattern), key=lambda p: self._natural_sort_key(str(p))
-                )
-            except Exception:
-                matches = []
-            files = [str(path) for path in matches if path.is_file()]
+        files = self._list_insitu_watch_files(folder)
         start_value = (
             int(widgets.get("sequence_start").value()) if widgets.get("sequence_start") else 0
         )
@@ -214,7 +199,10 @@ class InsituSequenceMixin:
 
         # 函数说明：实现 index from name 相关逻辑。
         def index_from_name(path: str):
-            match = re.search(r"(\d+)(?=\.[^.]+$|$)", os.path.basename(path))
+            frame = InSituSourceFrame.from_token(path)
+            if frame.source_kind == "nxs":
+                return frame.frame_index + 1
+            match = re.search(r"(\d+)(?=\.[^.]+$|$)", frame.path.name)
             return int(match.group(1)) if match else None
 
         filtered = []
@@ -285,19 +273,29 @@ class InsituSequenceMixin:
     def _list_insitu_watch_files(self, folder: str):
         try:
             widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+            settings = self._insitu_workflow_settings()
             pattern = (
                 widgets.get("sequence_pattern").text().strip()
                 if widgets.get("sequence_pattern")
-                else "*.cbf"
-            ) or "*.cbf"
-            if self.fitting_view_model.storage.is_remote_source(folder):
+                else ""
+            ) or ("*.nxs" if settings["source_kind"] == "nxs" else "*.cbf")
+            if (
+                self.fitting_view_model.storage.is_remote_source(folder)
+                and settings["source_kind"] == "cbf"
+            ):
                 cached = self._folder_image_scan_cache.get(normalize_path(folder))
                 return [path for path in (cached or []) if Path(path).match(pattern)]
-            return [
-                str(path)
-                for path in sorted(Path(folder).glob(pattern), key=lambda p: self._natural_sort_key(str(p)))
-                if path.is_file()
-            ]
+            frames = self.fitting_view_model.storage.discover_insitu_frames(
+                DiscoverInSituFramesRequest(
+                    root=Path(folder),
+                    source_kind=settings["source_kind"],
+                    pattern=pattern,
+                    recursive=settings["recursive"],
+                    expected_nxs_modules=settings["nxs_module_count"],
+                )
+            )
+            self._insitu_discovered_frames = {frame.token: frame for frame in frames}
+            return [frame.token for frame in frames]
         except Exception:
             return []
 
@@ -317,14 +315,15 @@ class InsituSequenceMixin:
             ):
                 self._set_insitu_workflow_state("Error", "Watch folder is unavailable")
                 return
+            settings = self._insitu_workflow_settings()
             if (
                 self.fitting_view_model.storage.is_remote_source(folder)
+                and settings["source_kind"] == "cbf"
                 and normalize_path(folder) not in self._folder_image_scan_cache
             ):
                 self._scan_folder_images_for_file(folder)
                 self._set_insitu_workflow_state("Watching", "Scanning remote watch folder...")
                 return
-            settings = self._insitu_workflow_settings()
             for path in self._list_insitu_watch_files(folder):
                 if path in self._insitu_workflow_seen or path in self._insitu_workflow_queue:
                     continue
@@ -333,7 +332,8 @@ class InsituSequenceMixin:
                 self._insitu_workflow_seen.add(path)
                 self._insitu_workflow_queue.append(path)
                 self.fitting_view_model.insitu.enqueue_insitu_files((path,))
-                self._log_insitu_workflow(f"Queued {os.path.basename(path)}")
+                frame = self._insitu_frame_for_token(path)
+                self._log_insitu_workflow(f"Queued {frame.display_name}")
             self._refresh_insitu_workflow_status()
             self._process_next_insitu_workflow_file()
         except Exception as exc:
@@ -341,15 +341,23 @@ class InsituSequenceMixin:
 
     def _insitu_workflow_file_is_stable(self, path: str) -> bool:
         try:
-            if self.fitting_view_model.storage.is_remote_source(path):
+            frame = self._insitu_frame_for_token(path)
+            if self.fitting_view_model.storage.is_remote_source(str(frame.path)):
                 return True
-            stat = os.stat(path)
+            watched_paths = frame.module_paths or (frame.path,)
+            stats = tuple(
+                (int(item.stat().st_size), float(item.stat().st_mtime))
+                for item in watched_paths
+            )
             previous = self._insitu_workflow_file_sizes.get(path)
-            current = (int(stat.st_size), float(stat.st_mtime))
-            self._insitu_workflow_file_sizes[path] = current
-            return previous == current and current[0] > 0
+            self._insitu_workflow_file_sizes[path] = stats
+            return previous == stats and all(size > 0 for size, _mtime in stats)
         except Exception:
             return False
+
+    def _insitu_frame_for_token(self, token: str) -> InSituSourceFrame:
+        cached = getattr(self, "_insitu_discovered_frames", {}) or {}
+        return cached.get(token) or InSituSourceFrame.from_token(token)
 
     def _process_next_insitu_workflow_file(self):
         if self._insitu_workflow_busy or self._insitu_workflow_state not in (
@@ -374,6 +382,8 @@ class InsituSequenceMixin:
         batch_paths = list(workflow_record.paths)
         del self._insitu_workflow_queue[: len(batch_paths)]
         path = batch_paths[0]
+        source_frame = self._insitu_frame_for_token(path)
+        source_path = str(source_frame.path)
         self._insitu_workflow_busy = True
         self._insitu_workflow_processing_file = path
         self._insitu_workflow_processing_batch = batch_paths
@@ -382,14 +392,19 @@ class InsituSequenceMixin:
         )
         self._refresh_insitu_workflow_status()
         self._log_insitu_workflow(
-            f"Loading batch of {len(batch_paths)} file(s): {os.path.basename(batch_paths[0])}"
-            + (f" -> {os.path.basename(batch_paths[-1])}" if len(batch_paths) > 1 else "")
+            f"Loading batch of {len(batch_paths)} frame(s): {source_frame.display_name}"
+            + (
+                f" -> {self._insitu_frame_for_token(batch_paths[-1]).display_name}"
+                if len(batch_paths) > 1
+                else ""
+            )
         )
         try:
-            self.current_parameters["imported_gisaxs_file"] = path
+            self.current_parameters["imported_gisaxs_file"] = source_path
+            self.current_parameters["nxs_frame_index"] = source_frame.frame_index
             if hasattr(self.ui, "gisaxsInputImportButtonValue"):
-                self.ui.gisaxsInputImportButtonValue.setText(path)
-            self._scan_folder_images_for_file(path)
+                self.ui.gisaxsInputImportButtonValue.setText(source_path)
+            self._scan_folder_images_for_file(source_path)
             self._load_insitu_workflow_batch_async(batch_paths)
             if hasattr(self.ui, "gisaxsInputStackDisplayLabel"):
                 if len(batch_paths) > 1:
@@ -399,7 +414,7 @@ class InsituSequenceMixin:
                     )
                 else:
                     self.ui.gisaxsInputStackDisplayLabel.setText(
-                        f"In-situ workflow: {os.path.splitext(os.path.basename(path))[0]}"
+                        f"In-situ workflow: {source_frame.display_name}"
                     )
         except Exception as exc:
             self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc))
@@ -412,10 +427,12 @@ class InsituSequenceMixin:
         )
         first = paths[0] if paths else ""
         last = paths[-1] if paths else first
+        first_frame = self._insitu_frame_for_token(first) if first else None
+        last_frame = self._insitu_frame_for_token(last) if last else first_frame
         batch_name = (
-            os.path.basename(first)
+            first_frame.display_name
             if len(paths) == 1
-            else f"{os.path.basename(first)} -> {os.path.basename(last)}"
+            else f"{first_frame.display_name} -> {last_frame.display_name}"
         )
         return {
             "file_index": (
@@ -424,10 +441,12 @@ class InsituSequenceMixin:
                 else len(getattr(self, "_insitu_workflow_results", []) or []) + 1
             ),
             "file_name": batch_name,
-            "file_path": str(first),
+            "file_path": str(first_frame.path) if first_frame else "",
+            "frame_index": first_frame.frame_index if first_frame else 0,
             "batch_size": len(paths),
             "batch_files": json.dumps(
-                [os.path.basename(path) for path in paths], ensure_ascii=False
+                [self._insitu_frame_for_token(path).display_name for path in paths],
+                ensure_ascii=False,
             ),
             "batch_paths": json.dumps(paths, ensure_ascii=False),
             "timestamp": (
@@ -535,7 +554,9 @@ class InsituSequenceMixin:
             widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
             image_label = widgets.get("image_label")
             if image_label is not None:
-                image_label.setText(f"Current image: {file_path}")
+                image_label.setText(
+                    f"Current image: {self._insitu_frame_for_token(file_path).display_name}"
+                )
             if refresh_views and (settings["auto_show"] or settings["auto_cut"]):
                 self._draw_insitu_workflow_image_preview(image_data, file_path)
 

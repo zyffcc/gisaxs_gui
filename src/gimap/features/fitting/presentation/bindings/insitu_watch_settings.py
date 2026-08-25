@@ -79,7 +79,35 @@ class InsituWatchSettingsMixin:
             "wait_stable": bool(widgets.get("stable").isChecked())
             if widgets.get("stable")
             else True,
+            "source_kind": (
+                "nxs"
+                if widgets.get("source_kind")
+                and widgets["source_kind"].currentText() == "NXS module series"
+                else "cbf"
+            ),
+            "recursive": bool(widgets.get("recursive").isChecked())
+            if widgets.get("recursive")
+            else True,
+            "nxs_module_count": int(widgets.get("nxs_module_count").value())
+            if widgets.get("nxs_module_count")
+            else 1,
         }
+
+    def _update_insitu_source_kind_ui(self):
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        pattern = widgets.get("sequence_pattern")
+        kind = self._insitu_workflow_settings().get("source_kind", "cbf")
+        if pattern is not None:
+            previous = pattern.text().strip().lower()
+            if not previous or previous in {"*.cbf", "*.nxs"}:
+                pattern.setText("*.nxs" if kind == "nxs" else "*.cbf")
+            pattern.setPlaceholderText("*.nxs" if kind == "nxs" else "*.cbf")
+        module_editor = widgets.get("nxs_module_count")
+        if module_editor is not None:
+            module_editor.setVisible(kind == "nxs")
+            page = getattr(self.ui, "fittingInsituSeriesPage", None)
+            if page is not None:
+                page.ui.workflowControls.nxsModuleCountLabel.setVisible(kind == "nxs")
 
     def _update_insitu_run_mode_ui(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
@@ -254,12 +282,15 @@ class InsituWatchSettingsMixin:
         batch = getattr(self, "_insitu_workflow_processing_batch", None) or []
         try:
             if len(batch) > 1:
-                return f"{os.path.basename(batch[0])} -> {os.path.basename(batch[-1])} ({len(batch)} files)"
+                first = self._insitu_frame_for_token(batch[0]).display_name
+                last = self._insitu_frame_for_token(batch[-1]).display_name
+                return f"{first} -> {last} ({len(batch)} frames)"
             if len(batch) == 1:
-                return os.path.basename(batch[0])
+                return self._insitu_frame_for_token(batch[0]).display_name
         except Exception:
             pass
-        return os.path.basename(self._insitu_workflow_processing_file or "-")
+        current = self._insitu_workflow_processing_file
+        return self._insitu_frame_for_token(current).display_name if current else "-"
 
     def _format_optional_float(self, value):
         try:

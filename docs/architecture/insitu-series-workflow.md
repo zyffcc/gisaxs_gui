@@ -5,11 +5,13 @@
 - **Related code**:
   [`src/gimap/features/fitting/domain/insitu_recipe.py`](../../src/gimap/features/fitting/domain/insitu_recipe.py)、
   [`src/gimap/features/fitting/application/insitu_recipe.py`](../../src/gimap/features/fitting/application/insitu_recipe.py)、
-  [`src/gimap/features/fitting/application/insitu.py`](../../src/gimap/features/fitting/application/insitu.py)
+  [`src/gimap/features/fitting/application/insitu.py`](../../src/gimap/features/fitting/application/insitu.py)、
+  [`src/gimap/features/fitting/infrastructure/adapters/local_files.py`](../../src/gimap/features/fitting/infrastructure/adapters/local_files.py)
 - **Related tests**:
   [`tests/test_fitting_insitu_recipe.py`](../../tests/test_fitting_insitu_recipe.py)、
-  [`tests/test_fitting_insitu_workflow.py`](../../tests/test_fitting_insitu_workflow.py)
-- **Last verified**: 2026-08-21
+  [`tests/test_fitting_insitu_workflow.py`](../../tests/test_fitting_insitu_workflow.py)、
+  [`tests/test_fitting_file_use_cases.py`](../../tests/test_fitting_file_use_cases.py)
+- **Last verified**: 2026-08-25
 
 ## 设计结论
 
@@ -62,7 +64,9 @@ Colormap、vmin/vmax、zoom、当前标签页等 `DisplayState` 不进入 Recipe
 
 ## 三种工作模式
 
-- **Live monitor**：监视目录中的新文件。新文件稳定后进入队列，只使用当时生效的 Recipe 版本；
+- **Live monitor**：递归监视 acquisition root。CBF 中每个文件是一帧；NXS 中同名前缀的 module
+  files 组成一个逻辑 detector sequence，内部 dataset 的每个 frame 是一帧。帧稳定后进入队列，
+  只使用当时生效的 Recipe 版本；
 - **Review history**：回看已处理文件、状态、参数和趋势。默认不重新计算；显式 reprocess 才产生新结果；
 - **Batch process**：先确定文件集合和顺序，再使用一个 Recipe 执行。可暂停、取消、失败继续并恢复状态。
 
@@ -80,9 +84,14 @@ Source → Preprocess → Geometry → Yoneda & cut → Fit → Results
 ```
 
 - 点击节点只切换该步骤的参数和解释，不立即计算，也不改变当前 Preview/Frames/Log 标签；
-- Source 选择 `Live Watch` 或 `Process Existing Sequence`，两者共享 folder、pattern、Recipe、
-  进度和结果缓存；
-- Preview 始终显示当前处理图像和 cut/fit 曲线，Frames 按行显示每个文件在 load、preprocess、
+- Source 选择 `Live Watch` 或 `Process Existing Sequence`，并显式选择 CBF 或 NXS。两者共享 root
+  folder、recursive、pattern、Recipe、进度和结果缓存；NXS 还声明本次探测器预期 module 数（默认
+  11），未形成完整 module group 或各 module 内部帧数不一致时不得入队；
+- Live 的 seen identity 是 `(logical path, internal frame index)`，而不是单独的文件路径。因此同一
+  NXS 文件内追加 frame 和新产生的另一组 NXS files 都能在后续轮询中进入队列；
+- Preview 始终显示当前处理图像和 cut/fit 曲线。其 Image display 提供 auto scale、log intensity、
+  vmin/vmax、colormap、center 和 cut ROI overlay；这些控件只重绘当前 preview，不进入 Recipe、
+  不产生新的 AnalysisImage revision，也不触发 cut/fit 或页面跳转。Frames 按行显示每个帧在 load、preprocess、
   geometry、cut、fit 各步骤的状态；
 - 选中某一帧时，流程节点显示该帧实际状态，而不是把“点击过”误认为“执行成功”；
 - Start、Pause、Stop 是页面底部固定命令，不随参数节点或结果标签切换而移动；
