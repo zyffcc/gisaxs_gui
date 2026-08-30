@@ -19,6 +19,10 @@ class WaxsExportPort(Protocol):
 
     def export_curve(self, path: Path, x: np.ndarray, y: np.ndarray) -> None: ...
 
+    def export_curve_image(
+        self, path: Path, x: np.ndarray, y: np.ndarray, display: dict
+    ) -> None: ...
+
     def export_matrix(
         self, path: Path, columns: tuple[np.ndarray, ...], headers: tuple[str, ...]
     ) -> None: ...

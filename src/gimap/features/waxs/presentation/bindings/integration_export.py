@@ -120,6 +120,16 @@ class IntegrationExportMixin:
         if self._current_view_is_cut:
             image, _extent = self._cut_image_by_q_range(image)
         mask_min, mask_max = self._display_mask_limits()
+        coordinate_mode = (
+            "q" if self.coordinate_mode_combo.currentText() == "q space" else "pixel"
+        )
+        q_range = None
+        if coordinate_mode == "q" and self._current_view_is_cut:
+            geometry = self._geometry_settings()
+            q_range = {
+                key: None if geometry[key] == -121.0 else geometry[key]
+                for key in ("qr_min", "qr_max", "qz_min", "qz_max")
+            }
         exported = self.view_model.export_image(
             Path(self.view_model.normalize_path(path)),
             image,
@@ -131,6 +141,9 @@ class IntegrationExportMixin:
                 "vmax": self.vmax_spin.value(),
                 "mask_min": mask_min,
                 "mask_max": mask_max,
+                "coordinate_mode": coordinate_mode,
+                "geometry": self._geometry_settings(),
+                "q_range": q_range,
             },
         )
         if exported is None:

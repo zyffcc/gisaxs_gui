@@ -7,6 +7,7 @@ from src.gimap.features.waxs.application import (
     RunWaxsBatch,
     WaxsBatchRequest,
     WaxsBatchResult,
+    WaxsBatchSource,
 )
 
 
@@ -35,12 +36,16 @@ class _Exporter:
         self.images = []
         self.curves = []
         self.matrices = []
+        self.curve_images = []
 
     def export_image(self, path, image, display):
         self.images.append((path, image.copy(), display))
 
     def export_curve(self, path, x, y):
         self.curves.append((path, x.copy(), y.copy()))
+
+    def export_curve_image(self, path, x, y, display):
+        self.curve_images.append((path, x.copy(), y.copy(), display))
 
     def export_matrix(self, path, columns, headers):
         self.matrices.append((path, columns, headers))
@@ -144,3 +149,54 @@ def test_run_batch_use_case_uses_runner_port(tmp_path):
     assert runner.request.folder == tmp_path
     assert use_case.cancel() is True
     assert use_case.set_paused(True) is True
+
+
+def test_batch_processes_multiple_sources_into_named_subfolders(tmp_path):
+    first = tmp_path / "run_a"
+    second = tmp_path / "run_b"
+
+    class Catalog:
+        def discover(self, folder, pattern):
+            assert pattern == "*.nxs"
+            return (folder / "scan.nxs",)
+
+    class Images:
+        def frame_count(self, path):
+            return 1
+
+        def load_frame(self, path, frame_index):
+            return np.ones((5, 5), dtype=np.float32)
+
+    request = _request(tmp_path)
+    request = WaxsBatchRequest(
+        **{
+            **request.__dict__,
+            "sources": (
+                WaxsBatchSource(first, "*.nxs", "sample_a"),
+                WaxsBatchSource(second, "*.nxs", "sample_b"),
+            ),
+            "export_q_images": True,
+            "export_curve_images": True,
+            "q_range": {
+                "qr_min": -1.0,
+                "qr_max": 1.0,
+                "qz_min": 0.0,
+                "qz_max": 2.0,
+            },
+        }
+    )
+    exporter = _Exporter()
+
+    result = ProcessWaxsBatch(Images(), Catalog(), exporter).execute(request)
+
+    assert len(result.items) == 2
+    image_paths = {str(entry[0].relative_to(tmp_path / "out")) for entry in exporter.images}
+    assert image_paths == {
+        str(Path("sample_a/2D_pixel/scan.png")),
+        str(Path("sample_a/2D_q/scan.png")),
+        str(Path("sample_b/2D_pixel/scan.png")),
+        str(Path("sample_b/2D_q/scan.png")),
+    }
+    assert len(exporter.curve_images) == 2
+    assert exporter.images[1][2]["coordinate_mode"] == "q"
+    assert exporter.images[1][2]["q_range"] == request.q_range

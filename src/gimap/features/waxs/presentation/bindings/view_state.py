@@ -43,6 +43,30 @@ class ViewStateMixin:
             "qz_max": self.qz_max_spin.value(),
         }
 
+    def _update_geometry_summaries(self, *_args) -> None:
+        geometry = self._geometry_settings()
+        summary = (
+            f"SDD {geometry['distance']:.3f} mm  ·  "
+            f"pixel {geometry['pixel_x']:.3f} × {geometry['pixel_y']:.3f} µm  ·  "
+            f"center ({geometry['center_x']:.2f}, {geometry['center_y']:.2f}) px\n"
+            f"λ {geometry['wavelength']:.5g} Å  ·  incidence {geometry['incidence']:.4g}°"
+        )
+        self.coordinate_geometry_summary.setText(summary)
+        self.batch_geometry_summary.setText(summary)
+
+    def _show_geometry_settings(self) -> None:
+        self.waxs_workflow_tabs.setCurrentIndex(1)
+        self.advanced_tabs.setCurrentIndex(2)
+
+    def _update_batch_q_range_enabled(self, enabled: bool) -> None:
+        for widget in (
+            self.batch_qr_min,
+            self.batch_qr_max,
+            self.batch_qz_min,
+            self.batch_qz_max,
+        ):
+            widget.setEnabled(bool(enabled))
+
     def _integration_settings(self) -> dict:
         return {
             "mode": self.integration_mode.currentText().lower(),

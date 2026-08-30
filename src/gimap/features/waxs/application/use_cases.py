@@ -136,8 +136,32 @@ class ExportWaxsImage:
 
 
 class ComputeWaxsQMaps:
+    _GEOMETRY_KEYS = (
+        "incidence",
+        "center_x",
+        "center_y",
+        "distance",
+        "pixel_x",
+        "pixel_y",
+        "wavelength",
+    )
+
+    def __init__(self):
+        self._cache_key = None
+        self._cache_value = None
+
     def execute(self, request: WaxsQMapRequest) -> tuple[np.ndarray, np.ndarray]:
-        return compute_q_maps(request.shape, request.geometry)
+        key = (
+            tuple(request.shape[:2]),
+            *(float(request.geometry[name]) for name in self._GEOMETRY_KEYS),
+        )
+        if key != self._cache_key:
+            qr, qz = compute_q_maps(request.shape, request.geometry)
+            qr.setflags(write=False)
+            qz.setflags(write=False)
+            self._cache_key = key
+            self._cache_value = (qr, qz)
+        return self._cache_value
 
 
 class CutWaxsImage:

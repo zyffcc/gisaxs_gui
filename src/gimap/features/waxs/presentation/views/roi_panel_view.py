@@ -282,9 +282,30 @@ class WaxsRoiPanelView:
         self.apply_cut_button.setObjectName("apply_cut_button")
         self.roi_layout.setWidget(26, QtWidgets.QFormLayout.FieldRole, self.apply_cut_button)
 
+        self.coordinateModeLabel = QtWidgets.QLabel(waxsRoiPanel)
+        self.coordinateModeLabel.setObjectName("coordinateModeLabel")
+        self.coordinate_mode_combo = QtWidgets.QComboBox(waxsRoiPanel)
+        self.coordinate_mode_combo.setObjectName("coordinate_mode_combo")
+        self.coordinate_mode_combo.addItems(["Pixel", "q space"])
+        self.roi_layout.insertRow(
+            1, self.coordinateModeLabel, self.coordinate_mode_combo
+        )
+        self.coordinate_geometry_summary = QtWidgets.QLabel(waxsRoiPanel)
+        self.coordinate_geometry_summary.setObjectName("coordinate_geometry_summary")
+        self.coordinate_geometry_summary.setWordWrap(True)
+        self.coordinate_geometry_summary.setTextInteractionFlags(
+            QtCore.Qt.TextSelectableByMouse
+        )
+        self.roi_layout.insertRow(2, self.coordinate_geometry_summary)
+        self.edit_geometry_button = QtWidgets.QPushButton(waxsRoiPanel)
+        self.edit_geometry_button.setObjectName("edit_geometry_button")
+        self.roi_layout.insertRow(3, self.edit_geometry_button)
+
         self.retranslateUi(waxsRoiPanel)
         QtCore.QMetaObject.connectSlotsByName(waxsRoiPanel)
-        waxsRoiPanel.setTabOrder(self.cut_type_combo, self.show_cut_region_check)
+        waxsRoiPanel.setTabOrder(self.cut_type_combo, self.coordinate_mode_combo)
+        waxsRoiPanel.setTabOrder(self.coordinate_mode_combo, self.edit_geometry_button)
+        waxsRoiPanel.setTabOrder(self.edit_geometry_button, self.show_cut_region_check)
         waxsRoiPanel.setTabOrder(self.show_cut_region_check, self.show_center_check)
         waxsRoiPanel.setTabOrder(self.show_center_check, self.pick_center_button)
         waxsRoiPanel.setTabOrder(self.pick_center_button, self.qr_min_spin)
@@ -310,6 +331,10 @@ class WaxsRoiPanelView:
     def retranslateUi(self, waxsRoiPanel):
         _translate = QtCore.QCoreApplication.translate
         self.cutTypeLabel.setText(_translate("WaxsRoiPanel", "Cut Type:"))
+        self.coordinateModeLabel.setText(_translate("WaxsRoiPanel", "Preview axes:"))
+        self.edit_geometry_button.setText(
+            _translate("WaxsRoiPanel", "Edit detector geometry...")
+        )
         self.cut_type_combo.setItemText(0, _translate("WaxsRoiPanel", "Q Range"))
         self.cut_type_combo.setItemText(1, _translate("WaxsRoiPanel", "Line Cut"))
         self.cut_type_combo.setItemText(2, _translate("WaxsRoiPanel", "Circle Cut"))

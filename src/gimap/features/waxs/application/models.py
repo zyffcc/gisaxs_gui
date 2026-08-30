@@ -41,6 +41,18 @@ class WaxsCurve:
 
 
 @dataclass(frozen=True)
+class WaxsBatchSource:
+    folder: Path
+    pattern: str = "*.tif"
+    output_subfolder: str | None = None
+
+    @property
+    def resolved_output_subfolder(self) -> str:
+        value = (self.output_subfolder or "").strip()
+        return value or self.folder.name
+
+
+@dataclass(frozen=True)
 class WaxsBatchRequest:
     folder: Path
     pattern: str
@@ -55,6 +67,16 @@ class WaxsBatchRequest:
     mask_max: float
     timeout_seconds: float | None = None
     continue_on_error: bool = True
+    sources: tuple[WaxsBatchSource, ...] = ()
+    export_q_images: bool = False
+    export_curve_images: bool = False
+    q_range: dict[str, float | None] | None = None
+
+    @property
+    def batch_sources(self) -> tuple[WaxsBatchSource, ...]:
+        if self.sources:
+            return self.sources
+        return (WaxsBatchSource(self.folder, self.pattern),)
 
 
 @dataclass(frozen=True)

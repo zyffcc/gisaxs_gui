@@ -46,28 +46,59 @@ class ProcessWaxsBatch:
         is_cancelled=None,
         wait_if_paused=None,
     ) -> WaxsBatchResult:
-        files = self._catalog.discover(request.folder, request.pattern)
-        if not files:
-            raise RuntimeError("No matching .nxs, .tif, or .tiff files found.")
         work_items = []
         results = []
-        for path in files:
-            try:
-                count = max(1, int(self._images.frame_count(path)))
-            except Exception as exc:
+        source_states = {}
+        for source in request.batch_sources:
+            files = self._catalog.discover(source.folder, source.pattern)
+            if not files:
                 results.append(
-                    WaxsBatchItem(path, 0, path.stem, "failed", str(exc))
+                    WaxsBatchItem(
+                        source.folder,
+                        0,
+                        source.folder.name,
+                        "failed",
+                        "No matching .nxs, .tif, or .tiff files found.",
+                    )
                 )
                 if not request.continue_on_error:
                     return WaxsBatchResult(tuple(results))
                 continue
-            work_items.extend((path, index, count) for index in range(count))
+            source_output = request.output_folder
+            if request.sources:
+                output_name = source.resolved_output_subfolder
+                if Path(output_name).name != output_name or output_name in {".", ".."}:
+                    raise ValueError(
+                        "Each batch output subfolder must be a simple folder name."
+                    )
+                source_output = source_output / output_name
+            source_key = str(source_output).casefold()
+            if source_key in source_states:
+                raise ValueError(
+                    f"Batch output subfolder is duplicated: {source_output.name}"
+                )
+            source_states[source_key] = {
+                "output": source_output,
+                "curve_columns": [],
+                "curve_names": [],
+                "background": None,
+                "background_columns": [],
+                "x_axis": None,
+            }
+            for path in files:
+                try:
+                    count = max(1, int(self._images.frame_count(path)))
+                except Exception as exc:
+                    results.append(
+                        WaxsBatchItem(path, 0, path.stem, "failed", str(exc))
+                    )
+                    if not request.continue_on_error:
+                        return WaxsBatchResult(tuple(results))
+                    continue
+                work_items.extend(
+                    (source_key, path, index, count) for index in range(count)
+                )
 
-        curve_columns = []
-        curve_names = []
-        background = None
-        background_columns = []
-        x_axis = None
         total = len(work_items) + len(results)
         completed = len(results)
         if on_progress:
@@ -80,24 +111,41 @@ class ProcessWaxsBatch:
                         item.status,
                     )
                 )
-        for path, frame_index, frame_count in work_items:
+        for source_key, path, frame_index, frame_count in work_items:
             if wait_if_paused:
                 wait_if_paused()
             if is_cancelled and is_cancelled():
                 return WaxsBatchResult(tuple(results), cancelled=True)
             suffix = f"_f{frame_index + 1:04d}" if frame_count > 1 else ""
             name = f"{path.stem}{suffix}"
+            source_state = source_states[source_key]
+            output_folder = source_state["output"]
             try:
                 loaded = self._load_image.execute(
                     LoadWaxsImageRequest(path, frame_index)
                 )
                 if request.export_images:
                     self._exporter.export_image(
-                        request.output_folder / "images" / f"{name}.png",
+                        output_folder / "2D_pixel" / f"{name}.png",
                         loaded.image,
-                        request.display,
+                        {**request.display, "coordinate_mode": "pixel"},
                     )
-                if request.export_curves or request.export_background_subtracted:
+                if request.export_q_images:
+                    self._exporter.export_image(
+                        output_folder / "2D_q" / f"{name}.png",
+                        loaded.image,
+                        {
+                            **request.display,
+                            "coordinate_mode": "q",
+                            "geometry": request.geometry,
+                            "q_range": request.q_range,
+                        },
+                    )
+                if (
+                    request.export_curves
+                    or request.export_curve_images
+                    or request.export_background_subtracted
+                ):
                     curve = self._integrate.execute(
                         IntegrateWaxsImageRequest(
                             loaded.image,
@@ -107,21 +155,35 @@ class ProcessWaxsBatch:
                             request.mask_max,
                         )
                     )
-                    if x_axis is None:
-                        x_axis = curve.x
-                        curve_columns.append(curve.x)
-                    curve_columns.append(curve.intensity)
-                    curve_names.append(name)
-                    curve_path = request.output_folder / "1D"
+                    if request.export_curves or request.export_background_subtracted:
+                        if source_state["x_axis"] is None:
+                            source_state["x_axis"] = curve.x
+                            source_state["curve_columns"].append(curve.x)
+                        source_state["curve_columns"].append(curve.intensity)
+                        source_state["curve_names"].append(name)
+                    curve_path = output_folder / "1D"
                     if request.export_curves:
                         self._exporter.export_curve(
                             curve_path / f"{name}.csv", curve.x, curve.intensity
                         )
+                    if request.export_curve_images:
+                        self._exporter.export_curve_image(
+                            curve_path / f"{name}.png",
+                            curve.x,
+                            curve.intensity,
+                            {
+                                **request.display,
+                                "x_label": self._curve_x_label(request.integration),
+                                "curve_log_scale": bool(
+                                    request.display.get("log_scale", False)
+                                ),
+                            },
+                        )
                     if request.export_background_subtracted:
-                        if background is None:
-                            background = curve.intensity
-                        corrected = curve.intensity - background
-                        background_columns.append(corrected)
+                        if source_state["background"] is None:
+                            source_state["background"] = curve.intensity
+                        corrected = curve.intensity - source_state["background"]
+                        source_state["background_columns"].append(corrected)
                         self._exporter.export_curve(
                             curve_path / f"{name}_subbg.csv", curve.x, corrected
                         )
@@ -139,20 +201,41 @@ class ProcessWaxsBatch:
             if item.status == "failed" and not request.continue_on_error:
                 break
 
-        curve_path = request.output_folder / "1D"
-        if curve_columns:
-            self._exporter.export_matrix(
-                curve_path / "output.csv",
-                tuple(curve_columns),
-                tuple(["x"] + curve_names),
-            )
-        if background_columns and x_axis is not None:
-            self._exporter.export_matrix(
-                curve_path / "output_subbg.csv",
-                tuple([x_axis] + background_columns),
-                tuple(["x"] + curve_names[: len(background_columns)]),
-            )
+        for source_state in source_states.values():
+            curve_path = source_state["output"] / "1D"
+            if source_state["curve_columns"]:
+                self._exporter.export_matrix(
+                    curve_path / "output.csv",
+                    tuple(source_state["curve_columns"]),
+                    tuple(["x"] + source_state["curve_names"]),
+                )
+            if (
+                source_state["background_columns"]
+                and source_state["x_axis"] is not None
+            ):
+                self._exporter.export_matrix(
+                    curve_path / "output_subbg.csv",
+                    tuple(
+                        [source_state["x_axis"]]
+                        + source_state["background_columns"]
+                    ),
+                    tuple(
+                        ["x"]
+                        + source_state["curve_names"][
+                            : len(source_state["background_columns"])
+                        ]
+                    ),
+                )
         return WaxsBatchResult(tuple(results))
+
+    @staticmethod
+    def _curve_x_label(integration: dict) -> str:
+        mode = str(integration.get("x_axis", "q")).lower()
+        if mode == "pixel":
+            return "Radius (pixel)"
+        if mode == "2theta":
+            return "2θ (°)"
+        return "q (Å⁻¹)"
 
 
 class RunWaxsBatch:

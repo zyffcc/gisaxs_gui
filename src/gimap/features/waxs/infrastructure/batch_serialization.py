@@ -2,7 +2,12 @@
 
 from pathlib import Path
 
-from ..application import WaxsBatchItem, WaxsBatchRequest, WaxsBatchResult
+from ..application import (
+    WaxsBatchItem,
+    WaxsBatchRequest,
+    WaxsBatchResult,
+    WaxsBatchSource,
+)
 
 
 def request_to_payload(request: WaxsBatchRequest) -> dict:
@@ -20,6 +25,17 @@ def request_to_payload(request: WaxsBatchRequest) -> dict:
         "mask_max": request.mask_max,
         "timeout_seconds": request.timeout_seconds,
         "continue_on_error": request.continue_on_error,
+        "sources": [
+            {
+                "folder": str(source.folder),
+                "pattern": source.pattern,
+                "output_subfolder": source.output_subfolder,
+            }
+            for source in request.sources
+        ],
+        "export_q_images": request.export_q_images,
+        "export_curve_images": request.export_curve_images,
+        "q_range": request.q_range,
     }
 
 
@@ -27,6 +43,14 @@ def request_from_payload(value: dict) -> WaxsBatchRequest:
     payload = dict(value)
     payload["folder"] = Path(payload["folder"])
     payload["output_folder"] = Path(payload["output_folder"])
+    payload["sources"] = tuple(
+        WaxsBatchSource(
+            folder=Path(source["folder"]),
+            pattern=str(source.get("pattern", "*.tif")),
+            output_subfolder=source.get("output_subfolder"),
+        )
+        for source in payload.get("sources", ())
+    )
     return WaxsBatchRequest(**payload)
 
 

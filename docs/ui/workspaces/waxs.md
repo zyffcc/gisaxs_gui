@@ -12,7 +12,7 @@
 - 独立入口：`WAXS/WAXS.py`（薄兼容启动器）→ `src/gimap/features/waxs/standalone.py` → 同一 feature page。
 - 页面 workflow layout：`src/gimap/features/waxs/presentation/workflow_layout.py`。
 - 页面样式：`src/gimap/features/waxs/presentation/waxs_theme.qss`。
-- 最近验证：2026-08-19。
+- 最近验证：2026-08-30。
 
 ## 当前现代化工作流
 
@@ -26,9 +26,24 @@ Load data
 Preview / Results / Export
 ```
 
-`Cut + integrate` 保留 ROI/Cut 与 1D Integration 子页签；`Advanced` 直接显示
-Display、Mask、Geometry，不再增加一层折叠；`Batch` 独立承载 folder、pattern、output、
-export selections 和 job status。单文件 integration 与文件夹 batch 仍调用原有命令。
+`Cut + integrate` 保留 ROI/Cut 与 1D Integration 子页签，并在 ROI/Cut 顶部提供 Pixel / q-space
+预览切换和只读 detector geometry 摘要（SDD、pixel size、beam center、wavelength、incidence）；
+`Advanced` 直接显示 Display、Mask、Geometry，不再增加一层折叠；`Batch` 独立承载多数据源表格、
+export root、四类导出、出版图外观、可选 q 显示范围和 job status。单文件 integration 与文件夹
+batch 仍调用同一组 application commands。
+
+q-space preview 与 2D q export 使用逐 detector cell 的 signed `qr` / `qz` 网格，不使用
+`imshow extent` 把非规则 q 网格拉伸为规则矩形。默认 q export 显示 detector 可达的完整范围；
+只有用户勾选 `Limit the exported q view` 后才应用 `qr/qz min/max`。出版图预设采用 300 dpi、
+大号坐标轴和刻度、带单位的 colorbar，并允许直接配置 colormap、Linear/Log10、Auto limits 或
+Vmin/Vmax。`Preview export style` 把这些选项投影到当前 2D preview；它只修改 display state。
+
+Batch 的每一行表示一个输入文件夹，可分别编辑 glob pattern 和输出子目录。输出子目录默认使用
+输入文件夹名，最终路径为 `<export root>/<output subfolder>/`，其下按 `2D_pixel/`、`2D_q/`
+和 `1D/` 分类。输出子目录必须是简单目录名且在同一任务中唯一，避免不同数据源互相覆盖。
+
+出版图设计参考 TUM INSIGHT 的 reciprocal-space plotting 与 batch/export 工作流：
+[Reus et al., J. Appl. Cryst. 57 (2024)](https://doi.org/10.1107/S1600576723011159)。
 
 `ui.waxs_page` re-export 页面类和 `load_image_matrix` public API，但不包含页面或
 文件读取实现。图像读取兼容函数由 WAXS infrastructure 拥有；路径规范化、工作目录和目录
@@ -42,9 +57,13 @@ export selections 和 job status。单文件 integration 与文件夹 batch 仍�
 | Open File、Reload、NXS frame | `Load data` | Open detector file 为主操作；loader、extensions、frame indexing 和 drag/drop 不变 |
 | toolbar auto/log/colormap | `Input` 快速显示控件 | 与 Advanced Display 原双向同步保留 |
 | detector/curve viewer、metadata、2D/1D switch | `Preview / PlotPanel` | image orientation、q extent、overlay、curve rendering 不变 |
-| ROI/Cut、1D Integration tabs | `1 Cut + integrate` | Q range、line/circle cut、binning、smoothing 和 axis mode 不变 |
+| ROI/Cut、1D Integration tabs | `1 Cut + integrate` | Pixel/q-space preview、geometry 摘要、Q range、line/circle cut、binning、smoothing 和 axis mode |
 | Display、Mask、Geometry tabs | `2 Advanced` | 独立 workspace；单位、默认值、mask threshold 和 q-map 几何不变 |
-| Batch/In-situ input、export selection、start/pause/stop | `3 Batch` | 独立 workspace；仍调用 `WaxsViewModel` 与 JobRunner batch adapter |
+| Batch data sources | `3 Batch / Data sources` | 多行 folder、pattern、output subfolder；新增行默认以输入文件夹名作为输出子目录 |
+| Batch export selection | `3 Batch / Outputs` | 2D pixel PNG、2D q PNG、1D CSV、1D PNG 可独立选择 |
+| Batch publication appearance | `3 Batch / Publication appearance` | colormap、Log10、Auto/Vmin/Vmax；可显式预览或从当前 preview 复制 |
+| Batch q conversion | `3 Batch / q conversion` | 显示 SDD/pixel/center 等 geometry；可选 qr/qz 显示范围 |
+| Batch start/pause/stop | `3 Batch` | 独立 workspace；仍调用 `WaxsViewModel` 与 JobRunner batch adapter |
 | load/batch status 与 progress | shared `JobStatus` | 旧 `status_label`/`progress` 别名保留，百分比仍为 0–100 |
 | latest integration status | `Results / ParameterSection` | curve point count 和 completion message 不变 |
 | Export Image、Export 1D | `Export / ParameterSection` | 复用原按钮实例和 exporter adapters |
@@ -71,12 +90,15 @@ objectName、signal connection、快捷键和错误提示保持不变。`WaxsVie
 - [ ] Cut + integrate、Advanced、Batch 切换不改变 vmin/vmax、mask 或 geometry 值；
 - [ ] Preview 的 2D/1D switch、colorbar、metadata 和 orientation 正确；
 - [ ] Q Range rectangle、Line Cut、Circle Cut、Pick Center 和 Clear ROI 正常；
-- [ ] q-map extent、incidence、center、distance、pixel size、wavelength 单位不变；
+- [ ] Pixel/q-space 切换使用真实 q 网格；incidence、center、distance、pixel size、wavelength 摘要与 Geometry 同步；
 - [ ] mask min/max、bad-pixel threshold、Apply/Reset Mask 正常；
 - [ ] radial/azimuthal integration、bins、smoothing、q/pixel/2theta 输出一致；
 - [ ] Results 显示正确 curve point count；
-- [ ] Export Image 与 Export 1D 文件格式、坐标和 array orientation 不变；
-- [ ] Batch folder/pattern/output 和三个 export selections 正常；
+- [ ] Export Image 根据当前 Pixel/q-space 模式写出正确坐标、单位和 array orientation；
+- [ ] Batch 多行 folder/pattern/output subfolder 可编辑，重复或非法 output subfolder 会就地报错；
+- [ ] 四类 batch output 可独立选择，默认输出位于 export root 下以输入文件夹名命名的子目录；
+- [ ] q export 未限制时显示完整范围，限制后使用指定 qr/qz 范围；
+- [ ] 2D/1D PNG 的轴标题、刻度、colorbar 和 300 dpi 出版预设正确，外观 preview 不触发 scientific command；
 - [ ] Batch Start/Pause/Resume/Stop、continue/error behavior 和 JobStatus 正常；
 - [ ] 单个坏文件不会导致 GUI 进程退出；
 - [ ] calibration 写入的 geometry 在 WAXS 页面继续正确同步。

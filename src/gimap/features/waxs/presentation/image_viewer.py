@@ -91,10 +91,11 @@ class ScatteringImageViewer(QWidget):
         extent: tuple[float, float, float, float] | None = None,
         xlabel: str = "X (pixel)",
         ylabel: str = "Y (pixel)",
+        q_coordinates: tuple[np.ndarray, np.ndarray] | None = None,
     ) -> None:
         render_start = time.perf_counter()
         raw = np.asarray(image)
-        preview_source, preview_extent = self._preview_image(raw, extent)
+        preview_source, preview_extent, stride = self._preview_image(raw, extent)
         preview = self.view_model.prepare_display(
             preview_source,
             log_scale=log_scale,
@@ -122,15 +123,33 @@ class ScatteringImageViewer(QWidget):
         self.cax.clear()
         cmap = colormaps.get_cmap(colormap).copy()
         cmap.set_bad(cmap(0.0))
-        artist = self.ax.imshow(
-            preview,
-            origin="upper",
-            cmap=cmap,
-            vmin=vmin,
-            vmax=vmax,
-            aspect="equal",
-            extent=preview_extent,
-        )
+        if q_coordinates is None:
+            artist = self.ax.imshow(
+                preview,
+                origin="upper",
+                cmap=cmap,
+                vmin=vmin,
+                vmax=vmax,
+                aspect="equal",
+                extent=preview_extent,
+            )
+        else:
+            horizontal_q, qz = q_coordinates
+            horizontal_preview = np.asarray(horizontal_q)[::stride, ::stride]
+            qz_preview = np.asarray(qz)[::stride, ::stride]
+            if flip_vertical:
+                horizontal_preview = np.flipud(horizontal_preview)
+                qz_preview = np.flipud(qz_preview)
+            artist = self.ax.pcolormesh(
+                horizontal_preview,
+                qz_preview,
+                preview,
+                shading="nearest",
+                cmap=cmap,
+                vmin=vmin,
+                vmax=vmax,
+                rasterized=True,
+            )
         self.ax.set_aspect("equal", adjustable="box", anchor="C")
         self.ax.set_anchor("C")
         self.ax.set_title(title)
@@ -154,7 +173,7 @@ class ScatteringImageViewer(QWidget):
         self,
         image: np.ndarray,
         extent: tuple[float, float, float, float] | None,
-    ) -> tuple[np.ndarray, tuple[float, float, float, float] | None]:
+    ) -> tuple[np.ndarray, tuple[float, float, float, float] | None, int]:
         height, width = image.shape[:2]
         canvas_w = max(64, int(self.canvas.width()))
         canvas_h = max(64, int(self.canvas.height()))
@@ -173,9 +192,8 @@ class ScatteringImageViewer(QWidget):
         self._preview_cache_key = (id(image), image.shape, str(image.dtype), stride, extent)
         self._preview_cache_array = preview
         self._preview_cache_extent = preview_extent
-        return preview, preview_extent
+        return preview, preview_extent, stride
 
-    @staticmethod
     @staticmethod
     def _array_mb(arr: np.ndarray) -> float:
         return float(np.asarray(arr).nbytes) / (1024.0 * 1024.0)

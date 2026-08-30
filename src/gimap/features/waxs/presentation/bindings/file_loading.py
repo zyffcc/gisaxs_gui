@@ -83,6 +83,7 @@ class FileLoadingMixin:
         self._set_frame_controls_enabled(Path(result.file_path).suffix.lower() == ".nxs")
 
         self._sync_selection_defaults_to_image()
+        self._update_geometry_summaries()
         self._update_auto_colorbar_limits()
         self._show_2d_view()
         self.refresh_view()
@@ -115,12 +116,20 @@ class FileLoadingMixin:
         extent = None
         xlabel = "X (pixel)"
         ylabel = "Y (pixel)"
+        q_coordinates = None
         title = Path(self.current_file).name if self.current_file else "Detector Image"
         if self._current_view_is_cut:
-            image, extent = self._cut_image_by_q_range(image)
+            image, _legacy_extent = self._cut_image_by_q_range(image)
+        if self.coordinate_mode_combo.currentText() == "q space":
+            q_coordinates = self.view_model.compute_q_maps(
+                self.current_image.shape,
+                self._geometry_settings(),
+            )
             xlabel = "Qr (Å⁻¹)"
             ylabel = "Qz (Å⁻¹)"
-            title = f"{title} - Cut"
+            title = f"{title} - q space"
+        elif self._current_view_is_cut:
+            title = f"{title} - Cut mask"
         mask_min, mask_max = self._display_mask_limits()
         self.viewer.show_image(
             image,
@@ -136,7 +145,14 @@ class FileLoadingMixin:
             extent=extent,
             xlabel=xlabel,
             ylabel=ylabel,
+            q_coordinates=q_coordinates,
         )
+        if q_coordinates is not None and self._current_view_is_cut:
+            geometry = self._geometry_settings()
+            if geometry["qr_min"] != -121.0 and geometry["qr_max"] != -121.0:
+                self.viewer.ax.set_xlim(geometry["qr_min"], geometry["qr_max"])
+            if geometry["qz_min"] != -121.0 and geometry["qz_max"] != -121.0:
+                self.viewer.ax.set_ylim(geometry["qz_min"], geometry["qz_max"])
         self._draw_overlays()
         self._update_metadata(image)
 

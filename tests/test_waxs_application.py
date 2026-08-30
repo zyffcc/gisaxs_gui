@@ -72,11 +72,17 @@ class _Paths:
 def test_geometry_application_use_cases_preserve_domain_results():
     image = np.arange(16, dtype=float).reshape(4, 4) + 1.0
 
-    qr, qz = ComputeWaxsQMaps().execute(WaxsQMapRequest(image.shape, GEOMETRY))
+    use_case = ComputeWaxsQMaps()
+    qr, qz = use_case.execute(WaxsQMapRequest(image.shape, GEOMETRY))
+    cached_qr, cached_qz = use_case.execute(WaxsQMapRequest(image.shape, GEOMETRY))
     cut = CutWaxsImage().execute(WaxsCutImageRequest(image, GEOMETRY))
 
     assert qr.shape == image.shape
     assert qz.shape == image.shape
+    assert cached_qr is qr
+    assert cached_qz is qz
+    assert not qr.flags.writeable
+    assert not qz.flags.writeable
     np.testing.assert_array_equal(cut.image, image)
     assert cut.extent is not None
 

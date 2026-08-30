@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.app.presentation import apply_design_system
+from src.gimap.app.presentation import ParameterCommitCoordinator, apply_design_system
 
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
@@ -147,6 +147,9 @@ class FormSetupMixin:
             roi_ui,
             (
                 "cut_type_combo",
+                "coordinate_mode_combo",
+                "coordinate_geometry_summary",
+                "edit_geometry_button",
                 "show_cut_region_check",
                 "show_center_check",
                 "pick_center_button",
@@ -229,20 +232,38 @@ class FormSetupMixin:
         self._expose_form(
             batch_ui,
             (
-                "batch_folder_edit",
-                "batch_browse_button",
+                "batch_sources_table",
+                "batch_add_folder_button",
+                "batch_remove_folder_button",
                 "batch_pattern_edit",
                 "batch_output_edit",
                 "batch_output_browse_button",
-                "batch_export_images",
+                "batch_export_pixel_images",
+                "batch_export_q_images",
                 "batch_export_curves",
-                "batch_export_subbg",
+                "batch_export_curve_images",
+                "batch_export_cmap",
+                "batch_export_log",
+                "batch_export_auto_scale",
+                "batch_export_vmin",
+                "batch_export_vmax",
+                "batch_preview_style_button",
+                "batch_copy_preview_button",
+                "batch_geometry_summary",
+                "batch_limit_q_range",
+                "batch_qr_min",
+                "batch_qr_max",
+                "batch_qz_min",
+                "batch_qz_max",
                 "batch_start_button",
                 "batch_pause_button",
                 "batch_stop_button",
             ),
         )
         self.batch_output_edit.setText(self.view_model.working_directory())
+        self._update_geometry_summaries()
+        self._update_batch_q_range_enabled(False)
+        self._update_batch_export_limits_enabled(True)
         self.waxsRunContentLayout.insertWidget(0, batch_panel)
 
         self.status_label = self.waxs_job_status.message_label
@@ -297,6 +318,13 @@ class FormSetupMixin:
             setattr(self, name, getattr(form, name))
 
     def _connect_signals(self) -> None:
+        self.parameter_commits = ParameterCommitCoordinator(self)
+        self.parameter_commits.register_group(
+            "waxs_geometry", commit=self.refresh_view
+        )
+        self.parameter_commits.register_group(
+            "waxs_q_range", commit=self.refresh_view
+        )
         self.open_button.clicked.connect(self.open_file_dialog)
         self.reload_button.clicked.connect(self.reload_current_file)
         self.export_button.clicked.connect(self.export_current_image)
@@ -312,6 +340,8 @@ class FormSetupMixin:
         self.toolbar_cmap.currentTextChanged.connect(self.display_cmap.setCurrentText)
         self.display_cmap.currentTextChanged.connect(self.toolbar_cmap.setCurrentText)
         self.cut_type_combo.currentTextChanged.connect(self._on_cut_type_changed)
+        self.coordinate_mode_combo.currentTextChanged.connect(self.refresh_view)
+        self.edit_geometry_button.clicked.connect(self._show_geometry_settings)
 
         for widget in (
             self.vmin_spin,
@@ -324,10 +354,6 @@ class FormSetupMixin:
             self.apply_mask_check,
             self.show_cut_region_check,
             self.show_center_check,
-            self.qr_min_spin,
-            self.qr_max_spin,
-            self.qz_min_spin,
-            self.qz_max_spin,
             self.line_center_x_spin,
             self.line_center_y_spin,
             self.line_width_spin,
@@ -347,6 +373,26 @@ class FormSetupMixin:
             if signal is not None:
                 signal.connect(self.refresh_view)
 
+        for widget in (
+            self.incidence_spin,
+            self.center_x_spin,
+            self.center_y_spin,
+            self.distance_spin,
+            self.pixel_x_spin,
+            self.pixel_y_spin,
+            self.wavelength_spin,
+        ):
+            widget.valueChanged.connect(self._update_geometry_summaries)
+            self.parameter_commits.bind_numeric("waxs_geometry", widget)
+
+        for widget in (
+            self.qr_min_spin,
+            self.qr_max_spin,
+            self.qz_min_spin,
+            self.qz_max_spin,
+        ):
+            self.parameter_commits.bind_numeric("waxs_q_range", widget)
+
         self.reset_mask_button.clicked.connect(self.reset_mask)
         self.apply_cut_button.clicked.connect(self.apply_cut)
         self.clear_roi_button.clicked.connect(self.clear_cut)
@@ -356,8 +402,15 @@ class FormSetupMixin:
         self.pick_center_button.clicked.connect(self.start_center_pick)
         self.integrate_button.clicked.connect(self.integrate_current_image)
         self.export_1d_button.clicked.connect(self.export_current_curve)
-        self.batch_browse_button.clicked.connect(self.select_batch_folder)
+        self.batch_add_folder_button.clicked.connect(self.select_batch_folder)
+        self.batch_remove_folder_button.clicked.connect(self.remove_selected_batch_folder)
         self.batch_output_browse_button.clicked.connect(self.select_batch_output_folder)
+        self.batch_limit_q_range.toggled.connect(self._update_batch_q_range_enabled)
+        self.batch_export_auto_scale.toggled.connect(
+            self._update_batch_export_limits_enabled
+        )
+        self.batch_preview_style_button.clicked.connect(self.preview_batch_export_style)
+        self.batch_copy_preview_button.clicked.connect(self.copy_current_preview_style)
         self.batch_start_button.clicked.connect(self.start_batch)
         self.batch_pause_button.clicked.connect(self.toggle_batch_pause)
         self.batch_stop_button.clicked.connect(self.stop_batch)

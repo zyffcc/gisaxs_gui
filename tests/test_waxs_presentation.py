@@ -17,6 +17,7 @@ from src.gimap.app import AppContext
 from src.gimap.features.waxs.infrastructure import (
     load_image_matrix as infrastructure_load_image_matrix,
 )
+from src.gimap.features.waxs.bootstrap import create_waxs_view_model
 from src.gimap.features.waxs.presentation.page import (
     ImageLoadResult,
     InSituProcessingWidget,
@@ -125,6 +126,12 @@ def test_feature_page_preserves_sections_controls_signals_and_job_status_offscre
     assert page.pixel_x_spin.value() == 75.0
     assert page.wavelength_spin.value() == 1.0332
     assert page.batch_pattern_edit.text() == "*.tif"
+    assert page.batch_sources_table.columnCount() == 3
+    assert page.batch_sources_table.horizontalHeaderItem(2).text() == "Output subfolder"
+    assert page.batch_export_q_images.isChecked()
+    assert page.batch_export_curves.isChecked()
+    assert page.coordinate_mode_combo.currentText() == "Pixel"
+    assert "SDD 2000.000 mm" in page.coordinate_geometry_summary.text()
     assert [
         page.waxs_workflow_tabs.tabText(index)
         for index in range(page.waxs_workflow_tabs.count())
@@ -241,4 +248,30 @@ def test_standalone_window_hosts_feature_owned_page_offscreen() -> None:
     assert window.page.view_model is not None
 
     window.close()
+    app.processEvents()
+
+
+def test_cut_workspace_can_preview_detector_on_true_q_grid() -> None:
+    from matplotlib.collections import QuadMesh
+
+    app = _app()
+    context = AppContext(
+        settings=InMemorySettingsRepository(),
+        session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
+        jobs=LocalProcessJobRunner(),
+    )
+    page = InSituProcessingWidget(view_model=create_waxs_view_model(context))
+    page.current_file = "synthetic.tif"
+    page.current_image = np.arange(64, dtype=np.float32).reshape(8, 8) + 1
+    page.center_x_spin.setValue(4.0)
+    page.center_y_spin.setValue(4.0)
+    page.coordinate_mode_combo.setCurrentText("q space")
+
+    page.refresh_view()
+
+    assert page.viewer.ax.get_xlabel() == "Qr (Å⁻¹)"
+    assert page.viewer.ax.get_ylabel() == "Qz (Å⁻¹)"
+    assert any(isinstance(collection, QuadMesh) for collection in page.viewer.ax.collections)
+    page.close()
     app.processEvents()

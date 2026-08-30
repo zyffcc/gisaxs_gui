@@ -81,7 +81,28 @@ class SelectionOverlayMixin:
         if self.current_image is None:
             return
         ax = self.viewer.ax
-        if self.show_center_check.isChecked() and not self._current_view_is_cut:
+        is_q_space = self.coordinate_mode_combo.currentText() == "q space"
+        if self.show_center_check.isChecked() and is_q_space:
+            qr, qz = self.view_model.compute_q_maps(
+                self.current_image.shape, self._geometry_settings()
+            )
+            row = max(
+                0,
+                min(qr.shape[0] - 1, int(round(self.center_y_spin.value())) - 1),
+            )
+            column = max(
+                0,
+                min(qr.shape[1] - 1, int(round(self.center_x_spin.value())) - 1),
+            )
+            ax.plot(
+                qr[row, column],
+                qz[row, column],
+                marker="+",
+                color="#22d3ee",
+                markersize=14,
+                markeredgewidth=2.0,
+            )
+        elif self.show_center_check.isChecked() and not self._current_view_is_cut:
             center_x = self.center_x_spin.value()
             center_y = self.center_y_spin.value()
             ax.plot(
@@ -90,7 +111,7 @@ class SelectionOverlayMixin:
 
         if self.show_cut_region_check.isChecked():
             cut_type = self.cut_type_combo.currentText()
-            if cut_type == "Line Cut" and not self._current_view_is_cut:
+            if cut_type == "Line Cut" and not self._current_view_is_cut and not is_q_space:
                 x0, y0, width, height = self._line_region()
                 ax.add_patch(
                     Rectangle(
@@ -104,7 +125,7 @@ class SelectionOverlayMixin:
                     color="#f97316",
                     markersize=9,
                 )
-            elif cut_type == "Circle Cut" and not self._current_view_is_cut:
+            elif cut_type == "Circle Cut" and not self._current_view_is_cut and not is_q_space:
                 cx = self.circle_center_x_spin.value()
                 cy = self.circle_center_y_spin.value()
                 inner = self.circle_inner_spin.value()
@@ -126,7 +147,7 @@ class SelectionOverlayMixin:
                     )
                 )
                 ax.add_patch(Circle((cx, cy), 3, fill=True, color="#a855f7"))
-            elif cut_type == "Q Range" and self._current_view_is_cut:
+            elif cut_type == "Q Range" and is_q_space:
                 x0 = None if self.qr_min_spin.value() == -121.0 else self.qr_min_spin.value()
                 x1 = None if self.qr_max_spin.value() == -121.0 else self.qr_max_spin.value()
                 y0 = None if self.qz_min_spin.value() == -121.0 else self.qz_min_spin.value()
@@ -162,6 +183,7 @@ class SelectionOverlayMixin:
             QMessageBox.information(self, "Apply Cut", "No image loaded.")
             return
         self._current_view_is_cut = True
+        self.coordinate_mode_combo.setCurrentText("q space")
         self._show_2d_view()
         self.refresh_view()
 
@@ -373,7 +395,7 @@ class SelectionOverlayMixin:
         x0, x1 = sorted([float(press_event.xdata), float(release_event.xdata)])
         y0, y1 = sorted([float(press_event.ydata), float(release_event.ydata)])
 
-        if self._current_view_is_cut:
+        if self.coordinate_mode_combo.currentText() == "q space":
             self.qr_min_spin.setValue(x0)
             self.qr_max_spin.setValue(x1)
             self.qz_min_spin.setValue(y0)
@@ -404,5 +426,6 @@ class SelectionOverlayMixin:
             self._roi_selector.set_active(False)
             self._roi_selector = None
         self._current_view_is_cut = True
+        self.coordinate_mode_combo.setCurrentText("q space")
         self.refresh_view()
         self._set_status("ROI selected and Q-range cut applied.")

@@ -3,12 +3,16 @@ from pathlib import Path
 import numpy as np
 
 from src.gimap.app.jobs import JobProgress, JobResult
-from src.gimap.features.waxs.application import WaxsBatchRequest
+from src.gimap.features.waxs.application import WaxsBatchRequest, WaxsBatchSource
 from src.gimap.features.waxs.infrastructure import (
     JobRunnerWaxsBatchAdapter,
     LocalWaxsExportAdapter,
     LocalWaxsFileCatalog,
     LocalWaxsPathAdapter,
+)
+from src.gimap.features.waxs.infrastructure.batch_serialization import (
+    request_from_payload,
+    request_to_payload,
 )
 
 
@@ -60,6 +64,8 @@ def test_local_export_adapter_writes_curve_matrix_and_png(tmp_path):
     curve = tmp_path / "curve.csv"
     matrix = tmp_path / "matrix.csv"
     image = tmp_path / "image.png"
+    q_image = tmp_path / "q_image.png"
+    curve_image = tmp_path / "curve.png"
 
     exporter.export_curve(curve, x, y)
     exporter.export_matrix(matrix, (x, y), ("x", "scan"))
@@ -74,10 +80,42 @@ def test_local_export_adapter_writes_curve_matrix_and_png(tmp_path):
             "mask_max": 16.0,
         },
     )
+    exporter.export_image(
+        q_image,
+        np.arange(16, dtype=float).reshape(4, 4) + 1,
+        {
+            "log_scale": False,
+            "colormap": "magma",
+            "auto_scale": True,
+            "mask_min": 1.0,
+            "mask_max": 16.0,
+            "coordinate_mode": "q",
+            "geometry": {
+                "incidence": 0.2,
+                "center_x": 2.0,
+                "center_y": 2.0,
+                "distance": 1000.0,
+                "pixel_x": 100.0,
+                "pixel_y": 100.0,
+                "wavelength": 1.0,
+            },
+            "q_range": {
+                "qr_min": -0.01,
+                "qr_max": 0.01,
+                "qz_min": 0.0,
+                "qz_max": 0.05,
+            },
+        },
+    )
+    exporter.export_curve_image(
+        curve_image, x, y, {"x_label": "q (Å⁻¹)"}
+    )
 
     assert curve.read_text(encoding="utf-8").splitlines()[0] == "x,intensity"
     assert matrix.read_text(encoding="utf-8").splitlines()[0] == "x,scan"
     assert image.is_file() and image.stat().st_size > 0
+    assert q_image.is_file() and q_image.stat().st_size > 0
+    assert curve_image.is_file() and curve_image.stat().st_size > 0
 
 
 def test_job_runner_batch_adapter_uses_serializable_request_and_progress(tmp_path):
@@ -169,3 +207,31 @@ def test_job_runner_batch_adapter_remembers_pause_before_worker_start(tmp_path):
 
     assert result.cancelled is False
     assert runner.control_value == "paused"
+
+
+def test_batch_serialization_preserves_multiple_sources_and_export_options(tmp_path):
+    request = _request(tmp_path)
+    request = WaxsBatchRequest(
+        **{
+            **request.__dict__,
+            "sources": (
+                WaxsBatchSource(tmp_path / "a", "*.nxs", "sample_a"),
+                WaxsBatchSource(tmp_path / "b", "*.tif", "sample_b"),
+            ),
+            "export_q_images": True,
+            "export_curve_images": True,
+            "q_range": {
+                "qr_min": -1.0,
+                "qr_max": 1.0,
+                "qz_min": 0.0,
+                "qz_max": 2.0,
+            },
+        }
+    )
+
+    restored = request_from_payload(request_to_payload(request))
+
+    assert restored.sources == request.sources
+    assert restored.export_q_images is True
+    assert restored.export_curve_images is True
+    assert restored.q_range == request.q_range
