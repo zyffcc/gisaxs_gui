@@ -36,6 +36,14 @@ def request_to_payload(request: WaxsBatchRequest) -> dict:
         "export_q_images": request.export_q_images,
         "export_curve_images": request.export_curve_images,
         "q_range": request.q_range,
+        "calibration_enabled": request.calibration_enabled,
+        "calibration_target_q": request.calibration_target_q,
+        "calibration_half_width": request.calibration_half_width,
+        "normalization_enabled": request.normalization_enabled,
+        "normalization_target_q": request.normalization_target_q,
+        "normalization_half_width": request.normalization_half_width,
+        "normalization_target_intensity": request.normalization_target_intensity,
+        "normalization_mode": request.normalization_mode,
     }
 
 

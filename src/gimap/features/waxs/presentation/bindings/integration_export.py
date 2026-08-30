@@ -136,6 +136,7 @@ class IntegrationExportMixin:
             {
                 "log_scale": self.display_log.isChecked(),
                 "colormap": self.display_cmap.currentText(),
+                "no_data_color": self.display_no_data_color.currentData(),
                 "auto_scale": self.display_auto_scale.isChecked(),
                 "vmin": self.vmin_spin.value(),
                 "vmax": self.vmax_spin.value(),

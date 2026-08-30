@@ -1,13 +1,18 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from src.gimap.features.waxs.application import (
     ProcessWaxsBatch,
+    PreviewWaxsBatchFrame,
     RunWaxsBatch,
     WaxsBatchRequest,
     WaxsBatchResult,
     WaxsBatchSource,
+    WaxsCurve,
+    WaxsPreprocessedFrame,
+    WaxsBatchPreviewRequest,
 )
 
 
@@ -200,3 +205,155 @@ def test_batch_processes_multiple_sources_into_named_subfolders(tmp_path):
     assert len(exporter.curve_images) == 2
     assert exporter.images[1][2]["coordinate_mode"] == "q"
     assert exporter.images[1][2]["q_range"] == request.q_range
+
+
+def test_batch_normalization_supports_group_first_and_per_frame_modes(tmp_path):
+    class Catalog:
+        def discover(self, folder, pattern):
+            return (folder / "multi.nxs",)
+
+    class Images:
+        def frame_count(self, path):
+            return 2
+
+        def load_frame(self, path, frame_index):
+            return np.full((3, 3), frame_index + 1.0, dtype=np.float32)
+
+    class Preprocess:
+        def execute(self, request):
+            image = request.image
+            peak = 2.0 * float(np.mean(image))
+            factor = request.normalization_factor or (
+                request.normalization_target_intensity / peak
+            )
+            curve = WaxsCurve(
+                np.array([1.9, 2.0, 2.1]),
+                np.array([1.0, peak, 1.0]) * factor,
+            )
+            return WaxsPreprocessedFrame(
+                image * factor, curve, dict(request.geometry), factor
+            )
+
+    def run(mode):
+        request = _request(tmp_path)
+        request = WaxsBatchRequest(
+            **{
+                **request.__dict__,
+                "export_background_subtracted": False,
+                "normalization_enabled": True,
+                "normalization_target_q": 2.0,
+                "normalization_half_width": 0.05,
+                "normalization_mode": mode,
+            }
+        )
+        exporter = _Exporter()
+        ProcessWaxsBatch(
+            Images(), Catalog(), exporter, preprocess_frame=Preprocess()
+        ).execute(request)
+        return exporter
+
+    group = run("source_first")
+    per_frame = run("per_frame")
+
+    np.testing.assert_allclose([entry[2][1] for entry in group.curves], [1.0, 2.0])
+    np.testing.assert_allclose(
+        [entry[2][1] for entry in per_frame.curves], [1.0, 1.0]
+    )
+    np.testing.assert_allclose(
+        [np.mean(entry[1]) for entry in per_frame.images], [0.5, 0.5]
+    )
+
+
+def test_batch_calibration_updates_sdd_before_q_export(tmp_path):
+    class Catalog:
+        def discover(self, folder, pattern):
+            return (folder / "scan.tif",)
+
+    class Images:
+        def frame_count(self, path):
+            return 1
+
+        def load_frame(self, path, frame_index):
+            return np.ones((3, 3), dtype=np.float32)
+
+    class Preprocess:
+        def execute(self, request):
+            geometry = {**request.geometry, "distance": 1000.0}
+            return WaxsPreprocessedFrame(
+                request.image,
+                WaxsCurve(np.array([1.99, 2.0, 2.01]), np.array([1.0, 5.0, 1.0])),
+                geometry,
+                None,
+            )
+
+    request = _request(tmp_path)
+    request = WaxsBatchRequest(
+        **{
+            **request.__dict__,
+            "geometry": {**request.geometry, "distance": 900.0},
+            "export_q_images": True,
+            "calibration_enabled": True,
+            "calibration_target_q": 2.0,
+            "calibration_half_width": 0.3,
+        }
+    )
+    exporter = _Exporter()
+
+    result = ProcessWaxsBatch(
+        Images(), Catalog(), exporter, preprocess_frame=Preprocess()
+    ).execute(request)
+
+    assert result.failed_count == 0
+    q_exports = [entry for entry in exporter.images if entry[2]["coordinate_mode"] == "q"]
+    assert q_exports[0][2]["geometry"]["distance"] == pytest.approx(1000.0)
+
+
+def test_batch_preview_uses_selected_group_item_and_first_frame_factor(tmp_path):
+    source = WaxsBatchSource(tmp_path, "*.nxs", "group")
+
+    class Catalog:
+        def discover(self, folder, pattern):
+            return (folder / "scan.nxs",)
+
+    class Images:
+        def frame_count(self, path):
+            return 3
+
+        def load_frame(self, path, frame_index):
+            return np.full((2, 2), frame_index + 1.0)
+
+    class Preprocess:
+        def __init__(self):
+            self.factors = []
+
+        def execute(self, request):
+            self.factors.append(request.normalization_factor)
+            factor = request.normalization_factor or 0.5
+            curve = WaxsCurve(np.array([2.0]), np.array([1.0]))
+            return WaxsPreprocessedFrame(
+                request.image * factor,
+                curve,
+                dict(request.geometry),
+                factor,
+            )
+
+    preprocessing = Preprocess()
+    use_case = PreviewWaxsBatchFrame(
+        Images(), Catalog(), preprocess_frame=preprocessing
+    )
+    batch = _request(tmp_path)
+    batch = WaxsBatchRequest(
+        **{
+            **batch.__dict__,
+            "normalization_enabled": True,
+            "normalization_mode": "source_first",
+        }
+    )
+
+    result = use_case.execute(WaxsBatchPreviewRequest(source, 1, batch))
+
+    assert result.item_index == 1
+    assert result.item_count == 3
+    assert result.frame_index == 1
+    assert preprocessing.factors == [None, 0.5]
+    np.testing.assert_allclose(result.frame.image, 1.0)

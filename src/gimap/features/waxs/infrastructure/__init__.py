@@ -9,6 +9,7 @@ from .adapters import (
     detect_nxs_frame_count,
     load_image_matrix,
     load_tiff_matrix,
+    LocalWaxsConfigurationAdapter,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "detect_nxs_frame_count",
     "load_image_matrix",
     "load_tiff_matrix",
+    "LocalWaxsConfigurationAdapter",
 ]

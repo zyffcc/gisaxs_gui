@@ -130,7 +130,26 @@ def test_feature_page_preserves_sections_controls_signals_and_job_status_offscre
     assert page.batch_sources_table.horizontalHeaderItem(2).text() == "Output subfolder"
     assert page.batch_export_q_images.isChecked()
     assert page.batch_export_curves.isChecked()
+    assert page.batch_calibration_enabled.isChecked() is False
+    assert page.batch_calibration_target.value() == 2.132
+    assert page.batch_calibration_window.value() == 0.035
+    assert page.batch_normalization_enabled.isChecked() is False
+    assert page.batch_normalization_target.value() == 2.132
+    assert page.batch_normalization_window.value() == 0.035
+    assert page.batch_normalization_intensity.value() == 1.0
+    assert page.batch_normalization_mode.currentData() == "source_first"
+    assert page.batch_preview_item_spin.value() == 1
+    assert page.batch_preview_preprocessing_button.text() == "Preview preprocessing"
+    assert page.batch_load_config_button.text() == "Load WAXS config..."
+    assert page.batch_save_config_button.text() == "Save WAXS config..."
+    assert page.batch_calibration_target.isEnabled() is False
+    assert page.batch_normalization_mode.isEnabled() is False
+    page.batch_calibration_enabled.setChecked(True)
+    page.batch_normalization_enabled.setChecked(True)
+    assert page.batch_calibration_target.isEnabled() is True
+    assert page.batch_normalization_mode.isEnabled() is True
     assert page.coordinate_mode_combo.currentText() == "Pixel"
+    assert page.display_no_data_color.currentData() == "white"
     assert "SDD 2000.000 mm" in page.coordinate_geometry_summary.text()
     assert [
         page.waxs_workflow_tabs.tabText(index)
@@ -274,4 +293,99 @@ def test_cut_workspace_can_preview_detector_on_true_q_grid() -> None:
     assert page.viewer.ax.get_ylabel() == "Qz (Å⁻¹)"
     assert any(isinstance(collection, QuadMesh) for collection in page.viewer.ax.collections)
     page.close()
+    app.processEvents()
+
+
+def test_waxs_preview_renders_no_data_cells_with_white_background() -> None:
+    from matplotlib.colors import to_rgba
+
+    app = _app()
+    context = AppContext(
+        settings=InMemorySettingsRepository(),
+        session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
+        jobs=LocalProcessJobRunner(),
+    )
+    page = InSituProcessingWidget(view_model=create_waxs_view_model(context))
+    page.current_file = "masked.tif"
+    page.current_image = np.array([[1.0, np.nan], [2.0, 3.0]], dtype=np.float32)
+    page.coordinate_mode_combo.setCurrentText("q space")
+
+    page.refresh_view()
+
+    artist = page.viewer.ax.collections[0]
+    np.testing.assert_allclose(artist.cmap.get_bad(), to_rgba("white"))
+    page.display_no_data_color.setCurrentIndex(1)
+    np.testing.assert_allclose(
+        page.viewer.ax.collections[0].cmap.get_bad(), to_rgba("black")
+    )
+    page.coordinate_mode_combo.setCurrentText("Pixel")
+    np.testing.assert_allclose(page.viewer.ax.images[0].cmap.get_bad(), to_rgba("black"))
+    page.close()
+    app.processEvents()
+
+
+def test_waxs_preview_interpolates_interior_nans_but_preserves_detector_blank_area() -> None:
+    app = _app()
+    context = AppContext(
+        settings=InMemorySettingsRepository(),
+        session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
+        jobs=LocalProcessJobRunner(),
+    )
+    page = InSituProcessingWidget(view_model=create_waxs_view_model(context))
+    page.viewer.canvas.resize(64, 64)
+    image = np.full((128, 128), np.nan, dtype=np.float32)
+    image[:64, :40] = 1.0
+    image[:64, 88:] = 2.0
+    image[64:, 40:88] = 3.0
+    image[20, 20] = np.nan
+
+    preview, _extent, stride = page.viewer._preview_image(image, None)
+
+    assert stride == 2
+    assert np.isfinite(preview[10, 10])
+    assert np.isnan(preview[10, 32])
+    page.close()
+    app.processEvents()
+
+
+def test_waxs_q_preview_splits_signed_branches_without_bridging_qr_zero() -> None:
+    horizontal_q = np.array(
+        [
+            [-2.0, -1.0, 0.0, 1.0, 2.0],
+            [-2.5, -1.5, 0.0, 1.5, 2.5],
+        ]
+    )
+
+    branches = ScatteringImageViewer._signed_q_branch_slices(horizontal_q)
+
+    assert [(branch.start, branch.stop) for branch in branches] == [(0, 2), (3, 5)]
+
+
+def test_waxs_parameters_round_trip_through_persistent_configuration() -> None:
+    app = _app()
+    settings = InMemorySettingsRepository()
+    context = AppContext(
+        settings=settings,
+        session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
+        jobs=LocalProcessJobRunner(),
+    )
+    page = InSituProcessingWidget(view_model=create_waxs_view_model(context))
+    page.distance_spin.setValue(2345.0)
+    page.batch_calibration_enabled.setChecked(True)
+    page.batch_normalization_intensity.setValue(3.0)
+
+    payload = page._waxs_configuration()
+    page._save_waxs_settings()
+    page.close()
+    restored = InSituProcessingWidget(view_model=create_waxs_view_model(context))
+
+    assert payload["version"] == 1
+    assert restored.distance_spin.value() == 2345.0
+    assert restored.batch_calibration_enabled.isChecked() is True
+    assert restored.batch_normalization_intensity.value() == 3.0
+    assert settings.get_section("waxs")["version"] == 1
+    restored.close()
     app.processEvents()

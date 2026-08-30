@@ -3,6 +3,7 @@
 from .images import WaxsImageRepository
 from .batch import WaxsBatchRunnerPort, WaxsExportPort, WaxsFileCatalog
 from .paths import WaxsPathPort
+from .configuration import WaxsConfigurationPort
 
 __all__ = [
     "WaxsBatchRunnerPort",
@@ -10,4 +11,5 @@ __all__ = [
     "WaxsFileCatalog",
     "WaxsImageRepository",
     "WaxsPathPort",
+    "WaxsConfigurationPort",
 ]

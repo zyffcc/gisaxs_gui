@@ -17,6 +17,8 @@ from PyQt5.QtWidgets import (
 
 from matplotlib.widgets import RectangleSelector
 
+from src.gimap.app.presentation import install_safe_wheel_behavior
+
 
 from .views import (
     WaxsPageView,
@@ -25,17 +27,20 @@ from .views import (
 from .file_types import SCATTERING_FILTER, SUPPORTED_EXTENSIONS
 from .image_viewer import ScatteringImageViewer
 from .widget_factory import make_double_spin
-from .workers import BatchWorker, ImageLoadResult, ImageLoadWorker
+from .workers import BatchPreviewWorker, BatchWorker, ImageLoadResult, ImageLoadWorker
 
 from .bindings.form_setup import FormSetupMixin
 from .bindings.file_loading import FileLoadingMixin
 from .bindings.selection_overlay import SelectionOverlayMixin
 from .bindings.integration_export import IntegrationExportMixin
 from .bindings.batch_processing import BatchProcessingMixin
+from .bindings.batch_preview import BatchPreviewMixin
 from .bindings.view_state import ViewStateMixin
+from .bindings.configuration import WaxsConfigurationMixin
 
 __all__ = [
     "BatchWorker",
+    "BatchPreviewWorker",
     "ImageLoadResult",
     "ImageLoadWorker",
     "InSituProcessingWidget",
@@ -52,7 +57,9 @@ class InSituProcessingWidget(
     SelectionOverlayMixin,
     IntegrationExportMixin,
     BatchProcessingMixin,
+    BatchPreviewMixin,
     ViewStateMixin,
+    WaxsConfigurationMixin,
     QWidget,
     WaxsPageView,
 ):
@@ -72,6 +79,8 @@ class InSituProcessingWidget(
         self._loader_worker: Optional[ImageLoadWorker] = None
         self._batch_thread: Optional[QThread] = None
         self._batch_worker: Optional[BatchWorker] = None
+        self._batch_preview_thread: Optional[QThread] = None
+        self._batch_preview_worker: Optional[BatchPreviewWorker] = None
         self._roi_selector: Optional[RectangleSelector] = None
         self._circle_pick_cid: Optional[int] = None
         self._center_pick_cid: Optional[int] = None
@@ -83,5 +92,7 @@ class InSituProcessingWidget(
         self.setupUi(self)
         self._bind_form()
         self._connect_signals()
+        install_safe_wheel_behavior(self)
+        self._setup_configuration_persistence()
         self._set_frame_controls_enabled(False)
         self._set_status("Ready")

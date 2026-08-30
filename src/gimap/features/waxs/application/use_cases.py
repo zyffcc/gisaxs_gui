@@ -19,6 +19,8 @@ from .models import (
     WaxsDisplayLimitsRequest,
     WaxsDisplayRequest,
     WaxsQMapRequest,
+    WaxsPreprocessFrameRequest,
+    WaxsPreprocessedFrame,
 )
 from .ports import WaxsExportPort, WaxsImageRepository, WaxsPathPort
 from ..domain import (
@@ -30,6 +32,9 @@ from ..domain import (
     line_cut_profile,
     prepare_display_array,
     smooth_curve,
+    aligned_detector_distance,
+    locate_reference_peak,
+    peak_normalization_factor,
 )
 
 
@@ -113,6 +118,73 @@ class IntegrateWaxsImage:
                 intensity, int(request.integration.get("smooth_window", 7))
             )
         return WaxsCurve(x, intensity)
+
+
+class PreprocessWaxsFrame:
+    """Apply optional SDD calibration and linear peak normalization."""
+
+    def __init__(self, integrate: IntegrateWaxsImage | None = None):
+        self._integrate = integrate or IntegrateWaxsImage()
+
+    def execute(self, request: WaxsPreprocessFrameRequest) -> WaxsPreprocessedFrame:
+        self._require_radial_q(request.integration)
+        geometry = dict(request.geometry)
+        curve = None
+        if request.calibration_enabled:
+            for _iteration in range(3):
+                curve = self._curve(request.image, geometry, request)
+                peak_q, _peak_intensity = locate_reference_peak(
+                    curve.x,
+                    curve.intensity,
+                    request.calibration_target_q,
+                    request.calibration_half_width,
+                )
+                new_distance = aligned_detector_distance(
+                    geometry["distance"], peak_q, request.calibration_target_q
+                )
+                relative_change = abs(new_distance - geometry["distance"]) / float(
+                    geometry["distance"]
+                )
+                geometry["distance"] = new_distance
+                if relative_change < 1e-6:
+                    break
+        curve = self._curve(request.image, geometry, request)
+        image = np.asarray(request.image)
+        factor = request.normalization_factor
+        if request.normalization_enabled:
+            if factor is None:
+                _peak_q, peak_intensity = locate_reference_peak(
+                    curve.x,
+                    curve.intensity,
+                    request.normalization_target_q,
+                    request.normalization_half_width,
+                )
+                factor = peak_normalization_factor(
+                    peak_intensity, request.normalization_target_intensity
+                )
+            image = np.asarray(image, dtype=float) * float(factor)
+            curve = WaxsCurve(curve.x, curve.intensity * float(factor))
+        return WaxsPreprocessedFrame(image, curve, geometry, factor)
+
+    def _curve(self, image, geometry, request) -> WaxsCurve:
+        return self._integrate.execute(
+            IntegrateWaxsImageRequest(
+                image,
+                geometry,
+                request.integration,
+                request.mask_min,
+                request.mask_max,
+            )
+        )
+
+    @staticmethod
+    def _require_radial_q(integration: dict) -> None:
+        axis = str(integration.get("x_axis", "q")).lower()
+        mode = str(integration.get("mode", "radial")).lower()
+        if axis != "q" or mode != "radial":
+            raise ValueError(
+                "Calibration and normalization require radial integration on the q axis."
+            )
 
 
 class ExportWaxsCurve:

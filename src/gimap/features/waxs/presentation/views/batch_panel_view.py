@@ -79,6 +79,15 @@ class WaxsBatchPanelView:
         self.batch_output_browse_button.setObjectName("batch_output_browse_button")
         output_layout.addWidget(self.batch_output_browse_button, 0, 2)
         self.batchPanelLayout.addLayout(output_layout)
+        config_actions = QtWidgets.QHBoxLayout()
+        self.batch_load_config_button = QtWidgets.QPushButton(panel)
+        self.batch_load_config_button.setObjectName("batch_load_config_button")
+        config_actions.addWidget(self.batch_load_config_button)
+        self.batch_save_config_button = QtWidgets.QPushButton(panel)
+        self.batch_save_config_button.setObjectName("batch_save_config_button")
+        config_actions.addWidget(self.batch_save_config_button)
+        config_actions.addStretch(1)
+        self.batchPanelLayout.addLayout(config_actions)
 
         self.batchExportsTitle = _section_label(panel, "batchExportsTitle")
         self.batchPanelLayout.addWidget(self.batchExportsTitle)
@@ -169,6 +178,77 @@ class WaxsBatchPanelView:
         q_grid.addWidget(self.batch_qz_max, 1, 2)
         self.batchPanelLayout.addLayout(q_grid)
 
+        self.batchPreprocessingTitle = _section_label(
+            panel, "batchPreprocessingTitle"
+        )
+        self.batchPanelLayout.addWidget(self.batchPreprocessingTitle)
+        preprocessing = QtWidgets.QGridLayout()
+        preprocessing.addWidget(QtWidgets.QLabel("Peak q (Å⁻¹)", panel), 0, 1)
+        preprocessing.addWidget(QtWidgets.QLabel("Search ±q", panel), 0, 2)
+        self.batch_calibration_enabled = QtWidgets.QCheckBox(panel)
+        self.batch_calibration_enabled.setObjectName("batch_calibration_enabled")
+        preprocessing.addWidget(self.batch_calibration_enabled, 1, 0)
+        self.batch_calibration_target = _q_spin(
+            panel, "batch_calibration_target"
+        )
+        self.batch_calibration_target.setRange(1e-6, 100.0)
+        self.batch_calibration_target.setDecimals(6)
+        self.batch_calibration_target.setValue(2.132)
+        preprocessing.addWidget(self.batch_calibration_target, 1, 1)
+        self.batch_calibration_window = _q_spin(
+            panel, "batch_calibration_window"
+        )
+        self.batch_calibration_window.setRange(1e-6, 10.0)
+        self.batch_calibration_window.setDecimals(6)
+        self.batch_calibration_window.setValue(0.035)
+        preprocessing.addWidget(self.batch_calibration_window, 1, 2)
+
+        self.batch_normalization_enabled = QtWidgets.QCheckBox(panel)
+        self.batch_normalization_enabled.setObjectName("batch_normalization_enabled")
+        preprocessing.addWidget(self.batch_normalization_enabled, 2, 0)
+        self.batch_normalization_target = _q_spin(
+            panel, "batch_normalization_target"
+        )
+        self.batch_normalization_target.setRange(1e-6, 100.0)
+        self.batch_normalization_target.setDecimals(6)
+        self.batch_normalization_target.setValue(2.132)
+        preprocessing.addWidget(self.batch_normalization_target, 2, 1)
+        self.batch_normalization_window = _q_spin(
+            panel, "batch_normalization_window"
+        )
+        self.batch_normalization_window.setRange(1e-6, 10.0)
+        self.batch_normalization_window.setDecimals(6)
+        self.batch_normalization_window.setValue(0.035)
+        preprocessing.addWidget(self.batch_normalization_window, 2, 2)
+        preprocessing.addWidget(QtWidgets.QLabel("Target intensity", panel), 3, 0)
+        self.batch_normalization_intensity = _q_spin(
+            panel, "batch_normalization_intensity"
+        )
+        self.batch_normalization_intensity.setRange(1e-9, 1e12)
+        self.batch_normalization_intensity.setDecimals(6)
+        self.batch_normalization_intensity.setValue(1.0)
+        preprocessing.addWidget(self.batch_normalization_intensity, 3, 1, 1, 2)
+        self.batch_normalization_mode = QtWidgets.QComboBox(panel)
+        self.batch_normalization_mode.setObjectName("batch_normalization_mode")
+        self.batch_normalization_mode.addItem("", "source_first")
+        self.batch_normalization_mode.addItem("", "per_frame")
+        preprocessing.addWidget(self.batch_normalization_mode, 4, 1, 1, 2)
+        self.batchPanelLayout.addLayout(preprocessing)
+
+        preview_row = QtWidgets.QHBoxLayout()
+        self.batchPreviewItemLabel = QtWidgets.QLabel(panel)
+        preview_row.addWidget(self.batchPreviewItemLabel)
+        self.batch_preview_item_spin = QtWidgets.QSpinBox(panel)
+        self.batch_preview_item_spin.setObjectName("batch_preview_item_spin")
+        self.batch_preview_item_spin.setRange(1, 999999)
+        preview_row.addWidget(self.batch_preview_item_spin)
+        self.batch_preview_preprocessing_button = QtWidgets.QPushButton(panel)
+        self.batch_preview_preprocessing_button.setObjectName(
+            "batch_preview_preprocessing_button"
+        )
+        preview_row.addWidget(self.batch_preview_preprocessing_button, 1)
+        self.batchPanelLayout.addLayout(preview_row)
+
         self.batchButtonsLayout = QtWidgets.QHBoxLayout()
         self.batch_start_button = QtWidgets.QPushButton(panel)
         self.batch_start_button.setObjectName("batch_start_button")
@@ -206,6 +286,12 @@ class WaxsBatchPanelView:
         )
         self.batchOutputFolderLabel.setText(_("WaxsBatchPanel", "Export root"))
         self.batch_output_browse_button.setText(_("WaxsBatchPanel", "Browse"))
+        self.batch_load_config_button.setText(
+            _("WaxsBatchPanel", "Load WAXS config...")
+        )
+        self.batch_save_config_button.setText(
+            _("WaxsBatchPanel", "Save WAXS config...")
+        )
         self.batchExportsTitle.setText(_("WaxsBatchPanel", "Outputs"))
         self.batch_export_pixel_images.setText(
             _("WaxsBatchPanel", "2D image · pixel axes")
@@ -227,6 +313,46 @@ class WaxsBatchPanelView:
         self.batchGeometryTitle.setText(_("WaxsBatchPanel", "q conversion"))
         self.batch_limit_q_range.setText(
             _("WaxsBatchPanel", "Limit the exported q view")
+        )
+        self.batchPreprocessingTitle.setText(
+            _("WaxsBatchPanel", "Preprocessing")
+        )
+        self.batch_calibration_enabled.setText(
+            _("WaxsBatchPanel", "Calibrate SDD")
+        )
+        self.batch_calibration_target.setToolTip(
+            _("WaxsBatchPanel", "Reference peak q (Å⁻¹)")
+        )
+        self.batch_calibration_window.setToolTip(
+            _("WaxsBatchPanel", "Peak search half-width ±q (Å⁻¹)")
+        )
+        self.batch_normalization_enabled.setText(
+            _("WaxsBatchPanel", "Normalize peak")
+        )
+        self.batch_normalization_target.setToolTip(
+            _("WaxsBatchPanel", "Normalization peak q (Å⁻¹)")
+        )
+        self.batch_normalization_window.setToolTip(
+            _("WaxsBatchPanel", "Peak search half-width ±q (Å⁻¹)")
+        )
+        self.batch_normalization_intensity.setToolTip(
+            _("WaxsBatchPanel", "Target unlogged peak intensity")
+        )
+        self.batch_normalization_mode.setItemText(
+            0, _("WaxsBatchPanel", "One factor per group (first frame)")
+        )
+        self.batch_normalization_mode.setItemText(
+            1, _("WaxsBatchPanel", "Independent factor per frame")
+        )
+        self.batchPreviewItemLabel.setText(_("WaxsBatchPanel", "Preview item"))
+        self.batch_preview_item_spin.setToolTip(
+            _(
+                "WaxsBatchPanel",
+                "1-based file/frame index within the selected data-source row.",
+            )
+        )
+        self.batch_preview_preprocessing_button.setText(
+            _("WaxsBatchPanel", "Preview preprocessing")
         )
         self.batch_start_button.setText(_("WaxsBatchPanel", "Start"))
         self.batch_pause_button.setText(_("WaxsBatchPanel", "Pause"))

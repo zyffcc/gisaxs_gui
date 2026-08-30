@@ -15,10 +15,7 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.features.waxs.application import (
-    WaxsBatchRequest,
-    WaxsBatchSource,
-)
+from src.gimap.features.waxs.application import WaxsBatchRequest, WaxsBatchSource
 
 
 from ..workers import BatchWorker
@@ -57,6 +54,16 @@ class BatchProcessingMixin:
     def _update_batch_export_limits_enabled(self, auto_scale: bool) -> None:
         self.batch_export_vmin.setEnabled(not auto_scale)
         self.batch_export_vmax.setEnabled(not auto_scale)
+
+    def _update_batch_preprocessing_enabled(self, *_args) -> None:
+        calibration = self.batch_calibration_enabled.isChecked()
+        normalization = self.batch_normalization_enabled.isChecked()
+        self.batch_calibration_target.setEnabled(calibration)
+        self.batch_calibration_window.setEnabled(calibration)
+        self.batch_normalization_target.setEnabled(normalization)
+        self.batch_normalization_window.setEnabled(normalization)
+        self.batch_normalization_intensity.setEnabled(normalization)
+        self.batch_normalization_mode.setEnabled(normalization)
 
     def copy_current_preview_style(self) -> None:
         self.batch_export_cmap.setCurrentText(self.display_cmap.currentText())
@@ -100,36 +107,24 @@ class BatchProcessingMixin:
                 self, "Batch Processing", "Add at least one valid input folder."
             )
             return
-        output_folder = self.batch_output_edit.text().strip() or self.view_model.working_directory()
         q_range = self._batch_q_range()
         if q_range is False:
             return
-        request = WaxsBatchRequest(
-            folder=sources[0].folder,
-            pattern=sources[0].pattern,
-            output_folder=Path(output_folder),
-            export_images=self.batch_export_pixel_images.isChecked(),
-            export_curves=self.batch_export_curves.isChecked(),
-            export_background_subtracted=False,
-            display={
-                "log_scale": self.batch_export_log.isChecked(),
-                "colormap": self.batch_export_cmap.currentText(),
-                "auto_scale": self.batch_export_auto_scale.isChecked(),
-                "vmin": self.batch_export_vmin.value(),
-                "vmax": self.batch_export_vmax.value(),
-                "mask_min": self._display_mask_limits()[0],
-                "mask_max": self._display_mask_limits()[1],
-            },
-            mask_min=self._display_mask_limits()[0],
-            mask_max=self._display_mask_limits()[1],
-            geometry=self._geometry_settings(),
-            integration=self._integration_settings(),
-            continue_on_error=True,
-            sources=tuple(sources),
-            export_q_images=self.batch_export_q_images.isChecked(),
-            export_curve_images=self.batch_export_curve_images.isChecked(),
-            q_range=q_range,
-        )
+        integration = self._integration_settings()
+        if (
+            self.batch_calibration_enabled.isChecked()
+            or self.batch_normalization_enabled.isChecked()
+        ) and (
+            integration.get("x_axis") != "q"
+            or integration.get("mode") != "radial"
+        ):
+            QMessageBox.warning(
+                self,
+                "Batch Preprocessing",
+                "Calibration and normalization require Radial mode with the q axis.",
+            )
+            return
+        request = self._build_batch_request(sources, q_range, integration)
         if not (
             request.export_images
             or request.export_q_images
@@ -159,6 +154,43 @@ class BatchProcessingMixin:
         self._batch_worker.failed.connect(self._batch_thread.quit)
         self._batch_thread.finished.connect(self._cleanup_batch)
         self._batch_thread.start()
+
+    def _build_batch_request(self, sources, q_range, integration) -> WaxsBatchRequest:
+        output_folder = self.batch_output_edit.text().strip() or self.view_model.working_directory()
+        return WaxsBatchRequest(
+            folder=sources[0].folder,
+            pattern=sources[0].pattern,
+            output_folder=Path(output_folder),
+            export_images=self.batch_export_pixel_images.isChecked(),
+            export_curves=self.batch_export_curves.isChecked(),
+            export_background_subtracted=False,
+            display={
+                "log_scale": self.batch_export_log.isChecked(),
+                "colormap": self.batch_export_cmap.currentText(),
+                "auto_scale": self.batch_export_auto_scale.isChecked(),
+                "vmin": self.batch_export_vmin.value(),
+                "vmax": self.batch_export_vmax.value(),
+                "mask_min": self._display_mask_limits()[0],
+                "mask_max": self._display_mask_limits()[1],
+            },
+            mask_min=self._display_mask_limits()[0],
+            mask_max=self._display_mask_limits()[1],
+            geometry=self._geometry_settings(),
+            integration=integration,
+            continue_on_error=True,
+            sources=tuple(sources),
+            export_q_images=self.batch_export_q_images.isChecked(),
+            export_curve_images=self.batch_export_curve_images.isChecked(),
+            q_range=q_range,
+            calibration_enabled=self.batch_calibration_enabled.isChecked(),
+            calibration_target_q=self.batch_calibration_target.value(),
+            calibration_half_width=self.batch_calibration_window.value(),
+            normalization_enabled=self.batch_normalization_enabled.isChecked(),
+            normalization_target_q=self.batch_normalization_target.value(),
+            normalization_half_width=self.batch_normalization_window.value(),
+            normalization_target_intensity=self.batch_normalization_intensity.value(),
+            normalization_mode=str(self.batch_normalization_mode.currentData()),
+        )
 
     def _batch_sources(self) -> list[WaxsBatchSource]:
         sources = []

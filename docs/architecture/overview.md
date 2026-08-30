@@ -4,7 +4,7 @@
 >
 > **Scope**：生产代码的 feature ownership、分层职责和依赖方向
 >
-> **Last verified**：2026-08-25
+> **Last verified**：2026-08-30
 
 ## 架构风格
 
@@ -209,6 +209,7 @@ SimulationPort
 PredictionModelPort
 FileRepositoryPort
 DatasetStoragePort
+WaxsConfigurationPort
 ```
 
 Adapter 示例：
@@ -217,10 +218,14 @@ Adapter 示例：
 BornAgainSimulationAdapter
 TensorFlowModelAdapter
 LocalFileSystemAdapter
+LocalWaxsConfigurationAdapter
 ```
 
 Use-case tests 可以使用内存 fake 或 test double 替代这些 adapters。Port 应描述
 application 真正需要的能力，不能照搬 BornAgain、TensorFlow 或操作系统的全部 API。
+WAXS 的 versioned portable JSON 由 `WaxsConfigurationPort` 隔离具体文件系统读写；
+presentation 只调用 `LoadWaxsConfiguration` / `SaveWaxsConfiguration`，自动记忆则继续使用
+应用级 settings repository 的 `waxs` section。
 
 ## Feature 边界
 

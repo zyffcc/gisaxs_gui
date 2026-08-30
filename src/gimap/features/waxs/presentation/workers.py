@@ -96,3 +96,25 @@ class BatchWorker(QObject):
                 self.finished.emit("Batch processing completed.")
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+class BatchPreviewWorker(QObject):
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, request, view_model):
+        super().__init__()
+        self.request = request
+        self.view_model = view_model
+
+    def run(self) -> None:
+        try:
+            result = self.view_model.preview_batch(self.request)
+            if result is None:
+                raise RuntimeError(
+                    self.view_model.state.error_message
+                    or "Batch preprocessing preview failed."
+                )
+            self.finished.emit(result)
+        except Exception as exc:
+            self.failed.emit(str(exc))

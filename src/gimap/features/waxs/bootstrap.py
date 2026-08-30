@@ -13,6 +13,9 @@ from .application import (
     GetWaxsWorkingDirectory,
     NormalizeWaxsPath,
     PrepareWaxsDisplay,
+    PreviewWaxsBatchFrame,
+    LoadWaxsConfiguration,
+    SaveWaxsConfiguration,
     RunWaxsBatch,
     ValidateWaxsDirectory,
 )
@@ -21,6 +24,8 @@ from .infrastructure import (
     JobRunnerWaxsBatchAdapter,
     LocalWaxsExportAdapter,
     LocalWaxsPathAdapter,
+    LocalWaxsFileCatalog,
+    LocalWaxsConfigurationAdapter,
 )
 from .presentation import WaxsViewModel
 
@@ -30,8 +35,12 @@ def create_waxs_view_model(context: AppContext) -> WaxsViewModel:
         raise ValueError("WaxsViewModel requires AppContext.jobs")
     exporter = LocalWaxsExportAdapter()
     paths = LocalWaxsPathAdapter()
+    images = CalibrationWaxsImageRepository()
+    catalog = LocalWaxsFileCatalog()
+    configurations = LocalWaxsConfigurationAdapter()
     return WaxsViewModel(
-        load_image=LoadWaxsImage(CalibrationWaxsImageRepository()),
+        context=context,
+        load_image=LoadWaxsImage(images),
         integrate_image=IntegrateWaxsImage(),
         run_batch=RunWaxsBatch(JobRunnerWaxsBatchAdapter(context.jobs)),
         export_curve=ExportWaxsCurve(exporter),
@@ -43,4 +52,7 @@ def create_waxs_view_model(context: AppContext) -> WaxsViewModel:
         normalize_path=NormalizeWaxsPath(paths),
         get_working_directory=GetWaxsWorkingDirectory(paths),
         validate_directory=ValidateWaxsDirectory(paths),
+        preview_batch_frame=PreviewWaxsBatchFrame(images, catalog),
+        load_configuration=LoadWaxsConfiguration(configurations),
+        save_configuration=SaveWaxsConfiguration(configurations),
     )

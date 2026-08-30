@@ -22,6 +22,7 @@ class WaxsViewModel:
     def __init__(
         self,
         *,
+        context=None,
         load_image,
         integrate_image,
         run_batch,
@@ -34,7 +35,11 @@ class WaxsViewModel:
         normalize_path,
         get_working_directory,
         validate_directory,
+        preview_batch_frame=None,
+        load_configuration=None,
+        save_configuration=None,
     ):
+        self.context = context
         self._load_image = load_image
         self._integrate_image = integrate_image
         self._run_batch = run_batch
@@ -47,7 +52,40 @@ class WaxsViewModel:
         self._normalize_path = normalize_path
         self._get_working_directory = get_working_directory
         self._validate_directory = validate_directory
+        self._preview_batch_frame = preview_batch_frame
+        self._load_configuration = load_configuration
+        self._save_configuration = save_configuration
         self.state = WaxsState()
+
+    def load_settings(self) -> dict[str, object]:
+        if self.context is None:
+            return {}
+        return dict(self.context.settings.get_section("waxs"))
+
+    def save_settings(self, values: dict[str, object]) -> None:
+        if self.context is None:
+            return
+        self.context.settings.update_section("waxs", dict(values))
+        self.context.settings.save()
+
+    def load_configuration(self, path: Path) -> dict:
+        if self._load_configuration is None:
+            raise RuntimeError("WAXS configuration loading is unavailable.")
+        return self._load_configuration.execute(Path(path))
+
+    def save_configuration(self, path: Path, values: dict) -> Path:
+        if self._save_configuration is None:
+            raise RuntimeError("WAXS configuration saving is unavailable.")
+        return self._save_configuration.execute(Path(path), dict(values))
+
+    def preview_batch(self, request):
+        if self._preview_batch_frame is None:
+            return None
+        try:
+            return self._preview_batch_frame.execute(request)
+        except Exception as exc:
+            self.state = replace(self.state, error_message=str(exc))
+            return None
 
     def normalize_path(self, path: str | Path) -> str:
         return self._normalize_path(path)

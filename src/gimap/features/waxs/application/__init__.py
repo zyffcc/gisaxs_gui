@@ -17,6 +17,10 @@ from .models import (
     WaxsDisplayLimitsRequest,
     WaxsDisplayRequest,
     WaxsQMapRequest,
+    WaxsPreprocessFrameRequest,
+    WaxsPreprocessedFrame,
+    WaxsBatchPreviewRequest,
+    WaxsBatchPreviewResult,
 )
 from .use_cases import (
     ComputeWaxsQMaps,
@@ -30,8 +34,11 @@ from .use_cases import (
     NormalizeWaxsPath,
     PrepareWaxsDisplay,
     ValidateWaxsDirectory,
+    PreprocessWaxsFrame,
 )
 from .batch import ProcessWaxsBatch, RunWaxsBatch
+from .batch_preview import PreviewWaxsBatchFrame
+from .configuration import LoadWaxsConfiguration, SaveWaxsConfiguration
 
 __all__ = [
     "IntegrateWaxsImage",
@@ -63,4 +70,12 @@ __all__ = [
     "WaxsDisplayLimitsRequest",
     "WaxsDisplayRequest",
     "WaxsQMapRequest",
+    "WaxsPreprocessFrameRequest",
+    "WaxsPreprocessedFrame",
+    "WaxsBatchPreviewRequest",
+    "WaxsBatchPreviewResult",
+    "PreprocessWaxsFrame",
+    "PreviewWaxsBatchFrame",
+    "LoadWaxsConfiguration",
+    "SaveWaxsConfiguration",
 ]

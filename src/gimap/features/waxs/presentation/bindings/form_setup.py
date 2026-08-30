@@ -208,6 +208,7 @@ class FormSetupMixin:
                 "display_auto_scale",
                 "display_log",
                 "display_cmap",
+                "display_no_data_color",
                 "display_flip",
                 "mask_min_spin",
                 "mask_max_spin",
@@ -238,6 +239,8 @@ class FormSetupMixin:
                 "batch_pattern_edit",
                 "batch_output_edit",
                 "batch_output_browse_button",
+                "batch_load_config_button",
+                "batch_save_config_button",
                 "batch_export_pixel_images",
                 "batch_export_q_images",
                 "batch_export_curves",
@@ -255,6 +258,16 @@ class FormSetupMixin:
                 "batch_qr_max",
                 "batch_qz_min",
                 "batch_qz_max",
+                "batch_calibration_enabled",
+                "batch_calibration_target",
+                "batch_calibration_window",
+                "batch_normalization_enabled",
+                "batch_normalization_target",
+                "batch_normalization_window",
+                "batch_normalization_intensity",
+                "batch_normalization_mode",
+                "batch_preview_item_spin",
+                "batch_preview_preprocessing_button",
                 "batch_start_button",
                 "batch_pause_button",
                 "batch_stop_button",
@@ -264,6 +277,7 @@ class FormSetupMixin:
         self._update_geometry_summaries()
         self._update_batch_q_range_enabled(False)
         self._update_batch_export_limits_enabled(True)
+        self._update_batch_preprocessing_enabled()
         self.waxsRunContentLayout.insertWidget(0, batch_panel)
 
         self.status_label = self.waxs_job_status.message_label
@@ -350,6 +364,7 @@ class FormSetupMixin:
             self.mask_max_spin,
             self.display_auto_scale,
             self.display_cmap,
+            self.display_no_data_color,
             self.display_flip,
             self.apply_mask_check,
             self.show_cut_region_check,
@@ -408,6 +423,24 @@ class FormSetupMixin:
         self.batch_limit_q_range.toggled.connect(self._update_batch_q_range_enabled)
         self.batch_export_auto_scale.toggled.connect(
             self._update_batch_export_limits_enabled
+        )
+        self.batch_calibration_enabled.toggled.connect(
+            self._update_batch_preprocessing_enabled
+        )
+        self.batch_normalization_enabled.toggled.connect(
+            self._update_batch_preprocessing_enabled
+        )
+        self.batch_preview_preprocessing_button.clicked.connect(
+            self.preview_batch_preprocessing
+        )
+        self.batch_sources_table.currentCellChanged.connect(
+            self._on_batch_group_selection_changed
+        )
+        self.batch_load_config_button.clicked.connect(
+            self.load_waxs_configuration_dialog
+        )
+        self.batch_save_config_button.clicked.connect(
+            self.save_waxs_configuration_dialog
         )
         self.batch_preview_style_button.clicked.connect(self.preview_batch_export_style)
         self.batch_copy_preview_button.clicked.connect(self.copy_current_preview_style)

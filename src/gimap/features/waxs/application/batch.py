@@ -7,11 +7,14 @@ from pathlib import Path
 import numpy as np
 
 from .models import (
+    IntegrateWaxsImageRequest,
     LoadWaxsImageRequest,
     WaxsBatchItem,
     WaxsBatchProgress,
     WaxsBatchRequest,
     WaxsBatchResult,
+    WaxsCurve,
+    WaxsPreprocessFrameRequest,
 )
 from .ports import (
     WaxsBatchRunnerPort,
@@ -19,8 +22,7 @@ from .ports import (
     WaxsFileCatalog,
     WaxsImageRepository,
 )
-from .use_cases import IntegrateWaxsImage, LoadWaxsImage
-from .models import IntegrateWaxsImageRequest
+from .use_cases import IntegrateWaxsImage, LoadWaxsImage, PreprocessWaxsFrame
 
 
 class ProcessWaxsBatch:
@@ -31,12 +33,15 @@ class ProcessWaxsBatch:
         images: WaxsImageRepository,
         catalog: WaxsFileCatalog,
         exporter: WaxsExportPort,
+        *,
+        preprocess_frame=None,
     ):
         self._images = images
         self._catalog = catalog
         self._exporter = exporter
         self._load_image = LoadWaxsImage(images)
         self._integrate = IntegrateWaxsImage()
+        self._preprocess = preprocess_frame or PreprocessWaxsFrame(self._integrate)
 
     def execute(
         self,
@@ -84,6 +89,7 @@ class ProcessWaxsBatch:
                 "background": None,
                 "background_columns": [],
                 "x_axis": None,
+                "normalization_factor": None,
             }
             for path in files:
                 try:
@@ -124,37 +130,67 @@ class ProcessWaxsBatch:
                 loaded = self._load_image.execute(
                     LoadWaxsImageRequest(path, frame_index)
                 )
+                image = loaded.image
+                geometry = dict(request.geometry)
+                curve = None
+                needs_curve = bool(
+                    request.export_curves
+                    or request.export_curve_images
+                    or request.export_background_subtracted
+                    or request.calibration_enabled
+                    or request.normalization_enabled
+                )
+                if needs_curve and not (
+                    request.calibration_enabled or request.normalization_enabled
+                ):
+                    curve = self._integrate_curve(image, geometry, request)
+                if request.calibration_enabled or request.normalization_enabled:
+                    if request.normalization_mode not in {"source_first", "per_frame"}:
+                        raise ValueError(
+                            "Normalization mode must be 'source_first' or 'per_frame'."
+                        )
+                    reused_factor = (
+                        source_state["normalization_factor"]
+                        if request.normalization_mode == "source_first"
+                        else None
+                    )
+                    processed = self._preprocess.execute(
+                        self._preprocess_request(
+                            image, geometry, request, reused_factor
+                        )
+                    )
+                    image = processed.image
+                    geometry = processed.geometry
+                    curve = processed.curve
+                    if (
+                        request.normalization_enabled
+                        and request.normalization_mode == "source_first"
+                        and source_state["normalization_factor"] is None
+                    ):
+                        source_state["normalization_factor"] = (
+                            processed.normalization_factor
+                        )
+
                 if request.export_images:
                     self._exporter.export_image(
                         output_folder / "2D_pixel" / f"{name}.png",
-                        loaded.image,
+                        image,
                         {**request.display, "coordinate_mode": "pixel"},
                     )
                 if request.export_q_images:
                     self._exporter.export_image(
                         output_folder / "2D_q" / f"{name}.png",
-                        loaded.image,
+                        image,
                         {
                             **request.display,
                             "coordinate_mode": "q",
-                            "geometry": request.geometry,
+                            "geometry": geometry,
                             "q_range": request.q_range,
                         },
                     )
-                if (
-                    request.export_curves
-                    or request.export_curve_images
-                    or request.export_background_subtracted
-                ):
-                    curve = self._integrate.execute(
-                        IntegrateWaxsImageRequest(
-                            loaded.image,
-                            request.geometry,
-                            request.integration,
-                            request.mask_min,
-                            request.mask_max,
-                        )
-                    )
+                if needs_curve:
+                    if curve is None:
+                        curve = self._integrate_curve(image, geometry, request)
                     if request.export_curves or request.export_background_subtracted:
                         if source_state["x_axis"] is None:
                             source_state["x_axis"] = curve.x
@@ -227,6 +263,45 @@ class ProcessWaxsBatch:
                     ),
                 )
         return WaxsBatchResult(tuple(results))
+
+    def _integrate_curve(
+        self,
+        image: np.ndarray,
+        geometry: dict,
+        request: WaxsBatchRequest,
+    ) -> WaxsCurve:
+        return self._integrate.execute(
+            IntegrateWaxsImageRequest(
+                image,
+                geometry,
+                request.integration,
+                request.mask_min,
+                request.mask_max,
+            )
+        )
+
+    @staticmethod
+    def _preprocess_request(
+        image: np.ndarray,
+        geometry: dict,
+        request: WaxsBatchRequest,
+        normalization_factor: float | None,
+    ) -> WaxsPreprocessFrameRequest:
+        return WaxsPreprocessFrameRequest(
+            image=image,
+            geometry=geometry,
+            integration=request.integration,
+            mask_min=request.mask_min,
+            mask_max=request.mask_max,
+            calibration_enabled=request.calibration_enabled,
+            calibration_target_q=request.calibration_target_q,
+            calibration_half_width=request.calibration_half_width,
+            normalization_enabled=request.normalization_enabled,
+            normalization_target_q=request.normalization_target_q,
+            normalization_half_width=request.normalization_half_width,
+            normalization_target_intensity=request.normalization_target_intensity,
+            normalization_factor=normalization_factor,
+        )
 
     @staticmethod
     def _curve_x_label(integration: dict) -> str:

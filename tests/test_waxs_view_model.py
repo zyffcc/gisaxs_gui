@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -57,6 +58,10 @@ def _view_model(
     normalize_path=None,
     get_working_directory=None,
     validate_directory=None,
+    context=None,
+    preview_batch_frame=None,
+    load_configuration=None,
+    save_configuration=None,
 ):
     return WaxsViewModel(
         load_image=loader or _UseCase(),
@@ -71,6 +76,10 @@ def _view_model(
         normalize_path=normalize_path or (lambda path: str(path)),
         get_working_directory=get_working_directory or (lambda: "/tmp"),
         validate_directory=validate_directory or (lambda path: Path(path).is_dir()),
+        context=context,
+        preview_batch_frame=preview_batch_frame,
+        load_configuration=load_configuration,
+        save_configuration=save_configuration,
     )
 
 
@@ -128,6 +137,42 @@ def test_view_model_batch_progress_cancel_pause_and_result(tmp_path):
     assert view_model.state.batch_status == "ready"
     assert view_model.state.progress == 1.0
     assert progress[0].name == "scan"
+
+
+def test_view_model_persists_waxs_settings_and_portable_configuration(tmp_path):
+    class Settings:
+        def __init__(self):
+            self.values = {"waxs": {"version": 1}}
+            self.saved = False
+
+        def get_section(self, section):
+            return dict(self.values.get(section, {}))
+
+        def update_section(self, section, values):
+            self.values[section] = dict(values)
+
+        def save(self):
+            self.saved = True
+
+    settings = Settings()
+    loader = _UseCase({"version": 1, "parameters": {}})
+    class Saver:
+        def execute(self, path, values):
+            return path
+
+    saver = Saver()
+    view_model = _view_model(
+        context=SimpleNamespace(settings=settings),
+        load_configuration=loader,
+        save_configuration=saver,
+    )
+
+    view_model.save_settings({"version": 1, "parameters": {"distance": 2000}})
+
+    assert settings.saved is True
+    assert view_model.load_settings()["parameters"]["distance"] == 2000
+    assert view_model.load_configuration(tmp_path / "waxs.json")["version"] == 1
+    assert view_model.save_configuration(tmp_path / "waxs.json", {"version": 1})
     assert view_model.cancel_batch() is True
     assert batch.cancelled is True
     assert view_model.set_batch_paused(True) is True

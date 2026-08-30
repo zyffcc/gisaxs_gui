@@ -9,6 +9,7 @@ from src.gimap.features.waxs.infrastructure import (
     LocalWaxsExportAdapter,
     LocalWaxsFileCatalog,
     LocalWaxsPathAdapter,
+    LocalWaxsConfigurationAdapter,
 )
 from src.gimap.features.waxs.infrastructure.batch_serialization import (
     request_from_payload,
@@ -55,6 +56,15 @@ def test_local_path_adapter_normalizes_and_inspects_directories(tmp_path):
     assert adapter.normalize(tmp_path) == str(tmp_path)
     assert adapter.is_directory(tmp_path)
     assert Path(adapter.current_directory()).is_dir()
+
+
+def test_local_configuration_adapter_round_trips_versioned_json(tmp_path):
+    adapter = LocalWaxsConfigurationAdapter()
+    path = tmp_path / "waxs.json"
+    values = {"version": 1, "parameters": {"distance_spin": {"value": 2100.0}}}
+
+    assert adapter.save(path, values) == path
+    assert adapter.load(path) == values
 
 
 def test_local_export_adapter_writes_curve_matrix_and_png(tmp_path):
@@ -226,6 +236,14 @@ def test_batch_serialization_preserves_multiple_sources_and_export_options(tmp_p
                 "qz_min": 0.0,
                 "qz_max": 2.0,
             },
+            "calibration_enabled": True,
+            "calibration_target_q": 2.132,
+            "calibration_half_width": 0.035,
+            "normalization_enabled": True,
+            "normalization_target_q": 2.132,
+            "normalization_half_width": 0.035,
+            "normalization_target_intensity": 3.0,
+            "normalization_mode": "per_frame",
         }
     )
 
@@ -235,3 +253,8 @@ def test_batch_serialization_preserves_multiple_sources_and_export_options(tmp_p
     assert restored.export_q_images is True
     assert restored.export_curve_images is True
     assert restored.q_range == request.q_range
+    assert restored.calibration_enabled is True
+    assert restored.calibration_half_width == 0.035
+    assert restored.normalization_enabled is True
+    assert restored.normalization_target_intensity == 3.0
+    assert restored.normalization_mode == "per_frame"

@@ -6,6 +6,11 @@ from .geometry import (
     cut_image_by_q_range,
     q_range_mask,
 )
+from .curve_preprocessing import (
+    aligned_detector_distance,
+    locate_reference_peak,
+    peak_normalization_factor,
+)
 from .masking import (
     estimate_display_limits,
     percentile_limits,
@@ -25,6 +30,9 @@ __all__ = [
     "compute_q_maps",
     "cut_image_by_q_range",
     "q_range_mask",
+    "aligned_detector_distance",
+    "locate_reference_peak",
+    "peak_normalization_factor",
     "estimate_display_limits",
     "percentile_limits",
     "prepare_display_array",

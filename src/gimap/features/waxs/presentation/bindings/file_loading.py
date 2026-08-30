@@ -146,6 +146,7 @@ class FileLoadingMixin:
             xlabel=xlabel,
             ylabel=ylabel,
             q_coordinates=q_coordinates,
+            no_data_color=self.display_no_data_color.currentData(),
         )
         if q_coordinates is not None and self._current_view_is_cut:
             geometry = self._geometry_settings()

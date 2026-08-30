@@ -95,20 +95,29 @@ class LocalWaxsExportAdapter:
         colormap = colormaps.get_cmap(
             str(display.get("colormap", "viridis"))
         ).copy()
-        colormap.set_bad(colormap(0.0))
+        # Match the interactive q-space preview: masked/no-data cells use the
+        # figure background rather than looking like low-intensity measurements.
+        no_data_color = str(display.get("no_data_color", "white"))
+        colormap.set_bad(no_data_color)
+        axis.set_facecolor(no_data_color)
         if display.get("coordinate_mode") == "q":
             geometry = dict(display["geometry"])
             qr, qz = compute_q_maps(values.shape, geometry)
-            artist = axis.pcolormesh(
-                qr,
-                qz,
-                values,
-                shading="nearest",
-                cmap=colormap,
-                vmin=vmin,
-                vmax=vmax,
-                rasterized=True,
-            )
+            artists = []
+            for branch in self._signed_q_branch_slices(qr):
+                artists.append(
+                    axis.pcolormesh(
+                        qr[:, branch],
+                        qz[:, branch],
+                        values[:, branch],
+                        shading="nearest",
+                        cmap=colormap,
+                        vmin=vmin,
+                        vmax=vmax,
+                        rasterized=True,
+                    )
+                )
+            artist = artists[0]
             axis.set_xlabel(r"$q_r$ ($\AA^{-1}$)")
             axis.set_ylabel(r"$q_z$ ($\AA^{-1}$)")
             self._apply_q_range(axis, display.get("q_range"))
@@ -178,6 +187,18 @@ class LocalWaxsExportAdapter:
         )
         for spine in axis.spines.values():
             spine.set_linewidth(1.1)
+
+    @staticmethod
+    def _signed_q_branch_slices(horizontal_q: np.ndarray) -> tuple[slice, ...]:
+        columns = np.nanmedian(np.asarray(horizontal_q, dtype=float), axis=0)
+        negative = np.flatnonzero(columns < 0.0)
+        positive = np.flatnonzero(columns > 0.0)
+        branches: list[slice] = []
+        if negative.size >= 2:
+            branches.append(slice(int(negative[0]), int(negative[-1]) + 1))
+        if positive.size >= 2:
+            branches.append(slice(int(positive[0]), int(positive[-1]) + 1))
+        return tuple(branches) or (slice(0, horizontal_q.shape[1]),)
 
     @staticmethod
     def _apply_q_range(axis, q_range) -> None:

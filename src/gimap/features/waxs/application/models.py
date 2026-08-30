@@ -71,6 +71,14 @@ class WaxsBatchRequest:
     export_q_images: bool = False
     export_curve_images: bool = False
     q_range: dict[str, float | None] | None = None
+    calibration_enabled: bool = False
+    calibration_target_q: float = 2.132
+    calibration_half_width: float = 0.035
+    normalization_enabled: bool = False
+    normalization_target_q: float = 2.132
+    normalization_half_width: float = 0.035
+    normalization_target_intensity: float = 1.0
+    normalization_mode: str = "source_first"
 
     @property
     def batch_sources(self) -> tuple[WaxsBatchSource, ...]:
@@ -104,6 +112,47 @@ class WaxsBatchResult:
     @property
     def failed_count(self) -> int:
         return sum(item.status == "failed" for item in self.items)
+
+
+@dataclass(frozen=True)
+class WaxsPreprocessFrameRequest:
+    image: np.ndarray
+    geometry: dict[str, Any]
+    integration: dict[str, Any]
+    mask_min: float
+    mask_max: float
+    calibration_enabled: bool = False
+    calibration_target_q: float = 2.132
+    calibration_half_width: float = 0.035
+    normalization_enabled: bool = False
+    normalization_target_q: float = 2.132
+    normalization_half_width: float = 0.035
+    normalization_target_intensity: float = 1.0
+    normalization_factor: float | None = None
+
+
+@dataclass(frozen=True)
+class WaxsPreprocessedFrame:
+    image: np.ndarray
+    curve: WaxsCurve
+    geometry: dict[str, Any]
+    normalization_factor: float | None = None
+
+
+@dataclass(frozen=True)
+class WaxsBatchPreviewRequest:
+    source: WaxsBatchSource
+    item_index: int
+    batch: WaxsBatchRequest
+
+
+@dataclass(frozen=True)
+class WaxsBatchPreviewResult:
+    path: Path
+    frame_index: int
+    item_index: int
+    item_count: int
+    frame: WaxsPreprocessedFrame
 
 
 @dataclass(frozen=True)

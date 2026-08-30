@@ -1,104 +1,611 @@
 {
-    "beam": {
-        "wavelength": 0.1,
-        "grazing_angle": 0.4,
-        "beam_size_x": 0.1,
-        "beam_size_y": 0.1,
-        "flux": 1000000000000.0,
-        "polarization": "horizontal"
-    },
-    "detector": {
-        "preset": "Pilatus 2M",
-        "distance": 2000,
-        "nbins_x": 1475,
-        "nbins_y": 1475,
-        "pixel_size_x": 172,
-        "pixel_size_y": 172,
-        "beam_center_x": 737,
-        "beam_center_y": 737,
-        "exposure_time": 1.0,
-        "dark_current": 0.1,
-        "readout_noise": 5.0
-    },
-    "sample": {
-        "particle_shape": "Sphere",
-        "particle_size": 10.0,
-        "size_distribution": 0.1,
-        "material": "Gold",
-        "substrate": "Silicon",
-        "thickness": 100.0,
-        "roughness": 1.0,
-        "density": 0.5,
-        "orientation": "random"
-    },
-    "preprocessing": {
-        "focus_region": {
-            "type": "q",
-            "qr_min": 0.01,
-            "qr_max": 3.0,
-            "qz_min": 0.01,
-            "qz_max": 3.0
-        },
-        "noising": {
-            "type": "Gaussian",
-            "snr_min": 80,
-            "snr_max": 130
-        },
-        "others": {
-            "crop_edge": true,
-            "add_mask": true,
-            "normalize": true,
-            "logarization": true
-        }
-    },
     "trainset": {
-        "file_name": "trainset",
-        "save_path": "",
-        "trainset_number": 1000,
-        "save_every": 100,
-        "batch_size": 10,
+        "schema_version": 2,
+        "project": {
+            "name": "gisaxs_2d_project",
+            "seed": 42,
+            "reference_file": "",
+            "workspace": "F:\\GIMaP\\gisaxs_gui\\trainset_jobs"
+        },
+        "dataset": {
+            "dimension": "2d",
+            "number_of_samples": 200000,
+            "output_format": "hdf5",
+            "samples_per_shard": 2000,
+            "sampling": "latin_hypercube",
+            "split": {
+                "train": 0.8,
+                "validation": 0.1,
+                "test": 0.1
+            },
+            "preview_samples": 16,
+            "dry_run_samples": 128
+        },
+        "beam": {
+            "wavelength_nm": 0.105,
+            "grazing_angle_deg": 0.4
+        },
         "detector": {
-            "preset": "Pilatus 2M",
-            "distance": 2000.0,
-            "nbins_x": 1475,
-            "nbins_y": 1475,
-            "pixel_size_x": 172,
-            "pixel_size_y": 172,
-            "beam_center_x": 737.0,
-            "beam_center_y": 50.0
+            "preset": "Custom",
+            "pixels_x": 1475,
+            "pixels_y": 1679,
+            "pixel_size_x_mm": 0.172,
+            "pixel_size_y_mm": 0.172,
+            "distance_mm": 3230.0,
+            "beam_center_x_px": 804.0,
+            "beam_center_y_px": 305.0
+        },
+        "roi": {
+            "x": 600,
+            "y": 180,
+            "width": 256,
+            "height": 256
+        },
+        "mask": {
+            "mode": "fixed",
+            "mask_value": -1.0,
+            "threshold": {
+                "enabled": true,
+                "minimum": 0.0,
+                "maximum": 1000000000000.0,
+                "auto_reference_upper": true,
+                "upper_quantile": 99.999
+            },
+            "fixed_shapes": [],
+            "random": {
+                "vertical_bars": 2,
+                "horizontal_bars": 1,
+                "bar_width_min": 2,
+                "bar_width_max": 6,
+                "circles": 1,
+                "circle_radius_min": 4,
+                "circle_radius_max": 12,
+                "beamstop": true
+            }
+        },
+        "simulation": {
+            "engine": "bornagain_yuxin",
+            "image_size": [
+                256,
+                256
+            ],
+            "resolution_sigma_phi_deg": 0.01,
+            "resolution_sigma_alpha_deg": 0.01,
+            "grid_cache": {
+                "enabled": true,
+                "directory": "_bornagain_cache",
+                "max_files": 5
+            }
+        },
+        "parameters": {
+            "radius_nm": {
+                "minimum": 1.0,
+                "maximum": 15.0,
+                "distribution": "uniform",
+                "grid_points": 30,
+                "source": "form_factor"
+            },
+            "height_nm": {
+                "minimum": 1.0,
+                "maximum": 20.0,
+                "distribution": "uniform",
+                "grid_points": 30,
+                "source": "form_factor"
+            },
+            "D_nm": {
+                "minimum": 3.0,
+                "maximum": 50.0,
+                "distribution": "uniform",
+                "source": "structure_factor"
+            },
+            "sigma_D_ratio": {
+                "minimum": 0.05,
+                "maximum": 0.2,
+                "distribution": "uniform",
+                "source": "structure_factor"
+            }
+        },
+        "sample": {
+            "surface_density_per_nm2": 0.01,
+            "particles": [
+                {
+                    "plugin": "spherical_segment",
+                    "material": "Copper",
+                    "enabled": true,
+                    "parameters": {
+                        "radius_nm": {
+                            "minimum": 1.0,
+                            "maximum": 15.0,
+                            "distribution": "uniform",
+                            "grid_points": 30
+                        },
+                        "height_nm": {
+                            "minimum": 1.0,
+                            "maximum": 20.0,
+                            "distribution": "uniform",
+                            "grid_points": 30
+                        }
+                    }
+                }
+            ],
+            "mixture": {
+                "mode": "gaussian_mixture",
+                "components": 5,
+                "sigma_fraction_min": 0.01,
+                "sigma_fraction_max": 0.3,
+                "random_weights": true
+            },
+            "layers": [
+                {
+                    "enabled": true,
+                    "material": "Copper",
+                    "thickness_nm": {
+                        "minimum": 20.0,
+                        "maximum": 20.0
+                    },
+                    "roughness_nm": {
+                        "minimum": 0.0,
+                        "maximum": 0.0
+                    }
+                },
+                {
+                    "enabled": true,
+                    "material": "Polymer",
+                    "thickness_nm": {
+                        "minimum": 50.0,
+                        "maximum": 50.0
+                    },
+                    "roughness_nm": {
+                        "minimum": 0.0,
+                        "maximum": 0.0
+                    }
+                }
+            ],
+            "substrate": {
+                "material": "Silicon",
+                "roughness_nm": 0.0
+            },
+            "interference": {
+                "plugin": "paracrystal",
+                "enabled": true,
+                "parameters": {
+                    "D_nm": {
+                        "minimum": 3.0,
+                        "maximum": 50.0,
+                        "distribution": "uniform"
+                    },
+                    "sigma_D_ratio": {
+                        "minimum": 0.05,
+                        "maximum": 0.2,
+                        "distribution": "uniform"
+                    }
+                }
+            },
+            "constraints": {
+                "segment_height_le_2r": true,
+                "interparticle_spacing_gt_2r": true
+            }
+        },
+        "preprocessing": {
+            "steps": [
+                {
+                    "plugin": "physical_background",
+                    "enabled": false,
+                    "target_fraction_min": 0.05,
+                    "target_fraction_max": 0.3,
+                    "constant_fraction_min": 0.0,
+                    "constant_fraction_max": 0.03,
+                    "specular_amplitude_min": 0.2,
+                    "specular_amplitude_max": 1.0,
+                    "specular_width_fraction_min": 0.01,
+                    "specular_width_fraction_max": 0.04,
+                    "specular_widening_min": 0.0,
+                    "specular_widening_max": 0.12,
+                    "specular_decay_fraction_min": 0.2,
+                    "specular_decay_fraction_max": 0.8,
+                    "yoneda_amplitude_min": 0.1,
+                    "yoneda_amplitude_max": 0.7,
+                    "yoneda_center_fraction_min": 0.5,
+                    "yoneda_center_fraction_max": 0.72,
+                    "yoneda_width_fraction_min": 0.02,
+                    "yoneda_width_fraction_max": 0.08,
+                    "yoneda_center_hole_min": 0.4,
+                    "yoneda_center_hole_max": 0.95,
+                    "wedge_amplitude_min": 0.05,
+                    "wedge_amplitude_max": 0.4,
+                    "wedge_anisotropy_min": 0.6,
+                    "wedge_anisotropy_max": 2.0,
+                    "wedge_porod_exponent_min": 2.0,
+                    "wedge_porod_exponent_max": 3.8,
+                    "wedge_rg_fraction_min": 0.05,
+                    "wedge_rg_fraction_max": 0.25,
+                    "plane_qy_slope_min": -0.08,
+                    "plane_qy_slope_max": 0.08,
+                    "plane_qz_slope_min": -0.08,
+                    "plane_qz_slope_max": 0.08,
+                    "low_qz_cut_fraction_min": 0.0,
+                    "low_qz_cut_fraction_max": 0.08,
+                    "blur_sigma_px_min": 0.0,
+                    "blur_sigma_px_max": 0.6
+                },
+                {
+                    "plugin": "gaussian_noise",
+                    "enabled": true,
+                    "snr_min_db": 80.0,
+                    "snr_max_db": 110.0
+                },
+                {
+                    "plugin": "poisson_noise",
+                    "enabled": false,
+                    "count_scale_min": 1.0,
+                    "count_scale_max": 20.0
+                },
+                {
+                    "plugin": "mask",
+                    "enabled": true
+                },
+                {
+                    "plugin": "log",
+                    "enabled": true,
+                    "epsilon": 1e-06
+                },
+                {
+                    "plugin": "normalize",
+                    "enabled": true,
+                    "mode": "range",
+                    "lower": 0.0,
+                    "upper": 1.0
+                },
+                {
+                    "plugin": "random_edge_crop",
+                    "enabled": false,
+                    "maximum_px": 4
+                }
+            ]
+        },
+        "model": {
+            "output_mode": "regression",
+            "layers": [
+                {
+                    "type": "conv2d",
+                    "units": 32,
+                    "activation": "relu",
+                    "kernel": 3
+                },
+                {
+                    "type": "maxpool2d",
+                    "pool": 2
+                },
+                {
+                    "type": "conv2d",
+                    "units": 64,
+                    "activation": "relu",
+                    "kernel": 3
+                },
+                {
+                    "type": "maxpool2d",
+                    "pool": 2
+                },
+                {
+                    "type": "conv2d",
+                    "units": 128,
+                    "activation": "relu",
+                    "kernel": 3
+                },
+                {
+                    "type": "global_average_pooling2d"
+                },
+                {
+                    "type": "dense",
+                    "units": 128,
+                    "activation": "relu"
+                },
+                {
+                    "type": "dropout",
+                    "rate": 0.3
+                }
+            ]
+        },
+        "training": {
+            "backend": "local",
+            "local_python": "F:\\miniconda\\envs\\GUI\\python.exe",
+            "batch_size": 64,
+            "epochs": 100,
+            "optimizer": "adam",
+            "learning_rate": 0.0001,
+            "scheduler": "cosine",
+            "smoke_samples": 64,
+            "smoke_epochs": 2
+        },
+        "hpc": {
+            "enabled": false,
+            "host": "maxwell.desy.de",
+            "user": "",
+            "remote_path": "",
+            "partition": "allgpu",
+            "gpus": 1,
+            "cpus": 8,
+            "memory": "64G",
+            "time": "24:00:00",
+            "python_command": "python",
+            "job_array": true
+        },
+        "runtime": {
+            "last_job_id": "",
+            "last_project_dir": "",
+            "auto_remember": true,
+            "dataset_output_dir": "",
+            "results_output_dir": ""
         }
     },
     "fitting": {
-        "detector": {
-            "distance": 2565.0,
-            "pixel_size_x": 172.0,
-            "pixel_size_y": 172.0,
-            "beam_center_x": 791.5100000000007,
-            "beam_center_y": 368.0,
-            "show_q_axis": false
+        "imported_gisaxs_file": "C:\\Users\\zhaon\\Downloads\\convert\\zhaonan_b8_pdai2_giwaxs_inca_00001_00001_m01_000011.cbf",
+        "stack_count": 1,
+        "cut_region": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
         },
-        "last_session": {
-            "load_mode": "Single",
-            "display_mode": "normal",
-            "stack_value": "1",
-            "stack_count": 1,
-            "insitu_range": "",
-            "fit_current_data": false,
-            "fit_log_x": false,
-            "fit_log_y": false,
-            "fit_norm": false,
-            "auto_show": false
-        },
-        "gisaxs_input": {
-            "vmax": 4.21,
-            "center_parallel": 0.0,
-            "cutline_vertical": 0.0,
-            "cutline_parallel": 20.0,
-            "load_mode": "Single"
+        "fitting_params": {}
+    },
+    "fitting_model_parameters": {
+        "fitting": {
+            "global_parameters": {
+                "sigma_res": 0.021734,
+                "k_value": 61617.2109,
+                "int_res": 2e-06,
+                "nu_res": 4.7878,
+                "background": 0.003568
+            },
+            "particles": {
+                "particle_7": {
+                    "shape": "Sphere",
+                    "enabled": true,
+                    "parameters": {
+                        "sphere": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.1,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1,
+                            "background": 0.0
+                        },
+                        "cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.1,
+                            "height": 20.0,
+                            "sigma_height": 0.1,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1,
+                            "background": 0.0
+                        }
+                    }
+                },
+                "particle_1": {
+                    "shape": "Cylinder",
+                    "enabled": true,
+                    "parameters": {
+                        "sphere": {
+                            "intensity": 1.0,
+                            "radius": 17.399999999999977,
+                            "sigma_radius": 6.0,
+                            "diameter": 0.0,
+                            "sigma_diameter": 0.0
+                        },
+                        "cylinder": {
+                            "intensity": 0.604631,
+                            "radius": 2.855,
+                            "sigma_radius": 0.3673,
+                            "height": 24.542,
+                            "sigma_height": 4.4309,
+                            "diameter": 25.223,
+                            "sigma_diameter": 0.2486
+                        },
+                        "vertical_cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.3,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1
+                        }
+                    }
+                },
+                "particle_2": {
+                    "shape": "Vertical Cylinder",
+                    "enabled": true,
+                    "parameters": {
+                        "vertical cylinder": {
+                            "intensity": 0.21201585990559743,
+                            "radius": 8.622373580932617,
+                            "sigma_radius": 0.49824807047843933,
+                            "diameter": 173.40914916992188,
+                            "sigma_diameter": 41.66437530517578
+                        },
+                        "vertical_cylinder": {
+                            "intensity": 1.0,
+                            "radius": 10.0,
+                            "sigma_radius": 0.3,
+                            "diameter": 20.0,
+                            "sigma_diameter": 0.1
+                        }
+                    }
+                },
+                "particle_3": {
+                    "shape": "Cylinder",
+                    "enabled": true,
+                    "parameters": {
+                        "cylinder": {
+                            "intensity": 0.183353,
+                            "radius": 9.506,
+                            "sigma_radius": 1.196,
+                            "height": 14.333,
+                            "sigma_height": 6.8071,
+                            "diameter": 139.434,
+                            "sigma_diameter": 47.5381
+                        }
+                    }
+                }
+            }
         }
     },
+    "classification": {
+        "sources": [],
+        "import_cache": {},
+        "preprocessing": {
+            "data_type": "auto",
+            "one_d_method": "Interpolate to common grid",
+            "two_d_method": "Center crop",
+            "normalize": "max",
+            "log_transform": false,
+            "smoothing_window": 0,
+            "crop_min": null,
+            "crop_max": null,
+            "one_d_grid": null,
+            "resize_shape": null,
+            "flatten": true
+        },
+        "validation": {
+            "method": "Stratified K-fold",
+            "test_size": 0.2,
+            "folds": 5,
+            "repeats": 1,
+            "shuffle": true,
+            "random_state": 42
+        },
+        "projection": {
+            "enabled": false,
+            "method": "None",
+            "n_components": 2,
+            "explained_variance": 0.95,
+            "umap_neighbors": 15,
+            "umap_min_dist": 0.1
+        },
+        "algorithms": [
+            {
+                "algorithm_id": "logistic_regression",
+                "display_name": "Logistic Regression",
+                "enabled": true,
+                "parameters": {
+                    "C": 1.0,
+                    "class_weight": "balanced",
+                    "max_iter": 1000
+                },
+                "description": "Linear baseline with calibrated class boundaries.",
+                "requires_scaling": true
+            },
+            {
+                "algorithm_id": "linear_svm",
+                "display_name": "Linear SVM",
+                "enabled": true,
+                "parameters": {
+                    "C": 1.0,
+                    "class_weight": "balanced",
+                    "probability": true
+                },
+                "description": "Margin classifier for high-dimensional small datasets.",
+                "requires_scaling": true
+            },
+            {
+                "algorithm_id": "rbf_svm",
+                "display_name": "RBF SVM",
+                "enabled": true,
+                "parameters": {
+                    "C": 1.0,
+                    "gamma": "scale",
+                    "class_weight": "balanced",
+                    "probability": true
+                },
+                "description": "Nonlinear SVM for curved class boundaries.",
+                "requires_scaling": true
+            },
+            {
+                "algorithm_id": "knn",
+                "display_name": "K-Nearest Neighbors",
+                "enabled": true,
+                "parameters": {
+                    "n_neighbors": 5,
+                    "weights": "distance",
+                    "metric": "minkowski"
+                },
+                "description": "Local neighbor voting; useful for compact datasets.",
+                "requires_scaling": true
+            },
+            {
+                "algorithm_id": "random_forest",
+                "display_name": "Random Forest",
+                "enabled": true,
+                "parameters": {
+                    "n_estimators": 300,
+                    "max_depth": null,
+                    "min_samples_leaf": 1,
+                    "class_weight": "balanced"
+                },
+                "description": "Bagged decision trees; robust and scale-insensitive.",
+                "requires_scaling": false
+            },
+            {
+                "algorithm_id": "extra_trees",
+                "display_name": "Extra Trees",
+                "enabled": false,
+                "parameters": {
+                    "n_estimators": 300,
+                    "max_depth": null,
+                    "min_samples_leaf": 1,
+                    "class_weight": "balanced"
+                },
+                "description": "Randomized tree ensemble with low variance.",
+                "requires_scaling": false
+            },
+            {
+                "algorithm_id": "gradient_boosting",
+                "display_name": "Gradient Boosting",
+                "enabled": false,
+                "parameters": {
+                    "n_estimators": 120,
+                    "learning_rate": 0.05,
+                    "max_depth": 3
+                },
+                "description": "Sequential boosted trees for tabular features.",
+                "requires_scaling": false
+            },
+            {
+                "algorithm_id": "adaboost",
+                "display_name": "AdaBoost",
+                "enabled": false,
+                "parameters": {
+                    "n_estimators": 120,
+                    "learning_rate": 0.5
+                },
+                "description": "Boosted weak learners for simple boundaries.",
+                "requires_scaling": false
+            },
+            {
+                "algorithm_id": "lda",
+                "display_name": "LDA",
+                "enabled": true,
+                "parameters": {
+                    "solver": "lsqr",
+                    "shrinkage": "auto"
+                },
+                "description": "Linear discriminant model with shrinkage for small samples.",
+                "requires_scaling": true
+            },
+            {
+                "algorithm_id": "gaussian_nb",
+                "display_name": "Gaussian Naive Bayes",
+                "enabled": false,
+                "parameters": {},
+                "description": "Fast probabilistic baseline with Gaussian assumptions.",
+                "requires_scaling": false
+            }
+        ],
+        "ranking_metric": "macro_f1",
+        "label_overrides": {}
+    },
     "gisaxs_predict": {
-        "framework": "tensorflow 2.15.0",
+        "framework": "tensorflow 2.16.2",
         "mode": "single",
         "input_file": "",
         "input_folder": "",
@@ -109,36 +616,20 @@
         "auto_scale": true,
         "vmin": null,
         "vmax": null,
-        "colormap": "viridis"
-    },
-    "classification": {
-        "import_cache": {
-            "P2": {
-                "path": "",
-                "rule": "*"
-            },
-            "Particle 1": {
-                "path": "",
-                "rule": "*"
-            }
-        }
-    },
-    "system": {
-        "calculation_method": "DWBA",
-        "approximation": "Born",
-        "substrate_layers": 1,
-        "max_iterations": 1000,
-        "convergence_threshold": 1e-06,
-        "parallel_processing": true,
-        "num_threads": 4
-    },
-    "trainset.detector": {
-        "preset": "Pilatus 2M",
-        "nbins_x": 1475,
-        "nbins_y": 1679,
-        "pixel_size_x": 172,
-        "pixel_size_y": 172,
-        "beam_center_x": 737,
-        "beam_center_y": 839
+        "predict_auto_scale": true,
+        "predict_vmin": null,
+        "predict_vmax": null,
+        "colormap": "viridis",
+        "gisaxs_log_scale": false,
+        "predict_log_scale": false,
+        "predict_curve_logx": false,
+        "predict_curve_logy": false,
+        "predict_curve_autoscale": true,
+        "predict_curve_xmin": null,
+        "predict_curve_xmax": null,
+        "predict_curve_ymin": null,
+        "predict_curve_ymax": null,
+        "module_name": "",
+        "module_model_path": ""
     }
 }

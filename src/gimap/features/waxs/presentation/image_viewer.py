@@ -92,6 +92,7 @@ class ScatteringImageViewer(QWidget):
         xlabel: str = "X (pixel)",
         ylabel: str = "Y (pixel)",
         q_coordinates: tuple[np.ndarray, np.ndarray] | None = None,
+        no_data_color: str = "white",
     ) -> None:
         render_start = time.perf_counter()
         raw = np.asarray(image)
@@ -122,7 +123,10 @@ class ScatteringImageViewer(QWidget):
         self.ax.clear()
         self.cax.clear()
         cmap = colormaps.get_cmap(colormap).copy()
-        cmap.set_bad(cmap(0.0))
+        # Keep masked/no-data detector cells visually distinct from measured
+        # intensities instead of extending the low end of the colormap into them.
+        cmap.set_bad(no_data_color)
+        self.ax.set_facecolor(no_data_color)
         if q_coordinates is None:
             artist = self.ax.imshow(
                 preview,
@@ -140,16 +144,21 @@ class ScatteringImageViewer(QWidget):
             if flip_vertical:
                 horizontal_preview = np.flipud(horizontal_preview)
                 qz_preview = np.flipud(qz_preview)
-            artist = self.ax.pcolormesh(
-                horizontal_preview,
-                qz_preview,
-                preview,
-                shading="nearest",
-                cmap=cmap,
-                vmin=vmin,
-                vmax=vmax,
-                rasterized=True,
-            )
+            artists = []
+            for branch in self._signed_q_branch_slices(horizontal_preview):
+                artists.append(
+                    self.ax.pcolormesh(
+                        horizontal_preview[:, branch],
+                        qz_preview[:, branch],
+                        preview[:, branch],
+                        shading="nearest",
+                        cmap=cmap,
+                        vmin=vmin,
+                        vmax=vmax,
+                        rasterized=True,
+                    )
+                )
+            artist = artists[0]
         self.ax.set_aspect("equal", adjustable="box", anchor="C")
         self.ax.set_anchor("C")
         self.ax.set_title(title)
@@ -184,7 +193,8 @@ class ScatteringImageViewer(QWidget):
             int(np.ceil(height / max(1, canvas_h))),
             int(np.ceil(np.sqrt(max(1, image.size) / max_preview_pixels))),
         )
-        preview = image[::stride, ::stride]
+        preview = image[::stride, ::stride].copy()
+        preview = self._detector_coverage_preview(image, preview, stride)
         if extent is None:
             preview_extent = (0.0, float(width), float(height), 0.0)
         else:
@@ -193,6 +203,68 @@ class ScatteringImageViewer(QWidget):
         self._preview_cache_array = preview
         self._preview_cache_extent = preview_extent
         return preview, preview_extent, stride
+
+    @classmethod
+    def _detector_coverage_preview(
+        cls,
+        image: np.ndarray,
+        sampled: np.ndarray,
+        stride: int,
+    ) -> np.ndarray:
+        """Interpolate interior NaNs while retaining unsupported detector area."""
+        height, width = image.shape[:2]
+        finite = np.isfinite(image)
+        pad_y = (-height) % stride
+        pad_x = (-width) % stride
+        padded = np.pad(finite, ((0, pad_y), (0, pad_x)), constant_values=False)
+        sampled_support = padded.reshape(
+            padded.shape[0] // stride,
+            stride,
+            padded.shape[1] // stride,
+            stride,
+        ).any(axis=(1, 3))
+
+        # A point belongs to the detector image only when measured pixels bracket
+        # it in both directions. This preserves the pixel-space blank canvas and,
+        # after coordinate projection, the high-q central coverage hole.
+        row_envelope = np.maximum.accumulate(
+            sampled_support, axis=1
+        ) & np.maximum.accumulate(sampled_support[:, ::-1], axis=1)[:, ::-1]
+        column_envelope = np.maximum.accumulate(
+            sampled_support, axis=0
+        ) & np.maximum.accumulate(sampled_support[::-1, :], axis=0)[::-1, :]
+        detector_coverage = row_envelope & column_envelope
+
+        result = np.asarray(sampled, dtype=float).copy()
+        cls._interpolate_nan_lines(result, axis=1)
+        cls._interpolate_nan_lines(result, axis=0)
+        result[~detector_coverage] = np.nan
+        return result
+
+    @staticmethod
+    def _interpolate_nan_lines(values: np.ndarray, *, axis: int) -> None:
+        oriented = values if axis == 1 else values.T
+        positions = np.arange(oriented.shape[1])
+        for line in oriented:
+            finite = np.isfinite(line)
+            if np.count_nonzero(finite) >= 2:
+                missing = ~finite
+                line[missing] = np.interp(positions[missing], positions[finite], line[finite])
+
+    @staticmethod
+    def _signed_q_branch_slices(horizontal_q: np.ndarray) -> tuple[slice, ...]:
+        """Split negative/positive signed-Qr branches at their discontinuity."""
+        columns = np.nanmedian(np.asarray(horizontal_q, dtype=float), axis=0)
+        negative = np.flatnonzero(columns < 0.0)
+        positive = np.flatnonzero(columns > 0.0)
+        branches: list[slice] = []
+        if negative.size >= 2:
+            branches.append(slice(int(negative[0]), int(negative[-1]) + 1))
+        if positive.size >= 2:
+            branches.append(slice(int(positive[0]), int(positive[-1]) + 1))
+        if branches:
+            return tuple(branches)
+        return (slice(0, horizontal_q.shape[1]),)
 
     @staticmethod
     def _array_mb(arr: np.ndarray) -> float:
