@@ -10,7 +10,7 @@
   [`tests/test_fitting_presentation.py`](../../../tests/test_fitting_presentation.py)、
   [`tests/test_fitting_view_model.py`](../../../tests/test_fitting_view_model.py)、
   [`tests/test_ui_workspace_layouts.py`](../../../tests/test_ui_workspace_layouts.py)
-- **Last verified**: 2026-08-25
+- **Last verified**: 2026-09-03
 
 ## 当前状态
 
@@ -123,6 +123,15 @@ calculation、文件格式判断、TensorFlow inference 或 fitting orchestratio
   表示围绕 Yoneda 位置平均的 detector rows；显式 `Extract / Update Cut` 才生成 1D curve；
 - Fit 主任务使用 `Components / Global / Data & refine / Auto fit` 四个同级标签页。`Plot Current Model`
   是标签页外的常驻主命令，修改 component 或 global 参数后无需切换工作面即可重新绘制；
+- `Data & refine` 提供 `Global Search` 与 `Local Refine` 两个独立入口。两者都打开非阻塞参数弹窗，
+  顶部明确显示输入来自 current cut 或 imported 1D data 及实际点数；表格允许逐项选择优化参数并
+  编辑 Min/Max。Global 使用数据/q-window 驱动的宽范围、differential-evolution evaluation budget
+  和 local starts，并在每个候选上先消去线性幅度；默认约 16384 evaluations、3 starts。Local 使用
+  当前值附近的 polishing 范围；运行期间显示所处阶段、总进度和当前/最佳 logRMSE，并可停止，完成后
+  把选中参数写回 Components/Global 控件。Global 的 Target logRMSE 默认是 `0`（不提前停止），避免
+  沿用 AI refine 的宽松阈值而在搜索尚未收敛时结束；
+- Components/Global 参数输入保留至少 12 位小数；进入页面、打开搜索弹窗或焦点切换不会把已加载的
+  小参数（例如 `10⁻⁸` 量级的 `D/sigma_D`）静默舍入并写回配置；
 - Global 的 `Default step` 列就是数值增量设置入口，修改后保存到 UI preferences。Resolution Sigma
   的内建默认步长是 `0.0001`，Reset 恢复内建值；
 - 结果区顶部只暴露一个 `q display` 选择以及 `Log X / Log Y / Normalize`。`Signed ±q` 保留符号，
@@ -199,7 +208,9 @@ application 行为。
 - [ ] 连续切换 Detector、Curve 时标签栏的纵向位置不变；q display 和 curve layers 只在曲线页面
       内容中出现，错误/状态 banner 也不推动标签栏；
 - [ ] Curve 展开 Advanced plot controls 后切回 Detector，Detector 宽高与滚动范围不受隐藏页影响；
-- [ ] Plot Current Model、Auto-K、Auto Refine、Clear 正常；成功绘图进入结果页，失败显示 inline error；
+- [ ] Plot Current Model、Auto-K、Clear 正常；Global Search 与 Local Refine 分别打开宽范围/精修范围
+      弹窗，勾选 `Use current cut` 时使用当前 cut，未勾选时使用 imported 1D data；bounds 包含当前
+      值，完成后写回选中参数；
 - [ ] Manual / AI assisted 切换不重置当前 curve、model 或 constraint state；
 - [ ] AI model refresh/open、constraint、Fast/Full、Stop 和 advanced constraints 正常；
 - [ ] detector Preview 的 drag/drop、double-click 和 overlay 正常；

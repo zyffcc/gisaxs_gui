@@ -135,9 +135,10 @@ class WorkflowFeedbackMixin:
             getattr(self.ui, "fitCurrentDataCheckBox", None)
             and self.ui.fitCurrentDataCheckBox.isChecked()
         )
-        fitting_input_ready = cut_ready if use_cut else (one_d_ready or cut_ready)
+        fitting_input_ready = cut_ready if use_cut else one_d_ready
         for name in (
             "FittingManualFittingButton",
+            "FittingGlobalSearchButton",
             "FittingAutoRefineButton",
             "FittingAutoFittingButton",
         ):

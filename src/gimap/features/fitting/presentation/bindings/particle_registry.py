@@ -32,15 +32,18 @@ class ParticleRegistryMixin:
 
         self._setup_particle_connections()
 
-        self._setup_particle_parameter_connections()
-
-        self._setup_global_parameter_connections()
-
         self._setup_parameter_ranges()
 
         self._initialize_particle_states()
 
         self._initialize_global_parameters()
+
+        # Register edit tracking only after programmatic loading, so each
+        # widget's persisted baseline is its loaded value rather than the
+        # temporary Qt Designer default.
+        self._setup_particle_parameter_connections()
+
+        self._setup_global_parameter_connections()
 
         self._add_fitting_success("Particle Shape Connector initialized")
 

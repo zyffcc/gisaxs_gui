@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from ..domain import (
+    default_global_search_bounds,
+    default_global_search_selected,
     ai_q_key,
     apply_input_image_options,
     chi_square,
@@ -108,11 +110,28 @@ class FittingAiCalculations:
 
 
 class ManualRefinementCalculations:
-    def default_selected(self, parameters):
-        return default_refine_selected(parameters)
+    def default_selected(self, parameter_name):
+        return default_refine_selected(parameter_name)
 
-    def default_bounds(self, item):
-        return default_refine_bounds(item)
+    def default_bounds(self, parameter_name, current_value):
+        return default_refine_bounds(parameter_name, current_value)
+
+    def default_global_selected(self, parameter_name):
+        return default_global_search_selected(parameter_name)
+
+    def default_global_bounds(
+        self,
+        parameter_name,
+        current_value,
+        observed=None,
+        q_values=None,
+    ):
+        return default_global_search_bounds(
+            parameter_name,
+            current_value,
+            observed,
+            q_values,
+        )
 
     def execute(self, setup, selected, options, **callbacks):
         return run_manual_refinement(
@@ -136,9 +155,7 @@ class FittingModelCalculations:
         return self._model.parameter_names(tuple(shapes))
 
     def components(self, shapes, q_model, parameters):
-        return self._model.components(
-            tuple(shapes), q_model, tuple(parameters)
-        )
+        return self._model.components(tuple(shapes), q_model, tuple(parameters))
 
     def build_function(self, shapes):
         return self._model.build_function(tuple(shapes))

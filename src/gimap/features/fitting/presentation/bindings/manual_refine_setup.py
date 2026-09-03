@@ -46,6 +46,9 @@ class ManualRefineSetupMixin:
 
             n = min(q_data.size, y_data.size)
             q_data, y_data = q_data[:n], y_data[:n]
+            prepared = self._prepare_signed_q_data(q_data, y_data)
+            q_data = np.asarray(prepared.q, dtype=float)
+            y_data = np.asarray(prepared.intensity, dtype=float)
             q_data, y_data = self._filter_ai_excluded_points_for_display(q_data, y_data)
             mask = np.isfinite(q_data) & np.isfinite(y_data) & (y_data > 0)
             if self._roi_active():
@@ -78,6 +81,8 @@ class ManualRefineSetupMixin:
                 "q_model": q_model,
                 "y": y_data,
                 "q_source_kind": q_source_kind,
+                "q_branch": prepared.branch,
+                "q_combination": prepared.combination,
                 "model_func": model_func,
                 "param_names": param_names,
                 "params": descriptors,
@@ -185,28 +190,81 @@ class ManualRefineSetupMixin:
     def _manual_refine_default_selected(self, name: str) -> bool:
         return _scientific_commands(self).refinement.default_selected(name)
 
-    def _manual_refine_dialog_state(self) -> dict:
+    def _manual_global_default_selected(self, name: str) -> bool:
+        return _scientific_commands(self).refinement.default_global_selected(name)
+
+    def _manual_refine_dialog_state(self, mode: str = "local") -> dict:
+        key = "manual_global_search_v2" if mode == "global" else "manual_auto_refine"
+        attr = "_manual_global_search_state" if mode == "global" else "_manual_auto_refine_state"
         try:
-            state = self.preferences.get("manual_auto_refine", {})
+            state = self.preferences.get(key, {})
             return state if isinstance(state, dict) else {}
         except Exception:
-            return (
-                getattr(self, "_manual_auto_refine_state", {})
-                if isinstance(getattr(self, "_manual_auto_refine_state", None), dict)
-                else {}
-            )
+            return getattr(self, attr, {}) if isinstance(getattr(self, attr, None), dict) else {}
 
-    def _save_manual_refine_dialog_state(self, rows: dict) -> None:
+    def _save_manual_refine_dialog_state(self, rows: dict, mode: str = "local") -> None:
         rows = rows if isinstance(rows, dict) else {}
-        self._manual_auto_refine_state = rows
+        key = "manual_global_search_v2" if mode == "global" else "manual_auto_refine"
+        attr = "_manual_global_search_state" if mode == "global" else "_manual_auto_refine_state"
+        setattr(self, attr, rows)
         try:
-            self.preferences.set("manual_auto_refine", rows)
+            self.preferences.set(key, rows)
             self.preferences.save()
         except Exception:
             pass
 
+    def _manual_parameter_search_settings(self) -> dict:
+        try:
+            settings = self.preferences.get("manual_parameter_search_v2", {})
+            return settings if isinstance(settings, dict) else {}
+        except Exception:
+            return {}
+
+    def _save_manual_parameter_search_settings(self, **updates) -> None:
+        try:
+            settings = self._manual_parameter_search_settings()
+            settings.update(updates)
+            self.preferences.set("manual_parameter_search_v2", settings)
+            self.preferences.save()
+        except Exception:
+            pass
+
+    def _matching_manual_refine_cached_row(self, desc: dict, cached_rows: dict) -> dict:
+        """Reuse a saved selection, but only reuse bounds for the same start value."""
+
+        cached = (
+            cached_rows.get(str(desc.get("name", "")), {}) if isinstance(cached_rows, dict) else {}
+        )
+        if not isinstance(cached, dict):
+            return {}
+        matched = {"checked": bool(cached["checked"])} if "checked" in cached else {}
+        try:
+            saved_value = float(cached["current_value"])
+            current_value = float(desc["value"])
+        except (KeyError, TypeError, ValueError):
+            return matched
+        if np.isclose(saved_value, current_value, rtol=1e-9, atol=1e-12):
+            for key in ("min", "max"):
+                if key in cached:
+                    matched[key] = cached[key]
+        return matched
+
     def _default_manual_refine_bounds(self, name: str, value: float):
         return _scientific_commands(self).refinement.default_bounds(name, value)
+
+    def _default_manual_global_bounds(
+        self,
+        name: str,
+        value: float,
+        observed=None,
+        q_values=None,
+    ):
+        return _scientific_commands(self).refinement.default_global_bounds(
+            name,
+            value,
+            observed,
+            q_values,
+        )
 
     def _run_manual_auto_refine(
         self, setup, selected, options, progress_callback=None, stop_callback=None

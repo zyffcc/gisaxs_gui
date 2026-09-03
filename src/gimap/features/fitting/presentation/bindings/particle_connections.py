@@ -69,13 +69,13 @@ class ParticleConnectionsMixin:
 
         if hasattr(self.ui, "fitBGValue"):
             self.ui.fitBGValue.setRange(min_value, max_value)
-            self.ui.fitBGValue.setDecimals(6)
+            self.ui.fitBGValue.setDecimals(12)
             self.ui.fitBGValue.setSingleStep(configured_step("fitBGStep", 0.1))
             widgets_set += 1
 
         if hasattr(self.ui, "fitSigmaResValue"):
             self.ui.fitSigmaResValue.setRange(min_value, max_value)
-            self.ui.fitSigmaResValue.setDecimals(6)
+            self.ui.fitSigmaResValue.setDecimals(12)
             self.ui.fitSigmaResValue.setSingleStep(
                 configured_step("fitSigmaResStep", 0.0001)
             )
@@ -83,13 +83,13 @@ class ParticleConnectionsMixin:
 
         if hasattr(self.ui, "fitNuResValue"):
             self.ui.fitNuResValue.setRange(min_value, max_value)
-            self.ui.fitNuResValue.setDecimals(4)
+            self.ui.fitNuResValue.setDecimals(12)
             self.ui.fitNuResValue.setSingleStep(configured_step("fitNuResStep", 0.1))
             widgets_set += 1
 
         if hasattr(self.ui, "fitIntResValue"):
             self.ui.fitIntResValue.setRange(min_value, max_value)
-            self.ui.fitIntResValue.setDecimals(6)
+            self.ui.fitIntResValue.setDecimals(12)
             self.ui.fitIntResValue.setSingleStep(
                 configured_step("fitIntResStep", 0.01)
             )
@@ -97,7 +97,7 @@ class ParticleConnectionsMixin:
 
         if hasattr(self.ui, "fitKValue"):
             self.ui.fitKValue.setRange(min_value, max_value)
-            self.ui.fitKValue.setDecimals(4)
+            self.ui.fitKValue.setDecimals(12)
             self.ui.fitKValue.setSingleStep(configured_step("fitKStep", 0.1))
             widgets_set += 1
 

@@ -323,6 +323,12 @@ QPushButton[gimapPrimaryAction="true"]:hover {
     background: #1e50b4;
 }
 
+QPushButton#FittingGlobalSearchButton,
+QPushButton#FittingAutoRefineButton {
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
 QPushButton[gimapDangerAction="true"] {
     color: #b42318;
     border-color: #f0b4ad;

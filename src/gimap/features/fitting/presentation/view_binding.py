@@ -7,6 +7,7 @@ from collections import OrderedDict, defaultdict
 
 
 from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtWidgets import QWidget
 
 from src.gimap.features.fitting.application import (
     apply_input_image_options,
@@ -99,7 +100,12 @@ class FittingViewBinding(
         super().__init__(parent)
         self.ui = ui
         self.parent = parent
-        self.main_window = parent.parent if hasattr(parent, "parent") else None
+        parent_widget = parent if isinstance(parent, QWidget) else None
+        if parent_widget is None and parent is not None:
+            parent_getter = getattr(parent, "parent", None)
+            candidate = parent_getter() if callable(parent_getter) else parent_getter
+            parent_widget = candidate if isinstance(candidate, QWidget) else None
+        self.main_window = parent_widget or (ui if isinstance(ui, QWidget) else None)
         if fitting_view_model is None:
             fitting_view_model = _create_default_fitting_view_model()
         self.fitting_view_model = fitting_view_model

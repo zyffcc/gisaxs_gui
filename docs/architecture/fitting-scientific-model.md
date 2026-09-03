@@ -4,10 +4,13 @@
 - **Scope**：Fitting 一维散射模型、分量累加、q 单位和绘图数据对齐
 - **Related code**：`src/gimap/features/fitting/domain/scattering_model.py`、
   `src/gimap/features/fitting/domain/curve_transformations.py`、
+  `src/gimap/features/fitting/domain/manual_refinement.py`、
   `src/gimap/features/fitting/presentation/bindings/detector_display.py`
 - **Related tests**：`tests/test_fitting_domain_scattering_model.py`、
-  `tests/test_fitting_curve_rendering.py`
-- **Last verified**：2026-08-20
+  `tests/test_fitting_curve_rendering.py`、
+  `tests/test_fitting_domain_constraints_scoring.py`、
+  `tests/test_fitting_domain_manual_refinement.py`
+- **Last verified**：2026-09-03
 
 本文是 GIMaP Fitting 科学模型的权威说明。修改公式、参数顺序、单位、采样方式、分量缩放
 或 q–intensity 对齐行为前，必须同步更新本文并增加固定数值回归测试。
@@ -160,6 +163,51 @@ prepared q + measured I + source sign
 
 Fold overlay 可以让 `+q` 与 `−q` 共享相同的 `|q|` 横坐标，但必须保留 source sign 供颜色、
 导出和诊断使用。对于仅依赖 `|q|` 的当前模型，相同 `|q|` 上的正负分支模型值必须相等。
+
+## Global Search 与 Local Refine
+
+`Global Search` 与 `Local Refine` 是两个明确分开的入口。勾选
+`Use current cut` 时输入来自当前 cut；未勾选时只使用已导入的 1D data，不在两者之间隐式
+fallback。输入继续使用当前 q branch/fold/average、排除点和 fitting ROI，随后仅保留有限且
+强度为正的点；少于 8 个点时不得启动。
+
+目标函数是实验强度与模型强度的 log residual。优化向量只包含弹窗中勾选的参数，其他参数
+保持当前值；每个 bounds 必须包含当前值。局部精修的内建默认范围用于 polishing：`R/h/D/k` 为当前值的
+±20%，`Int/BG/int_Res` 和各 sigma 为 ±50%，`nu_Res` 为 ±25%，并保持非负物理边界。
+零值使用小的非负可编辑窗口，`nu_Res` 下限为 0.1。
+
+局部 least-squares 不直接使用物理数值作为优化坐标，而是把每个选中参数按其 bounds 映射到
+`[0, 1]`。因此 `xtol` 衡量的是相对于用户范围的无量纲步长；同时释放 `10⁻⁸` 量级的参数与
+`10⁴` 量级的 `k` 时，不会因为原始尺度差异产生假性收敛。流程始终保留已评估的最佳参数，终止点
+不得比初始参数更差。
+
+全局搜索使用固定 seed、Latin-hypercube 初始化的 differential evolution 探索非线性形状、尺寸、
+structure 和 resolution 参数。对每个候选，`Int_i`、`int_Res` 与 `BG` 的线性幅度先用带 bounds 的
+迭代加权线性最小二乘消元；这避免把大量预算浪费在 `k × Int_i` 的退化方向。演化完成后，从 score
+最好的若干候选分别执行上述归一化局部精修。跨度达到 100 倍且上下界均为正的范围按对数映射，避免
+候选集中在大数值端。默认使用约 16384 次全局 evaluation、3 个局部起点，每个起点最多 80 次 local
+nfev；这些预算都可在弹窗中修改。
+
+全局默认 bounds 同时包含当前值并参考实际 `q_model` window：尺寸和分布宽度至少覆盖当前 q window
+可辨认的宽尺度范围，`D/sigma_D` 可跨越当前值附近的错误 basin，`nu_Res` 至少覆盖 `0.5–30`；
+`Int/int_Res/k` 对非零当前值允许 `10⁻⁴×–10⁴×`，`BG` 上限还参考当前有效强度的下四分位数。
+它们是搜索窗口，不是实验先验，用户应按样品知识收紧。
+
+Global 默认勾选所有 component geometry、distribution、structure、resolution 和线性幅度参数，只不
+勾选全局 `k`；`k` 与 component intensity 完全相关，不应同时释放。Local 默认仍只勾选 `Int`、
+`R/h` 与 `BG`，保持精修语义。
+用户修改过的勾选状态可以复用，但只有参数当前值未变化时才复用之前的绝对 bounds；当前值变化
+后重新围绕新值生成默认范围。Global 与 Local 分别保存选择和 bounds，避免宽搜索范围误用于精修。
+
+Components 与 Global 数值控件至少保留 12 位小数，足以表达接近零但非零的 structure/resolution
+参数。参数编辑追踪必须在 JSON 值加载后建立 baseline；仅打开页面、切换焦点或关闭窗口不得把
+高精度参数按控件的临时默认值重新写回。
+
+仓库回归样例 `TestSAXSdata/Cut_Data.txt` 按真实 `Import 1D` 路径读取：源 q 为 Å⁻¹，模型输入转换
+为 nm⁻¹（乘 10），并过滤唯一的非正强度点。固定的 3 Sphere 起点 logRMSE 为约 `0.174029`；默认
+16384 evaluation、3 个局部起点、每起点 80 nfev 必须降至 `0.05` 以下，当前固定 seed 回归约为
+`0.03838`。该真实曲线没有可追溯 parameter ground truth，因此这里只验证 empirical curve fit，不把
+得到的多解参数解释为结构真值。这个基准不改变 scattering 公式或参数语义。
 
 ## 修改门禁
 

@@ -21,7 +21,12 @@ from src.gimap.app.presentation.responsive_layout import current_profile, scale_
 
 from .ai_controls import build_ai_controls
 from .global_parameter_controls import build_global_parameter_controls
-from .layout_primitives import CardFrame, CurrentPageHeightTabWidget, NoWheelDoubleSpinBox
+from .layout_primitives import (
+    CardFrame,
+    CurrentPageHeightTabWidget,
+    NoWheelDoubleSpinBox,
+    ScientificDoubleSpinBox,
+)
 from .layout_primitives import detach_from_parent_layout as _detach_from_parent_layout
 from .parameter_step_preferences import ParameterStepPreferences
 
@@ -53,6 +58,13 @@ class FittingControlsCard(CardFrame):
         self._managed_step_reset_buttons = []
         self._managed_secondary_action_buttons = []
         self._managed_labels = []
+        for widget_name in (
+            "fitKValue",
+            "fitIntResValue",
+            "fitSigmaResValue",
+            "fitNuResValue",
+        ):
+            self._replace_global_value_spinbox(widget_name)
         containers = [
             ui.fitCurrentDataCheckBox,
             ui.widget,
@@ -101,7 +113,7 @@ class FittingControlsCard(CardFrame):
         ui.fitKLabel.setText("k:")
         ui.fitBGLabel = QLabel("BG:", self)
         ui.fitBGLabel.setObjectName("fitBGLabel")
-        ui.fitBGValue = QDoubleSpinBox(self)
+        ui.fitBGValue = ScientificDoubleSpinBox(self)
         ui.fitBGValue.setObjectName("fitBGValue")
         ui.fitBGValue.setDecimals(6)
         ui.fitBGValue.setRange(-1e10, 1e10)
@@ -210,18 +222,31 @@ class FittingControlsCard(CardFrame):
         actions_group = self._make_group("Fitting Actions")
         actions_layout = QHBoxLayout(actions_group)
         self._configure_group_layout(actions_layout, group_margin, group_top, group_spacing)
-        ui.FittingAutoRefineButton = QPushButton("Auto Refine", actions_group)
+        ui.FittingClearFittingButton_2.setText("Clear")
+        ui.FittingGlobalSearchButton = QPushButton("Global Search", actions_group)
+        ui.FittingGlobalSearchButton.setObjectName("FittingGlobalSearchButton")
+        normalize_button(ui.FittingGlobalSearchButton)
+        ui.FittingGlobalSearchButton.setMinimumHeight(scale_value(34, self.profile, 30))
+        ui.FittingGlobalSearchButton.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        ui.FittingGlobalSearchButton.setToolTip(
+            "Explore broad parameter ranges, then locally refine the best candidates."
+        )
+        ui.FittingAutoRefineButton = QPushButton("Local Refine", actions_group)
         ui.FittingAutoRefineButton.setObjectName("FittingAutoRefineButton")
         normalize_button(ui.FittingAutoRefineButton)
         ui.FittingAutoRefineButton.setMinimumHeight(scale_value(34, self.profile, 30))
         ui.FittingAutoRefineButton.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        ui.FittingAutoRefineButton.setToolTip(
+            "Polish the current parameters inside conservative local ranges."
+        )
+        self._managed_buttons.append(ui.FittingGlobalSearchButton)
         self._managed_buttons.append(ui.FittingAutoRefineButton)
-        actions_layout.addWidget(ui.FittingClearFittingButton_2)
-        actions_layout.addWidget(ui.FittingAutoRefineButton)
+        actions_layout.addWidget(ui.FittingClearFittingButton_2, 0)
+        actions_layout.addWidget(ui.FittingGlobalSearchButton, 1)
+        actions_layout.addWidget(ui.FittingAutoRefineButton, 1)
         actions_layout.addWidget(ui.FittingExportButton)
         ui.FittingManualFittingButton.setText("Plot Current Model")
         ui.FittingManualFittingButton.setProperty("gimapPrimaryAction", True)
-        ui.FittingAutoRefineButton.setProperty("gimapPrimaryAction", True)
 
         manual_page = QWidget(self)
         manual_page.setObjectName("fittingManualModePage")
@@ -279,6 +304,22 @@ class FittingControlsCard(CardFrame):
         layout.addWidget(self.mode_tabs)
         self._sync_mode_tab_height()
         self.apply_responsive_profile(self.profile)
+
+    def _replace_global_value_spinbox(self, widget_name: str) -> None:
+        old = getattr(self.ui, widget_name, None)
+        if not isinstance(old, QDoubleSpinBox):
+            return
+        _detach_from_parent_layout(old)
+        replacement = ScientificDoubleSpinBox(self)
+        replacement.setObjectName(old.objectName())
+        replacement.setRange(old.minimum(), old.maximum())
+        replacement.setDecimals(12)
+        replacement.setSingleStep(old.singleStep())
+        replacement.setValue(old.value())
+        replacement.setToolTip(old.toolTip())
+        old.setParent(None)
+        old.deleteLater()
+        setattr(self.ui, widget_name, replacement)
 
     def _make_group(self, title: str) -> QGroupBox:
         group = QGroupBox(title, self)
@@ -380,6 +421,17 @@ class FittingControlsCard(CardFrame):
             button.setMinimumWidth(button_width)
             button.setMaximumHeight(16777215)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        for button in (
+            self.ui.FittingClearFittingButton_2,
+            self.ui.FittingGlobalSearchButton,
+            self.ui.FittingAutoRefineButton,
+        ):
+            button.setMinimumWidth(0)
+        self.ui.FittingClearFittingButton_2.setMaximumWidth(60)
+        self.ui.FittingClearFittingButton_2.setSizePolicy(
+            QSizePolicy.Fixed,
+            QSizePolicy.Fixed,
+        )
         for input_widget in self._managed_inputs:
             input_widget.setMinimumHeight(input_height)
             input_widget.setMaximumHeight(16777215)

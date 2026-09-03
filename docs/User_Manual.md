@@ -197,7 +197,15 @@ global scale/background, and resolution-related terms.
 
 ### Auto Fitting / Auto Refine
 
-Auto Refine runs least-squares optimization from the current parameter state. It is intended to refine selected parameters according to the GUI settings.
+Auto Refine opens a parameter table before running least-squares optimization. Select the
+parameters to polish and edit their Min/Max bounds as needed. The current values are used as the
+starting point, so each selected range must include its current value. The built-in ranges are local
+windows around the current fit; resolution terms and global `k` are opt-in to avoid releasing strongly
+correlated scale terms by accident.
+
+With **Use current cut** checked, Auto Refine fits the current cut. With it unchecked, Auto Refine
+uses the imported 1D data. The dialog identifies the active source and the number of fitting points.
+The current q-display branch/combination, excluded points, and fitting range are applied consistently.
 
 If Auto Refine produces a better result than an AI fitting run, check that the same parameters, bounds, fixed/free selections, scale/background options, and data weighting are used in both workflows.
 

@@ -59,7 +59,7 @@ class InsituRefinementLifecycleMixin:
         selected = []
         for desc in setup.get("params", []):
             name = str(desc.get("name", ""))
-            cached = cached_rows.get(name, {}) if isinstance(cached_rows, dict) else {}
+            cached = self._matching_manual_refine_cached_row(desc, cached_rows)
             checked = (
                 bool(cached.get("checked", self._manual_refine_default_selected(name)))
                 if isinstance(cached, dict)

@@ -7,7 +7,7 @@
 > **Related code**：`src/gimap/app/context.py`、`src/gimap/app/bootstrap.py`、
 > `src/gimap/integrations/state/`
 >
-> **Last verified**：2026-08-20
+> **Last verified**：2026-09-03
 
 ## AppContext
 
@@ -23,6 +23,12 @@ workspace 和 feature。Context 当前包含：
 
 Feature 不得创建自己的全局 context 或 application singleton。Application 和 ViewModel 只依赖
 所需的 repository/port，不应把完整 Context 当作 service locator 到处传递。
+
+Fitting 的 Local Refine / Global Search 表格选择、可编辑 bounds 与全局搜索预算属于
+`UserPreferencesRepository` 中的交互偏好；它们不进入 scientific model parameter JSON、project
+state 或 session scientific provenance。Local 与 Global 的表格状态使用不同 key，避免宽范围跨模式
+复用。differential-evolution 版本使用 `manual_global_search_v2` 和
+`manual_parameter_search_v2`，不复用旧 Sobol 版本保存的窄 bounds 或过小预算。
 
 ## `core/global_params.py` 兼容边界
 

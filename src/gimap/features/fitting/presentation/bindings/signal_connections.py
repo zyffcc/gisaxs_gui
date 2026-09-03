@@ -165,7 +165,14 @@ class SignalConnectionsMixin:
             )
 
         if hasattr(self.ui, "FittingAutoRefineButton"):
-            self.ui.FittingAutoRefineButton.clicked.connect(self._show_manual_auto_refine_dialog)
+            self.ui.FittingAutoRefineButton.clicked.connect(
+                lambda _checked=False: self._show_manual_auto_refine_dialog("local")
+            )
+
+        if hasattr(self.ui, "FittingGlobalSearchButton"):
+            self.ui.FittingGlobalSearchButton.clicked.connect(
+                lambda _checked=False: self._show_manual_auto_refine_dialog("global")
+            )
 
         if hasattr(self.ui, "FittingAutoFittingButton"):
             self.ui.FittingAutoFittingButton.clicked.connect(self.open_ai_fitting_workspace)

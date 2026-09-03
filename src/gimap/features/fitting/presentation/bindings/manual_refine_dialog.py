@@ -38,14 +38,17 @@ from ..binding_primitives import (
 class ManualRefineDialogMixin:
     """Own manual refine dialog behavior."""
 
-    def _show_manual_auto_refine_dialog(self):
-        """Open a local least-squares refine dialog based on current manual fitting parameters."""
+    def _show_manual_auto_refine_dialog(self, search_mode: str = "local"):
+        """Open bounded global-search or local-refinement controls."""
         try:
+            search_mode = "global" if str(search_mode).lower() == "global" else "local"
+            is_global = search_mode == "global"
+            action_name = "Global Search" if is_global else "Local Refine"
             if not self.fitting_view_model.storage.dependency_available("scipy"):
                 QMessageBox.warning(
                     self.main_window or self.ui,
-                    "Auto Refine",
-                    "SciPy is required for Auto Refine. Please install scipy first.",
+                    action_name,
+                    f"SciPy is required for {action_name}. Please install scipy first.",
                 )
                 return
 
@@ -54,23 +57,43 @@ class ManualRefineDialogMixin:
                 return
 
             dialog = QDialog(self.main_window or self.ui)
-            dialog.setWindowTitle("Auto Refine Manual Fit")
-            dialog.resize(980, 640)
+            dialog.setObjectName(
+                "manualGlobalSearchDialog" if is_global else "manualAutoRefineDialog"
+            )
+            dialog.setWindowTitle(
+                "Global Search + Local Refine" if is_global else "Local Refine Manual Fit"
+            )
+            dialog.resize(1040 if is_global else 980, 680 if is_global else 640)
             dialog.setModal(False)
             dialog.setAttribute(Qt.WA_DeleteOnClose, True)
             layout = QVBoxLayout(dialog)
 
+            source_label = (
+                "current cut" if setup.get("q_source_kind") == "cut" else "imported 1D data"
+            )
             info = QLabel(
-                "Choose parameters to refine. Current manual parameters are used as initial values; "
-                "refined values will be written back to the fitting controls.",
+                f"Input: {source_label} ({len(setup['q_raw'])} fitting points). "
+                + (
+                    "Differential evolution explores the broad editable ranges, profiles linear "
+                    "amplitudes, then locally refines the best candidates."
+                    if is_global
+                    else "Polish the current values inside conservative editable local ranges. "
+                    "The optimizer uses normalized coordinates to avoid false xtol stops."
+                ),
                 dialog,
             )
+            info.setObjectName("manualAutoRefineInputSummary")
             info.setWordWrap(True)
             layout.addWidget(info)
 
             run_settings = self._ai_run_settings()
+            stored_settings = self._manual_parameter_search_settings()
             controls = QGridLayout()
-            controls.addWidget(QLabel("Max eval:", dialog), 0, 0)
+            controls.addWidget(
+                QLabel("Max local eval/start:" if is_global else "Max eval:", dialog),
+                0,
+                0,
+            )
             max_eval = QSpinBox(dialog)
             max_eval.setRange(1, 100000)
             max_eval.setValue(int(run_settings.get("full_refine_max_nfev", 120)))
@@ -78,11 +101,30 @@ class ManualRefineDialogMixin:
 
             controls.addWidget(QLabel("Target logRMSE:", dialog), 0, 2)
             target = QDoubleSpinBox(dialog)
+            target.setObjectName("manualTargetLogRmseSpinBox")
             target.setDecimals(8)
             target.setRange(0.0, 10.0)
             target.setSingleStep(0.00000001)
-            target.setValue(float(run_settings.get("full_refine_target_logrmse", 0.0)))
+            target.setValue(
+                float(stored_settings.get("target_logrmse", 0.0))
+                if is_global
+                else float(run_settings.get("full_refine_target_logrmse", 0.0))
+            )
+            target.setToolTip(
+                "0 runs the full global evaluation budget; set a positive value to stop early."
+                if is_global
+                else "Stop local refinement once this logRMSE is reached; 0 disables it."
+            )
             controls.addWidget(target, 0, 3)
+
+            global_samples_label = QLabel("Global evaluations:", dialog)
+            global_samples = QSpinBox(dialog)
+            global_samples.setObjectName("manualGlobalSamplesSpinBox")
+            global_samples.setRange(8, 65536)
+            global_samples.setValue(int(stored_settings.get("global_samples", 16384)))
+            global_samples.setToolTip("Approximate differential-evolution curve-evaluation budget.")
+            controls.addWidget(global_samples_label, 0, 4)
+            controls.addWidget(global_samples, 0, 5)
 
             controls.addWidget(QLabel("ftol:", dialog), 1, 0)
             ftol = QDoubleSpinBox(dialog)
@@ -126,10 +168,26 @@ class ManualRefineDialogMixin:
                 "Update the Fitting Plot every N estimated SciPy least_squares function evaluations; 0 disables live plot updates."
             )
             controls.addWidget(show_every, 2, 3)
+
+            global_starts_label = QLabel("Local starts:", dialog)
+            global_starts = QSpinBox(dialog)
+            global_starts.setObjectName("manualGlobalStartsSpinBox")
+            global_starts.setRange(1, 32)
+            global_starts.setValue(int(stored_settings.get("global_starts", 3)))
+            global_starts.setToolTip(
+                "Number of best global candidates polished with local least-squares."
+            )
+            controls.addWidget(global_starts_label, 2, 4)
+            controls.addWidget(global_starts, 2, 5)
+            global_samples_label.setVisible(is_global)
+            global_samples.setVisible(is_global)
+            global_starts_label.setVisible(is_global)
+            global_starts.setVisible(is_global)
             controls.setColumnStretch(6, 1)
             layout.addLayout(controls)
 
             table = QTableWidget(len(setup["params"]), 5, dialog)
+            table.setObjectName("manualAutoRefineParameterTable")
             table.setHorizontalHeaderLabels(["Refine", "Parameter", "Current", "Min", "Max"])
             table.setSelectionBehavior(QAbstractItemView.SelectRows)
             table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -140,15 +198,25 @@ class ManualRefineDialogMixin:
             layout.addWidget(table, 1)
 
             row_widgets = []
-            cached_rows = self._manual_refine_dialog_state()
+            cached_rows = self._manual_refine_dialog_state(search_mode)
             initializing_rows = True
             for row, desc in enumerate(setup["params"]):
                 value = float(desc["value"])
-                default_selected = self._manual_refine_default_selected(desc["name"])
-                lower, upper = self._default_manual_refine_bounds(desc["name"], value)
-                cached = (
-                    cached_rows.get(str(desc["name"]), {}) if isinstance(cached_rows, dict) else {}
+                default_selected = (
+                    self._manual_global_default_selected(desc["name"])
+                    if is_global
+                    else self._manual_refine_default_selected(desc["name"])
                 )
+                if is_global:
+                    lower, upper = self._default_manual_global_bounds(
+                        desc["name"],
+                        value,
+                        setup.get("y"),
+                        setup.get("q_model"),
+                    )
+                else:
+                    lower, upper = self._default_manual_refine_bounds(desc["name"], value)
+                cached = self._matching_manual_refine_cached_row(desc, cached_rows)
                 if isinstance(cached, dict):
                     default_selected = bool(cached.get("checked", default_selected))
                     try:
@@ -160,15 +228,19 @@ class ManualRefineDialogMixin:
                 check = QCheckBox(table)
                 check.setChecked(default_selected)
                 table.setCellWidget(row, 0, check)
-                table.setItem(row, 1, QTableWidgetItem(str(desc["label"])))
-                table.setItem(row, 2, QTableWidgetItem(f"{value:.10g}"))
+                parameter_item = QTableWidgetItem(str(desc["label"]))
+                parameter_item.setFlags(parameter_item.flags() & ~Qt.ItemIsEditable)
+                current_item = QTableWidgetItem(f"{value:.10g}")
+                current_item.setFlags(current_item.flags() & ~Qt.ItemIsEditable)
+                table.setItem(row, 1, parameter_item)
+                table.setItem(row, 2, current_item)
 
                 min_box = QDoubleSpinBox(table)
                 max_box = QDoubleSpinBox(table)
                 for spin in (min_box, max_box):
-                    spin.setDecimals(8)
+                    spin.setDecimals(12)
                     spin.setRange(-1e12, 1e12)
-                    spin.setSingleStep(max(abs(value) * 0.01, 1e-8))
+                    spin.setSingleStep(max(abs(value) * 0.01, 1e-12))
                 min_box.setValue(float(lower))
                 max_box.setValue(float(upper))
                 table.setCellWidget(row, 3, min_box)
@@ -184,10 +256,11 @@ class ManualRefineDialogMixin:
                 for desc, check, min_box, max_box in row_widgets:
                     rows[str(desc["name"])] = {
                         "checked": bool(check.isChecked()),
+                        "current_value": float(desc["value"]),
                         "min": float(min_box.value()),
                         "max": float(max_box.value()),
                     }
-                self._save_manual_refine_dialog_state(rows)
+                self._save_manual_refine_dialog_state(rows, search_mode)
 
             for _desc, check, min_box, max_box in row_widgets:
                 check.toggled.connect(lambda _checked=False: persist_row_state())
@@ -205,7 +278,7 @@ class ManualRefineDialogMixin:
             button_row = QHBoxLayout()
             select_all = QPushButton("Select All", dialog)
             clear = QPushButton("Clear", dialog)
-            run = QPushButton("Run Refine", dialog)
+            run = QPushButton("Run Global Search" if is_global else "Run Local Refine", dialog)
             stop = QPushButton("Stop", dialog)
             stop.setEnabled(False)
             apply_current = QPushButton("Apply Current", dialog)
@@ -260,6 +333,8 @@ class ManualRefineDialogMixin:
                     gtol,
                     progress_every,
                     show_every,
+                    global_samples,
+                    global_starts,
                 ):
                     widget.setEnabled(not running)
 
@@ -280,9 +355,15 @@ class ManualRefineDialogMixin:
                 for row, value in enumerate(result["params"]):
                     if selected_for_display is not None and row not in selected_for_display:
                         continue
-                    table.setItem(row, 2, QTableWidgetItem(f"{float(value):.10g}"))
+                    value = float(value)
+                    setup["params"][row]["value"] = value
+                    current_item = QTableWidgetItem(f"{value:.10g}")
+                    current_item.setFlags(current_item.flags() & ~Qt.ItemIsEditable)
+                    table.setItem(row, 2, current_item)
+                persist_row_state()
                 self._add_fitting_success(
-                    f"Applied Auto Refine parameters: logRMSE={float(result.get('final_log_rmse', np.nan)):.6g}"
+                    f"Applied {action_name} parameters: "
+                    f"logRMSE={float(result.get('final_log_rmse', np.nan)):.6g}"
                 )
 
             # 函数说明：处理progress事件。
@@ -291,12 +372,25 @@ class ManualRefineDialogMixin:
                 max_nfev = max(1, int(payload.get("max_nfev", max_eval.value())))
                 nfev = int(payload.get("nfev_est", payload.get("nfev", payload.get("calls", 0))))
                 calls = int(payload.get("calls", 0))
+                work_total = max(1, int(payload.get("work_total", max_nfev)))
+                work_done = int(payload.get("work_done", nfev))
+                phase = str(payload.get("phase", "local_refine"))
+                if phase == "global_search":
+                    phase_label = "Differential evolution"
+                elif payload.get("mode") == "global":
+                    phase_label = (
+                        f"Local refine {int(payload.get('local_start', 0))}/"
+                        f"{int(payload.get('global_starts', 1))}"
+                    )
+                else:
+                    phase_label = "Local refine"
                 now = time.perf_counter()
-                progress_bar.setValue(max(0, min(99, int(100 * nfev / max_nfev))))
+                progress_bar.setValue(max(0, min(99, int(100 * work_done / work_total))))
                 if now - float(refine_state.get("last_ui_update", 0.0)) >= 0.3 or nfev <= 1:
                     refine_state["last_ui_update"] = now
                     result_label.setText(
-                        f"Running: nfev~{nfev}/{max_nfev}, residual calls={calls}, "
+                        f"{phase_label}: work {work_done}/{work_total}, "
+                        f"local nfev~{nfev}, model calls={calls}, "
                         f"current logRMSE={float(payload.get('current_log_rmse', np.nan)):.6g}, "
                         f"best={float(payload.get('final_log_rmse', payload.get('best_log_rmse', np.nan))):.6g}"
                     )
@@ -337,21 +431,29 @@ class ManualRefineDialogMixin:
                         "click Apply Current to save the current best parameters."
                     )
                     self._add_fitting_warning(
-                        "Auto Refine stopped. Current best parameters are available to apply."
+                        f"{action_name} stopped. Current best parameters are available to apply."
                     )
                 else:
                     apply_result(result)
+                    initial_score = float(result["initial_log_rmse"])
+                    final_score = float(result["final_log_rmse"])
+                    improvement = (
+                        100.0 * (initial_score - final_score) / initial_score
+                        if np.isfinite(initial_score) and initial_score > 0
+                        else 0.0
+                    )
                     result_label.setText(
-                        f"Done: logRMSE {result['initial_log_rmse']:.6g} -> {result['final_log_rmse']:.6g}; "
-                        f"nfev={result['nfev']}; {result['message']}"
+                        f"Done: logRMSE {initial_score:.6g} -> {final_score:.6g} "
+                        f"({improvement:.1f}% better); local nfev={result['nfev']}; "
+                        f"{result['message']}"
                     )
                     self._add_fitting_success(result_label.text())
                 finish_worker()
 
             # 函数说明：处理failed事件。
             def on_failed(message):
-                result_label.setText(f"Auto Refine failed: {message}")
-                self._add_fitting_error(f"Auto Refine failed: {message}")
+                result_label.setText(f"{action_name} failed: {message}")
+                self._add_fitting_error(f"{action_name} failed: {message}")
                 finish_worker()
 
             # 函数说明：停止refine。
@@ -361,7 +463,7 @@ class ManualRefineDialogMixin:
                     worker.request_stop()
                     refine_state["status"] = "Stopping"
                     result_label.setText(
-                        "Stopping Auto Refine after the current residual evaluation..."
+                        f"Stopping {action_name} after the current model evaluation..."
                     )
                     stop.setEnabled(False)
 
@@ -380,7 +482,11 @@ class ManualRefineDialogMixin:
             def run_refine():
                 try:
                     options = {
+                        "mode": search_mode,
                         "max_nfev": int(max_eval.value()),
+                        "global_samples": int(global_samples.value()),
+                        "global_starts": int(global_starts.value()),
+                        "random_seed": 1729,
                         "target_logrmse": float(target.value()),
                         "ftol": float(ftol.value()) if ftol.value() > 0 else None,
                         "xtol": float(xtol.value()) if xtol.value() > 0 else None,
@@ -390,14 +496,22 @@ class ManualRefineDialogMixin:
                         "min_progress_seconds": 0.5,
                     }
                     persist_row_state()
-                    self._save_ai_fitting_settings(
-                        full_refine_max_nfev=int(max_eval.value()),
-                        full_refine_target_logrmse=float(target.value()),
-                        full_refine_ftol=float(ftol.value()),
-                        full_refine_xtol=float(xtol.value()),
-                        full_refine_gtol=float(gtol.value()),
-                        full_refine_progress_interval=int(progress_every.value()),
-                    )
+                    ai_setting_updates = {
+                        "full_refine_max_nfev": int(max_eval.value()),
+                        "full_refine_ftol": float(ftol.value()),
+                        "full_refine_xtol": float(xtol.value()),
+                        "full_refine_gtol": float(gtol.value()),
+                        "full_refine_progress_interval": int(progress_every.value()),
+                    }
+                    if not is_global:
+                        ai_setting_updates["full_refine_target_logrmse"] = float(target.value())
+                    self._save_ai_fitting_settings(**ai_setting_updates)
+                    if is_global:
+                        self._save_manual_parameter_search_settings(
+                            global_samples=int(global_samples.value()),
+                            global_starts=int(global_starts.value()),
+                            target_logrmse=float(target.value()),
+                        )
                     selected = []
                     for desc, check, min_box, max_box in row_widgets:
                         if not check.isChecked():
@@ -406,15 +520,23 @@ class ManualRefineDialogMixin:
                         hi = float(max_box.value())
                         if hi <= lo:
                             raise ValueError(f"{desc['label']} max must be greater than min.")
+                        current_value = float(desc["value"])
+                        if not lo <= current_value <= hi:
+                            raise ValueError(
+                                f"{desc['label']} bounds must include the current value "
+                                f"({current_value:.10g})."
+                            )
                         selected.append((desc, lo, hi))
                     if not selected:
                         QMessageBox.information(
-                            dialog, "Auto Refine", "Select at least one parameter to refine."
+                            dialog, action_name, "Select at least one parameter to optimize."
                         )
                         return
                     refine_state["latest_result"] = None
                     progress_bar.setValue(0)
-                    result_label.setText("Refining...")
+                    result_label.setText(
+                        "Running differential evolution..." if is_global else "Refining locally..."
+                    )
                     thread = QThread(dialog)
                     worker = ManualAutoRefineWorker(self, setup, selected, options)
                     bridge = RefineUiBridge(dialog)
@@ -435,8 +557,8 @@ class ManualRefineDialogMixin:
                     set_running_state(True, "Running")
                     thread.start()
                 except Exception as exc:
-                    result_label.setText(f"Auto Refine failed: {exc}")
-                    self._add_fitting_error(f"Auto Refine failed: {exc}")
+                    result_label.setText(f"{action_name} failed: {exc}")
+                    self._add_fitting_error(f"{action_name} failed: {exc}")
 
             run.clicked.connect(run_refine)
             dialog.finished.connect(
@@ -448,4 +570,4 @@ class ManualRefineDialogMixin:
             dialog.activateWindow()
 
         except Exception as e:
-            self._add_fitting_error(f"Failed to open Auto Refine: {e}")
+            self._add_fitting_error(f"Failed to open parameter search: {e}")

@@ -32,11 +32,11 @@ def build_global_parameter_controls(
     }
 
     parameter_rows = (
-        (ui.fitKLabel, ui.fitKValue, ui.fitKStep, "Scale Factor k"),
+        (ui.fitKLabel, ui.fitKValue, ui.fitKStep, "Scale k"),
         (ui.fitBGLabel, ui.fitBGValue, ui.fitBGStep, "Background"),
-        (ui.fitIntResLabel, ui.fitIntResValue, ui.fitIntResStep, "Resolution Intensity"),
-        (ui.fitSigmaResLabel, ui.fitSigmaResValue, ui.fitSigmaResStep, "Resolution Sigma"),
-        (ui.fitNuResLabel, ui.fitNuResValue, ui.fitNuResStep, "Resolution Nu"),
+        (ui.fitIntResLabel, ui.fitIntResValue, ui.fitIntResStep, "Res. intensity"),
+        (ui.fitSigmaResLabel, ui.fitSigmaResValue, ui.fitSigmaResStep, "Res. width"),
+        (ui.fitNuResLabel, ui.fitNuResValue, ui.fitNuResStep, "Res. exponent"),
     )
     for row, (label, value, step, text) in enumerate(parameter_rows, 1):
         label.setText(text)

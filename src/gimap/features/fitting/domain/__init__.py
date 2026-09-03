@@ -1,6 +1,11 @@
 """Fitting 的 framework-neutral scientific API。"""
 
-from .constraints import default_refine_bounds, default_refine_selected
+from .constraints import (
+    default_global_search_bounds,
+    default_global_search_selected,
+    default_refine_bounds,
+    default_refine_selected,
+)
 from .ai_curve import AiCurve, ai_q_key, prepare_ai_curve
 from .candidates import (
     CandidateParameterMapping,
@@ -99,6 +104,8 @@ __all__ = [
     "constraint_registry",
     "default_refine_bounds",
     "default_refine_selected",
+    "default_global_search_bounds",
+    "default_global_search_selected",
     "extract_pixel_profile",
     "extract_q_profile",
     "energy_to_wavelength",

@@ -35,6 +35,46 @@ class SlotQueryBase(tf.keras.layers.Layer):
         return cfg
 
 
+class BranchModeQuery(tf.keras.layers.Layer):
+    """Independent learnable mode and slot queries for branch-conditioned decoding."""
+
+    def __init__(self, num_hypotheses=16, max_slots=schema.MAX_SLOTS, dim=128, **kwargs):
+        super().__init__(**kwargs)
+        self.num_hypotheses = int(num_hypotheses)
+        self.max_slots = int(max_slots)
+        self.dim = int(dim)
+
+    def build(self, input_shape):
+        self.mode_query = self.add_weight(
+            name="mode_query",
+            shape=(self.num_hypotheses, self.dim),
+            initializer=tf.keras.initializers.RandomNormal(stddev=0.02),
+            trainable=True,
+        )
+        self.slot_query = self.add_weight(
+            name="slot_query",
+            shape=(self.max_slots, self.dim),
+            initializer=tf.keras.initializers.RandomNormal(stddev=0.02),
+            trainable=True,
+        )
+
+    def call(self, batch_like):
+        batch = tf.shape(batch_like)[0]
+        query = self.mode_query[:, tf.newaxis, :] + self.slot_query[tf.newaxis, :, :]
+        return tf.tile(query[tf.newaxis, :, :, :], [batch, 1, 1, 1])
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg.update(
+            {
+                "num_hypotheses": self.num_hypotheses,
+                "max_slots": self.max_slots,
+                "dim": self.dim,
+            }
+        )
+        return cfg
+
+
 def gelu_dense(x, units, name):
     x = tf.keras.layers.Dense(units, name=f"{name}_dense")(x)
     return tf.keras.layers.Activation(tf.nn.gelu, name=f"{name}_gelu")(x)
@@ -60,6 +100,52 @@ def decoder_block(q, z, point_mask, dim=128, heads=4, key_dim=32, ffn_dim=256, n
     return tf.keras.layers.LayerNormalization(epsilon=1e-6, name=f"{name}_ln_ffn")(q + f)
 
 
+def branch_mode_decoder_block(
+    q,
+    z,
+    point_mask,
+    num_hypotheses,
+    max_slots,
+    dim=128,
+    heads=4,
+    key_dim=32,
+    ffn_dim=256,
+    name="branch_dec",
+):
+    """Decode each continuous mode independently while sharing curve memory."""
+    q_flat = tf.keras.layers.Lambda(
+        lambda t: tf.reshape(t, [-1, max_slots, dim]), name=f"{name}_flatten_modes"
+    )(q)
+    z_flat = tf.keras.layers.Lambda(
+        lambda t: tf.reshape(
+            tf.tile(t[:, tf.newaxis, :, :], [1, num_hypotheses, 1, 1]),
+            [-1, tf.shape(t)[1], dim],
+        ),
+        name=f"{name}_tile_memory",
+    )(z)
+    mask_flat = tf.keras.layers.Lambda(
+        lambda t: tf.reshape(
+            tf.tile(t[:, tf.newaxis, :], [1, num_hypotheses, 1]),
+            [-1, tf.shape(t)[1]],
+        ),
+        name=f"{name}_tile_mask",
+    )(point_mask)
+    decoded = decoder_block(
+        q_flat,
+        z_flat,
+        mask_flat,
+        dim=dim,
+        heads=heads,
+        key_dim=key_dim,
+        ffn_dim=ffn_dim,
+        name=name,
+    )
+    return tf.keras.layers.Lambda(
+        lambda t: tf.reshape(t, [-1, num_hypotheses, max_slots, dim]),
+        name=f"{name}_restore_modes",
+    )(decoded)
+
+
 def build_model(
     max_points=schema.MAX_POINTS,
     max_slots=schema.MAX_SLOTS,
@@ -69,6 +155,8 @@ def build_model(
     dim=128,
     encoder_blocks=4,
     decoder_blocks=2,
+    num_hypotheses=16,
+    include_resolution_presence_head=True,
 ):
     inputs = {
         "x": tf.keras.Input(shape=(max_points, 3), dtype=tf.float32, name="x"),
@@ -118,32 +206,50 @@ def build_model(
     cons = tf.keras.layers.Dense(max_slots * dim, activation=tf.nn.gelu, name="constraint_dense2")(cons)
     cons = tf.keras.layers.Reshape((max_slots, dim), name="constraint_embedding")(cons)
 
-    base_q = SlotQueryBase(max_slots=max_slots, dim=dim, name="slot_query_base")(inputs["x"])
+    base_q = BranchModeQuery(
+        num_hypotheses=num_hypotheses,
+        max_slots=max_slots,
+        dim=dim,
+        name="branch_mode_query",
+    )(inputs["x"])
     h_slot = tf.keras.layers.Dense(max_slots * dim, name="slot_h_dense")(h_proj)
     h_slot = tf.keras.layers.Reshape((max_slots, dim), name="slot_h_reshape")(h_slot)
-    q = tf.keras.layers.Add(name="conditioned_slot_queries")([base_q, cons, h_slot])
+    branch_token = tf.keras.layers.Dense(dim, activation=tf.nn.gelu, name="branch_token")(flat_cons)
+    q = tf.keras.layers.Lambda(
+        lambda xs: xs[0] + xs[1][:, tf.newaxis, :, :] + xs[2][:, tf.newaxis, :, :]
+        + xs[3][:, tf.newaxis, tf.newaxis, :],
+        name="conditioned_branch_mode_queries",
+    )([base_q, cons, h_slot, branch_token])
 
     for i in range(decoder_blocks):
-        q = decoder_block(q, z, inputs["point_mask"], dim=dim, name=f"decoder_{i}")
+        q = branch_mode_decoder_block(
+            q,
+            z,
+            inputs["point_mask"],
+            num_hypotheses=num_hypotheses,
+            max_slots=max_slots,
+            dim=dim,
+            name=f"decoder_{i}",
+        )
 
-    exist_logit = tf.keras.layers.Dense(1, name="exist_logit_dense")(q)
-    exist_logit_raw = tf.keras.layers.Lambda(lambda t: tf.squeeze(t, axis=-1), name="exist_logit_raw")(exist_logit)
+    exist_logit_raw = tf.keras.layers.Dense(1, name="exist_logit_dense")(q)
+    exist_logit_raw = tf.keras.layers.Lambda(lambda t: tf.squeeze(t, axis=-1), name="exist_logit_raw")(exist_logit_raw)
     exist_logit = tf.keras.layers.Lambda(
         lambda xs: tf.where(
-            xs[1] > 0.5,
+            xs[1][:, tf.newaxis, :] > 0.5,
             tf.ones_like(xs[0]) * FORCE_EXIST_LOGIT,
-            tf.where(xs[1] > -0.5, tf.ones_like(xs[0]) * FORCE_EMPTY_LOGIT, xs[0]),
+            tf.where(xs[1][:, tf.newaxis, :] > -0.5, tf.ones_like(xs[0]) * FORCE_EMPTY_LOGIT, xs[0]),
         ),
         name="exist_logit",
     )([exist_logit_raw, inputs["force_exist"]])
 
-    type_logits_raw = tf.keras.layers.Dense(num_types, name="type_logits_raw")(q)
-    type_logits = tf.keras.layers.Lambda(lambda xs: xs[0] + (1.0 - xs[1]) * TYPE_MASK_LOGIT, name="type_logits")(
+    type_logits_raw = tf.keras.layers.Dense(num_types, name="type_logits_raw_dense")(q)
+    type_logits = tf.keras.layers.Lambda(lambda xs: xs[0] + (1.0 - xs[1][:, tf.newaxis, :, :]) * TYPE_MASK_LOGIT, name="type_logits")(
         [type_logits_raw, inputs["type_allowed"]]
     )
 
     param_raw = tf.keras.layers.Dense(num_types * p_max, name="param_mu_raw_dense")(q)
-    param_raw = tf.keras.layers.Reshape((max_slots, num_types, p_max), name="param_mu_raw")(param_raw)
+    param_raw = tf.keras.layers.Reshape((num_hypotheses, max_slots, num_types, p_max), name="param_mu_raw")(param_raw)
     param_low_eff = tf.keras.layers.Lambda(
         lambda xs: tf.where(xs[2] > 0.0, xs[0], tf.zeros_like(xs[0])),
         name="param_low_eff",
@@ -153,20 +259,20 @@ def build_model(
         name="param_high_eff",
     )([inputs["param_low_norm"], inputs["param_high_norm"], inputs["param_range_mask"]])
     param_mu_norm = tf.keras.layers.Lambda(
-        lambda xs: xs[1] + (xs[2] - xs[1]) * tf.sigmoid(xs[0]),
+        lambda xs: xs[1][:, tf.newaxis, :, :, :] + (xs[2] - xs[1])[:, tf.newaxis, :, :, :] * tf.sigmoid(xs[0]),
         name="param_mu_norm",
     )([param_raw, param_low_eff, param_high_eff])
     param_logstd_raw = tf.keras.layers.Dense(num_types * p_max, name="param_logstd_raw_dense")(q)
-    param_logstd_raw = tf.keras.layers.Reshape((max_slots, num_types, p_max), name="param_logstd_raw_reshape")(param_logstd_raw)
+    param_logstd_raw = tf.keras.layers.Reshape((num_hypotheses, max_slots, num_types, p_max), name="param_logstd_reshape")(param_logstd_raw)
     param_logstd_raw = tf.keras.layers.Lambda(lambda t: tf.clip_by_value(t, -5.0, 1.0), name="param_logstd_raw")(param_logstd_raw)
 
     d_present_logit_raw = tf.keras.layers.Dense(1, name="d_present_logit_dense")(q)
     d_present_logit_raw = tf.keras.layers.Lambda(lambda t: tf.squeeze(t, axis=-1), name="d_present_logit_raw")(d_present_logit_raw)
     d_present_logit = tf.keras.layers.Lambda(
         lambda xs: tf.where(
-            xs[1][:, :, 0] < 0.5,
+            xs[1][:, tf.newaxis, :, 0] < 0.5,
             tf.ones_like(xs[0]) * FORCE_EXIST_LOGIT,
-            tf.where(xs[1][:, :, 1] < 0.5, tf.ones_like(xs[0]) * FORCE_EMPTY_LOGIT, xs[0]),
+            tf.where(xs[1][:, tf.newaxis, :, 1] < 0.5, tf.ones_like(xs[0]) * FORCE_EMPTY_LOGIT, xs[0]),
         ),
         name="d_present_logit",
     )([d_present_logit_raw, inputs["d_allowed"]])
@@ -174,7 +280,23 @@ def build_model(
     weight_logit = tf.keras.layers.Dense(1, name="weight_logit_dense")(q)
     weight_logit = tf.keras.layers.Lambda(lambda t: tf.squeeze(t, axis=-1), name="weight_logit")(weight_logit)
 
-    g_raw = tf.keras.layers.Dense(g_max, name="global_mu_raw")(h_proj)
+    mode_state = tf.keras.layers.Lambda(lambda t: tf.reduce_mean(t, axis=2), name="mode_state_pool")(q)
+    mode_context = tf.keras.layers.Lambda(
+        lambda xs: tf.concat(
+            [xs[0], tf.tile(xs[1][:, tf.newaxis, :], [1, num_hypotheses, 1])], axis=-1
+        ),
+        name="mode_global_context",
+    )([mode_state, h_proj])
+    mode_context = tf.keras.layers.Dense(dim, activation=tf.nn.gelu, name="mode_global_projection")(mode_context)
+    # BG/resolution are properties of the observed curve, not of the
+    # particle-shape alternatives in the multi-solution sidecar. Decode them
+    # once from shared curve/constraint context and tile only for legacy
+    # inference/physics callers that still expect a hypothesis axis.
+    shared_global_context = tf.keras.layers.Concatenate(name="shared_global_context")([h_proj, branch_token])
+    shared_global_context = tf.keras.layers.Dense(dim, activation=tf.nn.gelu, name="shared_global_projection")(
+        shared_global_context
+    )
+    g_raw_shared = tf.keras.layers.Dense(g_max, name="global_mu_raw_dense")(shared_global_context)
     global_low_eff = tf.keras.layers.Lambda(
         lambda xs: tf.where(xs[2] > 0.0, xs[0], tf.zeros_like(xs[0])),
         name="global_low_eff",
@@ -183,13 +305,58 @@ def build_model(
         lambda xs: tf.where(xs[2] > 0.0, xs[1], tf.ones_like(xs[1])),
         name="global_high_eff",
     )([inputs["global_low_norm"], inputs["global_high_norm"], inputs["global_range_mask"]])
-    global_mu_norm = tf.keras.layers.Lambda(
+    global_mu_norm_shared = tf.keras.layers.Lambda(
         lambda xs: xs[1] + (xs[2] - xs[1]) * tf.sigmoid(xs[0]),
-        name="global_mu_norm",
-    )([g_raw, global_low_eff, global_high_eff])
-    global_logstd_raw = tf.keras.layers.Dense(g_max, name="global_logstd_raw_dense")(h_proj)
-    global_logstd_raw = tf.keras.layers.Lambda(lambda t: tf.clip_by_value(t, -5.0, 1.0), name="global_logstd_raw")(global_logstd_raw)
-    quality = tf.keras.layers.Dense(1, name="quality")(h_proj)
+        name="global_mu_norm_shared",
+    )([g_raw_shared, global_low_eff, global_high_eff])
+    global_logstd_raw_shared = tf.keras.layers.Dense(g_max, name="global_logstd_raw_dense")(shared_global_context)
+    global_logstd_raw_shared = tf.keras.layers.Lambda(
+        lambda t: tf.clip_by_value(t, -5.0, 1.0), name="global_logstd_raw_shared"
+    )(global_logstd_raw_shared)
+    if include_resolution_presence_head:
+        resolution_present_logit = tf.keras.layers.Dense(
+            1,
+            bias_initializer=tf.keras.initializers.Constant(2.0),
+            name="resolution_present_logit_dense",
+        )(shared_global_context)
+        resolution_present_logit = tf.keras.layers.Lambda(
+            lambda t: tf.squeeze(t, axis=-1), name="resolution_present_logit"
+        )(resolution_present_logit)
+    global_mu_norm = tf.keras.layers.Lambda(
+        lambda t: tf.tile(t[:, tf.newaxis, :], [1, num_hypotheses, 1]), name="global_mu_norm"
+    )(global_mu_norm_shared)
+    global_logstd_raw = tf.keras.layers.Lambda(
+        lambda t: tf.tile(t[:, tf.newaxis, :], [1, num_hypotheses, 1]), name="global_logstd_raw"
+    )(global_logstd_raw_shared)
+    g_raw = tf.keras.layers.Lambda(
+        lambda t: tf.tile(t[:, tf.newaxis, :], [1, num_hypotheses, 1]), name="global_mu_raw"
+    )(g_raw_shared)
+    candidate_active_logit = tf.keras.layers.Dense(
+        1,
+        bias_initializer=tf.keras.initializers.Constant(-0.5),
+        name="candidate_active_logit_dense",
+    )(mode_context)
+    candidate_active_logit = tf.keras.layers.Lambda(
+        lambda t: tf.squeeze(t, axis=-1), name="candidate_active_logit"
+    )(candidate_active_logit)
+    tier_raw = tf.keras.layers.Dense(3, name="tier_quality_raw_dense")(mode_context)
+    tier_probability = tf.keras.layers.Lambda(
+        lambda t: tf.stack(
+            [
+                tf.sigmoid(t[..., 2]) * tf.sigmoid(t[..., 1]) * tf.sigmoid(t[..., 0]),
+                tf.sigmoid(t[..., 2]) * tf.sigmoid(t[..., 1]),
+                tf.sigmoid(t[..., 2]),
+            ],
+            axis=-1,
+        ),
+        name="tier_probability",
+    )(tier_raw)
+    hypothesis_logit = tf.keras.layers.Lambda(
+        lambda p: tf.math.log(tf.clip_by_value(p[..., 2], 1e-6, 1.0 - 1e-6))
+        - tf.math.log1p(-tf.clip_by_value(p[..., 2], 1e-6, 1.0 - 1e-6)),
+        name="hypothesis_logit",
+    )(tier_probability)
+    quality = hypothesis_logit
 
     outputs = {
         "exist_logit": exist_logit,
@@ -202,6 +369,32 @@ def build_model(
         "global_mu_raw": g_raw,
         "global_mu_norm": global_mu_norm,
         "global_logstd_raw": global_logstd_raw,
+        "global_mu_raw_shared": g_raw_shared,
+        "global_mu_norm_shared": global_mu_norm_shared,
+        "global_logstd_raw_shared": global_logstd_raw_shared,
         "quality": quality,
+        "hypothesis_logit": hypothesis_logit,
+        "candidate_active_logit": candidate_active_logit,
+        "tier_probability": tier_probability,
     }
+    if include_resolution_presence_head:
+        outputs["resolution_present_logit"] = resolution_present_logit
     return tf.keras.Model(inputs=inputs, outputs=outputs, name="ML1DGISAXSSlotModel")
+
+
+def build_training_model(**kwargs):
+    """Return a training view and its artifact-compatible inference view.
+
+    The training view exposes the ordinal head's raw logits for stable BCE.
+    Both models share every layer and variable.  Saving the inference view
+    preserves the established `.keras` graph and old artifact load order.
+    """
+    inference_model = build_model(**kwargs)
+    outputs = dict(inference_model.output)
+    outputs["tier_raw"] = inference_model.get_layer("tier_quality_raw_dense").output
+    training_model = tf.keras.Model(
+        inputs=inference_model.inputs,
+        outputs=outputs,
+        name="ML1DGISAXSSlotTrainingModel",
+    )
+    return training_model, inference_model

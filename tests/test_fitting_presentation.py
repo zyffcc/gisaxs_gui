@@ -10,10 +10,18 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
+import pytest
 from matplotlib.collections import QuadMesh
 
 from PyQt5.QtCore import QPoint, Qt
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import (
+    QApplication,
+    QDoubleSpinBox,
+    QLabel,
+    QSpinBox,
+    QTableWidget,
+    QWidget,
+)
 from PyQt5.QtTest import QTest
 
 from main import MainWindow
@@ -174,12 +182,8 @@ def test_fitting_controls_are_owned_by_feature_factory():
 
 def test_fitting_static_controls_and_workspace_are_python_view_owned():
     views = PRESENTATION_ROOT / "views"
-    factory_source = (PRESENTATION_ROOT / "control_view_factory.py").read_text(
-        encoding="utf-8"
-    )
-    workspace_source = (PRESENTATION_ROOT / "workspace.py").read_text(
-        encoding="utf-8"
-    )
+    factory_source = (PRESENTATION_ROOT / "control_view_factory.py").read_text(encoding="utf-8")
+    workspace_source = (PRESENTATION_ROOT / "workspace.py").read_text(encoding="utf-8")
 
     assert FittingPageView.__module__.endswith("views.fitting_page_view")
     assert FittingWorkspaceView.__module__.endswith("views.fitting_workspace_view")
@@ -268,9 +272,7 @@ def test_independent_windows_project_the_same_typed_display_state() -> None:
     assert curve_window.current_curve_view_state() == curve_state
     emitted_curve_states = []
     curve_window.view_state_changed.connect(emitted_curve_states.append)
-    curve_window.q_view_combo.setCurrentIndex(
-        curve_window.q_view_combo.findData("positive")
-    )
+    curve_window.q_view_combo.setCurrentIndex(curve_window.q_view_combo.findData("positive"))
     assert emitted_curve_states[-1].q_mode == "positive"
 
     detector_state = DetectorDisplayState(
@@ -424,6 +426,173 @@ def test_feature_owned_fitting_workspace_preserves_controls_and_defaults_offscre
     window.close()
 
 
+def test_global_search_and_local_refine_open_mode_specific_bounds_for_selected_data_source():
+    app = _app()
+    window = MainWindow(_context())
+    window.show()
+    for _ in range(30):
+        QTest.qWait(50)
+        app.processEvents()
+        if hasattr(window, "runtime") and window.runtime.fitting._initialized:
+            break
+
+    binding = window.runtime.fitting
+    assert binding.main_window is window
+
+    binding.current_1d_data = {
+        "q": np.linspace(0.01, 0.2, 20),
+        "I": np.linspace(10.0, 2.0, 20),
+    }
+    binding.current_cut_data = {
+        "x_coords": np.linspace(0.03, 0.12, 12),
+        "y_intensity": np.linspace(8.0, 3.0, 12),
+    }
+    binding._roi_min = None
+    binding._roi_max = None
+    binding._q_full_min = None
+    binding._q_full_max = None
+
+    window.fitCurrentDataCheckBox.setChecked(False)
+    initial_setup = binding._build_manual_refine_setup()
+    for meta in binding.param_trigger_manager._meta_registry.values():
+        assert meta["last_value"] == pytest.approx(meta["widget"].value())
+        if meta["meta"].get("persist") in {"model_particle", "model_global"}:
+            assert meta["widget"].decimals() >= 12
+    radius_desc = next(
+        desc for desc in initial_setup["params"] if desc["name"].rstrip("0123456789") == "R"
+    )
+    radius_value = float(radius_desc["value"])
+    expected_lower, expected_upper = binding._default_manual_refine_bounds(
+        radius_desc["name"], radius_value
+    )
+    binding._sync_fitting_action_availability()
+    assert window.FittingGlobalSearchButton.isEnabled()
+    assert window.FittingGlobalSearchButton.text() == "Global Search"
+    assert window.FittingAutoRefineButton.isEnabled()
+    assert window.FittingAutoRefineButton.text() == "Local Refine"
+    QTest.mouseClick(window.FittingAutoRefineButton, Qt.LeftButton)
+    app.processEvents()
+
+    dialog = binding._manual_auto_refine_dialog
+    assert dialog is not None and dialog.isVisible()
+    summary = dialog.findChild(QLabel, "manualAutoRefineInputSummary")
+    table = dialog.findChild(QTableWidget, "manualAutoRefineParameterTable")
+    assert "imported 1D data (20 fitting points)" in summary.text()
+    assert table.rowCount() == len(initial_setup["params"])
+    radius_row = next(
+        row for row in range(table.rowCount()) if table.item(row, 1).text() == radius_desc["label"]
+    )
+    assert table.cellWidget(radius_row, 0).isChecked()
+    assert table.cellWidget(radius_row, 3).value() == pytest.approx(expected_lower, abs=1e-8)
+    assert table.cellWidget(radius_row, 4).value() == pytest.approx(expected_upper, abs=1e-8)
+    assert not table.item(radius_row, 2).flags() & Qt.ItemIsEditable
+    table.cellWidget(radius_row, 3).setValue(radius_value * 0.9)
+    app.processEvents()
+    dialog.close()
+    app.processEvents()
+
+    expected_global_lower, expected_global_upper = binding._default_manual_global_bounds(
+        radius_desc["name"],
+        radius_value,
+        initial_setup["y"],
+        initial_setup["q_model"],
+    )
+    QTest.mouseClick(window.FittingGlobalSearchButton, Qt.LeftButton)
+    app.processEvents()
+    dialog = binding._manual_auto_refine_dialog
+    table = dialog.findChild(QTableWidget, "manualAutoRefineParameterTable")
+    radius_row = next(
+        row for row in range(table.rowCount()) if table.item(row, 1).text() == radius_desc["label"]
+    )
+    assert dialog.objectName() == "manualGlobalSearchDialog"
+    assert (
+        "Differential evolution explores the broad editable ranges"
+        in dialog.findChild(QLabel, "manualAutoRefineInputSummary").text()
+    )
+    assert table.cellWidget(radius_row, 3).value() == pytest.approx(expected_global_lower, abs=1e-8)
+    assert table.cellWidget(radius_row, 4).value() == pytest.approx(expected_global_upper, abs=1e-8)
+    sigma_row = next(
+        row for row in range(table.rowCount()) if "sigma_R" in table.item(row, 1).text()
+    )
+    k_row = next(row for row in range(table.rowCount()) if table.item(row, 1).text() == "Global k")
+    assert table.cellWidget(sigma_row, 0).isChecked()
+    assert not table.cellWidget(k_row, 0).isChecked()
+    assert dialog.findChild(QSpinBox, "manualGlobalSamplesSpinBox").value() == 16384
+    assert dialog.findChild(QSpinBox, "manualGlobalStartsSpinBox").value() == 3
+    assert dialog.findChild(QDoubleSpinBox, "manualTargetLogRmseSpinBox").value() == 0.0
+    dialog.close()
+    app.processEvents()
+
+    new_radius_value = radius_value * 2.0
+    radius_widget = getattr(window, radius_desc["widget_name"])
+    previous_block = radius_widget.blockSignals(True)
+    radius_widget.setValue(new_radius_value)
+    radius_widget.blockSignals(previous_block)
+    QTest.mouseClick(window.FittingAutoRefineButton, Qt.LeftButton)
+    app.processEvents()
+    dialog = binding._manual_auto_refine_dialog
+    table = dialog.findChild(QTableWidget, "manualAutoRefineParameterTable")
+    radius_row = next(
+        row for row in range(table.rowCount()) if table.item(row, 1).text() == radius_desc["label"]
+    )
+    expected_lower, expected_upper = binding._default_manual_refine_bounds(
+        radius_desc["name"], new_radius_value
+    )
+    assert table.cellWidget(radius_row, 3).value() == pytest.approx(expected_lower, abs=1e-8)
+    assert table.cellWidget(radius_row, 4).value() == pytest.approx(expected_upper, abs=1e-8)
+    dialog.close()
+    app.processEvents()
+
+    window.fitCurrentDataCheckBox.setChecked(True)
+    cut_setup = binding._build_manual_refine_setup()
+    assert cut_setup["q_source_kind"] == "cut"
+    assert cut_setup["q_raw"].size == 12
+    np.testing.assert_allclose(cut_setup["y"], binding.current_cut_data["y_intensity"])
+    binding.fitting_view_model.complete_workflow_step("cut", "Cut ready")
+    binding._sync_fitting_action_availability()
+    assert window.FittingAutoRefineButton.isEnabled()
+    QTest.mouseClick(window.FittingAutoRefineButton, Qt.LeftButton)
+    app.processEvents()
+    dialog = binding._manual_auto_refine_dialog
+    summary = dialog.findChild(QLabel, "manualAutoRefineInputSummary")
+    assert "current cut (12 fitting points)" in summary.text()
+    dialog.close()
+    app.processEvents()
+
+    binding.current_1d_data = None
+    window.fitCurrentDataCheckBox.setChecked(False)
+    binding._sync_fitting_action_availability()
+    assert not window.FittingAutoRefineButton.isEnabled()
+    assert not window.FittingGlobalSearchButton.isEnabled()
+
+    window.close()
+
+
+def test_global_and_local_refine_actions_fit_supported_viewports():
+    app = _app()
+    window = MainWindow(_context())
+    window.show()
+    workspace = window.components.fitting_workspace
+    workspace.show_workflow_step("fit")
+    window.fittingModeTabs.setCurrentIndex(2)
+
+    for width, height in ((1280, 800), (1440, 900), (1920, 1080)):
+        window.resize(width, height)
+        QTest.qWait(80)
+        app.processEvents()
+        actions = window.FittingGlobalSearchButton.parentWidget()
+        for button in (
+            window.FittingClearFittingButton_2,
+            window.FittingGlobalSearchButton,
+            window.FittingAutoRefineButton,
+        ):
+            assert button.isVisible()
+            assert button.geometry().right() <= actions.contentsRect().right()
+            assert button.fontMetrics().horizontalAdvance(button.text()) + 8 <= button.width()
+
+    window.close()
+
+
 def test_fitting_context_switch_preserves_single_navigation_and_versions_insitu_recipe():
     app = _app()
     window = MainWindow(_context())
@@ -497,9 +666,7 @@ def test_fitting_context_switch_preserves_single_navigation_and_versions_insitu_
     assert window.components.fitting_view_model.insitu.recipe.fitting.refine_every_n == 4
     assert window.components.fitting_view_model.insitu.recipe.preprocessing["flip_ud"] is True
     assert (
-        window.components.fitting_view_model.insitu.recipe.experiment_setup[
-            "beam_center_x_px"
-        ]
+        window.components.fitting_view_model.insitu.recipe.experiment_setup["beam_center_x_px"]
         == 411.0
     )
     assert window.components.fitting_view_model.insitu.recipe.cut["center_parallel_px"] == 321.0
@@ -529,9 +696,7 @@ def test_fitting_context_switch_preserves_single_navigation_and_versions_insitu_
     assert not page.ui.startProcessButton.isHidden()
     assert window.gisaxsInputModelCombox.findText("In-situ") == -1
     assert window.findChild(QWidget, "gisaxsInputInsituWorkflowButton") is None
-    assert not (
-        PRESENTATION_ROOT / "bindings" / "insitu_dialog.py"
-    ).exists()
+    assert not (PRESENTATION_ROOT / "bindings" / "insitu_dialog.py").exists()
     QTest.mouseClick(workspace.insitu_context_button, Qt.LeftButton)
     assert workspace.context_stack.currentWidget() is page
     window.close()
@@ -558,9 +723,11 @@ def test_insitu_source_and_preview_display_fit_supported_viewports():
         browse_right = page.ui.workflowControls.sequenceBrowseButton.mapTo(
             page, page.ui.workflowControls.sequenceBrowseButton.rect().bottomRight()
         ).x()
-        source_right = page.ui.settingsScrollArea.viewport().mapTo(
-            page, page.ui.settingsScrollArea.viewport().rect().bottomRight()
-        ).x()
+        source_right = (
+            page.ui.settingsScrollArea.viewport()
+            .mapTo(page, page.ui.settingsScrollArea.viewport().rect().bottomRight())
+            .x()
+        )
         assert browse_right <= source_right
         assert page.ui.settingsScrollArea.horizontalScrollBar().maximum() == 0
         bottom = page.ui.jobStatus.mapTo(page, QPoint(0, page.ui.jobStatus.height())).y()
@@ -680,29 +847,26 @@ def test_fitting_workbench_exposes_guided_progressive_disclosure_and_modes():
     assert workspace.fitting_plot_advanced_section.is_expanded() is False
     assert workspace.fitting_log_section.is_expanded() is False
     assert workspace.fitting_export_section.parent() is workspace.fitting_results_panel
-    assert (
-        workspace.fitting_plot_advanced_section.parent()
-        is workspace.fitting_results_panel
-    )
+    assert workspace.fitting_plot_advanced_section.parent() is workspace.fitting_results_panel
     workspace.preview_tabs.setCurrentIndex(0)
     assert workspace.fitting_plot_card.toolbar.isHidden()
     assert workspace.inline_feedback.parent() is workspace.fitting_preview_panel
-    stable_tab_y = workspace.preview_tabs.tabBar().mapTo(
-        workspace.right_panel, QPoint(0, 0)
-    ).y()
+    stable_tab_y = workspace.preview_tabs.tabBar().mapTo(workspace.right_panel, QPoint(0, 0)).y()
     workspace.preview_tabs.setCurrentIndex(1)
     assert not workspace.fitting_plot_card.toolbar.isHidden()
     assert workspace.fitting_plot_card.toolbar.parent() is workspace.fitting_results_panel
     assert workspace.inline_feedback.parent() is workspace.fitting_results_panel
-    assert workspace.preview_tabs.tabBar().mapTo(
-        workspace.right_panel, QPoint(0, 0)
-    ).y() == stable_tab_y
+    assert (
+        workspace.preview_tabs.tabBar().mapTo(workspace.right_panel, QPoint(0, 0)).y()
+        == stable_tab_y
+    )
     workspace.inline_feedback.setText("Curve options need attention")
     workspace.inline_feedback.show()
     app.processEvents()
-    assert workspace.preview_tabs.tabBar().mapTo(
-        workspace.right_panel, QPoint(0, 0)
-    ).y() == stable_tab_y
+    assert (
+        workspace.preview_tabs.tabBar().mapTo(workspace.right_panel, QPoint(0, 0)).y()
+        == stable_tab_y
+    )
     workspace.inline_feedback.hide()
 
     workflow = initial_workflow_state()
@@ -720,9 +884,10 @@ def test_fitting_workbench_exposes_guided_progressive_disclosure_and_modes():
     app.processEvents()
     assert workspace.fitting_plot_card.toolbar.parent() is workspace.fitting_results_panel
     assert workspace.inline_feedback.parent() is workspace.fitting_results_panel
-    assert workspace.preview_tabs.tabBar().mapTo(
-        workspace.right_panel, QPoint(0, 0)
-    ).y() == stable_tab_y
+    assert (
+        workspace.preview_tabs.tabBar().mapTo(workspace.right_panel, QPoint(0, 0)).y()
+        == stable_tab_y
+    )
     assert window.aiFittingModelComboBox.parent() is not None
     assert workspace.fitting_plot_card.parent() is workspace.fitting_results_panel.content
     assert workspace.curve_plot_card is workspace.fitting_plot_card
@@ -756,16 +921,12 @@ def test_fitting_primary_image_and_plot_controls_are_visible_at_point_of_use():
 
     assert window.gisaxsInputAutoShowCheckBox.isChecked()
     assert window.gisaxsInputShowButton.parent() is window.gisaxsInputFileNavigationWidget
-    assert window.gisaxsInputAutoShowCheckBox.parent() is (
-        window.gisaxsInputFileNavigationWidget
-    )
+    assert window.gisaxsInputAutoShowCheckBox.parent() is (window.gisaxsInputFileNavigationWidget)
     assert not window.gisaxsInputShowButton.isHidden()
     assert window.gisaxsInputAutoScaleCheckBox.parent() is window.fittingDetectorDisplayInspector
     assert window.gisaxsInputVminValue.parent() is window.fittingDetectorDisplayInspector
     assert window.gisaxsInputColormapCombo.parent() is window.fittingDetectorDisplayInspector
-    assert window.fittingDetectorPreprocessing.parent() is (
-        window.fittingDetectorDisplayInspector
-    )
+    assert window.fittingDetectorPreprocessing.parent() is (window.fittingDetectorDisplayInspector)
     assert not window.fittingDetectorPreprocessing.isHidden()
     window.gisaxsInputThresholdMaskCheckBox.setChecked(True)
     window.gisaxsInputMirrorGapFillCheckBox.setChecked(True)
@@ -802,13 +963,16 @@ def test_fitting_current_task_and_fit_mode_use_natural_height_without_blank_canv
         assert window.FittingManualFittingButton.parent().objectName() == (
             "fittingPersistentCommandBar"
         )
-        assert window.FittingManualFittingButton.mapTo(
-            workspace.fitting_fit_step_page,
-            window.FittingManualFittingButton.rect().topLeft(),
-        ).y() < window.fittingModeTabs.mapTo(
-            workspace.fitting_fit_step_page,
-            window.fittingModeTabs.rect().topLeft(),
-        ).y()
+        assert (
+            window.FittingManualFittingButton.mapTo(
+                workspace.fitting_fit_step_page,
+                window.FittingManualFittingButton.rect().topLeft(),
+            ).y()
+            < window.fittingModeTabs.mapTo(
+                workspace.fitting_fit_step_page,
+                window.fittingModeTabs.rect().topLeft(),
+            ).y()
+        )
 
     bottom_controls = {
         1: window.findChild(QWidget, "fittingParameterStepHint"),
@@ -821,9 +985,7 @@ def test_fitting_current_task_and_fit_mode_use_natural_height_without_blank_canv
         QTest.qWait(90)
         app.processEvents()
         page = window.fittingModeTabs.currentWidget()
-        control_bottom = bottom_control.mapTo(
-            page, bottom_control.rect().bottomLeft()
-        ).y()
+        control_bottom = bottom_control.mapTo(page, bottom_control.rect().bottomLeft()).y()
         assert control_bottom <= page.contentsRect().bottom() + 1
 
     workspace.show_workflow_step("import")
@@ -867,9 +1029,7 @@ def test_auto_yoneda_uses_the_configured_horizontal_cut_thickness():
             return 11
 
     binding = DetectorConfigurationMixin()
-    binding.ui = SimpleNamespace(
-        gisaxsAutoYonedaCutThicknessSpinBox=ThicknessControl()
-    )
+    binding.ui = SimpleNamespace(gisaxsAutoYonedaCutThicknessSpinBox=ThicknessControl())
     assert binding._auto_horizontal_cut_thickness_pixels() == 11.0
 
     binding.ui = SimpleNamespace()
@@ -934,9 +1094,10 @@ def test_fitting_workflow_navigation_selects_one_task_without_completing_it():
         "fittingYonedaCutPage"
     )
     assert workspace.workflow_header.steps[2].property("workflowSelected") is True
-    assert tuple(
-        step.property("workflowState") for step in workspace.workflow_header.steps
-    ) == initial_statuses
+    assert (
+        tuple(step.property("workflowState") for step in workspace.workflow_header.steps)
+        == initial_statuses
+    )
     assert workspace.preview_tabs.currentIndex() == 1
 
     workspace.show_workflow_step("cut")
@@ -992,9 +1153,7 @@ def test_fitting_signed_q_control_resolves_log_scale_without_exposing_internal_a
     assert binding._get_x_axis_scale() == "symlog"
     assert "symmetric-log" in window.fitQViewHintLabel.text()
 
-    window.fitQViewModeComboBox.setCurrentIndex(
-        window.fitQViewModeComboBox.findData("fold")
-    )
+    window.fitQViewModeComboBox.setCurrentIndex(window.fitQViewModeComboBox.findData("fold"))
     app.processEvents()
     assert binding._get_q_branch() == "both"
     assert binding._get_q_combination_mode() == "fold"
@@ -1072,9 +1231,7 @@ def test_fitting_export_dialog_makes_curve_representation_visible():
 
     assert dialog.source_combo.currentText() == "Cut Data"
     assert dialog.selection().preparation == "fitting"
-    dialog.preparation_combo.setCurrentIndex(
-        dialog.preparation_combo.findData("raw")
-    )
+    dialog.preparation_combo.setCurrentIndex(dialog.preparation_combo.findData("raw"))
     assert dialog.selection().preparation == "raw"
     assert "original signed q" in dialog.summary_label.text()
     dialog.close()
@@ -1139,9 +1296,7 @@ def test_detector_q_preview_and_axis_switch_keep_the_same_detector_cells():
         revision=1,
     )
     binding.fitting_view_model.set_setting("fitting", "detector.show_q_axis", True)
-    binding.fitting_view_model.set_setting(
-        "fitting", "detector.horizontal_q_axis", "qy"
-    )
+    binding.fitting_view_model.set_setting("fitting", "detector.horizontal_q_axis", "qy")
     binding._last_q_mode = True
     binding._last_horizontal_q_axis = "qy"
     binding._update_cutline_step_sizes()
@@ -1156,9 +1311,7 @@ def test_detector_q_preview_and_axis_switch_keep_the_same_detector_cells():
     assert isinstance(binding._preview_image_artist, QuadMesh)
     assert binding._preview_ax.get_xlabel() == r"$q_y$ (nm$^{-1}$)"
 
-    binding.fitting_view_model.set_setting(
-        "fitting", "detector.horizontal_q_axis", "qr"
-    )
+    binding.fitting_view_model.set_setting("fitting", "detector.horizontal_q_axis", "qr")
     binding._on_detector_parameters_changed({"horizontal_q_axis": "qr"})
     remapped = binding._current_selection_pixel_region(
         q_mode=True,

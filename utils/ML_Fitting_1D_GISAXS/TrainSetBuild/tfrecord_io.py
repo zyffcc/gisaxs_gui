@@ -39,6 +39,38 @@ SAMPLE_SPECS = {
 
 OPTIONAL_INT_FEATURES = {
     "sampling_mode": (np.int32, tf.int32, ()),
+    "schema_version": (np.int32, tf.int32, ()),
+    "target_qmin_bin": (np.int32, tf.int32, ()),
+    "target_w_class": (np.int32, tf.int32, ()),
+    "grid_type": (np.int32, tf.int32, ()),
+    "d_pattern": (np.int32, tf.int32, ()),
+    "constraint_mode": (np.int32, tf.int32, ()),
+    "generation_attempts": (np.int32, tf.int32, ()),
+    "floor_points_removed": (np.int32, tf.int32, ()),
+    "resolution_stratum": (np.int32, tf.int32, ()),
+    "bad_point_count": (np.int32, tf.int32, ()),
+    "gap_point_count": (np.int32, tf.int32, ()),
+    "q_range_class": (np.int32, tf.int32, ()),
+    "particle_dynamic_stratum": (np.int32, tf.int32, ()),
+    "noise_count_scale_clip_code": (np.int32, tf.int32, ()),
+}
+
+OPTIONAL_FLOAT_FEATURES = {
+    "rho_BG", "rho_Res", "rho_Res_actual", "count_scale",
+    "relative_noise_scale", "particle_median", "particle_low_max",
+    "resolution_low_max", "p99_noisy",
+    "particle_log10_drop",
+    "noise_count_scale_unclipped", "noise_target_particle_tail_snr",
+    "noise_achieved_particle_tail_snr", "noise_particle_reference",
+    "noise_particle_tail", "noise_clean_tail", "noise_edge_fraction",
+}
+
+OPTIONAL_STRING_FEATURES = {"stable_sample_id"}
+
+OPTIONAL_ARRAY_FEATURES = {
+    "q_window_pre": (np.float32, tf.float32, (4,)),
+    "q_window_final": (np.float32, tf.float32, (4,)),
+    "global_param_mask": (np.float32, tf.float32, (schema.G_MAX,)),
 }
 
 INPUT_KEYS = [
@@ -64,6 +96,7 @@ LABEL_KEYS = [
     "slot_param_mask",
     "slot_weight",
     "global_params_norm",
+    "global_param_mask",
     "d_spacing_rule",
     "q",
     "I_clean",
@@ -79,6 +112,10 @@ def _int64_feature(value: int) -> tf.train.Feature:
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[int(value)]))
 
 
+def _float_feature(value: float) -> tf.train.Feature:
+    return tf.train.Feature(float_list=tf.train.FloatList(value=[float(value)]))
+
+
 def serialize_sample(sample: Dict[str, np.ndarray]) -> bytes:
     features = {}
     for key, (np_dtype, _, expected_shape) in SAMPLE_SPECS.items():
@@ -90,8 +127,26 @@ def serialize_sample(sample: Dict[str, np.ndarray]) -> bytes:
         if arr.shape != expected_shape:
             raise ValueError(f"{key} has shape {arr.shape}, expected {expected_shape}")
         features[key] = _bytes_feature(np.ascontiguousarray(arr).tobytes())
-    if "sampling_mode" in sample:
-        features["sampling_mode"] = _int64_feature(int(np.asarray(sample["sampling_mode"]).item()))
+    for key in OPTIONAL_INT_FEATURES:
+        if key in sample:
+            features[key] = _int64_feature(int(np.asarray(sample[key]).item()))
+    for key in OPTIONAL_FLOAT_FEATURES:
+        if key in sample:
+            features[key] = _float_feature(float(np.asarray(sample[key]).item()))
+    for key in OPTIONAL_STRING_FEATURES:
+        if key in sample:
+            value = sample[key]
+            if isinstance(value, np.ndarray):
+                value = value.item()
+            if isinstance(value, str):
+                value = value.encode("utf-8")
+            features[key] = _bytes_feature(bytes(value))
+    for key, (np_dtype, _, expected_shape) in OPTIONAL_ARRAY_FEATURES.items():
+        if key in sample:
+            arr = np.asarray(sample[key], dtype=np_dtype)
+            if arr.shape != expected_shape:
+                raise ValueError(f"{key} has shape {arr.shape}, expected {expected_shape}")
+            features[key] = _bytes_feature(np.ascontiguousarray(arr).tobytes())
     example = tf.train.Example(features=tf.train.Features(feature=features))
     return example.SerializeToString()
 
@@ -105,7 +160,24 @@ def parse_example(example_proto):
     feature_spec["d_spacing_rule"] = tf.io.FixedLenFeature(
         [], tf.string, default_value=np.eye(schema.NUM_D_RULES, dtype=np.float32)[schema.D_RULE_FREE].tobytes()
     )
-    feature_spec["sampling_mode"] = tf.io.FixedLenFeature([], tf.int64, default_value=-1)
+    defaults = {
+        "sampling_mode": -1, "schema_version": schema.SCHEMA_VERSION_LEGACY_V3,
+        "target_qmin_bin": -1, "target_w_class": -1, "grid_type": -1,
+        "d_pattern": -1, "constraint_mode": -1, "generation_attempts": 0,
+        "floor_points_removed": 0,
+        "resolution_stratum": -1, "bad_point_count": 0, "gap_point_count": 0,
+        "q_range_class": -1, "particle_dynamic_stratum": -1,
+        "noise_count_scale_clip_code": 0,
+    }
+    for key in OPTIONAL_INT_FEATURES:
+        feature_spec[key] = tf.io.FixedLenFeature([], tf.int64, default_value=defaults[key])
+    for key in OPTIONAL_FLOAT_FEATURES:
+        feature_spec[key] = tf.io.FixedLenFeature([], tf.float32, default_value=float("nan"))
+    for key in OPTIONAL_STRING_FEATURES:
+        feature_spec[key] = tf.io.FixedLenFeature([], tf.string, default_value=b"")
+    for key, (np_dtype, _, shape) in OPTIONAL_ARRAY_FEATURES.items():
+        default = np.ones(shape, dtype=np_dtype) if key == "global_param_mask" else np.zeros(shape, dtype=np_dtype)
+        feature_spec[key] = tf.io.FixedLenFeature([], tf.string, default_value=default.tobytes())
     parsed = tf.io.parse_single_example(example_proto, feature_spec)
     out = {}
     for key, (_, tf_dtype, shape) in SAMPLE_SPECS.items():
@@ -122,7 +194,12 @@ def parse_example(example_proto):
     )
     optional_mask = tf.stack([optional_d_active, optional_d_active], axis=-1)
     out["slot_param_mask"] = tf.concat([param_mask[:, :4], param_mask[:, 4:6] * optional_mask], axis=-1)
-    out["sampling_mode"] = tf.cast(parsed["sampling_mode"], tf.int32)
+    for key, (_, tf_dtype, shape) in OPTIONAL_ARRAY_FEATURES.items():
+        out[key] = tf.reshape(tf.io.decode_raw(parsed[key], tf_dtype), shape)
+    for key in OPTIONAL_INT_FEATURES:
+        out[key] = tf.cast(parsed[key], tf.int32)
+    for key in OPTIONAL_FLOAT_FEATURES | OPTIONAL_STRING_FEATURES:
+        out[key] = parsed[key]
     return out
 
 

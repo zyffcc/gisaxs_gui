@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QGridLayout,
     QLabel,
-    QDoubleSpinBox,
     QPushButton,
 )
 
@@ -22,6 +21,7 @@ from src.gimap.app.presentation import install_safe_wheel_behavior
 from src.gimap.features.fitting.presentation.layout_primitives import (
     CurrentPageHeightStackedWidget,
     NoWheelDoubleSpinBox,
+    ScientificDoubleSpinBox,
 )
 
 from ..binding_primitives import (
@@ -56,9 +56,9 @@ class ParticleWidgetEditorMixin:
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(10, 8, 10, 8)
         header_layout.setSpacing(10)
-        title = QLabel(f"Component {widget_id}", header)
+        title = QLabel(f"Comp. {widget_id}", header)
         title.setObjectName(f"fitParticleTitleLabel_{widget_id}")
-        title.setMinimumWidth(88)
+        title.setMinimumWidth(70)
         title.setStyleSheet("font-weight: 600; color: #1f2937;")
         type_group = QWidget(header)
         type_group.setObjectName(f"fitParticleTypeGroup_{widget_id}")
@@ -69,8 +69,8 @@ class ParticleWidgetEditorMixin:
         type_label.setObjectName(f"fitParticleTypeLabel_{widget_id}")
         combo = QComboBox(type_group)
         combo.setObjectName(f"fitParticleShapeCombox_{widget_id}")
-        combo.setMinimumWidth(158)
-        combo.setMaximumWidth(236)
+        combo.setMinimumWidth(110)
+        combo.setMaximumWidth(180)
         for shape_name in COMPONENT_ORDER:
             combo.addItem(shape_name)
             combo.setItemData(
@@ -79,11 +79,11 @@ class ParticleWidgetEditorMixin:
         combo.setToolTip(COMPONENT_FORMULA_TOOLTIPS["None"])
         type_layout.addWidget(type_label)
         type_layout.addWidget(combo)
-        remove_button = QPushButton("Remove", header)
+        remove_button = QPushButton("Delete", header)
         remove_button.setObjectName(f"fitParticleRemoveButton_{widget_id}")
         remove_button.setToolTip("Remove this component")
-        remove_button.setMinimumWidth(84)
-        remove_button.setMaximumWidth(96)
+        remove_button.setMinimumWidth(64)
+        remove_button.setMaximumWidth(76)
         remove_button.clicked.connect(
             lambda _checked=False, wid=widget_id: self._remove_particle_widget(wid)
         )
@@ -110,7 +110,7 @@ class ParticleWidgetEditorMixin:
         for shape_name in COMPONENT_ORDER[1:]:
             stack.addWidget(self._create_particle_parameter_page(stack, widget_id, shape_name))
         layout.addWidget(stack, 0)
-        container.setMinimumSize(420, 0)
+        container.setMinimumSize(0, 0)
         container.setMaximumWidth(16777215)
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._register_ui_children(container)
@@ -137,7 +137,7 @@ class ParticleWidgetEditorMixin:
         ):
             label = QLabel(label_text, page)
             label.setMinimumHeight(24)
-            value = QDoubleSpinBox(page)
+            value = ScientificDoubleSpinBox(page)
             value.setObjectName(
                 f"fitParticle{self._shape_object_token(shape_name)}{suffix}Value_{widget_id}"
             )
@@ -304,9 +304,9 @@ class ParticleWidgetEditorMixin:
         self._register_particle_show_checkbox(widget_id)
 
         self._setup_particle_connections([widget_id])
-        self._setup_particle_parameter_connections([widget_id])
         self._setup_parameter_ranges([widget_id])
         self._initialize_particle_states([widget_id])
+        self._setup_particle_parameter_connections([widget_id])
         self._schedule_model_parameters_region_refresh()
 
     def _sync_particle_widget_height(self, widget: QWidget):

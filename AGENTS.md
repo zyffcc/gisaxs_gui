@@ -1,22 +1,29 @@
-# GIMaP 工程约定
+# GIMaP Agent Working Agreement
 
-本文件适用于整个仓库。Codex 和其他 coding agents 后续修改代码时必须遵守这些约定。
+本文件适用于整个仓库。目标不是规定每一步怎么做，而是让 agent 在长期迭代中持续交付清晰、
+可靠、容易继续修改的软件。
 
-## 保护用户已有工作
+## 默认工作方式
 
-修改文件之前必须运行：
+- 先理解用户要得到的结果，再选择最小、完整的实现路径。
+- 对明确的 change/build/fix 请求，直接完成范围内的本地修改和非破坏性验证；不要为普通实现步骤
+  反复请求确认。
+- 对 explain/review/diagnose 请求只检查和报告，除非用户同时要求修改。
+- 只在会显著改变产品行为、科学定义、公开接口、数据兼容性或任务范围时停下来询问。
+- 一个任务聚焦一个用户结果和一个主要 owner。不要顺手重写无关 feature，也不要把重构、视觉
+  改版和科学行为变化混成一次大改。
+- 允许做有助于完成当前任务的小型整理，但不要为“未来也许需要”提前搭架构。
+- 修改过的代码应至少和修改前一样容易阅读。若新增间接层、状态或抽象不能消除更大的复杂度，
+  就不要增加它。
 
-```bash
-git status
-git diff
-```
+## 保护用户工作
 
-所有已有 tracked 和 untracked changes 都应视为用户工作。必须保留无关修改，并绕开
-发生冲突的内容。不得覆盖、删除或清理与当前任务无关的文件。
+修改文件前运行 `git status` 和 `git diff`。已有 tracked 与 untracked changes 都视为用户工作：
+保留无关修改，遇到重叠时绕开或明确说明。
 
-未经用户明确授权，禁止执行：
+未经用户明确授权，不得使用会丢弃工作区内容的命令，包括：
 
-```bash
+```text
 git reset --hard
 git restore .
 git checkout -- .
@@ -24,408 +31,170 @@ git clean
 git stash
 ```
 
-除非用户明确要求，否则不得 commit 或 push。
+除非用户明确要求，否则不要 commit 或 push。
 
-## 当前架构
+## 架构一页版
 
-采用 feature-first modular monolith。当前 feature 边界包括 format converter、fitting、
-prediction、trainset、classification、WAXS 和 calibration。每个 feature 内采用：
+GIMaP 是 feature-first modular monolith。用户功能由 `src/gimap/features/<feature>/` 拥有；应用壳
+和跨 feature 的 UI 基础设施由 `src/gimap/app/` 拥有；只有已经被多个 feature 稳定复用、语义
+明确的能力才进入 `src/gimap/shared/`。
 
-```text
-presentation/
-application/
-    ports/
-domain/
-infrastructure/
-    adapters/
-```
-
-目录必须对应真实职责和运行代码。不得创建空架构目录，不得移动无关源码，也不得在单个
-任务中混入无关的大范围改写。
-
-不要重新建立一个以全局 `controllers/`、`services/`、`models/` 或 `utils/` 为核心的
-架构。Feature-first ownership 优先于全局技术分层。
-
-`src/gimap` 生产代码不得反向导入顶层 `controllers`、`ui`、`trainset`、`calibration`、
-`WAXS` 或 `utils` 兼容包。旧路径只能向 feature/app/shared owner 单向转发；不得在兼容文件中
-新增业务实现。`utils/ML_Fitting_1D_GISAXS` 仅作为专用 TensorFlow worker/training bundle
-维护，不是新增通用 helper 的位置。
-
-## 依赖方向
-
-所有生产代码必须遵循：
+生产代码的依赖方向是：
 
 ```text
-presentation → application → domain
-
-infrastructure → implements application ports
+PyQt View → ViewModel → Application Use Case → Domain
+Infrastructure Adapter ─implements→ Application Port
 ```
 
-- Presentation 使用 PyQt views 和 ViewModels；
-- Application 包含 framework-neutral use cases 和 application-owned ports；
-- Domain 是不依赖 GUI、ML runtime、simulation engine 和 I/O infrastructure 的
-  Python；允许使用 Python 标准库、NumPy，以及适用于稳定 scientific primitive 的
-  SciPy；
-- Infrastructure 包含 BornAgain、TensorFlow/Keras、文件系统、存储格式和其他外部
-  依赖的 adapters；
-- 小型 composition root 可以构建 adapters 并注入 use cases，但 application 和
-  domain 不得导入具体 adapters。
-
-## Domain 限制
-
-Domain 禁止导入或依赖：
-
-- PyQt 或 PySide；
-- TensorFlow 或 Keras；
-- BornAgain；
-- presentation code；
-- controllers、widgets、dialogs、windows 或其他 GUI-specific modules；
-- 具体 infrastructure 或文件系统 implementations。
-
-Domain values 和 APIs 必须与 Qt objects、tensors、BornAgain objects 和 file handles
-保持独立。
-
-“Domain 为纯 Python”表示框架和外部运行时无关，不表示只能使用 Python 标准库。
-Domain 明确允许 NumPy；允许 SciPy 用于语义稳定且适合放入 domain 的 scientific
-primitive。引入其他数值库前必须进行 architecture review。
-
-## Application 限制
-
-Application 不得依赖 PyQt，也不得操作 `QWidget`、`QMessageBox`、`QFileDialog` 或
-其他 GUI object。Application 不得直接调用 BornAgain、TensorFlow 或具体文件系统 API。
-
-每个 application action 应建模为具有 framework-neutral input/output 的 use case。
-外部能力必须通过 ports 注入。每个新的 application use case 必须有测试。
-
-## Presentation 与 ViewModel
-
-`QMessageBox`、`QFileDialog` 和其他直接用户交互只能位于 presentation。
-
-ViewModel 可以：
-
-- 保存 UI state；
-- 暴露 commands；
-- 调用 use case；
-- 接收结果并转换为 display state。
-
-ViewModel 禁止负责：
-
-- scientific calculation；
-- TensorFlow inference；
-- BornAgain simulation；
-- 具体文件系统实现；
-- `QMessageBox`、`QFileDialog` 或 widget manipulation。
-
-View 负责渲染 ViewModel state 和用户 dialogs，use case 负责工作流编排。
-
-Presentation 不得直接导入本 feature 的 domain。需要展示的稳定 DTO、枚举或只读能力应由
-application 的 public API 明确导出；presentation 通过 application 获取它们，避免绕过
-use case 和 application boundary。
-
-Presentation 采用：
-
-```text
-PyQt View → ViewModel → Use Case
-```
-
-Feature-owned `ViewBinding` 可以连接 widget signals、dialogs、rendering 与 ViewModel。
-ViewBinding 属于 View 的实现细节，只能做控件值映射和展示；不得绕过 ViewModel 调用 use
-case，不得执行科学计算或具体 I/O。顶层旧 import path 只能薄 re-export 当前 owner，不能
-形成第二套 Controller orchestration。
-
-## Ports 与 adapters
-
-Ports 属于 feature 的 `application/ports/`，具体 implementations 属于
-`infrastructure/adapters/`。
-
-可使用以下 interfaces：
-
-- `SimulationPort`；
-- `PredictionModelPort`；
-- `FileRepositoryPort`；
-- `DatasetStoragePort`。
-
-可使用以下 adapters：
-
-- `BornAgainSimulationAdapter`；
-- `TensorFlowModelAdapter`；
-- `LocalFileSystemAdapter`。
-
-Port 描述 application 真正需要的能力，不能完整照搬外部库。Adapter 在边界处转换
-外部类型和异常。Use-case tests 应使用 fake 或 test double。
-
-## Feature 边界
-
-禁止导入另一个 feature 的 presentation、controller、ViewModel、adapter 或内部实现。
-以下模式明确禁止：
-
-```text
-prediction → FittingController.SomeHelper
-```
-
-跨 feature 复用只允许通过：
-
-- public application API；
-- 明确的 port/interface；
-- 具有清晰所有权的稳定 shared domain 或 scientific primitive。
-
-跨 feature application API 仅用于真正的业务协作，不能作为普通代码复用通道。多个
-feature 复用稳定数学或科学能力时，应优先提取为具有明确 ownership 的 shared
-scientific kernel，而不是通过另一个 feature 的 use case 间接调用。例如 prediction
-和 fitting 应共同依赖 q-space scientific kernel，而不是让 prediction 调用
-FittingUseCase 来完成 q conversion。
-
-`shared/` 不是默认放置位置。只有至少两个 feature 已经稳定需要同一项领域能力，并且
-语义、边界和 ownership 明确时，才能提取 shared abstraction。禁止为了“未来可能复用”
-提前创建 shared code，也禁止让 `shared/` 成为新的垃圾桶。
-
-禁止新增 catch-all modules：`utils.py`、`helpers.py`、`common.py`、`misc.py`。
-模块名称必须表达明确职责。
-
-## 保持科学行为不变
-
-架构、UI、性能和维护性修改不得静默改变：
-
-- numerical definitions 或结果；
-- parameter meanings；
-- units；
-- array orientation；
-- constraints；
-- ranking；
-- fitting behavior；
-- preprocessing behavior。
-
-只有任务明确要求时才能修改科学行为。科学行为修改必须单独说明，并通过适当测试和
-scientific review 验证。
-
-## 文件大小与内聚性
-
-- 新手写 Python 文件通常应保持在 400 行以内；
-- Controller 和 ViewModel 通常应保持在 300 行以内；
-- 这些是 architecture-review 阈值，不是机械硬限制；
-- 禁止仅为满足行数要求而进行没有明确职责边界的拆分。
-- `dialog.py`、`page.py`、`view_binding.py` 等 public presentation entrypoint 只负责组合、
-  依赖注入和稳定 re-export，不得重新承载完整页面实现；架构测试以 600 行作为入口退化门禁；
-- 仓库 runtime Python 文件另有 600 行 monolith 安全门禁；确有高内聚理由需要超过时，必须
-  先完成 architecture review 并记录显式例外，禁止通过压缩排版或无语义切片绕过；
-- 页面事件和展示绑定按职责放入命名明确的 `presentation/bindings/` 模块；大型 Python View
-  按有语义的视觉 section 或 component 拆分；
-- 禁止使用 `part1.py`、`part2.py` 等仅按大小切割、无法表达职责的模块名。
-
-## Python View 与 UI source of truth
-
-GIMaP 不再使用 Qt Designer `.ui` 或 pyuic 生成文件。每个稳定页面、dialog 和 window 必须由
-对应 feature 中独立、可读的 Python View 文件拥有：
-
-```text
-presentation/
-    page.py         # 页面组合、依赖注入和信号绑定
-    views/          # 独立 Python 页面、panel、dialog/window 布局
-    components/     # 仅在该 feature 内复用的视觉组件
-    view_model.py
-    styles/         # feature-owned QSS
-```
-
-应用外壳的 Python View 位于 `src/gimap/app/presentation/views/`。Feature View 位于
-`src/gimap/features/<feature>/presentation/views/`。禁止重新建立包含所有业务页面的单一
-monolithic Python UI 文件。
-
-- View 只定义 PyQt widget hierarchy、layout、objectName、tab order、视觉属性和展示绑定；
-- Matplotlib canvas、动态参数编辑器等运行时组件通过命名明确的 host widget 注入；
-- View 不导入 ViewModel、application、domain、controller、文件系统或外部科学 runtime；
-- `page.py`/`dialog.py` 负责注入 ViewModel、连接 commands 和把 state 渲染到 View；
-- 每个独立页面或稳定 dialog/window 使用职责明确的 Python 文件；页面变大时按可识别视觉区域
-  拆为 `views/` 或 `components/`，禁止形成新的千行通用 UI 文件；
-- 禁止把业务流程、科学计算、文件读写或进程管理放进 View；
-- 禁止保留同一页面的 `.ui`、pyuic 生成文件和 Python View 三套实现；
-- UI 维护必须审计 objectName、快捷键、默认值、tab order 和 signals；有意改变交互或视觉行为
-  时必须更新离屏测试与 workspace 文档；
-- `tests/test_ui_source_of_truth.py` 维护显式 Python View inventory 和依赖门禁；新增、删除或
-  重命名 View 必须同步清单并说明 owner；
-- 禁止重新新增 `.ui`、pyuic 输出或 UI 编译步骤；视觉参考应使用文档或截图保存。
-
-## 公共 Presentation 组件
-
-修改或新增页面前，必须先检查 `src/gimap/app/presentation/components/` 的公共组件 API，
-优先复用已有 `ParameterSection`、`AdvancedSection`、`FilePicker`、`PlotPanel`、
-`ResultTable`、`JobStatus`、`EmptyState`、`ErrorBanner` 和 safe-wheel numeric inputs。
-
-- 公共组件只能包含跨 feature 稳定的视觉、布局、可访问性和输入安全行为，不得包含科学计算、
-  use-case 调用、文件格式判断或 feature 状态；
-- feature presentation 只能通过 `src.gimap.app.presentation` 或其 `components` public API 导入，
-  禁止导入另一个 feature 的私有 presentation component；
-- 至少两个 feature 已有稳定相同需求，或属于全应用必须一致的交互安全规则时，才提升为公共组件；
-  禁止为了“将来可能复用”提前抽象；
-- 新公共组件必须从 `components/__init__.py` 和 `app/presentation/__init__.py` 显式导出，增加
-  offscreen test；有视觉状态时同步 showcase；
-- 动态创建的 spin box/combo box 必须再次调用 `install_safe_wheel_behavior`；普通滚轮用于滚动页面，
-  只有控件获得焦点且按住 Alt/Option 时才允许滚轮改值；
-- 公共组件目录不得出现 `utils.py`、`helpers.py`、`common.py` 等 catch-all 文件。
-
-详细组件清单、选择规则和新增流程见
-[`docs/architecture/ui-components.md`](docs/architecture/ui-components.md)。
-
-## 现代 UI 与布局门禁
-
-任何 workspace、page、dialog 或公共组件的新增与重构，都必须先阅读并遵守
-[`docs/architecture/ui-design-principles.md`](docs/architecture/ui-design-principles.md)。该文档是
-视觉层级、响应式布局、progressive disclosure 和 UI 验收的唯一权威来源。
-
-- 页面采用单层画布，通过留白、标题、对齐和分隔线建立层级；同一视觉区域最多一层带边框或背景
-  的容器，禁止 `Section → Card → GroupBox → Frame` 连续显示“框套框”；
-- Input、主要参数、Preview、主命令和 Results 必须默认可见。Advanced 只允许低频或专家选项，
-  标准工作流不得依赖展开面板；
-- 面向开发者的需求备注、实现说明和用户对 agent 的指导不得放入 UI；
-- 可变内容必须由 layout、`QSizePolicy` 和当前内容的 size hint 管理；禁止把动态页的 minimum 与
-  maximum height 锁为同一个值，禁止用固定高度掩盖裁切问题；
-- 一个方向只保留一个主要滚动容器；tab/stack 必须跟随当前页自然高度；
-- tab 和步骤导航必须保持位置、顺序稳定；仅当前页需要的 toolbar、banner、filter 必须位于 tab
-  内容内部或固定占位区，不得因显示/隐藏而把导航栏推上推下；
-- 图像显示控制紧邻 Preview，核心手势必须同时有显式 command；纯显示操作不得触发 cut、fit 或
-  页面跳转；
-- 曲线 q/log 控件必须使用用户任务语言。Signed q 的 Log X 使用 symlog，折叠后的 `|q|` 才使用
-  普通 log；不得把 branch、combination、axis scale 三个底层维度直接堆给用户；
-- 每次 UI 修改必须检查 1280×800、1440×900、1920×1080 的逻辑 viewport，运行 offscreen test，
-  并用截图检查裁切、重复边框、核心命令可见性和唯一主操作。
-
-## 科学数据流门禁
-
-Detector image 和其他会被多个科学步骤消费的数据必须遵守
-[`docs/architecture/scientific-data-flow.md`](docs/architecture/scientific-data-flow.md)。
-
-- 导入数据保存为不可变 RawImage；scientific preprocessing 必须从 RawImage 确定性生成唯一的
-  AnalysisImage，禁止在上一版处理结果上累计变换；
-- Preview、Yoneda/center finding、ROI、cut、fitting、batch analysis 和 processed export 默认且
-  只能消费 AnalysisImage，禁止缺失时静默回退到 RawImage；
-- Flip、threshold/mask、detector correction 和 mirror-fill 属于 scientific preprocessing；
-  colormap、vmin/vmax、auto scale、log intensity、zoom 和 overlay 属于 DisplayState；
-- DisplayState 不得改变科学数组、触发 scientific command 或使分析结果失效；preprocessing 改变
-  必须产生新 revision，并把依赖旧 revision 的 center、cut 和 fitting result 标记为 stale；
-- 嵌入 preview 与独立窗口只能是同一 AnalysisImage/CurvePlotSpec 和 typed display state 的两个
-  projection；禁止在独立窗口重复过滤、归一化或保存第二份科学状态。独立窗口可单独拥有 zoom、
-  pan、窗口几何和临时工具模式；
-- `Overlay ±q` 必须保留正负 source branch metadata，并以稳定、可辨识的不同颜色展示；
-- RawImage 只能用于重新 preprocessing、明确的 Raw Preview/Raw Export 或具名诊断；禁止通过
-  presentation display helper 给 application/domain 提供计算输入；
-- 裸数组兼容字段只能是 AnalysisImage 的只读别名，不能拥有第二份状态。代码必须使用语义明确的
-  data-flow API，并用测试证明 preview 和下游算法消费同一 revision。
-
-## Fitting 科学模型门禁
-
-Fitting 的总强度、Sphere/Cylinder/Vertical Cylinder form factor、结构因子、resolution、参数
-顺序、q 单位和分量缩放以
-[`docs/architecture/fitting-scientific-model.md`](docs/architecture/fitting-scientific-model.md)
-为唯一权威说明。
-
-当前核心公式为：
-
-```text
-I_model(q) = BG + K(k) × [Σᵢ Intᵢ Pᵢ(q) Sᵢ(q) + int_Res R(q)]
-R(q) = 1 / [1 + (|q| / sigma_Res)^nu_Res]
-F_sphere(q,R) = 3[sin(qR) - qR cos(qR)] / (qR)^3
-P_sphere(q) = <F_sphere(q,R)^2>
-phi(q) = exp(-pi q^2 sigma_D^2)
-S(q) = (1 - phi^2) / [1 + phi^2 - 2 phi cos(qD)]
-```
-
-`BG` 不乘 `k`；粒子分量与 resolution 分量乘相同的 `K(k)`。完整的圆柱公式、采样定义、
-参数语义和边界行为只在上述科学契约中维护，禁止在其他文档复制另一套定义。
-
-- 总曲线必须逐点满足 `Total = BG_total + Resolution + Σ Particle`；
-- 模型的所有分量必须在用于绘图的同一个 prepared q 数组上计算；
-- q、intensity 和 source-branch metadata 的过滤、fold 与排序必须使用同一个索引；
-- 禁止将 prepared model intensity 与 raw q 重新配对或再次独立 fold/sort；
-- 修改公式、采样、参数语义、单位或累加顺序时，必须同步更新公式文档并增加固定数值回归测试。
-
-## 参数提交与导航门禁
-
-所有 workspace 和 dialog 必须遵守
-[`docs/architecture/ui-interaction-contract.md`](docs/architecture/ui-interaction-contract.md)。
-
-- workflow step、workflow completion 和 preview tab 必须是独立状态；点击左侧任务不得重置右侧视图；
-- 参数编辑、鼠标选区和自动刷新不得隐式切 tab、滚动、抢焦点或打开 dialog；
-- 数值输入 Enter/结束编辑立即提交，方向键和有意滚轮采用默认 `220 ms` trailing debounce；普通
-  滚轮不得改值；相同 draft 不得重复提交；
-- 轻量 preview 可以节流刷新，scientific commit 必须通过 ViewModel command/use case；长任务必须
-  由显式 command 通过 JobRunner 启动；
-- 只有显式 Run/Plot/Extract 等命令成功产生有效结果后，才允许主动揭示结果页；失败和自动刷新
-  必须保留用户当前 view；
-- 已有派生结果可以在相关参数 commit 后防抖重算；尚无结果时不得把普通参数修改升级为隐式运行；
-- Qt signal 合并应复用公共 `ParameterCommitCoordinator`，不得在各 feature 重复 timer glue，也不得
-  把 scientific calculation 放入公共 coordinator。
-
-## 文档治理
-
-文档必须与代码保持同步，但禁止为没有文档影响的修改制造无意义的文档变更。不同目录
-承担不同职责：
-
-- `docs/architecture/`：当前架构、科学契约和稳定依赖规则；
-- `docs/ui/`：workspace 信息架构、控件映射和手动验收清单；
-- `docs/development.md`：开发环境、依赖安装、统一检查命令和平台差异；
-- `docs/adr/`：需要长期保留原因和权衡的重要架构决策；仅在确有此类决策时创建。
-
-禁止在多个文档中复制同一套完整规则。详细依赖规则以
-`docs/architecture/dependency-rules.md` 为唯一权威来源；本文件只保留 coding agent
-必须执行的摘要。其他文档应链接到权威来源，而不是复制后各自演化。
-
-新的重要文档应在开头明确：
-
-- `Status`：`Current` 或 `Draft`；
-- `Scope`；
-- `Related code`；
-- `Related tests`；
-- `Last verified`。
-
-发生以下变化时，必须在同一任务中更新对应的权威文档：
-
-- feature boundary 或 dependency direction 变化；
-- application port、public application API 或配置格式变化；
-- 用户工作流、启动流程或后台任务模型变化；
-- BornAgain、TensorFlow 或其他外部依赖的安装和兼容方式变化；
-- public import alias、entry point 或 public API 被增加、修改或删除。
-
-文档质量要求：
-
-- 架构图优先使用 Markdown Mermaid，确保图和文字可以一起 review；
-- 仓库内链接使用相对路径，文件名、模块名和命令必须与当前仓库一致；
-- 不得写入本地绝对路径、access token、用户配置、临时输出或机器专属信息；
-- 移动或删除文件时必须检索并修正文档中的失效引用；
-- 新文档必须有明确读者和职责，不得创建内容重叠的 architecture 文档；
-- `shared/`、ports、feature ownership 等术语必须与架构文档保持同一含义。
-
-每次交付必须明确报告 `Documentation impact`：更新了哪些文档；如果没有更新，说明为何
-不需要；同时说明是否改变了 public API、配置格式、用户工作流、依赖方向或兼容层。
-
-## 验证要求
-
-每个新的 application use case 都必须增加测试。交付修改前：
-
-- 运行与修改行为相关的 focused tests；
-- 可行时运行仓库统一验证命令；
-- 移动计算逻辑时比较可信科学输出；
-- 检查 `git status` 和 `git diff`，确认修改范围；
-- 检查文档影响和仓库内链接，避免实现与文档状态漂移；
-- 应明确报告 architecture violations，不得静默扩大 lint 或架构豁免范围。
-
-完整架构说明位于：
-
-- `docs/architecture/overview.md`；
-- `docs/architecture/dependency-rules.md`。
-
-## In-situ 序列分析契约
-
-Fitting 的实时、历史回看和批量处理必须遵守
-`docs/architecture/insitu-series-workflow.md`：
-
-- In-situ 复用单文件的 preprocessing、cut 和 fitting use cases，不得复制科学算法；
-- 单文件配置只能经用户显式操作创建不可变 Recipe 快照；
-- In-situ 修改必须创建新 Recipe 版本，不得反向或隐式同步到 Single analysis；
-- Recipe 更新必须声明 `future`、`selected_and_future` 或 `all` 作用范围；
-- display-only state 不进入 Recipe；worker 和持久化数据必须可 JSON 序列化；
-- 相同源数据与 Recipe 经 Single/In-situ 入口执行时必须保持数值兼容。
-- Single analysis 的 Load Mode 只能包含 Single/Stack；Live、历史回看和批量序列操作只能位于
-  feature-owned In-situ 页面，禁止重新增加 In-situ mode、轮询 timer 或第二个 runner dialog；
-- In-situ 页面采用 `Source → Preprocess → Geometry → Yoneda & cut → Fit → Results` 可点击流程。
-  点击节点只负责导航参数；完成/失败状态必须来自实际 frame record，不能来自点击历史；
-- Live 与 Batch 必须共享 Recipe、folder/pattern 输入、JobStatus、预览和结果缓存；不得复制单帧
-  preprocessing、cut、fit 算法或维护第二份运行状态。
+- Presentation 负责 widget、展示状态、信号映射和用户 dialog。
+- Application 负责 framework-neutral workflow、DTO 和 ports。
+- Domain 负责科学与业务规则，不依赖 GUI、I/O 或外部 runtime；可以使用标准库、NumPy，以及
+  适合稳定 scientific primitive 的 SciPy。
+- Infrastructure 负责 BornAgain、TensorFlow/Keras、文件系统、存储格式和进程等外部能力。
+- Composition root 可以装配 adapter 与 use case，但 application/domain 不导入具体 adapter。
+
+必须保持的边界：
+
+- Presentation 不直接导入本 feature 的 domain，也不直接构造 infrastructure adapter。
+- Application 不依赖 PyQt、具体文件系统、BornAgain 或 TensorFlow。
+- Domain 不依赖 presentation、application orchestration、GUI object、文件句柄或具体 adapter。
+- Feature 不导入另一个 feature 的 presentation、ViewModel、controller、adapter 或内部实现。
+  真正的跨 feature 协作使用 public application API、port 或稳定 shared primitive。
+- `src/gimap` 生产代码不反向导入顶层 `controllers`、`ui`、`trainset`、`calibration`、`WAXS`
+  或 `utils` 兼容包。旧路径只能薄转发当前 owner，不能承载新业务实现。
+- `utils/ML_Fitting_1D_GISAXS` 只是专用 TensorFlow worker/training bundle，不是通用工具目录。
+
+详细依赖规则以 `docs/architecture/dependency-rules.md` 为准；ownership 不清楚时先查看
+`docs/architecture/overview.md`。
+
+## 控制复杂度，而不是堆规则
+
+- 每项状态、公式和 workflow 只保留一个 source of truth；不要新增平行实现或第二份可变状态。
+- 优先复用当前 owner 的 public API。不要通过兼容层、另一个 feature 的 use case 或全局技术目录
+  绕路复用代码。
+- 局部重复可以暂时存在。至少两个稳定调用方且语义一致后，才提取 shared abstraction 或公共组件。
+- 不新增 `utils.py`、`helpers.py`、`common.py`、`misc.py` 等 catch-all module；名称应表达具体职责。
+- 不为了满足架构图创建空目录、无行为 wrapper、无实际调用方的 port 或 speculative interface。
+- 不用 `part1.py`、`part2.py` 或压缩排版规避文件过大。按真实职责拆分，或者保留高内聚代码并说明
+  理由。
+- 新手写 Python 文件通常控制在 400 行以内，Controller/ViewModel 通常控制在 300 行以内；
+  runtime Python 文件和 public presentation entrypoint 以 600 行为安全门禁。这些数字用于触发
+  review，不是机械切割目标。
+- 注释解释“为什么”以及科学约束，不重复代码已经清楚表达的“做什么”。
+
+## 需要先停一下的架构闸门
+
+正常的范围内修改可以直接推进。只有出现以下情况时，先给出简短影响分析与可选方案：
+
+- 新增跨 feature 依赖或 shared abstraction；
+- 新增 application port、public API、配置格式、持久化格式或兼容入口；
+- 改变 feature ownership、依赖方向或后台任务模型；
+- 有意改变科学公式、单位、参数语义、数组方向、约束、ranking、fitting 或 preprocessing；
+- 为完成任务必须明显扩大到另一个独立用户流程；
+- 需要新增生产依赖，或无法在现有边界内给代码找到清楚 owner。
+
+不要因为代码旧、任务较大或存在多个合理实现就自动停下。先检查现有模式和测试，能安全做出局部
+决定时就继续。
+
+## UI 工作
+
+GIMaP 使用 feature-owned Python View 作为 UI 唯一事实来源，不使用 Qt Designer `.ui`、pyuic
+生成文件或 UI 编译步骤。
+
+- View 只拥有 widget hierarchy、layout、objectName、tab order 和视觉默认值。
+- ViewModel 管理展示状态并调用 use case，不做科学计算、具体 I/O、TensorFlow/BornAgain 调用或
+  widget manipulation。
+- `QMessageBox`、`QFileDialog` 等直接交互只存在于 presentation。
+- 修改页面前先查看 `src/gimap/app/presentation/components/`，复用已经稳定的公共组件；不要
+  为单一 feature 提前提升公共组件。
+- 新增、删除或重命名 View 时同步 `tests/test_ui_source_of_truth.py` 的 inventory。
+- UI 变更应检查 1280×800、1440×900、1920×1080 viewport，运行 offscreen tests，并用截图确认
+  没有裁切、框套框、导航跳动或重复主操作。
+
+按需阅读，而不是把全部 UI 规则复制到这里：
+
+- 页面布局或视觉层级：`docs/architecture/ui-design-principles.md`
+- 公共组件：`docs/architecture/ui-components.md`
+- 参数提交、滚轮、刷新或导航：`docs/architecture/ui-interaction-contract.md`
+- Python View ownership：`docs/architecture/ui-source-of-truth.md`
+- 具体 workspace 行为：`docs/ui/workspaces/<feature>.md`
+
+## 科学行为与数据
+
+重构、UI、性能和维护性修改默认不得改变 numerical result、参数含义、单位、数组方向、约束、
+ranking、fitting 或 preprocessing。不要用“清理代码”的名义偷偷改变科学行为。
+
+若任务明确要求科学变化：
+
+- 将变化与无关重构分开；
+- 先固定旧行为或建立可信基准；
+- 增加有代表性的数值回归测试与边界测试；
+- 更新唯一权威科学文档，并在交付中明确说明变化。
+
+修改以下领域前必须阅读对应契约：
+
+- detector image、preprocessing、preview/cut/fitting 数据谱系：
+  `docs/architecture/scientific-data-flow.md`
+- fitting 公式、参数、q 处理和分量：`docs/architecture/fitting-scientific-model.md`
+- fitting live/history/batch：`docs/architecture/insitu-series-workflow.md`
+- XRR series extraction：`docs/architecture/xrr-series-workflow.md`
+- app settings/session/project state：`docs/architecture/app-context.md`
+
+契约正文只在这些文档中维护，不在 `AGENTS.md` 或其他说明中复制第二套版本。
+
+## 验证
+
+验证应与风险匹配，但不能省略与修改行为直接相关的检查：
+
+- 先运行 focused tests，快速获得反馈；
+- 每个新 application use case 都要有测试，优先使用 fake/test double；
+- 移动或重构科学逻辑时比较可信输出；
+- UI 修改运行相关 offscreen tests，并按上面的 viewport 做视觉检查；
+- 可行时运行仓库统一验证：`python tools/check.py`；
+- 不通过扩大 lint、架构或测试豁免来让修改过关；
+- 交付前再次检查 `git status` 和 `git diff`，确认没有范围外修改。
+
+如果完整验证受环境或外部 runtime 限制，运行能够运行的部分，并准确说明未运行内容和原因。
+
+## DESY Maxwell 远程工作
+
+- 当用户把当前任务明确放在 DESY Maxwell 范围内时，使用本机已有 SSH 配置连接
+  `zhaiyufe@max-wgs.desy.de`。连接中断后可以直接重连，不必为普通的任务范围内检查重复询问。
+- Maxwell 登录使用交互式认证。不得把密码、一次性秘钥、access token 或其他凭据写入仓库、脚本、
+  SSH 配置、shell history、日志或交付内容，也不得把它们提交到版本控制。
+- 遇到 `OTP(mfa.desy.de)`、凭据失效或认证被拒绝时立即暂停认证流程，在当前 Codex task 中向用户
+  请求新的 OTP。不得猜测、重复试用已经失败或可能过期的 OTP。
+- 用户已授权仅为 Maxwell OTP 请求发送通知到 `yufeng.zhai@desy.de`。只有在当前环境已有可用且已
+  连接的邮件发送能力时才可使用；否则在当前 Codex task 中请求。邮件中不得包含密码、OTP、token、
+  私钥、实验数据或远程日志内容。
+- `max-wgs` 是登录节点，只用于检查、文件管理和 Slurm 操作；训练、数据生成和其他重计算必须提交到
+  Slurm worker，不得直接在登录节点运行。
+- Maxwell 的 `/home/zhaiyufe` 容量有限，只用于轻量代码、配置和必要的小文件。训练集、模型、
+  checkpoint、缓存、大型日志及其他主要产物默认写入 `/data/dust/user/zhaiyufe/`；提交任务前检查
+  所有输出参数和 Slurm 日志路径，避免把大文件写入 home。
+- 成功登录不等于获得无限远程操作授权。提交或取消作业、修改远程代码/数据、安装依赖和删除内容仍
+  必须属于用户当前任务的明确范围；操作前先检查远程路径和状态，并保护已有工作。
+
+## 文档
+
+只有代码变化影响稳定事实时才更新文档，不为普通内部实现制造文档噪音：
+
+- 架构、依赖、port 或 public application API 变化更新 `docs/architecture/`；
+- 用户 workflow 或控件映射变化更新 `docs/ui/`；
+- 安装、依赖和统一命令变化更新 `docs/development.md`；
+- 只有需要长期保留原因与权衡的重要决策才创建 ADR。
+
+不要在多份文档复制完整规则。重要新文档应包含 Status、Scope、Related code、Related tests 和
+Last verified。移动或删除文件时检查仓库内引用；文档中不写本地绝对路径、token 或机器专属信息。
+
+## 交付格式
+
+最终报告保持简洁并包含：
+
+- 完成了什么；
+- 运行了哪些验证及结果；
+- `Documentation impact`：更新了哪些文档，或为什么不需要更新；
+- 是否改变 public API、配置格式、用户 workflow、依赖方向或兼容层；
+- 已知风险或未完成项；没有则明确说没有。
+
+清晰的代码、通过的测试和诚实的影响说明，比更长的规则清单更重要。
