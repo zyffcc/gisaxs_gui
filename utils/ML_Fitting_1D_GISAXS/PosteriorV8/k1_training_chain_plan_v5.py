@@ -19,8 +19,10 @@ from .k1_training_chain_contract_v5 import (
     canonical_json,
     digest,
     positive_integer,
+    v5_k1_training_runtime_capabilities,
     validate_v5_k1_training_inventory,
 )
+from .k1_staging_files_v5 import file_sha256, read_regular_bytes
 from .package_source_snapshot_v5 import (
     SOURCE_SNAPSHOT_EXTRACTED_TREE_SCHEMA,
     SOURCE_SNAPSHOT_EXTRACTED_TREE_VERSION,
@@ -37,9 +39,15 @@ POSTERIOR_ROOT_RELATIVE = Path("utils/ML_Fitting_1D_GISAXS/PosteriorV8")
 GPU_WRAPPER_RELATIVE = POSTERIOR_ROOT_RELATIVE / "slurm/v5_k1_training_seed_gpu4.sbatch"
 COLLECT_WRAPPER_RELATIVE = POSTERIOR_ROOT_RELATIVE / "slurm/v5_k1_training_collect_cpu.sbatch"
 K1_TRAINING_REQUIRED_SOURCE_FILES = (
+    POSTERIOR_ROOT_RELATIVE / "package_source_snapshot_v5.py",
     POSTERIOR_ROOT_RELATIVE / "k1_training_chain_contract_v5.py",
     POSTERIOR_ROOT_RELATIVE / "k1_training_chain_dataset_audit_v5.py",
+    POSTERIOR_ROOT_RELATIVE / "k1_staging_files_v5.py",
     POSTERIOR_ROOT_RELATIVE / "k1_job_staging_v5.py",
+    POSTERIOR_ROOT_RELATIVE / "k1_input_closure_v5.py",
+    POSTERIOR_ROOT_RELATIVE / "job_local_input_capability_v5.py",
+    POSTERIOR_ROOT_RELATIVE / "k1_staging_receipt_inputs_v5.py",
+    POSTERIOR_ROOT_RELATIVE / "k1_staging_receipt_v5.py",
     POSTERIOR_ROOT_RELATIVE / "k1_training_chain_plan_v5.py",
     POSTERIOR_ROOT_RELATIVE / "k1_training_chain_runtime_v5.py",
     POSTERIOR_ROOT_RELATIVE / "launch_k1_training_chain_v5.py",
@@ -55,7 +63,6 @@ K1_TRAINING_REQUIRED_SOURCE_FILES = (
     GPU_WRAPPER_RELATIVE,
     COLLECT_WRAPPER_RELATIVE,
 )
-V5_K1_WORKER_SECURITY_BLOCKER = "job_local_staging_security_audit_not_closed"
 _SOURCE_ARCHIVE_SUFFIXES = (".tar", ".tar.gz", ".tgz")
 
 
@@ -81,11 +88,7 @@ class V5K1TrainingChainConfig:
 
 
 def _file_sha256(path: Path) -> str:
-    value = sha256()
-    with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            value.update(chunk)
-    return value.hexdigest()
+    return file_sha256(path, "K1 frozen input")
 
 
 def _under_root(path: Path, root: Path, name: str, *, must_exist: bool) -> Path:
@@ -151,7 +154,11 @@ def fingerprint_v5_k1_training_source(source_root: Path) -> dict[str, object]:
 
 
 def _inventory(path: Path) -> tuple[dict[str, object], str]:
-    encoded = path.read_bytes()
+    encoded = read_regular_bytes(
+        path,
+        "K1 input inventory",
+        maximum_bytes=32 * 1024 * 1024,
+    )
     try:
         value = json.loads(encoded)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -241,7 +248,7 @@ def _seed_runs(run_root: Path, seeds: Sequence[int]) -> list[dict[str, object]]:
 
 
 def _formal_blockers(inventory: Mapping[str, object], mode: str) -> list[str]:
-    blockers = [V5_K1_WORKER_SECURITY_BLOCKER]
+    blockers: list[str] = []
     if mode != "formal_multiseed":
         return blockers
     supervision = inventory["full_search_supervision"]
@@ -249,6 +256,23 @@ def _formal_blockers(inventory: Mapping[str, object], mode: str) -> list[str]:
         blockers.append("input inventory has no fully promoted search supervision")
     blockers.extend(supervision["current_runtime_capabilities"]["blocked_interfaces"])
     return blockers
+
+
+def _job_local_input_security_contract() -> dict[str, object]:
+    return {
+        "status": "closed_by_live_wrapper_minted_capability_v2",
+        "capability_is_process_live_and_single_use": True,
+        "serialized_capability_or_receipt_authorizes_training": False,
+        "wrapper_created_owner_private_job_tmp_root_required": True,
+        "wrapper_mint_is_exclusive_one_shot_and_live_consumed": True,
+        "capability_has_no_public_factory": True,
+        "mint_token_seal_and_digest_are_never_audited": True,
+        "shared_scratch_base_alone_authorizes_training": False,
+        "original_and_job_local_bytes_rehashed_pre_and_post_training": True,
+        "source_archive_manifest_and_tree_reverified_pre_and_post_training": True,
+        "trainer_arguments_must_equal_verified_local_copy_set": True,
+        "output_remains_restricted_to_user_dust": True,
+    }
 
 
 def _scientific_role(mode: str) -> str:
@@ -445,6 +469,7 @@ def build_v5_k1_training_chain_plan(
             "submission_allowed": submission_allowed,
             "blockers": blockers,
             "formal_chain_complete": bool(config.mode == "formal_multiseed" and submission_allowed),
+            "job_local_input_security": _job_local_input_security_contract(),
             "login_node_work": "hash_contract_path_checks_plan_publication_and_sbatch_only",
             "training_compute": "Slurm_GPU_worker_only",
             "tuning_handoff_compute": "Slurm_CPU_worker_only",
@@ -701,6 +726,7 @@ def validate_v5_k1_training_chain_plan(payload: Mapping[str, object]) -> dict[st
             "submission_allowed",
             "blockers",
             "formal_chain_complete",
+            "job_local_input_security",
             "login_node_work",
             "training_compute",
             "tuning_handoff_compute",
@@ -722,10 +748,26 @@ def validate_v5_k1_training_chain_plan(payload: Mapping[str, object]) -> dict[st
         or gate["tuning_handoff_compute"] != "Slurm_CPU_worker_only"
         or gate["formal_chain_complete"]
         != (mode == "formal_multiseed" and gate["submission_allowed"])
-        or V5_K1_WORKER_SECURITY_BLOCKER not in gate["blockers"]
-        or gate["submission_allowed"] is not False
+        or gate["job_local_input_security"] != _job_local_input_security_contract()
     ):
         raise ValueError("execution gate semantics drifted")
+    if gate["submission_allowed"] is not (not gate["blockers"]):
+        raise ValueError("execution allowance disagrees with its blockers")
+    if mode == "engineering_e1":
+        if gate["blockers"] != [] or gate["submission_allowed"] is not True:
+            raise ValueError("engineering worker security gate is not closed and enabled")
+    else:
+        runtime_blockers = v5_k1_training_runtime_capabilities()["blocked_interfaces"]
+        allowed_blockers = {
+            "input inventory has no fully promoted search supervision",
+            *runtime_blockers,
+        }
+        if (
+            len(gate["blockers"]) != len(set(gate["blockers"]))
+            or not set(runtime_blockers).issubset(gate["blockers"])
+            or not set(gate["blockers"]).issubset(allowed_blockers)
+        ):
+            raise ValueError("formal execution blockers drifted from live capabilities")
     if value["resource_estimate"] != _resource_estimate(len(seeds)):
         raise ValueError("resource estimate drifted from the frozen Slurm allocation")
     if value["claim_limits"] != _claim_limits():
@@ -832,7 +874,6 @@ __all__ = [
     "K1_TRAINING_REQUIRED_SOURCE_FILES",
     "MAXWELL_DUST_ROOT",
     "V5K1TrainingChainConfig",
-    "V5_K1_WORKER_SECURITY_BLOCKER",
     "build_v5_k1_training_chain_plan",
     "fingerprint_v5_k1_training_source",
     "replay_v5_k1_training_chain_fingerprints",

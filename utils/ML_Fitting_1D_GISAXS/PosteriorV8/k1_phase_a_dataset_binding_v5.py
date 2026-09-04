@@ -11,6 +11,12 @@ import tempfile
 from typing import Mapping, Sequence
 
 from .grouped_dataset_v5 import read_v5_grouped_dataset
+from .k1_phase_a_capability_v7 import (
+    V7PhaseAInputCapability,
+    _consumed_capability_payload,
+    _validate_phase_a_capability,
+)
+from .k1_phase_a_contract_v7 import validate_launch_binding_payload
 from .k1_phase_a_cross_platform_v5 import (
     file_identity,
     validate_v5_k1_cross_platform_marker_file,
@@ -19,13 +25,14 @@ from .sobol_cross_platform_manifest_v5 import (
     V5_SOBOL_CROSS_PLATFORM_MANIFEST_SCHEMA,
     V5_SOBOL_CROSS_PLATFORM_MANIFEST_VERSION,
 )
+from .k1_staging_files_v5 import read_only_bytes_identity
 
 
 V5_K1_PHASE_A_DATASET_BINDING_SCHEMA = (
-    "gisaxs.posterior_v8.k1_phase_a_dataset_completion_binding/v1"
+    "gisaxs.posterior_v8.k1_phase_a_dataset_completion_binding/v2"
 )
 V5_K1_PHASE_A_DATASET_BINDING_VERSION = (
-    "posterior_v8_dataset_bytes_manifest_source_and_cross_platform_gate_binding_v1"
+    "posterior_v8_dataset_source_gate_launch_and_job_capability_binding_v2"
 )
 _SOURCE_FIELDS = {
     "source_archive_sha256",
@@ -61,6 +68,8 @@ _TOP_LEVEL_FIELDS = {
     "dataset",
     "source",
     "cross_platform_gate",
+    "launch_binding",
+    "job_local_capability",
     "binding_sha256",
 }
 
@@ -195,7 +204,17 @@ def build_v5_k1_phase_a_dataset_binding(
     *,
     original_dataset_path: str,
     marker_expected: Mapping[str, object],
+    launch_binding: Mapping[str, object],
+    capability: V7PhaseAInputCapability,
 ) -> dict[str, object]:
+    if not isinstance(launch_binding, Mapping):
+        raise ValueError("dataset binding requires a validated Phase-A v7 launch binding")
+    launch_binding = validate_launch_binding_payload(launch_binding)
+    if launch_binding["stage"] not in {"smoke_dataset", "full_dataset"}:
+        raise ValueError("dataset binding requires a validated Phase-A v7 launch binding")
+    _validate_phase_a_capability(
+        capability, stage=str(launch_binding["stage"]), phase="pre_use"
+    )
     expected = _marker_expected(marker_expected)
     marker = validate_v5_k1_cross_platform_marker_file(marker_path, **expected)
     source = dict(expected["expected_source"])
@@ -206,7 +225,12 @@ def build_v5_k1_phase_a_dataset_binding(
         "dataset": _dataset_payload(dataset_path, original_path=original_dataset_path),
         "source": source,
         "cross_platform_gate": _gate_payload(marker, expected),
+        "launch_binding": dict(launch_binding),
     }
+    _validate_phase_a_capability(
+        capability, stage=str(launch_binding["stage"]), phase="post_use"
+    )
+    core["job_local_capability"] = _consumed_capability_payload(capability)
     return {**core, "binding_sha256": sha256(_canonical_json(core).encode()).hexdigest()}
 
 
@@ -217,6 +241,8 @@ def publish_v5_k1_phase_a_dataset_binding(
     *,
     original_dataset_path: str,
     marker_expected: Mapping[str, object],
+    launch_binding: Mapping[str, object],
+    capability: V7PhaseAInputCapability,
 ) -> dict[str, object]:
     if binding_path.exists() or binding_path.is_symlink():
         raise FileExistsError("refusing to overwrite dataset completion binding")
@@ -225,6 +251,8 @@ def publish_v5_k1_phase_a_dataset_binding(
         marker_path,
         original_dataset_path=original_dataset_path,
         marker_expected=marker_expected,
+        launch_binding=launch_binding,
+        capability=capability,
     )
     encoded = json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
     _exclusive_atomic_write(binding_path, encoded)
@@ -234,6 +262,7 @@ def publish_v5_k1_phase_a_dataset_binding(
         marker_path=marker_path,
         expected_original_dataset_path=original_dataset_path,
         marker_expected=marker_expected,
+        expected_launch_binding=launch_binding,
     )
     return payload
 
@@ -245,6 +274,7 @@ def validate_v5_k1_phase_a_dataset_binding(
     marker_path: Path,
     expected_original_dataset_path: str,
     marker_expected: Mapping[str, object],
+    expected_launch_binding: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     payload = _strict_json_object(encoded)
     _exact_fields(payload, _TOP_LEVEL_FIELDS, "dataset completion binding")
@@ -269,6 +299,19 @@ def validate_v5_k1_phase_a_dataset_binding(
         raise ValueError("dataset completion binding gate identity does not match")
     if dataset["original_path"] != expected_original_dataset_path:
         raise ValueError("dataset completion binding original path does not match")
+    dataset_launch = validate_launch_binding_payload(payload["launch_binding"])
+    if dataset_launch["stage"] not in {"smoke_dataset", "full_dataset"}:
+        raise ValueError("dataset completion binding has the wrong producer stage")
+    if expected_launch_binding is not None and dataset_launch != expected_launch_binding:
+        raise ValueError("dataset completion binding launch identity does not match")
+    capability_payload = payload["job_local_capability"]
+    if (
+        not isinstance(capability_payload, Mapping)
+        or capability_payload.get("pre_post_equal") is not True
+        or capability_payload.get("capability", {}).get("launch_binding_sha256")
+        != dataset_launch.get("binding_sha256")
+    ):
+        raise ValueError("dataset completion binding capability identity does not match")
     actual_dataset = _dataset_payload(
         dataset_path, original_path=expected_original_dataset_path
     )
@@ -283,17 +326,8 @@ def validate_v5_k1_phase_a_dataset_binding(
 def validate_v5_k1_phase_a_dataset_binding_file(
     binding_path: Path, **expected: object
 ) -> dict[str, object]:
-    identity = file_identity(
-        binding_path, name="K1 dataset completion binding", require_read_only=True
-    )
-    encoded = Path(str(identity["path"])).read_text(encoding="utf-8")
-    after = file_identity(
-        Path(str(identity["path"])),
-        name="K1 dataset completion binding",
-        require_read_only=True,
-    )
-    if after != identity:
-        raise RuntimeError("K1 dataset completion binding changed while it was parsed")
+    raw, _ = read_only_bytes_identity(binding_path, "K1 dataset completion binding")
+    encoded = raw.decode("utf-8")
     return validate_v5_k1_phase_a_dataset_binding(encoded, **expected)
 
 
@@ -341,25 +375,18 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    expected = _expected_from_args(args)
-    if args.command == "publish":
-        result = publish_v5_k1_phase_a_dataset_binding(
-            args.dataset,
-            args.marker,
-            args.binding,
-            original_dataset_path=args.original_dataset_path,
-            marker_expected=expected,
-        )
-    else:
-        result = validate_v5_k1_phase_a_dataset_binding_file(
+    if args.command == "validate":
+        validate_v5_k1_phase_a_dataset_binding_file(
             args.binding,
             dataset_path=args.dataset,
             marker_path=args.marker,
             expected_original_dataset_path=args.original_dataset_path,
-            marker_expected=expected,
+            marker_expected=_expected_from_args(args),
         )
-    print(json.dumps(result, sort_keys=True, allow_nan=False))
-    return 0
+        return 0
+    raise RuntimeError(
+        "Phase-A v7 dataset publication requires the process-live pinned-wrapper runtime"
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -70,13 +70,31 @@ class PredictionResultsMixin:
                 }
             )
 
-        # Optional: Preprocessed steps panel with buttons following YAML order
+        # Use the snapshots captured by the exact inference call. Re-running
+        # preprocessing here can drift from the model input when the source or
+        # module changes while prediction is completing.
         try:
             if self._current_image is not None:
-                pre_img, pre_steps = self._collect_preprocess_steps(self._current_image)
+                if getattr(
+                    self, "_latest_preprocess_source", None
+                ) is self._current_image and isinstance(
+                    getattr(self, "_latest_model_input", None), np.ndarray
+                ):
+                    pre_img = self._latest_model_input
+                    pre_steps = list(getattr(self, "_latest_preprocess_steps", ()))
+                else:
+                    pre_img, pre_steps = self._collect_preprocess_steps(self._current_image)
                 if pre_steps:
                     display_steps = list(pre_steps)
                     if isinstance(pre_img, np.ndarray):
+                        masked_value = next(
+                            (
+                                step.get("masked_value")
+                                for step in reversed(display_steps)
+                                if isinstance(step, dict) and "masked_value" in step
+                            ),
+                            None,
+                        )
                         final_input = np.squeeze(pre_img)
                         if (
                             isinstance(final_input, np.ndarray)
@@ -88,6 +106,7 @@ class PredictionResultsMixin:
                                     "step": "Final Input: intensity",
                                     "label": "Final Input: intensity",
                                     "image": final_input[..., 0],
+                                    "masked_value": masked_value,
                                 },
                                 {
                                     "step": "Final Input: mask channel",
@@ -101,6 +120,7 @@ class PredictionResultsMixin:
                                     "step": "Final Input",
                                     "label": "Final Input",
                                     "image": final_input,
+                                    "masked_value": masked_value,
                                 }
                             ] + display_steps
                     panels.append(
@@ -127,22 +147,51 @@ class PredictionResultsMixin:
         except Exception as exc:
             self._append_status_message(f"Preprocessed panel failed: {exc}", level="ERROR")
 
-        # HR panel
+        raw_axes = outputs.get("distribution_axes") if isinstance(outputs, dict) else None
+        distribution_axes = raw_axes if isinstance(raw_axes, dict) else {}
+
+        # Joint distribution panel
         hr = outputs.get("hr") if isinstance(outputs, dict) else None
         if isinstance(hr, np.ndarray) and hr.ndim == 2:
-            panels.append({"kind": "hr", "title": "hr distribution", "data": hr})
+            column = distribution_axes.get("column")
+            row = distribution_axes.get("row")
+            column_label = (
+                str(column.get("label"))
+                if isinstance(column, dict) and column.get("label")
+                else "h"
+            )
+            row_label = str(row.get("label")) if isinstance(row, dict) and row.get("label") else "R"
+            panels.append(
+                {
+                    "kind": "hr",
+                    "title": f"p({column_label}, {row_label})",
+                    "data": hr,
+                    "axes": distribution_axes,
+                }
+            )
 
-        # 1D curves
-        h = outputs.get("h") if isinstance(outputs, dict) else None
-        if isinstance(h, np.ndarray):
-            panels.append(
-                {"kind": "curve", "title": "h distribution (nm)", "xlabel": "h (nm)", "data": h}
-            )
-        r = outputs.get("r") if isinstance(outputs, dict) else None
-        if isinstance(r, np.ndarray):
-            panels.append(
-                {"kind": "curve", "title": "R distribution (nm)", "xlabel": "R (nm)", "data": r}
-            )
+        # Physical 1D marginals in matrix column/row order.
+        for dimension, fallback_key, fallback_label in (
+            ("column", "h", "h"),
+            ("row", "r", "R"),
+        ):
+            axis = distribution_axes.get(dimension)
+            axis_values = axis if isinstance(axis, dict) else {}
+            key = str(axis_values.get("key") or fallback_key)
+            label = str(axis_values.get("label") or fallback_label)
+            unit = str(axis_values.get("unit") or "nm")
+            curve = outputs.get(key) if isinstance(outputs, dict) else None
+            curve_x = outputs.get(f"{key}_x") if isinstance(outputs, dict) else None
+            if isinstance(curve, np.ndarray):
+                panels.append(
+                    {
+                        "kind": "curve",
+                        "title": f"p({label})",
+                        "xlabel": f"{label} ({unit})" if unit else label,
+                        "data": curve,
+                        "x": curve_x,
+                    }
+                )
 
         if not panels:
             self._append_status_message("No plottable prediction outputs", level="WARN")
@@ -178,12 +227,23 @@ class PredictionResultsMixin:
         else:
             self._render_predict_tab_by_index(0)
 
-    def _render_predict2d_into_view(self, image2d: np.ndarray) -> None:
+    def _render_predict2d_into_view(
+        self,
+        image2d: np.ndarray,
+        *,
+        axes: Optional[Dict[str, object]] = None,
+    ) -> None:
         try:
             self._predict_current_image = image2d
             disp, vmin, vmax = self._prepare_predict_image(image2d)
             target_pixels = self._predict_viewport_pixels()
-            pix = self._render_hr_figure(disp, vmin=vmin, vmax=vmax, target_pixels=target_pixels)
+            pix = self._render_hr_figure(
+                disp,
+                vmin=vmin,
+                vmax=vmax,
+                target_pixels=target_pixels,
+                axes=axes,
+            )
             if pix is None:
                 pix = self._create_pixmap_from_array(
                     disp,
@@ -228,6 +288,7 @@ class PredictionResultsMixin:
         vmin: Optional[float] = None,
         vmax: Optional[float] = None,
         target_pixels: Optional[Tuple[int, int]] = None,
+        axes: Optional[Dict[str, object]] = None,
     ) -> Optional[QPixmap]:
         try:
             import matplotlib.pyplot as plt  # type: ignore
@@ -235,16 +296,37 @@ class PredictionResultsMixin:
             from matplotlib.backends.backend_agg import FigureCanvasAgg  # type: ignore
 
             img = np.array(image, dtype=np.float32)
-            vertical_sum = np.sum(img, axis=0)
-            horizontal_sum = np.sum(img, axis=1)
+            column_sum = np.sum(img, axis=0)
+            row_sum = np.sum(img, axis=1)
             vmin_calc, vmax_calc = self._auto_scale_values(img)
             cmin = vmin if vmin is not None else vmin_calc
             cmax = vmax if vmax is not None else vmax_calc
 
-            R_bins = np.linspace(0.05, 15, img.shape[0] + 1)
-            h_bins = np.linspace(0.05, 15, img.shape[1] + 1)
-            R_centers = (R_bins[:-1] + R_bins[1:]) / 2
-            h_centers = (h_bins[:-1] + h_bins[1:]) / 2
+            def axis_values(
+                dimension: str,
+                fallback_label: str,
+                count: int,
+            ) -> Tuple[str, str, float, float, np.ndarray]:
+                raw = axes.get(dimension) if isinstance(axes, dict) else None
+                values = raw if isinstance(raw, dict) else {}
+                label = str(values.get("label") or fallback_label)
+                unit = str(values.get("unit") or "nm")
+                low = values.get("min")
+                high = values.get("max")
+                minimum = float(low) if isinstance(low, (int, float)) else 0.05
+                maximum = float(high) if isinstance(high, (int, float)) else 15.0
+                if not np.isfinite(minimum) or not np.isfinite(maximum) or maximum <= minimum:
+                    minimum, maximum = 0.05, 15.0
+                bins = np.linspace(minimum, maximum, count + 1)
+                centers = (bins[:-1] + bins[1:]) / 2.0
+                return label, unit, minimum, maximum, centers
+
+            row_label, row_unit, row_min, row_max, row_centers = axis_values(
+                "row", "R", img.shape[0]
+            )
+            column_label, column_unit, column_min, column_max, column_centers = axis_values(
+                "column", "h", img.shape[1]
+            )
 
             dpi = 120.0
             if target_pixels:
@@ -266,27 +348,38 @@ class PredictionResultsMixin:
             cbar_tick_size = 12 * scale
 
             cmap_name = self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0])
-            im = ax[1, 0].imshow(img, cmap=cmap_name, vmin=cmin, vmax=cmax)
-            ax[1, 0].axis("off")
+            im = ax[1, 0].imshow(
+                img,
+                cmap=cmap_name,
+                vmin=cmin,
+                vmax=cmax,
+                origin="upper",
+                aspect="auto",
+                extent=(column_min, column_max, row_max, row_min),
+            )
+            ax[1, 0].set_xlabel(f"{column_label} ({column_unit})" if column_unit else column_label)
+            ax[1, 0].set_ylabel(f"{row_label} ({row_unit})" if row_unit else row_label)
+            ax[1, 0].tick_params(axis="both", which="major", labelsize=tick_size)
 
-            ax[0, 0].plot(h_centers, vertical_sum, color="red", linewidth=2)
-            ax[0, 0].set_title("h distribution (nm)", fontsize=title_size, fontweight="bold")
+            ax[0, 0].plot(column_centers, column_sum, color="red", linewidth=2)
+            ax[0, 0].set_title(f"p({column_label})", fontsize=title_size, fontweight="bold")
+            ax[0, 0].set_xlim(column_min, column_max)
             ax[0, 0].set_facecolor("#f0f0f0")
             ax[0, 0].grid(True, which="both", linestyle="--", linewidth=0.5)
             ax[0, 0].tick_params(axis="both", which="major", labelsize=tick_size)
 
-            ax[1, 1].plot(horizontal_sum, R_centers, color="red", linewidth=2)
-            ax[1, 1].set_title("R distribution (nm)", fontsize=title_size, fontweight="bold")
+            ax[1, 1].plot(row_sum, row_centers, color="red", linewidth=2)
+            ax[1, 1].set_title(f"p({row_label})", fontsize=title_size, fontweight="bold")
             ax[1, 1].set_facecolor("#f0f0f0")
             ax[1, 1].grid(True, which="both", linestyle="--", linewidth=0.5)
             ax[1, 1].tick_params(axis="both", which="major", labelsize=tick_size)
-            ax[1, 1].invert_yaxis()
+            ax[1, 1].set_ylim(row_max, row_min)
 
             ax[0, 1].axis("off")
 
             cax = fig.add_axes([0.95, 0.11, 0.02, 0.56])
             cbar = fig.colorbar(im, cax=cax)
-            cbar.set_label("Intensity", fontsize=cbar_label_size, fontweight="bold")
+            cbar.set_label("Probability", fontsize=cbar_label_size, fontweight="bold")
             cbar.ax.tick_params(labelsize=cbar_tick_size)
 
             canvas = FigureCanvasAgg(fig)
@@ -308,6 +401,7 @@ class PredictionResultsMixin:
         curve: np.ndarray,
         x_label: str,
         title: str,
+        x: Optional[np.ndarray] = None,
         log_x: bool = False,
         log_y: bool = False,
         xlim: Optional[Tuple[float, float]] = None,
@@ -318,16 +412,18 @@ class PredictionResultsMixin:
             from matplotlib.backends.backend_agg import FigureCanvasAgg  # type: ignore
 
             y = np.array(curve, dtype=np.float32)
-            x = np.arange(len(y), dtype=np.float32)
-            if log_x:
-                x = np.arange(1, len(y) + 1, dtype=np.float32)
+            x_values = np.asarray(x, dtype=np.float32) if isinstance(x, np.ndarray) else None
+            if x_values is None or x_values.shape != y.shape:
+                x_values = np.arange(len(y), dtype=np.float32)
+                if log_x:
+                    x_values = np.arange(1, len(y) + 1, dtype=np.float32)
 
             y_plot = y.copy()
             if log_y:
                 y_plot = np.where(y_plot > 0, y_plot, np.nan)
 
             fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(x, y_plot, color="red", linewidth=2)
+            ax.plot(x_values, y_plot, color="red", linewidth=2)
             ax.set_title(title, fontsize=14, fontweight="bold")
             ax.set_xlabel(x_label)
             ax.set_facecolor("#f0f0f0")

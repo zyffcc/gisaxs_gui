@@ -160,8 +160,14 @@ class PredictionViewBinding(
         self._predict_current_kind: Optional[str] = None
         self._predict_current_image: Optional[np.ndarray] = None
         self._predict_current_curve: Optional[np.ndarray] = None
+        self._predict_current_curve_x: Optional[np.ndarray] = None
         self._predict_curve_controls: Dict[str, object] = {}
         self._current_step_index: int = 0
+        self._step_snapshots: List[Dict[str, object]] = []
+        self._step_buttons: List[QPushButton] = []
+        self._latest_model_input: Optional[np.ndarray] = None
+        self._latest_preprocess_steps: List[Dict[str, object]] = []
+        self._latest_preprocess_source: Optional[np.ndarray] = None
 
         # 多文件预测相关
         self._multifile_results_widget: Optional[MultiFilePredictResultsWidget] = None

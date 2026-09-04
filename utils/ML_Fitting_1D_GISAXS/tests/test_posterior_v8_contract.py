@@ -10,6 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from PosteriorV8 import contract as contract_module
 from PosteriorV8.contract import (
     CYLINDER,
     NUM_TOPOLOGIES,
@@ -91,6 +92,56 @@ def test_gui_latent_component_roundtrip_uses_log_sizes_and_fraction_widths(compo
     assert recovered.sigma_h == pytest.approx(component.sigma_h) if component.sigma_h is not None else recovered.sigma_h is None
     assert recovered.D == pytest.approx(component.D) if component.D is not None else recovered.D is None
     assert recovered.sigma_D == pytest.approx(component.sigma_D) if component.sigma_D is not None else recovered.sigma_D is None
+
+
+def test_gui_latent_roundtrip_normalizes_closed_log_domain_endpoints_exactly():
+    component = GuiComponentParameters(
+        CYLINDER,
+        R=100.0,
+        sigma_R=20.0,
+        h=500.0,
+        sigma_h=100.0,
+        D=500.0,
+        sigma_D=50.0,
+    )
+
+    recovered = latent_component_to_gui(gui_component_to_latent(component))
+
+    assert recovered.R == 100.0
+    assert recovered.h == 500.0
+    assert recovered.D == 500.0
+    assert recovered.sigma_R == 20.0
+    assert recovered.sigma_h == 100.0
+    assert recovered.sigma_D == 50.0
+
+
+def test_exact_encoded_endpoint_wins_over_inward_platform_exp_roundoff():
+    class InwardRoundingNumeric:
+        @staticmethod
+        def log(value):
+            return float(np.log(value))
+
+        @staticmethod
+        def exp(value):
+            if value == float(np.log(100.0)):
+                return float(np.nextafter(100.0, -np.inf))
+            return float(np.exp(value))
+
+    numeric = InwardRoundingNumeric()
+    encoded = numeric.log(100.0)
+    inward = numeric.exp(encoded)
+
+    assert inward < 100.0
+    assert contract_module._roundoff_only_clamp(inward, ClosedInterval(1.0, 100.0), "R") == inward
+    assert (
+        contract_module._exp_closed_interval_endpoint(
+            encoded,
+            ClosedInterval(1.0, 100.0),
+            "R",
+            numeric,
+        )
+        == 100.0
+    )
 
 
 def test_gui_zero_d_pair_is_canonicalized_to_absent():

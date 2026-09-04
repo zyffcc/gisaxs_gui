@@ -4,16 +4,26 @@ from collections.abc import Sequence
 from dataclasses import replace
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import k1_phase_a_cross_platform_v5
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import immutable_submission_file_v5
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import k1_staging_files_v5
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import launch_k1_phase_b_dag_v5 as launcher
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_contract_v5 import (
     PHASE_A_SOURCE_PATHS,
     PHASE_B_SOURCE_PATHS,
+    V5_K1_PHASE_B_SCHEMA,
+    V5_K1_PHASE_B_VERSION,
     source_identity,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_capability_v5 import (
+    _consumed_phase_b_capability_payload,
+    _mint_phase_b_capability,
+    _validate_phase_b_capability,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_launch_inputs_v5 import (
     PHASE_A_ROOT_NAME,
@@ -21,6 +31,15 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_launch_inputs_v5 import (
     expected_v5_k1_phase_a_paths,
     inspect_v5_k1_phase_b_source,
     resolve_v5_k1_phase_a_input_files,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_launch_chain_v5 import (
+    V5K1PhaseBLaunchRuntime,
+    copy_v5_k1_phase_b_submission_wrapper,
+    inspect_v5_k1_phase_b_launch_chain,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_publication_v5 import (
+    V5_K1_PHASE_B_COMPLETION_FILENAME,
+    publish_v5_k1_phase_b_completed_result,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_worker_inputs_v5 import (
     V5K1PhaseBWorkerInputSpec,
@@ -32,6 +51,7 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.launch_k1_phase_b_dag_v5 import (
     PHASE_ROOT_NAME,
     PLAN_FILENAME,
     RECEIPT_FILENAME,
+    V5CommandRequest,
     V5CommandResult,
     V5K1PhaseBLaunchError,
     build_v5_k1_phase_b_launch_plan,
@@ -49,6 +69,96 @@ WRAPPER_RELATIVE = Path(
 LAUNCHER_TEST_RELATIVE = Path(
     "utils/ML_Fitting_1D_GISAXS/tests/test_posterior_v8_k1_phase_b_launcher_v5.py"
 )
+
+
+class _HeldScheduler:
+    def __init__(
+        self,
+        job_ids: Sequence[str],
+        *,
+        fail_release_stage: str | None = None,
+        hold_reason_overrides: dict[str, str] | None = None,
+        dependency_overrides: dict[str, str | None] | None = None,
+        release_stays_held: set[str] | None = None,
+        on_submit=None,
+        on_release=None,
+    ) -> None:
+        self._job_ids = iter(job_ids)
+        self._fail_release_stage = fail_release_stage
+        self._hold_reason_overrides = dict(hold_reason_overrides or {})
+        self._dependency_overrides = dict(dependency_overrides or {})
+        self._release_stays_held = set(release_stays_held or ())
+        self._on_submit = on_submit
+        self._on_release = on_release
+        self.requests: list[V5CommandRequest] = []
+        self.dependencies: dict[str, str | None] = {}
+        self.stages: dict[str, str] = {}
+        self.held: set[str] = set()
+        self.cancelled: list[str] = []
+
+    @property
+    def calls(self) -> list[tuple[str, ...]]:
+        return [request.argv for request in self.requests]
+
+    def __call__(self, request: V5CommandRequest) -> V5CommandResult:
+        self.requests.append(request)
+        command = request.argv
+        if command[0] == "sbatch":
+            job_id = next(self._job_ids)
+            dependency = next(
+                (
+                    value.removeprefix("--dependency=afterok:")
+                    for value in command
+                    if value.startswith("--dependency=afterok:")
+                ),
+                None,
+            )
+            stage = "formal_gate" if dependency is not None else "engineering_smoke"
+            self.dependencies[job_id] = dependency
+            self.stages[job_id] = stage
+            self.held.add(job_id)
+            if self._on_submit is not None:
+                self._on_submit(stage, job_id)
+            return V5CommandResult(0, job_id + "\n", "")
+        if command[:4] == ("scontrol", "show", "job", "--oneliner"):
+            job_id = command[4]
+            dependency = self.dependencies[job_id]
+            stage = self.stages[job_id]
+            reason = self._hold_reason_overrides.get(
+                stage,
+                (
+                    "JobHeldUser"
+                    if job_id in self.held
+                    else ("Dependency" if dependency else "Priority")
+                ),
+            )
+            reported_dependency = self._dependency_overrides.get(stage, dependency)
+            dependency_text = (
+                "(null)"
+                if reported_dependency is None
+                else f"afterok:{reported_dependency}(unfulfilled)"
+            )
+            return V5CommandResult(
+                0,
+                f"JobId={job_id} JobState=PENDING Reason={reason} "
+                f"Dependency={dependency_text}\n",
+                "",
+            )
+        if command[:2] == ("scontrol", "release"):
+            job_id = command[2]
+            stage = self.stages[job_id]
+            if self._on_release is not None:
+                self._on_release(stage, job_id)
+            if stage == self._fail_release_stage:
+                return V5CommandResult(1, "", "release rejected")
+            if stage not in self._release_stays_held:
+                self.held.discard(job_id)
+            return V5CommandResult(0, "", "")
+        if command[0] == "scancel":
+            self.cancelled.append(command[1])
+            self.held.discard(command[1])
+            return V5CommandResult(0, "", "")
+        raise AssertionError(f"unexpected scheduler command: {command}")
 
 
 def _canonical_sha(value: dict[str, object], self_field: str) -> str:
@@ -74,6 +184,9 @@ def _stubbed_config(tmp_path: Path, monkeypatch):
     (run_root / "logs").mkdir(parents=True)
     source_root = dust / "source-snapshots/new-audited-snapshot"
     source_root.mkdir(parents=True)
+    source_wrapper, _ = _read_only(
+        source_root / WRAPPER_RELATIVE, b"#!/bin/bash\nset -euo pipefail\n"
+    )
     archive, archive_sha = _read_only(
         dust / "source-archives/new-audited-source.tar", b"source archive"
     )
@@ -107,7 +220,13 @@ def _stubbed_config(tmp_path: Path, monkeypatch):
         "archive_byte_count": archive.stat().st_size,
         "manifest_sha256": "1" * 64,
         "source_tree_sha256": "2" * 64,
-        "required_file_identity": {WRAPPER_RELATIVE.as_posix(): {"sha256": "3" * 64}},
+        "required_file_identity": {
+            WRAPPER_RELATIVE.as_posix(): k1_phase_a_cross_platform_v5.file_identity(
+                source_wrapper,
+                name="source wrapper",
+                require_read_only=True,
+            )
+        },
     }
     artifacts = {
         name: {
@@ -178,6 +297,13 @@ def test_dry_run_is_write_free_and_builds_strict_smoke_formal_afterok_plan(tmp_p
     assert (
         "--dependency=afterok:ENGINEERING_SMOKE_JOB_ID" in plan["submission_preview"]["formal_gate"]
     )
+    assert "--hold" in plan["submission_preview"]["formal_gate"]
+    assert "--hold" in plan["submission_preview"]["engineering_smoke"]
+    assert "--kill-on-invalid-dep=yes" in plan["submission_preview"]["engineering_smoke"]
+    assert "--kill-on-invalid-dep=yes" in plan["submission_preview"]["formal_gate"]
+    assert plan["jobs"]["engineering_smoke"]["submit_held"] is True
+    assert plan["jobs"]["formal_gate"]["submit_held"] is True
+    assert plan["jobs"]["formal_gate"]["wrapper"] == plan["layout"]["submission_wrapper"]
     assert (
         plan["jobs"]["formal_gate"]["environment"]["POSTERIOR_V8_V5_K1_PHASE_B_FORMAL_ACK"] == "YES"
     )
@@ -209,14 +335,9 @@ def test_submit_records_exact_afterok_commands_and_self_hashed_read_only_audits(
     tmp_path, monkeypatch
 ):
     config, dust, _, _ = _stubbed_config(tmp_path, monkeypatch)
-    calls: list[tuple[str, ...]] = []
-    replies = iter(("25001001\n", "25001002;maxwell\n"))
+    runner = _HeldScheduler(("25001001", "25001002"))
 
-    def runner(argv: Sequence[str]) -> V5CommandResult:
-        calls.append(tuple(argv))
-        return V5CommandResult(0, next(replies), "")
-
-    receipt = launch_v5_k1_phase_b_dag(
+    result = launch_v5_k1_phase_b_dag(
         config,
         submit=True,
         runner=runner,
@@ -225,20 +346,36 @@ def test_submit_records_exact_afterok_commands_and_self_hashed_read_only_audits(
         environment={"AWS_SECRET_ACCESS_KEY": "must-not-be-captured"},
     )
 
-    assert receipt["status"] == "submitted"
+    receipt = result["submission_receipt"]
+    calls = runner.calls
+    assert result["status"] == "all_jobs_released"
+    assert receipt["status"] == "all_jobs_held"
     assert receipt["job_ids"] == {
         "engineering_smoke": "25001001",
         "formal_gate": "25001002",
     }
-    assert len(calls) == 2
-    assert calls[0][:2] == ("sbatch", "--parsable")
-    assert "--dependency=afterok:25001001" in calls[1]
-    assert all(any(item.startswith("--output=") for item in call) for call in calls)
-    assert all(any(item.startswith("--error=") for item in call) for call in calls)
+    submissions = [call for call in calls if call[0] == "sbatch"]
+    releases = [call for call in calls if call[:2] == ("scontrol", "release")]
+    inspections = [call for call in calls if call[:2] == ("scontrol", "show")]
+    assert len(submissions) == 2
+    assert len(inspections) == 4
+    assert releases == [
+        ("scontrol", "release", "25001002"),
+        ("scontrol", "release", "25001001"),
+    ]
+    assert all(
+        call[:4]
+        == ("sbatch", "--parsable", "--hold", "--kill-on-invalid-dep=yes")
+        for call in submissions
+    )
+    assert "--dependency=afterok:25001001" in submissions[1]
+    assert all(any(item.startswith("--output=") for item in call) for call in submissions)
+    assert all(any(item.startswith("--error=") for item in call) for call in submissions)
     assert "must-not-be-captured" not in repr(calls)
     assert "AWS_SECRET_ACCESS_KEY" not in repr(calls)
     assert receipt["secret_environment_captured"] is False
     _canonical_sha(receipt, "receipt_sha256")
+    _canonical_sha(result["launch_completion"], "launch_completion_sha256")
 
     audit = config.run_root / PHASE_ROOT_NAME / "audit"
     stored_plan = json.loads((audit / PLAN_FILENAME).read_text())
@@ -247,6 +384,17 @@ def test_submit_records_exact_afterok_commands_and_self_hashed_read_only_audits(
     assert stored_plan["plan_sha256"] == receipt["plan_sha256"]
     assert (audit / PLAN_FILENAME).stat().st_mode & 0o222 == 0
     assert (audit / RECEIPT_FILENAME).stat().st_mode & 0o222 == 0
+    assert Path(stored_plan["layout"]["launch_completion"]).stat().st_mode & 0o222 == 0
+    pinned = Path(stored_plan["layout"]["submission_wrapper"])
+    assert all(str(pinned) not in call for call in submissions)
+    assert all(
+        request.script_bytes == pinned.read_bytes()
+        for request in runner.requests
+        if request.argv[0] == "sbatch"
+    )
+    assert pinned.stat().st_mode & 0o777 == 0o400
+    assert pinned.stat().st_nlink == 1
+    assert str(config.source_root / WRAPPER_RELATIVE) not in repr(calls)
     assert not Path(stored_plan["layout"]["smoke_output"]).exists()
     assert not Path(stored_plan["layout"]["formal_output"]).exists()
     with pytest.raises(FileExistsError, match="versioned K1 Phase-B root"):
@@ -282,7 +430,7 @@ def test_non_max_wgs_and_bad_sbatch_are_fail_closed(tmp_path, monkeypatch):
             hostname="max-wgs01",
         )
     receipt = json.loads(raised.value.receipt_path.read_text())
-    assert receipt["status"] == "failed"
+    assert receipt["status"] == "submission_failed"
     assert receipt["failure"]["stage"] == "engineering_smoke"
     assert receipt["job_ids"] == {}
     _canonical_sha(receipt, "receipt_sha256")
@@ -290,7 +438,6 @@ def test_non_max_wgs_and_bad_sbatch_are_fail_closed(tmp_path, monkeypatch):
 
 def test_phase_a_drift_between_afterok_submissions_preserves_failure_receipt(tmp_path, monkeypatch):
     config, dust, _, phase_a = _stubbed_config(tmp_path, monkeypatch)
-    calls = 0
     inspections = 0
 
     def inspect(config, **kwargs):
@@ -302,10 +449,7 @@ def test_phase_a_drift_between_afterok_submissions_preserves_failure_receipt(tmp
 
     monkeypatch.setattr(launcher, "inspect_v5_k1_phase_a_inputs", inspect)
 
-    def runner(argv: Sequence[str]) -> V5CommandResult:
-        nonlocal calls
-        calls += 1
-        return V5CommandResult(0, "25002001\n", "")
+    runner = _HeldScheduler(("25002001",))
 
     with pytest.raises(V5K1PhaseBLaunchError) as raised:
         launch_v5_k1_phase_b_dag(
@@ -314,12 +458,232 @@ def test_phase_a_drift_between_afterok_submissions_preserves_failure_receipt(tmp
             runner=runner,
             allowed_root=dust,
             hostname="max-wgs03",
-        )
+    )
     receipt = json.loads(raised.value.receipt_path.read_text())
-    assert calls == 1
+    assert runner.cancelled == ["25002001"]
     assert receipt["job_ids"] == {"engineering_smoke": "25002001"}
     assert receipt["failure"]["stage"] == "formal_gate"
     assert "Phase-A evidence changed" in receipt["failure"]["message"]
+
+
+def test_release_failure_preserves_held_receipt_but_no_official_completion(
+    tmp_path, monkeypatch
+):
+    config, dust, _, _ = _stubbed_config(tmp_path, monkeypatch)
+    def check_receipt(stage: str, job_id: str) -> None:
+        del job_id
+        if stage == "formal_gate":
+            audit = config.run_root / PHASE_ROOT_NAME / "audit"
+            assert (audit / RECEIPT_FILENAME).is_file()
+            assert not (audit / launcher.LAUNCH_COMPLETION_FILENAME).exists()
+
+    runner = _HeldScheduler(
+        ("25004001", "25004002"),
+        fail_release_stage="formal_gate",
+        on_release=check_receipt,
+    )
+
+    with pytest.raises(V5K1PhaseBLaunchError) as raised:
+        launch_v5_k1_phase_b_dag(
+            config,
+            submit=True,
+            runner=runner,
+            allowed_root=dust,
+            hostname="max-wgs04",
+        )
+    audit = config.run_root / PHASE_ROOT_NAME / "audit"
+    receipt = json.loads((audit / RECEIPT_FILENAME).read_text())
+    failure = json.loads(raised.value.receipt_path.read_text())
+    assert receipt["status"] == "all_jobs_held"
+    assert receipt["formal_release_completed"] is False
+    assert failure["status"] == "RELEASE_FAILED_NO_LAUNCH_COMPLETION"
+    assert failure["official_launch_chain_complete"] is False
+    assert not (audit / launcher.LAUNCH_COMPLETION_FILENAME).exists()
+    assert runner.cancelled == ["25004002", "25004001"]
+    _canonical_sha(failure, "release_failure_sha256")
+
+
+def test_scheduler_must_confirm_initial_hold_and_cancels_unproven_job(
+    tmp_path, monkeypatch
+):
+    config, dust, _, _ = _stubbed_config(tmp_path, monkeypatch)
+    runner = _HeldScheduler(
+        ("25004101",), hold_reason_overrides={"engineering_smoke": "Priority"}
+    )
+
+    with pytest.raises(V5K1PhaseBLaunchError) as raised:
+        launch_v5_k1_phase_b_dag(
+            config,
+            submit=True,
+            runner=runner,
+            allowed_root=dust,
+            hostname="max-wgs04",
+        )
+    receipt = json.loads(raised.value.receipt_path.read_text())
+    assert receipt["status"] == "submission_failed"
+    assert "did not retain" in receipt["failure"]["message"]
+    assert runner.cancelled == ["25004101"]
+    assert not (
+        config.run_root / PHASE_ROOT_NAME / "audit" / launcher.LAUNCH_COMPLETION_FILENAME
+    ).exists()
+
+
+def test_scheduler_dependency_readback_must_match_and_cancels_both_jobs(
+    tmp_path, monkeypatch
+):
+    config, dust, _, _ = _stubbed_config(tmp_path, monkeypatch)
+    runner = _HeldScheduler(
+        ("25004201", "25004202"),
+        dependency_overrides={"formal_gate": "99999999"},
+    )
+
+    with pytest.raises(V5K1PhaseBLaunchError) as raised:
+        launch_v5_k1_phase_b_dag(
+            config,
+            submit=True,
+            runner=runner,
+            allowed_root=dust,
+            hostname="max-wgs04",
+        )
+    receipt = json.loads(raised.value.receipt_path.read_text())
+    assert receipt["status"] == "submission_failed"
+    assert "dependency drifted" in receipt["failure"]["message"]
+    assert runner.cancelled == ["25004202", "25004201"]
+
+
+def test_release_readback_must_clear_user_hold_before_official_completion(
+    tmp_path, monkeypatch
+):
+    config, dust, _, _ = _stubbed_config(tmp_path, monkeypatch)
+    runner = _HeldScheduler(
+        ("25004301", "25004302"), release_stays_held={"formal_gate"}
+    )
+
+    with pytest.raises(V5K1PhaseBLaunchError) as raised:
+        launch_v5_k1_phase_b_dag(
+            config,
+            submit=True,
+            runner=runner,
+            allowed_root=dust,
+            hostname="max-wgs04",
+        )
+    failure = json.loads(raised.value.receipt_path.read_text())
+    assert failure["status"] == "RELEASE_FAILED_NO_LAUNCH_COMPLETION"
+    assert "user-held after release" in failure["failure"]["message"]
+    assert runner.cancelled == ["25004302", "25004301"]
+    assert not (
+        config.run_root / PHASE_ROOT_NAME / "audit" / launcher.LAUNCH_COMPLETION_FILENAME
+    ).exists()
+
+
+def test_production_maxwell_root_forbids_all_injected_submission_seams(
+    tmp_path, monkeypatch
+):
+    config, _, _, _ = _stubbed_config(tmp_path, monkeypatch)
+    with pytest.raises(RuntimeError, match="forbids injected test seams"):
+        launch_v5_k1_phase_b_dag(
+            config,
+            submit=True,
+            runner=_HeldScheduler(("25004401", "25004402")),
+        )
+
+
+def test_formal_chain_requires_release_completion_and_bound_completed_smoke(
+    tmp_path, monkeypatch
+):
+    config, dust, _, _ = _stubbed_config(tmp_path, monkeypatch)
+    runner = _HeldScheduler(("25005001", "25005002"))
+    result = launch_v5_k1_phase_b_dag(
+        config,
+        submit=True,
+        runner=runner,
+        allowed_root=dust,
+        hostname="max-wgs05",
+    )
+    audit = config.run_root / PHASE_ROOT_NAME / "audit"
+    plan_path = audit / PLAN_FILENAME
+    plan = json.loads(plan_path.read_text())
+    smoke_runtime = _launch_runtime(plan_path, "engineering_smoke")
+    smoke_output = Path(plan["layout"]["smoke_output"])
+    smoke_chain = inspect_v5_k1_phase_b_launch_chain(
+        smoke_runtime,
+        output_dir=smoke_output,
+        slurm_job_id="25005001",
+    )
+    smoke_output.parent.mkdir(parents=True, exist_ok=True)
+    smoke_capability, smoke_capability_payload = _consumed_capability(smoke_chain)
+    publish_v5_k1_phase_b_completed_result(
+        smoke_output,
+        _smoke_result(smoke_chain, smoke_capability_payload),
+        launch_binding=smoke_chain,
+        capability=smoke_capability,
+    )
+
+    formal_runtime = _launch_runtime(plan_path, "formal_gate")
+    formal_output = Path(plan["layout"]["formal_output"])
+    evidence = inspect_v5_k1_phase_b_launch_chain(
+        formal_runtime,
+        output_dir=formal_output,
+        slurm_job_id="25005002",
+    )
+    assert evidence["formal_prerequisite_evidence"]["upstream_smoke_job_id"] == (
+        "25005001"
+    )
+    assert evidence["formal_prerequisite_evidence"]["formal_job_id"] == "25005002"
+    assert evidence["formal_prerequisite_evidence"]["upstream_smoke"][
+        "result_payload_sha256"
+    ]
+    assert result["launch_completion"]["official_launch_chain_complete"] is True
+
+    with pytest.raises(ValueError, match="not the receipt-bound stage job"):
+        inspect_v5_k1_phase_b_launch_chain(
+            formal_runtime,
+            output_dir=formal_output,
+            slurm_job_id="99999999",
+        )
+    smoke_completion = smoke_output / V5_K1_PHASE_B_COMPLETION_FILENAME
+    smoke_completion_bytes = smoke_completion.read_bytes()
+    smoke_output.chmod(0o700)
+    smoke_completion.unlink()
+    smoke_output.chmod(0o500)
+    assert (smoke_output / "phase-b-result.json").is_file()
+    with pytest.raises(FileNotFoundError):
+        inspect_v5_k1_phase_b_launch_chain(
+            formal_runtime,
+            output_dir=formal_output,
+            slurm_job_id="25005002",
+        )
+    smoke_output.chmod(0o700)
+    smoke_completion.write_bytes(smoke_completion_bytes)
+    smoke_completion.chmod(0o400)
+    smoke_output.chmod(0o500)
+    smoke_output.chmod(0o700)
+    with pytest.raises(ValueError, match="remains writable"):
+        inspect_v5_k1_phase_b_launch_chain(
+            formal_runtime,
+            output_dir=formal_output,
+            slurm_job_id="25005002",
+        )
+    smoke_output.chmod(0o500)
+    Path(plan["layout"]["launch_completion"]).unlink()
+    with pytest.raises(FileNotFoundError):
+        inspect_v5_k1_phase_b_launch_chain(
+            formal_runtime,
+            output_dir=formal_output,
+            slurm_job_id="25005002",
+        )
+    receipt_path = Path(plan["layout"]["receipt"])
+    receipt_payload = json.loads(receipt_path.read_text())
+    receipt_payload["receipt_sha256"] = "0" * 64
+    receipt_path.unlink()
+    receipt_path.write_text(json.dumps(receipt_payload))
+    receipt_path.chmod(0o400)
+    with pytest.raises(ValueError, match="self SHA-256 does not reproduce"):
+        inspect_v5_k1_phase_b_launch_chain(
+            formal_runtime,
+            output_dir=formal_output,
+            slurm_job_id="25005002",
+        )
 
 
 def test_old_diagnostic_run_and_phase_a_roots_are_rejected(tmp_path, monkeypatch):
@@ -344,7 +708,22 @@ def test_old_diagnostic_run_and_phase_a_roots_are_rejected(tmp_path, monkeypatch
             allowed_root=dust,
         )
     assert CURRENT_RUN_ROOT_NAME.endswith("V5_2_R2")
-    assert PHASE_A_ROOT_NAME.endswith("dag_v6")
+    assert PHASE_A_ROOT_NAME.endswith("dag_v13")
+
+
+def test_phase_b_refuses_phase_a_artifacts_without_full_gate_completion(
+    tmp_path, monkeypatch
+):
+    config, dust, _, _ = _stubbed_config(tmp_path, monkeypatch)
+    completion = expected_v5_k1_phase_a_paths(config.run_root)["phase_a_completion"]
+    completion.unlink()
+
+    with pytest.raises(FileNotFoundError):
+        resolve_v5_k1_phase_a_input_files(
+            config,
+            run_root=config.run_root,
+            allowed_root=dust,
+        )
 
 
 def _synthetic_source_tree(root: Path) -> Path:
@@ -452,6 +831,9 @@ def test_slurm_wrapper_revalidates_every_input_before_isolated_worker_execution(
         "POSTERIOR_V8_V5_K1_PHASE_B_MODEL_PROVENANCE",
         "POSTERIOR_V8_V5_K1_PHASE_B_MODEL_PROVENANCE_SHA256",
         "POSTERIOR_V8_V5_K1_PHASE_B_MODEL_PROVENANCE_BYTE_COUNT",
+        "POSTERIOR_V8_V5_K1_PHASE_B_PHASE_A_COMPLETION",
+        "POSTERIOR_V8_V5_K1_PHASE_B_PHASE_A_COMPLETION_SHA256",
+        "POSTERIOR_V8_V5_K1_PHASE_B_PHASE_A_COMPLETION_BYTE_COUNT",
         "POSTERIOR_V8_V5_K1_PHASE_B_EXPECTED_GATE_CLAIM_SHA256",
         "POSTERIOR_V8_V5_K1_PHASE_B_EXPECTED_REFERENCE_SHA256",
         "POSTERIOR_V8_V5_K1_PHASE_B_EXPECTED_REFERENCE_BYTE_COUNT",
@@ -460,12 +842,26 @@ def test_slurm_wrapper_revalidates_every_input_before_isolated_worker_execution(
         "POSTERIOR_V8_V5_K1_PHASE_B_EXPECTED_COMPARISON_SHA256",
         "POSTERIOR_V8_V5_K1_PHASE_B_OUTPUT",
         "POSTERIOR_V8_V5_K1_PHASE_B_MODE",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_STAGE",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_SHA256",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_FILE_SHA256",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_BYTE_COUNT",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_MODE",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_DEVICE",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_INODE",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_MTIME_NS",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_CTIME_NS",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN_NLINK",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_RECEIPT",
+        "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_COMPLETION",
     )
     for name in required_environment:
         assert f"${{{name}:?" in wrapper
     assert "GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2" in wrapper
-    assert "k1_phase_a_v5_2_dag_v6" in wrapper
-    assert "k1_phase_a_v5_2_dag_v5" not in wrapper
+    assert "k1_phase_a_v5_2_dag_v13" in wrapper
+    assert "k1_phase_a_v5_2_dag_v6" not in wrapper
+    assert "k1_phase_b_v5_2_dag_v3" in wrapper
     assert "PYTHONNOUSERSITE=1" in wrapper
     assert "unset PYTHONPATH" in wrapper
     assert "python -I -c" in wrapper
@@ -481,11 +877,25 @@ def test_slurm_wrapper_revalidates_every_input_before_isolated_worker_execution(
     assert '--original-source-archive "$POSTERIOR_V8_V5_SOURCE_ARCHIVE"' in wrapper
     assert '--original-phase-a-result "$POSTERIOR_V8_V5_K1_PHASE_B_RESULT"' in wrapper
     assert '--original-phase-a-model "$POSTERIOR_V8_V5_K1_PHASE_B_MODEL"' in wrapper
+    assert '--dataset-binding "$job_binding"' in wrapper
+    assert '--cross-platform-pass-marker "$job_marker"' in wrapper
+    assert '--phase-a-completion "$job_phase_a_completion"' in wrapper
     assert "verify_checked" in wrapper
     assert "source archive after worker" in wrapper
     assert "dataset binding after worker" in wrapper
     assert "PASS marker after worker" in wrapper
+    assert "Phase-A completion after worker" in wrapper
     assert 'exit "$worker_status"' in wrapper
+    assert '--launch-plan "$POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN"' in wrapper
+    assert '--launch-receipt "$POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_RECEIPT"' in wrapper
+    assert "Phase-B launch completion did not appear" in wrapper
+    worker_source = (
+        Path(__file__).resolve().parents[1]
+        / "PosteriorV8/run_k1_phase_b_gate_v5.py"
+    ).read_text()
+    assert "publish_v5_k1_phase_b_completed_result" in worker_source
+    assert "assert_v5_k1_phase_b_launch_chain_unchanged" in worker_source
+    assert "external_smoke_review" not in worker_source
 
 
 def _worker_input_spec(tmp_path: Path):
@@ -502,15 +912,28 @@ def _worker_input_spec(tmp_path: Path):
 
     phase_a_output = dust / "MaxwellRuns/audited/models/full"
     dataset, _ = _read_only(dust / "MaxwellRuns/audited/dataset.gvd5", b"dataset")
+    dataset_binding, _ = _read_only(
+        Path(str(dataset) + ".binding-v1.json"), b"dataset binding"
+    )
+    audit_root = phase_a_output.parents[1] / "audit"
+    pass_marker, _ = _read_only(
+        audit_root / "sobol-cross-platform-PASS-v1.json", b"pass marker"
+    )
     result, _ = _read_only(phase_a_output / "result.json", b"result")
     model, _ = _read_only(phase_a_output / "model.keras", b"model")
     provenance, _ = _read_only(phase_a_output / "model.provenance.json", b"provenance")
+    phase_a_completion, _ = _read_only(
+        audit_root / "full-gate-completion-v1.json", b"completion"
+    )
     authoritative_paths = {
         "source_archive": archive,
         "dataset": dataset,
+        "dataset_binding": dataset_binding,
+        "cross_platform_pass_marker": pass_marker,
         "phase_a_result": result,
         "phase_a_model": model,
         "phase_a_model_provenance": provenance,
+        "phase_a_completion": phase_a_completion,
     }
     expected = {
         name: {
@@ -553,9 +976,19 @@ def _worker_input_spec(tmp_path: Path):
 
 
 def _replace_read_only(path: Path, content: bytes) -> None:
-    path.unlink()
-    path.write_bytes(content)
-    path.chmod(0o400)
+    # Keep the unlinked inode alive until its replacement exists.  Otherwise a
+    # fast filesystem may immediately recycle the same inode and timestamp,
+    # making this adversarial fixture indistinguishable from the original file.
+    descriptor = os.open(
+        path,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+    )
+    try:
+        path.unlink()
+        path.write_bytes(content)
+        path.chmod(0o400)
+    finally:
+        os.close(descriptor)
 
 
 def test_worker_rechecks_authoritative_originals_and_local_copies_after_binding(tmp_path):
@@ -606,19 +1039,221 @@ def test_strict_identity_rejects_final_symlink_and_open_file_replacement(tmp_pat
     target.unlink()
     target.write_bytes(b"original")
     target.chmod(0o400)
-    real_read = k1_phase_a_cross_platform_v5.os.read
-    replacement_done = False
+    real_fstat = k1_staging_files_v5.os.fstat
+    fstat_calls = 0
 
-    def replace_while_reading(descriptor, byte_count):
-        nonlocal replacement_done
-        if not replacement_done:
-            replacement_done = True
+    def replace_while_reading(descriptor):
+        nonlocal fstat_calls
+        fstat_calls += 1
+        if fstat_calls == 2:
             _replace_read_only(target, b"replacement")
-        return real_read(descriptor, byte_count)
+        return real_fstat(descriptor)
 
     with monkeypatch.context() as scoped:
-        scoped.setattr(k1_phase_a_cross_platform_v5.os, "read", replace_while_reading)
-        with pytest.raises(RuntimeError, match="changed while it was hashed"):
+        scoped.setattr(k1_staging_files_v5.os, "fstat", replace_while_reading)
+        with pytest.raises(RuntimeError, match="changed or was replaced"):
             k1_phase_a_cross_platform_v5.file_identity(
                 target, name="racing input", require_read_only=True
             )
+
+
+def _launch_runtime(plan_path: Path, stage: str) -> V5K1PhaseBLaunchRuntime:
+    plan = json.loads(plan_path.read_text())
+    identity = k1_phase_a_cross_platform_v5.file_identity(
+        plan_path, name="test launch plan", require_read_only=True
+    )
+    return V5K1PhaseBLaunchRuntime(
+        plan_path=plan_path,
+        expected_plan_sha256=plan["plan_sha256"],
+        expected_plan_file_identity=identity,
+        receipt_path=Path(plan["layout"]["receipt"]),
+        launch_completion_path=Path(plan["layout"]["launch_completion"]),
+        launch_stage=stage,
+    )
+
+
+def _consumed_capability(launch_chain, recheck=None):
+    selected_recheck = (lambda: None) if recheck is None else recheck
+    capability = _mint_phase_b_capability(launch_chain, selected_recheck)
+    _validate_phase_b_capability(capability, phase="pre_execution")
+    _validate_phase_b_capability(capability, phase="post_execution")
+    return capability, _consumed_phase_b_capability_payload(capability)
+
+
+def _smoke_result(
+    launch_chain: dict[str, object], capability_payload: dict[str, object]
+) -> dict[str, object]:
+    core = {
+        "schema_version": V5_K1_PHASE_B_SCHEMA,
+        "version": V5_K1_PHASE_B_VERSION,
+        "status": "engineering_throughput_smoke_completed_fail_closed",
+        "launch_chain": launch_chain,
+        "job_local_capability": capability_payload,
+    }
+    return {
+        **core,
+        "result_payload_sha256": sha256(
+            json.dumps(
+                core, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+        ).hexdigest(),
+    }
+
+
+def test_completion_last_publication_requires_live_single_use_capability(
+    tmp_path,
+):
+    output = tmp_path / "results/smoke"
+    output.parent.mkdir(parents=True)
+    launch_chain = {
+        "launch_stage": "engineering_smoke",
+        "slurm_job_id": "25003001",
+        "launch_plan": {"plan_sha256": "1" * 64},
+        "formal_prerequisite_evidence": None,
+        "formal_prerequisite_evidence_sha256": None,
+    }
+    calls = 0
+
+    def fail_during_publication_recheck() -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 4:
+            assert output.is_dir()
+            assert (output / "phase-b-result.json").is_file()
+            assert not (output / V5_K1_PHASE_B_COMPLETION_FILENAME).exists()
+            raise RuntimeError("authoritative input changed")
+
+    failed_capability, failed_payload = _consumed_capability(
+        launch_chain, fail_during_publication_recheck
+    )
+
+    with pytest.raises(RuntimeError, match="authoritative input changed"):
+        publish_v5_k1_phase_b_completed_result(
+            output,
+            _smoke_result(launch_chain, failed_payload),
+            launch_binding=launch_chain,
+            capability=failed_capability,
+        )
+    assert calls == 4
+    assert not output.exists()
+
+    capability, capability_payload = _consumed_capability(launch_chain)
+    published = publish_v5_k1_phase_b_completed_result(
+        output,
+        _smoke_result(launch_chain, capability_payload),
+        launch_binding=launch_chain,
+        capability=capability,
+    )
+    result_path = output / "phase-b-result.json"
+    completion_path = output / V5_K1_PHASE_B_COMPLETION_FILENAME
+    assert published["completion"]["status"] == "COMPLETE"
+    assert result_path.stat().st_mode & 0o777 == 0o400
+    assert completion_path.stat().st_mode & 0o777 == 0o400
+    assert result_path.stat().st_nlink == completion_path.stat().st_nlink == 1
+    assert output.stat().st_mode & 0o222 == 0
+    completion = json.loads(completion_path.read_text())
+    _canonical_sha(completion, "completion_payload_sha256")
+    assert completion["result"]["sha256"] == sha256(result_path.read_bytes()).hexdigest()
+    assert completion["result"]["byte_count"] == result_path.stat().st_size
+    assert completion["result"]["device"] == result_path.stat().st_dev
+    assert completion["result"]["inode"] == result_path.stat().st_ino
+    assert completion["result"]["nlink"] == 1
+    assert completion["job_local_capability"] == capability_payload
+    second_output = output.parent / "forged-second-completion"
+    with pytest.raises(RuntimeError, match="post-execution validation"):
+        publish_v5_k1_phase_b_completed_result(
+            second_output,
+            _smoke_result(launch_chain, capability_payload),
+            launch_binding=launch_chain,
+            capability=capability,
+        )
+    assert not second_output.exists()
+
+
+def test_strict_identity_rejects_hardlinks_and_same_content_replacement(tmp_path):
+    target, _ = _read_only(tmp_path / "target.bin", b"same bytes")
+    alias = tmp_path / "hardlink.bin"
+    alias.hardlink_to(target)
+    with pytest.raises(ValueError, match="exactly one hard link"):
+        k1_phase_a_cross_platform_v5.file_identity(
+            target, name="hardlinked input", require_read_only=True
+        )
+    alias.unlink()
+    before = k1_phase_a_cross_platform_v5.file_identity(
+        target, name="replaceable input", require_read_only=True
+    )
+    _replace_read_only(target, b"same bytes")
+    after = k1_phase_a_cross_platform_v5.file_identity(
+        target, name="replacement input", require_read_only=True
+    )
+    assert before["sha256"] == after["sha256"]
+    assert before["byte_count"] == after["byte_count"]
+    assert before != after
+    assert {"device", "inode", "mode", "mtime_ns", "ctime_ns", "nlink"} <= set(after)
+
+
+def test_pinned_wrapper_copy_rejects_preoccupation_and_source_replacement(
+    tmp_path, monkeypatch
+):
+    source, _ = _read_only(tmp_path / "source.sbatch", b"#!/bin/bash\nexit 0\n")
+    expected = k1_phase_a_cross_platform_v5.file_identity(
+        source, name="source wrapper", require_read_only=True
+    )
+    submission = tmp_path / "submission"
+    submission.mkdir(mode=0o700)
+    preoccupied, _ = _read_only(submission / "pinned.sbatch", b"occupied")
+    with pytest.raises(FileExistsError, match="preoccupied"):
+        copy_v5_k1_phase_b_submission_wrapper(
+            source, preoccupied, expected_source_identity=expected
+        )
+
+    preoccupied.unlink()
+    real_open = immutable_submission_file_v5.os.open
+
+    def preoccupy_during_exclusive_open(path, flags, *args):
+        if Path(path) == preoccupied and flags & immutable_submission_file_v5.os.O_EXCL:
+            preoccupied.write_bytes(b"racing owner file")
+            preoccupied.chmod(0o400)
+        return real_open(path, flags, *args)
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            immutable_submission_file_v5.os, "open", preoccupy_during_exclusive_open
+        )
+        with pytest.raises(FileExistsError):
+            copy_v5_k1_phase_b_submission_wrapper(
+                source, preoccupied, expected_source_identity=expected
+            )
+    assert preoccupied.read_bytes() == b"racing owner file"
+    preoccupied.unlink()
+    real_read = immutable_submission_file_v5.os.read
+    source_open_count = 0
+    copy_fd = -1
+    replaced = False
+
+    def tracked_open(path, flags, *args):
+        nonlocal source_open_count, copy_fd
+        descriptor = real_open(path, flags, *args)
+        if Path(path) == source:
+            source_open_count += 1
+            if source_open_count == 2:
+                copy_fd = descriptor
+        return descriptor
+
+    def replace_during_copy(descriptor, byte_count):
+        nonlocal replaced
+        data = real_read(descriptor, byte_count)
+        if descriptor == copy_fd and data and not replaced:
+            replaced = True
+            _replace_read_only(source, b"#!/bin/bash\nexit 0\n")
+        return data
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(immutable_submission_file_v5.os, "open", tracked_open)
+        scoped.setattr(immutable_submission_file_v5.os, "read", replace_during_copy)
+        with pytest.raises(RuntimeError, match="changed during pinned copy"):
+            copy_v5_k1_phase_b_submission_wrapper(
+                source, preoccupied, expected_source_identity=expected
+            )
+    assert replaced is True
+    assert not preoccupied.exists()

@@ -193,6 +193,64 @@ def make_input(q, I, sigma_arr, cons):
     return batch
 
 
+def adapt_input_to_model(batch, model):
+    """Project current inference inputs onto the loaded checkpoint signature.
+
+    Older production checkpoints were trained before the optional
+    ``component_diameter`` spacing rule was added, so their
+    ``d_spacing_rule`` input has width 3 instead of the current width 4.  The
+    first three rule ids retained their meaning.  It is therefore safe to
+    drop only an all-zero trailing rule column; every other shape mismatch is
+    a real model/schema incompatibility and must remain an error.
+    """
+    model_specs = {}
+    for tensor in model.inputs:
+        name = tensor.name.split(":", 1)[0].split("/")[-1]
+        shape = tuple(None if dim is None else int(dim) for dim in tensor.shape)
+        model_specs[name] = shape
+
+    adapted = {}
+    for name, expected_shape in model_specs.items():
+        if name not in batch:
+            raise RuntimeError(f"Model input '{name}' is missing from the inference batch.")
+        value = np.asarray(batch[name])
+        if value.ndim != len(expected_shape):
+            raise RuntimeError(
+                f"Model input '{name}' expects rank {len(expected_shape)} with shape "
+                f"{expected_shape}, but inference produced {value.shape}."
+            )
+
+        if name == "d_spacing_rule" and value.ndim >= 1:
+            expected_width = expected_shape[-1]
+            if expected_width is not None and value.shape[-1] > expected_width:
+                unsupported_tail = value[..., expected_width:]
+                if np.any(np.abs(unsupported_tail) > 1e-7):
+                    raise RuntimeError(
+                        "The selected D-spacing rule is not supported by this older model "
+                        f"(model width={expected_width}, current width={value.shape[-1]}). "
+                        "Choose Free, Max diameter, or Mean diameter, or use a newer model."
+                    )
+                print(
+                    "Model compatibility: projected d_spacing_rule from "
+                    f"{value.shape[-1]} to {expected_width} entries.",
+                    flush=True,
+                )
+                value = value[..., :expected_width]
+
+        mismatches = [
+            (axis, actual, expected)
+            for axis, (actual, expected) in enumerate(zip(value.shape, expected_shape))
+            if expected is not None and actual != expected
+        ]
+        if mismatches:
+            raise RuntimeError(
+                f"Model input '{name}' expects shape {expected_shape}, but inference "
+                f"produced {value.shape}; mismatched axes={mismatches}."
+            )
+        adapted[name] = value
+    return adapted
+
+
 def find_column(names, aliases, default_idx):
     normalized = [normalize_col_name(n) for n in names]
     for alias in aliases:

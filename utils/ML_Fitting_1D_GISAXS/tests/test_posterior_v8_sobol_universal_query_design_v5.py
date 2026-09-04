@@ -101,11 +101,10 @@ def test_all_34_queries_replay_and_generating_pair_is_the_original_direct_pair()
     generating = _by_topology(artifact)[artifact.generating_topology_id]
     assert generating.geometry == original_geometry
     assert generating.amplitude == original_amplitude
-        # Snapshot the conservative geometry-only identity.  The contextual
-    # catalog version changed when incomplete amplitude context became an
-    # explicit no-quotient contract.
+    # Snapshot the conservative geometry-only identity.  It includes the
+    # versioned exact-closed-endpoint branch codec contract.
     assert original_geometry.sha256 == (
-        "697d5b7488c060a0c69ae3f41248f1dfed854d6df280d76e5dc5712192cdf57e"
+        "ba5dfcfd6c855e439a3d55ada4bf28fb403fb07d8f65a8a73ead2b0537ce1552"
     )
     assert original_amplitude.sha256 == (
         "88623ec2e103962e323dda20c9cad50f2e24c5f857289f1d8ec3d911784ecae4"

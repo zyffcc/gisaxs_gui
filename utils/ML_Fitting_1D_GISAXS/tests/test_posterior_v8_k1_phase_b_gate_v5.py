@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
@@ -273,16 +274,76 @@ def _phase_a_fixture():
             canonical_json(training_evidence_core).encode()
         ).hexdigest(),
     }
+    launch_binding_core = {
+        "schema": "gisaxs.posterior_v8.k1_phase_a_launch_binding/v1",
+        "status": "VALIDATED",
+        "stage": "full_gate",
+        "slurm_job_id": "25000006",
+        "plan_sha256": "0" * 64,
+        "receipt_sha256": "1" * 64,
+        "release_sha256": "2" * 64,
+        "transaction_files": {},
+        "upstream": {"stage": "full_dataset", "job_id": "25000005"},
+    }
+    launch_binding = {
+        **launch_binding_core,
+        "binding_sha256": sha256(
+            canonical_json(launch_binding_core).encode()
+        ).hexdigest(),
+    }
+    staged_inputs = [
+        {
+            "role": "source_archive",
+            "path": "/data/dust/user/zhaiyufe/job/source.tar",
+            "identity": {
+                "sha256": "3" * 64,
+                "byte_count": 100,
+                "mode_octal": "0o400",
+                "uid": 1000,
+                "gid": 1000,
+                "link_count": 1,
+            },
+        }
+    ]
+    staged_inputs_sha = sha256(canonical_json(staged_inputs).encode()).hexdigest()
+    capability_core = {
+        "schema": "gisaxs.posterior_v8.k1_phase_a_job_local_capability/v1",
+        "stage": "full_gate",
+        "slurm_job_id": "25000006",
+        "launch_binding_sha256": launch_binding["binding_sha256"],
+        "staged_inputs": staged_inputs,
+        "pre_mint_rehash_sha256": staged_inputs_sha,
+        "authorization": {
+            "live_registry_required": True,
+            "single_use": True,
+            "serialized_payload_authorizes_use": False,
+            "job_local_read_only_single_link_inputs": True,
+        },
+    }
+    capability_audit = {
+        **capability_core,
+        "capability_sha256": sha256(
+            canonical_json(capability_core).encode()
+        ).hexdigest(),
+    }
+    job_local_capability = {
+        "capability": capability_audit,
+        "pre_use_rehash_sha256": staged_inputs_sha,
+        "post_use_rehash_sha256": staged_inputs_sha,
+        "pre_post_equal": True,
+    }
     model_provenance_core = {
         "schema": V5_K1_MODEL_PROVENANCE_SCHEMA,
         "version": V5_K1_MODEL_PROVENANCE_VERSION,
-        "status": "BOUND",
+        "status": "BOUND_TO_INPUTS_PENDING_STAGE_COMPLETION",
         "model": {
             "filename": "model.keras",
             **model_identity,
             "reload_graph_contract_passed": True,
         },
         "training_evidence": training_evidence,
+        "launch_binding": launch_binding,
+        "job_local_capability": job_local_capability,
     }
     model_provenance = {
         **model_provenance_core,
@@ -293,14 +354,16 @@ def _phase_a_fixture():
     model_provenance_identity = {"sha256": "f" * 64, "byte_count": 789}
     weights_sha = "b" * 64
     nested_core = {
-        "schema_version": "gisaxs.posterior_v8.memorization_gate/v1",
-        "version": "single_recipe_single_mdn_local_target_diagnostic_v1",
+        "schema_version": "gisaxs.posterior_v8.memorization_gate/v3",
+        "version": "deterministic_minibatch_single_mdn_learnable_local_target_diagnostic_v3",
         "scientific_role": "wiring_and_memorization_diagnostic_not_model_acceptance",
         "initial_loss": 2.0,
         "final_loss": 0.1,
         "initial_target_median_rms": 0.4,
         "final_target_median_rms": 0.01,
         "target_count": 2,
+        "learnable_target_count": 2,
+        "fully_fixed_target_count": 0,
         "varying_coordinate_count": 4,
         "model_input_keys": [],
         "objective_audit_sha256": "c" * 64,
@@ -308,6 +371,7 @@ def _phase_a_fixture():
         "final_weights_sha256": weights_sha,
         "passed": True,
         "config": {
+            "batch_size": 32,
             "max_final_target_median_rms": 0.02,
             "minimum_loss_reduction": 0.5,
         },
@@ -365,9 +429,14 @@ def _phase_a_fixture():
             "clean_parent_count": 2,
             "observation_view_count": 2,
             "known_truth_target_count": 2,
+            "learnable_target_count": 2,
+            "fully_fixed_target_count": 0,
+            "varying_coordinate_count": 4,
         },
         "source": source,
         "training_evidence": training_evidence,
+        "launch_binding": launch_binding,
+        "job_local_capability": job_local_capability,
         "output_dir": "/data/dust/user/zhaiyufe/model",
         "created_at_utc": "2026-09-03T00:00:00+00:00",
         "status": "stage_a_passed",
@@ -448,6 +517,38 @@ def test_phase_a_model_drift_is_rejected_even_if_result_is_rehashed():
             model_weights_sha256_value=weights,
             live_gate_contract_value=contract,
         )
+
+
+def test_phase_a_requires_full_gate_launch_and_equal_live_capability_rehashes():
+    payload, dataset, model, provenance, provenance_file, source, weights, contract = (
+        _phase_a_fixture()
+    )
+    common = {
+        "dataset_identity": dataset,
+        "model_identity": model,
+        "model_provenance_payload": provenance,
+        "model_provenance_identity": provenance_file,
+        "phase_a_source_identity": source,
+        "source_snapshot_identity": payload["training_evidence"]["source_snapshot"],
+        "model_weights_sha256_value": weights,
+        "live_gate_contract_value": contract,
+    }
+
+    wrong_stage = deepcopy(payload)
+    launch = wrong_stage["launch_binding"]
+    launch["stage"] = "smoke_gate"
+    launch_core = dict(launch)
+    launch_core.pop("binding_sha256")
+    launch["binding_sha256"] = sha256(canonical_json(launch_core).encode()).hexdigest()
+    wrong_stage = _rehash_phase_a_result(wrong_stage)
+    with pytest.raises(ValueError, match="launch binding identity drifted"):
+        validate_v5_k1_phase_a_bindings(wrong_stage, **common)
+
+    unequal = deepcopy(payload)
+    unequal["job_local_capability"]["post_use_rehash_sha256"] = "f" * 64
+    unequal = _rehash_phase_a_result(unequal)
+    with pytest.raises(ValueError, match="did not survive pre/post"):
+        validate_v5_k1_phase_a_bindings(unequal, **common)
 
 
 def _rehash_phase_a_result(payload, *, model_provenance=None):

@@ -75,7 +75,7 @@ class AiWorkspaceStateMixin:
         return Path(str(selected)) if selected else None
 
     def _current_ai_curve_arrays(self, apply_exclusions: bool = True):
-        """Map current legacy curve state to the pure AI curve preparation service."""
+        """Return the user-selected fitting curve in the model's nm^-1 unit."""
         axis_filter = self._get_independent_axis_filter_mode()
         excluded = (
             set(getattr(self, "_ai_excluded_input_q", set()) or set())
@@ -90,32 +90,41 @@ class AiWorkspaceStateMixin:
         ):
             roi = (float(self._roi_min), float(self._roi_max))
 
-        sources = []
-        if self.q_ROI is not None and self.I_ROI is not None:
-            sources.append((self.q_ROI, self.I_ROI, None, None))
-        if self.q is not None and self.I is not None:
-            sources.append((self.q, self.I, None, roi))
-        if isinstance(getattr(self, "current_1d_data", None), dict):
-            data = self.current_1d_data
-            sources.append((data.get("q", []), data.get("I", []), data.get("err"), roi))
-        if isinstance(getattr(self, "cut", None), dict):
-            sources.append((self.cut.get("q", []), self.cut.get("I", []), None, roi))
+        use_current_cut = bool(
+            getattr(self.ui, "fitCurrentDataCheckBox", None)
+            and self.ui.fitCurrentDataCheckBox.isChecked()
+        )
+        if use_current_cut:
+            data = getattr(self, "current_cut_data", None)
+            if not isinstance(data, dict):
+                return None
+            q_values = data.get("x_coords", [])
+            intensities = data.get("y_intensity", [])
+            sigma = data.get("err")
+            q_source = "cut"
+        else:
+            data = getattr(self, "current_1d_data", None)
+            if not isinstance(data, dict):
+                return None
+            q_values = data.get("q", [])
+            intensities = data.get("I", [])
+            sigma = data.get("err")
+            q_source = data
 
-        for q_values, intensities, sigma, source_roi in sources:
-            try:
-                curve = _scientific_commands(self).ai.prepare_curve(
-                    q_values,
-                    intensities,
-                    sigma,
-                    axis_filter=axis_filter,
-                    roi=source_roi,
-                    excluded_q=excluded,
-                    minimum_points=16,
-                )
-                return curve.q, curve.intensity, curve.sigma
-            except (TypeError, ValueError):
-                continue
-        return None
+        try:
+            curve = _scientific_commands(self).ai.prepare_curve(
+                q_values,
+                intensities,
+                sigma,
+                axis_filter=axis_filter,
+                roi=roi,
+                excluded_q=excluded,
+                minimum_points=16,
+            )
+        except (TypeError, ValueError):
+            return None
+        q_model = self._convert_q_values_for_model(curve.q, source=q_source)
+        return q_model, curve.intensity, curve.sigma
 
     def _ai_q_key(self, q_value) -> str:
         return _scientific_commands(self).ai.q_key(q_value)

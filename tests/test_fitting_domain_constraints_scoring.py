@@ -45,6 +45,19 @@ def test_global_search_bounds_are_broad_and_use_curve_scale_for_background():
     assert not default_global_search_selected("k")
 
 
+@pytest.mark.parametrize("name", ["R1", "sigma_R1", "D1", "sigma_D1", "sigma_Res"])
+def test_global_search_bounds_include_disabled_zero_values(name):
+    lower, upper = default_global_search_bounds(
+        name,
+        0.0,
+        observed=np.array([1.0, 10.0]),
+        q_values=np.array([0.1, 2.0]),
+    )
+
+    assert lower == 0.0
+    assert upper > 0.0
+
+
 def test_application_refinement_defaults_forward_name_and_current_value():
     from src.gimap.features.fitting.application import ManualRefinementCalculations
 

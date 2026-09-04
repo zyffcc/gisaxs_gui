@@ -160,7 +160,7 @@ def parse_args():
         "--refine_stall_patience",
         type=int,
         default=80,
-        help="Stop refinement after this many residual calls without clear logRMSE improvement; <=0 disables.",
+        help="Stop refinement after about this many optimizer function evaluations without clear logRMSE improvement; <=0 disables.",
     )
     p.add_argument(
         "--refine_stall_tol",

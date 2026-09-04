@@ -8,11 +8,18 @@ from .array_contracts import (
     normalize_parameter_prediction,
     normalize_prediction_output,
 )
-from .modules import ModelSpec, OutputSpec, PredictionModule, PreprocessSpec
+from .modules import (
+    DistributionAxisSpec,
+    ModelSpec,
+    OutputSpec,
+    PredictionModule,
+    PreprocessSpec,
+)
 from .sequences import build_complete_batches, extract_cbf_index, parse_index_range
 
 __all__ = [
     "ModelRuntimeInfo",
+    "DistributionAxisSpec",
     "ModelSpec",
     "OutputSpec",
     "PredictionModule",

@@ -56,7 +56,7 @@ V5_K1_PHASE_C_REPLAY_RECEIPT_VERSION = (
     "policy_artifact_revalidated_raw_typed_completion_last_non_overwrite_v3"
 )
 V5_K1_PHASE_C_PRODUCTION_ADAPTER_BLOCKER = (
-    "production_phase_c_lossless_artifact_writer_not_implemented_or_audited"
+    "formal_phase_c_requires_verified_lossless_writer_receipt_capability"
 )
 _MAX_RECEIPT_BYTES = 256 * 1024 * 1024
 _ROOT_FIELDS = {
@@ -352,7 +352,7 @@ def derive_v5_k1_phase_c_parent_record(
 def _replay_core(
     *, plan: V5K1PhaseCPlan, port: V5K1PhaseCReplayPort, contract: Mapping[str, object]
 ) -> tuple[dict[str, object], tuple[V5K1PhaseCParentRecord, ...]]:
-    _require_formal_production_adapter(plan, port)
+    _require_formal_production_adapter(plan, port, contract)
     identity = _adapter_identity(port)
     frozen = validate_v5_k1_phase_c_contract(contract)
     validate_v5_k1_phase_c_plan(plan, contract=frozen)
@@ -447,7 +447,9 @@ def _replay_core(
 
 
 def _require_formal_production_adapter(
-    plan: V5K1PhaseCPlan, port: V5K1PhaseCReplayPort
+    plan: V5K1PhaseCPlan,
+    port: V5K1PhaseCReplayPort,
+    contract: Mapping[str, object],
 ) -> None:
     if not plan.formal:
         return
@@ -458,7 +460,9 @@ def _require_formal_production_adapter(
 
     if not _is_v5_k1_phase_c_production_filesystem_adapter(port):
         raise RuntimeError(V5_K1_PHASE_C_PRODUCTION_ADAPTER_BLOCKER)
-    _require_audited_v5_k1_phase_c_production_writer()
+    _require_audited_v5_k1_phase_c_production_writer(
+        port, plan=plan, contract=contract
+    )
 
 
 def _exclusive_completion_last_write(path: Path, payload: dict[str, object]) -> None:

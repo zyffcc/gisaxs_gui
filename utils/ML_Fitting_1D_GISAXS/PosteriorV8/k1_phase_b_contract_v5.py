@@ -16,6 +16,8 @@ import numpy as np
 from .candidate_refinement_contract_v5 import V5_EXACT_FORWARD_BUDGET_UNIT
 from .grouped_artifact_v5 import V5ArtifactReceipt, canonical_json
 from .grouped_dataset_v5 import V5GroupedDataset
+from .k1_phase_a_capability_v7 import CAPABILITY_SCHEMA as PHASE_A_CAPABILITY_SCHEMA
+from .k1_phase_a_contract_v7 import validate_launch_binding_payload
 from .memorization_gate_v5 import (
     V5_MEMORIZATION_GATE_SCHEMA,
     V5_MEMORIZATION_GATE_VERSION,
@@ -41,9 +43,9 @@ from .run_k1_memorization_gate_v5 import (
 from .study_protocol import protocol_payload, validate_protocol
 
 
-V5_K1_PHASE_B_SCHEMA = "gisaxs.posterior_v8.k1_single_branch_phase_b_gate/v2"
+V5_K1_PHASE_B_SCHEMA = "gisaxs.posterior_v8.k1_single_branch_phase_b_gate/v3"
 V5_K1_PHASE_B_VERSION = (
-    "posterior_v8_v5_2_single_branch_complete_slots_varying_only_draw32_gate_v2"
+    "posterior_v8_v5_2_launch_capability_bound_single_branch_draw32_gate_v3"
 )
 V5_K1_PHASE_B_ROLE = (
     "k1_single_branch_capacity_and_objective_diagnostic_not_full_k1_or_model_acceptance"
@@ -70,6 +72,8 @@ PHASE_A_MEMORIZATION_RESULT_FIELDS = frozenset(
         "initial_target_median_rms",
         "final_target_median_rms",
         "target_count",
+        "learnable_target_count",
+        "fully_fixed_target_count",
         "varying_coordinate_count",
         "model_input_keys",
         "objective_audit_sha256",
@@ -218,6 +222,8 @@ def _validate_phase_a_model_provenance(
     *,
     model_identity: Mapping[str, object],
     training_evidence: Mapping[str, object],
+    launch_binding: Mapping[str, object],
+    job_local_capability: Mapping[str, object],
 ) -> dict[str, object]:
     if not isinstance(value, Mapping) or set(value) != {
         "schema",
@@ -225,6 +231,8 @@ def _validate_phase_a_model_provenance(
         "status",
         "model",
         "training_evidence",
+        "launch_binding",
+        "job_local_capability",
         "binding_sha256",
     }:
         raise ValueError("Phase-A model provenance is incomplete or unsupported")
@@ -236,7 +244,7 @@ def _validate_phase_a_model_provenance(
     if (
         provenance["schema"] != V5_K1_MODEL_PROVENANCE_SCHEMA
         or provenance["version"] != V5_K1_MODEL_PROVENANCE_VERSION
-        or provenance["status"] != "BOUND"
+        or provenance["status"] != "BOUND_TO_INPUTS_PENDING_STAGE_COMPLETION"
     ):
         raise ValueError("Phase-A model provenance identity is incompatible")
     expected_model = {
@@ -248,11 +256,94 @@ def _validate_phase_a_model_provenance(
         raise ValueError("Phase-A model provenance does not bind the consumed model")
     if provenance["training_evidence"] != dict(training_evidence):
         raise ValueError("Phase-A model provenance training evidence drift detected")
+    if provenance["launch_binding"] != dict(launch_binding):
+        raise ValueError("Phase-A model provenance launch binding drift detected")
+    if provenance["job_local_capability"] != dict(job_local_capability):
+        raise ValueError("Phase-A model provenance capability binding drift detected")
     return provenance
+
+
+def _validate_phase_a_job_local_capability(
+    value: object, *, launch_binding: Mapping[str, object]
+) -> dict[str, object]:
+    if not isinstance(value, Mapping) or set(value) != {
+        "capability",
+        "pre_use_rehash_sha256",
+        "post_use_rehash_sha256",
+        "pre_post_equal",
+    }:
+        raise ValueError("Phase-A job-local capability is incomplete or unsupported")
+    payload = dict(value)
+    pre = digest(payload["pre_use_rehash_sha256"], "Phase-A capability pre-use SHA")
+    post = digest(payload["post_use_rehash_sha256"], "Phase-A capability post-use SHA")
+    if payload["pre_post_equal"] is not True or pre != post:
+        raise ValueError("Phase-A job-local capability did not survive pre/post revalidation")
+    audit = payload["capability"]
+    if not isinstance(audit, Mapping) or set(audit) != {
+        "schema",
+        "stage",
+        "slurm_job_id",
+        "launch_binding_sha256",
+        "staged_inputs",
+        "pre_mint_rehash_sha256",
+        "authorization",
+        "capability_sha256",
+    }:
+        raise ValueError("Phase-A capability audit is incomplete or unsupported")
+    capability = dict(audit)
+    supplied = digest(capability.pop("capability_sha256"), "Phase-A capability SHA")
+    if sha256(canonical_json(capability).encode("utf-8")).hexdigest() != supplied:
+        raise ValueError("Phase-A capability SHA-256 does not reproduce")
+    if (
+        audit["schema"] != PHASE_A_CAPABILITY_SCHEMA
+        or audit["stage"] != "full_gate"
+        or audit["stage"] != launch_binding["stage"]
+        or audit["slurm_job_id"] != launch_binding["slurm_job_id"]
+        or audit["launch_binding_sha256"] != launch_binding["binding_sha256"]
+        or audit["authorization"]
+        != {
+            "live_registry_required": True,
+            "single_use": True,
+            "serialized_payload_authorizes_use": False,
+            "job_local_read_only_single_link_inputs": True,
+        }
+    ):
+        raise ValueError("Phase-A capability launch or authorization binding drifted")
+    rows = audit["staged_inputs"]
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("Phase-A capability staged input inventory is missing")
+    for row in rows:
+        if not isinstance(row, Mapping) or set(row) != {"role", "path", "identity"}:
+            raise ValueError("Phase-A capability staged input row is invalid")
+        if not isinstance(row["role"], str) or not row["role"]:
+            raise ValueError("Phase-A capability staged input role is invalid")
+        if not isinstance(row["path"], str) or not Path(row["path"]).is_absolute():
+            raise ValueError("Phase-A capability staged input path is invalid")
+        identity = row["identity"]
+        if not isinstance(identity, Mapping) or set(identity) != {
+            "sha256",
+            "byte_count",
+            "mode_octal",
+            "uid",
+            "gid",
+            "link_count",
+        }:
+            raise ValueError("Phase-A capability staged input identity is invalid")
+        digest(identity["sha256"], "Phase-A staged input SHA")
+        if identity["mode_octal"] != "0o400" or identity["link_count"] != 1:
+            raise ValueError("Phase-A capability input was not read-only and single-link")
+    rows_sha = sha256(canonical_json(rows).encode("utf-8")).hexdigest()
+    if audit["pre_mint_rehash_sha256"] != rows_sha or pre != rows_sha:
+        raise ValueError("Phase-A capability staged-input rehash does not reproduce")
+    return payload
 PHASE_B_SOURCE_PATHS = (
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/launch_k1_phase_b_dag_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_b_launch_inputs_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_b_worker_inputs_v5.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/immutable_submission_file_v5.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_b_publication_v5.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_b_capability_v5.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_b_launch_chain_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_cross_platform_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_dataset_binding_v5.py",
@@ -739,6 +830,16 @@ def validate_v5_k1_phase_a_bindings(
     if value["model_contract"] != model_v5_contract_payload():
         raise ValueError("Phase-A model contract drift detected")
 
+    raw_launch_binding = value.get("launch_binding")
+    if not isinstance(raw_launch_binding, Mapping):
+        raise ValueError("Phase-A result has no launch binding")
+    launch_binding = validate_launch_binding_payload(
+        raw_launch_binding, expected_stage="full_gate"
+    )
+    job_local_capability = _validate_phase_a_job_local_capability(
+        value.get("job_local_capability"), launch_binding=launch_binding
+    )
+
     training_evidence = _validate_phase_a_training_evidence(
         value.get("training_evidence")
     )
@@ -826,6 +927,13 @@ def validate_v5_k1_phase_a_bindings(
         or validation.get("clean_parent_count") != recipes
         or validation.get("observation_view_count") != recipes * views
         or validation.get("known_truth_target_count") != recipes
+        or not isinstance(validation.get("learnable_target_count"), Integral)
+        or not isinstance(validation.get("fully_fixed_target_count"), Integral)
+        or validation.get("learnable_target_count") < 1
+        or validation.get("fully_fixed_target_count") < 0
+        or validation.get("learnable_target_count")
+        + validation.get("fully_fixed_target_count")
+        != recipes
     ):
         raise ValueError(
             "Phase-A dataset cardinality is not the frozen single-branch cohort"
@@ -850,6 +958,8 @@ def validate_v5_k1_phase_a_bindings(
         model_provenance_payload,
         model_identity=model_identity,
         training_evidence=training_evidence,
+        launch_binding=launch_binding,
+        job_local_capability=job_local_capability,
     )
     expected_artifact = {
         "filename": PHASE_A_MODEL_FILENAME,
@@ -886,7 +996,14 @@ def validate_v5_k1_phase_a_bindings(
     )
     if any(not np.isfinite(float(nested.get(name, np.nan))) for name in metric_names):
         raise ValueError("Phase-A memorization metrics contain NaN or infinity")
-    if nested.get("passed") is not True or nested.get("target_count") != recipes:
+    if (
+        nested.get("passed") is not True
+        or nested.get("target_count") != recipes
+        or nested.get("learnable_target_count")
+        != validation.get("learnable_target_count")
+        or nested.get("fully_fixed_target_count")
+        != validation.get("fully_fixed_target_count")
+    ):
         raise ValueError("Phase-A configured memorization diagnostic did not fully pass")
     if nested.get("final_weights_sha256") != digest(
         model_weights_sha256_value, "loaded model weights SHA"
@@ -931,6 +1048,8 @@ def validate_v5_k1_phase_a_bindings(
         "model_graph_identity_reverified": True,
         "model_weights_identity_reverified": True,
         "study_protocol_identity_reverified": True,
+        "phase_a_launch_binding_reverified": True,
+        "phase_a_job_local_capability_reverified": True,
         "phase_a_full_pass_reverified": True,
     }
 

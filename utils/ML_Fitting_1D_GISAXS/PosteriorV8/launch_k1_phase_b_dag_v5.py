@@ -17,11 +17,21 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import socket
 import subprocess
 import tempfile
 from typing import Callable, Mapping, Sequence
 
+from .k1_phase_a_cross_platform_v5 import file_identity as strict_file_identity
+from .k1_staging_files_v5 import read_only_bytes_identity
+from .k1_phase_b_launch_chain_v5 import (
+    V5_K1_PHASE_B_LAUNCH_COMPLETION_SCHEMA,
+    V5_K1_PHASE_B_LAUNCH_COMPLETION_VERSION,
+    V5_K1_PHASE_B_LAUNCH_SCHEMA,
+    V5_K1_PHASE_B_LAUNCH_VERSION,
+    copy_v5_k1_phase_b_submission_wrapper,
+)
 from .k1_phase_b_launch_inputs_v5 import (
     CURRENT_RUN_ROOT_NAME,
     MAXWELL_DUST_ROOT,
@@ -33,13 +43,11 @@ from .k1_phase_b_launch_inputs_v5 import (
 )
 
 
-V5_K1_PHASE_B_LAUNCH_SCHEMA = "gisaxs.posterior_v8.maxwell_k1_phase_b_dag_launch/v1"
-V5_K1_PHASE_B_LAUNCH_VERSION = (
-    "posterior_v8_phase_a_evidence_and_source_snapshot_bound_phase_b_dag_v1"
-)
-PHASE_ROOT_NAME = "k1_phase_b_v5_2_dag_v1"
-PLAN_FILENAME = "launch-plan-v1.json"
-RECEIPT_FILENAME = "launch-receipt-v1.json"
+PHASE_ROOT_NAME = "k1_phase_b_v5_2_dag_v3"
+PLAN_FILENAME = "launch-plan-v3.json"
+RECEIPT_FILENAME = "submission-receipt-v3.json"
+LAUNCH_COMPLETION_FILENAME = "launch-completion-v2.json"
+RELEASE_FAILURE_FILENAME = "launch-release-failure-v2.json"
 _WRAPPER = PHASE_B_WRAPPER
 _PARSABLE_JOB_ID = re.compile(r"([1-9][0-9]*)(?:;[A-Za-z0-9._-]+)?\Z")
 _SAFE_INHERITED_ENVIRONMENT = ("HOME", "LANG", "PATH", "SHELL", "USER")
@@ -53,7 +61,23 @@ class V5CommandResult:
     stderr: str
 
 
-CommandRunner = Callable[[Sequence[str]], V5CommandResult]
+@dataclass(frozen=True)
+class V5CommandRequest:
+    argv: tuple[str, ...]
+    script_bytes: bytes | None = None
+    script_sha256: str | None = None
+
+    def __iter__(self):
+        return iter(self.argv)
+
+    def __len__(self) -> int:
+        return len(self.argv)
+
+    def __getitem__(self, index):
+        return self.argv[index]
+
+
+CommandRunner = Callable[[V5CommandRequest], V5CommandResult]
 
 
 class V5K1PhaseBLaunchError(RuntimeError):
@@ -82,8 +106,13 @@ def _export_argument(environment: Mapping[str, object]) -> str:
     return "--export=" + ",".join((*_SAFE_INHERITED_ENVIRONMENT, *assignments))
 
 
-def _job_command(job: Mapping[str, object], dependency_job_id: str | None) -> tuple[str, ...]:
-    command = ["sbatch", "--parsable"]
+def _job_command(
+    job: Mapping[str, object],
+    dependency_job_id: str | None,
+    *,
+    runtime_environment: Mapping[str, object] | None = None,
+) -> tuple[str, ...]:
+    command = ["sbatch", "--parsable", "--hold", "--kill-on-invalid-dep=yes"]
     if dependency_job_id is not None:
         command.append(f"--dependency=afterok:{dependency_job_id}")
     command.extend(
@@ -91,8 +120,12 @@ def _job_command(job: Mapping[str, object], dependency_job_id: str | None) -> tu
             f"--job-name={job['job_name']}",
             f"--output={job['stdout']}",
             f"--error={job['stderr']}",
-            _export_argument(job["environment"]),
-            str(job["wrapper"]),
+            _export_argument(
+                {
+                    **job["environment"],
+                    **({} if runtime_environment is None else runtime_environment),
+                }
+            ),
         )
     )
     return tuple(command)
@@ -139,6 +172,10 @@ def build_v5_k1_phase_b_launch_plan(
         "formal_output": str(results_root / "formal-all512"),
         "plan": str(audit_root / PLAN_FILENAME),
         "receipt": str(audit_root / RECEIPT_FILENAME),
+        "launch_completion": str(audit_root / LAUNCH_COMPLETION_FILENAME),
+        "release_failure": str(audit_root / RELEASE_FAILURE_FILENAME),
+        "submission_root": str(audit_root / "submission-v3"),
+        "submission_wrapper": str(audit_root / "submission-v3/phase-b-gate-v3.sbatch"),
         "logs": str(logs),
     }
     if phase_root.exists() or phase_root.is_symlink():
@@ -161,6 +198,7 @@ def build_v5_k1_phase_b_launch_plan(
         "result": "POSTERIOR_V8_V5_K1_PHASE_B_RESULT",
         "model": "POSTERIOR_V8_V5_K1_PHASE_B_MODEL",
         "model_provenance": "POSTERIOR_V8_V5_K1_PHASE_B_MODEL_PROVENANCE",
+        "phase_a_completion": "POSTERIOR_V8_V5_K1_PHASE_B_PHASE_A_COMPLETION",
     }
     phase_a_environment: dict[str, object] = {}
     for name, environment_name in artifact_environment_names.items():
@@ -179,7 +217,7 @@ def build_v5_k1_phase_b_launch_plan(
     ):
         phase_a_environment[f"POSTERIOR_V8_V5_K1_PHASE_B_{environment_name}"] = gate[field]
     common_environment = {**source_environment, **phase_a_environment}
-    wrapper = source_root / _WRAPPER
+    wrapper = Path(layout["submission_wrapper"])
     jobs = {
         "engineering_smoke": {
             "job_name": "gisaxs-v5-2-k1-phase-b-smoke",
@@ -191,8 +229,15 @@ def build_v5_k1_phase_b_launch_plan(
                 "POSTERIOR_V8_V5_K1_PHASE_B_OUTPUT": layout["smoke_output"],
                 "POSTERIOR_V8_V5_K1_PHASE_B_MODE": "smoke",
                 "POSTERIOR_V8_V5_K1_PHASE_B_SMOKE_PARENTS": 2,
+                "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_STAGE": "engineering_smoke",
+                "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN": layout["plan"],
+                "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_RECEIPT": layout["receipt"],
+                "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_COMPLETION": layout[
+                    "launch_completion"
+                ],
             },
             "depends_on": None,
+            "submit_held": True,
         },
         "formal_gate": {
             "job_name": "gisaxs-v5-2-k1-phase-b-formal",
@@ -204,8 +249,15 @@ def build_v5_k1_phase_b_launch_plan(
                 "POSTERIOR_V8_V5_K1_PHASE_B_OUTPUT": layout["formal_output"],
                 "POSTERIOR_V8_V5_K1_PHASE_B_MODE": "formal",
                 "POSTERIOR_V8_V5_K1_PHASE_B_FORMAL_ACK": "YES",
+                "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_STAGE": "formal_gate",
+                "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN": layout["plan"],
+                "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_RECEIPT": layout["receipt"],
+                "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_COMPLETION": layout[
+                    "launch_completion"
+                ],
             },
             "depends_on": "engineering_smoke",
+            "submit_held": True,
         },
     }
     preview_ids = {stage: f"{stage.upper()}_JOB_ID" for stage in _STAGES}
@@ -249,6 +301,15 @@ def build_v5_k1_phase_b_launch_plan(
         "full_k1_all_legal_branches_pending_fail_closed": True,
         "layout": layout,
         "wrapper_sha256": source["required_file_identity"][_WRAPPER.as_posix()]["sha256"],
+        "submission_wrapper": {
+            "path": layout["submission_wrapper"],
+            "sha256": source["required_file_identity"][_WRAPPER.as_posix()]["sha256"],
+            "byte_count": source["required_file_identity"][_WRAPPER.as_posix()][
+                "byte_count"
+            ],
+            "mode": 0o400,
+            "nlink": 1,
+        },
         "stage_order": list(_STAGES),
         "jobs": jobs,
         "submission_preview": preview,
@@ -259,7 +320,9 @@ def build_v5_k1_phase_b_launch_plan(
     return {**core, "plan_sha256": sha256(_canonical_json(core).encode()).hexdigest()}
 
 
-def _write_json_exclusive(path: Path, payload: Mapping[str, object]) -> None:
+def _write_json_exclusive(
+    path: Path, payload: Mapping[str, object], *, name: str
+) -> dict[str, object]:
     encoded = (json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
     descriptor, temporary_name = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
@@ -269,8 +332,8 @@ def _write_json_exclusive(path: Path, payload: Mapping[str, object]) -> None:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(encoded)
             stream.flush()
+            os.fchmod(stream.fileno(), 0o400)
             os.fsync(stream.fileno())
-        temporary.chmod(0o400)
         try:
             os.link(temporary, path)
         except FileExistsError:
@@ -282,11 +345,24 @@ def _write_json_exclusive(path: Path, payload: Mapping[str, object]) -> None:
             os.close(directory_fd)
     finally:
         temporary.unlink(missing_ok=True)
+    identity = strict_file_identity(path, name=name, require_read_only=True)
+    if identity["mode"] != 0o400 or identity["nlink"] != 1:
+        raise RuntimeError(f"{name} final permissions/link count are invalid")
+    return identity
 
 
-def _default_runner(argv: Sequence[str]) -> V5CommandResult:
-    completed = subprocess.run(argv, check=False, capture_output=True, text=True)  # noqa: S603
-    return V5CommandResult(completed.returncode, completed.stdout, completed.stderr)
+def _default_runner(request: V5CommandRequest) -> V5CommandResult:
+    completed = subprocess.run(  # noqa: S603
+        request.argv,
+        input=request.script_bytes,
+        check=False,
+        capture_output=True,
+    )
+    return V5CommandResult(
+        completed.returncode,
+        completed.stdout.decode("utf-8", errors="replace"),
+        completed.stderr.decode("utf-8", errors="replace"),
+    )
 
 
 def _job_id(result: V5CommandResult, stage: str) -> str:
@@ -308,6 +384,74 @@ def _text_identity(value: str) -> dict[str, object]:
     return {"sha256": sha256(encoded).hexdigest(), "byte_count": len(encoded)}
 
 
+def _scheduler_snapshot(
+    result: V5CommandResult,
+    *,
+    stage: str,
+    expected_job_id: str,
+    expected_dependency_job_id: str | None,
+    expected_held: bool,
+) -> dict[str, object]:
+    if not isinstance(result, V5CommandResult) or result.returncode != 0:
+        raise RuntimeError(f"could not read back Slurm state for {stage}")
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if len(lines) != 1:
+        raise RuntimeError(f"Slurm returned an ambiguous state for {stage}")
+    fields: dict[str, str] = {}
+    for token in shlex.split(lines[0]):
+        if "=" in token:
+            name, value = token.split("=", 1)
+            fields[name] = value
+    if fields.get("JobId") != expected_job_id:
+        raise RuntimeError(f"Slurm state job id drifted for {stage}")
+    state = fields.get("JobState")
+    reason = fields.get("Reason")
+    dependency = fields.get("Dependency", "")
+    normalized_dependency = None if dependency in {"", "(null)", "None"} else dependency
+    if expected_held:
+        if state != "PENDING" or reason != "JobHeldUser":
+            raise RuntimeError(f"Slurm did not retain {stage} in a user hold")
+    elif state not in {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING", "COMPLETED"}:
+        raise RuntimeError(f"Slurm returned an unsupported released state for {stage}")
+    elif reason == "JobHeldUser":
+        raise RuntimeError(f"Slurm still reports {stage} as user-held after release")
+    if expected_dependency_job_id is None:
+        if normalized_dependency is not None:
+            raise RuntimeError(f"Slurm attached an unexpected dependency to {stage}")
+    elif not str(normalized_dependency).startswith(
+        f"afterok:{expected_dependency_job_id}"
+    ):
+        raise RuntimeError(f"Slurm dependency drifted for {stage}")
+    return {
+        "job_id": expected_job_id,
+        "job_state": state,
+        "reason": reason,
+        "dependency": normalized_dependency,
+        "response": _text_identity(result.stdout),
+    }
+
+
+def _plan_runtime_environment(
+    plan: Mapping[str, object], identity: Mapping[str, object]
+) -> dict[str, object]:
+    prefix = "POSTERIOR_V8_V5_K1_PHASE_B_LAUNCH_PLAN"
+    return {
+        f"{prefix}_SHA256": plan["plan_sha256"],
+        f"{prefix}_FILE_SHA256": identity["sha256"],
+        f"{prefix}_BYTE_COUNT": identity["byte_count"],
+        f"{prefix}_MODE": identity["mode"],
+        f"{prefix}_DEVICE": identity["device"],
+        f"{prefix}_INODE": identity["inode"],
+        f"{prefix}_MTIME_NS": identity["mtime_ns"],
+        f"{prefix}_CTIME_NS": identity["ctime_ns"],
+        f"{prefix}_NLINK": identity["nlink"],
+    }
+
+
+def _self_hashed(core: Mapping[str, object], field: str) -> dict[str, object]:
+    return {**core, field: sha256(_canonical_json(core).encode()).hexdigest()}
+
+
 def launch_v5_k1_phase_b_dag(
     config: V5K1PhaseBLaunchConfig,
     *,
@@ -321,6 +465,10 @@ def launch_v5_k1_phase_b_dag(
 
     if type(submit) is not bool:
         raise TypeError("submit must be a bool")
+    if allowed_root == MAXWELL_DUST_ROOT and any(
+        value is not None for value in (runner, hostname, environment)
+    ):
+        raise RuntimeError("production Maxwell submission forbids injected test seams")
     plan = build_v5_k1_phase_b_launch_plan(config, allowed_root=allowed_root)
     if not submit:
         return {
@@ -338,18 +486,76 @@ def launch_v5_k1_phase_b_dag(
 
     layout = plan["layout"]
     Path(layout["phase_root"]).mkdir(mode=0o700, exist_ok=False)
-    for name in ("results_root", "audit_root"):
+    for name in ("results_root", "audit_root", "submission_root"):
         Path(layout[name]).mkdir(mode=0o700, exist_ok=False)
     plan_path = Path(layout["plan"])
     receipt_path = Path(layout["receipt"])
-    _write_json_exclusive(plan_path, plan)
+    source_wrapper_identity = plan["source"]["required_file_identity"][
+        _WRAPPER.as_posix()
+    ]
+    pinned_wrapper_identity = copy_v5_k1_phase_b_submission_wrapper(
+        Path(plan["source"]["source_root"]) / _WRAPPER,
+        Path(layout["submission_wrapper"]),
+        expected_source_identity=source_wrapper_identity,
+    )
+    Path(layout["submission_root"]).chmod(0o500)
+    plan_identity = _write_json_exclusive(
+        plan_path, plan, name="K1 Phase-B launch plan"
+    )
+    runtime_environment = _plan_runtime_environment(plan, plan_identity)
 
     command_runner = _default_runner if runner is None else runner
     attempts: list[dict[str, object]] = []
+    held_scheduler_snapshots: dict[str, dict[str, object]] = {}
+    release_attempts: list[dict[str, object]] = []
+    cancellation_attempts: list[dict[str, object]] = []
     job_ids: dict[str, str] = {}
-    status = "failed"
-    failure: dict[str, str] | None = None
+    receipt: dict[str, object] | None = None
+    receipt_identity: dict[str, object] | None = None
     stage = _STAGES[0]
+
+    def build_receipt(
+        *, status: str, failure: Mapping[str, object] | None
+    ) -> dict[str, object]:
+        core = {
+            "schema_version": V5_K1_PHASE_B_LAUNCH_SCHEMA,
+            "version": V5_K1_PHASE_B_LAUNCH_VERSION,
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "status": status,
+            "plan_sha256": plan["plan_sha256"],
+            "plan_file_identity": plan_identity,
+            "submission_wrapper_identity": pinned_wrapper_identity,
+            "source_archive_sha256": plan["source"]["archive_sha256"],
+            "source_manifest_sha256": plan["source"]["manifest_sha256"],
+            "source_tree_sha256": plan["source"]["source_tree_sha256"],
+            "phase_a_result_sha256": plan["phase_a_inputs"]["artifacts"]["result"]["sha256"],
+            "phase_a_model_sha256": plan["phase_a_inputs"]["artifacts"]["model"]["sha256"],
+            "phase_a_dataset_sha256": plan["phase_a_inputs"]["artifacts"]["dataset"]["sha256"],
+            "phase_a_dataset_binding_sha256": plan["phase_a_inputs"]["dataset_binding_sha256"],
+            "plan_path": str(plan_path),
+            "receipt_path": str(receipt_path),
+            "launch_completion_path": str(layout["launch_completion"]),
+            "job_ids": dict(job_ids),
+            "dependency_edges": plan["dependency_edges"],
+            "submission_attempts": attempts,
+            "held_scheduler_snapshots": held_scheduler_snapshots,
+            "cancellation_attempts": cancellation_attempts,
+            "failure": None if failure is None else dict(failure),
+            "execution_environment": {
+                "hostname": host,
+                "python_version": platform.python_version(),
+            },
+            "heavy_compute_performed_on_login_node": False,
+            "cancellation_attempted": bool(cancellation_attempts),
+            "secret_environment_captured": False,
+            "model_acceptance_evidence": False,
+            "full_k1_all_legal_branches_gate_passed": False,
+            "all_jobs_submitted_held": status == "all_jobs_held",
+            "formal_submitted_held": status == "all_jobs_held",
+            "formal_release_completed": False,
+        }
+        return _self_hashed(core, "receipt_sha256")
+
     try:
         for stage in _STAGES:
             replayed_source = inspect_v5_k1_phase_b_source(config, allowed_root)
@@ -363,14 +569,46 @@ def launch_v5_k1_phase_b_dag(
             )
             if replayed_phase_a != plan["phase_a_inputs"]:
                 raise RuntimeError("immutable Phase-A evidence changed during DAG submission")
+            if strict_file_identity(
+                Path(layout["submission_wrapper"]),
+                name="pinned Phase-B submission wrapper",
+                require_read_only=True,
+            ) != pinned_wrapper_identity:
+                raise RuntimeError("pinned Phase-B submission wrapper changed")
+            if strict_file_identity(
+                plan_path, name="K1 Phase-B launch plan", require_read_only=True
+            ) != plan_identity:
+                raise RuntimeError("K1 Phase-B launch plan changed during submission")
+            script_bytes, script_file_identity = read_only_bytes_identity(
+                Path(layout["submission_wrapper"]),
+                f"pinned Phase-B {stage} submission wrapper",
+            )
+            if (
+                script_file_identity["sha256"] != pinned_wrapper_identity["sha256"]
+                or script_file_identity["byte_count"]
+                != pinned_wrapper_identity["byte_count"]
+                or script_file_identity["link_count"] != 1
+            ):
+                raise RuntimeError("pinned Phase-B wrapper changed before stdin submission")
             dependency = plan["jobs"][stage]["depends_on"]
             command = _job_command(
                 plan["jobs"][stage],
                 None if dependency is None else job_ids[str(dependency)],
+                runtime_environment=runtime_environment,
             )
-            attempt = {"stage": stage, "argv": list(command)}
+            request = V5CommandRequest(
+                argv=command,
+                script_bytes=script_bytes,
+                script_sha256=str(script_file_identity["sha256"]),
+            )
+            attempt = {
+                "stage": stage,
+                "argv": list(command),
+                "script_identity": script_file_identity,
+                "script_bytes_recorded": False,
+            }
             attempts.append(attempt)
-            result = command_runner(command)
+            result = command_runner(request)
             if isinstance(result, V5CommandResult):
                 attempt.update(
                     {
@@ -380,50 +618,157 @@ def launch_v5_k1_phase_b_dag(
                     }
                 )
             job_ids[stage] = _job_id(result, stage)
-        status = "submitted"
-    except (Exception, KeyboardInterrupt) as exc:
-        failure = {"stage": stage, "type": type(exc).__name__, "message": str(exc)[:2000]}
+            if list(job_ids.values()).count(job_ids[stage]) != 1:
+                raise RuntimeError("Phase-B scheduler reused a Slurm job id")
+            dependency_job_id = None if dependency is None else job_ids[str(dependency)]
+            scheduler_result = command_runner(
+                V5CommandRequest(
+                    argv=("scontrol", "show", "job", "--oneliner", job_ids[stage])
+                )
+            )
+            held_scheduler_snapshots[stage] = _scheduler_snapshot(
+                scheduler_result,
+                stage=stage,
+                expected_job_id=job_ids[stage],
+                expected_dependency_job_id=dependency_job_id,
+                expected_held=True,
+            )
 
-    receipt_core = {
-        "schema_version": V5_K1_PHASE_B_LAUNCH_SCHEMA,
-        "version": V5_K1_PHASE_B_LAUNCH_VERSION,
-        "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "status": status,
-        "plan_sha256": plan["plan_sha256"],
-        "source_archive_sha256": plan["source"]["archive_sha256"],
-        "source_manifest_sha256": plan["source"]["manifest_sha256"],
-        "source_tree_sha256": plan["source"]["source_tree_sha256"],
-        "phase_a_result_sha256": plan["phase_a_inputs"]["artifacts"]["result"]["sha256"],
-        "phase_a_model_sha256": plan["phase_a_inputs"]["artifacts"]["model"]["sha256"],
-        "phase_a_dataset_sha256": plan["phase_a_inputs"]["artifacts"]["dataset"]["sha256"],
-        "phase_a_dataset_binding_sha256": plan["phase_a_inputs"]["dataset_binding_sha256"],
-        "plan_path": str(plan_path),
-        "receipt_path": str(receipt_path),
-        "job_ids": job_ids,
-        "dependency_edges": plan["dependency_edges"],
-        "submission_attempts": attempts,
-        "failure": failure,
-        "execution_environment": {
-            "hostname": host,
-            "python_version": platform.python_version(),
-        },
-        "heavy_compute_performed_on_login_node": False,
-        "cancellation_attempted": False,
-        "secret_environment_captured": False,
-        "model_acceptance_evidence": False,
-        "full_k1_all_legal_branches_gate_passed": False,
-    }
-    receipt = {
-        **receipt_core,
-        "receipt_sha256": sha256(_canonical_json(receipt_core).encode()).hexdigest(),
-    }
-    _write_json_exclusive(receipt_path, receipt)
-    if status != "submitted":
-        raise V5K1PhaseBLaunchError(
-            f"K1 Phase-B DAG launch failed during {failure['stage']}; receipt preserved",
-            receipt_path=receipt_path,
+        receipt = build_receipt(status="all_jobs_held", failure=None)
+        receipt_identity = _write_json_exclusive(
+            receipt_path, receipt, name="K1 Phase-B held submission receipt"
         )
-    return receipt
+
+        for released_stage in reversed(_STAGES):
+            release_request = V5CommandRequest(
+                argv=("scontrol", "release", job_ids[released_stage])
+            )
+            release_result = command_runner(release_request)
+            attempt = {
+                "stage": released_stage,
+                "job_id": job_ids[released_stage],
+                "argv": list(release_request.argv),
+                "returncode": release_result.returncode,
+                "stdout": _text_identity(release_result.stdout),
+                "stderr": _text_identity(release_result.stderr),
+            }
+            release_attempts.append(attempt)
+            if release_result.returncode != 0:
+                raise RuntimeError(f"release failed for {released_stage}")
+            dependency = plan["jobs"][released_stage]["depends_on"]
+            scheduler_result = command_runner(
+                V5CommandRequest(
+                    argv=(
+                        "scontrol",
+                        "show",
+                        "job",
+                        "--oneliner",
+                        job_ids[released_stage],
+                    )
+                )
+            )
+            attempt["scheduler_snapshot"] = _scheduler_snapshot(
+                scheduler_result,
+                stage=released_stage,
+                expected_job_id=job_ids[released_stage],
+                expected_dependency_job_id=(
+                    None if dependency is None else job_ids[str(dependency)]
+                ),
+                expected_held=False,
+            )
+
+        completion_core = {
+            "schema_version": V5_K1_PHASE_B_LAUNCH_COMPLETION_SCHEMA,
+            "version": V5_K1_PHASE_B_LAUNCH_COMPLETION_VERSION,
+            "status": "ALL_JOBS_RELEASED",
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+            "plan_sha256": plan["plan_sha256"],
+            "plan_file_identity": plan_identity,
+            "submission_receipt_identity": receipt_identity,
+            "job_ids": dict(job_ids),
+            "release_order": list(reversed(_STAGES)),
+            "released_job_ids": [job_ids[item] for item in reversed(_STAGES)],
+            "release_attempts": release_attempts,
+            "official_launch_chain_complete": True,
+        }
+        launch_completion = _self_hashed(
+            completion_core, "launch_completion_sha256"
+        )
+        launch_completion_identity = _write_json_exclusive(
+            Path(layout["launch_completion"]),
+            launch_completion,
+            name="K1 Phase-B launch completion",
+        )
+        return {
+            "status": "all_jobs_released",
+            "submission_receipt": receipt,
+            "submission_receipt_identity": receipt_identity,
+            "launch_completion": launch_completion,
+            "launch_completion_identity": launch_completion_identity,
+        }
+    except (Exception, KeyboardInterrupt) as exc:
+        for cancelled_stage in reversed(tuple(job_ids)):
+            request = V5CommandRequest(argv=("scancel", job_ids[cancelled_stage]))
+            try:
+                result = command_runner(request)
+                cancellation_attempts.append(
+                    {
+                        "stage": cancelled_stage,
+                        "job_id": job_ids[cancelled_stage],
+                        "argv": list(request.argv),
+                        "returncode": result.returncode,
+                        "stdout": _text_identity(result.stdout),
+                        "stderr": _text_identity(result.stderr),
+                    }
+                )
+            except BaseException as cancel_exc:
+                cancellation_attempts.append(
+                    {
+                        "stage": cancelled_stage,
+                        "job_id": job_ids[cancelled_stage],
+                        "argv": list(request.argv),
+                        "exception_type": type(cancel_exc).__name__,
+                        "exception_message": str(cancel_exc)[:2000],
+                    }
+                )
+        failure = {
+            "stage": stage,
+            "type": type(exc).__name__,
+            "message": str(exc)[:2000],
+        }
+        if receipt is None:
+            failed_receipt = build_receipt(status="submission_failed", failure=failure)
+            _write_json_exclusive(
+                receipt_path,
+                failed_receipt,
+                name="K1 Phase-B failed submission receipt",
+            )
+            failure_path = receipt_path
+        else:
+            failure_core = {
+                "schema_version": V5_K1_PHASE_B_LAUNCH_COMPLETION_SCHEMA,
+                "version": V5_K1_PHASE_B_LAUNCH_COMPLETION_VERSION,
+                "status": "RELEASE_FAILED_NO_LAUNCH_COMPLETION",
+                "created_at_utc": datetime.now(timezone.utc).isoformat(),
+                "plan_sha256": plan["plan_sha256"],
+                "plan_file_identity": plan_identity,
+                "submission_receipt_identity": receipt_identity,
+                "job_ids": dict(job_ids),
+                "release_attempts": release_attempts,
+                "cancellation_attempts": cancellation_attempts,
+                "failure": failure,
+                "official_launch_chain_complete": False,
+            }
+            failure_path = Path(layout["release_failure"])
+            _write_json_exclusive(
+                failure_path,
+                _self_hashed(failure_core, "release_failure_sha256"),
+                name="K1 Phase-B release failure audit",
+            )
+        raise V5K1PhaseBLaunchError(
+            f"K1 Phase-B DAG launch failed during {stage}; all known jobs were cancelled",
+            receipt_path=failure_path,
+        ) from exc
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -487,6 +832,7 @@ __all__ = [
     "PHASE_ROOT_NAME",
     "PLAN_FILENAME",
     "RECEIPT_FILENAME",
+    "V5CommandRequest",
     "V5CommandResult",
     "V5K1PhaseBLaunchConfig",
     "V5K1PhaseBLaunchError",

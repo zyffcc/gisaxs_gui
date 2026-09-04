@@ -22,6 +22,17 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_dataset_binding_v5 import
     publish_v5_k1_phase_a_dataset_binding,
     validate_v5_k1_phase_a_dataset_binding_file,
 )
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_capability_v7 import (
+    _mint_phase_a_capability,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_contract_v7 import (
+    PHASE_A_LAUNCH_BINDING_SCHEMA,
+    portable_identity,
+    self_hashed,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_staging_files_v5 import (
+    read_only_identity,
+)
 
 
 _SOURCE = {
@@ -89,6 +100,33 @@ def _checked_dataset(path: Path, *, base_seed: int = 20260903) -> Path:
     return path
 
 
+def _phase_a_authority(root: Path, *, stage: str, job_id: str):
+    staged = _read_only_file(
+        root / f".{stage}-{job_id}-staged-input.json",
+        json.dumps({"stage": stage, "job_id": job_id}, sort_keys=True),
+    )
+    launch = self_hashed(
+        {
+            "schema": PHASE_A_LAUNCH_BINDING_SCHEMA,
+            "status": "VALIDATED",
+            "stage": stage,
+            "slurm_job_id": job_id,
+            "plan_sha256": "a" * 64,
+            "receipt_sha256": "b" * 64,
+            "release_sha256": "c" * 64,
+            "transaction_files": {},
+            "upstream": None,
+        },
+        "binding_sha256",
+    )
+    identity = portable_identity(read_only_identity(staged, "test staged input"))
+    capability = _mint_phase_a_capability(
+        launch,
+        [{"role": "test_staged_input", "path": str(staged), "identity": identity}],
+    )
+    return launch, capability
+
+
 def test_marker_binding_requires_exact_source_reference_and_launch_claim(tmp_path):
     expected = _marker_expected()
     parsed = validate_v5_k1_cross_platform_marker(_marker_text(), **expected)
@@ -136,6 +174,9 @@ def test_completion_last_binding_accepts_only_exact_local_dataset_and_marker(tmp
     original = _checked_dataset(tmp_path / "original.gvd5")
     binding = tmp_path / "original.gvd5.binding-v1.json"
     expected = _marker_expected()
+    launch, capability = _phase_a_authority(
+        tmp_path, stage="smoke_dataset", job_id="24390001"
+    )
 
     published = publish_v5_k1_phase_a_dataset_binding(
         original,
@@ -143,6 +184,8 @@ def test_completion_last_binding_accepts_only_exact_local_dataset_and_marker(tmp
         binding,
         original_dataset_path=str(original),
         marker_expected=expected,
+        launch_binding=launch,
+        capability=capability,
     )
 
     assert binding.stat().st_mode & 0o222 == 0
@@ -166,8 +209,12 @@ def test_completion_last_binding_accepts_only_exact_local_dataset_and_marker(tmp
         marker_path=marker,
         expected_original_dataset_path=str(original),
         marker_expected=expected,
+        expected_launch_binding=launch,
     ) == published
 
+    overwrite_launch, overwrite_capability = _phase_a_authority(
+        tmp_path, stage="smoke_dataset", job_id="24390002"
+    )
     with pytest.raises(FileExistsError, match="overwrite"):
         publish_v5_k1_phase_a_dataset_binding(
             original,
@@ -175,6 +222,8 @@ def test_completion_last_binding_accepts_only_exact_local_dataset_and_marker(tmp
             binding,
             original_dataset_path=str(original),
             marker_expected=expected,
+            launch_binding=overwrite_launch,
+            capability=overwrite_capability,
         )
 
 
@@ -183,12 +232,17 @@ def test_binding_rejects_old_data_swaps_tamper_and_hidden_fields(tmp_path):
     dataset = _checked_dataset(tmp_path / "dataset.gvd5")
     binding = tmp_path / "dataset.binding.json"
     expected = _marker_expected()
+    launch, capability = _phase_a_authority(
+        tmp_path, stage="full_dataset", job_id="24390003"
+    )
     publish_v5_k1_phase_a_dataset_binding(
         dataset,
         marker,
         binding,
         original_dataset_path=str(dataset),
         marker_expected=expected,
+        launch_binding=launch,
+        capability=capability,
     )
 
     old_dataset = _checked_dataset(tmp_path / "old-unbound.gvd5", base_seed=7)
@@ -199,6 +253,7 @@ def test_binding_rejects_old_data_swaps_tamper_and_hidden_fields(tmp_path):
             marker_path=marker,
             expected_original_dataset_path=str(old_dataset),
             marker_expected=expected,
+            expected_launch_binding=launch,
         )
 
     with pytest.raises(ValueError, match="consumed dataset"):
@@ -208,6 +263,7 @@ def test_binding_rejects_old_data_swaps_tamper_and_hidden_fields(tmp_path):
             marker_path=marker,
             expected_original_dataset_path=str(dataset),
             marker_expected=expected,
+            expected_launch_binding=launch,
         )
 
     payload = json.loads(binding.read_text(encoding="utf-8"))
@@ -223,6 +279,7 @@ def test_binding_rejects_old_data_swaps_tamper_and_hidden_fields(tmp_path):
             marker_path=marker,
             expected_original_dataset_path=str(dataset),
             marker_expected=expected,
+            expected_launch_binding=launch,
         )
 
     wrong_claim = {**expected, "expected_gate_claim_sha256": "a" * 64}
@@ -233,4 +290,5 @@ def test_binding_rejects_old_data_swaps_tamper_and_hidden_fields(tmp_path):
             marker_path=marker,
             expected_original_dataset_path=str(dataset),
             marker_expected=wrong_claim,
+            expected_launch_binding=launch,
         )

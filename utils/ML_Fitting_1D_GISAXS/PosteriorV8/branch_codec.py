@@ -28,6 +28,8 @@ from .contract import (
     LatentComponentBounds,
     LatentComponentParameters,
     LogBounds,
+    _exp_closed_interval_endpoint,
+    _roundoff_only_clamp,
     canonical_topology,
     gui_bounds_to_latent,
     latent_component_to_gui,
@@ -43,7 +45,9 @@ from .sobol_numeric_canonicalization_v5 import (
 )
 
 
-BRANCH_CODEC_VERSION = "posterior_v8_policy_bound_branch_unit_cube_varying_axes_v3"
+BRANCH_CODEC_VERSION = (
+    "posterior_v8_policy_bound_branch_unit_cube_varying_axes_exact_endpoints_v4"
+)
 COMPONENT_UNIT_AXES = (
     "log_R",
     "sigma_R_fraction",
@@ -116,23 +120,6 @@ def _active_values(values: Sequence[bool]) -> tuple[bool, ...]:
     return tuple(bool(value) for value in result)
 
 
-def _roundoff_only_clamp(value: float, interval: ClosedInterval, label: str) -> float:
-    """Clamp at most eight binary64 ULPs to an authoritative closed GUI range."""
-
-    numeric = float(value)
-    scale = max(abs(numeric), abs(interval.low), abs(interval.high))
-    tolerance = 8.0 * abs(float(np.spacing(scale)))
-    if numeric < interval.low:
-        if interval.low - numeric > tolerance:
-            raise RuntimeError(f"{label} escaped its GUI interval beyond roundoff")
-        return interval.low
-    if numeric > interval.high:
-        if numeric - interval.high > tolerance:
-            raise RuntimeError(f"{label} escaped its GUI interval beyond roundoff")
-        return interval.high
-    return numeric
-
-
 @dataclass(frozen=True)
 class BranchCoordinates:
     """Immutable fixed-width unit-cube value and semantic active mask."""
@@ -172,6 +159,10 @@ class _Axis:
             raise ValueError(f"{self.label} unit coordinate must lie in [0, 1]")
         if self.low == self.high:
             return self.low
+        if unit == 0.0:
+            return self.low
+        if unit == 1.0:
+            return self.high
         result = float(self.low + unit * (self.high - self.low))
         if not self.low <= result <= self.high:  # pragma: no cover
             raise RuntimeError(f"{self.label} interpolation escaped its interval")
@@ -456,10 +447,11 @@ class _ComponentCodec:
 
     def to_gui(self, component: LatentComponentParameters) -> GuiComponentParameters:
         self._validate(component)
-        radius = _roundoff_only_clamp(
-            self.numeric.exp(component.log_R),
+        radius = _exp_closed_interval_endpoint(
+            component.log_R,
             self.bounds.log_R.physical,
             "R",
+            self.numeric,
         )
         sigma_r = (
             component.sigma_R_fraction
@@ -477,10 +469,11 @@ class _ComponentCodec:
             assert component.sigma_h_fraction is not None
             assert self.bounds.log_h is not None
             assert self.bounds.sigma_h_fraction is not None
-            height = _roundoff_only_clamp(
-                self.numeric.exp(component.log_h),
+            height = _exp_closed_interval_endpoint(
+                component.log_h,
                 self.bounds.log_h.physical,
                 "h",
+                self.numeric,
             )
             sigma_h = _roundoff_only_clamp(
                 height * component.sigma_h_fraction,
@@ -493,10 +486,11 @@ class _ComponentCodec:
             assert component.sigma_D_fraction is not None
             assert self.bounds.log_D is not None
             assert self.bounds.sigma_D_fraction is not None
-            spacing = _roundoff_only_clamp(
-                self.numeric.exp(component.log_D),
+            spacing = _exp_closed_interval_endpoint(
+                component.log_D,
                 self.bounds.log_D.physical,
                 "D",
+                self.numeric,
             )
             sigma_d = _roundoff_only_clamp(
                 spacing * component.sigma_D_fraction,
@@ -818,16 +812,16 @@ class ProfiledBranchCodec:
         )
         resolution = None
         if self.resolution_bounds is not None:
-            sigma_res = _roundoff_only_clamp(
-                self.numeric.exp(
-                _Axis(
-                    self.numeric.log(self.resolution_bounds.sigma_res.low),
-                    self.numeric.log(self.resolution_bounds.sigma_res.high),
-                    "log_sigma_res",
-                ).decode(encoded.unit_cube[RESOLUTION_OFFSET])
-                ),
+            log_sigma_res = _Axis(
+                self.numeric.log(self.resolution_bounds.sigma_res.low),
+                self.numeric.log(self.resolution_bounds.sigma_res.high),
+                "log_sigma_res",
+            ).decode(encoded.unit_cube[RESOLUTION_OFFSET])
+            sigma_res = _exp_closed_interval_endpoint(
+                log_sigma_res,
                 self.resolution_bounds.sigma_res,
                 "sigma_res",
+                self.numeric,
             )
             nu_res = _Axis(
                 self.resolution_bounds.nu_res.low,

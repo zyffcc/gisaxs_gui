@@ -1,8 +1,8 @@
 """Assemble typed K1 Phase-C replay bundles from lossless raw files.
 
 Audit payloads omit numerical arrays and cannot be production replay inputs.
-This consumer-only module joins separately hash-checked raw files and provides
-no production artifact writer.
+This consumer module joins separately hash-checked raw files; the production
+writer is kept in its own outward-facing infrastructure module.
 """
 
 from __future__ import annotations

@@ -23,7 +23,7 @@ from .sobol_numeric_canonicalization_v5 import (
 
 
 CONTRACT_VERSION = "posterior_v8_contract_v1"
-CODEC_VERSION = "posterior_v8_policy_aware_log_size_fraction_width_v2"
+CODEC_VERSION = "posterior_v8_policy_aware_log_size_fraction_width_v3"
 FORWARD_MODEL_VERSION = "gimap_fitting_scattering_model_2026_08_20"
 
 SPHERE = "sphere"
@@ -118,6 +118,50 @@ def _require_subset(value: ClosedInterval, domain: ClosedInterval, name: str) ->
             f"{name}=[{value.low}, {value.high}] is outside "
             f"[{domain.low}, {domain.high}]"
         )
+
+
+def _roundoff_only_clamp(
+    value: float,
+    interval: ClosedInterval,
+    label: str,
+) -> float:
+    """Normalize at most eight binary64 ULPs to a closed physical interval.
+
+    ``exp(log(endpoint))`` is not guaranteed to reproduce the endpoint exactly.
+    This is a versioned inverse-codec normalization, not a general-purpose clip:
+    values farther than the declared roundoff envelope still fail closed.
+    """
+
+    numeric = float(value)
+    if not np.isfinite(numeric):
+        raise RuntimeError(f"{label} inverse-codec value is not finite")
+    scale = max(abs(numeric), abs(interval.low), abs(interval.high))
+    tolerance = 8.0 * abs(float(np.spacing(scale)))
+    if numeric < interval.low:
+        if interval.low - numeric > tolerance:
+            raise RuntimeError(f"{label} escaped its physical interval beyond roundoff")
+        return interval.low
+    if numeric > interval.high:
+        if numeric - interval.high > tolerance:
+            raise RuntimeError(f"{label} escaped its physical interval beyond roundoff")
+        return interval.high
+    return numeric
+
+
+def _exp_closed_interval_endpoint(
+    log_value: float,
+    interval: ClosedInterval,
+    label: str,
+    numeric,
+) -> float:
+    """Invert one log coordinate while preserving exact closed endpoints."""
+
+    encoded = float(log_value)
+    if encoded == numeric.log(interval.low):
+        return interval.low
+    if encoded == numeric.log(interval.high):
+        return interval.high
+    return _roundoff_only_clamp(numeric.exp(encoded), interval, label)
 
 
 def _positive(value: float, name: str) -> float:
@@ -282,9 +326,17 @@ def latent_component_to_gui(
     numeric_policy_version: str = V5_FAST_NUMERIC_POLICY_VERSION,
 ) -> GuiComponentParameters:
     numeric = v5_numeric_ops(validate_v5_numeric_policy(numeric_policy_version))
-    r = numeric.exp(component.log_R)
-    h = numeric.exp(component.log_h) if component.log_h is not None else None
-    d = numeric.exp(component.log_D) if component.log_D is not None else None
+    r = _exp_closed_interval_endpoint(component.log_R, R_DOMAIN, "R", numeric)
+    h = (
+        _exp_closed_interval_endpoint(component.log_h, H_DOMAIN, "h", numeric)
+        if component.log_h is not None
+        else None
+    )
+    d = (
+        _exp_closed_interval_endpoint(component.log_D, D_DOMAIN, "D", numeric)
+        if component.log_D is not None
+        else None
+    )
     return GuiComponentParameters(
         shape=component.shape,
         R=r,

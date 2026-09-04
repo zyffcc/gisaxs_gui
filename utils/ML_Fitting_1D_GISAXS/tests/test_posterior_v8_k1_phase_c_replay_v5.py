@@ -524,7 +524,7 @@ def test_artifact_binding_rejects_stale_model_contract() -> None:
     binding = V5K1PhaseCArtifactBinding(**values)
     assert binding.model_version.endswith("v5_2_r2")
     assert binding.cross_platform_manifest_schema.endswith("/v2")
-    assert binding.phase_a_launch_schema.endswith("/v5")
+    assert binding.phase_a_launch_schema.endswith("/v7")
     assert binding.proposal_execution_policy_sha256 == V5_PROPOSAL_EXECUTION_POLICY_SHA256
     assert binding.universal_inference_schema.endswith("/v3")
     with pytest.raises(ValueError, match="stale source/model contract"):

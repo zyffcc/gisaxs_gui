@@ -27,6 +27,13 @@ set -euo pipefail
 : "${POSTERIOR_V8_V5_K1_DATASET:?set POSTERIOR_V8_V5_K1_DATASET}"
 : "${POSTERIOR_V8_V5_K1_DATASET_BINDING:?set dataset completion binding}"
 : "${POSTERIOR_V8_V5_K1_GATE_OUTPUT:?set POSTERIOR_V8_V5_K1_GATE_OUTPUT}"
+: "${POSTERIOR_V8_V7_PHASE_A_PLAN:?set Phase-A v7 plan}"
+: "${POSTERIOR_V8_V7_PHASE_A_PLAN_SHA256:?set Phase-A v7 plan SHA-256}"
+: "${POSTERIOR_V8_V7_PHASE_A_RECEIPT:?set Phase-A v7 submission receipt}"
+: "${POSTERIOR_V8_V7_PHASE_A_RELEASE:?set Phase-A v7 release completion}"
+: "${POSTERIOR_V8_V7_PHASE_A_STAGE:?set Phase-A v7 stage}"
+: "${POSTERIOR_V8_V7_PHASE_A_UPSTREAM_COMPLETION:?set upstream completion}"
+: "${POSTERIOR_V8_V7_PHASE_A_COMPLETION:?set stage completion output}"
 
 case "$(hostname -s)" in
     max-wgs*) echo "K1 memorization must run on a Slurm worker" >&2; exit 2 ;;
@@ -114,6 +121,9 @@ fi
 POSTERIOR_V8_JOB_SOURCE_ARCHIVE="$GISAXS_JOB_CACHE_ROOT/source-snapshot.tar"
 POSTERIOR_V8_TRUSTED_VERIFIER="$GISAXS_JOB_CACHE_ROOT/package_source_snapshot_v5.py"
 POSTERIOR_V8_JOB_SOURCE_ROOT="$GISAXS_JOB_CACHE_ROOT/source"
+POSTERIOR_V8_JOB_STAGING_ROOT="$GISAXS_JOB_CACHE_ROOT/staging"
+mkdir -m 0700 "$POSTERIOR_V8_JOB_STAGING_ROOT"
+export POSTERIOR_V8_JOB_SOURCE_ARCHIVE POSTERIOR_V8_JOB_SOURCE_ROOT POSTERIOR_V8_JOB_STAGING_ROOT
 cp -- "$POSTERIOR_V8_V5_SOURCE_ARCHIVE" "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE"
 chmod 0400 "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE"
 read -r POSTERIOR_V8_JOB_ARCHIVE_SHA256 _ < <(
@@ -127,13 +137,13 @@ tar -xOf "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     snapshot/utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py \
     > "$POSTERIOR_V8_TRUSTED_VERIFIER"
 chmod 0400 "$POSTERIOR_V8_TRUSTED_VERIFIER"
-conda run --no-capture-output -n tf \
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 \
     python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     extract \
     --archive "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     --source-root "$POSTERIOR_V8_JOB_SOURCE_ROOT" \
     --expected-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256"
-conda run --no-capture-output -n tf \
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 \
     python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     verify-extracted \
     --archive "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
@@ -142,79 +152,9 @@ conda run --no-capture-output -n tf \
     --expected-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_MANIFEST_SHA256" \
     --expected-source-tree-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256"
 
-cd "$POSTERIOR_V8_JOB_SOURCE_ROOT"
-run_verified_module() {
-    local module="$1"
-    shift
-    conda run --no-capture-output -n tf \
-        python -I -c \
-        'import runpy, sys; root, module = sys.argv[1:3]; sys.path.insert(0, root); sys.argv = [module, *sys.argv[3:]]; runpy.run_module(module, run_name="__main__")' \
-        "$POSTERIOR_V8_JOB_SOURCE_ROOT" "$module" "$@"
-}
-POSTERIOR_V8_JOB_PASS_MARKER="$GISAXS_JOB_CACHE_ROOT/PASS.json"
-cp -- "$POSTERIOR_V8_V5_CROSS_PLATFORM_PASS_MARKER" "$POSTERIOR_V8_JOB_PASS_MARKER"
-chmod 0400 "$POSTERIOR_V8_JOB_PASS_MARKER"
-marker_expected_arguments=(
-    --source-archive-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256"
-    --source-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_MANIFEST_SHA256"
-    --source-tree-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256"
-    --reference-file-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_REFERENCE_SHA256"
-    --reference-file-byte-count "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_REFERENCE_BYTE_COUNT"
-    --reference-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_MANIFEST_SHA256"
-    --scientific-content-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_SCIENTIFIC_SHA256"
-    --comparison-result-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_COMPARISON_SHA256"
-    --expected-gate-claim-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_GATE_CLAIM_SHA256"
-)
-run_verified_module \
-    utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_cross_platform_v5 \
-    --marker "$POSTERIOR_V8_JOB_PASS_MARKER" \
-    "${marker_expected_arguments[@]}"
-POSTERIOR_V8_JOB_DATASET="$GISAXS_JOB_CACHE_ROOT/input.gvd5"
-POSTERIOR_V8_JOB_DATASET_BINDING="$GISAXS_JOB_CACHE_ROOT/input.gvd5.phase-a-binding.json"
-cp -- "$POSTERIOR_V8_V5_K1_DATASET" "$POSTERIOR_V8_JOB_DATASET"
-cp -- "$POSTERIOR_V8_V5_K1_DATASET_BINDING" "$POSTERIOR_V8_JOB_DATASET_BINDING"
-chmod 0400 "$POSTERIOR_V8_JOB_DATASET" "$POSTERIOR_V8_JOB_DATASET_BINDING"
-run_verified_module \
-    utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_dataset_binding_v5 \
-    validate \
-    --dataset "$POSTERIOR_V8_JOB_DATASET" \
-    --marker "$POSTERIOR_V8_JOB_PASS_MARKER" \
-    --binding "$POSTERIOR_V8_JOB_DATASET_BINDING" \
-    --original-dataset-path "$POSTERIOR_V8_V5_K1_DATASET" \
-    "${marker_expected_arguments[@]}"
-arguments=(
-    --dataset "$POSTERIOR_V8_JOB_DATASET"
-    --dataset-root "$GISAXS_JOB_CACHE_ROOT"
-    --dataset-binding "$POSTERIOR_V8_JOB_DATASET_BINDING"
-    --cross-platform-pass-marker "$POSTERIOR_V8_JOB_PASS_MARKER"
-    --original-dataset-path "$POSTERIOR_V8_V5_K1_DATASET"
-    --source-archive-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256"
-    --source-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_MANIFEST_SHA256"
-    --source-tree-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256"
-    --reference-file-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_REFERENCE_SHA256"
-    --reference-file-byte-count "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_REFERENCE_BYTE_COUNT"
-    --reference-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_MANIFEST_SHA256"
-    --scientific-content-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_SCIENTIFIC_SHA256"
-    --comparison-result-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_COMPARISON_SHA256"
-    --gate-claim-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_GATE_CLAIM_SHA256"
-    --output-dir "$POSTERIOR_V8_V5_K1_GATE_OUTPUT"
-    --source-root "$POSTERIOR_V8_JOB_SOURCE_ROOT"
-    --steps "${POSTERIOR_V8_V5_K1_STEPS:-1500}"
-    --learning-rate "${POSTERIOR_V8_V5_K1_LEARNING_RATE:-0.003}"
-    --seed "${POSTERIOR_V8_V5_K1_SEED:-20260903}"
-    --max-final-target-median-rms "${POSTERIOR_V8_V5_K1_MAX_FINAL_RMS:-0.01}"
-    --minimum-loss-reduction "${POSTERIOR_V8_V5_K1_MINIMUM_LOSS_REDUCTION:-0.5}"
-    --width "${POSTERIOR_V8_V5_K1_WIDTH:-128}"
-    --encoder-blocks "${POSTERIOR_V8_V5_K1_ENCODER_BLOCKS:-6}"
-)
-if [[ "${POSTERIOR_V8_V5_K1_SMOKE:-0}" == "1" ]]; then
-    arguments+=(--smoke)
-fi
-if [[ "${POSTERIOR_V8_V5_K1_DRY_RUN:-0}" == "1" ]]; then
-    arguments+=(--dry-run)
-fi
-
 srun nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
-run_verified_module \
-    utils.ML_Fitting_1D_GISAXS.PosteriorV8.run_k1_memorization_gate_v5 \
-    "${arguments[@]}"
+cd "$POSTERIOR_V8_JOB_SOURCE_ROOT"
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 \
+    python -I -c \
+    'import sys; root=sys.argv[1]; sys.path.insert(0, root); from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_runtime_v7 import run_stage_from_environment; run_stage_from_environment(sys.argv[2])' \
+    "$POSTERIOR_V8_JOB_SOURCE_ROOT" "$POSTERIOR_V8_V7_PHASE_A_STAGE"

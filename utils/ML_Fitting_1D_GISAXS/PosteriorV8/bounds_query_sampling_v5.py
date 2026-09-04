@@ -55,7 +55,7 @@ _SIGMA_D_ABSOLUTE_DOMAIN = ClosedInterval(
 )
 
 V5_SOLUTION_TARGET_SAMPLER_VERSION = (
-    "posterior_v8_complete_slot_contract_open_uniform_local_target_sampler_v2"
+    "posterior_v8_exact_closed_endpoint_complete_slot_open_uniform_target_sampler_v4"
 )
 
 
@@ -147,7 +147,13 @@ def _sample_axis_interval(
         start = low + start_fraction * span
         stop = start + width * span
     if log_space:
-        start, stop = float(np.exp(start)), float(np.exp(stop))
+        if regime == "fixed" and placement == "edge_low":
+            start = stop = domain.low
+        elif regime == "fixed" and placement == "edge_high":
+            start = stop = domain.high
+        else:
+            start = domain.low if placement == "edge_low" else float(np.exp(start))
+            stop = domain.high if placement == "edge_high" else float(np.exp(stop))
     start = min(max(start, domain.low), domain.high)
     stop = min(max(stop, domain.low), domain.high)
     return ClosedInterval(start, stop), design

@@ -35,11 +35,30 @@ from src.gimap.features.prediction.application import (
 class RenderControlsMixin:
     """Own render controls presentation behavior."""
 
+    @staticmethod
+    def _preprocess_step_display_array(step: Dict[str, object]) -> Optional[np.ndarray]:
+        snap = step.get("image")
+        if not isinstance(snap, np.ndarray):
+            return None
+        display = np.asarray(snap, dtype=np.float32).copy()
+        masked_value = step.get("masked_value")
+        if isinstance(masked_value, (int, float)):
+            sentinel = display == float(masked_value)
+            if np.any(sentinel) and np.any(~sentinel):
+                display[sentinel] = np.nan
+        if step.get("display_scale") == "log_positive":
+            positive = np.isfinite(display) & (display > 0)
+            logged = np.full(display.shape, np.nan, dtype=np.float32)
+            logged[positive] = np.log(display[positive] + 1e-3)
+            display = logged
+        return display
+
     def _render_step_snapshot(self, idx: int) -> None:
         steps = getattr(self, "_step_snapshots", None)
         if not isinstance(steps, list) or idx < 0 or idx >= len(steps):
             return
-        snap = steps[idx].get("image") if isinstance(steps[idx], dict) else None
+        step = steps[idx] if isinstance(steps[idx], dict) else {}
+        snap = step.get("image")
         if not isinstance(snap, np.ndarray):
             return
         self._current_step_index = idx
@@ -50,7 +69,10 @@ class RenderControlsMixin:
                 b.setChecked(i == idx)
             except Exception:
                 pass
-        display, vmin, vmax = self._prepare_predict_image(snap)
+        display_source = self._preprocess_step_display_array(step)
+        if display_source is None:
+            return
+        display, vmin, vmax = self._prepare_predict_image(display_source)
         cmap = self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0])
         pix = self._create_pixmap_from_array(display, vmin, vmax, cmap)
         self._show_pixmap_in_predict_view(pix)
@@ -381,7 +403,9 @@ class RenderControlsMixin:
             try:
                 if kind == "curve" and isinstance(self._predict_current_curve, np.ndarray):
                     curve = np.array(self._predict_current_curve, dtype=np.float32)
-                    x = np.arange(len(curve), dtype=np.float32)
+                    x = getattr(self, "_predict_current_curve_x", None)
+                    if not isinstance(x, np.ndarray) or x.shape != curve.shape:
+                        x = np.arange(len(curve), dtype=np.float32)
                     data = np.column_stack([x, curve])
                     data_path = os.path.join(export_path, f"predict_curve_{timestamp}.txt")
                     exported = self.prediction_view_model.export_array(

@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -36,11 +37,21 @@ def test_existing_module_yaml_files_are_discovered_with_legacy_contracts():
         "Yuxin_CuPolymer_SF_4Para",
     }
     assert by_id["Au_Silicon_15nm"].input_shape == (1, 256, 256, 1)
+    assert by_id["Au_Silicon_15nm"].preprocess.params["resize"] == {
+        "shape": [256, 256],
+        "method": "nearest",
+    }
     assert by_id["Au_Silicon_15nm"].outputs.names == (
-        "hr distribution",
-        "h distribution",
-        "r distribution",
+        "H-R distribution",
+        "H distribution",
+        "R distribution",
     )
+    assert by_id["Au_Silicon_15nm"].outputs.type == "joint_distribution"
+    assert by_id["Au_Silicon_15nm"].outputs.row_axis.key == "r"
+    assert by_id["Au_Silicon_15nm"].outputs.row_axis.maximum == 15.0
+    assert by_id["Au_Silicon_15nm"].outputs.column_axis.key == "h"
+    assert by_id["Au_Silicon_15nm"].outputs.column_axis.label == "H"
+    assert by_id["Au_Silicon_15nm"].outputs.column_axis.maximum == 30.0
     sf = by_id["Yuxin_CuPolymer_SF_4Para"]
     assert sf.input_shape == (1, 256, 256, 2)
     assert sf.outputs.parameter_names == ("t_Cu", "t_polymer", "D", "sigma")
@@ -57,6 +68,8 @@ def test_legacy_module_mapping_resolves_assets_but_preserves_windows_model_path(
     assert legacy["model_path"] == module.model.path
     assert Path(legacy["mask_path"]).is_absolute()
     assert legacy["preprocess_steps"] == list(module.preprocess.steps)
+    assert legacy["output_axes"]["row"]["label"] == "R"
+    assert legacy["output_axes"]["column"]["label"] == "H"
 
 
 def test_model_path_update_changes_only_model_path_line(tmp_path):
@@ -87,9 +100,7 @@ def test_fabio_repository_sums_stack_as_float32(tmp_path, monkeypatch):
         str(paths[0]): np.array([[1, 2], [3, 4]], dtype=np.uint16),
         str(paths[1]): np.array([[10, 20], [30, 40]], dtype=np.float64),
     }
-    fake_fabio = SimpleNamespace(
-        open=lambda path: SimpleNamespace(data=values[path])
-    )
+    fake_fabio = SimpleNamespace(open=lambda path: SimpleNamespace(data=values[path]))
     monkeypatch.setitem(sys.modules, "fabio", fake_fabio)
 
     loaded = FabioPredictionImageRepository().load(paths)
@@ -171,3 +182,81 @@ def test_module_entry_preprocessor_is_lazy_and_preserves_step_order(tmp_path):
     assert result.values.shape == (1, 2, 3, 1)
     assert np.all(result.values == 2)
     assert [step["label"] for step in result.steps] == ["first", "second"]
+
+
+def _load_au_preprocessing_module():
+    path = PROJECT_ROOT / "modules" / "Au_Silicon_15nm" / "preprocess.py"
+    spec = importlib.util.spec_from_file_location("test_au_preprocess", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_au_preprocessing_resize_matches_training_notebook_nearest_neighbor():
+    from scipy.ndimage import zoom
+
+    preprocessing = _load_au_preprocessing_module()
+    image = np.arange(35, dtype=np.float32).reshape(5, 7)
+    config = {
+        "steps": ["resize"],
+        "params": {"resize": {"shape": [4, 6], "method": "nearest"}},
+    }
+
+    actual, steps = preprocessing.run(image, config, return_steps=True)
+    expected = zoom(image, (4 / 5, 6 / 7), order=0).astype(np.float32)
+
+    np.testing.assert_array_equal(actual, expected)
+    assert steps[0]["label"] == "resize"
+
+
+def test_au_preprocessing_log_contract_and_repeated_step_labels_are_deterministic():
+    preprocessing = _load_au_preprocessing_module()
+    image = np.array(
+        [[-1.0, 0.0, 2.0], [-1.0, 1.0, 4.0], [-1.0, 3.0, 8.0]],
+        dtype=np.float32,
+    )
+    config = {
+        "steps": ["cut_columns", "log_and_normalize", "cut_columns"],
+        "params": {
+            "cut_columns": {"start": 0, "end": 1, "value": -1},
+            "log_and_normalize": {
+                "eps": 1e-8,
+                "exclude_from_max": {"columns": [0, 1], "rows": [2, 3]},
+            },
+        },
+    }
+
+    actual, steps = preprocessing.run(image, config, return_steps=True)
+    scale = np.e / (4.0 + 1e-8)
+
+    assert [step["label"] for step in steps] == [
+        "cut_columns (1/2)",
+        "log_and_normalize",
+        "cut_columns (2/2)",
+    ]
+    assert [step["display_scale"] for step in steps] == [
+        "log_positive",
+        "linear",
+        "linear",
+    ]
+    assert actual[0, 0] == -1
+    assert actual[0, 1] == pytest.approx(np.log(1e-8))
+    assert actual[1, 2] == pytest.approx(np.log(4.0 * scale + 1e-8))
+
+
+def test_au_preprocessing_rejects_missing_mask_and_unknown_steps(tmp_path):
+    preprocessing = _load_au_preprocessing_module()
+    image = np.ones((4, 4), dtype=np.float32)
+
+    with pytest.raises(FileNotFoundError, match="configured prediction mask not found"):
+        preprocessing.run(
+            image,
+            {
+                "steps": ["mask"],
+                "params": {"mask": {"apply": True, "path": "missing.npy"}},
+            },
+            module_folder=str(tmp_path),
+        )
+    with pytest.raises(ValueError, match="unknown preprocessing step"):
+        preprocessing.run(image, {"steps": ["typo"], "params": {}})

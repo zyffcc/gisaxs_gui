@@ -32,51 +32,60 @@ class _ObjectiveConfig:
 
 
 class _Dataset:
-    def __init__(self):
+    def __init__(self, varying_masks: tuple[np.ndarray, ...] | None = None):
         active = np.zeros(26, dtype=bool)
         active[:2] = True
-        target = np.full(26, 0.5, dtype=np.float32)
-        target[:2] = (0.2, 0.8)
-        search = FrozenSearchProvenance(
-            search_artifact_id="known-truth-one-call",
-            search_artifact_sha256="b" * 64,
-            protocol_id=KNOWN_TRUTH_ORACLE_PROTOCOL_ID,
-            protocol_sha256="c" * 64,
-            evaluator_version="exact-forward-v1",
-            metric_name="exact_forward_logrmse",
-            threshold_name="curve_equivalence",
-            threshold_value=0.02,
-            threshold_source_id="test",
-            exact_forward_call_budget=1,
-            exact_forward_calls_used=1,
-            termination_reason=KNOWN_TRUTH_ORACLE_TERMINATION_REASON,
-            completed=True,
-            compatible_representative_count=1,
+        masks = (active,) if varying_masks is None else varying_masks
+        candidates = []
+        for index, varying in enumerate(masks):
+            target = np.full(26, 0.5, dtype=np.float32)
+            target[varying] = np.asarray((0.2, 0.8), dtype=np.float32)[: np.count_nonzero(varying)]
+            search = FrozenSearchProvenance(
+                search_artifact_id=f"known-truth-one-call-{index}",
+                search_artifact_sha256=f"{index + 1:064x}",
+                protocol_id=KNOWN_TRUTH_ORACLE_PROTOCOL_ID,
+                protocol_sha256="c" * 64,
+                evaluator_version="exact-forward-v1",
+                metric_name="exact_forward_logrmse",
+                threshold_name="curve_equivalence",
+                threshold_value=0.02,
+                threshold_source_id="test",
+                exact_forward_call_budget=1,
+                exact_forward_calls_used=1,
+                termination_reason=KNOWN_TRUTH_ORACLE_TERMINATION_REASON,
+                completed=True,
+                compatible_representative_count=1,
+            )
+            exact = ExactCompatibleProvenance(
+                artifact_id=f"known-truth-{index}",
+                artifact_sha256=f"{index + 11:064x}",
+                metric_value=0.0,
+                bounds_passed=True,
+                physics_passed=True,
+            )
+            candidates.append(
+                V5CandidateSupervision(
+                    clean_recipe_id=f"recipe-{index}",
+                    candidate_id=f"candidate-{index}",
+                    outcome="compatible_found",
+                    active_dimension_mask=active,
+                    varying_dimension_mask=varying,
+                    search_provenance=search,
+                    exact_compatible=exact,
+                    target_local=target,
+                    generating_candidate_match=True,
+                )
+            )
+        self.labels = stack_candidate_supervision_v5(
+            tuple(candidates), clean_recipe_indices=tuple(range(len(candidates)))
         )
-        exact = ExactCompatibleProvenance(
-            artifact_id="known-truth",
-            artifact_sha256="a" * 64,
-            metric_value=0.0,
-            bounds_passed=True,
-            physics_passed=True,
-        )
-        candidate = V5CandidateSupervision(
-            clean_recipe_id="recipe",
-            candidate_id="candidate",
-            outcome="compatible_found",
-            active_dimension_mask=active,
-            varying_dimension_mask=active,
-            search_provenance=search,
-            exact_compatible=exact,
-            target_local=target,
-            generating_candidate_match=True,
-        )
-        self.labels = stack_candidate_supervision_v5((candidate,), clean_recipe_indices=(0,))
 
     def joined_numpy(self, *, include_unverified=False):
         assert include_unverified is False
         # Deliberately not a historical V5 input name: the runner discovers it.
-        return {"future_context": np.asarray([[1.0, -1.0]], np.float32)}, self.labels
+        count = int(self.labels["target_local"].shape[0])
+        context = np.tile(np.asarray([[1.0, -1.0]], np.float32), (count, 1))
+        return {"future_context": context}, self.labels
 
 
 def _model():
@@ -131,6 +140,8 @@ def test_memorization_runner_discovers_inputs_and_reports_hashed_gate():
 
     assert result.model_input_keys == ("future_context",)
     assert result.target_count == 1
+    assert result.learnable_target_count == 1
+    assert result.fully_fixed_target_count == 0
     assert result.varying_coordinate_count == 2
     assert result.initial_target_median_rms > result.final_target_median_rms
     assert result.final_target_median_rms < 0.02
@@ -141,8 +152,73 @@ def test_memorization_runner_discovers_inputs_and_reports_hashed_gate():
     assert result.audit_payload()["scientific_role"].endswith("not_model_acceptance")
 
 
+def test_memorization_metrics_exclude_valid_fully_fixed_targets():
+    varying = np.zeros(26, dtype=bool)
+    varying[:2] = True
+    fixed = np.zeros(26, dtype=bool)
+    _, result = run_v5_memorization_gate(
+        _Dataset((varying, fixed)),
+        _model,
+        objective=_objective,
+        objective_config=_ObjectiveConfig(),
+        config=V5MemorizationGateConfig(
+            steps=120,
+            learning_rate=0.05,
+            max_final_target_median_rms=0.02,
+            minimum_loss_reduction=0.01,
+        ),
+    )
+
+    assert result.target_count == 2
+    assert result.learnable_target_count == 1
+    assert result.fully_fixed_target_count == 1
+    assert result.varying_coordinate_count == 2
+    assert result.passed
+
+
+def test_memorization_gate_rejects_a_dataset_with_no_learnable_target():
+    fixed = np.zeros(26, dtype=bool)
+    with pytest.raises(ValueError, match="learnable local target"):
+        run_v5_memorization_gate(
+            _Dataset((fixed,)),
+            _model,
+            objective=_objective,
+            objective_config=_ObjectiveConfig(),
+            config=V5MemorizationGateConfig(steps=1),
+        )
+
+
+def test_memorization_gate_bounds_every_forward_batch():
+    varying = np.zeros(26, dtype=bool)
+    varying[:2] = True
+
+    def bounded_objective(outputs, labels, config):
+        tf.debugging.assert_less_equal(tf.shape(labels["target_local"])[0], 2)
+        return _objective(outputs, labels, config)
+
+    _, result = run_v5_memorization_gate(
+        _Dataset((varying,) * 5),
+        _model,
+        objective=bounded_objective,
+        objective_config=_ObjectiveConfig(),
+        config=V5MemorizationGateConfig(
+            steps=5,
+            batch_size=2,
+            learning_rate=0.05,
+            max_final_target_median_rms=1.0,
+            minimum_loss_reduction=0.0,
+        ),
+    )
+
+    assert result.target_count == 5
+    assert result.learnable_target_count == 5
+    assert result.config.batch_size == 2
+
+
 def test_memorization_gate_config_fails_closed():
     with pytest.raises(ValueError, match="positive"):
         V5MemorizationGateConfig(steps=0)
     with pytest.raises(ValueError, match="non-negative"):
         V5MemorizationGateConfig(minimum_loss_reduction=-1.0)
+    with pytest.raises(ValueError, match="batch_size"):
+        V5MemorizationGateConfig(batch_size=0)

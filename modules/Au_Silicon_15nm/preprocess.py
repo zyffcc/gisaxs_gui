@@ -2,35 +2,69 @@ import os
 import numpy as np
 
 
+_DEFAULT_STEPS = (
+    "crop",
+    "resize",
+    "set_invalid",
+    "mask",
+    "cut_columns",
+    "log_and_normalize",
+    "mask",
+    "cut_columns",
+    "cut_rows",
+)
+
+
 def _crop(img: np.ndarray, cfg: dict) -> np.ndarray:
     if not isinstance(cfg, dict):
         return img
     if all(k in cfg for k in ("y0", "y1", "x0", "x1")):
-        y0 = int(cfg.get("y0", 0)); y1 = int(cfg.get("y1", img.shape[0]))
-        x0 = int(cfg.get("x0", 0)); x1 = int(cfg.get("x1", img.shape[1]))
+        y0 = int(cfg.get("y0", 0))
+        y1 = int(cfg.get("y1", img.shape[0]))
+        x0 = int(cfg.get("x0", 0))
+        x1 = int(cfg.get("x1", img.shape[1]))
     else:
-        left = int(cfg.get("left", 0)); up = int(cfg.get("up", 0))
-        down = int(cfg.get("down", 0)); right = int(cfg.get("right", 0))
-        y0 = up; y1 = max(up, img.shape[0] - down)
-        x0 = left; x1 = max(left, img.shape[1] - right)
-    y0 = max(0, min(y0, img.shape[0])); y1 = max(y0, min(y1, img.shape[0]))
-    x0 = max(0, min(x0, img.shape[1])); x1 = max(x0, min(x1, img.shape[1]))
+        left = int(cfg.get("left", 0))
+        up = int(cfg.get("up", 0))
+        down = int(cfg.get("down", 0))
+        right = int(cfg.get("right", 0))
+        y0 = up
+        y1 = max(up, img.shape[0] - down)
+        x0 = left
+        x1 = max(left, img.shape[1] - right)
+    y0 = max(0, min(y0, img.shape[0]))
+    y1 = max(y0, min(y1, img.shape[0]))
+    x0 = max(0, min(x0, img.shape[1]))
+    x1 = max(x0, min(x1, img.shape[1]))
     return img[y0:y1, x0:x1]
 
 
 def _resize(img: np.ndarray, size) -> np.ndarray:
-    if not isinstance(size, (list, tuple)) or len(size) != 2:
-        return img
-    th, tw = int(size[0]), int(size[1])
-    try:
-        import tensorflow as tf  # type: ignore
-        t = tf.convert_to_tensor(img[None, ..., None], dtype=tf.float32)
-        r = tf.image.resize(t, [th, tw], method='bilinear')
-        return r.numpy()[0, ..., 0]
-    except Exception:
-        ys = np.linspace(0, img.shape[0] - 1, th).astype(np.int32)
-        xs = np.linspace(0, img.shape[1] - 1, tw).astype(np.int32)
-        return img[np.ix_(ys, xs)]
+    method = "nearest"
+    target = size
+    if isinstance(size, dict):
+        target = size.get("shape", size.get("size"))
+        method = str(size.get("method", method)).strip().lower()
+    if not isinstance(target, (list, tuple)) or len(target) != 2:
+        raise ValueError("resize requires shape: [height, width]")
+
+    th, tw = int(target[0]), int(target[1])
+    if th <= 0 or tw <= 0 or img.ndim != 2 or not all(img.shape):
+        raise ValueError(f"invalid resize from {img.shape} to {(th, tw)}")
+    interpolation_order = {"nearest": 0, "bilinear": 1}.get(method)
+    if interpolation_order is None:
+        raise ValueError(f"unsupported resize method: {method!r}")
+
+    # The Au model's experiment notebook defines resize_matrix with
+    # scipy.ndimage.zoom(order=0).  This exact pixel mapping matters because the
+    # model flattens its convolution output into a very large dense layer.
+    from scipy.ndimage import zoom
+
+    factors = (float(th) / img.shape[0], float(tw) / img.shape[1])
+    resized = zoom(img, factors, order=interpolation_order)
+    if resized.shape != (th, tw):
+        raise ValueError(f"resize produced {resized.shape}, expected {(th, tw)}")
+    return resized.astype(np.float32, copy=False)
 
 
 def _set_invalid(img: np.ndarray, cfg: dict) -> np.ndarray:
@@ -45,7 +79,8 @@ def _set_invalid(img: np.ndarray, cfg: dict) -> np.ndarray:
 def _cut_columns(img: np.ndarray, cfg: dict) -> np.ndarray:
     if not isinstance(cfg, dict):
         return img
-    start = int(cfg.get("start", 0)); end = int(cfg.get("end", 0))
+    start = int(cfg.get("start", 0))
+    end = int(cfg.get("end", 0))
     val = float(cfg.get("value", -1))
     out = img.copy()
     if 0 <= start < out.shape[1]:
@@ -57,7 +92,8 @@ def _cut_columns(img: np.ndarray, cfg: dict) -> np.ndarray:
 def _cut_rows(img: np.ndarray, cfg: dict) -> np.ndarray:
     if not isinstance(cfg, dict):
         return img
-    start = int(cfg.get("start", 0)); end = int(cfg.get("end", 0))
+    start = int(cfg.get("start", 0))
+    end = int(cfg.get("end", 0))
     val = float(cfg.get("value", -1))
     out = img.copy()
     if 0 <= start < out.shape[0]:
@@ -73,54 +109,61 @@ def _mask(img: np.ndarray, cfg: dict, module_folder: str) -> np.ndarray:
     if isinstance(path, str) and not os.path.isabs(path):
         path = os.path.abspath(os.path.join(module_folder or "", path))
     if not path or not os.path.isfile(path):
-        return img
-    try:
-        mask = np.load(path)
-        crop_m = cfg.get("crop_mask") if isinstance(cfg, dict) else None
-        if isinstance(crop_m, dict):
-            left = int(crop_m.get("left", 0)); up = int(crop_m.get("up", 0))
-            down = int(crop_m.get("down", 0)); right = int(crop_m.get("right", 0))
-            y0 = up; y1 = max(up, mask.shape[0] - down)
-            x0 = left; x1 = max(left, mask.shape[1] - right)
-            mask = mask[y0:y1, x0:x1]
-        resize = cfg.get("resize")
-        if isinstance(resize, (list, tuple)) and len(resize) == 2:
-            mh, mw = int(resize[0]), int(resize[1])
-            try:
-                import tensorflow as tf  # type: ignore
-                mt = tf.convert_to_tensor(mask[None, ..., None], dtype=tf.float32)
-                mr = tf.image.resize(mt, [mh, mw], method='nearest')
-                mask = mr.numpy()[0, ..., 0]
-            except Exception:
-                ys = np.linspace(0, mask.shape[0] - 1, mh).astype(np.int32)
-                xs = np.linspace(0, mask.shape[1] - 1, mw).astype(np.int32)
-                mask = mask[np.ix_(ys, xs)]
-        mv = float(cfg.get("mask_value", -1))
-        out = img.copy()
-        bad = mask != 0
-        if bad.shape == out.shape:
-            out[bad] = mv
-        return out
-    except Exception:
-        return img
+        raise FileNotFoundError(f"configured prediction mask not found: {path}")
 
-
-def _log_and_normalize(img: np.ndarray) -> np.ndarray:
-    try:
-        # Use the existing project utility for parity
-        from src.gimap.features.prediction.infrastructure.adapters.image_preprocessing import (
-            Preprocessing,
+    mask = np.load(path)
+    crop_m = cfg.get("crop_mask") if isinstance(cfg, dict) else None
+    if isinstance(crop_m, dict):
+        left = int(crop_m.get("left", 0))
+        up = int(crop_m.get("up", 0))
+        down = int(crop_m.get("down", 0))
+        right = int(crop_m.get("right", 0))
+        y0 = up
+        y1 = max(up, mask.shape[0] - down)
+        x0 = left
+        x1 = max(left, mask.shape[1] - right)
+        mask = mask[y0:y1, x0:x1]
+    resize = cfg.get("resize")
+    if isinstance(resize, (list, tuple)) and len(resize) == 2:
+        mask = _resize(mask.astype(np.float32), {"shape": resize, "method": "nearest"})
+    if mask.shape != img.shape:
+        raise ValueError(
+            f"prediction mask shape {mask.shape} does not match image shape {img.shape}"
         )
-        return Preprocessing(img).log_and_normalize()
-    except Exception:
-        # Fallback: simple safe log1p and min-max
-        x = np.log(img + 1e-8)
-        x = np.nan_to_num(x, nan=-1.0, posinf=0.0, neginf=-1.0)
-        mn = float(np.min(x))
-        mx = float(np.max(x))
-        if mx - mn > 1e-12:
-            x = (x - mn) / (mx - mn)
-        return x
+
+    mv = float(cfg.get("mask_value", -1))
+    out = img.copy()
+    out[mask != 0] = mv
+    return out
+
+
+def _log_and_normalize(img: np.ndarray, cfg: dict) -> np.ndarray:
+    """Apply the max-scaled logarithm used to train and validate this model."""
+    config = cfg if isinstance(cfg, dict) else {}
+    eps = float(config.get("eps", 1e-8))
+    if eps <= 0:
+        raise ValueError("log_and_normalize.eps must be positive")
+
+    max_source = img.astype(np.float32, copy=True)
+    exclude = config.get("exclude_from_max", {})
+    if isinstance(exclude, dict):
+        columns = exclude.get("columns")
+        if isinstance(columns, (list, tuple)) and len(columns) == 2:
+            max_source[:, int(columns[0]) : int(columns[1])] = -1.0
+        rows = exclude.get("rows")
+        if isinstance(rows, (list, tuple)) and len(rows) == 2:
+            max_source[int(rows[0]) : int(rows[1]), :] = -1.0
+
+    finite = max_source[np.isfinite(max_source)]
+    max_value = float(np.max(finite)) if finite.size else float("nan")
+    if not np.isfinite(max_value) or max_value <= 0:
+        raise ValueError("log_and_normalize requires at least one positive finite intensity")
+
+    log_argument = img.astype(np.float32, copy=False) * (np.e / (max_value + eps)) + eps
+    output = np.full(img.shape, -1.0, dtype=np.float32)
+    valid = np.isfinite(log_argument) & (log_argument > 0)
+    output[valid] = np.log(log_argument[valid])
+    return output
 
 
 def run(
@@ -133,7 +176,9 @@ def run(
     """
     Modular preprocessing runner.
     Honors explicit steps order in preprocess_cfg['steps'] when provided.
-    Falls back to notebook-aligned default: crop -> resize -> set_invalid -> cut_columns -> log_and_normalize -> mask -> cut_columns -> cut_rows.
+    Falls back to the same sequence as the module YAML.  The resize and
+    normalization parameters remain configuration-owned; there is no alternate
+    silent preprocessing algorithm.
 
     When return_steps is True, returns a tuple (img, steps) where steps is a list of
     {"step": name, "image": snapshot_after_step} to aid debugging and UI logging.
@@ -142,87 +187,86 @@ def run(
         raise ValueError("image is None")
     img = image.astype(np.float32, copy=True)
     cfg = preprocess_cfg or {}
-    params = cfg.get('params', {}) if isinstance(cfg, dict) else {}
-    steps = cfg.get('steps', []) if isinstance(cfg, dict) else []
+    params = cfg.get("params", {}) if isinstance(cfg, dict) else {}
+    steps = cfg.get("steps", []) if isinstance(cfg, dict) else []
+    configured_steps = list(steps) if steps else list(_DEFAULT_STEPS)
 
     steps_log: list[dict] = []
+    step_totals: dict[str, int] = {}
+    step_seen: dict[str, int] = {}
 
-    def record_step(label: str) -> None:
+    for configured_step in configured_steps:
+        if isinstance(configured_step, dict):
+            if len(configured_step) != 1:
+                raise ValueError("inline preprocessing step must contain exactly one entry")
+            configured_name = str(next(iter(configured_step)))
+        else:
+            configured_name = str(configured_step)
+        canonical_name = configured_name.strip().lower()
+        step_totals[canonical_name] = step_totals.get(canonical_name, 0) + 1
+
+    logarithm_applied = False
+
+    def record_step(label: str, *, masked_value: float | None = None) -> None:
         if not return_steps:
             return
-        try:
-            steps_log.append({"step": str(label), "image": img.copy()})
-        except Exception:
-            pass
+        occurrence = step_seen.get(label, 0) + 1
+        step_seen[label] = occurrence
+        total = step_totals.get(label, 1)
+        display_label = f"{label} ({occurrence}/{total})" if total > 1 else label
+        snapshot = {
+            "step": str(label),
+            "label": display_label,
+            "image": img.copy(),
+            # Raw detector intensities need logarithmic display to make weak
+            # scattering visible. This is preview metadata only; the snapshot
+            # and model tensor retain their exact scientific values.
+            "display_scale": "linear" if logarithm_applied else "log_positive",
+        }
+        if masked_value is not None:
+            snapshot["masked_value"] = float(masked_value)
+        steps_log.append(snapshot)
 
     def do_step(step):
-        nonlocal img
+        nonlocal img, logarithm_applied
         if isinstance(step, dict):
-            # {name: config}
             if len(step) != 1:
-                return
+                raise ValueError("inline preprocessing step must contain exactly one entry")
             name, scfg = next(iter(step.items()))
         else:
             name, scfg = str(step), params.get(step, {})
-        name = str(name).lower()
-        if name == 'crop':
-            img = _crop(img, scfg if isinstance(scfg, dict) else params.get('crop', {}))
-            record_step('crop')
-        elif name == 'resize':
-            size = scfg if isinstance(scfg, (list, tuple)) else params.get('resize', None)
-            img = _resize(img, size)
-            record_step('resize')
-        elif name in ('set_invalid', 'invalid', 'setinvalid'):
-            img = _set_invalid(img, scfg if isinstance(scfg, dict) else params.get('set_invalid', {}))
-            record_step('set_invalid')
-        elif name in ('cut_columns', 'cutcols', 'vertical_cut'):
-            img = _cut_columns(img, scfg if isinstance(scfg, dict) else params.get('cut_columns', {}))
-            record_step('cut_columns')
-        elif name in ('cut_rows', 'cutrows', 'bottom_cut'):
-            img = _cut_rows(img, scfg if isinstance(scfg, dict) else params.get('cut_rows', {}))
-            record_step('cut_rows')
-        elif name == 'mask':
-            mc = scfg if isinstance(scfg, dict) else params.get('mask', {})
+        name = str(name).strip().lower()
+        if name == "crop":
+            img = _crop(img, scfg if isinstance(scfg, dict) else params.get("crop", {}))
+            record_step("crop")
+        elif name == "resize":
+            img = _resize(img, scfg)
+            record_step("resize")
+        elif name in ("set_invalid", "invalid", "setinvalid"):
+            invalid_cfg = scfg if isinstance(scfg, dict) else {}
+            img = _set_invalid(img, invalid_cfg)
+            record_step("set_invalid", masked_value=float(invalid_cfg.get("negative", -1)))
+        elif name in ("cut_columns", "cutcols", "vertical_cut"):
+            cut_cfg = scfg if isinstance(scfg, dict) else {}
+            img = _cut_columns(img, cut_cfg)
+            record_step("cut_columns", masked_value=float(cut_cfg.get("value", -1)))
+        elif name in ("cut_rows", "cutrows", "bottom_cut"):
+            cut_cfg = scfg if isinstance(scfg, dict) else {}
+            img = _cut_rows(img, cut_cfg)
+            record_step("cut_rows", masked_value=float(cut_cfg.get("value", -1)))
+        elif name == "mask":
+            mc = scfg if isinstance(scfg, dict) else {}
             img = _mask(img, mc, module_folder)
-            record_step('mask')
-        elif name in ('log_and_normalize', 'lognormalize', 'log_norm'):
-            img = _log_and_normalize(img)
-            record_step('log_and_normalize')
-        # Unrecognized names are ignored
+            record_step("mask", masked_value=float(mc.get("mask_value", -1)))
+        elif name in ("log_and_normalize", "lognormalize", "log_norm"):
+            img = _log_and_normalize(img, scfg if isinstance(scfg, dict) else {})
+            logarithm_applied = True
+            record_step("log_and_normalize", masked_value=-1.0)
+        else:
+            raise ValueError(f"unknown preprocessing step: {name!r}")
 
-    if steps:
-        for st in steps:
-            do_step(st)
-        img_out = img.astype(np.float32, copy=False)
-        return (img_out, steps_log) if return_steps else img_out
-
-    # Default (matches notebook Cells ~5–12 pipeline)
-    # 1) crop
-    if 'crop' in params:
-        img = _crop(img, params.get('crop', {}))
-        record_step('crop')
-    # 2) resize
-    if 'resize' in params:
-        img = _resize(img, params.get('resize'))
-        record_step('resize')
-    # 3) set invalid values
-    img = _set_invalid(img, params.get('set_invalid', {'nan': -1, 'negative': -1}))
-    record_step('set_invalid')
-    # 4) vertical cut of first N columns
-    img = _cut_columns(img, params.get('cut_columns', {'start': 0, 'end': 20, 'value': -1}))
-    record_step('cut_columns_pre')
-    # 5) log and normalize
-    img = _log_and_normalize(img)
-    record_step('log_and_normalize')
-    # 6) mask
-    img = _mask(img, params.get('mask', {}), module_folder)
-    record_step('mask')
-    # 7) vertical cut again (after normalization)
-    img = _cut_columns(img, params.get('cut_columns', {'start': 0, 'end': 20, 'value': -1}))
-    record_step('cut_columns_post')
-    # 8) bottom rows cut
-    img = _cut_rows(img, params.get('cut_rows', {'start': 240, 'end': 256, 'value': -1}))
-    record_step('cut_rows')
+    for configured_step in configured_steps:
+        do_step(configured_step)
 
     img_out = img.astype(np.float32, copy=False)
     return (img_out, steps_log) if return_steps else img_out

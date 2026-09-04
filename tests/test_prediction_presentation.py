@@ -7,13 +7,31 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication, QTabWidget, QWidget
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import (
+    QApplication,
+    QGraphicsView,
+    QGridLayout,
+    QScrollArea,
+    QTabWidget,
+    QToolButton,
+    QWidget,
+)
 
 from main import MainWindow
 from src.gimap.features.prediction.presentation.bindings.module_catalog import (
     ModuleCatalogMixin,
+)
+from src.gimap.features.prediction.presentation.bindings.render_controls import (
+    RenderControlsMixin,
+)
+from src.gimap.features.prediction.presentation.bindings.rendering_setup import (
+    RenderingSetupMixin,
 )
 from src.gimap.features.prediction.presentation.bindings.setup_status import (
     SetupStatusMixin,
@@ -79,6 +97,102 @@ def test_module_catalog_ignores_final_event_from_deleted_qt_widget():
         ui = object()
 
     assert Binding().eventFilter(object(), None) is False
+
+
+def test_preprocess_step_preview_hides_mask_sentinel_without_changing_model_values():
+    class Binding(RenderControlsMixin):
+        def __init__(self):
+            self._step_snapshots = [
+                {
+                    "image": np.array([[-1.0, -2.0], [0.0, 1.0]], dtype=np.float32),
+                    "masked_value": -1.0,
+                }
+            ]
+            self._step_buttons = []
+            self.current_parameters = {"colormap": "viridis"}
+            self._DEFAULT_COLORMAPS = ("viridis",)
+            self.render_source = None
+
+        def _prepare_predict_image(self, image):
+            self.render_source = image
+            return image, -2.0, 1.0
+
+        def _create_pixmap_from_array(self, *_args):
+            return "pixmap"
+
+        def _show_pixmap_in_predict_view(self, pixmap):
+            self.pixmap = pixmap
+
+    binding = Binding()
+
+    binding._render_step_snapshot(0)
+
+    assert binding._predict_current_image[0, 0] == -1.0
+    assert np.isnan(binding.render_source[0, 0])
+    assert binding.render_source[0, 1] == -2.0
+    assert binding.pixmap == "pixmap"
+
+
+def test_preprocess_step_preview_uses_log_display_without_changing_snapshot():
+    snapshot = np.array([[0.0, 1.0], [np.e, -1.0]], dtype=np.float32)
+    original = snapshot.copy()
+    step = {
+        "image": snapshot,
+        "masked_value": -1.0,
+        "display_scale": "log_positive",
+    }
+
+    display = RenderControlsMixin._preprocess_step_display_array(step)
+
+    assert np.isnan(display[0, 0])
+    assert display[0, 1] == pytest.approx(np.log(1.001), abs=1e-7)
+    assert display[1, 0] == pytest.approx(np.log(np.e + 0.001), abs=1e-7)
+    assert np.isnan(display[1, 1])
+    np.testing.assert_array_equal(snapshot, original)
+
+
+def test_preprocessed_panel_shows_an_image_thumbnail_for_every_step():
+    _app()
+
+    class Binding(RenderingSetupMixin, RenderControlsMixin):
+        def __init__(self):
+            self._step_buttons = []
+            self._current_step_index = 0
+            self.current_parameters = {"colormap": "viridis"}
+            self._DEFAULT_COLORMAPS = ("viridis",)
+            self.rendered_index = None
+
+        def _render_step_snapshot(self, index):
+            self.rendered_index = index
+
+        def _refresh_predict_controls(self, _kind):
+            pass
+
+        def _auto_scale_percentiles(self, _image, _low, _high):
+            return 0.0, 1.0
+
+        def _create_pixmap_from_array(self, *_args):
+            return QPixmap(12, 8)
+
+    tabs = QTabWidget()
+    page = QWidget()
+    tabs.addTab(page, "Preprocessed")
+    binding = Binding()
+    binding._predict_tabs = tabs
+    steps = [
+        {"label": "crop", "image": np.ones((3, 4), dtype=np.float32)},
+        {"label": "resize", "image": np.ones((4, 4), dtype=np.float32)},
+        {"label": "mask", "image": np.eye(4, dtype=np.float32)},
+    ]
+
+    binding._render_predict_panel({"kind": "steps", "steps": steps, "default_index": 0})
+
+    gallery = page.findChild(QScrollArea, "preprocessStepGallery")
+    buttons = page.findChildren(QToolButton)
+    assert gallery is not None
+    assert binding.rendered_index == 0
+    assert [button.text() for button in buttons] == ["crop", "resize", "mask"]
+    assert all(not button.icon().isNull() for button in buttons)
 
 
 def test_legacy_component_path_reexports_feature_owned_prediction_classes():
@@ -322,6 +436,35 @@ def test_prediction_tab_navigation_uses_widget_identity_not_visible_text():
     assert tabs.currentWidget() is input_page
     binding._set_predict_main_tab("Predict-2D")
     assert tabs.currentWidget() is result_page
+
+
+def test_prediction_output_tabs_use_result_widget_identity_when_label_changes():
+    _app()
+    outer_tabs = QTabWidget()
+    input_page = QWidget()
+    result_page = QWidget()
+    outer_tabs.addTab(input_page, "Input preview")
+    outer_tabs.addTab(result_page, "Prediction result")
+    outer_tabs.setCurrentWidget(input_page)
+    result_layout = QGridLayout(result_page)
+    result_view = QGraphicsView(result_page)
+    inspector = QWidget(result_page)
+    result_layout.addWidget(result_view, 0, 0)
+    result_layout.addWidget(inspector, 0, 1)
+    binding = RenderingSetupMixin()
+    binding.ui = SimpleNamespace(
+        gisaxsPredictImageShowTabWidget=outer_tabs,
+        predict2dImageTab=result_page,
+        predict2dGraphicsView=result_view,
+        predict2dParameterWidget=inspector,
+    )
+
+    output_tabs = binding._get_or_create_predict2d_tabs()
+
+    assert output_tabs.parentWidget() is result_page
+    assert result_view.parentWidget() is result_page
+    assert inspector.parentWidget() is result_page
+    assert outer_tabs.currentWidget() is input_page
 
 
 def test_prediction_layout_modules_do_not_import_workflow_or_scientific_runtimes():

@@ -10,20 +10,22 @@ from pathlib import Path
 import socket
 from typing import Mapping, Sequence
 
+from .job_local_input_capability_v5 import _mint_job_local_input_capability
+from .k1_input_closure_v5 import rehash_staged_artifacts
 from .k1_job_staging_v5 import (
     V5_K1_JOB_STAGING_SCHEMA,
     V5_K1_JOB_STAGING_VERSION,
     build_job_staging_proof,
-    checked_json,
-    file_sha256,
-    finalize_staging_proof,
-    freeze_staging_tree,
-    lexical_no_symlinks,
-    rehash_staged_artifacts,
     stage_training_inputs,
-    validate_staging_proof,
     verify_training_artifact_bytes,
 )
+from .k1_staging_files_v5 import (
+    checked_json,
+    file_sha256,
+    freeze_staging_tree,
+    lexical_no_symlinks,
+)
+from .k1_staging_receipt_v5 import finalize_staging_proof, validate_staging_proof
 from .k1_training_chain_contract_v5 import canonical_json, digest
 from .k1_training_chain_plan_v5 import (
     K1_TRAINING_HANDOFF_FILENAME,
@@ -96,6 +98,8 @@ def verify_v5_k1_training_artifact_bytes(
     plan: Mapping[str, object], *, allowed_root: Path = MAXWELL_DUST_ROOT
 ) -> dict[str, object]:
     return verify_training_artifact_bytes(plan, allowed_root=allowed_root)
+
+
 def _seed_run(plan: Mapping[str, object], array_index: int) -> Mapping[str, object]:
     if isinstance(array_index, bool) or not isinstance(array_index, int):
         raise TypeError("array_index must be an integer")
@@ -192,7 +196,7 @@ def run_v5_k1_training_seed(
     freeze_staging_tree(Path(job_staging_root))
 
     from .grouped_training_data_v5 import V5GroupedTrainingConfig
-    from .grouped_training_v5 import V5JobLocalInputCapability, train_v5_grouped_model
+    from .grouped_training_v5 import train_v5_grouped_model
 
     config = plan["configuration"]
     training = V5GroupedTrainingConfig(
@@ -216,27 +220,17 @@ def run_v5_k1_training_seed(
         *sidecars["train_sidecars"],
         *sidecars["validation_sidecars"],
     )
-    pre_use_core = {
-        "common_staging": common_staging,
-        "inventory": staged["inventory"],
-        "artifacts": staged["artifacts"],
-        "trainer_argument_local_paths": list(ordered_arguments),
-    }
-    capability = V5JobLocalInputCapability.create(
-        staging_root=str(job_staging_root),
-        slurm_job_id=env["SLURM_JOB_ID"],
-        scientific_plan_sha256=plan["plan_sha256"],
-        staging_proof_sha256=sha256(canonical_json(pre_use_core).encode()).hexdigest(),
-        original_to_local_sha256=tuple(
-            (
-                item["original_path"],
-                item["job_local_path"],
-                item["frozen_sha256"],
-            )
-            for item in staged["artifacts"]
-        ),
-        trainer_argument_local_paths=ordered_arguments,
+    capability = _mint_job_local_input_capability(
+        plan,
+        common_staging,
+        staged,
+        environment=env,
+        allowed_root=allowed_root,
     )
+    if tuple(capability.audit_payload()["trainer_argument_local_paths"]) != tuple(
+        ordered_arguments
+    ):
+        raise RuntimeError("wrapper mint returned a different trainer argument set")
     staged["trainer_staging_capability"] = capability.audit_payload()
     result = train_v5_grouped_model(
         sidecars["train_datasets"],
@@ -250,12 +244,19 @@ def run_v5_k1_training_seed(
     if result.output_dir.resolve(strict=True) != output.resolve(strict=True):
         raise RuntimeError("grouped trainer returned an unexpected output directory")
     manifest = _validated_result_manifest(result.manifest_path)
-    post_training_rehash_sha256 = rehash_staged_artifacts(staged)
+    post_training_rehash_sha256 = rehash_staged_artifacts(
+        staged,
+        plan=plan,
+        allowed_root=allowed_root,
+    )
     staging_proof = finalize_staging_proof(
         common_staging,
+        plan=plan,
         staged_inputs=staged,
         trainer_manifest=manifest,
+        trainer_capability=capability,
         post_training_rehash_sha256=post_training_rehash_sha256,
+        allowed_root=allowed_root,
     )
     staging_proof = validate_staging_proof(
         staging_proof,
@@ -263,6 +264,8 @@ def run_v5_k1_training_seed(
         worker_kind="training_seed",
         expected_array_index=array_index,
         require_live_staging=True,
+        environment=env,
+        allowed_root=allowed_root,
     )
     result_file_sha = file_sha256(result.manifest_path)
     best_model_sha = file_sha256(result.best_model_path)
@@ -298,7 +301,11 @@ def run_v5_k1_training_seed(
 
 
 def _validate_seed_binding(
-    value: Mapping[str, object], plan: Mapping[str, object], expected_seed: int
+    value: Mapping[str, object],
+    plan: Mapping[str, object],
+    expected_seed: int,
+    *,
+    allowed_root: Path = MAXWELL_DUST_ROOT,
 ) -> dict[str, object]:
     if not isinstance(value, Mapping) or set(value) != _SEED_BINDING_FIELDS:
         raise ValueError("seed binding fields are incomplete or unsupported")
@@ -330,6 +337,7 @@ def _validate_seed_binding(
         plan,
         worker_kind="training_seed",
         expected_array_index=matching_runs[0]["array_index"],
+        allowed_root=allowed_root,
     )
     payload["job_local_staging"] = staging
     output = Path(matching_runs[0]["output"]).resolve(strict=True)
@@ -422,8 +430,10 @@ def collect_v5_k1_training_handoff(
     freeze_staging_tree(Path(job_staging_root))
     collector_staging = finalize_staging_proof(
         common_staging,
+        plan=plan,
         staged_inputs=None,
         trainer_manifest=None,
+        allowed_root=allowed_root,
     )
     collector_staging = validate_staging_proof(
         collector_staging,
@@ -431,9 +441,16 @@ def collect_v5_k1_training_handoff(
         worker_kind="collector",
         expected_array_index=None,
         require_live_staging=True,
+        environment=env,
+        allowed_root=allowed_root,
     )
     bindings = [
-        _validate_seed_binding(checked_json(path), plan, run["model_seed"])
+        _validate_seed_binding(
+            checked_json(path),
+            plan,
+            run["model_seed"],
+            allowed_root=allowed_root,
+        )
         for path, run in zip(expected, plan["seed_runs"])
     ]
     core = {

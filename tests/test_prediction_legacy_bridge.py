@@ -88,6 +88,8 @@ def test_prediction_bridge_delegates_preprocessing_to_view_model():
     assert result is prepared.values
     assert calls == [(image, typed_module)]
     assert bridge._latest_preprocess_steps == list(prepared.steps)
+    assert bridge._latest_model_input is prepared.values
+    assert bridge._latest_preprocess_source is image
     assert messages[-1][0] == "Module preprocess output shape (1, 4, 4, 1)"
 
 
@@ -103,8 +105,7 @@ def test_prediction_bridge_delegates_prediction_to_view_model():
         _latest_preprocess_steps=({"label": "normalized"},),
         prediction_view_model=SimpleNamespace(
             state=SimpleNamespace(error_message=None),
-            predict_prepared=lambda *args: calls.append(args)
-            or SimpleNamespace(outputs=outputs),
+            predict_prepared=lambda *args: calls.append(args) or SimpleNamespace(outputs=outputs),
         ),
         _append_status_message=lambda *args, **kwargs: None,
     )

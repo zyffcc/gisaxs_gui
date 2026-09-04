@@ -56,10 +56,7 @@ class AiPipelinePredictor:
         args = fitting_pipeline.build_args(fitting_request)
         fitting_pipeline.write_request_metadata(fitting_request)
         return JobRequest(
-            handler=(
-                "src.gimap.features.fitting.infrastructure.adapters.ai_pipeline:"
-                "run_ai_pipeline_job"
-            ),
+            handler="src.gimap.features.fitting.infrastructure.adapters.ai_pipeline:run_ai_pipeline_job",
             payload={
                 "script_path": str(fitting_pipeline.script_path),
                 "args": args[1:],
@@ -98,9 +95,7 @@ class AiPipelinePredictor:
             ),
             candidates=tuple(dict(row) for row in rows),
             best_log_rmse=(
-                None
-                if summary.get("best_log_rmse") is None
-                else float(summary["best_log_rmse"])
+                None if summary.get("best_log_rmse") is None else float(summary["best_log_rmse"])
             ),
             exit_code=int(summary.get("exit_code", 0)),
         )
@@ -122,6 +117,9 @@ class _ProgressWriter:
         if self._buffer.strip():
             self._emit(self._buffer.rstrip())
         self._buffer = ""
+
+    def close(self):
+        self.flush()
 
     def _emit(self, line: str):
         if not line:

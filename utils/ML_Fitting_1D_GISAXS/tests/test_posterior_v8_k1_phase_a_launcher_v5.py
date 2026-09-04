@@ -14,6 +14,7 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.launch_k1_phase_a_dag_v5 import (
     PHASE_ROOT_NAME,
     PLAN_FILENAME,
     RECEIPT_FILENAME,
+    V5CommandRequest,
     V5CommandResult,
     V5K1PhaseALaunchConfig,
     V5K1PhaseALaunchError,
@@ -31,6 +32,7 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.sobol_cross_platform_manifest_v5 imp
 
 _REQUIRED_SOURCE = (
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/launch_k1_phase_a_dag_v5.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/immutable_submission_file_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/sobol_cross_platform_contract_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/sobol_cross_platform_manifest_io_v5.py",
@@ -38,6 +40,11 @@ _REQUIRED_SOURCE = (
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/run_sobol_cross_platform_gate_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_cross_platform_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_dataset_binding_v5.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_capability_v7.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_contract_v7.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_publication_v7.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_runtime_v7.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_staging_files_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/build_k1_memorization_dataset_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/run_k1_memorization_gate_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/memorization_gate_v5.py",
@@ -68,6 +75,7 @@ _REQUIRED_SOURCE = (
     "utils/ML_Fitting_1D_GISAXS/tests/test_posterior_v8_k1_phase_a_artifact_binding_v5.py",
     "utils/ML_Fitting_1D_GISAXS/tests/test_posterior_v8_k1_dataset_gate_worker_v5.py",
     "utils/ML_Fitting_1D_GISAXS/tests/test_posterior_v8_k1_phase_a_launcher_v5.py",
+    "utils/ML_Fitting_1D_GISAXS/tests/test_posterior_v8_k1_phase_a_runtime_v7.py",
 )
 _PACKAGING_REQUIRED = (
     "AGENTS.md",
@@ -148,6 +156,59 @@ def _config(tmp_path: Path) -> tuple[V5K1PhaseALaunchConfig, Path, Path]:
     )
 
 
+class _HeldScheduler:
+    def __init__(self, job_ids: Sequence[str], *, on_submit=None) -> None:
+        self._job_ids = iter(job_ids)
+        self._on_submit = on_submit
+        self.requests: list[V5CommandRequest] = []
+        self.dependencies: dict[str, str | None] = {}
+        self.held: set[str] = set()
+
+    @property
+    def calls(self) -> list[tuple[str, ...]]:
+        return [request.argv for request in self.requests]
+
+    def __call__(self, request: V5CommandRequest) -> V5CommandResult:
+        self.requests.append(request)
+        command = request.argv
+        if command[0] == "sbatch":
+            job_id = next(self._job_ids)
+            dependency = next(
+                (
+                    value.removeprefix("--dependency=afterok:")
+                    for value in command
+                    if value.startswith("--dependency=afterok:")
+                ),
+                None,
+            )
+            self.dependencies[job_id] = dependency
+            self.held.add(job_id)
+            if self._on_submit is not None:
+                self._on_submit(job_id)
+            return V5CommandResult(0, job_id + "\n", "")
+        if command[:4] == ("scontrol", "show", "job", "--oneliner"):
+            job_id = command[4]
+            dependency = self.dependencies[job_id]
+            held = job_id in self.held
+            reason = "JobHeldUser" if held else ("Dependency" if dependency else "Priority")
+            dependency_text = (
+                "(null)" if dependency is None else f"afterok:{dependency}(unfulfilled)"
+            )
+            return V5CommandResult(
+                0,
+                f"JobId={job_id} JobState=PENDING Reason={reason} "
+                f"Dependency={dependency_text}\n",
+                "",
+            )
+        if command[:2] == ("scontrol", "release"):
+            self.held.discard(command[2])
+            return V5CommandResult(0, "", "")
+        if command[0] == "scancel":
+            self.held.discard(command[1])
+            return V5CommandResult(0, "", "")
+        raise AssertionError(f"unexpected scheduler command: {command}")
+
+
 def test_dry_run_builds_exact_six_stage_afterok_plan_without_writes(tmp_path):
     config, dust, _ = _config(tmp_path)
     result = launch_v5_k1_phase_a_dag(config, allowed_root=dust)
@@ -180,12 +241,16 @@ def test_dry_run_builds_exact_six_stage_afterok_plan_without_writes(tmp_path):
     assert plan["source"]["exact_manifest_file_set_verified"] is True
     assert plan["source"]["read_only_tree_verified"] is True
     assert plan["source"]["symlink_free_lexical_paths_verified"] is True
-    assert set(plan["wrapper_sha256"]) == {
+    assert set(plan["wrapper_identity"]) == {
         "regression",
         "cross_platform_gate",
         "dataset",
         "gate",
     }
+    assert all(
+        job["wrapper"].startswith(str(config.source_root) + "/")
+        for job in plan["jobs"].values()
+    )
     reference = plan["cross_platform_reference"]
     assert reference["path"] == str(config.cross_platform_reference_path)
     assert reference["file_sha256"] == config.cross_platform_reference_sha256
@@ -221,6 +286,11 @@ def test_dry_run_builds_exact_six_stage_afterok_plan_without_writes(tmp_path):
         "submission_preview"
     ]["smoke_dataset"]
     assert "--dependency=afterok:SMOKE_GATE_JOB_ID" in plan["submission_preview"]["full_dataset"]
+    assert all("--hold" in command for command in plan["submission_preview"].values())
+    assert all(
+        "--kill-on-invalid-dep=yes" in command
+        for command in plan["submission_preview"].values()
+    )
     assert all(
         any(value.startswith(f"--{stream}={config.run_root}/logs/") for value in command)
         for command in plan["submission_preview"].values()
@@ -364,7 +434,8 @@ def test_plan_rejects_existing_target_receipt_or_job_logs(tmp_path):
         build_v5_k1_phase_a_launch_plan(config, allowed_root=dust)
 
     another, another_dust, _ = _config(tmp_path / "log-case")
-    (another.run_root / "logs/k1-phase-a-v5-stale.out").write_text(
+    generation = PHASE_ROOT_NAME.rsplit("_", 1)[-1]
+    (another.run_root / f"logs/k1-phase-a-{generation}-stale.out").write_text(
         "existing", encoding="utf-8"
     )
     with pytest.raises(FileExistsError, match="Slurm logs"):
@@ -427,31 +498,26 @@ def test_plan_requires_actual_archive_and_sha_before_writes_or_subprocess(
 def test_submit_records_exact_argv_job_ids_and_dependency_edges(tmp_path, monkeypatch):
     config, dust, _ = _config(tmp_path)
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
-    calls: list[tuple[str, ...]] = []
-    replies = iter(
-        (
-            "24391001",
-            "24391002;maxwell",
-            "24391003",
-            "24391004",
-            "24391005",
-            "24391006",
-        )
+    runner = _HeldScheduler(
+        ["24391001", "24391002", "24391003", "24391004", "24391005", "24391006"]
     )
-
-    def runner(argv: Sequence[str]) -> V5CommandResult:
-        calls.append(tuple(argv))
-        return V5CommandResult(0, next(replies) + "\n", "")
-
-    receipt = launch_v5_k1_phase_a_dag(
+    result = launch_v5_k1_phase_a_dag(
         config,
         submit=True,
         runner=runner,
         allowed_root=dust,
         hostname="max-wgs01.desy.de",
     )
+    receipt = result["submission_receipt"]
+    calls = runner.calls
+    submissions = [call for call in calls if call[0] == "sbatch"]
+    releases = [call for call in calls if call[:2] == ("scontrol", "release")]
+    inspections = [
+        call for call in calls if call[:4] == ("scontrol", "show", "job", "--oneliner")
+    ]
 
-    assert receipt["status"] == "submitted"
+    assert result["status"] == "released"
+    assert receipt["status"] == "ALL_JOBS_HELD"
     assert receipt["job_ids"] == {
         "regression": "24391001",
         "cross_platform_gate": "24391002",
@@ -460,36 +526,32 @@ def test_submit_records_exact_argv_job_ids_and_dependency_edges(tmp_path, monkey
         "full_dataset": "24391005",
         "full_gate": "24391006",
     }
-    assert len(calls) == 6
-    assert "--dependency=afterok:24391001" in calls[1]
-    assert "--dependency=afterok:24391002" in calls[2]
-    assert "--dependency=afterok:24391003" in calls[3]
-    assert "--dependency=afterok:24391004" in calls[4]
-    assert "--dependency=afterok:24391005" in calls[5]
-    assert all(command[:2] == ("sbatch", "--parsable") for command in calls)
-    assert all(any(value.startswith("--output=") for value in command) for command in calls)
-    assert all(any(value.startswith("--error=") for value in command) for command in calls)
-    assert all("--export=ALL" not in command for command in calls)
+    assert len(submissions) == len(releases) == 6
+    assert len(inspections) == 12
+    assert "--dependency=afterok:24391001" in submissions[1]
+    assert "--dependency=afterok:24391002" in submissions[2]
+    assert "--dependency=afterok:24391003" in submissions[3]
+    assert "--dependency=afterok:24391004" in submissions[4]
+    assert "--dependency=afterok:24391005" in submissions[5]
+    assert all(command[:4] == ("sbatch", "--parsable", "--hold", "--kill-on-invalid-dep=yes") for command in submissions)
+    assert all(any(value.startswith("--output=") for value in command) for command in submissions)
+    assert all(any(value.startswith("--error=") for value in command) for command in submissions)
+    assert all("--export=ALL" not in command for command in submissions)
+    assert all(request.script_bytes for request in runner.requests if request.argv[0] == "sbatch")
+    assert all(request.script_sha256 for request in runner.requests if request.argv[0] == "sbatch")
     assert receipt["secret_environment_captured"] is False
-    assert receipt["source_archive"]["sha256"] == config.source_archive_sha256
-    assert receipt["source_archive"]["manifest_sha256"] == (
-        receipt["source_manifest_sha256"]
-    )
-    assert receipt["source_archive"]["verification"].startswith("archive_manifest")
-    assert receipt["cross_platform_reference"]["file_sha256"] == (
-        config.cross_platform_reference_sha256
-    )
-    assert receipt["cross_platform_reference"]["gate_claim_sha256"] == receipt[
-        "cross_platform_gate_claim_sha256"
-    ]
-    assert receipt["cancellation_attempted"] is False
     assert receipt["dependency_edges"] == [
-        ["regression", "cross_platform_gate"],
-        ["cross_platform_gate", "smoke_dataset"],
-        ["smoke_dataset", "smoke_gate"],
-        ["smoke_gate", "full_dataset"],
-        ["full_dataset", "full_gate"],
+        ["regression", "cross_platform_gate", "24391001", "24391002"],
+        ["cross_platform_gate", "smoke_dataset", "24391002", "24391003"],
+        ["smoke_dataset", "smoke_gate", "24391003", "24391004"],
+        ["smoke_gate", "full_dataset", "24391004", "24391005"],
+        ["full_dataset", "full_gate", "24391005", "24391006"],
     ]
+    assert set(receipt["held_scheduler_snapshots"]) == set(receipt["job_ids"])
+    assert all(
+        snapshot["reason"] == "JobHeldUser"
+        for snapshot in receipt["held_scheduler_snapshots"].values()
+    )
 
     audit = config.run_root / PHASE_ROOT_NAME / "audit"
     stored_plan = json.loads((audit / PLAN_FILENAME).read_text(encoding="utf-8"))
@@ -499,8 +561,11 @@ def test_submit_records_exact_argv_job_ids_and_dependency_edges(tmp_path, monkey
     assert stored_plan["plan_sha256"] == receipt["plan_sha256"]
     assert stored_receipt == receipt
     assert [item["argv"] for item in receipt["submission_attempts"]] == [
-        list(value) for value in calls
+        list(value) for value in submissions
     ]
+    assert result["release_completion"]["release_order"] == list(
+        reversed(stored_plan["stage_order"])
+    )
 
     with pytest.raises(FileExistsError, match="target, receipt, or job manifest"):
         launch_v5_k1_phase_a_dag(config, allowed_root=dust)
@@ -519,13 +584,14 @@ def test_bad_sbatch_parse_preserves_exclusive_failure_receipt(tmp_path, monkeypa
             hostname="max-wgs02",
         )
 
-    receipt = json.loads(raised.value.receipt_path.read_text(encoding="utf-8"))
-    assert receipt["status"] == "failed"
-    assert receipt["failure"]["stage"] == "regression"
-    assert "invalid parsable Slurm job id" in receipt["failure"]["message"]
-    assert receipt["job_ids"] == {}
-    assert len(receipt["submission_attempts"]) == 1
-    assert receipt["submission_attempts"][0]["argv"][:2] == ["sbatch", "--parsable"]
+    failure = json.loads(raised.value.failure_path.read_text(encoding="utf-8"))
+    assert failure["status"] == "LAUNCH_FAILED_NO_RELEASE_COMPLETION"
+    assert failure["failed_stage"] == "regression"
+    assert "invalid parsable Slurm job id" in failure["failure_message"]
+    assert failure["known_job_ids"] == {}
+    assert len(failure["submission_attempts"]) == 1
+    assert failure["submission_attempts"][0]["argv"][:2] == ["sbatch", "--parsable"]
+    assert not raised.value.receipt_path.exists()
 
 
 def test_archive_sha_and_source_drift_fail_closed(tmp_path, monkeypatch):
@@ -540,13 +606,10 @@ def test_archive_sha_and_source_drift_fail_closed(tmp_path, monkeypatch):
         )
 
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
-    calls = 0
-
-    def runner(argv: Sequence[str]) -> V5CommandResult:
-        nonlocal calls
-        calls += 1
+    def change_source(_job_id: str) -> None:
         source.chmod(0o755)
-        return V5CommandResult(0, "24392001\n", "")
+
+    runner = _HeldScheduler(["24392001"], on_submit=change_source)
 
     with pytest.raises(V5K1PhaseALaunchError) as raised:
         launch_v5_k1_phase_a_dag(
@@ -556,11 +619,12 @@ def test_archive_sha_and_source_drift_fail_closed(tmp_path, monkeypatch):
             allowed_root=dust,
             hostname="max-wgs03",
         )
-    receipt = json.loads(raised.value.receipt_path.read_text(encoding="utf-8"))
-    assert calls == 1
-    assert receipt["job_ids"] == {"regression": "24392001"}
-    assert receipt["failure"]["stage"] == "cross_platform_gate"
-    assert "read-only" in receipt["failure"]["message"]
+    failure = json.loads(raised.value.failure_path.read_text(encoding="utf-8"))
+    assert len([call for call in runner.calls if call[0] == "sbatch"]) == 1
+    assert failure["known_job_ids"] == {"regression": "24392001"}
+    assert failure["failed_stage"] == "cross_platform_gate"
+    assert "read-only" in failure["failure_message"]
+    assert failure["cancellation_attempts"][0]["job_id"] == "24392001"
 
 
 def test_missing_source_and_wrong_valid_archive_fail_closed(tmp_path):
@@ -599,14 +663,11 @@ def test_archive_replacement_between_submissions_fails_closed(tmp_path, monkeypa
     replacement = dust / "source-archives/replacement.tar"
     build_source_snapshot(wrong_working, replacement)
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
-    calls = 0
-
-    def runner(argv: Sequence[str]) -> V5CommandResult:
-        nonlocal calls
-        calls += 1
+    def replace_archive(_job_id: str) -> None:
         config.source_archive_path.unlink()
         replacement.replace(config.source_archive_path)
-        return V5CommandResult(0, "24393001\n", "")
+
+    runner = _HeldScheduler(["24393001"], on_submit=replace_archive)
 
     with pytest.raises(V5K1PhaseALaunchError) as raised:
         launch_v5_k1_phase_a_dag(
@@ -616,26 +677,23 @@ def test_archive_replacement_between_submissions_fails_closed(tmp_path, monkeypa
             allowed_root=dust,
             hostname="max-wgs04",
         )
-    receipt = json.loads(raised.value.receipt_path.read_text(encoding="utf-8"))
-    assert calls == 1
-    assert receipt["job_ids"] == {"regression": "24393001"}
-    assert receipt["failure"]["stage"] == "cross_platform_gate"
-    assert "does not match" in receipt["failure"]["message"]
+    failure = json.loads(raised.value.failure_path.read_text(encoding="utf-8"))
+    assert len([call for call in runner.calls if call[0] == "sbatch"]) == 1
+    assert failure["known_job_ids"] == {"regression": "24393001"}
+    assert failure["failed_stage"] == "cross_platform_gate"
+    assert "does not match" in failure["failure_message"]
 
 
 def test_reference_replacement_between_submissions_fails_closed(tmp_path, monkeypatch):
     config, dust, _ = _config(tmp_path)
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
-    calls = 0
-
-    def runner(argv: Sequence[str]) -> V5CommandResult:
-        nonlocal calls
-        calls += 1
+    def replace_reference(_job_id: str) -> None:
         content = config.cross_platform_reference_path.read_bytes()
         config.cross_platform_reference_path.unlink()
         config.cross_platform_reference_path.write_bytes(content)
         config.cross_platform_reference_path.chmod(0o444)
-        return V5CommandResult(0, "24394001\n", "")
+
+    runner = _HeldScheduler(["24394001"], on_submit=replace_reference)
 
     with pytest.raises(V5K1PhaseALaunchError) as raised:
         launch_v5_k1_phase_a_dag(
@@ -645,35 +703,23 @@ def test_reference_replacement_between_submissions_fails_closed(tmp_path, monkey
             allowed_root=dust,
             hostname="max-wgs05",
         )
-    receipt = json.loads(raised.value.receipt_path.read_text(encoding="utf-8"))
-    assert calls == 1
-    assert receipt["job_ids"] == {"regression": "24394001"}
-    assert receipt["failure"]["stage"] == "cross_platform_gate"
-    assert "reference changed" in receipt["failure"]["message"]
+    failure = json.loads(raised.value.failure_path.read_text(encoding="utf-8"))
+    assert len([call for call in runner.calls if call[0] == "sbatch"]) == 1
+    assert failure["known_job_ids"] == {"regression": "24394001"}
+    assert failure["failed_stage"] == "cross_platform_gate"
+    assert "reference changed" in failure["failure_message"]
 
 
 @pytest.mark.parametrize(
-    ("relative", "heavy_command"),
+    "relative",
     (
-        (
-            "PosteriorV8/slurm/regression_cpu.sbatch",
-            "from pytest import console_main",
-        ),
-        (
-            "PosteriorV8/slurm/v5_sobol_cross_platform_gate_cpu.sbatch",
-            "PosteriorV8.run_sobol_cross_platform_gate_v5",
-        ),
-        (
-            "PosteriorV8/slurm/v5_k1_memorization_dataset_cpu.sbatch",
-            "PosteriorV8.build_k1_memorization_dataset_v5",
-        ),
-        (
-            "PosteriorV8/slurm/v5_k1_memorization_gpu.sbatch",
-            "PosteriorV8.run_k1_memorization_gate_v5",
-        ),
+        "PosteriorV8/slurm/regression_cpu.sbatch",
+        "PosteriorV8/slurm/v5_sobol_cross_platform_gate_cpu.sbatch",
+        "PosteriorV8/slurm/v5_k1_memorization_dataset_cpu.sbatch",
+        "PosteriorV8/slurm/v5_k1_memorization_gpu.sbatch",
     ),
 )
-def test_phase_a_wrappers_reverify_bound_source_before_work(relative, heavy_command):
+def test_phase_a_wrappers_reverify_bound_source_before_central_runtime(relative):
     bundle_root = Path(__file__).resolve().parents[1]
     wrapper = (bundle_root / relative).read_text(encoding="utf-8")
 
@@ -693,36 +739,36 @@ def test_phase_a_wrappers_reverify_bound_source_before_work(relative, heavy_comm
     assert wrapper.index("verify-extracted") < wrapper.index(
         'cd "$POSTERIOR_V8_JOB_SOURCE_ROOT"'
     )
-    assert wrapper.index("verify-extracted") < wrapper.index(heavy_command)
+    runtime = "PosteriorV8.k1_phase_a_runtime_v7"
+    assert wrapper.index("verify-extracted") < wrapper.index(runtime)
     assert 'cd "$POSTERIOR_V8_SOURCE_ROOT"' not in wrapper
     assert "export PYTHONNOUSERSITE=1" in wrapper
     assert "unset PYTHONPATH" in wrapper
     assert "${PYTHONPATH:+" not in wrapper
     assert "python -m " not in wrapper
     assert "python -I -c" in wrapper
-    if "regression_cpu" in relative:
-        assert "env -u SLURM_JOB_ID conda run" in wrapper
-        assert 'sys.path.insert(0, root)' in wrapper
-        assert 'sys.argv = ["pytest", *sys.argv[2:]]' in wrapper
-    else:
-        assert "run_verified_module" in wrapper
-        assert "runpy.run_module(module" in wrapper
-    if "memorization_gpu" in relative:
-        dataset_copy = 'cp -- "$POSTERIOR_V8_V5_K1_DATASET" "$POSTERIOR_V8_JOB_DATASET"'
-        assert dataset_copy in wrapper
-        assert '--dataset "$POSTERIOR_V8_JOB_DATASET"' in wrapper
-        assert wrapper.index("verify-extracted") < wrapper.index(dataset_copy)
-        assert wrapper.index(dataset_copy) < wrapper.index(heavy_command)
+    assert "POSTERIOR_V8_V7_PHASE_A_PLAN" in wrapper
+    assert "POSTERIOR_V8_V7_PHASE_A_RECEIPT" in wrapper
+    assert "POSTERIOR_V8_V7_PHASE_A_RELEASE" in wrapper
+    assert "POSTERIOR_V8_V7_PHASE_A_UPSTREAM_COMPLETION" in wrapper
+    assert "POSTERIOR_V8_V7_PHASE_A_COMPLETION" in wrapper
+    assert "POSTERIOR_V8_JOB_STAGING_ROOT" in wrapper
 
 
-def test_cross_platform_and_dataset_bindings_are_checked_before_downstream_work():
+def test_central_runtime_binds_launch_inputs_before_scientific_stage_dispatch():
     bundle_root = Path(__file__).resolve().parents[1]
     slurm = bundle_root / "PosteriorV8/slurm"
-    cross = (slurm / "v5_sobol_cross_platform_gate_cpu.sbatch").read_text()
-    dataset = (slurm / "v5_k1_memorization_dataset_cpu.sbatch").read_text()
-    gpu = (slurm / "v5_k1_memorization_gpu.sbatch").read_text()
+    wrappers = [
+        (slurm / name).read_text()
+        for name in (
+            "regression_cpu.sbatch",
+            "v5_sobol_cross_platform_gate_cpu.sbatch",
+            "v5_k1_memorization_dataset_cpu.sbatch",
+            "v5_k1_memorization_gpu.sbatch",
+        )
+    ]
 
-    for wrapper in (cross, dataset, gpu):
+    for wrapper in wrappers:
         assert "GISAXS_JOB_TMP_BASE" in wrapper
         assert "/data/dust/user/zhaiyufe|/data/dust/user/zhaiyufe/*" in wrapper
         assert 'realpath -e -- "$GISAXS_JOB_TMP_BASE"' in wrapper
@@ -736,26 +782,13 @@ def test_cross_platform_and_dataset_bindings_are_checked_before_downstream_work(
             in wrapper
         )
 
-    cross_build = cross.index("PosteriorV8.run_sobol_cross_platform_gate_v5")
-    cross_marker_check = cross.index("PosteriorV8.k1_phase_a_cross_platform_v5")
-    assert cross.index("verify-extracted") < cross_build < cross_marker_check
-    assert cross.index('cp -- "$POSTERIOR_V8_V5_CROSS_PLATFORM_REFERENCE"') < cross_build
-    assert cross.index("POSTERIOR_V8_JOB_REFERENCE_SHA256") < cross_build
-    assert cross.index('chmod 0400 \\\n') < cross_marker_check
-
-    dataset_marker_check = dataset.index("PosteriorV8.k1_phase_a_cross_platform_v5")
-    dataset_build = dataset.index("PosteriorV8.build_k1_memorization_dataset_v5")
-    dataset_binding = dataset.index("PosteriorV8.k1_phase_a_dataset_binding_v5")
-    assert dataset.index("verify-extracted") < dataset_marker_check < dataset_build
-    assert dataset_build < dataset.index('chmod 0400 "$POSTERIOR_V8_V5_K1_DATASET_OUTPUT"')
-    assert dataset.index('chmod 0400 "$POSTERIOR_V8_V5_K1_DATASET_OUTPUT"') < dataset_binding
-    assert "publish \\" in dataset
-
-    gpu_marker_check = gpu.index("PosteriorV8.k1_phase_a_cross_platform_v5")
-    gpu_dataset_copy = gpu.index('cp -- "$POSTERIOR_V8_V5_K1_DATASET"')
-    gpu_binding_check = gpu.index("PosteriorV8.k1_phase_a_dataset_binding_v5")
-    gpu_train = gpu.index("PosteriorV8.run_k1_memorization_gate_v5")
-    assert gpu.index("verify-extracted") < gpu_marker_check < gpu_dataset_copy
-    assert gpu_dataset_copy < gpu_binding_check < gpu.index("srun nvidia-smi") < gpu_train
-    assert '--dataset "$POSTERIOR_V8_JOB_DATASET"' in gpu
-    assert '--binding "$POSTERIOR_V8_JOB_DATASET_BINDING"' in gpu
+    runtime = (bundle_root / "PosteriorV8/k1_phase_a_runtime_v7.py").read_text()
+    prepare = runtime.index("context = prepare_worker(stage, extra_inputs=extra)")
+    assert prepare < runtime.index("return _run_regression(context)")
+    assert prepare < runtime.index("return _run_cross(context)")
+    assert prepare < runtime.index("return _run_dataset(context)")
+    assert prepare < runtime.index("return _run_gate(context)")
+    assert "build_v5_k1_memorization_dataset" in runtime
+    assert "publish_v5_k1_phase_a_dataset_binding" in runtime
+    assert "run_v5_k1_dataset_memorization_gate" in runtime
+    assert "publish_stage_completion" in runtime

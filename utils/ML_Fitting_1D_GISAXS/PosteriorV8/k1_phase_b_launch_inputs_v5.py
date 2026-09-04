@@ -15,6 +15,13 @@ from .k1_phase_a_cross_platform_v5 import (
 from .k1_phase_a_dataset_binding_v5 import (
     validate_v5_k1_phase_a_dataset_binding_file,
 )
+from .k1_phase_a_contract_v7 import (
+    validate_plan as validate_phase_a_plan,
+    validate_receipt as validate_phase_a_receipt,
+    validate_release as validate_phase_a_release,
+    validate_stage_completion as validate_phase_a_stage_completion,
+)
+from .k1_staging_files_v5 import read_only_json
 from .k1_phase_b_contract_v5 import (
     PHASE_A_SOURCE_PATHS,
     PHASE_B_SOURCE_PATHS,
@@ -28,7 +35,10 @@ from .k1_phase_b_contract_v5 import (
 )
 from .launch_k1_phase_a_dag_v5 import (
     CURRENT_RUN_ROOT_NAME,
+    PLAN_FILENAME as PHASE_A_PLAN_FILENAME,
     PHASE_ROOT_NAME as PHASE_A_ROOT_NAME,
+    RECEIPT_FILENAME as PHASE_A_RECEIPT_FILENAME,
+    RELEASE_COMPLETION_FILENAME as PHASE_A_RELEASE_FILENAME,
 )
 from .package_source_snapshot_v5 import verify_extracted_source_snapshot
 from .run_k1_memorization_gate_v5 import (
@@ -203,6 +213,7 @@ def expected_v5_k1_phase_a_paths(run_root: Path) -> dict[str, Path]:
         "result": model_root / PHASE_A_RESULT_FILENAME,
         "model": model_root / PHASE_A_MODEL_FILENAME,
         "model_provenance": model_root / PHASE_A_MODEL_PROVENANCE_FILENAME,
+        "phase_a_completion": phase_a_root / "audit/full-gate-completion-v1.json",
     }
 
 
@@ -245,6 +256,14 @@ def resolve_v5_k1_phase_a_input_files(
             )
         paths[name] = path
         identities[name] = identity
+    completion = expected_paths["phase_a_completion"]
+    completion_identity = strict_file_identity(
+        completion,
+        name="Phase-A full-gate completion",
+        require_read_only=True,
+    )
+    paths["phase_a_completion"] = completion
+    identities["phase_a_completion"] = completion_identity
     return paths, identities
 
 
@@ -257,6 +276,35 @@ def inspect_v5_k1_phase_a_inputs(
 ) -> dict[str, object]:
     paths, identities = resolve_v5_k1_phase_a_input_files(
         config, run_root=run_root, allowed_root=allowed_root
+    )
+
+    phase_a_root = run_root / PHASE_A_ROOT_NAME
+    phase_a_plan, _ = read_only_json(
+        phase_a_root / "audit" / PHASE_A_PLAN_FILENAME,
+        "Phase-A launch plan",
+    )
+    phase_a_plan = validate_phase_a_plan(phase_a_plan)
+    phase_a_receipt, _ = read_only_json(
+        phase_a_root / "audit" / PHASE_A_RECEIPT_FILENAME,
+        "Phase-A submission receipt",
+    )
+    phase_a_receipt = validate_phase_a_receipt(phase_a_receipt, phase_a_plan)
+    phase_a_release, _ = read_only_json(
+        phase_a_root / "audit" / PHASE_A_RELEASE_FILENAME,
+        "Phase-A release completion",
+    )
+    phase_a_release = validate_phase_a_release(
+        phase_a_release, phase_a_plan, phase_a_receipt
+    )
+    phase_a_completion, completion_file_identity = read_only_json(
+        paths["phase_a_completion"], "Phase-A full-gate completion"
+    )
+    phase_a_completion = validate_phase_a_stage_completion(
+        phase_a_completion,
+        expected_stage="full_gate",
+        plan=phase_a_plan,
+        receipt=phase_a_receipt,
+        release=phase_a_release,
     )
 
     phase_a_result = strict_json_object(
@@ -303,6 +351,31 @@ def inspect_v5_k1_phase_a_inputs(
         ),
         live_gate_contract_value=protocol,
     )
+    if (
+        phase_a_result["launch_binding"] != phase_a_completion["launch_binding"]
+        or phase_a_result["job_local_capability"]
+        != phase_a_completion["job_local_capability"]
+    ):
+        raise ValueError("Phase-A result does not match its full-gate completion")
+    completion_roles = {
+        item["role"]: item for item in phase_a_completion["artifacts"]
+    }
+    expected_completion_artifacts = {
+        "k1_dataset": "dataset",
+        "k1_dataset_binding": "dataset_binding",
+        "cross_platform_pass_marker": "cross_platform_pass_marker",
+        "k1_model": "model",
+        "k1_model_provenance": "model_provenance",
+        "k1_gate_result": "result",
+    }
+    if set(completion_roles) != set(expected_completion_artifacts):
+        raise ValueError("Phase-A full-gate completion artifact inventory drifted")
+    for role, artifact_name in expected_completion_artifacts.items():
+        item = completion_roles[role]
+        if Path(str(item["path"])).resolve() != paths[artifact_name].resolve():
+            raise ValueError(f"Phase-A completion {role} path drifted")
+        if item["identity"]["sha256"] != identities[artifact_name]["sha256"]:
+            raise ValueError(f"Phase-A completion {role} content drifted")
 
     training_evidence = phase_a_result["training_evidence"]
     marker_expected = _marker_expected(training_evidence)
@@ -356,6 +429,12 @@ def inspect_v5_k1_phase_a_inputs(
         "cross_platform_gate_claim_sha256": marker["marker"]["gate_claim_sha256"],
         "phase_a_result_payload_sha256": phase_a_result["result_payload_sha256"],
         "phase_a_model_binding_sha256": model_provenance["binding_sha256"],
+        "phase_a_completion": {
+            "completion_sha256": phase_a_completion["completion_sha256"],
+            "file_identity": completion_file_identity,
+            "launch_binding_sha256": phase_a_completion["launch_binding_sha256"],
+            "slurm_job_id": phase_a_completion["slurm_job_id"],
+        },
         "phase_a_binding_revalidation": phase_a_binding,
         "source_location_semantics": {
             "recorded_phase_a_source_root_is_historical_job_local_execution_path": True,

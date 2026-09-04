@@ -21,12 +21,25 @@ class PreprocessSpec:
 
 
 @dataclass(frozen=True)
+class DistributionAxisSpec:
+    """Physical meaning of one matrix dimension in a distribution output."""
+
+    key: str = ""
+    label: str = ""
+    unit: str = ""
+    minimum: float | None = None
+    maximum: float | None = None
+
+
+@dataclass(frozen=True)
 class OutputSpec:
     type: str = ""
     names: tuple[str, ...] = ()
     parameter_names: tuple[str, ...] = ()
     target_min: tuple[float, ...] = ()
     target_max: tuple[float, ...] = ()
+    row_axis: DistributionAxisSpec = field(default_factory=DistributionAxisSpec)
+    column_axis: DistributionAxisSpec = field(default_factory=DistributionAxisSpec)
 
 
 @dataclass(frozen=True)

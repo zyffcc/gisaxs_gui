@@ -378,6 +378,13 @@ binary64 一定落入同一舍入单元，因此不再作为
 10000 时的 21 维 amplitude embedding；只允许替换被运行时版本污染的 Sobol design/point identity，禁止
 量化或归一化任何科学浮点和派生 query hash。这只证明该有限设计在声明平台上的复现性，不外推为
 任意实数超越函数的普适正确舍入。用户在 GUI 中直接输入的物理范围不会被十进制量化。
+闭区间物理端点经过 `log -> binary64 -> exp` 反变换时，精确编码的上下端点必须直接解码为原始物理
+端点，不能保留 platform libm 向区间内侧或外侧产生的相邻 binary64 值；非端点值若仅因舍入落在区间外
+不超过 8 ULP，也规范为相应端点，超过该 roundoff envelope 则失败关闭。该规则只处理可证明的端点
+反变换舍入，不是把一般越界 proposal 裁剪回用户范围，并由 parameter-codec 版本和冻结
+source/reference SHA 共同绑定。
+component-slot canonicalization 保存的 truth 是所存 local coordinate 的精确 binary64 decode 代表；输入物理值
+只在冻结 round-trip tolerance 内用于选择该代表，不能把相差一个 ULP 的 pre-encode 值另存为“真值”。
 
 V4 bounds-first pilot 将上述要求固定为可审计生成顺序：先用独立 `bounds_seed` 在真实
 `GuiComponentBounds/ResolutionBounds` 物理域采 full/wide/narrow、非对称、贴边和部分 fixed 范围，经
@@ -688,6 +695,14 @@ K1-C/E1 的机器可读 gate 由 `k1_phase_c_contract_v5.py`、`k1_phase_c_plan_
 cells；夹具通过只证明 evaluator wiring，`formal` 与 paper acceptance 始终分离。Phase-A 单一 Sphere
 memorization 模型不能直接充当 K1-C 的待测模型，必须先用与 gate 不重叠的全 K1 train/tuning blocks 训练。
 
+Phase-A 保留用户把全部活跃参数固定住的合法查询。此类目标没有连续自由度，因此不进入 local-MDN
+密度损失或 mixture-median RMS；也不能以零误差样本稀释 memorization 指标。gate 必须分别记录
+known-truth 总数、至少一个可学习目标的数量、全固定目标数量和实际 varying coordinate 数。全固定目标仍按
+canonical local `0.5` 保存，并由物理端点精确解码与 authoritative forward 验证，而不是从数据集中删除。
+Phase-A 的可学习目标按固定顺序、固定大小的循环 mini-batch 优化，初始与最终指标则用同样的有界 batch
+遍历全部可学习目标并按目标数聚合。这样在 16 GiB GPU 上不会把 `recipes × q-points × width` 的全部中间
+激活同时驻留显存；batch size 属于结果哈希覆盖的配置，不能在运行期间隐式改变。
+
 输出上限固定报告 `N={1,4,8,16}`，主 N 为 16；主预算曲线固定报告 exact-forward calls
 `B={256,512,1024,2048,4096}`。候选只有在 refinement 与最终 exact verification 均于累计调用数
 `<=B` 完成时才进入该 budget prefix；跨过 B 的候选不计。每个 prefix 先筛 exact-compatible verified
@@ -889,6 +904,9 @@ Maxwell 正式任务不得直接从一个可变 working tree 运行。每轮先�
 快照，上传到 `/data/dust/user/zhaiyufe/` 下新的版本目录，远端复核 archive 与 manifest 后只读解包；run
 manifest 同时记录源码快照 SHA、环境和 Slurm job ID。快照必须包含当前 untracked 的 PosteriorV8 新源码，
 因此不能使用只收集 Git index 的 archive。旧数据、模型、日志和源码目录一律不覆盖。
+Phase-A 模型目录发布时先把每个文件冻结为只读，再在仍为 job-private 的可写 staging 目录中移动目录项；
+发布后目标目录必须为 `0500`，成员必须为 `0400`、`nlink=1`，并且 stage completion 仍最后发布。不能先把
+staging 目录本身改为 `0500` 后再尝试删除其中目录项，因为 Linux/Lustre 会按目录写权限拒绝该操作。
 
 ## 验收与论文实验
 

@@ -11,7 +11,7 @@
   [`tests/test_prediction_multifile_presentation.py`](../../../tests/test_prediction_multifile_presentation.py)、
   [`tests/test_prediction_view_model.py`](../../../tests/test_prediction_view_model.py)、
   [`tests/test_ui_workspace_layouts.py`](../../../tests/test_ui_workspace_layouts.py)
-- **Last verified**: 2026-08-19
+- **Last verified**: 2026-09-04
 
 ## 当前状态
 
@@ -66,6 +66,18 @@ module.yaml 驱动的参数和预测结果仍由运行时组件维护。页面�
    readiness + Predict / Stop
 ```
 
+运行 prediction 后，Preprocessed 展示所选 module 的 YAML 顺序以及每一步的真实输出缩略图；点击任一
+缩略图会在主画布显示该步。selector 固定在主图上方，不需要先滚过主图；同名的重复步骤以
+`(1/2)`、`(2/2)` 区分。原始强度步骤只在 preview 使用对数色阶以显示弱散射，mask/cut 使用的 `-1`
+sentinel 也只在 preview 中作为无效像素隐藏；两种显示处理都不会改写送入模型的 tensor。结果页复用
+该次 inference 已捕获的 snapshots，不会为了画图再次运行 preprocessing。YAML 声明的 mask 或
+preprocessing 配置无效时，workflow 显示错误并停止，不再用隐式 fallback 产生看似成功但科学输入
+不一致的预测。
+
+联合分布页从 module output-axis contract 读取物理轴。Au 模型显示 `p(H,R)`（H 0.1–30 nm、R
+0.05–15 nm），顶部/侧边 marginal 以及单独的 `p(H)`、`p(R)` 曲线共享同一组 bin centers；导出曲线
+时也写出这些物理坐标，不再导出 0–29 的数组下标。
+
 单文件模式只显示 detector file 和 Stack；Folder batch 只显示 folder、Range 和
 Files per prediction，并实时显示文件数、job 数和无法组成完整 stack 的尾部文件数。
 两种模式共用原有 prediction command 和数据结构，不是两套预测实现。
@@ -115,6 +127,8 @@ tab 顺序及 `gisaxsPredictImageShowTabWidget` 均未拆开或替换。
 - [ ] Import Model、model manifest error 和 compatibility message 正常；
 - [ ] Advanced model configuration 和 Advanced model sources 折叠/展开不改变已选 module/model；
 - [ ] GISAXS Preview 的 current、display limits、log、colormap 和 zoom 正常；
+- [ ] Preprocessed steps 顺序与 module.yaml 一致，重复步骤标签可区分，mask/cut 区域不会显示成高强度；
+- [ ] 缺失 mask、无效 resize method 或未知 step 会停止预测并显示错误；
 - [ ] Predict readiness 四项状态、Predict 与 Stop 正常；
 - [ ] Predict 常驻可见，Stop 仅在 batch job 运行时显示；
 - [ ] 成功加载 model 后 workflow 进入 Predict，失败或取消不显示完成；

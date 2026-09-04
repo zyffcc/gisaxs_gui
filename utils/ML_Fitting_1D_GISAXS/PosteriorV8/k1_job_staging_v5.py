@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from hashlib import sha256
-import json
 import os
 from pathlib import Path
+import re
 import stat
 from typing import Mapping
-import zipfile
 
 from .grouped_dataset_v5 import V5_GROUPED_DATASET_SCHEMA, V5_GROUPED_DATASET_VERSION
 from .k1_training_chain_contract_v5 import (
@@ -20,163 +19,27 @@ from .k1_training_chain_contract_v5 import (
 from .k1_training_chain_dataset_audit_v5 import audit_v5_k1_training_datasets
 from .k1_training_chain_plan_v5 import (
     MAXWELL_DUST_ROOT,
-    V5_K1_WORKER_SECURITY_BLOCKER,
     fingerprint_v5_k1_training_source,
     replay_v5_k1_training_chain_fingerprints,
     validate_v5_k1_training_chain_plan,
 )
-from .package_source_snapshot_v5 import verify_extracted_source_snapshot
-
-
-V5_K1_JOB_STAGING_SCHEMA = "gisaxs.posterior_v8.k1_job_private_staging/v1"
-V5_K1_JOB_STAGING_VERSION = (
-    "posterior_v8_v5_2_original_to_job_private_read_only_copy_rehash_v1"
+from .k1_staging_files_v5 import (
+    checked_json,
+    checked_zip_manifest,
+    copy_regular_exclusive,
+    file_sha256,
+    freeze_staging_tree,
+    lexical_no_symlinks,
+    read_only_identity,
+    regular_identity,
 )
-_WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+from .package_source_snapshot_v5 import MANIFEST_NAME, verify_extracted_source_snapshot
 
 
-def lexical_no_symlinks(path: Path, name: str) -> Path:
-    lexical = Path(os.path.abspath(path))
-    current = Path(lexical.anchor)
-    for part in lexical.parts[1:]:
-        current /= part
-        if current.is_symlink():
-            raise ValueError(f"{name} must not traverse a symlink: {current}")
-    return lexical
-
-
-def _open_regular(path: Path, name: str):
-    lexical = lexical_no_symlinks(path, name)
-    descriptor = os.open(lexical, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise ValueError(f"{name} must be a regular file")
-        return lexical, descriptor
-    except Exception:
-        os.close(descriptor)
-        raise
-
-
-def file_sha256(path: Path, name: str = "file") -> str:
-    value = sha256()
-    _, descriptor = _open_regular(path, name)
-    with os.fdopen(descriptor, "rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            value.update(chunk)
-    return value.hexdigest()
-
-
-def _strict_object(raw: bytes, name: str) -> dict[str, object]:
-    def no_duplicates(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"{name} contains duplicate field {key!r}")
-            result[key] = value
-        return result
-
-    try:
-        value = json.loads(raw, object_pairs_hook=no_duplicates)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"{name} is invalid") from exc
-    if not isinstance(value, dict):
-        raise ValueError(f"{name} must contain one object")
-    return value
-
-
-def checked_json(path: Path, *, maximum_bytes: int = 32 * 1024 * 1024) -> dict[str, object]:
-    _, descriptor = _open_regular(path, f"JSON artifact {path}")
-    with os.fdopen(descriptor, "rb") as stream:
-        raw = stream.read(maximum_bytes + 1)
-    if len(raw) > maximum_bytes:
-        raise ValueError(f"JSON artifact is unexpectedly large: {path}")
-    return _strict_object(raw, f"JSON artifact {path}")
-
-
-def _checked_zip_manifest(path: Path) -> dict[str, object]:
-    try:
-        _, descriptor = _open_regular(path, "checked artifact")
-        with os.fdopen(descriptor, "rb") as stream, zipfile.ZipFile(stream, "r") as archive:
-            names = archive.namelist()
-            if len(names) != len(set(names)):
-                raise ValueError("checked artifact contains duplicate archive members")
-            member = archive.getinfo("manifest.json")
-            if member.file_size > 32 * 1024 * 1024:
-                raise ValueError("checked artifact manifest is unexpectedly large")
-            value = _strict_object(archive.read(member), "checked artifact manifest")
-    except (KeyError, OSError, zipfile.BadZipFile) as exc:
-        raise ValueError(f"checked artifact has no readable manifest: {path}") from exc
-    core = dict(value)
-    supplied = digest(core.pop("manifest_sha256", None), "artifact manifest SHA-256")
-    if supplied != sha256(canonical_json(core).encode()).hexdigest():
-        raise ValueError("checked artifact manifest SHA-256 does not reproduce")
-    return value
-
-
-def _read_only_identity(path: Path, name: str) -> dict[str, object]:
-    lexical, descriptor = _open_regular(path, name)
-    status = os.fstat(descriptor)
-    os.close(descriptor)
-    mode = stat.S_IMODE(status.st_mode)
-    if mode & _WRITE_BITS:
-        raise ValueError(f"{name} must be read-only")
-    return {
-        "path": str(lexical.resolve(strict=True)),
-        "sha256": file_sha256(lexical, name),
-        "byte_count": status.st_size,
-        "mode_octal": f"{mode:04o}",
-        "regular_file": True,
-        "read_only": True,
-    }
-
-
-def _copy_regular_exclusive(
-    source: Path, destination: Path, *, expected_sha256: str, name: str
-) -> dict[str, object]:
-    expected = digest(expected_sha256, f"{name} expected SHA-256")
-    source_lexical, source_descriptor = _open_regular(source, f"original {name}")
-    try:
-        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if destination.exists() or destination.is_symlink():
-            raise FileExistsError(f"refusing to overwrite staged {name}")
-        destination_descriptor = os.open(
-            destination,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-            0o400,
-        )
-    except Exception:
-        os.close(source_descriptor)
-        raise
-    copied = sha256()
-    byte_count = 0
-    try:
-        with os.fdopen(source_descriptor, "rb") as source_stream, os.fdopen(
-            destination_descriptor, "wb"
-        ) as destination_stream:
-            while chunk := source_stream.read(1024 * 1024):
-                destination_stream.write(chunk)
-                copied.update(chunk)
-                byte_count += len(chunk)
-            destination_stream.flush()
-            os.fsync(destination_stream.fileno())
-            os.fchmod(destination_stream.fileno(), 0o400)
-        local = _read_only_identity(destination, f"staged {name}")
-        if copied.hexdigest() != expected or local["sha256"] != expected:
-            raise RuntimeError(f"staged {name} differs from the frozen identity")
-        return {
-            "original_path": str(source_lexical),
-            "job_local_path": local["path"],
-            "frozen_sha256": expected,
-            "copy_stream_sha256": copied.hexdigest(),
-            "post_copy_sha256": local["sha256"],
-            "byte_count": byte_count,
-            "mode_octal": local["mode_octal"],
-            "regular_file": True,
-            "read_only": True,
-        }
-    except Exception:
-        destination.unlink(missing_ok=True)
-        raise
+V5_K1_JOB_STAGING_SCHEMA = "gisaxs.posterior_v8.k1_job_private_staging/v2"
+V5_K1_JOB_STAGING_VERSION = (
+    "posterior_v8_v5_2_live_capability_pre_post_original_local_source_rehash_v2"
+)
 
 
 def build_job_staging_proof(
@@ -190,30 +53,144 @@ def build_job_staging_proof(
     array_index: int | None,
     environment: Mapping[str, str],
     allowed_root: Path = MAXWELL_DUST_ROOT,
+    consumed_wrapper_mint: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     if worker_kind not in {"training_seed", "collector"}:
         raise ValueError("worker_kind is unsupported")
     job_id = environment.get("SLURM_JOB_ID", "")
     if not job_id.isdigit() or int(job_id) < 1:
         raise RuntimeError("job-private staging requires a Slurm job ID")
+    if worker_kind == "training_seed":
+        task_id = environment.get("SLURM_ARRAY_TASK_ID", "")
+        if not task_id.isdigit() or int(task_id) != array_index:
+            raise RuntimeError(
+                "job-private training staging requires its exact Slurm array task ID"
+            )
     expected_name = (
         f"gisaxs-v5-k1-seed-{job_id}-{array_index}-"
         if worker_kind == "training_seed"
         else f"gisaxs-v5-k1-collect-{job_id}-"
     )
     root = lexical_no_symlinks(staging_root, "job staging root").resolve(strict=True)
-    scratch_value = environment.get("SLURM_TMPDIR") or environment.get("TMPDIR") or "/tmp"
-    scratch = lexical_no_symlinks(Path(scratch_value), "Slurm scratch root").resolve(
+    job_tmp_value = environment.get("POSTERIOR_V8_JOB_TMP_ROOT")
+    if (
+        not isinstance(job_tmp_value, str)
+        or not job_tmp_value
+        or not Path(job_tmp_value).is_absolute()
+    ):
+        raise RuntimeError("wrapper did not export its job-private temporary root")
+    if environment.get("SLURM_TMPDIR"):
+        scratch_variable = "SLURM_TMPDIR"
+        scratch_value = environment["SLURM_TMPDIR"]
+    elif environment.get("TMPDIR"):
+        scratch_variable = "TMPDIR"
+        scratch_value = environment["TMPDIR"]
+    else:
+        scratch_variable = "literal_/tmp_fallback"
+        scratch_value = "/tmp"
+    if not isinstance(scratch_value, str) or not Path(scratch_value).is_absolute():
+        raise RuntimeError("wrapper scratch base must be an absolute path")
+    scratch = lexical_no_symlinks(Path(scratch_value), "wrapper scratch base").resolve(
         strict=True
     )
+    scratch_status = scratch.stat()
+    if not scratch.is_dir() or scratch.is_symlink():
+        raise ValueError("wrapper scratch base must be a real directory")
+    job_tmp = lexical_no_symlinks(
+        Path(job_tmp_value), "wrapper job-private temporary root"
+    ).resolve(strict=True)
+    job_tmp_status = job_tmp.stat()
+    job_tmp_mode = stat.S_IMODE(job_tmp_status.st_mode)
+    if (
+        not job_tmp.is_dir()
+        or job_tmp.is_symlink()
+        or job_tmp.parent != scratch
+        or re.fullmatch(re.escape(expected_name) + r"[A-Za-z0-9]{8}", job_tmp.name)
+        is None
+        or job_tmp_status.st_uid != os.getuid()
+        or job_tmp_mode != 0o700
+    ):
+        raise ValueError(
+            "wrapper job-private temporary root escaped its Slurm job binding"
+        )
+    expected_entries = {"staging", "runtime-cache"}
+    mint_path = job_tmp / ".posterior-v8-wrapper-mint"
+    if consumed_wrapper_mint is None:
+        expected_entries.add(mint_path.name)
+    if {path.name for path in job_tmp.iterdir()} != expected_entries:
+        raise ValueError("wrapper job-private temporary root has unexpected prior content")
+    if consumed_wrapper_mint is None:
+        mint_identity = read_only_identity(mint_path, "wrapper one-shot mint")
+        if (
+            mint_identity["uid"] != os.getuid()
+            or mint_identity["mode_octal"] != "0400"
+            or mint_identity["byte_count"] != 32
+            or mint_identity["device"] != job_tmp_status.st_dev
+        ):
+            raise ValueError("wrapper one-shot mint is not a private fresh token")
+        wrapper_mint = {
+            name: mint_identity[name]
+            for name in (
+                "path",
+                "byte_count",
+                "mode_octal",
+                "device",
+                "inode",
+                "uid",
+                "link_count",
+                "mtime_ns",
+                "ctime_ns",
+            )
+        }
+    else:
+        expected_mint_fields = {
+            "path",
+            "byte_count",
+            "mode_octal",
+            "device",
+            "inode",
+            "uid",
+            "link_count",
+            "mtime_ns",
+            "ctime_ns",
+        }
+        if (
+            not isinstance(consumed_wrapper_mint, Mapping)
+            or set(consumed_wrapper_mint) != expected_mint_fields
+            or consumed_wrapper_mint["path"] != str(mint_path)
+            or consumed_wrapper_mint["byte_count"] != 32
+            or consumed_wrapper_mint["mode_octal"] != "0400"
+            or consumed_wrapper_mint["device"] != job_tmp_status.st_dev
+            or consumed_wrapper_mint["uid"] != os.getuid()
+            or consumed_wrapper_mint["link_count"] != 1
+            or isinstance(consumed_wrapper_mint["mtime_ns"], bool)
+            or not isinstance(consumed_wrapper_mint["mtime_ns"], int)
+            or isinstance(consumed_wrapper_mint["ctime_ns"], bool)
+            or not isinstance(consumed_wrapper_mint["ctime_ns"], int)
+            or mint_path.exists()
+            or mint_path.is_symlink()
+        ):
+            raise ValueError("consumed wrapper one-shot mint identity drifted")
+        wrapper_mint = dict(consumed_wrapper_mint)
+    runtime_cache = lexical_no_symlinks(
+        job_tmp / "runtime-cache", "wrapper runtime cache root"
+    ).resolve(strict=True)
+    runtime_cache_status = runtime_cache.stat()
+    runtime_cache_mode = stat.S_IMODE(runtime_cache_status.st_mode)
+    if (
+        not runtime_cache.is_dir()
+        or runtime_cache.is_symlink()
+        or runtime_cache_status.st_uid != os.getuid()
+        or runtime_cache_mode != 0o700
+    ):
+        raise ValueError("wrapper runtime cache root is not owner-private")
     run_root = Path(plan["layout"]["run_root"]).resolve(strict=True)
     allowed = allowed_root.resolve(strict=True)
     if (
         not root.is_dir()
         or root.is_symlink()
         or root.stat().st_uid != os.getuid()
-        or root.parent != scratch
-        or not root.name.startswith(expected_name)
+        or root != job_tmp / "staging"
         or not run_root.is_relative_to(allowed)
         or scratch.is_relative_to(allowed)
     ):
@@ -221,21 +198,21 @@ def build_job_staging_proof(
     root_mode = stat.S_IMODE(root.stat().st_mode)
     if root_mode & (stat.S_IRWXG | stat.S_IRWXO) or not root_mode & stat.S_IRWXU:
         raise ValueError("job staging root must be owner-private")
-    local_plan = _read_only_identity(plan_path, "job-local K1 plan")
+    local_plan = read_only_identity(plan_path, "job-local K1 plan")
     original_plan = Path(plan["layout"]["plan"])
-    original_plan_sha = file_sha256(original_plan, "original frozen K1 plan")
-    if original_plan_sha != local_plan["sha256"]:
+    original_plan_identity = regular_identity(original_plan, "original frozen K1 plan")
+    if original_plan_identity["sha256"] != local_plan["sha256"]:
         raise RuntimeError("job-local K1 plan is not a byte-for-byte copy of the launch plan")
     if Path(local_plan["path"]) != root / "k1-training-plan.json":
         raise ValueError("job-local K1 plan escaped the private staging contract")
-    local_archive = _read_only_identity(source_archive, "job-local source archive")
-    original_archive_sha = file_sha256(
+    local_archive = read_only_identity(source_archive, "job-local source archive")
+    original_archive_identity = regular_identity(
         Path(plan["source"]["archive_path"]), "original frozen source archive"
     )
     if (
         Path(local_archive["path"]) != root / "source-snapshot.tar"
         or local_archive["sha256"] != plan["source"]["archive_sha256"]
-        or original_archive_sha != local_archive["sha256"]
+        or original_archive_identity["sha256"] != local_archive["sha256"]
     ):
         raise RuntimeError("job-local source archive differs from the frozen source identity")
     local_source = lexical_no_symlinks(source_root, "job-local source root").resolve(strict=True)
@@ -262,6 +239,25 @@ def build_job_staging_proof(
     ):
         if fingerprint[field] != plan["source"][field]:
             raise RuntimeError("job-local source bundle differs from the frozen source bundle")
+    source_file_identities = []
+    for relative in (MANIFEST_NAME, *plan["source"]["required_file_sha256"]):
+        identity = read_only_identity(
+            local_source / relative,
+            f"job-local source file {relative}",
+        )
+        expected_sha256 = (
+            expected_binding["manifest_sha256"]
+            if relative == MANIFEST_NAME
+            else plan["source"]["required_file_sha256"][relative]
+        )
+        if identity["sha256"] != expected_sha256:
+            raise RuntimeError(f"job-local source file identity drifted: {relative}")
+        source_file_identities.append(
+            {"relative_path": relative, **identity}
+        )
+    source_live_identity_sha256 = sha256(
+        canonical_json(source_file_identities).encode("utf-8")
+    ).hexdigest()
     if not Path(__file__).resolve(strict=True).is_relative_to(local_source):
         raise RuntimeError("K1 staging runtime was not imported from the job-local source tree")
     return {
@@ -271,14 +267,39 @@ def build_job_staging_proof(
         "slurm_job_id": job_id,
         "slurm_array_task_id": array_index,
         "staging_root": str(root),
-        "scratch_root": str(scratch),
+        "scratch_base": str(scratch),
+        "scratch_base_source": scratch_variable,
+        "scratch_base_device": scratch_status.st_dev,
+        "scratch_base_inode": scratch_status.st_ino,
+        "job_tmp_root": str(job_tmp),
+        "job_tmp_root_device": job_tmp_status.st_dev,
+        "job_tmp_root_inode": job_tmp_status.st_ino,
+        "job_tmp_root_uid": job_tmp_status.st_uid,
+        "job_tmp_root_mode_octal": f"{job_tmp_mode:04o}",
+        "job_tmp_root_owner_private": True,
+        "wrapper_mint": wrapper_mint,
+        "runtime_cache_root": str(runtime_cache),
+        "staging_root_device": root.stat().st_dev,
+        "staging_root_inode": root.stat().st_ino,
         "staging_root_owner_private": True,
         "plan": {
             "scientific_plan_sha256": plan["plan_sha256"],
             "original_path": str(original_plan),
             "job_local_path": local_plan["path"],
-            "original_file_sha256": original_plan_sha,
+            "original_file_sha256": original_plan_identity["sha256"],
             "job_local_file_sha256": local_plan["sha256"],
+            "original_byte_count": original_plan_identity["byte_count"],
+            "original_device": original_plan_identity["device"],
+            "original_inode": original_plan_identity["inode"],
+            "original_mtime_ns": original_plan_identity["mtime_ns"],
+            "original_ctime_ns": original_plan_identity["ctime_ns"],
+            "job_local_byte_count": local_plan["byte_count"],
+            "job_local_device": local_plan["device"],
+            "job_local_inode": local_plan["inode"],
+            "job_local_uid": local_plan["uid"],
+            "job_local_link_count": local_plan["link_count"],
+            "job_local_mtime_ns": local_plan["mtime_ns"],
+            "job_local_ctime_ns": local_plan["ctime_ns"],
             "byte_for_byte_copy_verified": True,
             "mode_octal": local_plan["mode_octal"],
         },
@@ -287,27 +308,56 @@ def build_job_staging_proof(
             "job_local_archive_path": local_archive["path"],
             "archive_sha256": local_archive["sha256"],
             "archive_mode_octal": local_archive["mode_octal"],
+            "original_archive_byte_count": original_archive_identity["byte_count"],
+            "original_archive_device": original_archive_identity["device"],
+            "original_archive_inode": original_archive_identity["inode"],
+            "original_archive_mtime_ns": original_archive_identity["mtime_ns"],
+            "original_archive_ctime_ns": original_archive_identity["ctime_ns"],
+            "job_local_archive_byte_count": local_archive["byte_count"],
+            "job_local_archive_device": local_archive["device"],
+            "job_local_archive_inode": local_archive["inode"],
+            "job_local_archive_uid": local_archive["uid"],
+            "job_local_archive_link_count": local_archive["link_count"],
+            "job_local_archive_mtime_ns": local_archive["mtime_ns"],
+            "job_local_archive_ctime_ns": local_archive["ctime_ns"],
             "byte_for_byte_archive_copy_verified": True,
             "original_source_root": plan["source"]["root"],
             "job_local_source_root": str(local_source),
             "source_bundle_sha256": fingerprint["bundle_sha256"],
             "manifest_sha256": local_binding["manifest_sha256"],
             "source_tree_sha256": local_binding["source_tree_sha256"],
+            "job_local_source_file_identities": source_file_identities,
+            "job_local_source_live_identity_sha256": source_live_identity_sha256,
             "exact_tree_verified": True,
             "runtime_imported_from_job_local_tree": True,
         },
     }
 
 
-def freeze_staging_tree(root: Path) -> None:
-    for current, directory_names, file_names in os.walk(root, topdown=False):
-        current_path = Path(current)
-        for name in (*directory_names, *file_names):
-            path = current_path / name
-            if path.is_symlink():
-                raise ValueError("job-private staging contains a symlink")
-            path.chmod(stat.S_IMODE(path.stat().st_mode) & ~_WRITE_BITS)
-        current_path.chmod(stat.S_IMODE(current_path.stat().st_mode) & ~_WRITE_BITS)
+def rebuild_job_staging_proof(
+    plan: Mapping[str, object],
+    common: Mapping[str, object],
+    *,
+    environment: Mapping[str, str],
+    allowed_root: Path,
+    wrapper_mint_consumed: bool = False,
+) -> dict[str, object]:
+    """Replay the common plan/source/job-root proof from its bound live paths."""
+
+    return build_job_staging_proof(
+        plan,
+        plan_path=Path(common["plan"]["job_local_path"]),
+        staging_root=Path(common["staging_root"]),
+        source_root=Path(common["source"]["job_local_source_root"]),
+        source_archive=Path(common["source"]["job_local_archive_path"]),
+        worker_kind=common["worker_kind"],
+        array_index=common["slurm_array_task_id"],
+        environment=environment,
+        allowed_root=allowed_root,
+        consumed_wrapper_mint=(
+            common["wrapper_mint"] if wrapper_mint_consumed else None
+        ),
+    )
 
 
 def verify_training_artifact_bytes(
@@ -323,7 +373,7 @@ def verify_training_artifact_bytes(
             dataset_path = Path(artifact["path"]).resolve(strict=True)
             if file_sha256(dataset_path) != artifact["artifact_sha256"]:
                 raise RuntimeError("grouped dataset bytes changed after inventory freeze")
-            manifest = _checked_zip_manifest(dataset_path)
+            manifest = checked_zip_manifest(dataset_path)
             if (
                 manifest["manifest_sha256"] != artifact["manifest_sha256"]
                 or (manifest.get("dataset_schema"), manifest.get("dataset_version"))
@@ -341,7 +391,7 @@ def verify_training_artifact_bytes(
                 evidence = Path(artifact["evidence_receipt_path"]).resolve(strict=True)
                 if file_sha256(sidecar) != artifact["sidecar_artifact_sha256"]:
                     raise RuntimeError("search sidecar bytes changed after inventory freeze")
-                if _checked_zip_manifest(sidecar)["manifest_sha256"] != artifact[
+                if checked_zip_manifest(sidecar)["manifest_sha256"] != artifact[
                     "sidecar_manifest_sha256"
                 ]:
                     raise RuntimeError("search sidecar manifest identity drifted")
@@ -365,7 +415,7 @@ def verify_training_artifact_bytes(
 def _copy_evidence_closure(
     original_receipt: Path, local_receipt: Path, expected_sha256: str
 ) -> list[dict[str, object]]:
-    receipt_copy = _copy_regular_exclusive(
+    receipt_copy = copy_regular_exclusive(
         original_receipt,
         local_receipt,
         expected_sha256=expected_sha256,
@@ -390,7 +440,7 @@ def _copy_evidence_closure(
             if prior != (source, expected):
                 raise ValueError("search evidence closure aliases different immutable files")
             continue
-        evidence = _copy_regular_exclusive(
+        evidence = copy_regular_exclusive(
             source, destination, expected_sha256=expected, name=f"executor evidence {index}"
         )
         evidence.update(kind="executor_evidence", trainer_consumed=False)
@@ -414,7 +464,7 @@ def stage_training_inputs(
     inputs_root.mkdir(mode=0o700)
     replay = replay_v5_k1_training_chain_fingerprints(value, allowed_root=allowed_root)
     local_inventory = inputs_root / "k1-input-inventory.json"
-    inventory_copy = _copy_regular_exclusive(
+    inventory_copy = copy_regular_exclusive(
         Path(value["input_inventory"]["path"]),
         local_inventory,
         expected_sha256=value["input_inventory"]["file_sha256"],
@@ -435,13 +485,13 @@ def stage_training_inputs(
             artifact_root.mkdir(mode=0o700, parents=True)
             original = Path(artifact["path"])
             local = artifact_root / f"grouped-parent{original.suffix}"
-            parent = _copy_regular_exclusive(
+            parent = copy_regular_exclusive(
                 original,
                 local,
                 expected_sha256=artifact["artifact_sha256"],
                 name=f"{role} grouped dataset {index}",
             )
-            if _checked_zip_manifest(local)["manifest_sha256"] != artifact["manifest_sha256"]:
+            if checked_zip_manifest(local)["manifest_sha256"] != artifact["manifest_sha256"]:
                 raise RuntimeError("staged grouped dataset manifest identity drifted")
             parent.update(
                 role=role,
@@ -457,13 +507,13 @@ def stage_training_inputs(
                 continue
             original_sidecar = Path(artifact["sidecar_path"])
             local_sidecar = artifact_root / f"search-sidecar{original_sidecar.suffix}"
-            sidecar = _copy_regular_exclusive(
+            sidecar = copy_regular_exclusive(
                 original_sidecar,
                 local_sidecar,
                 expected_sha256=artifact["sidecar_artifact_sha256"],
                 name=f"{role} search sidecar {index}",
             )
-            if _checked_zip_manifest(local_sidecar)["manifest_sha256"] != artifact[
+            if checked_zip_manifest(local_sidecar)["manifest_sha256"] != artifact[
                 "sidecar_manifest_sha256"
             ]:
                 raise RuntimeError("staged search sidecar manifest identity drifted")
@@ -501,65 +551,15 @@ def stage_training_inputs(
     }
 
 
-def rehash_staged_artifacts(staging: Mapping[str, object]) -> str:
-    rows = []
-    for artifact in (staging["inventory"], *staging["artifacts"]):
-        identity = _read_only_identity(
-            Path(artifact["job_local_path"]), "staged training input"
-        )
-        if identity["sha256"] != artifact["frozen_sha256"] or identity[
-            "byte_count"
-        ] != artifact["byte_count"]:
-            raise RuntimeError("a staged training input changed before binding")
-        rows.append(
-            {
-                "job_local_path": identity["path"],
-                "sha256": identity["sha256"],
-                "byte_count": identity["byte_count"],
-                "mode_octal": identity["mode_octal"],
-            }
-        )
-    return sha256(canonical_json(rows).encode()).hexdigest()
-
-
-def finalize_staging_proof(
-    common: Mapping[str, object],
-    *,
-    staged_inputs: Mapping[str, object] | None,
-    trainer_manifest: Mapping[str, object] | None,
-    post_training_rehash_sha256: str | None = None,
-) -> dict[str, object]:
-    """Fail closed until the persisted K1 staging receipt audit is complete."""
-
-    del common, staged_inputs, trainer_manifest, post_training_rehash_sha256
-    raise RuntimeError(V5_K1_WORKER_SECURITY_BLOCKER)
-
-
-def validate_staging_proof(
-    raw: object,
-    plan: Mapping[str, object],
-    *,
-    worker_kind: str,
-    expected_array_index: int | None,
-    require_live_staging: bool = False,
-) -> dict[str, object]:
-    """Reject persisted staging claims while the receipt audit remains open."""
-
-    del raw, plan, worker_kind, expected_array_index, require_live_staging
-    raise RuntimeError(V5_K1_WORKER_SECURITY_BLOCKER)
-
-
 __all__ = [
     "V5_K1_JOB_STAGING_SCHEMA",
     "V5_K1_JOB_STAGING_VERSION",
     "build_job_staging_proof",
     "checked_json",
     "file_sha256",
-    "finalize_staging_proof",
     "freeze_staging_tree",
     "lexical_no_symlinks",
-    "rehash_staged_artifacts",
+    "rebuild_job_staging_proof",
     "stage_training_inputs",
-    "validate_staging_proof",
     "verify_training_artifact_bytes",
 ]

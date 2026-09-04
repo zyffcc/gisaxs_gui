@@ -13,6 +13,13 @@ set -euo pipefail
 : "${POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256:?set expected archive SHA-256}"
 : "${POSTERIOR_V8_V5_EXPECTED_SOURCE_MANIFEST_SHA256:?set expected manifest SHA-256}"
 : "${POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256:?set expected source-tree SHA-256}"
+: "${POSTERIOR_V8_V7_PHASE_A_PLAN:?set Phase-A v7 plan}"
+: "${POSTERIOR_V8_V7_PHASE_A_PLAN_SHA256:?set Phase-A v7 plan SHA-256}"
+: "${POSTERIOR_V8_V7_PHASE_A_RECEIPT:?set Phase-A v7 submission receipt}"
+: "${POSTERIOR_V8_V7_PHASE_A_RELEASE:?set Phase-A v7 release completion}"
+: "${POSTERIOR_V8_V7_PHASE_A_STAGE:?set Phase-A v7 stage}"
+: "${POSTERIOR_V8_V7_PHASE_A_UPSTREAM_COMPLETION:?set upstream completion}"
+: "${POSTERIOR_V8_V7_PHASE_A_COMPLETION:?set stage completion output}"
 
 case "$(hostname -s)" in
     max-wgs*) echo "PosteriorV8 regression must run on a Slurm worker" >&2; exit 2 ;;
@@ -36,7 +43,26 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 unset PYTHONPATH
-GISAXS_JOB_CACHE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/gisaxs-v5-regression-${SLURM_JOB_ID}-XXXXXXXX")"
+GISAXS_JOB_TMP_BASE="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}"
+if [[ ! -d "$GISAXS_JOB_TMP_BASE" || -L "$GISAXS_JOB_TMP_BASE" ]]; then
+    echo "regression scratch parent must be a real directory" >&2
+    exit 2
+fi
+GISAXS_JOB_TMP_BASE="$(realpath -e -- "$GISAXS_JOB_TMP_BASE")"
+case "$GISAXS_JOB_TMP_BASE" in
+    /data/dust/user/zhaiyufe|/data/dust/user/zhaiyufe/*)
+        echo "regression scratch must be node-local, not dust" >&2
+        exit 2
+        ;;
+esac
+GISAXS_JOB_CACHE_ROOT="$(mktemp -d "$GISAXS_JOB_TMP_BASE/gisaxs-v5-regression-${SLURM_JOB_ID}-XXXXXXXX")"
+chmod 0700 "$GISAXS_JOB_CACHE_ROOT"
+if [[ ! -d "$GISAXS_JOB_CACHE_ROOT" || -L "$GISAXS_JOB_CACHE_ROOT" \
+    || ! -O "$GISAXS_JOB_CACHE_ROOT" \
+    || "$(stat -c '%a' -- "$GISAXS_JOB_CACHE_ROOT")" != "700" ]]; then
+    echo "regression scratch is not exclusive owner-private storage" >&2
+    exit 2
+fi
 export XDG_CACHE_HOME="$GISAXS_JOB_CACHE_ROOT/xdg"
 export KERAS_HOME="$GISAXS_JOB_CACHE_ROOT/keras"
 export CUDA_CACHE_PATH="$GISAXS_JOB_CACHE_ROOT/cuda"
@@ -53,6 +79,9 @@ fi
 POSTERIOR_V8_JOB_SOURCE_ARCHIVE="$GISAXS_JOB_CACHE_ROOT/source-snapshot.tar"
 POSTERIOR_V8_TRUSTED_VERIFIER="$GISAXS_JOB_CACHE_ROOT/package_source_snapshot_v5.py"
 POSTERIOR_V8_JOB_SOURCE_ROOT="$GISAXS_JOB_CACHE_ROOT/source"
+POSTERIOR_V8_JOB_STAGING_ROOT="$GISAXS_JOB_CACHE_ROOT/staging"
+mkdir -m 0700 "$POSTERIOR_V8_JOB_STAGING_ROOT"
+export POSTERIOR_V8_JOB_SOURCE_ARCHIVE POSTERIOR_V8_JOB_SOURCE_ROOT POSTERIOR_V8_JOB_STAGING_ROOT
 cp -- "$POSTERIOR_V8_V5_SOURCE_ARCHIVE" "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE"
 chmod 0400 "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE"
 read -r POSTERIOR_V8_JOB_ARCHIVE_SHA256 _ < <(
@@ -66,13 +95,13 @@ tar -xOf "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     snapshot/utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py \
     > "$POSTERIOR_V8_TRUSTED_VERIFIER"
 chmod 0400 "$POSTERIOR_V8_TRUSTED_VERIFIER"
-conda run --no-capture-output -n tf \
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 \
     python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     extract \
     --archive "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     --source-root "$POSTERIOR_V8_JOB_SOURCE_ROOT" \
     --expected-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256"
-conda run --no-capture-output -n tf \
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 \
     python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     verify-extracted \
     --archive "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
@@ -82,15 +111,7 @@ conda run --no-capture-output -n tf \
     --expected-source-tree-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256"
 
 cd "$POSTERIOR_V8_JOB_SOURCE_ROOT"
-# The wrapper has already proved that it is running on a Slurm worker.  The
-# suite itself exercises login-node launchers and local temporary paths, so it
-# must not inherit the production-job sentinel and mistake those unit-test
-# fixtures for live Maxwell operations.  Individual tests can still set the
-# sentinel explicitly with monkeypatch when they exercise worker-only guards.
-env -u SLURM_JOB_ID conda run --no-capture-output -n tf \
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 \
     python -I -c \
-    'from pytest import console_main; import sys; root = sys.argv[1]; sys.path.insert(0, root); sys.argv = ["pytest", *sys.argv[2:]]; raise SystemExit(console_main())' \
-    "$POSTERIOR_V8_JOB_SOURCE_ROOT" -q \
-    utils/ML_Fitting_1D_GISAXS/tests/test_posterior_v8_*.py \
-    --disable-warnings \
-    -p no:cacheprovider
+    'import sys; root=sys.argv[1]; sys.path.insert(0, root); from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_runtime_v7 import run_stage_from_environment; run_stage_from_environment(sys.argv[2])' \
+    "$POSTERIOR_V8_JOB_SOURCE_ROOT" "$POSTERIOR_V8_V7_PHASE_A_STAGE"

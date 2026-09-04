@@ -80,6 +80,36 @@ def test_distribution_output_orientation_matches_existing_prediction():
     np.testing.assert_array_equal(result["hr"], [[0, 1, 2], [3, 4, 5]])
     np.testing.assert_array_equal(result["h"], [3, 5, 7])
     np.testing.assert_array_equal(result["r"], [3, 12])
+    assert result["hr"].dtype == np.float32
+    assert result["h"].dtype == np.float32
+    assert result["r"].dtype == np.float32
+    np.testing.assert_allclose(result["r_x"], [3.7875, 11.2625])
+    np.testing.assert_allclose(result["h_x"], [2.5416667, 7.525, 12.508333])
+
+
+def test_distribution_output_uses_module_physical_axes_without_transposing_matrix():
+    image = np.arange(6, dtype=np.float32).reshape(2, 3)
+    result = normalize_prediction_output(
+        image,
+        {
+            "output_axes": {
+                "row": {"key": "r", "label": "R", "unit": "nm", "min": 0.0, "max": 2.0},
+                "column": {
+                    "key": "h",
+                    "label": "H",
+                    "unit": "nm",
+                    "min": 0.0,
+                    "max": 30.0,
+                },
+            }
+        },
+    )
+
+    np.testing.assert_array_equal(result["r"], [3, 12])
+    np.testing.assert_array_equal(result["h"], [3, 5, 7])
+    np.testing.assert_allclose(result["r_x"], [0.5, 1.5])
+    np.testing.assert_allclose(result["h_x"], [5.0, 15.0, 25.0])
+    assert result["distribution_axes"]["column"]["label"] == "H"
 
 
 def test_scalar_and_dict_outputs_keep_legacy_shape_contracts():

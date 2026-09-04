@@ -11,6 +11,9 @@ import re
 from typing import Mapping, Sequence
 
 from .grouped_artifact_v5 import canonical_json
+from .lossless_representative_artifact_v5 import (
+    decode_v5_lossless_representative_payload,
+)
 from .paper_budget_evaluator_v5 import (
     V5PairedPaperBudgetQueryRecord,
     V5PaperBudgetMethodResult,
@@ -33,6 +36,7 @@ from .paper_representative_payload_v5 import (
     V5_EMITTED_REPRESENTATIVE_ROLE,
     V5_PAPER_REPRESENTATIVE_PAYLOAD_SCHEMA,
     V5_PAPER_REPRESENTATIVE_PAYLOAD_VERSION,
+    V5PaperParameterRepresentativePayload,
 )
 from .tuning_checkpoint_runtime_v5 import (
     V5TuningCheckpointRuntimeResult,
@@ -41,6 +45,10 @@ from .tuning_checkpoint_runtime_v5 import (
     V5_TUNING_CHECKPOINT_RUNTIME_VERSION,
     V5_TUNING_EXACT_TRACE_ARTIFACT_SCHEMA,
     V5_TUNING_EXACT_TRACE_ARTIFACT_VERSION,
+)
+from .tuning_lossless_emission_store_v5 import (
+    V5_TUNING_LOSSLESS_EMISSION_BINDING_SCHEMA,
+    V5_TUNING_LOSSLESS_EMISSION_BINDING_VERSION,
 )
 
 
@@ -100,10 +108,12 @@ _COMPLETION_FIELDS = frozenset(
         "retained_full_epochs",
         "expected_tuning_query_count",
         "expected_exact_trace_count",
+        "expected_lossless_emission_count",
         "tuning_summary_schema",
         "tuning_summary_version",
         "checkpoint_summaries",
         "exact_trace_artifacts",
+        "lossless_emission_artifacts",
         "validation_loss_used",
         "test_calibration_reference_or_ood_used",
         "publication_rule",
@@ -130,6 +140,33 @@ _TRACE_FIELDS = frozenset(
         "validation_loss_used",
     }
 )
+_LOSSLESS_BINDING_FIELDS = frozenset(
+    {
+        "schema",
+        "version",
+        "candidate_id",
+        "output_rank",
+        "relative_path",
+        "file_sha256",
+        "upstream_payload_sha256",
+        "upstream_source_artifact_sha256",
+        "restored_payload_sha256",
+    }
+)
+_LOSSLESS_INVENTORY_FIELDS = _LOSSLESS_BINDING_FIELDS | {
+    "full_epoch",
+    "query_id",
+}
+_TRACE_EMISSION_FIELDS = {
+    "available_after_call",
+    "output_rank",
+    "candidate_id",
+    "compatibility_status",
+    "elapsed_seconds",
+    "representative_payload",
+    "representative_payload_sha256",
+    "lossless_payload_artifact",
+}
 
 
 def _digest(value: object, name: str) -> str:
@@ -200,6 +237,37 @@ def _load_json_file(
     if not isinstance(payload, dict):
         raise ValueError(f"{name} must contain one JSON object")
     return path, payload, file_sha
+
+
+def _load_lossless_emission(
+    path: Path,
+    *,
+    expected_file_sha256: str,
+) -> tuple[dict[str, object], str]:
+    selected = _checked_path(path, "lossless emission artifact", directory=False)
+    metadata = selected.stat(follow_symlinks=False)
+    if metadata.st_nlink != 1 or metadata.st_mode & 0o222:
+        raise ValueError("lossless emission artifact must be uniquely linked and read-only")
+    raw = selected.read_bytes()
+    if len(raw) > 1024 * 1024 * 1024:
+        raise ValueError("lossless emission artifact is unexpectedly large")
+    file_sha = sha256(raw).hexdigest()
+    if file_sha != _digest(expected_file_sha256, "lossless emission file SHA-256"):
+        raise ValueError("lossless emission file SHA-256 changed")
+    try:
+        payload = json.loads(
+            raw,
+            object_pairs_hook=_strict_object,
+            parse_constant=_reject_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("lossless emission artifact is not strict JSON") from exc
+    if (
+        not isinstance(payload, dict)
+        or canonical_json(payload).encode("utf-8") != raw
+    ):
+        raise ValueError("lossless emission artifact is not one canonical JSON object")
+    return payload, file_sha
 
 
 def _nested_tuple(value: object, depth: int, name: str):
@@ -363,12 +431,91 @@ def _elapsed(value: object, name: str) -> float:
     return result
 
 
+def _lossless_inventory(
+    root: Path,
+    value: object,
+) -> tuple[
+    dict[
+        tuple[int, str, int, str],
+        tuple[dict[str, object], V5PaperParameterRepresentativePayload],
+    ],
+    tuple[Path, ...],
+    tuple[str, ...],
+]:
+    if not isinstance(value, list):
+        raise ValueError("lossless emission inventory must be a list")
+    result = {}
+    paths = []
+    file_shas = []
+    seen_paths = set()
+    for index, raw in enumerate(value):
+        if not isinstance(raw, Mapping) or frozenset(raw) != _LOSSLESS_INVENTORY_FIELDS:
+            raise ValueError(f"lossless emission inventory[{index}] fields are invalid")
+        item = dict(raw)
+        epoch = _positive_integer(item["full_epoch"], "lossless full epoch")
+        rank = _positive_integer(item["output_rank"], "lossless output rank")
+        query_id = item["query_id"]
+        candidate_id = item["candidate_id"]
+        if not isinstance(query_id, str) or not query_id or not isinstance(
+            candidate_id, str
+        ) or not candidate_id:
+            raise ValueError("lossless emission query/candidate IDs must be non-empty text")
+        if (
+            item["schema"] != V5_TUNING_LOSSLESS_EMISSION_BINDING_SCHEMA
+            or item["version"] != V5_TUNING_LOSSLESS_EMISSION_BINDING_VERSION
+        ):
+            raise ValueError("lossless emission binding contract changed")
+        query_digest = sha256(query_id.encode("utf-8")).hexdigest()
+        candidate_digest = sha256(candidate_id.encode("utf-8")).hexdigest()
+        expected = (
+            f"lossless-emissions/epoch-{epoch:06d}/{query_digest}/"
+            f"rank-{rank:04d}-{candidate_digest}.json"
+        )
+        path = _safe_member(root, item["relative_path"], expected)
+        if path in seen_paths:
+            raise ValueError("lossless emission inventory paths must be unique")
+        seen_paths.add(path)
+        payload, file_sha = _load_lossless_emission(
+            path, expected_file_sha256=item["file_sha256"]
+        )
+        restored = decode_v5_lossless_representative_payload(
+            payload, source_artifact_sha256=file_sha
+        )
+        if (
+            restored.role != V5_EMITTED_REPRESENTATIVE_ROLE
+            or restored.representative_id != candidate_id
+            or restored.sha256
+            != _digest(item["restored_payload_sha256"], "restored payload SHA-256")
+        ):
+            raise ValueError("lossless emission payload identity does not reproduce")
+        _digest(item["upstream_payload_sha256"], "upstream payload SHA-256")
+        _digest(
+            item["upstream_source_artifact_sha256"],
+            "upstream source artifact SHA-256",
+        )
+        key = (epoch, query_id, rank, candidate_id)
+        if key in result:
+            raise ValueError("lossless emission inventory identities must be unique")
+        binding = {
+            field: item[field]
+            for field in _LOSSLESS_BINDING_FIELDS
+        }
+        result[key] = (binding, restored)
+        paths.append(path)
+        file_shas.append(file_sha)
+    return result, tuple(paths), tuple(file_shas)
+
+
 def _verify_trace_payload(
     payload: Mapping[str, object],
     *,
     inventory: Mapping[str, object],
     evaluation: V5TuningCheckpointEvaluation,
-) -> None:
+    lossless: Mapping[
+        tuple[int, str, int, str],
+        tuple[dict[str, object], V5PaperParameterRepresentativePayload],
+    ],
+) -> set[tuple[int, str, int, str]]:
     if frozenset(payload) != _TRACE_FIELDS:
         raise ValueError("exact trace artifact fields are incomplete")
     if (
@@ -427,8 +574,9 @@ def _verify_trace_payload(
         raise ValueError("exact trace candidate emissions must be a list")
     ledger_emissions = []
     seen_ids, seen_ranks = set(), set()
+    used_lossless = set()
     for emission in emissions:
-        if not isinstance(emission, Mapping):
+        if not isinstance(emission, Mapping) or set(emission) != _TRACE_EMISSION_FIELDS:
             raise ValueError("exact trace candidate emission must be an object")
         call = _positive_integer(emission.get("available_after_call"), "emission call")
         rank = _positive_integer(emission.get("output_rank"), "emission rank")
@@ -436,6 +584,7 @@ def _verify_trace_payload(
         status = emission.get("compatibility_status")
         elapsed = _elapsed(emission.get("elapsed_seconds"), "emission time")
         representative = emission.get("representative_payload")
+        binding = emission.get("lossless_payload_artifact")
         if (
             call > len(calls)
             or not isinstance(candidate_id, str)
@@ -450,11 +599,33 @@ def _verify_trace_payload(
             or representative.get("role") != V5_EMITTED_REPRESENTATIVE_ROLE
             or representative.get("representative_id") != candidate_id
             or representative.get("query_context_sha256") != member.query_context_sha256
+            or not isinstance(binding, Mapping)
+            or frozenset(binding) != _LOSSLESS_BINDING_FIELDS
         ):
             raise ValueError("exact trace candidate emission identity is invalid")
         payload_sha = sha256(canonical_json(dict(representative)).encode("utf-8")).hexdigest()
         if emission.get("representative_payload_sha256") != payload_sha:
             raise ValueError("exact trace representative payload SHA-256 does not reproduce")
+        key = (
+            int(inventory["full_epoch"]),
+            str(inventory["query_id"]),
+            rank,
+            candidate_id,
+        )
+        lossless_value = lossless.get(key)
+        if lossless_value is None or dict(binding) != lossless_value[0]:
+            raise ValueError("exact trace lossless payload binding is missing or changed")
+        restored = lossless_value[1]
+        restored_audit = restored.audit_payload()
+        restored_audit["source_artifact_sha256"] = binding[
+            "upstream_source_artifact_sha256"
+        ]
+        if (
+            binding["upstream_payload_sha256"] != payload_sha
+            or restored_audit != representative
+        ):
+            raise ValueError("lossless payload does not reproduce the live typed emission")
+        used_lossless.add(key)
         seen_ids.add(candidate_id)
         seen_ranks.add(rank)
         ledger_emissions.append(
@@ -480,6 +651,7 @@ def _verify_trace_payload(
     completion = _elapsed(payload["completion_elapsed_seconds"], "trace completion time")
     if completion < call_times[-1]:
         raise ValueError("exact trace completion precedes its final call")
+    return used_lossless
 
 
 def read_v5_tuning_checkpoint_runtime_result(
@@ -508,7 +680,7 @@ def read_v5_tuning_checkpoint_runtime_result(
         or core["validation_loss_used"] is not False
         or core["test_calibration_reference_or_ood_used"] is not False
         or core["publication_rule"]
-        != "completion_written_exclusively_after_every_trace_and_summary_file"
+        != "completion_written_exclusively_after_every_trace_summary_and_lossless_emission"
     ):
         raise ValueError("tuning runtime completion contract changed")
     epochs = tuple(
@@ -525,6 +697,11 @@ def read_v5_tuning_checkpoint_runtime_result(
         "expected_exact_trace_count"
     ]:
         raise ValueError("tuning runtime artifact inventory counts are incomplete")
+    lossless, lossless_paths, lossless_shas = _lossless_inventory(
+        root, core["lossless_emission_artifacts"]
+    )
+    if len(lossless) != core["expected_lossless_emission_count"]:
+        raise ValueError("lossless emission inventory count is incomplete")
     evaluations, summary_paths, summary_file_shas = [], [], []
     for epoch, item in zip(epochs, summaries):
         if not isinstance(item, Mapping) or set(item) != {
@@ -576,6 +753,7 @@ def read_v5_tuning_checkpoint_runtime_result(
         if result.method_id == evaluation.method_id
     }
     trace_paths, trace_shas, seen = [], [], set()
+    used_lossless = set()
     by_epoch = {value.checkpoint_epoch: value for value in evaluations}
     for item in traces:
         if not isinstance(item, Mapping) or set(item) != {
@@ -607,10 +785,13 @@ def read_v5_tuning_checkpoint_runtime_result(
             "exact trace artifact",
             expected_file_sha256=item["artifact_sha256"],
         )
-        _verify_trace_payload(
-            payload,
-            inventory=item,
-            evaluation=by_epoch[item["full_epoch"]],
+        used_lossless.update(
+            _verify_trace_payload(
+                payload,
+                inventory=item,
+                evaluation=by_epoch[item["full_epoch"]],
+                lossless=lossless,
+            )
         )
         trace_paths.append(path)
         trace_shas.append(file_sha)
@@ -618,11 +799,15 @@ def read_v5_tuning_checkpoint_runtime_result(
         "expected_tuning_query_count"
     ]:
         raise ValueError("exact trace inventory does not exactly cover every epoch/query")
+    if used_lossless != set(lossless):
+        raise ValueError("lossless emission inventory contains missing or unreferenced entries")
     return V5TuningCheckpointRuntimeResult(
         output_root=root,
         evaluations=tuple(evaluations),
         trace_paths=tuple(trace_paths),
         trace_artifact_sha256s=tuple(trace_shas),
+        lossless_emission_paths=lossless_paths,
+        lossless_emission_file_sha256s=lossless_shas,
         summary_paths=tuple(summary_paths),
         summary_file_sha256s=tuple(summary_file_shas),
         completion_path=completion_path,

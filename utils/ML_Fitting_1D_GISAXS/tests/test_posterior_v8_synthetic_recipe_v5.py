@@ -46,6 +46,36 @@ def test_clean_recipe_is_replayable_and_uses_disjoint_provenance_seeds():
     assert np.all(evaluate_v5_clean_recipe(first) > 0.0)
 
 
+def test_clean_recipe_replays_global_high_endpoint_without_roundoff_escape():
+    # This exact seed exposed exp(log(100)) == 100.00000000000004 on Maxwell
+    # while constructing the 512-parent Phase-A cohort.
+    recipe = sample_v5_clean_recipe(
+        ("sphere",),
+        recipe_seed=20260915,
+        amplitude_range_regime="full",
+        pattern_id=0,
+    )
+
+    assert recipe.target.truth_components[0].R == 100.0
+    assert np.all(np.isfinite(evaluate_v5_clean_recipe(recipe)))
+
+
+def test_clean_recipe_truth_is_the_exact_stored_coordinate_decode_representative():
+    # This seed previously retained the pre-encode width value, which differed
+    # from decoding its stored local coordinate by one binary64 ULP.
+    recipe = sample_v5_clean_recipe(
+        ("sphere",),
+        recipe_seed=20261003,
+        amplitude_range_regime="full",
+        pattern_id=0,
+    )
+    codec = recipe.query.codec_for(recipe.target.pattern_id)
+    latent, resolution = codec.decode(recipe.target.local_target_unit)
+
+    assert codec.latent_components_to_gui(latent) == recipe.target.truth_components
+    assert resolution == recipe.target.truth_resolution
+
+
 def test_v5_exact_curve_matches_existing_authoritative_simulation_path_for_k1():
     pattern = branch_pattern_id((True, False, False, False), True)
     grid = GridProvenance(kind="hybrid", q_min=3.0e-4, q_max=2.0, n_points=128)

@@ -15,6 +15,9 @@ from .k1_phase_c_replay_runner_v5 import (
     read_and_replay_v5_k1_phase_c_receipt,
     run_v5_k1_phase_c_replay,
 )
+from .k1_phase_c_writer_capability_v5 import (
+    verify_v5_k1_phase_c_writer_receipt,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -23,6 +26,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--manifest-file-sha256", required=True)
+    parser.add_argument(
+        "--writer-receipt",
+        type=Path,
+        default=None,
+        help="Required for formal replay; verified into one live adapter capability.",
+    )
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument(
         "--nonformal",
@@ -46,9 +55,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         formal=not args.nonformal,
         parents_per_branch=args.parents_per_branch,
     )
+    if plan.formal and args.writer_receipt is None:
+        raise ValueError("formal replay requires --writer-receipt")
+    capability = (
+        None
+        if args.writer_receipt is None
+        else verify_v5_k1_phase_c_writer_receipt(args.writer_receipt)
+    )
     adapter = V5K1PhaseCFilesystemReplayAdapter(
         args.manifest,
         expected_manifest_file_sha256=args.manifest_file_sha256,
+        writer_capability=capability,
     )
     run_v5_k1_phase_c_replay(plan=plan, port=adapter, receipt_path=args.receipt)
     checked = read_and_replay_v5_k1_phase_c_receipt(
@@ -74,4 +91,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - exercised through worker entrypoint
     raise SystemExit(main())
-

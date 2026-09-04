@@ -3,8 +3,9 @@
 Every input is a canonical, read-only JSON file named by one externally
 supplied manifest-file SHA-256.  Loading and each revalidation reopen every
 file with ``O_NOFOLLOW``, verify bytes and filesystem identity, and rebuild the
-entire typed replay bundle.  The designed formal authorization also requires
-an audited writer capability; until that producer exists it fails closed.
+entire typed replay bundle.  Formal authorization additionally consumes one
+process-local capability minted by fully replaying the completion-last writer
+receipt.
 """
 
 from __future__ import annotations
@@ -32,10 +33,10 @@ from .k1_phase_c_replay_contract_v5 import V5K1PhaseCReplayBundle
 
 V5_K1_PHASE_C_FILESYSTEM_ADAPTER_ID = "v5_k1_phase_c_production_filesystem_replay"
 V5_K1_PHASE_C_FILESYSTEM_ADAPTER_VERSION = (
-    "canonical_read_only_nofollow_per_file_sha_inode_double_revalidation_v1"
+    "canonical_read_only_nofollow_sha_inode_nlink_writer_capability_v2"
 )
 V5_K1_PHASE_C_RAW_PRODUCER_BLOCKER = (
-    "production_phase_c_lossless_artifact_writer_not_implemented_or_audited"
+    "formal_phase_c_requires_verified_lossless_writer_receipt_capability"
 )
 
 _MAX_MANIFEST_BYTES = 256 * 1024 * 1024
@@ -74,6 +75,7 @@ class _FileIdentity:
     mtime_ns: int
     ctime_ns: int
     mode: int
+    link_count: int
 
 
 def _identity(metadata: os.stat_result) -> _FileIdentity:
@@ -84,6 +86,7 @@ def _identity(metadata: os.stat_result) -> _FileIdentity:
         mtime_ns=metadata.st_mtime_ns,
         ctime_ns=metadata.st_ctime_ns,
         mode=stat.S_IMODE(metadata.st_mode),
+        link_count=metadata.st_nlink,
     )
 
 
@@ -106,8 +109,11 @@ def _read_immutable_json(
             not stat.S_ISREG(before.st_mode)
             or before.st_size > maximum_bytes
             or stat.S_IMODE(before.st_mode) & 0o222
+            or before.st_nlink != 1
         ):
-            raise ValueError(f"{name} must be a bounded read-only regular file")
+            raise ValueError(
+                f"{name} must be a bounded, uniquely linked, read-only regular file"
+            )
         chunks = []
         observed = sha256()
         remaining = maximum_bytes + 1
@@ -210,6 +216,7 @@ def _load_filesystem_snapshot(
     root = manifest_path.parent.resolve(strict=True)
     files: dict[str, V5K1PhaseCRawFile] = {}
     identities: dict[str, _FileIdentity] = {"@manifest": manifest_identity}
+    inode_identities = {(manifest_identity.device, manifest_identity.inode)}
     paths: set[Path] = {manifest_path}
     for index, value in enumerate(raw_rows):
         if not isinstance(value, dict) or set(value) != _FILE_FIELDS:
@@ -233,6 +240,10 @@ def _load_filesystem_snapshot(
             maximum_bytes=_MAX_ARTIFACT_BYTES,
             name=f"raw artifact {file_id!r}",
         )
+        inode_key = (identity.device, identity.inode)
+        if inode_key in inode_identities:
+            raise ValueError("raw manifest files must not share one hard-linked inode")
+        inode_identities.add(inode_key)
         files[file_id] = V5K1PhaseCRawFile(
             file_id=file_id,
             role=role,
@@ -279,6 +290,7 @@ class V5K1PhaseCFilesystemReplayAdapter:
         manifest_path: str | os.PathLike[str],
         *,
         expected_manifest_file_sha256: str,
+        writer_capability: object | None = None,
     ) -> None:
         self._manifest_path = _checked_manifest_path(manifest_path)
         self._expected_manifest_file_sha256 = digest(
@@ -288,6 +300,18 @@ class V5K1PhaseCFilesystemReplayAdapter:
         self._loaded_plan_sha256: str | None = None
         self._loaded_contract_sha256: str | None = None
         self._revalidation_count = 0
+        self._writer_attestation = None
+        if writer_capability is not None:
+            from .k1_phase_c_writer_capability_v5 import (
+                _consume_v5_k1_phase_c_writer_capability,
+            )
+
+            self._writer_attestation = _consume_v5_k1_phase_c_writer_capability(
+                writer_capability,
+                adapter=self,
+                manifest_path=self._manifest_path,
+                manifest_file_sha256=self._expected_manifest_file_sha256,
+            )
 
     @property
     def manifest_path(self) -> Path:
@@ -306,6 +330,10 @@ class V5K1PhaseCFilesystemReplayAdapter:
     def load_bundle(
         self, *, plan: V5K1PhaseCPlan, contract: dict[str, object]
     ) -> V5K1PhaseCReplayBundle:
+        if plan.formal:
+            _require_audited_v5_k1_phase_c_production_writer(
+                self, plan=plan, contract=contract
+            )
         snapshot = _load_filesystem_snapshot(
             self._manifest_path,
             expected_manifest_file_sha256=self._expected_manifest_file_sha256,
@@ -316,6 +344,10 @@ class V5K1PhaseCFilesystemReplayAdapter:
         self._loaded_plan_sha256 = plan.sha256
         self._loaded_contract_sha256 = str(contract["contract_sha256"])
         self._revalidation_count = 0
+        if plan.formal:
+            _require_audited_v5_k1_phase_c_production_writer(
+                self, plan=plan, contract=contract, bundle=snapshot.bundle
+            )
         return snapshot.bundle
 
     def revalidate_bundle(
@@ -367,7 +399,9 @@ class V5K1PhaseCFilesystemReplayAdapter:
             or self._revalidation_count < 2
         ):
             raise RuntimeError("formal Phase-C capability requires two complete filesystem replays")
-        _require_audited_v5_k1_phase_c_production_writer()
+        _require_audited_v5_k1_phase_c_production_writer(
+            self, plan=plan, contract=contract, bundle=bundle
+        )
         return _V5K1PhaseCFormalReplayCapability(
             adapter=self,
             plan_sha256=plan.sha256,
@@ -384,15 +418,42 @@ def _is_v5_k1_phase_c_production_filesystem_adapter(value: object) -> bool:
     return type(value) is V5K1PhaseCFilesystemReplayAdapter
 
 
-def _require_audited_v5_k1_phase_c_production_writer() -> None:
-    """Fail closed until a real writer receipt verifier is implemented.
+def _require_audited_v5_k1_phase_c_production_writer(
+    adapter: object | None = None,
+    *,
+    plan: V5K1PhaseCPlan | None = None,
+    contract: Mapping[str, object] | None = None,
+    bundle: V5K1PhaseCReplayBundle | None = None,
+) -> None:
+    """Require the exact adapter's live, receipt-revalidated attestation."""
 
-    This deliberate hard stop is not configurable and accepts no serialized
-    substitute.  A future audited production writer must add its own opaque
-    receipt/capability verification here before formal minting can proceed.
-    """
+    if (
+        type(adapter) is not V5K1PhaseCFilesystemReplayAdapter
+        or type(plan) is not V5K1PhaseCPlan
+        or contract is None
+    ):
+        raise RuntimeError(V5_K1_PHASE_C_RAW_PRODUCER_BLOCKER)
+    from .k1_phase_c_writer_capability_v5 import (
+        _validate_v5_k1_phase_c_writer_attestation,
+    )
 
-    raise RuntimeError(V5_K1_PHASE_C_RAW_PRODUCER_BLOCKER)
+    try:
+        state = _validate_v5_k1_phase_c_writer_attestation(
+            adapter._writer_attestation,
+            adapter=adapter,
+            manifest_path=adapter.manifest_path,
+            manifest_file_sha256=adapter.manifest_file_sha256,
+            plan_sha256=plan.sha256,
+            contract_sha256=str(contract["contract_sha256"]),
+            bundle_sha256=None if bundle is None else bundle.sha256,
+        )
+    except (KeyError, TypeError, ValueError, RuntimeError) as exc:
+        raise RuntimeError(V5_K1_PHASE_C_RAW_PRODUCER_BLOCKER) from exc
+    if bundle is not None and adapter._snapshot is not None and (
+        state.matcher_identity_sha256
+        != adapter._snapshot.matcher.identity_sha256
+    ):
+        raise RuntimeError(V5_K1_PHASE_C_RAW_PRODUCER_BLOCKER)
 
 
 def _authorize_v5_k1_phase_c_formal_filesystem_replay(

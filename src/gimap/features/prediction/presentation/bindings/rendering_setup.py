@@ -9,7 +9,9 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from PyQt5.QtCore import QSignalBlocker
+from PyQt5.QtCore import QSize, Qt, QSignalBlocker
+
+from PyQt5.QtGui import QIcon
 
 
 from PyQt5.QtWidgets import (
@@ -17,8 +19,9 @@ from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGridLayout,
-    QPushButton,
+    QScrollArea,
     QSizePolicy,
+    QToolButton,
 )
 
 
@@ -61,6 +64,8 @@ class RenderingSetupMixin:
             )
             return None
         self._latest_preprocess_steps = list(prepared.steps)
+        self._latest_model_input = prepared.values
+        self._latest_preprocess_source = image
         self._append_status_message(f"Module preprocess output shape {prepared.values.shape}")
         return prepared.values
 
@@ -94,33 +99,23 @@ class RenderingSetupMixin:
         return dict(result.outputs)
 
     def _get_or_create_predict2d_tabs(self) -> Optional[QTabWidget]:
-        # Embed inner tabs inside the existing Predict-2D tab of the main tab widget
+        # Use widget identity because the visible label is presentation-owned
+        # (currently "Prediction result") and may be translated or renamed.
         main_tabs = getattr(self.ui, "gisaxsPredictImageShowTabWidget", None)
         if main_tabs is None:
             return None
-        pred_index = -1
-        try:
-            for i in range(main_tabs.count()):
-                try:
-                    label = main_tabs.tabText(i)
-                    if isinstance(label, str) and label.lower().strip() in (
-                        "predict-2d",
-                        "predict 2d",
-                        "predict",
-                    ):
-                        pred_index = i
-                        break
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        if pred_index < 0:
-            # fallback to current tab
-            try:
-                pred_index = main_tabs.currentIndex()
-            except Exception:
-                pred_index = 0
-        pred_page = main_tabs.widget(pred_index)
+        pred_page = getattr(self.ui, "predict2dImageTab", None)
+        if pred_page is None:
+            pred_index = next(
+                (
+                    index
+                    for index in range(main_tabs.count())
+                    if main_tabs.tabText(index).strip().casefold()
+                    in {"prediction result", "predict-2d", "predict 2d", "predict"}
+                ),
+                -1,
+            )
+            pred_page = main_tabs.widget(pred_index) if pred_index >= 0 else None
         if pred_page is None:
             return None
         layout = pred_page.layout()
@@ -128,17 +123,32 @@ class RenderingSetupMixin:
             layout = QVBoxLayout(pred_page)
         # Reuse existing inner tabs if present
         try:
-            inner_tabs = next(iter(pred_page.findChildren(QTabWidget)), None)
+            inner_tabs = pred_page.findChild(QTabWidget, "predictionOutputTabs")
         except Exception:
             inner_tabs = None
         if inner_tabs is None:
             inner_tabs = QTabWidget(pred_page)
-            # 允许横向扩展，不限制最大宽度，避免挤压父容器
-            try:
-                inner_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            except Exception:
-                pass
-            layout.addWidget(inner_tabs)
+            inner_tabs.setObjectName("predictionOutputTabs")
+            inner_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            if isinstance(layout, QGridLayout):
+                # Keep the output selector and step gallery above the large
+                # canvas, where they remain visible without scrolling past the
+                # image and inspector.
+                pview = getattr(self.ui, "predict2dGraphicsView", None)
+                inspector = getattr(self.ui, "predict2dParameterWidget", None)
+                if pview is not None:
+                    layout.removeWidget(pview)
+                if inspector is not None:
+                    layout.removeWidget(inspector)
+                layout.addWidget(inner_tabs, 0, 0, 1, 2)
+                if pview is not None:
+                    layout.addWidget(pview, 1, 0)
+                if inspector is not None:
+                    layout.addWidget(inspector, 1, 1)
+                layout.setRowStretch(0, 0)
+                layout.setRowStretch(1, 1)
+            else:
+                layout.addWidget(inner_tabs)
         self._predict_tabs = inner_tabs
         return inner_tabs
 
@@ -192,8 +202,15 @@ class RenderingSetupMixin:
         data = spec.get("data") if isinstance(spec, dict) else None
         self._predict_current_kind = kind if isinstance(kind, str) else None
         self._predict_current_curve = None
+        self._predict_current_curve_x = None
+        tabs = getattr(self, "_predict_tabs", None)
+        if tabs is not None and kind != "steps":
+            compact_height = max(34, tabs.tabBar().sizeHint().height() + 8)
+            tabs.setMinimumHeight(compact_height)
+            tabs.setMaximumHeight(compact_height)
         if kind == "hr" and isinstance(data, np.ndarray):
-            self._render_predict2d_into_view(data)
+            axes = spec.get("axes") if isinstance(spec.get("axes"), dict) else None
+            self._render_predict2d_into_view(data, axes=axes)
             self._refresh_predict_controls("hr")
             return
         if kind == "array" and isinstance(data, np.ndarray):
@@ -212,10 +229,13 @@ class RenderingSetupMixin:
             title = spec.get("title", "Curve")
             xlabel = spec.get("xlabel", "Index")
             self._predict_current_curve = data
+            curve_x = spec.get("x")
+            self._predict_current_curve_x = curve_x if isinstance(curve_x, np.ndarray) else None
             pix = self._render_curve_figure(
                 data,
                 x_label=str(xlabel),
                 title=str(title),
+                x=self._predict_current_curve_x,
                 log_x=bool(self.current_parameters.get("predict_curve_logx", False)),
                 log_y=bool(self.current_parameters.get("predict_curve_logy", False)),
                 xlim=self._get_curve_xlim(),
@@ -248,11 +268,15 @@ class RenderingSetupMixin:
                 )
             self._render_step_snapshot(start_idx)
             self._refresh_predict_controls("steps")
-            # Build buttons under the tabs page to switch steps
+            # Build a scrollable image gallery under the main preview. Plain
+            # text buttons hid the actual intermediate images and made this
+            # tab look empty.
             tabs = getattr(self, "_predict_tabs", None)
             page = tabs.currentWidget() if tabs else None
             if page is None:
                 return
+            tabs.setMinimumHeight(210)
+            tabs.setMaximumHeight(260)
             layout = page.layout()
             if layout is None:
                 layout = QVBoxLayout(page)
@@ -267,29 +291,53 @@ class RenderingSetupMixin:
             try:
                 pview = getattr(self.ui, "predict2dGraphicsView", None)
                 if pview is not None:
-                    vw = max(1, pview.viewport().size().width())
-                    cols = max(1, vw // 120)
+                    vw = max(600, pview.viewport().size().width())
+                    cols = max(1, vw // 150)
             except Exception:
                 pass
-            grid = QGridLayout()
+            scroll = QScrollArea(page)
+            scroll.setObjectName("preprocessStepGallery")
+            scroll.setWidgetResizable(True)
+            scroll.setMinimumHeight(160)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            gallery = QWidget(scroll)
+            grid = QGridLayout(gallery)
             grid.setContentsMargins(0, 0, 0, 0)
             grid.setSpacing(6)
             btns = []
             for idx, st in enumerate(steps):
                 lbl = st.get("label") or st.get("step") or f"Step {idx + 1}"
-                btn = QPushButton(str(lbl))
+                btn = QToolButton(gallery)
+                btn.setObjectName(f"preprocessStepThumbnail{idx + 1}")
+                btn.setProperty("stepIndex", idx)
+                btn.setText(str(lbl))
+                btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+                btn.setIconSize(QSize(132, 88))
+                btn.setMinimumSize(QSize(144, 116))
+                preview = self._preprocess_step_display_array(st)
+                if isinstance(preview, np.ndarray):
+                    vmin, vmax = self._auto_scale_percentiles(preview, 1, 99.8)
+                    pixmap = self._create_pixmap_from_array(
+                        preview,
+                        vmin,
+                        vmax,
+                        self.current_parameters.get("colormap", self._DEFAULT_COLORMAPS[0]),
+                    )
+                    if pixmap is not None:
+                        btn.setIcon(QIcon(pixmap))
                 btn.setCheckable(True)
                 btn.setChecked(idx == start_idx)
                 btn.clicked.connect(lambda checked, i=idx: self._render_step_snapshot(i))
                 r, c = divmod(idx, cols)
                 grid.addWidget(btn, r, c)
                 btns.append(btn)
-            layout.addLayout(grid)
+            scroll.setWidget(gallery)
+            layout.addWidget(scroll)
             try:
                 row_count = (len(btns) + cols - 1) // cols
-                row_h = btns[0].sizeHint().height() if btns else 24
-                # 仅设置最小高度，允许父布局根据可用空间扩展
-                page.setMinimumHeight(row_count * (row_h + 6) + 4)
+                gallery.setMinimumHeight(row_count * 122)
+                page.setMinimumHeight(0)
                 try:
                     page.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
                 except Exception:
@@ -297,6 +345,7 @@ class RenderingSetupMixin:
             except Exception:
                 pass
             self._step_buttons = btns
+            self._step_gallery_scroll = scroll
             return
 
     def _predict_viewport_pixels(self) -> Optional[Tuple[int, int]]:

@@ -37,21 +37,47 @@ fi
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1
 unset PYTHONPATH
-POSTERIOR_V8_SCRATCH_ROOT="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}"
-if [[ ! -d "$POSTERIOR_V8_SCRATCH_ROOT" || -L "$POSTERIOR_V8_SCRATCH_ROOT" ]]; then
-    echo "Slurm scratch root must be a real directory" >&2
+POSTERIOR_V8_SCRATCH_BASE="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}"
+if [[ ! -d "$POSTERIOR_V8_SCRATCH_BASE" || -L "$POSTERIOR_V8_SCRATCH_BASE" ]]; then
+    echo "worker scratch base must be a real directory" >&2
     exit 2
 fi
-case "$POSTERIOR_V8_SCRATCH_ROOT" in
+case "$POSTERIOR_V8_SCRATCH_BASE" in
     /data/dust/user/zhaiyufe|/data/dust/user/zhaiyufe/*)
         echo "job-private staging cannot use the shared dust tree" >&2; exit 2 ;;
 esac
-POSTERIOR_V8_JOB_STAGING_ROOT="$(mktemp -d "$POSTERIOR_V8_SCRATCH_ROOT/gisaxs-v5-k1-seed-${SLURM_JOB_ID}-${SLURM_ARRAY_TASK_ID}-XXXXXXXX")"
+POSTERIOR_V8_JOB_TMP_ROOT="$(mktemp -d "$POSTERIOR_V8_SCRATCH_BASE/gisaxs-v5-k1-seed-${SLURM_JOB_ID}-${SLURM_ARRAY_TASK_ID}-XXXXXXXX")"
+chmod 700 "$POSTERIOR_V8_JOB_TMP_ROOT"
+export POSTERIOR_V8_JOB_TMP_ROOT
+POSTERIOR_V8_WRAPPER_MINT="$POSTERIOR_V8_JOB_TMP_ROOT/.posterior-v8-wrapper-mint"
+conda run --no-capture-output -n tf python -I - "$POSTERIOR_V8_WRAPPER_MINT" <<'PY'
+import os
+import sys
+
+path = sys.argv[1]
+descriptor = os.open(
+    path,
+    os.O_WRONLY
+    | os.O_CREAT
+    | os.O_EXCL
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_CLOEXEC", 0),
+    0o600,
+)
+with os.fdopen(descriptor, "wb") as stream:
+    stream.write(os.urandom(32))
+    stream.flush()
+    os.fsync(stream.fileno())
+    os.fchmod(stream.fileno(), 0o400)
+PY
+POSTERIOR_V8_JOB_STAGING_ROOT="$POSTERIOR_V8_JOB_TMP_ROOT/staging"
+mkdir -m 700 "$POSTERIOR_V8_JOB_STAGING_ROOT"
 POSTERIOR_V8_JOB_PLAN="$POSTERIOR_V8_JOB_STAGING_ROOT/k1-training-plan.json"
 POSTERIOR_V8_JOB_SOURCE_ARCHIVE="$POSTERIOR_V8_JOB_STAGING_ROOT/source-snapshot.tar"
 POSTERIOR_V8_TRUSTED_VERIFIER="$POSTERIOR_V8_JOB_STAGING_ROOT/bootstrap/package_source_snapshot_v5.py"
 POSTERIOR_V8_JOB_SOURCE_ROOT="$POSTERIOR_V8_JOB_STAGING_ROOT/source"
-POSTERIOR_V8_RUNTIME_CACHE_ROOT="$(mktemp -d "$POSTERIOR_V8_SCRATCH_ROOT/gisaxs-v5-k1-train-${SLURM_JOB_ID}-${SLURM_ARRAY_TASK_ID}-XXXXXXXX")"
+POSTERIOR_V8_RUNTIME_CACHE_ROOT="$POSTERIOR_V8_JOB_TMP_ROOT/runtime-cache"
+mkdir -m 700 "$POSTERIOR_V8_RUNTIME_CACHE_ROOT"
 export XDG_CACHE_HOME="$POSTERIOR_V8_RUNTIME_CACHE_ROOT/xdg"
 export KERAS_HOME="$POSTERIOR_V8_RUNTIME_CACHE_ROOT/keras"
 export CUDA_CACHE_PATH="$POSTERIOR_V8_RUNTIME_CACHE_ROOT/cuda"
@@ -69,6 +95,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import sys
 import tarfile
@@ -164,19 +191,55 @@ if plan["source"]["root"] != str(exported_source):
 lexical(Path(plan["layout"]["run_root"]), "K1 run root")
 scratch = lexical(
     Path(os.environ.get("SLURM_TMPDIR") or os.environ.get("TMPDIR") or "/tmp"),
-    "Slurm scratch root",
+    "worker scratch base",
     require_dust=False,
 )
 if scratch.is_relative_to(DUST):
     raise ValueError("job-private staging cannot use the shared dust tree")
-status = staging_root.lstat()
+job_tmp = lexical(
+    Path(os.environ["POSTERIOR_V8_JOB_TMP_ROOT"]),
+    "wrapper job-private temporary root",
+    require_dust=False,
+)
+job_tmp_status = job_tmp.stat()
 expected_prefix = f"gisaxs-v5-k1-seed-{os.environ['SLURM_JOB_ID']}-{os.environ['SLURM_ARRAY_TASK_ID']}-"
 if (
-    staging_root.parent != scratch
-    or not staging_root.name.startswith(expected_prefix)
+    not job_tmp.is_dir()
+    or job_tmp.is_symlink()
+    or job_tmp.parent != scratch
+    or re.fullmatch(re.escape(expected_prefix) + r"[A-Za-z0-9]{8}", job_tmp.name) is None
+    or job_tmp_status.st_uid != os.getuid()
+    or stat.S_IMODE(job_tmp_status.st_mode) != 0o700
+):
+    raise ValueError("wrapper job-private temporary root is not fresh owner-private scratch")
+if {path.name for path in job_tmp.iterdir()} != {
+    "staging", "runtime-cache", ".posterior-v8-wrapper-mint"
+}:
+    raise ValueError("wrapper job-private temporary root has unexpected prior content")
+mint_status = (job_tmp / ".posterior-v8-wrapper-mint").lstat()
+if (
+    not stat.S_ISREG(mint_status.st_mode)
+    or mint_status.st_uid != os.getuid()
+    or stat.S_IMODE(mint_status.st_mode) != 0o400
+    or mint_status.st_nlink != 1
+    or mint_status.st_size != 32
+):
+    raise ValueError("wrapper one-shot mint is not fresh private state")
+runtime_cache = job_tmp / "runtime-cache"
+cache_status = runtime_cache.lstat()
+if (
+    not stat.S_ISDIR(cache_status.st_mode)
+    or runtime_cache.is_symlink()
+    or cache_status.st_uid != os.getuid()
+    or stat.S_IMODE(cache_status.st_mode) != 0o700
+):
+    raise ValueError("wrapper runtime cache root is not owner-private")
+status = staging_root.lstat()
+if (
+    staging_root != job_tmp / "staging"
     or not stat.S_ISDIR(status.st_mode)
     or status.st_uid != os.getuid()
-    or status.st_mode & 0o077
+    or stat.S_IMODE(status.st_mode) != 0o700
     or any(staging_root.iterdir())
 ):
     raise ValueError("job staging root is not fresh owner-private Slurm scratch")

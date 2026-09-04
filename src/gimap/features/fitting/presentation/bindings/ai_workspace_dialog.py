@@ -238,7 +238,9 @@ class AiWorkspaceDialogMixin:
             elif text == "Show Results":
                 btn.clicked.connect(lambda _checked=False: self._show_ai_candidate_table())
             elif text == "Refine Selected Candidate":
-                btn.clicked.connect(lambda _checked=False: self._show_ai_candidate_table())
+                btn.clicked.connect(
+                    lambda _checked=False: self._show_ai_candidate_table(prefer_refine=True)
+                )
             else:
                 btn.clicked.connect(lambda _checked=False: self._reset_ai_workspace_defaults())
             action_row.addWidget(btn)

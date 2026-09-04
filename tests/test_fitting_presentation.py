@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QApplication,
     QDoubleSpinBox,
     QLabel,
+    QPushButton,
     QSpinBox,
     QTableWidget,
     QWidget,
@@ -426,7 +427,9 @@ def test_feature_owned_fitting_workspace_preserves_controls_and_defaults_offscre
     window.close()
 
 
-def test_global_search_and_local_refine_open_mode_specific_bounds_for_selected_data_source():
+def test_global_search_and_local_refine_open_mode_specific_bounds_for_selected_data_source(
+    monkeypatch,
+):
     app = _app()
     window = MainWindow(_context())
     window.show()
@@ -442,6 +445,7 @@ def test_global_search_and_local_refine_open_mode_specific_bounds_for_selected_d
     binding.current_1d_data = {
         "q": np.linspace(0.01, 0.2, 20),
         "I": np.linspace(10.0, 2.0, 20),
+        "q_source_unit": "angstrom",
     }
     binding.current_cut_data = {
         "x_coords": np.linspace(0.03, 0.12, 12),
@@ -453,6 +457,22 @@ def test_global_search_and_local_refine_open_mode_specific_bounds_for_selected_d
     binding._q_full_max = None
 
     window.fitCurrentDataCheckBox.setChecked(False)
+    ai_q, ai_intensity, _ai_sigma = binding._current_ai_curve_arrays()
+    np.testing.assert_allclose(ai_q, binding.current_1d_data["q"] * 10.0)
+    np.testing.assert_allclose(ai_intensity, binding.current_1d_data["I"])
+
+    original_cut = binding.current_cut_data
+    binding.current_cut_data = {
+        "x_coords": np.linspace(0.03, 0.12, 20),
+        "y_intensity": np.linspace(8.0, 3.0, 20),
+        "q_source_unit": "nm",
+    }
+    window.fitCurrentDataCheckBox.setChecked(True)
+    ai_cut_q, _ai_cut_intensity, _ai_cut_sigma = binding._current_ai_curve_arrays()
+    np.testing.assert_allclose(ai_cut_q, binding.current_cut_data["x_coords"])
+    binding.current_cut_data = original_cut
+    window.fitCurrentDataCheckBox.setChecked(False)
+
     initial_setup = binding._build_manual_refine_setup()
     for meta in binding.param_trigger_manager._meta_registry.values():
         assert meta["last_value"] == pytest.approx(meta["widget"].value())
@@ -558,6 +578,53 @@ def test_global_search_and_local_refine_open_mode_specific_bounds_for_selected_d
     assert "current cut (12 fitting points)" in summary.text()
     dialog.close()
     app.processEvents()
+
+    loaded_candidates = []
+    refine_modes = []
+
+    def record_candidate(row, *, refresh_plot=True):
+        loaded_candidates.append((row, refresh_plot))
+        return True
+
+    monkeypatch.setattr(binding, "_load_ai_candidate_params", record_candidate)
+    monkeypatch.setattr(
+        binding,
+        "_show_manual_auto_refine_dialog",
+        lambda mode="local": refine_modes.append(mode),
+    )
+    candidate = {
+        "rank": 1,
+        "combination": "sphere+sphere+sphere",
+        "score_weighted_probability": 0.72,
+        "posterior_frequency": 0.41,
+        "best_log_rmse": 0.12,
+        "best_chi2_weighted": 1.5,
+        "best_source": "posterior_sample",
+        "components": [
+            {"type": "sphere", "weight": 1.0 / 3.0, "params": {"R": radius}}
+            for radius in (4.0, 8.0, 14.0)
+        ],
+    }
+    binding._show_ai_candidate_table(rows=[candidate], prefer_refine=True)
+    candidate_dialog = binding._ai_results_dialog
+    candidate_table = candidate_dialog.findChild(QTableWidget, "aiFittingCandidatesTable")
+    refine_button = candidate_dialog.findChild(QPushButton, "aiRefineCandidateButton")
+    assert candidate_table.currentRow() == 0
+    assert refine_button.isDefault()
+    QTest.mouseClick(refine_button, Qt.LeftButton)
+    QTest.qWait(10)
+    app.processEvents()
+    assert loaded_candidates[-1][0]["combination"] == candidate["combination"]
+    assert loaded_candidates[-1][1] is True
+    assert refine_modes == ["local"]
+
+    binding._show_ai_candidate_table(rows=[candidate])
+    candidate_dialog = binding._ai_results_dialog
+    global_button = candidate_dialog.findChild(QPushButton, "aiGlobalSearchCandidateButton")
+    QTest.mouseClick(global_button, Qt.LeftButton)
+    QTest.qWait(10)
+    app.processEvents()
+    assert refine_modes == ["local", "global"]
 
     binding.current_1d_data = None
     window.fitCurrentDataCheckBox.setChecked(False)

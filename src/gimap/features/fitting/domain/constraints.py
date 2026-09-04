@@ -124,26 +124,26 @@ def default_global_search_bounds(
 
     if base in {"R", "h"}:
         if value == 0.0:
-            return small_length, broad_length
+            return 0.0, broad_length
         return min(value * 0.25, small_length), max(value * 4.0, broad_length)
 
     if base == "D":
         upper_from_q = max(broad_length, np.pi * broad_length)
         if value == 0.0:
-            return small_length, upper_from_q
+            return 0.0, upper_from_q
         return min(value * 0.1, small_length), max(value * 10.0, upper_from_q)
 
     if base in {"sigma_R", "sigma_h", "sigma_D"}:
         width_floor = max(1e-8, small_length * 0.01)
         if value == 0.0:
-            return width_floor, broad_length
+            return 0.0, broad_length
         return min(value * 0.1, width_floor), max(value * 3.0, broad_length)
 
     if base == "sigma_Res":
         resolution_floor = max(1e-8, q_min * 1e-3) if q_min > 0 else 1e-4
         resolution_ceiling = max(1.0, 2.0 * q_max) if q_max > 0 else 10.0
         if value == 0.0:
-            return resolution_floor, resolution_ceiling
+            return 0.0, resolution_ceiling
         return min(value * 0.1, resolution_floor), max(
             value * 5.0,
             resolution_ceiling,

@@ -39,6 +39,11 @@ from .grouped_training_shards_v5 import (
     V5GroupedTrainingAudit,
     inspect_v5_grouped_training,
 )
+from .job_local_input_capability_v5 import (
+    V5JobLocalInputCapability,
+    _job_local_capability_post_validation_payload,
+    _validate_job_local_input_capability,
+)
 from .model_v5 import (
     build_branch_conditioned_proposal_model,
     validate_model_v5_graph_contract,
@@ -52,7 +57,7 @@ from .training_objective_v5 import (
 
 V5_GROUPED_TRAINER_SCHEMA = "gisaxs.posterior_v8.grouped_training_run/v3"
 V5_GROUPED_TRAINER_VERSION = (
-    "v5_2_policy_bound_operational_mass_coverage_checkpoint_inventory_v2"
+    "v5_2_policy_bound_operational_mass_coverage_checkpoint_inventory_v3"
 )
 RUN_PLAN_FILE = "run_plan.json"
 HISTORY_FILE = "history.json"
@@ -63,13 +68,6 @@ LAST_MODEL_FILE = "last.keras"
 FULL_CHECKPOINT_DIRECTORY = "checkpoints"
 FULL_CHECKPOINT_SELECTION_STATUS = "pending_external_exact_budget_auc_and_ttfc_selection"
 BEST_MODEL_ROLE = "validation_objective_convenience_not_paper_selected"
-V5_JOB_LOCAL_INPUT_CAPABILITY_SCHEMA = (
-    "gisaxs.posterior_v8.grouped_training_job_local_input_capability/v1"
-)
-V5_JOB_LOCAL_INPUT_CAPABILITY_VERSION = (
-    "k1_verified_original_to_node_local_read_only_input_mapping_v1"
-)
-
 _COUNT_METRICS = {
     "candidate_count",
     "verified_count",
@@ -99,66 +97,6 @@ class V5GroupedTrainingResult:
     full_checkpoint_paths: tuple[Path, ...]
     checkpoint_selection_status: str
     paper_model_eligible: bool
-
-
-@dataclass(frozen=True, kw_only=True)
-class V5JobLocalInputCapability:
-    """Narrow capability for already-staged, immutable Slurm-node inputs."""
-
-    staging_root: str
-    slurm_job_id: str
-    scientific_plan_sha256: str
-    staging_proof_sha256: str
-    original_to_local_sha256: tuple[tuple[str, str, str], ...]
-    trainer_argument_local_paths: tuple[str, ...]
-    capability_sha256: str
-
-    @classmethod
-    def create(
-        cls,
-        *,
-        staging_root: str,
-        slurm_job_id: str,
-        scientific_plan_sha256: str,
-        staging_proof_sha256: str,
-        original_to_local_sha256: Sequence[tuple[str, str, str]],
-        trainer_argument_local_paths: Sequence[str],
-    ) -> "V5JobLocalInputCapability":
-        mappings = tuple(tuple(value) for value in original_to_local_sha256)
-        core = {
-            "schema": V5_JOB_LOCAL_INPUT_CAPABILITY_SCHEMA,
-            "version": V5_JOB_LOCAL_INPUT_CAPABILITY_VERSION,
-            "staging_root": staging_root,
-            "slurm_job_id": slurm_job_id,
-            "scientific_plan_sha256": scientific_plan_sha256,
-            "staging_proof_sha256": staging_proof_sha256,
-            "original_to_local_sha256": [list(value) for value in mappings],
-            "trainer_argument_local_paths": list(trainer_argument_local_paths),
-        }
-        return cls(
-            staging_root=staging_root,
-            slurm_job_id=slurm_job_id,
-            scientific_plan_sha256=scientific_plan_sha256,
-            staging_proof_sha256=staging_proof_sha256,
-            original_to_local_sha256=mappings,
-            trainer_argument_local_paths=tuple(trainer_argument_local_paths),
-            capability_sha256=sha256(canonical_json(core).encode()).hexdigest(),
-        )
-
-    def audit_payload(self) -> dict[str, object]:
-        return {
-            "schema": V5_JOB_LOCAL_INPUT_CAPABILITY_SCHEMA,
-            "version": V5_JOB_LOCAL_INPUT_CAPABILITY_VERSION,
-            "staging_root": self.staging_root,
-            "slurm_job_id": self.slurm_job_id,
-            "scientific_plan_sha256": self.scientific_plan_sha256,
-            "staging_proof_sha256": self.staging_proof_sha256,
-            "original_to_local_sha256": [
-                list(value) for value in self.original_to_local_sha256
-            ],
-            "trainer_argument_local_paths": list(self.trainer_argument_local_paths),
-            "capability_sha256": self.capability_sha256,
-        }
 
 
 def _source_sha256() -> dict[str, str]:
@@ -354,20 +292,16 @@ def _runtime_payload(strategy: tf.distribute.Strategy) -> dict[str, object]:
     }
 
 
-def _validate_job_local_input_capability(
-    datasets: Sequence[Path], capability: V5JobLocalInputCapability
-) -> None:
-    """Keep the node-local exception closed until its receipt audit is complete."""
-
-    del datasets, capability
-    raise RuntimeError("job_local_staging_security_audit_not_closed")
-
 def _require_dust_paths_under_slurm(
     datasets: Sequence[Path],
     output: Path,
     job_local_input_capability: V5JobLocalInputCapability | None = None,
 ) -> None:
     if "SLURM_JOB_ID" not in os.environ:
+        if job_local_input_capability is not None:
+            raise RuntimeError(
+                "job-local input capability is valid only inside its Slurm allocation"
+            )
         return
     dust = Path("/data/dust/user/zhaiyufe")
     try:
@@ -375,7 +309,11 @@ def _require_dust_paths_under_slurm(
     except ValueError as exc:
         raise ValueError(f"Maxwell Slurm output must be under {dust}/") from exc
     if job_local_input_capability is not None:
-        _validate_job_local_input_capability(datasets, job_local_input_capability)
+        _validate_job_local_input_capability(
+            datasets,
+            job_local_input_capability,
+            phase="pre_training",
+        )
         return
     for path in datasets:
         try:
@@ -619,6 +557,11 @@ def train_v5_grouped_model(
         },
         "source_sha256": sources,
         "runtime": runtime,
+        "job_local_input_capability": (
+            None
+            if job_local_input_capability is None
+            else job_local_input_capability.audit_payload()
+        ),
     }
     plan = {
         **plan_core,
@@ -781,6 +724,18 @@ def train_v5_grouped_model(
         for artifact in adapter.input_artifact_audit():
             if _file_sha256(Path(str(artifact["path"]))) != artifact["artifact_sha256"]:
                 raise RuntimeError("an input parent/sidecar artifact changed during training")
+        job_local_post_validation = None
+        if job_local_input_capability is not None:
+            _validate_job_local_input_capability(
+                sources_all,
+                job_local_input_capability,
+                phase="post_training",
+            )
+            job_local_post_validation = (
+                _job_local_capability_post_validation_payload(
+                    job_local_input_capability
+                )
+            )
         for checkpoint in history["full_checkpoints"]:
             checkpoint_path = output / str(checkpoint["relative_path"])
             if _file_sha256(checkpoint_path) != checkpoint["file_sha256"]:
@@ -814,6 +769,7 @@ def train_v5_grouped_model(
             "history_sha256": history_hash,
             "source_sha256": sources,
             "slurm": runtime["slurm"],
+            "job_local_input_capability": job_local_post_validation,
             "status": "complete",
         }
         result = {
@@ -871,6 +827,7 @@ __all__ = [
     "V5GroupedTrainingAudit",
     "V5GroupedTrainingConfig",
     "V5GroupedTrainingResult",
+    "V5JobLocalInputCapability",
     "inspect_v5_grouped_training",
     "train_v5_grouped_model",
 ]

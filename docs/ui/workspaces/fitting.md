@@ -10,7 +10,7 @@
   [`tests/test_fitting_presentation.py`](../../../tests/test_fitting_presentation.py)、
   [`tests/test_fitting_view_model.py`](../../../tests/test_fitting_view_model.py)、
   [`tests/test_ui_workspace_layouts.py`](../../../tests/test_ui_workspace_layouts.py)
-- **Last verified**: 2026-09-03
+- **Last verified**: 2026-09-04
 
 ## 当前状态
 
@@ -130,6 +130,10 @@ calculation、文件格式判断、TensorFlow inference 或 fitting orchestratio
   当前值附近的 polishing 范围；运行期间显示所处阶段、总进度和当前/最佳 logRMSE，并可停止，完成后
   把选中参数写回 Components/Global 控件。Global 的 Target logRMSE 默认是 `0`（不提前停止），避免
   沿用 AI refine 的宽松阈值而在搜索尚未收敛时结束；
+- `Fast Predict` 使用当前数据源生成并物理验证 initial-parameter 候选，不做隐式 refinement；候选表
+  同时展示 fit likelihood 与 model probability。选择一行会预览该候选，`Load & Local Refine...`
+  直接打开窄范围精修弹窗，`Load & Global Search...` 在模型选中的 topology 上打开宽范围搜索。
+  因此 AI proposal、候选选择、传统优化和参数写回属于一条可完成的 workflow；
 - Components/Global 参数输入保留至少 12 位小数；进入页面、打开搜索弹窗或焦点切换不会把已加载的
   小参数（例如 `10⁻⁸` 量级的 `D/sigma_D`）静默舍入并写回配置；
 - Global 的 `Default step` 列就是数值增量设置入口，修改后保存到 UI preferences。Resolution Sigma
@@ -212,7 +216,8 @@ application 行为。
       弹窗，勾选 `Use current cut` 时使用当前 cut，未勾选时使用 imported 1D data；bounds 包含当前
       值，完成后写回选中参数；
 - [ ] Manual / AI assisted 切换不重置当前 curve、model 或 constraint state；
-- [ ] AI model refresh/open、constraint、Fast/Full、Stop 和 advanced constraints 正常；
+- [ ] AI model refresh/open、constraint、Fast/Full、Stop 和 advanced constraints 正常；Fast 结果显示
+      fit likelihood/model probability，选中候选后可直接进入 Local Refine 或 Global Search；
 - [ ] detector Preview 的 drag/drop、double-click 和 overlay 正常；
 - [ ] Curve 的 Data only、Compare、Model only 分别显示正确图层，实验曲线、各 component、resolution
       和总拟合曲线一致；

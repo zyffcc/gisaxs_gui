@@ -9,7 +9,7 @@ for every query and every retained full epoch.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from hashlib import sha256
 import json
 from numbers import Integral, Real
@@ -38,19 +38,20 @@ from .paper_checkpoint_selector_v5 import (
     build_v5_checkpoint_evaluation_method_binding,
 )
 from .paper_endpoint_metrics import EXACT_FORWARD_BUDGETS, OUTPUT_CAPS
+from .tuning_lossless_emission_store_v5 import publish_v5_tuning_lossless_emissions
+from .tuning_trace_artifact_v5 import (
+    V5_TUNING_EXACT_TRACE_ARTIFACT_SCHEMA,
+    V5_TUNING_EXACT_TRACE_ARTIFACT_VERSION,
+    build_v5_tuning_exact_trace_artifact,
+    write_v5_tuning_json_exclusive,
+)
 
 
 V5_TUNING_CHECKPOINT_RUNTIME_SCHEMA = (
     "gisaxs.posterior_v8.tuning_checkpoint_exact_budget_runtime/v1"
 )
 V5_TUNING_CHECKPOINT_RUNTIME_VERSION = (
-    "all_retained_epochs_same_cohort_method_seed_complete_exact_trace_v1"
-)
-V5_TUNING_EXACT_TRACE_ARTIFACT_SCHEMA = (
-    "gisaxs.posterior_v8.tuning_checkpoint_exact_call_trace/v1"
-)
-V5_TUNING_EXACT_TRACE_ARTIFACT_VERSION = (
-    "checkpoint_query_method_seed_bound_complete_ledger_v1"
+    "all_retained_epochs_complete_trace_and_lossless_typed_emissions_v2"
 )
 V5_TUNING_CHECKPOINT_RUNTIME_COMPLETE = (
     "all_retained_full_epochs_exact_budget_evaluated"
@@ -111,23 +112,6 @@ def _checked_regular_file(path: Path, expected_sha256: str, name: str) -> Path:
     if _file_sha256(path) != _digest(expected_sha256, f"{name} SHA-256"):
         raise RuntimeError(f"{name} changed or disagrees with its frozen SHA-256")
     return path.resolve(strict=True)
-
-
-def _write_json_exclusive(path: Path, payload: Mapping[str, object]) -> str:
-    encoded = (canonical_json(dict(payload)) + "\n").encode("utf-8")
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
-    except BaseException:
-        try:
-            path.unlink()
-        except OSError:
-            pass
-        raise
-    return sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
@@ -227,6 +211,8 @@ class V5TuningCheckpointRuntimeResult:
     evaluations: tuple[V5TuningCheckpointEvaluation, ...]
     trace_paths: tuple[Path, ...]
     trace_artifact_sha256s: tuple[str, ...]
+    lossless_emission_paths: tuple[Path, ...]
+    lossless_emission_file_sha256s: tuple[str, ...]
     summary_paths: tuple[Path, ...]
     summary_file_sha256s: tuple[str, ...]
     completion_path: Path
@@ -265,62 +251,6 @@ def _validate_cohort_references(
         ):
             raise ValueError("reference set escaped the frozen cohort/context/payload identity")
     return ordered
-
-
-def _trace_artifact_core(
-    *,
-    checkpoint: V5RetainedFullCheckpoint,
-    reference: V5FrozenReferenceSet,
-    method_id: str,
-    method_binding: Mapping[str, object],
-    inference_seed: int,
-    source_summary_artifact_sha256: str,
-    result: V5TuningExactTraceRunResult,
-    ledger_sha256: str,
-) -> dict[str, object]:
-    return {
-        "schema": V5_TUNING_EXACT_TRACE_ARTIFACT_SCHEMA,
-        "version": V5_TUNING_EXACT_TRACE_ARTIFACT_VERSION,
-        "trace_id": result.trace_id,
-        "checkpoint": {
-            "full_epoch": checkpoint.full_epoch,
-            "artifact_sha256": checkpoint.checkpoint_artifact_sha256,
-            "weights_sha256": checkpoint.checkpoint_weights_sha256,
-            "training_result_sha256": checkpoint.training_result_sha256,
-        },
-        "source_summary_artifact_sha256": source_summary_artifact_sha256,
-        "query": {
-            "query_id": reference.query_id,
-            "query_context_sha256": reference.query_context_sha256,
-            "pairing_unit_id": reference.pairing_unit_id,
-            "reference_set_id": reference.reference_set_id,
-            "reference_set_sha256": reference.reference_set_sha256,
-            "reference_representative_payload_set_sha256": (
-                reference.representative_payload_set_sha256
-            ),
-        },
-        "method_id": method_id,
-        "method_binding": dict(method_binding),
-        "inference_seed": inference_seed,
-        "exact_forward_call_budget": EXACT_FORWARD_BUDGETS[-1],
-        "exact_forward_calls": [asdict(value) for value in result.exact_forward_calls],
-        "candidate_emissions": [
-            {
-                "available_after_call": value.available_after_call,
-                "output_rank": value.output_rank,
-                "candidate_id": value.candidate_id,
-                "compatibility_status": value.compatibility_status,
-                "elapsed_seconds": value.elapsed_seconds,
-                "representative_payload": value.payload.audit_payload(),
-                "representative_payload_sha256": value.payload.sha256,
-            }
-            for value in result.candidate_emissions
-        ],
-        "trace_ledger_sha256": ledger_sha256,
-        "completion_elapsed_seconds": result.completion_elapsed_seconds,
-        "complete_contiguous_exact_call_trace": True,
-        "validation_loss_used": False,
-    }
 
 
 def evaluate_v5_retained_checkpoints_on_tuning(
@@ -387,6 +317,9 @@ def evaluate_v5_retained_checkpoints_on_tuning(
     trace_paths = []
     trace_artifact_sha256s = []
     trace_inventory = []
+    lossless_emission_paths = []
+    lossless_emission_file_sha256s = []
+    lossless_emission_inventory = []
     summary_paths = []
     summary_file_sha256s = []
     summary_inventory = []
@@ -457,21 +390,59 @@ def evaluate_v5_retained_checkpoints_on_tuning(
             last_elapsed = provisional.exact_forward_calls[-1].elapsed_seconds
             if result.completion_elapsed_seconds < last_elapsed:
                 raise ValueError("trace completion time precedes its final exact call")
-            trace_core = _trace_artifact_core(
-                checkpoint=checkpoint,
-                reference=reference,
+            lossless = publish_v5_tuning_lossless_emissions(
+                output_root=root,
+                full_epoch=checkpoint.full_epoch,
+                query_id=reference.query_id,
+                emissions=result.candidate_emissions,
+            )
+            lossless_emission_paths.extend(
+                root / value.relative_path for value in lossless
+            )
+            lossless_emission_file_sha256s.extend(
+                value.file_sha256 for value in lossless
+            )
+            lossless_emission_inventory.extend(
+                {
+                    "full_epoch": checkpoint.full_epoch,
+                    "query_id": reference.query_id,
+                    **value.audit_payload(),
+                }
+                for value in lossless
+            )
+            trace_core = build_v5_tuning_exact_trace_artifact(
+                trace_id=result.trace_id,
+                checkpoint_binding={
+                    "full_epoch": checkpoint.full_epoch,
+                    "artifact_sha256": checkpoint.checkpoint_artifact_sha256,
+                    "weights_sha256": checkpoint.checkpoint_weights_sha256,
+                    "training_result_sha256": checkpoint.training_result_sha256,
+                },
+                query_binding={
+                    "query_id": reference.query_id,
+                    "query_context_sha256": reference.query_context_sha256,
+                    "pairing_unit_id": reference.pairing_unit_id,
+                    "reference_set_id": reference.reference_set_id,
+                    "reference_set_sha256": reference.reference_set_sha256,
+                    "reference_representative_payload_set_sha256": (
+                        reference.representative_payload_set_sha256
+                    ),
+                },
                 method_id=method,
                 method_binding=binding,
                 inference_seed=seed,
                 source_summary_artifact_sha256=source_sha,
-                result=result,
+                exact_forward_calls=result.exact_forward_calls,
+                candidate_emissions=result.candidate_emissions,
                 ledger_sha256=provisional.ledger_sha256,
+                lossless_emissions=lossless,
+                completion_elapsed_seconds=result.completion_elapsed_seconds,
             )
             trace_path = trace_root / (
                 f"epoch-{checkpoint.full_epoch:06d}-"
                 f"{sha256(reference.query_id.encode('utf-8')).hexdigest()}.json"
             )
-            trace_sha = _write_json_exclusive(trace_path, trace_core)
+            trace_sha = write_v5_tuning_json_exclusive(trace_path, trace_core)
             trace_paths.append(trace_path)
             trace_artifact_sha256s.append(trace_sha)
             trace_inventory.append(
@@ -525,7 +496,7 @@ def evaluate_v5_retained_checkpoints_on_tuning(
             "checkpoint artifact",
         )
         summary_path = summary_root / f"full-epoch-{checkpoint.full_epoch:06d}.json"
-        summary_file_sha = _write_json_exclusive(
+        summary_file_sha = write_v5_tuning_json_exclusive(
             summary_path,
             {**evaluation.audit_payload(), "summary_sha256": evaluation.sha256},
         )
@@ -557,14 +528,16 @@ def evaluate_v5_retained_checkpoints_on_tuning(
         "retained_full_epochs": list(epochs),
         "expected_tuning_query_count": len(references),
         "expected_exact_trace_count": len(values) * len(references),
+        "expected_lossless_emission_count": len(lossless_emission_inventory),
         "tuning_summary_schema": V5_TUNING_CHECKPOINT_SUMMARY_SCHEMA,
         "tuning_summary_version": V5_TUNING_CHECKPOINT_SUMMARY_VERSION,
         "checkpoint_summaries": summary_inventory,
         "exact_trace_artifacts": trace_inventory,
+        "lossless_emission_artifacts": lossless_emission_inventory,
         "validation_loss_used": False,
         "test_calibration_reference_or_ood_used": False,
         "publication_rule": (
-            "completion_written_exclusively_after_every_trace_and_summary_file"
+            "completion_written_exclusively_after_every_trace_summary_and_lossless_emission"
         ),
     }
     completion_sha = sha256(
@@ -580,10 +553,14 @@ def evaluate_v5_retained_checkpoints_on_tuning(
         )
     for path, expected_sha in zip(trace_paths, trace_artifact_sha256s):
         _checked_regular_file(path, expected_sha, "exact trace artifact")
+    for path, expected_sha in zip(
+        lossless_emission_paths, lossless_emission_file_sha256s
+    ):
+        _checked_regular_file(path, expected_sha, "lossless emission artifact")
     for path, expected_sha in zip(summary_paths, summary_file_sha256s):
         _checked_regular_file(path, expected_sha, "checkpoint summary")
     completion_path = root / "completion.json"
-    completion_file_sha = _write_json_exclusive(
+    completion_file_sha = write_v5_tuning_json_exclusive(
         completion_path,
         {**completion_core, "completion_sha256": completion_sha},
     )
@@ -592,6 +569,10 @@ def evaluate_v5_retained_checkpoints_on_tuning(
         evaluations=tuple(evaluations),
         trace_paths=tuple(trace_paths),
         trace_artifact_sha256s=tuple(trace_artifact_sha256s),
+        lossless_emission_paths=tuple(lossless_emission_paths),
+        lossless_emission_file_sha256s=tuple(
+            lossless_emission_file_sha256s
+        ),
         summary_paths=tuple(summary_paths),
         summary_file_sha256s=tuple(summary_file_sha256s),
         completion_path=completion_path,

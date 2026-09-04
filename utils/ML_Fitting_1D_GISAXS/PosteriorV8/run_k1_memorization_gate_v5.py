@@ -46,6 +46,15 @@ from .k1_phase_a_cross_platform_v5 import (
 from .k1_phase_a_dataset_binding_v5 import (
     validate_v5_k1_phase_a_dataset_binding_file,
 )
+from .k1_phase_a_capability_v7 import (
+    V7PhaseAInputCapability,
+    _consumed_capability_payload,
+    _validate_phase_a_capability,
+)
+from .k1_phase_a_contract_v7 import (
+    PHASE_A_LAUNCH_BINDING_SCHEMA,
+    validate_launch_binding_payload,
+)
 from .model_v5 import (
     build_branch_conditioned_proposal_model,
     validate_model_v5_graph_contract,
@@ -60,10 +69,10 @@ from .study_protocol import protocol_payload
 
 
 V5_K1_DATASET_GATE_SCHEMA = (
-    "gisaxs.posterior_v8.k1_single_branch_dataset_memorization_gate/v3"
+    "gisaxs.posterior_v8.k1_single_branch_dataset_memorization_gate/v6"
 )
 V5_K1_DATASET_GATE_VERSION = (
-    "posterior_v8_v5_2_evidence_bound_sphere_pattern0_mixture_median_wiring_gate_v3"
+    "posterior_v8_v5_2_bounded_memory_fixed_query_aware_wiring_gate_v6"
 )
 V5_K1_DATASET_GATE_ROLE = (
     "single_branch_sphere_pattern0_memorization_wiring_not_model_acceptance"
@@ -72,9 +81,9 @@ MAXWELL_DUST_ROOT = Path("/data/dust/user/zhaiyufe")
 RESULT_FILENAME = "result.json"
 MODEL_FILENAME = "model.keras"
 MODEL_PROVENANCE_FILENAME = "model.provenance.json"
-V5_K1_MODEL_PROVENANCE_SCHEMA = "gisaxs.posterior_v8.k1_phase_a_model_provenance/v1"
+V5_K1_MODEL_PROVENANCE_SCHEMA = "gisaxs.posterior_v8.k1_phase_a_model_provenance/v2"
 V5_K1_MODEL_PROVENANCE_VERSION = (
-    "posterior_v8_model_bytes_dataset_source_and_cross_platform_gate_binding_v1"
+    "posterior_v8_model_bytes_dataset_source_gate_and_launch_binding_v2"
 )
 V5_K1_TRAINING_EVIDENCE_SCHEMA = "gisaxs.posterior_v8.k1_phase_a_training_evidence/v1"
 V5_K1_TRAINING_EVIDENCE_VERSION = (
@@ -99,6 +108,8 @@ V5_K1_DATASET_GATE_PUBLISHED_RESULT_FIELDS = frozenset(
         "dataset_validation",
         "source",
         "training_evidence",
+        "launch_binding",
+        "job_local_capability",
         "output_dir",
         "created_at_utc",
         "status",
@@ -169,6 +180,7 @@ def _positive_integer(value: int, name: str) -> int:
 @dataclass(frozen=True, kw_only=True)
 class V5K1DatasetGateConfig:
     steps: int = 1500
+    batch_size: int = 32
     learning_rate: float = 3.0e-3
     seed: int = 20260903
     max_final_target_median_rms: float = 0.01
@@ -180,12 +192,14 @@ class V5K1DatasetGateConfig:
     def __post_init__(self) -> None:
         gate = V5MemorizationGateConfig(
             steps=self.steps,
+            batch_size=self.batch_size,
             learning_rate=self.learning_rate,
             seed=self.seed,
             max_final_target_median_rms=self.max_final_target_median_rms,
             minimum_loss_reduction=self.minimum_loss_reduction,
         )
         object.__setattr__(self, "steps", gate.steps)
+        object.__setattr__(self, "batch_size", gate.batch_size)
         object.__setattr__(self, "learning_rate", gate.learning_rate)
         object.__setattr__(self, "seed", gate.seed)
         object.__setattr__(self, "max_final_target_median_rms", gate.max_final_target_median_rms)
@@ -208,6 +222,7 @@ class V5K1DatasetGateConfig:
         return (
             V5MemorizationGateConfig(
                 steps=steps,
+                batch_size=self.batch_size,
                 learning_rate=self.learning_rate,
                 seed=self.seed,
                 max_final_target_median_rms=self.max_final_target_median_rms,
@@ -246,7 +261,7 @@ def _one_item(value: object, name: str) -> object:
 
 
 def validate_v5_k1_memorization_dataset(dataset: V5GroupedDataset) -> dict[str, object]:
-    """Fail closed unless every row is a K=1 one-call known-truth target."""
+    """Fail closed unless every row is a valid K=1 one-call known-truth target."""
 
     if not isinstance(dataset, V5GroupedDataset):
         raise TypeError("dataset must be a checked V5GroupedDataset")
@@ -310,8 +325,15 @@ def validate_v5_k1_memorization_dataset(dataset: V5GroupedDataset) -> dict[str, 
             raise ValueError(f"K=1 gate requires known-truth warmup field {name}={expected!r}")
     if not np.all(arrays[candidate_label("exact_metric_value")] == 0.0):
         raise ValueError("known-truth warmup exact metric must be zero")
-    if np.any(np.sum(arrays[candidate_label("varying_dimension_mask")], axis=-1) < 1):
-        raise ValueError("every K=1 warmup target must have a varying coordinate")
+    varying = arrays[candidate_label("varying_dimension_mask")].astype(np.bool_, copy=False)
+    target = arrays[candidate_label("target_local")]
+    varying_per_target = np.sum(varying, axis=-1)
+    learnable_target_count = int(np.count_nonzero(varying_per_target > 0))
+    fully_fixed_target_count = int(dataset.candidate_count - learnable_target_count)
+    if learnable_target_count < 1:
+        raise ValueError("K=1 warmup dataset needs at least one learnable target")
+    if not np.all(target[~varying] == np.float32(0.5)):
+        raise ValueError("fixed/inactive K=1 target coordinates must equal canonical 0.5")
 
     x = arrays["observation__input__x"]
     if x.ndim != 3 or x.shape[1] < 1:
@@ -320,6 +342,9 @@ def validate_v5_k1_memorization_dataset(dataset: V5GroupedDataset) -> dict[str, 
         "clean_parent_count": dataset.recipe_count,
         "observation_view_count": dataset.observation_count,
         "known_truth_target_count": dataset.candidate_count,
+        "learnable_target_count": learnable_target_count,
+        "fully_fixed_target_count": fully_fixed_target_count,
+        "varying_coordinate_count": int(np.count_nonzero(varying)),
         "joined_positive_example_count": dataset.joined_count,
         "max_points": int(x.shape[1]),
         "topology_ids": sorted({int(value) for value in topology_ids}),
@@ -567,6 +592,9 @@ def run_v5_k1_dataset_memorization_gate(
     dataset_allowed_root: Path | None = None,
     hostname: str | None = None,
     environment: Mapping[str, str] | None = None,
+    launch_binding: Mapping[str, object] | None = None,
+    job_local_input_capability: V7PhaseAInputCapability | None = None,
+    authoritative_output_dir: str | os.PathLike[str] | None = None,
 ) -> dict[str, object]:
     """Validate one checked shard and optionally execute/publish its gate."""
 
@@ -577,12 +605,32 @@ def run_v5_k1_dataset_memorization_gate(
     dataset_root = allowed_root if dataset_allowed_root is None else dataset_allowed_root
     dataset_file = _under_root(Path(dataset_path), dataset_root, "dataset_path")
     output = _under_root(Path(output_dir), allowed_root, "output_dir")
+    recorded_output = (
+        output
+        if authoritative_output_dir is None
+        else _under_root(Path(authoritative_output_dir), allowed_root, "authoritative_output_dir")
+    )
     if not dataset_file.is_file():
         raise FileNotFoundError(f"checked grouped dataset does not exist: {dataset_file}")
     if output.exists():
         raise FileExistsError(f"refusing to overwrite output directory: {output}")
     if not output.parent.is_dir():
         raise FileNotFoundError(f"output parent directory does not exist: {output.parent}")
+
+    if not dry_run:
+        if (
+            not isinstance(launch_binding, Mapping)
+            or launch_binding.get("schema") != PHASE_A_LAUNCH_BINDING_SCHEMA
+            or launch_binding.get("stage") not in {"smoke_gate", "full_gate"}
+            or job_local_input_capability is None
+        ):
+            raise ValueError("real Phase-A gate requires its v7 launch binding and capability")
+        launch_binding = validate_launch_binding_payload(launch_binding)
+        _validate_phase_a_capability(
+            job_local_input_capability,
+            stage=str(launch_binding["stage"]),
+            phase="pre_use",
+        )
 
     dataset, receipt = read_v5_grouped_dataset(dataset_file)
     validation = validate_v5_k1_memorization_dataset(dataset)
@@ -611,7 +659,9 @@ def run_v5_k1_dataset_memorization_gate(
         "dataset_validation": validation,
         "source": _source_identity(Path(source_root)),
         "training_evidence": training_evidence,
-        "output_dir": str(output),
+        "output_dir": str(recorded_output),
+        "launch_binding": None if launch_binding is None else dict(launch_binding),
+        "job_local_capability": None,
     }
     if dry_run:
         return {
@@ -624,6 +674,8 @@ def run_v5_k1_dataset_memorization_gate(
     host = socket.gethostname() if hostname is None else hostname
     selected_environment = os.environ if environment is None else environment
     job_id = _execution_guard(host, selected_environment)
+    if job_id != launch_binding["slurm_job_id"]:
+        raise RuntimeError("current Slurm job id differs from the Phase-A launch binding")
     model, gate_result = run_v5_memorization_gate(
         dataset,
         lambda: build_branch_conditioned_proposal_model(
@@ -643,14 +695,25 @@ def run_v5_k1_dataset_memorization_gate(
     ):
         raise RuntimeError("Phase-A training evidence changed during model optimization")
 
+    _validate_phase_a_capability(
+        job_local_input_capability,
+        stage=str(launch_binding["stage"]),
+        phase="post_use",
+    )
+    common["job_local_capability"] = _consumed_capability_payload(
+        job_local_input_capability
+    )
+
     output.mkdir(mode=0o700, exist_ok=False)
     model_identity = _publish_model(model, output / MODEL_FILENAME)
     model_provenance_core = {
         "schema": V5_K1_MODEL_PROVENANCE_SCHEMA,
         "version": V5_K1_MODEL_PROVENANCE_VERSION,
-        "status": "BOUND",
+        "status": "BOUND_TO_INPUTS_PENDING_STAGE_COMPLETION",
         "model": dict(model_identity),
         "training_evidence": training_evidence,
+        "launch_binding": dict(launch_binding),
+        "job_local_capability": common["job_local_capability"],
     }
     model_provenance = {
         **model_provenance_core,
@@ -747,6 +810,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--comparison-result-sha256", required=True)
     parser.add_argument("--gate-claim-sha256", required=True)
     parser.add_argument("--steps", type=int, default=1500)
+    parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=3.0e-3)
     parser.add_argument("--seed", type=int, default=20260903)
     parser.add_argument("--max-final-target-median-rms", type=float, default=0.01)
@@ -780,6 +844,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         config=V5K1DatasetGateConfig(
             steps=args.steps,
+            batch_size=args.batch_size,
             learning_rate=args.learning_rate,
             seed=args.seed,
             max_final_target_median_rms=args.max_final_target_median_rms,

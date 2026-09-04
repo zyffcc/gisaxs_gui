@@ -6,7 +6,13 @@ from pathlib import Path
 import re
 from typing import Any
 
-from ...domain import ModelSpec, OutputSpec, PredictionModule, PreprocessSpec
+from ...domain import (
+    DistributionAxisSpec,
+    ModelSpec,
+    OutputSpec,
+    PredictionModule,
+    PreprocessSpec,
+)
 from ...application.module_descriptions import describe_prediction_module
 
 
@@ -30,6 +36,20 @@ def _load_yaml_mapping(text: str) -> dict[str, Any]:
 
 def _tuple_of_floats(value) -> tuple[float, ...]:
     return tuple(float(item) for item in value) if isinstance(value, list) else ()
+
+
+def _distribution_axis(value: object) -> DistributionAxisSpec:
+    if not isinstance(value, dict):
+        return DistributionAxisSpec()
+    minimum = value.get("min")
+    maximum = value.get("max")
+    return DistributionAxisSpec(
+        key=str(value.get("key", "")).strip().casefold(),
+        label=str(value.get("label", "")).strip(),
+        unit=str(value.get("unit", "")).strip(),
+        minimum=float(minimum) if isinstance(minimum, (int, float)) else None,
+        maximum=float(maximum) if isinstance(maximum, (int, float)) else None,
+    )
 
 
 class YamlModuleRepository:
@@ -64,11 +84,15 @@ class YamlModuleRepository:
             )
             output_spec = OutputSpec(names=output_names)
         elif isinstance(outputs, dict):
+            axes = outputs.get("axes") if isinstance(outputs.get("axes"), dict) else {}
             output_spec = OutputSpec(
                 type=str(outputs.get("type", "")),
+                names=tuple(str(item) for item in outputs.get("names", ())),
                 parameter_names=tuple(str(item) for item in outputs.get("parameter_names", ())),
                 target_min=_tuple_of_floats(outputs.get("target_min")),
                 target_max=_tuple_of_floats(outputs.get("target_max")),
+                row_axis=_distribution_axis(axes.get("row")),
+                column_axis=_distribution_axis(axes.get("column")),
             )
         else:
             output_spec = OutputSpec()

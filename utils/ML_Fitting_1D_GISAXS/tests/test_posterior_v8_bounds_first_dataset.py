@@ -16,6 +16,7 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.bounds_first_contract import (
     BoundsProvenance,
     local_varying_mask,
 )
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import bounds_first_dataset as dataset_module
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.bounds_first_dataset import (
     ARRAY_ORDER,
     LOCAL_TARGET_OPEN_EPSILON,
@@ -159,6 +160,29 @@ def test_compact_pilot_covers_range_shapes_edges_fixed_axes_and_hard_core():
             hard_core_checked += 1
     assert hard_core_checked > 0
     validate_compact_pilot(_config(), arrays, metadata)
+
+
+def test_edge_high_range_is_exact_under_inward_platform_exp_roundoff(monkeypatch):
+    native_exp = np.exp
+    encoded_high = float(np.log(R_DOMAIN.high))
+
+    def inward_endpoint_exp(value):
+        result = native_exp(value)
+        if float(value) == encoded_high:
+            return np.nextafter(R_DOMAIN.high, -np.inf)
+        return result
+
+    monkeypatch.setattr(dataset_module.np, "exp", inward_endpoint_exp)
+    bounds = sample_user_bounds(
+        TOPOLOGIES[0],
+        (False,),
+        False,
+        regime="narrow",
+        placement="edge_high",
+        bounds_seed=771,
+    )
+
+    assert bounds.component_bounds[0].R.high == R_DOMAIN.high
 
 
 def test_compact_pilot_rejects_missing_component_slot_provenance():

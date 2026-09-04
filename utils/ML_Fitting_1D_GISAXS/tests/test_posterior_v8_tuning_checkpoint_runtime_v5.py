@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from hashlib import sha256
 import json
+import stat
 
 import numpy as np
 import pytest
@@ -233,12 +234,25 @@ def test_runtime_evaluates_every_retained_epoch_and_publishes_complete_inventory
 
     assert tuple(value.checkpoint_epoch for value in result.evaluations) == (1, 2)
     assert len(result.trace_paths) == len(result.trace_artifact_sha256s) == 2
+    assert len(result.lossless_emission_paths) == 2
+    assert len(result.lossless_emission_file_sha256s) == 2
+    assert all(
+        stat.S_IMODE(path.stat().st_mode) == 0o400
+        and path.stat().st_nlink == 1
+        for path in result.lossless_emission_paths
+    )
+    lossless = json.loads(
+        result.lossless_emission_paths[0].read_text(encoding="utf-8")
+    )
+    assert lossless["parameter"]["exact_intensity_dtype"] == "<f8"
+    assert lossless["parameter"]["exact_intensity"] == [1.0]
     assert len(result.summary_paths) == len(result.summary_file_sha256s) == 2
     assert all(path.is_file() for path in result.trace_paths + result.summary_paths)
     completion = json.loads(result.completion_path.read_text(encoding="utf-8"))
     assert completion["status"] == "all_retained_full_epochs_exact_budget_evaluated"
     assert completion["expected_exact_trace_count"] == 2
     assert len(completion["exact_trace_artifacts"]) == 2
+    assert len(completion["lossless_emission_artifacts"]) == 2
     assert len(completion["checkpoint_summaries"]) == 2
     assert completion["validation_loss_used"] is False
     assert completion["test_calibration_reference_or_ood_used"] is False

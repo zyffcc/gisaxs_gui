@@ -13,8 +13,6 @@ import json
 from types import SimpleNamespace
 from typing import Mapping
 
-import numpy as np
-
 from .amplitude_query_v5 import (
     V5_AMPLITUDE_EMBEDDING_VERSION,
     V5_AMPLITUDE_QUERY_SCHEMA,
@@ -22,9 +20,8 @@ from .amplitude_query_v5 import (
     V5AmplitudeQuery,
 )
 from .bounds_query_v5 import branch_condition, bounds_query_from_json
-from .contract import ClosedInterval, LatentComponentParameters
-from .evaluation import CandidateInput, LinearSolutionSnapshot, ReferenceMode
-from .grouped_artifact_v5 import array_sha256, canonical_json
+from .contract import ClosedInterval
+from .grouped_artifact_v5 import canonical_json
 from .k1_phase_c_contract_v5 import digest
 from .k1_phase_c_replay_contract_v5 import (
     V5K1PhaseCBranchSearchReplay,
@@ -33,16 +30,17 @@ from .k1_phase_c_replay_contract_v5 import (
     V5K1PhaseCSplitReplayReceipt,
 )
 from .k1_phase_c_replay_receipt_v5 import V5K1PhaseCArtifactBinding
+from .lossless_representative_artifact_v5 import (
+    V5_LOSSLESS_REPRESENTATIVE_ARTIFACT_SCHEMA,
+    decode_v5_lossless_representative_payload,
+)
 from .paper_budget_evaluator_v5 import (
     V5ExactForwardCall,
     V5PaperBudgetEvaluationConfig,
 )
 from .paper_representative_payload_v5 import (
-    V5_EMITTED_REPRESENTATIVE_ROLE,
-    V5_REFERENCE_REPRESENTATIVE_ROLE,
     V5PaperParameterRepresentativePayload,
 )
-from .profiled_forward import ResolutionShape
 from .query_parameter_distance_v5 import query_local_parameter_distance
 from .search_supervision_sidecar_v5 import V5_SEARCH_SIDECAR_SCHEMA, V5_SEARCH_SIDECAR_VERSION
 from .sobol_numeric_canonicalization_v5 import v5_numeric_policy_sha256
@@ -69,7 +67,7 @@ RAW_REFERENCE_BANK_SCHEMA = "gisaxs.posterior_v8.k1_phase_c_reference_bank_raw/v
 RAW_REFERENCE_TRACE_SCHEMA = "gisaxs.posterior_v8.k1_phase_c_reference_trace_raw/v1"
 RAW_METHOD_TRACE_SCHEMA = "gisaxs.posterior_v8.k1_phase_c_method_trace_raw/v1"
 RAW_REPRESENTATIVE_PAYLOAD_SCHEMA = (
-    "gisaxs.posterior_v8.k1_phase_c_representative_payload_raw/v1"
+    V5_LOSSLESS_REPRESENTATIVE_ARTIFACT_SCHEMA
 )
 
 
@@ -269,114 +267,9 @@ def _parse_distance_context(
     return tasks
 
 
-def _linear(value: object) -> LinearSolutionSnapshot:
-    row = _object(
-        value,
-        {"background", "particle_amplitudes", "resolution_amplitude", "k"},
-        "linear_solution",
-    )
-    return LinearSolutionSnapshot(
-        background=row["background"],
-        particle_amplitudes=tuple(_sequence(row["particle_amplitudes"], "particle_amplitudes")),
-        resolution_amplitude=row["resolution_amplitude"],
-        k=row["k"],
-    )
-
-
-def _components(value: object) -> tuple[LatentComponentParameters, ...]:
-    expected = _field_names(LatentComponentParameters)
-    return tuple(
-        LatentComponentParameters(**_object(item, expected, f"components[{index}]"))
-        for index, item in enumerate(_sequence(value, "components"))
-    )
-
-
-def _resolution(value: object) -> ResolutionShape | None:
-    if value is None:
-        return None
-    return ResolutionShape(**_object(value, {"sigma_res", "nu_res"}, "resolution"))
-
-
 def _parse_representative(raw: V5K1PhaseCRawFile) -> V5PaperParameterRepresentativePayload:
-    row = _raw_envelope(
-        raw.payload,
-        RAW_REPRESENTATIVE_PAYLOAD_SCHEMA,
-        {"representative_id", "role", "global_branch_key", "query_context_sha256", "parameter"},
-        "representative-payload artifact",
-    )
-    role = row["role"]
-    common = {"topology_id", "components", "resolution", "linear_solution"}
-    if role == V5_REFERENCE_REPRESENTATIVE_ROLE:
-        parameter_row = _object(row["parameter"], {"reference_id", *common}, "reference parameter")
-        parameter = ReferenceMode(
-            reference_id=parameter_row["reference_id"],
-            topology_id=parameter_row["topology_id"],
-            components=_components(parameter_row["components"]),
-            resolution=_resolution(parameter_row["resolution"]),
-            linear_solution=_linear(parameter_row["linear_solution"]),
-        )
-    elif role == V5_EMITTED_REPRESENTATIVE_ROLE:
-        candidate_fields = {
-            "candidate_id",
-            "proposal_rank",
-            "exact_intensity",
-            "exact_intensity_dtype",
-            "exact_intensity_shape",
-            "exact_intensity_order",
-            "exact_intensity_sha256",
-            "bounds_pass",
-            "physics_pass",
-            "proposal_score_raw",
-            *common,
-        }
-        parameter_row = _object(row["parameter"], candidate_fields, "candidate parameter")
-        if (
-            parameter_row["exact_intensity_dtype"] != "<f8"
-            or parameter_row["exact_intensity_order"] != "C"
-            or not isinstance(parameter_row["exact_intensity_shape"], list)
-            or len(parameter_row["exact_intensity_shape"]) != 1
-            or isinstance(parameter_row["exact_intensity_shape"][0], bool)
-            or not isinstance(parameter_row["exact_intensity_shape"][0], int)
-            or parameter_row["exact_intensity_shape"][0] < 1
-        ):
-            raise ValueError("candidate exact intensity must be non-empty 1-D little-endian f8 C-order")
-        exact_values = _sequence(parameter_row["exact_intensity"], "exact_intensity")
-        if any(
-            isinstance(value, bool) or not isinstance(value, (int, float))
-            for value in exact_values
-        ):
-            raise ValueError("candidate exact intensity requires JSON numeric scalars, not bools")
-        exact = np.ascontiguousarray(np.asarray(exact_values, dtype=np.dtype("<f8")))
-        if not np.all(np.isfinite(exact)) or np.any(exact <= 0.0):
-            raise ValueError("candidate exact intensity values must be finite and strictly positive")
-        if list(exact.shape) != parameter_row["exact_intensity_shape"]:
-            raise ValueError("candidate exact-intensity shape does not reproduce")
-        expected_intensity_sha = digest(
-            parameter_row["exact_intensity_sha256"], "exact_intensity_sha256"
-        )
-        if array_sha256("candidate_exact_intensity", exact) != expected_intensity_sha:
-            raise ValueError("candidate exact-intensity SHA-256 does not reproduce")
-        parameter = CandidateInput(
-            candidate_id=parameter_row["candidate_id"],
-            proposal_rank=parameter_row["proposal_rank"],
-            topology_id=parameter_row["topology_id"],
-            components=_components(parameter_row["components"]),
-            resolution=_resolution(parameter_row["resolution"]),
-            linear_solution=_linear(parameter_row["linear_solution"]),
-            exact_intensity=exact,
-            bounds_pass=parameter_row["bounds_pass"],
-            physics_pass=parameter_row["physics_pass"],
-            proposal_score_raw=parameter_row["proposal_score_raw"],
-        )
-    else:
-        raise ValueError("representative role is unsupported")
-    return V5PaperParameterRepresentativePayload(
-        representative_id=row["representative_id"],
-        role=role,
-        parameter=parameter,
-        global_branch_key=row["global_branch_key"],
-        query_context_sha256=row["query_context_sha256"],
-        source_artifact_sha256=raw.file_sha256,
+    return decode_v5_lossless_representative_payload(
+        raw.payload, source_artifact_sha256=raw.file_sha256
     )
 
 

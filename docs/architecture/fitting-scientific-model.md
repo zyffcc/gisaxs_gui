@@ -5,12 +5,14 @@
 - **Related code**：`src/gimap/features/fitting/domain/scattering_model.py`、
   `src/gimap/features/fitting/domain/curve_transformations.py`、
   `src/gimap/features/fitting/domain/manual_refinement.py`、
-  `src/gimap/features/fitting/presentation/bindings/detector_display.py`
+  `src/gimap/features/fitting/presentation/bindings/detector_display.py`、
+  `utils/ML_Fitting_1D_GISAXS/Training/prediction_curve_io.py`
 - **Related tests**：`tests/test_fitting_domain_scattering_model.py`、
   `tests/test_fitting_curve_rendering.py`、
   `tests/test_fitting_domain_constraints_scoring.py`、
-  `tests/test_fitting_domain_manual_refinement.py`
-- **Last verified**：2026-09-03
+  `tests/test_fitting_domain_manual_refinement.py`、
+  `tests/test_ai_curve_loader.py`
+- **Last verified**：2026-09-04
 
 本文是 GIMaP Fitting 科学模型的权威说明。修改公式、参数顺序、单位、采样方式、分量缩放
 或 q–intensity 对齐行为前，必须同步更新本文并增加固定数值回归测试。
@@ -163,6 +165,28 @@ prepared q + measured I + source sign
 
 Fold overlay 可以让 `+q` 与 `−q` 共享相同的 `|q|` 横坐标，但必须保留 source sign 供颜色、
 导出和诊断使用。对于仅依赖 `|q|` 的当前模型，相同 `|q|` 上的正负分支模型值必须相等。
+
+## AI proposal 与传统优化交接
+
+`Fast Predict` 只执行神经网络 proposal、后验采样和物理 forward verification，用于给出模型拓扑与
+initial parameters；它本身不执行数值精修。其输入源与手动 fitting 完全一致：勾选
+`Use current cut` 时只使用当前 cut（原生 nm⁻¹），未勾选时只使用 imported 1D data，并在 AI
+preprocessing 后将 Å⁻¹ 转为模型的 nm⁻¹。不得从 `self.q`、旧 ROI 缓存或另一种数据源隐式 fallback。
+
+候选结果同时显示 physics fit likelihood 与 model sampling probability。二者用于排序和诊断，不应
+解释为结构真值的校准置信度。选择候选会把其 topology、component 参数与 global 参数加载为当前手动
+模型；随后可选择 `Local Refine` 在窄范围 polishing，或选择 `Global Search` 在相同 topology 上进行
+宽范围搜索。这样模型负责提出可行 basin/组分组合，传统优化负责实际曲线收敛。
+
+checkpoint 的实际 tensor signature 是 inference contract。旧 production checkpoint 的
+`d_spacing_rule` 宽度为 3，当前 schema 宽度为 4；前三个 rule id 语义不变时，只允许裁掉全零的新增
+尾列。若用户启用了旧模型不认识的新 rule，必须明确拒绝，不能静默重映射。其他 tensor shape
+不匹配同样必须报错。
+
+AI full-profile 的 least-squares 使用数值 Jacobian；一次 scipy function evaluation 会触发约
+`n_variables + 1` 次 residual call。stall patience 按估算 function evaluations 计数，而不是按底层
+residual calls 计数，并在相同 optimization q grid 上比较初始值和后续最佳值，避免高维问题只做一两
+次有效迭代就被误判停滞。最终候选仍在完整 q grid 上重新计分，只有 score 不变差时才接受精修结果。
 
 ## Global Search 与 Local Refine
 

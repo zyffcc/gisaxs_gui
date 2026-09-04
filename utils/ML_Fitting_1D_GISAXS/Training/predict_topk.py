@@ -31,6 +31,7 @@ from Training.prediction_candidates import (
 )
 from Training.prediction_cli import parse_args, validate_prediction_args
 from Training.prediction_curve_io import (
+    adapt_input_to_model,
     load_curve,
     load_model,
     make_input,
@@ -151,11 +152,10 @@ def main():
     print(f"Loading model from: {model_dir}", flush=True)
     model = load_model(model_dir, allow_unsafe_lambda=args.allow_unsafe_lambda)
     print("Running neural network proposal pass...", flush=True)
-    proposal_input = make_input(q_eval, I_eval, sigma_eval, cons)
-    model_input_names = {tensor.name.split(":")[0] for tensor in model.inputs}
-    proposal_input = {
-        key: value for key, value in proposal_input.items() if key in model_input_names
-    }
+    proposal_input = adapt_input_to_model(
+        make_input(q_eval, I_eval, sigma_eval, cons),
+        model,
+    )
     pred = model(proposal_input, training=False)
     pred = {k: v.numpy() for k, v in pred.items()}
     exist_prob = sigmoid_stable(pred["exist_logit"][0])
@@ -465,8 +465,8 @@ def main():
             flush=True,
         )
         print(
-            "Note: refine eval=... counts residual calls, not scipy nfev. "
-            "With numerical Jacobian, residual_calls can be roughly nfev * (n_variables + 1).",
+            "Note: refine progress reports both residual calls and an estimated scipy nfev. "
+            "Stall patience is measured in the estimated function-evaluation scale.",
             flush=True,
         )
         for idx, r in enumerate(refine_targets, start=1):

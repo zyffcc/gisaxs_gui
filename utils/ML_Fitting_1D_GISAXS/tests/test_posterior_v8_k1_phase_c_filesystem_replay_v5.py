@@ -29,7 +29,6 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_c_contract_v5 import (
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_c_filesystem_replay_v5 import (
     V5K1PhaseCFilesystemReplayAdapter,
-    _authorize_v5_k1_phase_c_formal_filesystem_replay,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_c_raw_artifacts_v5 import (
     RAW_ARTIFACT_BINDING_SCHEMA,
@@ -557,14 +556,8 @@ def test_formal_capability_hard_blocks_test_raw_without_audited_writer(tmp_path)
     adapter = V5K1PhaseCFilesystemReplayAdapter(
         manifest, expected_manifest_file_sha256=manifest_sha
     )
-    bundle = adapter.load_bundle(plan=plan, contract=contract)
-    adapter.revalidate_bundle(bundle=bundle, plan=plan, contract=contract)
-    adapter.revalidate_bundle(bundle=bundle, plan=plan, contract=contract)
-
     with pytest.raises(RuntimeError, match=V5_K1_PHASE_C_PRODUCTION_ADAPTER_BLOCKER):
-        _authorize_v5_k1_phase_c_formal_filesystem_replay(
-            adapter, bundle=bundle, plan=plan, contract=contract
-        )
+        adapter.load_bundle(plan=plan, contract=contract)
 
 
 def test_formal_runner_with_real_adapter_fails_closed_without_audited_writer(

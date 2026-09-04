@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 
 ML_ROOT = Path(__file__).resolve().parents[1] / "utils" / "ML_Fitting_1D_GISAXS"
@@ -17,6 +19,8 @@ from Training.predict_topk import (
     load_curve,
     score_from_metrics,
 )
+from Training.prediction_curve_io import adapt_input_to_model
+from Training.prediction_refinement import estimated_function_evaluations
 
 
 def test_comment_header_with_separate_unit_does_not_shift_intensity_column(tmp_path):
@@ -79,3 +83,28 @@ def test_hybrid_score_penalizes_narrow_linear_overshoot():
     assert score_from_metrics(smoother, "hybrid_log_relative") < score_from_metrics(
         visually_spiky, "hybrid_log_relative"
     )
+
+
+def test_current_spacing_rule_vector_is_projected_for_legacy_checkpoint():
+    model = SimpleNamespace(inputs=[SimpleNamespace(name="d_spacing_rule:0", shape=(None, 3))])
+    current_batch = {"d_spacing_rule": np.array([[0.0, 1.0, 0.0, 0.0]], dtype=np.float32)}
+
+    adapted = adapt_input_to_model(current_batch, model)
+
+    assert adapted["d_spacing_rule"].shape == (1, 3)
+    np.testing.assert_array_equal(adapted["d_spacing_rule"], [[0.0, 1.0, 0.0]])
+
+
+def test_legacy_checkpoint_rejects_new_spacing_rule_instead_of_silently_remapping():
+    model = SimpleNamespace(inputs=[SimpleNamespace(name="d_spacing_rule:0", shape=(None, 3))])
+    current_batch = {"d_spacing_rule": np.array([[0.0, 0.0, 0.0, 1.0]], dtype=np.float32)}
+
+    with pytest.raises(RuntimeError, match="not supported by this older model"):
+        adapt_input_to_model(current_batch, model)
+
+
+def test_refine_stall_patience_uses_function_evaluation_scale():
+    assert estimated_function_evaluations(0, 12) == 0
+    assert estimated_function_evaluations(1, 12) == 1
+    assert estimated_function_evaluations(13, 12) == 1
+    assert estimated_function_evaluations(14, 12) == 2

@@ -337,33 +337,26 @@ def test_slurm_runtime_refuses_non_dust_data_and_output(tmp_path, monkeypatch):
 
 
 def test_job_local_capability_remains_fail_closed(tmp_path, monkeypatch):
-    scratch = tmp_path / "slurm-scratch"
-    scratch.mkdir()
-    root = scratch / "gisaxs-v5-k1-seed-991-0-fixture"
-    root.mkdir(mode=0o700)
-    local = root / "train.gvd5"
-    local.write_bytes(b"immutable-staged-input")
-    local.chmod(0o400)
-    root.chmod(0o500)
+    local = _artifact(tmp_path)
     monkeypatch.setenv("SLURM_JOB_ID", "991")
-    monkeypatch.setenv("SLURM_TMPDIR", str(scratch))
-    capability = V5JobLocalInputCapability.create(
-        staging_root=str(root),
-        slurm_job_id="991",
-        scientific_plan_sha256="1" * 64,
-        staging_proof_sha256="2" * 64,
-        original_to_local_sha256=(
-            (
-                str(tmp_path / "original.gvd5"),
-                str(local),
-                sha256(local.read_bytes()).hexdigest(),
-            ),
-        ),
-        trainer_argument_local_paths=(str(local),),
-    )
+    with pytest.raises(TypeError, match="opaque"):
+        V5JobLocalInputCapability()
+    forged = object.__new__(V5JobLocalInputCapability)
+    forged._nonce = b"serialized-audit-substitution"
 
-    with pytest.raises(RuntimeError, match="job_local_staging_security_audit_not_closed"):
-        _validate_job_local_input_capability((local.resolve(),), capability)
+    with pytest.raises(RuntimeError, match="not minted"):
+        _validate_job_local_input_capability(
+            (local.resolve(),), forged, phase="pre_training"
+        )
+    with pytest.raises(ValueError, match="Slurm output"):
+        train_v5_grouped_model(
+            local,
+            local,
+            tmp_path / "non-dust-output",
+            _smoke_config(),
+            strategy=tf.distribute.OneDeviceStrategy("/cpu:0"),
+            job_local_input_capability=forged,
+        )
 
 def test_slurm_wrapper_is_worker_only_dust_scoped_and_has_no_overwrite_switch():
     path = Path(__file__).parents[1] / "PosteriorV8" / "slurm" / "v5_grouped_train_gpu4.sbatch"

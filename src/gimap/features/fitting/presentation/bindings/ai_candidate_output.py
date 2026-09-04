@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from PyQt5.QtCore import QUrl
+from PyQt5.QtCore import QTimer, QUrl
 
 from PyQt5.QtWidgets import (
     QFileDialog,
@@ -76,7 +76,13 @@ class AiCandidateOutputMixin:
             f"AI prediction output exported to:\n{dest}",
         )
 
-    def _show_ai_candidate_table(self, output_dir: Path | None = None, rows=None) -> None:
+    def _show_ai_candidate_table(
+        self,
+        output_dir: Path | None = None,
+        rows=None,
+        *,
+        prefer_refine: bool = False,
+    ) -> None:
         output_dir = Path(output_dir or getattr(self, "_ai_output_dir", "") or "")
         if rows is None:
             rows = self.fitting_view_model.load_candidate_results(output_dir)
@@ -92,16 +98,18 @@ class AiCandidateOutputMixin:
         self._ai_candidate_rows = rows
 
         dialog = QDialog(self.main_window or self.ui)
+        dialog.setObjectName("aiFittingCandidatesDialog")
         dialog.setWindowTitle("AI Fitting Candidates")
         dialog.resize(900, 520)
         layout = QVBoxLayout(dialog)
         table = QTableWidget(len(rows), 8, dialog)
+        table.setObjectName("aiFittingCandidatesTable")
         table.setHorizontalHeaderLabels(
             [
                 "Rank",
                 "Combination",
-                "Score Prob.",
-                "Posterior",
+                "Fit likelihood",
+                "Model probability",
                 "logRMSE",
                 "Chi2",
                 "Constraints",
@@ -133,14 +141,21 @@ class AiCandidateOutputMixin:
         layout.addWidget(table, 1)
 
         preview_hint = QLabel(
-            "Selecting a row automatically loads its parameters and refreshes the fitting plot.",
+            "Select a model proposal using its physics fit likelihood and model probability. "
+            "The row is previewed immediately; Local Refine opens editable narrow bounds "
+            "around those predicted parameters.",
             dialog,
         )
         preview_hint.setWordWrap(True)
         layout.addWidget(preview_hint)
 
         button_row = QHBoxLayout()
-        load_btn = QPushButton("Load Selected Params", dialog)
+        load_btn = QPushButton("Load Initial Params", dialog)
+        load_btn.setObjectName("aiLoadCandidateButton")
+        global_btn = QPushButton("Load && Global Search...", dialog)
+        global_btn.setObjectName("aiGlobalSearchCandidateButton")
+        refine_btn = QPushButton("Load && Local Refine...", dialog)
+        refine_btn.setObjectName("aiRefineCandidateButton")
         open_btn = QPushButton("Open Output Folder", dialog)
         close_btn = QPushButton("Close", dialog)
         load_btn.clicked.connect(
@@ -148,6 +163,12 @@ class AiCandidateOutputMixin:
         )
         table.doubleClicked.connect(
             lambda _index: self._load_selected_ai_candidate_from_table(table, rows, dialog)
+        )
+        refine_btn.clicked.connect(
+            lambda: self._refine_selected_ai_candidate_from_table(table, rows, dialog)
+        )
+        global_btn.clicked.connect(
+            lambda: self._optimize_selected_ai_candidate_from_table(table, rows, "global", dialog)
         )
         table.currentCellChanged.connect(
             lambda current_row, _current_column, _previous_row, _previous_column: (
@@ -159,12 +180,17 @@ class AiCandidateOutputMixin:
         )
         close_btn.clicked.connect(dialog.close)
         button_row.addWidget(load_btn)
+        button_row.addWidget(global_btn)
+        button_row.addWidget(refine_btn)
         button_row.addWidget(open_btn)
         button_row.addStretch(1)
         button_row.addWidget(close_btn)
         layout.addLayout(button_row)
         self._ai_results_dialog = dialog
         table.selectRow(0)
+        if prefer_refine:
+            refine_btn.setDefault(True)
+            refine_btn.setFocus()
         dialog.show()
 
     def _preview_ai_candidate_from_table(self, selected: int, rows: list) -> None:
@@ -182,3 +208,24 @@ class AiCandidateOutputMixin:
         if self._load_ai_candidate_params(rows[selected], refresh_plot=True):
             if dialog is not None:
                 dialog.accept()
+
+    def _refine_selected_ai_candidate_from_table(
+        self, table: QTableWidget, rows: list, dialog: QDialog | None = None
+    ) -> None:
+        self._optimize_selected_ai_candidate_from_table(table, rows, "local", dialog)
+
+    def _optimize_selected_ai_candidate_from_table(
+        self,
+        table: QTableWidget,
+        rows: list,
+        mode: str,
+        dialog: QDialog | None = None,
+    ) -> None:
+        selected = table.currentRow()
+        if selected < 0 or selected >= len(rows):
+            return
+        if not self._load_ai_candidate_params(rows[selected], refresh_plot=True):
+            return
+        if dialog is not None:
+            dialog.accept()
+        QTimer.singleShot(0, lambda: self._show_manual_auto_refine_dialog(mode))

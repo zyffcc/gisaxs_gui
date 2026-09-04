@@ -44,7 +44,6 @@ from .contract import (
     ClosedInterval,
     GuiComponentBounds,
     full_component_bounds,
-    latent_component_to_gui,
     topology_id_for,
 )
 from .preprocessing import DEFAULT_CONTRACT, preprocess_curve
@@ -57,10 +56,10 @@ from .simulation import (
 )
 
 
-BOUNDS_GENERATOR_VERSION = "posterior_v8_bounds_first_physical_ranges_v2"
-PILOT_GENERATOR_VERSION = "posterior_v8_bounds_first_compact_pilot_v3"
+BOUNDS_GENERATOR_VERSION = "posterior_v8_bounds_first_exact_endpoint_physical_ranges_v3"
+PILOT_GENERATOR_VERSION = "posterior_v8_bounds_first_compact_pilot_v5"
 LOCAL_TARGET_SAMPLING_VERSION = (
-    "posterior_v8_open_uniform_then_canonical_component_slots_v2"
+    "posterior_v8_open_uniform_then_exact_endpoint_decode_canonical_component_slots_v4"
 )
 # Match the support used by the logistic-normal training objective. Exact
 # closed-boundary values remain an optimizer stress test rather than an atom
@@ -189,7 +188,13 @@ def _interval(rng, domain, regime, placement, *, log_space=True, fixed=False):
         start = low + start_fraction * (high - low)
         stop = start + width_fraction * (high - low)
     if log_space:
-        start, stop = float(np.exp(start)), float(np.exp(stop))
+        if fixed and placement == "edge_low":
+            start = stop = domain.low
+        elif fixed and placement == "edge_high":
+            start = stop = domain.high
+        else:
+            start = domain.low if placement == "edge_low" else float(np.exp(start))
+            stop = domain.high if placement == "edge_high" else float(np.exp(stop))
     start = min(max(float(start), domain.low), domain.high)
     stop = min(max(float(stop), domain.low), domain.high)
     return ClosedInterval(start, stop)
@@ -336,7 +341,7 @@ def sample_solution_label(
     latent, _, resolution = codec.decode_active(active_values)
     canonical = canonicalize_component_slots(codec, latent, resolution)
     latent = canonical.components
-    gui = tuple(latent_component_to_gui(item) for item in latent)
+    gui = codec.latent_components_to_gui(latent)
     local = canonical.coordinates
     global_coordinates = bounds.global_reference_codec().encode(latent, resolution)
     return BoundsFirstLabel(

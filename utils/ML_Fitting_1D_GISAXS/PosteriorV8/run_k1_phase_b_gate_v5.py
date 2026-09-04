@@ -18,7 +18,6 @@ import platform
 import resource
 import socket
 import sys
-import tempfile
 import time
 from typing import Mapping, Sequence
 
@@ -54,6 +53,11 @@ from .k1_phase_b_contract_v5 import (
     validate_v5_k1_phase_a_bindings,
     verify_recorded_dataset_sources,
 )
+from .k1_phase_b_capability_v5 import (
+    _consumed_phase_b_capability_payload,
+    _mint_phase_b_capability,
+    _validate_phase_b_capability,
+)
 from .k1_phase_b_evaluation_v5 import (
     as_numpy_outputs,
     assess_v5_k1_phase_b_records,
@@ -61,6 +65,14 @@ from .k1_phase_b_evaluation_v5 import (
     parent_seed,
     replay_parent_contexts,
 )
+from .k1_phase_b_launch_chain_v5 import (
+    V5K1PhaseBLaunchRuntime,
+    add_v5_k1_phase_b_launch_runtime_arguments,
+    assert_v5_k1_phase_b_launch_chain_unchanged,
+    inspect_v5_k1_phase_b_launch_chain,
+    v5_k1_phase_b_launch_runtime_from_args,
+)
+from .k1_phase_b_publication_v5 import publish_v5_k1_phase_b_completed_result
 from .k1_phase_b_worker_inputs_v5 import (
     V5K1PhaseBWorkerInputSpec,
     add_v5_k1_phase_b_worker_input_arguments,
@@ -75,25 +87,6 @@ from .run_k1_memorization_gate_v5 import (
     RESULT_FILENAME as PHASE_A_RESULT_FILENAME,
     validate_v5_k1_memorization_dataset,
 )
-
-
-def _publish_json(target: Path, payload: Mapping[str, object]) -> None:
-    encoded = (json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n").encode()
-    descriptor, temporary_name = tempfile.mkstemp(
-        dir=target.parent, prefix=f".{target.name}.", suffix=".tmp"
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
-        try:
-            os.link(temporary, target)
-        except FileExistsError:
-            raise FileExistsError(f"refusing to overwrite result artifact: {target}") from None
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def _validated_paths(
@@ -159,6 +152,14 @@ def run_v5_k1_phase_b_gate(
     original_dataset_path: str | os.PathLike[str],
     dataset_sha256: str,
     dataset_byte_count: int,
+    dataset_binding_path: str | os.PathLike[str],
+    original_dataset_binding_path: str | os.PathLike[str],
+    dataset_binding_sha256: str,
+    dataset_binding_byte_count: int,
+    cross_platform_pass_marker_path: str | os.PathLike[str],
+    original_cross_platform_pass_marker_path: str | os.PathLike[str],
+    cross_platform_pass_marker_sha256: str,
+    cross_platform_pass_marker_byte_count: int,
     original_phase_a_output_dir: str | os.PathLike[str],
     original_phase_a_result_path: str | os.PathLike[str],
     phase_a_result_sha256: str,
@@ -169,6 +170,11 @@ def run_v5_k1_phase_b_gate(
     original_phase_a_model_provenance_path: str | os.PathLike[str],
     phase_a_model_provenance_sha256: str,
     phase_a_model_provenance_byte_count: int,
+    phase_a_completion_path: str | os.PathLike[str],
+    original_phase_a_completion_path: str | os.PathLike[str],
+    phase_a_completion_sha256: str,
+    phase_a_completion_byte_count: int,
+    launch_runtime: V5K1PhaseBLaunchRuntime,
     config: V5K1PhaseBGateConfig = V5K1PhaseBGateConfig(),
     allowed_root: Path = MAXWELL_DUST_ROOT,
     input_allowed_root: Path | None = None,
@@ -210,18 +216,26 @@ def run_v5_k1_phase_b_gate(
         authoritative_paths={
             "source_archive": Path(original_source_archive_path),
             "dataset": Path(original_dataset_path),
+            "dataset_binding": Path(original_dataset_binding_path),
+            "cross_platform_pass_marker": Path(
+                original_cross_platform_pass_marker_path
+            ),
             "phase_a_result": Path(original_phase_a_result_path),
             "phase_a_model": Path(original_phase_a_model_path),
             "phase_a_model_provenance": Path(original_phase_a_model_provenance_path),
+            "phase_a_completion": Path(original_phase_a_completion_path),
         },
         local_paths={
             "source_archive": Path(source_archive_path),
             "dataset": Path(dataset_path),
+            "dataset_binding": Path(dataset_binding_path),
+            "cross_platform_pass_marker": Path(cross_platform_pass_marker_path),
             "phase_a_result": Path(phase_a_result_path),
             "phase_a_model": Path(phase_a_model_path),
             "phase_a_model_provenance": (
                 Path(phase_a_model_path).parent / PHASE_A_MODEL_PROVENANCE_FILENAME
             ),
+            "phase_a_completion": Path(phase_a_completion_path),
         },
         expected={
             "source_archive": {
@@ -231,6 +245,14 @@ def run_v5_k1_phase_b_gate(
             "dataset": {
                 "sha256": dataset_sha256,
                 "byte_count": dataset_byte_count,
+            },
+            "dataset_binding": {
+                "sha256": dataset_binding_sha256,
+                "byte_count": dataset_binding_byte_count,
+            },
+            "cross_platform_pass_marker": {
+                "sha256": cross_platform_pass_marker_sha256,
+                "byte_count": cross_platform_pass_marker_byte_count,
             },
             "phase_a_result": {
                 "sha256": phase_a_result_sha256,
@@ -243,6 +265,10 @@ def run_v5_k1_phase_b_gate(
             "phase_a_model_provenance": {
                 "sha256": phase_a_model_provenance_sha256,
                 "byte_count": phase_a_model_provenance_byte_count,
+            },
+            "phase_a_completion": {
+                "sha256": phase_a_completion_sha256,
+                "byte_count": phase_a_completion_byte_count,
             },
         },
         source_manifest_sha256=source_manifest_sha256,
@@ -259,6 +285,16 @@ def run_v5_k1_phase_b_gate(
     selected_environment = os.environ if environment is None else environment
     job_id = execution_guard(host, selected_environment)
 
+    engineering_subset = config.parent_limit is not None
+    expected_launch_stage = "engineering_smoke" if engineering_subset else "formal_gate"
+    if launch_runtime.launch_stage != expected_launch_stage:
+        raise ValueError("Phase-B launch stage does not match the requested scientific mode")
+    launch_chain = inspect_v5_k1_phase_b_launch_chain(
+        launch_runtime,
+        output_dir=output,
+        slurm_job_id=job_id,
+    )
+
     dataset, receipt = read_v5_grouped_dataset(dataset_file)
     dataset_validation = validate_v5_k1_memorization_dataset(dataset)
     protocol = live_gate_contract()
@@ -270,7 +306,6 @@ def run_v5_k1_phase_b_gate(
         raise ValueError("checked dataset does not have the frozen one-view-per-parent design")
     if config.parent_limit is not None and config.parent_limit >= expected_parents:
         raise ValueError("parent_limit is smoke-only; omit it for the formal 512-parent gate")
-    engineering_subset = config.parent_limit is not None
     selected_parent_count = config.parent_limit or expected_parents
 
     dataset_sources = verify_recorded_dataset_sources(dataset, source_root_path)
@@ -320,6 +355,40 @@ def run_v5_k1_phase_b_gate(
         live_gate_contract_value=protocol,
     )
 
+    def final_recheck() -> None:
+        assert_v5_k1_phase_b_worker_inputs_unchanged(
+            bound_worker_inputs, worker_input_spec
+        )
+        assert_v5_k1_phase_b_launch_chain_unchanged(
+            launch_chain,
+            launch_runtime,
+            output_dir=output,
+            slurm_job_id=job_id,
+        )
+        if source_identity(source_root_path, PHASE_B_SOURCE_PATHS) != phase_b_source_before:
+            raise RuntimeError("K1 Phase-B source changed during execution")
+        if source_identity(
+            source_root_path, tuple(sorted(PHASE_A_SOURCE_PATHS))
+        ) != phase_a_source:
+            raise RuntimeError("bound Phase-A source changed during K1 Phase-B execution")
+        if verify_recorded_dataset_sources(dataset, source_root_path) != dataset_sources:
+            raise RuntimeError("recorded dataset source changed during K1 Phase-B execution")
+        if file_identity(dataset_file) != {
+            "sha256": receipt.artifact_sha256,
+            "byte_count": receipt.byte_count,
+        }:
+            raise RuntimeError("checked dataset changed during K1 Phase-B execution")
+        if file_identity(result_file) != phase_a_result_identity:
+            raise RuntimeError("Phase-A result changed during K1 Phase-B execution")
+        if file_identity(model_file) != model_identity:
+            raise RuntimeError("Phase-A model changed during K1 Phase-B execution")
+        if file_identity(model_provenance_file) != model_provenance_identity:
+            raise RuntimeError("Phase-A model provenance changed during K1 Phase-B execution")
+        if model_weights_sha256(model) != weights_digest:
+            raise RuntimeError("loaded Phase-A model weights changed during inference")
+
+    capability = _mint_phase_b_capability(launch_chain, final_recheck)
+    _validate_phase_b_capability(capability, phase="pre_execution")
     total_started = time.perf_counter()
     replay_started = time.perf_counter()
     contexts = replay_parent_contexts(dataset, parent_limit=selected_parent_count)
@@ -370,31 +439,9 @@ def run_v5_k1_phase_b_gate(
     )
     total_seconds = time.perf_counter() - total_started
 
-    phase_b_source = source_identity(source_root_path, PHASE_B_SOURCE_PATHS)
-    assert_v5_k1_phase_b_worker_inputs_unchanged(
-        bound_worker_inputs, worker_input_spec
-    )
-    if phase_b_source != phase_b_source_before:
-        raise RuntimeError("K1 Phase-B source changed during execution")
-    if source_identity(
-        source_root_path, tuple(sorted(PHASE_A_SOURCE_PATHS))
-    ) != phase_a_source:
-        raise RuntimeError("bound Phase-A source changed during K1 Phase-B execution")
-    if verify_recorded_dataset_sources(dataset, source_root_path) != dataset_sources:
-        raise RuntimeError("recorded dataset source changed during K1 Phase-B execution")
-    if file_identity(dataset_file) != {
-        "sha256": receipt.artifact_sha256,
-        "byte_count": receipt.byte_count,
-    }:
-        raise RuntimeError("checked dataset changed during K1 Phase-B execution")
-    if file_identity(result_file) != phase_a_result_identity:
-        raise RuntimeError("Phase-A result changed during K1 Phase-B execution")
-    if file_identity(model_file) != model_identity:
-        raise RuntimeError("Phase-A model changed during K1 Phase-B execution")
-    if file_identity(model_provenance_file) != model_provenance_identity:
-        raise RuntimeError("Phase-A model provenance changed during K1 Phase-B execution")
-    if model_weights_sha256(model) != weights_digest:
-        raise RuntimeError("loaded Phase-A model weights changed during inference")
+    _validate_phase_b_capability(capability, phase="post_execution")
+    capability_payload = _consumed_phase_b_capability_payload(capability)
+    phase_b_source = phase_b_source_before
 
     calls_used = int(assessment["exact_forward_ledger"]["calls_used"])
     calls_per_second = calls_used / exact_seconds if exact_seconds > 0.0 else None
@@ -431,7 +478,7 @@ def run_v5_k1_phase_b_gate(
         "formal_resource_plan_status": (
             "pending_measured_smoke_before_CPU_parallel_array_or_hybrid_choice"
             if engineering_subset
-            else "formal_serial_plan_explicitly_selected_after_external_smoke_review"
+            else "predeclared_formal_serial_plan_executed_only_after_bound_smoke_completion"
         ),
     }
     single_branch_passed = bool(assessment["single_branch_phase_b_gate_passed"])
@@ -514,6 +561,8 @@ def run_v5_k1_phase_b_gate(
             "dataset_validation": dataset_validation,
         },
         "source": phase_b_source,
+        "launch_chain": launch_chain,
+        "job_local_capability": capability_payload,
         "assessment": assessment,
         "compute": compute,
         "parent_records": [value.to_audit_dict() for value in records],
@@ -523,23 +572,19 @@ def run_v5_k1_phase_b_gate(
             "python_version": platform.python_version(),
             "tensorflow_version": tf.__version__,
         },
-        "publication": "exclusive_output_directory_and_atomic_exclusive_json",
+        "publication": "private_staging_final_rechecks_then_read_only_completion_last",
     }
     payload = {
         **core,
         "result_payload_sha256": sha256(canonical_json(core).encode("utf-8")).hexdigest(),
     }
-    output.mkdir(mode=0o700, exist_ok=False)
-    _publish_json(output / V5_K1_PHASE_B_RESULT_FILENAME, payload)
-    directory_fd = os.open(output, os.O_RDONLY)
-    try:
-        os.fsync(directory_fd)
-    finally:
-        os.close(directory_fd)
-    assert_v5_k1_phase_b_worker_inputs_unchanged(
-        bound_worker_inputs, worker_input_spec
+    published = publish_v5_k1_phase_b_completed_result(
+        output,
+        payload,
+        launch_binding=launch_chain,
+        capability=capability,
     )
-    return payload
+    return published["result"]
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -549,6 +594,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--phase-a-model", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     add_v5_k1_phase_b_worker_input_arguments(parser)
+    add_v5_k1_phase_b_launch_runtime_arguments(parser)
     parser.add_argument("--seed", type=int, default=20260903)
     parser.add_argument("--per-candidate-forward-limit", type=int, default=128)
     parser.add_argument("--per-parent-forward-limit", type=int, default=4096)
@@ -565,6 +611,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.phase_a_model,
         args.output_dir,
         **v5_k1_phase_b_worker_input_kwargs(args),
+        launch_runtime=v5_k1_phase_b_launch_runtime_from_args(args),
         config=V5K1PhaseBGateConfig(
             seed=args.seed,
             per_candidate_forward_evaluation_limit=args.per_candidate_forward_limit,

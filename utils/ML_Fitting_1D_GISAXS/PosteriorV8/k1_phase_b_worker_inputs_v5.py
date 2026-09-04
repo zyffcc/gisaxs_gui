@@ -22,9 +22,12 @@ from .run_k1_memorization_gate_v5 import (
 AUTHORITATIVE_INPUT_KEYS = (
     "source_archive",
     "dataset",
+    "dataset_binding",
+    "cross_platform_pass_marker",
     "phase_a_result",
     "phase_a_model",
     "phase_a_model_provenance",
+    "phase_a_completion",
 )
 _SOURCE_SNAPSHOT_LOCATION_FIELDS = {"archive_path", "source_root"}
 
@@ -102,9 +105,14 @@ def capture_v5_k1_phase_b_authoritative_inputs(
         identities[key] = identity
 
     exact_phase_a_paths = {
+        "dataset_binding": Path(str(identities["dataset"]["path"]) + ".binding-v1.json"),
+        "cross_platform_pass_marker": (
+            output.parents[1] / "audit/sobol-cross-platform-PASS-v1.json"
+        ),
         "phase_a_result": output / PHASE_A_RESULT_FILENAME,
         "phase_a_model": output / PHASE_A_MODEL_FILENAME,
         "phase_a_model_provenance": output / PHASE_A_MODEL_PROVENANCE_FILENAME,
+        "phase_a_completion": output.parents[1] / "audit/full-gate-completion-v1.json",
     }
     for key, required_path in exact_phase_a_paths.items():
         if Path(str(identities[key]["path"])) != required_path:
@@ -262,6 +270,14 @@ def add_v5_k1_phase_b_worker_input_arguments(
     parser.add_argument("--original-dataset-path", required=True, type=Path)
     parser.add_argument("--dataset-sha256", required=True)
     parser.add_argument("--dataset-byte-count", required=True, type=int)
+    parser.add_argument("--dataset-binding", required=True, type=Path)
+    parser.add_argument("--original-dataset-binding", required=True, type=Path)
+    parser.add_argument("--dataset-binding-sha256", required=True)
+    parser.add_argument("--dataset-binding-byte-count", required=True, type=int)
+    parser.add_argument("--cross-platform-pass-marker", required=True, type=Path)
+    parser.add_argument("--original-cross-platform-pass-marker", required=True, type=Path)
+    parser.add_argument("--cross-platform-pass-marker-sha256", required=True)
+    parser.add_argument("--cross-platform-pass-marker-byte-count", required=True, type=int)
     parser.add_argument("--original-phase-a-output-dir", required=True, type=Path)
     parser.add_argument("--original-phase-a-result", required=True, type=Path)
     parser.add_argument("--phase-a-result-sha256", required=True)
@@ -272,6 +288,10 @@ def add_v5_k1_phase_b_worker_input_arguments(
     parser.add_argument("--original-phase-a-model-provenance", required=True, type=Path)
     parser.add_argument("--phase-a-model-provenance-sha256", required=True)
     parser.add_argument("--phase-a-model-provenance-byte-count", required=True, type=int)
+    parser.add_argument("--phase-a-completion", required=True, type=Path)
+    parser.add_argument("--original-phase-a-completion", required=True, type=Path)
+    parser.add_argument("--phase-a-completion-sha256", required=True)
+    parser.add_argument("--phase-a-completion-byte-count", required=True, type=int)
 
 
 def v5_k1_phase_b_worker_input_kwargs(args: argparse.Namespace) -> dict[str, object]:
@@ -289,6 +309,20 @@ def v5_k1_phase_b_worker_input_kwargs(args: argparse.Namespace) -> dict[str, obj
         "original_dataset_path": args.original_dataset_path,
         "dataset_sha256": args.dataset_sha256,
         "dataset_byte_count": args.dataset_byte_count,
+        "dataset_binding_path": args.dataset_binding,
+        "original_dataset_binding_path": args.original_dataset_binding,
+        "dataset_binding_sha256": args.dataset_binding_sha256,
+        "dataset_binding_byte_count": args.dataset_binding_byte_count,
+        "original_cross_platform_pass_marker_path": (
+            args.original_cross_platform_pass_marker
+        ),
+        "cross_platform_pass_marker_sha256": (
+            args.cross_platform_pass_marker_sha256
+        ),
+        "cross_platform_pass_marker_byte_count": (
+            args.cross_platform_pass_marker_byte_count
+        ),
+        "cross_platform_pass_marker_path": args.cross_platform_pass_marker,
         "original_phase_a_output_dir": args.original_phase_a_output_dir,
         "original_phase_a_result_path": args.original_phase_a_result,
         "phase_a_result_sha256": args.phase_a_result_sha256,
@@ -299,6 +333,10 @@ def v5_k1_phase_b_worker_input_kwargs(args: argparse.Namespace) -> dict[str, obj
         "original_phase_a_model_provenance_path": (args.original_phase_a_model_provenance),
         "phase_a_model_provenance_sha256": args.phase_a_model_provenance_sha256,
         "phase_a_model_provenance_byte_count": (args.phase_a_model_provenance_byte_count),
+        "phase_a_completion_path": args.phase_a_completion,
+        "original_phase_a_completion_path": args.original_phase_a_completion,
+        "phase_a_completion_sha256": args.phase_a_completion_sha256,
+        "phase_a_completion_byte_count": args.phase_a_completion_byte_count,
         "input_allowed_root": args.input_root,
     }
 

@@ -28,7 +28,7 @@ from .sobol_numeric_canonicalization_v5 import V5_FAST_NUMERIC_POLICY_VERSION
 
 
 CANONICAL_COMPONENT_SLOTS_VERSION = (
-    "posterior_v8_policy_bound_complete_slot_class_local_physical_lexicographic_v3"
+    "posterior_v8_policy_bound_decode_fixed_point_exact_endpoint_slots_v5"
 )
 CANONICAL_COMPONENT_ROUNDTRIP_ATOL = 5.0e-12
 MAX_CANONICAL_ASSIGNMENTS = 24
@@ -249,6 +249,7 @@ def canonicalize_component_slots(
     feasible: list[
         tuple[
             tuple[tuple[object, ...], ...],
+            tuple[tuple[object, ...], ...],
             tuple[LatentComponentParameters, ...],
             BranchCoordinates,
         ]
@@ -281,17 +282,27 @@ def canonicalize_component_slots(
             atol=CANONICAL_COMPONENT_ROUNDTRIP_ATOL,
         ):
             continue
-        key = tuple(
+        selection_key = tuple(
             component_physical_dictionary_key(
                 item,
                 numeric_policy_version=codec.numeric_policy_version,
             )
             for item in assigned
         )
-        feasible.append((key, assigned, encoded))
+        canonical_key = tuple(
+            component_physical_dictionary_key(
+                item,
+                numeric_policy_version=codec.numeric_policy_version,
+            )
+            for item in decoded
+        )
+        # Persist the exact decode representative of the stored coordinates.
+        # The original assignment remains the lexicographic selection key, but
+        # returning it could differ from a replayed decode by one binary64 ULP.
+        feasible.append((selection_key, canonical_key, decoded, encoded))
     if not feasible:
         raise ValueError("no shape/D-compatible component assignment is feasible in the user codec")
-    key, assigned, coordinates = min(feasible, key=lambda item: item[0])
+    _, key, assigned, coordinates = min(feasible, key=lambda item: item[0])
     return CanonicalComponentSlotAssignment(
         components=assigned,
         resolution=resolution,

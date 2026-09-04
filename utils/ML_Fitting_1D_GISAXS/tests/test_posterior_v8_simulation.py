@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from hashlib import sha256
 import sys
 from pathlib import Path
 
@@ -79,15 +78,28 @@ def test_public_noise_primitive_preserves_pre_extraction_values_pointwise():
     noise = NoiseProvenance(poisson_count_scale=2.0e4, relative_sigma=0.01)
     intensity, sigma = apply_observation_noise(clean, noise, observation_seed=1234)
 
-    # Frozen from the former inline simulate_recipe implementation.  A byte
-    # digest makes any pointwise float64 drift visible without storing 128
-    # opaque decimal literals in the test.
-    assert sha256(np.asarray(intensity, dtype="<f8").tobytes()).hexdigest() == (
-        "b92f702fd0879e3b727517df332df825e32435d9e97f0253e41ac19daed0806c"
+    # Replay the former inline implementation pointwise.  Platform libm may
+    # produce adjacent binary64 values for geomspace/exp, so a digest frozen on
+    # macOS is not a valid Linux regression oracle even with the same NumPy.
+    rng = np.random.default_rng(np.random.SeedSequence([1234, 0x5638]))
+    reference = max(float(np.median(clean)), np.finfo(np.float64).tiny)
+    scale = noise.poisson_count_scale
+    assert scale is not None
+    counts = rng.poisson(np.clip(clean / reference * scale, 0.0, 1.0e9))
+    expected_intensity = counts.astype(np.float64) / scale * reference
+    expected_sigma_poisson = np.sqrt(np.maximum(counts, 1.0)) / scale * reference
+    expected_intensity *= np.exp(
+        rng.normal(0.0, noise.relative_sigma, size=expected_intensity.shape)
     )
-    assert sha256(np.asarray(sigma, dtype="<f8").tobytes()).hexdigest() == (
-        "b0c5d3fa5c6b19656596a4665733fe6758e56fef2c719b2222fbe1316a370f7b"
+    floor = max(noise.sigma_floor_fraction * reference, np.finfo(np.float64).tiny)
+    expected_intensity = np.maximum(expected_intensity, floor)
+    expected_sigma = np.sqrt(
+        np.square(expected_sigma_poisson)
+        + np.square(noise.relative_sigma * expected_intensity)
+        + floor**2
     )
+    np.testing.assert_array_equal(intensity, expected_intensity)
+    np.testing.assert_array_equal(sigma, expected_sigma)
 
     recipe = sample_identifiable_recipe(1234, topology_id=33, max_points=96)
     simulated = simulate_recipe(recipe)

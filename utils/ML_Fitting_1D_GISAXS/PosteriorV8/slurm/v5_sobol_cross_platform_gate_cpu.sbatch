@@ -25,6 +25,13 @@ set -euo pipefail
 : "${POSTERIOR_V8_V5_CROSS_PLATFORM_CANDIDATE_OUTPUT:?set candidate output}"
 : "${POSTERIOR_V8_V5_CROSS_PLATFORM_RESULT_OUTPUT:?set result output}"
 : "${POSTERIOR_V8_V5_CROSS_PLATFORM_PASS_MARKER:?set PASS marker output}"
+: "${POSTERIOR_V8_V7_PHASE_A_PLAN:?set Phase-A v7 plan}"
+: "${POSTERIOR_V8_V7_PHASE_A_PLAN_SHA256:?set Phase-A v7 plan SHA-256}"
+: "${POSTERIOR_V8_V7_PHASE_A_RECEIPT:?set Phase-A v7 submission receipt}"
+: "${POSTERIOR_V8_V7_PHASE_A_RELEASE:?set Phase-A v7 release completion}"
+: "${POSTERIOR_V8_V7_PHASE_A_STAGE:?set Phase-A v7 stage}"
+: "${POSTERIOR_V8_V7_PHASE_A_UPSTREAM_COMPLETION:?set upstream completion}"
+: "${POSTERIOR_V8_V7_PHASE_A_COMPLETION:?set stage completion output}"
 
 case "$(hostname -s)" in
     max-wgs*) echo "cross-platform gate must run on a Slurm worker" >&2; exit 2 ;;
@@ -109,6 +116,9 @@ fi
 POSTERIOR_V8_JOB_SOURCE_ARCHIVE="$GISAXS_JOB_CACHE_ROOT/source-snapshot.tar"
 POSTERIOR_V8_TRUSTED_VERIFIER="$GISAXS_JOB_CACHE_ROOT/package_source_snapshot_v5.py"
 POSTERIOR_V8_JOB_SOURCE_ROOT="$GISAXS_JOB_CACHE_ROOT/source"
+POSTERIOR_V8_JOB_STAGING_ROOT="$GISAXS_JOB_CACHE_ROOT/staging"
+mkdir -m 0700 "$POSTERIOR_V8_JOB_STAGING_ROOT"
+export POSTERIOR_V8_JOB_SOURCE_ARCHIVE POSTERIOR_V8_JOB_SOURCE_ROOT POSTERIOR_V8_JOB_STAGING_ROOT
 cp -- "$POSTERIOR_V8_V5_SOURCE_ARCHIVE" "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE"
 chmod 0400 "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE"
 read -r POSTERIOR_V8_JOB_ARCHIVE_SHA256 _ < <(sha256sum -- "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE")
@@ -120,12 +130,12 @@ tar -xOf "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     snapshot/utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py \
     > "$POSTERIOR_V8_TRUSTED_VERIFIER"
 chmod 0400 "$POSTERIOR_V8_TRUSTED_VERIFIER"
-conda run --no-capture-output -n tf python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     extract \
     --archive "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     --source-root "$POSTERIOR_V8_JOB_SOURCE_ROOT" \
     --expected-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256"
-conda run --no-capture-output -n tf python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     verify-extracted \
     --archive "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     --source-root "$POSTERIOR_V8_JOB_SOURCE_ROOT" \
@@ -133,53 +143,8 @@ conda run --no-capture-output -n tf python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     --expected-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_MANIFEST_SHA256" \
     --expected-source-tree-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256"
 
-POSTERIOR_V8_JOB_REFERENCE="$GISAXS_JOB_CACHE_ROOT/reference.json"
-cp -- "$POSTERIOR_V8_V5_CROSS_PLATFORM_REFERENCE" "$POSTERIOR_V8_JOB_REFERENCE"
-chmod 0400 "$POSTERIOR_V8_JOB_REFERENCE"
-read -r POSTERIOR_V8_JOB_REFERENCE_SHA256 _ < <(sha256sum -- "$POSTERIOR_V8_JOB_REFERENCE")
-POSTERIOR_V8_JOB_REFERENCE_BYTE_COUNT="$(wc -c < "$POSTERIOR_V8_JOB_REFERENCE" | tr -d '[:space:]')"
-if [[ "$POSTERIOR_V8_JOB_REFERENCE_SHA256" != "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_REFERENCE_SHA256" \
-    || "$POSTERIOR_V8_JOB_REFERENCE_BYTE_COUNT" != "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_REFERENCE_BYTE_COUNT" ]]; then
-    echo "cross-platform reference identity changed before worker use" >&2
-    exit 2
-fi
-
 cd "$POSTERIOR_V8_JOB_SOURCE_ROOT"
-run_verified_module() {
-    local module="$1"
-    shift
-    conda run --no-capture-output -n tf \
-        python -I -c \
-        'import runpy, sys; root, module = sys.argv[1:3]; sys.path.insert(0, root); sys.argv = [module, *sys.argv[3:]]; runpy.run_module(module, run_name="__main__")' \
-        "$POSTERIOR_V8_JOB_SOURCE_ROOT" "$module" "$@"
-}
-run_verified_module \
-    utils.ML_Fitting_1D_GISAXS.PosteriorV8.run_sobol_cross_platform_gate_v5 \
-    build-and-compare \
-    --source-archive-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256" \
-    --source-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_MANIFEST_SHA256" \
-    --source-tree-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256" \
-    --reference "$POSTERIOR_V8_JOB_REFERENCE" \
-    --candidate-output "$POSTERIOR_V8_V5_CROSS_PLATFORM_CANDIDATE_OUTPUT" \
-    --result-output "$POSTERIOR_V8_V5_CROSS_PLATFORM_RESULT_OUTPUT" \
-    --pass-marker "$POSTERIOR_V8_V5_CROSS_PLATFORM_PASS_MARKER"
-chmod 0400 \
-    "$POSTERIOR_V8_V5_CROSS_PLATFORM_CANDIDATE_OUTPUT" \
-    "$POSTERIOR_V8_V5_CROSS_PLATFORM_RESULT_OUTPUT" \
-    "$POSTERIOR_V8_V5_CROSS_PLATFORM_PASS_MARKER"
-
-POSTERIOR_V8_JOB_PASS_MARKER="$GISAXS_JOB_CACHE_ROOT/PASS.json"
-cp -- "$POSTERIOR_V8_V5_CROSS_PLATFORM_PASS_MARKER" "$POSTERIOR_V8_JOB_PASS_MARKER"
-chmod 0400 "$POSTERIOR_V8_JOB_PASS_MARKER"
-run_verified_module \
-    utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_cross_platform_v5 \
-    --marker "$POSTERIOR_V8_JOB_PASS_MARKER" \
-    --source-archive-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256" \
-    --source-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_MANIFEST_SHA256" \
-    --source-tree-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256" \
-    --reference-file-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_REFERENCE_SHA256" \
-    --reference-file-byte-count "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_REFERENCE_BYTE_COUNT" \
-    --reference-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_MANIFEST_SHA256" \
-    --scientific-content-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_SCIENTIFIC_SHA256" \
-    --comparison-result-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_COMPARISON_SHA256" \
-    --expected-gate-claim-sha256 "$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_GATE_CLAIM_SHA256"
+conda run --no-capture-output --prefix /data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2 \
+    python -I -c \
+    'import sys; root=sys.argv[1]; sys.path.insert(0, root); from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_runtime_v7 import run_stage_from_environment; run_stage_from_environment(sys.argv[2])' \
+    "$POSTERIOR_V8_JOB_SOURCE_ROOT" "$POSTERIOR_V8_V7_PHASE_A_STAGE"

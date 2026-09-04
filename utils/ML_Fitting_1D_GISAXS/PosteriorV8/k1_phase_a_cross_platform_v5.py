@@ -18,6 +18,8 @@ import re
 import stat
 from typing import Mapping, Sequence
 
+from .k1_staging_files_v5 import read_only_bytes_identity
+
 from .run_sobol_cross_platform_gate_v5 import (
     validate_v5_sobol_cross_platform_pass_marker,
 )
@@ -82,6 +84,19 @@ def _assert_regular_no_symlink(path: Path, name: str) -> Path:
 def file_identity(path: Path, *, name: str, require_read_only: bool) -> dict[str, object]:
     """Return an exact regular-file identity without following symlink components."""
 
+    if require_read_only:
+        _, strict = read_only_bytes_identity(path, name)
+        return {
+            "path": strict["path"],
+            "sha256": strict["sha256"],
+            "byte_count": strict["byte_count"],
+            "mode": int(str(strict["mode_octal"]), 8),
+            "device": strict["device"],
+            "inode": strict["inode"],
+            "mtime_ns": strict["mtime_ns"],
+            "ctime_ns": strict["ctime_ns"],
+            "nlink": strict["link_count"],
+        }
     resolved = _assert_regular_no_symlink(path, name)
     if not hasattr(os, "O_NOFOLLOW"):
         raise RuntimeError("strict file identity requires O_NOFOLLOW support")
@@ -157,6 +172,20 @@ def file_identity(path: Path, *, name: str, require_read_only: bool) -> dict[str
         "device": status_after.st_dev,
         "inode": status_after.st_ino,
         "mtime_ns": status_after.st_mtime_ns,
+    }
+
+
+def _legacy_identity(strict: Mapping[str, object]) -> dict[str, object]:
+    return {
+        "path": strict["path"],
+        "sha256": strict["sha256"],
+        "byte_count": strict["byte_count"],
+        "mode": int(str(strict["mode_octal"]), 8),
+        "device": strict["device"],
+        "inode": strict["inode"],
+        "mtime_ns": strict["mtime_ns"],
+        "ctime_ns": strict["ctime_ns"],
+        "nlink": strict["link_count"],
     }
 
 
@@ -249,10 +278,11 @@ def inspect_v5_k1_cross_platform_reference(
     """Strictly read one reference and derive its frozen Phase-A claim."""
 
     expected_digest = _digest(expected_file_sha256, "expected reference file SHA-256")
-    identity = file_identity(path, name="cross-platform reference", require_read_only=require_read_only)
+    raw, strict_identity = read_only_bytes_identity(path, "cross-platform reference")
+    identity = _legacy_identity(strict_identity)
     if identity["sha256"] != expected_digest:
         raise ValueError("cross-platform reference SHA-256 does not match the frozen digest")
-    encoded = Path(str(identity["path"])).read_text(encoding="utf-8")
+    encoded = raw.decode("utf-8")
     after = file_identity(
         Path(str(identity["path"])),
         name="cross-platform reference",
@@ -339,8 +369,9 @@ def validate_v5_k1_cross_platform_marker(
 
 
 def validate_v5_k1_cross_platform_marker_file(path: Path, **expected: object) -> dict[str, object]:
-    identity = file_identity(path, name="cross-platform PASS marker", require_read_only=True)
-    encoded = Path(str(identity["path"])).read_text(encoding="utf-8")
+    raw, strict_identity = read_only_bytes_identity(path, "cross-platform PASS marker")
+    identity = _legacy_identity(strict_identity)
+    encoded = raw.decode("utf-8")
     after = file_identity(
         Path(str(identity["path"])),
         name="cross-platform PASS marker",

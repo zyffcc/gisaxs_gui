@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from io import BytesIO
 import json
 from pathlib import Path
+import pickle
 import shutil
+import subprocess
+import sys
 import zipfile
 
 import numpy as np
@@ -21,11 +25,27 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_c_contract_v5 import (
     K1_PHASE_C_BRANCHES,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import k1_job_staging_v5
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import job_local_input_capability_v5
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import k1_staging_files_v5
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.job_local_input_capability_v5 import (
+    _mint_job_local_input_capability,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_input_closure_v5 import (
+    rehash_staged_artifacts,
+)
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_job_staging_v5 import (
     build_job_staging_proof,
-    finalize_staging_proof,
+    freeze_staging_tree,
     stage_training_inputs,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_staging_receipt_v5 import (
+    finalize_staging_proof,
     validate_staging_proof,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.grouped_training_v5 import (
+    V5JobLocalInputCapability,
+    _job_local_capability_post_validation_payload,
+    _validate_job_local_input_capability,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_training_chain_contract_v5 import (
     V5K1TrainingArtifact,
@@ -49,12 +69,16 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_training_chain_runtime_v5 import 
     run_v5_k1_training_seed,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.launch_k1_training_chain_v5 import (
+    V5CommandResult,
     launch_v5_k1_training_chain,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.package_source_snapshot_v5 import (
     build_source_snapshot,
     extract_source_snapshot,
 )
+
+
+WRAPPER_MINT_BYTES = b"fixture-wrapper-mint-state-0001x"
 
 
 def _sha256_file(path: Path) -> str:
@@ -239,6 +263,79 @@ def chain_fixture(tmp_path: Path) -> _Fixture:
     )
 
 
+def _fixture_with_sidecar_evidence(fixture: _Fixture) -> _Fixture:
+    raw = json.loads(fixture.inventory.read_text(encoding="utf-8"))
+    artifacts = {}
+    for role in ("train", "tuning_validation"):
+        original = raw["artifacts"][role][0]
+        marker = role.replace("_validation", "")
+        sidecar = fixture.inventory.parent / f"{marker}-search.gsv5"
+        manifest_core = {"fixture": marker, "kind": "frozen_search_sidecar"}
+        manifest = {
+            **manifest_core,
+            "manifest_sha256": sha256(canonical_json(manifest_core).encode()).hexdigest(),
+        }
+        with zipfile.ZipFile(sidecar, "x") as archive:
+            archive.writestr("manifest.json", canonical_json(manifest))
+        evidence = fixture.inventory.parent / f"{marker}-executor.bin"
+        evidence.write_bytes(f"{marker}-executor-evidence\n".encode())
+        receipt = sidecar.with_suffix(".evidence-receipt.json")
+        receipt.write_text(
+            json.dumps(
+                {
+                    "branch_evidence": [
+                        {
+                            "relative_path": evidence.name,
+                            "artifact_sha256": _sha256_file(evidence),
+                        }
+                    ]
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        artifacts[role] = V5K1TrainingArtifact(
+            path=original["path"],
+            role=role,
+            split_id=original["split_id"],
+            artifact_sha256=original["artifact_sha256"],
+            manifest_sha256=original["manifest_sha256"],
+            clean_parent_count=original["clean_parent_count"],
+            branch_counts=tuple(
+                (branch.branch_id, original["branch_counts"][branch.branch_id])
+                for branch in K1_PHASE_C_BRANCHES
+            ),
+            sidecar_path=str(sidecar),
+            sidecar_artifact_sha256=_sha256_file(sidecar),
+            sidecar_manifest_sha256=manifest["manifest_sha256"],
+            evidence_receipt_path=str(receipt),
+            evidence_receipt_sha256=_sha256_file(receipt),
+            full_training_eligible=False,
+        )
+    inventory = build_v5_k1_training_inventory(
+        source_archive_sha256=raw["source_archive_sha256"],
+        source_bundle_sha256=raw["source_bundle_sha256"],
+        train_artifacts=(artifacts["train"],),
+        tuning_artifacts=(artifacts["tuning_validation"],),
+        train_parent_set_sha256=raw["splits"]["train_parent_set_sha256"],
+        tuning_parent_set_sha256=raw["splits"]["tuning_parent_set_sha256"],
+        train_tuning_disjointness_receipt_sha256=raw["splits"][
+            "train_tuning_disjointness_receipt_sha256"
+        ],
+        k1_phase_c_disjointness_receipt_sha256=raw["splits"][
+            "k1_phase_c_disjointness_receipt_sha256"
+        ],
+    )
+    path = fixture.inventory.parent / "k1-input-inventory-with-sidecars.json"
+    write_v5_k1_training_inventory(path, inventory)
+    return replace(
+        fixture,
+        inventory=path,
+        inventory_file_sha256=_sha256_file(path),
+    )
+
+
 def _publish_plan(plan: dict[str, object]) -> Path:
     layout = plan["layout"]
     Path(layout["run_root"]).mkdir(parents=True)
@@ -269,8 +366,15 @@ def _job_stage(
         if worker == "training_seed"
         else f"gisaxs-v5-k1-collect-{job_id}-"
     )
-    root = scratch / f"{prefix}fixture"
+    job_tmp = scratch / f"{prefix}fixture0"
+    job_tmp.mkdir(mode=0o700)
+    root = job_tmp / "staging"
     root.mkdir(mode=0o700)
+    (job_tmp / "runtime-cache").mkdir(mode=0o700)
+    wrapper_mint = job_tmp / ".posterior-v8-wrapper-mint"
+    wrapper_mint.write_bytes(WRAPPER_MINT_BYTES)
+    assert wrapper_mint.stat().st_size == 32
+    wrapper_mint.chmod(0o400)
     local_plan = root / "k1-training-plan.json"
     shutil.copyfile(plan_path, local_plan)
     local_plan.chmod(0o400)
@@ -283,7 +387,13 @@ def _job_stage(
         local_source,
         expected_sha256=plan["source"]["archive_sha256"],
     )
-    environment = {"SLURM_JOB_ID": job_id, "SLURM_TMPDIR": str(scratch)}
+    environment = {
+        "SLURM_JOB_ID": job_id,
+        "TMPDIR": str(scratch),
+        "POSTERIOR_V8_JOB_TMP_ROOT": str(job_tmp),
+    }
+    if worker == "training_seed":
+        environment["SLURM_ARRAY_TASK_ID"] = str(array_index)
     return root, local_plan, local_source, local_archive, environment
 
 
@@ -294,6 +404,115 @@ def _rehashed(plan: dict[str, object]) -> dict[str, object]:
         **result,
         "plan_sha256": sha256(canonical_json(result).encode()).hexdigest(),
     }
+
+
+def _minted_training_capability(
+    fixture: _Fixture,
+    monkeypatch,
+    *,
+    name: str,
+    job_id: str,
+):
+    fixture = _fixture_with_sidecar_evidence(fixture)
+    plan = build_v5_k1_training_chain_plan(
+        fixture.config(name), allowed_root=fixture.dust
+    )
+    plan_path = _publish_plan(plan)
+    root, local_plan, local_source, local_archive, environment = _job_stage(
+        fixture,
+        plan,
+        plan_path,
+        job_id=job_id,
+        worker="training_seed",
+        array_index=0,
+    )
+    monkeypatch.setattr(
+        k1_job_staging_v5,
+        "__file__",
+        str(local_source / "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_job_staging_v5.py"),
+    )
+    monkeypatch.delenv("SLURM_TMPDIR", raising=False)
+    for key, value in environment.items():
+        monkeypatch.setenv(key, value)
+    common = build_job_staging_proof(
+        plan,
+        plan_path=local_plan,
+        staging_root=root,
+        source_root=local_source,
+        source_archive=local_archive,
+        worker_kind="training_seed",
+        array_index=0,
+        environment=environment,
+        allowed_root=fixture.dust,
+    )
+    staged = stage_training_inputs(
+        plan, staging_root=root, allowed_root=fixture.dust
+    )
+    freeze_staging_tree(root)
+    capability = _mint_job_local_input_capability(
+        plan,
+        common,
+        staged,
+        environment=environment,
+        allowed_root=fixture.dust,
+    )
+    arguments = tuple(
+        value
+        for role in (
+            "train_datasets",
+            "validation_datasets",
+            "train_sidecars",
+            "validation_sidecars",
+        )
+        for value in staged["local_inputs"][role]
+    )
+    return fixture, plan, common, staged, capability, arguments, environment
+
+
+def _capability_closure_target(
+    name: str,
+    fixture: _Fixture,
+    plan: dict[str, object],
+    common: dict[str, object],
+    staged: dict[str, object],
+) -> Path:
+    by_kind = {
+        (scope, item["kind"]): Path(item[f"{scope}_path"])
+        for item in staged["artifacts"]
+        for scope in ("original", "job_local")
+    }
+    local_source = Path(common["source"]["job_local_source_root"])
+    first_source = next(iter(plan["source"]["required_file_sha256"]))
+    targets = {
+        "original_inventory": Path(plan["input_inventory"]["path"]),
+        "job_local_inventory": Path(staged["inventory"]["job_local_path"]),
+        "original_parent": by_kind[("original", "grouped_parent")],
+        "job_local_parent": by_kind[("job_local", "grouped_parent")],
+        "original_sidecar": by_kind[("original", "frozen_search_sidecar")],
+        "job_local_sidecar": by_kind[("job_local", "frozen_search_sidecar")],
+        "original_evidence_receipt": by_kind[
+            ("original", "task_bound_search_evidence_receipt")
+        ],
+        "job_local_evidence_receipt": by_kind[
+            ("job_local", "task_bound_search_evidence_receipt")
+        ],
+        "original_executor_evidence": by_kind[("original", "executor_evidence")],
+        "job_local_executor_evidence": by_kind[("job_local", "executor_evidence")],
+        "original_plan": Path(common["plan"]["original_path"]),
+        "job_local_plan": Path(common["plan"]["job_local_path"]),
+        "original_source_archive": Path(common["source"]["original_archive_path"]),
+        "job_local_source_archive": Path(common["source"]["job_local_archive_path"]),
+        "original_source_tree": fixture.source_root / first_source,
+        "job_local_source_manifest": local_source / "SOURCE-MANIFEST.json",
+        "job_local_source_tree": local_source / first_source,
+    }
+    return targets[name]
+
+
+def _append_drift(path: Path) -> None:
+    path.chmod(0o600)
+    with path.open("ab") as stream:
+        stream.write(b"post-mint-drift")
 
 
 def test_engineering_dry_run_is_write_free_and_freezes_gpu_array(chain_fixture: _Fixture):
@@ -308,13 +527,23 @@ def test_engineering_dry_run_is_write_free_and_freezes_gpu_array(chain_fixture: 
     assert not Path(plan["layout"]["run_root"]).exists()
     assert plan["configuration"]["model_seeds"] == [101]
     assert plan["slurm"]["training_array_spec"] == "0-0"
-    assert plan["execution_gate"] == {
-        "submission_allowed": False,
-        "blockers": ["job_local_staging_security_audit_not_closed"],
-        "formal_chain_complete": False,
-        "login_node_work": "hash_contract_path_checks_plan_publication_and_sbatch_only",
-        "training_compute": "Slurm_GPU_worker_only",
-        "tuning_handoff_compute": "Slurm_CPU_worker_only",
+    gate = plan["execution_gate"]
+    assert gate["submission_allowed"] is True
+    assert gate["blockers"] == []
+    assert gate["formal_chain_complete"] is False
+    assert gate["job_local_input_security"] == {
+        "status": "closed_by_live_wrapper_minted_capability_v2",
+        "capability_is_process_live_and_single_use": True,
+        "serialized_capability_or_receipt_authorizes_training": False,
+        "wrapper_created_owner_private_job_tmp_root_required": True,
+        "wrapper_mint_is_exclusive_one_shot_and_live_consumed": True,
+        "capability_has_no_public_factory": True,
+        "mint_token_seal_and_digest_are_never_audited": True,
+        "shared_scratch_base_alone_authorizes_training": False,
+        "original_and_job_local_bytes_rehashed_pre_and_post_training": True,
+        "source_archive_manifest_and_tree_reverified_pre_and_post_training": True,
+        "trainer_arguments_must_equal_verified_local_copy_set": True,
+        "output_remains_restricted_to_user_dust": True,
     }
     assert "--array=0-0" in result["submission_preview"]["training"]
     assert "TRAINING_ARRAY_JOB_ID" in " ".join(
@@ -453,7 +682,8 @@ def test_seed_inputs_are_exclusive_node_local_read_only_copies(
         plan, staging_root=root, allowed_root=chain_fixture.dust
     )
 
-    assert Path(common["staging_root"]).parent == Path(environment["SLURM_TMPDIR"])
+    assert Path(common["job_tmp_root"]).parent == Path(environment["TMPDIR"])
+    assert Path(common["staging_root"]) == Path(common["job_tmp_root"]) / "staging"
     original_paths = set((*plan["inputs"]["train_datasets"], *plan["inputs"]["validation_datasets"]))
     local_paths = {
         *staged["local_inputs"]["train_datasets"],
@@ -492,6 +722,40 @@ def test_staging_rejects_symlinked_frozen_input(chain_fixture: _Fixture):
         stage_training_inputs(plan, staging_root=root, allowed_root=chain_fixture.dust)
 
 
+@pytest.mark.parametrize("attack", ("mutate", "replace"))
+def test_stable_file_hash_rejects_mutation_or_same_byte_path_replacement(
+    tmp_path: Path, monkeypatch, attack: str,
+):
+    target = tmp_path / "frozen.bin"
+    target.write_bytes(b"frozen-byte-identity")
+    displaced = tmp_path / "displaced.bin"
+    real_sha256 = sha256
+
+    class ReplacingDigest:
+        def __init__(self):
+            self._inner = real_sha256()
+            self._replaced = False
+
+        def update(self, chunk: bytes) -> None:
+            self._inner.update(chunk)
+            if not self._replaced:
+                self._replaced = True
+                if attack == "replace":
+                    target.rename(displaced)
+                    target.write_bytes(displaced.read_bytes())
+                else:
+                    with target.open("ab") as stream:
+                        stream.write(b"mutation-race")
+
+        def hexdigest(self) -> str:
+            return self._inner.hexdigest()
+
+    monkeypatch.setattr(k1_staging_files_v5, "sha256", ReplacingDigest)
+
+    with pytest.raises(RuntimeError, match="changed|replaced"):
+        k1_staging_files_v5.file_sha256(target, "mutation-race fixture")
+
+
 def test_staging_rejects_shared_dust_as_slurm_scratch(
     chain_fixture: _Fixture, monkeypatch,
 ):
@@ -528,6 +792,113 @@ def test_staging_rejects_shared_dust_as_slurm_scratch(
         )
 
 
+@pytest.mark.parametrize(
+    "attack",
+    (
+        "missing_or_reused_mint",
+        "writable_mint",
+        "hardlinked_mint",
+        "unexpected_prior_content",
+        "wrong_root_mode",
+        "symlinked_runtime_cache",
+        "symlinked_job_root",
+    ),
+)
+def test_staging_rejects_forged_or_reused_tmp_roots(
+    chain_fixture: _Fixture, monkeypatch, attack: str,
+):
+    plan = build_v5_k1_training_chain_plan(
+        chain_fixture.config(f"tmp-root-attack-{attack}"),
+        allowed_root=chain_fixture.dust,
+    )
+    plan_path = _publish_plan(plan)
+    root, local_plan, local_source, local_archive, environment = _job_stage(
+        chain_fixture,
+        plan,
+        plan_path,
+        job_id="714",
+        worker="training_seed",
+        array_index=0,
+    )
+    job_tmp = root.parent
+    mint = job_tmp / ".posterior-v8-wrapper-mint"
+    if attack == "missing_or_reused_mint":
+        mint.unlink()
+    elif attack == "writable_mint":
+        mint.chmod(0o600)
+    elif attack == "hardlinked_mint":
+        (job_tmp.parent / "attacker-mint-link").hardlink_to(mint)
+    elif attack == "unexpected_prior_content":
+        (job_tmp / "attacker-content").write_text("unexpected", encoding="utf-8")
+    elif attack == "wrong_root_mode":
+        job_tmp.chmod(0o750)
+    elif attack == "symlinked_runtime_cache":
+        (job_tmp / "runtime-cache").rmdir()
+        (job_tmp / "runtime-cache").symlink_to(job_tmp.parent, target_is_directory=True)
+    else:
+        moved = job_tmp.with_name(f"{job_tmp.name}-real")
+        job_tmp.rename(moved)
+        job_tmp.symlink_to(moved, target_is_directory=True)
+    monkeypatch.setattr(
+        k1_job_staging_v5,
+        "__file__",
+        str(local_source / "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_job_staging_v5.py"),
+    )
+    with pytest.raises((RuntimeError, ValueError, FileNotFoundError)):
+        build_job_staging_proof(
+            plan,
+            plan_path=local_plan,
+            staging_root=root,
+            source_root=local_source,
+            source_archive=local_archive,
+            worker_kind="training_seed",
+            array_index=0,
+            environment=environment,
+            allowed_root=chain_fixture.dust,
+        )
+
+
+def test_staging_rejects_arbitrary_existing_tmp_directory(
+    chain_fixture: _Fixture, monkeypatch,
+):
+    plan = build_v5_k1_training_chain_plan(
+        chain_fixture.config("arbitrary-tmp-root"), allowed_root=chain_fixture.dust
+    )
+    plan_path = _publish_plan(plan)
+    root, local_plan, local_source, local_archive, environment = _job_stage(
+        chain_fixture,
+        plan,
+        plan_path,
+        job_id="715",
+        worker="training_seed",
+        array_index=0,
+    )
+    arbitrary = root.parent.with_name("attacker-existing-directory")
+    root.parent.rename(arbitrary)
+    environment["POSTERIOR_V8_JOB_TMP_ROOT"] = str(arbitrary)
+    root = arbitrary / "staging"
+    local_plan = root / local_plan.name
+    local_source = root / "source"
+    local_archive = root / local_archive.name
+    monkeypatch.setattr(
+        k1_job_staging_v5,
+        "__file__",
+        str(local_source / "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_job_staging_v5.py"),
+    )
+    with pytest.raises(ValueError, match="Slurm job binding"):
+        build_job_staging_proof(
+            plan,
+            plan_path=local_plan,
+            staging_root=root,
+            source_root=local_source,
+            source_archive=local_archive,
+            worker_kind="training_seed",
+            array_index=0,
+            environment=environment,
+            allowed_root=chain_fixture.dust,
+        )
+
+
 def test_non_dry_workers_fail_closed_without_complete_private_staging(
     chain_fixture: _Fixture,
 ):
@@ -547,25 +918,380 @@ def test_non_dry_workers_fail_closed_without_complete_private_staging(
         )
 
 
-def test_persisted_staging_proof_claims_remain_fail_closed():
-    with pytest.raises(RuntimeError, match="job_local_staging_security_audit_not_closed"):
-        finalize_staging_proof(
-            {}, staged_inputs=None, trainer_manifest=None
+def test_job_local_capability_is_opaque_single_use_and_exact_argument_bound(
+    chain_fixture: _Fixture, monkeypatch,
+):
+    (
+        fixture,
+        plan,
+        common,
+        staged,
+        capability,
+        arguments,
+        environment,
+    ) = _minted_training_capability(
+        chain_fixture, monkeypatch, name="opaque-capability", job_id="706"
+    )
+
+    assert not hasattr(V5JobLocalInputCapability, "create")
+    assert "_mint_job_local_input_capability" not in job_local_input_capability_v5.__all__
+    with pytest.raises(TypeError, match="opaque"):
+        V5JobLocalInputCapability()
+    with pytest.raises(TypeError, match="subclassed"):
+        class ForgedCapability(V5JobLocalInputCapability):
+            pass
+    with pytest.raises(TypeError, match="serialized"):
+        pickle.dumps(capability)
+    with pytest.raises(TypeError):
+        copy.copy(capability)
+    with pytest.raises(TypeError):
+        copy.deepcopy(capability)
+    forged = object.__new__(V5JobLocalInputCapability)
+    forged._nonce = b"forged"
+    assert forged is not capability
+    assert forged != capability
+    assert hash(capability) == hash(capability)
+    assert repr(capability) == "<V5JobLocalInputCapability opaque>"
+    with pytest.raises(RuntimeError, match="not minted"):
+        _validate_job_local_input_capability(
+            tuple(Path(value) for value in arguments),
+            forged,
+            phase="pre_training",
         )
-    with pytest.raises(RuntimeError, match="job_local_staging_security_audit_not_closed"):
+    audit = capability.audit_payload()
+    serialized_audit = canonical_json(audit)
+    assert audit["scratch_base_device"] == common["scratch_base_device"]
+    assert audit["scratch_base_inode"] == common["scratch_base_inode"]
+    assert audit["job_tmp_root_owner_private"] is True
+    assert audit["staging_root_owner_private"] is True
+    assert (
+        audit["authorization"]["shared_scratch_base_alone_authorizes_use"]
+        is False
+    )
+    assert WRAPPER_MINT_BYTES.hex() not in serialized_audit
+    assert sha256(WRAPPER_MINT_BYTES).hexdigest() not in serialized_audit
+    assert not {
+        "nonce",
+        "seal",
+        "seal_key",
+        "token",
+        "token_sha256",
+        "wrapper_mint_live_identity",
+    }.intersection(audit)
+    audit["trainer_argument_local_paths"] = ["/tmp/substituted"]
+    assert capability.audit_payload()["trainer_argument_local_paths"] == list(arguments)
+    with pytest.raises(TypeError, match="unsupported type"):
+        _validate_job_local_input_capability(
+            tuple(Path(value) for value in arguments),
+            audit,
+            phase="pre_training",
+        )
+    with pytest.raises((RuntimeError, ValueError), match="mint|prior content"):
+        _mint_job_local_input_capability(
+            plan,
+            common,
+            staged,
+            environment=environment,
+            allowed_root=fixture.dust,
+        )
+    with pytest.raises(RuntimeError, match="other than"):
+        _validate_job_local_input_capability(
+            (Path(arguments[0]), *tuple(Path(value) for value in arguments[:-1])),
+            capability,
+            phase="pre_training",
+        )
+
+    expected_rehash = capability.audit_payload()["pre_training_rehash_sha256"]
+    assert _validate_job_local_input_capability(
+        tuple(Path(value) for value in arguments),
+        capability,
+        phase="pre_training",
+    ) == expected_rehash
+    with pytest.raises(RuntimeError, match="single-use"):
+        _validate_job_local_input_capability(
+            tuple(Path(value) for value in arguments),
+            capability,
+            phase="pre_training",
+        )
+    assert _validate_job_local_input_capability(
+        tuple(Path(value) for value in arguments),
+        capability,
+        phase="post_training",
+    ) == expected_rehash
+    with pytest.raises(RuntimeError, match="single-use"):
+        _validate_job_local_input_capability(
+            tuple(Path(value) for value in arguments),
+            capability,
+            phase="post_training",
+        )
+
+
+@pytest.mark.parametrize(
+    "tamper_target",
+    (
+        "original_inventory",
+        "job_local_inventory",
+        "original_parent",
+        "job_local_parent",
+        "original_sidecar",
+        "job_local_sidecar",
+        "original_evidence_receipt",
+        "job_local_evidence_receipt",
+        "original_executor_evidence",
+        "job_local_executor_evidence",
+        "original_plan",
+        "job_local_plan",
+        "original_source_archive",
+        "job_local_source_archive",
+        "original_source_tree",
+        "job_local_source_manifest",
+        "job_local_source_tree",
+    ),
+)
+def test_job_local_capability_post_validation_detects_toctou_across_full_closure(
+    chain_fixture: _Fixture, monkeypatch, tamper_target: str,
+):
+    (
+        fixture,
+        plan,
+        common,
+        staged,
+        capability,
+        arguments,
+        _,
+    ) = _minted_training_capability(
+        chain_fixture,
+        monkeypatch,
+        name=f"toctou-{tamper_target}",
+        job_id="707",
+    )
+    _validate_job_local_input_capability(
+        tuple(Path(value) for value in arguments),
+        capability,
+        phase="pre_training",
+    )
+    _append_drift(
+        _capability_closure_target(tamper_target, fixture, plan, common, staged)
+    )
+
+    with pytest.raises(
+        (RuntimeError, ValueError),
+        match=(
+            "changed|identity|read-only|archive|binding|invalid|manifest|reproduce|"
+            "valid JSON|byte-for-byte"
+        ),
+    ):
+        _validate_job_local_input_capability(
+            tuple(Path(value) for value in arguments),
+            capability,
+            phase="post_training",
+        )
+
+
+@pytest.mark.parametrize(
+    "tamper_target",
+    (
+        "original_parent",
+        "job_local_sidecar",
+        "original_plan",
+        "job_local_source_manifest",
+    ),
+)
+def test_job_local_capability_pre_validation_replays_full_closure(
+    chain_fixture: _Fixture, monkeypatch, tamper_target: str,
+):
+    fixture, plan, common, staged, capability, arguments, _ = (
+        _minted_training_capability(
+            chain_fixture,
+            monkeypatch,
+            name=f"pre-toctou-{tamper_target}",
+            job_id="717",
+        )
+    )
+    _append_drift(
+        _capability_closure_target(tamper_target, fixture, plan, common, staged)
+    )
+    with pytest.raises((RuntimeError, ValueError)):
+        _validate_job_local_input_capability(
+            tuple(Path(value) for value in arguments),
+            capability,
+            phase="pre_training",
+        )
+
+
+@pytest.mark.parametrize("link_attack", ("hardlink", "symlink"))
+def test_job_local_capability_rejects_linked_local_input(
+    chain_fixture: _Fixture, monkeypatch, link_attack: str,
+):
+    _, _, common, staged, capability, arguments, _ = _minted_training_capability(
+        chain_fixture,
+        monkeypatch,
+        name=f"local-{link_attack}",
+        job_id="718",
+    )
+    target = Path(staged["local_inputs"]["train_datasets"][0])
+    if link_attack == "hardlink":
+        (Path(common["scratch_base"]) / "attacker-hardlink").hardlink_to(target)
+    else:
+        target.parent.chmod(0o700)
+        original = target.with_name("renamed-parent.gvd5")
+        target.rename(original)
+        target.symlink_to(original)
+    with pytest.raises((RuntimeError, ValueError), match="hard link|symlink"):
+        _validate_job_local_input_capability(
+            tuple(Path(value) for value in arguments),
+            capability,
+            phase="pre_training",
+        )
+
+
+def test_training_staging_receipt_binds_capability_and_pre_post_rehash(
+    chain_fixture: _Fixture, monkeypatch,
+):
+    (
+        fixture,
+        plan,
+        common,
+        staged,
+        capability,
+        arguments,
+        environment,
+    ) = _minted_training_capability(
+        chain_fixture, monkeypatch, name="training-proof", job_id="708"
+    )
+    paths = tuple(Path(value) for value in arguments)
+    _validate_job_local_input_capability(
+        paths, capability, phase="pre_training"
+    )
+    _validate_job_local_input_capability(
+        paths, capability, phase="post_training"
+    )
+    attestation = _job_local_capability_post_validation_payload(capability)
+    trainer_rows = [
+        row
+        for row in attestation["capability"]["original_to_local_inputs"]
+        if row["kind"] in {"grouped_parent", "frozen_search_sidecar"}
+    ]
+    manifest_core = {
+        "status": "complete",
+        "plan_sha256": "9" * 64,
+        "input_artifacts": [
+            {
+                "path": row["job_local_path"],
+                "artifact_sha256": row["sha256"],
+            }
+            for row in trainer_rows
+        ],
+        "job_local_input_capability": attestation,
+    }
+    manifest = {
+        **manifest_core,
+        "result_sha256": sha256(canonical_json(manifest_core).encode()).hexdigest(),
+    }
+    post_rehash = rehash_staged_artifacts(
+        staged,
+        plan=plan,
+        allowed_root=fixture.dust,
+    )
+    staged["trainer_staging_capability"] = capability.audit_payload()
+    proof = finalize_staging_proof(
+        common,
+        plan=plan,
+        staged_inputs=staged,
+        trainer_manifest=manifest,
+        trainer_capability=capability,
+        post_training_rehash_sha256=post_rehash,
+        allowed_root=fixture.dust,
+    )
+
+    assert proof["input_binding"]["pre_post_byte_identity_equal"] is True
+    assert proof["input_binding"]["serialized_receipt_authorizes_training"] is False
+    assert validate_staging_proof(
+        proof,
+        plan,
+        worker_kind="training_seed",
+        expected_array_index=0,
+        require_live_staging=True,
+        environment=environment,
+        allowed_root=fixture.dust,
+    ) == proof
+
+
+def test_collector_staging_receipt_is_strict_but_never_training_authority(
+    chain_fixture: _Fixture, monkeypatch,
+):
+    plan = build_v5_k1_training_chain_plan(
+        chain_fixture.config("collector-proof"), allowed_root=chain_fixture.dust
+    )
+    plan_path = _publish_plan(plan)
+    root, local_plan, local_source, local_archive, environment = _job_stage(
+        chain_fixture,
+        plan,
+        plan_path,
+        job_id="705",
+        worker="collector",
+    )
+    monkeypatch.setattr(
+        k1_job_staging_v5,
+        "__file__",
+        str(local_source / "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_job_staging_v5.py"),
+    )
+    common = build_job_staging_proof(
+        plan,
+        plan_path=local_plan,
+        staging_root=root,
+        source_root=local_source,
+        source_archive=local_archive,
+        worker_kind="collector",
+        array_index=None,
+        environment=environment,
+        allowed_root=chain_fixture.dust,
+    )
+    freeze_staging_tree(root)
+    proof = finalize_staging_proof(
+        common,
+        plan=plan,
+        staged_inputs=None,
+        trainer_manifest=None,
+        allowed_root=chain_fixture.dust,
+    )
+
+    assert proof["input_binding"] is None
+    assert proof["trainer_result"] is None
+    assert validate_staging_proof(
+        proof,
+        plan,
+        worker_kind="collector",
+        expected_array_index=None,
+        require_live_staging=True,
+        environment=environment,
+        allowed_root=chain_fixture.dust,
+    ) == proof
+    tampered = copy.deepcopy(proof)
+    tampered["job_tmp_root"] = "/tmp/gisaxs-v5-k1-collect-705-attacker-existing"
+    core = dict(tampered)
+    core.pop("proof_sha256")
+    tampered["proof_sha256"] = sha256(canonical_json(core).encode()).hexdigest()
+    with pytest.raises(ValueError, match="wrapper-created temporary root"):
         validate_staging_proof(
-            {}, {}, worker_kind="collector", expected_array_index=None
+            tampered,
+            plan,
+            worker_kind="collector",
+            expected_array_index=None,
+            allowed_root=chain_fixture.dust,
         )
 
 
-def test_collection_is_fail_closed_before_reading_seed_bindings(
+def test_collection_requires_wrapper_created_job_tmp_root_before_seed_bindings(
     chain_fixture: _Fixture,
 ):
     plan = build_v5_k1_training_chain_plan(
         chain_fixture.config("collect-blocked"), allowed_root=chain_fixture.dust
     )
     plan_path = _publish_plan(plan)
-    with pytest.raises(RuntimeError, match="blocked and cannot execute"):
+    unused_stage = chain_fixture.dust.parent / "unused-stage"
+    unused_stage.mkdir(mode=0o700)
+    with pytest.raises(RuntimeError, match="did not export"):
         collect_v5_k1_training_handoff(
             plan_path,
             expected_plan_sha256=plan["plan_sha256"],
@@ -573,7 +1299,7 @@ def test_collection_is_fail_closed_before_reading_seed_bindings(
             allowed_root=chain_fixture.dust,
             hostname="max-gpu001",
             environment={"SLURM_JOB_ID": "123"},
-            job_staging_root=chain_fixture.dust.parent / "unused-stage",
+            job_staging_root=unused_stage,
             job_source_root=chain_fixture.dust.parent / "unused-source",
             job_source_archive=chain_fixture.dust.parent / "unused.tar",
         )
@@ -596,38 +1322,46 @@ def test_source_archive_and_extracted_tree_are_reverified(chain_fixture: _Fixtur
     plan = build_v5_k1_training_chain_plan(
         chain_fixture.config("source-drift"), allowed_root=chain_fixture.dust
     )
+    verifier_relative = (
+        "utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py"
+    )
+    assert verifier_relative in plan["source"]["required_file_sha256"]
     required = (
         chain_fixture.source_root
         / "utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py"
     )
     required.chmod(0o644)
 
-    with pytest.raises(ValueError, match="read-only"):
+    with pytest.raises((RuntimeError, ValueError), match="changed|read-only"):
         replay_v5_k1_training_chain_fingerprints(plan, allowed_root=chain_fixture.dust)
 
 
-def test_engineering_submit_is_fail_closed_before_publication_or_sbatch(
+def test_engineering_submit_is_enabled_only_after_security_contract_is_closed(
     chain_fixture: _Fixture,
 ):
     calls: list[tuple[str, ...]] = []
 
     def runner(argv: tuple[str, ...]):
         calls.append(tuple(argv))
-        raise AssertionError("blocked K1 chain must not invoke sbatch")
+        return V5CommandResult(0, f"{700 + len(calls)}\n", "")
 
     config = chain_fixture.config("submitted")
-    with pytest.raises(RuntimeError, match="job_local_staging_security_audit_not_closed"):
-        launch_v5_k1_training_chain(
-            config,
-            submit=True,
-            runner=runner,
-            allowed_root=chain_fixture.dust,
-            hostname="max-wgs.desy.de",
-            environment={},
-        )
+    receipt = launch_v5_k1_training_chain(
+        config,
+        submit=True,
+        runner=runner,
+        allowed_root=chain_fixture.dust,
+        hostname="max-wgs.desy.de",
+        environment={},
+    )
 
-    assert calls == []
-    assert not config.run_root.exists()
+    assert receipt["status"] == "submitted"
+    assert receipt["job_ids"] == {
+        "training_seed_array": "701",
+        "tuning_handoff": "702",
+    }
+    assert len(calls) == 2
+    assert config.run_root.is_dir()
 
 
 def test_reused_run_root_and_wrong_explicit_archive_sha_fail_closed(
@@ -661,6 +1395,23 @@ def test_k1_workers_verify_node_local_source_and_plan_before_use(
     ).read_text(encoding="utf-8")
 
     assert "${SLURM_TMPDIR:-${TMPDIR:-/tmp}}" in wrapper
+    verifier_relative = (
+        "utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py"
+    )
+    assert Path(verifier_relative) in K1_TRAINING_REQUIRED_SOURCE_FILES
+    assert "POSTERIOR_V8_JOB_TMP_ROOT=\"$(mktemp -d" in wrapper
+    assert "export POSTERIOR_V8_JOB_TMP_ROOT" in wrapper
+    assert ".posterior-v8-wrapper-mint" in wrapper
+    assert "os.O_CREAT" in wrapper and "os.O_EXCL" in wrapper
+    assert 'getattr(os, "O_NOFOLLOW", 0)' in wrapper
+    assert 'getattr(os, "O_CLOEXEC", 0)' in wrapper
+    assert "stream.write(os.urandom(32))" in wrapper
+    assert "os.fsync(stream.fileno())" in wrapper
+    assert "os.fchmod(stream.fileno(), 0o400)" in wrapper
+    assert 'POSTERIOR_V8_JOB_STAGING_ROOT="$POSTERIOR_V8_JOB_TMP_ROOT/staging"' in wrapper
+    assert 'POSTERIOR_V8_RUNTIME_CACHE_ROOT="$POSTERIOR_V8_JOB_TMP_ROOT/runtime-cache"' in wrapper
+    assert 'Path(os.environ["POSTERIOR_V8_JOB_TMP_ROOT"])' in wrapper
+    assert "wrapper job-private temporary root is not fresh owner-private scratch" in wrapper
     assert "job-private staging cannot use the shared dust tree" in wrapper
     assert "mktemp -d" in wrapper
     assert "job-cache/" not in wrapper
@@ -686,3 +1437,44 @@ def test_k1_workers_verify_node_local_source_and_plan_before_use(
         'cd "$POSTERIOR_V8_JOB_SOURCE_ROOT"'
     )
     assert wrapper.index("verify-extracted") < wrapper.index(heavy_command)
+
+
+@pytest.mark.parametrize(
+    "wrapper_name",
+    ("v5_k1_training_seed_gpu4.sbatch", "v5_k1_training_collect_cpu.sbatch"),
+)
+def test_wrapper_mint_exclusive_create_never_overwrites_existing_path(
+    tmp_path: Path, wrapper_name: str,
+):
+    wrapper = (
+        Path(__file__).parents[1] / "PosteriorV8" / "slurm" / wrapper_name
+    ).read_text(encoding="utf-8")
+    marker = '<<\'PY\'\n'
+    mint_program = wrapper.split(marker, 1)[1].split("\nPY\n", 1)[0]
+    existing = tmp_path / ".posterior-v8-wrapper-mint"
+    original = b"attacker-preexisting-content"
+    existing.write_bytes(original)
+
+    result = subprocess.run(
+        [sys.executable, "-I", "-", str(existing)],
+        input=mint_program,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert existing.read_bytes() == original
+    fresh = tmp_path / ".posterior-v8-wrapper-mint-fresh"
+    created = subprocess.run(
+        [sys.executable, "-I", "-", str(fresh)],
+        input=mint_program,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert created.returncode == 0
+    assert created.stdout == ""
+    assert created.stderr == ""
+    assert fresh.stat().st_size == 32
+    assert fresh.stat().st_mode & 0o777 == 0o400

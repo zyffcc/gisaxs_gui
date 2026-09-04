@@ -215,8 +215,12 @@ def test_bounds_first_sampler_and_label_contract_share_canonical_slots():
         resolution_bounds=None,
     )
     label = sample_solution_label(bounds, local_target_seed=101)
-    latent = tuple(gui_component_to_latent(item) for item in label.truth_components)
-    assert canonicalize_component_slots(bounds.local_codec(), latent, None).components == latent
+    codec = bounds.local_codec()
+    latent, resolution = codec.decode(label.local_target_unit)
+    canonical = canonicalize_component_slots(codec, latent, resolution)
+
+    assert canonical.components == latent
+    assert codec.latent_components_to_gui(latent) == label.truth_components
 
     reversed_latent = tuple(reversed(latent))
     reversed_local = bounds.local_codec().encode(reversed_latent, None)

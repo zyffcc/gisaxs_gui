@@ -5,7 +5,7 @@ version: "1.15.0"
 model:
   format: keras
   # model_path: 允许为空，首次使用需要选择
-  model_path: "C:\Users\zhaiyufe\Downloads\Au_ff_h2_0to15_savedmodel"
+  model_path: '/Users/zhaiyf/Downloads/Au_ff_h2_0to15_savedmodel'
 preprocess:
   entry: preprocess:run
   # Ordered steps for modular preprocessing; you can change order as needed.
@@ -13,6 +13,7 @@ preprocess:
     - crop
     - resize
     - set_invalid
+    - mask
     - cut_columns
     - log_and_normalize
     - mask
@@ -24,7 +25,11 @@ preprocess:
       up: 800
       down: 450
       right: 250
-    resize: [256, 256]
+    # Training/validation uses scipy.ndimage.zoom(order=0); bilinear changes
+    # individual detector pixels and causes a large shift in this dense model.
+    resize:
+      shape: [256, 256]
+      method: nearest
     # Replace NaN/negative before log
     set_invalid:
       nan: -1
@@ -39,7 +44,14 @@ preprocess:
       start: 240
       end: 256
       value: -1
-    mask: 
+    # log(e * intensity / max + eps). The excluded bands match the training
+    # Preprocessing.log_and_normalize implementation used by this model.
+    log_and_normalize:
+      eps: 1e-8
+      exclude_from_max:
+        columns: [0, 10]
+        rows: [240, 256]
+    mask:
       apply: true
       path: "assets/mask.npy"
       resize: [256, 256]
@@ -54,11 +66,25 @@ io:
   stack_axis: 0
   input_shape: [1, 256, 256, 1]
 outputs:
-  - name: "hr distribution"
-    shape: [30, 30]
-  - name: "h distribution"
-    shape: [30]
-  - name: "r distribution"
-    shape: [30]
+  type: joint_distribution
+  names:
+    - "H-R distribution"
+    - "H distribution"
+    - "R distribution"
+  # The saved model was trained with matrix rows=R and columns=H/2.  Expose
+  # full particle height H on the physical axis to match the publication.
+  axes:
+    row:
+      key: r
+      label: R
+      unit: nm
+      min: 0.05
+      max: 15.0
+    column:
+      key: h
+      label: H
+      unit: nm
+      min: 0.1
+      max: 30.0
 
   

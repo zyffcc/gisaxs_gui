@@ -49,7 +49,7 @@ from .simulation import GridProvenance
 
 V5_CLEAN_RECIPE_SCHEMA = "gisaxs.posterior_v8.clean_recipe/v4"
 V5_CLEAN_RECIPE_VERSION = (
-    "posterior_v8_complete_slot_contract_gui_k_int_query_first_clean_recipe_v4"
+    "posterior_v8_exact_closed_endpoint_complete_slot_gui_k_int_query_first_recipe_v6"
 )
 V5_EXACT_FORWARD_PATH = V5_CLEAN_EXACT_FORWARD_PATH
 _UINT64_MASK = (1 << 64) - 1

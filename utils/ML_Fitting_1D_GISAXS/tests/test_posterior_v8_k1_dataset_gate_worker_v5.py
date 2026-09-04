@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 
@@ -30,6 +31,17 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_cross_platform_v5 import 
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_dataset_binding_v5 import (
     publish_v5_k1_phase_a_dataset_binding,
 )
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_capability_v7 import (
+    _mint_phase_a_capability,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_a_contract_v7 import (
+    PHASE_A_LAUNCH_BINDING_SCHEMA,
+    portable_identity,
+    self_hashed,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_staging_files_v5 import (
+    read_only_identity,
+)
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.run_k1_memorization_gate_v5 import (
     MODEL_FILENAME,
     MODEL_PROVENANCE_FILENAME,
@@ -41,6 +53,7 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.run_k1_memorization_gate_v5 import (
     run_v5_k1_dataset_memorization_gate,
     validate_v5_k1_memorization_dataset,
 )
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import run_k1_memorization_gate_v5 as gate_worker
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.study_protocol import protocol_payload
 
 
@@ -100,6 +113,35 @@ def _marker_text() -> str:
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
+def _phase_a_authority(root: Path, *, stage: str, job_id: str, label: str):
+    staged = root / f".{label}-{stage}-{job_id}-staged-input.json"
+    staged.write_text(
+        json.dumps({"stage": stage, "job_id": job_id}, sort_keys=True),
+        encoding="utf-8",
+    )
+    staged.chmod(0o400)
+    launch = self_hashed(
+        {
+            "schema": PHASE_A_LAUNCH_BINDING_SCHEMA,
+            "status": "VALIDATED",
+            "stage": stage,
+            "slurm_job_id": job_id,
+            "plan_sha256": "a" * 64,
+            "receipt_sha256": "b" * 64,
+            "release_sha256": "c" * 64,
+            "transaction_files": {},
+            "upstream": None,
+        },
+        "binding_sha256",
+    )
+    identity = portable_identity(read_only_identity(staged, "test staged input"))
+    capability = _mint_phase_a_capability(
+        launch,
+        [{"role": "test_staged_input", "path": str(staged), "identity": identity}],
+    )
+    return launch, capability
+
+
 @pytest.fixture(scope="module")
 def checked_k1_dataset(tmp_path_factory):
     root = tmp_path_factory.mktemp("v5-k1-dataset-gate")
@@ -127,12 +169,20 @@ def phase_a_evidence(checked_k1_dataset):
     marker.chmod(0o400)
     binding = root / "dataset.binding.json"
     expected = _marker_expected()
+    launch, capability = _phase_a_authority(
+        root,
+        stage="smoke_dataset",
+        job_id="24390001",
+        label="dataset-binding",
+    )
     publish_v5_k1_phase_a_dataset_binding(
         dataset,
         marker,
         binding,
         original_dataset_path=str(dataset),
         marker_expected=expected,
+        launch_binding=launch,
+        capability=capability,
     )
     return V5K1PhaseATrainingEvidence(
         dataset_binding_path=binding,
@@ -205,6 +255,43 @@ def test_dataset_gate_rejects_multicomponent_or_nongenerating_inputs():
     nongenerating = build_tiny_v5_grouped_dataset(generating_only=False)
     with pytest.raises(ValueError, match="generating-candidate-only"):
         validate_v5_k1_memorization_dataset(nongenerating)
+
+
+def test_dataset_gate_preserves_fully_fixed_queries_but_requires_learnable_rows(
+    monkeypatch,
+):
+    source = build_tiny_v5_grouped_dataset(recipe_count=2, base_seed=44)
+    arrays = {name: np.array(value, copy=True) for name, value in source.arrays.items()}
+    varying_label = "candidate_label__varying_dimension_mask"
+    varying_input = "candidate_context__input__varying_dimension_mask"
+    target_label = "candidate_label__target_local"
+    arrays[varying_label][0] = False
+    arrays[varying_input][0] = False
+    arrays[target_label][0] = np.float32(0.5)
+
+    class _CheckedDataset:
+        manifest = source.manifest
+        recipe_count = source.recipe_count
+        observation_count = source.observation_count
+        candidate_count = source.candidate_count
+        joined_count = source.joined_count
+
+        def __init__(self, values):
+            self.arrays = values
+
+    monkeypatch.setattr(gate_worker, "V5GroupedDataset", _CheckedDataset)
+    dataset = _CheckedDataset(arrays)
+    result = validate_v5_k1_memorization_dataset(dataset)
+    assert result["known_truth_target_count"] == 2
+    assert result["learnable_target_count"] == 1
+    assert result["fully_fixed_target_count"] == 1
+    assert result["varying_coordinate_count"] > 0
+
+    arrays[varying_label][1] = False
+    arrays[varying_input][1] = False
+    arrays[target_label][1] = np.float32(0.5)
+    with pytest.raises(ValueError, match="at least one learnable target"):
+        validate_v5_k1_memorization_dataset(_CheckedDataset(arrays))
 
 
 def test_gate_dry_run_binds_v52_dataset_source_and_pending_complete_criteria(
@@ -306,6 +393,9 @@ def test_gate_execution_rejects_login_node_and_missing_slurm(
 ):
     root, dataset, _ = checked_k1_dataset
     config = V5K1DatasetGateConfig(smoke=True)
+    login_launch, login_capability = _phase_a_authority(
+        root, stage="smoke_gate", job_id="1", label="login-rejection"
+    )
     with pytest.raises(RuntimeError, match="not max-wgs"):
         run_v5_k1_dataset_memorization_gate(
             dataset,
@@ -316,7 +406,12 @@ def test_gate_execution_rejects_login_node_and_missing_slurm(
             allowed_root=root,
             hostname="max-wgs001",
             environment={"SLURM_JOB_ID": "1"},
+            launch_binding=login_launch,
+            job_local_input_capability=login_capability,
         )
+    missing_launch, missing_capability = _phase_a_authority(
+        root, stage="smoke_gate", job_id="2", label="missing-slurm-rejection"
+    )
     with pytest.raises(RuntimeError, match="SLURM_JOB_ID"):
         run_v5_k1_dataset_memorization_gate(
             dataset,
@@ -327,6 +422,8 @@ def test_gate_execution_rejects_login_node_and_missing_slurm(
             allowed_root=root,
             hostname="max-gpu-001",
             environment={},
+            launch_binding=missing_launch,
+            job_local_input_capability=missing_capability,
         )
 
 
@@ -353,6 +450,9 @@ def test_gpu_smoke_atomically_publishes_stage_a_model_and_receipt(
 ):
     root, dataset, _ = checked_k1_dataset
     output = root / "stage-a-smoke"
+    launch, capability = _phase_a_authority(
+        root, stage="smoke_gate", job_id="24390002", label="gpu-smoke"
+    )
     result = run_v5_k1_dataset_memorization_gate(
         dataset,
         output,
@@ -362,6 +462,9 @@ def test_gpu_smoke_atomically_publishes_stage_a_model_and_receipt(
         allowed_root=root,
         hostname="max-gpu-001",
         environment={"SLURM_JOB_ID": "24390002"},
+        launch_binding=launch,
+        job_local_input_capability=capability,
+        authoritative_output_dir=output,
     )
 
     assert result["status"] == "stage_a_smoke_completed"
@@ -422,24 +525,27 @@ def test_maxwell_wrappers_form_a_versioned_cpu_to_gpu_dag_contract():
         "POSTERIOR_V8_V5_K1_DATASET_BINDING",
         "POSTERIOR_V8_V5_CROSS_PLATFORM_PASS_MARKER",
         "POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_GATE_CLAIM_SHA256",
-        "build_k1_memorization_dataset_v5",
-        "k1_phase_a_dataset_binding_v5",
+        "POSTERIOR_V8_V7_PHASE_A_PLAN",
+        "POSTERIOR_V8_V7_PHASE_A_RECEIPT",
+        "POSTERIOR_V8_V7_PHASE_A_RELEASE",
+        "POSTERIOR_V8_V7_PHASE_A_STAGE",
+        "POSTERIOR_V8_V7_PHASE_A_COMPLETION",
+        "k1_phase_a_runtime_v7",
     ):
         assert value in cpu
     for value in (
         "SLURM_JOB_ID",
         "POSTERIOR_V8_V5_K1_DATASET",
-        "POSTERIOR_V8_V5_K1_DATASET_BINDING",
-        "POSTERIOR_V8_V5_CROSS_PLATFORM_PASS_MARKER",
-        "POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_GATE_CLAIM_SHA256",
-        "POSTERIOR_V8_V5_K1_GATE_OUTPUT",
-        "POSTERIOR_V8_V5_K1_WIDTH",
-        "POSTERIOR_V8_V5_K1_ENCODER_BLOCKS",
-        "POSTERIOR_V8_V5_K1_SMOKE",
-        "POSTERIOR_V8_V5_K1_DRY_RUN",
-        "run_k1_memorization_gate_v5",
-        "k1_phase_a_dataset_binding_v5",
-        '--dataset-root "$GISAXS_JOB_CACHE_ROOT"',
+            "POSTERIOR_V8_V5_K1_DATASET_BINDING",
+            "POSTERIOR_V8_V5_CROSS_PLATFORM_PASS_MARKER",
+            "POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_GATE_CLAIM_SHA256",
+            "POSTERIOR_V8_V5_K1_GATE_OUTPUT",
+            "POSTERIOR_V8_V7_PHASE_A_PLAN",
+        "POSTERIOR_V8_V7_PHASE_A_RECEIPT",
+        "POSTERIOR_V8_V7_PHASE_A_RELEASE",
+        "POSTERIOR_V8_V7_PHASE_A_STAGE",
+        "POSTERIOR_V8_V7_PHASE_A_COMPLETION",
+        "k1_phase_a_runtime_v7",
         "--constraint=GPUx1",
     ):
         assert value in gpu
@@ -451,14 +557,7 @@ def test_maxwell_wrappers_form_a_versioned_cpu_to_gpu_dag_contract():
     assert "GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2/logs" not in cpu
     assert "GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2/logs" not in gpu
     assert "max-wgs*" in cpu and "max-wgs*" in gpu
-    for exact_argument in (
-        '--dataset-binding "$POSTERIOR_V8_JOB_DATASET_BINDING"',
-        '--cross-platform-pass-marker "$POSTERIOR_V8_JOB_PASS_MARKER"',
-        '--original-dataset-path "$POSTERIOR_V8_V5_K1_DATASET"',
-        '--source-archive-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_ARCHIVE_SHA256"',
-        '--source-manifest-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_MANIFEST_SHA256"',
-        '--source-tree-sha256 "$POSTERIOR_V8_V5_EXPECTED_SOURCE_TREE_SHA256"',
-        '--gate-claim-sha256 '
-        '"$POSTERIOR_V8_V5_EXPECTED_CROSS_PLATFORM_GATE_CLAIM_SHA256"',
-    ):
-        assert exact_argument in gpu
+    for wrapper in (cpu, gpu):
+        assert "POSTERIOR_V8_JOB_STAGING_ROOT" in wrapper
+        assert "python -I -c" in wrapper
+        assert "run_stage_from_environment" in wrapper

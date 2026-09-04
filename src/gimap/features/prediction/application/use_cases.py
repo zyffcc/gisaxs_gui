@@ -45,6 +45,22 @@ def _module_output_values(module) -> dict[str, object]:
         "parameter_names": list(module.outputs.parameter_names),
         "target_min": list(module.outputs.target_min),
         "target_max": list(module.outputs.target_max),
+        "output_axes": {
+            "row": {
+                "key": module.outputs.row_axis.key,
+                "label": module.outputs.row_axis.label,
+                "unit": module.outputs.row_axis.unit,
+                "min": module.outputs.row_axis.minimum,
+                "max": module.outputs.row_axis.maximum,
+            },
+            "column": {
+                "key": module.outputs.column_axis.key,
+                "label": module.outputs.column_axis.label,
+                "unit": module.outputs.column_axis.unit,
+                "min": module.outputs.column_axis.minimum,
+                "max": module.outputs.column_axis.maximum,
+            },
+        },
     }
 
 

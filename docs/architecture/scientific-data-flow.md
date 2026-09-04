@@ -4,10 +4,13 @@
 - **Scope**: detector image 从导入、科学预处理、显示到派生分析结果的数据所有权与谱系
 - **Related code**: `src/gimap/features/fitting/domain/detector_image.py`、
   `src/gimap/features/fitting/application/scientific.py`、
-  `src/gimap/features/fitting/presentation/bindings/image_display_options.py`
+  `src/gimap/features/fitting/presentation/bindings/image_display_options.py`、
+  `src/gimap/features/prediction/infrastructure/adapters/module_preprocessing.py`、
+  `modules/Au_Silicon_15nm/preprocess.py`
 - **Related tests**: `tests/test_fitting_detector_data_flow.py`、
-  `tests/test_fitting_domain_image_transforms.py`、`tests/test_cut_fitting_stack.py`
-- **Last verified**: 2026-08-20
+  `tests/test_fitting_domain_image_transforms.py`、`tests/test_cut_fitting_stack.py`、
+  `tests/test_prediction_adapters.py`
+- **Last verified**: 2026-09-04
 
 ## 目的
 
@@ -170,6 +173,34 @@ threshold。这样可以避免重复翻转、重复填充和切换选项后无�
 
 Mirror-fill 的镜像轴属于 preprocessing input。当前 fitting 使用 Setup 中保存的 detector
 `beam_center_x`，不得把正在求解的临时 Yoneda 结果作为未声明输入，从而形成循环依赖。
+
+## 2D Prediction module preprocessing
+
+Prediction 的 detector input 与 fitting 的 AnalysisImage 是两个明确的 workflow。Prediction 加载
+单张 CBF 或先求和一个 stack，然后只执行一次所选 module 的 preprocessing entry；它不复用界面
+显示数组，也不在 TensorFlow worker 中再次预处理。
+
+每个 Prediction module 的 `module.yaml` 是预处理顺序和参数的唯一事实来源：
+
+- `steps` 按声明顺序执行，重复步骤也必须重复执行并在诊断快照中区分；
+- `params` 原样传给 module-owned entry，crop、resize interpolation、invalid replacement、log scaling、
+  mask 和 cut 都属于模型输入契约；
+- 声明的 mask 缺失、shape 不兼容、未知步骤或不支持的 interpolation 必须明确失败，禁止静默换成另一套
+  算法后继续预测；
+- preprocessing step preview 可以把 `-1` sentinel 隐藏为无效像素以避免颜色误导，但送入模型和 export
+  的数组必须保持原数值。
+
+`Gold on Silicon 15nm (DESY P03)` 模块与训练/验证 preprocessing 对齐：crop 后通过
+`scipy.ndimage.zoom(order=0)` 缩放到 256×256，再处理 invalid，并在 normalization 前应用 detector
+mask 和 column cut；随后使用排除指定 detector bands 后的正最大值执行
+`log(e · intensity / max + eps)`，再应用一次相同 mask、column cut 和 bottom row cut，确保 log 产生的
+无效值仍为训练约定的 `-1`。该模型会把空间特征展开到 dense layer，因此 nearest 与 bilinear 不是
+可互换的显示选择，而是会改变预测结果的科学配置。
+
+模块的联合分布 output 必须在 `module.yaml` 声明 matrix row/column 对应的物理量、单位与范围；domain
+沿与该声明正交的维度计算 marginal，presentation 不得硬编码或猜测轴方向。Au SavedModel 的 matrix
+row 是 `R=0.05–15 nm`，column 在训练 bundle 中是半高度 `h=0.05–15 nm`；对用户和论文图展示时转换为
+完整高度 `H=2h=0.1–30 nm`，但不得 transpose 或修改模型输出概率。
 
 ## Revision、失效和谱系
 

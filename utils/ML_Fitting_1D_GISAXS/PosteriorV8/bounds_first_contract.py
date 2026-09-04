@@ -34,7 +34,6 @@ from .contract import (
     GuiComponentParameters,
     canonical_topology,
     full_component_bounds,
-    gui_component_to_latent,
     topology_id_for,
 )
 from .profiled_forward import ResolutionShape
@@ -45,9 +44,11 @@ from .sobol_numeric_canonicalization_v5 import (
 )
 
 
-BOUNDS_FIRST_SCHEMA_VERSION = "gisaxs.posterior_v8.bounds_first_local/v5"
+BOUNDS_FIRST_SCHEMA_VERSION = "gisaxs.posterior_v8.bounds_first_local/v7"
 BOUNDS_EMBEDDING_VERSION = "posterior_v8_policy_bound_gui_physical_bounds_78d/v2"
-LOCAL_TARGET_SEMANTICS = "local_unit_of_codec_built_from_presampled_gui_bounds/v1"
+LOCAL_TARGET_SEMANTICS = (
+    "exact_endpoint_decode_representative_of_local_unit_codec_from_presampled_gui_bounds/v3"
+)
 RANGE_REGIMES = ("full", "wide", "narrow")
 BOUND_PLACEMENTS = (
     "interior",
@@ -363,8 +364,13 @@ class BoundsFirstLabel:
         if self.annotation_reason is not None or self.annotation_certificate is not None:
             raise ValueError("solution targets must not carry negative/OOD annotations")
         components = tuple(self.truth_components)
-        latent = tuple(gui_component_to_latent(item) for item in components)
         local_codec = self.bounds.local_codec()
+        latent, decoded_resolution = local_codec.decode(self.local_target_unit)
+        decoded_gui = local_codec.latent_components_to_gui(latent)
+        if decoded_gui != components or decoded_resolution != self.truth_resolution:
+            raise ValueError(
+                "solution physical truth must be the exact stored local target coordinate decode"
+            )
         canonical = canonicalize_component_slots(
             local_codec,
             latent,

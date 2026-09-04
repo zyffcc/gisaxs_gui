@@ -164,13 +164,71 @@ def normalize_prediction_output(
         return {"scalars": np.asarray(scalar_output).reshape(-1)}
     if image_output is None:
         return None
-    image = image_output.squeeze()
+    image = np.asarray(image_output.squeeze(), dtype=np.float32)
     if image.ndim == 3:
         image = image[..., 0]
     if image.ndim != 2:
         return None
-    return {
+
+    raw_axes = module_values.get("output_axes")
+    axes = raw_axes if isinstance(raw_axes, Mapping) else {}
+
+    def axis_contract(
+        dimension: str,
+        *,
+        fallback_key: str,
+        fallback_label: str,
+        count: int,
+    ) -> tuple[str, dict[str, object], np.ndarray]:
+        raw = axes.get(dimension)
+        values = raw if isinstance(raw, Mapping) else {}
+        key = str(values.get("key") or fallback_key).strip().casefold()
+        if not key or key == "hr":
+            key = fallback_key
+        label = str(values.get("label") or fallback_label).strip()
+        unit = str(values.get("unit") or "nm").strip()
+        minimum = values.get("min")
+        maximum = values.get("max")
+        low = float(minimum) if isinstance(minimum, (int, float)) else 0.05
+        high = float(maximum) if isinstance(maximum, (int, float)) else 15.0
+        if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+            low, high = 0.05, 15.0
+        edges = np.linspace(low, high, count + 1, dtype=np.float32)
+        centers = ((edges[:-1] + edges[1:]) / 2.0).astype(np.float32)
+        return (
+            key,
+            {
+                "key": key,
+                "label": label,
+                "unit": unit,
+                "min": low,
+                "max": high,
+            },
+            centers,
+        )
+
+    row_key, row_axis, row_x = axis_contract(
+        "row",
+        fallback_key="r",
+        fallback_label="R",
+        count=image.shape[0],
+    )
+    column_key, column_axis, column_x = axis_contract(
+        "column",
+        fallback_key="h",
+        fallback_label="h",
+        count=image.shape[1],
+    )
+    if column_key == row_key:
+        column_key = "h" if row_key != "h" else "column"
+        column_axis["key"] = column_key
+
+    result: dict[str, object] = {
         "hr": image,
-        "h": np.sum(image, axis=0),
-        "r": np.sum(image, axis=1),
+        "distribution_axes": {"row": row_axis, "column": column_axis},
+        row_key: np.sum(image, axis=1, dtype=np.float32),
+        column_key: np.sum(image, axis=0, dtype=np.float32),
+        f"{row_key}_x": row_x,
+        f"{column_key}_x": column_x,
     }
+    return result
