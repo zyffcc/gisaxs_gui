@@ -163,11 +163,18 @@ def _feasible_initial(coefficients: np.ndarray, bounds: AmplitudeBounds) -> np.n
     upper = np.asarray(bounds.upper, dtype=np.float64)
     result = coefficients.copy()
     below = result < lower
+    above = result > upper
     # An exact NNLS zero has no logarithm and is intentionally lifted to the
-    # requested lower bound.  Other out-of-range starting values fail closed.
-    if np.any(below & (result != 0.0)) or np.any(result > upper):
+    # requested lower bound.  A value no farther than the bounds contract's
+    # declared numerical tolerance above a closed upper endpoint is snapped
+    # back to that endpoint; this reconciles SciPy implementations that return
+    # the same bound solution on opposite sides of the final binary64 ULP.
+    # Every substantive excursion, and every non-zero lower excursion, still
+    # fails closed.
+    if np.any(below & (result != 0.0)) or (np.any(above) and not bounds.contains(result)):
         raise ValueError("initial amplitudes are outside the requested bounds")
     result[below] = lower[below]
+    result[above] = upper[above]
     if not bounds.contains(result):
         raise RuntimeError("failed to construct a feasible amplitude-polish start")
     return result

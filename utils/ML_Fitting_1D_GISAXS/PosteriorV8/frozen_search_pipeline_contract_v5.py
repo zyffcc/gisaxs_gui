@@ -52,6 +52,9 @@ V5_SEARCH_PIPELINE_FORMAL_SIDECAR_PREFIX = (
 V5_SEARCH_PIPELINE_FORMAL_SCOPE = (
     "paper_full_calibrated_contract_smoke_only_not_training_eligible"
 )
+V5_SEARCH_PIPELINE_TRAINING_SCOPE = (
+    "paper_full_calibrated_model_free_exact_search_training_supervision_shard"
+)
 
 
 def _text(value: object, name: str) -> str:
@@ -233,6 +236,7 @@ __all__ = [
     "V5_SEARCH_PIPELINE_FORMAL_SIDECAR_PREFIX",
     "V5_SEARCH_PIPELINE_PILOT_SIDECAR_PREFIX",
     "V5_SEARCH_PIPELINE_SCOPE",
+    "V5_SEARCH_PIPELINE_TRAINING_SCOPE",
     "V5_TOPOLOGY_SEARCH_SCHEDULE_SCHEMA",
     "V5_TOPOLOGY_SEARCH_SCHEDULE_VERSION",
     "plan_v5_frozen_search_shard",

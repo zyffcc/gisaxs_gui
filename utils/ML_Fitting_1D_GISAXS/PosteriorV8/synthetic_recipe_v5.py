@@ -75,7 +75,7 @@ def _derived_seed(recipe_seed: int, namespace: int) -> int:
     return _splitmix64(_seed(recipe_seed, "recipe_seed") ^ int(namespace))
 
 
-def _canonical_payload(
+def canonical_v5_clean_recipe_json(
     *,
     recipe_seed: int,
     query_seed: int,
@@ -89,6 +89,8 @@ def _canonical_payload(
     amplitude: V5AmplitudeComposition,
     grid: GridProvenance,
 ) -> str:
+    """Serialize one validated clean recipe without regenerating its physics."""
+
     payload = {
         "schema_version": V5_CLEAN_RECIPE_SCHEMA,
         "generator_version": V5_CLEAN_RECIPE_VERSION,
@@ -216,7 +218,7 @@ class V5CleanRecipe:
             raise ValueError("amplitude composition is outside its pre-existing physical query")
         if not isinstance(grid, GridProvenance):
             raise TypeError("grid must be GridProvenance")
-        canonical = _canonical_payload(
+        canonical = canonical_v5_clean_recipe_json(
             recipe_seed=seeds[0],
             query_seed=seeds[1],
             amplitude_query_seed=seeds[2],
@@ -282,7 +284,7 @@ class V5CleanRecipe:
             resolution_present=resolution_present
         ).contains(self.amplitude.coefficient_vector, atol=2.0e-9):
             raise ValueError("composition escaped the query-first amplitude constraint")
-        canonical = _canonical_payload(
+        canonical = canonical_v5_clean_recipe_json(
             recipe_seed=self.recipe_seed,
             query_seed=self.query_seed,
             amplitude_query_seed=self.amplitude_query_seed,
@@ -319,10 +321,9 @@ def sample_v5_clean_recipe(
     if shapes not in TOPOLOGIES:
         raise ValueError("topology must be one canonical Posterior V8 topology")
     seed = _seed(recipe_seed, "recipe_seed")
-    query_seed = _derived_seed(seed, 0x51554552)
-    amplitude_query_seed = _derived_seed(seed, 0x41515545)
-    target_seed = _derived_seed(seed, 0x54415247)
-    amplitude_seed = _derived_seed(seed, 0x414D504C)
+    query_seed, amplitude_query_seed, target_seed, amplitude_seed = (
+        v5_clean_recipe_seed_lineage(seed)
+    )
     query = sample_v5_bounds_query(shapes, query_seed=query_seed)
     selected_range_regime = amplitude_range_regime_for(
         amplitude_range_regime,
@@ -369,12 +370,26 @@ authoritative_gui_parameters = authoritative_v5_gui_parameters
 evaluate_v5_clean_recipe = evaluate_v5_clean_recipe_forward
 
 
+def v5_clean_recipe_seed_lineage(recipe_seed: int) -> tuple[int, int, int, int]:
+    """Return the four frozen namespace-derived seeds for one pilot recipe."""
+
+    seed = _seed(recipe_seed, "recipe_seed")
+    return (
+        _derived_seed(seed, 0x51554552),
+        _derived_seed(seed, 0x41515545),
+        _derived_seed(seed, 0x54415247),
+        _derived_seed(seed, 0x414D504C),
+    )
+
+
 __all__ = [
     "V5_CLEAN_RECIPE_SCHEMA",
     "V5_CLEAN_RECIPE_VERSION",
     "V5_EXACT_FORWARD_PATH",
     "V5CleanRecipe",
     "authoritative_gui_parameters",
+    "canonical_v5_clean_recipe_json",
     "evaluate_v5_clean_recipe",
     "sample_v5_clean_recipe",
+    "v5_clean_recipe_seed_lineage",
 ]

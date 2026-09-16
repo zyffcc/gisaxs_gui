@@ -42,6 +42,7 @@ from .frozen_search_pipeline_contract_v5 import (
     V5_SEARCH_PIPELINE_FORMAL_SIDECAR_PREFIX,
     V5_SEARCH_PIPELINE_PILOT_SIDECAR_PREFIX,
     V5_SEARCH_PIPELINE_SCOPE,
+    V5_SEARCH_PIPELINE_TRAINING_SCOPE,
     V5_TOPOLOGY_SEARCH_SCHEDULE_SCHEMA,
     V5_TOPOLOGY_SEARCH_SCHEDULE_VERSION,
     plan_v5_frozen_search_shard,
@@ -58,6 +59,10 @@ from .grouped_dataset_v5 import (
     observation_array,
     read_v5_grouped_dataset,
     write_v5_grouped_dataset,
+)
+from .k1_balanced_full_search_runtime_v5 import (
+    V5K1BalancedFullSearchExecutableTask,
+    V5K1BalancedFullSearchQueryDesign,
 )
 from .observation_v5 import build_v5_observation_data_views
 from .search_evidence_receipt_v5 import (
@@ -105,8 +110,14 @@ def _write_json_exclusive(path: Path, payload: Mapping[str, object]) -> None:
 
 
 def _expected_parent_dataset(
-    shard_plan: V5FrozenSearchShardPlan | V5FormalProductionExecutableShard,
+    shard_plan: (
+        V5FrozenSearchShardPlan
+        | V5FormalProductionExecutableShard
+        | V5K1BalancedFullSearchExecutableTask
+    ),
 ) -> tuple[V5GroupedDataset, tuple[object, ...]]:
+    if isinstance(shard_plan, V5K1BalancedFullSearchExecutableTask):
+        return shard_plan.parent_dataset, shard_plan.recipes
     formal = isinstance(shard_plan, V5FormalProductionExecutableShard)
     grouped = None if formal else shard_plan.grouped_plan
     split_plan = shard_plan.split_plan if formal else grouped.plan
@@ -165,7 +176,11 @@ def _same_dataset(expected: V5GroupedDataset, actual: V5GroupedDataset) -> bool:
 
 
 def materialize_or_verify_v5_frozen_search_parent(
-    shard_plan: V5FrozenSearchShardPlan | V5FormalProductionExecutableShard,
+    shard_plan: (
+        V5FrozenSearchShardPlan
+        | V5FormalProductionExecutableShard
+        | V5K1BalancedFullSearchExecutableTask
+    ),
     parent_path: str | os.PathLike[str],
 ) -> tuple[V5GroupedDataset, V5ArtifactReceipt, tuple[object, ...], bool]:
     """Create a deterministic parent, or byte-strictly validate an existing one."""
@@ -183,25 +198,31 @@ def materialize_or_verify_v5_frozen_search_parent(
     return expected, receipt, recipes, False
 
 
-def _catalog_artifact_id(design: V5SobolUniversalTopologyQueryDesign) -> str:
+def _catalog_artifact_id(
+    design: V5SobolUniversalTopologyQueryDesign | V5K1BalancedFullSearchQueryDesign,
+) -> str:
+    if isinstance(design, V5K1BalancedFullSearchQueryDesign):
+        return f"v5-k1-forced-universal-query-set/{design.sha256}"
     return f"v5-sobol-universal-topology-query-design/{design.sha256}"
 
 
 def _publish_or_verify_query_catalogs(
-    shard_plan: V5FrozenSearchShardPlan | V5FormalProductionExecutableShard,
+    shard_plan: (
+        V5FrozenSearchShardPlan
+        | V5FormalProductionExecutableShard
+        | V5K1BalancedFullSearchExecutableTask
+    ),
     directory: Path,
 ) -> tuple[dict[str, tuple[str, str]], dict[str, object]]:
     directory.mkdir(parents=False, exist_ok=True)
     bindings: dict[str, tuple[str, str]] = {}
     rows = []
+    forced_balanced = isinstance(shard_plan, V5K1BalancedFullSearchExecutableTask)
     for design in shard_plan.query_designs:
         path = directory / f"{design.clean_group_id}.json"
         encoded = design.to_json()
         if path.exists():
-            replay = V5SobolUniversalTopologyQueryDesign.from_json(
-                path.read_text(encoding="utf-8")
-            )
-            if replay != design or path.read_text(encoding="utf-8") != encoded:
+            if path.read_text(encoding="utf-8") != encoded:
                 raise ValueError("existing topology-query catalog does not reproduce")
         else:
             with path.open("x", encoding="utf-8", newline="\n") as stream:
@@ -221,7 +242,11 @@ def _publish_or_verify_query_catalogs(
             }
         )
     core = {
-        "schema": "gisaxs.posterior_v8.sobol_universal_query_catalog_index/v1",
+        "schema": (
+            "gisaxs.posterior_v8.k1_forced_universal_query_catalog_index/v1"
+            if forced_balanced
+            else "gisaxs.posterior_v8.sobol_universal_query_catalog_index/v1"
+        ),
         "pipeline_plan_sha256": shard_plan.sha256,
         "topology_schedule_sha256": shard_plan.topology_schedule.sha256,
         "catalogs": rows,
@@ -238,7 +263,11 @@ def _publish_or_verify_query_catalogs(
 
 
 def _search_specs(
-    shard_plan: V5FrozenSearchShardPlan | V5FormalProductionExecutableShard,
+    shard_plan: (
+        V5FrozenSearchShardPlan
+        | V5FormalProductionExecutableShard
+        | V5K1BalancedFullSearchExecutableTask
+    ),
     parent: V5GroupedDataset,
     recipes: Sequence[object],
     catalog_bindings: Mapping[str, tuple[str, str]],
@@ -247,7 +276,10 @@ def _search_specs(
     result = []
     observation_index = 0
     observation_ids = parent.arrays[observation_array("observation_id")]
-    formal = isinstance(shard_plan, V5FormalProductionExecutableShard)
+    formal = isinstance(
+        shard_plan,
+        (V5FormalProductionExecutableShard, V5K1BalancedFullSearchExecutableTask),
+    )
     for recipe_index, (recipe, point, query_design) in enumerate(zip(
         recipes, shard_plan.points, shard_plan.query_designs
     )
@@ -407,7 +439,11 @@ def _verify_source_bundle_before_publication(
 
 
 def execute_v5_frozen_search_shard(
-    shard_plan: V5FrozenSearchShardPlan | V5FormalProductionExecutableShard,
+    shard_plan: (
+        V5FrozenSearchShardPlan
+        | V5FormalProductionExecutableShard
+        | V5K1BalancedFullSearchExecutableTask
+    ),
     execution: V5FrozenSearchExecution,
     output_root: str | os.PathLike[str],
     *,
@@ -420,7 +456,12 @@ def execute_v5_frozen_search_shard(
     """Execute all branches and publish sidecar last; preserve failures separately."""
 
     if not isinstance(
-        shard_plan, (V5FrozenSearchShardPlan, V5FormalProductionExecutableShard)
+        shard_plan,
+        (
+            V5FrozenSearchShardPlan,
+            V5FormalProductionExecutableShard,
+            V5K1BalancedFullSearchExecutableTask,
+        ),
     ):
         raise TypeError("shard_plan has an invalid type")
     if not isinstance(execution, V5FrozenSearchExecution):
@@ -548,7 +589,9 @@ def execute_v5_frozen_search_shard(
             "pipeline_plan_sha256": shard_plan.sha256,
             "launch_plan_sha256": execution.launch_plan_sha256,
             "scientific_scope": (
-                V5_SEARCH_PIPELINE_FORMAL_SCOPE
+                V5_SEARCH_PIPELINE_TRAINING_SCOPE
+                if formal_production_authorization is not None
+                else V5_SEARCH_PIPELINE_FORMAL_SCOPE
                 if formal
                 else V5_SEARCH_PIPELINE_SCOPE
             ),
@@ -646,6 +689,7 @@ __all__ = [
     "V5_SEARCH_PIPELINE_FORMAL_SIDECAR_PREFIX",
     "V5_SEARCH_PIPELINE_PILOT_SIDECAR_PREFIX",
     "V5_SEARCH_PIPELINE_SCOPE",
+    "V5_SEARCH_PIPELINE_TRAINING_SCOPE",
     "V5_TOPOLOGY_SEARCH_SCHEDULE_SCHEMA",
     "V5_TOPOLOGY_SEARCH_SCHEDULE_VERSION",
     "execute_v5_frozen_search_shard",

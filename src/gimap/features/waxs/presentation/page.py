@@ -29,6 +29,7 @@ from .image_viewer import ScatteringImageViewer
 from .widget_factory import make_double_spin
 from .workers import BatchPreviewWorker, BatchWorker, ImageLoadResult, ImageLoadWorker
 
+from .bindings.interactive_detector import InteractiveDetectorMixin
 from .bindings.form_setup import FormSetupMixin
 from .bindings.file_loading import FileLoadingMixin
 from .bindings.selection_overlay import SelectionOverlayMixin
@@ -52,6 +53,7 @@ __all__ = [
 
 
 class InSituProcessingWidget(
+    InteractiveDetectorMixin,
     FormSetupMixin,
     FileLoadingMixin,
     SelectionOverlayMixin,
@@ -92,6 +94,7 @@ class InSituProcessingWidget(
         self.setupUi(self)
         self._bind_form()
         self._connect_signals()
+        self.viewer.toolbar.addAction("Interactive", self._open_interactive_detector)
         install_safe_wheel_behavior(self)
         self._setup_configuration_persistence()
         self._set_frame_controls_enabled(False)

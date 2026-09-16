@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from hashlib import sha256
 import json
 from numbers import Integral, Real
@@ -11,16 +12,21 @@ import re
 from typing import Mapping, Sequence
 
 from .grouped_artifact_v5 import canonical_json
+from .k1_staging_files_v5 import read_only_bytes_identity
 from .lossless_representative_artifact_v5 import (
     decode_v5_lossless_representative_payload,
 )
 from .paper_budget_evaluator_v5 import (
+    V5CandidateEmission,
+    V5ExactForwardCall,
+    V5MethodExactCallTrace,
     V5PairedPaperBudgetQueryRecord,
     V5PaperBudgetMethodResult,
     V5_EXACT_COMPATIBILITY_STATUSES,
     V5_PAPER_BUDGET_EVALUATOR_SCHEMA,
     V5_PAPER_BUDGET_EVALUATOR_VERSION,
 )
+from .paper_representative_history_v5 import V5RepresentativeHistory, V5RepresentativeSnapshot
 from .paper_checkpoint_selector_v5 import (
     V5CompletedTuningTrace,
     V5TuningCheckpointEvaluation,
@@ -69,6 +75,7 @@ _SUMMARY_FIELDS = frozenset(
         "base_method_protocol_sha256",
         "inference_seed",
         "checkpoint_evaluation_method_binding",
+        "representative_selection_policy",
         "query_cohort",
         "query_cohort_sha256",
         "paired_query_records",
@@ -106,6 +113,7 @@ _COMPLETION_FIELDS = frozenset(
         "exact_forward_budgets",
         "output_caps",
         "retained_full_epochs",
+        "representative_selection_policy",
         "expected_tuning_query_count",
         "expected_exact_trace_count",
         "expected_lossless_emission_count",
@@ -138,6 +146,8 @@ _TRACE_FIELDS = frozenset(
         "completion_elapsed_seconds",
         "complete_contiguous_exact_call_trace",
         "validation_loss_used",
+        "representative_selection_policy",
+        "representative_snapshots",
     }
 )
 _LOSSLESS_BINDING_FIELDS = frozenset(
@@ -218,10 +228,10 @@ def _load_json_file(
     expected_file_sha256: str | None = None,
 ) -> tuple[Path, dict[str, object], str]:
     path = _checked_path(value, name, directory=False)
-    raw = path.read_bytes()
-    if len(raw) > 128 * 1024 * 1024:
-        raise ValueError(f"{name} is unexpectedly large")
-    file_sha = sha256(raw).hexdigest()
+    raw, identity = read_only_bytes_identity(path, name, maximum_bytes=128 * 1024 * 1024)
+    if identity["mode_octal"] != "0400":
+        raise ValueError(f"{name} must have mode 0400")
+    file_sha = identity["sha256"]
     if expected_file_sha256 is not None and file_sha != _digest(
         expected_file_sha256, f"{name} file SHA-256"
     ):
@@ -374,6 +384,7 @@ def read_v5_tuning_checkpoint_evaluation(
     if not isinstance(completions_payload, list):
         raise ValueError("trace_completions must be a list")
     evaluation = V5TuningCheckpointEvaluation(
+        representative_selection_policy=core["representative_selection_policy"],
         checkpoint_epoch=core["checkpoint_epoch"],
         checkpoint_artifact_sha256=core["checkpoint_artifact_sha256"],
         checkpoint_weights_sha256=core["checkpoint_weights_sha256"],
@@ -573,6 +584,7 @@ def _verify_trace_payload(
     if not isinstance(emissions, list):
         raise ValueError("exact trace candidate emissions must be a list")
     ledger_emissions = []
+    typed_emissions = []
     seen_ids, seen_ranks = set(), set()
     used_lossless = set()
     for emission in emissions:
@@ -626,6 +638,11 @@ def _verify_trace_payload(
         ):
             raise ValueError("lossless payload does not reproduce the live typed emission")
         used_lossless.add(key)
+        typed_emissions.append(V5CandidateEmission(
+            available_after_call=call, output_rank=rank, candidate_id=candidate_id,
+            compatibility_status=status, elapsed_seconds=elapsed,
+            payload=replace(restored, source_artifact_sha256=binding["upstream_source_artifact_sha256"]),
+        ))
         seen_ids.add(candidate_id)
         seen_ranks.add(rank)
         ledger_emissions.append(
@@ -651,6 +668,51 @@ def _verify_trace_payload(
     completion = _elapsed(payload["completion_elapsed_seconds"], "trace completion time")
     if completion < call_times[-1]:
         raise ValueError("exact trace completion precedes its final call")
+    record = next(row for row in evaluation.paired_query_records if row.query_id == member.query_id)
+    result = next(row for row in record.method_results if row.trace_id == inventory["trace_id"])
+    policy = payload["representative_selection_policy"]
+    if policy != result.representative_selection_policy:
+        raise ValueError("trace representative selection policy differs from summary")
+    if policy == "append_only":
+        if payload["representative_snapshots"] is not None:
+            raise ValueError("append-only trace cannot silently discard representative snapshots")
+    elif policy == "budget_snapshot":
+        rows = payload["representative_snapshots"]
+        if not isinstance(rows, list) or any(not isinstance(row, Mapping) or set(row) != {
+            "available_after_call", "elapsed_seconds", "representative_ids",
+        } for row in rows):
+            raise ValueError("trace representative snapshot fields are invalid")
+        trace = V5MethodExactCallTrace(
+            query_id=member.query_id, pairing_unit_id=member.pairing_unit_id,
+            method_id=result.method_id, method_protocol_id=result.method_protocol_id,
+            method_protocol_sha256=result.method_protocol_sha256,
+            trace_id=result.trace_id, trace_artifact_sha256=inventory["artifact_sha256"],
+            reference_set_id=member.reference_set_id, reference_set_sha256=member.reference_set_sha256,
+            comparison_protocol_id=record.comparison_protocol_id,
+            comparison_protocol_sha256=record.comparison_protocol_sha256,
+            exact_forward_call_budget=EXACT_FORWARD_BUDGETS[-1],
+            exact_forward_calls=tuple(V5ExactForwardCall(**call) for call in calls),
+            candidate_emissions=tuple(typed_emissions),
+        )
+        history = V5RepresentativeHistory(
+            trace=trace, snapshots=tuple(V5RepresentativeSnapshot(**row) for row in rows),
+        )
+        expected_ids = tuple(
+            tuple(
+                tuple(value.candidate_id for value in history.representatives_at(budget, cap))
+                for budget in EXACT_FORWARD_BUDGETS
+            )
+            for cap in OUTPUT_CAPS
+        )
+        first = next((row for row in history.snapshots if row.representative_ids), None)
+        if (history.sha256 != result.representative_history_sha256
+            or expected_ids != result.selected_candidate_ids_matrix
+            or history.snapshots[-1].elapsed_seconds > completion
+            or result.first_compatible_exact_call != (None if first is None else first.available_after_call)
+            or result.time_to_first_compatible_seconds != (None if first is None else first.elapsed_seconds)):
+            raise ValueError("tuning summary does not reproduce its representative history")
+    else:
+        raise ValueError("unknown trace representative selection policy")
     return used_lossless
 
 
@@ -736,6 +798,7 @@ def read_v5_tuning_checkpoint_runtime_result(
             or value.base_method_protocol_sha256
             != core["base_method_protocol_sha256"]
             or value.inference_seed != core["inference_seed"]
+            or value.representative_selection_policy != core["representative_selection_policy"]
         )
         for epoch, value in zip(epochs, evaluations)
     ):

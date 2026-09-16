@@ -207,7 +207,7 @@ def _runner(
     )
 
 
-def _evaluate(tmp_path, *, runner=_runner, output_name="tuning-output"):
+def _evaluate(tmp_path, *, runner=_runner, output_name="tuning-output", selection_policy="append_only"):
     reference = _reference_set()
     source_sha = _digest("source-summary")
     return evaluate_v5_retained_checkpoints_on_tuning(
@@ -224,7 +224,96 @@ def _evaluate(tmp_path, *, runner=_runner, output_name="tuning-output"):
         source_summary_artifact_sha256=source_sha,
         output_root=tmp_path / output_name,
         pre_publish_guard=lambda: source_sha,
+        representative_selection_policy=selection_policy,
     )
+
+
+def test_runtime_persists_and_replays_budget_local_representative_withdrawal(tmp_path, monkeypatch):
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import V5RepresentativeSnapshot
+
+    def snapshot_runner(*args):
+        result = _runner(*args)
+        return replace(result, representative_snapshots=(
+            V5RepresentativeSnapshot(available_after_call=512, elapsed_seconds=5.125,
+                                     representative_ids=("candidate-001",)),
+            V5RepresentativeSnapshot(available_after_call=2048, elapsed_seconds=20.485,
+                                     representative_ids=()),
+        ))
+
+    output = _evaluate(tmp_path, runner=snapshot_runner, selection_policy="budget_snapshot")
+    replay = read_v5_tuning_checkpoint_runtime_result(output.output_root)
+    for path in (*output.trace_paths, *output.summary_paths, output.completion_path):
+        assert stat.S_IMODE(path.stat().st_mode) == 0o400
+        assert path.stat().st_nlink == 1
+    assert [row.sha256 for row in output.evaluations] == [row.sha256 for row in replay.evaluations]
+    for evaluation in replay.evaluations:
+        method = evaluation.paired_query_records[0].method_results[0]
+        assert method.representative_selection_policy == "budget_snapshot"
+        assert method.representative_history_sha256 is not None
+        assert method.first_compatible_exact_call == 512
+        assert method.time_to_first_compatible_seconds == 5.125
+        assert method.hit_count_matrix[0] == (0, 1, 1, 0, 0)
+        assert method.selected_candidate_ids_matrix[0][-1] == ()
+    for path in replay.trace_paths:
+        payload = json.loads(path.read_text())
+        assert payload["representative_selection_policy"] == "budget_snapshot"
+        assert len(payload["representative_snapshots"]) == 2
+    selected = select_v5_paper_checkpoint(
+        replay.evaluations, selection_id="snapshot-selection", expected_checkpoint_epochs=(1, 2),
+    )
+    assert selected.inference_seed == 20260903
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import tuning_checkpoint_summary_io_v5 as reader
+    original = reader._load_json_file
+
+    def changed_snapshot(*args, **kwargs):
+        path, payload, digest = original(*args, **kwargs)
+        if "representative_snapshots" in payload:
+            payload["representative_snapshots"][-1]["representative_ids"] = ["candidate-001"]
+        return path, payload, digest
+
+    monkeypatch.setattr(reader, "_load_json_file", changed_snapshot)
+    with pytest.raises(ValueError, match="representative history"):
+        read_v5_tuning_checkpoint_runtime_result(output.output_root)
+
+
+def test_runtime_snapshot_policy_cannot_silently_fall_back_to_append_only(tmp_path):
+    with pytest.raises(ValueError, match="frozen representative selection policy"):
+        _evaluate(tmp_path, selection_policy="budget_snapshot")
+    assert not (tmp_path / "tuning-output" / "completion.json").exists()
+
+
+def test_runtime_snapshot_hidden_compatible_inventory_is_not_first_visible_output(tmp_path):
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import V5RepresentativeSnapshot
+
+    def hidden_runner(*args):
+        return replace(_runner(*args), representative_snapshots=(
+            V5RepresentativeSnapshot(available_after_call=1, elapsed_seconds=0.015,
+                                     representative_ids=()),
+        ))
+
+    output = _evaluate(tmp_path, runner=hidden_runner, selection_policy="budget_snapshot")
+    replay = read_v5_tuning_checkpoint_runtime_result(output.output_root)
+    for evaluation in replay.evaluations:
+        result = evaluation.paired_query_records[0].method_results[0]
+        assert result.candidate_emissions_evaluated == 1
+        assert result.first_compatible_exact_call is None
+        assert result.time_to_first_compatible_seconds is None
+        assert all(hit == 0 for row in result.hit_count_matrix for hit in row)
+
+
+def test_runtime_rejects_snapshot_after_completion_before_publication(tmp_path):
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import V5RepresentativeSnapshot
+
+    def late_runner(*args):
+        result = _runner(*args)
+        return replace(result, representative_snapshots=(
+            V5RepresentativeSnapshot(available_after_call=4096, elapsed_seconds=50.0,
+                                     representative_ids=("candidate-001",)),
+        ))
+
+    with pytest.raises(ValueError, match="completion precedes"):
+        _evaluate(tmp_path, runner=late_runner, selection_policy="budget_snapshot")
+    assert not (tmp_path / "tuning-output" / "completion.json").exists()
 
 
 def test_runtime_evaluates_every_retained_epoch_and_publishes_complete_inventory(
@@ -299,10 +388,42 @@ def test_runtime_detects_checkpoint_toctou_and_never_writes_completion(tmp_path)
 def test_runtime_reader_rejects_trace_mutation_despite_existing_completion(tmp_path):
     result = _evaluate(tmp_path)
     trace_path = result.trace_paths[0]
+    trace_path.chmod(0o600)
     trace_path.write_bytes(trace_path.read_bytes() + b" \n")
+    trace_path.chmod(0o400)
 
     with pytest.raises(ValueError, match="file SHA-256 changed"):
         read_v5_tuning_checkpoint_runtime_result(result.output_root)
+
+
+@pytest.mark.parametrize("mutation", ["writable", "world_readable", "hardlink"])
+def test_runtime_reader_rejects_unsealed_trace(tmp_path, mutation):
+    import os
+    result = _evaluate(tmp_path)
+    path = result.trace_paths[0]
+    if mutation == "hardlink":
+        os.link(path, tmp_path / "extra-link.json")
+    else:
+        path.chmod(0o600 if mutation == "writable" else 0o444)
+    with pytest.raises(ValueError, match="read-only|0400|hard link"):
+        read_v5_tuning_checkpoint_runtime_result(result.output_root)
+
+
+def test_runtime_never_publishes_completion_after_trace_loses_seal(tmp_path, monkeypatch):
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import tuning_checkpoint_runtime_v5 as runtime
+    writer = runtime.write_v5_tuning_json_exclusive
+
+    def unsealing_writer(path, payload):
+        digest = writer(path, payload)
+        if path.parent.name == "checkpoint-summaries":
+            for trace in (path.parent.parent / "exact-traces").glob("*.json"):
+                trace.chmod(0o600)
+        return digest
+
+    monkeypatch.setattr(runtime, "write_v5_tuning_json_exclusive", unsealing_writer)
+    with pytest.raises(ValueError, match="read-only"):
+        _evaluate(tmp_path)
+    assert not (tmp_path / "tuning-output" / "completion.json").exists()
 
 
 def test_runtime_rejects_query_context_or_reference_payload_set_swap(tmp_path):

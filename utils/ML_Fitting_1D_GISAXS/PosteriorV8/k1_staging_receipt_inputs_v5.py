@@ -153,7 +153,7 @@ def validate_training_input_receipt(
         or capability["slurm_array_task_id"] != array_index
         or capability["scratch_base"] != str(root.parents[1])
         or capability["scratch_base_source"]
-        not in {"SLURM_TMPDIR", "TMPDIR", "literal_/tmp_fallback"}
+        != "POSTERIOR_V8_SCRATCH_BASE"
         or capability["job_tmp_root"] != str(root.parent)
         or capability["runtime_cache_root"] != str(root.parent / "runtime-cache")
         or capability["wrapper_mint_binding"]

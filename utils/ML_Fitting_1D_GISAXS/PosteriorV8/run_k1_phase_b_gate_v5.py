@@ -35,6 +35,7 @@ from .k1_phase_b_contract_v5 import (
     MAXWELL_DUST_ROOT,
     PHASE_A_SOURCE_PATHS,
     PHASE_B_SOURCE_PATHS,
+    PHASE_B_WORKER_RELATIVE_PATH,
     PROPOSAL_COUNT,
     V5_K1_PHASE_B_RESULT_FILENAME,
     V5_K1_PHASE_B_ROLE,
@@ -135,6 +136,13 @@ def _branch_scope(contexts) -> tuple[tuple[str, ...], int, int]:
     return scope
 
 
+def _validated_worker_source_root(source_root: str | os.PathLike[str]) -> Path:
+    root = Path(source_root).expanduser().resolve()
+    if (root / PHASE_B_WORKER_RELATIVE_PATH).resolve() != Path(__file__).resolve():
+        raise ValueError("source_root does not own the imported K1 Phase-B worker")
+    return root
+
+
 def run_v5_k1_phase_b_gate(
     dataset_path: str | os.PathLike[str],
     phase_a_result_path: str | os.PathLike[str],
@@ -185,9 +193,7 @@ def run_v5_k1_phase_b_gate(
 
     if not isinstance(config, V5K1PhaseBGateConfig):
         raise TypeError("config must be a V5K1PhaseBGateConfig")
-    source_root_path = Path(source_root).expanduser().resolve()
-    if (source_root_path / PHASE_B_SOURCE_PATHS[0]).resolve() != Path(__file__).resolve():
-        raise ValueError("source_root does not own the imported K1 Phase-B worker")
+    source_root_path = _validated_worker_source_root(source_root)
     selected_input_root = allowed_root if input_allowed_root is None else input_allowed_root
     dataset_file, result_file, model_file, model_provenance_file, output = _validated_paths(
         dataset_path,
@@ -437,6 +443,30 @@ def run_v5_k1_phase_b_gate(
         gate_contract=protocol,
         engineering_subset=engineering_subset,
     )
+    parent_counts = dict(assessment["parent_counts"])
+    expected_parent_counts = {
+        "clean_parent_count": int(dataset_validation["clean_parent_count"]),
+        "learnable_parent_count": int(dataset_validation["learnable_target_count"]),
+        "fully_fixed_parent_count": int(dataset_validation["fully_fixed_target_count"]),
+        "varying_coordinate_count": int(dataset_validation["varying_coordinate_count"]),
+    }
+    observed_formal_counts = {
+        name: int(parent_counts[name]) for name in expected_parent_counts
+    }
+    if not engineering_subset and observed_formal_counts != expected_parent_counts:
+        raise RuntimeError(
+            "Phase-B parent classifications do not reconcile with the checked dataset"
+        )
+    parent_count_reconciliation = {
+        "dataset_expected": expected_parent_counts,
+        "selected_observed": observed_formal_counts,
+        "formal_full_cohort_required": not engineering_subset,
+        "formal_full_cohort_reconciled": (
+            observed_formal_counts == expected_parent_counts
+            if not engineering_subset
+            else False
+        ),
+    }
     total_seconds = time.perf_counter() - total_started
 
     _validate_phase_b_capability(capability, phase="post_execution")
@@ -522,8 +552,14 @@ def run_v5_k1_phase_b_gate(
                 "minimum_local_rms_among_stochastic_draw_indices_1_through_32_"
                 "from_the_same_frozen_rng_stream_no_mixture_median"
             ),
-            "local_rms": "rms_over_varying_dimension_mask_only",
-            "aggregation": "one_value_per_independent_clean_parent_macro_average",
+            "local_rms": (
+                "rms_over_varying_dimension_mask_for_learnable_parents_only_"
+                "fully_fixed_parents_have_no_local_mdn_metric"
+            ),
+            "aggregation": (
+                "local_mdn_metrics_macro_average_learnable_parents_only_"
+                "exact_forward_metrics_macro_average_all_clean_parents"
+            ),
             "neural_input": "checked_phase_a_single_observation_view",
             "exact_target": (
                 "noise_free_clean_parent_authoritative_gui_forward_on_frozen_clean_grid"
@@ -559,6 +595,7 @@ def run_v5_k1_phase_b_gate(
             },
             "phase_a_binding": phase_a_binding,
             "dataset_validation": dataset_validation,
+            "parent_count_reconciliation": parent_count_reconciliation,
         },
         "source": phase_b_source,
         "launch_chain": launch_chain,

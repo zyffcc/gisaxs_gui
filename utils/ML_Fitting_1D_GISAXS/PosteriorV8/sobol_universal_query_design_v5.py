@@ -594,11 +594,36 @@ def materialize_v5_sobol_universal_topology_query_design(
     )
 
 
+def materialize_v5_topology_queries_from_named_coordinates(
+    *,
+    sobol_index: int,
+    unit_coordinates: Sequence[float],
+    selected_topology_ids: Sequence[int],
+) -> tuple[int, tuple[V5TopologyQuery, ...]]:
+    """Replay queries from an upstream-validated exact named-coordinate vector.
+
+    This lower-level adapter does not claim that the supplied coordinates are a
+    raw Sobol point.  The caller owns and must bind any deterministic projection
+    (for example, the balanced K1 categorical forcing contract).
+    """
+
+    index = _nonnegative_integer(sobol_index, "sobol_index")
+    coordinates = validate_v5_sobol_recipe_coordinates(unit_coordinates)
+    selected = _selected_topology_ids(selected_topology_ids)
+    generating_topology_id, replays = _replay_topology_queries(
+        coordinates,
+        sobol_index=index,
+        selected_topology_ids=selected,
+    )
+    return generating_topology_id, tuple(value.query for value in replays)
+
+
 __all__ = [
     "V5_SOBOL_UNIVERSAL_POINT_HASH_VERSION",
     "V5_SOBOL_UNIVERSAL_QUERY_DESIGN_SCHEMA",
     "V5_SOBOL_UNIVERSAL_QUERY_DESIGN_VERSION",
     "V5SobolUniversalTopologyQueryDesign",
     "materialize_v5_sobol_universal_topology_query_design",
+    "materialize_v5_topology_queries_from_named_coordinates",
     "v5_sobol_universal_design_point_sha256",
 ]

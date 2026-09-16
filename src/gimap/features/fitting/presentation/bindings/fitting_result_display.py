@@ -99,16 +99,12 @@ class FittingResultDisplayMixin:
                     original_y_data = np.array(self.current_1d_data["I"])
                     data_label = "1D File Data"
 
-            from matplotlib.figure import Figure
-            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-
-            scene = self._setup_fit_graphics_scene()
-            if scene is None:
+            projection = self._ensure_curve_canvas()
+            if projection is None:
                 return
-
-            fig = Figure(figsize=(9.6, 7.2), dpi=80)
-            canvas = FigureCanvas(fig)
-            ax = fig.add_subplot(111)
+            fig, canvas, ax, proxy_widget = projection
+            ax.clear()
+            ax._gimap_legacy_render = True
 
             fitting_y_data = np.array(intensity_data)
             plot_original_y = original_y_data.copy() if original_y_data is not None else None
@@ -194,7 +190,7 @@ class FittingResultDisplayMixin:
 
             fig.tight_layout()
 
-            proxy_widget = scene.addWidget(canvas)
+            canvas.draw_idle()
             self._fit_view_to_item(
                 self._active_curve_graphics_view(), proxy_widget, keep_aspect=True
             )

@@ -29,18 +29,21 @@ from .proposal_execution_policy_v5 import (
     V5_PROPOSAL_EXECUTION_POLICY_SHA256,
     validate_v5_proposal_execution_policy_sha256,
 )
-from .training_objective_v5 import V5CandidateObjectiveConfig
+from .training_objective_v5 import (
+    DEFAULT_LOCAL_COVERAGE_WEIGHT,
+    V5CandidateObjectiveConfig,
+)
 
 
-V5_GROUPED_TRAINING_CONFIG_SCHEMA = "gisaxs.posterior_v8.grouped_training_config/v1"
+V5_GROUPED_TRAINING_CONFIG_SCHEMA = "gisaxs.posterior_v8.grouped_training_config/v2"
 V5_GROUPED_TRAINING_CONFIG_VERSION = (
-    "proposal_policy_bound_mass_coverage_operational_top4_v1"
+    "proposal_policy_bound_center_aligned_mass_coverage_operational_top4_v2"
 )
 V5_GROUPED_TRAINING_SEMANTICS = (
     "uniform_clean_recipe_batches_parent_positive_warmup_sidecar_verified_full_"
     "complete_observation_branch_groups_multirepresentative_coverage_and_pairwise_"
     "ranking_equal_recipe_count_per_replica_with_expansion_safety_receipt_"
-    "proposal_policy_bound_operational_top4_v5"
+    "proposal_policy_bound_center_aligned_operational_top4_v6"
 )
 
 
@@ -92,7 +95,7 @@ class V5GroupedTrainingConfig:
     search_yield_weight: float = 1.0
     pairwise_ranking_weight: float = 1.0
     local_mdn_weight: float = 1.0
-    local_coverage_weight: float = 1.0
+    local_coverage_weight: float = DEFAULT_LOCAL_COVERAGE_WEIGHT
     operational_top_l_alignment_weight: float = 1.0
     logistic_epsilon: float = 1.0e-5
     local_coverage_temperature: float = 0.05

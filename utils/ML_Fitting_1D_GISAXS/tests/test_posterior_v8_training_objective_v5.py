@@ -20,6 +20,7 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.candidate_supervision_v5 import (
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.training_objective_v5 import (
     CANDIDATE_TRAINING_OBJECTIVE_V5_SCHEMA,
     CANDIDATE_TRAINING_OBJECTIVE_V5_VERSION,
+    DEFAULT_LOCAL_COVERAGE_WEIGHT,
     V5CandidateObjectiveConfig,
     compute_v5_candidate_training_objective,
 )
@@ -124,6 +125,15 @@ def _isolated_config(**updates):
     }
     values.update(updates)
     return V5CandidateObjectiveConfig(**values)
+
+
+def test_default_objective_uses_diagnosed_center_alignment_weight():
+    config = V5CandidateObjectiveConfig()
+    assert DEFAULT_LOCAL_COVERAGE_WEIGHT == 100.0
+    assert config.local_mdn_weight == 1.0
+    assert config.local_coverage_weight == DEFAULT_LOCAL_COVERAGE_WEIGHT
+    assert config.operational_top_l_alignment_weight == 1.0
+    assert config.audit_payload()["config"]["local_coverage_weight"] == 100.0
 
 
 def test_unverified_has_zero_bce_and_mdn_contribution():

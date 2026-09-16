@@ -30,6 +30,8 @@ from .k1_phase_c_contract_v5 import (
     v5_k1_phase_c_contract_payload,
 )
 from .k1_training_chain_dataset_audit_v5 import V5_K1_PARENT_SET_HASH_SEMANTICS
+from .k1_training_identity_contract_v5 import V5K1TrainingIdentityAuthorization
+from .k1_search_projection_evidence_v5 import V5K1SearchProjectionEvidence
 from .model_v5_contract import model_v5_contract_payload
 from .search_evidence_receipt_v5 import (
     V5_SEARCH_TRAINING_RECEIPT_PROMOTION_ENABLED,
@@ -42,9 +44,9 @@ from .sobol_recipe_coordinates_v5 import (
 )
 
 
-V5_K1_TRAINING_INVENTORY_SCHEMA = "gisaxs.posterior_v8.k1_training_input_inventory/v1"
+V5_K1_TRAINING_INVENTORY_SCHEMA = "gisaxs.posterior_v8.k1_training_input_inventory/v3"
 V5_K1_TRAINING_INVENTORY_VERSION = (
-    "posterior_v8_v5_2_balanced_all12_train_tuning_input_inventory_v1"
+    "posterior_v8_v5_2_balanced_all12_original_and_projected_input_inventory_v3"
 )
 V5_K1_TRAINING_CHAIN_SCHEMA = "gisaxs.posterior_v8.k1_training_tuning_chain/v1"
 V5_K1_TRAINING_CHAIN_VERSION = "posterior_v8_v5_2_all12_seed_array_training_tuning_handoff_v1"
@@ -286,6 +288,58 @@ def _artifact_bundle_sha256(artifacts: Sequence[V5K1TrainingArtifact]) -> str:
     return sha256(canonical_json(values).encode("utf-8")).hexdigest()
 
 
+def _validate_identity_authorization(
+    authorization: V5K1TrainingIdentityAuthorization,
+    *,
+    source_archive_sha256: str,
+    source_bundle_sha256: str,
+    train: tuple[V5K1TrainingArtifact, ...],
+    tuning: tuple[V5K1TrainingArtifact, ...],
+    train_parent_set_sha256: str,
+    tuning_parent_set_sha256: str,
+    train_tuning_disjointness_receipt_sha256: str,
+    k1_phase_c_disjointness_receipt_sha256: str,
+    projection_evidence: V5K1SearchProjectionEvidence | None = None,
+) -> None:
+    if not isinstance(authorization, V5K1TrainingIdentityAuthorization):
+        raise TypeError("identity_authorization has an invalid type")
+    if projection_evidence is None and (
+        authorization.source_archive_sha256 != source_archive_sha256
+        or authorization.source_bundle_sha256 != source_bundle_sha256
+    ):
+        raise ValueError("identity authorization is bound to another source")
+    if (
+        authorization.train_tuning_receipt_sha256
+        != train_tuning_disjointness_receipt_sha256
+        or authorization.three_way_receipt_sha256
+        != k1_phase_c_disjointness_receipt_sha256
+    ):
+        raise ValueError("identity authorization receipt binding drifted")
+    if projection_evidence is not None:
+        if not isinstance(projection_evidence, V5K1SearchProjectionEvidence):
+            raise TypeError("projection_evidence has an invalid type")
+        projection_evidence.validate_population_binding(
+            authorization, {"train": train, "tuning_validation": tuning},
+            {"train": train_parent_set_sha256, "tuning_validation": tuning_parent_set_sha256},
+        )
+        return
+    for role, artifacts, parent_set_sha in (
+        ("train", train, train_parent_set_sha256),
+        ("tuning_validation", tuning, tuning_parent_set_sha256),
+    ):
+        population = authorization.population(role)
+        if (
+            population.artifact_sha256s
+            != tuple(sorted(value.artifact_sha256 for value in artifacts))
+            or population.manifest_sha256s
+            != tuple(sorted(value.manifest_sha256 for value in artifacts))
+            or population.clean_parent_count
+            != sum(value.clean_parent_count for value in artifacts)
+            or population.clean_group_set_sha256 != parent_set_sha
+        ):
+            raise ValueError(f"identity authorization {role} population drifted")
+
+
 def build_v5_k1_training_inventory(
     *,
     source_archive_sha256: str,
@@ -297,6 +351,8 @@ def build_v5_k1_training_inventory(
     train_tuning_disjointness_receipt_sha256: str,
     k1_phase_c_disjointness_receipt_sha256: str,
     phase_a_result_payload_sha256: str | None = None,
+    identity_authorization: V5K1TrainingIdentityAuthorization | None = None,
+    projection_evidence: V5K1SearchProjectionEvidence | None = None,
 ) -> dict[str, object]:
     """Build a self-verifying inventory; callers must derive counts from artifacts."""
 
@@ -319,6 +375,31 @@ def build_v5_k1_training_inventory(
     tuning_parent_sha = digest(tuning_parent_set_sha256, "tuning_parent_set_sha256")
     if train_parent_sha == tuning_parent_sha:
         raise ValueError("train and tuning parent-set identities must differ")
+    source_archive = digest(source_archive_sha256, "source_archive_sha256")
+    source_bundle = digest(source_bundle_sha256, "source_bundle_sha256")
+    train_tuning_receipt_sha = digest(
+        train_tuning_disjointness_receipt_sha256,
+        "train_tuning_disjointness_receipt_sha256",
+    )
+    phase_c_receipt_sha = digest(
+        k1_phase_c_disjointness_receipt_sha256,
+        "k1_phase_c_disjointness_receipt_sha256",
+    )
+    if projection_evidence is not None and identity_authorization is None:
+        raise ValueError("projection evidence requires its original identity authorization")
+    if identity_authorization is not None:
+        _validate_identity_authorization(
+            identity_authorization,
+            source_archive_sha256=source_archive,
+            source_bundle_sha256=source_bundle,
+            train=train,
+            tuning=tuning,
+            train_parent_set_sha256=train_parent_sha,
+            tuning_parent_set_sha256=tuning_parent_sha,
+            train_tuning_disjointness_receipt_sha256=train_tuning_receipt_sha,
+            k1_phase_c_disjointness_receipt_sha256=phase_c_receipt_sha,
+            projection_evidence=projection_evidence,
+        )
     phase_c = v5_k1_phase_c_contract_payload()
     artifacts = (*train, *tuning)
     full_eligible = all(value.full_training_eligible for value in artifacts)
@@ -326,8 +407,8 @@ def build_v5_k1_training_inventory(
         "schema": V5_K1_TRAINING_INVENTORY_SCHEMA,
         "version": V5_K1_TRAINING_INVENTORY_VERSION,
         "scientific_role": "balanced_k1_train_and_tuning_inputs_not_model_acceptance",
-        "source_archive_sha256": digest(source_archive_sha256, "source_archive_sha256"),
-        "source_bundle_sha256": digest(source_bundle_sha256, "source_bundle_sha256"),
+        "source_archive_sha256": source_archive,
+        "source_bundle_sha256": source_bundle,
         "dataset_contract": {
             "schema": V5_GROUPED_DATASET_SCHEMA,
             "version": V5_GROUPED_DATASET_VERSION,
@@ -351,17 +432,25 @@ def build_v5_k1_training_inventory(
             "train_parent_set_sha256": train_parent_sha,
             "tuning_parent_set_sha256": tuning_parent_sha,
             "train_tuning_disjoint": True,
-            "train_tuning_disjointness_receipt_sha256": digest(
-                train_tuning_disjointness_receipt_sha256,
-                "train_tuning_disjointness_receipt_sha256",
-            ),
+            "train_tuning_disjointness_receipt_sha256": train_tuning_receipt_sha,
             "k1_phase_c_split_id": K1_PHASE_C_SPLIT_ID,
             "k1_phase_c_contract_sha256": phase_c["contract_sha256"],
-            "train_and_tuning_are_disjoint_from_k1_phase_c": True,
-            "k1_phase_c_disjointness_receipt_sha256": digest(
-                k1_phase_c_disjointness_receipt_sha256,
-                "k1_phase_c_disjointness_receipt_sha256",
+            "train_and_tuning_are_disjoint_from_k1_phase_c": (
+                identity_authorization is not None and projection_evidence is None
             ),
+            "k1_phase_c_disjointness_receipt_sha256": phase_c_receipt_sha,
+            "identity_authorization": (
+                None
+                if identity_authorization is None
+                else identity_authorization.to_payload()
+            ),
+            "identity_authorization_sha256": (
+                None if identity_authorization is None else identity_authorization.sha256
+            ),
+            "projection_evidence": (
+                None if projection_evidence is None else projection_evidence.to_payload()
+            ),
+            "projection_requires_live_collection_replay": projection_evidence is not None,
         },
         "phase_a": {
             "result_payload_sha256": _optional_digest(
@@ -383,6 +472,7 @@ def build_v5_k1_training_inventory(
             "inventory_is_training_completion": False,
             "inventory_is_k1_phase_c_pass": False,
             "inventory_is_paper_model_acceptance": False,
+            "identity_authorization_grants_gradients": False,
         },
     }
     return {
@@ -433,6 +523,19 @@ def validate_v5_k1_training_inventory(
     tuning = tuple(
         V5K1TrainingArtifact.from_payload(item) for item in artifacts["tuning_validation"]
     )
+    raw_authorization = value["splits"]["identity_authorization"]
+    raw_projection = value["splits"]["projection_evidence"]
+    projection = (None if raw_projection is None
+                  else V5K1SearchProjectionEvidence.from_payload(raw_projection))
+    authorization = (
+        None
+        if raw_authorization is None
+        else V5K1TrainingIdentityAuthorization.from_payload(raw_authorization)
+    )
+    if value["splits"]["identity_authorization_sha256"] != (
+        None if authorization is None else authorization.sha256
+    ):
+        raise ValueError("K1 training identity authorization binding drifted")
     replay = build_v5_k1_training_inventory(
         source_archive_sha256=value["source_archive_sha256"],
         source_bundle_sha256=value["source_bundle_sha256"],
@@ -447,6 +550,8 @@ def validate_v5_k1_training_inventory(
             "k1_phase_c_disjointness_receipt_sha256"
         ],
         phase_a_result_payload_sha256=value["phase_a"]["result_payload_sha256"],
+        identity_authorization=authorization,
+        projection_evidence=projection,
     )
     if dict(payload) != replay:
         raise ValueError("K1 training inventory drifted from live contracts or derived totals")

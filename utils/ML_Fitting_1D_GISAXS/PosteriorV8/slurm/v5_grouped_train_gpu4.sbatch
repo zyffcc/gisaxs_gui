@@ -19,7 +19,7 @@ set -euo pipefail
 : "${POSTERIOR_V8_V5_GROUPED_OUTPUT:?set POSTERIOR_V8_V5_GROUPED_OUTPUT}"
 
 case "$(hostname -s)" in
-    max-wgs*) echo "V5.1 training must run on a Slurm worker" >&2; exit 2 ;;
+    max-wgs*|max-fs-display*) echo "V5.1 training must run on a Slurm worker" >&2; exit 2 ;;
 esac
 
 case "$POSTERIOR_V8_V5_GROUPED_OUTPUT" in

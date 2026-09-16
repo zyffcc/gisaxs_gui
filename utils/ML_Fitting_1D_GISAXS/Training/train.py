@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from Training import data_loader
 from Training.losses import LossWeights, compute_losses
 from Training.model import build_model, build_training_model
-from Training.differentiable_physics import configure_v5_global_norm_version
+from Training.differentiable_physics import configure_dataset_physics
 from TrainSetBuild import schema
 
 
@@ -270,8 +270,8 @@ def main():
     global_norm_version = dataset_metadata.get(
         "global_normalization_version", schema.V5_GLOBAL_NORM_VERSION
     )
-    configure_v5_global_norm_version(global_norm_version)
-    print(f"V5 global normalization version: {global_norm_version}", flush=True)
+    profile = configure_dataset_physics(dataset_metadata)
+    print(f"Training physics dataset profile: {profile}", flush=True)
     model_dir.mkdir(parents=True, exist_ok=True)
     (model_dir / "checkpoints").mkdir(exist_ok=True)
     (model_dir / "logs").mkdir(exist_ok=True)
@@ -829,6 +829,7 @@ def main():
             "physical_verification_required_at_inference": True,
         },
         "reconstruction_loss_weight": args.reconstruction_loss_weight,
+        "dataset_profile": profile,
         "global_normalization_version": global_norm_version,
         "reconstruction_start_epoch": args.reconstruction_start_epoch,
         "reconstruction_ramp_epochs": args.reconstruction_ramp_epochs,

@@ -205,7 +205,7 @@ def validate_staging_proof(
         or payload["worker_kind"] != worker_kind
         or payload["slurm_array_task_id"] != expected_array_index
         or payload["scratch_base_source"]
-        not in {"SLURM_TMPDIR", "TMPDIR", "literal_/tmp_fallback"}
+        != "POSTERIOR_V8_SCRATCH_BASE"
         or payload["job_tmp_root_owner_private"] is not True
         or payload["staging_root_owner_private"] is not True
     ):
@@ -229,8 +229,8 @@ def validate_staging_proof(
     ):
         raise ValueError("staging root escaped its wrapper-created temporary root")
     allowed = allowed_root.resolve(strict=True)
-    if scratch == allowed or scratch.is_relative_to(allowed):
-        raise ValueError("Slurm temporary root cannot use the shared input/output tree")
+    if not scratch.is_relative_to(allowed):
+        raise ValueError("Slurm temporary root must remain under the user dust root")
     if worker_kind == "training_seed" and (
         isinstance(expected_array_index, bool)
         or not isinstance(expected_array_index, int)

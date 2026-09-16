@@ -265,7 +265,25 @@ def test_dry_run_builds_exact_six_stage_afterok_plan_without_writes(tmp_path):
     assert len(reference["gate_claim_sha256"]) == 64
     assert plan["jobs"]["smoke_dataset"]["environment"]["POSTERIOR_V8_V5_K1_RECIPE_COUNT"] == 2
     assert plan["jobs"]["full_dataset"]["environment"]["POSTERIOR_V8_V5_K1_RECIPE_COUNT"] == 512
-    assert plan["jobs"]["full_gate"]["environment"]["POSTERIOR_V8_V5_K1_STEPS"] == 1500
+    full_gate_environment = plan["jobs"]["full_gate"]["environment"]
+    assert full_gate_environment["POSTERIOR_V8_V5_K1_STEPS"] == 18000
+    assert full_gate_environment["POSTERIOR_V8_V5_K1_LEARNING_RATE"] == 0.003
+    assert full_gate_environment["POSTERIOR_V8_V5_K1_FINAL_LEARNING_RATE"] == 0.00003
+    assert (
+        full_gate_environment["POSTERIOR_V8_V5_K1_LEARNING_RATE_SCHEDULE"]
+        == "cosine_decay"
+    )
+    assert full_gate_environment["POSTERIOR_V8_V5_K1_LOCAL_MDN_WEIGHT"] == 1.0
+    assert (
+        full_gate_environment["POSTERIOR_V8_V5_K1_LOCAL_COVERAGE_WEIGHT"]
+        == 100.0
+    )
+    assert (
+        full_gate_environment[
+            "POSTERIOR_V8_V5_K1_OPERATIONAL_TOP_L_ALIGNMENT_WEIGHT"
+        ]
+        == 1.0
+    )
     assert plan["jobs"]["smoke_dataset"]["environment"][
         "POSTERIOR_V8_V5_K1_DATASET_BINDING"
     ] == plan["layout"]["smoke_dataset_binding"]
@@ -753,6 +771,16 @@ def test_phase_a_wrappers_reverify_bound_source_before_central_runtime(relative)
     assert "POSTERIOR_V8_V7_PHASE_A_UPSTREAM_COMPLETION" in wrapper
     assert "POSTERIOR_V8_V7_PHASE_A_COMPLETION" in wrapper
     assert "POSTERIOR_V8_JOB_STAGING_ROOT" in wrapper
+
+
+def test_memorization_gpu_wrapper_uses_validated_h200_capacity_envelope():
+    bundle_root = Path(__file__).resolve().parents[1]
+    wrapper = (
+        bundle_root / "PosteriorV8/slurm/v5_k1_memorization_gpu.sbatch"
+    ).read_text(encoding="utf-8")
+
+    assert "#SBATCH --constraint=GPUx1&H200" in wrapper
+    assert "#SBATCH --time=04:00:00" in wrapper
 
 
 def test_central_runtime_binds_launch_inputs_before_scientific_stage_dispatch():

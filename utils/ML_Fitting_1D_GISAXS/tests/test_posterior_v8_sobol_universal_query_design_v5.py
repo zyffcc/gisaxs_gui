@@ -102,9 +102,9 @@ def test_all_34_queries_replay_and_generating_pair_is_the_original_direct_pair()
     assert generating.geometry == original_geometry
     assert generating.amplitude == original_amplitude
     # Snapshot the conservative geometry-only identity.  It includes the
-    # versioned exact-closed-endpoint branch codec contract.
+    # versioned boundary-first, interior-fallback branch codec contract.
     assert original_geometry.sha256 == (
-        "ba5dfcfd6c855e439a3d55ada4bf28fb403fb07d8f65a8a73ead2b0537ce1552"
+        "a4df8533438f144fe9689bfe310ace9c615dfd5e163e3657f45fc35f31b77fce"
     )
     assert original_amplitude.sha256 == (
         "88623ec2e103962e323dda20c9cad50f2e24c5f857289f1d8ec3d911784ecae4"

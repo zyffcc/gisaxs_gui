@@ -43,9 +43,11 @@ from .gui_amplitude_constraints import (
 NonlinearComponent = GuiComponentParameters
 
 PROFILED_AMPLITUDE_SOLVER_VERSION = (
-    "posterior_v8_scaled_linear_profile_auxiliary_kappa_projection_v3"
+    "posterior_v8_feasible_nnls_optimum_overflow_safe_scaled_linear_profile_"
+    "auxiliary_kappa_projection_v5"
 )
 POLYTOPE_FEASIBLE_FALLBACK_STATUS = -101
+POLYTOPE_FEASIBLE_NNLS_STATUS = 101
 
 
 def _finite_float(value: float, name: str) -> float:
@@ -177,6 +179,25 @@ def _validate_components(
     return result
 
 
+def _stable_column_l2_norms(matrix: np.ndarray) -> np.ndarray:
+    """Return finite column norms without squaring the original magnitudes.
+
+    Relative-error weighting can make every entry finite while its naive sum
+    of squares overflows.  Scaling each column by its maximum magnitude before
+    the reduction preserves the exact L2 norm algebraically and keeps the
+    solver coordinates well conditioned.
+    """
+
+    magnitudes = np.max(np.abs(matrix), axis=0)
+    if not np.all(np.isfinite(magnitudes)) or np.any(magnitudes <= 0.0):
+        raise ValueError("forward design matrix contains a zero or non-finite column")
+    normalized = matrix / magnitudes[np.newaxis, :]
+    norms = magnitudes * np.sqrt(np.sum(normalized * normalized, axis=0))
+    if not np.all(np.isfinite(norms)) or np.any(norms <= 0.0):
+        raise ValueError("forward design matrix contains a zero or non-finite column")
+    return norms
+
+
 def component_unit_basis(
     q: Sequence[float] | np.ndarray,
     component: NonlinearComponent,
@@ -261,8 +282,56 @@ def _solve_coefficient_polytope(
     tolerance: float,
     max_iterations: int | None,
 ) -> tuple[np.ndarray, int, str, float]:
-    lower, upper, matrix, rhs = polytope.scaled_system(column_scale)
-    initial = np.asarray(polytope.feasible_coefficients) * column_scale
+    # First solve over the non-negative orthant, which is a superset of the
+    # coupled GUI coefficient polytope.  Whenever that global least-squares
+    # optimum is itself a strict member of the requested polytope, it is also
+    # the global optimum of the constrained problem.  Accepting that certified
+    # point directly avoids feeding SLSQP a range-midpoint witness that can be
+    # dozens of orders of magnitude away from the data scale.
+    warm = lsq_linear(
+        scaled_design,
+        weighted_observed,
+        bounds=(0.0, np.inf),
+        method="trf",
+        tol=tolerance,
+        lsmr_tol="auto",
+        max_iter=None if max_iterations is None else int(max_iterations),
+    )
+    warm_values = np.asarray(warm.x, dtype=np.float64)
+    warm_coefficients = warm_values / column_scale
+    warm_is_finite = bool(np.all(np.isfinite(warm_values)))
+    if (
+        bool(warm.success)
+        and warm_is_finite
+        and polytope.contains(warm_coefficients)
+    ):
+        return (
+            warm_coefficients,
+            POLYTOPE_FEASIBLE_NNLS_STATUS,
+            "global non-negative least-squares optimum satisfies the full "
+            "coefficient polytope",
+            float(warm.optimality),
+        )
+
+    with np.errstate(over="ignore", under="ignore"):
+        lower, upper, matrix, rhs = polytope.scaled_system(column_scale)
+        initial = np.asarray(polytope.feasible_coefficients) * column_scale
+    if not np.all(np.isfinite(initial)):
+        # The contract witness may be many orders of magnitude away from a
+        # legal near-zero observation.  In that exceptional case, obtain an
+        # equivalent data-scale start in the already normalized coordinates.
+        # It is accepted only when the resulting physical coefficients are a
+        # strict member of the original coupled GUI polytope.
+        if (
+            not bool(warm.success)
+            or not warm_is_finite
+            or not polytope.contains(warm_coefficients)
+        ):
+            raise ValueError(
+                "coefficient-polytope witness overflows scaled coordinates and "
+                "no finite data-scale feasible start exists"
+            )
+        initial = warm_values
 
     def objective(values):
         residual = scaled_design @ values - weighted_observed
@@ -369,9 +438,7 @@ def profile_linear_amplitudes(
     weighted_design = design / sigma_array[:, np.newaxis]
     weighted_observed = observed / sigma_array
 
-    column_scale = np.linalg.norm(weighted_design, axis=0)
-    if not np.all(np.isfinite(column_scale)) or np.any(column_scale <= 0.0):
-        raise ValueError("forward design matrix contains a zero or non-finite column")
+    column_scale = _stable_column_l2_norms(weighted_design)
     scaled_design = weighted_design / column_scale[np.newaxis, :]
 
     if amplitude_constraint is None:

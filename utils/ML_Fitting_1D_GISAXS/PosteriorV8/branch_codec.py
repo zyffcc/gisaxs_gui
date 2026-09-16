@@ -46,7 +46,7 @@ from .sobol_numeric_canonicalization_v5 import (
 
 
 BRANCH_CODEC_VERSION = (
-    "posterior_v8_policy_bound_branch_unit_cube_varying_axes_exact_endpoints_v4"
+    "posterior_v8_policy_bound_branch_unit_cube_varying_axes_safe_fallback_v5"
 )
 COMPONENT_UNIT_AXES = (
     "log_R",
@@ -736,12 +736,31 @@ class ProfiledBranchCodec:
         midpoint = np.full(UNIT_CUBE_DIMENSIONS, INACTIVE_UNIT_VALUE, dtype=np.float64)
         result = np.zeros(UNIT_CUBE_DIMENSIONS, dtype=bool)
         for index in self.active_indices:
-            endpoints: list[float] = []
-            for endpoint in (1.0e-12, 1.0 - 1.0e-12):
-                probe = midpoint.copy()
-                probe[index] = endpoint
-                components, resolution = self.decode(probe)
-                endpoints.append(self.encode(components, resolution).unit_cube[index])
+            endpoints: list[float] | None = None
+            boundary_error: ValueError | None = None
+            for probes in ((1.0e-12, 1.0 - 1.0e-12), (0.25, 0.75)):
+                try:
+                    values = []
+                    for endpoint in probes:
+                        probe = midpoint.copy()
+                        probe[index] = endpoint
+                        components, resolution = self.decode(probe)
+                        values.append(
+                            self.encode(components, resolution).unit_cube[index]
+                        )
+                    endpoints = values
+                    break
+                except ValueError as exc:
+                    if boundary_error is None:
+                        boundary_error = exc
+                        continue
+                    raise ValueError(
+                        "codec varying-axis probes are infeasible at both boundary "
+                        "and interior support"
+                    ) from exc
+            if endpoints is None:  # pragma: no cover - the loop either succeeds or raises
+                assert boundary_error is not None
+                raise boundary_error
             result[index] = not np.isclose(endpoints[0], endpoints[1], rtol=0.0, atol=1.0e-12)
         mask = tuple(bool(value) for value in result)
         if any(varying and not active for varying, active in zip(mask, self.active_mask)):

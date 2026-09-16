@@ -1,0 +1,515 @@
+[
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 24,
+      "row": 914
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 22,
+      "row": 914
+    },
+    "message": "Undefined name `ax`",
+    "name": "undefined-name",
+    "noqa_row": 914,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 38,
+      "row": 914
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 36,
+      "row": 914
+    },
+    "message": "Undefined name `Qr`",
+    "name": "undefined-name",
+    "noqa_row": 914,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 42,
+      "row": 914
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 40,
+      "row": 914
+    },
+    "message": "Undefined name `Qz`",
+    "name": "undefined-name",
+    "noqa_row": 914,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 52,
+      "row": 914
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 44,
+      "row": 914
+    },
+    "message": "Undefined name `A_masked`",
+    "name": "undefined-name",
+    "noqa_row": 914,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 93,
+      "row": 914
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 87,
+      "row": 914
+    },
+    "message": "Undefined name `cb_min`",
+    "name": "undefined-name",
+    "noqa_row": 914,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 106,
+      "row": 914
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 100,
+      "row": 914
+    },
+    "message": "Undefined name `cb_max`",
+    "name": "undefined-name",
+    "noqa_row": 914,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 25,
+      "row": 1406
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 1406
+    },
+    "message": "Undefined name `index`",
+    "name": "undefined-name",
+    "noqa_row": 1406,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 54,
+      "row": 1407
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 31,
+      "row": 1407
+    },
+    "message": "Undefined name `smoothed_radial_profile`",
+    "name": "undefined-name",
+    "noqa_row": 1407,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 25,
+      "row": 1408
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 1408
+    },
+    "message": "Undefined name `index`",
+    "name": "undefined-name",
+    "noqa_row": 1408,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 36,
+      "row": 1409
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 1409
+    },
+    "message": "Undefined name `twoTheta`",
+    "name": "undefined-name",
+    "noqa_row": 1409,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 61,
+      "row": 1409
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 38,
+      "row": 1409
+    },
+    "message": "Undefined name `smoothed_radial_profile`",
+    "name": "undefined-name",
+    "noqa_row": 1409,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 25,
+      "row": 1410
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 1410
+    },
+    "message": "Undefined name `index`",
+    "name": "undefined-name",
+    "noqa_row": 1410,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 40,
+      "row": 1411
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 1411
+    },
+    "message": "Undefined name `rbin_centers`",
+    "name": "undefined-name",
+    "noqa_row": 1411,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 65,
+      "row": 1411
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 42,
+      "row": 1411
+    },
+    "message": "Undefined name `smoothed_radial_profile`",
+    "name": "undefined-name",
+    "noqa_row": 1411,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 25,
+      "row": 1412
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 1412
+    },
+    "message": "Undefined name `index`",
+    "name": "undefined-name",
+    "noqa_row": 1412,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 45,
+      "row": 1413
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 31,
+      "row": 1413
+    },
+    "message": "Undefined name `radial_profile`",
+    "name": "undefined-name",
+    "noqa_row": 1413,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 25,
+      "row": 1414
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 1414
+    },
+    "message": "Undefined name `index`",
+    "name": "undefined-name",
+    "noqa_row": 1414,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 36,
+      "row": 1415
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 1415
+    },
+    "message": "Undefined name `twoTheta`",
+    "name": "undefined-name",
+    "noqa_row": 1415,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 52,
+      "row": 1415
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 38,
+      "row": 1415
+    },
+    "message": "Undefined name `radial_profile`",
+    "name": "undefined-name",
+    "noqa_row": 1415,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 25,
+      "row": 1416
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 1416
+    },
+    "message": "Undefined name `index`",
+    "name": "undefined-name",
+    "noqa_row": 1416,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 40,
+      "row": 1417
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 1417
+    },
+    "message": "Undefined name `rbin_centers`",
+    "name": "undefined-name",
+    "noqa_row": 1417,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 56,
+      "row": 1417
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 42,
+      "row": 1417
+    },
+    "message": "Undefined name `radial_profile`",
+    "name": "undefined-name",
+    "noqa_row": 1417,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 25,
+      "row": 1419
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 20,
+      "row": 1419
+    },
+    "message": "Undefined name `index`",
+    "name": "undefined-name",
+    "noqa_row": 1419,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 52,
+      "row": 1420
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 28,
+      "row": 1420
+    },
+    "message": "Undefined name `thetabin_centers_degrees`",
+    "name": "undefined-name",
+    "noqa_row": 1420,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 78,
+      "row": 1420
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/WAXS.py",
+    "fix": null,
+    "location": {
+      "column": 54,
+      "row": 1420
+    },
+    "message": "Undefined name `smoothed_angular_profile`",
+    "name": "undefined-name",
+    "noqa_row": 1420,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 17,
+      "row": 177
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/tests/test_waxs_view_model.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 177
+    },
+    "message": "Undefined name `batch`",
+    "name": "undefined-name",
+    "noqa_row": 177,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  },
+  {
+    "cell": null,
+    "code": "F821",
+    "end_location": {
+      "column": 17,
+      "row": 179
+    },
+    "filename": "/Users/zhaiyf/Documents/DESY/GISAXS_GUI_VIPR/gisaxs_gui/tests/test_waxs_view_model.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 179
+    },
+    "message": "Undefined name `batch`",
+    "name": "undefined-name",
+    "noqa_row": 179,
+    "severity": "error",
+    "url": "https://docs.astral.sh/ruff/rules/undefined-name"
+  }
+]

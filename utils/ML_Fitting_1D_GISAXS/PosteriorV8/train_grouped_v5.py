@@ -15,6 +15,7 @@ from .grouped_training_v5 import (
     inspect_v5_grouped_training,
     train_v5_grouped_model,
 )
+from .training_objective_v5 import DEFAULT_LOCAL_COVERAGE_WEIGHT
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -85,7 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--search-yield-weight", type=float, default=1.0)
     parser.add_argument("--pairwise-ranking-weight", type=float, default=1.0)
     parser.add_argument("--local-mdn-weight", type=float, default=1.0)
-    parser.add_argument("--local-coverage-weight", type=float, default=1.0)
+    parser.add_argument(
+        "--local-coverage-weight",
+        type=float,
+        default=DEFAULT_LOCAL_COVERAGE_WEIGHT,
+    )
     parser.add_argument(
         "--operational-top-l-alignment-weight", type=float, default=1.0
     )
@@ -173,9 +178,9 @@ def _config(args: argparse.Namespace) -> V5GroupedTrainingConfig:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if socket.gethostname().split(".", 1)[0].startswith("max-wgs"):
+    if socket.gethostname().split(".", 1)[0].startswith(("max-wgs", "max-fs-display")):
         raise RuntimeError(
-            "grouped training CLI, including --dry-run, is forbidden on max-wgs "
+            "grouped training CLI, including --dry-run, is forbidden on Maxwell login nodes "
             "because artifact inspection materializes resident arrays; use a Slurm "
             "worker or a future manifest-only preflight"
         )

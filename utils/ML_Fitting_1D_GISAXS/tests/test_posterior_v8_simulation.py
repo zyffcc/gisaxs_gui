@@ -93,10 +93,9 @@ def test_public_noise_primitive_preserves_pre_extraction_values_pointwise():
     )
     floor = max(noise.sigma_floor_fraction * reference, np.finfo(np.float64).tiny)
     expected_intensity = np.maximum(expected_intensity, floor)
-    expected_sigma = np.sqrt(
-        np.square(expected_sigma_poisson)
-        + np.square(noise.relative_sigma * expected_intensity)
-        + floor**2
+    expected_sigma = np.hypot(
+        np.hypot(expected_sigma_poisson, noise.relative_sigma * expected_intensity),
+        floor,
     )
     np.testing.assert_array_equal(intensity, expected_intensity)
     np.testing.assert_array_equal(sigma, expected_sigma)
@@ -110,6 +109,22 @@ def test_public_noise_primitive_preserves_pre_extraction_values_pointwise():
     )
     np.testing.assert_array_equal(simulated.intensity, expected_intensity)
     np.testing.assert_array_equal(simulated.sigma, expected_sigma)
+
+
+def test_noise_sigma_root_sum_square_stays_positive_at_subnormal_scale():
+    clean = np.full(64, 1.0e-300, dtype=np.float64)
+    noise = NoiseProvenance(
+        poisson_count_scale=None,
+        relative_sigma=0.0,
+        sigma_floor_fraction=1.0e-6,
+    )
+
+    intensity, sigma = apply_observation_noise(clean, noise, observation_seed=8128)
+
+    assert np.all(np.isfinite(intensity))
+    assert np.all(np.isfinite(sigma))
+    assert np.all(sigma > 0.0)
+    np.testing.assert_array_equal(sigma, np.full_like(sigma, 1.0e-306))
 
 
 def test_all_34_topologies_generate_valid_identifiability_candidates():

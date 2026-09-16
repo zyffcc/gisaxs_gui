@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from numbers import Integral
-from typing import Mapping, Protocol, Sequence
+from typing import Callable, Mapping, Protocol, Sequence
 
 import numpy as np
 
@@ -250,6 +250,14 @@ def _sobol_seeds(
             )
 
 
+class V5VerifiedReportObservationError(Exception):
+    """A report audit sink failed; search must not silently omit evidence."""
+
+
+class V5EvaluatedCandidateObservationError(Exception):
+    """A lossless candidate audit failed; do not continue with incomplete evidence."""
+
+
 def run_v5_universal_one_click_inference(
     context: V5UniversalCandidateContext,
     curve: ObservedCurve,
@@ -262,9 +270,20 @@ def run_v5_universal_one_click_inference(
     best_of_n: Sequence[int] = (1, 4, 8, 16),
     reference_modes: Sequence[ReferenceMode] = (),
     seed: int = 0,
+    exact_forward_call_observer: Callable[[int, str], None] | None = None,
+    verified_report_observer: Callable[[int, EvaluationReport], None] | None = None,
+    evaluated_candidate_observer: Callable[
+        [int, CandidateInput, V5UniversalCandidateProvenance, EvaluationReport], None
+    ] | None = None,
 ) -> V5UniversalInferenceResult:
-    """Return exact-compatible multi-topology modes under one strict budget."""
+    """Return verified modes; optional call observations use global budget indices."""
 
+    if exact_forward_call_observer is not None and not callable(exact_forward_call_observer):
+        raise TypeError("exact_forward_call_observer must be callable or None")
+    if verified_report_observer is not None and not callable(verified_report_observer):
+        raise TypeError("verified_report_observer must be callable or None")
+    if evaluated_candidate_observer is not None and not callable(evaluated_candidate_observer):
+        raise TypeError("evaluated_candidate_observer must be callable or None")
     if not isinstance(context, V5UniversalCandidateContext):
         raise TypeError("context must be a V5UniversalCandidateContext")
     if not isinstance(curve, ObservedCurve):
@@ -325,12 +344,21 @@ def run_v5_universal_one_click_inference(
             return "budget"
         branch = branches[(seed_value_.topology_id, seed_value_.pattern_id)]
         batch = context.batches[branch.topology_batch_index]
+        observation_arguments = {}
+        if exact_forward_call_observer is not None:
+            offset = forward_used
+
+            def observe(local_index: int, phase: str) -> None:
+                exact_forward_call_observer(offset + local_index, phase)
+
+            observation_arguments["exact_forward_call_observer"] = observe
         exact = run_v5_exact_refinement(
             batch,
             curve,
             (seed_value_,),
             per_candidate_forward_evaluation_limit=(budget.per_candidate_forward_evaluation_limit),
             forward_evaluation_limit=remaining,
+            **observation_arguments,
         )
         if len(exact.attempts) != 1:
             raise RuntimeError("single-seed exact refinement returned the wrong attempt count")
@@ -374,6 +402,20 @@ def run_v5_universal_one_click_inference(
                 reference_modes=references,
             )
             evaluation_calls += 1
+            # Capture the actual lossless input and branch provenance at birth,
+            # before a later report can replace its user-visible representative.
+            if evaluated_candidate_observer is not None:
+                try:
+                    evaluated_candidate_observer(forward_used, candidate, provenance[-1], report)
+                except Exception as exc:
+                    raise V5EvaluatedCandidateObservationError("candidate observer failed") from exc
+            # Observe this immutable report when it actually becomes available,
+            # before later candidates can change clustering or representative ranks.
+            if verified_report_observer is not None:
+                try:
+                    verified_report_observer(forward_used, report)
+                except Exception as exc:
+                    raise V5VerifiedReportObservationError("verified-report observer failed") from exc
         attempts.append(
             V5UniversalAttemptAudit(
                 attempt_rank=len(attempts) + 1,
@@ -526,6 +568,8 @@ def run_v5_universal_one_click_inference(
 
 
 __all__ = [
+    "V5EvaluatedCandidateObservationError",
+    "V5VerifiedReportObservationError",
     "V5UniversalProposalModelPort",
     "run_v5_universal_one_click_inference",
 ]

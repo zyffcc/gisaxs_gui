@@ -30,12 +30,10 @@ from .k1_phase_b_contract_v5 import (
     V5K1PhaseBParentRecord,
     digest,
     live_gate_contract,
-    strict_json_object,
 )
 from .model_v5_contract import MODEL_V5_INPUT_KEYS
 from .observation_v5 import build_v5_observation_data_view
-from .simulation import GridProvenance
-from .synthetic_recipe_v5 import sample_v5_clean_recipe
+from .persisted_clean_recipe_v5 import persisted_v5_clean_recipe_from_json
 
 
 def _quantile(values: Sequence[float], q: float) -> float:
@@ -66,16 +64,21 @@ def _record_reasons(
         reasons.append("proposal_count_is_not_32")
     if record.single_draw_index != SINGLE_DRAW_INDEX:
         reasons.append("single_draw_is_not_stochastic_draw_index_1")
-    if record.varying_dimension_count < 1:
-        reasons.append("clean_parent_has_no_varying_dimension")
+    if record.varying_dimension_count < 0:
+        reasons.append("clean_parent_has_negative_varying_dimension_count")
     if record.topology_id < 0 or record.pattern_id < 0:
         reasons.append("branch_identity_is_invalid")
-    if not np.all(
-        np.isfinite((record.single_draw_local_rms, record.best_of_32_local_rms))
-    ):
-        reasons.append("local_metric_is_nan_or_infinite")
-    if record.best_of_32_local_rms > record.single_draw_local_rms + 1.0e-15:
-        reasons.append("best_of_32_is_not_nested_with_single_draw")
+    if record.varying_dimension_count == 0:
+        if record.single_draw_local_rms is not None or record.best_of_32_local_rms is not None:
+            reasons.append("fully_fixed_parent_must_not_claim_local_mdn_metrics")
+    elif record.varying_dimension_count > 0:
+        local_metrics = (record.single_draw_local_rms, record.best_of_32_local_rms)
+        if any(value is None for value in local_metrics) or not np.all(
+            np.isfinite(np.asarray(local_metrics, dtype=np.float64))
+        ):
+            reasons.append("learnable_parent_local_metric_is_missing_nan_or_infinite")
+        elif float(record.best_of_32_local_rms) > float(record.single_draw_local_rms) + 1.0e-15:
+            reasons.append("best_of_32_is_not_nested_with_single_draw")
     if record.exact_best_raw_log_rmse is None or not np.isfinite(
         float(record.exact_best_raw_log_rmse)
     ):
@@ -167,12 +170,20 @@ def assess_v5_k1_phase_b_records(
     if any(per_parent_reasons.values()):
         integrity_reasons.append("one_or_more_clean_parent_records_are_partial_or_invalid")
 
+    learnable = tuple(value for value in selected if value.varying_dimension_count > 0)
+    fully_fixed = tuple(value for value in selected if value.varying_dimension_count == 0)
+    if len(learnable) + len(fully_fixed) != len(selected):
+        integrity_reasons.append("parent_varying_dimension_classification_is_incomplete")
+    if not learnable:
+        integrity_reasons.append("no_learnable_clean_parent_for_local_mdn_gate")
     finite_local = bool(
-        selected
+        learnable
         and all(
-            np.isfinite(value.single_draw_local_rms)
-            and np.isfinite(value.best_of_32_local_rms)
-            for value in selected
+            value.single_draw_local_rms is not None
+            and value.best_of_32_local_rms is not None
+            and np.isfinite(float(value.single_draw_local_rms))
+            and np.isfinite(float(value.best_of_32_local_rms))
+            for value in learnable
         )
     )
     finite_exact = bool(
@@ -185,17 +196,27 @@ def assess_v5_k1_phase_b_records(
     )
     metrics: dict[str, float | None] = {
         "branch_conditioned_local_mdn_single_draw_local_rms_median": (
-            float(np.median([value.single_draw_local_rms for value in selected]))
+            float(
+                np.median(
+                    [float(value.single_draw_local_rms) for value in learnable]
+                )
+            )
             if finite_local
             else None
         ),
         "branch_conditioned_local_mdn_best_of_32_local_rms_median": (
-            float(np.median([value.best_of_32_local_rms for value in selected]))
+            float(
+                np.median(
+                    [float(value.best_of_32_local_rms) for value in learnable]
+                )
+            )
             if finite_local
             else None
         ),
         "branch_conditioned_local_mdn_best_of_32_local_rms_p90": (
-            _quantile([value.best_of_32_local_rms for value in selected], 0.9)
+            _quantile(
+                [float(value.best_of_32_local_rms) for value in learnable], 0.9
+            )
             if finite_local
             else None
         ),
@@ -297,6 +318,20 @@ def assess_v5_k1_phase_b_records(
     return {
         "statistical_unit": "independent_clean_parent_macro_average",
         "quantile_method": "numpy_linear",
+        "parent_counts": {
+            "clean_parent_count": len(selected),
+            "learnable_parent_count": len(learnable),
+            "fully_fixed_parent_count": len(fully_fixed),
+            "varying_coordinate_count": sum(
+                value.varying_dimension_count for value in learnable
+            ),
+            "local_mdn_metric_parent_count": len(learnable),
+            "exact_forward_metric_parent_count": len(selected),
+        },
+        "local_mdn_metric_population": (
+            "learnable_parents_with_at_least_one_varying_coordinate_only_"
+            "fully_fixed_parents_retained_for_exact_forward_without_zero_error_dilution"
+        ),
         "metrics": metrics,
         "gate_decisions": decisions,
         "integrity_passed": integrity_ok,
@@ -366,18 +401,8 @@ def replay_parent_contexts(
             raise ValueError("K1 Phase-B requires one observation and one branch per parent")
         observation_index, candidate_index = int(observation_indices[0]), int(candidate_indices[0])
         encoded = str(arrays[clean_array("recipe_canonical_json")][recipe_index])
-        payload = strict_json_object(encoded, "clean recipe")
-        topology = tuple(str(value) for value in payload.get("query", {}).get("topology", ()))
-        recipe = sample_v5_clean_recipe(
-            topology,
-            recipe_seed=int(payload["recipe_seed"]),
-            amplitude_range_regime=str(payload["amplitude_range_regime"]),
-            pattern_id=int(payload["branch_pattern_id"]),
-            grid=GridProvenance(**payload["grid"]),
-        )
         expected_sha = str(arrays[clean_array("recipe_sha256")][recipe_index])
-        if recipe.canonical_json != encoded or recipe.sha256 != expected_sha:
-            raise ValueError("clean parent no longer replays byte-for-byte")
+        recipe = persisted_v5_clean_recipe_from_json(encoded, expected_sha)
         view = build_v5_observation_data_view(
             recipe,
             int(arrays[observation_array("view_index")][observation_index]),
@@ -469,21 +494,23 @@ def build_parent_record(
     ):
         raise RuntimeError("proposal sampler did not return frozen stochastic draws 1..32")
     varying_count = int(np.count_nonzero(varying))
-    if varying_count < 1:
-        raise ValueError("K1 Phase-B parent has no varying local coordinate")
-    local_rms = np.asarray(
-        [
-            np.sqrt(
-                np.mean(
-                    np.square(
-                        np.asarray(value.local_unit, dtype=np.float64)[varying]
-                        - target[varying]
+    local_rms = (
+        None
+        if varying_count == 0
+        else np.asarray(
+            [
+                np.sqrt(
+                    np.mean(
+                        np.square(
+                            np.asarray(value.local_unit, dtype=np.float64)[varying]
+                            - target[varying]
+                        )
                     )
                 )
-            )
-            for value in proposals
-        ],
-        dtype=np.float64,
+                for value in proposals
+            ],
+            dtype=np.float64,
+        )
     )
     refinement = refiner(
         batch,
@@ -524,8 +551,8 @@ def build_parent_record(
         varying_dimension_count=varying_count,
         proposal_count=len(proposals),
         single_draw_index=proposals[0].draw_index,
-        single_draw_local_rms=float(local_rms[0]),
-        best_of_32_local_rms=float(np.min(local_rms)),
+        single_draw_local_rms=None if local_rms is None else float(local_rms[0]),
+        best_of_32_local_rms=None if local_rms is None else float(np.min(local_rms)),
         exact_best_raw_log_rmse=None if exact_best is None else float(exact_best),
         exact_compatible=bool(
             exact_best is not None and exact_best < raw_compatibility_threshold

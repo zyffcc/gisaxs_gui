@@ -4,18 +4,26 @@ from copy import deepcopy
 from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.grouped_artifact_v5 import canonical_json
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_contract_v5 import (
     PHASE_A_SOURCE_PATHS,
+    PHASE_B_SOURCE_PATHS,
+    PHASE_B_WORKER_RELATIVE_PATH,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.model_v5_contract import (
     MODEL_V5_NAME,
     MODEL_V5_SCHEMA,
     MODEL_V5_VERSION,
     model_v5_contract_payload,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.memorization_gate_v5 import (
+    V5_MEMORIZATION_GATE_SCHEMA,
+    V5_MEMORIZATION_GATE_VERSION,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.run_k1_memorization_gate_v5 import (
     V5_K1_MODEL_PROVENANCE_SCHEMA,
@@ -32,7 +40,11 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.run_k1_phase_b_gate_v5 import (
     V5K1PhaseBGateConfig,
     V5K1PhaseBParentRecord,
     assess_v5_k1_phase_b_records,
+    _validated_worker_source_root,
     validate_v5_k1_phase_a_bindings,
+)
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_evaluation_v5 import (
+    build_parent_record,
 )
 
 
@@ -47,6 +59,16 @@ GATES = {
     "exact_post_refine_raw_log_rmse_p90_lt": 1.0e-3,
     "exact_post_refine_compatible_rate_gte": 0.99,
 }
+
+
+def test_worker_source_ownership_uses_the_explicit_worker_inventory_entry(tmp_path):
+    repository = Path(__file__).resolve().parents[3]
+
+    assert PHASE_B_WORKER_RELATIVE_PATH in PHASE_B_SOURCE_PATHS
+    assert PHASE_B_SOURCE_PATHS[0] != PHASE_B_WORKER_RELATIVE_PATH
+    assert _validated_worker_source_root(repository) == repository
+    with pytest.raises(ValueError, match="does not own"):
+        _validated_worker_source_root(tmp_path)
 
 
 def _contract(recipes: int = 2) -> dict[str, object]:
@@ -120,6 +142,162 @@ def test_single_branch_phase_b_success_evaluates_all_dynamic_gates_but_not_full_
     ] == pytest.approx(0.02)
     assert result["exact_forward_ledger"]["input_seed_count"] == 64
     assert result["bounds_and_physics_compliance"]["bounds_compliance_fraction"] == 1.0
+
+
+def test_fully_fixed_parent_is_exact_audited_without_diluting_local_metrics():
+    fully_fixed = _record(
+        1,
+        varying_dimension_count=0,
+        single_draw_local_rms=None,
+        best_of_32_local_rms=None,
+    )
+    result = assess_v5_k1_phase_b_records(
+        (_record(0), fully_fixed), gate_contract=_contract()
+    )
+
+    assert result["single_branch_phase_b_gate_passed"] is True
+    assert result["metrics"][
+        "branch_conditioned_local_mdn_single_draw_local_rms_median"
+    ] == pytest.approx(0.02)
+    assert result["metrics"][
+        "branch_conditioned_local_mdn_best_of_32_local_rms_median"
+    ] == pytest.approx(0.005)
+    assert result["parent_counts"] == {
+        "clean_parent_count": 2,
+        "learnable_parent_count": 1,
+        "fully_fixed_parent_count": 1,
+        "varying_coordinate_count": 2,
+        "local_mdn_metric_parent_count": 1,
+        "exact_forward_metric_parent_count": 2,
+    }
+    assert result["exact_forward_ledger"]["input_seed_count"] == 64
+
+
+def test_fully_fixed_parent_claiming_zero_local_metric_fails_closed():
+    invalid = _record(
+        1,
+        varying_dimension_count=0,
+        single_draw_local_rms=0.0,
+        best_of_32_local_rms=0.0,
+    )
+    result = assess_v5_k1_phase_b_records(
+        (_record(0), invalid), gate_contract=_contract()
+    )
+
+    assert result["single_branch_phase_b_gate_passed"] is False
+    assert "fully_fixed_parent_must_not_claim_local_mdn_metrics" in result[
+        "per_parent_failure_reasons"
+    ][invalid.clean_parent_sha256]
+
+
+def test_local_mdn_gate_requires_at_least_one_learnable_parent():
+    fully_fixed = _record(
+        0,
+        varying_dimension_count=0,
+        single_draw_local_rms=None,
+        best_of_32_local_rms=None,
+    )
+    result = assess_v5_k1_phase_b_records(
+        (fully_fixed,), gate_contract=_contract(recipes=1)
+    )
+
+    assert result["single_branch_phase_b_gate_passed"] is False
+    assert "no_learnable_clean_parent_for_local_mdn_gate" in result[
+        "integrity_failure_reasons"
+    ]
+    assert result["metrics"][
+        "branch_conditioned_local_mdn_best_of_32_local_rms_median"
+    ] is None
+    assert result["metrics"]["exact_post_refine_raw_log_rmse_p90"] == pytest.approx(
+        2.0e-4
+    )
+    assert result["parent_counts"]["exact_forward_metric_parent_count"] == 1
+
+
+def test_fully_fixed_parent_still_runs_proposals_and_exact_refinement():
+    proposals = tuple(
+        SimpleNamespace(
+            draw_index=index,
+            source="stochastic_draw",
+            local_unit=np.full(8, 0.5, dtype=np.float64),
+        )
+        for index in range(1, 33)
+    )
+    audit = SimpleNamespace(
+        geometry_bounds_satisfied=True,
+        physics_satisfied=True,
+        initial_amplitude_audit=SimpleNamespace(all_constraints_satisfied=True),
+        final_amplitude_audit=SimpleNamespace(all_constraints_satisfied=True),
+    )
+    attempts = tuple(SimpleNamespace(prerequisite_audit=audit) for _ in proposals)
+    ledger = SimpleNamespace(
+        configured_total_limit=4096,
+        configured_per_candidate_limit=128,
+        calls_used=64,
+        calls_remaining=4032,
+        calls_by_phase=(
+            ("seed_profile_verification", 32),
+            ("initial_profile_verification", 0),
+            ("optimizer_residual", 0),
+            ("optimizer_terminal_verification", 32),
+        ),
+        attempts_recorded=32,
+        refinement_successes=32,
+        validation_failures=0,
+        refinement_failures=0,
+        per_candidate_budget_exhausted_attempts=0,
+        total_budget_exhausted_before_seed_attempts=0,
+    )
+    refinement = SimpleNamespace(
+        candidates=(SimpleNamespace(exact_intensity=np.ones(4)),),
+        attempts=attempts,
+        ledger=ledger,
+        status="exact_candidates_ready_for_verification",
+        all_input_seeds_processed=True,
+    )
+    sampler_calls = []
+    refiner_calls = []
+
+    def sampler(*args, **kwargs):
+        sampler_calls.append((args, kwargs))
+        return proposals
+
+    def refiner(*args, **kwargs):
+        refiner_calls.append((args, kwargs))
+        return refinement
+
+    recipe = SimpleNamespace(
+        sha256="1" * 64,
+        query=SimpleNamespace(topology_id=0),
+        target=SimpleNamespace(pattern_id=0),
+    )
+    batch = SimpleNamespace(
+        query_sha256="2" * 64,
+        query=SimpleNamespace(sha256="3" * 64),
+        amplitude_query=SimpleNamespace(sha256="4" * 64),
+    )
+    curve = SimpleNamespace(intensity=np.ones(4))
+    record = build_parent_record(
+        recipe=recipe,
+        batch=batch,
+        target=np.full(8, 0.5),
+        varying=np.zeros(8, dtype=bool),
+        curve=curve,
+        model_outputs={},
+        frozen_parent_seed=123,
+        raw_compatibility_threshold=1.0e-3,
+        config=V5K1PhaseBGateConfig(),
+        proposal_sampler=sampler,
+        refiner=refiner,
+    )
+
+    assert len(sampler_calls) == len(refiner_calls) == 1
+    assert record.varying_dimension_count == 0
+    assert record.single_draw_local_rms is None
+    assert record.best_of_32_local_rms is None
+    assert record.exact_best_raw_log_rmse == pytest.approx(0.0)
+    assert record.exact_compatible is True
+    assert record.attempts_recorded == 32
 
 
 def test_partial_or_unverified_parent_fails_every_gate_closed():
@@ -298,7 +476,7 @@ def _phase_a_fixture():
             "identity": {
                 "sha256": "3" * 64,
                 "byte_count": 100,
-                "mode_octal": "0o400",
+                "mode_octal": "0400",
                 "uid": 1000,
                 "gid": 1000,
                 "link_count": 1,
@@ -354,8 +532,8 @@ def _phase_a_fixture():
     model_provenance_identity = {"sha256": "f" * 64, "byte_count": 789}
     weights_sha = "b" * 64
     nested_core = {
-        "schema_version": "gisaxs.posterior_v8.memorization_gate/v3",
-        "version": "deterministic_minibatch_single_mdn_learnable_local_target_diagnostic_v3",
+        "schema_version": V5_MEMORIZATION_GATE_SCHEMA,
+        "version": V5_MEMORIZATION_GATE_VERSION,
         "scientific_role": "wiring_and_memorization_diagnostic_not_model_acceptance",
         "initial_loss": 2.0,
         "final_loss": 0.1,
@@ -371,7 +549,15 @@ def _phase_a_fixture():
         "final_weights_sha256": weights_sha,
         "passed": True,
         "config": {
+            "steps": 18_000,
             "batch_size": 32,
+            "learning_rate": 3.0e-3,
+            "final_learning_rate": 3.0e-5,
+            "learning_rate_schedule": "cosine_decay",
+            "seed": 20_260_903,
+            "local_mdn_weight": 1.0,
+            "local_coverage_weight": 100.0,
+            "operational_top_l_alignment_weight": 1.0,
             "max_final_target_median_rms": 0.02,
             "minimum_loss_reduction": 0.5,
         },

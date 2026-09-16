@@ -30,9 +30,9 @@ from .paper_representative_payload_v5 import (
 )
 
 
-V5_PAPER_BUDGET_EVALUATOR_SCHEMA = "gisaxs.posterior_v8.paper_budget_evaluator/v6"
+V5_PAPER_BUDGET_EVALUATOR_SCHEMA = "gisaxs.posterior_v8.paper_budget_evaluator/v7"
 V5_PAPER_BUDGET_EVALUATOR_VERSION = (
-    "query_context_bound_typed_actual_emitted_representative_replay_budget_evaluation_v6"
+    "query_context_bound_explicit_representative_selection_history_v7"
 )
 V5_EQUIVALENCE_MATCHING_VERSION = (
     "maximum_cardinality_then_minimum_total_normalized_distance_hungarian/v1"
@@ -411,6 +411,17 @@ class V5PaperBudgetMethodResult:
     exact_forward_calls_evaluated: int
     candidate_emissions_evaluated: int
     compatibility_status_counts: tuple[tuple[str, int], ...]
+    representative_selection_policy: str = "append_only"
+    representative_history_sha256: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.representative_selection_policy == "append_only":
+            if self.representative_history_sha256 is not None:
+                raise ValueError("append-only result cannot claim snapshot history")
+        elif self.representative_selection_policy == "budget_snapshot":
+            _digest(self.representative_history_sha256, "representative history SHA-256")
+        else:
+            raise ValueError("unknown representative selection policy")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -515,6 +526,8 @@ def _evaluate_method(
     trace: V5MethodExactCallTrace,
     config: V5PaperBudgetEvaluationConfig,
     matcher: EquivalenceDistanceMatcher,
+    *,
+    representative_selector: Callable[[int, int], tuple[V5CandidateEmission, ...]] | None = None,
 ) -> V5PaperBudgetMethodResult:
     largest_budget = config.exact_forward_budgets[-1]
     evaluation_emissions = tuple(
@@ -523,6 +536,13 @@ def _evaluate_method(
     compatible = tuple(
         value for value in evaluation_emissions if value.compatibility_status == V5_EXACT_COMPATIBLE
     )
+    if representative_selector is not None:
+        visible_ids = {
+            row.candidate_id
+            for budget in config.exact_forward_budgets
+            for row in representative_selector(budget, max(config.output_caps))
+        }
+        compatible = tuple(row for row in compatible if row.candidate_id in visible_ids)
     distances: dict[tuple[str, str], float | None] = {}
     for reference in references.representatives:
         for candidate in sorted(compatible, key=lambda value: value.candidate_id):
@@ -537,7 +557,11 @@ def _evaluate_method(
         hit_row, recall_row, selection_row, pairs_row, distance_row = [], [], [], [], []
         for budget in config.exact_forward_budgets:
             available = [value for value in compatible if value.available_after_call <= budget]
-            selected = tuple(sorted(available, key=lambda value: value.output_rank)[:output_cap])
+            selected = (
+                tuple(sorted(available, key=lambda value: value.output_rank)[:output_cap])
+                if representative_selector is None
+                else representative_selector(budget, output_cap)
+            )
             pairs = _minimum_distance_maximum_cardinality_pairs(
                 references.representatives,
                 selected,
@@ -655,6 +679,11 @@ def evaluate_v5_paired_paper_budget_query(
         _evaluate_method(references, trace, config, equivalence_distance_matcher)
         for trace in sorted(values, key=lambda value: value.method_id)
     )
+    return _paired_record_from_results(references, config, results)
+
+
+def _paired_record_from_results(references, config, results) -> V5PairedPaperBudgetQueryRecord:
+    """Common metadata assembly after the selected evaluator validated inputs."""
     return V5PairedPaperBudgetQueryRecord(
         query_id=references.query_id,
         query_context_sha256=references.query_context_sha256,

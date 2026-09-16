@@ -36,9 +36,9 @@ from .k1_staging_files_v5 import (
 from .package_source_snapshot_v5 import MANIFEST_NAME, verify_extracted_source_snapshot
 
 
-V5_K1_JOB_STAGING_SCHEMA = "gisaxs.posterior_v8.k1_job_private_staging/v2"
+V5_K1_JOB_STAGING_SCHEMA = "gisaxs.posterior_v8.k1_job_private_staging/v3"
 V5_K1_JOB_STAGING_VERSION = (
-    "posterior_v8_v5_2_live_capability_pre_post_original_local_source_rehash_v2"
+    "posterior_v8_v5_2_dust_private_live_capability_pre_post_source_rehash_v3"
 )
 
 
@@ -79,15 +79,9 @@ def build_job_staging_proof(
         or not Path(job_tmp_value).is_absolute()
     ):
         raise RuntimeError("wrapper did not export its job-private temporary root")
-    if environment.get("SLURM_TMPDIR"):
-        scratch_variable = "SLURM_TMPDIR"
-        scratch_value = environment["SLURM_TMPDIR"]
-    elif environment.get("TMPDIR"):
-        scratch_variable = "TMPDIR"
-        scratch_value = environment["TMPDIR"]
-    else:
-        scratch_variable = "literal_/tmp_fallback"
-        scratch_value = "/tmp"
+    # Host-local temporary defaults must never redirect dataset copies or caches.
+    scratch_variable = "POSTERIOR_V8_SCRATCH_BASE"
+    scratch_value = environment.get(scratch_variable)
     if not isinstance(scratch_value, str) or not Path(scratch_value).is_absolute():
         raise RuntimeError("wrapper scratch base must be an absolute path")
     scratch = lexical_no_symlinks(Path(scratch_value), "wrapper scratch base").resolve(
@@ -192,7 +186,7 @@ def build_job_staging_proof(
         or root.stat().st_uid != os.getuid()
         or root != job_tmp / "staging"
         or not run_root.is_relative_to(allowed)
-        or scratch.is_relative_to(allowed)
+        or not scratch.is_relative_to(allowed)
     ):
         raise ValueError("job staging root escaped its Slurm scratch/job identity")
     root_mode = stat.S_IMODE(root.stat().st_mode)

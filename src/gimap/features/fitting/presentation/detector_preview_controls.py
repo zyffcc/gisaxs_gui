@@ -143,6 +143,9 @@ class DetectorToolBar(QFrame):
         ui.fittingOpenDetectorWindowButton.setToolTip(
             "Open the larger pan/zoom detector viewer"
         )
+        ui.fittingInteractiveDetectorButton = QPushButton("Interactive", self)
+        ui.fittingInteractiveDetectorButton.setObjectName("fittingInteractiveDetectorButton")
+        ui.fittingInteractiveDetectorButton.setToolTip("Open the interactive pixel detector with histogram and ROI")
         ui.fittingDisplayInspectorButton = self._tool(
             "Display", "fittingDisplayInspectorButton"
         )
@@ -154,6 +157,7 @@ class DetectorToolBar(QFrame):
             ui.fittingSelectRegionButton,
             ui.fittingResetDetectorViewButton,
             ui.fittingOpenDetectorWindowButton,
+            ui.fittingInteractiveDetectorButton,
         ):
             layout.addWidget(widget)
         layout.addStretch(1)

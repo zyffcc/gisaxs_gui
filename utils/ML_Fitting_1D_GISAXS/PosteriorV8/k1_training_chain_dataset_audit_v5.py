@@ -141,23 +141,43 @@ def _artifact_audit(artifact: Mapping[str, object]) -> dict[str, object]:
     counts = {branch.branch_id: 0 for branch in K1_PHASE_C_BRANCHES}
     recipes = arrays[clean_array("recipe_canonical_json")]
     patterns = arrays[clean_array("target_pattern_id")]
+    # Local import avoids a contract-cycle through the balanced-plan owner.
+    from .k1_forced_sobol_recipe_v5 import (
+        V5_K1_FORCED_SOBOL_RECIPE_SCHEMA,
+        decode_v5_k1_forced_recipe_identity,
+    )
+
     for index, encoded in enumerate(recipes):
         recipe = _strict_json(str(encoded), "clean recipe")
-        query = recipe.get("query")
-        if not isinstance(query, Mapping):
-            raise ValueError("clean recipe has no K=1 query")
-        topology = query.get("topology")
-        pattern = recipe.get("branch_pattern_id")
-        if (
-            not isinstance(topology, list)
-            or len(topology) != 1
-            or not isinstance(topology[0], str)
-            or isinstance(pattern, bool)
-            or not isinstance(pattern, Integral)
-            or int(patterns[index]) != int(pattern)
-        ):
-            raise ValueError("clean recipe is not a replayable K=1 generating branch")
-        branch = _BRANCH_BY_WIRE.get((topology[0], int(pattern)))
+        if recipe.get("schema") == V5_K1_FORCED_SOBOL_RECIPE_SCHEMA:
+            identity = decode_v5_k1_forced_recipe_identity(str(encoded))
+            branch = next(
+                value
+                for value in K1_PHASE_C_BRANCHES
+                if value.branch_id == identity.branch_id
+            )
+            if (
+                identity.split_id != expected_split
+                or identity.clean_group_id != group_ids[index]
+                or int(patterns[index]) != branch.pattern_id
+            ):
+                raise ValueError("forced K1 recipe escaped its stored grouped row")
+        else:
+            query = recipe.get("query")
+            if not isinstance(query, Mapping):
+                raise ValueError("clean recipe has no K=1 query")
+            topology = query.get("topology")
+            pattern = recipe.get("branch_pattern_id")
+            if (
+                not isinstance(topology, list)
+                or len(topology) != 1
+                or not isinstance(topology[0], str)
+                or isinstance(pattern, bool)
+                or not isinstance(pattern, Integral)
+                or int(patterns[index]) != int(pattern)
+            ):
+                raise ValueError("clean recipe is not a replayable K=1 generating branch")
+            branch = _BRANCH_BY_WIRE.get((topology[0], int(pattern)))
         if branch is None:
             raise ValueError("clean recipe is outside the twelve legal K1 branches")
         counts[branch.branch_id] += 1

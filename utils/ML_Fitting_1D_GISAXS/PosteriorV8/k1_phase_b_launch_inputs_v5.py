@@ -69,7 +69,7 @@ _REQUIRED_SOURCE = tuple(
 )
 _PHASE_A_FULL_DATASET = "k1-v5-2-phase-a-v5-full-r512-sphere-v0.gvd5"
 _PHASE_A_FULL_DATASET_BINDING = _PHASE_A_FULL_DATASET + ".binding-v1.json"
-_PHASE_A_FULL_MODEL_DIRECTORY = "k1-v5-2-phase-a-v5-full-steps1500"
+_PHASE_A_FULL_MODEL_DIRECTORY = "k1-v5-2-phase-a-v5-full-steps18000"
 
 
 @dataclass(frozen=True, kw_only=True)

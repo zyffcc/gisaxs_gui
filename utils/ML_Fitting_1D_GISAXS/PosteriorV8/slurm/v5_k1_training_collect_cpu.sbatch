@@ -15,7 +15,7 @@ set -euo pipefail
 : "${POSTERIOR_V8_K1_TRAINING_PLAN_SHA256:?set POSTERIOR_V8_K1_TRAINING_PLAN_SHA256}"
 
 case "$(hostname -s)" in
-    max-wgs*) echo "K1 tuning handoff cannot run on the Maxwell login node" >&2; exit 2 ;;
+    max-wgs*|max-fs-display*) echo "K1 tuning handoff cannot run on the Maxwell login node" >&2; exit 2 ;;
 esac
 for dust_path in "$POSTERIOR_V8_SOURCE_ROOT" "$POSTERIOR_V8_K1_TRAINING_PLAN"; do
     case "$dust_path" in
@@ -28,23 +28,21 @@ if [[ ! -f "$POSTERIOR_V8_K1_TRAINING_PLAN" ]]; then
     exit 2
 fi
 
+readonly POSTERIOR_V8_PYTHON="/data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2/bin/python"
+[[ -x "$POSTERIOR_V8_PYTHON" ]] || { echo "dedicated GISAXS Python is unavailable" >&2; exit 2; }
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1
 unset PYTHONPATH
-POSTERIOR_V8_SCRATCH_BASE="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}"
+export POSTERIOR_V8_SCRATCH_BASE="/data/dust/user/zhaiyufe"
 if [[ ! -d "$POSTERIOR_V8_SCRATCH_BASE" || -L "$POSTERIOR_V8_SCRATCH_BASE" ]]; then
     echo "worker scratch base must be a real directory" >&2
     exit 2
 fi
-case "$POSTERIOR_V8_SCRATCH_BASE" in
-    /data/dust/user/zhaiyufe|/data/dust/user/zhaiyufe/*)
-        echo "job-private staging cannot use the shared dust tree" >&2; exit 2 ;;
-esac
 POSTERIOR_V8_JOB_TMP_ROOT="$(mktemp -d "$POSTERIOR_V8_SCRATCH_BASE/gisaxs-v5-k1-collect-${SLURM_JOB_ID}-XXXXXXXX")"
 chmod 700 "$POSTERIOR_V8_JOB_TMP_ROOT"
 export POSTERIOR_V8_JOB_TMP_ROOT
 POSTERIOR_V8_WRAPPER_MINT="$POSTERIOR_V8_JOB_TMP_ROOT/.posterior-v8-wrapper-mint"
-conda run --no-capture-output -n tf python -I - "$POSTERIOR_V8_WRAPPER_MINT" <<'PY'
+"$POSTERIOR_V8_PYTHON" -I - "$POSTERIOR_V8_WRAPPER_MINT" <<'PY'
 import os
 import sys
 
@@ -72,6 +70,7 @@ POSTERIOR_V8_TRUSTED_VERIFIER="$POSTERIOR_V8_JOB_STAGING_ROOT/bootstrap/package_
 POSTERIOR_V8_JOB_SOURCE_ROOT="$POSTERIOR_V8_JOB_STAGING_ROOT/source"
 POSTERIOR_V8_RUNTIME_CACHE_ROOT="$POSTERIOR_V8_JOB_TMP_ROOT/runtime-cache"
 mkdir -m 700 "$POSTERIOR_V8_RUNTIME_CACHE_ROOT"
+export TMPDIR="$POSTERIOR_V8_RUNTIME_CACHE_ROOT"
 export XDG_CACHE_HOME="$POSTERIOR_V8_RUNTIME_CACHE_ROOT/xdg"
 export KERAS_HOME="$POSTERIOR_V8_RUNTIME_CACHE_ROOT/keras"
 export MPLCONFIGDIR="$POSTERIOR_V8_RUNTIME_CACHE_ROOT/matplotlib"
@@ -80,7 +79,7 @@ export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
-POSTERIOR_V8_FROZEN_SOURCE_BINDING="$(conda run --no-capture-output -n tf python -I - \
+POSTERIOR_V8_FROZEN_SOURCE_BINDING="$("$POSTERIOR_V8_PYTHON" -I - \
     "$POSTERIOR_V8_K1_TRAINING_PLAN" \
     "$POSTERIOR_V8_K1_TRAINING_PLAN_SHA256" \
     "$POSTERIOR_V8_SOURCE_ROOT" \
@@ -184,12 +183,10 @@ if plan["source"]["root"] != str(exported_source):
     raise ValueError("Slurm source root differs from the authenticated plan")
 lexical(Path(plan["layout"]["run_root"]), "K1 run root")
 scratch = lexical(
-    Path(os.environ.get("SLURM_TMPDIR") or os.environ.get("TMPDIR") or "/tmp"),
+    Path(os.environ["POSTERIOR_V8_SCRATCH_BASE"]),
     "worker scratch base",
-    require_dust=False,
+    require_dust=True,
 )
-if scratch.is_relative_to(DUST):
-    raise ValueError("job-private staging cannot use the shared dust tree")
 job_tmp = lexical(
     Path(os.environ["POSTERIOR_V8_JOB_TMP_ROOT"]),
     "wrapper job-private temporary root",
@@ -281,14 +278,12 @@ if [[ -n "$POSTERIOR_V8_FROZEN_EXTRA" || ! "$POSTERIOR_V8_FROZEN_ARCHIVE_SHA256"
     exit 2
 fi
 readonly POSTERIOR_V8_FROZEN_ARCHIVE_SHA256 POSTERIOR_V8_FROZEN_MANIFEST_SHA256 POSTERIOR_V8_FROZEN_SOURCE_TREE_SHA256
-conda run --no-capture-output -n tf \
-    python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
+"$POSTERIOR_V8_PYTHON" -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     extract \
     --archive "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     --source-root "$POSTERIOR_V8_JOB_SOURCE_ROOT" \
     --expected-sha256 "$POSTERIOR_V8_FROZEN_ARCHIVE_SHA256"
-conda run --no-capture-output -n tf \
-    python -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
+"$POSTERIOR_V8_PYTHON" -I "$POSTERIOR_V8_TRUSTED_VERIFIER" \
     verify-extracted \
     --archive "$POSTERIOR_V8_JOB_SOURCE_ARCHIVE" \
     --source-root "$POSTERIOR_V8_JOB_SOURCE_ROOT" \
@@ -302,8 +297,7 @@ module purge
 source /etc/profile.d/modules.sh
 module load maxwell
 
-conda run --no-capture-output -n tf \
-    python -I -c 'import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module("utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_training_chain_runtime_v5", run_name="__main__", alter_sys=True)' \
+"$POSTERIOR_V8_PYTHON" -I -c 'import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module("utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_training_chain_runtime_v5", run_name="__main__", alter_sys=True)' \
     "$POSTERIOR_V8_JOB_SOURCE_ROOT" \
     collect \
     --plan "$POSTERIOR_V8_JOB_PLAN" \

@@ -238,7 +238,7 @@ def test_model_directory_promotion_keeps_files_frozen_while_moving_entries(tmp_p
 def test_failed_model_publication_stays_in_model_parent_for_atomic_promotion(tmp_path):
     model_root = tmp_path / "models"
     model_root.mkdir()
-    target = model_root / "k1-v5-2-phase-a-v5-full-steps1500"
+    target = model_root / "k1-v5-2-phase-a-v5-full-steps18000"
     partial = model_root / f".{target.name}.partial-7006-test"
     partial.mkdir(mode=0o700)
     (partial / "result.json").write_text("{}\n", encoding="utf-8")

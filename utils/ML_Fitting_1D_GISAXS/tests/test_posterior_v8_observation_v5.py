@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from dataclasses import replace
 
 import numpy as np
@@ -23,6 +24,19 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.synthetic_recipe_v5 import (
     evaluate_v5_clean_recipe,
     sample_v5_clean_recipe,
 )
+
+
+def test_noise_algorithm_version_changes_acquisition_identity_without_changing_view(monkeypatch):
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import observation_v5 as observation
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.simulation import sample_observation_view
+
+    view = sample_observation_view(123, 0)
+    provenance = observation.sample_v5_uncertainty_provenance(123, 0)
+    current = observation.v5_acquisition_policy_id(view, provenance)
+    monkeypatch.setattr(observation, "NOISE_APPLICATION_VERSION",
+                        "posterior_v8_observation_noise_poisson_lognormal_v1")
+    historical = observation.v5_acquisition_policy_id(view, provenance)
+    assert historical != current
 
 
 def _assert_same_arrays(first, second):

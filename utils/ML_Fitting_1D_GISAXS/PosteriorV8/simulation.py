@@ -36,7 +36,9 @@ SIMULATION_VERSION = "posterior_v8_phase2_candidate_simulation_v4"
 OBSERVATION_VIEW_VERSION = "posterior_v8_multiview_observation_v1"
 OBSERVATION_STRATUM_VERSION = "posterior_v8_observation_stratum_v1"
 OBSERVATION_SEED_DERIVATION = "posterior_v8_seedsequence_clean_recipe_seed_view_index_namespace_v1"
-NOISE_APPLICATION_VERSION = "posterior_v8_observation_noise_poisson_lognormal_v1"
+NOISE_APPLICATION_VERSION = (
+    "posterior_v8_observation_noise_poisson_lognormal_overflow_safe_rss_v2"
+)
 MIN_EFFECTIVE_AMPLITUDE_FRACTION = 0.15
 HARD_CORE_SPACING_MARGIN = 1.001
 MIN_GRID_POINTS = 64
@@ -643,8 +645,12 @@ def apply_observation_noise(
         intensity *= np.exp(rng.normal(0.0, noise.relative_sigma, size=intensity.shape))
     floor = max(noise.sigma_floor_fraction * reference, np.finfo(np.float64).tiny)
     intensity = np.maximum(intensity, floor)
-    sigma = np.sqrt(
-        np.square(sigma_poisson) + np.square(noise.relative_sigma * intensity) + floor**2
+    # ``sqrt(a**2 + b**2 + c**2)`` underflows to zero for scientifically legal
+    # subnormal-scale curves (and may overflow at the opposite extreme).  The
+    # chained hypot is the same root-sum-square law with binary64 scaling.
+    sigma = np.hypot(
+        np.hypot(sigma_poisson, noise.relative_sigma * intensity),
+        floor,
     )
     intensity.setflags(write=False)
     sigma.setflags(write=False)

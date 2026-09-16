@@ -55,9 +55,9 @@ from .training_objective_v5 import (
 )
 
 
-V5_GROUPED_TRAINER_SCHEMA = "gisaxs.posterior_v8.grouped_training_run/v3"
+V5_GROUPED_TRAINER_SCHEMA = "gisaxs.posterior_v8.grouped_training_run/v4"
 V5_GROUPED_TRAINER_VERSION = (
-    "v5_2_policy_bound_operational_mass_coverage_checkpoint_inventory_v3"
+    "v5_2_policy_bound_center_aligned_mass_coverage_checkpoint_inventory_v4"
 )
 RUN_PLAN_FILE = "run_plan.json"
 HISTORY_FILE = "history.json"
@@ -468,7 +468,7 @@ def train_v5_grouped_model(
 
     if not isinstance(config, V5GroupedTrainingConfig):
         raise TypeError("config must be V5GroupedTrainingConfig")
-    if socket.gethostname().split(".", 1)[0].startswith("max-wgs"):
+    if socket.gethostname().split(".", 1)[0].startswith(("max-wgs", "max-fs-display")):
         raise RuntimeError("training is forbidden on the Maxwell login node; submit through Slurm")
     train_sources = resolved_artifact_paths(train_dataset_paths)
     validation_sources = resolved_artifact_paths(validation_dataset_paths)

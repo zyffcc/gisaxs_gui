@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
+from pathlib import Path
+import stat
 
 import pytest
 
@@ -26,7 +29,9 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_c_contract_v5 import (
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_c_plan_v5 import (
     build_v5_k1_phase_c_plan,
     planned_v5_k1_phase_c_stress_cell,
+    v5_k1_phase_c_plan_from_payload,
     validate_v5_k1_phase_c_plan,
+    write_v5_k1_phase_c_authoring_plan,
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_endpoint_metrics import (
     EXACT_FORWARD_BUDGETS,
@@ -179,3 +184,20 @@ def test_plan_identity_tamper_fails_closed():
     tampered = replace(plan, total_parent_count=plan.total_parent_count - 1)
     with pytest.raises(ValueError, match="identity does not reproduce"):
         validate_v5_k1_phase_c_plan(tampered)
+
+
+def test_phase_c_authoring_plan_is_strict_canonical_and_write_once(tmp_path: Path):
+    plan = build_v5_k1_phase_c_plan(formal=False, parents_per_branch=25)
+    target = tmp_path / "phase-c-plan.json"
+
+    write_v5_k1_phase_c_authoring_plan(target, plan)
+
+    assert stat.S_IMODE(target.stat().st_mode) == 0o400
+    assert target.stat().st_nlink == 1
+    persisted = json.loads(target.read_text(encoding="utf-8"))
+    assert v5_k1_phase_c_plan_from_payload(persisted) == plan
+    with pytest.raises(FileExistsError, match="overwrite"):
+        write_v5_k1_phase_c_authoring_plan(target, plan)
+    persisted["total_parent_count"] -= 1
+    with pytest.raises(ValueError, match="does not reproduce"):
+        v5_k1_phase_c_plan_from_payload(persisted)

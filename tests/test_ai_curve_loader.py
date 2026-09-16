@@ -85,6 +85,25 @@ def test_hybrid_score_penalizes_narrow_linear_overshoot():
     )
 
 
+@pytest.mark.parametrize("weight", [0.0, 1e-12, 0.25])
+def test_refinement_tiny_weight_starts_inside_existing_logit_bounds(weight):
+    from scipy.optimize import least_squares
+
+    params = np.array([20.0, 1.0, 0.0, 0.0, 0.0, 0.0])
+    item = {
+        "components": [component_array_to_dict(schema.TYPE_SPHERE, params, weight),
+                       component_array_to_dict(schema.TYPE_SPHERE, params, 1.0 - weight)],
+        "global_phys": np.array([1.0, 0.01, 2.0, 0.0, 1.0]),
+    }
+    x0, lower, upper, setup = candidate_refine_setup(item)
+    index = setup["weight_start"]
+    assert lower[index] == -20.0 and upper[index] == 20.0
+    assert x0[index] == max(-20.0, np.log(max(weight, 1e-12)))
+    assert np.all(x0 >= lower) and np.all(x0 <= upper)
+    result = least_squares(lambda x: x - x0, x0, bounds=(lower, upper), max_nfev=2)
+    assert np.all(np.isfinite(result.fun))
+
+
 def test_current_spacing_rule_vector_is_projected_for_legacy_checkpoint():
     model = SimpleNamespace(inputs=[SimpleNamespace(name="d_spacing_rule:0", shape=(None, 3))])
     current_batch = {"d_spacing_rule": np.array([[0.0, 1.0, 0.0, 0.0]], dtype=np.float32)}

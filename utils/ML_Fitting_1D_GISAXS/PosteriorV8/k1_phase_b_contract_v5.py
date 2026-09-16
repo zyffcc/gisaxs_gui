@@ -43,9 +43,9 @@ from .run_k1_memorization_gate_v5 import (
 from .study_protocol import protocol_payload, validate_protocol
 
 
-V5_K1_PHASE_B_SCHEMA = "gisaxs.posterior_v8.k1_single_branch_phase_b_gate/v3"
+V5_K1_PHASE_B_SCHEMA = "gisaxs.posterior_v8.k1_single_branch_phase_b_gate/v12"
 V5_K1_PHASE_B_VERSION = (
-    "posterior_v8_v5_2_launch_capability_bound_single_branch_draw32_gate_v3"
+    "posterior_v8_v5_2_closed_interval_tolerance_single_branch_draw32_gate_v12"
 )
 V5_K1_PHASE_B_ROLE = (
     "k1_single_branch_capacity_and_objective_diagnostic_not_full_k1_or_model_acceptance"
@@ -55,6 +55,17 @@ MAXWELL_DUST_ROOT = Path("/data/dust/user/zhaiyufe")
 PROPOSAL_COUNT = 32
 SINGLE_DRAW_INDEX = 1
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
+CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS = (
+    "path",
+    "sha256",
+    "byte_count",
+    "mode",
+    "inode",
+    "mtime_ns",
+    "ctime_ns",
+    "nlink",
+)
+FULL_FILE_IDENTITY_FIELDS = (*CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS, "device")
 EXPECTED_GATE_KEYS = (
     "branch_conditioned_local_mdn_single_draw_local_rms_median_lt",
     "branch_conditioned_local_mdn_best_of_32_local_rms_median_lt",
@@ -62,6 +73,26 @@ EXPECTED_GATE_KEYS = (
     "exact_post_refine_raw_log_rmse_p90_lt",
     "exact_post_refine_compatible_rate_gte",
 )
+
+
+def cross_node_stable_file_identity(value: object) -> dict[str, object] | None:
+    """Canonicalize a complete local file identity without mount-local ``st_dev``."""
+
+    if not isinstance(value, Mapping) or set(value) != set(FULL_FILE_IDENTITY_FIELDS):
+        return None
+    return {field: value[field] for field in CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS}
+
+
+def validate_cross_node_stable_file_identity(
+    value: object,
+) -> dict[str, object] | None:
+    """Accept only the exact canonical cross-node identity field set."""
+
+    if not isinstance(value, Mapping) or set(value) != set(
+        CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS
+    ):
+        return None
+    return dict(value)
 PHASE_A_MEMORIZATION_RESULT_FIELDS = frozenset(
     {
         "schema_version",
@@ -330,12 +361,15 @@ def _validate_phase_a_job_local_capability(
         }:
             raise ValueError("Phase-A capability staged input identity is invalid")
         digest(identity["sha256"], "Phase-A staged input SHA")
-        if identity["mode_octal"] != "0o400" or identity["link_count"] != 1:
+        if identity["mode_octal"] != "0400" or identity["link_count"] != 1:
             raise ValueError("Phase-A capability input was not read-only and single-link")
     rows_sha = sha256(canonical_json(rows).encode("utf-8")).hexdigest()
     if audit["pre_mint_rehash_sha256"] != rows_sha or pre != rows_sha:
         raise ValueError("Phase-A capability staged-input rehash does not reproduce")
     return payload
+PHASE_B_WORKER_RELATIVE_PATH = (
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/run_k1_phase_b_gate_v5.py"
+)
 PHASE_B_SOURCE_PATHS = (
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/launch_k1_phase_b_dag_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_b_launch_inputs_v5.py",
@@ -347,7 +381,7 @@ PHASE_B_SOURCE_PATHS = (
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_cross_platform_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_a_dataset_binding_v5.py",
-    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/run_k1_phase_b_gate_v5.py",
+    PHASE_B_WORKER_RELATIVE_PATH,
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_b_contract_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/k1_phase_b_evaluation_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/candidate_batch_v5.py",
@@ -358,6 +392,7 @@ PHASE_B_SOURCE_PATHS = (
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/profiled_refinement.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/gui_amplitude_constraints.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/clean_recipe_forward_v5.py",
+    "utils/ML_Fitting_1D_GISAXS/PosteriorV8/persisted_clean_recipe_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/observation_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/synthetic_recipe_v5.py",
     "utils/ML_Fitting_1D_GISAXS/PosteriorV8/grouped_artifact_v5.py",
@@ -430,8 +465,8 @@ class V5K1PhaseBParentRecord:
     varying_dimension_count: int
     proposal_count: int
     single_draw_index: int
-    single_draw_local_rms: float
-    best_of_32_local_rms: float
+    single_draw_local_rms: float | None
+    best_of_32_local_rms: float | None
     exact_best_raw_log_rmse: float | None
     exact_compatible: bool
     refinement_status: str
@@ -1064,10 +1099,13 @@ def execution_guard(hostname: str, environment: Mapping[str, str]) -> str:
 
 
 __all__ = [
+    "CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS",
     "EXPECTED_GATE_KEYS",
+    "FULL_FILE_IDENTITY_FIELDS",
     "MAXWELL_DUST_ROOT",
     "PHASE_A_SOURCE_PATHS",
     "PHASE_B_SOURCE_PATHS",
+    "PHASE_B_WORKER_RELATIVE_PATH",
     "PROPOSAL_COUNT",
     "SINGLE_DRAW_INDEX",
     "V5_EXACT_FORWARD_BUDGET_UNIT",
@@ -1077,6 +1115,7 @@ __all__ = [
     "V5_K1_PHASE_B_VERSION",
     "V5K1PhaseBGateConfig",
     "V5K1PhaseBParentRecord",
+    "cross_node_stable_file_identity",
     "dataset_identity",
     "digest",
     "execution_guard",
@@ -1086,6 +1125,7 @@ __all__ = [
     "source_identity",
     "strict_json_object",
     "under_root",
+    "validate_cross_node_stable_file_identity",
     "validate_v5_k1_phase_a_bindings",
     "verify_recorded_dataset_sources",
 ]

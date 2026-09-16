@@ -140,3 +140,15 @@ objectName、signal connection、快捷键和错误提示保持不变。`WaxsVie
 - [ ] Batch Start/Pause/Resume/Stop、continue/error behavior 和 JobStatus 正常；
 - [ ] 单个坏文件不会导致 GUI 进程退出；
 - [ ] calibration 写入的 geometry 在 WAXS 页面继续正确同步。
+
+## Interactive detector inspection
+
+The detector toolbar's **Interactive** action opens the shared pixel viewer. Wheel zoom and drag pan
+stay local to this window. **ROI** exposes a movable rectangle; **Apply ROI** uses the existing WAXS
+Q-range selection workflow. Center and cut outlines track the workspace. Log intensity and histogram
+limits update the workspace display controls; right-click gradient presets are inspection-only and
+exports keep the workspace colormap. Cursor intensity uses full-resolution, unlogged source values.
+
+For multi-frame NXS input, **Play/Pause** requests frames through the existing loader without queuing
+multiple reads. Closing the window or leaving the pixel detector view stops playback. Q-space remains
+available in the main detector view; switching to q-space hides stale data in the interactive window.

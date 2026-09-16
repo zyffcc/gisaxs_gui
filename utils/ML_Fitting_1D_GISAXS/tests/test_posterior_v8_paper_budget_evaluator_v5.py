@@ -239,6 +239,202 @@ def _record(traces=None):
     )
 
 
+def test_representative_history_sealed_file_round_trip_and_rejection(tmp_path):
+    import os
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import (
+        V5RepresentativeHistory, V5RepresentativeSnapshot,
+    )
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_store_v5 import (
+        publish_v5_representative_history, read_v5_representative_history,
+    )
+    history = V5RepresentativeHistory(trace=_trace("neural"), snapshots=(
+        V5RepresentativeSnapshot(available_after_call=2, elapsed_seconds=0.2,
+                                 representative_ids=("candidate-02",)),
+    ))
+    path = tmp_path / "history.json"
+    digest = publish_v5_representative_history(path, history)
+    kwargs = dict(trace=history.trace, expected_file_sha256=digest,
+                  expected_history_sha256=history.sha256)
+    restored = read_v5_representative_history(path, **kwargs)
+    assert restored.to_payload() == history.to_payload()
+    assert path.stat().st_mode & 0o777 == 0o400
+    assert path.stat().st_nlink == 1
+    original = path.read_bytes()
+    with pytest.raises(FileExistsError):
+        publish_v5_representative_history(path, history)
+    assert path.read_bytes() == original
+    for field in ("expected_file_sha256", "expected_history_sha256"):
+        with pytest.raises(ValueError, match="SHA-256 differs"):
+            read_v5_representative_history(path, **{**kwargs, field: "0" * 64})
+    link = tmp_path / "symlink.json"
+    link.symlink_to(path)
+    with pytest.raises(ValueError, match="symlink"):
+        read_v5_representative_history(link, **kwargs)
+    os.link(path, tmp_path / "hardlink.json")
+    with pytest.raises(ValueError, match="one hard link"):
+        read_v5_representative_history(path, **kwargs)
+    provisional = replace(history, trace=replace(history.trace, trace_artifact_sha256="0" * 64))
+    with pytest.raises(ValueError, match="provisional"):
+        publish_v5_representative_history(tmp_path / "unsealed.json", provisional)
+    assert not (tmp_path / "unsealed.json").exists()
+
+
+@pytest.mark.parametrize("encoding", ["whitespace", "duplicate", "mode", "other_trace"])
+def test_representative_history_store_rejects_noncanonical_or_unbound_file(tmp_path, encoding):
+    import json
+    from hashlib import sha256
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.grouped_artifact_v5 import canonical_json
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import (
+        V5RepresentativeHistory, V5RepresentativeSnapshot,
+    )
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_store_v5 import (
+        read_v5_representative_history,
+    )
+    history = V5RepresentativeHistory(trace=_trace("neural"), snapshots=(
+        V5RepresentativeSnapshot(available_after_call=2, elapsed_seconds=0.2,
+                                 representative_ids=("candidate-02",)),
+    ))
+    text = canonical_json(history.to_payload())
+    if encoding == "whitespace":
+        text += "\n"
+    if encoding == "duplicate":
+        text = '{"query_id":' + json.dumps(history.trace.query_id) + ',' + text[1:]
+    raw = text.encode()
+    path = tmp_path / "history.json"
+    path.write_bytes(raw)
+    path.chmod(0o444 if encoding == "mode" else 0o400)
+    trace = history.trace
+    if encoding == "other_trace":
+        trace = replace(trace, trace_artifact_sha256="f" * 64)
+    with pytest.raises(ValueError):
+        read_v5_representative_history(
+            path, trace=trace, expected_file_sha256=sha256(raw).hexdigest(),
+            expected_history_sha256=history.sha256,
+        )
+
+
+def test_representative_history_json_replay_binds_trace_and_exact_fields():
+    import json
+    from hashlib import sha256
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.grouped_artifact_v5 import canonical_json
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import (
+        V5RepresentativeHistory, V5RepresentativeSnapshot,
+    )
+    trace = _trace("neural")
+    history = V5RepresentativeHistory(trace=trace, snapshots=(
+        V5RepresentativeSnapshot(available_after_call=2, elapsed_seconds=0.2,
+                                 representative_ids=("candidate-02",)),
+    ))
+    payload = json.loads(json.dumps(history.to_payload()))
+    assert V5RepresentativeHistory.from_payload(payload, trace=trace) == history
+    assert payload["history_sha256"] == history.sha256
+    for key in ("query_id", "trace_ledger_sha256", "trace_artifact_sha256",
+                "pairing_unit_id", "method_protocol_sha256", "reference_set_sha256",
+                "comparison_protocol_sha256", "schema", "method_id"):
+        changed = dict(payload)
+        changed[key] = "changed"
+        changed.pop("history_sha256")
+        changed["history_sha256"] = sha256(canonical_json(changed).encode()).hexdigest()
+        with pytest.raises(ValueError, match="binding differs"):
+            V5RepresentativeHistory.from_payload(changed, trace=trace)
+    for changed in ({**payload, "extra": 1}, {**payload, "history_sha256": "bad"}):
+        with pytest.raises(ValueError, match="binding differs"):
+            V5RepresentativeHistory.from_payload(changed, trace=trace)
+    payload["snapshots"][0]["extra"] = 1
+    with pytest.raises(ValueError, match="snapshot fields"):
+        V5RepresentativeHistory.from_payload(payload, trace=trace)
+
+
+def test_representative_history_replaces_rather_than_accumulates_visible_modes():
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import (
+        V5RepresentativeHistory, V5RepresentativeSnapshot,
+    )
+    first = V5RepresentativeSnapshot(available_after_call=2, elapsed_seconds=0.2,
+                                     representative_ids=("candidate-02",))
+    later = V5RepresentativeSnapshot(available_after_call=5, elapsed_seconds=0.5,
+                                     representative_ids=("candidate-05", "candidate-04"))
+    history = V5RepresentativeHistory(trace=_trace("neural"), snapshots=(first, later))
+    assert history.representatives_at(1, 16) == ()
+    assert [r.candidate_id for r in history.representatives_at(4, 16)] == ["candidate-02"]
+    assert [r.candidate_id for r in history.representatives_at(8, 1)] == ["candidate-05"]
+    assert [r.candidate_id for r in history.representatives_at(8, 16)] == ["candidate-05", "candidate-04"]
+    withdrawn = replace(history, snapshots=(first, replace(later, representative_ids=())))
+    assert withdrawn.representatives_at(8, 16) == ()
+    assert history.sha256 != withdrawn.sha256
+    assert not isinstance(history, V5MethodExactCallTrace)
+
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import (
+        evaluate_v5_representative_history,
+    )
+    evaluated = evaluate_v5_representative_history(
+        _references(), history, config=_config(), equivalence_distance_matcher=_matcher,
+    )
+    assert evaluated.history_sha256 == history.sha256
+    assert evaluated.method_result.selected_candidate_ids_matrix[-1] == (
+        ("candidate-02",), ("candidate-02",), ("candidate-05", "candidate-04"),
+    )
+    assert evaluated.method_result.hit_count_matrix[-1] == (1, 1, 2)
+    empty = evaluate_v5_representative_history(
+        _references(), withdrawn, config=_config(), equivalence_distance_matcher=_matcher,
+    )
+    assert empty.method_result.hit_count_matrix[-1] == (1, 1, 0)
+    assert evaluated.sha256 != empty.sha256
+    with pytest.raises(ValueError, match="binding"):
+        evaluate_v5_representative_history(
+            _references(query_id="another-query"), history,
+            config=_config(), equivalence_distance_matcher=_matcher,
+        )
+
+
+@pytest.mark.parametrize("index,elapsed,ids,message", [
+    (2, 0.2, ("candidate-04",), "future"),
+    (2, 0.2, ("missing",), "unknown"),
+    (2, 0.2, ("candidate-01",), "incompatible"),
+    (2, 0.31, ("candidate-02",), "next exact call"),
+    (9, 0.9, (), "within budget"),
+])
+def test_representative_history_rejects_unavailable_or_invalid_snapshots(index, elapsed, ids, message):
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import (
+        V5RepresentativeHistory, V5RepresentativeSnapshot,
+    )
+    row = V5RepresentativeSnapshot(available_after_call=index, elapsed_seconds=elapsed,
+                                   representative_ids=ids)
+    with pytest.raises(ValueError, match=message):
+        V5RepresentativeHistory(trace=_trace("neural"), snapshots=(row,))
+
+
+def test_snapshot_metrics_never_match_hidden_inventory_or_backdate_visibility():
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8.paper_representative_history_v5 import (
+        V5RepresentativeHistory, V5RepresentativeSnapshot, evaluate_v5_representative_history,
+    )
+    history = V5RepresentativeHistory(trace=_trace("neural"), snapshots=(
+        V5RepresentativeSnapshot(available_after_call=4, elapsed_seconds=0.45,
+                                 representative_ids=("candidate-02",)),
+    ))
+    matched_ids = []
+
+    def only_visible(reference, candidate):
+        assert candidate.representative_id == "candidate-02"
+        matched_ids.append(candidate.representative_id)
+        return _matcher(reference, candidate)
+
+    result = evaluate_v5_representative_history(
+        _references(), history, config=_config(), equivalence_distance_matcher=only_visible,
+    ).method_result
+    assert matched_ids
+    assert result.first_compatible_exact_call == 4
+    assert result.time_to_first_compatible_seconds == 0.45
+    assert result.hit_count_matrix[-1] == (0, 1, 1)
+    assert result.selected_candidate_ids_matrix[-1][0] == ()
+    with pytest.raises(ValueError, match="exceeds"):
+        history.representatives_at(9, 1)
+    changed = replace(history, trace=replace(history.trace, pairing_unit_id="another-parent"))
+    assert changed.sha256 != history.sha256
+    with pytest.raises(TypeError, match="not text"):
+        V5RepresentativeSnapshot(available_after_call=1, elapsed_seconds=0.1,
+                                 representative_ids="candidate-02")
+
+
 def test_defaults_reproduce_preregistered_n_by_budget_grid() -> None:
     config = V5PaperBudgetEvaluationConfig(
         comparison_protocol_id="paper",

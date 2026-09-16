@@ -22,7 +22,10 @@ from ..detector_render_lod import (
 )
 
 
-class SelectionPreviewMixin:
+from .interactive_detector import InteractiveDetectorMixin
+
+
+class SelectionPreviewMixin(InteractiveDetectorMixin):
     """Own selection preview behavior."""
 
     def _try_update_cached_preview(self, image_data, selection_info=None):
@@ -64,7 +67,6 @@ class SelectionPreviewMixin:
                 or self._canvas_cache is None
                 or self._preview_ax is None
                 or self._preview_image_artist is None
-                or shape_changed
             )
             horizontal_q_axis = self._horizontal_q_axis()
             q_mesh_cache_key = self._q_mesh_cache_key if show_q_axis else None
@@ -145,10 +147,12 @@ class SelectionPreviewMixin:
                 self._preview_image_artist.set_cmap(self._image_colormap)
 
             self._draw_preview_selection(ax, selection_info)
+            self._sync_interactive_detector(preview_data, np.flipud(image_data), extent,
+                                            vmin, vmax, show_q_axis, selection_info)
             render_start = time.perf_counter()
-            self._canvas_cache.draw()
+            self._canvas_cache.draw_idle()
             print(
-                f"[Timing] Matplotlib rendering: {(time.perf_counter() - render_start) * 1000:.2f} ms (Detector Preview)"
+                f"[Timing] Matplotlib redraw queued: {(time.perf_counter() - render_start) * 1000:.2f} ms (Detector Preview)"
             )
             if self._preview_proxy_widget is not None:
                 self._fit_view_to_item(graphics_view, self._preview_proxy_widget, keep_aspect=True)
@@ -157,7 +161,7 @@ class SelectionPreviewMixin:
             self._preview_horizontal_q_axis = horizontal_q_axis
             self._preview_q_mesh_cache_key = q_mesh_cache_key
             self._preview_render_step = preview_step
-            print(f"[Timing] preview rendering: {(time.perf_counter() - t_total) * 1000:.2f} ms")
+            print(f"[Timing] preview update (paint deferred): {(time.perf_counter() - t_total) * 1000:.2f} ms")
             return True
         except Exception as e:
             self.status_updated.emit(f"Preview cache update failed: {str(e)}")

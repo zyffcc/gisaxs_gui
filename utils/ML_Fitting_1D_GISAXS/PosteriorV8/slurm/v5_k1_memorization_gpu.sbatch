@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --partition=allgpu
 #SBATCH --account=hasylab
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --nodes=1
-#SBATCH --constraint=GPUx1
+#SBATCH --constraint=GPUx1&H200
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --output=/data/dust/user/zhaiyufe/MaxwellRuns/GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2/logs/k1-phase-a-v5-gate-%j.out

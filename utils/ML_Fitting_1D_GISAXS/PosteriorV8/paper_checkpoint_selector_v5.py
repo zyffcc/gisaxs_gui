@@ -32,23 +32,23 @@ from .paper_endpoint_metrics import (
     PRIMARY_OUTPUT_CAP,
     normalized_log2_budget_auc,
 )
-V5_PAPER_CHECKPOINT_SELECTOR_SCHEMA = "gisaxs.posterior_v8.paper_checkpoint_selector/v2"
+V5_PAPER_CHECKPOINT_SELECTOR_SCHEMA = "gisaxs.posterior_v8.paper_checkpoint_selector/v3"
 V5_PAPER_CHECKPOINT_SELECTOR_VERSION = (
-    "external_tuning_context_payload_seed_bound_budget_auc_ttfc_selection_v2"
+    "external_tuning_explicit_snapshot_policy_budget_auc_ttfc_selection_v3"
 )
 V5_PAPER_CHECKPOINT_SELECTION_RULE_ID = (
     "recipe_macro_n16_auc_exact_ttfc_wall_ttfc_epoch_artifact_sha/v1"
 )
 V5_TUNING_CHECKPOINT_SUMMARY_SCHEMA = (
-    "gisaxs.posterior_v8.tuning_checkpoint_budget_summary/v2"
+    "gisaxs.posterior_v8.tuning_checkpoint_budget_summary/v3"
 )
 V5_TUNING_CHECKPOINT_SUMMARY_VERSION = (
-    "complete_exact_trace_same_cohort_method_seed_budget_v2"
+    "complete_exact_trace_same_cohort_method_seed_budget_snapshot_binding_v3"
 )
 V5_CHECKPOINT_EVALUATION_METHOD_BINDING_SCHEMA = (
-    "gisaxs.posterior_v8.checkpoint_evaluation_method_binding/v2"
+    "gisaxs.posterior_v8.checkpoint_evaluation_method_binding/v3"
 )
-V5_CHECKPOINT_BOUND_METHOD_PROTOCOL_ID = "v5.2-checkpoint-evaluation-method-binding/v2"
+V5_CHECKPOINT_BOUND_METHOD_PROTOCOL_ID = "v5.2-checkpoint-evaluation-method-binding/v3"
 V5_TUNING_QUERY_COHORT_SCHEMA = "gisaxs.posterior_v8.tuning_query_cohort/v2"
 V5_TUNING_QUERY_COHORT_VERSION = (
     "query_context_and_reference_payload_set_bound_tuning_cohort_v2"
@@ -155,10 +155,14 @@ def build_v5_checkpoint_evaluation_method_binding(
     base_method_protocol_id: str,
     base_method_protocol_sha256: str,
     inference_seed: int,
+    representative_selection_policy: str = "append_only",
 ) -> dict[str, object]:
     """Bind a trace protocol to one exact checkpoint and its frozen base method."""
 
+    if representative_selection_policy not in ("append_only", "budget_snapshot"):
+        raise ValueError("unknown representative selection policy")
     core = {
+        "representative_selection_policy": representative_selection_policy,
         "schema": V5_CHECKPOINT_EVALUATION_METHOD_BINDING_SCHEMA,
         "bound_method_protocol_id": V5_CHECKPOINT_BOUND_METHOD_PROTOCOL_ID,
         "checkpoint_epoch": _positive_integer(checkpoint_epoch, "checkpoint_epoch"),
@@ -306,7 +310,7 @@ def _validate_result(
                 raise ValueError("hit count exceeds the reference/output-cap limit")
             if observed != int(hit) / reference_count:
                 raise ValueError("recall matrix is inconsistent with hit counts")
-            if observed < prior:
+            if observed < prior and result.representative_selection_policy == "append_only":
                 raise ValueError("recall must be non-decreasing with exact-forward budget")
             prior = observed
     aucs = tuple(result.auc_by_output_cap)
@@ -335,11 +339,16 @@ def _validate_result(
     compatible_count = dict(counts)[V5_EXACT_COMPATIBLE]
     if any(hit > compatible_count for row in result.hit_count_matrix for hit in row):
         raise ValueError("hit count exceeds the number of exact-compatible emissions")
-    if (result.first_compatible_exact_call is None) != (compatible_count == 0):
-        raise ValueError("first-compatible call is inconsistent with compatibility counts")
-    if (result.time_to_first_compatible_seconds is None) != (compatible_count == 0):
-        raise ValueError("first-compatible time is inconsistent with compatibility counts")
-    if compatible_count:
+    if result.representative_selection_policy == "append_only":
+        if (result.first_compatible_exact_call is None) != (compatible_count == 0):
+            raise ValueError("first-compatible call is inconsistent with compatibility counts")
+        if (result.time_to_first_compatible_seconds is None) != (compatible_count == 0):
+            raise ValueError("first-compatible time is inconsistent with compatibility counts")
+    if (result.first_compatible_exact_call is None) != (result.time_to_first_compatible_seconds is None):
+        raise ValueError("first-compatible call/time availability differs")
+    if result.first_compatible_exact_call is not None:
+        if not compatible_count:
+            raise ValueError("visible compatible output requires an exact-compatible emission")
         call = _positive_integer(
             result.first_compatible_exact_call, "first_compatible_exact_call"
         )
@@ -366,6 +375,7 @@ class V5TuningCheckpointEvaluation:
     query_cohort: V5TuningQueryCohort
     paired_query_records: tuple[V5PairedPaperBudgetQueryRecord, ...]
     trace_completions: tuple[V5CompletedTuningTrace, ...]
+    representative_selection_policy: str = "append_only"
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -393,6 +403,7 @@ class V5TuningCheckpointEvaluation:
         if not isinstance(self.query_cohort, V5TuningQueryCohort):
             raise TypeError("query_cohort must be a V5TuningQueryCohort")
         method_binding = build_v5_checkpoint_evaluation_method_binding(
+            representative_selection_policy=self.representative_selection_policy,
             checkpoint_epoch=self.checkpoint_epoch,
             checkpoint_artifact_sha256=self.checkpoint_artifact_sha256,
             checkpoint_weights_sha256=self.checkpoint_weights_sha256,
@@ -457,6 +468,8 @@ class V5TuningCheckpointEvaluation:
                 raise ValueError("each tuning record must contain one unique selected method")
             result = methods[0]
             _validate_result(result, record)
+            if result.representative_selection_policy != self.representative_selection_policy:
+                raise ValueError("query escaped the frozen representative selection policy")
             if (
                 result.method_protocol_id,
                 result.method_protocol_sha256,
@@ -520,7 +533,9 @@ class V5TuningCheckpointEvaluation:
             "base_method_protocol_id": self.base_method_protocol_id,
             "base_method_protocol_sha256": self.base_method_protocol_sha256,
             "inference_seed": self.inference_seed,
+            "representative_selection_policy": self.representative_selection_policy,
             "checkpoint_evaluation_method_binding": build_v5_checkpoint_evaluation_method_binding(
+                representative_selection_policy=self.representative_selection_policy,
                 checkpoint_epoch=self.checkpoint_epoch,
                 checkpoint_artifact_sha256=self.checkpoint_artifact_sha256,
                 checkpoint_weights_sha256=self.checkpoint_weights_sha256,
@@ -825,6 +840,7 @@ def select_v5_paper_checkpoint(
             value.base_method_protocol_id,
             value.base_method_protocol_sha256,
             value.inference_seed,
+            value.representative_selection_policy,
             tuple(
                 (
                     record.evaluator_config_sha256,

@@ -115,7 +115,7 @@ def v5_sobol_ood_materialization_contract() -> dict[str, object]:
     }
 
 
-def _physics_payload(physics: V5DirectPhysics) -> dict[str, object]:
+def v5_sobol_physics_payload(physics: V5DirectPhysics) -> dict[str, object]:
     resolution_present = physics.amplitude.resolution_present
     return {
         "direct_physics_version": physics.version,
@@ -188,7 +188,7 @@ def _recipe_payload(
             "unit_coordinates": list(unit_coordinates),
             "inactive_coordinate_names": list(physics.inactive_coordinate_names),
         },
-        "physics": _physics_payload(physics),
+        "physics": v5_sobol_physics_payload(physics),
         "grid": asdict(grid),
     }
 
@@ -345,4 +345,5 @@ __all__ = [
     "evaluate_v5_sobol_clean_recipe",
     "materialize_v5_sobol_clean_recipe",
     "v5_sobol_ood_materialization_contract",
+    "v5_sobol_physics_payload",
 ]

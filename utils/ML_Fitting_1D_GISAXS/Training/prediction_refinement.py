@@ -322,7 +322,9 @@ def candidate_refine_setup(item, cons=None, d_hard_core_margin=D_HARD_CORE_MARGI
     weight_start = len(x0)
     if len(components) > 1:
         for comp in components:
-            x0.append(float(np.log(max(float(comp.get("weight", 0.0)), 1e-12))))
+            # Near-zero mixture weights must start inside the existing logit
+            # bounds, just as the geometry and global initial coordinates do.
+            x0.append(float(np.clip(np.log(max(float(comp.get("weight", 0.0)), 1e-12)), -20.0, 20.0)))
             lower.append(-20.0)
             upper.append(20.0)
 

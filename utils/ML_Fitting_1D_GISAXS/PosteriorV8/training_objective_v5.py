@@ -29,10 +29,11 @@ from .proposal_execution_policy_v5 import (
 from .training_objective_v2 import normalized_masked_logistic_normal_nll
 
 
-CANDIDATE_TRAINING_OBJECTIVE_V5_SCHEMA = "gisaxs.posterior_v8.candidate_training_objective/v7"
+CANDIDATE_TRAINING_OBJECTIVE_V5_SCHEMA = "gisaxs.posterior_v8.candidate_training_objective/v8"
 CANDIDATE_TRAINING_OBJECTIVE_V5_VERSION = (
-    "posterior_v8_recipe_pairwise_yield_local_mdn_mass_coverage_soft_rank_top4_v5"
+    "posterior_v8_recipe_pairwise_yield_local_mdn_center_aligned_mass_coverage_soft_rank_top4_v6"
 )
+DEFAULT_LOCAL_COVERAGE_WEIGHT = 100.0
 MISSING_CLASS_SEMANTICS = (
     "head_with_zero_eligible_examples_contributes_exact_zero_and_reports_zero_counts_v1"
 )
@@ -71,7 +72,7 @@ class V5CandidateObjectiveConfig:
     search_yield_weight: float = 1.0
     pairwise_ranking_weight: float = 1.0
     local_mdn_weight: float = 1.0
-    local_coverage_weight: float = 1.0
+    local_coverage_weight: float = DEFAULT_LOCAL_COVERAGE_WEIGHT
     operational_top_l_alignment_weight: float = 1.0
     logistic_epsilon: float = 1.0e-5
     local_coverage_temperature: float = 0.05
@@ -970,6 +971,7 @@ def compute_v5_candidate_training_objective(
 __all__ = [
     "CANDIDATE_TRAINING_OBJECTIVE_V5_SCHEMA",
     "CANDIDATE_TRAINING_OBJECTIVE_V5_VERSION",
+    "DEFAULT_LOCAL_COVERAGE_WEIGHT",
     "LOCAL_HARD_COVERAGE_BASELINE_SEMANTICS",
     "LOCAL_COVERAGE_RMS_STABILITY_EPSILON",
     "LOCAL_COVERAGE_SEMANTICS",

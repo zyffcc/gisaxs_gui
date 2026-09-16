@@ -324,6 +324,15 @@ def test_gate_dry_run_binds_v52_dataset_source_and_pending_complete_criteria(
         "mixture_components": 1,
     }
     assert result["resolved_gate_config"]["steps"] == 2
+    assert result["resolved_gate_config"]["local_mdn_weight"] == 1.0
+    assert result["resolved_gate_config"]["local_coverage_weight"] == 100.0
+    assert (
+        result["resolved_gate_config"]["operational_top_l_alignment_weight"]
+        == 1.0
+    )
+    assert result["resolved_gate_config"]["learning_rate"] == 3.0e-3
+    assert result["resolved_gate_config"]["final_learning_rate"] == 3.0e-5
+    assert result["resolved_gate_config"]["learning_rate_schedule"] == "cosine_decay"
     assert result["dataset"]["dataset_file_sha256"] == builder_result["dataset"]["artifact_sha256"]
     assert len(result["source"]["bundle_sha256"]) == 64
     assert result["training_evidence"]["source_snapshot"] == _SOURCE

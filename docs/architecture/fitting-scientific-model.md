@@ -187,6 +187,8 @@ AI full-profile 的 least-squares 使用数值 Jacobian；一次 scipy function 
 `n_variables + 1` 次 residual call。stall patience 按估算 function evaluations 计数，而不是按底层
 residual calls 计数，并在相同 optimization q grid 上比较初始值和后续最佳值，避免高维问题只做一两
 次有效迭代就被误判停滞。最终候选仍在完整 q grid 上重新计分，只有 score 不变差时才接受精修结果。
+混合权重的初始 logit 与几何初始坐标一样，先夹到既有优化 bounds；极小或零权重不应导致
+`x0 is infeasible` 而完全跳过 fitting。此初始化修复不扩大权重 logit 的 `[-20, 20]` 搜索范围。
 
 ## Global Search 与 Local Refine
 
@@ -234,6 +236,31 @@ Components 与 Global 数值控件至少保留 12 位小数，足以表达接近
 得到的多解参数解释为结构真值。这个基准不改变 scattering 公式或参数语义。
 
 ## 修改门禁
+
+### 可选贡献平衡训练课程
+
+数据生成的 `--contribution_balanced` 显式启用 `q-window-rms-v1`：在当前 q 窗口按
+每个单位权重组分的 RMS 强度反比修正原 Dirichlet 权重，再归一化。几何、正演公式和
+K 分布不变；改变的是新训练数据的幅度采样分布。默认仍为原 Dirichlet，metadata 记录
+`component_weighting`；旧文件不改。此课程降低不同形状绝对强度尺度造成的组分淹没，
+但不保证每个组分可识别，更不保证结构唯一；不得把课程集成绩当成弱组分或真实数据成绩。
+回归见 `test_contribution_weights.py`。
+
+### 训练正演的参数版本
+
+训练启动必须读取 metadata 的 `dataset_profile`，缺失或不支持的版本拒绝启动。
+`legacy_v3` 的可微正演使用绝对 Sphere/Cylinder/structure 分布宽度、绝对全局幅度
+及上述 Vertical Cylinder 的 `1e-6 R⁴/4` 振幅平方因子；不能使用 V5 的比例参数解释。
+`universal_v5` 保持既有相对宽度和 nuisance 定义。此修复只对齐训练目标，不改变 GUI 正演
+或旧数据。真值标签的硬/软候选正演和有限梯度回归见 `test_training_legacy_forward.py`。
+
+### 新合成训练数据的计数噪声
+
+`TrainSetBuild.noise` 的 `poisson-unclipped-high-count-v2` 不再把期望计数
+截到 `1e9`，以避免高动态范围曲线的峰被系统性削平。计数不超过 `1e9` 时保持
+原 Poisson 抽样；更高计数采用均值为期望计数、标准差为其平方根的高计数正态近似。
+非有限期望计数明确拒绝。新数据 metadata 记录噪声版本；旧数据不修改、不重新解释。
+此修复改变合成观测噪声，不改变正演公式。回归见 `test_trainset_noise.py`。
 
 任何影响本文内容的修改必须同时满足：
 

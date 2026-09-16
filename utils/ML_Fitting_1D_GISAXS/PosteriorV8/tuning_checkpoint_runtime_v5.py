@@ -19,6 +19,7 @@ import re
 from typing import Callable, Mapping, Sequence
 
 from .grouped_artifact_v5 import canonical_json
+from .k1_staging_files_v5 import read_only_bytes_identity
 from .paper_budget_evaluator_v5 import (
     EquivalenceDistanceMatcher,
     V5CandidateEmission,
@@ -27,6 +28,10 @@ from .paper_budget_evaluator_v5 import (
     V5MethodExactCallTrace,
     V5PaperBudgetEvaluationConfig,
     evaluate_v5_paired_paper_budget_query,
+    _paired_record_from_results,
+)
+from .paper_representative_history_v5 import (
+    V5RepresentativeHistory, V5RepresentativeSnapshot, evaluate_v5_representative_history,
 )
 from .paper_checkpoint_selector_v5 import (
     V5CompletedTuningTrace,
@@ -48,10 +53,10 @@ from .tuning_trace_artifact_v5 import (
 
 
 V5_TUNING_CHECKPOINT_RUNTIME_SCHEMA = (
-    "gisaxs.posterior_v8.tuning_checkpoint_exact_budget_runtime/v1"
+    "gisaxs.posterior_v8.tuning_checkpoint_exact_budget_runtime/v2"
 )
 V5_TUNING_CHECKPOINT_RUNTIME_VERSION = (
-    "all_retained_epochs_complete_trace_and_lossless_typed_emissions_v2"
+    "all_retained_epochs_complete_trace_explicit_representative_history_v3"
 )
 V5_TUNING_CHECKPOINT_RUNTIME_COMPLETE = (
     "all_retained_full_epochs_exact_budget_evaluated"
@@ -114,6 +119,12 @@ def _checked_regular_file(path: Path, expected_sha256: str, name: str) -> Path:
     return path.resolve(strict=True)
 
 
+def _checked_sealed_file(path: Path, expected_sha256: str, name: str) -> None:
+    _, identity = read_only_bytes_identity(path, name)
+    if identity["mode_octal"] != "0400" or identity["sha256"] != expected_sha256:
+        raise RuntimeError(f"{name} is not the expected sealed artifact")
+
+
 @dataclass(frozen=True, eq=False, kw_only=True)
 class V5RetainedFullCheckpoint:
     full_epoch: int
@@ -156,6 +167,7 @@ class V5TuningExactTraceRunResult:
     exact_forward_calls: tuple[V5ExactForwardCall, ...]
     candidate_emissions: tuple[V5CandidateEmission, ...]
     completion_elapsed_seconds: float
+    representative_snapshots: tuple[V5RepresentativeSnapshot, ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "trace_id", _text(self.trace_id, "trace_id"))
@@ -184,6 +196,11 @@ class V5TuningExactTraceRunResult:
             raise TypeError("candidate_emissions contain an invalid value")
         object.__setattr__(self, "exact_forward_calls", calls)
         object.__setattr__(self, "candidate_emissions", emissions)
+        if self.representative_snapshots is not None:
+            snapshots = tuple(self.representative_snapshots)
+            if not snapshots or any(type(row) is not V5RepresentativeSnapshot for row in snapshots):
+                raise ValueError("snapshot runner requires explicit typed representative snapshots")
+            object.__setattr__(self, "representative_snapshots", snapshots)
         object.__setattr__(
             self,
             "completion_elapsed_seconds",
@@ -268,9 +285,12 @@ def evaluate_v5_retained_checkpoints_on_tuning(
     source_summary_artifact_sha256: str,
     output_root: str | os.PathLike[str],
     pre_publish_guard: Callable[[], str],
+    representative_selection_policy: str = "append_only",
 ) -> V5TuningCheckpointRuntimeResult:
     """Evaluate the complete retained full-epoch inventory on one tuning cohort."""
 
+    if representative_selection_policy not in ("append_only", "budget_snapshot"):
+        raise ValueError("unknown representative selection policy")
     values = tuple(checkpoints)
     if not values or not all(isinstance(value, V5RetainedFullCheckpoint) for value in values):
         raise ValueError("checkpoints must contain retained full checkpoints")
@@ -331,6 +351,7 @@ def evaluate_v5_retained_checkpoints_on_tuning(
             "checkpoint artifact",
         )
         binding = build_v5_checkpoint_evaluation_method_binding(
+            representative_selection_policy=representative_selection_policy,
             checkpoint_epoch=checkpoint.full_epoch,
             checkpoint_artifact_sha256=checkpoint.checkpoint_artifact_sha256,
             checkpoint_weights_sha256=checkpoint.checkpoint_weights_sha256,
@@ -354,6 +375,8 @@ def evaluate_v5_retained_checkpoints_on_tuning(
             )
             if not isinstance(result, V5TuningExactTraceRunResult):
                 raise TypeError("trace_runner must return V5TuningExactTraceRunResult")
+            if (result.representative_snapshots is not None) != (representative_selection_policy == "budget_snapshot"):
+                raise ValueError("runner escaped frozen representative selection policy")
             after = _file_sha256(checkpoint.checkpoint_path)
             if before != checkpoint.checkpoint_artifact_sha256 or after != before:
                 raise RuntimeError("checkpoint changed while its exact trace was running")
@@ -388,6 +411,10 @@ def evaluate_v5_retained_checkpoints_on_tuning(
                 candidate_emissions=result.candidate_emissions,
             )
             last_elapsed = provisional.exact_forward_calls[-1].elapsed_seconds
+            if result.representative_snapshots is not None:
+                history = V5RepresentativeHistory(trace=provisional, snapshots=result.representative_snapshots)
+                if history.snapshots[-1].elapsed_seconds > result.completion_elapsed_seconds:
+                    raise ValueError("trace completion precedes its final representative snapshot")
             if result.completion_elapsed_seconds < last_elapsed:
                 raise ValueError("trace completion time precedes its final exact call")
             lossless = publish_v5_tuning_lossless_emissions(
@@ -437,6 +464,7 @@ def evaluate_v5_retained_checkpoints_on_tuning(
                 ledger_sha256=provisional.ledger_sha256,
                 lossless_emissions=lossless,
                 completion_elapsed_seconds=result.completion_elapsed_seconds,
+                representative_snapshots=result.representative_snapshots,
             )
             trace_path = trace_root / (
                 f"epoch-{checkpoint.full_epoch:06d}-"
@@ -459,12 +487,18 @@ def evaluate_v5_retained_checkpoints_on_tuning(
                 provisional,
                 trace_artifact_sha256=trace_sha,
             )
-            record = evaluate_v5_paired_paper_budget_query(
-                reference,
-                (trace,),
-                config=config,
-                equivalence_distance_matcher=equivalence_distance_matcher,
-            )
+            if result.representative_snapshots is None:
+                record = evaluate_v5_paired_paper_budget_query(
+                    reference, (trace,), config=config,
+                    equivalence_distance_matcher=equivalence_distance_matcher,
+                )
+            else:
+                history = V5RepresentativeHistory(trace=trace, snapshots=result.representative_snapshots)
+                snapshot_result = evaluate_v5_representative_history(
+                    reference, history, config=config,
+                    equivalence_distance_matcher=equivalence_distance_matcher,
+                )
+                record = _paired_record_from_results(reference, config, (snapshot_result.method_result,))
             records.append(record)
             completions.append(
                 V5CompletedTuningTrace(
@@ -475,6 +509,7 @@ def evaluate_v5_retained_checkpoints_on_tuning(
                 )
             )
         evaluation = V5TuningCheckpointEvaluation(
+            representative_selection_policy=representative_selection_policy,
             checkpoint_epoch=checkpoint.full_epoch,
             checkpoint_artifact_sha256=checkpoint.checkpoint_artifact_sha256,
             checkpoint_weights_sha256=checkpoint.checkpoint_weights_sha256,
@@ -526,6 +561,7 @@ def evaluate_v5_retained_checkpoints_on_tuning(
         "exact_forward_budgets": list(EXACT_FORWARD_BUDGETS),
         "output_caps": list(OUTPUT_CAPS),
         "retained_full_epochs": list(epochs),
+        "representative_selection_policy": representative_selection_policy,
         "expected_tuning_query_count": len(references),
         "expected_exact_trace_count": len(values) * len(references),
         "expected_lossless_emission_count": len(lossless_emission_inventory),
@@ -552,13 +588,13 @@ def evaluate_v5_retained_checkpoints_on_tuning(
             "checkpoint artifact",
         )
     for path, expected_sha in zip(trace_paths, trace_artifact_sha256s):
-        _checked_regular_file(path, expected_sha, "exact trace artifact")
+        _checked_sealed_file(path, expected_sha, "exact trace artifact")
     for path, expected_sha in zip(
         lossless_emission_paths, lossless_emission_file_sha256s
     ):
-        _checked_regular_file(path, expected_sha, "lossless emission artifact")
+        _checked_sealed_file(path, expected_sha, "lossless emission artifact")
     for path, expected_sha in zip(summary_paths, summary_file_sha256s):
-        _checked_regular_file(path, expected_sha, "checkpoint summary")
+        _checked_sealed_file(path, expected_sha, "checkpoint summary")
     completion_path = root / "completion.json"
     completion_file_sha = write_v5_tuning_json_exclusive(
         completion_path,

@@ -13,9 +13,11 @@ from typing import Mapping
 from .grouped_artifact_v5 import canonical_json
 from .k1_phase_a_cross_platform_v5 import file_identity as strict_file_identity
 from .k1_phase_b_contract_v5 import (
+    CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS,
     V5_K1_PHASE_B_RESULT_FILENAME,
     V5_K1_PHASE_B_SCHEMA,
     V5_K1_PHASE_B_VERSION,
+    cross_node_stable_file_identity,
     digest,
 )
 from .k1_phase_b_capability_v5 import (
@@ -26,11 +28,11 @@ from .k1_phase_b_capability_v5 import (
 )
 
 
-V5_K1_PHASE_B_COMPLETION_SCHEMA = "gisaxs.posterior_v8.k1_phase_b_completion/v2"
+V5_K1_PHASE_B_COMPLETION_SCHEMA = "gisaxs.posterior_v8.k1_phase_b_completion/v11"
 V5_K1_PHASE_B_COMPLETION_VERSION = (
-    "posterior_v8_live_capability_result_then_completion_last_v2"
+    "posterior_v8_closed_interval_tolerance_result_then_completion_last_v11"
 )
-V5_K1_PHASE_B_COMPLETION_FILENAME = "phase-b-complete-v2.json"
+V5_K1_PHASE_B_COMPLETION_FILENAME = "phase-b-complete-v11.json"
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
 _PUBLISHED_FILENAMES = {
     V5_K1_PHASE_B_RESULT_FILENAME,
@@ -109,8 +111,11 @@ def _completion_payload(
         raise ValueError("completion Slurm job id is malformed")
     if not isinstance(plan, Mapping):
         raise ValueError("completion launch-plan evidence is missing")
+    stable_result_identity = cross_node_stable_file_identity(result_identity)
+    if stable_result_identity is None:
+        raise ValueError("Phase-B result file identity is incomplete")
     portable_result = {
-        **dict(result_identity),
+        **stable_result_identity,
         "path": str(output_dir / V5_K1_PHASE_B_RESULT_FILENAME),
         "result_payload_sha256": result_digest,
     }
@@ -123,6 +128,11 @@ def _completion_payload(
         "slurm_job_id": job_id,
         "output_dir": str(output_dir),
         "result": portable_result,
+        "result_identity_policy": {
+            "bound_fields": list(CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS),
+            "device_field": "mount_namespace_local_not_cross_node_bound",
+            "canonical_evidence_excludes_device": True,
+        },
         "launch_plan": dict(plan),
         "job_local_capability": dict(capability_payload),
         "formal_prerequisite_evidence_sha256": launch_binding.get(

@@ -165,13 +165,14 @@ def test_cli_dry_run_validates_without_creating_output(tmp_path, capsys):
     assert not output.exists()
 
 
+@pytest.mark.parametrize("hostname", ["max-wgs01.desy.de", "max-fs-display006.desy.de"])
 def test_cli_dry_run_rejects_maxwell_login_node_before_reading_artifacts(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, hostname
 ):
     from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import train_grouped_v5
 
     monkeypatch.setattr(
-        train_grouped_v5.socket, "gethostname", lambda: "max-wgs01.desy.de"
+        train_grouped_v5.socket, "gethostname", lambda: hostname
     )
     with pytest.raises(RuntimeError, match="including --dry-run"):
         main(
@@ -185,6 +186,18 @@ def test_cli_dry_run_rejects_maxwell_login_node_before_reading_artifacts(
                 "--dry-run",
             )
         )
+    assert not (tmp_path / "output").exists()
+
+
+@pytest.mark.parametrize("hostname", ["max-wgs01.desy.de", "max-fs-display006.desy.de"])
+def test_direct_trainer_rejects_login_even_with_slurm_environment(tmp_path, monkeypatch, hostname):
+    from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import grouped_training_v5
+
+    monkeypatch.setattr(grouped_training_v5.socket, "gethostname", lambda: hostname)
+    monkeypatch.setenv("SLURM_JOB_ID", "12345")
+    with pytest.raises(RuntimeError, match="forbidden on the Maxwell login node"):
+        train_v5_grouped_model(tmp_path / "missing-train", tmp_path / "missing-validation",
+                               tmp_path / "output")
     assert not (tmp_path / "output").exists()
 
 
@@ -371,6 +384,7 @@ def test_slurm_wrapper_is_worker_only_dust_scoped_and_has_no_overwrite_switch():
     ):
         assert f"${{{variable}:?" in source
     assert "max-wgs*" in source
+    assert "max-fs-display*" in source
     assert "/data/dust/user/zhaiyufe/" in source
     assert "--dry-run" in source and "--smoke" in source
     assert "--overwrite" not in source

@@ -9,6 +9,23 @@ from TrainSetBuild import schema
 
 
 _V5_GLOBAL_NORM_VERSION = schema.V5_GLOBAL_NORM_VERSION
+_DATASET_PROFILE = schema.DATASET_PROFILE_UNIVERSAL_V5
+
+
+def configure_dataset_physics(metadata):
+    """Select label semantics explicitly, before any TensorFlow tracing."""
+    global _DATASET_PROFILE
+    profile = metadata.get("dataset_profile")
+    if profile not in (schema.DATASET_PROFILE_LEGACY_V3, schema.DATASET_PROFILE_UNIVERSAL_V5):
+        raise ValueError(f"Unsupported or missing training dataset_profile: {profile!r}")
+    if profile == schema.DATASET_PROFILE_UNIVERSAL_V5:
+        configure_v5_global_norm_version(metadata.get("global_normalization_version", schema.V5_GLOBAL_NORM_VERSION))
+    _DATASET_PROFILE = profile
+    return profile
+
+
+def _absolute_width(size, width):
+    return width if _DATASET_PROFILE == schema.DATASET_PROFILE_LEGACY_V3 else size * width
 
 
 def configure_v5_global_norm_version(version):
@@ -27,12 +44,15 @@ def _denorm(x, spec):
 
 def denormalize_component_params(params_norm):
     return tf.stack(
-        [_denorm(params_norm[..., i], schema.V5_PARAM_NORM_RANGES[name]) for i, name in enumerate(schema.PARAM_NAMES)],
+        [_denorm(params_norm[..., i], schema.param_norm_ranges(_DATASET_PROFILE)[name]) for i, name in enumerate(schema.PARAM_NAMES)],
         axis=-1,
     )
 
 
 def denormalize_global_params(global_norm):
+    if _DATASET_PROFILE == schema.DATASET_PROFILE_LEGACY_V3:
+        return tf.stack([_denorm(global_norm[..., i], schema.GLOBAL_NORM_RANGES[name])
+                         for i, name in enumerate(schema.GLOBAL_PARAM_NAMES)], axis=-1)
     ranges = schema.v5_global_norm_ranges(_V5_GLOBAL_NORM_VERSION)
     return tf.stack(
         [_denorm(global_norm[..., i], ranges[name]) for i, name in enumerate(schema.V5_GLOBAL_TARGET_NAMES)],
@@ -85,6 +105,10 @@ def vertical_cylinder_form_factor(q, r, sigma_r_fraction):
     radii, weights = _gaussian_nodes(r, r * sigma_r_fraction, n=26, nsig=3.0)
     x = q[:, :, tf.newaxis, :] * radii[:, :, :, tf.newaxis]
     form = tf.square(_radial_cylinder_amplitude(x))
+    if _DATASET_PROFILE == schema.DATASET_PROFILE_LEGACY_V3:
+        form *= 1e-6 * tf.pow(radii[:, :, :, tf.newaxis], 4) / 4.0
+        # Match the authoritative implementation's explicit q=0 convention.
+        form = tf.where(q[:, :, tf.newaxis, :] == 0.0, 0.0, form)
     return tf.reduce_sum(form * weights[:, :, :, tf.newaxis], axis=2)
 
 
@@ -167,6 +191,12 @@ def _masked_median(values, mask):
 
 
 def _v5_add_resolution_background(q, particle, global_norm, resolution_present, point_mask=None):
+    if _DATASET_PROFILE == schema.DATASET_PROFILE_LEGACY_V3:
+        bg, sigma, nu, amplitude, scale = tf.unstack(denormalize_global_params(global_norm), axis=-1)
+        peak = 1.0 / (1.0 + tf.pow(tf.abs(q) / sigma[:, None], nu[:, None]))
+        presence = tf.clip_by_value(tf.cast(resolution_present, tf.float32), 0.0, 1.0)
+        total = bg[:, None] + scale[:, None] * (particle + (presence * amplitude)[:, None] * peak)
+        return tf.maximum(total, 1e-30)
     rho_bg, sigma_res, nu_res, rho_res, _unused = tf.unstack(denormalize_global_params(global_norm), axis=-1)
     if point_mask is None:
         point_mask = q > 0.0
@@ -189,8 +219,8 @@ def reconstruct_intensity(q, matched_type, matched_exist, params_norm, weight_lo
     params = denormalize_component_params(params_norm)
     r, sigma_r, h, sigma_h, d, sigma_d = tf.unstack(params, axis=-1)
     q_slots = q[:, tf.newaxis, :]
-    p_sphere = sphere_form_factor(q_slots, r, r * sigma_r)
-    p_cylinder = random_cylinder_form_factor(q_slots, r, r * sigma_r, h, h * sigma_h)
+    p_sphere = sphere_form_factor(q_slots, r, _absolute_width(r, sigma_r))
+    p_cylinder = random_cylinder_form_factor(q_slots, r, _absolute_width(r, sigma_r), h, _absolute_width(h, sigma_h))
     p_vertical = vertical_cylinder_form_factor(q_slots, r, sigma_r)
     type_onehot = tf.one_hot(tf.cast(matched_type, tf.int32), schema.NUM_TYPES, dtype=tf.float32)
     form = (
@@ -199,7 +229,7 @@ def reconstruct_intensity(q, matched_type, matched_exist, params_norm, weight_lo
         + type_onehot[:, :, schema.TYPE_VERTICAL_CYLINDER, tf.newaxis] * p_vertical
     )
     d_probability = tf.sigmoid(tf.cast(d_present_logits, tf.float32))
-    form *= structure_factor(q_slots, d, d * sigma_d, d_probability)
+    form *= structure_factor(q_slots, d, _absolute_width(d, sigma_d), d_probability)
     active = tf.cast(matched_exist > 0.5, tf.float32)
     masked_logits = tf.cast(weight_logits, tf.float32) + (1.0 - active) * -1e4
     weights = tf.nn.softmax(masked_logits, axis=-1) * active
@@ -218,13 +248,13 @@ def reconstruct_intensity_soft(q, type_logits, exist_logits, params_norm_by_type
         params = denormalize_component_params(params_norm_by_type[:, :, type_id, :])
         r, sigma_r, h, sigma_h, d, sigma_d = tf.unstack(params, axis=-1)
         if type_id == schema.TYPE_SPHERE:
-            form = sphere_form_factor(q_slots, r, r * sigma_r)
+            form = sphere_form_factor(q_slots, r, _absolute_width(r, sigma_r))
         elif type_id == schema.TYPE_CYLINDER:
-            form = random_cylinder_form_factor(q_slots, r, r * sigma_r, h, h * sigma_h)
+            form = random_cylinder_form_factor(q_slots, r, _absolute_width(r, sigma_r), h, _absolute_width(h, sigma_h))
         else:
             form = vertical_cylinder_form_factor(q_slots, r, sigma_r)
         d_probability = tf.sigmoid(tf.cast(d_present_logits, tf.float32))
-        return form * structure_factor(q_slots, d, d * sigma_d, d_probability)
+        return form * structure_factor(q_slots, d, _absolute_width(d, sigma_d), d_probability)
 
     form = tf.zeros_like(q_slots, dtype=tf.float32)
     for type_id in (schema.TYPE_SPHERE, schema.TYPE_CYLINDER, schema.TYPE_VERTICAL_CYLINDER):
@@ -302,6 +332,12 @@ def multi_hypothesis_reconstruction_errors(
     resolution_present_logit = tf.gather(resolution_present_logit, selected)
     hypotheses = tf.shape(type_logits)[1]
     points = tf.shape(q)[1]
+    # Current models expose globals per hypothesis; older callers share them.
+    if global_norm.shape.rank == 2:
+        global_norm = tf.tile(global_norm[:, tf.newaxis, :], [1, hypotheses, 1])
+    elif global_norm.shape.rank != 3:
+        raise ValueError("global_norm must have shape [B,G] or [B,H,G]")
+    tf.debugging.assert_equal(tf.shape(global_norm)[1], hypotheses)
 
     q_flat = tf.reshape(tf.tile(q[:, tf.newaxis, :], [1, hypotheses, 1]), [-1, points])
     target_flat = tf.reshape(tf.tile(target[:, tf.newaxis, :], [1, hypotheses, 1]), [-1, points])
@@ -312,10 +348,7 @@ def multi_hypothesis_reconstruction_errors(
         tf.reshape(exist_logits, [-1, schema.MAX_SLOTS]),
         tf.reshape(params_norm_by_type, [-1, schema.MAX_SLOTS, schema.NUM_TYPES, schema.P_MAX]),
         tf.reshape(weight_logits, [-1, schema.MAX_SLOTS]),
-        tf.reshape(
-            tf.tile(global_norm[:, tf.newaxis, :], [1, hypotheses, 1]),
-            [-1, schema.G_MAX],
-        ),
+        tf.reshape(global_norm, [-1, schema.G_MAX]),
         tf.reshape(d_present_logits, [-1, schema.MAX_SLOTS]),
         tf.reshape(tf.tile(tf.sigmoid(resolution_present_logit)[:, tf.newaxis], [1, hypotheses]), [-1]),
         point_mask=tf.cast(mask_flat > 0.5, tf.bool),

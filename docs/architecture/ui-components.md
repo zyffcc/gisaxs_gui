@@ -74,3 +74,10 @@ guard 会由 root 保持，避免 Qt event filter 被垃圾回收。
 7. 让一个 caller 采用该组件，并运行 feature、design-system 和 architecture tests。
 
 若只是视觉相似但业务语义不同，保留 feature-owned component，不要通过大量 flags 做成万能组件。
+
+## ScientificImageViewer
+
+`ScientificImageViewer` is exported from app presentation and is shared by WAXS and GISAXS detector
+inspection. It owns only pixel rendering, viewport interactions and intent signals. Scientific
+preparation, ROI submission and frame loading remain with each feature. See
+[display lifecycle and compatibility boundaries](display-system.md).

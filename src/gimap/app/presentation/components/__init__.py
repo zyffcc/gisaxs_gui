@@ -10,6 +10,7 @@ from .numeric_inputs import (
     install_safe_wheel_behavior,
 )
 from .panels import PlotPanel
+from .scientific_image_viewer import ScientificImageViewer
 from .results import ResultTable
 from .sections import AdvancedSection, ParameterSection
 
@@ -21,6 +22,7 @@ __all__ = [
     "JobStatus",
     "ParameterSection",
     "PlotPanel",
+    "ScientificImageViewer",
     "ResultTable",
     "SafeWheelComboBox",
     "SafeWheelDoubleSpinBox",

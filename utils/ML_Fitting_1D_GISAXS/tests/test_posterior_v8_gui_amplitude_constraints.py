@@ -9,6 +9,7 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.amplitude_polish import (
     AmplitudeBounds,
     polish_profiled_amplitudes,
 )
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import amplitude_polish as amplitude_polish_module
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.contract import ClosedInterval
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.gui_amplitude_constraints import (
     CANONICAL_AMPLITUDE_GAUGE,
@@ -19,6 +20,7 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.gui_amplitude_constraints import (
 )
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.profiled_forward import (
     NonlinearComponent,
+    POLYTOPE_FEASIBLE_NNLS_STATUS,
     ResolutionShape,
     build_design_matrix,
     evaluate_profiled_forward,
@@ -169,6 +171,81 @@ def test_profile_linear_amplitudes_solves_inside_full_gui_polytope():
     assert result.resolution_amplitude == pytest.approx(expected[3], rel=2e-6)
 
 
+def test_profile_linear_amplitudes_handles_legal_near_zero_intensity_scale():
+    q = np.geomspace(0.001, 5.0, 256)
+    components = (
+        NonlinearComponent(
+            "sphere",
+            R=20.023190759873142,
+            sigma_R=9.158663931766,
+        ),
+    )
+    expected = np.asarray((0.0, 5.940319000883555e-302))
+    intensity = build_design_matrix(q, components) @ expected
+    constraint = GuiAmplitudeConstraint(
+        background=ClosedInterval(0.0, 1.0e8),
+        component_intensities=(ClosedInterval(0.0, 1.0e8),),
+        k=ClosedInterval(0.01, 1.0e8),
+        resolution_present=False,
+    )
+
+    result = profile_linear_amplitudes(
+        q,
+        intensity,
+        components,
+        sigma=intensity,
+        amplitude_constraint=constraint,
+    )
+
+    assert result.amplitude_constraint_audit is not None
+    assert result.amplitude_constraint_audit.all_constraints_satisfied
+    assert result.particle_amplitudes[0] > 0.0
+    np.testing.assert_allclose(result.fitted_intensity, intensity, rtol=5e-7, atol=0.0)
+
+
+def test_amplitude_polish_start_snaps_only_upper_endpoint_roundoff():
+    bounds = AmplitudeBounds((0.0, 0.4), (0.1, 1.6))
+    rounded = np.asarray((np.nextafter(0.1, np.inf), np.nextafter(1.6, np.inf)))
+
+    snapped = amplitude_polish_module._feasible_initial(rounded, bounds)  # noqa: SLF001
+
+    np.testing.assert_array_equal(snapped, np.asarray(bounds.upper))
+    with pytest.raises(ValueError, match="outside the requested bounds"):
+        amplitude_polish_module._feasible_initial(  # noqa: SLF001
+            np.asarray((0.1 + 1.0e-8, 1.6)),
+            bounds,
+        )
+
+
+def test_feasible_nnls_optimum_avoids_remote_polytope_midpoint_fallback():
+    q = np.geomspace(0.001, 5.0, 256)
+    components = (NonlinearComponent("sphere", R=1.0, sigma_R=0.02),)
+    expected = np.asarray((4.5228926311615585e-4, 1.242412783898598e-305))
+    intensity = build_design_matrix(q, components) @ expected
+    constraint = GuiAmplitudeConstraint(
+        background=ClosedInterval(0.0, 1.0e8),
+        component_intensities=(
+            ClosedInterval(np.nextafter(0.0, 1.0), 1.0e8),
+        ),
+        k=ClosedInterval(0.01, 1.0e8),
+        resolution_present=False,
+    )
+
+    result = profile_linear_amplitudes(
+        q,
+        intensity,
+        components,
+        sigma=intensity,
+        amplitude_constraint=constraint,
+    )
+
+    assert result.solver_status == POLYTOPE_FEASIBLE_NNLS_STATUS
+    assert "global non-negative least-squares optimum" in result.solver_message
+    assert result.amplitude_constraint_audit is not None
+    assert result.amplitude_constraint_audit.all_constraints_satisfied
+    np.testing.assert_allclose(result.fitted_intensity, intensity, rtol=5e-7, atol=0.0)
+
+
 def test_profile_constraint_branch_mismatch_fails_closed_and_default_is_compatible():
     q = np.geomspace(0.01, 1.0, 100)
     component = NonlinearComponent("sphere", R=12.0, sigma_R=1.0)
@@ -256,7 +333,9 @@ def test_profile_and_polish_respect_independent_gui_int_ranges():
     )
 
     assert unconstrained.component_weights[0] > 0.8
-    assert 0.2 <= constrained.component_weights[0] <= 0.4
+    assert constraint.component_intensities[0].contains(
+        constrained.component_weights[0]
+    )
     assert polished.final_profile.component_weights[0] <= 0.4 + 1e-9
     assert polished.final_constraint_audit is not None
     assert polished.final_constraint_audit.all_constraints_satisfied

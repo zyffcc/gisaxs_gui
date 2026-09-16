@@ -5,6 +5,27 @@ from __future__ import annotations
 import numpy as np
 
 
+NOISE_VERSION = "poisson-unclipped-high-count-v2"
+
+
+def _sample_counts(expected_counts, rng):
+    """Preserve peak intensity; use the Gaussian limit above 1e9 counts."""
+    expected = np.asarray(expected_counts, dtype=np.float64)
+    if not np.all(np.isfinite(expected)) or np.any(expected < 0):
+        raise ValueError("Expected photon counts must be finite and nonnegative.")
+    high = expected > 1e9
+    if not np.any(high):
+        return rng.poisson(expected)
+    counts = np.empty_like(expected)
+    counts[~high] = rng.poisson(expected[~high])
+    # Clipping the expectation would systematically flatten bright peaks.
+    # At these counts the normal limit preserves the Poisson mean/variance.
+    counts[high] = np.maximum(
+        rng.normal(expected[high], np.sqrt(expected[high])), 0.0
+    )
+    return counts
+
+
 def _log_uniform(rng: np.random.Generator, low: float, high: float) -> float:
     return float(np.exp(rng.uniform(np.log(low), np.log(high))))
 
@@ -20,8 +41,9 @@ def add_noise(
     I_clean_safe = np.maximum(np.asarray(I_clean, dtype=np.float64), 1e-30)
     ref = max(float(np.median(I_clean_safe)), 1e-30)
     poisson_scale = _log_uniform(rng, poisson_scale_min, poisson_scale_max)
-    expected_counts = np.clip(I_clean_safe / ref * poisson_scale, 0.0, 1e9)
-    noisy_counts = rng.poisson(expected_counts)
+    with np.errstate(over="ignore", invalid="ignore"):
+        expected_counts = I_clean_safe / ref * poisson_scale
+    noisy_counts = _sample_counts(expected_counts, rng)
     I_poisson = noisy_counts / poisson_scale * ref
     rel_sigma = float(rng.uniform(rel_noise_min, rel_noise_max))
     I_noisy = I_poisson * np.exp(rng.normal(0.0, rel_sigma, size=I_poisson.shape))

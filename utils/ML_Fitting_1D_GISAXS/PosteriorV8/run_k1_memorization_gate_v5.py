@@ -66,13 +66,14 @@ from .model_v5_contract import (
     model_v5_contract_payload,
 )
 from .study_protocol import protocol_payload
+from .training_objective_v5 import DEFAULT_LOCAL_COVERAGE_WEIGHT
 
 
 V5_K1_DATASET_GATE_SCHEMA = (
-    "gisaxs.posterior_v8.k1_single_branch_dataset_memorization_gate/v6"
+    "gisaxs.posterior_v8.k1_single_branch_dataset_memorization_gate/v8"
 )
 V5_K1_DATASET_GATE_VERSION = (
-    "posterior_v8_v5_2_bounded_memory_fixed_query_aware_wiring_gate_v6"
+    "posterior_v8_v5_2_cosine_center_aligned_bounded_memory_fixed_query_aware_wiring_gate_v8"
 )
 V5_K1_DATASET_GATE_ROLE = (
     "single_branch_sphere_pattern0_memorization_wiring_not_model_acceptance"
@@ -179,10 +180,15 @@ def _positive_integer(value: int, name: str) -> int:
 
 @dataclass(frozen=True, kw_only=True)
 class V5K1DatasetGateConfig:
-    steps: int = 1500
+    steps: int = 18000
     batch_size: int = 32
     learning_rate: float = 3.0e-3
+    final_learning_rate: float = 3.0e-5
+    learning_rate_schedule: str = "cosine_decay"
     seed: int = 20260903
+    local_mdn_weight: float = 1.0
+    local_coverage_weight: float = DEFAULT_LOCAL_COVERAGE_WEIGHT
+    operational_top_l_alignment_weight: float = 1.0
     max_final_target_median_rms: float = 0.01
     minimum_loss_reduction: float = 0.5
     width: int = 128
@@ -194,14 +200,36 @@ class V5K1DatasetGateConfig:
             steps=self.steps,
             batch_size=self.batch_size,
             learning_rate=self.learning_rate,
+            final_learning_rate=self.final_learning_rate,
+            learning_rate_schedule=self.learning_rate_schedule,
             seed=self.seed,
+            local_mdn_weight=self.local_mdn_weight,
+            local_coverage_weight=self.local_coverage_weight,
+            operational_top_l_alignment_weight=(
+                self.operational_top_l_alignment_weight
+            ),
             max_final_target_median_rms=self.max_final_target_median_rms,
             minimum_loss_reduction=self.minimum_loss_reduction,
         )
         object.__setattr__(self, "steps", gate.steps)
         object.__setattr__(self, "batch_size", gate.batch_size)
         object.__setattr__(self, "learning_rate", gate.learning_rate)
+        object.__setattr__(
+            self, "final_learning_rate", gate.final_learning_rate
+        )
+        object.__setattr__(
+            self, "learning_rate_schedule", gate.learning_rate_schedule
+        )
         object.__setattr__(self, "seed", gate.seed)
+        object.__setattr__(self, "local_mdn_weight", gate.local_mdn_weight)
+        object.__setattr__(
+            self, "local_coverage_weight", gate.local_coverage_weight
+        )
+        object.__setattr__(
+            self,
+            "operational_top_l_alignment_weight",
+            gate.operational_top_l_alignment_weight,
+        )
         object.__setattr__(self, "max_final_target_median_rms", gate.max_final_target_median_rms)
         object.__setattr__(self, "minimum_loss_reduction", gate.minimum_loss_reduction)
         object.__setattr__(self, "width", _positive_integer(self.width, "width"))
@@ -224,7 +252,14 @@ class V5K1DatasetGateConfig:
                 steps=steps,
                 batch_size=self.batch_size,
                 learning_rate=self.learning_rate,
+                final_learning_rate=self.final_learning_rate,
+                learning_rate_schedule=self.learning_rate_schedule,
                 seed=self.seed,
+                local_mdn_weight=self.local_mdn_weight,
+                local_coverage_weight=self.local_coverage_weight,
+                operational_top_l_alignment_weight=(
+                    self.operational_top_l_alignment_weight
+                ),
                 max_final_target_median_rms=self.max_final_target_median_rms,
                 minimum_loss_reduction=self.minimum_loss_reduction,
             ),
@@ -809,10 +844,25 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--scientific-content-sha256", required=True)
     parser.add_argument("--comparison-result-sha256", required=True)
     parser.add_argument("--gate-claim-sha256", required=True)
-    parser.add_argument("--steps", type=int, default=1500)
+    parser.add_argument("--steps", type=int, default=18000)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=3.0e-3)
+    parser.add_argument("--final-learning-rate", type=float, default=3.0e-5)
+    parser.add_argument(
+        "--learning-rate-schedule",
+        choices=("constant", "cosine_decay"),
+        default="cosine_decay",
+    )
     parser.add_argument("--seed", type=int, default=20260903)
+    parser.add_argument("--local-mdn-weight", type=float, default=1.0)
+    parser.add_argument(
+        "--local-coverage-weight",
+        type=float,
+        default=DEFAULT_LOCAL_COVERAGE_WEIGHT,
+    )
+    parser.add_argument(
+        "--operational-top-l-alignment-weight", type=float, default=1.0
+    )
     parser.add_argument("--max-final-target-median-rms", type=float, default=0.01)
     parser.add_argument("--minimum-loss-reduction", type=float, default=0.5)
     parser.add_argument("--width", type=int, default=128)
@@ -846,7 +896,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             steps=args.steps,
             batch_size=args.batch_size,
             learning_rate=args.learning_rate,
+            final_learning_rate=args.final_learning_rate,
+            learning_rate_schedule=args.learning_rate_schedule,
             seed=args.seed,
+            local_mdn_weight=args.local_mdn_weight,
+            local_coverage_weight=args.local_coverage_weight,
+            operational_top_l_alignment_weight=(
+                args.operational_top_l_alignment_weight
+            ),
             max_final_target_median_rms=args.max_final_target_median_rms,
             minimum_loss_reduction=args.minimum_loss_reduction,
             width=args.width,

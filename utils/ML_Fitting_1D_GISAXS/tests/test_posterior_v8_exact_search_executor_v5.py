@@ -406,6 +406,12 @@ def test_slsqp_line_search_failure_keeps_only_audited_feasible_exact_fallback(
         fixed=True,
     )
     real_minimize = profiled_forward_module.minimize
+    real_lsq_linear = profiled_forward_module.lsq_linear
+
+    def uncertified_nnls(*args, **kwargs):
+        solved = real_lsq_linear(*args, **kwargs)
+        solved.success = False
+        return solved
 
     def line_search_failure(*args, **kwargs):
         solved = real_minimize(*args, **kwargs)
@@ -414,6 +420,10 @@ def test_slsqp_line_search_failure_keeps_only_audited_feasible_exact_fallback(
         solved.message = "Positive directional derivative for linesearch"
         return solved
 
+    # This regression audits the explicitly marked feasible fallback.  Force
+    # the new feasible-NNLS certificate path to remain unavailable so the
+    # injected SLSQP line-search failure still reaches that fallback.
+    monkeypatch.setattr(profiled_forward_module, "lsq_linear", uncertified_nnls)
     monkeypatch.setattr(profiled_forward_module, "minimize", line_search_failure)
     path = tmp_path / "feasible-fallback.gvd5"
     result = execute_v5_frozen_branch_search(

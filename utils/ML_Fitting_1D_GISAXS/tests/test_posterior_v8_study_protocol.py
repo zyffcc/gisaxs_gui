@@ -202,8 +202,8 @@ from utils.ML_Fitting_1D_GISAXS.PosteriorV8.universal_inference_contract_v5 impo
 
 def test_methods_template_binds_v5_2_identity_before_holdout() -> None:
     payload = protocol_payload()
-    assert STUDY_PROTOCOL_SCHEMA.endswith("/v17")
-    assert STUDY_PROTOCOL_VERSION.endswith("_v17")
+    assert STUDY_PROTOCOL_SCHEMA.endswith("/v20")
+    assert STUDY_PROTOCOL_VERSION.endswith("_v20")
     assert STUDY_PROTOCOL_STATUS.startswith("methods_template_")
     status = payload["status_contract"]
     assert status["document_kind"] == "methods_template"
@@ -596,6 +596,17 @@ def test_protocol_replaces_global_classifiers_with_v5_search_and_local_metrics()
     memorization_stage = payload["stages"]["k1_memorization"]
     assert memorization_stage["topology_schedule"] == "single_branch_sphere_pattern0"
     assert memorization_stage["purpose"] == "single_branch_capacity_and_objective_diagnostic"
+    assert memorization_stage["metric_population_contract"] == {
+        "local_mdn_metrics": (
+            "learnable_parents_with_at_least_one_varying_coordinate_only"
+        ),
+        "fully_fixed_parents": (
+            "retained_for_exact_forward_and_excluded_from_local_rms_"
+            "without_zero_error_dilution"
+        ),
+        "exact_forward_metrics": "all_clean_parents",
+        "minimum_learnable_parent_count": 1,
+    }
     schedules = payload["topology_schedule_contract"]
     assert schedules["single_branch_sphere_pattern0"] == {
         "declared_topology": ["sphere"],

@@ -11,6 +11,7 @@ import pytest
 
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import k1_phase_a_cross_platform_v5
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import immutable_submission_file_v5
+from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import k1_phase_b_launch_chain_v5
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import k1_staging_files_v5
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8 import launch_k1_phase_b_dag_v5 as launcher
 from utils.ML_Fitting_1D_GISAXS.PosteriorV8.k1_phase_b_contract_v5 import (
@@ -588,6 +589,89 @@ def test_production_maxwell_root_forbids_all_injected_submission_seams(
         )
 
 
+def test_audit_file_identity_treats_device_as_mount_namespace_local():
+    launcher_identity = {
+        "path": "/dust/plan.json",
+        "sha256": "1" * 64,
+        "byte_count": 123,
+        "mode": 0o400,
+        "device": 69,
+        "inode": 456,
+        "mtime_ns": 789,
+        "ctime_ns": 790,
+        "nlink": 1,
+    }
+    worker_identity = {**launcher_identity, "device": 60}
+
+    assert k1_phase_b_launch_chain_v5._cross_node_file_identity_matches(
+        worker_identity, launcher_identity
+    )
+    assert not k1_phase_b_launch_chain_v5._cross_node_file_identity_matches(
+        {**worker_identity, "inode": 457}, launcher_identity
+    )
+    assert not k1_phase_b_launch_chain_v5._cross_node_file_identity_matches(
+        {name: value for name, value in worker_identity.items() if name != "nlink"},
+        launcher_identity,
+    )
+    canonical = k1_phase_b_launch_chain_v5._cross_node_stable_file_identity(
+        worker_identity
+    )
+    assert canonical is not None
+    assert "device" not in canonical
+    assert set(canonical) == set(
+        k1_phase_b_launch_chain_v5._CROSS_NODE_STABLE_IDENTITY_FIELDS
+    )
+
+
+def test_launch_chain_accepts_mount_local_device_for_every_audit_file(
+    tmp_path, monkeypatch
+):
+    config, dust, _, _ = _stubbed_config(tmp_path, monkeypatch)
+    launch_v5_k1_phase_b_dag(
+        config,
+        submit=True,
+        runner=_HeldScheduler(("25004901", "25004902")),
+        allowed_root=dust,
+        hostname="max-wgs05",
+    )
+    audit = config.run_root / PHASE_ROOT_NAME / "audit"
+    plan_path = audit / PLAN_FILENAME
+    plan = json.loads(plan_path.read_text())
+    runtime = _launch_runtime(plan_path, "engineering_smoke")
+    original_read = k1_phase_b_launch_chain_v5._read_self_hashed_json
+    original_identity = k1_phase_b_launch_chain_v5.strict_file_identity
+    wrapper_path = Path(plan["layout"]["submission_wrapper"]).resolve()
+
+    def worker_read(*args, **kwargs):
+        payload, identity = original_read(*args, **kwargs)
+        return payload, {**identity, "device": int(identity["device"]) + 1000}
+
+    def worker_identity(path, **kwargs):
+        identity = original_identity(path, **kwargs)
+        if Path(path).resolve() == wrapper_path:
+            return {**identity, "device": int(identity["device"]) + 1000}
+        return identity
+
+    monkeypatch.setattr(
+        k1_phase_b_launch_chain_v5, "_read_self_hashed_json", worker_read
+    )
+    monkeypatch.setattr(
+        k1_phase_b_launch_chain_v5, "strict_file_identity", worker_identity
+    )
+    evidence = inspect_v5_k1_phase_b_launch_chain(
+        runtime,
+        output_dir=Path(plan["layout"]["smoke_output"]),
+        slurm_job_id="25004901",
+    )
+
+    launch_plan = evidence["launch_plan"]
+    transaction = evidence["launch_transaction_evidence"]
+    assert "device" not in launch_plan["file_identity"]
+    assert "device" not in launch_plan["submission_wrapper_identity"]
+    assert "device" not in transaction["submission_receipt_identity"]
+    assert "device" not in transaction["launch_completion_identity"]
+
+
 def test_formal_chain_requires_release_completion_and_bound_completed_smoke(
     tmp_path, monkeypatch
 ):
@@ -621,18 +705,31 @@ def test_formal_chain_requires_release_completion_and_bound_completed_smoke(
 
     formal_runtime = _launch_runtime(plan_path, "formal_gate")
     formal_output = Path(plan["layout"]["formal_output"])
-    evidence = inspect_v5_k1_phase_b_launch_chain(
-        formal_runtime,
-        output_dir=formal_output,
-        slurm_job_id="25005002",
-    )
+    original_read = k1_phase_b_launch_chain_v5._read_self_hashed_json
+
+    def other_worker_read(*args, **kwargs):
+        payload, identity = original_read(*args, **kwargs)
+        return payload, {**identity, "device": int(identity["device"]) + 1000}
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            k1_phase_b_launch_chain_v5,
+            "_read_self_hashed_json",
+            other_worker_read,
+        )
+        evidence = inspect_v5_k1_phase_b_launch_chain(
+            formal_runtime,
+            output_dir=formal_output,
+            slurm_job_id="25005002",
+        )
     assert evidence["formal_prerequisite_evidence"]["upstream_smoke_job_id"] == (
         "25005001"
     )
     assert evidence["formal_prerequisite_evidence"]["formal_job_id"] == "25005002"
-    assert evidence["formal_prerequisite_evidence"]["upstream_smoke"][
-        "result_payload_sha256"
-    ]
+    upstream = evidence["formal_prerequisite_evidence"]["upstream_smoke"]
+    assert upstream["result_payload_sha256"]
+    assert "device" not in upstream["result_identity"]
+    assert "device" not in upstream["completion_identity"]
     assert result["launch_completion"]["official_launch_chain_complete"] is True
 
     with pytest.raises(ValueError, match="not the receipt-bound stage job"):
@@ -708,7 +805,7 @@ def test_old_diagnostic_run_and_phase_a_roots_are_rejected(tmp_path, monkeypatch
             allowed_root=dust,
         )
     assert CURRENT_RUN_ROOT_NAME.endswith("V5_2_R2")
-    assert PHASE_A_ROOT_NAME.endswith("dag_v13")
+    assert PHASE_A_ROOT_NAME.endswith("dag_v28")
 
 
 def test_phase_b_refuses_phase_a_artifacts_without_full_gate_completion(
@@ -859,9 +956,11 @@ def test_slurm_wrapper_revalidates_every_input_before_isolated_worker_execution(
     for name in required_environment:
         assert f"${{{name}:?" in wrapper
     assert "GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2" in wrapper
-    assert "k1_phase_a_v5_2_dag_v13" in wrapper
+    assert "k1_phase_a_v5_2_dag_v28" in wrapper
+    assert "k1_phase_a_v5_2_dag_v15" not in wrapper
     assert "k1_phase_a_v5_2_dag_v6" not in wrapper
-    assert "k1_phase_b_v5_2_dag_v3" in wrapper
+    assert "k1_phase_b_v5_2_dag_v15" in wrapper
+    assert "k1-phase-b-v5-2-v15" in wrapper
     assert "PYTHONNOUSERSITE=1" in wrapper
     assert "unset PYTHONPATH" in wrapper
     assert "python -I -c" in wrapper
@@ -1155,7 +1254,14 @@ def test_completion_last_publication_requires_live_single_use_capability(
     _canonical_sha(completion, "completion_payload_sha256")
     assert completion["result"]["sha256"] == sha256(result_path.read_bytes()).hexdigest()
     assert completion["result"]["byte_count"] == result_path.stat().st_size
-    assert completion["result"]["device"] == result_path.stat().st_dev
+    assert "device" not in completion["result"]
+    assert completion["result_identity_policy"] == {
+        "bound_fields": list(
+            k1_phase_b_launch_chain_v5._CROSS_NODE_STABLE_IDENTITY_FIELDS
+        ),
+        "device_field": "mount_namespace_local_not_cross_node_bound",
+        "canonical_evidence_excludes_device": True,
+    }
     assert completion["result"]["inode"] == result_path.stat().st_ino
     assert completion["result"]["nlink"] == 1
     assert completion["job_local_capability"] == capability_payload

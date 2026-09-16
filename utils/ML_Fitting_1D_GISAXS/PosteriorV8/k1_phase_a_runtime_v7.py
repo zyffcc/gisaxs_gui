@@ -461,10 +461,28 @@ def _run_gate(context: PhaseAWorkerContext) -> Mapping[str, object]:
         source_root=Path(env["POSTERIOR_V8_JOB_SOURCE_ROOT"]),
         evidence=evidence,
         config=V5K1DatasetGateConfig(
-            steps=int(env.get("POSTERIOR_V8_V5_K1_STEPS", "1500")),
+            steps=int(env.get("POSTERIOR_V8_V5_K1_STEPS", "18000")),
             batch_size=int(env.get("POSTERIOR_V8_V5_K1_BATCH_SIZE", "32")),
             learning_rate=float(env.get("POSTERIOR_V8_V5_K1_LEARNING_RATE", "0.003")),
+            final_learning_rate=float(
+                env.get("POSTERIOR_V8_V5_K1_FINAL_LEARNING_RATE", "0.00003")
+            ),
+            learning_rate_schedule=env.get(
+                "POSTERIOR_V8_V5_K1_LEARNING_RATE_SCHEDULE", "cosine_decay"
+            ),
             seed=int(env.get("POSTERIOR_V8_V5_K1_SEED", "20260903")),
+            local_mdn_weight=float(
+                env.get("POSTERIOR_V8_V5_K1_LOCAL_MDN_WEIGHT", "1.0")
+            ),
+            local_coverage_weight=float(
+                env.get("POSTERIOR_V8_V5_K1_LOCAL_COVERAGE_WEIGHT", "100.0")
+            ),
+            operational_top_l_alignment_weight=float(
+                env.get(
+                    "POSTERIOR_V8_V5_K1_OPERATIONAL_TOP_L_ALIGNMENT_WEIGHT",
+                    "1.0",
+                )
+            ),
             max_final_target_median_rms=float(env.get("POSTERIOR_V8_V5_K1_MAX_FINAL_RMS", "0.01")),
             minimum_loss_reduction=float(env.get("POSTERIOR_V8_V5_K1_MINIMUM_LOSS_REDUCTION", "0.5")),
             width=int(env.get("POSTERIOR_V8_V5_K1_WIDTH", "128")),

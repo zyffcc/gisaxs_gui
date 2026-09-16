@@ -243,6 +243,33 @@ def _random_access_sobol_points(
     return quasi.astype(np.float64) * scale
 
 
+def materialize_v5_unit_coordinates_for_indices(
+    design: V5SobolDesign,
+    indices: Sequence[int],
+) -> tuple[tuple[float, ...], ...]:
+    """Materialize raw design coordinates without assigning a global split plan."""
+
+    if not isinstance(design, V5SobolDesign):
+        raise TypeError("design must be a V5SobolDesign")
+    if isinstance(indices, (str, bytes)):
+        raise TypeError("indices must be a sequence of integers")
+    try:
+        requested = tuple(_integer(value, "sobol_index") for value in indices)
+    except TypeError as exc:
+        raise TypeError("indices must be a sequence of integers") from exc
+    if not requested:
+        raise ValueError("indices cannot be empty")
+    if len(set(requested)) != len(requested):
+        raise ValueError("indices must be unique")
+    if max(requested) >= 1 << design.bits:
+        raise ValueError("requested index exceeds the frozen Sobol period")
+    coordinates = _random_access_sobol_points(design, requested)
+    return tuple(
+        tuple(float(value) for value in np.asarray(row, dtype="<f8"))
+        for row in coordinates
+    )
+
+
 def materialize_v5_design_points_for_indices(
     plan: V5SplitPlan,
     design: V5SobolDesign,
@@ -272,14 +299,14 @@ def materialize_v5_design_points_for_indices(
     if max(requested) >= 1 << design.bits:
         raise ValueError("requested index exceeds the frozen Sobol period")
 
-    coordinates = _random_access_sobol_points(design, requested)
+    coordinates = materialize_v5_unit_coordinates_for_indices(design, requested)
     return tuple(
         V5DesignPoint(
             index,
             plan.split_for_index(index),
             plan.ood_label_for_index(index),
             v5_clean_group_id(plan, design, index),
-            tuple(float(value) for value in np.asarray(row, dtype="<f8")),
+            row,
         )
         for index, row in zip(requested, coordinates)
     )
@@ -293,5 +320,6 @@ __all__ = [
     "V5SobolDesign",
     "materialize_v5_design_points",
     "materialize_v5_design_points_for_indices",
+    "materialize_v5_unit_coordinates_for_indices",
     "v5_clean_group_id",
 ]

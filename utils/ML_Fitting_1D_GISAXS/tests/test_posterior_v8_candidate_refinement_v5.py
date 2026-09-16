@@ -120,6 +120,76 @@ def _batch_and_curve(query, amplitude_query, q, intensity, pattern_id):
     return batch, curve
 
 
+def _observer_case(varying=False):
+    bounds = (GuiComponentBounds(
+        "sphere", ClosedInterval(9.0, 11.0) if varying else ClosedInterval(10.0, 10.0),
+        ClosedInterval(1.0, 1.0),
+    ),)
+    query = _query(bounds)
+    amplitude = V5AmplitudeQuery.create(
+        background=ClosedInterval(0.03, 0.05), k=ClosedInterval(1.0, 1.0),
+        component_intensities=(ClosedInterval(1.0, 1.0),),
+        resolution_presence_policy="absent", int_res=None,
+    )
+    latent, _ = query.codec_for(0).decode(np.full(26, 0.5))
+    q = np.geomspace(0.008, 1.3, 40)
+    intensity = build_design_matrix(q, tuple(latent_component_to_gui(x) for x in latent)) @ (
+        np.asarray((0.04, 1.0))
+    )
+    return _batch_and_curve(query, amplitude, q, intensity, 0)
+
+
+@pytest.mark.parametrize("varying", [False, True])
+def test_exact_call_observer_preserves_results_and_budget(varying):
+    batch, curve = _observer_case(varying)
+    proposals = (_proposal(batch), _proposal(batch, draw_index=1))
+    calls = []
+    plain = run_v5_exact_refinement(batch, curve, proposals)
+    observed = run_v5_exact_refinement(
+        batch, curve, proposals,
+        exact_forward_call_observer=lambda index, phase: calls.append((index, phase)),
+    )
+    assert plain.ledger == observed.ledger
+    assert plain.attempts == observed.attempts
+    for before, after in zip(plain.candidates, observed.candidates):
+        assert before.components == after.components
+        assert before.linear_solution == after.linear_solution
+        np.testing.assert_array_equal(before.exact_intensity, after.exact_intensity)
+    assert [index for index, _ in calls] == list(range(1, plain.ledger.calls_used + 1))
+    assert exact_module.exact_forward_phase_counts([phase for _, phase in calls]) == (
+        plain.ledger.calls_by_phase
+    )
+    calls.clear()
+    empty = run_v5_exact_refinement(
+        batch, curve, proposals, forward_evaluation_limit=0,
+        exact_forward_call_observer=lambda index, phase: calls.append((index, phase)),
+    )
+    assert empty.ledger.calls_used == 0 and calls == []
+
+
+def test_exact_call_observer_rejects_noncallable_before_scientific_work():
+    with pytest.raises(TypeError, match="observer must be callable"):
+        run_v5_exact_refinement(None, None, (), exact_forward_call_observer=42)
+
+
+@pytest.mark.parametrize("varying", [False, True])
+def test_exact_call_observer_failure_aborts_without_swallowing_audit_loss(varying):
+    batch, curve = _observer_case(varying)
+    seen = []
+
+    def fail(index, phase):
+        seen.append((index, phase))
+        if not varying or phase == "optimizer_residual":
+            raise RuntimeError("audit sink unavailable")
+
+    with pytest.raises(exact_module.V5ExactForwardObservationError) as failure:
+        run_v5_exact_refinement(
+            batch, curve, (_proposal(batch),), exact_forward_call_observer=fail,
+        )
+    assert isinstance(failure.value.__cause__, RuntimeError)
+    assert seen and (not varying or seen[-1][1] == "optimizer_residual")
+
+
 def test_fixed_local_ranges_and_coupled_amplitudes_survive_to_final_absent_resolution():
     bounds = (
         GuiComponentBounds("sphere", ClosedInterval(10.0, 10.0), ClosedInterval(1.0, 1.0)),

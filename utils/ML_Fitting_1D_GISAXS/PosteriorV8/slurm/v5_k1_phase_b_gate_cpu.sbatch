@@ -4,8 +4,8 @@
 #SBATCH --time=08:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --output=/data/dust/user/zhaiyufe/MaxwellRuns/GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2/logs/k1-phase-b-v5-%j.out
-#SBATCH --error=/data/dust/user/zhaiyufe/MaxwellRuns/GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2/logs/k1-phase-b-v5-%j.err
+#SBATCH --output=/data/dust/user/zhaiyufe/MaxwellRuns/GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2/logs/k1-phase-b-v5-2-v15-%j.out
+#SBATCH --error=/data/dust/user/zhaiyufe/MaxwellRuns/GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2/logs/k1-phase-b-v5-2-v15-%j.err
 
 set -euo pipefail
 
@@ -64,12 +64,12 @@ case "$(hostname -s)" in
 esac
 
 run_root="/data/dust/user/zhaiyufe/MaxwellRuns/GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2"
-phase_a_root="$run_root/k1_phase_a_v5_2_dag_v13"
-phase_b_root="$run_root/k1_phase_b_v5_2_dag_v3"
+phase_a_root="$run_root/k1_phase_a_v5_2_dag_v28"
+phase_b_root="$run_root/k1_phase_b_v5_2_dag_v15"
 expected_dataset="$phase_a_root/datasets/k1-v5-2-phase-a-v5-full-r512-sphere-v0.gvd5"
 expected_binding="$expected_dataset.binding-v1.json"
 expected_marker="$phase_a_root/audit/sobol-cross-platform-PASS-v1.json"
-expected_model_root="$phase_a_root/models/k1-v5-2-phase-a-v5-full-steps1500"
+expected_model_root="$phase_a_root/models/k1-v5-2-phase-a-v5-full-steps18000"
 expected_phase_a_completion="$phase_a_root/audit/full-gate-completion-v1.json"
 if [[ "$POSTERIOR_V8_V5_K1_PHASE_B_DATASET" != "$expected_dataset" \
     || "$POSTERIOR_V8_V5_K1_PHASE_B_DATASET_BINDING" != "$expected_binding" \

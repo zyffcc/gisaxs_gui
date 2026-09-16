@@ -17,6 +17,7 @@ import tensorflow as tf
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from TrainSetBuild import sampling, schema
+from TrainSetBuild.noise import NOISE_VERSION
 from TrainSetBuild.tfrecord_io import serialize_sample
 
 
@@ -61,6 +62,7 @@ def parse_args():
     p.add_argument("--edge_fraction", type=float, default=0.20)
     p.add_argument("--out_of_window_fraction", type=float, default=0.10)
     p.add_argument("--gap_drop_prob", type=float, default=1.0, help="Probability of applying short intensity-drop gap augmentation per curve.")
+    p.add_argument("--contribution_balanced", action="store_true", help="New curriculum: compensate component weights for actual q-window RMS power.")
     p.add_argument("--gap_drop_max_fraction", type=float, default=0.05, help="Maximum fraction of points allowed to be intensity-dropped.")
     p.add_argument("--d_absent_probability", type=float, default=0.25, help="Probability that an active component has no D/structure factor.")
     p.add_argument(
@@ -113,9 +115,11 @@ def write_metadata(output_dir: Path, args, counts):
             "split_counts": counts,
             "samples_per_shard": int(args.samples_per_shard),
             "storage_format": args.format,
+            "component_weighting": "q-window-rms-v1" if args.contribution_balanced else "dirichlet-v1",
             "k_values": list(map(int, args.k_values)),
             "k_probs": None if args.k_probs is None else list(map(float, args.k_probs)),
             "noise": {
+                "version": NOISE_VERSION,
                 "poisson_scale_min": float(args.poisson_scale_min),
                 "poisson_scale_max": float(args.poisson_scale_max),
                 "rel_noise_min": float(args.rel_noise_min),
@@ -218,6 +222,7 @@ def build_split(split: str, count: int, output_dir: Path, args, seed_offset: int
                         k_values=args.k_values,
                         k_probs=args.k_probs,
                         gap_drop_prob=args.gap_drop_prob,
+                        contribution_balanced=args.contribution_balanced,
                         gap_drop_max_fraction=args.gap_drop_max_fraction,
                         d_absent_probability=args.d_absent_probability,
                         d_rule_ids=args.d_spacing_rules,
@@ -246,6 +251,7 @@ def build_split(split: str, count: int, output_dir: Path, args, seed_offset: int
                         k_values=args.k_values,
                         k_probs=args.k_probs,
                         gap_drop_prob=args.gap_drop_prob,
+                        contribution_balanced=args.contribution_balanced,
                         gap_drop_max_fraction=args.gap_drop_max_fraction,
                         d_absent_probability=args.d_absent_probability,
                         d_rule_ids=args.d_spacing_rules,

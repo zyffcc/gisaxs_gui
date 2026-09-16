@@ -83,3 +83,16 @@ View defines only widgets, layouts, object names, tab order, and visual defaults
 `page.py` or `dialog.py` injects ViewModels and connects behavior. Update the
 explicit inventory in `tests/test_ui_source_of_truth.py` whenever a View is added,
 removed, or renamed.
+
+## Interactive detector dependency
+
+`requirements.txt` includes `pyqtgraph>=0.13.7,<0.14` for the shared interactive pixel viewer.
+The 0.13 line works with the existing PyQt5 / NumPy runtime constraints. Imports are lazy so the
+existing Matplotlib workflow remains available in older environments without pyqtgraph; opening
+**Interactive** there explains the missing dependency.
+
+Focused display verification:
+
+```bash
+QT_QPA_PLATFORM=offscreen python -m pytest tests/test_display_artist_reuse.py tests/test_scientific_image_viewer.py tests/test_fitting_curve_rendering.py
+```

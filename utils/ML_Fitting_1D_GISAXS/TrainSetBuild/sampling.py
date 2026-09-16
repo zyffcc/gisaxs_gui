@@ -425,6 +425,7 @@ def generate_sample(
     d_rule_ids: np.ndarray | None = None,
     d_rule_probs: np.ndarray | None = None,
     max_attempts: int = 100,
+    contribution_balanced: bool = False,
 ) -> Dict[str, np.ndarray]:
     for _ in range(max_attempts):
         q = sample_q_grid(rng, max_points=max_points)
@@ -483,6 +484,12 @@ def generate_sample(
             components.append(component_array_to_dict(tid, params, float(weights[j])))
 
         try:
+            if contribution_balanced:
+                from TrainSetBuild.contribution_weights import balance_component_weights
+                balanced = balance_component_weights(q, components)
+                slot_weight[:k_active] = balanced
+                for component, weight in zip(components, balanced):
+                    component['weight'] = float(weight)
             global_phys = sample_global_params(q, components, rng)
             I_clean = evaluate_clean(q, components, global_array_to_dict(global_phys))
         except Exception:

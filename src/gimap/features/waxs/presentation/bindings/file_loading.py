@@ -94,6 +94,9 @@ class FileLoadingMixin:
         )
 
     def _on_image_load_failed(self, message: str) -> None:
+        window = getattr(self.viewer, "interactive_window", None)
+        if window is not None:
+            window.stop_playback()
         self.set_job_state("failed", "Failed to load file", progress=0)
         QMessageBox.warning(self, "Failed to Load File", f"Failed to load file:\n{message}")
 
@@ -155,10 +158,14 @@ class FileLoadingMixin:
             if geometry["qz_min"] != -121.0 and geometry["qz_max"] != -121.0:
                 self.viewer.ax.set_ylim(geometry["qz_min"], geometry["qz_max"])
         self._draw_overlays()
+        self._sync_interactive_detector_overlays()
         self._update_metadata(image)
 
     def _on_view_tab_changed(self, index: int) -> None:
         if index == 1:
+            window = getattr(self.viewer, "interactive_window", None)
+            if window is not None:
+                window.set_unavailable("Select the 2D detector tab to inspect pixels.")
             self._active_view = "1d"
             if self._last_curve is not None:
                 self._plot_curve(*self._last_curve)
@@ -188,6 +195,9 @@ class FileLoadingMixin:
         self.view_tabs.blockSignals(False)
 
     def _show_1d_view(self) -> None:
+        window = getattr(self.viewer, "interactive_window", None)
+        if window is not None:
+            window.set_unavailable("Select the 2D detector tab to inspect pixels.")
         self._active_view = "1d"
         self.view_tabs.blockSignals(True)
         self.view_tabs.setCurrentIndex(1)

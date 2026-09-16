@@ -42,6 +42,8 @@ class SignalConnectionsMixin:
             self.ui.fittingResetDetectorViewButton.clicked.connect(
                 self._reset_main_detector_view
             )
+        if hasattr(self.ui, "fittingInteractiveDetectorButton"):
+            self.ui.fittingInteractiveDetectorButton.clicked.connect(self._open_interactive_detector)
         if hasattr(self.ui, "fittingOpenDetectorWindowButton"):
             self.ui.fittingOpenDetectorWindowButton.clicked.connect(
                 self._show_independent_window

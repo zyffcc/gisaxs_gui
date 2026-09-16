@@ -26,6 +26,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
 from matplotlib.figure import Figure
+from matplotlib.transforms import Bbox
 
 
 from .file_types import SUPPORTED_EXTENSIONS
@@ -50,7 +51,10 @@ class ScatteringImageViewer(QWidget):
         self._preview_cache_key = None
         self._preview_cache_array: Optional[np.ndarray] = None
         self._preview_cache_extent: tuple[float, float, float, float] | None = None
-        self._reset_image_axes()
+        self._image_artists = []
+        self._mesh_coordinates = None
+        self._overlay_artists = []
+        self._placeholder_artist = None
         self._placeholder()
 
         layout = QVBoxLayout(self)
@@ -60,11 +64,14 @@ class ScatteringImageViewer(QWidget):
         layout.addWidget(self.canvas, 1)
 
     def _placeholder(self) -> None:
-        self._reset_image_axes()
-        self.ax.clear()
-        self.cax.clear()
+        self._ensure_image_axes()
+        self.clear_overlays()
+        for artist in self._image_artists:
+            artist.set_visible(False)
+        if self._placeholder_artist is not None:
+            self._placeholder_artist.remove()
         self.cax.set_axis_off()
-        self.ax.text(
+        self._placeholder_artist = self.ax.text(
             0.5,
             0.5,
             "Open a .nxs, .tif, or .tiff file",
@@ -120,59 +127,126 @@ class ScatteringImageViewer(QWidget):
             limits_time = 0.0
 
         self._ensure_image_axes()
-        self.ax.clear()
-        self.cax.clear()
+        self.clear_overlays()
+        if self._placeholder_artist is not None:
+            self._placeholder_artist.remove()
+            self._placeholder_artist = None
+        self.ax.set_axis_on()
+        self.cax.set_axis_on()
         cmap = colormaps.get_cmap(colormap).copy()
         # Keep masked/no-data detector cells visually distinct from measured
         # intensities instead of extending the low end of the colormap into them.
         cmap.set_bad(no_data_color)
         self.ax.set_facecolor(no_data_color)
-        if q_coordinates is None:
-            artist = self.ax.imshow(
-                preview,
-                origin="upper",
-                cmap=cmap,
-                vmin=vmin,
-                vmax=vmax,
-                aspect="equal",
-                extent=preview_extent,
-            )
-        else:
+        mesh_coordinates = None
+        if q_coordinates is not None:
             horizontal_q, qz = q_coordinates
             horizontal_preview = np.asarray(horizontal_q)[::stride, ::stride]
             qz_preview = np.asarray(qz)[::stride, ::stride]
             if flip_vertical:
                 horizontal_preview = np.flipud(horizontal_preview)
                 qz_preview = np.flipud(qz_preview)
-            artists = []
-            for branch in self._signed_q_branch_slices(horizontal_preview):
-                artists.append(
-                    self.ax.pcolormesh(
-                        horizontal_preview[:, branch],
-                        qz_preview[:, branch],
-                        preview[:, branch],
-                        shading="nearest",
-                        cmap=cmap,
-                        vmin=vmin,
-                        vmax=vmax,
-                        rasterized=True,
-                    )
-                )
-            artist = artists[0]
+            mesh_coordinates = (horizontal_preview, qz_preview)
+        same_geometry = (
+            (mesh_coordinates is None and self._mesh_coordinates is None)
+            or (mesh_coordinates is not None and self._mesh_coordinates is not None
+                and all(np.array_equal(a, b, equal_nan=True)
+                        for a, b in zip(mesh_coordinates, self._mesh_coordinates)))
+        )
+        if not same_geometry:
+            for artist in self._image_artists:
+                artist.remove()
+            self._image_artists = []
+            self.ax.dataLim.set(Bbox.null())
+        if mesh_coordinates is None:
+            if not self._image_artists:
+                self.ax.set_autoscale_on(True)
+                self._image_artists = [self.ax.imshow(
+                    preview, origin="upper", cmap=cmap, vmin=vmin, vmax=vmax,
+                    aspect="equal", extent=preview_extent,
+                )]
+            else:
+                artist = self._image_artists[0]
+                old_extent = tuple(artist.get_extent())
+                artist.set_data(preview)
+                if old_extent != tuple(preview_extent):
+                    artist.set_extent(preview_extent)
+                    self.ax.set_xlim(preview_extent[:2])
+                    self.ax.set_ylim(preview_extent[2:])
+        else:
+            horizontal_preview, qz_preview = mesh_coordinates
+            branches = self._signed_q_branch_slices(horizontal_preview)
+            if not self._image_artists:
+                self.ax.set_autoscale_on(True)
+                for branch in branches:
+                    self._image_artists.append(self.ax.pcolormesh(
+                        horizontal_preview[:, branch], qz_preview[:, branch],
+                        preview[:, branch], shading="nearest", cmap=cmap,
+                        vmin=vmin, vmax=vmax, rasterized=True,
+                    ))
+                self.ax.autoscale_view()
+                self.ax.set_xlim(sorted(self.ax.get_xlim()))
+                self.ax.set_ylim(sorted(self.ax.get_ylim()))
+            else:
+                for artist, branch in zip(self._image_artists, branches):
+                    artist.set_array(preview[:, branch].ravel())
+        if not same_geometry:
+            self._mesh_coordinates = (
+                tuple(a.copy() for a in mesh_coordinates) if mesh_coordinates is not None else None
+            )
+        for artist in self._image_artists:
+            artist.set_visible(True)
+            with artist.callbacks.blocked():
+                artist.set_cmap(cmap)
+                artist.set_clim(vmin, vmax)
+        artist = self._image_artists[0]
+        self.ax.set_autoscale_on(False)
         self.ax.set_aspect("equal", adjustable="box", anchor="C")
         self.ax.set_anchor("C")
         self.ax.set_title(title)
         self.ax.set_xlabel(xlabel)
         self.ax.set_ylabel(ylabel)
-        self.colorbar = self.figure.colorbar(artist, cax=self.cax)
+        if self.colorbar is None:
+            self.colorbar = self.figure.colorbar(artist, cax=self.cax)
+        else:
+            previous = self.colorbar.mappable
+            if previous is not artist:
+                previous.callbacks.disconnect(previous.colorbar_cid)
+                previous.colorbar = None
+                previous.colorbar_cid = None
+                artist.colorbar = self.colorbar
+                artist.colorbar_cid = artist.callbacks.connect("changed", self.colorbar.update_normal)
+            self.colorbar.update_normal(artist)
+        self.canvas.draw_idle()
+        window = getattr(self, "interactive_window", None)
+        if window is not None and window.isVisible():
+            if q_coordinates is not None:
+                window.set_unavailable("Q-space is available in the main detector view. Switch to Pixel to inspect here.")
+            else:
+                window.set_frame(
+                    preview, intensity=np.flipud(raw) if flip_vertical else raw,
+                    extent=preview_extent, origin="upper", levels=(vmin, vmax),
+                    colormap=colormap, log_scale=log_scale, no_data_color=no_data_color,
+                )
         render_time = time.perf_counter() - render_start
         self._log_display_debug(raw, preview, limits_time, render_time)
 
+    def clear_overlays(self) -> None:
+        """Remove only registered decorations, leaving selectors and image artists alive."""
+        for artist in self._overlay_artists:
+            if artist.axes is not None:
+                artist.remove()
+        self._overlay_artists.clear()
+
     def _reset_image_axes(self) -> None:
         self.figure.clear()
-        self.ax = self.figure.add_axes([0.07, 0.08, 0.78, 0.86])
-        self.cax = self.figure.add_axes([0.88, 0.08, 0.025, 0.86])
+        self.ax = self.figure.add_axes([0.09, 0.14, 0.75, 0.76])
+        self.cax = self.figure.add_axes([0.88, 0.14, 0.025, 0.76])
         self.colorbar = None
+        self._image_artists = []
+        self._mesh_coordinates = None
+        self._overlay_artists = []
+        self._placeholder_artist = None
 
     def _ensure_image_axes(self) -> None:
         if self.ax is None or self.cax is None:
@@ -281,7 +355,7 @@ class ScatteringImageViewer(QWidget):
             "[WAXS display] "
             f"raw shape={raw.shape} dtype={raw.dtype} MB={self._array_mb(raw):.2f}; "
             f"preview shape={preview.shape} dtype={preview.dtype} MB={self._array_mb(preview):.2f}; "
-            f"display_limits={limits_time:.3f}s; render_preview={render_time:.3f}s"
+            f"display_limits={limits_time:.3f}s; update_preview={render_time:.3f}s (paint deferred)"
         )
 
     def display_limits(

@@ -359,7 +359,7 @@ def _job_stage(
     array_index: int | None = None,
     scratch_root: Path | None = None,
 ) -> tuple[Path, Path, Path, Path, dict[str, str]]:
-    scratch = fixture.dust.parent / "node-local-scratch" if scratch_root is None else scratch_root
+    scratch = fixture.dust / "private-job-scratch" if scratch_root is None else scratch_root
     scratch.mkdir(exist_ok=True)
     prefix = (
         f"gisaxs-v5-k1-seed-{job_id}-{array_index}-"
@@ -390,6 +390,7 @@ def _job_stage(
     environment = {
         "SLURM_JOB_ID": job_id,
         "TMPDIR": str(scratch),
+        "POSTERIOR_V8_SCRATCH_BASE": str(scratch),
         "POSTERIOR_V8_JOB_TMP_ROOT": str(job_tmp),
     }
     if worker == "training_seed":
@@ -598,6 +599,20 @@ def test_formal_requires_five_seeds_and_stays_blocked_on_missing_adapters(
         )
 
 
+@pytest.mark.parametrize("hostname", ["max-wgs", "max-wgs001.desy.de",
+                                      "max-fs-display006", "max-fs-display.desy.de"])
+@pytest.mark.parametrize("operation", ["train", "collect"])
+def test_login_hosts_reject_training_and_collection_before_input_io(tmp_path, hostname, operation):
+    missing = tmp_path / "nonexistent-plan.json"
+    arguments = dict(hostname=hostname, environment={"SLURM_JOB_ID": "12345"})
+    with pytest.raises(RuntimeError, match="login node"):
+        if operation == "train":
+            run_v5_k1_training_seed(missing, 0, **arguments)
+        else:
+            collect_v5_k1_training_handoff(missing, **arguments)
+    assert not list(tmp_path.iterdir())
+
+
 def test_tiny_fixture_seed_and_collection_dry_runs_do_not_import_tensorflow_or_write(
     chain_fixture: _Fixture,
 ):
@@ -756,14 +771,14 @@ def test_stable_file_hash_rejects_mutation_or_same_byte_path_replacement(
         k1_staging_files_v5.file_sha256(target, "mutation-race fixture")
 
 
-def test_staging_rejects_shared_dust_as_slurm_scratch(
+def test_staging_rejects_scratch_outside_dust(
     chain_fixture: _Fixture, monkeypatch,
 ):
     plan = build_v5_k1_training_chain_plan(
         chain_fixture.config("dust-scratch"), allowed_root=chain_fixture.dust
     )
     plan_path = _publish_plan(plan)
-    scratch = chain_fixture.dust / "shared-scratch"
+    scratch = chain_fixture.dust.parent / "outside-dust-scratch"
     root, local_plan, local_source, local_archive, environment = _job_stage(
         chain_fixture,
         plan,
@@ -1318,6 +1333,25 @@ def test_rehashed_plan_cannot_change_resource_or_output_contract(chain_fixture: 
         validate_v5_k1_training_chain_plan(plan)
 
 
+@pytest.mark.parametrize("module", [
+    "tuning_checkpoint_model_v5.py", "tuning_search_recorder_v5.py",
+    "tuning_checkpoint_runtime_v5.py", "tuning_checkpoint_summary_io_v5.py",
+    "tuning_trace_artifact_v5.py", "tuning_lossless_emission_store_v5.py",
+    "paper_representative_history_v5.py", "paper_representative_history_store_v5.py",
+    "paper_checkpoint_selector_v5.py", "paper_budget_evaluator_v5.py",
+])
+def test_training_source_requires_tuning_evidence_modules(tmp_path, module):
+    relative = Path("utils/ML_Fitting_1D_GISAXS/PosteriorV8") / module
+    assert relative in K1_TRAINING_REQUIRED_SOURCE_FILES
+    for required in K1_TRAINING_REQUIRED_SOURCE_FILES:
+        if required != relative:
+            target = tmp_path / required
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("# source inventory fixture\n", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match=module):
+        fingerprint_v5_k1_training_source(tmp_path)
+
+
 def test_source_archive_and_extracted_tree_are_reverified(chain_fixture: _Fixture):
     plan = build_v5_k1_training_chain_plan(
         chain_fixture.config("source-drift"), allowed_root=chain_fixture.dust
@@ -1394,7 +1428,8 @@ def test_k1_workers_verify_node_local_source_and_plan_before_use(
         Path(__file__).parents[1] / "PosteriorV8" / "slurm" / wrapper_name
     ).read_text(encoding="utf-8")
 
-    assert "${SLURM_TMPDIR:-${TMPDIR:-/tmp}}" in wrapper
+    assert 'export POSTERIOR_V8_SCRATCH_BASE="/data/dust/user/zhaiyufe"' in wrapper
+    assert "${SLURM_TMPDIR:-${TMPDIR:-/tmp}}" not in wrapper
     verifier_relative = (
         "utils/ML_Fitting_1D_GISAXS/PosteriorV8/package_source_snapshot_v5.py"
     )
@@ -1412,7 +1447,8 @@ def test_k1_workers_verify_node_local_source_and_plan_before_use(
     assert 'POSTERIOR_V8_RUNTIME_CACHE_ROOT="$POSTERIOR_V8_JOB_TMP_ROOT/runtime-cache"' in wrapper
     assert 'Path(os.environ["POSTERIOR_V8_JOB_TMP_ROOT"])' in wrapper
     assert "wrapper job-private temporary root is not fresh owner-private scratch" in wrapper
-    assert "job-private staging cannot use the shared dust tree" in wrapper
+    assert 'Path(os.environ["POSTERIOR_V8_SCRATCH_BASE"])' in wrapper
+    assert 'export TMPDIR="$POSTERIOR_V8_RUNTIME_CACHE_ROOT"' in wrapper
     assert "mktemp -d" in wrapper
     assert "job-cache/" not in wrapper
     assert "POSTERIOR_V8_JOB_PLAN" in wrapper
@@ -1421,7 +1457,10 @@ def test_k1_workers_verify_node_local_source_and_plan_before_use(
     assert "runtime was not" not in wrapper
     assert 'cd "$POSTERIOR_V8_SOURCE_ROOT"' not in wrapper
     assert "unset PYTHONPATH" in wrapper
-    assert "python -I -c" in wrapper
+    assert '"$POSTERIOR_V8_PYTHON" -I -c' in wrapper
+    assert '/data/dust/user/zhaiyufe/conda/envs/gisaxs-v5-r2/bin/python' in wrapper
+    assert 'conda run' not in wrapper
+    assert 'readonly POSTERIOR_V8_PYTHON=' in wrapper
     assert '--plan "$POSTERIOR_V8_JOB_PLAN"' in wrapper
     assert '--job-staging-root "$POSTERIOR_V8_JOB_STAGING_ROOT"' in wrapper
     assert "POSTERIOR_V8_JOB_ARCHIVE_SHA256" not in wrapper

@@ -15,11 +15,15 @@ from .grouped_artifact_v5 import canonical_json
 from .immutable_submission_file_v5 import copy_immutable_submission_file
 from .k1_phase_a_cross_platform_v5 import file_identity as strict_file_identity
 from .k1_phase_b_contract_v5 import (
+    CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS,
+    FULL_FILE_IDENTITY_FIELDS,
     V5_K1_PHASE_B_RESULT_FILENAME,
     V5_K1_PHASE_B_SCHEMA,
     V5_K1_PHASE_B_VERSION,
+    cross_node_stable_file_identity,
     digest,
     strict_json_object,
+    validate_cross_node_stable_file_identity,
 )
 from .k1_phase_b_publication_v5 import (
     V5_K1_PHASE_B_COMPLETION_FILENAME,
@@ -28,18 +32,20 @@ from .k1_phase_b_publication_v5 import (
 )
 
 
-V5_K1_PHASE_B_LAUNCH_SCHEMA = "gisaxs.posterior_v8.maxwell_k1_phase_b_dag_launch/v3"
+V5_K1_PHASE_B_LAUNCH_SCHEMA = "gisaxs.posterior_v8.maxwell_k1_phase_b_dag_launch/v14"
 V5_K1_PHASE_B_LAUNCH_VERSION = (
-    "posterior_v8_held_scheduler_readback_stdin_wrapper_phase_b_dag_v3"
+    "posterior_v8_closed_interval_tolerance_phase_b_dag_v14"
 )
 V5_K1_PHASE_B_LAUNCH_COMPLETION_SCHEMA = (
-    "gisaxs.posterior_v8.maxwell_k1_phase_b_launch_completion/v2"
+    "gisaxs.posterior_v8.maxwell_k1_phase_b_launch_completion/v13"
 )
 V5_K1_PHASE_B_LAUNCH_COMPLETION_VERSION = (
-    "posterior_v8_both_held_receipt_reverse_release_completion_v2"
+    "posterior_v8_closed_interval_tolerance_release_completion_v13"
 )
 LAUNCH_STAGES = ("engineering_smoke", "formal_gate")
 _WRITE_BITS = stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+_CROSS_NODE_STABLE_IDENTITY_FIELDS = CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS
+_FULL_FILE_IDENTITY_FIELDS = FULL_FILE_IDENTITY_FIELDS
 
 
 def _stat_tuple(status: os.stat_result) -> tuple[int, ...]:
@@ -51,6 +57,21 @@ def _stat_tuple(status: os.stat_result) -> tuple[int, ...]:
         status.st_mtime_ns,
         status.st_ctime_ns,
         status.st_nlink,
+    )
+
+
+def _cross_node_stable_file_identity(value: object) -> dict[str, object] | None:
+    """Canonicalize an audited file identity without mount-local ``st_dev``."""
+
+    return cross_node_stable_file_identity(value)
+
+
+def _cross_node_file_identity_matches(observed: object, expected: object) -> bool:
+    """Compare every cross-node-stable field of two complete file identities."""
+
+    observed_stable = _cross_node_stable_file_identity(observed)
+    return observed_stable is not None and observed_stable == (
+        _cross_node_stable_file_identity(expected)
     )
 
 
@@ -144,7 +165,12 @@ def _inspect_plan(
         runtime.expected_plan_sha256, "expected launch-plan SHA-256"
     ):
         raise ValueError("Phase-B launch plan self identity drift detected")
-    if plan_identity != dict(runtime.expected_plan_file_identity):
+    expected_plan_identity = dict(runtime.expected_plan_file_identity)
+    # st_dev identifies the client mount namespace, not the Lustre object. Maxwell
+    # login and worker nodes can therefore report different values for the same
+    # inode. Bind every cross-node-stable field and retain the launcher device in
+    # the immutable receipt instead of comparing the mount-local value.
+    if not _cross_node_file_identity_matches(plan_identity, expected_plan_identity):
         raise ValueError("Phase-B launch plan file identity drift detected")
     if (plan.get("schema_version"), plan.get("version")) != (
         V5_K1_PHASE_B_LAUNCH_SCHEMA,
@@ -213,11 +239,20 @@ def _inspect_plan(
     )
     if any(wrapper_identity[name] != wrapper_binding[name] for name in ("sha256", "byte_count", "mode", "nlink")):
         raise ValueError("Phase-B pinned wrapper content identity drift detected")
+    stable_plan_identity = _cross_node_stable_file_identity(expected_plan_identity)
+    stable_wrapper_identity = _cross_node_stable_file_identity(wrapper_identity)
+    if stable_plan_identity is None or stable_wrapper_identity is None:
+        raise ValueError("Phase-B cross-node audit identity fields are incomplete")
     evidence = {
         "path": str(runtime.plan_path.resolve()),
         "plan_sha256": plan["plan_sha256"],
-        "file_identity": plan_identity,
-        "submission_wrapper_identity": wrapper_identity,
+        "file_identity": stable_plan_identity,
+        "cross_node_identity_policy": {
+            "bound_fields": list(_CROSS_NODE_STABLE_IDENTITY_FIELDS),
+            "device_field": "mount_namespace_local_not_cross_node_bound",
+            "canonical_evidence_excludes_device": True,
+        },
+        "submission_wrapper_identity": stable_wrapper_identity,
     }
     return plan, evidence
 
@@ -255,16 +290,29 @@ def _validate_smoke_completion(
         name="upstream smoke result",
         self_field="result_payload_sha256",
     )
-    expected_result_identity = completion.get("result")
-    if not isinstance(expected_result_identity, Mapping):
-        raise ValueError("upstream smoke completion result identity is missing")
-    observed_result = {
-        **result_identity,
-        "result_payload_sha256": result["result_payload_sha256"],
+    expected_result = completion.get("result")
+    expected_result_fields = {
+        *CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS,
+        "result_payload_sha256",
     }
+    if not isinstance(expected_result, Mapping) or set(expected_result) != (
+        expected_result_fields
+    ):
+        raise ValueError("upstream smoke completion result identity is missing")
+    expected_result_identity = validate_cross_node_stable_file_identity(
+        {
+            name: expected_result[name]
+            for name in CROSS_NODE_STABLE_FILE_IDENTITY_FIELDS
+        }
+    )
+    observed_result_identity = _cross_node_stable_file_identity(result_identity)
     capability = completion.get("job_local_capability")
     if (
-        observed_result != dict(expected_result_identity)
+        observed_result_identity is None
+        or expected_result_identity is None
+        or observed_result_identity != expected_result_identity
+        or result["result_payload_sha256"]
+        != expected_result["result_payload_sha256"]
         or not isinstance(capability, Mapping)
         or capability.get("pre_post_equal") is not True
         or result.get("job_local_capability") != capability
@@ -281,10 +329,13 @@ def _validate_smoke_completion(
         or launch_chain.get("launch_plan") != dict(plan_evidence)
     ):
         raise ValueError("upstream smoke result launch/stage/job binding is invalid")
+    stable_completion_identity = _cross_node_stable_file_identity(completion_identity)
+    if stable_completion_identity is None:
+        raise ValueError("upstream smoke completion file identity is incomplete")
     return {
-        "completion_identity": completion_identity,
+        "completion_identity": stable_completion_identity,
         "completion_payload_sha256": completion["completion_payload_sha256"],
-        "result_identity": result_identity,
+        "result_identity": observed_result_identity,
         "result_payload_sha256": result["result_payload_sha256"],
         "launch_stage": "engineering_smoke",
         "slurm_job_id": expected_job_id,
@@ -310,8 +361,11 @@ def inspect_v5_k1_phase_b_launch_chain(
         or receipt.get("version") != V5_K1_PHASE_B_LAUNCH_VERSION
         or receipt.get("status") != "all_jobs_held"
         or receipt.get("plan_sha256") != plan["plan_sha256"]
-        or receipt.get("plan_file_identity") != plan_evidence["file_identity"]
-        or receipt.get("submission_wrapper_identity")
+        or _cross_node_stable_file_identity(receipt.get("plan_file_identity"))
+        != plan_evidence["file_identity"]
+        or _cross_node_stable_file_identity(
+            receipt.get("submission_wrapper_identity")
+        )
         != plan_evidence["submission_wrapper_identity"]
         or Path(str(receipt.get("plan_path"))).resolve() != runtime.plan_path.resolve()
         or Path(str(receipt.get("receipt_path"))).resolve()
@@ -394,6 +448,9 @@ def inspect_v5_k1_phase_b_launch_chain(
         ):
             raise ValueError(f"Phase-B {stage} scheduler hold evidence drifted")
 
+    stable_receipt_identity = _cross_node_stable_file_identity(receipt_identity)
+    if stable_receipt_identity is None:
+        raise ValueError("Phase-B submission receipt file identity is incomplete")
     launch_completion, launch_completion_identity = _read_self_hashed_json(
         runtime.launch_completion_path,
         name="Phase-B launch completion",
@@ -404,8 +461,14 @@ def inspect_v5_k1_phase_b_launch_chain(
         != V5_K1_PHASE_B_LAUNCH_COMPLETION_SCHEMA
         or launch_completion.get("version") != V5_K1_PHASE_B_LAUNCH_COMPLETION_VERSION
         or launch_completion.get("status") != "ALL_JOBS_RELEASED"
-        or launch_completion.get("plan_file_identity") != plan_evidence["file_identity"]
-        or launch_completion.get("submission_receipt_identity") != receipt_identity
+        or _cross_node_stable_file_identity(
+            launch_completion.get("plan_file_identity")
+        )
+        != plan_evidence["file_identity"]
+        or _cross_node_stable_file_identity(
+            launch_completion.get("submission_receipt_identity")
+        )
+        != stable_receipt_identity
         or launch_completion.get("job_ids") != dict(job_ids)
         or launch_completion.get("release_order") != list(reversed(LAUNCH_STAGES))
         or launch_completion.get("released_job_ids")
@@ -430,10 +493,15 @@ def inspect_v5_k1_phase_b_launch_chain(
             or snapshot.get("reason") == "JobHeldUser"
         ):
             raise ValueError(f"Phase-B {stage} release audit is incompatible")
+    stable_launch_completion_identity = _cross_node_stable_file_identity(
+        launch_completion_identity
+    )
+    if stable_launch_completion_identity is None:
+        raise ValueError("Phase-B launch completion file identity is incomplete")
     transaction_evidence = {
-        "submission_receipt_identity": receipt_identity,
+        "submission_receipt_identity": stable_receipt_identity,
         "submission_receipt_sha256": receipt["receipt_sha256"],
-        "launch_completion_identity": launch_completion_identity,
+        "launch_completion_identity": stable_launch_completion_identity,
         "launch_completion_sha256": launch_completion["launch_completion_sha256"],
         "job_ids": dict(job_ids),
         "held_scheduler_snapshots": dict(held),

@@ -105,41 +105,55 @@ def experimental_curve_series(
 
 def render_curve_plot(axes, spec: CurvePlotSpec) -> None:
     """Render one immutable specification into an embedded or independent axes."""
-    axes.clear()
-    for series in spec.series:
+    if getattr(axes, "_gimap_legacy_render", False):
+        axes.clear()
+        axes._gimap_legacy_render = False
+    # Axes can also be cleared by legacy callers; discard detached cache entries.
+    cached = getattr(axes, "_gimap_curve_artists", {})
+    active = {}
+    for index, series in enumerate(spec.series):
         if series.x.size == 0:
             continue
+        key = (index, series.role, series.style, series.label)
+        artist = cached.pop(key, None)
+        if artist is not None and artist not in axes.get_children():
+            artist = None
         if series.style == "scatter":
-            axes.scatter(
-                series.x,
-                series.y,
-                s=series.marker_size,
-                alpha=series.alpha,
-                color=series.color,
-                label=series.label,
-                zorder=series.zorder,
-            )
+            if artist is None:
+                artist = axes.scatter([], [])
+            artist.set_offsets(np.column_stack((series.x, series.y)))
+            artist.set_sizes([series.marker_size])
+            artist.set_color(series.color)
         else:
-            axes.plot(
-                series.x,
-                series.y,
-                color=series.color,
-                linestyle=series.linestyle,
-                linewidth=series.linewidth,
-                alpha=series.alpha,
-                label=series.label,
-                zorder=series.zorder,
-            )
+            if artist is None:
+                artist, = axes.plot([], [])
+            artist.set_data(series.x, series.y)
+            artist.set_color(series.color)
+            artist.set_linestyle(series.linestyle)
+            artist.set_linewidth(series.linewidth)
+        artist.set_alpha(series.alpha)
+        artist.set_label(series.label)
+        artist.set_zorder(series.zorder)
+        active[key] = artist
+    for artist in cached.values():
+        if artist in axes.get_children():
+            artist.remove()
+    axes._gimap_curve_artists = active
 
-    if spec.roi_bounds is not None:
-        for value in spec.roi_bounds:
-            axes.axvline(
-                float(value),
-                color="#F97316",
-                linestyle="--",
-                linewidth=1.2,
-                alpha=0.8,
-            )
+    roi_artists = getattr(axes, "_gimap_roi_artists", [])
+    roi_artists = [artist for artist in roi_artists if artist in axes.get_children()]
+    if spec.roi_bounds is None:
+        for artist in roi_artists:
+            artist.remove()
+        roi_artists = []
+    else:
+        if not roi_artists:
+            roi_artists = [axes.axvline(value, color="#F97316", linestyle="--",
+                                       linewidth=1.2, alpha=0.8)
+                           for value in spec.roi_bounds]
+        for artist, value in zip(roi_artists, spec.roi_bounds):
+            artist.set_xdata([float(value), float(value)])
+    axes._gimap_roi_artists = roi_artists
 
     axes.set_xlabel(spec.x_label)
     axes.set_ylabel(spec.y_label)
@@ -158,8 +172,23 @@ def render_curve_plot(axes, spec: CurvePlotSpec) -> None:
         axes.spines[axis].set_linewidth(1.8)
     axes.tick_params(axis="both", which="both", width=1.6, labelsize=12)
     handles, labels = axes.get_legend_handles_labels()
-    if handles:
-        axes.legend(handles, labels)
+    legend_key = (
+        tuple((id(handle), label) for handle, label in zip(handles, labels)),
+        tuple((series.color, series.alpha, series.linestyle, series.linewidth,
+               series.marker_size) for series in spec.series if series.x.size),
+    )
+    if legend_key != getattr(axes, "_gimap_legend_key", None):
+        if axes.get_legend() is not None:
+            axes.get_legend().remove()
+        if handles:
+            axes.legend(handles, labels)
+        axes._gimap_legend_key = legend_key
+    # relim() ignores scatter collections; include their current coordinates explicitly.
+    axes.relim()
+    for series in spec.series:
+        if series.x.size and series.style == "scatter":
+            axes.update_datalim(np.column_stack((series.x, series.y)))
+    axes.autoscale(enable=True)
 
 
 __all__ = [

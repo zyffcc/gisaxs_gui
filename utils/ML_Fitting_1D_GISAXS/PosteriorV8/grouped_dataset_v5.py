@@ -41,9 +41,9 @@ from .grouped_tensor_contract_v5 import validate_grouped_tensor_contract
 from .model_v5_contract import MODEL_V5_INPUT_KEYS, model_v5_contract_payload
 
 
-V5_GROUPED_DATASET_SCHEMA = "gisaxs.posterior_v8.grouped_candidate_dataset/v3"
+V5_GROUPED_DATASET_SCHEMA = "gisaxs.posterior_v8.grouped_candidate_dataset/v4"
 V5_GROUPED_DATASET_VERSION = (
-    "posterior_v8_v5_2_complete_slot_contract_varying_axes_relational_stage_v3"
+    "posterior_v8_v5_2_center_aligned_complete_slot_contract_varying_axes_relational_stage_v4"
 )
 V5_GROUPED_SOLUTION_STAGE = "oracle_known_truth_solution_stage_no_automatic_negatives_v1"
 
@@ -121,7 +121,10 @@ def candidate_label(name: str) -> str:
 def grouped_contract_bundle() -> dict[str, object]:
     """Return current model, label, and local-only objective identities."""
 
-    from .training_objective_v5 import V5CandidateObjectiveConfig
+    from .training_objective_v5 import (
+        DEFAULT_LOCAL_COVERAGE_WEIGHT,
+        V5CandidateObjectiveConfig,
+    )
 
     return {
         "model": model_v5_contract_payload(),
@@ -130,7 +133,7 @@ def grouped_contract_bundle() -> dict[str, object]:
             search_yield_weight=0.0,
             pairwise_ranking_weight=0.0,
             local_mdn_weight=1.0,
-            local_coverage_weight=1.0,
+            local_coverage_weight=DEFAULT_LOCAL_COVERAGE_WEIGHT,
         ).audit_payload(),
     }
 

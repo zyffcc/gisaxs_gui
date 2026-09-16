@@ -81,7 +81,8 @@ def validate_shards(shards: Iterable[Path]):
                     raise ValueError(f"TFRecord {shard_list[0]} array {key} has shape {actual}, expected {expected}")
         return
 
-    required = set(INPUT_KEYS + LABEL_KEYS)
+    # NPZ reading below uses the same all-ones default as TFRecord parsing.
+    required = set(INPUT_KEYS + LABEL_KEYS) - {"global_param_mask"}
     for shard in shard_list:
         with np.load(shard) as data:
             missing = sorted(required.difference(data.files))
@@ -91,6 +92,8 @@ def validate_shards(shards: Iterable[Path]):
     first = shard_list[0]
     with np.load(first) as data:
         for key, expected in EXPECTED_SAMPLE_SHAPES.items():
+            if key == "global_param_mask" and key not in data.files:
+                continue
             actual = data[key].shape[1:]
             if actual != expected:
                 raise ValueError(f"Shard {first} array {key} has sample shape {actual}, expected {expected}")
@@ -144,9 +147,6 @@ def _signature():
         "global_range_mask": tf.TensorSpec((schema.G_MAX,), tf.float32),
         "d_allowed": tf.TensorSpec((schema.MAX_SLOTS, 2), tf.float32),
         "d_spacing_rule": tf.TensorSpec((schema.NUM_D_RULES,), tf.float32),
-        "q": tf.TensorSpec((schema.MAX_POINTS,), tf.float32),
-        "I_clean": tf.TensorSpec((schema.MAX_POINTS,), tf.float32),
-        "point_mask": tf.TensorSpec((schema.MAX_POINTS,), tf.bool),
     }
     labels = {
         "slot_type": tf.TensorSpec((schema.MAX_SLOTS,), tf.int32),
@@ -156,7 +156,11 @@ def _signature():
         "slot_weight": tf.TensorSpec((schema.MAX_SLOTS,), tf.float32),
         "global_params_norm": tf.TensorSpec((schema.G_MAX,), tf.float32),
         "global_param_mask": tf.TensorSpec((schema.G_MAX,), tf.float32),
+        "resolution_present": tf.TensorSpec((), tf.float32),
         "d_spacing_rule": tf.TensorSpec((schema.NUM_D_RULES,), tf.float32),
+        "q": tf.TensorSpec((schema.MAX_POINTS,), tf.float32),
+        "I_clean": tf.TensorSpec((schema.MAX_POINTS,), tf.float32),
+        "point_mask": tf.TensorSpec((schema.MAX_POINTS,), tf.bool),
     }
     return inputs, labels
 
@@ -196,6 +200,12 @@ def sample_generator(shards: Iterable[Path], shuffle_samples: bool = True, seed:
                         "slot_weight": data["slot_weight"][i].astype(np.float32),
                         "global_params_norm": data["global_params_norm"][i].astype(np.float32),
                         "global_param_mask": data["global_param_mask"][i].astype(np.float32) if "global_param_mask" in data.files else np.ones(schema.G_MAX, np.float32),
+                        # A parameter supervision mask is not an existence label.
+                        "resolution_present": np.float32(
+                            data["global_params_phys"][i, 3] > 0
+                            if "global_params_phys" in data.files
+                            else data["global_params_norm"][i, 3] > 0
+                        ),
                         "d_spacing_rule": data["d_spacing_rule"][i].astype(np.float32),
                         "q": data["q"][i].astype(np.float32),
                         "I_clean": data["I_clean"][i].astype(np.float32),

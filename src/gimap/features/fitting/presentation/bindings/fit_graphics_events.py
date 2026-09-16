@@ -60,14 +60,34 @@ class FitGraphicsEventsMixin:
                     view.setRenderHint(QPainter.TextAntialiasing, True)
                 except Exception:
                     pass
-            else:
-                scene.clear()
 
             return scene
 
         except Exception as e:
             self.status_updated.emit(f"Failed to setup fit graphics scene: {str(e)}")
             return None
+
+    def _ensure_curve_canvas(self):
+        """Create the scene-owned canvas once; explicit clear invalidates all references."""
+        scene = self._setup_fit_graphics_scene()
+        if scene is None:
+            return None
+        canvas = getattr(self, "_current_fit_canvas", None)
+        proxy = getattr(self, "_curve_canvas_proxy", None)
+        if canvas is None or proxy is None:
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+            from matplotlib.figure import Figure
+
+            scene.clear()
+            figure = Figure(figsize=(9.6, 7.2), dpi=80)
+            canvas = FigureCanvasQTAgg(figure)
+            figure.add_subplot(111)
+            proxy = scene.addWidget(canvas)
+            self._current_fit_figure = figure
+            self._current_fit_canvas = canvas
+            self._curve_canvas_proxy = proxy
+        figure = self._current_fit_figure
+        return figure, canvas, figure.axes[0], proxy
 
     def eventFilter(self, watched, event):
         """Refit preview canvases after users resize their splitter regions."""
@@ -170,6 +190,9 @@ class FitGraphicsEventsMixin:
             scene = self._setup_fit_graphics_scene()
             if scene is not None:
                 scene.clear()
+                self._current_fit_figure = None
+                self._current_fit_canvas = None
+                self._curve_canvas_proxy = None
 
             self.status_updated.emit("Fit graphics view cleared")
 

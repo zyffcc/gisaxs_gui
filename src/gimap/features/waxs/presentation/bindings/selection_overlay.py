@@ -78,9 +78,11 @@ class SelectionOverlayMixin:
                     label.setVisible(visible)
 
     def _draw_overlays(self) -> None:
+        self.viewer.clear_overlays()
         if self.current_image is None:
             return
         ax = self.viewer.ax
+        previous_artists = set(ax.get_children())
         is_q_space = self.coordinate_mode_combo.currentText() == "q space"
         if self.show_center_check.isChecked() and is_q_space:
             qr, qz = self.view_model.compute_q_maps(
@@ -164,6 +166,9 @@ class SelectionOverlayMixin:
                         )
                     )
 
+        self.viewer._overlay_artists = [
+            artist for artist in ax.get_children() if artist not in previous_artists
+        ]
         self.viewer.canvas.draw_idle()
 
     def reset_mask(self) -> None:
@@ -210,6 +215,10 @@ class SelectionOverlayMixin:
         self.refresh_view()
         if self._roi_selector is not None:
             self._roi_selector.set_active(False)
+            self._roi_selector.disconnect_events()
+            for artist in self._roi_selector.artists:
+                if artist.axes is not None:
+                    artist.remove()
             self._roi_selector = None
         self._roi_selector = RectangleSelector(
             self.viewer.ax,
@@ -281,6 +290,10 @@ class SelectionOverlayMixin:
     def _cancel_interactive_tools(self) -> None:
         if self._roi_selector is not None:
             self._roi_selector.set_active(False)
+            self._roi_selector.disconnect_events()
+            for artist in self._roi_selector.artists:
+                if artist.axes is not None:
+                    artist.remove()
             self._roi_selector = None
         if self._circle_pick_cid is not None:
             self.viewer.canvas.mpl_disconnect(self._circle_pick_cid)
@@ -424,6 +437,10 @@ class SelectionOverlayMixin:
 
         if self._roi_selector is not None:
             self._roi_selector.set_active(False)
+            self._roi_selector.disconnect_events()
+            for artist in self._roi_selector.artists:
+                if artist.axes is not None:
+                    artist.remove()
             self._roi_selector = None
         self._current_view_is_cut = True
         self.coordinate_mode_combo.setCurrentText("q space")

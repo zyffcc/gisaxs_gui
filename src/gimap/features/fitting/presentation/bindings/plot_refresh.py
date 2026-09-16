@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..detector_data_access import analysis_image_for
+from ..curve_rendering import CurvePlotSpec, CurveSeries, render_curve_plot
 
 
 import numpy as np
@@ -110,101 +111,24 @@ class PlotRefreshMixin:
             self.status_updated.emit(f"Error clearing fitting data: {str(e)}")
 
     def _force_update_gui_points_only(self):
-        """GUI"""
-        try:
-            if not hasattr(self.ui, "fitGraphicsView"):
-                return
-
-            if not hasattr(self, "_current_fit_figure") or self._current_fit_figure is None:
-                return
-
-            if not hasattr(self, "_current_fit_canvas") or self._current_fit_canvas is None:
-                return
-
-            x_data, y_data, data_label = self._get_current_data_for_display()
-            if x_data is None or y_data is None:
-                return
-
-            self._current_fit_figure.clear()
-            ax = self._current_fit_figure.add_subplot(111)
-
-            log_x = self._is_fit_log_x_enabled()
-            log_y = self._is_fit_log_y_enabled()
-            normalize = self._is_fit_norm_enabled()
-
-            plot_y = y_data.copy()
-            if normalize:
-                max_val = np.max(y_data)
-                if max_val > 0:
-                    plot_y = y_data / max_val
-
-            x_plot = self._convert_q_values_for_display(x_data)
-            ax.scatter(x_plot, plot_y, s=30, alpha=0.7, color="blue", label=data_label, zorder=2)
-
-            x_label = self._build_q_axis_label()
-            y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
-            title = f"Data Points Only - {data_label}"
-
-            ax.set_xlabel(x_label)
-            ax.set_ylabel(y_label)
-            ax.set_title(title)
-            ax.grid(True, alpha=0.3)
-            ax.legend()
-
-            self._apply_x_axis_scale(ax)
-            if log_y:
-                ax.set_yscale("log")
-
-            self._current_fit_canvas.draw()
-
-        except Exception as e:
-            pass
+        x, y, label = self._get_current_data_for_display()
+        if x is not None and y is not None:
+            self._plot_data_points_only(x, y, label, self._is_fit_log_x_enabled(),
+                                        self._is_fit_log_y_enabled(), self._is_fit_norm_enabled())
+            figure = getattr(self, "_current_fit_figure", None)
+            if figure is not None and figure.axes:
+                figure.axes[0].set_title(f"Data Points Only - {label}")
 
     def _update_fitting_plot_points_only(self):
-        """No description."""
-        try:
-            if not hasattr(self, "current_cut_data") or self.current_cut_data is None:
-                return
-
-            if (
-                hasattr(self.ui, "fitGraphicsView")
-                and hasattr(self, "_current_fit_figure")
-                and self._current_fit_figure is not None
-            ):
-                self._current_fit_figure.clear()
-                ax = self._current_fit_figure.add_subplot(111)
-
-                log_x = self._is_fit_log_x_enabled()
-                log_y = self._get_checkbox_state("fitLogYCheckBox", False)
-
-                cut_data = self.current_cut_data
-                x_data = None
-                y_data = None
-                if "x_coords" in cut_data and "y_intensity" in cut_data:
-                    x_data = cut_data["x_coords"]
-                    y_data = cut_data["y_intensity"]
-                elif "x" in cut_data and "y" in cut_data:
-                    x_data = cut_data["x"]
-                    y_data = cut_data["y"]
-
-                if x_data is not None and y_data is not None:
-                    x_plot = self._convert_q_values_for_display(x_data)
-                    ax.scatter(x_plot, y_data, c="blue", s=20, alpha=0.7, label="Data")
-
-                    self._apply_x_axis_scale(ax)
-                    if log_y:
-                        ax.set_yscale("log")
-
-                    ax.set_xlabel(self._build_q_axis_label())
-                    ax.set_ylabel("Intensity")
-                    ax.legend()
-                    ax.grid(True, alpha=0.3)
-
-                if hasattr(self, "_current_fit_canvas") and self._current_fit_canvas is not None:
-                    self._current_fit_canvas.draw()
-
-        except Exception as e:
-            pass
+        cut = getattr(self, "current_cut_data", None)
+        if cut is None:
+            return
+        x, y = self._legacy_cut_arrays(cut)
+        if x is not None and y is not None:
+            self._render_legacy_curve_series((CurveSeries(
+                self._convert_q_values_for_display(x), y, "Data", "blue",
+                marker_size=20, alpha=0.7,
+            ),), y_label="Intensity", title="", log_y=self._get_checkbox_state("fitLogYCheckBox", False))
 
     def _on_fit_log_changed(self):
         """Log-x/Log-y"""
@@ -318,67 +242,21 @@ class PlotRefreshMixin:
             self.status_updated.emit(f"Error updating display sync: {str(e)}")
 
     def _update_fitting_plot(self):
-        """No description."""
-        try:
-            if not hasattr(self, "fitting_data") or self.fitting_data is None:
-                return
-
-            if (
-                hasattr(self.ui, "fitGraphicsView")
-                and hasattr(self, "_current_fit_figure")
-                and self._current_fit_figure is not None
-            ):
-                self._current_fit_figure.clear()
-                ax = self._current_fit_figure.add_subplot(111)
-
-                log_x = self._is_fit_log_x_enabled()
-                log_y = self._get_checkbox_state("fitLogYCheckBox", False)
-
-                if hasattr(self, "current_cut_data") and self.current_cut_data is not None:
-                    cut_data = self.current_cut_data
-                    if "x_coords" in cut_data and "y_intensity" in cut_data:
-                        ax.scatter(
-                            self._convert_q_values_for_display(cut_data["x_coords"]),
-                            cut_data["y_intensity"],
-                            c="blue",
-                            s=20,
-                            alpha=0.7,
-                            label="Data",
-                        )
-                    elif "x" in cut_data and "y" in cut_data:
-                        ax.scatter(
-                            self._convert_q_values_for_display(cut_data["x"]),
-                            cut_data["y"],
-                            c="blue",
-                            s=20,
-                            alpha=0.7,
-                            label="Data",
-                        )
-
-                fitting_data = self.fitting_data
-                if isinstance(fitting_data, dict) and "x" in fitting_data and "y" in fitting_data:
-                    ax.plot(
-                        self._convert_q_values_for_display(fitting_data["x"]),
-                        fitting_data["y"],
-                        "r-",
-                        linewidth=2,
-                        label="Fit",
-                    )
-
-                self._apply_x_axis_scale(ax)
-                if log_y:
-                    ax.set_yscale("log")
-
-                ax.set_xlabel(self._build_q_axis_label())
-                ax.set_ylabel("Intensity")
-                ax.legend()
-                ax.grid(True, alpha=0.3)
-
-                if hasattr(self, "_current_fit_canvas") and self._current_fit_canvas is not None:
-                    self._current_fit_canvas.draw()
-
-        except Exception:
-            pass
+        fitting = getattr(self, "fitting_data", None)
+        if fitting is None:
+            return
+        series = []
+        cut = getattr(self, "current_cut_data", None)
+        if cut is not None:
+            x, y = self._legacy_cut_arrays(cut)
+            if x is not None and y is not None:
+                series.append(CurveSeries(self._convert_q_values_for_display(x), y,
+                                          "Data", "blue", marker_size=20, alpha=0.7))
+        if isinstance(fitting, dict) and "x" in fitting and "y" in fitting:
+            series.append(CurveSeries(self._convert_q_values_for_display(fitting["x"]),
+                                      fitting["y"], "Fit", "red", style="line", linewidth=2, alpha=1))
+        self._render_legacy_curve_series(tuple(series), y_label="Intensity", title="",
+                                         log_y=self._get_checkbox_state("fitLogYCheckBox", False))
 
     def _update_fitting_mode_displays_without_line(self):
         """No description."""
@@ -415,67 +293,28 @@ class PlotRefreshMixin:
             pass
 
     def _update_external_window_points_only(self):
-        """No description."""
-        try:
-            if not hasattr(self.independent_fit_window, "ax"):
-                return
-
-            x_data, y_data, data_label = self._get_current_data_for_display()
-            if x_data is None or y_data is None:
-                return
-
-            log_x = self._is_fit_log_x_enabled()
-            log_y = self._is_fit_log_y_enabled()
-            normalize = self._is_fit_norm_enabled()
-
-            ax = self.independent_fit_window.ax
-            ax.clear()
-
-            plot_y = y_data.copy()
-            if normalize:
-                max_val = np.max(y_data)
-                if max_val > 0:
-                    plot_y = y_data / max_val
-
-            x_raw, x_plot, plot_y, filter_mode = self._filter_q_data_for_independent_display(
-                x_data, plot_y
-            )
-            x_raw, x_plot, plot_y = self._filter_ai_excluded_points_for_display(
-                x_raw, x_plot, plot_y
-            )
-            x_plot = self._convert_q_values_for_display(x_plot)
-            if x_plot.size == 0 or plot_y is None or plot_y.size == 0:
-                return
-
-            ax.scatter(x_plot, plot_y, s=30, alpha=0.7, color="blue", label=data_label, zorder=2)
-
-            x_label = self._build_q_axis_label(filter_mode=filter_mode)
-            y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
-            title = f"Fitting Display Mode - {data_label}"
-
-            ax.set_xlabel(x_label)
-            ax.set_ylabel(y_label)
-            ax.set_title(title)
-            ax.grid(True, alpha=0.3)
-            ax.legend()
-
-            for axis in ["top", "bottom", "left", "right"]:
-                ax.spines[axis].set_linewidth(1.8)
-
-            self._apply_x_axis_scale(ax)
-            if log_y:
-                ax.set_yscale("log")
-
-            if hasattr(self.independent_fit_window, "canvas"):
-                try:
-                    if hasattr(self.independent_fit_window, "set_deletable_points"):
-                        self.independent_fit_window.set_deletable_points(x_raw, x_plot, plot_y)
-                except Exception:
-                    pass
-                self.independent_fit_window.canvas.draw()
-
-        except Exception as e:
-            pass
+        window = getattr(self, "independent_fit_window", None)
+        if window is None or window.ax is None:
+            return
+        x, y, label = self._get_current_data_for_display()
+        if x is None or y is None:
+            return
+        values = y.copy()
+        normalize = self._is_fit_norm_enabled()
+        if normalize and np.max(y) > 0:
+            values = y / np.max(y)
+        raw_x, plot_x, values, filter_mode = self._filter_q_data_for_independent_display(x, values)
+        raw_x, plot_x, values = self._filter_ai_excluded_points_for_display(raw_x, plot_x, values)
+        plot_x = self._convert_q_values_for_display(plot_x)
+        series = (CurveSeries(plot_x, values, label, "blue", marker_size=30, alpha=0.7),)
+        render_curve_plot(window.ax, CurvePlotSpec(
+            series, self._build_q_axis_label(filter_mode=filter_mode),
+            "Normalized Intensity" if normalize else "Intensity (a.u.)",
+            f"Fitting Display Mode - {label}", x_scale=self._get_x_axis_scale(),
+            log_y=self._is_fit_log_y_enabled(),
+        ))
+        window.set_deletable_points(raw_x, plot_x, values)
+        window.canvas.draw_idle()
 
     def _get_current_data_for_display(self):
         """No description."""
@@ -504,48 +343,40 @@ class PlotRefreshMixin:
             return None, None, ""
 
     def _plot_data_points_only(self, x_data, y_data, data_label, log_x, log_y, normalize):
-        """UI"""
-        try:
-            if not hasattr(self.ui, "fitGraphicsView"):
-                return
+        """Refresh the legacy points-only projection without rebuilding its canvas."""
+        figure = getattr(self, "_current_fit_figure", None)
+        if figure is None:
+            return
+        plot_y = np.asarray(y_data).copy()
+        if normalize:
+            maximum = np.max(plot_y)
+            if maximum > 0:
+                plot_y = plot_y / maximum
+        spec = CurvePlotSpec(
+            series=(CurveSeries(self._convert_q_values_for_display(x_data), plot_y,
+                                data_label, "blue", marker_size=30, alpha=0.7),),
+            x_label=self._build_q_axis_label(),
+            y_label="Normalized Intensity" if normalize else "Intensity (a.u.)",
+            title=f"Fitting Display Mode - {data_label}",
+            x_scale=self._get_x_axis_scale(), log_y=log_y,
+        )
+        axes = figure.axes[0] if figure.axes else figure.add_subplot(111)
+        render_curve_plot(axes, spec)
+        self._current_fit_canvas.draw_idle()
 
-            # Use the existing fitting GUI figure and canvas
-            if hasattr(self, "_current_fit_figure") and self._current_fit_figure is not None:
-                self._current_fit_figure.clear()
-                ax = self._current_fit_figure.add_subplot(111)
+    def _render_legacy_curve_series(self, series, *, y_label, title, log_y):
+        figure = getattr(self, "_current_fit_figure", None)
+        if figure is None:
+            return
+        axes = figure.axes[0] if figure.axes else figure.add_subplot(111)
+        render_curve_plot(axes, CurvePlotSpec(series, self._build_q_axis_label(), y_label,
+                                             title, x_scale=self._get_x_axis_scale(), log_y=log_y))
+        self._current_fit_canvas.draw_idle()
 
-                # Processing data
-                plot_y = y_data.copy()
-                if normalize:
-                    max_val = np.max(y_data)
-                    if max_val > 0:
-                        plot_y = y_data / max_val
-
-                # Plotting data points
-                x_plot = self._convert_q_values_for_display(x_data)
-                ax.scatter(
-                    x_plot, plot_y, s=30, alpha=0.7, color="blue", label=data_label, zorder=2
-                )
-
-                # Setting up labels and styles
-                x_label = self._build_q_axis_label()
-                y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"
-                title = f"Fitting Display Mode - {data_label}"
-
-                ax.set_xlabel(x_label)
-                ax.set_ylabel(y_label)
-                ax.set_title(title)
-                ax.grid(True, alpha=0.3)
-                ax.legend()
-
-                # Setting logarithmic coordinates
-                self._apply_x_axis_scale(ax)
-                if log_y:
-                    ax.set_yscale("log")
-
-                # Refresh Canvas
-                if hasattr(self, "_current_fit_canvas") and self._current_fit_canvas is not None:
-                    self._current_fit_canvas.draw()
-
-        except Exception as e:
-            pass
+    @staticmethod
+    def _legacy_cut_arrays(cut):
+        if "x_coords" in cut and "y_intensity" in cut:
+            return cut["x_coords"], cut["y_intensity"]
+        if "x" in cut and "y" in cut:
+            return cut["x"], cut["y"]
+        return None, None

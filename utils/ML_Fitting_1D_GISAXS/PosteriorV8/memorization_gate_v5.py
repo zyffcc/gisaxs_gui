@@ -20,11 +20,12 @@ import tensorflow as tf
 
 from .candidate_supervision_v5 import CANDIDATE_SUPERVISION_TENSOR_KEYS
 from .grouped_artifact_v5 import canonical_json
+from .training_objective_v5 import DEFAULT_LOCAL_COVERAGE_WEIGHT
 
 
-V5_MEMORIZATION_GATE_SCHEMA = "gisaxs.posterior_v8.memorization_gate/v3"
+V5_MEMORIZATION_GATE_SCHEMA = "gisaxs.posterior_v8.memorization_gate/v5"
 V5_MEMORIZATION_GATE_VERSION = (
-    "deterministic_minibatch_single_mdn_learnable_local_target_diagnostic_v3"
+    "deterministic_cosine_minibatch_joint_density_center_aligned_local_target_diagnostic_v5"
 )
 
 
@@ -47,12 +48,24 @@ def _positive(value: float, name: str) -> float:
     return result
 
 
+def _nonnegative(value: float, name: str) -> float:
+    result = float(value)
+    if not isfinite(result) or result < 0.0:
+        raise ValueError(f"{name} must be finite and non-negative")
+    return result
+
+
 @dataclass(frozen=True, kw_only=True)
 class V5MemorizationGateConfig:
-    steps: int = 1500
+    steps: int = 18000
     batch_size: int = 32
     learning_rate: float = 3.0e-3
+    final_learning_rate: float = 3.0e-5
+    learning_rate_schedule: str = "cosine_decay"
     seed: int = 20260903
+    local_mdn_weight: float = 1.0
+    local_coverage_weight: float = DEFAULT_LOCAL_COVERAGE_WEIGHT
+    operational_top_l_alignment_weight: float = 1.0
     max_final_target_median_rms: float = 0.01
     minimum_loss_reduction: float = 0.5
 
@@ -72,11 +85,41 @@ class V5MemorizationGateConfig:
         object.__setattr__(self, "steps", int(self.steps))
         object.__setattr__(self, "batch_size", int(self.batch_size))
         object.__setattr__(self, "seed", int(self.seed))
+        objective_weights = {
+            name: _nonnegative(getattr(self, name), name)
+            for name in (
+                "local_mdn_weight",
+                "local_coverage_weight",
+                "operational_top_l_alignment_weight",
+            )
+        }
+        if not any(value > 0.0 for value in objective_weights.values()):
+            raise ValueError("at least one local objective weight must be positive")
+        for name, value in objective_weights.items():
+            object.__setattr__(self, name, value)
         object.__setattr__(
             self,
             "learning_rate",
             _positive(self.learning_rate, "learning_rate"),
         )
+        object.__setattr__(
+            self,
+            "final_learning_rate",
+            _positive(self.final_learning_rate, "final_learning_rate"),
+        )
+        if self.final_learning_rate > self.learning_rate:
+            raise ValueError("final_learning_rate must not exceed learning_rate")
+        if self.learning_rate_schedule not in {"constant", "cosine_decay"}:
+            raise ValueError(
+                "learning_rate_schedule must be 'constant' or 'cosine_decay'"
+            )
+        if (
+            self.learning_rate_schedule == "constant"
+            and self.final_learning_rate != self.learning_rate
+        ):
+            raise ValueError(
+                "constant schedule requires final_learning_rate == learning_rate"
+            )
         object.__setattr__(
             self,
             "max_final_target_median_rms",
@@ -269,8 +312,11 @@ def run_v5_memorization_gate(
         objective_config = objective_config or V5CandidateObjectiveConfig(
             search_yield_weight=0.0,
             pairwise_ranking_weight=0.0,
-            local_mdn_weight=1.0,
-            local_coverage_weight=1.0,
+            local_mdn_weight=config.local_mdn_weight,
+            local_coverage_weight=config.local_coverage_weight,
+            operational_top_l_alignment_weight=(
+                config.operational_top_l_alignment_weight
+            ),
         )
     if not callable(model_factory) or not callable(objective):
         raise TypeError("model_factory and objective must be callable")
@@ -313,7 +359,17 @@ def run_v5_memorization_gate(
         name: tf.gather(tf.convert_to_tensor(raw_labels[name]), learnable_indices)
         for name in CANDIDATE_SUPERVISION_TENSOR_KEYS
     }
-    optimizer = tf.keras.optimizers.Adam(learning_rate=config.learning_rate)
+    if config.learning_rate_schedule == "constant":
+        learning_rate: float | tf.keras.optimizers.schedules.LearningRateSchedule = (
+            config.learning_rate
+        )
+    else:
+        learning_rate = tf.keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=config.learning_rate,
+            decay_steps=config.steps,
+            alpha=config.final_learning_rate / config.learning_rate,
+        )
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     initial_loss, initial_rms, varying_count = _batched_metrics(
         model,

@@ -237,3 +237,13 @@ application 行为。
 - [ ] 未加载代表文件时不能创建 Recipe；创建后显示版本和来源；In-situ policy 修改产生下一版本；
 - [ ] Recipe 的 future/selected/all scope 明确，In-situ 修改不会改变 Single 控件；
 - [ ] Guided/Compact 偏好可保存；workflow 仅在成功后完成，上游参数改变后下游显示 stale。
+
+## Interactive detector inspection
+
+The detector toolbar's **Interactive** button opens the shared pixel viewer with wheel zoom, drag pan,
+ROI, crosshair, full-resolution unlogged intensity readout and histogram/LUT. **Apply ROI** uses the
+existing detector-region handler. Log intensity and histogram range changes update the workspace
+controls; custom gradient presets are inspection-only and do not change the export colormap.
+The existing **Open** window and publication/export actions remain available. Nonuniform q-space
+continues in the existing detector view; the interactive pixel window disables stale selection when
+q-space is active. GISAXS stack playback is not yet connected to this window.

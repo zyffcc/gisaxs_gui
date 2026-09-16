@@ -251,6 +251,21 @@ def _stage_from_artifacts(
     return stage
 
 
+def replay_v5_formal_production_stage_from_artifacts(
+    *,
+    stage_payload: Mapping[str, object],
+    schedule_path: str | Path,
+    calibration: V5CheckedCompatibilityCalibration,
+) -> V5FormalProductionSearchStage:
+    """Replay one launch-bound formal stage for a worker adapter."""
+
+    return _stage_from_artifacts(
+        stage_payload=stage_payload,
+        schedule_path=Path(schedule_path),
+        calibration=calibration,
+    )
+
+
 def _select_shard_payload(
     global_plan: Mapping[str, object],
     *,
@@ -438,5 +453,6 @@ __all__ = [
     "V5PreparedFormalProductionWorkerShard",
     "prepare_v5_formal_production_worker_shard",
     "read_v5_formal_production_global_plan",
+    "replay_v5_formal_production_stage_from_artifacts",
     "validate_v5_formal_production_global_plan_payload",
 ]

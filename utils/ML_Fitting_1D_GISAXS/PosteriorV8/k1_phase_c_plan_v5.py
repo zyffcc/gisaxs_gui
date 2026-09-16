@@ -6,6 +6,9 @@ from dataclasses import asdict, dataclass
 from hashlib import sha256
 import json
 from numbers import Integral
+import os
+from pathlib import Path
+import stat
 from typing import Mapping
 
 import numpy as np
@@ -242,6 +245,58 @@ def validate_v5_k1_phase_c_plan(
     return plan
 
 
+def v5_k1_phase_c_plan_from_payload(
+    payload: Mapping[str, object],
+) -> V5K1PhaseCPlan:
+    """Strictly reconstruct one persisted Phase-C plan from its canonical payload."""
+
+    if not isinstance(payload, Mapping):
+        raise TypeError("K1 Phase-C plan payload must be an object")
+    expected_fields = {
+        "schema",
+        "version",
+        "contract_sha256",
+        "master_scramble_seed",
+        "formal",
+        "parents_per_branch",
+        "total_parent_count",
+        "stress_assignment_version",
+        "sobol_blocks",
+    }
+    if set(payload) != expected_fields:
+        raise ValueError("K1 Phase-C plan payload fields are unsupported")
+    replay = build_v5_k1_phase_c_plan(
+        formal=payload["formal"],
+        parents_per_branch=payload["parents_per_branch"],
+        master_scramble_seed=payload["master_scramble_seed"],
+    )
+    if replay.audit_payload() != dict(payload):
+        raise ValueError("K1 Phase-C plan payload does not reproduce")
+    return replay
+
+
+def write_v5_k1_phase_c_authoring_plan(
+    path: str | os.PathLike[str],
+    plan: V5K1PhaseCPlan,
+) -> Path:
+    """Exclusively publish one canonical 0400/nlink1 Phase-C authoring plan."""
+
+    checked = validate_v5_k1_phase_c_plan(plan)
+    target = Path(path)
+    if target.exists() or target.is_symlink():
+        raise FileExistsError("refusing to overwrite a K1 Phase-C authoring plan")
+    with target.open("x", encoding="utf-8", newline="\n") as stream:
+        stream.write(checked.canonical_json)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    target.chmod(0o400)
+    metadata = target.stat()
+    if stat.S_IMODE(metadata.st_mode) != 0o400 or metadata.st_nlink != 1:
+        raise RuntimeError("K1 Phase-C authoring plan is not 0400/nlink1")
+    return target
+
+
 def planned_v5_k1_phase_c_stress_cell(
     plan: V5K1PhaseCPlan,
     *,
@@ -280,5 +335,7 @@ __all__ = [
     "V5K1PhaseCSobolBlock",
     "build_v5_k1_phase_c_plan",
     "planned_v5_k1_phase_c_stress_cell",
+    "v5_k1_phase_c_plan_from_payload",
     "validate_v5_k1_phase_c_plan",
+    "write_v5_k1_phase_c_authoring_plan",
 ]

@@ -227,23 +227,16 @@ class DetectorDisplayMixin:
             spec = self._build_curve_plot_spec(mode)
             if spec is None:
                 return
-            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-            from matplotlib.figure import Figure
-
-            scene = self._setup_fit_graphics_scene()
-            if scene is None:
+            projection = self._ensure_curve_canvas()
+            if projection is None:
                 return
-            figure = Figure(figsize=(9.6, 7.2), dpi=80)
-            canvas = FigureCanvasQTAgg(figure)
-            axes = figure.add_subplot(111)
+            figure, canvas, axes, proxy_widget = projection
             self._render_curve_plot_spec(axes, spec)
             figure.tight_layout()
-            proxy_widget = scene.addWidget(canvas)
+            canvas.draw_idle()
             self._fit_view_to_item(
                 self._active_curve_graphics_view(), proxy_widget, keep_aspect=True
             )
-            self._current_fit_figure = figure
-            self._current_fit_canvas = canvas
             self._current_curve_plot_spec = spec
         except Exception as exc:
             emitter = getattr(getattr(self, "status_updated", None), "emit", None)

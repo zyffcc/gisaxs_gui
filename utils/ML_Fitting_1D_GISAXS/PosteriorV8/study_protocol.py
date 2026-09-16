@@ -22,10 +22,10 @@ from typing import Mapping
 # Python contract imports below.  Grouped artifact validation binds them while
 # formal-production modules are imported, so defining them later would create a
 # circular-import failure.
-STUDY_PROTOCOL_SCHEMA = "gisaxs.posterior_v8.multisolution_study_protocol/v17"
+STUDY_PROTOCOL_SCHEMA = "gisaxs.posterior_v8.multisolution_study_protocol/v20"
 STUDY_PROTOCOL_VERSION = (
     "posterior_v8_v5_2_methods_template_iid_conformal_typed_outputs_decimal80_"
-    "multiseed_rqmc_numeric_query_bound_operational_mass_contract_20260903_v17"
+    "multiseed_rqmc_overflow_safe_profiled_amplitude_contract_20260906_v20"
 )
 STUDY_PROTOCOL_STATUS = (
     "methods_template_frozen_design_before_holdout_no_run_or_artifact_yet_frozen"
@@ -221,9 +221,10 @@ from .uncertainty_provenance_v5 import (
 
 # Kept as identifiers rather than importing TensorFlow into this manifest CLI.
 V5_OBJECTIVE_MODULE = "PosteriorV8.training_objective_v5"
-V5_OBJECTIVE_SCHEMA = "gisaxs.posterior_v8.candidate_training_objective/v7"
+V5_OBJECTIVE_SCHEMA = "gisaxs.posterior_v8.candidate_training_objective/v8"
 V5_OBJECTIVE_VERSION = (
-    "posterior_v8_recipe_pairwise_yield_local_mdn_mass_coverage_soft_rank_top4_v5"
+    "posterior_v8_recipe_pairwise_yield_local_mdn_center_aligned_mass_coverage_"
+    "soft_rank_top4_v6"
 )
 
 
@@ -1269,20 +1270,33 @@ def _protocol_core() -> dict[str, object]:
                     "performance_claim_allowed": False,
                 },
             ),
-            "k1_memorization": _stage(
-                topology_schedule="single_branch_sphere_pattern0",
-                recipes=512,
-                training_augmentation_views=1,
-                seeds=1,
-                purpose="single_branch_capacity_and_objective_diagnostic",
-                gates={
-                    "branch_conditioned_local_mdn_single_draw_local_rms_median_lt": 0.05,
-                    "branch_conditioned_local_mdn_best_of_32_local_rms_median_lt": 0.01,
-                    "branch_conditioned_local_mdn_best_of_32_local_rms_p90_lt": 0.03,
-                    "exact_post_refine_raw_log_rmse_p90_lt": 1.0e-3,
-                    "exact_post_refine_compatible_rate_gte": 0.99,
+            "k1_memorization": {
+                **_stage(
+                    topology_schedule="single_branch_sphere_pattern0",
+                    recipes=512,
+                    training_augmentation_views=1,
+                    seeds=1,
+                    purpose="single_branch_capacity_and_objective_diagnostic",
+                    gates={
+                        "branch_conditioned_local_mdn_single_draw_local_rms_median_lt": 0.05,
+                        "branch_conditioned_local_mdn_best_of_32_local_rms_median_lt": 0.01,
+                        "branch_conditioned_local_mdn_best_of_32_local_rms_p90_lt": 0.03,
+                        "exact_post_refine_raw_log_rmse_p90_lt": 1.0e-3,
+                        "exact_post_refine_compatible_rate_gte": 0.99,
+                    },
+                ),
+                "metric_population_contract": {
+                    "local_mdn_metrics": (
+                        "learnable_parents_with_at_least_one_varying_coordinate_only"
+                    ),
+                    "fully_fixed_parents": (
+                        "retained_for_exact_forward_and_excluded_from_local_rms_"
+                        "without_zero_error_dilution"
+                    ),
+                    "exact_forward_metrics": "all_clean_parents",
+                    "minimum_learnable_parent_count": 1,
                 },
-            ),
+            },
             "engineering_e1": _stage(
                 topology_schedule="k1",
                 recipes=13_824,

@@ -50,7 +50,7 @@ V5_K1_PHASE_A_LAUNCH_SCHEMA = PHASE_A_PLAN_SCHEMA
 V5_K1_PHASE_A_LAUNCH_VERSION = PHASE_A_PLAN_VERSION
 MAXWELL_DUST_ROOT = Path("/data/dust/user/zhaiyufe")
 CURRENT_RUN_ROOT_NAME = "GISAXS_ONE_CLICK_PAPER_V5_20260903_V5_2_R2"
-_PHASE_PUBLICATION_GENERATION = "v13"
+_PHASE_PUBLICATION_GENERATION = "v28"
 PHASE_ROOT_NAME = f"k1_phase_a_v5_2_dag_{_PHASE_PUBLICATION_GENERATION}"
 _LOG_PREFIX = f"k1-phase-a-{_PHASE_PUBLICATION_GENERATION}"
 PLAN_FILENAME = "launch-plan-v7.json"
@@ -403,7 +403,7 @@ def build_v5_k1_phase_a_launch_plan(
             data_root / "k1-v5-2-phase-a-v5-full-r512-sphere-v0.gvd5.binding-v1.json"
         ),
         "smoke_model": str(model_root / "k1-v5-2-phase-a-v5-smoke-steps2"),
-        "full_model": str(model_root / "k1-v5-2-phase-a-v5-full-steps1500"),
+        "full_model": str(model_root / "k1-v5-2-phase-a-v5-full-steps18000"),
         "logs": str(logs),
     }
     for stage in _STAGES:
@@ -515,6 +515,12 @@ def build_v5_k1_phase_a_launch_plan(
                 ],
                 "POSTERIOR_V8_V5_K1_GATE_OUTPUT": layout["smoke_model"],
                 "POSTERIOR_V8_V5_K1_STEPS": 2,
+                "POSTERIOR_V8_V5_K1_LEARNING_RATE": 0.003,
+                "POSTERIOR_V8_V5_K1_FINAL_LEARNING_RATE": 0.00003,
+                "POSTERIOR_V8_V5_K1_LEARNING_RATE_SCHEDULE": "cosine_decay",
+                "POSTERIOR_V8_V5_K1_LOCAL_MDN_WEIGHT": 1.0,
+                "POSTERIOR_V8_V5_K1_LOCAL_COVERAGE_WEIGHT": 100.0,
+                "POSTERIOR_V8_V5_K1_OPERATIONAL_TOP_L_ALIGNMENT_WEIGHT": 1.0,
                 "POSTERIOR_V8_V5_K1_WIDTH": 32,
                 "POSTERIOR_V8_V5_K1_ENCODER_BLOCKS": 1,
                 "POSTERIOR_V8_V5_K1_SMOKE": 1,
@@ -552,7 +558,13 @@ def build_v5_k1_phase_a_launch_plan(
                     "full_dataset_binding"
                 ],
                 "POSTERIOR_V8_V5_K1_GATE_OUTPUT": layout["full_model"],
-                "POSTERIOR_V8_V5_K1_STEPS": 1500,
+                "POSTERIOR_V8_V5_K1_STEPS": 18000,
+                "POSTERIOR_V8_V5_K1_LEARNING_RATE": 0.003,
+                "POSTERIOR_V8_V5_K1_FINAL_LEARNING_RATE": 0.00003,
+                "POSTERIOR_V8_V5_K1_LEARNING_RATE_SCHEDULE": "cosine_decay",
+                "POSTERIOR_V8_V5_K1_LOCAL_MDN_WEIGHT": 1.0,
+                "POSTERIOR_V8_V5_K1_LOCAL_COVERAGE_WEIGHT": 100.0,
+                "POSTERIOR_V8_V5_K1_OPERATIONAL_TOP_L_ALIGNMENT_WEIGHT": 1.0,
                 "POSTERIOR_V8_V5_K1_WIDTH": 128,
                 "POSTERIOR_V8_V5_K1_ENCODER_BLOCKS": 6,
             },

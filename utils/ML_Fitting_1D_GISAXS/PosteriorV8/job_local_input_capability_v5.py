@@ -125,6 +125,7 @@ def _bound_environment(environment: Mapping[str, str]) -> dict[str, str]:
             "SLURM_ARRAY_TASK_ID",
             "SLURM_TMPDIR",
             "TMPDIR",
+            "POSTERIOR_V8_SCRATCH_BASE",
             "POSTERIOR_V8_JOB_TMP_ROOT",
         )
     }

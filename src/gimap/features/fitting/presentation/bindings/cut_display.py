@@ -117,16 +117,12 @@ class CutDisplayMixin:
                     y_data = y_data / max_intensity
                     y_label = "Normalized Intensity"
 
-            from matplotlib.figure import Figure
-            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-
-            scene = self._setup_fit_graphics_scene()
-            if scene is None:
+            projection = self._ensure_curve_canvas()
+            if projection is None:
                 return
-
-            fig = Figure(figsize=(8, 6), dpi=80)
-            canvas = FigureCanvas(fig)
-            ax = fig.add_subplot(111)
+            fig, canvas, ax, proxy_widget = projection
+            ax.clear()
+            ax._gimap_legacy_render = True
 
             self._plot_cut_data_with_log_handling(
                 ax, x_coords, y_data, options["log_x"], markersize=4, linewidth=1.5
@@ -147,7 +143,7 @@ class CutDisplayMixin:
 
             fig.tight_layout()
 
-            proxy_widget = scene.addWidget(canvas)
+            canvas.draw_idle()
             self._fit_view_to_item(
                 self._active_curve_graphics_view(), proxy_widget, keep_aspect=True
             )

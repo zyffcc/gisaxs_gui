@@ -3,35 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from hashlib import sha256
-import os
 from pathlib import Path
 from typing import Mapping
 
 from .paper_budget_evaluator_v5 import V5CandidateEmission, V5ExactForwardCall
 from .paper_endpoint_metrics import EXACT_FORWARD_BUDGETS
-from .grouped_artifact_v5 import canonical_json
+from .read_only_json_publication_v5 import publish_read_only_canonical_json
+from .k1_staging_files_v5 import lexical_no_symlinks
 from .tuning_lossless_emission_store_v5 import V5TuningLosslessEmissionArtifact
 
 
-V5_TUNING_EXACT_TRACE_ARTIFACT_SCHEMA = "gisaxs.posterior_v8.tuning_checkpoint_exact_call_trace/v1"
+V5_TUNING_EXACT_TRACE_ARTIFACT_SCHEMA = "gisaxs.posterior_v8.tuning_checkpoint_exact_call_trace/v2"
 V5_TUNING_EXACT_TRACE_ARTIFACT_VERSION = (
-    "checkpoint_query_method_seed_complete_ledger_lossless_emissions_v2"
+    "checkpoint_query_method_seed_complete_ledger_explicit_snapshots_v3"
 )
 
 
 def write_v5_tuning_json_exclusive(path: Path, payload: Mapping[str, object]) -> str:
-    encoded = (canonical_json(dict(payload)) + "\n").encode("utf-8")
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
-    except BaseException:
-        path.unlink(missing_ok=True)
-        raise
-    return sha256(encoded).hexdigest()
+    target = lexical_no_symlinks(path, "tuning publication")
+    return publish_read_only_canonical_json(target, payload)
 
 
 def build_v5_tuning_exact_trace_artifact(
@@ -48,6 +38,7 @@ def build_v5_tuning_exact_trace_artifact(
     lossless_emissions: tuple[V5TuningLosslessEmissionArtifact, ...],
     ledger_sha256: str,
     completion_elapsed_seconds: float,
+    representative_snapshots: tuple | None = None,
 ) -> dict[str, object]:
     lossless_by_rank = {value.output_rank: value for value in lossless_emissions}
     if set(lossless_by_rank) != {value.output_rank for value in candidate_emissions}:
@@ -81,6 +72,13 @@ def build_v5_tuning_exact_trace_artifact(
         "completion_elapsed_seconds": completion_elapsed_seconds,
         "complete_contiguous_exact_call_trace": True,
         "validation_loss_used": False,
+        "representative_selection_policy": (
+            "append_only" if representative_snapshots is None else "budget_snapshot"
+        ),
+        "representative_snapshots": (
+            None if representative_snapshots is None
+            else [asdict(row) for row in representative_snapshots]
+        ),
     }
 
 

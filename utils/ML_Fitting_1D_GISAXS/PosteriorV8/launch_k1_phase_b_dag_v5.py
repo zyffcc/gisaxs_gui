@@ -43,10 +43,10 @@ from .k1_phase_b_launch_inputs_v5 import (
 )
 
 
-PHASE_ROOT_NAME = "k1_phase_b_v5_2_dag_v3"
-PLAN_FILENAME = "launch-plan-v3.json"
-RECEIPT_FILENAME = "submission-receipt-v3.json"
-LAUNCH_COMPLETION_FILENAME = "launch-completion-v2.json"
+PHASE_ROOT_NAME = "k1_phase_b_v5_2_dag_v15"
+PLAN_FILENAME = "launch-plan-v14.json"
+RECEIPT_FILENAME = "submission-receipt-v14.json"
+LAUNCH_COMPLETION_FILENAME = "launch-completion-v13.json"
 RELEASE_FAILURE_FILENAME = "launch-release-failure-v2.json"
 _WRAPPER = PHASE_B_WRAPPER
 _PARSABLE_JOB_ID = re.compile(r"([1-9][0-9]*)(?:;[A-Za-z0-9._-]+)?\Z")
@@ -174,13 +174,15 @@ def build_v5_k1_phase_b_launch_plan(
         "receipt": str(audit_root / RECEIPT_FILENAME),
         "launch_completion": str(audit_root / LAUNCH_COMPLETION_FILENAME),
         "release_failure": str(audit_root / RELEASE_FAILURE_FILENAME),
-        "submission_root": str(audit_root / "submission-v3"),
-        "submission_wrapper": str(audit_root / "submission-v3/phase-b-gate-v3.sbatch"),
+        "submission_root": str(audit_root / "submission-v7"),
+        "submission_wrapper": str(audit_root / "submission-v7/phase-b-gate-v6.sbatch"),
         "logs": str(logs),
     }
     if phase_root.exists() or phase_root.is_symlink():
         raise FileExistsError("refusing to reuse the versioned K1 Phase-B root")
-    if any(logs.glob("k1-phase-b-v5-*.out")) or any(logs.glob("k1-phase-b-v5-*.err")):
+    if any(logs.glob("k1-phase-b-v5-2-v15-*.out")) or any(
+        logs.glob("k1-phase-b-v5-2-v15-*.err")
+    ):
         raise FileExistsError("refusing to reuse existing K1 Phase-B Slurm logs")
 
     source_environment = {
@@ -222,8 +224,8 @@ def build_v5_k1_phase_b_launch_plan(
         "engineering_smoke": {
             "job_name": "gisaxs-v5-2-k1-phase-b-smoke",
             "wrapper": str(wrapper),
-            "stdout": str(logs / "k1-phase-b-v5-smoke-%j.out"),
-            "stderr": str(logs / "k1-phase-b-v5-smoke-%j.err"),
+            "stdout": str(logs / "k1-phase-b-v5-2-v15-smoke-%j.out"),
+            "stderr": str(logs / "k1-phase-b-v5-2-v15-smoke-%j.err"),
             "environment": {
                 **common_environment,
                 "POSTERIOR_V8_V5_K1_PHASE_B_OUTPUT": layout["smoke_output"],
@@ -242,8 +244,8 @@ def build_v5_k1_phase_b_launch_plan(
         "formal_gate": {
             "job_name": "gisaxs-v5-2-k1-phase-b-formal",
             "wrapper": str(wrapper),
-            "stdout": str(logs / "k1-phase-b-v5-formal-%j.out"),
-            "stderr": str(logs / "k1-phase-b-v5-formal-%j.err"),
+            "stdout": str(logs / "k1-phase-b-v5-2-v15-formal-%j.out"),
+            "stderr": str(logs / "k1-phase-b-v5-2-v15-formal-%j.err"),
             "environment": {
                 **common_environment,
                 "POSTERIOR_V8_V5_K1_PHASE_B_OUTPUT": layout["formal_output"],

@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import stat
 from typing import Mapping, Sequence
 
 from .job_local_input_capability_v5 import _mint_job_local_input_capability
@@ -24,6 +25,8 @@ from .k1_staging_files_v5 import (
     file_sha256,
     freeze_staging_tree,
     lexical_no_symlinks,
+    read_only_identity,
+    read_only_json,
 )
 from .k1_staging_receipt_v5 import finalize_staging_proof, validate_staging_proof
 from .k1_training_chain_contract_v5 import canonical_json, digest
@@ -35,13 +38,13 @@ from .k1_training_chain_plan_v5 import (
 )
 
 
-V5_K1_SEED_BINDING_SCHEMA = "gisaxs.posterior_v8.k1_training_seed_binding/v2"
+V5_K1_SEED_BINDING_SCHEMA = "gisaxs.posterior_v8.k1_training_seed_binding/v3"
 V5_K1_SEED_BINDING_VERSION = (
-    "posterior_v8_v5_2_job_private_immutable_training_result_input_binding_v2"
+    "posterior_v8_v5_2_sealed_training_result_input_binding_v3"
 )
-V5_K1_TUNING_HANDOFF_SCHEMA = "gisaxs.posterior_v8.k1_tuning_handoff/v2"
+V5_K1_TUNING_HANDOFF_SCHEMA = "gisaxs.posterior_v8.k1_tuning_handoff/v3"
 V5_K1_TUNING_HANDOFF_VERSION = (
-    "posterior_v8_v5_2_job_private_collector_complete_seed_inventory_pending_tuning_v2"
+    "posterior_v8_v5_2_sealed_complete_seed_inventory_pending_tuning_v3"
 )
 K1_SEED_BINDING_FILENAME = "k1-seed-binding-v1.json"
 _SEED_BINDING_FIELDS = {
@@ -87,7 +90,7 @@ def _load_plan(
 def _worker_guard(*, dry_run: bool, hostname: str, environment: Mapping[str, str]) -> None:
     if dry_run:
         return
-    if hostname.split(".", 1)[0].startswith("max-wgs"):
+    if hostname.split(".", 1)[0].startswith(("max-wgs", "max-fs-display")):
         raise RuntimeError("K1 training runtime is forbidden on the Maxwell login node")
     job_id = environment.get("SLURM_JOB_ID", "")
     if not job_id.isdigit() or int(job_id) < 1:
@@ -118,6 +121,34 @@ def _write_json_exclusive(path: Path, payload: Mapping[str, object]) -> None:
         stream.write(encoded)
         stream.flush()
         os.fsync(stream.fileno())
+        os.fchmod(stream.fileno(), 0o400)
+
+
+def _seal_seed_artifacts(output: Path) -> None:
+    """Seal only the fresh output owned by this seed, before its completion receipt.
+
+    Preflight the entire tree before chmod so an unexpected hard link cannot
+    change permissions on an older artifact outside this run.
+    """
+    lexical_no_symlinks(output, "fresh seed output")
+    paths = [output, *output.rglob("*")]
+    for path in paths:
+        info = path.lstat()
+        if (info.st_uid != os.getuid() or stat.S_ISLNK(info.st_mode)
+                or not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode))
+                or (stat.S_ISREG(info.st_mode) and info.st_nlink != 1)):
+            raise ValueError("fresh seed output contains unsafe ownership, file type or links")
+    for path in paths:
+        if path.is_file():
+            path.chmod(0o400)
+            read_only_identity(path, "sealed seed artifact")
+
+
+def _sealed_sha(path: Path) -> str:
+    identity = read_only_identity(lexical_no_symlinks(path, "seed artifact"), "seed artifact")
+    if identity["mode_octal"] != "0400":
+        raise ValueError("seed artifact must have mode 0400")
+    return identity["sha256"]
 
 
 def _validated_result_manifest(path: Path) -> dict[str, object]:
@@ -296,6 +327,8 @@ def run_v5_k1_training_seed(
         **core,
         "binding_sha256": sha256(canonical_json(core).encode("utf-8")).hexdigest(),
     }
+    _seal_seed_artifacts(output)
+    _validate_seed_binding(payload, plan, selected["model_seed"], allowed_root=allowed_root)
     _write_json_exclusive(output / K1_SEED_BINDING_FILENAME, payload)
     return payload
 
@@ -341,16 +374,16 @@ def _validate_seed_binding(
     )
     payload["job_local_staging"] = staging
     output = Path(matching_runs[0]["output"]).resolve(strict=True)
-    result_path = Path(payload["training_result_manifest"]).resolve(strict=True)
+    result_path = lexical_no_symlinks(Path(payload["training_result_manifest"]), "seed result").resolve(strict=True)
     if result_path.parent != output:
         raise ValueError("training result manifest escaped the frozen seed output")
-    if file_sha256(result_path) != payload["training_result_manifest_file_sha256"]:
+    if _sealed_sha(result_path) != payload["training_result_manifest_file_sha256"]:
         raise ValueError("training result manifest changed after seed binding")
     result = _validated_result_manifest(result_path)
     if result.get("result_sha256") != payload["training_result_sha256"]:
         raise ValueError("training result SHA disagrees with its seed binding")
-    best_model = Path(payload["best_model"]).resolve(strict=True)
-    if best_model.parent != output or file_sha256(best_model) != payload["best_model_sha256"]:
+    best_model = lexical_no_symlinks(Path(payload["best_model"]), "seed model").resolve(strict=True)
+    if best_model.parent != output or _sealed_sha(best_model) != payload["best_model_sha256"]:
         raise ValueError("best model escaped or changed after seed binding")
     if result.get("best_model_sha256") != payload["best_model_sha256"]:
         raise ValueError("best model SHA disagrees with the training result")
@@ -362,8 +395,8 @@ def _validate_seed_binding(
         relative = Path(str(checkpoint.get("relative_path", "")))
         if relative.is_absolute() or not relative.parts or ".." in relative.parts:
             raise ValueError("full checkpoint has an unsafe relative path")
-        checkpoint_path = (output / relative).resolve(strict=True)
-        if not checkpoint_path.is_relative_to(output) or file_sha256(
+        checkpoint_path = lexical_no_symlinks(output / relative, "seed checkpoint").resolve(strict=True)
+        if not checkpoint_path.is_relative_to(output) or _sealed_sha(
             checkpoint_path
         ) != digest(checkpoint.get("file_sha256"), "full checkpoint SHA-256"):
             raise ValueError("full checkpoint escaped or changed after seed binding")
@@ -444,9 +477,10 @@ def collect_v5_k1_training_handoff(
         environment=env,
         allowed_root=allowed_root,
     )
+    binding_identities = [_sealed_sha(item) for item in expected]
     bindings = [
         _validate_seed_binding(
-            checked_json(path),
+            read_only_json(path, "seed completion binding")[0],
             plan,
             run["model_seed"],
             allowed_root=allowed_root,
@@ -478,6 +512,8 @@ def collect_v5_k1_training_handoff(
     target = Path(plan["layout"]["tuning_handoff"])
     if target.name != K1_TRAINING_HANDOFF_FILENAME:
         raise RuntimeError("tuning handoff filename escaped the contract")
+    if [_sealed_sha(item) for item in expected] != binding_identities:
+        raise RuntimeError("seed completion bindings changed during collection")
     _write_json_exclusive(target, payload)
     return payload
 

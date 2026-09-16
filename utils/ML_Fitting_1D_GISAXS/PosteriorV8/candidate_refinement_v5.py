@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 import json
-from typing import Literal, Sequence
+from typing import Callable, Literal, Sequence
 
 import numpy as np
 
@@ -56,6 +56,10 @@ from .profiled_refinement import refine_profiled_branch
 
 
 _CANDIDATE_ERRORS = (FloatingPointError, OverflowError, RuntimeError, TypeError, ValueError)
+
+
+class V5ExactForwardObservationError(Exception):
+    """An audit sink failed; this must not become a recoverable solver failure."""
 
 
 def _local_vector(value: Sequence[float]) -> tuple[float, ...]:
@@ -307,9 +311,17 @@ def run_v5_exact_refinement(
     ftol: float = 1.0e-8,
     xtol: float = 1.0e-8,
     gtol: float = 1.0e-8,
+    exact_forward_call_observer: Callable[[int, str], None] | None = None,
 ) -> V5ExactRefinementBatchResult:
-    """Refine all supplied seeds in order; one candidate failure never aborts later seeds."""
+    """Refine seeds in order, optionally observing each admitted exact-call start.
 
+    The observer receives a one-based batch call index and its accounting phase,
+    after budget admission and before scientific work. It must only record audit
+    data. Observer failures abort the batch, rather than yielding a partial trace.
+    """
+
+    if exact_forward_call_observer is not None and not callable(exact_forward_call_observer):
+        raise TypeError("exact_forward_call_observer must be callable or None")
     if not isinstance(batch, V5CandidateContextBatch):
         raise TypeError("batch must be a V5CandidateContextBatch")
     if not isinstance(curve, ObservedCurve):
@@ -373,6 +385,13 @@ def run_v5_exact_refinement(
                 raise _ForwardBudgetReached
             local_phases.append(phase)
             total_phases.append(phase)
+            if exact_forward_call_observer is not None:
+                try:
+                    exact_forward_call_observer(len(total_phases), phase)
+                except Exception as exc:
+                    # Not a RuntimeError: optimizers intentionally recover from
+                    # numerical RuntimeError, but must never swallow audit loss.
+                    raise V5ExactForwardObservationError("exact-call observer failed") from exc
 
         try:
             codec, constraint = _validate_seed(batch, seed)
@@ -599,6 +618,7 @@ __all__ = [
     "V5_EXACT_FORWARD_BUDGET_UNIT",
     "V5CandidatePrerequisiteAudit",
     "V5ExactForwardLedger",
+    "V5ExactForwardObservationError",
     "V5ExactRefinementAttempt",
     "V5ExactRefinementBatchResult",
     "V5LocalRefinementSeed",

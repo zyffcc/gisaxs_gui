@@ -222,3 +222,29 @@ def test_memorization_gate_config_fails_closed():
         V5MemorizationGateConfig(minimum_loss_reduction=-1.0)
     with pytest.raises(ValueError, match="batch_size"):
         V5MemorizationGateConfig(batch_size=0)
+    with pytest.raises(ValueError, match="must not exceed"):
+        V5MemorizationGateConfig(
+            learning_rate=1.0e-5,
+            final_learning_rate=2.0e-5,
+        )
+    with pytest.raises(ValueError, match="learning_rate_schedule"):
+        V5MemorizationGateConfig(learning_rate_schedule="plateau")
+    with pytest.raises(ValueError, match="constant schedule"):
+        V5MemorizationGateConfig(learning_rate_schedule="constant")
+    with pytest.raises(ValueError, match="at least one local objective weight"):
+        V5MemorizationGateConfig(
+            local_mdn_weight=0.0,
+            local_coverage_weight=0.0,
+            operational_top_l_alignment_weight=0.0,
+        )
+
+
+def test_memorization_gate_default_objective_is_center_aligned_and_audited():
+    config = V5MemorizationGateConfig()
+    assert config.local_mdn_weight == 1.0
+    assert config.local_coverage_weight == 100.0
+    assert config.operational_top_l_alignment_weight == 1.0
+    assert config.steps == 18000
+    assert config.learning_rate == 3.0e-3
+    assert config.final_learning_rate == 3.0e-5
+    assert config.learning_rate_schedule == "cosine_decay"
