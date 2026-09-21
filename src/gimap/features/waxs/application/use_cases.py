@@ -35,6 +35,7 @@ from ..domain import (
     aligned_detector_distance,
     locate_reference_peak,
     peak_normalization_factor,
+    subtract_background,
 )
 
 
@@ -62,6 +63,14 @@ class ValidateWaxsDirectory:
         return self.paths.is_directory(path)
 
 
+class GetWaxsFrameCount:
+    def __init__(self, repository: WaxsImageRepository):
+        self._repository = repository
+
+    def execute(self, path: Path) -> int:
+        return max(1, int(self._repository.frame_count(Path(path))))
+
+
 class LoadWaxsImage:
     def __init__(self, repository: WaxsImageRepository):
         self._repository = repository
@@ -75,6 +84,21 @@ class LoadWaxsImage:
         )
         if image.ndim != 2:
             raise ValueError(f"Expected a 2D WAXS image, got shape {image.shape}")
+        if request.background_path:
+            background_path = Path(request.background_path)
+            background_count = max(
+                1, int(self._repository.frame_count(background_path))
+            )
+            background_index = max(
+                0, min(int(request.background_frame_index), background_count - 1)
+            )
+            background = np.asarray(
+                self._repository.load_frame(background_path, background_index),
+                dtype=np.float32,
+            )
+            image = subtract_background(
+                image, background, request.background_coefficient
+            )
         return LoadedWaxsImage(path, frame_index, frame_count, image)
 
 

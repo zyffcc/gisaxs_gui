@@ -24,6 +24,7 @@ from .integration import (
     normalize_angle_deg,
     smooth_curve,
 )
+from .background import subtract_background
 
 __all__ = [
     "UNSET_Q_LIMIT",
@@ -42,4 +43,5 @@ __all__ = [
     "line_cut_profile",
     "normalize_angle_deg",
     "smooth_curve",
+    "subtract_background",
 ]

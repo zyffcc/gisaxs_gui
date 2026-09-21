@@ -31,15 +31,32 @@ class ImageLoadWorker(QObject):
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, file_path: str, frame_index: int, view_model):
+    def __init__(
+        self,
+        file_path: str,
+        frame_index: int,
+        view_model,
+        background_path: str | None = None,
+        background_coefficient: float = 1.0,
+        background_frame_index: int = 0,
+    ):
         super().__init__()
         self.file_path = file_path
         self.frame_index = int(frame_index)
         self.view_model = view_model
+        self.background_path = background_path
+        self.background_coefficient = background_coefficient
+        self.background_frame_index = int(background_frame_index)
 
     def run(self) -> None:
         try:
-            loaded = self.view_model.load_image(Path(self.file_path), self.frame_index)
+            loaded = self.view_model.load_image(
+                Path(self.file_path),
+                self.frame_index,
+                background_path=self.background_path,
+                background_coefficient=self.background_coefficient,
+                background_frame_index=self.background_frame_index,
+            )
             if loaded is None:
                 raise RuntimeError(self.view_model.state.error_message or "Failed to load image.")
             self.finished.emit(

@@ -150,6 +150,11 @@ class WaxsConfigurationMixin:
         )
         self._update_geometry_summaries()
         self.refresh_view()
+        # Restore background frame range/state and re-apply to an open image.
+        if getattr(self, "background_path_edit", None):
+            self._update_background_frame_range_from_edit()
+        if getattr(self, "current_file", None):
+            self._reload_current_for_background()
 
     def _schedule_waxs_settings_save(self, *_args) -> None:
         if not self._applying_waxs_configuration:

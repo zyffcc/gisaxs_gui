@@ -8,6 +8,7 @@ from .application import (
     EstimateWaxsDisplayLimits,
     ExportWaxsCurve,
     ExportWaxsImage,
+    GetWaxsFrameCount,
     IntegrateWaxsImage,
     LoadWaxsImage,
     GetWaxsWorkingDirectory,
@@ -41,6 +42,7 @@ def create_waxs_view_model(context: AppContext) -> WaxsViewModel:
     return WaxsViewModel(
         context=context,
         load_image=LoadWaxsImage(images),
+        get_frame_count=GetWaxsFrameCount(images),
         integrate_image=IntegrateWaxsImage(),
         run_batch=RunWaxsBatch(JobRunnerWaxsBatchAdapter(context.jobs)),
         export_curve=ExportWaxsCurve(exporter),

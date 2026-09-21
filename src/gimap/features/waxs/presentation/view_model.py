@@ -38,6 +38,7 @@ class WaxsViewModel:
         preview_batch_frame=None,
         load_configuration=None,
         save_configuration=None,
+        get_frame_count=None,
     ):
         self.context = context
         self._load_image = load_image
@@ -55,6 +56,7 @@ class WaxsViewModel:
         self._preview_batch_frame = preview_batch_frame
         self._load_configuration = load_configuration
         self._save_configuration = save_configuration
+        self._get_frame_count = get_frame_count
         self.state = WaxsState()
 
     def load_settings(self) -> dict[str, object]:
@@ -96,11 +98,44 @@ class WaxsViewModel:
     def is_directory(self, path: str | Path) -> bool:
         return self._validate_directory(path)
 
-    def load_image(self, path: Path, frame_index: int = 0):
+    def frame_count(self, path: str | Path) -> int:
+        if self._get_frame_count is None:
+            return 1
+        return self._get_frame_count.execute(Path(path))
+
+    def preview_background(self, path: str | Path, frame_index: int = 0):
+        """Load a background frame without mutating the main image state."""
+        if self._load_image is None:
+            return None
+        try:
+            loaded = self._load_image.execute(
+                LoadWaxsImageRequest(Path(path), int(frame_index))
+            )
+        except Exception as exc:
+            self.state = replace(self.state, error_message=str(exc))
+            return None
+        return loaded.image
+
+    def load_image(
+        self,
+        path: Path,
+        frame_index: int = 0,
+        background_path: str | Path | None = None,
+        background_coefficient: float = 1.0,
+        background_frame_index: int = 0,
+    ):
         self.state = replace(self.state, image_status="loading", error_message=None)
         try:
             loaded = self._load_image.execute(
-                LoadWaxsImageRequest(Path(path), frame_index)
+                LoadWaxsImageRequest(
+                    Path(path),
+                    frame_index,
+                    background_path=(
+                        Path(background_path) if background_path else None
+                    ),
+                    background_coefficient=background_coefficient,
+                    background_frame_index=background_frame_index,
+                )
             )
         except Exception as exc:
             self.state = replace(

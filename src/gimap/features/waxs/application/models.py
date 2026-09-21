@@ -13,6 +13,9 @@ import numpy as np
 class LoadWaxsImageRequest:
     path: Path
     frame_index: int = 0
+    background_path: Path | None = None
+    background_coefficient: float = 1.0
+    background_frame_index: int = 0
 
 
 @dataclass(frozen=True)

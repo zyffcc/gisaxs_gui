@@ -28,6 +28,7 @@ from .use_cases import (
     EstimateWaxsDisplayLimits,
     ExportWaxsCurve,
     ExportWaxsImage,
+    GetWaxsFrameCount,
     IntegrateWaxsImage,
     LoadWaxsImage,
     GetWaxsWorkingDirectory,
@@ -43,6 +44,7 @@ from .configuration import LoadWaxsConfiguration, SaveWaxsConfiguration
 __all__ = [
     "IntegrateWaxsImage",
     "IntegrateWaxsImageRequest",
+    "GetWaxsFrameCount",
     "LoadedWaxsImage",
     "LoadWaxsImage",
     "LoadWaxsImageRequest",

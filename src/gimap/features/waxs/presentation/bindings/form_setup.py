@@ -222,6 +222,14 @@ class FormSetupMixin:
                 "pixel_x_spin",
                 "pixel_y_spin",
                 "wavelength_spin",
+                "background_enable",
+                "background_path_edit",
+                "background_browse_button",
+                "background_clear_button",
+                "background_frame_spin",
+                "background_coefficient_spin",
+                "background_preview_button",
+                "background_hint",
             ),
         )
         self.waxsAdvancedContentLayout.addWidget(self.advanced_tabs)
@@ -341,6 +349,16 @@ class FormSetupMixin:
         )
         self.open_button.clicked.connect(self.open_file_dialog)
         self.reload_button.clicked.connect(self.reload_current_file)
+        self.background_browse_button.clicked.connect(self.select_background_file)
+        self.background_clear_button.clicked.connect(self.clear_background)
+        self.background_enable.toggled.connect(self._on_background_changed)
+        self.background_coefficient_spin.valueChanged.connect(
+            self._on_background_changed
+        )
+        self.background_frame_spin.valueChanged.connect(self._on_background_changed)
+        self.background_preview_button.clicked.connect(
+            self.preview_background_dialog
+        )
         self.export_button.clicked.connect(self.export_current_image)
         self.viewer.fileDropped.connect(self.load_file)
         self.view_tabs.currentChanged.connect(self._on_view_tab_changed)

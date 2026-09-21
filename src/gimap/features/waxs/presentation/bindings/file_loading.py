@@ -28,6 +28,137 @@ class FileLoadingMixin:
         if file_path:
             self.load_file(self.view_model.normalize_path(file_path))
 
+    def select_background_file(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open Background File", "", SCATTERING_FILTER
+        )
+        if not file_path:
+            return
+        normalized = self.view_model.normalize_path(file_path)
+        self.background_path_edit.setText(normalized)
+        self.background_enable.setChecked(True)
+        self._update_background_frame_range(Path(normalized))
+        self._reload_current_for_background()
+
+    def clear_background(self) -> None:
+        self.background_path_edit.clear()
+        self.background_enable.setChecked(False)
+        self._update_background_frame_range(None)
+        self._reload_current_for_background()
+
+    def _on_background_changed(self, *_args) -> None:
+        self._update_background_frame_range_from_edit()
+        self._reload_current_for_background()
+
+    def _update_background_frame_range_from_edit(self) -> None:
+        text = self.background_path_edit.text().strip()
+        if text:
+            self._update_background_frame_range(Path(text))
+        else:
+            self._update_background_frame_range(None)
+
+    def _update_background_frame_range(self, path: Path | None) -> None:
+        """Set the background frame spin range based on file type/frame count."""
+        if getattr(self, "background_frame_spin", None) is None:
+            return
+        if path is None:
+            self.background_frame_spin.setEnabled(False)
+            self.background_frame_spin.setMaximum(1)
+            self.background_frame_spin.setValue(1)
+            return
+        suffix = path.suffix.lower()
+        if suffix != ".nxs":
+            self.background_frame_spin.setEnabled(False)
+            self.background_frame_spin.setMaximum(1)
+            self.background_frame_spin.setValue(1)
+            return
+        try:
+            count = self.view_model.frame_count(path)
+        except Exception:
+            count = 1
+        count = max(1, int(count))
+        self.background_frame_spin.setMaximum(count)
+        self.background_frame_spin.setEnabled(count > 1)
+        if self.background_frame_spin.value() > count:
+            self.background_frame_spin.setValue(count)
+
+    def preview_background_dialog(self) -> None:
+        text = self.background_path_edit.text().strip()
+        if not text:
+            QMessageBox.information(
+                self, "Preview Background", "No background file selected."
+            )
+            return
+        from PyQt5.QtWidgets import (
+            QDialog,
+            QHBoxLayout,
+            QLabel,
+            QSpinBox,
+            QVBoxLayout,
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Background Preview")
+        dialog.resize(560, 480)
+        layout = QVBoxLayout(dialog)
+        header = QHBoxLayout()
+        header_label = QLabel(Path(text).name)
+        header.addWidget(header_label)
+        header.addStretch(1)
+        layout.addLayout(header)
+        frame_row = QHBoxLayout()
+        frame_row.addWidget(QLabel("Frame:"))
+        frame_edit = QSpinBox(dialog)
+        frame_edit.setMinimum(1)
+        frame_edit.setMaximum(
+            max(1, int(self._background_preview_frame_count(Path(text))))
+        )
+        frame_edit.setValue(self.background_frame_spin.value())
+        frame_row.addWidget(frame_edit)
+        frame_row.addStretch(1)
+        layout.addLayout(frame_row)
+        from .image_viewer import ScatteringImageViewer
+
+        viewer = ScatteringImageViewer(view_model=self.view_model)
+        layout.addWidget(viewer, 1)
+
+        def render() -> None:
+            image = self.view_model.preview_background(
+                Path(text), int(frame_edit.value() - 1)
+            )
+            if image is None:
+                QMessageBox.warning(
+                    dialog, "Preview Background", "Could not load background frame."
+                )
+                return
+            viewer.show_image(
+                image,
+                log_scale=self.display_log.isChecked(),
+                colormap=self.display_cmap.currentText(),
+                auto_scale=True,
+                vmin=self.vmin_spin.value(),
+                vmax=self.vmax_spin.value(),
+                mask_min=0.0,
+                mask_max=0.0,
+                flip_vertical=self.display_flip.isChecked(),
+                title=f"Background {Path(text).name} - frame {frame_edit.value()}",
+            )
+
+        frame_edit.valueChanged.connect(lambda _v: render())
+        render()
+        dialog.exec_()
+
+    def _background_preview_frame_count(self, path: Path) -> int:
+        try:
+            return self.view_model.frame_count(path)
+        except Exception:
+            return 1
+
+    def _reload_current_for_background(self) -> None:
+        """Re-apply background settings to the currently displayed image."""
+        if self.current_file:
+            self._start_loader(self.current_file, self.frame_spin.value() - 1)
+
     def load_file(self, file_path: str, frame_index: int = 0) -> None:
         suffix = Path(file_path).suffix.lower()
         if suffix not in SUPPORTED_EXTENSIONS:
@@ -46,11 +177,44 @@ class FileLoadingMixin:
             return
         self._start_loader(self.current_file, self.frame_spin.value() - 1)
 
+    def _background_settings(
+        self,
+    ) -> tuple[str | None, float, int]:
+        """Return current background path, coefficient and frame from the UI.
+
+        Returns ``(None, coefficient, frame_index)`` when background subtraction
+        is disabled or no background path has been chosen, so the loader applies
+        no change.
+        """
+        if not getattr(self, "background_enable", None) or not getattr(
+            self, "background_path_edit", None
+        ):
+            return None, 1.0, 0
+        if not self.background_enable.isChecked():
+            return None, 1.0, 0
+        path = self.background_path_edit.text().strip()
+        coefficient = (
+            float(self.background_coefficient_spin.value())
+            if getattr(self, "background_coefficient_spin", None)
+            else 1.0
+        )
+        frame_index = (
+            int(self.background_frame_spin.value() - 1)
+            if getattr(self, "background_frame_spin", None)
+            else 0
+        )
+        if not path:
+            return None, coefficient, 0
+        return path, coefficient, frame_index
+
     def _start_loader(self, file_path: str, frame_index: int) -> None:
         if self._loader_thread is not None and self._loader_thread.isRunning():
             self._set_status("A file is already loading...")
             return
 
+        background_path, background_coefficient, background_frame_index = (
+            self._background_settings()
+        )
         self.set_job_state(
             "running",
             f"Loading {Path(file_path).name}...",
@@ -60,6 +224,9 @@ class FileLoadingMixin:
             file_path,
             frame_index,
             self.view_model,
+            background_path=background_path,
+            background_coefficient=background_coefficient,
+            background_frame_index=background_frame_index,
         )
         self._loader_worker.moveToThread(self._loader_thread)
         self._loader_thread.started.connect(self._loader_worker.run)
