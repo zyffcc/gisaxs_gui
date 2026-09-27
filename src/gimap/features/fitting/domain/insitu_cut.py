@@ -5,6 +5,9 @@ from __future__ import annotations
 import numpy as np
 
 from .curve_transformations import interpolate_series
+from .cut_math import extract_native_pixel_profile
+from .image_transforms import finite_mean_axis
+from .models import CutSelection
 
 
 def _sort_filter_pairs(x_values, y_values):
@@ -21,7 +24,7 @@ def _sort_filter_pairs(x_values, y_values):
 
 
 def compute_insitu_cut(payload: dict) -> dict:
-    """Preserve the former worker math, including ordinary ``np.mean`` behavior."""
+    """CBF cuts preserve native masked observations; legacy sampling is explicit."""
 
     data = np.asarray(payload.get("image_data"), dtype=float)
     if data.ndim != 2:
@@ -39,6 +42,7 @@ def compute_insitu_cut(payload: dict) -> dict:
     horizontal_q_axis = "qr" if payload.get("horizontal_q_axis") == "qr" else "qy"
     point_count = max(10, int(payload.get("n_points", 300)))
     method = str(payload.get("method", "Linear"))
+    preserve_native = bool(payload.get("preserve_native", False))
 
     if show_q_axis:
         qy_mesh = np.asarray(payload.get("qy_mesh"), dtype=float)
@@ -101,7 +105,22 @@ def compute_insitu_cut(payload: dict) -> dict:
             float(x_values.max()),
             point_count,
         )
-        y_result = interpolate_series(x_values, y_values, x_result, method)
+        if preserve_native:
+            x_result, y_result = x_values, y_values
+        else:
+            y_result = interpolate_series(x_values, y_values, x_result, method)
+        source = "q"
+    elif preserve_native and payload.get("native_pixel_q", False):
+        mesh = payload.get("qy_mesh" if cut_type == "horizontal" else "qz_mesh")
+        intensity, q_line, _indices = extract_native_pixel_profile(
+            data, mesh, CutSelection(center_x, center_y, vertical, parallel, cut_type)
+        )
+        x_result, y_result = _sort_filter_pairs(q_line, intensity)
+        if cut_type == "horizontal":
+            x_label = r"$q_r$ (nm$^{-1}$)" if horizontal_q_axis == "qr" else r"$q_y$ (nm$^{-1}$)"
+            title = "Horizontal Cut"
+        else:
+            x_label, title = r"$q_z$ (nm$^{-1}$)", "Vertical Cut"
         source = "q"
     else:
         image_height, image_width = data.shape
@@ -115,17 +134,17 @@ def compute_insitu_cut(payload: dict) -> dict:
         if region.size == 0:
             raise RuntimeError("Empty region selected")
         if cut_type == "horizontal":
-            intensity = np.mean(region, axis=0)
+            intensity = finite_mean_axis(region, axis=0) if preserve_native else np.mean(region, axis=0)
             coordinates = np.arange(x_min, x_max + 1, dtype=float)
             title = "Horizontal Cut"
             x_label = "Pixel / qy"
         else:
-            intensity = np.mean(region, axis=1)
+            intensity = finite_mean_axis(region, axis=1) if preserve_native else np.mean(region, axis=1)
             coordinates = np.arange(row_min, row_max + 1, dtype=float)
             title = "Vertical Cut"
             x_label = "Pixel / qz"
         x_values, y_values = _sort_filter_pairs(coordinates, intensity)
-        if x_values.size < 2:
+        if preserve_native or x_values.size < 2:
             x_result, y_result = x_values, y_values
         else:
             x_result = np.linspace(
@@ -142,7 +161,9 @@ def compute_insitu_cut(payload: dict) -> dict:
         "x_label": x_label,
         "title": title,
         "source": source,
+        "q_source": "region_mean_native" if preserve_native and source == "q" else None,
         "cut_type": cut_type,
         "points": int(len(x_result)),
-        "method": method,
+        "method": "native_masked" if preserve_native else method,
+        "analysis_revision": payload.get("analysis_revision"),
     }

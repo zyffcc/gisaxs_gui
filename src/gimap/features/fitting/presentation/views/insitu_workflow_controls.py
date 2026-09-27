@@ -1,9 +1,11 @@
 """Controls for the feature-owned Fitting In-situ workflow page."""
 
 from __future__ import annotations
+from PyQt5.QtCore import Qt
 
 from PyQt5.QtWidgets import (
     QCheckBox,
+    QTabWidget,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -34,21 +36,42 @@ class InSituWorkflowControls(QWidget):
         self.stack.setObjectName("fittingInsituParameterStack")
         self.stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
         root.addWidget(self.stack)
+        self.pages = {}
         self._build_source_page()
         self._build_preprocess_page()
         self._build_geometry_page()
         self._build_cut_page()
         self._build_fit_page()
         self._build_results_page()
+        # The frequent path has three steps. Scientific setup lives in one inspector.
+        self.setupTabs = QTabWidget()
+        self.setupTabs.setDocumentMode(True)
+        for key, title in (("preprocess", "Preprocess"), ("geometry", "Detector"), ("cut", "Cut")):
+            widget = self.pages[key]
+            self.stack.removeWidget(widget)
+            self.setupTabs.addTab(widget, title)
+        self.pages["fit"].layout().addWidget(self.setupTabs)
+        self.setupTabs.hide()
+        self.applyRecipeButton.setText("Save analysis settings")
+        self.pages["fit"].layout().insertWidget(5, self.applyRecipeButton)
+        self.setupButton = QPushButton("Detector / cut settings…")
+        self.setupButton.setCheckable(True)
+        self.setupButton.toggled.connect(self.setupTabs.setVisible)
+        self.pages["fit"].layout().insertWidget(3, self.setupButton)
 
     def show_step(self, key: str) -> None:
         if key in self.STEP_KEYS:
-            self.stack.setCurrentIndex(self.STEP_KEYS.index(key))
+            if key in ("preprocess", "geometry", "cut"):
+                self.stack.setCurrentWidget(self.pages["fit"])
+                self.setupTabs.show(); self.setupTabs.setCurrentWidget(self.pages[key])
+            else:
+                self.stack.setCurrentWidget(self.pages[key])
 
     def _page(self, key: str, title: str, description: str):
         page = QWidget(self.stack)
         page.setObjectName(f"fittingInsitu{key.title()}Parameters")
         layout = QVBoxLayout(page)
+        layout.setAlignment(Qt.AlignTop)
         layout.setContentsMargins(2, 2, 8, 8)
         layout.setSpacing(10)
         title_label = QLabel(title, page)
@@ -59,6 +82,7 @@ class InSituWorkflowControls(QWidget):
         layout.addWidget(title_label)
         layout.addWidget(meta)
         self.stack.addWidget(page)
+        self.pages[key] = page
         return page, layout
 
     def _build_source_page(self) -> None:
@@ -169,6 +193,11 @@ class InSituWorkflowControls(QWidget):
         self.mirrorFillCheckBox = QCheckBox("Mirror-fill detector gaps", page)
         self.mirrorMarginSpinBox = QSpinBox(page)
         self.mirrorMarginSpinBox.setRange(0, 10_000)
+        self.invalidMarginSpinBox = QSpinBox(page)
+        self.invalidMarginSpinBox.setRange(0, 20)
+        self.invalidMarginSpinBox.setValue(3)
+        self.invalidMarginSpinBox.setSuffix(" px")
+        self.invalidMarginSpinBox.setToolTip("CBF invalid detector pixels and their neighbours are blocked before all analysis. Zero counts remain valid; masked gaps are not interpolated into observations.")
         form = QFormLayout()
         form.addRow("", self.flipUdCheckBox)
         form.addRow("", self.thresholdCheckBox)
@@ -176,6 +205,7 @@ class InSituWorkflowControls(QWidget):
         form.addRow("Threshold max", self.thresholdMaxSpinBox)
         form.addRow("", self.mirrorFillCheckBox)
         form.addRow("Gap margin", self.mirrorMarginSpinBox)
+        form.addRow("CBF bad-pixel guard", self.invalidMarginSpinBox)
         layout.addLayout(form)
         layout.addStretch(1)
 
@@ -246,7 +276,7 @@ class InSituWorkflowControls(QWidget):
         page, layout = self._page(
             "fit",
             "Fit",
-            "Reuse the captured model and choose how each frame is initialized and refined.",
+            "Run the current 1D workflow for every frame. Save settings before starting.",
         )
         self.autoFitCheckBox = QCheckBox("Fit every extracted curve", page)
         self.usePreviousCheckBox = QCheckBox("Use previous success as next initial guess", page)
@@ -263,20 +293,43 @@ class InSituWorkflowControls(QWidget):
         self.refineEverySpinBox = QSpinBox(page)
         self.refineEverySpinBox.setRange(1, 100_000)
         self.failurePolicyCombo = self._combo(
-            ("Continue", "Fallback to recipe", "Stop")
+            ("Continue", "Stop")
         )
+        self.autoFitCheckBox.setChecked(True)
+        self.fullAutoFitCheckBox.setChecked(True)
+        self.usePreviousCheckBox.setChecked(False)
+        self.fitInitializationCombo.setCurrentText("AI each frame")
+        self.workflowModeCombo = QComboBox(page)
+        self.workflowModeCombo.addItems(("Fit curves · selected method", "Fit curves · legacy correction off", "Extract curves only"))
+        self.workflowModeCombo.setToolTip(
+            "Choose the fitting method in 1D parameters. Legacy correction off only disables "
+            "the legacy V5 four-step correction. The single-RC specialist and its amplitude calibration "
+            "use their own captured settings in both fitting modes."
+        )
+        self.failurePolicyCombo.setCurrentText("Continue")
         form = QFormLayout()
-        form.addRow("", self.autoFitCheckBox)
-        form.addRow("", self.usePreviousCheckBox)
-        form.addRow("", self.fullAutoFitCheckBox)
-        form.addRow("", self.autoRefineCheckBox)
-        form.addRow("AI profile", self.profileCombo)
-        form.addRow("Initial values", self.fitInitializationCombo)
-        form.addRow("Refinement", self.refinementCombo)
-        form.addRow("Refine every", self.refineEverySpinBox)
+        form.addRow("Process", self.workflowModeCombo)
         form.addRow("On failure", self.failurePolicyCombo)
         layout.addLayout(form)
-        layout.addStretch(1)
+        label = QLabel("Uses the bundled 1D workflow and captured prediction parameters. Each q side keeps its own model and forward curve.", page)
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        self.predictionSettingsButton = QPushButton("1D parameters…", page)
+        layout.addWidget(self.predictionSettingsButton)
+        for widget in (self.autoFitCheckBox, self.usePreviousCheckBox, self.fullAutoFitCheckBox,
+                       self.autoRefineCheckBox, self.profileCombo, self.fitInitializationCombo,
+                       self.refinementCombo, self.refineEverySpinBox):
+            widget.hide()
+        self.workflowModeCombo.currentIndexChanged.connect(self._sync_workflow_mode)
+        self._sync_workflow_mode(0)
+
+    def _sync_workflow_mode(self, index):
+        self.autoFitCheckBox.setChecked(index != 2)
+        self.fullAutoFitCheckBox.setChecked(index != 2)
+        self.usePreviousCheckBox.setChecked(False)
+        self.autoRefineCheckBox.setChecked(False)
+        self.fitInitializationCombo.setCurrentText("AI each frame")
+        self.refinementCombo.setCurrentText("Plot only")
 
     def _build_results_page(self) -> None:
         page, layout = self._page(

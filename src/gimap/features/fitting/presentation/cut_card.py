@@ -5,6 +5,7 @@ from __future__ import annotations
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QBoxLayout,
+    QCheckBox,
     QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
@@ -210,6 +211,18 @@ class CutLineCard(CardFrame):
         auto_row.addWidget(self.ui.gisaxsInputCenterAutoFindingButton)
         page_layout.addLayout(auto_row)
         page_layout.addWidget(self.ui.gisaxsInputCutButton)
+        self.ui.gisaxsOptimizeCenterXButton = QPushButton("Optimize Center X", page)
+        self.ui.gisaxsOptimizeCenterXButton.setObjectName("gisaxsOptimizeCenterXButton")
+        self.ui.gisaxsOptimizeCenterXButton.setToolTip(
+            "Find the symmetry axis in the selected horizontal band, update beam X (q=0), and re-extract. Yoneda height stays fixed."
+        )
+        normalize_button(self.ui.gisaxsOptimizeCenterXButton)
+        page_layout.addWidget(self.ui.gisaxsOptimizeCenterXButton)
+        toggle = QCheckBox("Find Yoneda automatically on CBF load", page)
+        toggle.setChecked(bool(self.preferences.get("fitting.yoneda_cut.auto_on_cbf_load", True)))
+        toggle.toggled.connect(self._save_auto_yoneda)
+        self.ui.gisaxsAutoYonedaOnLoadCheckBox = toggle
+        page_layout.addWidget(toggle)
         page_layout.addStretch(1)
         # Both compatibility names now refer to the single merged disclosure.
         self.ui.fittingCutStepDisclosure = disclosure
@@ -226,6 +239,10 @@ class CutLineCard(CardFrame):
         except (TypeError, ValueError):
             value = self.DEFAULT_AUTO_CUT_THICKNESS
         return min(999, max(1, value))
+
+    def _save_auto_yoneda(self, enabled):
+        self.preferences.set("fitting.yoneda_cut.auto_on_cbf_load", bool(enabled))
+        self.preferences.save()
 
     def _save_auto_cut_thickness(self) -> None:
         self.preferences.set(

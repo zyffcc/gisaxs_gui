@@ -1,0 +1,14 @@
+{
+  "cache": "/data/dust/user/zhaiyufe/MaxwellRuns/network-benchmark-20260914-v5/cache",
+  "initial": "/data/dust/user/zhaiyufe/MaxwellRuns/network-benchmark-20260914-v5/results/base_supervised",
+  "output": "/data/dust/user/zhaiyufe/MaxwellRuns/network-benchmark-20260914-v5/results/base_physics",
+  "train_count": 20000,
+  "epochs": 6,
+  "batch_size": 128,
+  "physics_samples": 4,
+  "physics_weight": 10.0,
+  "learning_rate": 0.0001,
+  "seed": 20260913,
+  "architecture": "cnn_multi",
+  "hypotheses": 6
+}

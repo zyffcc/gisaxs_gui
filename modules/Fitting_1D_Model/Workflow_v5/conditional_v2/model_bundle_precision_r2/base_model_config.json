@@ -1,0 +1,33 @@
+{
+  "base_dir": "weights/base",
+  "corrector_dir": "weights/corrector",
+  "model": "corrector_10k_self",
+  "topk": 34,
+  "passes": 20,
+  "retain_best": true,
+  "representation": "log512",
+  "compiled_inference": true,
+  "selection_frozen_utc": "2026-09-14T03:26:33Z",
+  "validation_document": "confirmation_selected10k.json",
+  "selection_criterion": "-validation fraction<.05 + .1median + .03P90; test unused",
+  "no_inference_optimizer": true,
+  "types": {
+    "1": "sphere",
+    "2": "random cylinder",
+    "3": "vertical cylinder"
+  },
+  "probability_status": "No calibrated per-curve posterior; classifier score for ranking only",
+  "validated_budgets": [
+    {
+      "topk": 34,
+      "passes": 20
+    }
+  ],
+  "output_schema_version": "v5-output-r3",
+  "revision_scope": "Two-level component/parameter candidates and exact component conditioning; neural weights unchanged",
+  "conditional_inference": {
+    "components": "complete multiset of 1-4 supported types",
+    "heads": 6,
+    "passes": 20
+  }
+}

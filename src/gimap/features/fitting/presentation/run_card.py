@@ -269,7 +269,7 @@ class FittingControlsCard(CardFrame):
         self.mode_tabs.addTab(model_parameters_card, "Components")
         self.mode_tabs.addTab(global_group, "Global")
         self.mode_tabs.addTab(manual_page, "Data & refine")
-        self.mode_tabs.addTab(ai_page, "Auto fit")
+        self.mode_tabs.addTab(ai_page, "1D Predict")
         self.mode_tabs.setDocumentMode(True)
         self.mode_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.mode_tabs.currentChanged.connect(
@@ -302,6 +302,9 @@ class FittingControlsCard(CardFrame):
         command_layout.addWidget(ui.FittingManualFittingButton, 0)
         layout.addWidget(self.fit_command_bar)
         layout.addWidget(self.mode_tabs)
+        self.mode_tabs.currentChanged.connect(lambda index: self.fit_command_bar.setVisible(index != 3))
+        self.mode_tabs.setCurrentIndex(3)
+        self.fit_command_bar.hide()
         self._sync_mode_tab_height()
         self.apply_responsive_profile(self.profile)
 

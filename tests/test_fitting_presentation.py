@@ -699,16 +699,12 @@ def test_fitting_context_switch_preserves_single_navigation_and_versions_insitu_
     assert page.ui.previewShowRoiCheckBox.isChecked()
     assert not page.ui.previewVminSpinBox.isEnabled()
     assert tuple(page.ui.workflowButtons) == (
-        "source",
-        "preprocess",
-        "geometry",
-        "cut",
-        "fit",
-        "results",
+        "source", "fit", "results",
     )
     assert page.ui.workflowControls.applyRecipeButton.isEnabled() is False
-    QTest.mouseClick(page.ui.workflowButtons["geometry"], Qt.LeftButton)
-    assert page.ui.workflowControls.stack.currentIndex() == 2
+    QTest.mouseClick(page.ui.workflowButtons["fit"], Qt.LeftButton)
+    page.ui.workflowControls.show_step("geometry")
+    assert page.ui.workflowControls.setupTabs.currentWidget() is page.ui.workflowControls.pages["geometry"]
 
     recipe = window.components.fitting_view_model.insitu.create_recipe_from_single(
         SingleAnalysisRecipeSnapshot(
@@ -906,7 +902,7 @@ def test_fitting_workbench_exposes_guided_progressive_disclosure_and_modes():
         "Components",
         "Global",
         "Data & refine",
-        "Auto fit",
+        "1D Predict",
     ]
     assert workspace.preview_tabs.tabText(0) == "Detector"
     assert workspace.preview_tabs.count() == 2
@@ -1026,10 +1022,12 @@ def test_fitting_current_task_and_fit_mode_use_natural_height_without_blank_canv
         app.processEvents()
         natural_height = workspace.fitting_fit_step_page.minimumSizeHint().height()
         assert workspace.workflow_content_stack.height() <= natural_height + 4
-        assert window.FittingManualFittingButton.isVisible()
+        assert window.FittingManualFittingButton.isVisible() is (index != 3)
         assert window.FittingManualFittingButton.parent().objectName() == (
             "fittingPersistentCommandBar"
         )
+        if index == 3:
+            continue  # V5 owns its own primary action; the manual bar is hidden.
         assert (
             window.FittingManualFittingButton.mapTo(
                 workspace.fitting_fit_step_page,
@@ -1194,6 +1192,8 @@ def test_fitting_model_parameters_are_primary_fit_content_and_wheel_safe():
     workspace.show_workflow_step("fit")
 
     assert window.fittingModeTabs.indexOf(workspace.model_parameters_card) == 0
+    assert window.fittingModeTabs.currentIndex() == 3
+    window.fittingModeTabs.setCurrentIndex(0)
     assert not workspace.model_parameters_card.isHidden()
     assert workspace.fitting_advanced_section.isHidden()
     assert window.fitParticleShapeCombox_1.currentText() == "Sphere"

@@ -23,6 +23,7 @@ class InsituRecipeRuntimeMixin:
         if getattr(self, "_insitu_runtime_snapshot", None) is None:
             self._insitu_runtime_snapshot = {
                 "preprocessing": {
+                    "_invalid_margin_px": int(getattr(self, "_invalid_margin_px", 3)),
                     "_flip_ud": bool(getattr(self, "_flip_ud", False)),
                     "_threshold_mask_enabled": bool(
                         getattr(self, "_threshold_mask_enabled", False)
@@ -48,6 +49,7 @@ class InsituRecipeRuntimeMixin:
                 },
             }
         preprocess = recipe.preprocessing
+        self._invalid_margin_px = int(preprocess.get("invalid_margin_px", recipe.model.get("workflow_v5", {}).get("cbf_gap_margin", 3)))
         self._flip_ud = bool(preprocess.get("flip_ud", False))
         self._threshold_mask_enabled = bool(
             preprocess.get("threshold_enabled", False)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from pathlib import Path
 
 from PyQt5.QtCore import QSettings
 
@@ -17,7 +18,12 @@ class ImageDisplayOptionsMixin:
     """Own image display options behavior."""
 
     def _load_image_display_options(self):
+        self._invalid_margin_px = 3
         try:
+            margin = self.fitting_view_model.get_setting("fitting", "gisaxs_input.invalid_margin_px", None)
+            if margin is None and hasattr(self, "_workflow_options"):
+                margin = self._workflow_options().get("cbf_gap_margin", 3)
+            self._invalid_margin_px = int(np.clip(3 if margin is None else margin, 0, 20))
             settings = QSettings()
             self._show_cut_region = bool(
                 self.fitting_view_model.get_setting("fitting", "gisaxs_input.show_cut_region", True)
@@ -104,6 +110,7 @@ class ImageDisplayOptionsMixin:
 
     def _save_image_display_options(self):
         try:
+            self.fitting_view_model.set_setting("fitting", "gisaxs_input.invalid_margin_px", int(getattr(self, "_invalid_margin_px", 3)))
             settings = QSettings()
             settings.setValue("fitting/gisaxs_input/flip_ud", bool(self._flip_ud))
             settings.setValue(
@@ -159,6 +166,10 @@ class ImageDisplayOptionsMixin:
 
     def _initialize_image_display_option_widgets(self):
         try:
+            invalid_margin = getattr(self.ui, "gisaxsInputInvalidMarginSpinBox", None)
+            if invalid_margin is not None:
+                invalid_margin.setValue(int(getattr(self, "_invalid_margin_px", 3)))
+                invalid_margin.valueChanged.connect(self._on_invalid_margin_changed)
             combo = getattr(self.ui, "gisaxsInputColormapCombo", None)
             if combo is not None:
                 combo.blockSignals(True)
@@ -230,6 +241,11 @@ class ImageDisplayOptionsMixin:
     def _sync_image_display_option_widgets(self):
         try:
             self._syncing_image_display_options = True
+            invalid_margin = getattr(self.ui, "gisaxsInputInvalidMarginSpinBox", None)
+            if invalid_margin is not None:
+                invalid_margin.blockSignals(True)
+                invalid_margin.setValue(int(getattr(self, "_invalid_margin_px", 3)))
+                invalid_margin.blockSignals(False)
             combo = getattr(self.ui, "gisaxsInputColormapCombo", None)
             if combo is not None:
                 combo.blockSignals(True)
@@ -323,6 +339,13 @@ class ImageDisplayOptionsMixin:
         if self._syncing_image_display_options:
             return
         self._flip_ud = bool(checked)
+        self._save_image_display_options()
+        self._reapply_input_image_options()
+
+    def _on_invalid_margin_changed(self, value):
+        if self._syncing_image_display_options:
+            return
+        self._invalid_margin_px = int(value)
         self._save_image_display_options()
         self._reapply_input_image_options()
 
@@ -421,6 +444,8 @@ class ImageDisplayOptionsMixin:
                 ),
                 mirror_gap_margin_px=int(getattr(self, "_mirror_gap_margin_px", 0)),
                 mirror_gap_value=-float(stack_count),
+                mask_negative_pixels=Path(self.current_parameters.get("imported_gisaxs_file", "")).suffix.lower() == ".cbf",
+                invalid_margin_px=int(getattr(self, "_invalid_margin_px", 3)),
             )
         except Exception as exc:
             message = f"Image preprocessing failed: {exc}"
@@ -440,6 +465,8 @@ class ImageDisplayOptionsMixin:
         self.summed_data = processed if stack_count > 1 else None
         self._image_display_cache.clear()
         self._last_mirror_fill_count = detector_image.mirror_filled_gap_pixels
+        if detector_image.preprocessing.mask_negative_pixels:
+            self.status_updated.emit(f"CBF preprocessing mask: {detector_image.masked_pixels} pixels blocked; guard={detector_image.preprocessing.invalid_margin_px} px; revision={detector_image.revision}")
         if mirror_enabled:
             message = (
                 "Mirror gap fill applied to analysis data: "

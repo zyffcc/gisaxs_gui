@@ -89,6 +89,10 @@ class AiCandidateOutputMixin:
         if not rows:
             self._set_ai_workspace_status("AI fitting produced no candidates.", None)
             return
+        if rows and rows[0].get("workflow") == "native_v5":
+            self._ai_candidate_rows = list(rows)
+            self._show_workflow_results(rows, output_dir)
+            return
         rows = list(
             self.fitting_view_model.review_candidates(
                 rows,

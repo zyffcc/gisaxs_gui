@@ -37,6 +37,46 @@ class FitResultExportMixin:
 
             if isinstance(getattr(self, "fitting", None), dict):
                 meta = self.fitting.get("meta", {})
+                if meta.get("source") == "native_v5":
+                    # Versioned workflow candidates must never be described by
+                    # unrelated manual-model controls or their parameter schema.
+                    import json
+
+                    candidates = meta.get("side_candidates") or [meta.get("candidate")]
+                    candidates = [row for row in candidates if isinstance(row, dict)]
+                    lines.append("# Parameter Source: native_v5_candidate_snapshot")
+                    if not candidates:
+                        lines.append("# No native workflow candidate snapshot available")
+                    for row in candidates:
+                        lines.append(f"# Side: {row.get('side', 'not recorded')}")
+                        lines.append(f"# Candidate Source: {row.get('best_source', 'not recorded')}")
+                        lines.append(f"# Forward Version: {row.get('forward_version', 'not recorded')}")
+                        if row.get("model_id"):
+                            lines.append(f"# Model ID: {row['model_id']}")
+                        lines.append("# Units: " + json.dumps(row.get("unit_contract", {}), sort_keys=True))
+                        lines.append("# Component weights are model amplitude weights, not probabilities or volume fractions")
+                        for index, component in enumerate(row.get("components", []), 1):
+                            lines.append(f"# Particle {index}: shape={component.get('type', 'not recorded')}")
+                            values = {**component.get("params", {})}
+                            for name in ("type_id", "amplitude", "weight"):
+                                if component.get(name) is not None:
+                                    values[name] = component[name]
+                            for name, value in values.items():
+                                if value is not None:
+                                    lines.append(f"#   component_{index}_{name} = {float(value):.17g}")
+                            if "structure_factor" in component:
+                                lines.append(f"#   component_{index}_structure_factor = {bool(component['structure_factor'])}")
+                        lines.append("# Global Parameters:")
+                        for name, value in row.get("global_params", {}).items():
+                            if value is not None:
+                                lines.append(f"#   {name} = {float(value):.17g}")
+                        # Legacy conditional V5 amplitudes also require these
+                        # original reference coefficients and normalization.
+                        for name in ("normalizer", "forward_reference"):
+                            if row.get(name) is not None:
+                                lines.append(f"# {name}: " + json.dumps(row[name], sort_keys=True))
+                    lines.append("# Fitting Parameters End")
+                    return lines
                 fit_shapes = meta.get("shapes")
                 fit_params = meta.get("params")
                 if fit_shapes and fit_params:

@@ -187,6 +187,7 @@ class InSituSeriesPage(QWidget):
             (controls.thresholdMinSpinBox, preprocess.get("threshold_min", -1e12)),
             (controls.thresholdMaxSpinBox, preprocess.get("threshold_max", 1e12)),
             (controls.mirrorMarginSpinBox, preprocess.get("mirror_gap_margin_px", 0)),
+            (controls.invalidMarginSpinBox, preprocess.get("invalid_margin_px", 3)),
             (controls.cutCenterVerticalSpinBox, cut.get("center_vertical_px", 0.0)),
             (controls.cutCenterParallelSpinBox, cut.get("center_parallel_px", 0.0)),
             (controls.cutVerticalSpinBox, cut.get("cut_vertical_px", 10.0)),
@@ -221,6 +222,10 @@ class InSituSeriesPage(QWidget):
             recipe.fitting.initialization == "ai_each_frame"
         )
         controls.autoRefineCheckBox.setChecked(recipe.fitting.refinement != "plot_only")
+        if recipe.model.get("workflow_v5"):
+            mode = 2 if recipe.model.get("extract_only") else (0 if recipe.model["workflow_v5"].get("numerical",True) else 1)
+            controls.workflowModeCombo.setCurrentIndex(mode)
+            controls._sync_workflow_mode(mode)
 
     def render_workflow(self, workflow) -> None:
         total = workflow.processed_count + len(workflow.pending_paths)
@@ -309,6 +314,10 @@ class InSituSeriesPage(QWidget):
                 experiment_setup=self._experiment_setup_values(),
                 preprocessing=self._preprocessing_values(),
                 cut=self._cut_values(),
+                model={**recipe.to_dict()["model"],
+                       "workflow_v5": {**recipe.to_dict()["model"].get("workflow_v5", {}),
+                                       "numerical": controls.workflowModeCombo.currentIndex() == 0},
+                       "extract_only": controls.workflowModeCombo.currentIndex() == 2},
                 tracking=InSituTrackingPolicy(
                     center=_TRACKING_FROM_TEXT[controls.centerTrackingCombo.currentText()],
                     yoneda=_TRACKING_FROM_TEXT[controls.yonedaTrackingCombo.currentText()],
@@ -340,6 +349,7 @@ class InSituSeriesPage(QWidget):
     def _preprocessing_values(self) -> dict[str, object]:
         c = self.ui.workflowControls
         return {
+            "invalid_margin_px": c.invalidMarginSpinBox.value(),
             "flip_ud": c.flipUdCheckBox.isChecked(),
             "threshold_enabled": c.thresholdCheckBox.isChecked(),
             "threshold_min": c.thresholdMinSpinBox.value(),

@@ -225,6 +225,43 @@ class InsituRefinementLifecycleMixin:
             )
             if not rows:
                 raise RuntimeError("Full Auto Fit produced no candidates")
+            if rows[0].get("workflow") == "native_v5":
+                # Each q side has its own fitted model; retain the best of BOTH sides.
+                best = {}
+                for row in rows:
+                    best.setdefault(row["side"], row)
+                self._apply_workflow_candidate(rows[0], refresh_plot=False)
+                selected = list(best.values())
+                q = np.concatenate([r["native_q"] for r in selected])
+                fitted = np.concatenate([r["native_fit"] for r in selected])
+                order = np.argsort(q)
+                self.fitting["q"], self.fitting["I"] = q[order], fitted[order]
+                self.I_fitting = fitted[order]
+                self.fitting["meta"]["side_candidates"] = selected
+                self.fitting["meta"]["params"] = {
+                    f"{row['side']}_component_{i+1}_{key}": float(value)
+                    for row in selected for i, component in enumerate(row["components"])
+                    for key, value in component["params"].items() if value is not None
+                }
+                # Retain every scalar needed to reconstruct each side. Particle
+                # amplitudes and instrument/background values differ by frame.
+                for row in selected:
+                    for i, component in enumerate(row["components"], 1):
+                        for key in ("amplitude", "weight", "type_id"):
+                            if component.get(key) is not None:
+                                self.fitting["meta"]["params"][f"{row['side']}_component_{i}_{key}"] = float(component[key])
+                    for key, value in row.get("global_params", {}).items():
+                        if value is not None:
+                            self.fitting["meta"]["params"][f"{row['side']}_{key}"] = float(value)
+                record["v5_forward_versions"] = {row["side"]: row.get("forward_version") for row in selected}
+                record["v5_candidate_sources"] = {row["side"]: row.get("best_source") for row in selected}
+                record["v5_unit_contracts"] = {row["side"]: row.get("unit_contract", {}) for row in selected}
+                record["v5_output_dir"] = str(output_dir)
+                record["v5_seconds"] = result.runtime_seconds if result is not None else None
+                record["v5_side_candidates"] = selected
+                record["v5_weighted_rms"] = {s:r["signed_weighted_rms"] for s,r in best.items()}
+                self._complete_insitu_workflow_fit(record, "ok")
+                return
             if not self._load_ai_candidate_params(rows[0]):
                 raise RuntimeError("Failed to load the best Full Auto Fit candidate")
             old_suppress = getattr(self, "_suppress_workflow_plot_updates", False)
@@ -289,6 +326,10 @@ class InsituRefinementLifecycleMixin:
         try:
             if not isinstance(getattr(self, "fitting", None), dict):
                 return None
+            if self.fitting.get("meta", {}).get("source") == "native_v5":
+                sides = self.fitting["meta"].get("side_candidates", [self.fitting["meta"]["candidate"]])
+                residual = np.concatenate([(np.asarray(r["native_fit"]) - r["observed"]) / r["sigma"] for r in sides])
+                return float(np.mean(residual**2))
             fit_y = np.asarray(self.fitting.get("I", []), dtype=float).reshape(-1)
             exp_y = None
             if getattr(self, "current_cut_data", None) is not None:
@@ -355,6 +396,10 @@ class InsituRefinementLifecycleMixin:
         self._refresh_insitu_workflow_status()
         if refresh_views:
             self._schedule_insitu_trend_refresh()
+        recipe = self.fitting_view_model.insitu.recipe
+        if failed and recipe is not None and recipe.fitting.failure == "stop":
+            self._stop_insitu_workflow()
+            return
         if not self._insitu_workflow_stop_requested and self._insitu_workflow_state in (
             "Watching",
             "Processing",

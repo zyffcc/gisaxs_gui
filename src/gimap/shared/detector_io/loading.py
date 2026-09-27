@@ -228,17 +228,35 @@ def _read_cbf(path: Path) -> DetectorImage:
 
 
 def _read_tiff(path: Path) -> DetectorImage:
+    reader = "pillow"
     try:
         from PIL import Image
         with Image.open(path) as image:
             data = np.asarray(image)
-    except Exception:
-        import matplotlib.pyplot as plt
-        data = plt.imread(str(path))
+    except (ImportError, OSError, ValueError):
+        # Some detector TIFFs store signed 32-bit samples with WhiteIsZero.
+        # Matplotlib uses Pillow too, so retrying there cannot decode these.
+        # FabIO preserves scientific pixel values, including valid negatives;
+        # interpreting detector-specific invalid codes belongs to preprocessing.
+        import fabio
+
+        detector = fabio.open(str(path))
+        try:
+            if detector.data is None:
+                raise ValueError(f"Empty TIFF detector image: {path}")
+            data = np.array(detector.data, copy=True)
+        finally:
+            detector.close()
+        reader = "fabio"
     if data.ndim == 3:
         data = np.mean(data[..., :3], axis=2)
     data = np.asarray(data, dtype=np.float32)
-    return DetectorImage(data, ~np.isfinite(data), path, metadata={"format": "tiff", "transformations": []})
+    return DetectorImage(
+        data,
+        ~np.isfinite(data),
+        path,
+        metadata={"format": "tiff", "reader": reader, "transformations": []},
+    )
 
 
 def load_detector_image(

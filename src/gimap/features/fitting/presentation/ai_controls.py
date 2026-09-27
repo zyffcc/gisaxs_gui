@@ -25,7 +25,7 @@ from .layout_primitives import (
 
 
 def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing: int):
-    method_group = card._make_group("AI Auto Fitting")
+    method_group = card._make_group("1D Predict · current workflow")
     method_layout = QVBoxLayout(method_group)
     card._configure_group_layout(
         method_layout, group_margin, group_top, scale_value(10, card.profile, 8)
@@ -231,14 +231,39 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
         editor.setMaximumWidth(scale_value(116, card.profile, 104))
         editor.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-    method_layout.addLayout(model_row)
-    method_layout.addLayout(model_actions_row)
-    method_layout.addLayout(control_row)
-    method_layout.addLayout(constraint_actions_row)
-    method_layout.addLayout(predict_row)
-    tuning_disclosure.add_widget(tuning_content)
+    # Retain compatibility handles for settings migration, outside the visible flow.
+    legacy = QWidget(method_group)
+    legacy.hide()
+    for widget in (ui.aiFittingModelLabel, ui.aiFittingModelComboBox,
+                   ui.aiFittingConstraintLabel, ui.aiFittingConstraintComboBox,
+                   ui.aiFittingFixedKComboBox, ui.aiFittingCombinationButton,
+                   ui.aiFittingAdvancedConstraintsButton, ui.aiFittingRefreshButton,
+                   ui.aiFittingSamplesSpinBox, ui.aiFittingRefineTopNSpinBox,
+                   ui.aiFittingRefineMaxEvalSpinBox, ui.aiFittingProgressEverySpinBox):
+        widget.setParent(legacy)
+    ui.aiFittingFullAutoFitButton.setText("Fit curve")
+    ui.aiFittingFastPredictButton.setText("General predict only")
+    ui.aiFittingFastPredictButton.setToolTip("Use the experimental general V5 neural model without correction. Fit curve uses the method selected in Parameters.")
+    ui.aiFittingFastPredictButton.setProperty("gimapPrimaryAction", False)
+    ui.aiFittingOpenWorkspaceButton.setText("Parameters / batch…")
+    caption = QLabel("Experimental composition candidates · single-RC specialist only for known single random cylinder · native measured points", method_group)
+    caption.setToolTip("Select the method in Parameters. The single-RC specialist has a local validation scope; numerical fallback does not establish generalization or a unique composition.")
+    caption.setWordWrap(True)
+    method_layout.addWidget(caption)
+    primary = QHBoxLayout()
+    ui.aiFittingExperimentalButton = QPushButton("Quick physical fit", method_group)
+    ui.aiFittingExperimentalButton.setToolTip("Experimental numerical fitting with free amplitudes and broader resolution bounds. Auto compares single-component families; specify a complete composition in Parameters to fit a mixture.")
+    primary.addWidget(ui.aiFittingExperimentalButton)
+    primary.addWidget(ui.aiFittingFullAutoFitButton)
+    primary.addWidget(ui.aiFittingFastPredictButton)
+    primary.addWidget(ui.aiFittingStopButton)
+    method_layout.addLayout(primary)
+    secondary = QHBoxLayout()
+    secondary.addWidget(ui.aiFittingOpenWorkspaceButton)
+    secondary.addWidget(ui.aiFittingExportOutputButton)
+    method_layout.addLayout(secondary)
     ui.fittingAiTuningDisclosure = tuning_disclosure
-    method_layout.addWidget(tuning_disclosure)
+    tuning_disclosure.setParent(legacy)
     method_layout.addWidget(card.methodInfoLabel)
 
     return method_group

@@ -49,6 +49,9 @@ class FittingResultDisplayMixin:
         self._refresh_curve_layers()
 
     def _refresh_curve_layers(self) -> None:
+        if isinstance(getattr(self, "fitting", None), dict) and self.fitting.get("meta", {}).get("source") == "native_v5":
+            self._render_workflow_plot()
+            return
         mode = self._get_curve_view_mode()
         has_model = bool(
             getattr(self, "has_fitting_data", False)

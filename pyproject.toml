@@ -15,6 +15,10 @@ extend-exclude = [
     ".gimap_cache",
     "AI_Fitting_Output",
     "trainset_jobs",
+    # Imported research records are preserved verbatim, not GUI runtime modules.
+    "modules/Fitting_1D_Model/Workflow_v5/development",
+    # Frozen upstream model code is checked against its SHA256 manifest instead.
+    "modules/Fitting_1D_Model/Workflow_v5/conditional_v2",
 ]
 
 [tool.ruff.lint]

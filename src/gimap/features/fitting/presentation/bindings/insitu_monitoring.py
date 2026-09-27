@@ -60,6 +60,21 @@ class InsituMonitoringMixin:
             canvas = holder._insitu_canvas
             fig.clear()
             ax = fig.add_subplot(111)
+            fitting = getattr(self, "fitting", None)
+            if isinstance(fitting, dict) and fitting.get("meta", {}).get("source") == "native_v5":
+                sides = fitting["meta"].get("side_candidates", [fitting["meta"]["candidate"]])
+                for row in sides:
+                    ax.errorbar(row["native_q"], row["observed"], yerr=row["sigma"],
+                                fmt="o", ms=3, alpha=.6, label=f"{row['side']} measured")
+                    ax.plot(row["display_q"], row["display_fit"], lw=1.6,
+                            label=f"{row['side']} model forward")
+                if self._is_fit_log_y_enabled():
+                    ax.set_yscale("symlog", linthresh=max(min(min(r["sigma"]) for r in sides), 1e-12))
+                ax.set_xlabel("q (nm⁻¹)"); ax.set_ylabel("Intensity (input units)")
+                ax.set_title("V5 fitting · native observations / 500-point display")
+                ax.grid(alpha=.2); ax.legend(fontsize=8)
+                fig.tight_layout(pad=.5); canvas.draw_idle()
+                return
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()

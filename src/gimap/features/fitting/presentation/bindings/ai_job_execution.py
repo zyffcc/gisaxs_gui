@@ -29,6 +29,16 @@ from ..binding_primitives import (
 )
 
 
+def workflow_options_for_mode(options, run_mode):
+    """Main Fit honors the saved method; explicit prediction selects legacy V5."""
+    result = {**options, "q_unit": "nm^-1", "numerical": run_mode != "fast"}
+    if run_mode in ("stable", "experimental"):
+        result["method"] = run_mode
+    elif run_mode == "fast":
+        result["method"] = "model"
+    return result
+
+
 class AiJobExecutionMixin:
     """Own ai job execution behavior."""
 
@@ -36,10 +46,15 @@ class AiJobExecutionMixin:
         return Path.cwd() / "AI_Fitting_Output"
 
     def _ai_current_prediction_dir(self) -> Path:
-        return self._ai_prediction_output_root() / "current_prediction"
+        from datetime import datetime
+        return self._ai_prediction_output_root() / ("v5_" + datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
 
     def _prepare_ai_prediction_io(self) -> tuple[Path, Path] | None:
-        arrays = self._current_ai_curve_arrays()
+        try:
+            arrays = self._current_ai_curve_arrays()
+        except (TypeError, ValueError) as exc:
+            QMessageBox.warning(self.main_window or self.ui, "1D fitting input", str(exc))
+            return None
         if arrays is None:
             QMessageBox.warning(
                 self.main_window or self.ui,
@@ -65,6 +80,17 @@ class AiJobExecutionMixin:
         return exact if exact and exact > 0 else None
 
     def _start_ai_prediction(self, run_mode: str = "fast") -> None:
+        if (
+            getattr(self, "_insitu_workflow_ai_record", None) is None
+            and getattr(self, "_insitu_workflow_state", "Idle")
+            in ("Watching", "Processing", "Paused")
+        ):
+            self._set_ai_workspace_status("Stop the in-situ sequence before fitting a single curve.", None)
+            return
+        workspace = getattr(self, "_workflow_v5_dialog", None)
+        if workspace is not None and workspace.job is not None:
+            self._set_ai_workspace_status("A 1D batch is already running in the prediction workspace.", None)
+            return
         thread = getattr(self, "_ai_job_thread", None)
         if thread is not None and thread.isRunning():
             self._set_ai_workspace_status("AI prediction is already running.", None)
@@ -86,7 +112,12 @@ class AiJobExecutionMixin:
         profile = (
             _ai_catalog(self).profile("Fast") if run_mode == "fast" else self._current_ai_profile()
         )
-        constraints = self.build_ai_constraints_json_from_ui()
+        options = self._workflow_options()
+        recipe = self.fitting_view_model.insitu.recipe
+        if getattr(self, "_insitu_workflow_ai_record", None) is not None and recipe is not None:
+            options = dict(recipe.model.get("workflow_v5", options))
+        options = workflow_options_for_mode(options, run_mode)
+        constraints = {"workflow_v5": options, "sigma_estimated": getattr(self, "_workflow_sigma_estimated", False), "observation_metadata": getattr(self, "_workflow_observation_metadata", {})}
         request = CandidateGenerationRequest(
             model_path=model_path,
             output_dir=output_dir,
@@ -95,15 +126,15 @@ class AiJobExecutionMixin:
             sigma=sigma,
             profile=profile.to_dict(),
             constraints=constraints,
-            exact_nonempty=self._ai_exact_nonempty_arg(),
-            clear_output_dir=True,
+            exact_nonempty=None,
+            clear_output_dir=False,
         )
 
         thread = QThread(self.main_window or self.ui)
         worker = AiCandidateWorker(
             self.fitting_view_model,
             request,
-            refine=run_mode != "fast",
+            refine=False,  # V5 owns its four-step correction; no legacy refinement profile.
         )
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -120,13 +151,18 @@ class AiJobExecutionMixin:
         self._ai_run_started_at = time.perf_counter()
         self._ai_run_cancelled = False
         self._ai_candidate_rows = []
-        self._begin_fitting_step("fit", f"Running {profile.name} AI fitting")
+        label = "V5 neural prediction" if run_mode == "fast" else "V5 fitting with four-step correction"
+        if options["method"] == "experimental":
+            label = "experimental physical fit (numerical)"
+        elif options["method"] == "stable":
+            label = "single-RC specialist prediction with curve checks"
+        self._begin_fitting_step("fit", f"Running {label}")
         self._set_ai_running_state(True)
         self._set_ai_workspace_status(
-            f"Starting {profile.name} AI fitting run...",
+            f"Starting {label}...",
             0,
         )
-        self._append_ai_log(f"JobRunner request: profile={profile.name}, model={model_path}")
+        self._append_ai_log(f"JobRunner request: {label}, model={model_path}")
         thread.start()
 
     def _set_ai_running_state(self, running: bool) -> None:
@@ -134,7 +170,7 @@ class AiJobExecutionMixin:
             text = button.text()
             if text in ("Fast Predict", "Full Auto Fit", "Run AI Auto Fit"):
                 button.setEnabled(not running)
-        for name in ("aiFittingFastPredictButton", "aiFittingFullAutoFitButton"):
+        for name in ("aiFittingFastPredictButton", "aiFittingFullAutoFitButton", "aiFittingExperimentalButton"):
             button = getattr(self.ui, name, None)
             if button is not None:
                 button.setEnabled(not running)
@@ -175,6 +211,9 @@ class AiJobExecutionMixin:
         line = str(getattr(progress, "message", "") or "")
         if line:
             self._append_ai_log(line)
+            self._set_ai_workspace_status(
+                line[:180], int(100 * float(getattr(progress, "fraction", 0.0)))
+            )
             self._handle_ai_process_text(line, append_log=False)
         else:
             self._set_ai_workspace_status(

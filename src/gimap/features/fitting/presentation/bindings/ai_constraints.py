@@ -34,6 +34,8 @@ class AiConstraintsMixin:
     """Own ai constraints behavior."""
 
     def _load_ai_candidate_params(self, row: dict, *, refresh_plot: bool = True) -> bool:
+        if row.get("workflow") == "native_v5":
+            return self._apply_workflow_candidate(row, refresh_plot=refresh_plot)
         reviewed = self.fitting_view_model.review_candidates(
             [row],
             self._ai_run_settings().get("constraint_set"),

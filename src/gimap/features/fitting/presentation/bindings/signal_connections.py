@@ -76,6 +76,8 @@ class SignalConnectionsMixin:
 
         if hasattr(self.ui, "gisaxsInputCutButton"):
             self.ui.gisaxsInputCutButton.clicked.connect(lambda _checked=False: self._perform_cut())
+        if hasattr(self.ui, "gisaxsOptimizeCenterXButton"):
+            self.ui.gisaxsOptimizeCenterXButton.clicked.connect(self._optimize_center_x)
 
         detector_panel = getattr(self.ui, "fittingDetectorSetupPanel", None)
         if detector_panel is not None:
@@ -205,6 +207,10 @@ class SignalConnectionsMixin:
         if hasattr(self.ui, "aiFittingFullAutoFitButton"):
             self.ui.aiFittingFullAutoFitButton.clicked.connect(
                 lambda: self._start_ai_prediction("full")
+            )
+        if hasattr(self.ui, "aiFittingExperimentalButton"):
+            self.ui.aiFittingExperimentalButton.clicked.connect(
+                lambda: self._start_ai_prediction("experimental")
             )
         if hasattr(self.ui, "aiFittingStopButton"):
             self.ui.aiFittingStopButton.clicked.connect(self._stop_ai_fitting_process)

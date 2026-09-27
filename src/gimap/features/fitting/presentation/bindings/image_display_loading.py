@@ -59,6 +59,7 @@ class ImageDisplayLoadingMixin:
                 self._display_image(image_data)
             analysis_image = analysis_image_for(self)
             if analysis_image is not None:
+                self._auto_yoneda_after_load(file_path)
                 self._after_insitu_workflow_image_loaded(analysis_image, file_path)
         except Exception as e:
             self.fitting_view_model.fail_image_load(str(e))

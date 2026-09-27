@@ -91,8 +91,12 @@ class Detector:
         qr = np.sqrt(qx**2 + qy**2)
         qr = np.copysign(qr, qy)
 
-        # Flip up the qz image
+        # Every component must describe the same analysis-array pixel. Detector
+        # y increases upwards, while analysis-array rows increase downwards.
+        qx = np.flipud(qx)
+        qy = np.flipud(qy)
         qz = np.flipud(qz)
+        qr = np.flipud(qr)
 
         # Cache the results
         self._q_cache = (qx, qy, qz, qr)

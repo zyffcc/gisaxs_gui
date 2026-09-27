@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QSizePolicy,
     QToolButton,
     QVBoxLayout,
@@ -111,6 +112,16 @@ class DetectorDisplayInspector(QFrame):
         grid.addWidget(ui.gisaxsInputThresholdMinSpinBox, 4, 1)
         grid.addWidget(ui.gisaxsInputThresholdMaxLabel, 5, 0)
         grid.addWidget(ui.gisaxsInputThresholdMaxSpinBox, 5, 1)
+        ui.gisaxsInputInvalidMarginSpinBox = QSpinBox(preprocessing)
+        ui.gisaxsInputInvalidMarginSpinBox.setRange(0, 20)
+        ui.gisaxsInputInvalidMarginSpinBox.setValue(3)
+        ui.gisaxsInputInvalidMarginSpinBox.setSuffix(" px")
+        ui.gisaxsInputInvalidMarginSpinBox.setToolTip("CBF negative detector codes and their neighbours are masked before Yoneda, cuts and fitting. Zero counts remain valid. Mirror fill cannot restore masked observations.")
+        grid.addWidget(QLabel("CBF bad-pixel guard", preprocessing), 6, 0)
+        grid.addWidget(ui.gisaxsInputInvalidMarginSpinBox, 6, 1)
+        mask_hint = QLabel("CBF invalid pixels are blocked before analysis.", preprocessing)
+        mask_hint.setWordWrap(True)
+        grid.addWidget(mask_hint, 7, 0, 1, 2)
         ui.fittingDetectorPreprocessing = preprocessing
         return preprocessing
 

@@ -167,6 +167,7 @@ class CutExtractionMixin:
             cut_type: Either ``horizontal`` or ``vertical``.
         """
         try:
+            self._last_cut_q_source = None
             center_x, center_y = self._get_cut_center_coordinates()
 
             show_q_axis = self._should_show_q_axis()
@@ -205,6 +206,9 @@ class CutExtractionMixin:
                 x_coordinates = q_coords
 
             self._plot_cut_result(x_coordinates, cut_data, x_label, "Intensity (a.u.)", title)
+            if self._last_cut_q_source:
+                self.current_cut_data["q_source"] = self._last_cut_q_source
+                self.cut.setdefault("meta", {})["q_source"] = self._last_cut_q_source
 
         except Exception as e:
             raise Exception(f"{cut_type.capitalize()} cut failed: {str(e)}")
@@ -265,6 +269,11 @@ class CutExtractionMixin:
                 valid_intensity,
                 context=f"{cut_type.capitalize()} Q cut",
             )
+            detector_state = getattr(self, "current_detector_image", None)
+            if detector_state is not None and detector_state.preprocessing.mask_negative_pixels:
+                self._last_cut_q_source = "region_mean_native"
+                self.status_updated.emit(f"CBF cut: {len(valid_q)} native valid points; masked gaps are not interpolated")
+                return valid_intensity, valid_q
             n_points = self._resolve_cut_points(points_override)
             q_interp = np.linspace(valid_q.min(), valid_q.max(), n_points)
             try:
@@ -316,14 +325,24 @@ class CutExtractionMixin:
                 width=float(width),
                 orientation=cut_type,
             )
-            intensity_native, pixel_coords = _scientific_commands(self).cut.extract_pixel(
-                analysis_image_for(self),
-                selection,
-            )
-            if cut_type == "horizontal":
-                native_q = self._convert_pixel_to_qy(pixel_coords)
+            detector_state = getattr(self, "current_detector_image", None)
+            preserve_native = bool(detector_state is not None and detector_state.preprocessing.mask_negative_pixels)
+            if preserve_native:
+                horizontal_mesh, qz_mesh = self._get_cached_q_meshgrids()
+                mesh = horizontal_mesh if cut_type == "horizontal" else qz_mesh
+                intensity_native, native_q, pixel_coords = _scientific_commands(self).cut.extract_native_pixel(
+                    analysis_image_for(self), mesh, selection,
+                )
+                self._last_cut_q_source = "region_mean_native"
             else:
-                native_q = self._convert_pixel_to_qz(pixel_coords)
+                intensity_native, pixel_coords = _scientific_commands(self).cut.extract_pixel(
+                    analysis_image_for(self), selection,
+                )
+            if cut_type == "horizontal" and not preserve_native:
+                native_q = self._convert_pixel_to_qy(pixel_coords)
+            elif cut_type == "vertical":
+                if not preserve_native:
+                    native_q = self._convert_pixel_to_qz(pixel_coords)
                 image_height, image_width = analysis_image_for(self).shape
                 x_min = max(0, int(center_x - width / 2))
                 x_max = min(image_width - 1, int(center_x + width / 2))
@@ -352,6 +371,9 @@ class CutExtractionMixin:
             )
             if valid_q.size < 2:
                 raise Exception("Not enough finite q/intensity points in the selected region")
+            if preserve_native:
+                self.status_updated.emit(f"CBF cut: {len(valid_q)} native valid points; masked gaps are not interpolated")
+                return valid_intensity, valid_q
             n_points = self._resolve_cut_points(points_override)
             q_interp = np.linspace(valid_q.min(), valid_q.max(), n_points)
             try:

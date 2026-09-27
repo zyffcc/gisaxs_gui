@@ -1,0 +1,17 @@
+{
+  "fresh_test_no_overlap": true,
+  "previous_test_identities_excluded": 2048,
+  "frozen_source_and_original_weights_verified": true,
+  "all768_independent_float64_forward": true,
+  "clean_error_max_delta": 2.9866277896847815e-06,
+  "observed_error_max_delta": 5.214480888193762e-07,
+  "neural_start_gates_preserved": true,
+  "physical_bounds_units_valid": true,
+  "newly_good": 36,
+  "lost_good": 1,
+  "paired_improvement_pp": 27.34375,
+  "stratified_curve_bootstrap95_pp": [
+    20.292968750000007,
+    35.15625
+  ]
+}

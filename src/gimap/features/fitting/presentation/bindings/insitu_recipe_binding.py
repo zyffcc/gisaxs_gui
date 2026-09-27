@@ -3,12 +3,39 @@
 from __future__ import annotations
 
 import json
+import math
 
 from ...application import (
     InSituFittingPolicy,
     InSituTrackingPolicy,
     SingleAnalysisRecipeSnapshot,
 )
+
+
+def _recipe_detector_geometry(panel, authoritative):
+    """Preserve scientific precision unless a geometry control was actually changed."""
+    visible = panel.current_settings()
+    values = {}
+    for recipe_key, attribute, control_name in (
+        ("distance_mm", "distance", "distance_spinbox"),
+        ("grazing_angle_deg", "grazing_angle", "angle_spinbox"),
+        ("wavelength_nm", "wavelength", "wavelength_spinbox"),
+        ("beam_center_x_px", "beam_center_x", "beam_center_x_spinbox"),
+        ("beam_center_y_px", "beam_center_y", "beam_center_y_spinbox"),
+        ("pixel_size_x_um", "pixel_size_x", "pixel_size_x_spinbox"),
+        ("pixel_size_y_um", "pixel_size_y", "pixel_size_y_spinbox"),
+    ):
+        value = float(getattr(visible, attribute))
+        control = getattr(panel, control_name, None)
+        if authoritative is not None and control is not None:
+            exact = float(getattr(authoritative, attribute))
+            # Read-only projection: never re-apply rounded widgets during capture.
+            # A deliberate edit differs by at least one representable control step.
+            half_step = 0.5 * 10.0 ** -control.decimals()
+            if math.isfinite(exact) and abs(value - exact) <= half_step + 1e-12:
+                value = exact
+        values[recipe_key] = value
+    return values
 
 
 class InsituRecipeBindingMixin:
@@ -32,7 +59,7 @@ class InsituRecipeBindingMixin:
                 model=payload["model"],
                 tracking=InSituTrackingPolicy(center="fixed", yoneda="fixed"),
                 fitting=InSituFittingPolicy(
-                    initialization="previous_success",
+                    initialization="ai_each_frame",
                     refinement="plot_only",
                     failure="continue",
                 ),
@@ -53,10 +80,14 @@ class InsituRecipeBindingMixin:
         detector_panel = getattr(self.ui, "fittingDetectorSetupPanel", None)
         if detector_panel is None:
             raise ValueError("Detector setup is not available")
-        detector = detector_panel.current_settings()
+        load_detector = getattr(self.fitting_view_model, "load_detector_settings", None)
+        authoritative = load_detector() if callable(load_detector) else None
+        detector_geometry = _recipe_detector_geometry(detector_panel, authoritative)
         parameter_snapshot = self._build_fitting_parameter_snapshot()
         fitting_values = parameter_snapshot.get("fitting", {})
         model = {
+            "workflow_v5": self._workflow_options() if hasattr(self, "_workflow_options") else {},
+            "workflow_input_selection": self._workflow_input_selection() if hasattr(self,"_workflow_input_selection") else {},
             "schema": parameter_snapshot.get("schema", "gimap_fitting_parameters_v1"),
             "model_parameters": parameter_snapshot.get("model_parameters", {}),
             "fitting_params": (
@@ -66,16 +97,9 @@ class InsituRecipeBindingMixin:
             ),
         }
         return {
-            "experiment_setup": {
-                "distance_mm": detector.distance,
-                "grazing_angle_deg": detector.grazing_angle,
-                "wavelength_nm": detector.wavelength,
-                "beam_center_x_px": detector.beam_center_x,
-                "beam_center_y_px": detector.beam_center_y,
-                "pixel_size_x_um": detector.pixel_size_x,
-                "pixel_size_y_um": detector.pixel_size_y,
-            },
+            "experiment_setup": detector_geometry,
             "preprocessing": {
+                "invalid_margin_px": int(getattr(self, "_invalid_margin_px", 3)),
                 "flip_ud": bool(getattr(self, "_flip_ud", False)),
                 "threshold_enabled": bool(
                     getattr(self, "_threshold_mask_enabled", False)
@@ -122,9 +146,18 @@ class InsituRecipeBindingMixin:
             return False
 
     def _insitu_recipe_start_error(self) -> str:
+        dialog = getattr(self, "_workflow_v5_dialog", None)
+        if dialog is not None and dialog.job is not None:
+            return "Finish or cancel the 1D text batch before starting an in-situ sequence."
+        if getattr(self, "_ai_job_thread", None) is not None:
+            return "Wait for the current 1D fitting job to finish before starting a sequence."
         recipe = self.fitting_view_model.insitu.recipe
         if recipe is None:
             return "Capture the current Single analysis as an In-situ Recipe first."
+        if recipe.model.get("workflow_v5"):
+            # V5 does not reuse mutable Single model widgets: its conditions/input
+            # selection are fully captured, just like detector and cut geometry.
+            return ""
         if recipe.source == "insitu_edit":
             try:
                 current_model = self._current_insitu_recipe_payload()["model"]

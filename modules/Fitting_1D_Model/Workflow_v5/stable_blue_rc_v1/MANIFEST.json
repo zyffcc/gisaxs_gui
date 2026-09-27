@@ -1,0 +1,14 @@
+{
+  "model_id": "blue_rc_curve_supervised_20260921_step1200",
+  "forward_version": "blue_rc_gauss48_96_v1",
+  "amplitude_relative_tolerance": 0.1,
+  "files": {
+    "curve_best.weights.h5": "3823241f3e02824f0f1c24fdc2d7ae026ea34ba6c1b8de9930eb48e0134340b7",
+    "feature_scaling.npz": "b592d060ff85738abc710a4187ea71fd56322b0b2649234e60656419b3af6cce",
+    "protocol.json": "a20a4369e0a45256d3a9e88b57a69e3acd3c05fd89e95e069fd944453f1ff0f0",
+    "network.npz": "844e219fed977c963bed6892713620ab84d8d6f0dae28efab8f9adf7bd1fc83a"
+  },
+  "scope": "Local native-count CBF single-RC candidate; guarded auto routing, no posterior calibration or unique-parameter claim",
+  "calibration": "One positive linear amplitude solve, fixed neural shape and resolution; chosen on 64 new synthetic validation samples before real comparison",
+  "inference_backend": "numpy_dense_swish_v1"
+}

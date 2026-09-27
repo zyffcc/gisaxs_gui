@@ -34,11 +34,8 @@ class InSituSeriesPageView:
 
     STEP_DEFINITIONS = (
         ("source", "1", "Source"),
-        ("preprocess", "2", "Preprocess"),
-        ("geometry", "3", "Geometry"),
-        ("cut", "4", "Yoneda & cut"),
-        ("fit", "5", "Fit"),
-        ("results", "6", "Results"),
+        ("fit", "2", "Analysis settings"),
+        ("results", "3", "Results"),
     )
 
     def setupUi(self, page: QWidget) -> None:  # noqa: N802 - Qt View convention
@@ -68,7 +65,7 @@ class InSituSeriesPageView:
         self.titleLabel.setObjectName("fittingInsituTitleLabel")
         self.titleLabel.setProperty("gimapPageTitle", True)
         self.subtitleLabel = QLabel(
-            "One versioned Recipe drives live acquisition and existing sequences.", page
+            "Choose a folder, use the current detector / cut setup, then start.", page
         )
         self.subtitleLabel.setObjectName("fittingInsituSubtitleLabel")
         self.subtitleLabel.setProperty("gimapMeta", True)
@@ -79,7 +76,7 @@ class InSituSeriesPageView:
         self.recipeStatusLabel = QLabel("No Recipe", page)
         self.recipeStatusLabel.setObjectName("fittingInsituRecipeStatusLabel")
         self.recipeStatusLabel.setProperty("statusKind", "warning")
-        self.captureRecipeButton = QPushButton("Use current Single setup", page)
+        self.captureRecipeButton = QPushButton("Use current setup", page)
         self.captureRecipeButton.setObjectName("fittingInsituCaptureRecipeButton")
         self.captureRecipeButton.setProperty("gimapPrimaryAction", True)
         row.addWidget(self.recipeStatusLabel)

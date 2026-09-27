@@ -37,7 +37,9 @@ class AiSettingsMixin:
             pass
 
     def _default_ai_run_settings(self) -> dict:
+        from ...application.workflow_v5 import default_options
         return {
+            "workflow_v5": default_options(),
             "profile": _ai_catalog(self).default_profile_name,
             "profile_overrides": {},
             "random_seed": 123,

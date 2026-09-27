@@ -21,6 +21,8 @@ class DetectorPreprocessing:
     mirror_center_x: float | None = None
     mirror_gap_margin_px: int = 0
     mirror_gap_value: float = -1.0
+    mask_negative_pixels: bool = False
+    invalid_margin_px: int = 0
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,7 @@ class DetectorImageState:
     revision: int
     mirror_filled_gap_pixels: int = 0
     mirror_replaced_pixels: int = 0
+    masked_pixels: int = 0
 
 
 def prepare_detector_image(
@@ -51,6 +54,21 @@ def prepare_detector_image(
         threshold_min=float(preprocessing.threshold_min),
         threshold_max=float(preprocessing.threshold_max),
     )
+    # Detector invalid codes are interpreted here, before every scientific
+    # consumer. They must never become zero counts or mirror-filled observations.
+    if preprocessing.mask_negative_pixels:
+        invalid = ~np.isfinite(raw) | (raw < 0)
+        margin = int(preprocessing.invalid_margin_px)
+        if not 0 <= margin <= 20:
+            raise ValueError("Invalid-pixel guard must be between 0 and 20 pixels")
+        if margin:
+            from scipy.ndimage import maximum_filter
+
+            invalid = maximum_filter(invalid, size=2 * margin + 1, mode="constant", cval=0)
+        if preprocessing.flip_ud:
+            invalid = np.flipud(invalid)
+        analysis_before_mirror = np.array(analysis_before_mirror, copy=True)
+        analysis_before_mirror[invalid] = np.nan
 
     filled_gap_pixels = 0
     replaced_pixels = 0
@@ -82,6 +100,7 @@ def prepare_detector_image(
         revision=max(0, int(revision)),
         mirror_filled_gap_pixels=filled_gap_pixels,
         mirror_replaced_pixels=replaced_pixels,
+        masked_pixels=int(np.count_nonzero(~np.isfinite(analysis))),
     )
 
 

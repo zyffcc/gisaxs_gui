@@ -20,6 +20,42 @@ ROOT = Path(__file__).resolve().parents[1]
 FITTING_SOURCE = ROOT / "src" / "gimap" / "features" / "fitting"
 
 
+def test_cbf_invalid_pixels_are_blocked_before_flip_mirror_cut_and_export():
+    from src.gimap.features.fitting.domain.cut_math import extract_pixel_profile
+    from src.gimap.features.fitting.domain.models import CutSelection
+    from src.gimap.features.fitting.domain.cbf_observations import column_observations
+
+    raw = np.full((7, 30), 9., dtype=np.float32)
+    raw[:, 15] = -1
+    raw[0, 1] = -2
+    raw[0, 28] = 0
+    original = raw.copy()
+    calculations = FittingImageCalculations()
+    state = calculations.prepare(raw, revision=9, flip_ud=True, mask_negative_pixels=True, invalid_margin_px=2, mirror_fill_gaps=True, mirror_center_x=10)
+    image = state.analysis_image
+    assert np.isnan(image[:, 13:18]).all()
+    assert np.isnan(image[-1, 1])
+    assert image[-1, 28] == 0
+    assert state.mirror_filled_gap_pixels == 0
+    assert not state.analysis_image.flags.writeable
+    np.testing.assert_array_equal(raw, original)
+    selection = CutSelection(center_x=14.5, center_y=3, height=6, width=29, orientation="horizontal")
+    profile, columns = extract_pixel_profile(image, selection)
+    qmesh = np.broadcast_to(np.arange(30), image.shape)
+    q, y, sigma, _ = column_observations(image, qmesh, (0, 6, 0, 29))
+    np.testing.assert_array_equal(profile[np.isfinite(profile)], y)
+    np.testing.assert_array_equal(columns[np.isfinite(profile)], q)
+    assert np.isfinite(sigma).all()
+    rebuilt = calculations.prepare(state.raw_image, revision=10, flip_ud=False, mask_negative_pixels=True, invalid_margin_px=2)
+    np.testing.assert_array_equal(np.flipud(image), rebuilt.analysis_image)
+    from src.gimap.features.fitting.domain.insitu_cut import compute_insitu_cut
+
+    batch = compute_insitu_cut(dict(image_data=image, vertical=6, parallel=29, center_x=14.5, center_y=3, preserve_native=True, n_points=500, analysis_revision=9))
+    np.testing.assert_array_equal(batch["x_coords"], q)
+    np.testing.assert_array_equal(batch["y_intensity"], y)
+    assert batch["analysis_revision"] == 9 and batch["method"] == "native_masked"
+
+
 def test_prepare_detector_image_builds_one_read_only_analysis_revision():
     raw = np.array(
         [[10.0, -1.0, 30.0, 40.0, 50.0], [60.0, -1.0, 80.0, 90.0, 100.0]],

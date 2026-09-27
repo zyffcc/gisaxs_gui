@@ -162,6 +162,20 @@ overlay 和 cut overlay。它由 presentation/rendering 拥有，可以与 Analy
 
 ## PreprocessingConfig
 
+### CBF 有效性掩码（2026-09-21）
+
+CBF loader 之后，统一 preprocessing 把非有限值、负数 detector invalid code 及其
+`invalid_margin_px` 邻域标成 NaN（默认邻域半宽 3 px，可在 Preprocessing 中调整）。
+这是探测器规则，不根据拟合残差删点；正常零计数保留。mask 随 Flip UD 一起变换，
+在 mirror-fill 之前应用，屏蔽区域不能被镜像恢复为有效测量。非 CBF 的负强度不适用此规则。
+
+Preview、Yoneda、pixel/q cut、1D 拟合、in-situ 和 processed export 消费同一 AnalysisImage。
+CBF cut 使用有限像素均值，保留原生测量坐标，不跨 NaN 间隙插值生成观察值；500 点只用于
+正演显示。in-situ worker 携带 `preserve_native` 和 `analysis_revision`，实现同一列均值语义。
+旧拟合入口自行读取 raw 并扩展 gap 的逻辑已移除；CBF 计数误差也由预处理后实际有效像素计算。
+改变 guard 会生成新的 analysis revision，旧 cut 需 Extract / Update 后才能用于拟合。
+in-situ recipe 保存并恢复 guard；旧 recipe 的 `workflow_v5.cbf_gap_margin` 仅作为迁移来源。
+
 PreprocessingConfig 必须是 framework-neutral、可比较和可测试的数据。当前 fitting 至少包含：
 
 - `flip_ud`；

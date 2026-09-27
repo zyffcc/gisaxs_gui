@@ -46,7 +46,7 @@ class InsituWatchSettingsMixin:
 
     def _insitu_workflow_settings(self) -> dict:
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-        return {
+        settings = {
             "run_mode": widgets.get("run_mode").currentText()
             if widgets.get("run_mode")
             else "Process Existing Sequence",
@@ -92,6 +92,14 @@ class InsituWatchSettingsMixin:
             if widgets.get("nxs_module_count")
             else 1,
         }
+        view_model = getattr(self, "fitting_view_model", None)
+        recipe = getattr(getattr(view_model, "insitu", None), "recipe", None)
+        if recipe is not None and recipe.model.get("workflow_v5"):
+            enabled = not recipe.model.get("extract_only", False)
+            settings.update(auto_fit=enabled, full_auto_fit=enabled,
+                            use_previous=False, auto_refine=False)
+        return settings
+
 
     def _update_insitu_source_kind_ui(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}

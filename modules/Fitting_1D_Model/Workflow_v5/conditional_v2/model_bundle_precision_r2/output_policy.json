@@ -1,0 +1,101 @@
+{
+  "beta": 0.01,
+  "default_distinct_combos": 8,
+  "clean_targets": [
+    0.03,
+    0.05
+  ],
+  "rules": {
+    "strict": {
+      "rms": 0.025,
+      "local": 0.075,
+      "max_noise": 0.03,
+      "target_clean_logrmse": 0.03,
+      "development_candidate_count": 357,
+      "development_precision": 0.9523809523809523
+    },
+    "good": {
+      "rms": 0.05,
+      "local": 0.1,
+      "max_noise": 0.03,
+      "target_clean_logrmse": 0.05,
+      "development_candidate_count": 645,
+      "development_precision": 0.9844961240310077
+    }
+  },
+  "noise_bins": [
+    0.037083915819313945,
+    0.06411866704591644
+  ],
+  "limitations": "Empirical quality flags; no per-curve probability or human visual approval guarantee. Synthetic validation population only.",
+  "coverage_calibration": {
+    "target": 0.9,
+    "rank_quantile": 6,
+    "calibration_count": 128,
+    "empirical_coverage": 0.921875,
+    "note": "K-balanced validation reused in model development: empirical calibration, no formal deployment coverage guarantee; truncating below the calibrated size removes the nominal target"
+  },
+  "confirmation_metrics": {
+    "count": 128,
+    "coverage5": 0.8671875,
+    "coverage8": 0.9296875,
+    "coverage12": 0.9921875,
+    "coverage16": 1.0,
+    "coverage_set": 0.8984375,
+    "joint5_0.03": 0.3359375,
+    "joint5_0.05": 0.5390625,
+    "joint8_0.03": 0.3515625,
+    "joint8_0.05": 0.5703125,
+    "joint12_0.03": 0.3828125,
+    "joint12_0.05": 0.609375,
+    "joint16_0.03": 0.3828125,
+    "joint16_0.05": 0.6171875,
+    "fit_reference_clean_median": 0.025989889167249203,
+    "fit_reference_clean005": 0.8203125,
+    "true_combo_pool_clean005": 0.6171875,
+    "strict": {
+      "passed_candidates": 127,
+      "total_candidates": 1024,
+      "precision": 0.968503937007874,
+      "reference_pass_rate": 0.3125,
+      "reference_precision": 1.0
+    },
+    "good": {
+      "passed_candidates": 293,
+      "total_candidates": 1024,
+      "precision": 0.9829351535836177,
+      "reference_pass_rate": 0.4375,
+      "reference_precision": 0.9821428571428571
+    }
+  },
+  "confirmation_metrics_scope": "r2 one representative per combination on confirmation128; not all r3 parameter heads",
+  "r3_retrospective_summary": {
+    "component_coverage": 0.9296875,
+    "joint8_good": 0.5703125,
+    "joint8_strict": 0.3515625,
+    "true_combo_any_good_in_all_heads": 0.6171875,
+    "displayed_parameters": 48.0,
+    "duplicate_heads": 0.0,
+    "true_combo_at_least_two_separated_good": 0.5,
+    "true_combo_good_parameter_count_histogram": {
+      "0": 49,
+      "1": 15,
+      "2": 10,
+      "3": 20,
+      "4": 14,
+      "5": 17,
+      "6": 3
+    },
+    "strict": {
+      "passed": 314,
+      "actually_good": 308,
+      "precision": 0.9808917197452229
+    },
+    "good": {
+      "passed": 957,
+      "actually_good": 918,
+      "precision": 0.9592476489028213
+    }
+  },
+  "r3_retrospective_scope": "Retrospective audit on reused r2 confirmation128, not new independent generalization evidence or coverage of all posterior modes"
+}

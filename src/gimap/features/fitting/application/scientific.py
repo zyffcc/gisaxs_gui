@@ -33,6 +33,9 @@ from ..domain import (
     valid_y_values_for_limits,
 )
 from .ports import FittingModelPort, QSpacePort
+from ..domain.center_symmetry import optimize_horizontal_center
+from ..domain.cut_math import pixel_region_bounds, extract_native_pixel_profile
+from ..domain.cbf_observations import column_observations
 
 
 class FittingImageCalculations:
@@ -51,10 +54,22 @@ class FittingImageCalculations:
     def center_profiles(self, image):
         return finite_log_profiles(image)
 
+    def optimize_center_x(self, image, pixel_region, initial_x):
+        return optimize_horizontal_center(image, pixel_region, initial_x)
+
 
 class FittingCutCalculations:
+    def cbf_observations(self, *args, **kwargs):
+        return column_observations(*args, **kwargs)
+
+    def pixel_bounds(self, image_shape, selection):
+        return pixel_region_bounds(image_shape, selection)
+
     def extract_pixel(self, image, selection):
         return extract_pixel_profile(image, selection)
+
+    def extract_native_pixel(self, image, q_mesh, selection):
+        return extract_native_pixel_profile(image, q_mesh, selection)
 
     def extract_q(self, image, horizontal_q_mesh, qz_mesh, selection):
         return extract_q_profile(image, horizontal_q_mesh, qz_mesh, selection)

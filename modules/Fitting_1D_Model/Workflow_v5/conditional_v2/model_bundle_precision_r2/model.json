@@ -1,0 +1,49 @@
+{
+  "base_dir": "weights/base",
+  "corrector_dir": "weights/corrector",
+  "model": "corrector_10k_self",
+  "topk": 34,
+  "passes": 20,
+  "retain_best": true,
+  "representation": "log512",
+  "compiled_inference": true,
+  "selection_frozen_utc": "2026-09-14T03:26:33Z",
+  "validation_document": "confirmation_selected10k.json",
+  "selection_criterion": "-validation fraction<.05 + .1median + .03P90; test unused",
+  "no_inference_optimizer": false,
+  "types": {
+    "1": "sphere",
+    "2": "random cylinder",
+    "3": "vertical cylinder"
+  },
+  "probability_status": "No calibrated per-curve posterior; classifier score for ranking only",
+  "validated_budgets": [
+    {
+      "topk": 34,
+      "passes": 20
+    }
+  ],
+  "output_schema_version": "v5-precision-r1",
+  "revision_scope": "Two-level component/parameter candidates and exact component conditioning; neural weights unchanged",
+  "conditional_inference": {
+    "components": "complete multiset of 1-4 supported types",
+    "heads": 6,
+    "passes": 20
+  },
+  "model_variant": "precision-r2",
+  "default_entrypoint": "source/precision_predict.py",
+  "precision_settings": {
+    "component_list_size": 12,
+    "heads_per_component": 6,
+    "neural_passes": 20,
+    "max_trust_evaluations": 80,
+    "jacobian_epsilon": 0.001,
+    "TF32": false,
+    "selection": "Observed logRMSE within each component multiset",
+    "test_count": 128,
+    "seed": 202609201
+  },
+  "legacy_topk_scope": "topk34 is inherited base initialization configuration; precision entry explicitly selects classifier top12",
+  "optional_conditional_fast_entrypoint": "source/adaptive_predict.py",
+  "adaptive_policy": "early_strict"
+}

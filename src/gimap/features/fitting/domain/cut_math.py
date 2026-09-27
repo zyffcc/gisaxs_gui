@@ -34,6 +34,31 @@ def extract_pixel_profile(image, selection: CutSelection):
     return finite_mean_axis(region, axis=1), np.arange(row_min, row_max + 1)
 
 
+def extract_native_pixel_profile(image, q_mesh, selection: CutSelection):
+    """Average intensity and q over the same valid pixels of a pixel ROI.
+
+    This does not infer counting statistics. Coordinates remain native detector
+    columns/rows; a wholly masked column/row contributes no observation.
+    """
+    data = np.asarray(image, dtype=float)
+    q = np.asarray(q_mesh, dtype=float)
+    if data.ndim != 2 or q.shape != data.shape:
+        raise ValueError("Image and q mesh must have the same 2D shape")
+    x0, x1, r0, r1 = pixel_region_bounds(data.shape, selection)
+    region = data[r0:r1 + 1, x0:x1 + 1]
+    q_region = q[r0:r1 + 1, x0:x1 + 1]
+    valid = np.isfinite(region) & np.isfinite(q_region)
+    axis = 0 if selection.orientation == "horizontal" else 1
+    count = valid.sum(axis=axis)
+    keep = count > 0
+    if not keep.any():
+        raise ValueError("No valid data in the selected region")
+    intensity = np.where(valid, region, 0).sum(axis=axis)[keep] / count[keep]
+    q_line = np.where(valid, q_region, 0).sum(axis=axis)[keep] / count[keep]
+    indices = np.arange(x0, x1 + 1) if axis == 0 else np.arange(r0, r1 + 1)
+    return intensity, q_line, indices[keep]
+
+
 def extract_q_profile(image, horizontal_q_mesh, qz_mesh, selection: CutSelection):
     """从 qy/qz 或 signed-qr/qz 矩形 region 提取 fitting profile。"""
     data = np.asarray(image, dtype=float)

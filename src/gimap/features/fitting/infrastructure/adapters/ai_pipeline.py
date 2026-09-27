@@ -24,6 +24,19 @@ from .fitting_pipeline import FittingRequest, fitting_pipeline
 
 class AiPipelinePredictor:
     def create_job_request(self, request: CandidateGenerationRequest) -> JobRequest:
+        if (Path(request.model_path) / "conditional_fast_manifest_v2.json").is_file():
+            from .workflow_v5 import validate_options
+            options = validate_options(request.constraints.get("workflow_v5", {}))
+            output = Path(request.output_dir).resolve()
+            return JobRequest(
+                handler="src.gimap.features.fitting.infrastructure.adapters.workflow_v5:run_workflow_job",
+                payload=dict(model_path=str(request.model_path), output_dir=str(output),
+                             q=request.q.tolist(), intensity=request.intensity.tolist(),
+                             sigma=request.sigma.tolist(), options=options,
+                             observation_metadata=request.constraints.get("observation_metadata", {}),
+                             sigma_estimated=bool(request.constraints.get("sigma_estimated", False))),
+                timeout_seconds=3600,
+            )
         output_dir = Path(request.output_dir).expanduser().resolve()
         if request.clear_output_dir:
             self._clear_reusable_output(output_dir)

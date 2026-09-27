@@ -19,6 +19,7 @@ class InsituPageBindingMixin:
         page.capture_recipe_requested.connect(self._capture_current_insitu_recipe)
         page.return_to_single_requested.connect(self._open_single_analysis_page)
         page.error_occurred.connect(self._add_fitting_error)
+        page.ui.workflowControls.predictionSettingsButton.clicked.connect(self._open_insitu_prediction_settings)
         widgets = page.workflow_widgets()
         self._insitu_workflow_widgets = widgets
         self._insitu_workflow_canvas_image = page.ui.imageCanvas

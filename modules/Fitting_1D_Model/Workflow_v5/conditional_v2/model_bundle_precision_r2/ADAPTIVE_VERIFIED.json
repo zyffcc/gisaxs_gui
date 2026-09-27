@@ -1,0 +1,26 @@
+{
+  "source_and_original_model_hashes_verified": true,
+  "no_test_overlap": true,
+  "prior_test_identities_excluded": 2176,
+  "independent_float64_forwards": 1536,
+  "errors_max_delta": {
+    "full": {
+      "clean": 1.8036682870314902e-06,
+      "observed": 3.9938736717815004e-07
+    },
+    "adaptive": {
+      "clean": 1.8036682870314902e-06,
+      "observed": 3.9938736717815004e-07
+    }
+  },
+  "all_component_heads_and_gates_preserved": true,
+  "D_above_2R_and_positive_normalized_weights": true,
+  "newly_good": 0,
+  "lost_good": 0,
+  "good05_difference_pp": 0.0,
+  "paired_stratified_bootstrap95_pp": [
+    0.0,
+    0.0
+  ],
+  "uncertainty_note": "Paired curve bootstrap on 128 synthetic records; no real-data guarantee or proof of noninferiority."
+}

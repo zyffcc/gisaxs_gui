@@ -127,7 +127,7 @@ class WorkflowFeedbackMixin:
             and self.fitting_view_model.state.cut_status == "ready"
         )
         one_d_ready = getattr(self, "current_1d_data", None) is not None
-        for name in ("gisaxsInputCenterAutoFindingButton", "gisaxsInputCutButton"):
+        for name in ("gisaxsInputCenterAutoFindingButton", "gisaxsInputCutButton", "gisaxsOptimizeCenterXButton"):
             button = getattr(self.ui, name, None)
             if button is not None:
                 button.setEnabled(image_ready)

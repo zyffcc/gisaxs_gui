@@ -30,8 +30,10 @@ class InsituCutProcessingMixin:
             center_x = geometry.get("center_parallel_px", 0.0)
             center_y = geometry.get("center_vertical_px", 0.0)
             show_q_axis = self._should_show_q_axis()
+            detector_state = getattr(self, "current_detector_image", None)
+            preserve_native = bool(detector_state is not None and detector_state.preprocessing.mask_negative_pixels)
             qy_mesh = qz_mesh = None
-            if show_q_axis:
+            if show_q_axis or preserve_native:
                 qy_mesh, qz_mesh = self._get_cached_q_meshgrids()
                 if qy_mesh is None or qz_mesh is None:
                     raise RuntimeError("Q-space meshgrids not available")
@@ -44,6 +46,9 @@ class InsituCutProcessingMixin:
             except Exception:
                 method = self._interp_method_default
             payload = {
+                "preserve_native": preserve_native,
+                "native_pixel_q": preserve_native and not show_q_axis,
+                "analysis_revision": getattr(self, "_analysis_revision", None),
                 "image_data": image_data,
                 "vertical": vertical_value,
                 "parallel": parallel_value,
@@ -116,6 +121,10 @@ class InsituCutProcessingMixin:
                 self._suppress_workflow_plot_updates = old_suppress
             if getattr(self, "current_cut_data", None) is None:
                 raise RuntimeError("Cut did not produce data")
+            self.current_cut_data["analysis_revision"] = result.get("analysis_revision")
+            if result.get("q_source"):
+                self.current_cut_data["q_source"] = result["q_source"]
+                self.cut.setdefault("meta", {})["q_source"] = result["q_source"]
             excluded_count = self._apply_deleted_point_mask_to_current_cut()
             if excluded_count:
                 record["deleted_points_applied"] = int(excluded_count)
@@ -211,7 +220,13 @@ class InsituCutProcessingMixin:
                 self._insitu_workflow_ai_record = record
                 self._insitu_workflow_ai_then_refine = bool(settings["auto_refine"])
                 self._log_insitu_workflow("Full Auto Fit started")
-                self._start_ai_prediction("full")
+                page = getattr(self.ui, "fittingInsituSeriesPage", None)
+                recipe = self.fitting_view_model.insitu.recipe
+                workflow_options = recipe.model.get("workflow_v5", {}) if recipe else {}
+                numerical = workflow_options.get("numerical", True)
+                method = workflow_options.get("method", "model")
+                mode = method if method in ("stable", "experimental") else ("full" if numerical else "fast")
+                self._start_ai_prediction(mode)
                 thread = getattr(self, "_ai_job_thread", None)
                 if thread is None:
                     self._insitu_workflow_ai_record = None

@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import h5py
 import numpy as np
@@ -238,12 +240,25 @@ class CalibrationTests(unittest.TestCase):
             self.assertEqual(loaded.selected_candidate.matched_ring_count, 3)
 
     def test_apply_updates_shared_geometry(self):
-        candidate = CalibrationCandidate("agbh", 123.5, 234.5, 1456.7, matched_ring_count=3)
-        result = CalibrationResult("x.cbf", 10, 20, "abc", 12.0, energy_to_wavelength(12), "D", 172e-6, 172e-6, candidate, [candidate], datetime.now(timezone.utc).isoformat())
-        values = apply_calibration_result(result)
-        self.assertAlmostEqual(values["distance"], 1456.7)
-        self.assertAlmostEqual(global_params.get_parameter("fitting", "detector.beam_center_x"), 123.5)
-        self.assertAlmostEqual(global_params.get_parameter("beam", "wavelength"), result.wavelength_angstrom / 10.0)
+        # The legacy API persists shared geometry. Exercise the real save path
+        # in a sandbox, never overwrite the operator's last detector setup.
+        stored = deepcopy(global_params._parameters)
+        real_path = Path(global_params.user_params_file)
+        real_bytes = real_path.read_bytes() if real_path.exists() else None
+        with tempfile.TemporaryDirectory() as folder:
+            isolated_path = Path(folder) / "calibration_parameters.json"
+            with patch.object(global_params, "user_params_file", str(isolated_path)):
+                try:
+                    candidate = CalibrationCandidate("agbh", 123.5, 234.5, 1456.7, matched_ring_count=3)
+                    result = CalibrationResult("x.cbf", 10, 20, "abc", 12.0, energy_to_wavelength(12), "D", 172e-6, 172e-6, candidate, [candidate], datetime.now(timezone.utc).isoformat())
+                    values = apply_calibration_result(result)
+                    self.assertAlmostEqual(values["distance"], 1456.7)
+                    self.assertAlmostEqual(global_params.get_parameter("fitting", "detector.beam_center_x"), 123.5)
+                    self.assertAlmostEqual(global_params.get_parameter("beam", "wavelength"), result.wavelength_angstrom / 10.0)
+                    self.assertTrue(isolated_path.exists())
+                finally:
+                    global_params._parameters = stored
+        self.assertEqual(real_path.read_bytes() if real_path.exists() else None, real_bytes)
 
     def test_full_engine_on_synthetic_standard(self):
         energy, distance, pixel = 12.0, 1000.0, 172e-6
