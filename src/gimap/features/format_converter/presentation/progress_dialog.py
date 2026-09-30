@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.app.presentation import apply_design_system
 
 from src.gimap.app.presentation.assets import app_icon
 
@@ -41,7 +40,6 @@ class ConversionProgressDialog(QDialog, ConversionProgressDialogView):
         )
         self.report_button.clicked.connect(self._open_report)
         self.close_button.clicked.connect(self.accept)
-        apply_design_system(self)
 
     def complete(self, report) -> None:
         self.running = False

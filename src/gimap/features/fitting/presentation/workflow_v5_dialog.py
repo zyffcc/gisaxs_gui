@@ -27,7 +27,6 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
     QSplitter,
-    QWidget,
     QTextBrowser,
     QProgressBar,
     QTabWidget,
@@ -35,9 +34,10 @@ from PyQt5.QtWidgets import (
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.app.jobs import JobRequest
 from src.gimap.integrations.jobs import LocalProcessJobRunner
-from ..application.workflow_v5 import default_options, validate_options, bundled_workflow
+from ..application.workflow_v5 import validate_options, bundled_workflow
 
 
 class WorkflowJobThread(QThread):
@@ -90,7 +90,7 @@ class WorkflowV5Dialog(QDialog):
         self._options = validate_options(options or {})
         root = QVBoxLayout(self)
         title = QLabel("1D Predict", self)
-        title.setStyleSheet("font-size:24px;font-weight:600;color:#0f172a")
+        set_role(title, "display")
         root.addWidget(title)
         hint = QLabel(
             "Load curves → Fit → compare candidates. General V5 proposes multiple compositions. "
@@ -105,9 +105,7 @@ class WorkflowV5Dialog(QDialog):
         self.settings_button.setCheckable(True)
         self.run_button = QPushButton("Fit curve")
         self.run_button.setObjectName("workflowV5RunButton")
-        self.run_button.setStyleSheet(
-            "background:#2563eb;color:white;font-weight:600;padding:10px 24px;border-radius:6px"
-        )
+        set_role(self.run_button, "primary")
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setEnabled(False)
         self.export_button = QPushButton("Open results")

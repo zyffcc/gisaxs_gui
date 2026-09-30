@@ -75,17 +75,17 @@ QSS 优先放在 owner 的 `presentation/styles/` 或应用级 design system 中
 
 | Owner | Python Views | 运行时注入边界 |
 | --- | --- | --- |
-| app | main shell、Display Settings | feature pages、navigation state |
+| app | main shell、Settings | feature pages、navigation state、menus |
 | Format Converter | main、folder import、progress | preview、conversion worker state |
 | Calibration | calibration dialog | Matplotlib figure、candidate overlays |
 | Classification | page + dataset/preprocessing/experiment/results/inspection panels | 数据驱动表格与图 |
-| WAXS | page + toolbar/preview/configure/ROI/integration/advanced/batch | scattering viewer、Matplotlib canvas |
+| Analyze | page、Options panel | pyqtgraph detector/curve views、batch dialog |
 | Trainset | shell + Dataset/Preview/Model/Run/Monitor 五步页面 | catalog/plugin 字段、交互画布、JobStatus |
 | Prediction | controls、workspace、multi-file results、export/heatmap/trend dialogs | model-driven controls、Matplotlib canvas |
 | Fitting | controls、workspace、detector dialog、两个独立绘图窗口 | 动态模型参数、Matplotlib canvas/toolbar |
 | XRR | series extractor dialog | detector/ROI 与 XRR curve Matplotlib canvases、worker progress |
 
-当前共有 41 个显式 Python View。`tests/test_ui_source_of_truth.py` 维护完整 owner inventory，并
+当前共有 35 个显式 Python View。`tests/test_ui_source_of_truth.py` 维护完整 owner inventory，并
 阻止 `.ui`、`_generated`、pyuic 标记和非法 runtime/workflow 依赖重新进入仓库。
 
 ## 修改页面的标准流程

@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation import apply_design_system, install_safe_wheel_behavior
+from src.gimap.app.presentation import install_safe_wheel_behavior, style_widget
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
@@ -50,10 +50,10 @@ class ClassificationPage(QWidget, ClassificationPageView):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self._load_stylesheet()  # before the widgets exist: they are polished once
         self.setupUi(self)
         self._responsive_mode = ""
         self._bind_form()
-        self._load_stylesheet()
         install_safe_wheel_behavior(self)
         self.apply_responsive_mode()
         QTimer.singleShot(0, self._apply_initial_splitter_sizes)
@@ -227,7 +227,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
             ),
         ):
             bind_parameter_section(section, title, description, content, layout)
-            apply_design_system(section)
         bind_advanced_section(
             self.classification_log_section,
             self.logToggleButton,
@@ -235,7 +234,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
             self.classificationLogContent,
             self.classificationLogContentLayout,
         )
-        apply_design_system(self.classification_log_section)
 
         self.newSessionButton.setObjectName("NewSessionButton")
         self.loadSessionButton.setObjectName("LoadSessionButton")
@@ -391,7 +389,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
             ui.preprocessingAdvancedContent,
             ui.preprocessingAdvancedContentLayout,
         )
-        apply_design_system(self.classification_preprocessing_advanced)
         self.preprocessing_continue_button = QPushButton("Continue to explore", panel)
         self.preprocessing_continue_button.setObjectName("preprocessingContinueButton")
         self.preprocessing_continue_button.setProperty("classificationPrimaryAction", True)
@@ -448,7 +445,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
             ui.algorithmAdvancedContent,
             ui.algorithmAdvancedContentLayout,
         )
-        apply_design_system(self.classification_algorithm_advanced)
         self.classification_algorithm_advanced.setParent(panel)
         ui.experimentPanelLayout.insertWidget(1, self.classification_algorithm_advanced)
         self.algorithmConfigSplitter.setHandleWidth(0)
@@ -461,7 +457,6 @@ class ClassificationPage(QWidget, ClassificationPageView):
             ui.classificationRunContent,
             ui.classificationRunContentLayout,
         )
-        apply_design_system(self.classification_run_section)
         ui.experimentPanelLayout.removeWidget(self.classification_run_section)
         ui.experimentPanelLayout.insertWidget(1, self.classification_run_section)
 
@@ -576,5 +571,4 @@ class ClassificationPage(QWidget, ClassificationPageView):
         remove_from(parent.layout())
 
     def _load_stylesheet(self) -> None:
-        if STYLE_PATH.exists():
-            self.setStyleSheet(STYLE_PATH.read_text(encoding="utf-8"))
+        style_widget(self, STYLE_PATH)

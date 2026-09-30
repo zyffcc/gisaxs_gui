@@ -5,11 +5,8 @@ from __future__ import annotations
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QFrame, QLabel, QScrollArea, QSplitter, QVBoxLayout, QWidget
 
-from src.gimap.app.presentation import apply_design_system
 from src.gimap.app.presentation.components import ParameterSection, PlotPanel
-from src.gimap.app.presentation.responsive_layout import scale_value
 
-from .prediction_theme import prediction_stylesheet
 from .workflow_components import (
     PredictionCanvasEmptyState,
     PredictionDisclosure,
@@ -93,10 +90,6 @@ class PredictionWorkbenchLayout:
         )
         self.workflow_header.bind(self.ui)
         self.workflow_header.step_requested.connect(self._navigate_to_step)
-        apply_design_system(self.contents)
-        self.contents.setStyleSheet(
-            self.contents.styleSheet() + "\n" + prediction_stylesheet()
-        )
 
     def _clear_workspace_host(self) -> None:
         layout = self.workspace_ui.predictionWorkspaceLayout
@@ -157,7 +150,18 @@ class PredictionWorkbenchLayout:
 
         self.run_section.setParent(rail)
         self.run_section.setProperty("predictionStickyRun", True)
-        rail_layout.addWidget(self.run_section, 0)
+        # Same side margins as the cards scrolling above it (and their scroll bar, when there is one),
+        # so “3. Predict” lines up with 1 and 2.
+        sticky = QVBoxLayout()
+        sticky.addWidget(self.run_section)
+        rail_layout.addLayout(sticky, 0)
+        bar = scroll_area.verticalScrollBar()
+
+        def align(_minimum=0, maximum=0) -> None:
+            sticky.setContentsMargins(12, 0, 12 + (bar.sizeHint().width() if maximum > 0 else 0), 12)
+
+        bar.rangeChanged.connect(align)
+        align()
         rail.setMinimumWidth(self._control_min_width())
         rail.setMaximumWidth(self._control_target_width() + 80)
         self.left_scroll_area = scroll_area
@@ -182,7 +186,7 @@ class PredictionWorkbenchLayout:
         self.plot_panel.setObjectName("predictionPlotPanel")
         self.results_card.setParent(self.plot_panel.plot_host)
         self.results_card.header_widget.hide()
-        self.results_card.setMinimumHeight(scale_value(500, self.profile, 390))
+        self.results_card.setMinimumHeight(500)
         self.ui.gisaxsPredictImageShowTabWidget.setTabText(0, "Input preview")
         self.ui.gisaxsPredictImageShowTabWidget.setTabText(1, "Prediction result")
         self.plot_panel.set_plot_widget(self.results_card)
@@ -225,7 +229,7 @@ class PredictionWorkbenchLayout:
             right_contents,
         )
         self.batch_results_section.setObjectName("predictionBatchResultsSection")
-        self.batch_results_section.setMinimumHeight(scale_value(360, self.profile, 300))
+        self.batch_results_section.setMinimumHeight(360)
         self.batch_current_file_label = QLabel("No batch result selected", right_contents)
         self.batch_current_file_label.setObjectName("predictionBatchCurrentFileLabel")
         self.batch_current_file_label.setProperty("cardMeta", True)
@@ -332,7 +336,7 @@ class PredictionWorkbenchLayout:
         )
 
     def _preview_min_width(self) -> int:
-        return max(self.profile.preview_min, scale_value(480, self.profile, 400))
+        return max(self.profile.preview_min, 480)
 
     def _apply_splitter_sizes(self) -> None:
         self.splitter.setSizes(

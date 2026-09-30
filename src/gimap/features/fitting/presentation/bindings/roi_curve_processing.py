@@ -47,8 +47,6 @@ class RoiCurveProcessingMixin:
             q_all = None
             if self.q is not None:
                 q_all = np.asarray(self.q)
-            elif self.current_cut_data is not None and "x_coords" in self.current_cut_data:
-                q_all = np.asarray(self.current_cut_data["x_coords"])
             elif self.current_1d_data is not None and "q" in self.current_1d_data:
                 q_all = np.asarray(self.current_1d_data["q"])
             if q_all is not None and q_all.size > 0:
@@ -162,9 +160,7 @@ class RoiCurveProcessingMixin:
             self.preferences.save()
         except Exception:
             pass
-        if getattr(self, "data_source", None) == "cut":
-            self._mark_cut_stale("Sampling changed; update the cut to apply it")
-        elif getattr(self, "data_source", None) == "1d":
+        if getattr(self, "data_source", None) == "1d":
             self._resample_1d(n_points=n)
 
     def _on_interp_method_changed(self, method: str):
@@ -176,8 +172,6 @@ class RoiCurveProcessingMixin:
             pass
         if self.data_source == "1d" and self.q is not None:
             self._resample_1d(n_points=len(self.q), method=meth, keep_same_count=True)
-        elif self.data_source == "cut":
-            self._mark_cut_stale("Interpolation changed; update the cut to apply it")
 
     def _resample_1d(self, n_points: int, method: str = None, keep_same_count: bool = False):
         if self.current_1d_data is None or self.q is None or self.I is None:
@@ -206,7 +200,7 @@ class RoiCurveProcessingMixin:
         self._apply_roi_to_data_and_refresh()
 
     def _interpolate_series(self, x, y, x_new, method: str):
-        return _scientific_commands(self).cut.interpolate(x, y, x_new, method)
+        return _scientific_commands(self).curve.interpolate(x, y, x_new, method)
 
     def _log_cut_debug(self, message: str):
         """Send cut diagnostics to the fitting log without interrupting the cut flow."""
@@ -246,7 +240,7 @@ class RoiCurveProcessingMixin:
             self._log_cut_debug(
                 f"{context}: first/last q before sorting = {raw_x[0]:.8g}, {raw_x[-1]:.8g}"
             )
-        x_arr, y_arr, rows_arr = _scientific_commands(self).cut.sort_filter(
+        x_arr, y_arr, rows_arr = _scientific_commands(self).curve.sort_filter(
             x_values,
             intensity_values,
             context=context,
@@ -282,7 +276,7 @@ class RoiCurveProcessingMixin:
             mode = self._get_independent_axis_filter_mode()
         except Exception:
             mode = "all"
-        q_arr, intensity_arr = _scientific_commands(self).cut.filter_axis(
+        q_arr, intensity_arr = _scientific_commands(self).curve.filter_axis(
             q_values,
             intensity_values,
             mode,

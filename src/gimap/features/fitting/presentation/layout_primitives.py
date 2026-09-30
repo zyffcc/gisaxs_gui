@@ -209,6 +209,18 @@ class CurrentPageHeightTabWidget(QTabWidget):
             hint.setHeight(height)
         return hint
 
+    # QTabWidget answers height-for-width with its tallest page; layouts that
+    # honour it (word-wrapped labels nearby) would reserve that height.
+    def hasHeightForWidth(self) -> bool:
+        page = self.currentWidget()
+        return page is not None and page.hasHeightForWidth()
+
+    def heightForWidth(self, width: int) -> int:
+        page = self.currentWidget()
+        if page is None or not page.hasHeightForWidth():
+            return -1
+        return self.tabBar().sizeHint().height() + max(1, page.heightForWidth(width)) + 12
+
 
 class CurrentPageSizeTabWidget(CurrentPageHeightTabWidget):
     """Isolate a workspace tab from the size hints of hidden sibling pages."""

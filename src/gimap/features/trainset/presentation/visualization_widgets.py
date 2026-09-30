@@ -17,6 +17,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.presentation.theme import theme_color
+
 
 class ArrayCanvas(QWidget):
     region_created = pyqtSignal(str, dict)
@@ -168,11 +170,11 @@ class ArrayCanvas(QWidget):
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(248, 250, 252))
-        painter.setPen(QPen(QColor(215, 222, 232), 1))
+        painter.fillRect(self.rect(), theme_color("surface_alt"))  # theme colours: light and dark
+        painter.setPen(QPen(theme_color("border"), 1))
         painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
         if self.image is None or not self.image.size:
-            painter.setPen(QColor(100, 116, 139))
+            painter.setPen(theme_color("text_muted"))
             painter.drawText(self.rect(), Qt.AlignCenter | Qt.TextWordWrap, self.empty_text)
             return
         data = np.asarray(self.image, dtype=np.float64)
@@ -301,8 +303,8 @@ class HistogramWidget(QWidget):
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(255, 255, 255))
-        painter.setPen(QColor(71, 85, 105))
+        painter.fillRect(self.rect(), theme_color("surface"))
+        painter.setPen(theme_color("text_muted"))
         painter.drawText(12, 20, "Processed simulated-pixel intensity")
         if not self.y.size or self.y.max() <= 0:
             painter.drawText(
@@ -312,10 +314,10 @@ class HistogramWidget(QWidget):
             )
             return
         plot = self.rect().adjusted(68, 34, -18, -48)
-        painter.setPen(QPen(QColor(100, 116, 139), 1))
+        painter.setPen(QPen(theme_color("text_muted"), 1))
         painter.drawLine(plot.bottomLeft(), plot.bottomRight())
         painter.drawLine(plot.bottomLeft(), plot.topLeft())
-        painter.setPen(QPen(QColor(37, 99, 235), 2))
+        painter.setPen(QPen(theme_color("accent"), 2))
         points = []
         x_min = float(np.nanmin(self.x)) if self.x.size else 0.0
         x_max = float(np.nanmax(self.x)) if self.x.size else float(len(self.y) - 1)
@@ -326,7 +328,7 @@ class HistogramWidget(QWidget):
             points.append(QPoint(x, y))
         for first, second in zip(points, points[1:]):
             painter.drawLine(first, second)
-        painter.setPen(QColor(71, 85, 105))
+        painter.setPen(theme_color("text_muted"))
         for fraction in (0.0, 0.5, 1.0):
             x = plot.left() + int(fraction * plot.width())
             value = x_min + fraction * (x_max - x_min)
@@ -413,8 +415,8 @@ class ParameterCoverageWidget(QWidget):
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(255, 255, 255))
-        painter.setPen(QColor(71, 85, 105))
+        painter.fillRect(self.rect(), theme_color("surface"))
+        painter.setPen(theme_color("text_muted"))
         if not self.x.size:
             painter.drawText(self.rect(), Qt.AlignCenter, "No ground-truth samples yet.")
             return
@@ -428,7 +430,7 @@ class ParameterCoverageWidget(QWidget):
             title += f" · first 2 of {dimensions} form-factor dimensions"
         painter.drawText(12, 20, title)
         plot = self.rect().adjusted(70, 38, -22, -52)
-        painter.setPen(QPen(QColor(100, 116, 139), 1))
+        painter.setPen(QPen(theme_color("text_muted"), 1))
         painter.drawLine(plot.bottomLeft(), plot.bottomRight())
         painter.drawLine(plot.bottomLeft(), plot.topLeft())
 
@@ -482,7 +484,7 @@ class ParameterCoverageWidget(QWidget):
                     )
             y_label = self._axis_label(self.y_name)
 
-        painter.setPen(QColor(71, 85, 105))
+        painter.setPen(theme_color("text_muted"))
         for fraction in (0.0, 0.5, 1.0):
             x = plot.left() + int(fraction * plot.width())
             x_value = x_min + fraction * (x_max - x_min)

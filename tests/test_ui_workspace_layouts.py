@@ -14,10 +14,13 @@ from src.gimap.integrations.state import (
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
 )
-from ui.classification_page import ClassificationPage
-from ui.format_converter_dialog import ConversionProgressDialog, FormatConverterDialog
-from ui.geometry_calibration_dialog import GeometryCalibrationDialog
-from ui.trainset_build_page import TrainsetBuildPage
+from src.gimap.features.classification.presentation.page import ClassificationPage
+from src.gimap.features.format_converter.presentation.dialog import (
+    ConversionProgressDialog,
+    FormatConverterDialog,
+)
+from src.gimap.features.calibration.presentation.dialog import GeometryCalibrationDialog
+from src.gimap.features.trainset.presentation.page import TrainsetBuildPage
 
 
 _TEST_APP = None
@@ -41,29 +44,8 @@ def _context():
 
 def test_main_window_composition_is_owned_by_app_composition_boundary() -> None:
     from main import MainWindowComponents
-    from src.gimap.app.presentation.navigation import NavigationSidebar
-    from src.gimap.app.presentation.shell import ContentStack, MainShell
-    from ui.components.main_window_components import (
-        MainWindowComponents as LegacyMainWindowComponents,
-    )
-    from ui.components.main_window_components import (
-        NavigationSidebar as LegacyNavigationSidebar,
-    )
-    from ui.components.main_window_components import ContentStack as LegacyContentStack
-    from ui.components.main_window_components import MainShell as LegacyMainShell
-
-    assert LegacyMainWindowComponents is MainWindowComponents
     assert MainWindowComponents.__module__ == "src.gimap.app.main_window"
-    assert LegacyNavigationSidebar is NavigationSidebar
-    assert LegacyContentStack is ContentStack
-    assert LegacyMainShell is MainShell
-
-    legacy_source = (PROJECT_ROOT / "ui" / "components" / "main_window_components.py").read_text(
-        encoding="utf-8"
-    )
-    legacy_tree = ast.parse(legacy_source)
-    assert not any(isinstance(node, ast.ClassDef) for node in legacy_tree.body)
-    assert len(legacy_source.splitlines()) <= 70
+    assert not list((PROJECT_ROOT / "ui").rglob("*.py"))
 
     main_source = (PROJECT_ROOT / "main.py").read_text(encoding="utf-8")
     assert "src.gimap.app.main_window" in main_source
@@ -151,7 +133,7 @@ def test_trainset_layout_maps_existing_steps_to_shared_workspace_sections():
     page.close()
 
 
-def test_trainset_job_status_preserves_legacy_controller_aliases_and_percent_range():
+def test_trainset_job_status_exposes_progress_widgets_and_percent_range():
     _app()
     page = TrainsetBuildPage()
 
@@ -166,20 +148,19 @@ def test_trainset_job_status_preserves_legacy_controller_aliases_and_percent_ran
     page.close()
 
 
-def test_fitting_layout_uses_shared_six_stage_sections_without_replacing_actions():
+def test_fitting_layout_is_curve_card_model_and_plot_without_replacing_actions():
     _app()
     window = MainWindow(_context())
     workspace = window.components.fitting_workspace
 
-    assert workspace.fitting_input_section.title_label.text() == "Input"
-    assert workspace.fitting_configure_section.title_label.text() == "Configure"
-    assert workspace.fitting_preview_panel.title_label.text() == "Preview"
-    assert workspace.fitting_run_section.title_label.text() == "Fit"
-    assert workspace.fitting_results_panel.title_label.text() == "Results"
-    assert workspace.fitting_export_section.title_label.text() == "Export"
-    assert workspace.fitting_advanced_section.is_expanded() is False
-    assert window.FittingExportButton.parent() is workspace.fitting_export_section.content
-    assert window.fitExportPlotButton.parent() is workspace.fitting_export_section.content
+    assert workspace.page_splitter.count() == 2
+    assert workspace.controls_scroll_area.widget() is workspace.controls_content
+    assert workspace.curve_card.parent() is workspace.controls_content
+    assert workspace.results_scroll_area.widget() is workspace.results_panel
+    assert workspace.plot_controls_section.is_expanded() is False
+    assert workspace.log_section.is_expanded() is False
+    assert window.FittingExportButton.parent() is workspace.results_panel
+    assert window.fitExportPlotButton.parent() is workspace.results_panel
     window.close()
 
 
@@ -230,40 +211,3 @@ def test_classification_layout_uses_shared_stages_advanced_sections_and_job_stat
     assert page.workflowStack.count() == 5
     page.close()
 
-
-def test_waxs_layout_uses_shared_stages_basic_advanced_and_job_status():
-    _app()
-    window = MainWindow(_context())
-    page = window.components.waxs_page
-
-    assert window.waxsPageIndex == 4
-    assert window.mainWindowWidget.count() == 5
-    assert window.mainWindowWidget.widget(4) is page
-    assert not hasattr(window, "waxsPageHost")
-
-    assert page.waxs_input_section.title_label.text() == "Load data"
-    assert page.waxs_configure_section.title_label.text() == "Cut and integrate"
-    assert page.waxs_preview_panel.title_label.text() == "Preview"
-    assert page.waxs_run_section.title_label.text() == "Batch processing"
-    assert page.waxs_results_section.title_label.text() == "Results"
-    assert page.waxs_export_section.title_label.text() == "Export"
-    assert page.waxs_advanced_section.is_expanded() is True
-    assert page.waxs_workflow_tabs.count() == 3
-    assert [page.tabs.tabText(index) for index in range(page.tabs.count())] == [
-        "ROI / Cut",
-        "1D Integration",
-    ]
-    assert [page.advanced_tabs.tabText(index) for index in range(page.advanced_tabs.count())] == [
-        "Display",
-        "Mask",
-        "Geometry",
-    ]
-
-    page.set_job_state("running", "Processing frame", progress=35)
-    assert page.progress is page.waxs_job_status.progress_bar
-    assert page.status_label is page.waxs_job_status.message_label
-    assert page.progress.maximum() == 100
-    assert page.progress.value() == 35
-    assert page.export_button.parent() is page.waxs_export_section.content
-    assert page.export_1d_button.parent() is page.waxs_export_section.content
-    window.close()

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-from pathlib import Path
 
 import numpy as np
 
@@ -60,71 +59,6 @@ class AiWorkspaceStateMixin:
         if combo is not None:
             combo.setCurrentText("Free")
         self._set_ai_workspace_status("Balanced profile and model-default constraints restored.", 0)
-
-    def _selected_ai_model_path(self) -> Path | None:
-        for combo in (
-            getattr(self, "_ai_model_combo", None),
-            getattr(self.ui, "aiFittingModelComboBox", None),
-        ):
-            if combo is None or combo.currentIndex() < 0:
-                continue
-            data = combo.itemData(combo.currentIndex())
-            if data:
-                return Path(str(data))
-        selected = self._ai_fitting_settings().get("last_selected_model")
-        return Path(str(selected)) if selected else None
-
-    def _current_ai_curve_arrays(self, apply_exclusions: bool = True):
-        """Return the user-selected fitting curve in the model's nm^-1 unit."""
-        axis_filter = self._get_independent_axis_filter_mode()
-        excluded = (
-            set(getattr(self, "_ai_excluded_input_q", set()) or set())
-            if apply_exclusions
-            else set()
-        )
-        roi = None
-        if (
-            getattr(self, "_roi_controls_enabled", True)
-            and self._roi_min is not None
-            and self._roi_max is not None
-        ):
-            roi = (float(self._roi_min), float(self._roi_max))
-
-        use_current_cut = bool(
-            getattr(self.ui, "fitCurrentDataCheckBox", None)
-            and self.ui.fitCurrentDataCheckBox.isChecked()
-        )
-        if use_current_cut:
-            data = getattr(self, "current_cut_data", None)
-            if not isinstance(data, dict):
-                return None
-            q_values = data.get("x_coords", [])
-            intensities = data.get("y_intensity", [])
-            sigma = data.get("err")
-            q_source = "cut"
-        else:
-            data = getattr(self, "current_1d_data", None)
-            if not isinstance(data, dict):
-                return None
-            q_values = data.get("q", [])
-            intensities = data.get("I", [])
-            sigma = data.get("err")
-            q_source = data
-
-        try:
-            curve = _scientific_commands(self).ai.prepare_curve(
-                q_values,
-                intensities,
-                sigma,
-                axis_filter=axis_filter,
-                roi=roi,
-                excluded_q=excluded,
-                minimum_points=16,
-            )
-        except (TypeError, ValueError):
-            return None
-        q_model = self._convert_q_values_for_model(curve.q, source=q_source)
-        return q_model, curve.intensity, curve.sigma
 
     def _ai_q_key(self, q_value) -> str:
         return _scientific_commands(self).ai.q_key(q_value)

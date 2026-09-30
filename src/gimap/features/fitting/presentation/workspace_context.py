@@ -13,9 +13,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation import apply_design_system
 
-from .fitting_theme import fitting_stylesheet
+from .fitting_theme import apply_fitting_style
 from .insitu_series_page import InSituSeriesPage
 
 
@@ -48,6 +47,7 @@ class FittingContextContainer(QWidget):
         root.setSpacing(0)
 
         self.context_bar = QFrame(self)
+        apply_fitting_style(self.context_bar)
         self.context_bar.setObjectName("fittingContextBar")
         bar_layout = QHBoxLayout(self.context_bar)
         bar_layout.setContentsMargins(16, 8, 16, 8)
@@ -72,6 +72,7 @@ class FittingContextContainer(QWidget):
         bar_layout.addStretch(1)
 
         self.stack = _CurrentContextStack(self)
+        apply_fitting_style(self.stack)
         self.stack.setObjectName("fittingContextStack")
         self.insitu_page = InSituSeriesPage(insitu_view_model, self.stack)
         self.stack.addWidget(single_page)
@@ -85,9 +86,6 @@ class FittingContextContainer(QWidget):
         self.insitu_page.return_to_single_requested.connect(
             lambda: self.show_context("single")
         )
-        for widget in (self.context_bar, self.stack):
-            apply_design_system(widget)
-            widget.setStyleSheet(widget.styleSheet() + "\n" + fitting_stylesheet())
         self.show_context("single")
 
     def show_context(self, context: str) -> None:

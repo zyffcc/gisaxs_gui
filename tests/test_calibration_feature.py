@@ -198,7 +198,8 @@ def test_normalize_calibration_path_is_port_driven(tmp_path: Path) -> None:
 
 def test_standard_detection_preserves_legacy_filename_aliases() -> None:
     assert detect_standard_keys("scan_silver_behenate_001.cbf") == ("agbh",)
-    assert detect_standard_keys("scan_lab6_ceo2_001.nxs") == ("lab6", "ceo2")
+    # A mixed calibrant is fitted with both line sets first; the single standards stay as alternatives.
+    assert detect_standard_keys("scan_lab6_ceo2_001.nxs") == ("lab6_ceo2", "lab6", "ceo2")
     assert detect_standard_keys("unknown.cbf") == ()
 
 
@@ -253,15 +254,7 @@ def test_manual_refinement_preview_commit_and_significant_change_are_stable(
 
 def test_calibration_applies_with_in_memory_context_and_no_qapplication(tmp_path: Path) -> None:
     settings = InMemorySettingsRepository(
-        {
-            "fitting": {
-                "detector": {
-                    "distance": 2000.0,
-                    "beam_center_x": 100.0,
-                    "beam_center_y": 200.0,
-                }
-            }
-        }
+        {"detector": {"distance": 2000.0, "beam_center_x": 100.0, "beam_center_y": 200.0}}
     )
     context = AppContext(
         settings=settings,
@@ -269,9 +262,134 @@ def test_calibration_applies_with_in_memory_context_and_no_qapplication(tmp_path
         preferences=InMemoryUserPreferencesRepository(),
     )
     view_model = create_calibration_view_model(context)
+    defaults = {"distance": 1.0, "beam_center_x": 2.0, "beam_center_y": 3.0}
+    assert view_model.current_geometry(defaults) == {
+        "distance": 2000.0,
+        "beam_center_x": 100.0,
+        "beam_center_y": 200.0,
+    }
     view_model.result = _result(tmp_path / "source.cbf")
+    view_model.result.metadata["image_shape"] = [1679, 1475]
 
     geometry = view_model.apply_result()
 
     assert geometry["distance"] == 1456.7
-    assert settings.get("fitting", "detector.beam_center_x") == 123.5
+    assert geometry["beam_center_y"] == 234.5  # calibration's own (top-origin) value
+    assert settings.get("detector", "beam_center_x") == 123.5
+    assert settings.get("detector", "beam_center_y") == 234.5
+    assert view_model.current_geometry(defaults)["distance"] == 1456.7
+    # The former Cut & Fitting detector settings are no longer written.
+    assert settings.get("fitting", "detector.beam_center_x") is None
+
+
+def _in_memory_context() -> AppContext:
+    return AppContext(
+        settings=InMemorySettingsRepository(),
+        session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
+    )
+
+
+def _profile_context(profiles) -> AppContext:
+    return AppContext(
+        settings=InMemorySettingsRepository(),
+        session=InMemorySessionRepository(),
+        preferences=InMemoryUserPreferencesRepository(),
+        instrument_profiles=profiles,
+    )
+
+
+def test_applying_a_calibration_records_a_canonical_instrument_profile(tmp_path: Path) -> None:
+    from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
+
+    profiles = InMemoryInstrumentProfileRepository()
+    view_model = create_calibration_view_model(_profile_context(profiles))
+    view_model.result = _result(tmp_path / "source.cbf")
+    view_model.result.metadata["image_shape"] = [1679, 1475]
+
+    view_model.apply_result()
+
+    profile = profiles.find("Detector 1679×1475")
+    assert view_model.last_profile == profile
+    assert profile.detector_name == "Detector"
+    assert profile.detector_shape == (1679, 1475)
+    geometry = profile.geometry
+    # numpy pixel-centre index (123.5, 234.5) -> canonical pixel-corner frame (+0.5)
+    assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == (124.0, 235.0)
+    assert geometry.distance_m == pytest.approx(1.4567)
+    assert geometry.pixel_size_x_m == pytest.approx(172e-6)
+    assert geometry.wavelength_angstrom == pytest.approx(energy_to_wavelength(12.0))
+    assert geometry.incidence_deg == 0.0
+    assert "calibration agbh" in profile.source
+    assert profiles.match(detector_name="Detector", shape=(1679, 1475)) == profile
+
+
+def test_recalibration_updates_the_profile_and_keeps_its_incidence(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
+
+    profiles = InMemoryInstrumentProfileRepository()
+    view_model = create_calibration_view_model(_profile_context(profiles))
+    view_model.result = _result(tmp_path / "source.cbf")
+    view_model.result.metadata["image_shape"] = [1679, 1475]
+    view_model.apply_result()
+    first = profiles.find("Detector 1679×1475")
+    profiles.save(replace(first, geometry=first.geometry.with_incidence(0.4)))
+
+    moved = replace(view_model.result.selected_candidate, center_x_px=130.0, distance_mm=2000.0)
+    view_model.result = replace(view_model.result, selected_candidate=moved)
+    view_model.apply_result()
+
+    updated = profiles.find("Detector 1679×1475")
+    assert len(profiles.load_all()) == 1
+    assert updated.geometry.beam_center_x_px == 130.5
+    assert updated.geometry.distance_m == pytest.approx(2.0)
+    assert updated.geometry.incidence_deg == 0.4
+
+
+def test_calibration_without_frame_size_names_the_profile_by_detector_only(tmp_path: Path) -> None:
+    from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
+
+    profiles = InMemoryInstrumentProfileRepository()
+    view_model = create_calibration_view_model(_profile_context(profiles))
+    view_model.result = _result(tmp_path / "source.cbf")
+
+    view_model.apply_result()
+
+    assert view_model.last_profile.name == "Detector"
+    assert view_model.last_profile.detector_shape is None
+
+
+def test_overwriting_a_saved_profile_asks_only_for_a_significant_change(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
+
+    profiles = InMemoryInstrumentProfileRepository()
+    view_model = create_calibration_view_model(_profile_context(profiles))
+    view_model.result = _result(tmp_path / "source.cbf")
+    view_model.result.metadata["image_shape"] = [1679, 1475]
+    # Nothing saved yet: nothing to overwrite.
+    assert view_model.significantly_changed_profile() is None
+
+    view_model.apply_result()
+    # The same point in both conventions (index 123.5 == canonical 124.0).
+    assert view_model.significantly_changed_profile() is None
+
+    moved = replace(view_model.result.selected_candidate, center_x_px=150.0)
+    view_model.result = replace(view_model.result, selected_candidate=moved)
+    assert view_model.significantly_changed_profile() == profiles.find("Detector 1679×1475")
+
+    farther = replace(moved, center_x_px=123.5, distance_mm=1456.7 * 1.1)
+    view_model.result = replace(view_model.result, selected_candidate=farther)
+    assert view_model.significantly_changed_profile() is not None
+
+
+def test_contexts_without_a_profile_store_do_not_record_profiles(tmp_path: Path) -> None:
+    view_model = create_calibration_view_model(_in_memory_context())
+    view_model.result = _result(tmp_path / "source.cbf")
+
+    view_model.apply_result()
+
+    assert view_model.last_profile is None

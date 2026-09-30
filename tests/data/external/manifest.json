@@ -1,0 +1,40 @@
+{
+  "gisaxs_galaxi": {
+    "frame": "gisaxs_galaxi/galaxi_data.tif",
+    "kind": "gisaxs",
+    "pixel_size_m": 0.000172,
+    "distance_m": 1.730,
+    "wavelength_angstrom": 1.34,
+    "incidence_deg": 0.463,
+    "beam_center_px": [597.1, 719.6],
+    "yoneda_row": 607.5,
+    "source": "BornAgain r23 testdata/scatter2d/galaxi_data.tif.gz (GPL-3.0)"
+  },
+  "saxs_agbh_pyfai": {
+    "frame": "saxs_agbh_pyfai/Pilatus1M.edf",
+    "poni": "saxs_agbh_pyfai/Pilatus1M.poni",
+    "standard": "agbh",
+    "pixel_size_m": 0.000172,
+    "wavelength_angstrom": 1.0,
+    "beam_center_px": [180.0, 263.9],
+    "ring_distance_mm_at_stated_wavelength": 1635.0,
+    "source": "pyFAI test images (MIT)"
+  },
+  "giwaxs_p08_mapi": {
+    "frame": "giwaxs_p08_mapi/S121_MAI_A2_00841.tif",
+    "poni": "giwaxs_p08_mapi/LaB6_2021_12_DESY_P08.poni",
+    "kind": "giwaxs",
+    "incidence_deg": 0.075,
+    "peaks_q": [0.899, 0.999, 1.41, 1.992, 2.226],
+    "source": "Zenodo 10.5281/zenodo.17466183 (CC BY 4.0)"
+  },
+  "giwaxs_xeuss_pbte": {
+    "frame": "giwaxs_xeuss_pbte/PbTe_3010_r1_PT_1_10_0_00028.edf",
+    "mask": "giwaxs_xeuss_pbte/mask_PbTe_3010.edf",
+    "poni": "giwaxs_xeuss_pbte/AgBe_250403_XENOCS.poni",
+    "kind": "giwaxs",
+    "incidence_deg": 0.235,
+    "tilt_deg": 6.06,
+    "source": "Zenodo 10.5281/zenodo.17466183 (CC BY 4.0)"
+  }
+}

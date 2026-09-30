@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from ..domain import PredictionModule
 
 
-def _is_windows_absolute(path: str) -> bool:
-    return bool(path and PureWindowsPath(path).is_absolute())
+def _is_foreign_absolute(path: str) -> bool:
+    """True for paths that are absolute on Windows or POSIX, whatever the host OS.
+
+    Module files are shared between machines; a ``/Users/...`` path written on
+    macOS must not be re-rooted under the module folder on Windows.
+    """
+    return bool(
+        path and (PureWindowsPath(path).is_absolute() or PurePosixPath(path).is_absolute())
+    )
 
 
 def describe_prediction_module(module: PredictionModule) -> dict[str, object]:
@@ -78,7 +85,7 @@ def describe_prediction_module(module: PredictionModule) -> dict[str, object]:
             mask_path
             and module.folder is not None
             and not Path(mask_path).is_absolute()
-            and not _is_windows_absolute(mask_path)
+            and not _is_foreign_absolute(mask_path)
         ):
             mask_path = str((module.folder / mask_path).resolve())
         result["mask_path"] = mask_path
@@ -91,7 +98,7 @@ def describe_prediction_module(module: PredictionModule) -> dict[str, object]:
         model_path
         and module.folder is not None
         and not Path(model_path).is_absolute()
-        and not _is_windows_absolute(model_path)
+        and not _is_foreign_absolute(model_path)
     ):
         result["model_path"] = str((module.folder / model_path).resolve())
     return result

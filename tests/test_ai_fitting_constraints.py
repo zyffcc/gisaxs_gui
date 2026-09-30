@@ -1,4 +1,4 @@
-from utils.ai_fitting_constraints import ConstraintSet, exclusion_size
+from src.gimap.features.fitting.domain.physical_constraints import ConstraintSet, exclusion_size
 
 
 def component(kind, **params):

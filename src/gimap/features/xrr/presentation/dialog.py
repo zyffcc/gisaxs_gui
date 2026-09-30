@@ -8,7 +8,7 @@ from PyQt5.QtCore import QThread, Qt
 from PyQt5.QtWidgets import QDialog, QFileDialog, QMessageBox
 
 from src.gimap.app.bootstrap import create_standalone_legacy_context
-from src.gimap.app.presentation import apply_design_system, install_safe_wheel_behavior
+from src.gimap.app.presentation import install_safe_wheel_behavior
 from src.gimap.app.presentation.assets import app_icon
 
 from ..application import (
@@ -43,7 +43,6 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self.setWindowFlags(
             self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint
         )
-        apply_design_system(self)
         install_safe_wheel_behavior(self)
         self.plotter = XrrPlotPresenter(
             self.live_panel,

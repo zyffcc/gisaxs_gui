@@ -169,8 +169,8 @@ def render_curve_plot(axes, spec: CurvePlotSpec) -> None:
         axes.set_xscale(spec.x_scale if spec.x_scale in {"linear", "log"} else "linear")
     axes.set_yscale("log" if spec.log_y else "linear")
     for axis in ("top", "bottom", "left", "right"):
-        axes.spines[axis].set_linewidth(1.8)
-    axes.tick_params(axis="both", which="both", width=1.6, labelsize=12)
+        axes.spines[axis].set_linewidth(1.0)
+    axes.tick_params(axis="both", which="both", width=0.8, labelsize=10)
     handles, labels = axes.get_legend_handles_labels()
     legend_key = (
         tuple((id(handle), label) for handle, label in zip(handles, labels)),
@@ -191,7 +191,27 @@ def render_curve_plot(axes, spec: CurvePlotSpec) -> None:
     axes.autoscale(enable=True)
 
 
+def apply_plot_theme(figure, *, background: str, foreground: str, grid: str) -> None:
+    """Screen colours of a curve figure (the light/dark theme); exported figures keep their own."""
+    figure.patch.set_facecolor(background)
+    for axes in figure.axes:
+        axes.set_facecolor(background)
+        for spine in axes.spines.values():
+            spine.set_edgecolor(foreground)
+        axes.tick_params(which="both", colors=foreground)
+        for text in (axes.xaxis.label, axes.yaxis.label, axes.title):
+            text.set_color(foreground)
+        axes.grid(True, color=grid, alpha=1.0)
+        legend = axes.get_legend()
+        if legend is not None:
+            legend.get_frame().set_facecolor(background)
+            legend.get_frame().set_edgecolor(grid)
+            for text in legend.get_texts():
+                text.set_color(foreground)
+
+
 __all__ = [
+    "apply_plot_theme",
     "CurvePlotSpec",
     "CurveSeries",
     "MODEL_COLOR",

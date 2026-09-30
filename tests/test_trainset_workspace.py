@@ -9,13 +9,13 @@ from unittest.mock import patch
 import h5py
 import numpy as np
 
-from trainset.config import (
+from src.gimap.features.trainset.infrastructure.adapters.configuration import (
     default_project_config,
     synchronize_parameter_specs,
     trainable_parameter_names,
     validate_project_config,
 )
-from trainset.generator import (
+from src.gimap.features.trainset.infrastructure.adapters.dataset_generator import (
     DatasetGenerator,
     apply_preprocessing,
     build_fixed_mask,
@@ -23,9 +23,9 @@ from trainset.generator import (
     load_scattering_image,
     merge_threshold_mask,
 )
-from trainset.geometry import q_vectors, roi_to_spherical_ranges
-from trainset.grid_cache import load_or_build_grid
-from trainset.job_package import prepare_job_package
+from src.gimap.features.trainset.domain.geometry import q_vectors, roi_to_spherical_ranges
+from src.gimap.features.trainset.infrastructure.adapters.grid_cache import load_or_build_grid
+from src.gimap.features.trainset.infrastructure.adapters.portable_job_package import prepare_job_package
 
 
 class TrainsetWorkspaceTests(unittest.TestCase):
@@ -46,7 +46,7 @@ class TrainsetWorkspaceTests(unittest.TestCase):
                 value = float(sampled["radius_nm"] + sampled["height_nm"])
                 return np.full((2, 2), value, dtype=np.float32)
 
-            with patch("trainset.grid_cache._simulate_pattern_once", side_effect=fake_simulation) as mocked:
+            with patch("src.gimap.features.trainset.infrastructure.adapters.grid_cache._simulate_pattern_once", side_effect=fake_simulation) as mocked:
                 first = load_or_build_grid(config)
                 second = load_or_build_grid(config)
                 self.assertFalse(first["cache_hit"])

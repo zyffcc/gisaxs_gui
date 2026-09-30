@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from PyQt5.QtWidgets import QHBoxLayout, QStackedLayout, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QHBoxLayout, QStackedLayout, QWidget
 
-from ..styles import apply_design_system
 from .feedback import EmptyState
 from .sections import ParameterSection
 
@@ -35,7 +34,6 @@ class PlotPanel(ParameterSection):
         self.plot_stack.addWidget(self.empty_state)
         self.add_widget(self.plot_host, 1)
         self._plot_widget: QWidget | None = None
-        apply_design_system(self)
 
     def add_toolbar_widget(self, widget: QWidget) -> None:
         self.toolbar_layout.addWidget(widget)

@@ -8,7 +8,6 @@
   `preview_page_view.py`、`model_page_view.py`、`run_page_view.py`、
   `monitor_page_view.py`。
 - 页面行为与动态 workspace panels：`src/gimap/features/trainset/presentation/page.py`。
-- 兼容入口：`ui/trainset_build_page.py`。
 - 最近验证：2026-08-19。
 
 ## 当前现代化工作流
@@ -36,8 +35,9 @@ composition root 把唯一的 feature-owned 页面装入 host，并通过构造�
 `TrainsetViewBinding`。Binding 强制要求页面和 ViewModel 依赖，不再包含 host/layout fallback、
 页面创建或兼容 widget 清理逻辑。
 
-Physical-background 参数定义由 trainset domain 单一拥有；public alias `trainset.config` 与
-feature presentation 引用同一个对象，因此参数键、范围、精度和帮助文本保持不变。
+Physical-background 参数定义由 trainset domain 单一拥有；configuration adapter 与 feature
+presentation 引用同一个对象，因此参数键、范围、精度和帮助文本保持不变。旧的顶层 `trainset`
+兼容包已删除。
 
 ## 控件映射
 

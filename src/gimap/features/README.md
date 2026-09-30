@@ -1,6 +1,6 @@
 # `features`
 
-每个业务能力在这里拥有独立 feature，例如 fitting、prediction、trainset、
+每个业务能力在这里拥有独立 feature，例如 analyze（默认工作区）、fitting、prediction、trainset、
 classification、WAXS、calibration 或 XRR。创建实际 feature 时采用：
 
 ```text

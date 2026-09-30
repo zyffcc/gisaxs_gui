@@ -1,0 +1,153 @@
+{
+  "name": "Yuxin, P03 2021-11: Cu sputtered onto PEO, in situ, Lambda 9M (4 samples x 403 frames)",
+  "data_root": "E:/ExpData/Yuxin",
+  "frames": [
+    "lyx_cu_peo1_20pl_2p5fr_116_00002/lmbd/lyx_cu_peo1_20pl_2p5fr_116_00002_00001_m01.nxs",
+    "lyx_cu_peo2_20pl_2p5fr_117_00002/lmbd/lyx_cu_peo2_20pl_2p5fr_117_00002_00001_m01.nxs",
+    "lyx_cu_peo2_20pl_2p5fr_120_00002/lmbd/lyx_cu_peo2_20pl_2p5fr_120_00002_00001_m01.nxs",
+    "lyx_cu_peo2_20pl_2p5fr_123_00002/lmbd/lyx_cu_peo2_20pl_2p5fr_123_00002_00001_m01.nxs"
+  ],
+  "notes": "GIWAXS at P03, alpha_i = 0.4 deg",
+  "baseline": {
+    "geometry_source_contains": "giwaxs_calib_lab6_ceo2_redone_final",
+    "standard": "lab6_ceo2",
+    "max_line_error_percent": 0.2,
+    "reliable_peaks": [
+      2.557,
+      2.95,
+      3.415
+    ],
+    "peak_tolerance": 0.01,
+    "spike": 4.893,
+    "ring": {
+      "q": 2.95,
+      "herman": null,
+      "note_contains": "shadowed",
+      "why": "|χ| > 57° is a shadow (20–150x below the diffuse background at every q): f from the rest would be faked by it"
+    },
+    "no_series_hints": true,
+    "open_questions": 0,
+    "sector_note_contains": "shadowed"
+  },
+  "report": {
+    "mistakes": [
+      {
+        "id": "hexagonal_series",
+        "all": [
+          "(?i)hexagonal|六方"
+        ],
+        "unless": "(?i)\\bno\\b|\\bnot\\b|without|没有|不是|并非|无",
+        "why": "An older series hint was built from a halo, a failed fit and a detector spike; the data show no hexagonal series."
+      },
+      {
+        "id": "spike_as_reflection",
+        "all": [
+          "4\\.89",
+          "(?i)bragg|reflection|衍射峰|晶面|crystalline"
+        ],
+        "unless": "(?i)artef|artifact|spike|伪影|坏点|hot pixel",
+        "why": "4.893 is one or two bins wide and in every sample and the calibration: an artefact."
+      },
+      {
+        "id": "herman_from_13_percent",
+        "all": [
+          "1\\.65",
+          "(?i)herman|取向因子|\\bf\\s*[=≈]"
+        ],
+        "unless": "(?i)only|not|cannot|无法|不能|不给|仅|只|覆盖|coverage|13\\s*%|weigh|权重",
+        "why": "Only 13 % of |χ| 0–90° is measured at 1.655: no orientation factor."
+      },
+      {
+        "id": "halo_crystallite_size",
+        "all": [
+          "(?i)halo|晕",
+          "(?i)crystallite size|grain size|晶粒尺寸|scherrer"
+        ],
+        "unless": "(?i)\\bno\\b|\\bnot\\b|不|无|没有",
+        "why": "A broad halo has a correlation length, not a crystallite size."
+      },
+      {
+        "id": "phase_as_fact",
+        "all": [
+          "(?i)cu\\s*2\\s*o|cu₂o|metallic cu|金属铜|氧化亚铜"
+        ],
+        "unless": "(?i)consistent|hypothes|may|might|could|possibl|suggest|whether|distinguish|check|either|假设|可能|一致|或许|符合|推测|是否|区分|检查|建议|另一种",
+        "why": "The phase is a hypothesis unless the user confirms it; say what supports it."
+      },
+      {
+        "id": "orientation_from_shadow",
+        "all": [
+          "(?i)(1\\.9[23]|halo|晕)[^。\\n]{0,80}(mainly out-of-plane|面外为主|主要在面外)"
+        ],
+        "unless": "(?i)shadow|遮挡|伪影|artefact|artifact|不可信|not|不能|unreliable",
+        "why": "An amorphous halo 'mainly out-of-plane' by a factor 40 comes from the shadowed in-plane sector."
+      }
+    ],
+    "baseline_facts": [
+      {
+        "id": "calibration_named",
+        "any": [
+          "(?i)redone_final|lab6.?ceo2|LaB6\\s*\\+\\s*CeO|混合标样"
+        ]
+      },
+      {
+        "id": "line_error",
+        "any": [
+          "0\\.0[5-6]\\d*\\s*%"
+        ]
+      },
+      {
+        "id": "alpha_i_source",
+        "any": [
+          "(?i)(α\\s*i|alpha.?i|入射角)[^。\\n]{0,40}0\\.4"
+        ]
+      },
+      {
+        "id": "spike_called_artefact",
+        "all": [
+          "4\\.89",
+          "(?i)artef|artifact|spike|伪影|坏点|hot pixel"
+        ]
+      }
+    ],
+    "findings": [
+      {
+        "id": "missing_wedge",
+        "points": 1,
+        "any": [
+          "(?i)missing wedge|缺失楔"
+        ]
+      },
+      {
+        "id": "series_change",
+        "points": 2,
+        "all": [
+          "(?i)frames? 1\\b|frames? 1\\s*[–-]|first (ten )?frames|start of the (series|run)|before (the )?deposition|初态|沉积前|第\\s*1(\\s*[–-]\\s*\\d+)?\\s*帧|开始时",
+          "(?i)2\\.9[4-6]|3\\.4[0-5]|appear|出现"
+        ]
+      },
+      {
+        "id": "shared_lines",
+        "points": 1,
+        "all": [
+          "(?i)every sample|all (four )?samples|every frame|from the (first|start)|since frame 1|每个样品|所有样品|四个样品都|所有帧|每一帧|从第\\s*1\\s*帧起|一直存在",
+          "(?i)3\\.8[89]|3\\.90|4\\.89|instrument|substrate|衬底|基底|仪器|窗口|样品台"
+        ]
+      },
+      {
+        "id": "fcc_ratio_or_q_offset",
+        "points": 2,
+        "any": [
+          "(?i)\\bfcc\\b|1\\.15[4-9]|面心立方|2\\.3\\s*%|lattice (constant|parameter)|晶格常数"
+        ]
+      },
+      {
+        "id": "shadowed_region",
+        "points": 2,
+        "any": [
+          "(?i)shadow|遮挡|阴影|insensitive|响应很低|低约\\s*100\\s*倍|100\\s*倍|dead (area|region)"
+        ]
+      }
+    ]
+  }
+}

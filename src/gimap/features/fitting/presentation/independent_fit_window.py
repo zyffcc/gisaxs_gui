@@ -12,12 +12,6 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.app.presentation.responsive_layout import (
-    apply_density_profile,
-    install_adaptive_window_profile,
-)
-
-
 from .views import IndependentFitWindowView
 from .scientific_commands import is_matplotlib_available
 from .curve_plotting import plot_cut_data_with_log_handling
@@ -76,13 +70,6 @@ class IndependentFitWindow(QMainWindow, IndependentFitWindowView):
 
         if self.figure is not None and self.canvas is not None and self.ax is not None:
             self._setup_empty_plot()
-        install_adaptive_window_profile(
-            self, self._apply_screen_profile, apply_window_minimum=False
-        )
-
-    # 函数说明：应用screen profile。
-    def _apply_screen_profile(self, profile, screen):
-        apply_density_profile(self, profile)
 
     # 函数说明：配置empty 图表。
     def _setup_empty_plot(self):

@@ -73,22 +73,10 @@ class ManualRefinementMixin:
         if self.result is None or self.main_window is None:
             return
         candidate = self.result.selected_candidate
-        page = getattr(getattr(self.main_window, "components", None), "waxs_page", None)
-        if page is not None:
-            controls = {
-                "center_x_spin": candidate.center_x_px,
-                "center_y_spin": candidate.center_y_px,
-                "distance_spin": candidate.distance_mm,
-                "pixel_x_spin": self.result.pixel_size_x_m * 1e6,
-                "pixel_y_spin": self.result.pixel_size_y_m * 1e6,
-                "wavelength_spin": self.result.wavelength_angstrom,
-            }
-            for name, value in controls.items():
-                widget = getattr(page, name, None)
-                if widget is not None:
-                    widget.setValue(float(value))
-            if hasattr(page, "refresh_view"):
-                page.refresh_view()
+        # Analyze reads the recorded instrument profile on its next frame.
+        analyze = getattr(getattr(self.main_window, "components", None), "analyze_page", None)
+        if analyze is not None and hasattr(analyze, "_refresh_profiles"):
+            analyze._refresh_profiles()
         if hasattr(self.main_window, "statusbar"):
             self.main_window.statusbar.showMessage(
                 "Geometry calibration applied: center "

@@ -110,6 +110,25 @@ class CurveFilesMixin:
                 self.main_window, "Error", f"Failed to process 1D file path:\n{str(e)}"
             )
 
+    def import_1d_file(self, file_path, *, q_view: str | None = None) -> None:
+        """Load a 1D curve file (q in Å⁻¹) exactly as the Import 1D control does.
+
+        ``q_view`` preselects how signed q is shown and fitted (``fold``:
+        both halves on |q| in two colours, ``average``, ``positive``,
+        ``negative_abs`` …).
+        """
+        file_path = normalize_path(str(file_path))
+        combo = getattr(self.ui, "fitQViewModeComboBox", None)
+        if q_view and combo is not None and combo.findData(q_view) >= 0:
+            combo.blockSignals(True)
+            combo.setCurrentIndex(combo.findData(q_view))
+            combo.blockSignals(False)
+            update_hint = getattr(self, "_update_q_view_hint", None)
+            if callable(update_hint):
+                update_hint()
+        self.current_1d_file_path = file_path
+        self._load_1d_data(file_path)
+
     def _load_1d_data(self, file_path):
         """No description."""
         try:
@@ -133,14 +152,18 @@ class CurveFilesMixin:
                 "err": data.error,
                 "file_path": file_path,
                 "q_source_unit": data.q_source_unit,
+                "pixels": data.pixels,
+                "observation": dict(data.observation),
             }
 
             self.data_source = "1d"
             self.display_mode = "normal"
-            if hasattr(self.ui, "fitCurrentDataCheckBox"):
-                self.ui.fitCurrentDataCheckBox.blockSignals(True)
-                self.ui.fitCurrentDataCheckBox.setChecked(False)
-                self.ui.fitCurrentDataCheckBox.blockSignals(False)
+            zoom = getattr(self, "_curve_zoom", None)
+            if zoom is not None and zoom.zoomed:  # a new curve: its own range, not the last one's zoom
+                zoom.reset()
+            card = getattr(self.ui, "fittingCurveCard", None)
+            if card is not None:
+                card.show_curve(file_path, data.q, observation=data.observation, unit=data.q_source_unit)
 
             if hasattr(self.ui, "fitImport1dFileValue"):
                 self.ui.fitImport1dFileValue.setText(file_path)

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Optional, Protocol
+
+from src.gimap.shared.geometry import InstrumentProfile
 
 from ...domain import CalibrationRequest, CalibrationResult, DetectorImage
 
@@ -48,6 +50,12 @@ class GeometryParametersPort(Protocol):
     def apply(self, result: CalibrationResult) -> dict[str, float]: ...
 
     def save(self) -> None: ...
+
+
+class InstrumentProfilePort(Protocol):
+    def find(self, name: str) -> Optional[InstrumentProfile]: ...
+
+    def save(self, profile: InstrumentProfile) -> None: ...
 
 
 class DetectorCatalogPort(Protocol):

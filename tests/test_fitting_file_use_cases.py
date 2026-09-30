@@ -1,30 +1,27 @@
 from pathlib import Path
 
-import h5py
 import numpy as np
-from PIL import Image
 
 from src.gimap.features.fitting.application import (
+    ExportCurveFigure,
+    ExportCurveFigureRequest,
     ExportFitResult,
     ExportFitResultRequest,
+    FigureSeries,
     DiscoverInSituFrames,
     DiscoverInSituFramesRequest,
     InSituSourceFrame,
     LoadCurve,
     LoadCurveRequest,
-    LoadScatteringFile,
-    LoadScatteringFileRequest,
-    InspectScatteringSequence,
-    ManageRemoteFileCache,
     ManageFittingParameterFiles,
     SaveFittingLog,
     CheckFittingDependency,
 )
 from src.gimap.features.fitting.infrastructure.adapters import (
+    MatplotlibCurveFigureWriter,
     LocalCurveRepository,
     LocalFitResultRepository,
-    LocalScatteringFileRepository,
-    LocalRemoteFileCacheAdapter,
+    LocalInSituFrameRepository,
     LocalFittingParameterFileRepository,
     LocalFittingLogRepository,
     ImportlibFittingDependencyAvailabilityAdapter,
@@ -57,115 +54,6 @@ def test_load_curve_returns_structured_invalid_and_missing_errors(tmp_path):
     assert invalid.error.code == "unsupported_format"
     assert invalid.error.path == str(unsupported)
     assert missing.error.code == "not_found"
-
-
-def test_load_tiff_stack_preserves_natural_order_and_sum(tmp_path):
-    paths = [tmp_path / name for name in ("frame1.tif", "frame2.tif", "frame10.tif")]
-    for value, path in enumerate(paths, start=1):
-        Image.fromarray(np.full((4, 6), value, dtype=np.uint16)).save(path)
-
-    outcome = LoadScatteringFile(LocalScatteringFileRepository()).execute(
-        LoadScatteringFileRequest(paths[1], stack_count=99)
-    )
-
-    assert outcome.succeeded
-    np.testing.assert_allclose(outcome.value.image, np.full((4, 6), 5.0))
-    assert [path.name for path in outcome.value.source_files] == ["frame2.tif", "frame10.tif"]
-    assert outcome.value.metadata["stack_count"] == 2
-
-
-def test_load_scattering_file_returns_structured_format_error(tmp_path):
-    source = tmp_path / "image.png"
-    source.write_bytes(b"not an image")
-
-    outcome = LoadScatteringFile(LocalScatteringFileRepository()).execute(
-        LoadScatteringFileRequest(source)
-    )
-
-    assert outcome.error.code == "unsupported_format"
-    assert outcome.error.details["operation"] == "read"
-
-
-def test_inspect_scattering_sequence_uses_repository_without_qapplication(tmp_path):
-    paths = [tmp_path / f"scan_m0{index}.nxs" for index in (1, 2)]
-    for path in paths:
-        with h5py.File(path, "w") as handle:
-            handle.create_dataset(
-                "/entry/instrument/detector/data",
-                data=np.zeros((3, 4, 6), dtype=np.float32),
-            )
-
-    info = InspectScatteringSequence(LocalScatteringFileRepository()).execute(paths[1])
-
-    assert info.logical_path == paths[0].resolve()
-    assert info.series_paths == tuple(path.resolve() for path in paths)
-    assert info.frame_count == 3
-    assert info.uses_internal_frames
-
-
-def test_discover_insitu_cbf_frames_recurses_below_acquisition_root(tmp_path):
-    nested = tmp_path / "scan_001" / "detector"
-    nested.mkdir(parents=True)
-    (nested / "image_002.cbf").write_bytes(b"cbf")
-    (nested / "image_001.cbf").write_bytes(b"cbf")
-    (tmp_path / "root.cbf").write_bytes(b"cbf")
-    use_case = DiscoverInSituFrames(LocalScatteringFileRepository())
-
-    recursive = use_case.execute(
-        DiscoverInSituFramesRequest(tmp_path, "cbf", recursive=True)
-    )
-    direct = use_case.execute(
-        DiscoverInSituFramesRequest(tmp_path, "cbf", recursive=False)
-    )
-
-    assert [frame.path.name for frame in recursive] == [
-        "root.cbf",
-        "image_001.cbf",
-        "image_002.cbf",
-    ]
-    assert [frame.path.name for frame in direct] == ["root.cbf"]
-
-
-def test_discover_insitu_nxs_groups_modules_and_detects_appended_frames(tmp_path):
-    scan = tmp_path / "scan_001"
-    scan.mkdir()
-    modules = [scan / f"detector_m0{index}.nxs" for index in (1, 2)]
-    for path in modules:
-        with h5py.File(path, "w") as handle:
-            handle.create_dataset(
-                "/entry/instrument/detector/data",
-                data=np.zeros((2, 4, 6), dtype=np.float32),
-                maxshape=(None, 4, 6),
-            )
-    use_case = DiscoverInSituFrames(LocalScatteringFileRepository())
-    incomplete = use_case.execute(
-        DiscoverInSituFramesRequest(
-            tmp_path, "nxs", recursive=True, expected_nxs_modules=3
-        )
-    )
-    assert incomplete == ()
-    request = DiscoverInSituFramesRequest(
-        tmp_path, "nxs", recursive=True, expected_nxs_modules=2
-    )
-
-    initial = use_case.execute(request)
-    assert [(frame.path.name, frame.frame_index) for frame in initial] == [
-        ("detector_m01.nxs", 0),
-        ("detector_m01.nxs", 1),
-    ]
-    assert all(frame.module_paths == tuple(path.resolve() for path in modules) for frame in initial)
-
-    for path in modules:
-        with h5py.File(path, "a") as handle:
-            dataset = handle["/entry/instrument/detector/data"]
-            dataset.resize((3, 4, 6))
-            dataset[2] = 2.0
-
-    updated = use_case.execute(request)
-    assert [frame.frame_index for frame in updated] == [0, 1, 2]
-    restored = InSituSourceFrame.from_token(updated[-1].token)
-    assert restored.path == modules[0].resolve()
-    assert restored.frame_index == 2
 
 
 def test_export_fit_result_preserves_legacy_txt_and_csv_format(tmp_path):
@@ -211,36 +99,32 @@ def test_export_fit_result_returns_structured_file_error(tmp_path):
     assert Path(outcome.error.path) == missing_parent
 
 
-def test_remote_cache_use_case_preserves_copy_reuse_and_clear_contract(tmp_path):
-    project_root = tmp_path / "project"
-    source_dir = tmp_path / "OneDrive" / "beamtime"
-    source_dir.mkdir(parents=True)
-    source = source_dir / "frame.cbf"
-    source.write_bytes(b"detector-data")
-    cache = ManageRemoteFileCache(LocalRemoteFileCacheAdapter(project_root))
-    progress = []
+def test_curve_figure_is_a_column_wide_600_dpi_raster_or_a_vector(tmp_path):
+    from PIL import Image
 
-    copied = cache.prepare(
-        str(source),
-        cache.default_directory(),
-        3.0,
-        on_progress=lambda *values: progress.append(values),
+    q = np.linspace(0.01, 0.3, 40)
+    request = dict(
+        series=(
+            FigureSeries("Data", q, 100 * np.exp(-q / 0.05), "#1f4e9c", "scatter"),
+            FigureSeries("Model", q, 100 * np.exp(-q / 0.05), "#c92a2a", "line"),
+        ),
+        x_label="q (nm⁻¹)",
+        y_label="Intensity (a.u.)",
+        log_y=True,
     )
-    reused = cache.prepare(
-        str(source),
-        cache.default_directory(),
-        3.0,
-        on_progress=lambda *values: progress.append(values),
-    )
-    unrelated = copied.parent / "keep.txt"
-    unrelated.write_text("keep", encoding="utf-8")
+    use_case = ExportCurveFigure(MatplotlibCurveFigureWriter())
 
-    assert cache.is_remote(str(source))
-    assert copied == reused
-    assert copied.read_bytes() == source.read_bytes()
-    assert progress[-1][0] == 100
-    assert cache.clear(cache.default_directory()) == 1
-    assert unrelated.is_file()
+    raster = use_case.execute(ExportCurveFigureRequest(path=tmp_path / "plot.png", **request))
+    vector = use_case.execute(ExportCurveFigureRequest(path=tmp_path / "plot.pdf", **request))
+    empty = use_case.execute(
+        ExportCurveFigureRequest(path=tmp_path / "empty.png", **{**request, "series": ()})
+    )
+
+    assert raster.succeeded and vector.succeeded
+    with Image.open(raster.value) as image:
+        assert abs(image.width - round(8.5 / 2.54 * 600)) <= 2  # one column at 600 dpi
+    assert vector.value.read_bytes().startswith(b"%PDF")
+    assert not empty.succeeded and "Nothing is plotted" in empty.error.message
 
 
 def test_parameter_file_use_case_preserves_json_and_copy_contract(tmp_path):
@@ -276,3 +160,26 @@ def test_optional_dependency_query_does_not_import_runtime():
 
     assert availability.execute("numpy") is True
     assert availability.execute("definitely_missing_gimap_runtime") is False
+
+
+def test_discover_insitu_curves_in_natural_order_and_restore_tokens(tmp_path):
+    nested = tmp_path / "run_2"
+    nested.mkdir()
+    curve = "0.1 1\n0.2 2\n"
+    for name in ("s_00010_fit_input.dat", "s_00002_fit_input.dat", "s_00001_horizontal.csv"):
+        (tmp_path / name).write_text(curve, encoding="ascii")
+    (nested / "s_00003_fit_input.dat").write_text(curve, encoding="ascii")
+    use_case = DiscoverInSituFrames(LocalInSituFrameRepository())
+
+    direct = use_case.execute(DiscoverInSituFramesRequest(tmp_path))
+    recursive = use_case.execute(DiscoverInSituFramesRequest(tmp_path, recursive=True))
+
+    assert [frame.path.name for frame in direct] == ["s_00002_fit_input.dat", "s_00010_fit_input.dat"]
+    # Natural order of the path below the folder: "run_2/…" sorts before "s_…".
+    assert [frame.path.name for frame in recursive] == [
+        "s_00003_fit_input.dat",
+        "s_00002_fit_input.dat",
+        "s_00010_fit_input.dat",
+    ]
+    restored = InSituSourceFrame.from_token(direct[-1].token)
+    assert restored.path == direct[-1].path and restored.display_name == "s_00010_fit_input.dat"

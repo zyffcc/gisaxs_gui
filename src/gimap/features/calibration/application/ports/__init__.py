@@ -8,6 +8,7 @@ from .calibration import (
     CancellationCheck,
     DetectorCatalogPort,
     GeometryParametersPort,
+    InstrumentProfilePort,
     ProgressCallback,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "CancellationCheck",
     "DetectorCatalogPort",
     "GeometryParametersPort",
+    "InstrumentProfilePort",
     "ProgressCallback",
 ]

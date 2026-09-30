@@ -1,4 +1,4 @@
-"""Adapters for the flat legacy ``user_settings.json`` preference store."""
+"""In-memory UserPreferencesRepository (the real one lives in ``user_store``)."""
 
 from __future__ import annotations
 
@@ -24,18 +24,5 @@ class InMemoryUserPreferencesRepository:
     def snapshot(self) -> dict[str, Any]:
         return deepcopy(self._values)
 
-
-class LegacyUserPreferencesRepository:
-    """Expose the existing UserSettings object through the application port."""
-
-    def __init__(self, manager):
-        self._manager = manager
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._manager.get(key, default)
-
-    def set(self, key: str, value: Any) -> None:
-        self._manager.set(key, value)
-
-    def save(self) -> None:
-        self._manager.save_settings()
+    def reset(self) -> None:
+        self._values = {}

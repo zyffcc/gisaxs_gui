@@ -4,8 +4,7 @@
 - **Scope**: Format Converter 的 PyQt presentation 所有权、控件映射与手动验收
 - **Related code**:
   [`src/gimap/features/format_converter/presentation/`](../../../src/gimap/features/format_converter/presentation/)、
-  [`format_converter_dialog_view.py`](../../../src/gimap/features/format_converter/presentation/views/format_converter_dialog_view.py)、
-  [`ui/format_converter_dialog.py`](../../../ui/format_converter_dialog.py)
+  [`format_converter_dialog_view.py`](../../../src/gimap/features/format_converter/presentation/views/format_converter_dialog_view.py)
 - **Related tests**:
   [`tests/test_format_converter_presentation.py`](../../../tests/test_format_converter_presentation.py)、
   [`tests/test_format_converter_feature.py`](../../../tests/test_format_converter_feature.py)、
@@ -33,9 +32,8 @@ PyQt Dialog → FormatConverterViewModel → application use cases → ports
 `views/folder_import_dialog_view.py` 与 `views/conversion_progress_dialog_view.py` 独立拥有，
 与主对话框共用同一 behavior module，但不存在第二套布局实现。
 
-`ui/format_converter_dialog.py` 是 9 行 public import alias，直接 re-export feature 的三个
-dialog class，不包含第二套实现。生产 caller 按需导入 feature-owned dialog；该 alias 只服务
-已有外部脚本和 API 回归测试。
+旧的 `ui/format_converter_dialog.py` 与 `utils/format_converter.py` 兼容别名已删除；调用方直接
+导入 `src.gimap.features.format_converter` 中的 owner 模块。
 
 ## 控件映射
 

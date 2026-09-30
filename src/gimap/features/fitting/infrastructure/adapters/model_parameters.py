@@ -3,16 +3,34 @@
 from __future__ import annotations
 
 import copy
+import shutil
 from pathlib import Path
 
-from config.model_parameters_manager import ModelParametersManager
+from src.gimap.integrations.state.user_store import (
+    MODEL_PARAMETERS_FILE,
+    PROJECT_ROOT,
+    user_data_dir,
+)
+
+from .model_parameters_store import ModelParametersManager
+
+TEMPLATE_PATH = PROJECT_ROOT / "config" / MODEL_PARAMETERS_FILE
+"""Shipped defaults; the user's copy lives in the user data folder."""
+
+
+def default_model_parameters_path() -> Path:
+    """The user's model-parameter file, created from the shipped template on first use."""
+    path = user_data_dir() / MODEL_PARAMETERS_FILE
+    if not path.exists() and TEMPLATE_PATH.is_file():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(TEMPLATE_PATH, path)
+    return path
 
 
 class FittingModelParametersAdapter:
     def __init__(self, config_path: str | Path | None = None):
-        self._manager = ModelParametersManager(
-            str(config_path) if config_path is not None else None
-        )
+        path = Path(config_path) if config_path is not None else default_model_parameters_path()
+        self._manager = ModelParametersManager(str(path))
 
     @property
     def config_path(self) -> Path:

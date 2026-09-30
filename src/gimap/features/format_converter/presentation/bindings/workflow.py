@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.theme import set_role
 from ..display_formatting import _human_bytes
 
 
@@ -43,13 +44,11 @@ class WorkflowMixin:
         current = self.stack.currentIndex()
         for index, label in enumerate(self.step_labels):
             if index == current:
-                label.setStyleSheet(
-                    "background: #2563eb; color: white; border-radius: 5px; font-weight: 600;"
-                )
+                set_role(label, "step-current")
             elif index < current:
-                label.setStyleSheet("background: #dbeafe; color: #1d4ed8; border-radius: 5px;")
+                set_role(label, "step-done")
             else:
-                label.setStyleSheet("background: #f1f5f9; color: #475569; border-radius: 5px;")
+                set_role(label, "step")
         self.back_button.setEnabled(current > 0)
         self.next_button.setText("Review & Convert" if current == 2 else "Next")
 

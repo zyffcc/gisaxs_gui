@@ -162,7 +162,7 @@ class FittingParameterPersistenceMixin:
         import_particles_action = menu.addAction("Import Particle Parameters Only...")
         reload_action = menu.addAction("Reload Parameters from Config")
         menu.addSeparator()
-        ai_action = menu.addAction("Open AI Fitting Workspace...")
+        ai_action = menu.addAction("Fit Settings & Batch...")
         action = menu.exec_(global_pos)
         if action == save_action:
             self.save_fitting_parameters_dialog()

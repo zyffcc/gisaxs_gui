@@ -1,4 +1,4 @@
-"""Fitting 的文件加载和导出 use cases。"""
+"""Fitting file use cases: curves, fit results and in-situ curve series."""
 
 from __future__ import annotations
 
@@ -6,18 +6,17 @@ from pathlib import Path
 
 from .errors import FileOperationError
 from .models import (
+    ExportCurveFigureRequest,
     ExportFitResultRequest,
     DiscoverInSituFramesRequest,
     ExportOperationResult,
+    FigureOperationResult,
     LoadCurveRequest,
-    LoadScatteringFileRequest,
     CurveOperationResult,
-    ScatteringOperationResult,
-    ScatteringSequenceInfo,
     InSituSourceFrame,
 )
-from .ports import CurveRepository, FitResultRepository, ScatteringFileRepository
-from .ports import FittingModelPort, RemoteFileCachePort
+from .ports import CurveFigureWriter, CurveRepository, FitResultRepository, InSituFrameRepository
+from .ports import FittingModelPort
 from ..domain import ManualFitRequest, ManualFitResult, q_values_for_model
 
 
@@ -39,33 +38,10 @@ def _structured_file_error(path: Path, operation: str, exc: Exception) -> FileOp
     )
 
 
-class LoadScatteringFile:
-    def __init__(self, repository: ScatteringFileRepository):
-        self._repository = repository
-
-    def execute(self, request: LoadScatteringFileRequest) -> ScatteringOperationResult:
-        try:
-            return ScatteringOperationResult(value=self._repository.load(request))
-        except Exception as exc:
-            return ScatteringOperationResult(
-                error=_structured_file_error(request.path, "read", exc)
-            )
-
-
-class InspectScatteringSequence:
-    """Read detector navigation metadata through the file repository port."""
-
-    def __init__(self, repository: ScatteringFileRepository):
-        self._repository = repository
-
-    def execute(self, path: Path) -> ScatteringSequenceInfo:
-        return self._repository.inspect_sequence(Path(path))
-
-
 class DiscoverInSituFrames:
-    """Discover lightweight frame locators below an acquisition root."""
+    """List the curve files of an in-situ series, in natural order."""
 
-    def __init__(self, repository: ScatteringFileRepository):
+    def __init__(self, repository: InSituFrameRepository):
         self._repository = repository
 
     def execute(
@@ -96,6 +72,21 @@ class ExportFitResult:
             return ExportOperationResult(error=_structured_file_error(request.path, "write", exc))
 
 
+class ExportCurveFigure:
+    """Write the plotted curve layers as a publication figure."""
+
+    def __init__(self, writer: CurveFigureWriter):
+        self._writer = writer
+
+    def execute(self, request: ExportCurveFigureRequest) -> FigureOperationResult:
+        try:
+            if not request.series:
+                raise ValueError("Nothing is plotted yet: load a curve first")
+            return FigureOperationResult(value=self._writer.write(request))
+        except Exception as exc:
+            return FigureOperationResult(error=_structured_file_error(request.path, "write", exc))
+
+
 class RunManualFit:
     def __init__(self, model: FittingModelPort):
         self._model = model
@@ -116,34 +107,3 @@ class RunManualFit:
             parameter_names=parameter_names,
             parameters=request.parameters,
         )
-
-
-class ManageRemoteFileCache:
-    def __init__(self, cache: RemoteFileCachePort):
-        self._cache = cache
-
-    def default_directory(self) -> str:
-        return self._cache.default_directory()
-
-    def display_directory(self, cache_dir: str) -> str:
-        return self._cache.display_directory(cache_dir)
-
-    def resolve_directory(self, cache_dir: str) -> Path:
-        return self._cache.resolve_directory(cache_dir)
-
-    def is_remote(self, path: str) -> bool:
-        return self._cache.is_remote(path)
-
-    def target_path(self, source_path: str, cache_dir: str) -> Path:
-        return self._cache.target_path(source_path, cache_dir)
-
-    def prepare(self, source_path: str, cache_dir: str, max_gb: float, **callbacks):
-        return self._cache.prepare(
-            source_path,
-            cache_dir,
-            max_gb,
-            **callbacks,
-        )
-
-    def clear(self, cache_dir: str) -> int:
-        return self._cache.clear(cache_dir)

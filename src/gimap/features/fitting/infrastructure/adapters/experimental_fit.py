@@ -55,17 +55,22 @@ def fit_candidates(item, options, report, cancelled):
     q, y, sigma = (item[k] for k in ("q", "observed", "sigma"))
     combinations = [options["components"]] if options["components"] else [[1], [3], [2]]
     results = []
+    hint = options.get("distance_hint_nm")
+    starts = [(1.5, None), (4.0, None)] + ([(4.0, float(hint))] if hint and np.isfinite(hint) and hint > 0 else [])
     for types in combinations:
-        for radius in (1.5, 4.0):
+        for radius, distance in starts:
             if cancelled():
                 raise RuntimeError("Fitting cancelled")
-            report(0, 1, f"{item['side']}: numerical fit {types}, initial R={radius:g} nm", {})
+            start = f"initial R={radius:g} nm" + (f", D={distance:.3g} nm" if distance else "")
+            report(0, 1, f"{item['side']}: numerical fit {types}, {start}", {})
             tick = time.perf_counter()
             initial, lower, upper = [], [], []
             for j, typ in enumerate(types):
                 r = radius * (1 + 0.6 * j)
                 dmin = max(3, 2 * r * 1.001)
                 eta = np.log(1.5) / np.log(500 / dmin)
+                if distance:
+                    eta = float(np.clip(np.log(max(distance, 1.01 * dmin) / dmin) / np.log(500 / dmin), 0.01, 0.99))
                 initial.extend([np.log(r), 0.2, eta, 0.12])
                 lower.extend([0, 0.02, 0, 0.05])
                 upper.extend([np.log(100), 0.9, 1, 0.9])

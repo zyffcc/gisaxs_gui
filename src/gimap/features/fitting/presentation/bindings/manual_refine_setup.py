@@ -24,25 +24,12 @@ class ManualRefineSetupMixin:
                 self._add_fitting_error("No active particle shapes selected for Auto Refine")
                 return None
 
-            q_data = None
-            y_data = None
-            q_source_kind = None
-            if (
-                hasattr(self.ui, "fitCurrentDataCheckBox")
-                and self.ui.fitCurrentDataCheckBox.isChecked()
-            ):
-                if getattr(self, "current_cut_data", None) is not None:
-                    q_data = np.asarray(self.current_cut_data.get("x_coords"), dtype=float)
-                    y_data = np.asarray(self.current_cut_data.get("y_intensity"), dtype=float)
-                    q_source_kind = "cut"
-            else:
-                if getattr(self, "current_1d_data", None) is not None:
-                    q_data = np.asarray(self.current_1d_data.get("q"), dtype=float)
-                    y_data = np.asarray(self.current_1d_data.get("I"), dtype=float)
-                    q_source_kind = "1d"
-            if q_data is None or y_data is None:
+            if getattr(self, "current_1d_data", None) is None:
                 self._add_fitting_error("No input curve available for Auto Refine")
                 return None
+            q_data = np.asarray(self.current_1d_data.get("q"), dtype=float)
+            y_data = np.asarray(self.current_1d_data.get("I"), dtype=float)
+            q_source_kind = "1d"
 
             n = min(q_data.size, y_data.size)
             q_data, y_data = q_data[:n], y_data[:n]

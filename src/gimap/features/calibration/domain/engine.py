@@ -225,6 +225,8 @@ class CalibrationEngine:
             calibration_timestamp=datetime.now(timezone.utc).isoformat(),
             metadata={
                 "loader": image.metadata,
+                # Needed to express the beam centre in other pages' conventions.
+                "image_shape": [int(value) for value in np.shape(image.data)[:2]],
                 "estimated_distance_mm": estimated_distance_mm,
                 "distance_range_mm": list(distance_range_mm),
             },

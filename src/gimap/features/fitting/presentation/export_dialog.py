@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation import apply_design_system
 
 
 @dataclass(frozen=True)
@@ -67,7 +66,6 @@ class FittingDataExportDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        apply_design_system(self)
 
     def selection(self) -> FittingExportSelection:
         return FittingExportSelection(

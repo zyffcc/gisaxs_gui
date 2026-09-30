@@ -1,13 +1,13 @@
 from src.gimap.features.fitting.application import ManageFittingModelParameters
 from src.gimap.features.fitting.infrastructure.adapters import (
-    LegacyFittingModelParametersAdapter,
+    FittingModelParametersAdapter,
 )
 
 
 def test_model_parameter_repository_preserves_legacy_json_and_particle_api(tmp_path):
     path = tmp_path / "model_parameters.json"
     parameters = ManageFittingModelParameters(
-        LegacyFittingModelParametersAdapter(path)
+        FittingModelParametersAdapter(path)
     )
 
     parameters.replace_section(
@@ -25,7 +25,7 @@ def test_model_parameter_repository_preserves_legacy_json_and_particle_api(tmp_p
     assert parameters.save_parameters()
 
     restored = ManageFittingModelParameters(
-        LegacyFittingModelParametersAdapter(path)
+        FittingModelParametersAdapter(path)
     )
     assert restored.get_particle_shape("fitting", "particle_1") == "Sphere"
     assert restored.get_particle_parameter(

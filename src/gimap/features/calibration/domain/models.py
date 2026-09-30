@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
-from src.gimap.shared.detector_io.models import DetectorImage
+from src.gimap.shared.detector_io.models import DetectorImage  # noqa: F401  (re-exported)
 
 
 @dataclass(frozen=True)

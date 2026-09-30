@@ -9,16 +9,6 @@ class ParticleThreeMixin:
     def _setup_particle_three(self):
         self.fitParticleWidget_3 = QtWidgets.QWidget(self.scrollAreaWidgetContents)
         self.fitParticleWidget_3.setMinimumSize(QtCore.QSize(230, 300))
-        self.fitParticleWidget_3.setStyleSheet(
-            "#fitParticleWidget_3 {\n"
-            "  border: 1px solid rgba(0,0,0,0.12);  /* 细外框 */\n"
-            "  border-radius: 12px;                 /* 圆角大小可改 */\n"
-            "  padding: 8px;                        /* 让内容不贴边 */\n"
-            "  /* 伪“阴影”：用浅色外描边模拟（Qt 没有 box-shadow） */\n"
-            "  outline: 6px solid rgba(0,0,0,0.03);\n"
-            "  outline-offset: -6px;                /* 紧贴边缘 */\n"
-            "}"
-        )
         self.fitParticleWidget_3.setObjectName("fitParticleWidget_3")
         self.verticalLayout_22 = QtWidgets.QVBoxLayout(self.fitParticleWidget_3)
         self.verticalLayout_22.setObjectName("verticalLayout_22")

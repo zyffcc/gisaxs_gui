@@ -1,73 +1,54 @@
 """Bridge the portable native-node workflow to single and in-situ fitting."""
 
 import numpy as np
-from pathlib import Path
-from ...application import CutSelection
-from ..binding_primitives import _scientific_commands
+
+from src.gimap.app.presentation.i18n import tr
 
 from ..workflow_v5_dialog import WorkflowV5Dialog
 from ...application.workflow_v5 import bundled_workflow, default_options
 
+SAME_CURVE = 0.01
+"""Fitting's model reproduces a loaded solution when it differs from it by at most this (relative)."""
+
 
 class WorkflowV5BindingMixin:
-    def _native_cbf_input(self, options):
-        state = getattr(self, "current_detector_image", None)
-        source = self.current_parameters.get("imported_gisaxs_file", "")
-        if state is None or Path(source).suffix.lower() != ".cbf":
+    def _native_curve_input(self, data, options):
+        """Native detector columns written by Analyze: the counting contract of the CBF path.
+
+        Analyze averages each detector column of the horizontal cut band (mean
+        counts per pixel, Poisson σ, pixel count), exactly the observation the
+        detector path used to build here, so V5 gets the same metadata and the
+        same working tolerance on σ.  Other curves return ``None``.
+        """
+        observation = data.get("observation") or {}
+        pixels, counting = data.get("pixels"), data.get("err")
+        if observation.get("source") != "native_detector_columns" or pixels is None or counting is None:
             return None
-        workflow_state = self.fitting_view_model.state
-        cut_revision = (getattr(self, "current_cut_data", None) or {}).get("analysis_revision", workflow_state.cut_result_analysis_revision)
-        if cut_revision != state.revision:
-            raise ValueError("Preprocessing changed. Click Extract / Update to rebuild the cut before fitting.")
-        image = state.analysis_image
-        grid = self._detector_q_grid()
-        if grid is None:
+        q = np.asarray(data.get("q", []), float).reshape(-1)
+        y = np.asarray(data.get("I", []), float).reshape(-1)
+        pixels = np.asarray(pixels, float).reshape(-1)
+        counting = np.asarray(counting, float).reshape(-1)
+        if not (q.shape == y.shape == pixels.shape == counting.shape) or not q.size:
             return None
-        q_mesh = grid.horizontal(self._horizontal_q_axis())
-        selected = None
-        if self._should_show_q_axis():
-            region = self._current_selection_pixel_region(
-                q_mode=True, horizontal_axis=self._horizontal_q_axis()
-            )
-            if region is None:
-                raise ValueError("Select a horizontal detector region first")
-            info = self.current_parameter_selection
-            cx, cy, width, height = (info[k] for k in ("center_x", "center_y", "width", "height"))
-            selected = (abs(q_mesh - cx) <= width / 2) & (abs(grid.qz - cy) <= height / 2)
-        else:
-            insitu_geometry = self._insitu_cut_geometry() if getattr(self, "_insitu_workflow_ai_record", None) is not None else {}
-            selection = CutSelection(
-                center_x=insitu_geometry.get("center_parallel_px", self.ui.gisaxsInputCenterParallelValue.value()),
-                center_y=insitu_geometry.get("center_vertical_px", self.ui.gisaxsInputCenterVerticalValue.value()),
-                height=insitu_geometry.get("cut_vertical_px", self.ui.gisaxsInputCutLineVerticalValue.value()),
-                width=insitu_geometry.get("cut_parallel_px", self.ui.gisaxsInputCutLineParallelValue.value()),
-                orientation="horizontal",
-            )
-            if selection.height > selection.width:
-                return None
-            x0, x1, r0, r1 = _scientific_commands(self).cut.pixel_bounds(image.shape, selection)
-            region = (r0, r1, x0, x1)
-        q, y, counting, metadata = _scientific_commands(self).cut.cbf_observations(
-            image,
-            q_mesh,
-            region,
-            selection_mask=selected,
-        )
-        metadata.update(
-            q_source="region_mean_native",
-            analysis_revision=state.revision,
-            mask_source="detector_preprocessing",
-            gap_margin_px=state.preprocessing.invalid_margin_px,
-            masked_pixels=state.masked_pixels,
-            threshold_enabled=state.preprocessing.threshold_enabled,
-            mirror_replaced_pixels=state.mirror_replaced_pixels,
-            stack_count=max(1, int(self.current_parameters.get("stack_count", 1))),
+        cbf = observation.get("file_format") == "cbf"
+        self._workflow_observation_metadata = dict(
+            source="native_cbf_columns" if cbf else "native_detector_columns",
+            q_source="analyze_native_columns",
+            measured_columns=int(q.size),
+            valid_pixel_counts=pixels.tolist(),
+            intensity_unit=observation.get("intensity_unit", "counts_per_pixel"),
+            gap_margin_px=int(observation.get("gap_guard_px", 0)),
+            threshold_enabled=bool(observation.get("threshold_enabled", False)),
+            counting_model_valid=bool(observation.get("counting_model_valid", True)),
+            mirror_replaced_pixels=0,
+            stack_count=max(1, int(observation.get("summed_frames", 1))),
+            uncertainty="Poisson sum/count approximation; additional relative noise is a working tolerance",
+            sampling="Native measured columns; no interpolated points across detector gaps",
         )
         sigma = np.sqrt(
             counting**2 + (options["relative_noise"] * abs(y)) ** 2 + options["absolute_noise"] ** 2
         )
-        self._workflow_observation_metadata = metadata
-        return dict(x_coords=q, y_intensity=y, err=sigma, q_source_unit="nm")
+        return {**data, "err": sigma}
 
     def _workflow_options(self):
         return {**default_options(), **self._ai_fitting_settings().get("workflow_v5", {})}
@@ -85,7 +66,7 @@ class WorkflowV5BindingMixin:
                 runner=self.fitting_view_model.context.jobs,
             )
             dialog.settings_changed.connect(self._save_workflow_options)
-            dialog.candidate_selected.connect(self._apply_workflow_candidate)
+            dialog.candidate_selected.connect(self.show_workflow_candidate)
             dialog.can_start = lambda: (
                 getattr(self, "_ai_job_thread", None) is None
                 and not getattr(self, "_insitu_workflow_busy", False)
@@ -109,7 +90,7 @@ class WorkflowV5BindingMixin:
             "model": "General V5 (experimental)",
             "experimental": "Numerical physical fitting",
         }[method]
-        self._set_ai_workspace_status(f"{label} · ready for native-point fitting", 0)
+        self._set_ai_workspace_status(f"{label} · ready to fit", 0)
 
     def _open_insitu_prediction_settings(self):
         recipe = self.fitting_view_model.insitu.recipe
@@ -154,28 +135,27 @@ class WorkflowV5BindingMixin:
         return dict(
             axis_filter=self._get_independent_axis_filter_mode(),
             roi=roi,
+            # The folded views (|q| overlay, ±q average, −q as |q|) show the fitting
+            # range in |q|, so it selects both signs of the native columns.
+            roi_abs=self._get_q_combination_mode() != "separate",
             excluded_q=sorted(getattr(self, "_ai_excluded_input_q", set()) or set()),
         )
 
     def _current_ai_curve_arrays(self, apply_exclusions=True):
         # Keep the measured sign and intensity. Never route V5 through the legacy
         # positive-I cleaner, which discards the most informative noisy samples.
-        use_cut = bool(getattr(self, "_insitu_workflow_ai_record", None)) or bool(
-            getattr(self.ui, "fitCurrentDataCheckBox", None)
-            and self.ui.fitCurrentDataCheckBox.isChecked()
-        )
-        data = getattr(self, "current_cut_data" if use_cut else "current_1d_data", None)
+        data = getattr(self, "current_1d_data", None)
         options = self._workflow_options()
         recipe = self.fitting_view_model.insitu.recipe
         if getattr(self, "_insitu_workflow_ai_record", None) is not None and recipe is not None:
             options = dict(recipe.model.get("workflow_v5", options))
         self._workflow_observation_metadata = {}
-        if use_cut:
-            data = self._native_cbf_input(options) or data
+        if isinstance(data, dict):
+            data = self._native_curve_input(data, options) or data
         if not isinstance(data, dict):
             return None
-        q = np.asarray(data.get("x_coords" if use_cut else "q", []), float).reshape(-1)
-        y = np.asarray(data.get("y_intensity" if use_cut else "I", []), float).reshape(-1)
+        q = np.asarray(data.get("q", []), float).reshape(-1)
+        y = np.asarray(data.get("I", []), float).reshape(-1)
         if len(q) != len(y) or not len(q):
             return None
         mask = np.isfinite(q) & np.isfinite(y) & (q != 0)
@@ -192,7 +172,8 @@ class WorkflowV5BindingMixin:
             mask &= q < 0
         if selection.get("roi") is not None:
             lo, hi = sorted(selection["roi"])
-            mask &= (q >= lo) & (q <= hi)
+            ranged = np.abs(q) if selection.get("roi_abs") else q
+            mask &= (ranged >= lo) & (ranged <= hi)
         if apply_exclusions:
             excluded = set(selection.get("excluded_q", []))
             mask &= np.array(
@@ -234,7 +215,7 @@ class WorkflowV5BindingMixin:
         if sigma.shape != q.shape:
             raise ValueError("Input sigma length does not match q")
         return (
-            self._convert_q_values_for_model(q[mask], source="cut" if use_cut else data),
+            self._convert_q_values_for_model(q[mask], source=data),
             y[mask],
             sigma[mask],
         )
@@ -243,12 +224,44 @@ class WorkflowV5BindingMixin:
         self.open_ai_fitting_workspace()
         self._workflow_v5_dialog.set_results(rows, output_dir)
 
+    def show_workflow_candidate(self, row) -> bool:
+        """A ``native_v5`` solution (1D Predict, or Analyze ▸ Results ▸ Show in Fitting) put into Components and
+        Global and drawn by Fitting's model, which then refines it; drawn as it is when it cannot be put there."""
+        if self._insitu_frame_active():
+            return False
+        model = str(row.get("combination") or "").replace("_", " ")
+        try:
+            converted = self.fitting_view_model.map_native_solution(row)
+            self._load_parameter_mapping(converted.mapping)
+        except (ValueError, KeyError, TypeError, RuntimeError) as exc:
+            shown = self._apply_workflow_candidate(row)
+            self._set_fitting_inline_feedback(
+                tr("{model} is drawn, but not put into Components: {reason}").format(model=model, reason=exc), "warning"
+            )
+            return shown
+        self._perform_manual_fitting(reveal_result=True)  # the model on the data
+        tabs = getattr(self.ui, "fittingModeTabs", None)
+        if tabs is not None:
+            tabs.setCurrentIndex(0)  # Components: where the values went
+        deviation = converted.max_deviation
+        if not np.isfinite(deviation) or deviation <= SAME_CURVE:
+            message, kind = tr("{model} is in Components and Global; Fitting's model draws the same curve{within}.").format(
+                model=model, within="" if not np.isfinite(deviation) else f" (≤ {100 * deviation:.2g} %)"), "info"
+        else:
+            message, kind = tr(
+                "{model} is in Components and Global as a start: Fitting's model of it differs from the solution by up "
+                "to {percent} % (its Vertical Cylinder weights radii by R⁴). Refine it here."
+            ).format(model=model, percent=f"{100 * deviation:.3g}"), "warning"
+        self._set_fitting_inline_feedback(message, kind)
+        return True
+
+    def _insitu_frame_active(self) -> bool:
+        return bool(getattr(self, "_insitu_workflow_busy", False)) or getattr(
+            self, "_insitu_workflow_state", "Idle"
+        ) in ("Watching", "Processing", "Paused")
+
     def _apply_workflow_candidate(self, row, refresh_plot=True):
-        if refresh_plot and (
-            getattr(self, "_insitu_workflow_busy", False)
-            or getattr(self, "_insitu_workflow_state", "Idle")
-            in ("Watching", "Processing", "Paused")
-        ):
+        if refresh_plot and self._insitu_frame_active():
             # Browsing old single-curve results must not replace an active frame.
             return False
         q, fitted = np.asarray(row["native_q"]), np.asarray(row["native_fit"])

@@ -77,7 +77,7 @@ class DatasetSourcesMixin:
         color.setFixedSize(14, 14)
         color.setStyleSheet(f"background: {source.color}; border-radius: 7px;")
         title = QLabel(source.label, card)
-        title.setStyleSheet("font-weight: 700;")
+        title.setProperty("gimapRole", "strong")
         status = QLabel(str(summary.get("status", "Empty")), card)
         status.setProperty("classificationBadge", True)
         top.addWidget(color)

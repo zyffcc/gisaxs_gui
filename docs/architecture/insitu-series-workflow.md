@@ -1,7 +1,8 @@
 # In-situ 序列分析契约
 
 - **Status**: Current
-- **Scope**: Fitting 中单文件分析与实时、回看、批量序列处理之间的配置和数据边界
+- **Scope**: Fitting 中单条曲线分析与实时、批量曲线序列处理之间的配置和数据边界；探测器帧序列由
+  Analyze 先转成曲线（Send Series to Fitting）
 - **Related code**:
   [`src/gimap/features/fitting/domain/insitu_recipe.py`](../../src/gimap/features/fitting/domain/insitu_recipe.py)、
   [`src/gimap/features/fitting/application/insitu_recipe.py`](../../src/gimap/features/fitting/application/insitu_recipe.py)、
@@ -9,9 +10,9 @@
   [`src/gimap/features/fitting/infrastructure/adapters/local_files.py`](../../src/gimap/features/fitting/infrastructure/adapters/local_files.py)
 - **Related tests**:
   [`tests/test_fitting_insitu_recipe.py`](../../tests/test_fitting_insitu_recipe.py)、
-  [`tests/test_fitting_insitu_workflow.py`](../../tests/test_fitting_insitu_workflow.py)、
+  [`tests/test_fitting_insitu_series.py`](../../tests/test_fitting_insitu_series.py)、
   [`tests/test_fitting_file_use_cases.py`](../../tests/test_fitting_file_use_cases.py)
-- **Last verified**: 2026-09-22
+- **Last verified**: 2026-09-28
 
 ## 设计结论
 
@@ -19,12 +20,15 @@ Fitting 是一个 workspace，包含两个稳定、互不抢占状态的工作�
 
 ```text
 Fitting
-├── Single analysis    单个代表文件的交互式分析与参数验证
-└── In-situ series     使用已确认 Recipe 进行 Live / Review / Batch
+├── Single analysis    单条代表曲线的交互式拟合与参数验证
+└── In-situ series     使用已确认 Recipe 拟合一个曲线序列（Live / Batch）
 ```
 
-In-situ 不是一套不同的科学算法。每一帧仍按单文件的预处理、几何、cut 和 fitting use case
-执行；In-situ 只增加文件发现、序列调度、Recipe 版本、失败策略、进度和结果聚合。
+序列的每一帧是一条曲线文件（通常是 Analyze 写出的 `*_fit_input.dat`）。探测器帧的读取、
+几何、gap guard、相加与切割都在 Analyze 完成（Export All / Send Series to Fitting），规则见
+[`scientific-data-flow.md`](scientific-data-flow.md)。In-situ 不是一套不同的科学算法：每条曲线
+仍按单条曲线的 fitting use case 执行；In-situ 只增加文件发现、序列调度、Recipe 版本、失败策略、
+进度和结果聚合。
 
 ## 单向 Recipe 快照
 
@@ -53,51 +57,37 @@ Recipe 记录影响科学结果的配置，而不是窗口布局或颜色等显�
 
 | 分组 | 内容 | 序列中的常见策略 |
 | --- | --- | --- |
-| Experiment setup | detector distance、pixel size、beam center、wavelength、grazing angle | 通常固定 |
-| Preprocessing | orientation、threshold/mask、mirror-fill | 固定并应用到每一帧 |
-| Cut | ROI、cut geometry、q/像素定义 | 固定或按追踪策略更新 |
-| Model | workflow_v5 方法、幅度校准开关、条件、组分、分辨率、噪声、候选预算及输入 ROI/侧选择 | 捕获快照；不跟随 Single 修改 |
-| Tracking | center/Yoneda 如何随帧变化 | fixed / detect each frame / previous success |
-| Fitting | Fit curves · selected method / legacy correction off / Extract only；失败策略 | 实际方法以捕获的 Fit method 为准；RC specialist 独立控制幅度校准；continue / stop |
+| Cut | `source = "curve"`：输入是曲线文件，q 与像素数已由 Analyze 决定 | 固定 |
+| Model | workflow_v5 方法、幅度校准开关、条件、组分、分辨率、噪声、候选预算及输入选择（正/负/两侧、fitting range 及其是否按 \|q\|、排除点） | 捕获快照；不跟随 Single 修改 |
+| Fitting | Fit curves · selected method / legacy correction off / Plot curves only；失败策略 | 实际方法以捕获的 Fit method 为准；RC specialist 独立控制幅度校准；continue / stop |
 
-Colormap、vmin/vmax、zoom、当前标签页等 `DisplayState` 不进入 Recipe，因为它们不改变科学输入。
+图的色图、范围、缩放、当前标签页等显示状态不进入 Recipe，因为它们不改变科学输入。旧版 Recipe
+中的 experiment setup / preprocessing / tracking 字段仍可读取，但曲线序列不再使用它们。
 
-Experiment setup 必须保存用于 q 网格计算的完整科学精度。当 spinbox 只是该值的舍入显示时，
-捕获读取设置仓库中的原值；有意修改到不同显示值时采用用户输入。不得将优化后的
-Center X 791.3190849 因界面显示 791.32 而变成另一套几何，也不得通过扩大 ROI 掩盖由此导致
-的边界点丢失。Single／in-situ 同帧需保留相同原生 q、观测强度、有效像素计数和输入 ROI。
+Single／in-situ 对同一曲线需保留相同原生 q、观测强度、有效像素计数和输入选择。
 
 ## 三种工作模式
 
-- **Live monitor**：递归监视 acquisition root。CBF 中每个文件是一帧；NXS 中同名前缀的 module
-  files 组成一个逻辑 detector sequence，内部 dataset 的每个 frame 是一帧。帧稳定后进入队列，
-  只使用当时生效的 Recipe 版本；
-- **Review history**：回看已处理文件、状态、参数和趋势。默认不重新计算；显式 reprocess 才产生新结果；
-- **Batch process**：先确定文件集合和顺序，再使用一个 Recipe 执行。可暂停、取消、失败继续并恢复状态。
+- **Live Watch**：监视曲线文件夹（可含子文件夹），新写入的曲线（可选等到文件写完）进入队列，只使用当时
+  生效的 Recipe 版本。Analyze 的 Watch + Export New Frames 写出曲线，这里接着拟合；
+- **Process Existing Sequence**：按文件名自然顺序处理已有曲线（start / end / step 取文件名最后一个
+  数字，忽略 `_sum10`、`_fit_input` 后缀），可暂停、取消、失败继续；
+- 结果表、trend、heatmap 与导出是两种模式共用的 Results。
 
-三种模式共享同一 Recipe、JobStatus、结果表和预览语义，不得分别复制预处理或拟合算法。
+两种模式共享同一 Recipe、JobStatus、结果表和预览语义，不得分别复制拟合算法。
 
 ## 页面与操作模型
 
-In-situ 页面是序列处理的唯一 UI owner。Single analysis 的 Load Mode 只负责单文件或临时
-Stack，不再提供 In-situ 选项、范围输入、轮询 timer 或第二个 runner dialog。
-
-页面只保留三个可点击的步骤；Analysis settings 的 Detector / cut settings 折叠区保留预处理、几何与 cut 参数：
+In-situ 页面是序列处理的唯一 UI owner；Single analysis 只处理一条曲线。页面有三个可点击的步骤：
 
 ```text
-Source → Analysis settings → Results
+Source → Fit → Results
 ```
 
 - 点击节点只切换该步骤的参数和解释，不立即计算，也不改变当前 Preview/Frames/Log 标签；
-- Source 选择 `Live Watch` 或 `Process Existing Sequence`，并显式选择 CBF 或 NXS。两者共享 root
-  folder、recursive、pattern、Recipe、进度和结果缓存；NXS 还声明本次探测器预期 module 数（默认
-  11），未形成完整 module group 或各 module 内部帧数不一致时不得入队；
-- Live 的 seen identity 是 `(logical path, internal frame index)`，而不是单独的文件路径。因此同一
-  NXS 文件内追加 frame 和新产生的另一组 NXS files 都能在后续轮询中进入队列；
-- Preview 始终显示当前处理图像和 cut/fit 曲线。其 Image display 提供 auto scale、log intensity、
-  vmin/vmax、colormap、center 和 cut ROI overlay；这些控件只重绘当前 preview，不进入 Recipe、
-  不产生新的 AnalysisImage revision，也不触发 cut/fit 或页面跳转。Frames 按行显示每个帧在 load、preprocess、
-  geometry、cut、fit 各步骤的状态；
+- Source 选择 `Live Watch` 或 `Process Existing Sequence`，共享曲线文件夹、pattern（默认
+  `*_fit_input.dat`）、是否包含子文件夹、编号范围、Recipe、进度和结果缓存；
+- Preview 显示当前曲线与拟合；Frames 按行显示每条曲线 load 与 fit 的状态；
 - 选中某一帧时，流程节点显示该帧实际状态，而不是把“点击过”误认为“执行成功”；
 - Start、Pause、Stop 是页面底部固定命令，不随参数节点或结果标签切换而移动；
 - Trend、heatmap、export 和 cache 操作属于 Results 节点，不得建立第二套处理状态。
@@ -107,26 +97,21 @@ Source → Analysis settings → Results
 任意序列帧的科学输出必须可追溯到：
 
 ```text
-Source frame
-  → AnalysisImage(revision)
-  → CutResult(recipe_version, analysis_revision)
-  → FitResult(recipe_version, cut_revision)
+Detector frame(s)
+  → Analyze（有效像素、gap guard、相加、几何、切割）
+  → <stem>_fit_input.dat（q I σ pixels + # observation）
+  → FitResult(recipe_version)
 ```
 
-相同源数据、相同 Recipe 和相同软件/依赖版本，通过单文件或 In-situ 入口执行时应得到数值兼容
-的结果。In-situ 不得绕过 canonical preprocessing，也不得重新访问未处理的原始数组来生成后续
-cut 或 fit。
+相同曲线、相同 Recipe 和相同软件/依赖版本，通过单条或 In-situ 入口执行时应得到数值兼容
+的结果。In-situ 不读取探测器帧，也不重新计算曲线。
 
 ## 当前执行边界
 
-Live/Batch controls、预览和状态已经内嵌到 feature-owned In-situ 页面；旧 dialog shell 已删除。
-执行仍复用经过测试的单帧 preprocessing、q-space、cut 和 fitting commands，不复制科学算法。
-
-启动时由 Recipe runtime seam 注入 Recipe 的 preprocessing 与 experiment geometry，In-situ cut
-直接读取 Recipe cut geometry；任务停止、批处理完成或出错后恢复 Single 的运行时设置。1D fitting
-使用 Recipe 中保存的 workflow_v5 与输入选择；Single 后续修改不会影响序列。
-1D parameters 保存后生成作用于未来帧的新 Recipe，不修改 Single 设置。每个结果 record 必须记录 `recipe_version` 以及 load、preprocess、geometry、
-cut、fit 的独立状态。
+Live/Batch controls、预览和状态内嵌在 feature-owned In-situ 页面。每条曲线经与 Single 相同的曲线
+读取与 fitting commands 处理，不复制科学算法。1D fitting 使用 Recipe 中保存的 workflow_v5 与输入
+选择；Single 后续修改不会影响序列。1D parameters 保存后生成作用于未来曲线的新 Recipe，不修改
+Single 设置。每个结果 record 记录 `recipe_version` 以及 load、fit 的独立状态。
 
 ## 实验性预测执行与输出
 
@@ -148,7 +133,9 @@ RC specialist 下的 Auto／`[]` 组分、没有原生计数契约的文本、�
 不保证未知混合物覆盖。0.05 不是强制通过线。
 
 正负 q 独立拟合；有符号强度与原测量点保留，500 点仅用于显示正演。每点实际有效像素数随
-CBF cut 传递，并按完全相同的 ROI／删点／分侧排序同步；不能从加入容差后的 sigma 反推。
+曲线文件的 `pixels` 列传递，并按完全相同的 ROI／删点／分侧排序同步；不能从加入容差后的 sigma 反推。
+学习分支的计数契约另要求每侧 450–700 个原生列、q 覆盖到 4.0–4.3 nm⁻¹、每列 3–12 个有效像素；
+不满足时按记录的原因数值回退。
 每帧保存两侧各自 rank 1 的曲线与候选参数，不用旧手工 forward 重新计算。
 Recipe 版本、结果目录、耗时与误差写入帧记录。不同侧参数带 side 前缀，避免覆盖。
 文本多文件 batch 在一个进程内复用 runtime；in-situ 当前仍按帧启动隔离 worker，存在每帧加载
@@ -163,10 +150,12 @@ Recipe 版本、结果目录、耗时与误差写入帧记录。不同侧参数�
 `python tools/check_stable_predict_workflow.py --mode all`，范围与证据见
 [`RELEASE_zh.md`](../../modules/Fitting_1D_Model/Workflow_v5/development/evidence/stable_blue_20260922/RELEASE_zh.md)。
 
+## 2026-09-28 Analyze → Fitting 回放
 
-## 2026-09-21 CBF 实际序列回放补充
-
-`tools/check_cbf_center_workflow.py --insitu` 现已覆盖用户指定 CBF 的真实加载、预处理、cut、
-V5 拟合、双侧输出及结果持久化（单帧序列）；长序列和 NXS 仍需单独验收。
-修复 Recipe 冻结组分列表为 tuple 后被 V5 选项校验拒绝的问题；校验入口接受 list/tuple 并规范为 JSON list。
-Single 的 CBF 自动 Yoneda 入口明确跳过正在运行的 in-situ，捕获后的中心/切片仍由 Recipe 决定。
+`tools/check_stable_predict_workflow.py` 的 UI 部分改为用户路径：Analyze 用保存的几何打开真实 CBF，
+把水平带拖到验证过的行（1171–1176），Refine x by Symmetry，Send to Fitting，fitting range 设为
+|q| ≤ 4.23 nm⁻¹（0.423 Å⁻¹，保留这 1148 列），然后 1D Predict；再用该曲线跑单帧 in-situ。结果：Analyze 的 1148 个原生列与
+旧探测器路径的固定样本**逐列强度和像素数完全相同**，q 只差不到一列（精确 q 模型 + 对称中心
+791.296 px 对旧 791.32 px），因此最靠近中心的一列换到了另一侧（570／578 对 571／577）。学习
+分支可用并运行；其候选被判为结构残差，按设计转数值拟合，双侧 lnRMSE 0.166／0.148（旧记录
+学习分支 0.171／0.155）。Single 与 in-situ 的原生观测与结果一致。

@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 
+import re
 from pathlib import Path
 
-
+import numpy as np
 from PyQt5.QtWidgets import (
     QFileDialog,
     QDialog,
 )
 
 from src.gimap.features.fitting.application import (
+    ExportCurveFigureRequest,
     ExportFitResultRequest,
+    FigureSeries,
 )
+from src.gimap.shared.figures import FIGURE_FILE_FILTER
 
 from ..binding_primitives import (
     _scientific_commands,
@@ -23,6 +27,75 @@ from ..export_dialog import FittingDataExportDialog
 
 class FitResultExportMixin:
     """Own fit result export behavior."""
+
+    def _export_plot(self):
+        """Save the curve plot as shown (data, model, components) as a publication figure."""
+        series, axes_labels = self._plotted_figure_series()
+        if not series:
+            self._add_fitting_error("Nothing to export: load a curve first")
+            return
+        source = (getattr(self, "current_1d_data", None) or {}).get("file_path")
+        default = (
+            str(Path(source).with_name(f"{Path(source).stem}_plot.png"))
+            if source
+            else "fitting_plot.png"
+        )
+        path, _ = QFileDialog.getSaveFileName(
+            self.main_window, "Export Plot", default, FIGURE_FILE_FILTER
+        )
+        if not path:
+            return
+        outcome = self.fitting_view_model.storage.export_curve_figure(
+            ExportCurveFigureRequest(path=Path(path), series=series, **axes_labels)
+        )
+        if outcome.succeeded:
+            self._add_fitting_success(f"Plot exported: {outcome.value}")
+            self.status_updated.emit(f"Plot exported to {outcome.value.name}")
+        else:
+            self._add_fitting_error(f"Could not export the plot: {outcome.error.message}")
+
+    def _plotted_figure_series(self):
+        """The data and model layers drawn on the curve plot, its axis labels and scales.
+
+        Read from the plot itself so every render path exports what is shown; the
+        fitting-range guides (unlabelled lines) are left out.
+        """
+        from matplotlib.colors import to_hex
+
+        figure = getattr(self, "_current_fit_figure", None)
+        if figure is None or not figure.axes:
+            return (), {}
+        axes = figure.axes[0]
+        series = []
+        for artist in axes.collections:
+            label = str(artist.get_label())
+            offsets = np.asarray(artist.get_offsets(), dtype=float)
+            if label.startswith("_") or offsets.ndim != 2 or not offsets.size:
+                continue
+            colors = artist.get_facecolor()
+            color = to_hex(colors[0]) if len(colors) else "#1f4e9c"
+            series.append(FigureSeries(label, offsets[:, 0], offsets[:, 1], color, "scatter"))
+        for line in axes.lines:
+            label = str(line.get_label())
+            if label.startswith("_"):
+                continue
+            series.append(
+                FigureSeries(
+                    label,
+                    np.asarray(line.get_xdata(), dtype=float),
+                    np.asarray(line.get_ydata(), dtype=float),
+                    to_hex(line.get_color()),
+                    "line",
+                )
+            )
+        x_scale = axes.get_xscale()
+        return tuple(series), dict(
+            # "[Fold overlay]"-style notes explain the screen view, not the figure.
+            x_label=re.sub(r"\s*\[[^\]]*\]", "", axes.get_xlabel()),
+            y_label=axes.get_ylabel(),
+            x_scale=x_scale if x_scale in ("linear", "log", "symlog") else "linear",
+            log_y=axes.get_yscale() == "log",
+        )
 
     def _get_fitting_parameter_comment_lines(self):
         """No description."""
@@ -161,9 +234,7 @@ class FitResultExportMixin:
             from datetime import datetime
 
             q_source_kind = None
-            if choice == "Cut Data":
-                q_source_kind = "cut"
-            elif choice == "1D File Data":
+            if choice == "Curve Data":
                 q_source_kind = "1d"
             elif choice == "Fitting Data" and isinstance(getattr(self, "fitting", None), dict):
                 q_source_kind = self.fitting.get("meta", {}).get(
@@ -195,15 +266,10 @@ class FitResultExportMixin:
                     f"# ROI Range: {float(self._roi_min):.10g} -> {float(self._roi_max):.10g}"
                 )
 
-            if choice == "1D File Data" and getattr(self, "current_1d_data", None) is not None:
+            if choice == "Curve Data" and getattr(self, "current_1d_data", None) is not None:
                 file_path = self.current_1d_data.get("file_path")
                 if file_path:
-                    lines.append(f"# 1D File: {file_path}")
-            elif choice == "Cut Data" and getattr(self, "cut", None) is not None:
-                cut_meta = self.cut.get("meta", {}) if isinstance(self.cut, dict) else {}
-                title = cut_meta.get("title")
-                if title:
-                    lines.append(f"# Cut Title: {title}")
+                    lines.append(f"# Curve File: {file_path}")
 
         except Exception:
             pass
@@ -221,16 +287,12 @@ class FitResultExportMixin:
                 return
 
             options = []
-            if getattr(self, "cut", None) is not None:
-                options.append("Cut Data")
             if getattr(self, "fitting", None) is not None:
                 options.append("Fitting Data")
             if getattr(self, "current_1d_data", None) is not None:
-                options.append("1D File Data")
+                options.append("Curve Data")
             if not options:
-                self._add_fitting_error(
-                    "No available data to export (need Cut, Fitting, or 1D data)"
-                )
+                self._add_fitting_error("No data to export: load a curve or run a fit first")
                 return
 
             dialog = FittingDataExportDialog(tuple(options), self.main_window)
@@ -243,22 +305,17 @@ class FitResultExportMixin:
             y_data = None
             data_name = ""
             q_source_kind = None
-            if choice == "Cut Data" and self.cut is not None:
-                x_data = np.array(self.cut.get("q", []))
-                y_data = np.array(self.cut.get("I", []))
-                data_name = "Cut_Data"
-                q_source_kind = "cut"
-            elif choice == "Fitting Data" and self.fitting is not None:
+            if choice == "Fitting Data" and self.fitting is not None:
                 x_data = np.array(self.fitting.get("q", []))
                 y_data = np.array(self.fitting.get("I", []))
                 data_name = "Fitting_Data"
                 q_source_kind = self.fitting.get("meta", {}).get(
                     "data_source", getattr(self, "data_source", None)
                 )
-            elif choice == "1D File Data" and self.current_1d_data is not None:
+            elif choice == "Curve Data" and self.current_1d_data is not None:
                 x_data = np.array(self.current_1d_data.get("q", []))
                 y_data = np.array(self.current_1d_data.get("I", []))
-                data_name = "1D_File_Data"
+                data_name = "Curve_Data"
                 q_source_kind = "1d"
             else:
                 self._add_fitting_error("Selected data is not available to export")

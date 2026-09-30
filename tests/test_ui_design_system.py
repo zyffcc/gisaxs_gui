@@ -19,8 +19,6 @@ from src.gimap.app.presentation import (
     SafeWheelDoubleSpinBox,
     install_safe_wheel_behavior,
 )
-from src.gimap.app.presentation.showcase import DesignSystemShowcase
-from src.gimap.app.presentation.responsive_layout import AdaptiveWindowProfileController
 
 
 _TEST_APP = None
@@ -58,18 +56,6 @@ def test_shared_components_construct_without_feature_or_scientific_dependencies(
     assert not any("gimap.features" in name for name in imports)
     assert not any(name.startswith("tensorflow") for name in imports)
     assert not any(name.startswith("bornagain") for name in imports)
-
-
-def test_adaptive_profile_event_filter_tolerates_partial_qt_teardown():
-    _app()
-    window = QWidget()
-    controller = AdaptiveWindowProfileController(window)
-    del controller.window
-
-    assert controller.eventFilter(window, QEvent(QEvent.Resize)) is False
-
-    controller.window = window
-    window.removeEventFilter(controller)
 
 
 def test_advanced_section_preserves_children_and_emits_expansion_state():
@@ -114,14 +100,12 @@ def test_file_picker_and_job_status_emit_intent_signals_only():
     assert job.progress_bar.value() == 250
 
 
-def test_result_table_empty_state_and_showcase_construct_offscreen():
+def test_result_table_empty_state_constructs_offscreen():
     _app()
     table = ResultTable(("Name", "State"))
     assert table.empty_label.isVisible() is False or table.rowCount() == 0
     table.set_rows((("scan", "ready"),))
     assert table.rowCount() == 1
-    showcase = DesignSystemShowcase()
-    assert showcase.windowTitle() == "GIMaP UI Design System"
 
 
 def test_safe_wheel_input_scrolls_page_unless_alt_option_is_explicit():
@@ -165,3 +149,29 @@ def test_safe_wheel_input_scrolls_page_unless_alt_option_is_explicit():
     install_safe_wheel_behavior(content)
     assert spin.property("gimapSafeWheelInput") is True
     scroll_area.close()
+
+
+def test_every_style_sheet_parses_in_qt_in_both_themes():
+    """Qt drops a whole style sheet over one rule it cannot parse (e.g. CSS ``:not(:checked)``, Qt's ``:!checked``)."""
+    from PyQt5.QtCore import qInstallMessageHandler
+
+    from src.gimap.app.presentation.theme import apply_theme, theme_manager
+
+    app = _app()
+    sheets = sorted(Path("src").rglob("*.qss"))
+    assert len(sheets) >= 5
+    messages = []
+    previous = qInstallMessageHandler(lambda _kind, _context, text: messages.append(text))
+    try:
+        for mode in ("light", "dark"):
+            apply_theme(mode, 9.0)
+            for path in sheets:
+                frame = QWidget()
+                frame.setStyleSheet(theme_manager().render(path.read_text(encoding="utf-8")))
+                frame.ensurePolished()
+                app.processEvents()
+                failed = [text for text in messages if "Could not parse" in text]
+                assert not failed, f"{path} ({mode}): {failed}"
+    finally:
+        qInstallMessageHandler(previous)
+        apply_theme("light", 9.0)

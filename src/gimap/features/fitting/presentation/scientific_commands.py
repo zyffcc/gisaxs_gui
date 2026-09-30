@@ -1,33 +1,13 @@
-"""Scientific Commands primitives for fitting presentation."""
+"""Scientific command access and shared constants of the Fitting presentation."""
 
 from __future__ import annotations
 
 
 from src.gimap.features.fitting.application import (
-    ComputeInSituCut,
     FittingAiCalculations,
     FittingCurveCalculations,
-    FittingCutCalculations,
-    FittingImageCalculations,
     ManualRefinementCalculations,
 )
-
-
-from src.gimap.features.fitting.presentation.scientific_view_model import (
-    FittingScientificViewModel,
-)
-
-
-from src.gimap.features.fitting.application import (
-    ComputeInSituCut,
-    FittingAiCalculations,
-    FittingCurveCalculations,
-    FittingCutCalculations,
-    FittingImageCalculations,
-    ManualRefinementCalculations,
-)
-
-
 from src.gimap.features.fitting.presentation.scientific_view_model import (
     FittingScientificViewModel,
 )
@@ -65,12 +45,9 @@ def _scientific_commands(owner):
     if commands is not None:
         return commands
     return FittingScientificViewModel(
-        image=FittingImageCalculations(),
-        cut=FittingCutCalculations(),
         curve=FittingCurveCalculations(),
         ai=FittingAiCalculations(),
         refinement=ManualRefinementCalculations(),
-        insitu_cut=ComputeInSituCut(),
     )
 
 

@@ -71,6 +71,6 @@ class TrainsetBuildPage(
         self._parameter_dialog: Optional[QDialog] = None
         self._step_states = ["Not started"] * len(self.STEPS)
         self._design_stage_ready = [False, False, False, False]
+        self._apply_style()  # before the widgets exist: they are polished once
         self.setupUi(self)
         self._bind_shell()
-        self._apply_style()

@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 
-from ...application.workflow_v5 import bundled_workflow, default_options, validate_options
+from ...application.workflow_v5 import bundled_workflow, validate_options
 
 
 def read_curve(path: Path):
@@ -33,13 +33,13 @@ def read_curve(path: Path):
             ):
                 continue
             raise ValueError(f"Non-numeric row in {path.name}: {line[:80]}") from None
-        if len(values) not in (2, 3):
-            raise ValueError("Curve files need q, intensity[, sigma] columns")
+        if len(values) not in (2, 3, 4):
+            raise ValueError("Curve files need q, intensity[, sigma[, pixels]] columns")
         rows.append(values)
     if not rows or len({len(row) for row in rows}) != 1:
         raise ValueError("Empty curve or inconsistent columns")
     a = np.asarray(rows, dtype=float)
-    return a[:, 0], a[:, 1], a[:, 2] if a.shape[1] == 3 else None
+    return a[:, 0], a[:, 1], a[:, 2] if a.shape[1] >= 3 else None
 
 
 def prepare_sides(q, intensity, sigma, options):

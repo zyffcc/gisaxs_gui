@@ -1,7 +1,7 @@
 numpy>=1.24,<2.0
 scipy>=1.10
 matplotlib>=3.7
-pyqtgraph>=0.13.7,<0.14
+pyqtgraph>=0.13.7,<0.15
 BornAgain==24.1; platform_system != "Darwin"
 PyQt5>=5.15
 opencv-python>=4.8
@@ -13,3 +13,7 @@ scikit-learn>=1.3
 tensorflow-intel>=2.15,<=2.16; platform_system=="Windows"
 tensorflow>=2.15,<=2.16; platform_system!="Windows"
 PyYAML>=6.0
+# Process with AI (Analyze): Claude through anthropic; DeepSeek, Qwen, OpenAI, local models through openai.
+# Optional: GIMaP runs without them (the automatic analysis, Series and Batch Export need no AI).
+anthropic>=1.8
+openai>=1.40

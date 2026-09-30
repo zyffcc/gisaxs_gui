@@ -12,9 +12,9 @@ import pytest
 from PyQt5.QtCore import QObject, Qt
 from PyQt5.QtWidgets import QApplication, QGridLayout, QMainWindow, QStackedWidget
 
-from controllers.classification_controller import ClassificationController
 from src.gimap.app import AppContext
 from src.gimap.app.main_window import MainWindowComponents
+from src.gimap.app.window_view import ApplicationWindowView as Ui_MainWindow
 from src.gimap.features.classification.bootstrap import create_classification_view_model
 from src.gimap.features.classification.presentation.page import (
     STYLE_PATH,
@@ -25,18 +25,16 @@ from src.gimap.features.classification.presentation.views import ClassificationP
 from src.gimap.features.classification.presentation.view_binding import (
     ClassificationViewBinding,
 )
-from ui.classification_page import ClassificationPage as LegacyClassificationPage
 from src.gimap.integrations.jobs import LocalProcessJobRunner
 from src.gimap.integrations.state import (
     InMemorySessionRepository,
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
 )
-from ui.main_window import Ui_MainWindow
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-LEGACY_MAIN_WINDOW = PROJECT_ROOT / "ui" / "main_window.py"
+SHELL_VIEW = PROJECT_ROOT / "src" / "gimap" / "app" / "presentation" / "views" / "main_window_view.py"
 _TEST_APP = None
 
 
@@ -46,20 +44,10 @@ def _app() -> QApplication:
     return _TEST_APP
 
 
-def test_legacy_classification_entry_reexports_feature_owned_page() -> None:
-    assert ClassificationController is ClassificationViewBinding
-    assert LegacyClassificationPage is ClassificationPage
-
-    legacy_source = (PROJECT_ROOT / "ui" / "classification_page.py").read_text(encoding="utf-8")
-    assert "class ClassificationPage" not in legacy_source
-    assert len(legacy_source.splitlines()) <= 8
-
-
 def test_feature_page_owns_its_only_stylesheet_implementation() -> None:
     expected_root = PROJECT_ROOT / "src" / "gimap" / "features" / "classification" / "presentation"
     assert STYLE_PATH == expected_root / "styles" / "classification_page.qss"
     assert STYLE_PATH.is_file()
-    assert not (PROJECT_ROOT / "ui" / "styles" / "classification_page.qss").exists()
 
 
 def test_feature_page_preserves_widgets_signals_steps_and_job_status_offscreen() -> None:
@@ -310,7 +298,7 @@ def test_application_shell_keeps_only_classification_host() -> None:
     assert ui.classificationPage.layout() is ui.verticalLayout_23
     assert ui.verticalLayout_23.count() == 0
 
-    source = LEGACY_MAIN_WINDOW.read_text(encoding="utf-8")
+    source = SHELL_VIEW.read_text(encoding="utf-8")
     for removed_name in (
         "ClassificationImportGroupBox",
         "classificationPageMainScrollArea",

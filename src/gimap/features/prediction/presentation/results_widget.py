@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
 )
 
-from src.gimap.app.presentation.responsive_layout import move_window_to_cursor_screen
+from src.gimap.app.presentation.layout_metrics import move_window_to_cursor_screen
 
 from .views import (
     MultiFileResultsWidgetView,

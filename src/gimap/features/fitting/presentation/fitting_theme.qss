@@ -3,21 +3,21 @@
 #gisaxsFittingWorkspaceSplitter,
 #gisaxsWorkAreaContents,
 #gisaxsRightCollapsiblePanel {
-    background: #f5f7fb;
+    background: @surface_alt@;
 }
 
 #fittingContextBar {
-    background: #ffffff;
+    background: @surface@;
     border: none;
-    border-bottom: 1px solid #dfe6ef;
+    border-bottom: 1px solid @divider@;
 }
 
 #fittingContextLabel {
-    font-size: 15px;
+    font-size: @font_title_pt@;
 }
 
 QPushButton[fittingContextButton="true"] {
-    color: #536179;
+    color: @text_muted@;
     background: transparent;
     border: 1px solid transparent;
     border-radius: 7px;
@@ -27,22 +27,22 @@ QPushButton[fittingContextButton="true"] {
 }
 
 QPushButton[fittingContextButton="true"]:hover {
-    background: #f1f5fa;
+    background: @surface_hover@;
 }
 
 QPushButton[fittingContextButton="true"]:checked {
-    color: #1f5dbd;
-    background: #eaf2ff;
-    border-color: #a9c8f6;
+    color: @accent@;
+    background: @accent_soft@;
+    border-color: @info_border@;
 }
 
 #fittingInsituSeriesPage {
-    background: #f5f7fb;
+    background: @surface_alt@;
 }
 
 #fittingInsituTitleLabel {
-    color: #172033;
-    font-size: 20px;
+    color: @text@;
+    font-size: @font_display_pt@;
     font-weight: 700;
 }
 
@@ -53,24 +53,24 @@ QPushButton[fittingContextButton="true"]:checked {
 }
 
 #fittingInsituRecipeStatusLabel[statusKind="warning"] {
-    color: #7b5812;
-    background: #fff4d8;
+    color: @warning@;
+    background: @warning_soft@;
 }
 
 #fittingInsituRecipeStatusLabel[statusKind="complete"] {
-    color: #176548;
-    background: #e8f7f1;
+    color: @success@;
+    background: @success_soft@;
 }
 
 #fittingInsituModeTabs::pane {
-    background: #ffffff;
-    border: 1px solid #dde4ee;
+    background: @surface@;
+    border: 1px solid @border@;
     border-radius: 10px;
     top: -1px;
 }
 
 #fittingInsituModeTabs QTabBar::tab {
-    color: #637086;
+    color: @text_muted@;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
@@ -81,25 +81,25 @@ QPushButton[fittingContextButton="true"]:checked {
 }
 
 #fittingInsituModeTabs QTabBar::tab:selected {
-    color: #245dcb;
-    border-bottom-color: #245dcb;
+    color: @accent@;
+    border-bottom-color: @accent@;
 }
 
 QFrame[fittingWorkflowHeader="true"] {
-    background: #152238;
-    border: 1px solid #223451;
+    background: @rail@;
+    border: 1px solid @rail_border@;
     border-radius: 12px;
 }
 
 QLabel[workflowTitle="true"] {
     color: #ffffff;
-    font-size: 18px;
+    font-size: @font_heading_pt@;
     font-weight: 700;
 }
 
 QLabel[workflowSubtitle="true"] {
     color: #b9c7da;
-    font-size: 12px;
+    font-size: @font_pt@;
 }
 
 QFrame[fittingWorkflowStep="true"] {
@@ -148,19 +148,19 @@ QLabel[workflowBadge="true"] {
     background: rgba(255, 255, 255, 0.14);
     border-radius: 11px;
     color: #ffffff;
-    font-size: 11px;
+    font-size: @font_small_pt@;
     font-weight: 700;
 }
 
 QLabel[workflowLabel="true"] {
     color: #e8eef7;
-    font-size: 11px;
+    font-size: @font_small_pt@;
     font-weight: 600;
 }
 
 QLabel[workflowMessage="true"] {
     color: #c9d5e7;
-    font-size: 9px;
+    font-size: @font_small_pt@;
 }
 
 #fittingWorkflowGuidedButton {
@@ -173,73 +173,73 @@ QLabel[workflowMessage="true"] {
 
 QFrame[previewToolbar="true"],
 QFrame[displayInspector="true"] {
-    background: #f8fafc;
-    border: 1px solid #dfe6ef;
+    background: @surface_alt@;
+    border: 1px solid @divider@;
     border-radius: 8px;
 }
 
 QFrame[previewToolbar="true"] QToolButton:checked {
-    color: #ffffff;
-    background: #245dcb;
-    border-color: #245dcb;
+    color: @on_accent@;
+    background: @accent@;
+    border-color: @accent@;
 }
 
 #fittingDetectorToolHint {
-    color: #64748b;
+    color: @text_muted@;
 }
 
 #fittingInlineFeedback {
-    background: #fff5f5;
-    border: 1px solid #f4b8b8;
+    background: @danger_soft@;
+    border: 1px solid @danger_border@;
     border-radius: 8px;
-    color: #a12626;
+    color: @danger@;
     padding: 8px 10px;
 }
 
 #fittingInlineFeedback[feedbackKind="info"] {
-    background: #eff6ff;
-    border-color: #bfdbfe;
-    color: #1d4ed8;
+    background: @info_soft@;
+    border-color: @info_border@;
+    color: @info@;
 }
 
 #fittingInlineFeedback[feedbackKind="warning"] {
-    background: #fff8e8;
-    border-color: #e7c978;
-    color: #775514;
+    background: @warning_soft@;
+    border-color: @warning_border@;
+    color: @warning@;
 }
 
 #fittingResultStatusChip {
     border-radius: 9px;
     padding: 4px 9px;
-    background: #eef2f7;
-    color: #56657a;
+    background: @surface_hover@;
+    color: @text_muted@;
     font-weight: 600;
 }
 
 #fittingResultStatusChip[statusKind="complete"],
 #fittingResultStatusChip[statusKind="ready"] {
-    background: #e8f7f1;
-    color: #176548;
+    background: @success_soft@;
+    color: @success@;
 }
 
 #fittingResultStatusChip[statusKind="running"] {
-    background: #edf4ff;
-    color: #245dcb;
+    background: @info_soft@;
+    color: @accent@;
 }
 
 #fittingResultStatusChip[statusKind="error"] {
-    background: #fff0f0;
-    color: #a12626;
+    background: @danger_soft@;
+    color: @danger@;
 }
 
 #fittingResultStatusChip[statusKind="stale"] {
-    background: #fff4d8;
-    color: #7b5812;
+    background: @warning_soft@;
+    color: @warning@;
 }
 
 QFrame[gimapSection="true"] {
-    background: #ffffff;
-    border: 1px solid #e1e7f0;
+    background: @surface@;
+    border: 1px solid @divider@;
     border-radius: 10px;
 }
 
@@ -265,15 +265,15 @@ QFrame[gimapSection="true"] {
 
 #fittingPreviewTabs::pane,
 #fittingModeTabs::pane {
-    background: #ffffff;
-    border: 1px solid #dde4ee;
+    background: @surface@;
+    border: 1px solid @border@;
     border-radius: 10px;
     top: -1px;
 }
 
 #fittingPreviewTabs QTabBar::tab {
     background: transparent;
-    color: #637086;
+    color: @text_muted@;
     border: none;
     border-bottom: 2px solid transparent;
     min-width: 120px;
@@ -284,43 +284,43 @@ QFrame[gimapSection="true"] {
 
 #fittingModeTabs QTabBar::tab {
     background: transparent;
-    color: #637086;
+    color: @text_muted@;
     border: none;
     border-bottom: 2px solid transparent;
-    min-width: 76px;
-    min-height: 34px;
-    padding: 4px 7px;
+    min-width: 0px;
+    min-height: 30px;
+    padding: 4px 4px;
     font-weight: 600;
 }
 
 #fittingPreviewTabs QTabBar::tab:selected,
 #fittingModeTabs QTabBar::tab:selected {
-    color: #245dcb;
-    border-bottom-color: #245dcb;
+    color: @accent@;
+    border-bottom-color: @accent@;
 }
 
 QToolButton[fittingDisclosure="true"] {
     background: transparent;
     border: none;
-    color: #536177;
+    color: @text_muted@;
     font-weight: 600;
     padding: 5px 2px;
     text-align: left;
 }
 
 QToolButton[fittingDisclosure="true"]:hover {
-    color: #245dcb;
+    color: @accent@;
 }
 
 QPushButton[gimapPrimaryAction="true"] {
-    background: #245dcb;
-    border: 1px solid #245dcb;
-    color: #ffffff;
+    background: @accent@;
+    border: 1px solid @accent@;
+    color: @on_accent@;
     font-weight: 650;
 }
 
 QPushButton[gimapPrimaryAction="true"]:hover {
-    background: #1e50b4;
+    background: @accent_hover@;
 }
 
 QPushButton#FittingGlobalSearchButton,
@@ -330,34 +330,47 @@ QPushButton#FittingAutoRefineButton {
 }
 
 QPushButton[gimapDangerAction="true"] {
-    color: #b42318;
-    border-color: #f0b4ad;
-    background: #fff7f6;
+    color: @danger@;
+    border-color: @danger_border@;
+    background: @danger_soft@;
+}
+
+/* Nothing running: Stop stays quiet (this sheet overrides the application's own :disabled rule). */
+QPushButton[gimapDangerAction="true"]:disabled {
+    color: @text_disabled@;
+    border-color: @border@;
+    background: @disabled_bg@;
+}
+
+QPushButton[gimapPrimaryAction="true"]:disabled {
+    background: @accent_border@;
+    border-color: @accent_border@;
+    color: @on_accent@;
 }
 
 QLabel[fittingSetupBadge="true"] {
-    background: #edf4ff;
-    border: 1px solid #c9dcff;
+    background: @info_soft@;
+    border: 1px solid @info_border@;
     border-radius: 7px;
-    color: #245dcb;
-    font-size: 11px;
+    color: @accent@;
+    font-size: @font_small_pt@;
     font-weight: 600;
     padding: 5px 8px;
 }
 
 QLabel[fittingEmptyState="true"] {
-    background: rgba(248, 250, 253, 0.94);
-    border: 1px dashed #b9c5d5;
+    background: @surface_alt@;
+    border: 1px dashed @border_strong@;
     border-radius: 10px;
-    color: #64748b;
-    font-size: 12px;
+    color: @text_muted@;
+    font-size: @font_pt@;
     padding: 18px;
 }
 
 QFrame[card="true"],
 QFrame[sectionCard="true"] {
-    background: #ffffff;
-    border: 1px solid #e4e9f1;
+    background: @surface@;
+    border: 1px solid @divider@;
     border-radius: 8px;
 }
 
@@ -372,20 +385,20 @@ QGroupBox::title {
     subcontrol-origin: margin;
     left: 8px;
     padding: 0 4px;
-    color: #4b596d;
+    color: @text_muted@;
     font-weight: 600;
 }
 
 QFrame[insituWorkflowBar="true"] {
-    background: #f5f8fc;
-    border: 1px solid #dfe6ef;
+    background: @surface_alt@;
+    border: 1px solid @divider@;
     border-radius: 9px;
 }
 
 QToolButton[insituWorkflowStep="true"] {
     min-height: 34px;
     padding: 4px 8px;
-    color: #64748b;
+    color: @text_muted@;
     background: transparent;
     border: none;
     border-radius: 7px;
@@ -393,43 +406,47 @@ QToolButton[insituWorkflowStep="true"] {
 }
 
 QToolButton[insituWorkflowStep="true"]:hover {
-    color: #245dcb;
-    background: #edf4ff;
+    color: @accent@;
+    background: @info_soft@;
 }
 
 QToolButton[insituWorkflowStep="true"]:checked {
-    color: #ffffff;
-    background: #245dcb;
+    color: @on_accent@;
+    background: @accent@;
 }
 
-QToolButton[insituWorkflowStep="true"][workflowState="complete"]:not(:checked),
-QToolButton[insituWorkflowStep="true"][workflowState="configured"]:not(:checked) {
-    color: #176548;
-    background: #e8f7f1;
+QToolButton[insituWorkflowStep="true"][workflowState="complete"]:!checked,
+QToolButton[insituWorkflowStep="true"][workflowState="configured"]:!checked {
+    color: @success@;
+    background: @success_soft@;
 }
 
-QToolButton[insituWorkflowStep="true"][workflowState="running"]:not(:checked) {
-    color: #245dcb;
-    background: #edf4ff;
+QToolButton[insituWorkflowStep="true"][workflowState="running"]:!checked {
+    color: @accent@;
+    background: @info_soft@;
 }
 
-QToolButton[insituWorkflowStep="true"][workflowState="error"]:not(:checked) {
-    color: #a12626;
-    background: #fff0f0;
+QToolButton[insituWorkflowStep="true"][workflowState="error"]:!checked {
+    color: @danger@;
+    background: @danger_soft@;
 }
 
 #fittingInsituParameterStack,
 #fittingInsituPreviewTabs::pane {
-    background: #ffffff;
-    border: 1px solid #dde4ee;
+    background: @surface@;
+    border: 1px solid @border@;
     border-radius: 9px;
+}
+
+#fittingInsituParameterStack {
+    padding: 6px 8px;
 }
 
 #fittingInsituPreviewTabs QTabBar::tab {
     min-height: 32px;
     min-width: 92px;
     padding: 4px 10px;
-    color: #637086;
+    color: @text_muted@;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
@@ -437,6 +454,92 @@ QToolButton[insituWorkflowStep="true"][workflowState="error"]:not(:checked) {
 }
 
 #fittingInsituPreviewTabs QTabBar::tab:selected {
-    color: #245dcb;
-    border-bottom-color: #245dcb;
+    color: @accent@;
+    border-bottom-color: @accent@;
+}
+
+QGroupBox[fittingPlainGroup="true"] {
+    border: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    background: transparent;
+}
+
+QGroupBox[fittingPlainGroup="true"]::title {
+    subcontrol-origin: margin;
+    left: 0;
+    padding: 0;
+    font-weight: 600;
+}
+
+QWidget[fittingParticleCard="true"] {
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 10px;
+}
+
+QWidget[fittingParticleHeader="true"] {
+    background: @surface_alt@;
+    border: 1px solid @divider@;
+    border-radius: 8px;
+}
+
+QWidget[fittingParticleTypeGroup="true"] {
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 6px;
+}
+
+QLabel[fittingParticleTitle="true"] {
+    border: none;
+    color: @text@;
+    font-weight: 700;
+    padding: 0 2px 0 0;
+}
+
+QLabel[fittingParticleTypeLabel="true"] {
+    border: none;
+    color: @text_muted@;
+    font-weight: 600;
+    padding-left: 8px;
+    padding-right: 2px;
+}
+
+QComboBox[fittingParticleShape="true"] {
+    border: none;
+    background: transparent;
+    padding-left: 2px;
+    padding-right: 24px;
+}
+
+QPushButton[fittingParticleRemove="true"] {
+    background: @surface_alt@;
+    border: 1px solid @border_strong@;
+    border-radius: 6px;
+    color: @text@;
+    font-weight: 600;
+    padding: 3px 10px;
+}
+
+QPushButton[fittingParticleRemove="true"]:hover {
+    background: @surface_hover@;
+}
+
+/* The single-curve page: panels as in Analyze. */
+QFrame#fitCommandBar,
+QFrame#fitProcessPanel,
+QFrame#fitPlotPanel {
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 10px;
+}
+
+QLabel#fitCurveChip {
+    color: @text@;
+    font-weight: 600;
+    padding: 0 4px;
+}
+
+QLabel#fitWarnings {
+    color: @warning@;
 }

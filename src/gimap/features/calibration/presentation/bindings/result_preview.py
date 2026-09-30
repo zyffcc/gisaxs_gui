@@ -185,8 +185,9 @@ class ResultPreviewMixin:
         candidate = self._display_candidate()
         if candidate is not None and not clean_preview:
             cx, cy = candidate.center_x_px, candidate.center_y_px
-            self.axes.axvline(cx, color=CENTER_COLOR, linestyle="-.", linewidth=1.2, alpha=0.95)
-            self.axes.axhline(cy, color=CENTER_COLOR, linestyle="-.", linewidth=1.2, alpha=0.95)
+            if self.center_check.isChecked():
+                self.axes.axvline(cx, color=CENTER_COLOR, linestyle="-.", linewidth=1.2, alpha=0.95)
+                self.axes.axhline(cy, color=CENTER_COLOR, linestyle="-.", linewidth=1.2, alpha=0.95)
             if self.rings_check.isChecked() and self.result is not None:
                 for radius in candidate.detected_peak_radii_px:
                     if not self._ellipse_intersects_image(cx, cy, radius, radius, width, height):

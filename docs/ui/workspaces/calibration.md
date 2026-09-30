@@ -4,8 +4,7 @@
 - **Scope**: Geometry Calibration 的 PyQt presentation 所有权、控件映射与手动验收
 - **Related code**:
   [`src/gimap/features/calibration/presentation/`](../../../src/gimap/features/calibration/presentation/)、
-  [`geometry_calibration_dialog_view.py`](../../../src/gimap/features/calibration/presentation/views/geometry_calibration_dialog_view.py)、
-  [`ui/geometry_calibration_dialog.py`](../../../ui/geometry_calibration_dialog.py)
+  [`geometry_calibration_dialog_view.py`](../../../src/gimap/features/calibration/presentation/views/geometry_calibration_dialog_view.py)
 - **Related tests**:
   [`tests/test_calibration_presentation.py`](../../../tests/test_calibration_presentation.py)、
   [`tests/test_calibration_feature.py`](../../../tests/test_calibration_feature.py)、
@@ -30,8 +29,8 @@ Qt signals、`QFileDialog` 和 `QMessageBox` 留在 dialog。路径规范化
 通过 application port；standard detection、理论环 geometry、manual refinement 和显著差异
 阈值位于 domain，并由 ViewModel commands 调用。
 
-`ui/geometry_calibration_dialog.py` 是 9 行 public import alias，直接 re-export feature 的三个
-class。生产 caller 按需导入 feature-owned dialog；该 alias 只服务已有外部脚本和 API 回归测试。
+旧的 `ui/geometry_calibration_dialog.py` 与 `calibration/*.py` 兼容别名已删除；调用方直接导入
+`src.gimap.features.calibration.presentation.dialog`。
 
 ## 控件映射
 

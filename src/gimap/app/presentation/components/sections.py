@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from ..styles import apply_design_system
 
 
 class ParameterSection(QFrame):
@@ -56,7 +55,6 @@ class ParameterSection(QFrame):
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(8)
         root.addWidget(self.content)
-        apply_design_system(self)
 
     def set_title(self, title: str) -> None:
         self.title_label.setText(title)
@@ -119,7 +117,6 @@ class AdvancedSection(QFrame):
         root.addWidget(self.content)
 
         self.toggle_button.toggled.connect(self.set_expanded)
-        apply_design_system(self)
 
     def is_expanded(self) -> bool:
         return self.toggle_button.isChecked()

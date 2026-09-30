@@ -23,11 +23,13 @@ class PersistenceMixin:
         if self.result is None:
             return
         self._commit_manual_values()
-        if self.view_model.result_differs_significantly():
+        changed = self.view_model.significantly_changed_profile()
+        if changed is not None:
             answer = QMessageBox.question(
                 self,
                 "Apply Geometry",
-                "This calibration differs significantly from the current manually configured geometry. Overwrite it?",
+                f"This calibration moves the beam centre or distance of the saved instrument "
+                f"profile \u201c{changed.name}\u201d significantly. Overwrite the profile?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -36,11 +38,14 @@ class PersistenceMixin:
         self.view_model.apply_result()
         self._sync_main_window_geometry()
         self.calibrationApplied.emit(self.result)
-        QMessageBox.information(
-            self,
-            "Geometry Calibration",
-            "The calibrated geometry was applied to SAXS, GISAXS, and GIWAXS state.",
-        )
+        message = "The calibrated geometry was applied."
+        profile = self.view_model.last_profile
+        if profile is not None:
+            message = (
+                f"Saved as instrument profile \u201c{profile.name}\u201d; Analyze uses it "
+                "automatically for frames from this detector."
+            )
+        QMessageBox.information(self, "Geometry Calibration", message)
 
     def export_result(self) -> None:
         if self.result is None:

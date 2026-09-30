@@ -76,6 +76,7 @@ class GeometryCalibrationTranslations:
         self.log_check.setText(_translate("GeometryCalibrationDialog", "Log intensity"))
         self.mask_check.setText(_translate("GeometryCalibrationDialog", "Show invalid-pixel mask"))
         self.rings_check.setText(_translate("GeometryCalibrationDialog", "Show ring overlays"))
+        self.center_check.setText(_translate("GeometryCalibrationDialog", "Show beam centre lines"))
         self.calibrationRunTitle.setText(_translate("GeometryCalibrationDialog", "Run"))
         self.calibrationRunDescription.setText(
             _translate(

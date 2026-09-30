@@ -4,7 +4,7 @@
 >
 > **Scope**：生产代码的 feature ownership、分层职责和依赖方向
 >
-> **Last verified**：2026-08-30
+> **Last verified**：2026-09-28
 
 ## 架构风格
 
@@ -16,6 +16,8 @@ presentation、application、domain 和 infrastructure 代码。
 
 ```text
 features/
+    analyze/        # 默认工作区：GISAXS 与 GIWAXS（含原 WAXS 页面功能，见 docs/ui/workspaces/analyze.md）
+    assistant/      # Process with Claude：Claude 通过工具操作 Analyze，报告 GIWAXS 结果（见其 README）
     fitting/
         presentation/
         application/
@@ -30,15 +32,20 @@ features/
         infrastructure/
     trainset/
     classification/
-    waxs/
     calibration/
+    format_converter/
     xrr/
 ```
+
+应用壳（`app/`）：`main.py` → `app/main_window.py`（页面与侧栏）、`app/menus.py`（菜单命令）、
+`app/runtime.py`（feature 运行时与按 key 导航）；`app/presentation/theme/` 为唯一的样式来源
+（浅色 / 深色 token），缩放交给 Qt high-DPI。用户数据（设置、偏好、仪器配置、会话、模型参数）
+统一保存在用户数据目录（`integrations/state/user_store.py`）。
 
 优先采用 feature-first 的原因包括：
 
 - 将一个用户工作流及其实现代码放在一起；
-- 为 fitting、prediction、trainset、classification、WAXS、calibration 和 XRR
+- 为 analyze、fitting、prediction、trainset、classification、calibration 和 XRR
   建立清晰的所有权边界；
 - 减少对全局 `controllers/`、`services/`、`models/` 和 `utils/` 技术目录的依赖，
   避免其职责随时间逐渐模糊；
@@ -93,9 +100,8 @@ ViewBinding 在架构上属于 View 的实现细节，不是额外的
 orchestration 层；它不得绕过 ViewModel 调用 use case，也不得包含科学计算或具体 I/O。
 因此实际文件结构可能是 `View + ViewBinding → ViewModel → Use Case`，依赖含义仍与上图一致。
 
-顶层旧 Controller import path 仅允许薄 re-export 当前 feature owner，不能发展成与
-ViewModel 并列的第二层 orchestration，也不得建立
-`View → Controller → ViewModel → Use Case` 链路。Presentation 中确有 composition 或
+旧的顶层 Controller import path 已删除。Presentation 不得发展出与 ViewModel 并列的
+第二层 orchestration，也不得建立 `View → Controller → ViewModel → Use Case` 链路。Presentation 中确有 composition 或
 navigation 对象时，它不得包含工作流编排、科学计算、外部引擎调用或具体 I/O。
 
 ### Application
@@ -115,9 +121,9 @@ Application 不依赖 PyQt，也不能操作 `QWidget`、`QMessageBox`、`QFileD
 每个新的 application use case 都必须有测试。
 
 跨多个科学步骤的数据还必须遵守
-[`scientific-data-flow.md`](scientific-data-flow.md)：RawImage 保持不可变，application 从
-RawImage 和 framework-neutral preprocessing config 生成唯一 AnalysisImage，presentation 的
-DisplayState 不能成为 scientific input。
+[`scientific-data-flow.md`](scientific-data-flow.md)：Analyze 从原始帧、有效像素和校正确定性地
+得到曲线（`AnalyzeFrame` 是唯一串起它们的地方），导出的 `_fit_input.dat` 带着 observation
+交给 Fitting；显示状态（色图、范围、视图、缩放）不能成为 scientific input。
 
 Fitting 的总强度、form factor、结构因子、resolution、单位和 q–intensity 对齐以
 [`fitting-scientific-model.md`](fitting-scientific-model.md) 为权威科学契约。
@@ -209,7 +215,7 @@ SimulationPort
 PredictionModelPort
 FileRepositoryPort
 DatasetStoragePort
-WaxsConfigurationPort
+FigureWriter
 ```
 
 Adapter 示例：
@@ -218,14 +224,11 @@ Adapter 示例：
 BornAgainSimulationAdapter
 TensorFlowModelAdapter
 LocalFileSystemAdapter
-LocalWaxsConfigurationAdapter
+MatplotlibFigureWriter
 ```
 
 Use-case tests 可以使用内存 fake 或 test double 替代这些 adapters。Port 应描述
 application 真正需要的能力，不能照搬 BornAgain、TensorFlow 或操作系统的全部 API。
-WAXS 的 versioned portable JSON 由 `WaxsConfigurationPort` 隔离具体文件系统读写；
-presentation 只调用 `LoadWaxsConfiguration` / `SaveWaxsConfiguration`，自动记忆则继续使用
-应用级 settings repository 的 `waxs` section。
 
 ## Feature 边界
 
@@ -251,6 +254,10 @@ Prediction ─┐
 Fitting ────┘
 ```
 
+当前的 shared scientific kernel：`shared/detector_io`（CBF/NXS/TIFF 读取与元数据）和
+`shared/geometry`（探测器几何、像素 → q 映射、仪器配置，约定见
+[`geometry.md`](geometry.md)）。
+
 `shared/` 不是默认放置位置。只有至少两个 feature 已经稳定需要同一项领域能力，且其
 语义、边界和 ownership 都明确时，才允许提取 shared abstraction。禁止为了“未来可能
 复用”而提前创建 shared code。
@@ -259,12 +266,14 @@ Shared code 必须有明确的科学或 application 职责。禁止新增名为 
 `helpers.py`、`common.py` 或 `misc.py` 的 catch-all modules，也禁止让 `shared/` 成为
 新的 catch-all directory。
 
-## Public import 兼容边界
+## Import 边界
 
 Feature 源码按 presentation、application、domain 和 infrastructure 分层；presentation
 只通过 application 公共 API 使用 domain 能力。顶层 `controllers`、`ui`、`trainset`、
-`calibration`、`WAXS` 和 `utils` 路径只允许为用户脚本或第三方 import 提供薄别名，不能
-包含第二套业务实现，也不能被 `src/gimap` 生产代码反向导入。
+`calibration`、`WAXS` 和 `utils/*.py` 兼容别名已删除，调用方直接导入 `src.gimap` 中的
+owner 模块。唯一保留的稳定路径是
+`src.gimap.features.trainset.infrastructure.adapters.dataset_generator`：已注册模型生成的
+`preprocess.py` 和 portable job 脚本依赖它。
 
 ## 修改范围与科学安全
 

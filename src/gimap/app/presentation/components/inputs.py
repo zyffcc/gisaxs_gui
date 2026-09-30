@@ -5,7 +5,6 @@ from __future__ import annotations
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QWidget
 
-from ..styles import apply_design_system
 
 
 class FilePicker(QWidget):
@@ -39,7 +38,6 @@ class FilePicker(QWidget):
         self.path_edit.textChanged.connect(self.pathChanged)
         self.browse_button.clicked.connect(self.browseRequested)
         self.clear_button.clicked.connect(self._clear)
-        apply_design_system(self)
 
     def path(self) -> str:
         return self.path_edit.text().strip()

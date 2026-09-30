@@ -332,11 +332,7 @@ class InsituRefinementLifecycleMixin:
                 return float(np.mean(residual**2))
             fit_y = np.asarray(self.fitting.get("I", []), dtype=float).reshape(-1)
             exp_y = None
-            if getattr(self, "current_cut_data", None) is not None:
-                exp_y = np.asarray(
-                    self.current_cut_data.get("y_intensity", []), dtype=float
-                ).reshape(-1)
-            elif getattr(self, "current_1d_data", None) is not None:
+            if getattr(self, "current_1d_data", None) is not None:
                 exp_y = np.asarray(self.current_1d_data.get("I", []), dtype=float).reshape(-1)
             if exp_y is None:
                 return None

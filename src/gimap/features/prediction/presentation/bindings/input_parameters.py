@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.shared.file_paths import normalize_path
 
 
@@ -513,7 +514,7 @@ class InputParametersMixin:
             label = getattr(self.ui, name, None)
             if label is not None:
                 label.setText(text)
-                label.setStyleSheet("color: #166534;" if ok else "color: #b91c1c;")
+                set_role(label, "success" if ok else "error")
 
         btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
         running = bool(self._prediction_active or self._multifile_prediction_active)

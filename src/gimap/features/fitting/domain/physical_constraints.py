@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from math import hypot, isfinite
 from typing import Any, Callable, Dict, Iterable, Mapping, Sequence
 

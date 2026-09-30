@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 
 from .radiation import energy_to_wavelength
-from .metadata import extract_cbf_metadata, extract_nxs_metadata
+from .metadata import extract_cbf_metadata, extract_edf_metadata, extract_nxs_metadata
 from .models import DetectorImage
 
 
@@ -171,6 +171,13 @@ def _read_nxs(path: Path, frame_idx: int, dataset_path: Optional[str]) -> Detect
     # This is the exact transpose + vertical flip used by the embedded GIWAXS page.
     data = np.flipud(grid.T).astype(np.float32, copy=False)
     final_mask = np.flipud(invalid.T)
+    # A header beam centre follows the same transpose + flip: the first stored
+    # axis becomes the columns, the last one the rows counted from the bottom.
+    # Stitched multi-module series have no single header frame, so none.
+    raw_center = metadata.get("header_beam_center_px")
+    if raw_center is not None and len(paths) == 1:
+        fast, slow = raw_center
+        metadata["header_beam_center"] = (float(slow), float(data.shape[0]) - float(fast))
     metadata.update({
         "format": "nxs",
         "dataset_path": selected,
@@ -201,6 +208,12 @@ def _read_cbf(path: Path) -> DetectorImage:
     data = np.asarray(cbf.data, dtype=np.float32)
     invalid = ~np.isfinite(data) | (data < 0)
     metadata = extract_cbf_metadata(cbf.header, data.shape)
+    # Beam_xy is (column, row) in pixels of the stored image, which is also
+    # the canonical frame here (row 0 at the top, origin at the pixel corner,
+    # as pyFAI reads it).  Headers are often stale; Analyze uses this centre
+    # only when the user opts in.
+    if metadata.get("header_beam_xy_px") is not None:
+        metadata["header_beam_center"] = tuple(float(v) for v in metadata["header_beam_xy_px"])
     # Beamline CBF headers often contain detector settings but not incident
     # energy.  A simultaneous detector normally writes an NXS file under a
     # sibling directory of the same scan; read only its lightweight metadata.
@@ -223,6 +236,40 @@ def _read_cbf(path: Path) -> DetectorImage:
                 continue
     fields = {key: metadata[key] for key in (
         "detector_name", "pixel_size_x_m", "pixel_size_y_m", "energy_kev", "wavelength_angstrom", "distance_m", "beam_center_x_px", "beam_center_y_px"
+    )}
+    return DetectorImage(data=data, mask=invalid, source_path=path, metadata=metadata, **fields)
+
+
+def _read_edf(path: Path) -> DetectorImage:
+    import fabio
+
+    image = fabio.open(str(path))
+    try:
+        if image.data is None:
+            raise ValueError(f"Empty EDF detector image: {path}")
+        raw = np.array(image.data, copy=True)
+        header = dict(image.header)
+    finally:
+        image.close()
+    if raw.ndim == 3:
+        raw = raw[0]
+    data = np.asarray(raw, dtype=np.float32)
+    # Like TIFF, values stay as stored (negative integer sentinels are Analyze's call);
+    # only the header's explicit Dummy marks pixels without data here.
+    invalid = ~np.isfinite(data)
+    metadata = extract_edf_metadata(header, data.shape)
+    metadata["stored_dtype"] = str(raw.dtype)
+    try:
+        dummy = float(header.get("Dummy", 0.0))
+        tolerance = float(header.get("DDummy", 0.0))
+    except ValueError:
+        dummy, tolerance = 0.0, 0.0
+    if dummy != 0.0:  # the SAXS-package convention: |value − Dummy| ≤ DDummy marks a pixel without data
+        invalid |= np.abs(data - dummy) <= max(tolerance, 0.0)
+    metadata["reader"] = "fabio"
+    fields = {key: metadata[key] for key in (
+        "detector_name", "pixel_size_x_m", "pixel_size_y_m", "energy_kev", "wavelength_angstrom", "distance_m",
+        "beam_center_x_px", "beam_center_y_px",
     )}
     return DetectorImage(data=data, mask=invalid, source_path=path, metadata=metadata, **fields)
 
@@ -250,12 +297,13 @@ def _read_tiff(path: Path) -> DetectorImage:
         reader = "fabio"
     if data.ndim == 3:
         data = np.mean(data[..., :3], axis=2)
+    stored_dtype = str(np.asarray(data).dtype)
     data = np.asarray(data, dtype=np.float32)
     return DetectorImage(
         data,
         ~np.isfinite(data),
         path,
-        metadata={"format": "tiff", "reader": reader, "transformations": []},
+        metadata={"format": "tiff", "reader": reader, "transformations": [], "stored_dtype": stored_dtype},
     )
 
 
@@ -275,7 +323,9 @@ def load_detector_image(
         return _read_cbf(source)
     if suffix in {".tif", ".tiff"}:
         return _read_tiff(source)
-    raise ValueError("Unsupported calibration image. Select an .nxs or .cbf file.")
+    if suffix == ".edf":
+        return _read_edf(source)
+    raise ValueError(f"Unsupported detector image {source.name}: use CBF, NXS, TIFF or EDF.")
 
 
 def dump_metadata(image: DetectorImage) -> str:

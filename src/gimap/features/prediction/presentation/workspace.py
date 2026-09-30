@@ -21,12 +21,13 @@ from src.gimap.app.presentation.layout_primitives import (
     FORM_ROW_SPACING,
     normalize_button,
 )
-from src.gimap.app.presentation.responsive_layout import current_profile, scale_value
+from src.gimap.app.presentation.layout_metrics import LAYOUT
 
 from .cards import PredictCard, PredictModelLibraryCard
 from .control_style import apply_prediction_control_style
 from .views import PredictionWorkspaceView
 from .preview_layout import PredictionPreviewLayout
+from .prediction_theme import apply_prediction_style
 from .workbench_layout import PredictionWorkbenchLayout
 from .workflow_components import (
     PredictionDisclosure,
@@ -54,7 +55,7 @@ class GisaxsPredictWorkspace:
 
     def __init__(self, ui, profile=None) -> None:
         self.ui = ui
-        self.profile = profile or current_profile(ui.centralwidget)
+        self.profile = profile or LAYOUT
         self._preview_layout: PredictionPreviewLayout | None = None
         self._build()
 
@@ -72,6 +73,7 @@ class GisaxsPredictWorkspace:
         apply_prediction_control_style(self.ui, self.profile)
 
         contents = QWidget(page)
+        apply_prediction_style(contents)  # before the widgets exist: they are polished once
         workspace_ui = PredictionWorkspaceView()
         workspace_ui.setupUi(contents)
         self._workspace_ui = workspace_ui
@@ -374,7 +376,7 @@ class GisaxsPredictWorkspace:
         ):
             raise RuntimeError("Prediction preview output sections were not created")
         self.ui.gisaxsPredictImageShowWidget.setParent(card.content_widget)
-        card.setMinimumHeight(scale_value(520, self.profile, 420))
+        card.setMinimumHeight(520)
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         card.add_content(self.ui.gisaxsPredictImageShowWidget, 1)
         return card

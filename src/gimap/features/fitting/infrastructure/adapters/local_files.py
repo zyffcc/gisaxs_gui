@@ -1,195 +1,84 @@
-"""Fitting 当前本地文件格式的 adapters。"""
+"""Local file adapters of Fitting: curves, fit results and in-situ curve series."""
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
 
-from src.gimap.shared.detector_io import (
-    detect_nxs_frame_count,
-    load_detector_image,
-    nxs_series_paths,
-)
 from .scattering_curve_files import load_xy_any
 
 from ...application.models import (
+    CURVE_SUFFIXES,
+    DEFAULT_CURVE_PATTERN,
     ExportFitResultRequest,
     DiscoverInSituFramesRequest,
     ExportedFitResult,
     LoadCurveRequest,
-    LoadScatteringFileRequest,
-    ScatteringFileData,
-    ScatteringSequenceInfo,
     InSituSourceFrame,
 )
 from ...domain import CurveData
 
 
-PathPreparer = Callable[[str], str]
-ProgressCallback = Callable[[int, str], None]
-
-
-def _natural_sort_key(path: Path):
-    return [int(value) if value.isdigit() else value.lower() for value in re.split(r"(\d+)", path.name)]
-
-
-class LocalScatteringFileRepository:
-    def __init__(
-        self,
-        *,
-        prepare_path: PathPreparer | None = None,
-        progress: ProgressCallback | None = None,
-    ):
-        self._prepare_path = prepare_path or (lambda value: value)
-        self._progress = progress or (lambda _percent, _message: None)
-
-    def load(self, request: LoadScatteringFileRequest) -> ScatteringFileData:
-        source = Path(request.path).expanduser().resolve()
-        if not source.exists():
-            raise FileNotFoundError(f"Scattering file was not found: {source}")
-        suffix = source.suffix.lower()
-        if suffix not in {".cbf", ".nxs", ".tif", ".tiff"}:
-            raise ValueError(f"Unsupported scattering image format: {suffix or '<none>'}")
-
-        stack_count = max(1, int(request.stack_count))
-        frame_index = max(0, int(request.frame_index))
-        if suffix == ".nxs":
-            images, source_files, effective_files = self._load_nxs(
-                source,
-                frame_index,
-                stack_count,
-            )
-        else:
-            extensions = {suffix} if suffix in {".cbf"} else {".tif", ".tiff"}
-            selected = self._ordinary_stack(source, stack_count, extensions)
-            images, source_files, effective_files = self._load_ordinary(selected)
-        if not images:
-            raise ValueError(f"No readable detector image was found from {source}")
-
-        summed = np.asarray(images[0], dtype=np.float32).copy()
-        for image in images[1:]:
-            next_image = np.asarray(image, dtype=np.float32)
-            if next_image.shape != summed.shape:
-                raise ValueError("Detector images in a stack must have the same shape")
-            summed += next_image
-        return ScatteringFileData(
-            image=summed,
-            source_path=source,
-            source_files=tuple(source_files),
-            frame_index=frame_index,
-            metadata={
-                "format": suffix.lstrip("."),
-                "stack_count": len(images),
-                "effective_files": tuple(str(item) for item in effective_files),
-            },
-        )
-
-    def inspect_sequence(self, path) -> ScatteringSequenceInfo:
-        source = Path(path).expanduser().resolve()
-        if source.suffix.lower() != ".nxs":
-            return ScatteringSequenceInfo(source, source, (source,), 1)
-        series = tuple(nxs_series_paths(source))
-        logical_path = series[0] if series else source
-        frame_count = max(1, int(detect_nxs_frame_count(source)))
-        return ScatteringSequenceInfo(source, logical_path, series or (source,), frame_count)
+class LocalInSituFrameRepository:
+    """Curve files of an in-situ series, in natural (numeric-aware) order."""
 
     def discover_insitu_frames(
         self, request: DiscoverInSituFramesRequest
     ) -> tuple[InSituSourceFrame, ...]:
         root = Path(request.root).expanduser().resolve()
         if not root.is_dir():
-            raise FileNotFoundError(f"In-situ source root was not found: {root}")
-        suffix = ".nxs" if request.source_kind == "nxs" else ".cbf"
-        pattern = request.pattern.strip() or f"*{suffix}"
+            raise FileNotFoundError(f"In-situ source folder was not found: {root}")
+        pattern = request.pattern.strip() or DEFAULT_CURVE_PATTERN
         iterator = root.rglob(pattern) if request.recursive else root.glob(pattern)
         paths = sorted(
-            (path.resolve() for path in iterator if path.is_file() and path.suffix.lower() == suffix),
+            (
+                path.resolve()
+                for path in iterator
+                if path.is_file() and path.suffix.lower() in CURVE_SUFFIXES
+            ),
             key=lambda path: tuple(
                 int(value) if value.isdigit() else value.casefold()
                 for value in re.split(r"(\d+)", str(path.relative_to(root)))
             ),
         )
-        if request.source_kind == "cbf":
-            return tuple(InSituSourceFrame(path=path) for path in paths)
+        return tuple(InSituSourceFrame(path=path) for path in paths)
 
-        frames: list[InSituSourceFrame] = []
-        seen_groups: set[Path] = set()
-        for path in paths:
-            modules = tuple(item.resolve() for item in nxs_series_paths(path))
-            canonical = modules[0] if modules else path
-            if canonical in seen_groups:
-                continue
-            seen_groups.add(canonical)
-            if len(modules) < request.expected_nxs_modules:
-                continue
+
+ANALYZE_FIT_INPUT_MARKER = "# GIMaP Analyze fit input"
+
+
+def read_fit_input_extras(path: Path) -> tuple[np.ndarray | None, dict]:
+    """Pixel counts (4th column) and ``# observation:`` record of a GIMaP Analyze fit input.
+
+    Other files give ``(None, {})``; a malformed row drops the pixel counts,
+    never the curve.
+    """
+    lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    if not lines or not lines[0].startswith(ANALYZE_FIT_INPUT_MARKER):
+        return None, {}
+    observation: dict = {}
+    pixels: list[float] = []
+    complete = True
+    for line in lines:
+        text = line.strip()
+        if text.startswith("# observation:"):
             try:
-                counts = tuple(int(detect_nxs_frame_count(module)) for module in modules)
-            except (OSError, ValueError):
-                # A file that is still being created will be reconsidered on the next poll.
-                continue
-            if not counts or len(set(counts)) != 1:
-                continue
-            frames.extend(
-                InSituSourceFrame(
-                    path=canonical,
-                    frame_index=frame_index,
-                    source_kind="nxs",
-                    module_paths=modules,
-                )
-                for frame_index in range(counts[0])
-            )
-        return tuple(frames)
-
-    def _load_nxs(self, source: Path, frame_index: int, stack_count: int):
-        frame_count = max(1, int(detect_nxs_frame_count(source)))
-        start = max(0, min(frame_index, frame_count - 1))
-        actual_count = min(stack_count, frame_count - start)
-        images = []
-        for offset in range(actual_count):
-            frame = start + offset
-            self._progress(
-                40 + int((offset / actual_count) * 40),
-                f"Processing NXS frame {frame + 1}/{frame_count}",
-            )
-            images.append(np.asarray(load_detector_image(source, frame_idx=frame).data))
-        source_files = [source] * actual_count
-        return images, source_files, source_files
-
-    def _ordinary_stack(self, source: Path, stack_count: int, extensions: set[str]):
-        candidates = sorted(
-            (path for path in source.parent.iterdir() if path.suffix.lower() in extensions),
-            key=_natural_sort_key,
-        )
+                loaded = json.loads(text.split(":", 1)[1])
+            except ValueError:
+                loaded = {}
+            observation = loaded if isinstance(loaded, dict) else {}
+            continue
+        if not text or text.startswith("#"):
+            continue
+        parts = text.split()
         try:
-            start = candidates.index(source)
-        except ValueError as exc:
-            raise FileNotFoundError(f"Scattering file is not in its parent directory: {source}") from exc
-        actual_count = min(stack_count, len(candidates) - start)
-        return candidates[start : start + actual_count]
-
-    def _load_ordinary(self, selected: list[Path]):
-        images = []
-        effective_files: list[Path] = []
-        source_files: list[Path] = []
-        for index, source in enumerate(selected):
-            self._progress(
-                40 + int((index / max(1, len(selected))) * 40),
-                f"Processing file {index + 1}/{len(selected)}: {source.name}",
-            )
-            effective = Path(self._prepare_path(str(source))).expanduser().resolve()
-            try:
-                image = load_detector_image(effective).data
-            except Exception:
-                if len(selected) == 1:
-                    raise
-                continue
-            source_files.append(source)
-            effective_files.append(effective)
-            images.append(np.asarray(image, dtype=np.float32))
-        return images, source_files, effective_files
+            pixels.append(float(parts[3]))
+        except (IndexError, ValueError):
+            complete = False
+    return (np.asarray(pixels, dtype=float) if complete and pixels else None), observation
 
 
 class LocalCurveRepository:
@@ -200,12 +89,17 @@ class LocalCurveRepository:
         if source.suffix.lower() not in {".dat", ".txt"}:
             raise ValueError(f"Unsupported curve format: {source.suffix or '<none>'}")
         loaded = load_xy_any(str(source))
+        pixels, observation = read_fit_input_extras(source)
+        if pixels is not None and pixels.size != np.asarray(loaded.q).size:
+            pixels = None  # rows were dropped as non-finite: counts no longer align
         return CurveData(
             q=loaded.q,
             intensity=loaded.I,
             error=getattr(loaded, "err", None),
             q_source_unit=request.q_source_unit,
             source_path=str(source),
+            pixels=pixels,
+            observation=observation,
         )
 
 

@@ -1,40 +1,38 @@
-"""Insitu Sequence for fitting presentation."""
+"""Process or watch a folder of 1D curves and fit each one with the In-situ Recipe."""
 
 from __future__ import annotations
 
-import os
-
-import json
-
-import re
-
-
 import datetime
-
+import json
+import os
+import re
 from pathlib import Path
 
-
 from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QMessageBox
 
-from PyQt5.QtWidgets import (
-    QMessageBox,
-)
-
-from src.gimap.shared.file_paths import normalize_path
 from src.gimap.features.fitting.application import (
+    DEFAULT_CURVE_PATTERN,
     DiscoverInSituFramesRequest,
     InSituSourceFrame,
 )
 
+_NUMBER = re.compile(r"(\d+)")
+_ANALYZE_SUFFIXES = re.compile(r"(_sum\d+)?(_fit_input)?$", re.IGNORECASE)
 
-from ..binding_primitives import (
-    InsituBatchImageLoader,
-)
-from ..detector_data_access import analysis_image_for
+
+def curve_number(path) -> int | None:
+    """Sequence number of a curve file: the last number of its name, ignoring Analyze's suffixes.
+
+    ``run_00042_fit_input.dat`` → 42, ``run_frame0007_sum10_fit_input.dat`` → 7.
+    """
+    stem = _ANALYZE_SUFFIXES.sub("", Path(path).stem)
+    numbers = _NUMBER.findall(stem)
+    return int(numbers[-1]) if numbers else None
 
 
 class InsituSequenceMixin:
-    """Own insitu sequence behavior."""
+    """Queue curve files (existing or newly written) and hand them to curve processing."""
 
     def _has_active_fitting_template(self):
         try:
@@ -43,62 +41,42 @@ class InsituSequenceMixin:
         except Exception:
             return False
 
+    def _insitu_source_folder(self) -> str:
+        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+        edit = widgets.get("sequence_folder")
+        folder = edit.text().strip() if edit is not None else ""
+        if not folder:
+            self._populate_insitu_sequence_folder_default()
+            folder = edit.text().strip() if edit is not None else ""
+        return folder
+
+    def _warn_insitu(self, title: str, message: str) -> None:
+        QMessageBox.warning(self._insitu_workflow_parent_widget(), title, message)
+
+    def _reset_insitu_run(self) -> None:
+        self._insitu_workflow_file_sizes = {}
+        self._reset_insitu_session_cache()
+        self._insitu_workflow_last_fit_params = None
+        self._insitu_workflow_last_fit_status = "-"
+        self._insitu_workflow_last_chi_square = None
+        self._reset_insitu_heatmap_data()
+
     def _start_insitu_workflow(self):
+        """Live Watch: fit every curve written into the folder from now on."""
         try:
             recipe_error = self._insitu_recipe_start_error()
             if recipe_error:
-                QMessageBox.warning(
-                    self._insitu_workflow_parent_widget(),
-                    "In-situ Recipe changed",
-                    recipe_error,
-                )
+                self._warn_insitu("In-situ Recipe changed", recipe_error)
                 return
-            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-            folder = (
-                widgets.get("sequence_folder").text().strip()
-                if widgets.get("sequence_folder")
-                else ""
-            )
-            if not folder:
-                self._populate_insitu_sequence_folder_default()
-                folder = (
-                    widgets.get("sequence_folder").text().strip()
-                    if widgets.get("sequence_folder")
-                    else ""
-                )
-            if not self.fitting_view_model.storage.is_remote_source(folder) and not os.path.isdir(
-                folder
-            ):
-                QMessageBox.warning(
-                    self._insitu_workflow_parent_widget(),
-                    "In-situ Workflow",
-                    f"Watch folder not found:\n{folder}",
-                )
+            folder = self._insitu_source_folder()
+            if not os.path.isdir(folder):
+                self._warn_insitu("In-situ Workflow", f"Watch folder not found:\n{folder}")
                 return
             settings = self._insitu_workflow_settings()
-            if not any(settings[key] for key in ("auto_show", "auto_cut", "auto_fit")):
-                QMessageBox.information(
-                    self._insitu_workflow_parent_widget(),
-                    "In-situ Workflow",
-                    "Enable at least one workflow step.",
-                )
-                return
-            self._activate_insitu_recipe_runtime()
             if self._insitu_workflow_state != "Paused":
                 self._insitu_workflow_queue = []
-                if (
-                    self.fitting_view_model.storage.is_remote_source(folder)
-                    and settings["source_kind"] == "cbf"
-                    and normalize_path(folder) not in self._folder_image_scan_cache
-                ):
-                    self._scan_folder_images_for_file(folder)
                 self._insitu_workflow_seen = set(self._list_insitu_watch_files(folder))
-                self._insitu_workflow_file_sizes = {}
-                self._reset_insitu_session_cache()
-                self._insitu_workflow_last_fit_params = None
-                self._insitu_workflow_last_fit_status = "-"
-                self._insitu_workflow_last_chi_square = None
-                self._reset_insitu_heatmap_data()
+                self._reset_insitu_run()
                 self.fitting_view_model.insitu.start_insitu_workflow(())
             else:
                 self.fitting_view_model.insitu.resume_insitu_workflow()
@@ -114,60 +92,25 @@ class InsituSequenceMixin:
             self._set_insitu_workflow_state("Error", f"Start failed: {exc}")
 
     def _start_insitu_sequence_processing(self):
+        """Process Existing Sequence: fit every matching curve already in the folder."""
         try:
             recipe_error = self._insitu_recipe_start_error()
             if recipe_error:
-                QMessageBox.warning(
-                    self._insitu_workflow_parent_widget(),
-                    "In-situ Recipe changed",
-                    recipe_error,
-                )
+                self._warn_insitu("In-situ Recipe changed", recipe_error)
                 return
-            settings = self._insitu_workflow_settings()
-            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-            folder = (
-                widgets.get("sequence_folder").text().strip()
-                if widgets.get("sequence_folder")
-                else ""
-            )
-            if not folder:
-                self._populate_insitu_sequence_folder_default()
-                folder = (
-                    widgets.get("sequence_folder").text().strip()
-                    if widgets.get("sequence_folder")
-                    else ""
-                )
-            if not folder or (
-                not self.fitting_view_model.storage.is_remote_source(folder)
-                and not os.path.isdir(folder)
-            ):
-                QMessageBox.warning(
-                    self._insitu_workflow_parent_widget(),
-                    "In-situ Workflow",
-                    f"Sequence folder not found:\n{folder}",
-                )
-                return
-            if not any(settings[key] for key in ("auto_show", "auto_cut", "auto_fit")):
-                QMessageBox.information(
-                    self._insitu_workflow_parent_widget(),
-                    "In-situ Workflow",
-                    "Enable at least one workflow step.",
-                )
+            folder = self._insitu_source_folder()
+            if not folder or not os.path.isdir(folder):
+                self._warn_insitu("In-situ Workflow", f"Folder of curves not found:\n{folder}")
                 return
             if self._insitu_workflow_state != "Paused":
                 self._insitu_workflow_queue = self._build_insitu_sequence_file_list(folder)
                 self._insitu_workflow_seen = set(self._insitu_workflow_queue)
-                self._insitu_workflow_file_sizes = {}
-                self._reset_insitu_session_cache()
-                self._insitu_workflow_last_fit_params = None
-                self._insitu_workflow_last_fit_status = "-"
-                self._insitu_workflow_last_chi_square = None
-                self._reset_insitu_heatmap_data()
+                self._reset_insitu_run()
                 if not self._insitu_workflow_queue:
                     QMessageBox.information(
                         self._insitu_workflow_parent_widget(),
                         "In-situ Workflow",
-                        "No files matched the sequence settings.",
+                        "No curves matched the folder, file pattern and range.",
                     )
                     return
                 self.fitting_view_model.insitu.start_insitu_workflow(
@@ -175,12 +118,11 @@ class InsituSequenceMixin:
                 )
             else:
                 self.fitting_view_model.insitu.resume_insitu_workflow()
-            self._activate_insitu_recipe_runtime()
             self._insitu_workflow_stop_requested = False
             if self._insitu_workflow_timer is not None:
                 self._insitu_workflow_timer.stop()
             self._set_insitu_workflow_state(
-                "Processing", f"Processing {len(self._insitu_workflow_queue)} existing file(s)"
+                "Processing", f"Processing {len(self._insitu_workflow_queue)} curve(s)"
             )
             QTimer.singleShot(0, self._process_next_insitu_workflow_file)
         except Exception as exc:
@@ -196,23 +138,14 @@ class InsituSequenceMixin:
         step = max(
             1, int(widgets.get("sequence_step").value()) if widgets.get("sequence_step") else 1
         )
-
-        # 函数说明：实现 index from name 相关逻辑。
-        def index_from_name(path: str):
-            frame = InSituSourceFrame.from_token(path)
-            if frame.source_kind == "nxs":
-                return frame.frame_index + 1
-            match = re.search(r"(\d+)(?=\.[^.]+$|$)", frame.path.name)
-            return int(match.group(1)) if match else None
-
         filtered = []
         for path in files:
-            idx = index_from_name(path)
-            if start_value and (idx is None or idx < start_value):
+            index = curve_number(path)
+            if start_value and (index is None or index < start_value):
                 continue
-            if end_value and (idx is None or idx > end_value):
+            if end_value and (index is None or index > end_value):
                 continue
-            if start_value and idx is not None and ((idx - start_value) % step != 0):
+            if start_value and index is not None and ((index - start_value) % step != 0):
                 continue
             filtered.append(path)
         if not start_value and not end_value and step > 1:
@@ -224,7 +157,7 @@ class InsituSequenceMixin:
             if self._insitu_workflow_timer is not None:
                 self._insitu_workflow_timer.stop()
             self.fitting_view_model.insitu.pause_insitu_workflow()
-            self._set_insitu_workflow_state("Paused", "Workflow paused after the current operation")
+            self._set_insitu_workflow_state("Paused", "Workflow paused after the current curve")
         except Exception:
             pass
 
@@ -238,60 +171,26 @@ class InsituSequenceMixin:
             self._insitu_workflow_busy = False
             self._insitu_workflow_processing_file = None
             self._cleanup_insitu_refine_worker()
-            image_loader = getattr(self, "async_image_loader", None)
-            if image_loader is not None and image_loader.isRunning():
-                try:
-                    image_loader.requestInterruption()
-                    self.status_updated.emit("Requested cancellation of current image loading")
-                except Exception:
-                    pass
-            loader = getattr(self, "_insitu_batch_loader", None)
-            if loader is not None and loader.isRunning():
-                try:
-                    loader.requestInterruption()
-                    loader.quit()
-                except Exception:
-                    pass
-                self._insitu_batch_loader = None
-            cut_worker = getattr(self, "_insitu_cut_worker", None)
-            if cut_worker is not None and cut_worker.isRunning():
-                try:
-                    cut_worker.requestInterruption()
-                    cut_worker.quit()
-                except Exception:
-                    pass
-                self._insitu_cut_worker = None
             if getattr(self, "_insitu_workflow_ai_record", None) is not None:
                 self._stop_ai_fitting_process()
                 self._insitu_workflow_ai_record = None
                 self._insitu_workflow_ai_then_refine = False
             self._set_insitu_workflow_state("Idle", "Watch stopped")
-            self._restore_single_analysis_runtime()
         except Exception:
             pass
 
     def _list_insitu_watch_files(self, folder: str):
         try:
             widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-            settings = self._insitu_workflow_settings()
-            pattern = (
-                widgets.get("sequence_pattern").text().strip()
-                if widgets.get("sequence_pattern")
-                else ""
-            ) or ("*.nxs" if settings["source_kind"] == "nxs" else "*.cbf")
-            if (
-                self.fitting_view_model.storage.is_remote_source(folder)
-                and settings["source_kind"] == "cbf"
-            ):
-                cached = self._folder_image_scan_cache.get(normalize_path(folder))
-                return [path for path in (cached or []) if Path(path).match(pattern)]
+            pattern_edit = widgets.get("sequence_pattern")
+            pattern = (pattern_edit.text().strip() if pattern_edit is not None else "") or (
+                DEFAULT_CURVE_PATTERN
+            )
             frames = self.fitting_view_model.storage.discover_insitu_frames(
                 DiscoverInSituFramesRequest(
                     root=Path(folder),
-                    source_kind=settings["source_kind"],
                     pattern=pattern,
-                    recursive=settings["recursive"],
-                    expected_nxs_modules=settings["nxs_module_count"],
+                    recursive=self._insitu_workflow_settings()["recursive"],
                 )
             )
             self._insitu_discovered_frames = {frame.token: frame for frame in frames}
@@ -303,27 +202,11 @@ class InsituSequenceMixin:
         try:
             if self._insitu_workflow_state != "Watching":
                 return
-            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-            folder = (
-                widgets.get("sequence_folder").text().strip()
-                if widgets.get("sequence_folder")
-                else ""
-            )
-            if not folder or (
-                not self.fitting_view_model.storage.is_remote_source(folder)
-                and not os.path.isdir(folder)
-            ):
+            folder = self._insitu_source_folder()
+            if not folder or not os.path.isdir(folder):
                 self._set_insitu_workflow_state("Error", "Watch folder is unavailable")
                 return
             settings = self._insitu_workflow_settings()
-            if (
-                self.fitting_view_model.storage.is_remote_source(folder)
-                and settings["source_kind"] == "cbf"
-                and normalize_path(folder) not in self._folder_image_scan_cache
-            ):
-                self._scan_folder_images_for_file(folder)
-                self._set_insitu_workflow_state("Watching", "Scanning remote watch folder...")
-                return
             for path in self._list_insitu_watch_files(folder):
                 if path in self._insitu_workflow_seen or path in self._insitu_workflow_queue:
                     continue
@@ -332,26 +215,20 @@ class InsituSequenceMixin:
                 self._insitu_workflow_seen.add(path)
                 self._insitu_workflow_queue.append(path)
                 self.fitting_view_model.insitu.enqueue_insitu_files((path,))
-                frame = self._insitu_frame_for_token(path)
-                self._log_insitu_workflow(f"Queued {frame.display_name}")
+                self._log_insitu_workflow(f"Queued {self._insitu_frame_for_token(path).display_name}")
             self._refresh_insitu_workflow_status()
             self._process_next_insitu_workflow_file()
         except Exception as exc:
             self._set_insitu_workflow_state("Error", f"Polling failed: {exc}")
 
     def _insitu_workflow_file_is_stable(self, path: str) -> bool:
+        """A file counts once its size and time stayed the same over one poll interval."""
         try:
-            frame = self._insitu_frame_for_token(path)
-            if self.fitting_view_model.storage.is_remote_source(str(frame.path)):
-                return True
-            watched_paths = frame.module_paths or (frame.path,)
-            stats = tuple(
-                (int(item.stat().st_size), float(item.stat().st_mtime))
-                for item in watched_paths
-            )
+            stat = self._insitu_frame_for_token(path).path.stat()
+            stats = (int(stat.st_size), float(stat.st_mtime))
             previous = self._insitu_workflow_file_sizes.get(path)
             self._insitu_workflow_file_sizes[path] = stats
-            return previous == stats and all(size > 0 for size, _mtime in stats)
+            return previous == stats and stats[0] > 0
         except Exception:
             return False
 
@@ -368,56 +245,26 @@ class InsituSequenceMixin:
         if not self._insitu_workflow_queue:
             if self._insitu_workflow_state == "Processing":
                 self._set_insitu_workflow_state("Idle", "Sequence processing complete")
-                self._restore_single_analysis_runtime()
             self._refresh_insitu_workflow_status()
             return
-        batch_size = max(1, int(self._insitu_workflow_settings().get("fit_every", 1)))
-        workflow_record = self.fitting_view_model.insitu.begin_next_insitu_file(batch_size)
+        workflow_record = self.fitting_view_model.insitu.begin_next_insitu_file(1)
         if workflow_record is None:
-            # Compatibility for dynamic callers that filled the legacy queue directly.
+            # Compatibility for dynamic callers that filled the queue directly.
             self.fitting_view_model.insitu.start_insitu_workflow(tuple(self._insitu_workflow_queue))
-            workflow_record = self.fitting_view_model.insitu.begin_next_insitu_file(batch_size)
+            workflow_record = self.fitting_view_model.insitu.begin_next_insitu_file(1)
         if workflow_record is None:
             return
-        batch_paths = list(workflow_record.paths)
-        del self._insitu_workflow_queue[: len(batch_paths)]
-        path = batch_paths[0]
-        source_frame = self._insitu_frame_for_token(path)
-        source_path = str(source_frame.path)
+        paths = list(workflow_record.paths)
+        del self._insitu_workflow_queue[: len(paths)]
+        path = paths[0]
         self._insitu_workflow_busy = True
         self._insitu_workflow_processing_file = path
-        self._insitu_workflow_processing_batch = batch_paths
-        self._insitu_workflow_current_record = self._new_insitu_workflow_record(
-            batch_paths, workflow_record=workflow_record
-        )
+        self._insitu_workflow_processing_batch = paths
+        record = self._new_insitu_workflow_record(paths, workflow_record=workflow_record)
+        self._insitu_workflow_current_record = record
         self._refresh_insitu_workflow_status()
-        self._log_insitu_workflow(
-            f"Loading batch of {len(batch_paths)} frame(s): {source_frame.display_name}"
-            + (
-                f" -> {self._insitu_frame_for_token(batch_paths[-1]).display_name}"
-                if len(batch_paths) > 1
-                else ""
-            )
-        )
-        try:
-            self.current_parameters["imported_gisaxs_file"] = source_path
-            self.current_parameters["nxs_frame_index"] = source_frame.frame_index
-            if hasattr(self.ui, "gisaxsInputImportButtonValue"):
-                self.ui.gisaxsInputImportButtonValue.setText(source_path)
-            self._scan_folder_images_for_file(source_path)
-            self._load_insitu_workflow_batch_async(batch_paths)
-            if hasattr(self.ui, "gisaxsInputStackDisplayLabel"):
-                if len(batch_paths) > 1:
-                    self.ui.gisaxsInputStackDisplayLabel.setText(
-                        f"In-situ workflow stack: {os.path.splitext(os.path.basename(batch_paths[0]))[0]} - "
-                        f"{os.path.splitext(os.path.basename(batch_paths[-1]))[0]}"
-                    )
-                else:
-                    self.ui.gisaxsInputStackDisplayLabel.setText(
-                        f"In-situ workflow: {source_frame.display_name}"
-                    )
-        except Exception as exc:
-            self._finalize_insitu_workflow_file(load_status="failed", error_message=str(exc))
+        self._log_insitu_workflow(f"Loading {self._insitu_frame_for_token(path).display_name}")
+        self._process_insitu_curve(record, path)
 
     def _new_insitu_workflow_record(self, path_or_paths, workflow_record=None) -> dict:
         paths = (
@@ -425,29 +272,17 @@ class InsituSequenceMixin:
             if isinstance(path_or_paths, (list, tuple))
             else [str(path_or_paths)]
         )
-        first = paths[0] if paths else ""
-        last = paths[-1] if paths else first
-        first_frame = self._insitu_frame_for_token(first) if first else None
-        last_frame = self._insitu_frame_for_token(last) if last else first_frame
-        batch_name = (
-            first_frame.display_name
-            if len(paths) == 1
-            else f"{first_frame.display_name} -> {last_frame.display_name}"
-        )
+        frame = self._insitu_frame_for_token(paths[0]) if paths else None
+        recipe = self.fitting_view_model.insitu.recipe
         return {
             "file_index": (
                 int(workflow_record.index)
                 if workflow_record is not None
                 else len(getattr(self, "_insitu_workflow_results", []) or []) + 1
             ),
-            "file_name": batch_name,
-            "file_path": str(first_frame.path) if first_frame else "",
-            "frame_index": first_frame.frame_index if first_frame else 0,
-            "batch_size": len(paths),
-            "batch_files": json.dumps(
-                [self._insitu_frame_for_token(path).display_name for path in paths],
-                ensure_ascii=False,
-            ),
+            "file_name": frame.display_name if frame else "",
+            "file_path": str(frame.path) if frame else "",
+            "curve_number": curve_number(frame.path) if frame else None,
             "batch_paths": json.dumps(paths, ensure_ascii=False),
             "timestamp": (
                 workflow_record.started_at
@@ -457,122 +292,13 @@ class InsituSequenceMixin:
             "run_mode": self._insitu_workflow_settings().get(
                 "run_mode", "Process Existing Sequence"
             ),
-            "recipe_version": (
-                self.fitting_view_model.insitu.recipe.version
-                if self.fitting_view_model.insitu.recipe is not None
-                else ""
-            ),
+            "recipe_version": recipe.version if recipe is not None else "",
             "load_status": "pending",
-            "preprocess_status": "pending",
-            "geometry_status": "pending",
-            "cut_status": "skipped",
             "fit_status": "skipped",
             "chi_square": "",
             "fitted_parameters": "",
             "error_message": "",
         }
 
-    def _load_insitu_workflow_batch_async(self, batch_paths: list[str]):
-        try:
-            mirror_fill_enabled = bool(getattr(self, "_mirror_fill_detector_gaps", False))
-            if mirror_fill_enabled:
-                self._log_insitu_workflow(
-                    f"Mirror-filling detector gaps in canonical preprocessing "
-                    f"(margin={int(getattr(self, '_mirror_gap_margin_px', 0))} px)"
-                )
-                if isinstance(self._insitu_workflow_current_record, dict):
-                    self._insitu_workflow_current_record["mirror_fill_detector_gaps"] = True
-                    self._insitu_workflow_current_record["mirror_gap_margin_px"] = int(
-                        getattr(self, "_mirror_gap_margin_px", 0)
-                    )
-            loader = InsituBatchImageLoader(
-                batch_paths,
-                fitting_view_model=self.fitting_view_model,
-                copy_remote_to_cache=self._remote_copy_enabled,
-                cache_dir=self._remote_cache_dir,
-                cache_limit_gb=self._remote_cache_limit_gb,
-            )
-            loader.image_loaded.connect(self._on_insitu_batch_image_loaded)
-            loader.error_occurred.connect(self._on_insitu_batch_image_error)
-            loader.progress_updated.connect(self._on_image_loading_progress)
-            loader.remote_file_detected.connect(self._on_remote_file_detected)
-            loader.copy_started.connect(self._on_remote_copy_started)
-            loader.copy_finished.connect(self._on_remote_copy_finished)
-            loader.finished.connect(lambda: setattr(self, "_insitu_batch_loader", None))
-            self._insitu_batch_loader = loader
-            loader.start()
-        except Exception as exc:
-            self._finalize_insitu_workflow_file(
-                load_status="failed", error_message=str(exc), failed=True
-            )
 
-    def _on_insitu_batch_image_loaded(self, image_data, first_file_path: str):
-        if (
-            getattr(self, "_insitu_workflow_stop_requested", False)
-            or not self._insitu_workflow_busy
-        ):
-            return
-        try:
-            batch_paths = getattr(self, "_insitu_workflow_processing_batch", None) or [
-                first_file_path
-            ]
-            if len(batch_paths) > 1:
-                self.status_updated.emit(
-                    f"In-situ batch loading complete: {len(batch_paths)} files "
-                    f"({os.path.basename(batch_paths[0])} -> {os.path.basename(batch_paths[-1])})"
-                )
-            if self._should_refresh_insitu_views_for_current_file():
-                self._display_image(image_data)
-            else:
-                self._ingest_workflow_image_without_preview(image_data)
-            analysis_image = analysis_image_for(self)
-            if analysis_image is None:
-                raise RuntimeError("Analysis image is not ready after in-situ preprocessing")
-            self._after_insitu_workflow_image_loaded(analysis_image, first_file_path)
-        except Exception as exc:
-            self._finalize_insitu_workflow_file(
-                load_status="failed", error_message=str(exc), failed=True
-            )
-
-    def _on_insitu_batch_image_error(self, message: str):
-        if getattr(self, "_insitu_workflow_stop_requested", False):
-            return
-        self._finalize_insitu_workflow_file(
-            load_status="failed", error_message=str(message), failed=True
-        )
-
-    def _after_insitu_workflow_image_loaded(self, image_data, file_path: str):
-        if not self._insitu_workflow_busy or file_path != self._insitu_workflow_processing_file:
-            return
-        record = self._insitu_workflow_current_record or self._new_insitu_workflow_record(file_path)
-        settings = self._insitu_workflow_settings()
-        refresh_views = self._should_refresh_insitu_views_for_current_file()
-        try:
-            record["load_status"] = "ok"
-            record["preprocess_status"] = "ok"
-            record["geometry_status"] = "ok"
-            widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-            image_label = widgets.get("image_label")
-            if image_label is not None:
-                image_label.setText(
-                    f"Current image: {self._insitu_frame_for_token(file_path).display_name}"
-                )
-            if refresh_views and (settings["auto_show"] or settings["auto_cut"]):
-                self._draw_insitu_workflow_image_preview(image_data, file_path)
-
-            if settings["auto_cut"]:
-                self._start_insitu_cut_worker(
-                    image_data, file_path, record, settings, refresh_views
-                )
-                return
-
-            if settings["auto_fit"]:
-                self._run_insitu_workflow_fit(record)
-                return
-
-            self._finalize_insitu_workflow_file(record=record)
-        except Exception as exc:
-            if settings["auto_cut"] and record.get("cut_status") == "skipped":
-                record["cut_status"] = "failed"
-            record["error_message"] = str(exc)
-            self._finalize_insitu_workflow_file(record=record, failed=True)
+__all__ = ["InsituSequenceMixin", "curve_number"]

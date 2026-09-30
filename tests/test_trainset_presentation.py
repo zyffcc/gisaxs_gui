@@ -14,9 +14,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtCore import QObject
 from PyQt5.QtWidgets import QApplication, QMainWindow
 
-from controllers.trainset_controller import TrainsetController
 from src.gimap.app import AppContext
 from src.gimap.app.main_window import MainWindowComponents
+from src.gimap.app.window_view import ApplicationWindowView as Ui_MainWindow
 from src.gimap.features.trainset.domain import PHYSICAL_BACKGROUND_PARAMETERS
 from src.gimap.features.trainset.presentation.page import (
     ArrayCanvas,
@@ -32,24 +32,19 @@ from src.gimap.features.trainset.presentation.views import (
     TrainsetRunPageView,
 )
 from src.gimap.features.trainset.presentation.view_binding import TrainsetViewBinding
-from trainset.config import PHYSICAL_BACKGROUND_PARAMETERS as LegacyBackgroundParameters
+from src.gimap.features.trainset.infrastructure.adapters.configuration import (
+    PHYSICAL_BACKGROUND_PARAMETERS as AdapterBackgroundParameters,
+)
 from src.gimap.integrations.jobs import LocalProcessJobRunner
 from src.gimap.integrations.state import (
     InMemorySessionRepository,
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
 )
-from ui.trainset_build_page import ArrayCanvas as LegacyArrayCanvas
-from ui.trainset_build_page import HistogramWidget as LegacyHistogramWidget
-from ui.trainset_build_page import (
-    ParameterCoverageWidget as LegacyParameterCoverageWidget,
-)
-from ui.trainset_build_page import TrainsetBuildPage as LegacyTrainsetBuildPage
-from ui.main_window import Ui_MainWindow
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-LEGACY_MAIN_WINDOW = PROJECT_ROOT / "ui" / "main_window.py"
+SHELL_VIEW = PROJECT_ROOT / "src" / "gimap" / "app" / "presentation" / "views" / "main_window_view.py"
 _TEST_APP = None
 
 
@@ -78,20 +73,8 @@ def _app() -> QApplication:
     return _TEST_APP
 
 
-def test_legacy_trainset_entry_reexports_feature_owned_view_classes() -> None:
-    assert TrainsetController is TrainsetViewBinding
-    assert LegacyTrainsetBuildPage is TrainsetBuildPage
-    assert LegacyArrayCanvas is ArrayCanvas
-    assert LegacyHistogramWidget is HistogramWidget
-    assert LegacyParameterCoverageWidget is ParameterCoverageWidget
-
-    legacy_source = (PROJECT_ROOT / "ui" / "trainset_build_page.py").read_text(encoding="utf-8")
-    assert "class TrainsetBuildPage" not in legacy_source
-    assert len(legacy_source.splitlines()) <= 18
-
-
 def test_physical_background_definitions_have_one_domain_owner() -> None:
-    assert LegacyBackgroundParameters is PHYSICAL_BACKGROUND_PARAMETERS
+    assert AdapterBackgroundParameters is PHYSICAL_BACKGROUND_PARAMETERS
     assert len(PHYSICAL_BACKGROUND_PARAMETERS) == 18
     assert PHYSICAL_BACKGROUND_PARAMETERS[0]["key"] == "target_fraction"
     assert PHYSICAL_BACKGROUND_PARAMETERS[-1]["key"] == "blur_sigma_px"
@@ -251,7 +234,7 @@ def test_application_shell_keeps_only_trainset_host() -> None:
     assert ui.trainsetBuildPage.layout() is ui.verticalLayout_6
     assert ui.verticalLayout_6.count() == 0
 
-    source = LEGACY_MAIN_WINDOW.read_text(encoding="utf-8")
+    source = SHELL_VIEW.read_text(encoding="utf-8")
     for removed_name in (
         "beamParametersBox",
         "sampleParametersParticleStackedWidget",

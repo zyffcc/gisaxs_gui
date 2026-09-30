@@ -11,7 +11,7 @@ ML runtime、JobRunner 与模型文件 ports。工作台的 public application A
 
 Application 通过 `ClusteringPort` 隔离可选聚类 runtime，source/session 的 `label_mode` 明确区分
 accepted、provisional 与 unlabeled。Classification 页面和专属样式由本 feature 拥有；生产运行时直接构造
-`ClassificationViewBinding`。降维、clustering 和训练通过 JobRunner ports 执行。旧
-`ui.classification_page` 与 `controllers.classification_*` 名称仅作为兼容入口。完整用户工作流和
+`ClassificationViewBinding`。降维、clustering 和训练通过 JobRunner ports 执行。旧的
+`ui.classification_page` 与 `controllers.classification_*` 兼容别名已删除。完整用户工作流和
 session 字段说明见 `docs/ui/workspaces/classification.md`。顶部 workflow header 的状态由真实
 data/embedding/label/model artifact 驱动，导航位置不会改变步骤完成度。

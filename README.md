@@ -4,19 +4,48 @@ GIMaP (Grazing-Incidence Mapping Package) is a desktop application for GISAXS/GI
 
 ## Overview
 
-GIMaP provides a single desktop interface for working with grazing-incidence scattering data. The current codebase includes tools for detector image viewing, cut-and-fit workflows, trained-model prediction, AI-assisted 1D fitting, trainset generation, classification, and an embedded WAXS/GIWAXS in-situ processing page.
+GIMaP provides a single desktop interface for working with grazing-incidence scattering data. **Analyze** reduces GISAXS and GIWAXS detector frames to curves (exact q, instrument profiles, in-situ series); **Fitting** fits those curves with particle models, one curve or a whole series; the **Labs** pages hold trained-model prediction, trainset generation and classification.
 
 The application entry point is `main.py`.
 
 ## Key Features
 
-- **Cut & Fitting**: load GISAXS detector images, inspect 2D data, define cuts, fit 1D curves, and run least-squares refinement.
-- **AI-assisted fitting**: generate model candidates, rank predicted candidates, refine selected candidates, and export prediction/refinement results.
-- **GIMaP Predict**: run configured trained-model prediction modules on single files or multi-file batches.
-- **Model import**: import or select trained models through module configuration files.
-- **Trainset Build**: generate synthetic or simulated training data through an experimental GUI workflow (Not implemented).
-- **Classification**: import datasets, preview data, reduce dimensions, train classifiers, and save/load classification models.
-- **WAXS/GIWAXS**: embedded in-situ processing page for `.nxs`, `.tif`, and `.tiff` detector data, including display, masking, geometry, cut, 1D integration, and batch export controls.
+- **Analyze** (GISAXS and GIWAXS): open CBF, TIFF, EDF or NeXus frames or a whole folder (multi-module
+  series are stitched) and get the reduced curves without further clicks. A step rail leads through
+  Data → Geometry → Mask & corrections → Cuts → Results → Export; every step shows its state.
+  - Geometry from a calibrant (AgBh, LaB₆, CeO₂ …) or entered once and kept as the instrument profile
+    of the detector; exact q (Å⁻¹), beam centre = direct beam.
+  - Masks (detector gaps, mask files, drawn shapes, value limits, isolated hot/dead pixels removed per
+    frame), background subtraction, optional mirror filling; optional GIWAXS intensity corrections
+    (solid angle, polarisation, film absorption, with propagated errors); series alignment and
+    normalisation to a reference peak. Undo / Redo of every set-up change (Ctrl+Z).
+  - GISAXS: Yoneda and beam-centre cuts; GIWAXS: I(q), in-plane / out-of-plane sectors, q boxes and
+    I(χ). Custom cuts: click a peak (ring, sector or spot), type centre ± width, or draw on the cake;
+    Save / Load Cuts.
+  - Curves can be shown as +q, −q, both halves or |q|; every curve shows its sources. Box zoom
+    (Shift+drag) on every image and plot.
+  - **Run Automatic Analysis** (no AI): peak table with fitted positions, widths and uncertainties,
+    orientation, crystallite size — with progress, Stop, and the finished part kept.
+  - **Series**: heat maps and peak tables of in-situ series.
+  - **Batch Export**: from raw frames to a folder in a few clicks — curves, fit input, q maps, cake and
+    detector images, converted frames (TIFF, EDF, NPY, HDF5), optional peak fitting of every frame
+    (start from the previous frame, the first frame or fresh), CSV/TXT/DAT and PNG/TIFF/SVG/PDF, a
+    README of the folder and a JSON record of the settings. Several frames are reduced at once in
+    low-priority processes (sized to the cores and free memory; Gentle / Balanced / Fast), with Pause,
+    Stop and the frames appearing live in the Series map.
+  - Remembers the recent data (File ▸ Open Recent, Start page) and offers the set-up of the last session.
+- **Fitting**: a step rail (Curve → Model → Fit → Results) over the controls; fit 1D curves from
+  Analyze (or any curve file) with sphere, random-cylinder and vertical-cylinder models — a physical least-squares fit without AI, or the experimental neural
+  network proposal refined against the measured points; single curves or in-situ series.
+- **Process with AI** (optional): an AI (Claude, DeepSeek, Qwen, OpenAI or a local model) runs the
+  Analyze tools on the open frame while you watch; its changes come back as cards you can preview,
+  apply or undo, and it says why anything could not be determined. Claude runs on a Claude Pro/Max
+  plan through a local Claude Code (no API key) or on the API with a key.
+- **Labs**: 2D Prediction with trained models (single files or folder batches), Trainset Build
+  (simulated GISAXS training sets with BornAgain) and Classification (import, reduce dimensions,
+  train and apply classifiers).
+- **Interface**: English or Chinese, light or dark theme, adjustable font size; unexpected errors are
+  logged (`<user data>/logs/errors.log`) and shown without closing the application.
 
 ## Installation
 
@@ -88,30 +117,33 @@ The GUI contains dense scientific controls. Use a larger display, maximize the w
 
 ## Basic Workflow
 
-1. Start the application with `python main.py`.
-2. Choose a workspace from the left navigation panel.
-3. Load a GISAXS/GIWAXS file or a folder of files.
+1. Start the application with `python main.py` (or the installed GIMaP).
+2. On the **Start** page, drop detector images or a folder, or pick one of the recent ones; or use
+   **File ▸ Open Data…** / **Open Folder…**.
+3. **Analyze** shows the frame and its curves at once. The first time, calibrate or enter the
+   geometry (it is saved as the instrument profile of the detector); check the mask and the cuts.
+4. **Run Automatic Analysis** for the peak table and orientation, or **Batch Export** to reduce a whole
+   folder to the files you choose.
 
-## Cut & Fitting Workflow
+## Analyze → Fitting Workflow
 
-1. Open the **Cut & Fitting** page.
-2. Import a GISAXS detector image or supported data file.
-3. Adjust display options such as scale, intensity range, and log display.
-4. Configure detector and cut parameters.
-5. Generate a 1D curve from the selected region.
-6. Select a fitting model and parameter bounds.
-7. Run manual fitting or Auto Refine. Auto Refine uses least-squares optimization.
-8. Export plots, fitting curves, and fitting results.
+1. In **Analyze**, **Send to Fitting** opens the horizontal cut in **Fitting** (both halves on |qy| in
+   two colours); **Send Series to Fitting…** sends a whole in-situ series.
+2. In Fitting, **Fit curve** uses the method chosen in **Fit settings & batch…**; **Physical fit (no
+   AI)** fits sphere / cylinder families numerically; **AI guess only** shows the network proposal.
+3. For full control, select the model components and parameter bounds, plot the model and run
+   Global Search / Local Refine (least squares).
+4. Export the plot (publication figure), the curves and the fitting results.
 
-The current fitting code includes sphere, cylinder, vertical cylinder components.
+Fitting shows q in nm⁻¹ (Analyze uses Å⁻¹; the curve card shows both).
 
 ## AI Auto Fitting
 
 The default AI fitting model is `modules/Fitting_1D_Model/k1_k2_k3_k4_phys`. It is a single K1-K4 slot model with an explicit optional-D head, relational D constraints, and a delayed physical-reconstruction loss. Its `manifest.json` records the checkpoint checksum, supported K values, required inputs/outputs, training state, and remote provenance. Model discovery validates this contract and loads the checkpoint lazily; the portable SavedModel is used automatically when the Python-version-specific `.keras` Lambda bytecode cannot be restored.
 
-The Cut & Fitting page opens one AI Auto Fitting workspace with the following flow:
+The Fitting page opens one AI Auto Fitting workspace with the following flow:
 
-1. Prepare the current ROI/Yoneda 1D curve and its uncertainty.
+1. Prepare the current curve (fitting range and q display applied) and its uncertainty.
 2. Select the versioned K1-K4 model and a Fast, Balanced, or Exhaustive profile.
 3. Build the same geometry-aware constraint payload used by prediction and refinement.
 4. Run one neural proposal pass, sample posterior parameter modes at multiple normalized scales, and verify every candidate with the physical forward model.
@@ -142,10 +174,10 @@ The default physical constraints are:
 - a randomly oriented cylinder conservatively requires `D > margin * sqrt((2R)^2 + h^2)`;
 - multi-component max/mean spacing rules use the maximum or arithmetic mean of those geometry-specific exclusion sizes. The default margin is 1.001.
 
-## GIMaP Predict Workflow
+## 2D Prediction Workflow (Labs)
 
-1. Open the **GIMaP Predict** page.
-2. Choose **Single File** or **Multi Files** mode.
+1. Open **Labs ▸ 2D Prediction**.
+2. Choose **Single file** or **Folder batch** mode.
 3. Select a GISAXS file or input folder.
 4. Set stack, range, and step/every options when working with stacked or batch data.
 5. Select a prediction module.
@@ -202,6 +234,7 @@ Dependencies are listed in `requirements.txt`:
 - numpy>=1.24,<2.0
 - scipy>=1.10
 - matplotlib>=3.7
+- pyqtgraph>=0.13.7,<0.15
 - BornAgain==24.1 on Windows and Linux; installed separately on macOS
 - PyQt5>=5.15
 - opencv-python>=4.8
@@ -213,6 +246,7 @@ Dependencies are listed in `requirements.txt`:
 - tensorflow-intel>=2.15,<=2.16; platform_system=="Windows"
 - tensorflow>=2.15,<=2.16; platform_system!="Windows"
 - PyYAML>=6.0
+- anthropic>=1.8 and openai>=1.40 (optional: Process with AI)
 
 
 ## Feedback and Contact

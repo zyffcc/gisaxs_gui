@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QGridLayout, QLabel
+from src.gimap.app.presentation.theme import set_role
 
-from src.gimap.app.presentation.responsive_layout import scale_value
 
 
 def build_global_parameter_controls(
@@ -17,7 +17,7 @@ def build_global_parameter_controls(
     card._configure_group_layout(global_layout, group_margin, group_top, group_spacing)
     for col, text in enumerate(("Parameter", "Value", "Default step", "Action")):
         header_label = QLabel(text, global_group)
-        header_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
+        set_role(header_label, "caption")
         global_layout.addWidget(header_label, 0, col)
 
     reset_buttons = {
@@ -111,7 +111,7 @@ def build_global_parameter_controls(
     global_layout.setColumnStretch(1, 1)
     global_layout.setColumnStretch(2, 0)
     global_layout.setColumnStretch(3, 0)
-    global_group.setMinimumHeight(scale_value(238, card.profile, 210))
+    global_group.setMinimumHeight(238)
 
     return global_group
 

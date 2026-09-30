@@ -11,9 +11,8 @@ from PyQt5.QtTest import QTest
 
 from src.gimap.integrations.state import InMemorySettingsRepository
 from src.gimap.features.fitting.presentation.parameter_trigger import (
-    UniversalParameterTriggerManager as FeatureParameterTriggerManager,
+    UniversalParameterTriggerManager,
 )
-from utils.universal_parameter_trigger_manager import UniversalParameterTriggerManager
 
 
 _TEST_APP = None
@@ -53,10 +52,6 @@ def test_parameter_trigger_module_has_no_global_params_import():
 
     source = inspect.getsource(UniversalParameterTriggerManager)
     assert "from core.global_params" not in source
-
-
-def test_legacy_parameter_trigger_path_reexports_feature_owner():
-    assert UniversalParameterTriggerManager is FeatureParameterTriggerManager
 
 
 def test_split_trigger_keeps_legacy_callback_and_diagnostics_contract():
@@ -117,6 +112,7 @@ def test_changed_mode_flushes_on_enter_and_debounces_rapid_numeric_edits():
 
     widget.setValue(2.0)
     widget.setValue(3.0)
-    QTest.qWait(55)
+    # Generous margin: under a loaded event loop the 40 ms timer can fire late.
+    QTest.qWait(400)
     app.processEvents()
     assert commits == [1.0, 3.0]

@@ -3,12 +3,19 @@
 from pathlib import Path
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
-from PyQt5.QtWidgets import QMainWindow
 
 from .fitting_session import FittingSessionCoordinator
 from .presentation.parameter_validation import show_parameter_validation
-from .presentation.workspace_feedback import show_workspace_unavailable
 from .workspace_parameters import WorkspaceParameterCoordinator
+
+PAGE_STATUS = {
+    "home": "Start: open data and choose a task",
+    "analyze": "Analyze: open or drop detector frames",
+    "fitting": "Fitting: fit 1D curves",
+    "predict": "2D prediction",
+    "trainset": "Trainset build",
+    "classification": "Classification",
+}
 
 
 class ApplicationRuntime(QObject):
@@ -111,6 +118,9 @@ class ApplicationRuntime(QObject):
             self._initialize_ui()
             self.trainset.initialize()
             self.fitting.initialize()
+            workspace = getattr(self.ui, "fittingWorkspace", None)
+            if workspace is not None and hasattr(workspace, "attach_legacy"):
+                workspace.attach_legacy(self.fitting)  # In-situ series follows the Single analysis page
             self.classification.initialize()
             self.prediction.initialize()
             QTimer.singleShot(1000, self.fitting_session.load_last_session)
@@ -119,14 +129,9 @@ class ApplicationRuntime(QObject):
             print(f"Application runtime: Feature initialization failed: {exc}")
 
     def _setup_connections(self) -> None:
-        self.ui.trainsetBuildButton.clicked.connect(self._switch_to_trainset_build)
-        self.ui.gisaxsPredictButton.clicked.connect(self._switch_to_gisaxs_predict)
-        self.ui.cutAndFittingButton.clicked.connect(self._switch_to_cut_fitting)
-        self.ui.ClassficationButton.clicked.connect(self._switch_to_classification)
-        try:
-            self.ui.WAXSButton.clicked.connect(self._switch_to_waxs)
-        except Exception:
-            pass
+        statusbar = getattr(self.ui, "statusbar", None)
+        if statusbar is not None:
+            self.status_updated.connect(lambda text: statusbar.showMessage(str(text), 6000))
 
         trainset = self.trainset
         trainset.parameters_changed.connect(self._on_parameters_changed)
@@ -170,8 +175,7 @@ class ApplicationRuntime(QObject):
         prediction.progress_updated.connect(self.progress_updated)
 
     def _initialize_ui(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(2)
-        self._update_button_states(0)
+        # The composition chose the start page (Analyze); keep whatever is shown now.
         self.status_updated.emit("GIMaP ready")
 
     def _open_registered_prediction_module(self, module_name: str) -> None:
@@ -181,46 +185,19 @@ class ApplicationRuntime(QObject):
         if combo is not None and combo.findText(module_name) >= 0:
             combo.setCurrentText(module_name)
         prediction._on_module_selected(module_name)
-        self._switch_to_gisaxs_predict()
+        self.navigate("predict")
 
-    def _switch_to_waxs(self) -> None:
-        page_index = getattr(self.ui, "waxsPageIndex", None)
-        if page_index is None:
-            show_workspace_unavailable(
-                self.parent if isinstance(self.parent, QMainWindow) else None,
-                "WAXS",
-                "Embedded WAXS page is not available.",
-            )
-            return
-        self.ui.mainWindowWidget.setCurrentIndex(page_index)
-        self.status_updated.emit("Switched to WAXS / in-situ processing mode")
-        self._update_button_states(4)
-
-    def _switch_to_cut_fitting(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(2)
-        self.status_updated.emit("Switched to Cut Fitting mode")
-        self._update_button_states(0)
-        if not self.fitting._initialized:
-            self.fitting.initialize()
-
-    def _switch_to_gisaxs_predict(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(1)
-        self.status_updated.emit("Switched to GISAXS prediction mode")
-        self._update_button_states(1)
-        if not self.prediction._initialized:
-            self.prediction.initialize()
-
-    def _switch_to_trainset_build(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(0)
-        self.status_updated.emit("Switched to Trainset Build mode")
-        self._update_button_states(2)
-
-    def _switch_to_classification(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(3)
-        self.status_updated.emit("Switched to Classification mode")
-        self._update_button_states(3)
-        if not self.classification._initialized:
-            self.classification.initialize()
+    def navigate(self, key: str) -> None:
+        """Show a workspace and initialise its feature on first use."""
+        self.ui.components.show_page(key)
+        self.status_updated.emit(PAGE_STATUS.get(key, key))
+        binding = {
+            "fitting": self.fitting,
+            "predict": self.prediction,
+            "classification": self.classification,
+        }.get(key)
+        if binding is not None and not binding._initialized:
+            binding.initialize()
 
     def _on_parameters_changed(self, module_name, parameters) -> None:
         self.current_parameters[module_name] = parameters
@@ -258,9 +235,6 @@ class ApplicationRuntime(QObject):
         self.status_updated.emit(
             f"Classification completed, processed {len(results)} items"
         )
-
-    def _update_button_states(self, active_index: int) -> None:
-        self.ui.components.sidebar.set_active_index(active_index)
 
     @property
     def trainset_controller(self):

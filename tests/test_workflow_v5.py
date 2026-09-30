@@ -136,13 +136,11 @@ def test_simplified_insitu_controls_and_dialog_settings():
     assert tuple(view.workflowButtons) == ("source", "fit", "results")
     controls = view.workflowControls
     controls.show_step("fit")
-    controls.workflowModeCombo.setCurrentIndex(1)
-    assert controls.autoFitCheckBox.isChecked() and controls.fullAutoFitCheckBox.isChecked()
-    assert not controls.autoRefineCheckBox.isChecked()
+    assert controls.stack.currentWidget() is controls.pages["fit"]
     controls.workflowModeCombo.setCurrentIndex(2)
-    assert not controls.autoFitCheckBox.isChecked()
-    controls.show_step("geometry")
-    assert controls.setupTabs.currentWidget() is controls.pages["geometry"]
+    assert controls.fit_mode() == 2 and controls.workflowModeCombo.currentText() == "Plot curves only"
+    controls.show_step("geometry")  # detector steps are gone: unknown keys are ignored
+    assert controls.stack.currentWidget() is controls.pages["fit"]
     dialog = WorkflowV5Dialog(
         options=dict(components=[2, 2], sigma_res=0.01, nu_res=7, numerical=False)
     )

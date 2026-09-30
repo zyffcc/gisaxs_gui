@@ -26,13 +26,18 @@ def _app() -> QApplication:
 
 def test_rapid_numeric_changes_are_committed_once_after_debounce():
     app = _app()
+    # Earlier Qt tests can leave timer events queued for timer ids that the
+    # Windows event dispatcher recycles; deliver them before starting timers.
+    QTest.qWait(50)
+    app.processEvents()
     widget = QDoubleSpinBox()
     commits = []
     coordinator = ParameterCommitCoordinator(widget)
     coordinator.register_group(
         "geometry",
         commit=lambda: commits.append(widget.value()),
-        policy=ParameterUpdatePolicy(debounce_ms=40),
+        # Generous margins: a loaded CI/Windows event loop can stall for tens of ms.
+        policy=ParameterUpdatePolicy(debounce_ms=300),
     )
     coordinator.bind_numeric("geometry", widget)
 
@@ -42,7 +47,7 @@ def test_rapid_numeric_changes_are_committed_once_after_debounce():
     app.processEvents()
     assert commits == []
 
-    QTest.qWait(55)
+    QTest.qWait(450)
     app.processEvents()
     assert commits == [3.0]
 

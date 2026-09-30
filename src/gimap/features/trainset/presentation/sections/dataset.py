@@ -21,10 +21,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation import (
-    apply_design_system,
-)
-
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
@@ -79,7 +75,6 @@ class DatasetMixin:
             ui.designPreviewCard,
             ui.designPreviewContentLayout,
         )
-        apply_design_system(page)
 
         reference = QGroupBox("1 · Real scattering reference")
         ref_form = QGridLayout(reference)

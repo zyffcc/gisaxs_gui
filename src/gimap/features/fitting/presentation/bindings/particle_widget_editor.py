@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
 )
 
+from src.gimap.app.presentation.theme import repolish, set_role
 from src.gimap.app.presentation import install_safe_wheel_behavior
 
 from src.gimap.features.fitting.presentation.layout_primitives import (
@@ -59,7 +60,6 @@ class ParticleWidgetEditorMixin:
         title = QLabel(f"Comp. {widget_id}", header)
         title.setObjectName(f"fitParticleTitleLabel_{widget_id}")
         title.setMinimumWidth(70)
-        title.setStyleSheet("font-weight: 600; color: #1f2937;")
         type_group = QWidget(header)
         type_group.setObjectName(f"fitParticleTypeGroup_{widget_id}")
         type_layout = QHBoxLayout(type_group)
@@ -130,7 +130,7 @@ class ParticleWidgetEditorMixin:
         grid.setVerticalSpacing(6)
         header_labels = (QLabel("Parameter", page), QLabel("Value", page), QLabel("Step", page))
         for col, header_label in enumerate(header_labels):
-            header_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
+            set_role(header_label, "caption")
             grid.addWidget(header_label, 0, col)
         for row, (param_key, suffix, label_text, default_value, decimals, step) in enumerate(
             COMPONENT_PARAMETER_SCHEMAS[shape_name], 1
@@ -185,74 +185,23 @@ class ParticleWidgetEditorMixin:
         return container
 
     def _apply_particle_widget_style(self, widget: QWidget, widget_id: int):
+        """Mark the component card parts; fitting_theme.qss draws them."""
         if widget is None:
             return
-        widget.setStyleSheet(
-            "QWidget {"
-            "background-color: #ffffff;"
-            "color: #172033;"
-            "}"
-            f"QWidget#{widget.objectName()} {{"
-            "background-color: #ffffff;"
-            "border: 1px solid #d6deea;"
-            "border-radius: 12px;"
-            "}"
-            f"QWidget#fitParticleHeader_{widget_id} {{"
-            "background-color: #f8fbff;"
-            "border: 1px solid #e5edf6;"
-            "border-radius: 10px;"
-            "}"
-            f"QWidget#fitParticleTypeGroup_{widget_id} {{"
-            "background-color: #ffffff;"
-            "border: 1px solid #dbe4f0;"
-            "border-radius: 8px;"
-            "}"
-            f"QLabel#fitParticleTitleLabel_{widget_id} {{"
-            "background-color: transparent;"
-            "border: none;"
-            "color: #1f2937;"
-            "font-weight: 700;"
-            "padding: 0 2px 0 0;"
-            "}"
-            f"QLabel#fitParticleTypeLabel_{widget_id} {{"
-            "background-color: transparent;"
-            "border: none;"
-            "color: #526070;"
-            "font-weight: 600;"
-            "padding-left: 8px;"
-            "padding-right: 2px;"
-            "}"
-            f"QComboBox#fitParticleShapeCombox_{widget_id} {{"
-            "border: none;"
-            "background-color: transparent;"
-            "padding-left: 2px;"
-            "padding-right: 24px;"
-            "min-height: 28px;"
-            "}"
-            f"QComboBox#fitParticleShapeCombox_{widget_id}::drop-down {{"
-            "border: none;"
-            "background-color: transparent;"
-            "width: 22px;"
-            "subcontrol-origin: padding;"
-            "subcontrol-position: top right;"
-            "}"
-            f"QComboBox#fitParticleShapeCombox_{widget_id}::down-arrow {{"
-            "width: 10px;"
-            "height: 10px;"
-            "}"
-            f"QPushButton#fitParticleRemoveButton_{widget_id} {{"
-            "background-color: #f3f7fb;"
-            "border: 1px solid #cfd9e6;"
-            "border-radius: 8px;"
-            "color: #334155;"
-            "font-weight: 600;"
-            "padding: 4px 10px;"
-            "}"
-            f"QPushButton#fitParticleRemoveButton_{widget_id}:hover {{"
-            "background-color: #e8f0f8;"
-            "border-color: #b8c7d9;"
-            "}"
-        )
+        widget.setProperty("fittingParticleCard", True)
+        for name, role in (
+            (f"fitParticleHeader_{widget_id}", "fittingParticleHeader"),
+            (f"fitParticleTypeGroup_{widget_id}", "fittingParticleTypeGroup"),
+            (f"fitParticleTitleLabel_{widget_id}", "fittingParticleTitle"),
+            (f"fitParticleTypeLabel_{widget_id}", "fittingParticleTypeLabel"),
+            (f"fitParticleShapeCombox_{widget_id}", "fittingParticleShape"),
+            (f"fitParticleRemoveButton_{widget_id}", "fittingParticleRemove"),
+        ):
+            child = widget.findChild(QWidget, name)
+            if child is not None:
+                child.setProperty(role, True)
+                repolish(child)
+        repolish(widget)
 
     def _register_ui_children(self, widget: QWidget):
         if widget is None:

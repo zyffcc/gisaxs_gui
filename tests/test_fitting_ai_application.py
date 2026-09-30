@@ -22,8 +22,8 @@ from src.gimap.features.fitting.infrastructure.adapters import (
     LocalAiFittingArtifactRepository,
 )
 from src.gimap.integrations.jobs import LocalProcessJobRunner
-from utils.ai_fitting_pipeline import FittingPipeline
-from utils.ai_fitting_profiles import profile_registry
+from src.gimap.features.fitting.infrastructure.adapters.fitting_pipeline import FittingPipeline
+from src.gimap.features.fitting.application.fitting_profiles import profile_registry
 
 
 class _FakePredictor:

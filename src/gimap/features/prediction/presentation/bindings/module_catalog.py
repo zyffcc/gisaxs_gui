@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.shared.file_paths import normalize_path
 
 
@@ -133,13 +134,13 @@ class ModuleCatalogMixin:
         text = combo.currentText() if combo is not None else ""
         if self._framework_ready():
             label.setText(f"Framework OK: {text}")
-            label.setStyleSheet("color: #166534;")
+            set_role(label, "success")
         elif text.startswith("No compatible"):
             label.setText("Framework missing or incompatible")
-            label.setStyleSheet("color: #b91c1c;")
+            set_role(label, "error")
         else:
             label.setText("Framework incompatible")
-            label.setStyleSheet("color: #b91c1c;")
+            set_role(label, "error")
 
     def _initialize_modules_ui(self) -> None:
         self._refresh_modules()

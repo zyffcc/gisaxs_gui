@@ -5,7 +5,6 @@ from __future__ import annotations
 from PyQt5.QtWidgets import QPushButton, QSizePolicy
 
 from src.gimap.app.presentation.layout_primitives import normalize_button, normalize_input
-from src.gimap.app.presentation.responsive_layout import scale_value
 
 
 def apply_prediction_control_style(ui, profile) -> None:
@@ -18,8 +17,8 @@ def apply_prediction_control_style(ui, profile) -> None:
 
     for view in (ui.gisaxsImageGraphicsView, ui.predict2dGraphicsView):
         view.setMinimumSize(
-            scale_value(360, profile, 300),
-            scale_value(280, profile, 220),
+            360,
+            280,
         )
         view.setMaximumSize(16777215, 16777215)
         view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -28,18 +27,18 @@ def apply_prediction_control_style(ui, profile) -> None:
         ui.gisaxsImageParametersWidget,
         ui.predict2dParameterWidget,
     ):
-        controls.setMinimumWidth(scale_value(340, profile, 300))
-        controls.setMaximumWidth(scale_value(420, profile, 360))
+        controls.setMinimumWidth(340)
+        controls.setMaximumWidth(420)
         controls.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 
-    ui.gisaxsPredictImageShowTabWidget.setMinimumHeight(scale_value(430, profile, 340))
+    ui.gisaxsPredictImageShowTabWidget.setMinimumHeight(430)
     ui.gisaxsPredictImageShowTabWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
     ui.gisaxsPredictImageShowWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     ui.predictStatusScrollArea.setVisible(False)
     ui.predictStatusScrollArea.setMaximumHeight(0)
-    ui.predictStatusTextBrowser.setMinimumHeight(scale_value(130, profile, 110))
-    ui.predictStatusTextBrowser.setMaximumHeight(scale_value(180, profile, 150))
+    ui.predictStatusTextBrowser.setMinimumHeight(130)
+    ui.predictStatusTextBrowser.setMaximumHeight(180)
     ui.predictStatusTextBrowser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
     ui.gisaxsPredictExportFolderButton.setVisible(False)
@@ -69,7 +68,7 @@ def apply_prediction_control_style(ui, profile) -> None:
     ):
         normalize_button(button, wide=button in (ui.gisaxsPredictPredictButton,))
     for button in (ui.gisaxsImageExportButton, ui.predict2dExportButton):
-        button.setMinimumWidth(scale_value(120, profile, 104))
+        button.setMinimumWidth(120)
         button.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
 
     for widget in (

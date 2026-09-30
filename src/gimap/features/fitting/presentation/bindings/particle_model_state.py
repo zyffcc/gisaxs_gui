@@ -126,21 +126,6 @@ class ParticleModelStateMixin:
             self._initializing = False
             self._schedule_model_parameters_region_refresh()
 
-    def _set_particle_page_and_state(self, widget_id: int, combo_index: int, shape_name: str):
-        """No description."""
-        config = self.particle_shape_configs[widget_id]
-        page_config = config["pages"][combo_index]
-
-        if hasattr(self.ui, config["stack_widget"]):
-            stack_widget = getattr(self.ui, config["stack_widget"])
-
-            stack_widget.setCurrentIndex(page_config["page_index"])
-
-            if shape_name == "None":
-                self._set_particle_none_state(widget_id)
-            else:
-                self._set_particle_active_state(widget_id, shape_name)
-
     def _load_particle_parameters(self, widget_id: int, shape_name: str):
         """UI"""
         if shape_name == "None":

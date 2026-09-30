@@ -121,13 +121,7 @@ class ParticleConnectionsMixin:
                     def _after_commit(info, value, wid=widget_id, shp=shape_lower, p=param_key):
                         try:
                             self._add_particle_message(f"Meta commit {wid}.{shp}.{p} = {value}")
-                            has_data = (
-                                hasattr(self, "current_cut_data")
-                                and self.current_cut_data is not None
-                            ) or (
-                                hasattr(self, "current_1d_data")
-                                and self.current_1d_data is not None
-                            )
+                            has_data = getattr(self, "current_1d_data", None) is not None
                             if has_data:
                                 self._perform_manual_fitting(reveal_result=False)
                         except Exception:
@@ -178,9 +172,7 @@ class ParticleConnectionsMixin:
             def _after_commit(info, value, p=param_key):
                 try:
                     self._add_particle_message(f"Meta commit global {p} = {value}")
-                    has_data = (
-                        hasattr(self, "current_cut_data") and self.current_cut_data is not None
-                    ) or (hasattr(self, "current_1d_data") and self.current_1d_data is not None)
+                    has_data = getattr(self, "current_1d_data", None) is not None
                     if has_data:
                         self._perform_manual_fitting(reveal_result=False)
                 except Exception:

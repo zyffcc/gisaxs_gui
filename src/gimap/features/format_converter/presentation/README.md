@@ -7,4 +7,4 @@
 预览、估算和转换。`QFileDialog` 与 `QMessageBox` 留在 dialog；文件读写和格式规则不在
 presentation 中实现。
 
-Public alias `ui.format_converter_dialog` 只 re-export 本目录中的类，不拥有第二套 dialog 实现。
+旧的 `ui.format_converter_dialog` 别名已删除；调用方直接导入本目录的 `dialog.py`。

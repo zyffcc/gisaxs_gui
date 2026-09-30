@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QRectF
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QCheckBox, QLabel
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QCheckBox, QLabel, QSizePolicy
+
+from .box_zoom import zoom_button
 
 
 class ScientificImageViewer(QWidget):
@@ -49,8 +51,13 @@ class ScientificImageViewer(QWidget):
         self.play_button = QPushButton("Play")
         self.play_button.setCheckable(True)
         self.play_button.setVisible(False)
+        self.graphics = pg.GraphicsLayoutWidget()
+        self.plot = self.graphics.addPlot(row=0, col=0)
+        self.view_box = self.plot.getViewBox()
+        self.zoom_button = zoom_button(self.view_box, self)
         for widget in (
             self.reset_button,
+            self.zoom_button,
             self.roi_button,
             self.apply_button,
             self.log_button,
@@ -59,11 +66,8 @@ class ScientificImageViewer(QWidget):
             controls.addWidget(widget)
         controls.addStretch(1)
         layout.addLayout(controls)
-        self.graphics = pg.GraphicsLayoutWidget()
-        self.plot = self.graphics.addPlot(row=0, col=0)
         self.plot.setLabel("bottom", "X (pixel)")
         self.plot.setLabel("left", "Y (pixel)")
-        self.view_box = self.plot.getViewBox()
         self.view_box.setAspectLocked(True)
         self.image_item = pg.ImageItem(axisOrder="row-major")
         self.image_item.setAutoDownsample(True)
@@ -91,6 +95,8 @@ class ScientificImageViewer(QWidget):
         layout.addWidget(self.graphics, 1)
         self.readout = QLabel("Open a detector image to inspect pixels")
         self.readout.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.readout.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)  # a moving readout never resizes the view
+        self.readout.setMinimumWidth(0)
         layout.addWidget(self.readout)
         self.reset_button.clicked.connect(self.view_box.autoRange)
         self.roi_button.toggled.connect(self.roi.setVisible)

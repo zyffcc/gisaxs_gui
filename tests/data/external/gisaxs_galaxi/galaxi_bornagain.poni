@@ -1,0 +1,12 @@
+# GALAXI geometry of the BornAgain example (experiment_at_galaxi), written by GIMaP for tests:
+# distance 1730 mm, pixel 172 um, direct beam (597.1, 719.6) px from the top-left corner, lambda 1.34 A.
+poni_version: 2
+Detector: Detector
+Detector_config: {"pixel1": 0.000172, "pixel2": 0.000172, "max_shape": [1043, 981]}
+Distance: 1.73
+Poni1: 0.1237712
+Poni2: 0.1027012
+Rot1: 0.0
+Rot2: 0.0
+Rot3: 0.0
+Wavelength: 1.34e-10

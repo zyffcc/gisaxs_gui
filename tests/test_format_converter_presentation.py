@@ -30,11 +30,6 @@ from src.gimap.integrations.state import (
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
 )
-from ui.format_converter_dialog import (
-    ConversionProgressDialog as LegacyConversionProgressDialog,
-)
-from ui.format_converter_dialog import FolderImportDialog as LegacyFolderImportDialog
-from ui.format_converter_dialog import FormatConverterDialog as LegacyFormatConverterDialog
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -55,18 +50,8 @@ def _context() -> AppContext:
     )
 
 
-def test_legacy_dialog_entry_reexports_feature_owned_classes() -> None:
-    assert LegacyFormatConverterDialog is FormatConverterDialog
-    assert LegacyFolderImportDialog is FolderImportDialog
-    assert LegacyConversionProgressDialog is ConversionProgressDialog
-
-    legacy_source = (PROJECT_ROOT / "ui" / "format_converter_dialog.py").read_text(encoding="utf-8")
-    assert "class FormatConverterDialog" not in legacy_source
-    assert len(legacy_source.splitlines()) <= 12
-
-
 def test_menu_opens_converter_through_feature_owned_module() -> None:
-    menu_source = (PROJECT_ROOT / "src/gimap/app/menu_manager.py").read_text(encoding="utf-8")
+    menu_source = (PROJECT_ROOT / "src/gimap/app/menus.py").read_text(encoding="utf-8")
 
     assert "src.gimap.features.format_converter.presentation.dialog" in menu_source
     assert "from ui.format_converter_dialog" not in menu_source

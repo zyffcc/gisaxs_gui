@@ -1,8 +1,4 @@
-"""Stable exports for fitting presentation primitives.
-
-Concrete implementations live in focused modules; this module preserves the
-public import surface used by existing bindings and compatibility callers.
-"""
+"""Shared primitives of the Fitting presentation bindings."""
 
 from .scientific_commands import (
     GISAXS_IMAGE_COLORMAPS,
@@ -21,28 +17,30 @@ from .refinement_workers import (
     RefineUiBridge,
 )
 
-from .insitu_workers import (
-    InsituBatchImageLoader,
-    InsituCutWorker,
-)
-
-from .independent_image_window import (
-    IndependentMatplotlibWindow,
-)
-
 from .independent_fit_window import (
     IndependentFitWindow,
 )
 
-from .display_manager import (
-    UnifiedDisplayManager,
-    _qobject_is_alive,
-)
 
-from .image_loading_workers import (
-    FolderImageScanWorker,
-    AsyncImageLoader,
-)
+def _qobject_is_alive(obj) -> bool:
+    """``False`` for ``None`` and for Qt objects whose C++ side was deleted."""
+    if obj is None:
+        return False
+    try:
+        import sip
+
+        if sip.isdeleted(obj):
+            return False
+    except Exception:
+        pass
+    try:
+        obj.objectName()
+    except RuntimeError:
+        return False
+    except Exception:
+        pass
+    return True
+
 
 __all__ = [
     "GISAXS_IMAGE_COLORMAPS",
@@ -56,12 +54,6 @@ __all__ = [
     "is_matplotlib_available",
     "ManualAutoRefineWorker",
     "RefineUiBridge",
-    "InsituBatchImageLoader",
-    "InsituCutWorker",
-    "IndependentMatplotlibWindow",
     "IndependentFitWindow",
-    "UnifiedDisplayManager",
     "_qobject_is_alive",
-    "FolderImageScanWorker",
-    "AsyncImageLoader",
 ]

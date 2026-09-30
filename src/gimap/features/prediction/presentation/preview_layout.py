@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.layout_primitives import normalize_button
-from src.gimap.app.presentation.responsive_layout import scale_value
 
 from .workflow_components import PredictionDisclosure
 
@@ -48,15 +47,6 @@ class PredictionPreviewLayout:
     def _make_section(title: str, parent: QWidget) -> tuple[QFrame, QVBoxLayout]:
         frame = QFrame(parent)
         frame.setObjectName("predictPreviewSection")
-        frame.setStyleSheet(
-            """
-            QFrame#predictPreviewSection {
-                background: #f8fafc;
-                border: 1px solid #dde5ef;
-                border-radius: 8px;
-            }
-            """
-        )
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(10, 8, 10, 10)
         layout.setSpacing(6)
@@ -121,7 +111,7 @@ class PredictionPreviewLayout:
         row.setSpacing(6)
         for button in buttons:
             normalize_button(button)
-            button.setMinimumWidth(scale_value(76, self.profile, 68))
+            button.setMinimumWidth(76)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             row.addWidget(button)
         layout.addLayout(row)
@@ -142,8 +132,8 @@ class PredictionPreviewLayout:
         self._clear_layout(panel_layout)
         self.ui.gisaxsImageColorScaleLabel.setParent(panel)
         self.ui.gisaxsImageColorScaleLabel.hide()
-        panel.setMinimumWidth(scale_value(270, self.profile, 240))
-        panel.setMaximumWidth(scale_value(340, self.profile, 310))
+        panel.setMinimumWidth(270)
+        panel.setMaximumWidth(340)
         panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
         current_section, current_layout = self._make_section("Current", panel)
@@ -179,7 +169,7 @@ class PredictionPreviewLayout:
         output_section, output_layout = self._make_section("Output", panel)
         self.gisaxs_output_section = output_section
         normalize_button(self.ui.gisaxsImageExportButton, wide=True)
-        self.ui.gisaxsImageExportButton.setMinimumWidth(scale_value(180, self.profile, 150))
+        self.ui.gisaxsImageExportButton.setMinimumWidth(180)
         output_layout.addWidget(self.ui.gisaxsImageExportButton)
 
         panel_layout.addWidget(current_section, 0, 0)
@@ -211,8 +201,8 @@ class PredictionPreviewLayout:
         self._clear_layout(panel_layout)
         self.ui.predict2dColorScaleLabel.setParent(panel)
         self.ui.predict2dColorScaleLabel.hide()
-        panel.setMinimumWidth(scale_value(270, self.profile, 240))
-        panel.setMaximumWidth(scale_value(340, self.profile, 310))
+        panel.setMinimumWidth(270)
+        panel.setMaximumWidth(340)
         panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
         scale_section = self._build_display_section(
@@ -240,7 +230,7 @@ class PredictionPreviewLayout:
         output_section, output_layout = self._make_section("Output", panel)
         self.predict2d_output_section = output_section
         normalize_button(self.ui.predict2dExportButton, wide=True)
-        self.ui.predict2dExportButton.setMinimumWidth(scale_value(180, self.profile, 150))
+        self.ui.predict2dExportButton.setMinimumWidth(180)
         output_layout.addWidget(self.ui.predict2dExportButton)
 
         curve_section, curve_layout = self._make_section("Curve", panel)

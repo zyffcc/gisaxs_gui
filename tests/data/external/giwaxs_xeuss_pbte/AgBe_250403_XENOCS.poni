@@ -1,0 +1,14 @@
+# Nota: C-Order, 1 refers to the Y axis, 2 to the X axis
+# Calibration done on Thu Apr  3 17:52:35 2025
+poni_version: 2.1
+Detector: Pilatus300k
+Detector_config: {"orientation": 3}
+Distance: 0.14675812120335077
+Poni1: 0.10981989446858446
+Poni2: -0.011886231733054933
+Rot1: -0.08901621237574575
+Rot2: -0.05713579867176153
+Rot3: 0.0
+Wavelength: 1.54e-10
+# Calibrant: AgBh
+# Image: fabio:///D:/PhD/Articles/pygid/xenocs data/PbTe_3010_r1_PT_1_10_0_00029.edf

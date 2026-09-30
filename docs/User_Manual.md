@@ -44,174 +44,192 @@ The source dependency file is `requirements.txt`. No `environment.yml` file was 
 
 ## 3. Main Interface
 
-The main window contains a left navigation panel and a central working area.
+The main window has a sidebar on the left, the active workspace in the middle, a menu bar
+(**File, View, Tools, Help**) and a status bar.
 
-The main pages are:
+The sidebar groups the pages into **Workspaces** (Start, Analyze, Fitting) and **Labs**
+(2D Prediction, Trainset Build, Classification — the machine-learning tools). `« Collapse`
+(or **View ▸ Collapse Sidebar**, `Ctrl+B`) reduces it to icons; `Ctrl+1` … switch pages.
 
-- **Cut & Fitting**
-- **GIMaP Predict**
-- **Trainset Build**
-- **Classification**
-- **WAXS**
+- **Start** (the first page): drop detector images or a folder, or open them — Analyze opens at
+  once and shows the file, its detector and frames while the image loads. Or choose what you want
+  to know: *Crystals and orientation* (GIWAXS), *Nanostructure* (GISAXS), *In-situ or batch series*,
+  *Calibrate the detector* — or describe your data and question to the AI (**Ask the AI…**).
+- **Analyze**: one workspace for GISAXS and GIWAXS. The command bar holds the file, the mode
+  (Auto / GISAXS / GIWAXS), αi, **Run Automatic Analysis**, **Ask AI…**, **Export** and **Send to
+  Fitting**. On the left the steps — ① Data ② Geometry ③ Mask & corrections ④ Cuts ⑤ Results
+  ⑥ Export — each with its state and one line of what it found; the image in the middle
+  (Detector / q map, **Sources** shows where every curve comes from — click a curve to see only
+  its region); on the right **Curves**, **Results** and **Series**.
+  - *Run Automatic Analysis* needs no AI. GIWAXS: geometry, the last frames of a series summed,
+    peaks, in-plane / out-of-plane, ring orientation and crystallite sizes. GISAXS: the horizontal
+    cut at the Yoneda band, the beam-centre column moved to the symmetry axis, the halves (averaged
+    when both agree, otherwise the usable one — with the reason), the in-plane distance 2π/q*
+    (a shoulder is reported as a hint) and a physical fit of I(qy) (spheres, vertical and random
+    cylinders with size spread and distance D). When several models fit equally well, Results asks
+    which one you expect and names the one that agrees with the measured spacing. Save the fitted
+    curve, the fit table or the report; **Refine in Fitting** opens the prepared curve in Fitting.
+    **Fit details** (under the peak table or the fit table, closed until you open it) follow the
+    selected row: for a peak, the points it was fitted to with the Gaussian and its local background,
+    q, d and FWHM with their errors, height, area, background and slope, S/N, χ²ᵣ, the fit window,
+    the Scherrer size, how peaks are found, and where the ring lies on the q map; for a model
+    solution, every parameter (R, σR/R, h, D, σD/D, weight, amplitude, background, resolution), χ²,
+    convergence, evaluations and time, the q range, the start of D and the algorithm, its warnings,
+    and **Show in Fitting**, which opens the curve in Fitting with that solution drawn (Export Data…
+    there saves it with its parameters).
+    Questions only you can answer (αi, the energy, the calibration) become fields: fill them in and
+    run again.
+  - *Mask & corrections*: detector gaps, and isolated hot and dead pixels found in every frame, are
+    left out automatically (the step says how many; **Show Masked Pixels** circles them; the option
+    can be turned off). Negative values of floating-point (dark-subtracted) frames are kept as data.
+  - *Series*: with several files, a folder or a multi-frame NeXus file, **Build Map** reduces every
+    frame with the current settings (with progress and Cancel) and shows the chosen curve as an
+    intensity map against frame and q, with adjustable colour scale. Drag the horizontal band to
+    pick a frame (its curve is drawn below, **Open** shows it in Analyze) and the vertical band to
+    pick a q window (its intensity against frame is drawn below). Export the map as a CSV table or
+    a figure.
+  - The geometry comes from an *instrument profile* matched by detector name and frame size; the
+    first time, **Find Calibration Automatically**, enter it, or run Geometry Calibration once.
+    See `docs/ui/workspaces/analyze.md`.
+- **Fitting**: fit 1D curves — one curve, or an in-situ series of curves. See section 4.
+- **2D Prediction**, **Trainset Build**, **Classification**: Labs (sections 5–7).
 
-The application also exposes settings and parameter-related actions through the GUI menu system. These are used for reusable application options and global parameters.
+The former WAXS page has been retired: every WAXS/GIWAXS function (background, masks, sectors,
+q-range and circle cuts, integration axis, image export, batch with calibration/normalization)
+is in Analyze's GIWAXS mode. The detector half of the former Cut & Fitting page is in Analyze too.
 
-## 4. Cut & Fitting Page
+### Menus
 
-The Cut & Fitting page is used to inspect GISAXS data, create 1D cuts, and fit model curves.
+| Menu | Entries |
+|---|---|
+| File | Open Data… (`Ctrl+O`), Open Folder… (`Ctrl+Shift+O`), Open Recent, Load Workspace Parameters… (`Ctrl+L`), Save Workspace Parameters As… (`Ctrl+Shift+S`), Exit |
+| View | the workspaces (`Ctrl+1`…), Collapse Sidebar (`Ctrl+B`), Full Screen, Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`) |
+| Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), Fit Settings & Batch…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
+| Help | User Manual (`F1`), GitHub Repository, Open User Data Folder, About GIMaP |
 
-At the top of Fitting, choose **Single analysis** for one representative file or **In-situ series**
-for Live monitor, Review history, and Batch process. Switching between them preserves each page's
-current state.
+*Workspace parameters* are those of Fitting and the Labs; Analyze keeps its own set-up in settings
+files (**Export ▸ Save Settings… / Load Settings…**, also used by Batch Export).
 
-The visible workflow is `Import data → Experiment setup → Yoneda & cut → Fit`. Yoneda finding and
-cut extraction share one task page so the center and cut band can be checked together, while GIMaP
-still validates their results separately. These steps only change the controls shown on the left; they
-do not reset the right-side `Detector` or `Curve` view.
+### Memory between sessions
 
-### Passing a Single Analysis to In-situ
+- **Recent data**: every file or folder opened (dialog, drag and drop, Start page, Batch Export) is
+  listed in **File ▸ Open Recent** and on the Start page, newest first (at most 8; files that no
+  longer exist are left out; *Clear the List* empties it).
+- **Last set-up**: when GIMaP closes after a frame was analysed, the Analyze set-up (mode, profile,
+  masks, corrections, cut regions …) is kept in `last_analyze_setup.json` in the user data folder.
+  With the first frame of the next session a message offers **Use It** — it is never applied without
+  asking, since a new beamtime may need other settings.
 
-First complete and verify the setup on a representative file in **Single analysis**. Open
-**In-situ series** and choose **Use current Single setup**. GIMaP creates a versioned processing
-Recipe containing detector setup, preprocessing, cut geometry, model parameters, tracking policy,
-and fitting policy. Display-only options such as colormap, zoom, and vmin/vmax are not copied.
+### When something goes wrong
 
-The transfer is explicit and one-way. Later In-situ changes create a new Recipe version and never
-silently modify the Single analysis. Before applying an In-situ change, choose whether it affects
-future frames, selected and future frames, or all frames (which explicitly requests reprocessing).
-Live, Review, and Batch use the same Recipe and the same single-frame scientific pipeline.
+An unexpected error does not close GIMaP: a window says what happened (the traceback behind
+**Show Details**, **Copy Details** for a report) and the work goes on. Every error is written to
+`logs/errors.log` in the user data folder (**Open Log Folder**). Files that cannot be read say why in
+words — empty (still being written?), not a detector image, a damaged or incomplete NeXus file, no
+permission — instead of the reader library's message.
 
-### Import GISAXS Image
+### Settings and user data
 
-Use the file loading controls to import detector images or data files. The codebase includes support for scientific image loading through libraries such as `fabio`, `h5py`, OpenCV, and custom loaders. Existing documentation and code references indicate support for common image files and GISAXS detector formats such as `.cbf`, with actual behavior depending on the loader and file structure.
+**Tools ▸ Settings…** has four pages; every change applies immediately.
 
-### Single Image / Stack Loading
+- **Appearance**: light or dark theme, the font size and the interface language (English by
+  default, or 中文; values, units and file names are never translated). The interface follows the
+  display scaling of the operating system (for example 125 % or 150 % in Windows), so it looks the
+  same on every monitor, including low-resolution screens.
+- **Analyze**: whether a beam centre written in the file header (CBF `Beam_xy`, NeXus
+  `beam_center_x/y`) replaces the calibrated profile centre — off by default, because many
+  beamlines never update it — and which half of the horizontal cut *Send to Fitting* uses.
+- **Data**: the user data folder and *Reset All Settings…*.
+- **Assistant**: the brain (Claude Code on your Claude plan, the Claude API, or another AI
+  provider: DeepSeek, Qwen, OpenAI, Kimi, GLM, Gemini, OpenRouter, SiliconFlow, Azure, Ollama …),
+  standing instructions added to every run (e.g. where calibrations are kept, the beamline energy),
+  Claude Code's program, model and sign-in, the API models and keys, effort, turn limit and default
+  permission (see *Process with AI* in section 8).
 
-The application includes logic for single-file and stacked data workflows. When a loaded file contains multiple frames or a selected workflow uses multiple files, use the available navigation controls to move through frames or files.
+All settings, preferences, instrument profiles, the session and the fitting model parameters are
+kept in one user data folder outside the program: `%APPDATA%\GIMaP` on Windows (`~/.config/gimap`
+elsewhere, or the folder in the `GIMAP_HOME` environment variable). Updating the program never
+overwrites them. Files from older versions (`config/user_parameters.json`,
+`config/user_settings.json`, `config/instrument_profiles.json`) are imported once and left
+untouched.
 
-### Previous / Next Navigation
+## 4. Fitting Page
 
-Previous and Next controls are used to move between files or frames when a multi-file or stack workflow is active.
+The Fitting page fits 1D curves with particle models: one curve at a time (**Single analysis**)
+or a whole series of curves from an in-situ experiment (**In-situ series**). Switching between the
+two keeps each side's curve, parameters, Recipe and results.
 
-### Display Options
+The detector work of the former Cut & Fitting page — opening images, the beam centre and Yoneda
+band, the cut region, masks around detector gaps, summing frames — now happens in **Analyze**,
+which writes the curve that Fitting fits:
 
-Display controls are available for image preview and fitting plots. Depending on the active data view, these may include display scaling, color limits, linear/log intensity, and preview updates.
+| Former Cut & Fitting control | Now |
+|---|---|
+| Import image, Previous / Next | Analyze file list |
+| Detector parameters | Analyze instrument profile (Geometry…, Calibrate…) |
+| Find Yoneda & Set Cut, cut thickness | Analyze's automatic horizontal cut (drag the band or enter rows) |
+| Optimize Center X | Analyze ▸ Beam centre ▸ Refine x by Symmetry |
+| Mask negative pixels + guard | Analyze ▸ Options ▸ Gap guard (3 px by default) |
+| Stack | Analyze ▸ Options ▸ Sum N frames |
+| Cut region width | Fitting's fitting range (below) |
+| In-situ CBF / NXS series | Analyze ▸ Send to Fitting ▸ Send Series to Fitting… |
 
-### Auto Scale
+### Single analysis: one curve in four steps
 
-Auto scale adjusts the display intensity range for the current image or plot. It is intended for visualization and does not change the underlying data.
+Laid out like Analyze: the steps on the left, each saying where it stands; the plot on the right —
+the points (paler outside the fitting range), the model over the whole curve, with **Terms** each of
+its parts (every particle, the background, the resolution peak), the **orange band** that is the
+fitting range (drag it) — and below it the residuals, (I − model)/σ (ln(I/model) when the file has no σ).
+The command bar has **Open Curve…** (its menu: **Load Model…**), **Undo / Redo** of the model (every fit
+is one step), **Fit** (Ctrl+Return) and **Save** (data and fit, plot, model).
 
-### Intensity Log Scale
+1. **Curve** — the file, its points and q range in nm⁻¹ and Å⁻¹, and whether σ is in the file (the fit
+   weights each point by 1/σ; without σ every point gets the same relative weight). For a cut through
+   the beam: **Halves of the cut** — their mean (where both exist; beyond, the longer half alone), both
+   on |q|, or one half. **Fitting range** in nm⁻¹ (or drag the band; **Whole Curve**). Under *File*: the
+   q unit of the file (Å⁻¹ for Analyze's curves).
+2. **Model** — one card per particle: its family (sphere, random cylinder, vertical cylinder), **Distance D**
+   on or off (the paracrystal interference), and its values — scale, R, **σR/R**, h and **σh/h** for
+   cylinders, D and **σD/D**. Spreads are relative everywhere (as in Analyze's results and 1D Predict).
+   **fit** ticked: the fit may change the value; unticked: it stays fixed. **Ranges** shows each value's
+   min – max (the fit keeps it inside, *Search the ranges* searches across it; a value typed outside widens
+   its range). A card for the background, the resolution peak A/(1 + (|q|/w)^ν) and the factor k (fixed
+   at 1 by default). After a fit every value shows its ± error, or *at a bound*.
+3. **Fit** — one button, four methods:
+   - **Refine the current values** — bounded least squares from the values in Model; stays near them.
+   - **Search the ranges, then refine** — differential evolution across the ranges of the free values
+     (log scale when a range spans 10× or more), then refinement from the three best starts.
+   - **Find the particle shape (no AI)** — the numerical fit of sphere, random and vertical cylinder from
+     several starts (as in Analyze's automatic analysis); the solutions go to Results, the best into Model.
+     A first curve opens here.
+   - **AI proposal (1D Predict)** — the V5 model with its numerical correction; its solutions likewise.
+   Progress and **Stop** (the best values so far are kept). The scales (every particle's scale, the
+   background, the peak A) are solved exactly at every step, so the search only moves sizes, spreads,
+   distances and the peak's shape. *Advanced*: the number of evaluations; **Fit Many Curves…** (1D Predict
+   for a list of files).
+4. **Results** — χ²ᵣ (with σ) or the variance of ln I, points, free values, converged or not; warnings when a
+   value stopped at a bound of its range, when values are strongly correlated (|ρ| ≥ 0.95: the data do not
+   separate them) or when χ²ᵣ is well above 1; every value ± its 1σ error (covariance at the solution,
+   scaled by χ²ᵣ); the **Solutions** of *Find the particle shape* or 1D Predict with their χ²ᵣ on these
+   points (**Use This Solution** puts one into Model). **Save Data and Fit…** writes q (nm⁻¹ and Å⁻¹), I, σ,
+   the model, the residuals and every term as CSV, with a JSON record of the model, the fit (errors,
+   bounds, correlations) and the points next to it; **Save Plot…** (PNG or SVG) and **Save Model…** (JSON,
+   to load for another curve). The log is folded at the bottom.
 
-Log display helps inspect weak scattering features and high-dynamic-range detector images. Use it for visualization; fitting behavior depends on the selected fitting/evaluation settings.
+The model and the choices are kept for the next session, and the last curve opens again.
 
-### Detector Preview
+**From Analyze.** *Send to Fitting* opens the cut here with the halves chosen in Analyze;
+*Results ▸ Fit details ▸ Show in Fitting* puts that solution into Model — sizes and spreads converted,
+the scales solved on the solution's own curve — and says how closely this model reproduces it (the same
+curve for spheres and random cylinders; Fitting's vertical cylinder weights radii by R⁴, so it is loaded
+as a start to refine).
 
-The detector preview shows the current 2D data and cut geometry. Use it to confirm that the loaded image, detector orientation, and selected region are reasonable before cutting or fitting.
+Analyze's curve files, `<name>_fit_input.dat`, have four columns — q (Å⁻¹), intensity, σ and the number
+of detector pixels averaged — and a header recording where the curve came from; any `.dat` / `.txt` /
+`.csv` file with columns `q I [σ]` opens too.
 
-### Detector Data Flow
-
-GIMaP keeps the imported detector array as an unchanged **RawImage**. Options in **Preprocessing**—
-including Flip UD, threshold/mask and mirror gap fill—build one **AnalysisImage**. The detector preview,
-automatic Yoneda/center finding, ROI/cut and fitting all use that same AnalysisImage. Therefore, when
-mirror fill or Flip UD is enabled, later analysis uses exactly the processed data shown in the preview.
-
-Display controls such as colormap, vmin/vmax, auto scale, log intensity, zoom and overlays only change
-the rendering. They do not change scientific input or fitting results.
-
-Double-clicking/opening a detector or curve viewer creates an enlarged projection of the current view,
-not a second analysis state. The embedded and independent detector views share the same processed image,
-intensity scale, colormap, coordinate mode and overlays. The embedded and independent curve views share
-q preparation, visible data/model layers, log/normalization settings, units, ROI and legends. Controls in
-either projection update the other. Window size, zoom/pan and temporary toolbar tools remain local so the
-independent viewer can be used for detailed inspection without disturbing the main layout.
-
-```mermaid
-flowchart LR
-    A["Import file"] --> B["RawImage<br/>unchanged source array"]
-    B --> C["PreprocessingConfig<br/>Flip / Threshold / Mask / Mirror-fill"]
-    C --> D["AnalysisImage<br/>single scientific input"]
-
-    D --> E["Detector Preview"]
-    D --> F["Yoneda / Center Finding"]
-    D --> G["ROI / Cut"]
-    G --> H["Fitting"]
-    D --> I["Processed Data Export"]
-
-    B --> J["Explicit Raw Export"]
-    K["DisplayState<br/>Colormap / Vmin / Vmax / Log intensity / Overlay"] --> E
-```
-
-Changing a preprocessing option invalidates older center/cut/fitting results; run the relevant analysis
-step again. Changing only a display control does not invalidate scientific results. Mirror fill uses the
-beam-center X value saved in Experiment Setup, so verify the detector setup before relying on filled gaps.
-
-### Cut Line Settings
-
-Cut settings define how the 2D scattering image is converted into a 1D curve. `Find Yoneda & Set Cut`
-locates the center and prepares a horizontal cut band. `Auto horizontal cut thickness` controls the
-number of detector rows averaged around the Yoneda location and defaults to 5 px. You can then adjust
-the center or cut geometry before using `Extract / Update Cut` to generate the 1D curve.
-
-### Detector Parameters
-
-Detector parameters are used for coordinate conversion and interpretation of scattering data. Set these carefully before quantitative analysis. Incorrect detector parameters can produce incorrect q-space values and fitting results.
-
-Enable **Show detector axes in q** to draw the detector on its calculated two-dimensional q grid. The
-horizontal coordinate can be **qy** or signed **qr**; the vertical coordinate is always **qz**. Signed
-`qr = sign(qy)·sqrt(qx²+qy²)` preserves the left/right detector branch. The embedded preview and the
-independent viewer share this choice. Clicking or dragging in q mode snaps to the nearest detector cell,
-and switching qy/qr keeps the same detector-cell region while updating the Yoneda/cut coordinates.
-
-For responsive interaction, q-space images are drawn with an adaptive screen-resolution preview when the
-detector has more cells than the viewport can reveal. This affects rendering only: center picking, region
-snapping, Yoneda cuts, fitting and export continue to use the cached full-resolution detector image and q
-grids. Changing color, intensity scale, overlays or qy/qr reuses that cache; changing detector geometry
-rebuilds it once.
-
-### Cutting Selected Region
-
-After selecting the desired region or cut geometry, run the cut/integration action to generate a 1D curve. Inspect the generated curve before fitting.
-
-If a cut already exists, changing center, cut geometry, sampling, or detector setup refreshes that cut
-after a short debounce without changing the current page. Press Enter to apply a typed parameter
-immediately. Arrow-key and focused Alt/Option-wheel adjustments apply after the brief debounce so rapid
-changes remain smooth. Ordinary wheel scrolling never changes a numeric field.
-
-### Curve Layers
-
-The right-side `Curve` page uses one stable plot for both cut data and fitting output. Choose `Data only`
-to inspect the measured curve, `Compare` to overlay data and the current model, or `Model only` to inspect
-model layers. A successful explicit cut opens `Data only`; a successful `Plot Current Model` opens
-`Compare`. Automatic parameter refreshes never take the view away from the page you are inspecting.
-In `Overlay ±q`, positive-q measurements are blue and mirrored negative-q measurements are red in both
-the embedded and independent plots, so branch identity remains visible after both branches share `|q|`.
-
-### Plot Current Model
-
-`Plot Current Model` evaluates the currently selected model and parameter values without optimizing
-them. The command remains visible above the `Components`, `Global`, `Data & refine`, and `Auto fit`
-tabs, so parameters can be edited and replotted without switching to another tab. The fitting code
-includes physical-model components such as sphere, cylinder, vertical cylinder, structure factor,
-global scale/background, and resolution-related terms.
-
-### Auto Fitting / Auto Refine
-
-Auto Refine opens a parameter table before running least-squares optimization. Select the
-parameters to polish and edit their Min/Max bounds as needed. The current values are used as the
-starting point, so each selected range must include its current value. The built-in ranges are local
-windows around the current fit; resolution terms and global `k` are opt-in to avoid releasing strongly
-correlated scale terms by accident.
-
-With **Use current cut** checked, Auto Refine fits the current cut. With it unchecked, Auto Refine
-uses the imported 1D data. The dialog identifies the active source and the number of fitting points.
-The current q-display branch/combination, excluded points, and fitting range are applied consistently.
-
-If Auto Refine produces a better result than an AI fitting run, check that the same parameters, bounds, fixed/free selections, scale/background options, and data weighting are used in both workflows.
-
-### AI Auto Fitting
-
-The AI fitting workspace can generate candidate parameters, rank candidates, refine selected candidates, and export results. This workflow is currently under active development.
+**In-situ series** takes its set-up from Single analysis (*Use current setup*): the curve and the model
+shown there.
 
 Typical AI fitting outputs are written to:
 
@@ -239,9 +257,25 @@ restores the built-in value.
 
 The fitting model includes global scale and background terms. These are important for matching the measured intensity level and baseline.
 
-### Export Plot / Export Fitting Result
+### Export Plot / Export Data
 
-Use export actions to save plots, fitting results, and generated data. Export availability depends on the active result and workflow state.
+**Export Plot…** saves the plot as shown (data, model and components) as a publication figure: one
+journal column (8.5 cm) wide, PNG/TIFF at 600 dpi or SVG/PDF as vectors, like Analyze's figures and
+independent of the light/dark theme. **Export Data…** writes the curve, the fitted curve or the data used
+for fitting as text, with a header that records the parameters.
+
+### In-situ series
+
+1. In Analyze, list the frames (or a folder) and choose **Send to Fitting ▸ Send Series to Fitting…**;
+   every frame is exported (optionally summed N at a time) and the series opens here with the folder
+   and the pattern `*_fit_input.dat` filled in. Curves written by other tools work too.
+2. Fit one representative curve in Single analysis, then choose **Use current setup** to capture the
+   model and fit settings as a read-only Recipe (v1). Changing them in the series saves a new version
+   and never changes Single analysis.
+3. **Process sequence** fits the existing curves in natural order (a start / end / step range uses the
+   last number in each file name); **Start live watch** fits every new curve written into the folder.
+   A failing curve is recorded and the run continues (or stops, if chosen).
+4. **Results**: trend monitor, curve heatmap and **Export results…**.
 
 ## 5. GIMaP Predict Page
 
@@ -327,11 +361,239 @@ Detected functionality includes:
 
 **This feature is under development.**
 
-## 8. WAXS Page
+## 8. WAXS / GIWAXS
 
-The WAXS / in-situ workflow is embedded directly in the main GUI. Use the **WAXS** item in the left navigation panel to open it.
+Open WAXS or GIWAXS frames in **Analyze** (frames with scattering angles above 20° are reduced as GIWAXS
+automatically, or choose **GIWAXS**). The steps follow the usual processing:
 
-The embedded page supports `.nxs`, `.tif`, and `.tiff` input through **Open File** or drag-and-drop. For `.nxs` files, the frame selector is enabled when multiple frames are detected. The page includes a large detector preview with zoom/pan controls, display and mask settings, geometry parameters, Q-range cut controls, 1D integration, and batch/in-situ export controls.
+1. **Import and preprocess** (Mask & corrections): hot and dead pixels are left out automatically; draw
+   rectangles or polygons on the detector image, or load a mask file (JSON from GIMaP, or an EDF/TIFF image
+   of the same size where non-zero = masked); **Fill gaps from the mirror side** takes pixels without data
+   from their mirror position about the beam-centre column (GIWAXS is symmetric in ±q∥). Background,
+   gap guard and the valid intensity range are under Corrections. **Intensity corrections (GIWAXS)** —
+   off by default — divide by the solid angle of each pixel (cos³2θ), the polarisation (factor 0.95–0.99
+   at a synchrotron, 0 for a laboratory source) and the absorption in the film (thickness and attenuation
+   length; relative to αf = αi, without refraction). Peak positions do not change; intensities compared
+   across χ or q do (orientation, pole figures, crystallinity ratios). For photon counts the errors are
+   propagated (a corrected pixel's variance is its value divided by the factor); the JSON record says
+   what was corrected and how.
+2. **Calibration** when the frame has no geometry (the banner: Find Calibration Automatically, Enter
+   Geometry, Calibrate).
+3. **q map**: the view **q map** shows the intensity against q∥ (qr) and qz; **Cake** unwraps it onto χ and q.
+   **Save ▾** above the image saves the view as a figure or its data as a CSV table with the axes.
+4. **Cut regions** (Cuts step): the full ring, the in-plane and out-of-plane bands and the ring of I(χ) are
+   there from the start. To add your own cut, press **Ring**, **Sector** or **Spot** and click on the image
+   (detector, q map or cake; for a ring also on the I(q) plot): the region snaps to the peak there — centre and
+   FWHM fitted from the pixels, window = centre ± FWHM — and a note gives q, d and the FWHM (Undo is on the
+   note). **Add ▾** also draws a rectangle on the Cake view, adds presets, and saves or loads a set of cuts
+   (JSON) for the next data set. A region is a q range × a χ range (optionally both sides ±χ). Move and
+   resize it on the Cake view, or type its **centre ± half width** under the list; **Snap to Peak** re-centres
+   it on the nearest peak. Each region gives I(q) (upper plot) and I(χ) (lower plot) in its own colour, and is
+   outlined on the q map; **Sources** shows its pixels on the detector.
+5. **Results**: each plot has **Save ▾** (figure, or its curves as CSV); **Export** writes every curve with a
+   JSON record. **Run Automatic Analysis** adds peaks, orientation and sizes; while it runs, the Results tab
+   shows what it is doing, the phases done and the time, and **Stop** ends it before its next step (a slow step
+   such as the geometry or model fit finishes first — the panel says so). What it found is kept: **Save
+   Report…** or **Discard**.
+   Every image and plot has **Zoom** (drag a rectangle; Shift + drag works everywhere; Reset shows all again),
+   and a curve with a signed x (qy, χ) can be shown as both halves, one half, or both folded onto |x|.
+6. **In-situ and batch**: list the files (or open a multi-frame NeXus file) and use the **Series** tab: any
+   curve of any region as an intensity map against frame and q, a frame's curve, the intensity or the peak
+   (position, FWHM, area, height) in a q window against frame, and CSV export.
+7. **Batch Export…** — shown in the command bar, under the file list and in the Series tab as soon as more than
+   one frame is listed (Ctrl+Shift+E; also in the Export step, Export ▾, and on the Start page with a folder of raw frames):
+   one dialog in four groups — **Data** (a table per curve with every frame as a column; per-frame curves with σ;
+   the Fitting input; q maps; cakes — as CSV, tab-separated TXT or space-separated DAT), **Pictures** (the
+   detector image and/or the q map as PNG, TIFF, SVG or PDF), **Converted detector frames** (the data as TIFF,
+   EDF, NumPy or HDF5: a format conversion) and **Fitting** (optional: the peaks of the ring regions for GIWAXS,
+   a particle model of the horizontal cut for GISAXS; start values from the previous frame, the first frame, or
+   found anew; **Try on This Frame** shows the fit before the batch). Every option shows the file it writes;
+   the files of one kind go into their own subfolder, and `README.txt` says what each file is.
+   The choices and the folder are remembered. **Speed**: *Gentle* reduces one frame at a time (the
+   computer stays free), *Balanced* (default) and *Fast* several at once in separate processes at low
+   priority — as many as the cores and half of the free memory allow (a Lambda 9M frame needs about 1.4 GB
+   while it is reduced); a short batch stays one at a time. While it runs, a panel above the Results /
+   Series tabs shows the frames being reduced, how many are done, the time per frame and the time left, the
+   latest fit, **Pause** (no new frames) and **Stop** (the frames being reduced finish first — the panel
+   says so; everything written stays and the tables are written for the frames done); how many frames at
+   once can be lowered while running. The **Series** tab shows the map of every frame done so far, growing
+   as they come, with the newest frame's curve below it (click a row to look at another one); after the
+   batch the map stays there to explore and export. **Save Settings… / Load Settings…** keep the whole
+   set-up (geometry, masks, corrections, cut regions, export choices) as a file, so the next raw data
+   needs only: Batch Export… → folder → Export.
+
+   Example (Lambda 9M, 4727 × 3142 px, peak fitting on): one frame at a time about 2.5 s per frame; with
+   *Balanced* (4 at once) 41 frames took 31 s.
+8. **Colour limits**: next to every image is a histogram of the displayed values with two handles: drag them
+   (or the band between them) for a quick change — the mouse wheel over the bar zooms it for finer moves. **Levels
+   ▾** has *Auto for every frame* (each new frame gets its own limits) and the rule (1–99.7 %, 0.1–99.9 %, 5–95 %,
+   min–max, mean ± 3σ), **Min** / **Max** typed in intensity units, and **Auto Once**; a click on **Levels**
+   itself is Auto Once. Limits you drag or type stay — for other frames, re-analysis, the live Series map — until
+   Auto (the button then reads *Levels (fixed)*); they mean the same in log and linear display, and the detector,
+   q map, cake and Series map each keep their own — the Series map one per curve (I(q), I(χ), a region …), so
+   switching the curve does not carry one curve's limits to another. In **Batch Export ▸ Pictures**, *Colour scale*: each frame its
+   own limits (1–99.7 %), or the limits on screen for every frame, so the pictures can be compared (recorded in
+   the batch's JSON). This follows napari (auto-contrast once / continuous), Mantid (the Autoscale check box) and
+   silx / pyFAI (autoscale modes, typed limits).
+9. **Marks**: every image (detector, q map, cake, the Series map) has **Marks ▾**, every curve plot an eye
+   button: one switch per kind of mark drawn there — beam centre, sample horizon, cut bands, masks and cut
+   regions, the pixel overlay (masked pixels, curve sources), marked hot / dead pixels, the q box, the colour
+   bar, the window band of a plot — plus Show All / Hide All. Hidden marks stay hidden when the frame changes
+   and next session; pressing **Sources** or **Show Masked Pixels** shows the pixel overlay again. The marks you
+   made can be removed from the same menu: **Remove the Drawn Masks**, **Remove All Cut Regions**, **Remove
+   the q Box** (Undo brings them back). Single regions are shown or hidden with their check box in the list.
+   The calibration preview has its own switches (masked pixels, rings, beam centre lines, Clean image).
+   On the **q map** the beam centre is the direct beam, q∥ (qy) = 0, qz = 0 — just below the map, which starts at
+   the sample horizon (drawn dashed at qz = k sin αi); Fit view keeps it in sight. It is moved on the detector
+   image.
+10. **Undo / Redo** (↶ ↷ in the command bar, `Ctrl+Z`, `Ctrl+Shift+Z` or `Ctrl+Y`): every change of the
+   set-up — a mask drawn, a region added or moved, a band dragged, the profile, αi or the mode, the
+   corrections, a settings file loaded, an AI card applied — is one step; the tooltip says what the next
+   Undo or Redo changes (“Undo: cut regions”). A drag or a quick series of the same edits is one step. The
+   instrument profiles themselves (a calibration saved) are not undone this way.
+
+### Process with AI (GIWAXS assistant)
+
+**Process with AI…** (Analyze toolbar, or **Tools ▸ Process with AI…**, `Ctrl+Shift+L`)
+lets Claude analyse the GIWAXS frame shown in Analyze with the same tools you use: it switches the
+mode, adjusts sectors, sets the I(χ) window, fits peaks and exports files, and the page follows
+every step on screen. The **Claude** panel on the right shows a summary of Claude's reasoning,
+each tool call (hover for its arguments and result) and, at the end, the report.
+
+The AI can think with one of three **brains** (Settings ▸ Assistant, or *Brain* in the start
+dialog):
+
+- **Claude Code — your Claude plan (default)**: GIMaP runs your local Claude Code in the
+  background, so the run counts against your Claude Pro or Max plan and needs no API key. Claude
+  Code must be installed (the Claude desktop app includes it) and signed in once: **Settings ▸
+  Assistant ▸ Sign In…** opens a window running `claude auth login`; choose your Claude account,
+  then press **Check**. Claude Code gets only the GIMaP tools — no shell, files or web — and no
+  API key is passed to it. Model and effort are set in Settings (empty model = Claude Code's
+  default).
+- **Claude API — API key**: billed per token. Install the SDK once (`pip install anthropic`) and
+  add a key in **Settings ▸ Assistant** (or set `ANTHROPIC_API_KEY`); **Test Connection** checks
+  the key and model.
+- **Other AI provider — OpenAI-compatible API**: DeepSeek, Qwen (Alibaba Cloud Model Studio),
+  OpenAI, Kimi, Zhipu GLM, Google Gemini (its compatible endpoint), OpenRouter, SiliconFlow, Azure
+  OpenAI, or a model on your own computer or lab server (Ollama, LM Studio, vLLM, any compatible
+  service). In **Settings ▸ Assistant ▸ Other AI providers** pick the provider (the address is filled
+  in; change it for a local server or Azure), save its key (or set the provider's environment
+  variable, e.g. `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`), choose a model (typed, suggested, or
+  **Get List** from the provider) and **Test Connection** — it sends one tiny request with a tool,
+  because the model must support tool calling. Keys stay in the user data folder, one per provider.
+
+1. Open a GIWAXS frame with its instrument profile, then click **Process with AI…** and choose:
+   - the results: *Peak table* (q, d, FWHM, intensity, significance), *Orientation* (in-plane
+     versus out-of-plane intensity of each peak), *Orientation distribution of one ring* (I(χ),
+     maxima, Herman's orientation factor; pick the ring or let Claude choose), *Crystallite size*
+     (Scherrer coherence length);
+   - optional notes on the sample and what you want to know;
+   - **Permissions**: *Preview first* (recommended for new users: every settings change the AI
+     makes is undone when it finishes and comes back as a card to apply), *Ask me before writing
+     files or changing corrections* (a dialog appears for
+     each such action; a refusal is respected) or *Fully automatic* (everything is still logged);
+   - whether Claude may see a small image of the q map (qualitative only), and the report language.
+2. **Stop** ends a run at any time. The report lists each requested result as *done*, *partial* or
+   *not available* with the reason (for example "no peak above 3σ between 0.2 and 2.0 Å⁻¹"), and
+   the tables below it come from the tool results, not from Claude's text. **Save Report…**
+   writes an HTML report and a JSON record next to the data (`gimap_analysis/`).
+
+**Baseline first, then questions.** Claude may start with GIMaP's standard procedure in one step
+(*run_standard_pipeline*: geometry, the last frames of a series, peaks, in-/out-of-plane, ring
+orientation and sizes of the strongest reliable peaks and of the ring you asked about, each
+decision with its reason). Its choices are defaults, not limits: Claude then follows what your
+question needs — the start of an in-situ series, lines every sample shares, peak ratios, a peak
+the baseline skipped — and marks interpretations as hypotheses, with the numbers behind them.
+
+**Changes you can preview, apply and undo.** The AI's answer is not only text. Every change it
+makes to Analyze (sector widths, a custom sector, a q box, the frame, the mode, αi, the radial bins,
+the valid intensity range) is recorded, and it can suggest changes without making them. They appear
+as cards under **Changes** in the panel: a picture of the q map with the change, the setting in
+words, why the AI suggests it, and **Apply**, **Dismiss** or **Undo**; **Undo All** takes back every
+applied change. In *Preview first* the AI's own exploration is restored at the end: a setting the AI
+proposed a value for shows only that proposal; otherwise the net change of each setting remains as
+a card, and changes that ended where they started or changed nothing visible are left out.
+
+**Follow-up questions.** When a run has finished, type a question under the report (*Ask a
+follow-up…*, e.g. “Why is there almost no signal in the in-plane sector?”) and press **Ask**: a
+new run on the same frame and settings answers it, knowing what the previous run found, and can
+bring new cards.
+
+**A frame without geometry.** When no instrument profile matches the frame, the AI does not stop.
+Files or folders you name in the notes (or in the standing instructions) are read and searched
+first — e.g. *“the calibration is D:\beamtime\calib\img_0005.cbf, 11.8 keV”*. It also searches the
+frame's folder and subfolders, the parent and all sibling folders, two folders up with their
+subfolders and calibration / log folders three up, and can search any folder further up or down
+(read-only) for
+
+- calibration results — pyFAI `.poni` files and calibrations saved by GIMaP's Geometry
+  Calibration (`.json`);
+- images of a calibration standard — the standard is taken from the file or folder name (AgBH /
+  silver behenate, LaB6, CeO2, a LaB6 + CeO2 mixture; Si, Al2O3 and Cr2O3 are recognised but
+  cannot be fitted yet); a multi-module NeXus series (`*_m01.nxs` … `*_m11.nxs`) counts as one image;
+- logs and parameter files (`.log`, `.fio`, `.txt` …) that state the energy, the distance, the beam
+  centre or the incidence angle.
+
+It prefers a calibration of the same kind of detector file taken before the frame, with
+*giwaxs*/*waxs* and *final*/*redone* in its name, fits standard images with GIMaP's calibration and
+judges a fit by where the standard's lines land in q: within 0.2 % on average is good, within 0.5 %
+usable. (The ring-fit residual in pixels is not used for this: on a tilted wide-angle detector a
+good calibration can leave several pixels.) When the name does not say which standard an image
+shows, it fits every standard and compares the same way.
+Only when the numbers cannot decide, or the energy is nowhere to be found, a **Claude asks** dialog
+lists the options with their file times and folders (or asks you to type the value). Files within
+two folders above the frame and files you named are read without asking; other files are read
+after you agree (confirm mode) or with a note in the panel (automatic mode). Hidden and system
+folders (`.ssh`, `AppData`, `Windows` …) are never read. The chosen geometry is saved as the instrument profile of the detector — in
+the confirm mode after you approve it — and the report states which file, standard and values it
+came from.
+
+What is sent: the frame's status (file name, geometry, settings) and the reduced curves as
+numbers; the detector file itself is never sent, and the q-map image only when allowed. The panel
+shows the tokens of each run: with Claude Code also the plan's usage-limit warnings and the cost at
+API prices (for comparison — a plan is not billed per token); with the API the estimated cost.
+The API brain's default model is `claude-opus-5` (effort *high*); its requests use Anthropic's
+server-side fallback for declined requests. Every
+run is recorded in the user data folder (`assistant_runs/`), and analyses Claude found missing are
+collected in `assistant_feature_requests.jsonl` so they can be added later.
+
+Limits: Scherrer sizes are lower bounds of the coherence length unless the instrumental width is
+known, and broad halos (FWHM above 15 % of q) get none; Herman's factor assumes a film that is
+isotropic in its plane and weighs each |χ| by sin χ, so it is given only when at least 80 % of that
+weight is measured (the part near the sample plane counts most); with a partly measured ring the
+report also gives f of a random ring over the same |χ|, the value to compare with. Regions far
+below the diffuse background at the same q (under 20 %: a shadow, an absorber or an insensitive
+detector area) count as unmeasured, and a sector lying in one is not compared. Intensity next to
+the qz axis may be unmeasured (missing wedge). Peaks one or two bins wide far above the
+background are marked as spikes (hot pixels, module edges), not diffraction. Claude uses
+crystallographic labels such as (100) or edge-on only when the sample notes or the data make the
+assignment clear.
+
+### Without the window: command line, Codex and other agents
+
+`tools/gimap_agent.py` runs the same tools without the GIMaP window, for scripts and for other
+agents (Codex reads `AGENTS.md`, which points to `docs/agents/giwaxs-playbook.md`):
+
+```bash
+python tools/gimap_agent.py auto sample_A_00001_m01.nxs sample_B_00001_m01.nxs --notes "alpha_i = 0.4 deg"
+```
+
+`auto` performs the standard procedure — geometry (a saved instrument profile, or the best
+calibration found around the frame, checked by its lines), the last ten frames of a series summed,
+peaks, in-/out-of-plane, ring orientation and sizes of the strongest reliable peaks — and writes
+for every frame a `report.md` with each decision and its reason, the curves as CSV, the q map, and a
+`summary.md` for the batch (later frames of the same detector reuse the first calibration). What
+only you know goes under *Needs attention* with the option that supplies it (`--incidence-deg`,
+`--energy-kev`, `--pixel-size-um`, `--calibration`, `--standard`); αi, the energy and the pixel
+size are also read from `--notes` when it states exactly one value. Results go to the user data
+folder (`assistant_runs/cli/`) or `--out`, never next to the data; saved instrument profiles are
+read but not changed. `auto` is a baseline, not the whole analysis: `status`, `find-calibration`,
+`tools` and `call` (a JSON list of tool calls) give finer control, and `mcp` serves every tool over
+MCP stdio for Codex or Claude Code (`open_frame`, then `run_standard_pipeline` and the others on the
+same frame). The playbook describes both levels — the baseline every agent runs, and the questions
+a capable agent follows up — and `tools/eval_giwaxs_agent.py` evaluates them on a real case
+(`baseline`: what the procedure must get right; `report`: mistakes and findings in an agent's
+written report).
 
 ## 9. Geometry Calibration Tool
 
@@ -398,7 +660,8 @@ AI fitting model discovery is handled separately and searches fitting-model fold
 
 ### File Cannot Be Loaded
 
-Check that the file format is supported by the active loader. For detector formats such as `.cbf`, confirm that `fabio` is installed. For HDF5/Nexus-like files, confirm that `h5py` is installed and that the internal dataset path matches what the loader expects. If support for a custom file format is required, please contact yufeng.zhai@desy.de.
+The message under the image says why in words (empty file, not a detector image, damaged or
+incomplete NeXus, no permission). Otherwise, check that the file format is supported by the active loader. For detector formats such as `.cbf`, confirm that `fabio` is installed. For HDF5/Nexus-like files, confirm that `h5py` is installed and that the internal dataset path matches what the loader expects. If support for a custom file format is required, please contact yufeng.zhai@desy.de.
 
 ### Model Not Imported
 
@@ -434,7 +697,10 @@ Confirm that the output folder exists and is writable. Avoid exporting into prot
 
 ### GUI Layout Too Large for Small Screen
 
-The GUI contains dense scientific controls. Use a larger display, maximize the window, or adjust system scaling if controls are clipped. For the best user experience, a 1080p or higher-resolution screen is recommended.
+GIMaP uses the display scaling of the operating system and a compact layout that fits a
+1280 × 720 screen. If text is too large or too small, use **View ▸ Font Size** or
+**Tools ▸ Settings ▸ Appearance**; dense panels scroll instead of being clipped. The window
+size and position are restored at the next start.
 
 ## 12. FAQ
 

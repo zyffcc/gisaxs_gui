@@ -216,11 +216,29 @@ def test_new_source_does_not_depend_on_legacy_compatibility_packages() -> None:
     assert not violations, "新架构源码不得反向依赖 legacy compatibility package：\n" + "\n".join(violations)
 
 
+def test_deleted_compatibility_aliases_do_not_regrow() -> None:
+    """The top-level alias packages and internal legacy bridges were removed."""
+    regrown = [
+        str(path.relative_to(PROJECT_ROOT))
+        for root in ("calibration", "controllers", "trainset", "ui", "WAXS")
+        for path in (PROJECT_ROOT / root).rglob("*.py")
+    ]
+    regrown += [
+        str(path.relative_to(PROJECT_ROOT))
+        for path in (PROJECT_ROOT / "utils").glob("*.py")
+        if path.name != "__init__.py"
+    ]
+    regrown += [
+        str(path.relative_to(PROJECT_ROOT))
+        for path in GIMAP_ROOT.rglob("*.py")
+        if path.name in {"legacy_bridge.py", "legacy_controller.py"}
+    ]
+    assert not regrown, "兼容别名已删除，调用方应直接导入 owner 模块：\n" + "\n".join(regrown)
+
+
 def test_production_source_does_not_use_internal_legacy_bridges() -> None:
     violations: list[str] = []
     for file_path in sorted(GIMAP_ROOT.rglob("*.py")):
-        if file_path.name in {"legacy_bridge.py", "legacy_controller.py"}:
-            continue
         for module_name, line_number in _imported_names(
             file_path.read_text(encoding="utf-8")
         ):
@@ -265,40 +283,27 @@ def test_shared_does_not_import_feature_implementations() -> None:
     assert not violations, "Shared 不得反向依赖 feature 实现：\n" + "\n".join(violations)
 
 
-def test_global_params_singleton_is_confined_to_app_composition_root() -> None:
-    allowed = {GIMAP_ROOT / "app" / "bootstrap.py"}
+def test_settings_live_in_the_user_store_only() -> None:
+    """The legacy ``core`` settings singletons and ``config`` modules are gone."""
+    assert not list((PROJECT_ROOT / "core").glob("*.py"))
+    assert not list((PROJECT_ROOT / "config").glob("*.py"))
     violations: list[str] = []
     for file_path in sorted(GIMAP_ROOT.rglob("*.py")):
-        if file_path in allowed:
-            continue
-        source = file_path.read_text(encoding="utf-8")
-        if "core.global_params" in source:
-            violations.append(str(file_path.relative_to(PROJECT_ROOT)))
-
-    assert not violations, "global_params 只能在 AppContext composition root 适配：\n" + "\n".join(
-        violations
-    )
-
-
-def test_legacy_user_preferences_singleton_is_confined_to_app_composition_root() -> None:
-    allowed = {GIMAP_ROOT / "app" / "bootstrap.py"}
-    violations: list[str] = []
-    for file_path in sorted(GIMAP_ROOT.rglob("*.py")):
-        if file_path in allowed:
-            continue
-        source = file_path.read_text(encoding="utf-8")
-        if "core.user_settings" in source:
-            violations.append(str(file_path.relative_to(PROJECT_ROOT)))
-
-    assert not violations, "user_settings 只能在 AppContext composition adapter 适配：\n" + "\n".join(
-        violations
-    )
+        for module_name, line_number in _absolute_imported_names(
+            file_path.read_text(encoding="utf-8")
+        ):
+            if module_name.split(".", maxsplit=1)[0] in {"core", "config"}:
+                relative_path = file_path.relative_to(PROJECT_ROOT)
+                violations.append(f"{relative_path}:{line_number}: {module_name}")
+    assert not violations, "设置只能经由 AppContext 的 user store：\n" + "\n".join(violations)
 
 
 def test_runtime_python_modules_do_not_regrow_into_monoliths() -> None:
     """Require an explicit architecture review before a runtime module exceeds 600 lines."""
 
-    runtime_roots = ("src", "controllers", "ui", "trainset", "utils")
+    # ``utils/ML_Fitting_1D_GISAXS`` is research tooling that the GUI only
+    # launches as a subprocess; it is not part of the application runtime.
+    runtime_roots = ("src",)
     violations: list[str] = []
     for root_name in runtime_roots:
         for file_path in sorted((PROJECT_ROOT / root_name).rglob("*.py")):

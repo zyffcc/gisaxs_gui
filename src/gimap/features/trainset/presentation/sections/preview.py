@@ -29,7 +29,6 @@ from PyQt5.QtWidgets import (
 
 from src.gimap.app.presentation import (
     JobStatus,
-    apply_design_system,
 )
 
 from src.gimap.app.presentation.section_bindings import (
@@ -77,7 +76,6 @@ class PreviewMixin:
             ui.previewPanelContent,
             ui.previewPanelContentLayout,
         )
-        apply_design_system(page)
         intro = QLabel(
             "Simulation-first preview: BornAgain creates the scattering pattern. Choose any sampled physics, background or noise range "
             "to compare its minimum, midpoint and maximum without using the experimental image as training data."

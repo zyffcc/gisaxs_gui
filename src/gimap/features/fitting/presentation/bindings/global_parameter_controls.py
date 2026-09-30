@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.theme import set_role
 from ..binding_primitives import (
     _scientific_commands,
 )
@@ -76,12 +77,10 @@ class GlobalParameterControlsMixin:
         """No description."""
         if hasattr(self.ui, "FittingAutoKButton"):
             if self._auto_k_enabled:
-                self.ui.FittingAutoKButton.setStyleSheet(
-                    "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; }"
-                )
+                set_role(self.ui.FittingAutoKButton, "success")
                 self.ui.FittingAutoKButton.setText("Auto-K: ON")
             else:
-                self.ui.FittingAutoKButton.setStyleSheet("")
+                set_role(self.ui.FittingAutoKButton, None)
                 self.ui.FittingAutoKButton.setText("Auto-K: OFF")
             self._sync_global_secondary_button_widths()
 

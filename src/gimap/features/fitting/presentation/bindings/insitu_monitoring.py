@@ -28,6 +28,8 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.components import MplBoxZoom
+
 from ..binding_primitives import (
     GISAXS_IMAGE_COLORMAPS,
     is_matplotlib_available,
@@ -36,20 +38,6 @@ from ..binding_primitives import (
 
 class InsituMonitoringMixin:
     """Own insitu monitoring presentation behavior."""
-
-    def _create_selection_from_current_cut_controls(self):
-        try:
-            geometry = self._insitu_cut_geometry()
-            if not geometry:
-                return None
-            return self._create_selection_from_parameters(
-                geometry["center_parallel_px"],
-                geometry["center_vertical_px"],
-                geometry["cut_parallel_px"],
-                geometry["cut_vertical_px"],
-            )
-        except Exception:
-            return None
 
     def _draw_insitu_workflow_curve_preview(self):
         holder = getattr(self, "_insitu_workflow_canvas_curve", None)
@@ -78,8 +66,7 @@ class InsituMonitoringMixin:
             log_x = self._is_fit_log_x_enabled()
             log_y = self._is_fit_log_y_enabled()
             normalize = self._is_fit_norm_enabled()
-            # 函数说明：实现 prepare pair 相关逻辑。
-            def prepare_pair(x_values, y_values, source="cut"):
+            def prepare_pair(x_values, y_values, source="1d"):
                 x = np.asarray(x_values, dtype=float).reshape(-1)
                 y = np.asarray(y_values, dtype=float).reshape(-1)
                 n = min(x.size, y.size)
@@ -95,18 +82,15 @@ class InsituMonitoringMixin:
                 x = self._convert_q_values_for_display(x, source=source)
                 return x, y
 
-            if getattr(self, "current_cut_data", None) is not None:
-                x, y = prepare_pair(
-                    self.current_cut_data.get("x_coords", []),
-                    self.current_cut_data.get("y_intensity", []),
-                    source="cut",
-                )
+            curve = getattr(self, "current_1d_data", None)
+            if isinstance(curve, dict):
+                x, y = prepare_pair(curve.get("q", []), curve.get("I", []), source=curve)
                 if x.size and y.size:
                     ax.plot(
-                        x, y, marker="o", markersize=3, linewidth=1.4, color="#1f77b4", label="Cut"
+                        x, y, marker="o", markersize=3, linewidth=1.0, color="#1f77b4", label="Curve"
                     )
             if isinstance(getattr(self, "fitting", None), dict):
-                source = self.fitting.get("meta", {}).get("data_source", "cut")
+                source = self.fitting.get("meta", {}).get("data_source", "1d")
                 fx, fy = prepare_pair(
                     self.fitting.get("q", []), self.fitting.get("I", []), source=source
                 )
@@ -117,7 +101,7 @@ class InsituMonitoringMixin:
                 ax.set_yscale("log")
             self._apply_fit_y_axis_limits(ax, log_y=log_y)
             self._draw_roi_guides_if_active(ax)
-            ax.set_title("Cut / fitting curve")
+            ax.set_title((curve or {}).get("file_path", "Curve").replace("\\", "/").split("/")[-1])
             ax.set_xlabel(self._build_q_axis_label())
             ax.set_ylabel("Normalized Intensity" if normalize else "Intensity (a.u.)")
             ax.grid(True, alpha=0.3)
@@ -137,8 +121,14 @@ class InsituMonitoringMixin:
         self._schedule_insitu_heatmap_refresh(force=True)
 
     def _append_insitu_heatmap_cut(self, q_values, intensity_values):
-        """Append a cut using a chunked matrix, interpolating onto the first q grid."""
-        q = np.asarray(q_values, dtype=float).reshape(-1)
+        """Append a curve to a chunked matrix, interpolated onto the first curve's q grid.
+
+        q is stored in the display unit (nm⁻¹ or Å⁻¹) of the curve plots.
+        """
+        q = np.asarray(
+            self._convert_q_values_for_display(np.asarray(q_values, dtype=float), source="1d"),
+            dtype=float,
+        ).reshape(-1)
         values = np.asarray(intensity_values, dtype=float).reshape(-1)
         n = min(q.size, values.size)
         if n <= 0:
@@ -186,12 +176,12 @@ class InsituMonitoringMixin:
             return
         if not is_matplotlib_available():
             QMessageBox.warning(
-                self._insitu_workflow_parent_widget(), "Cut Heatmap", "Matplotlib is required."
+                self._insitu_workflow_parent_widget(), "Curve Heatmap", "Matplotlib is required."
             )
             return
         try:
             dialog = QDialog(self._insitu_workflow_parent_widget())
-            dialog.setWindowTitle("In-situ Cut Heatmap")
+            dialog.setWindowTitle("In-situ Curve Heatmap")
             dialog.resize(980, 680)
             dialog.setModal(False)
             dialog.setAttribute(Qt.WA_DeleteOnClose, True)
@@ -227,7 +217,7 @@ class InsituMonitoringMixin:
             layout.addLayout(controls)
             holder = self._make_insitu_monitor_canvas(dialog)
             layout.addWidget(holder, 1)
-            status = QLabel("Waiting for auto-cut data...", dialog)
+            status = QLabel("Waiting for curves…", dialog)
             layout.addWidget(status)
             self._insitu_heatmap_dialog = dialog
             self._insitu_heatmap_widgets = {
@@ -252,7 +242,7 @@ class InsituMonitoringMixin:
             self._refresh_insitu_heatmap(reset_view=True)
             dialog.show()
         except Exception as exc:
-            self._log_insitu_workflow(f"Cut heatmap failed: {exc}", "ERROR")
+            self._log_insitu_workflow(f"Curve heatmap failed: {exc}", "ERROR")
 
     def _clear_insitu_heatmap_refs(self):
         self._insitu_heatmap_dialog = None
@@ -296,7 +286,7 @@ class InsituMonitoringMixin:
             ax.text(
                 0.5,
                 0.5,
-                "Waiting for auto-cut data...",
+                "Waiting for curves…",
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
@@ -305,7 +295,7 @@ class InsituMonitoringMixin:
             self._insitu_heatmap_artist = None
             self._insitu_heatmap_colorbar = None
             if status is not None:
-                status.setText("Waiting for auto-cut data...")
+                status.setText("Waiting for curves…")
             canvas.draw_idle()
             return
         from matplotlib.colors import LogNorm, Normalize
@@ -342,7 +332,7 @@ class InsituMonitoringMixin:
                 norm=norm,
             )
             ax.set_xlabel("Sequence number")
-            ax.set_ylabel(r"$q$ (nm$^{-1}$)")
+            ax.set_ylabel(f"q ({self._get_q_unit_label()})")
             self._insitu_heatmap_artist = artist
             self._insitu_heatmap_colorbar = fig.colorbar(artist, ax=ax, label="Intensity (a.u.)")
             fig.tight_layout()
@@ -358,7 +348,7 @@ class InsituMonitoringMixin:
                 self._insitu_heatmap_colorbar.update_normal(artist)
         if status is not None:
             status.setText(
-                f"{count} cut(s) | q points: {len(q)} | color range: {lo:.6g} to {hi:.6g}"
+                f"{count} curve(s) | q points: {len(q)} | color range: {lo:.6g} to {hi:.6g}"
             )
         canvas.draw_idle()
 
@@ -428,6 +418,7 @@ class InsituMonitoringMixin:
                 canvas = FigureCanvasQTAgg(figure)
                 holder._insitu_figure = figure
                 holder._insitu_canvas = canvas
+                holder._insitu_zoom = MplBoxZoom(canvas)
                 layout.addWidget(canvas)
                 return holder
             except (ImportError, RuntimeError):

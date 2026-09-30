@@ -98,34 +98,21 @@ class JsonDetectorCatalogAdapter:
 
 
 class SettingsGeometryAdapter:
-    """通过 SettingsRepository 读取并保存共享 geometry settings。"""
+    """Keep the last applied calibration in the shared settings.
+
+    ``detector.*`` holds the geometry in calibration convention (numpy pixel
+    indices, row 0 at the top) and ``beam.*`` the energy; the instrument
+    profile Analyze uses is recorded separately (see ``RecordInstrumentProfile``).
+    """
 
     def __init__(self, settings: SettingsRepository):
         self.settings = settings
 
     def current_geometry(self, defaults: dict[str, float]) -> dict[str, float]:
+        """The last applied geometry; ``defaults`` fill in what was never stored."""
         return {
-            "distance": float(
-                self.settings.get(
-                    "fitting",
-                    "detector.distance",
-                    defaults["distance"],
-                )
-            ),
-            "beam_center_x": float(
-                self.settings.get(
-                    "fitting",
-                    "detector.beam_center_x",
-                    defaults["beam_center_x"],
-                )
-            ),
-            "beam_center_y": float(
-                self.settings.get(
-                    "fitting",
-                    "detector.beam_center_y",
-                    defaults["beam_center_y"],
-                )
-            ),
+            key: float(self.settings.get("detector", key, defaults[key]))
+            for key in ("distance", "beam_center_x", "beam_center_y")
         }
 
     def apply(self, result: CalibrationResult) -> dict[str, float]:
@@ -139,7 +126,6 @@ class SettingsGeometryAdapter:
         }
         for key, value in geometry.items():
             self.settings.set("detector", key, value)
-            self.settings.set("fitting", f"detector.{key}", value)
         self.settings.set(
             "detector",
             "rotation_deg",

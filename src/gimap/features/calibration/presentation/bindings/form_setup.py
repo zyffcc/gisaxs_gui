@@ -19,8 +19,8 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.app.presentation import apply_design_system
 
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
@@ -41,71 +41,11 @@ class FormSetupMixin:
     """Own form setup presentation behavior."""
 
     def _apply_dialog_style(self) -> None:
-        self.setStyleSheet("""
-                QPushButton#primaryCalibrationButton {
-                    background: #2563eb; color: white; border: 1px solid #1d4ed8;
-                    border-radius: 6px; padding: 7px 14px; font-weight: 600;
-                }
-                QPushButton#primaryCalibrationButton:hover { background: #1d4ed8; }
-                QPushButton#primaryCalibrationButton:disabled {
-                    background: #cbd5e1; color: #64748b; border-color: #cbd5e1;
-                }
-                QPushButton#previewActionButton, QPushButton#manualRefineButton {
-                    border: 1px solid #cbd5e1; border-radius: 6px;
-                    background: #f8fafc; padding: 6px 11px;
-                }
-                QPushButton#previewActionButton:hover, QPushButton#manualRefineButton:hover {
-                    background: #eef2ff; border-color: #94a3b8;
-                }
-                QPushButton#manualRefineButton:checked {
-                    background: #e0e7ff; border-color: #6366f1; color: #312e81;
-                }
-                QLabel#overlayLegend {
-                    background: #1f2937; color: white; border-radius: 6px;
-                    padding: 6px 10px;
-                }
-                QLabel#previewInfo { color: #475569; padding: 1px 2px; }
-                QGroupBox#manualRefinementGroup {
-                    border: 1px solid #cbd5e1; border-radius: 8px;
-                    margin-top: 12px; padding-top: 10px; font-weight: 600;
-                }
-                QLabel#manualHint { color: #475569; font-weight: 400; }
-            """)
-        # Keep the key actions visually stable under the host application's
-        # interchangeable light/dark themes, some of which install broad
-        # QPushButton rules after child widgets have been constructed.
-        self.calibrate_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #2563eb; color: white;
-                    border: 1px solid #1d4ed8; border-radius: 6px;
-                    padding: 7px 14px; font-weight: 600;
-                }
-                QPushButton:hover { background-color: #1d4ed8; }
-                QPushButton:disabled {
-                    background-color: #cbd5e1; color: #64748b;
-                    border-color: #cbd5e1;
-                }
-            """)
-        preview_style = """
-                QPushButton {
-                    background-color: #f8fafc; color: #1f2937;
-                    border: 1px solid #cbd5e1; border-radius: 6px;
-                    padding: 6px 11px;
-                }
-                QPushButton:hover { background-color: #eef2ff; border-color: #94a3b8; }
-                QPushButton:checked {
-                    background-color: #e0e7ff; color: #312e81;
-                    border-color: #6366f1;
-                }
-                QPushButton:disabled { color: #94a3b8; background-color: #f1f5f9; }
-            """
-        for button in (
-            self.fit_image_button,
-            self.clean_preview_button,
-            self.expand_preview_button,
-            self.manual_refine_button,
-        ):
-            button.setStyleSheet(preview_style)
+        """Semantic roles only; colours come from the application theme."""
+        set_role(self.calibrate_button, "primary")
+        set_role(self.overlay_legend, "overlay")
+        for label in (self.preview_info_label, self.manual_hint):
+            set_role(label, "muted")
 
     def _bind_form(self) -> None:
         """Attach behavior and dynamic content to the Designer-owned form."""
@@ -158,16 +98,6 @@ class FormSetupMixin:
             self.calibrationManualContent,
             self.calibrationManualContentLayout,
         )
-        for section in (
-            self.calibration_input_section,
-            self.calibration_advanced_section,
-            self.calibration_run_section,
-            self.calibration_preview_panel,
-            self.calibration_results_section,
-            self.calibration_manual_section,
-            self.calibration_export_section,
-        ):
-            apply_design_system(section)
 
         self.standard_combo.addItem("Auto Detect", "auto")
         for standard in self.view_model.standard_options():
@@ -217,9 +147,6 @@ class FormSetupMixin:
             '<span style="color:#f8fafc">Other theoretical</span>'
         )
         self.overlay_legend.setAttribute(Qt.WA_StyledBackground, True)
-        self.overlay_legend.setStyleSheet(
-            "background-color: #1f2937; color: #f8fafc; border-radius: 6px; padding: 6px 10px;"
-        )
         self.overlay_legend.setVisible(False)
 
         self.result_labels = {
@@ -255,6 +182,7 @@ class FormSetupMixin:
         self.log_check.toggled.connect(self.redraw_preview)
         self.mask_check.toggled.connect(self.redraw_preview)
         self.rings_check.toggled.connect(self.redraw_preview)
+        self.center_check.toggled.connect(self.redraw_preview)
         self.fit_image_button.clicked.connect(self.fit_preview_to_image)
         self.clean_preview_button.toggled.connect(self._clean_preview_toggled)
         self.expand_preview_button.clicked.connect(self._toggle_preview_expanded)

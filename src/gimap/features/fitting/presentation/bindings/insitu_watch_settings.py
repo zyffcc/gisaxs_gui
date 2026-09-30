@@ -1,4 +1,4 @@
-"""Insitu Watch Settings for fitting presentation."""
+"""Settings, folder choice and status line of the In-situ curve series."""
 
 from __future__ import annotations
 
@@ -6,21 +6,15 @@ import os
 
 import numpy as np
 
-
-from PyQt5.QtWidgets import (
-    QFileDialog,
-)
+from PyQt5.QtWidgets import QFileDialog
 
 from src.gimap.shared.file_paths import normalize_path
 
-from ..binding_primitives import (
-    _ai_catalog,
-)
-from ..detector_data_access import analysis_image_for
+from ..views.insitu_workflow_controls import PLOT_ONLY
 
 
 class InsituWatchSettingsMixin:
-    """Own insitu watch settings behavior."""
+    """Own in-situ settings, the source folder and the status widgets."""
 
     def _is_auto_show_enabled(self) -> bool:
         return (
@@ -46,76 +40,33 @@ class InsituWatchSettingsMixin:
 
     def _insitu_workflow_settings(self) -> dict:
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
+
+        def read(key, default, getter):
+            widget = widgets.get(key)
+            return getter(widget) if widget is not None else default
+
+        fitting = read("fit_mode", 0, lambda widget: widget.currentIndex()) != PLOT_ONLY
         settings = {
-            "run_mode": widgets.get("run_mode").currentText()
-            if widgets.get("run_mode")
-            else "Process Existing Sequence",
-            "auto_show": bool(widgets.get("auto_show").isChecked())
-            if widgets.get("auto_show")
-            else False,
-            "auto_cut": bool(widgets.get("auto_cut").isChecked())
-            if widgets.get("auto_cut")
-            else False,
-            "auto_fit": bool(widgets.get("auto_fit").isChecked())
-            if widgets.get("auto_fit")
-            else False,
-            "use_previous": bool(widgets.get("use_previous").isChecked())
-            if widgets.get("use_previous")
-            else True,
-            "full_auto_fit": bool(widgets.get("full_auto_fit").isChecked())
-            if widgets.get("full_auto_fit")
-            else False,
-            "profile": (
-                str(widgets.get("profile").currentText())
-                if widgets.get("profile")
-                else _ai_catalog(self).default_profile_name
+            "run_mode": read(
+                "run_mode", "Process Existing Sequence", lambda widget: widget.currentText()
             ),
-            "auto_refine": bool(widgets.get("auto_refine").isChecked())
-            if widgets.get("auto_refine")
-            else False,
-            "poll_interval": float(widgets.get("poll").value()) if widgets.get("poll") else 2.0,
-            "fit_every": int(widgets.get("fit_every").value()) if widgets.get("fit_every") else 1,
-            "ui_every": int(widgets.get("ui_every").value()) if widgets.get("ui_every") else 5,
-            "wait_stable": bool(widgets.get("stable").isChecked())
-            if widgets.get("stable")
-            else True,
-            "source_kind": (
-                "nxs"
-                if widgets.get("source_kind")
-                and widgets["source_kind"].currentText() == "NXS module series"
-                else "cbf"
-            ),
-            "recursive": bool(widgets.get("recursive").isChecked())
-            if widgets.get("recursive")
-            else True,
-            "nxs_module_count": int(widgets.get("nxs_module_count").value())
-            if widgets.get("nxs_module_count")
-            else 1,
+            "auto_show": True,
+            "auto_fit": fitting,
+            "full_auto_fit": fitting,
+            "use_previous": False,
+            "auto_refine": False,
+            "poll_interval": read("poll", 2.0, lambda widget: float(widget.value())),
+            "fit_every": 1,
+            "ui_every": read("ui_every", 5, lambda widget: int(widget.value())),
+            "wait_stable": read("stable", True, lambda widget: bool(widget.isChecked())),
+            "recursive": read("recursive", False, lambda widget: bool(widget.isChecked())),
         }
         view_model = getattr(self, "fitting_view_model", None)
         recipe = getattr(getattr(view_model, "insitu", None), "recipe", None)
         if recipe is not None and recipe.model.get("workflow_v5"):
             enabled = not recipe.model.get("extract_only", False)
-            settings.update(auto_fit=enabled, full_auto_fit=enabled,
-                            use_previous=False, auto_refine=False)
+            settings.update(auto_fit=enabled, full_auto_fit=enabled)
         return settings
-
-
-    def _update_insitu_source_kind_ui(self):
-        widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-        pattern = widgets.get("sequence_pattern")
-        kind = self._insitu_workflow_settings().get("source_kind", "cbf")
-        if pattern is not None:
-            previous = pattern.text().strip().lower()
-            if not previous or previous in {"*.cbf", "*.nxs"}:
-                pattern.setText("*.nxs" if kind == "nxs" else "*.cbf")
-            pattern.setPlaceholderText("*.nxs" if kind == "nxs" else "*.cbf")
-        module_editor = widgets.get("nxs_module_count")
-        if module_editor is not None:
-            module_editor.setVisible(kind == "nxs")
-            page = getattr(self.ui, "fittingInsituSeriesPage", None)
-            if page is not None:
-                page.ui.workflowControls.nxsModuleCountLabel.setVisible(kind == "nxs")
 
     def _update_insitu_run_mode_ui(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
@@ -135,24 +86,26 @@ class InsituWatchSettingsMixin:
         self._refresh_insitu_workflow_status()
 
     def _populate_insitu_sequence_folder_default(self):
+        """Suggest the folder of the Single-analysis curve (usually Analyze's gimap_analysis)."""
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         edit = widgets.get("sequence_folder")
         if edit is None:
             return
-        try:
-            current = self.current_parameters.get("imported_gisaxs_file", "")
-            folder = os.path.dirname(current) if current else ""
-            if folder:
-                edit.setText(folder)
-        except Exception:
-            pass
+        current = (getattr(self, "current_1d_data", None) or {}).get("file_path") or getattr(
+            self, "current_1d_file_path", ""
+        )
+        folder = os.path.dirname(str(current)) if current else ""
+        text = edit.text().strip()
+        if folder and (not text or text == getattr(self, "_insitu_suggested_folder", None)):
+            edit.setText(folder)
+            self._insitu_suggested_folder = folder
 
     def _browse_insitu_sequence_folder(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
         edit = widgets.get("sequence_folder")
         start = edit.text().strip() if edit is not None else ""
         folder = QFileDialog.getExistingDirectory(
-            self._insitu_workflow_parent_widget(), "Select In-situ Sequence Folder", start
+            self._insitu_workflow_parent_widget(), "Select the Folder of Curves", start
         )
         if folder and edit is not None:
             edit.setText(normalize_path(folder))
@@ -162,8 +115,6 @@ class InsituWatchSettingsMixin:
         if message:
             self._log_insitu_workflow(message)
         self._refresh_insitu_workflow_status()
-        if state == "Error":
-            self._restore_single_analysis_runtime()
 
     def _log_insitu_workflow(self, message: str, level: str = "INFO"):
         text = f"[In-situ Workflow][{level}] {message}"
@@ -209,35 +160,30 @@ class InsituWatchSettingsMixin:
                 ),
                 "cache": str(self._insitu_session_cache_path()),
             }
+            prefixes = {
+                "file": "Current curve: ",
+                "processed": "Done: ",
+                "failed": "Failed: ",
+                "queue": "Queue: ",
+            }
             for key, value in values.items():
-                if key in labels and labels[key] is not None:
-                    if key == "file":
-                        labels[key].setText(f"Current image: {value}")
-                    elif key == "processed":
-                        labels[key].setText(f"Done: {value}")
-                    elif key == "failed":
-                        labels[key].setText(f"Failed: {value}")
-                    elif key == "queue":
-                        labels[key].setText(f"Queue: {value}")
-                    else:
-                        labels[key].setText(value)
+                label = labels.get(key)
+                if label is not None:
+                    label.setText(prefixes.get(key, "") + value)
+            state = self._insitu_workflow_state
+            running = state in ("Watching", "Processing", "Paused")
             start_btn = widgets.get("start")
-            pause_btn = widgets.get("pause")
-            stop_btn = widgets.get("stop")
-            running = self._insitu_workflow_state in ("Watching", "Processing", "Paused")
             if start_btn is not None:
-                start_btn.setEnabled(not running or self._insitu_workflow_state == "Paused")
-                start_btn.setText(
-                    "Resume" if self._insitu_workflow_state == "Paused" else "Start Watch"
-                )
+                start_btn.setEnabled(not running or state == "Paused")
+                start_btn.setText("Resume" if state == "Paused" else "Start Watch")
             process_btn = widgets.get("process")
             if process_btn is not None:
-                process_btn.setEnabled(not running or self._insitu_workflow_state == "Paused")
-                process_btn.setText(
-                    "Resume" if self._insitu_workflow_state == "Paused" else "Start Process"
-                )
+                process_btn.setEnabled(not running or state == "Paused")
+                process_btn.setText("Resume" if state == "Paused" else "Start Process")
+            pause_btn = widgets.get("pause")
             if pause_btn is not None:
-                pause_btn.setEnabled(self._insitu_workflow_state in ("Watching", "Processing"))
+                pause_btn.setEnabled(state in ("Watching", "Processing"))
+            stop_btn = widgets.get("stop")
             if stop_btn is not None:
                 stop_btn.setEnabled(running or bool(getattr(self, "_insitu_workflow_busy", False)))
             page = getattr(self.ui, "fittingInsituSeriesPage", None)
@@ -249,36 +195,22 @@ class InsituWatchSettingsMixin:
                     "Paused": "paused",
                     "Error": "failed",
                 }
-                total = int(getattr(self, "_insitu_workflow_processed_count", 0)) + len(
-                    getattr(self, "_insitu_workflow_queue", []) or []
-                )
                 processed = int(getattr(self, "_insitu_workflow_processed_count", 0))
-                progress = None if self._insitu_workflow_state == "Watching" else (
+                total = processed + len(getattr(self, "_insitu_workflow_queue", []) or [])
+                progress = None if state == "Watching" else (
                     0.0 if total == 0 else processed / total
                 )
                 page.ui.jobStatus.set_state(
-                    status_map.get(self._insitu_workflow_state, "idle"),
+                    status_map.get(state, "idle"),
                     f"{processed} processed · "
                     f"{int(getattr(self, '_insitu_workflow_failed_count', 0))} failed",
                     progress=progress,
                 )
-                rows = self._load_insitu_session_records()
-                page.render_records(rows)
+                page.render_records(self._load_insitu_session_records())
                 current = getattr(self, "_insitu_workflow_current_record", None)
                 if isinstance(current, dict):
                     page.set_step_state(
                         "source", page._normalize_step_state(current.get("load_status"))
-                    )
-                    page.set_step_state(
-                        "preprocess",
-                        page._normalize_step_state(current.get("preprocess_status")),
-                    )
-                    page.set_step_state(
-                        "geometry",
-                        page._normalize_step_state(current.get("geometry_status")),
-                    )
-                    page.set_step_state(
-                        "cut", page._normalize_step_state(current.get("cut_status"))
                     )
                     page.set_step_state(
                         "fit", page._normalize_step_state(current.get("fit_status"))
@@ -287,18 +219,11 @@ class InsituWatchSettingsMixin:
             pass
 
     def _insitu_current_batch_label(self) -> str:
-        batch = getattr(self, "_insitu_workflow_processing_batch", None) or []
+        current = getattr(self, "_insitu_workflow_processing_file", None)
         try:
-            if len(batch) > 1:
-                first = self._insitu_frame_for_token(batch[0]).display_name
-                last = self._insitu_frame_for_token(batch[-1]).display_name
-                return f"{first} -> {last} ({len(batch)} frames)"
-            if len(batch) == 1:
-                return self._insitu_frame_for_token(batch[0]).display_name
+            return self._insitu_frame_for_token(current).display_name if current else "-"
         except Exception:
-            pass
-        current = self._insitu_workflow_processing_file
-        return self._insitu_frame_for_token(current).display_name if current else "-"
+            return "-"
 
     def _format_optional_float(self, value):
         try:
@@ -311,69 +236,14 @@ class InsituWatchSettingsMixin:
 
     def _refresh_insitu_workflow_step_styles(self):
         widgets = getattr(self, "_insitu_workflow_widgets", {}) or {}
-        cut_valid, _message = self._validate_current_cut_settings()
-        show_valid = bool(
-            analysis_image_for(self) is not None
-            or self.current_parameters.get("imported_gisaxs_file")
-        )
-        fit_valid = self._has_active_fitting_template()
-        previous_valid = self._insitu_workflow_last_fit_params is not None
-        style_map = {
-            "auto_show": "color: #16803c;" if show_valid else "color: #b00020;",
-            "auto_cut": "color: #16803c;" if cut_valid else "color: #b00020;",
-            "auto_fit": "color: #16803c;" if fit_valid else "color: #b00020;",
-            "use_previous": "color: #16803c;" if previous_valid else "color: #b00020;",
-            "full_auto_fit": "color: #16803c;" if fit_valid else "color: #b00020;",
-            "auto_refine": "color: #16803c;"
-            if self.fitting_view_model.storage.dependency_available("scipy")
-            else "color: #b00020;",
-        }
-        for key, style in style_map.items():
-            widget = widgets.get(key)
-            if widget is None:
-                continue
-            widget.setStyleSheet(style if widget.isChecked() else "color: #202124;")
-        auto_fit_enabled = bool(widgets.get("auto_fit") and widgets["auto_fit"].isChecked())
-        for key in ("use_previous", "full_auto_fit", "auto_refine"):
-            widget = widgets.get(key)
-            if widget is not None:
-                widget.setEnabled(auto_fit_enabled)
-        heatmap_button = widgets.get("heatmap")
-        if heatmap_button is not None:
-            heatmap_button.setEnabled(
-                bool(widgets.get("auto_cut") and widgets["auto_cut"].isChecked())
-            )
         page = getattr(self.ui, "fittingInsituSeriesPage", None)
-        if page is not None:
-            page.set_step_state("source", "configured" if show_valid else "pending")
-            page.set_step_state("preprocess", "configured")
-            page.set_step_state("geometry", "configured")
-            page.set_step_state("cut", "configured" if cut_valid else "error")
-            page.set_step_state("fit", "configured" if fit_valid else "pending")
-        self._draw_insitu_workflow_region_preview()
+        if page is None:
+            return
+        folder = widgets.get("sequence_folder")
+        has_folder = folder is not None and bool(folder.text().strip())
+        recipe = self.fitting_view_model.insitu.recipe
+        page.set_step_state("source", "configured" if has_folder else "pending")
+        page.set_step_state("fit", "configured" if recipe is not None else "pending")
 
-    def _validate_current_cut_settings(self):
-        try:
-            analysis_image = analysis_image_for(self)
-            if analysis_image is None:
-                return False, "No image loaded"
-            geometry = self._insitu_cut_geometry()
-            vertical_value = geometry.get("cut_vertical_px", 0.0)
-            parallel_value = geometry.get("cut_parallel_px", 0.0)
-            if vertical_value <= 0 or parallel_value <= 0:
-                return False, "Cut width/height must be positive"
-            info = self._create_selection_from_current_cut_controls()
-            if not info:
-                return False, "Cut ROI unavailable"
-            bounds = info.get("bounds", {})
-            height, width = analysis_image.shape
-            if (
-                bounds.get("x_max", 0) <= 0
-                or bounds.get("y_max", 0) <= 0
-                or bounds.get("x_min", width) >= width
-                or bounds.get("y_min", height) >= height
-            ):
-                return False, "Cut ROI is outside the image"
-            return True, "OK"
-        except Exception as exc:
-            return False, str(exc)
+
+__all__ = ["InsituWatchSettingsMixin"]

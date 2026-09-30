@@ -19,6 +19,7 @@ from ..domain import (
     candidate_parameter_mapping,
     verify_and_rank_candidates,
 )
+from ..domain.native_solution import NativeSolutionMapping, native_solution_mapping
 
 
 class GenerateCandidates:
@@ -84,6 +85,10 @@ class ReviewCandidates:
 class MapCandidateParameters:
     def execute(self, row: Mapping[str, Any]) -> CandidateParameterMapping:
         return candidate_parameter_mapping(row)
+
+    def native(self, row: Mapping[str, Any]) -> NativeSolutionMapping:
+        """A quick-fit (``native_v5``) solution in the manual model's parameters, and how well they reproduce it."""
+        return native_solution_mapping(row)
 
 
 class LoadCandidateResults:

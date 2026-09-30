@@ -58,7 +58,7 @@ def main() -> int:
         for name in ("fitting", "prediction", "trainset", "classification")
         if getattr(window.runtime, name, None) is not None
     )
-    if window.mainWindowWidget.count() != 5 or len(bindings) != 4:
+    if window.mainWindowWidget.count() != 6 or len(bindings) != 4:
         raise RuntimeError(
             f"Unexpected workspace composition: pages={window.mainWindowWidget.count()}, "
             f"bindings={bindings}"

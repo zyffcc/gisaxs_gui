@@ -1,121 +1,31 @@
-"""Signal Connections for fitting presentation."""
+"""Signal wiring of the curve-first Fitting workspace."""
 
 from __future__ import annotations
 
-
 from PyQt5.QtCore import Qt
+
+from src.gimap.app.presentation.theme import theme_manager
 
 
 class SignalConnectionsMixin:
-    """Own signal connections behavior."""
+    """Connect the curve, model and fitting controls to their handlers."""
 
     def _setup_connections(self):
-        """No description."""
-        if hasattr(self.ui, "gisaxsInputImportButton"):
-            self.ui.gisaxsInputImportButton.clicked.connect(self._import_gisaxs_file)
-
-        if self._previous_image_button is not None:
-            self._previous_image_button.clicked.connect(self._show_previous_folder_image)
-        if self._next_image_button is not None:
-            self._next_image_button.clicked.connect(self._show_next_folder_image)
-
-        if hasattr(self.ui, "gisaxsInputImportButtonValue"):
-            self.ui.gisaxsInputImportButtonValue.returnPressed.connect(
-                self._on_import_value_changed
-            )
-
-        if hasattr(self.ui, "gisaxsInputStackValue"):
-            self.ui.gisaxsInputStackValue.returnPressed.connect(self._on_stack_value_changed)
-
-        if hasattr(self.ui, "gisaxsInputShowButton"):
-            self.ui.gisaxsInputShowButton.clicked.connect(self._show_image)
-
-        if hasattr(self.ui, "fittingPickCenterButton"):
-            self.ui.fittingPickCenterButton.toggled.connect(
-                self._toggle_main_center_tool
-            )
-        if hasattr(self.ui, "fittingSelectRegionButton"):
-            self.ui.fittingSelectRegionButton.toggled.connect(
-                self._toggle_main_region_tool
-            )
-        if hasattr(self.ui, "fittingResetDetectorViewButton"):
-            self.ui.fittingResetDetectorViewButton.clicked.connect(
-                self._reset_main_detector_view
-            )
-        if hasattr(self.ui, "fittingInteractiveDetectorButton"):
-            self.ui.fittingInteractiveDetectorButton.clicked.connect(self._open_interactive_detector)
-        if hasattr(self.ui, "fittingOpenDetectorWindowButton"):
-            self.ui.fittingOpenDetectorWindowButton.clicked.connect(
-                self._show_independent_window
-            )
-
-        if hasattr(self.ui, "gisaxsInputAutoShowCheckBox"):
-            self.ui.gisaxsInputAutoShowCheckBox.toggled.connect(self._on_auto_show_changed)
-
-        if hasattr(self.ui, "gisaxsInputModelCombox"):
-            try:
-                self.ui.gisaxsInputModelCombox.currentTextChanged.connect(
-                    self._on_load_mode_changed
-                )
-            except Exception:
-                pass
-
-        if hasattr(self.ui, "gisaxsInputIntLogCheckBox"):
-            self.ui.gisaxsInputIntLogCheckBox.toggled.connect(self._on_log_changed)
-
-        if hasattr(self.ui, "gisaxsInputAutoScaleCheckBox"):
-            self.ui.gisaxsInputAutoScaleCheckBox.toggled.connect(self._on_auto_scale_changed)
-
-        if hasattr(self.ui, "gisaxsInputDisplayModeQ"):
-            self.ui.gisaxsInputDisplayModeQ.toggled.connect(self._on_q_mode_changed)
-        if hasattr(self.ui, "gisaxsInputDisplayModePixel"):
-            self.ui.gisaxsInputDisplayModePixel.toggled.connect(self._on_q_mode_changed)
-
-        if hasattr(self.ui, "gisaxsInputCenterAutoFindingButton"):
-            self.ui.gisaxsInputCenterAutoFindingButton.clicked.connect(self._auto_find_center)
-
-        if hasattr(self.ui, "gisaxsInputCutButton"):
-            self.ui.gisaxsInputCutButton.clicked.connect(lambda _checked=False: self._perform_cut())
-        if hasattr(self.ui, "gisaxsOptimizeCenterXButton"):
-            self.ui.gisaxsOptimizeCenterXButton.clicked.connect(self._optimize_center_x)
-
-        detector_panel = getattr(self.ui, "fittingDetectorSetupPanel", None)
-        if detector_panel is not None:
-            detector_panel.settings_applied.connect(self._on_detector_parameters_changed)
-        elif hasattr(self.ui, "gisaxsInputDetectorParaButton"):
-            self.ui.gisaxsInputDetectorParaButton.clicked.connect(self._show_detector_parameters)
-
-        if hasattr(self.ui, "gisaxsInputGraphicsView"):
-            preview_view = self.ui.gisaxsInputGraphicsView
-            preview_view.setToolTip(
-                "Drop a CBF, NXS, or TIFF file here to load it. Double-click to open a larger window."
-            )
-            preview_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            preview_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            preview_view.setAlignment(Qt.AlignCenter)
-            preview_view.mouseDoubleClickEvent = self._on_graphics_view_double_click
-            preview_view.setAcceptDrops(True)
-            preview_view.installEventFilter(self)
-            preview_view.viewport().setAcceptDrops(True)
-            preview_view.viewport().installEventFilter(self)
-
         if hasattr(self.ui, "fitGraphicsView"):
-            self.ui.fitGraphicsView.setToolTip(
-                "Double-click to open a larger independent fit window."
-            )
-            self.ui.fitGraphicsView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            self.ui.fitGraphicsView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            self.ui.fitGraphicsView.setAlignment(Qt.AlignCenter)
-            self.ui.fitGraphicsView.mouseDoubleClickEvent = self._on_fit_graphics_view_double_click
-            self.ui.fitGraphicsView.installEventFilter(self)
+            view = self.ui.fitGraphicsView
+            view.setToolTip("Double-click to open a larger independent fit window.")
+            view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            view.setAlignment(Qt.AlignCenter)
+            view.mouseDoubleClickEvent = self._on_fit_graphics_view_double_click
+            view.installEventFilter(self)
         if hasattr(self.ui, "fittingOpenResultWindowButton"):
             self.ui.fittingOpenResultWindowButton.clicked.connect(
                 lambda _checked=False: self._on_fit_graphics_view_double_click(None)
             )
 
-        if hasattr(self.ui, "fitStartButton"):
-            self.ui.fitStartButton.clicked.connect(self._start_fitting)
-
+        if hasattr(self.ui, "fitResetButton"):
+            self.ui.fitResetButton.clicked.connect(self._reset_fitting)
         if hasattr(self.ui, "FittingClearFittingButton_2"):
             self.ui.FittingClearFittingButton_2.clicked.connect(self._clear_fitting_data)
 
@@ -132,47 +42,37 @@ class SignalConnectionsMixin:
                 self._on_curve_view_mode_changed
             )
 
-        for _name in ["fitBGShowCheckBox", "fitResShowCheckBox"]:
-            if hasattr(self.ui, _name):
-                try:
-                    getattr(self.ui, _name).toggled.connect(self._on_component_checkbox_changed)
-                except Exception:
-                    pass
+        for name in ("fitBGShowCheckBox", "fitResShowCheckBox"):
+            if hasattr(self.ui, name):
+                getattr(self.ui, name).toggled.connect(self._on_component_checkbox_changed)
 
         if hasattr(self.ui, "OthersNormalizeCheckBox"):
             self.ui.OthersNormalizeCheckBox.toggled.connect(self._on_normalize_changed)
         if hasattr(self.ui, "fitNormCheckBox"):
             self.ui.fitNormCheckBox.toggled.connect(self._on_normalize_changed)
 
-        if hasattr(self.ui, "PositiveOnlyCheckBox"):
-            self.ui.PositiveOnlyCheckBox.toggled.connect(self._on_positive_only_changed)
-        if hasattr(self.ui, "fitRegionPositiveOnlyCheckBox"):
-            self.ui.fitRegionPositiveOnlyCheckBox.toggled.connect(self._on_positive_only_changed)
-        if hasattr(self.ui, "fitRegionNegativeOnlyCheckBox"):
-            self.ui.fitRegionNegativeOnlyCheckBox.toggled.connect(self._on_positive_only_changed)
-
-        if hasattr(self.ui, "fitResetButton"):
-            self.ui.fitResetButton.clicked.connect(self._reset_fitting)
+        for name in ("PositiveOnlyCheckBox", "fitRegionPositiveOnlyCheckBox", "fitRegionNegativeOnlyCheckBox"):
+            if hasattr(self.ui, name):
+                getattr(self.ui, name).toggled.connect(self._on_positive_only_changed)
 
         if hasattr(self.ui, "fitImport1dFileButton"):
             self.ui.fitImport1dFileButton.clicked.connect(self._import_1d_file)
-
         if hasattr(self.ui, "fitImport1dFileValue"):
             self.ui.fitImport1dFileValue.returnPressed.connect(self._on_1d_file_value_changed)
 
         if hasattr(self.ui, "FittingExportButton"):
             self.ui.FittingExportButton.clicked.connect(self._export_fitting_data)
-
+        if hasattr(self.ui, "fitExportPlotButton"):
+            self.ui.fitExportPlotButton.clicked.connect(self._export_plot)
+        theme_manager().changed.connect(self._restyle_curve_plots)
         if hasattr(self.ui, "FittingManualFittingButton"):
             self.ui.FittingManualFittingButton.clicked.connect(
                 lambda _checked=False: self._perform_manual_fitting(reveal_result=True)
             )
-
         if hasattr(self.ui, "FittingAutoRefineButton"):
             self.ui.FittingAutoRefineButton.clicked.connect(
                 lambda _checked=False: self._show_manual_auto_refine_dialog("local")
             )
-
         if hasattr(self.ui, "FittingGlobalSearchButton"):
             self.ui.FittingGlobalSearchButton.clicked.connect(
                 lambda _checked=False: self._show_manual_auto_refine_dialog("global")
@@ -223,101 +123,10 @@ class SignalConnectionsMixin:
         if hasattr(self.ui, "FittingAutoKButton"):
             self.ui.FittingAutoKButton.clicked.connect(self._on_auto_k_button_clicked)
 
-        if hasattr(self.ui, "fitCurrentDataCheckBox"):
-            self.ui.fitCurrentDataCheckBox.toggled.connect(self._on_current_data_checkbox_changed)
-
-        self._connect_cutline_parameter_signals(
-            mode=self._default_signal_mode,
-            overrides=self._signal_mode_overrides,
-        )
-
-        self._connect_parameter_widgets()
-
         self._setup_fitting_text_browser()
         self._setup_fitting_parameters_context_menu()
         self._refresh_ai_fitting_models()
         self._restore_main_ai_settings()
 
-    def _connect_cutline_parameter_signals(self, mode: str = "changed", overrides: dict = None):
-        """Register Cut Line, center, and color-scale widgets with global parameter persistence.
 
-        Args:
-            mode: Signal mode. Use ``changed`` for live value updates or ``finished`` for commit-only updates.
-            overrides: Optional per-widget signal mode overrides.
-        """
-        mapping = [
-            ("gisaxsInputCenterVerticalValue", "center_vertical"),
-            ("gisaxsInputCenterParallelValue", "center_parallel"),
-            ("gisaxsInputCutLineVerticalValue", "cutline_vertical"),
-            ("gisaxsInputCutLineParallelValue", "cutline_parallel"),
-            ("gisaxsInputVminValue", "vmin"),
-            ("gisaxsInputVmaxValue", "vmax"),
-        ]
-        overrides = overrides or {}
-        for widget_name, param_key in mapping:
-            if not hasattr(self.ui, widget_name):
-                continue
-            w = getattr(self.ui, widget_name)
-
-            # 函数说明：实现 after commit 相关逻辑。
-            def _after_commit(info, value, p=param_key):
-                try:
-                    if p in ("vmin", "vmax"):
-                        self._on_color_scale_value_committed()
-                        self._add_fitting_message(f"Meta commit GISAXS {p} = {value}", "INFO")
-                        self._refresh_insitu_workflow_step_styles()
-                        return
-                    self._on_parameter_display_changed()
-                    self._add_fitting_message(f"Meta commit GISAXS {p} = {value}", "INFO")
-                    self._refresh_insitu_workflow_step_styles()
-                except Exception:
-                    pass
-
-            widget_mode = overrides.get(widget_name, mode)
-            meta = {
-                "persist": "settings",
-                "key_path": ("fitting", f"gisaxs_input.{param_key}"),
-                "trigger_fit": False,
-                "debounce_ms": self._param_debounce_ms,
-                "epsilon_abs": self._param_abs_eps,
-                "epsilon_rel": self._param_rel_eps,
-                "after_commit": _after_commit,
-                "connect_mode": widget_mode,
-            }
-            self.param_trigger_manager.register_parameter_widget(
-                widget=w,
-                widget_id=f"meta_gisaxs_{param_key}",
-                category="gisaxs_input",
-                immediate_handler=lambda v: None,
-                delayed_handler=None,
-                connect_signals=True,
-                meta=meta,
-            )
-
-    def _restore_gisaxs_input_parameters(self):
-        """Restore persisted GISAXS input and Cut Line values after widget setup."""
-        mapping = [
-            ("gisaxsInputCenterVerticalValue", "center_vertical", 0.0),
-            ("gisaxsInputCenterParallelValue", "center_parallel", 0.0),
-            ("gisaxsInputCutLineVerticalValue", "cutline_vertical", 10.0),
-            ("gisaxsInputCutLineParallelValue", "cutline_parallel", 10.0),
-            ("gisaxsInputVminValue", "vmin", None),
-            ("gisaxsInputVmaxValue", "vmax", None),
-        ]
-        for widget_name, param_key, default_value in mapping:
-            if not hasattr(self.ui, widget_name):
-                continue
-            try:
-                value = self.fitting_view_model.get_setting(
-                    "fitting", f"gisaxs_input.{param_key}", default_value
-                )
-                if value is None:
-                    continue
-                widget = getattr(self.ui, widget_name)
-                old_block_state = widget.blockSignals(True)
-                try:
-                    widget.setValue(float(value))
-                finally:
-                    widget.blockSignals(old_block_state)
-            except Exception:
-                continue
+__all__ = ["SignalConnectionsMixin"]

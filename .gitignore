@@ -154,6 +154,7 @@ config/*~
 # 用户本地配置
 config/user_parameters.json
 config/user_settings.json
+config/instrument_profiles.json
 
 # 测试输出
 test_output/
@@ -195,3 +196,11 @@ plots/
 * Raman临时处理
 raman_*
 raman_*/
+
+# 研究、验证与开发资料（本地保留，不进仓库）
+research/
+validation/
+modules/Fitting_1D_Model/Workflow_v5/development/
+
+# 分析输出（写在数据旁边）
+gimap_analysis/

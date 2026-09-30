@@ -1,4 +1,4 @@
-"""SettingsRepository 的 JSON 与 legacy global_params 实现。"""
+"""In-memory and plain-JSON SettingsRepository implementations (tests, tools, exports)."""
 
 from __future__ import annotations
 
@@ -89,36 +89,3 @@ class JsonSettingsRepository(InMemorySettingsRepository):
             json.dumps(self._values, indent=4, ensure_ascii=False),
             encoding="utf-8",
         )
-
-
-class GlobalParamsSettingsRepository:
-    """把 legacy GlobalParameterManager 暴露为新的 SettingsRepository。"""
-
-    def __init__(self, manager):
-        self._manager = manager
-
-    def get(self, section: str, key: str, default: Any = None) -> Any:
-        return self._manager.get_parameter(section, key, default)
-
-    def set(self, section: str, key: str, value: Any) -> None:
-        self._manager.set_parameter(section, key, value)
-
-    def get_section(self, section: str) -> dict[str, Any]:
-        return self._manager.get_module_parameters(section)
-
-    def update_section(self, section: str, values: dict[str, Any]) -> None:
-        self._manager.set_module_parameters(section, values)
-
-    def snapshot(self) -> dict[str, dict[str, Any]]:
-        return self._manager.get_all_parameters()
-
-    def reload(self) -> None:
-        user_path = getattr(self._manager, "user_params_file", None)
-        if user_path:
-            self._manager.load_parameters(user_path)
-
-    def save(self) -> None:
-        self._manager.save_user_parameters()
-
-    def reset(self) -> None:
-        self._manager.reset_to_initial_parameters()

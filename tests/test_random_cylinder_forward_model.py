@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.special import j1
 
-from utils.fitting import _gaussian_grid, cylinder_form_factor_pd
+from src.gimap.features.fitting.domain.scattering_model import _gaussian_grid, cylinder_form_factor_pd
 
 
 def _scalar_reference(q, radius, sigma_radius, height, sigma_height, *, n_r, n_h, n_orient, nsig=4.0):

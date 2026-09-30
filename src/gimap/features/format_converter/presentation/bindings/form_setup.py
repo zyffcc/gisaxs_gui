@@ -12,7 +12,6 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.app.presentation import apply_design_system
 
 
 from src.gimap.app.presentation.section_bindings import (
@@ -146,4 +145,3 @@ class FormSetupMixin:
 
         self._update_frame_editor()
         self._update_step_header()
-        apply_design_system(self)

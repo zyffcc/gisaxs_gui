@@ -40,7 +40,6 @@ from .bindings.run_state import RunStateMixin
 from .bindings.session_export import SessionExportMixin
 from .bindings.selection_controls import SelectionControlsMixin
 from .bindings.formatting import FormattingMixin
-from .bindings.compatibility_slots import CompatibilitySlotsMixin
 
 __all__ = ["ClassificationViewBinding"]
 
@@ -58,7 +57,6 @@ class ClassificationViewBinding(
     SessionExportMixin,
     SelectionControlsMixin,
     FormattingMixin,
-    CompatibilitySlotsMixin,
     QObject,
 ):
     """Translate Qt events and ViewModel results into presentation state."""

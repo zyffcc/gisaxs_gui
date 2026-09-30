@@ -204,9 +204,9 @@ class InputSelectionMixin:
             QMessageBox.information(self, "Frame selection", "Select one or more input rows first.")
             return
         try:
-            waxs = getattr(getattr(self.parent(), "components", None), "waxs_page", None)
+            analyze = getattr(getattr(self.parent(), "components", None), "analyze_page", None)
             current_frame = getattr(
-                getattr(waxs, "frame_spin", None),
+                getattr(analyze, "frame_spin", None),
                 "value",
                 lambda: 1,
             )()

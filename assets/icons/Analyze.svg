@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254">
+  <!-- Analyze: a detector frame with a cut band and the resulting curve. -->
+  <g fill="none" stroke="#6aff8f" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="120" y="160" width="620" height="620" rx="40"/>
+    <line x1="120" y1="470" x2="740" y2="470"/>
+    <circle cx="430" cy="600" r="46"/>
+    <polyline points="820,1080 900,980 960,760 1010,1000 1060,880 1134,1080"/>
+    <line x1="780" y1="1100" x2="1160" y2="1100"/>
+  </g>
+</svg>

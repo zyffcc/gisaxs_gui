@@ -32,4 +32,3 @@ class PageShellMixin:
             20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )
         self.gridLayout_38.addItem(spacerItem, 2, 0, 1, 1)
-        self.gisaxsInputBox = QtWidgets.QGroupBox(self.gisaxsFittingPageScrollAreaWidgetContents)

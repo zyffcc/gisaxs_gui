@@ -1,198 +1,125 @@
 # 科学数据流契约
 
 - **Status**: Current
-- **Scope**: detector image 从导入、科学预处理、显示到派生分析结果的数据所有权与谱系
-- **Related code**: `src/gimap/features/fitting/domain/detector_image.py`、
-  `src/gimap/features/fitting/application/scientific.py`、
-  `src/gimap/features/fitting/presentation/bindings/image_display_options.py`、
-  `src/gimap/features/prediction/infrastructure/adapters/module_preprocessing.py`、
-  `modules/Au_Silicon_15nm/preprocess.py`
-- **Related tests**: `tests/test_fitting_detector_data_flow.py`、
-  `tests/test_fitting_domain_image_transforms.py`、`tests/test_cut_fitting_stack.py`、
-  `tests/test_prediction_adapters.py`
-- **Last verified**: 2026-09-04
+- **Scope**: 探测器帧从读取、有效像素、校正、几何到曲线，再到 Fitting 的数据所有权与谱系；
+  显示状态与科学数据的边界
+- **Related code**: `src/gimap/shared/detector_io/`、`src/gimap/shared/geometry/`、
+  `src/gimap/features/analyze/domain/`（`validity.py`、`corrections.py`、`binning.py`、`gisaxs.py`、
+  `giwaxs.py`、`symmetry.py`）、`src/gimap/features/analyze/application/use_cases.py`、
+  `src/gimap/features/analyze/infrastructure/adapters/csv_export.py`、
+  `src/gimap/features/fitting/infrastructure/adapters/local_files.py`、
+  `src/gimap/features/fitting/presentation/bindings/workflow_v5_binding.py`、
+  `src/gimap/features/prediction/infrastructure/adapters/module_preprocessing.py`
+- **Related tests**: `tests/test_analyze_domain.py`、`tests/test_analyze_frames_and_center.py`、
+  `tests/test_analyze_fit_input_contract.py`、`tests/test_analyze_workspace.py`、
+  `tests/test_stable_metadata_ui.py`、`tests/test_prediction_adapters.py`
+- **Last verified**: 2026-09-28
 
 ## 目的
 
-用户在 detector preview 中看到的科学预处理结果，必须与 Yoneda/center finding、ROI、cut、
-fitting、batch processing 和 processed-data export 实际消费的数据一致。任何下游流程不得因为
-方便或历史字段仍然存在而隐式回到刚读入的原始数组。
-
-本契约区分科学数据和纯显示状态。不是所有可视化选项都会改变科学输入：Flip UD、threshold、
-mask、detector correction 和 mirror-fill 属于 scientific preprocessing；colormap、vmin/vmax、
-log intensity 和 overlay 只决定如何渲染。
+用户在 Analyze 中看到的曲线，必须就是导出、送到 Fitting、以及 in-situ 序列实际使用的观测。
+任何下游流程不得因为方便而重新读取原始数组、另做一套掩码或插值。显示选项（色图、强度范围、
+log、q map / detector 视图、缩放）只决定怎么画，不改变任何科学数值。
 
 ```mermaid
 flowchart LR
-    A["导入文件"] --> B["RawImage<br/>不可修改的原始数组"]
-    B --> C["PreprocessingConfig<br/>Flip / Threshold / Mask / Mirror-fill"]
-    C --> D["AnalysisImage<br/>唯一的科学处理后数组"]
-
-    D --> E["Detector Preview"]
-    D --> F["Yoneda / Center Finding"]
-    D --> G["ROI / Cut"]
-    G --> H["Fitting"]
-    D --> I["Processed Data Export"]
-
-    B --> J["明确选择的 Raw Export"]
-    K["DisplayState<br/>Colormap / Vmin / Vmax / Log intensity / Overlay"] --> E
+    A["文件<br/>CBF / NXS / TIFF"] --> B["Frame<br/>float32 数据 + loader mask<br/>规范方向（第 0 行在上）"]
+    B --> C["valid = 有限 ∧ ≥ 0 ∧ ¬mask"]
+    C --> D["Sum N frames（可选）"]
+    D --> E["校正：背景 → gap guard → 有效范围"]
+    E --> F["几何：instrument profile<br/>+ 会话 / 文件头中心、αi"]
+    F --> G["GISAXS：Yoneda 带的原生列平均<br/>+ 束流中心列的原生行平均"]
+    F --> H["GIWAXS：径向 bins、扇区、q 框、I(χ)"]
+    G --> I["Curve：x (Å⁻¹)、I、σ、pixels"]
+    H --> I
+    I --> J["导出 CSV + _analysis.json"]
+    I --> K["_fit_input.dat<br/>q I σ pixels + # observation"]
+    K --> L["Fitting：CurveData<br/>→ V5 计数契约"]
+    M["显示状态<br/>色图 / 范围 / log / 视图 / 缩放"] --> N["DetectorView、CurvePlot"]
+    E --> N
+    I --> N
 ```
 
-## 嵌入视图与独立窗口的投影契约
+## 帧与有效像素
 
-独立窗口不是第二套分析工作区，也不拥有第二份 scientific/display state。它是当前嵌入视图的
-放大投影，并在此基础上提供 Matplotlib toolbar、精细缩放、点排除和选区等扩展操作。
+- `shared/detector_io` 返回规范方向的帧：像素 `(行 i, 列 j)` 覆盖 `[j, j+1] × [i, i+1]`，第 0 行在
+  顶部（与 `DetectorGeometry` 一致，见 [`geometry.md`](geometry.md)）。NXS 多模块在读取时拼接；
+  不再有 Flip UD、mirror fill 或 threshold 这类会改写数据的预处理。
+- `valid_pixels(data, mask)`：有限、非负、且不在 loader mask 中的像素才是观测。Pilatus / Eiger 的
+  缝隙与坏点是负值，NeXus loader 把拒绝的像素变成 NaN，两者在这里统一。正常零计数保留。
+- `sum_frames`：Sum N frames 逐像素相加，像素只有在所有帧中都有效才有效（不用部分帧外推）。
 
-```mermaid
-flowchart LR
-    A["AnalysisImage + DetectorDisplayState"] --> B["Detector render input"]
-    B --> C["嵌入 Detector preview"]
-    B --> D["独立 2D viewer"]
+## 校正（顺序固定，均为可选或可设为 0）
 
-    E["Prepared curve + CurveViewState"] --> F["CurvePlotSpec"]
-    F --> G["嵌入 Curve preview"]
-    F --> H["独立 1D viewer"]
-```
+1. 背景：`frame − scale × background`，两帧都有效的像素才有效；背景帧按文件版本缓存一次。
+2. gap guard：`guard_invalid(valid, N)` 把探测器无效像素周围 N px（方形邻域，默认 3，0 关闭，最多 20）
+   也视为无效；帧边界不算无效。它只针对探测器无效像素，不针对后续的有效范围。
+3. 有效原始强度范围 Min / Max（饱和、热像素）。
 
-- 两个 2D 视图共享同一个 AnalysisImage revision，以及 Log/Linear、Auto scale、Vmin/Vmax、
-  colormap、q/pixel axis、水平 q 坐标（`qy` 或 signed `qr`）、center 和 cut overlay 状态；任一视图
-  修改这些 controls，另一视图必须同步；
-- 两个 1D 视图共享同一个 `CurvePlotSpec`，包括 q preparation、data/model layers、Log X/Y、
-  Normalize、q unit、Y range、ROI 和图例；禁止分别过滤、归一化或重算一套绘图数据；
-- `Overlay ±q` 必须保留 source branch metadata：+q 使用蓝色，镜像后的 −q 使用红色，折叠到
-  相同 `|q|` 后仍能辨认来源；
-- zoom/pan 范围、窗口几何、Matplotlib toolbar mode 和临时 point-delete mode 属于单个 projection
-  的 viewport state，可以只存在于独立窗口；它们不得改变 shared scientific/display state；
-- 关闭和重新打开独立窗口时，必须从当前 ViewModel state 恢复，而不是从窗口自己的历史控件推断。
+校正从原始帧重新计算，不在上一版结果上累加；改变校正不重新读取文件。原始 `raw_data / raw_valid`
+与校正后的 `data / valid` 分开保存在 `FrameAnalysis` 中。
 
-## Detector q 网格契约
+## 几何与 q
 
-Detector geometry 对 AnalysisImage 的每个 cell 生成同 shape 的 `qy`、`qz` 和 signed `qr` 网格：
+几何只来自 instrument profile（标定或手动输入），会话中心、文件头中心（设置中打开时）与 αi 只替换
+各自的字段。q 由 `shared/geometry` 的精确掠入射公式给出，单位 Å⁻¹；Analyze 不使用任何历史近似。
+GISAXS / GIWAXS 由最大散射角自动判断（≤ 20° 为 GISAXS），也可强制。
+Refine x by Symmetry 只在当前水平带内求左右对称轴并改会话中心 x，不改数据。
 
-```text
-qr = sign(qy) · sqrt(qx² + qy²)
-```
+## 曲线
 
-`qr` 是面内径向坐标，不得使用 `sqrt(qy² + qz²)` 近似。`qz` 是面外坐标，不属于 `qr`。
-科学 cut 使用与 AnalysisImage array row 对齐的原始网格；Detector preview 因屏幕采用
-`origin='lower'`，必须把 intensity 与两个坐标网格一起只翻转一次。禁止只翻 intensity、只翻 qz，
-或使用 `[q_min, q_max]` 的 `imshow extent` 把曲线网格压成规则矩形。
+- GISAXS 水平切线：Yoneda 带（自动定位或用户拖动的行区间）中**每个探测器列**一个点——该列有效
+  像素的平均强度、Poisson 标准误差 `σ = √max(Σ, 1) / n`、有效像素数 `n`、有效像素的平均 qy。
+  不插值、不重采样，缝隙保持为缝隙。竖直切线同理（每行一个点）。
+- GIWAXS：径向 bins、扇区、q 框和 I(χ) 为 bin 平均（`pixels` 为 bin 内有效像素数）。自动 bins 不比
+  像素的 q 步长细；沿 q 的曲线把像素太少（< max(8, 中位数 10 %)）的相邻 bin 合并（像素加权的 x 与均值，
+  不跨越 > 2.5 个 bin 的空隙）；I(χ) 不合并。
+- σ 的两种模型：计数帧（非浮点、未减背景）为上面的 Poisson 误差；浮点（扣暗场）帧或减背景后为 bin 内
+  像素离散度的标准误差 `s / √n`（单像素 bin 取其余 bin 的中位方差）。合并 bin 的 σ 为
+  `√(Σ nᵢ² σᵢ²) / Σ nᵢ`，对计数帧等于 `√Σ / n`。此时 `counting_model_valid` 为 false。
+- 每条曲线的 `x` 带符号（qy < 0 在直射束左侧）；“送哪一半”只是 Fitting 的显示与选择，不改文件。
 
-```mermaid
-flowchart LR
-    A["Detector geometry"] --> B["DetectorQGrid<br/>qy / signed qr / qz"]
-    C["AnalysisImage<br/>array row order"] --> D["Scientific cut"]
-    B --> D
-    B --> E["flip rows once"]
-    C --> F["flip rows once"]
-    E --> G["2D pcolormesh<br/>qy-or-qr / qz"]
-    F --> G
-    G --> H["nearest detector-cell selection"]
-    H --> D
-```
+## 导出与交接
 
-- 水平坐标可选择 `qy` 或 signed `qr`，纵轴始终是 `qz`；
-- 主 Detector preview 与独立 viewer 必须使用同一选择并显示同一网格；
-- 点击、框选、center overlay 和 Yoneda cut region 必须吸附到最近的有限 detector cell；
-- `qy ↔ qr` 或 pixel ↔ q 切换时，先保存 detector-cell bounds，再投影到新坐标，不能把旧数值直接
-  当作新单位；
-- 坐标切换不产生新的 AnalysisImage revision，但已有 cut 必须按同一 detector 区域刷新坐标和结果；
-- 下采样 preview 时，intensity、水平 q 网格和 qz 网格必须使用相同 stride。
+- `gimap_analysis/<stem>_{horizontal,vertical,…}.csv`：`#` 注释头 + 列 `x, I, sigma, pixels`；
+  `<stem>_analysis.json` 记录文件、帧、相加帧、instrument profile、中心来源、校正、切割与提示。
+- `<stem>_fit_input.dat`：Fitting 的输入，首行 `# GIMaP Analyze fit input (q in 1/A)`，
+  `# observation:` JSON（`source`：GISAXS 为 `native_detector_columns`，其余为 `radial_bins`；
+  `file_format`、`gap_guard_px`、`summed_frames`、`intensity_unit = counts_per_pixel`、
+  `threshold_enabled`、`counting_model_valid`），四列 `q I sigma pixels`。
+- Fitting 读取为 `CurveData(q, intensity, error, pixels, observation)`；行被丢弃导致像素数不再对齐时
+  丢弃 `pixels`，而不是错位使用。
+- V5：`native_detector_columns` 且带 pixels 的曲线恢复原 CBF 路径的计数契约
+  （`source = native_cbf_columns`、`valid_pixel_counts`、`gap_margin_px`、`stack_count =
+  summed_frames`），σ 为 `√(σ² + (rel·|I|)² + abs²)` 的 working tolerance。输入选择
+  （正 / 负 / 两侧、fitting range、排除点）对 q 与 pixel counts 用同一个掩码；折叠视图中 fitting
+  range 以 |q| 选择两侧。计数契约不满足时学习分支按记录的原因回退，不静默更换输入。
+- Batch Export 的表格 `<名称>_<曲线>_frames.csv`：`#` 注释头（曲线、帧数、x 是否完全一致或插值到第一帧的 x——
+  线性插值、不外推，并写出最大 x 偏移），首行 x 标签与每帧的文件与帧号，之后每行 x 与每帧的平均强度（空 = 该帧无数据）。
+  σ 与像素数只在逐帧文件中。`<名称>_batch.json` 记录选项、帧列表、失败的帧与第一帧的完整元数据。
+- Batch Export 的文件按种类放入子文件夹（`curves/`、`fit_input/`、`maps/`、`images/`、`frames/`、`fits/`），表格与拟合表在顶层，
+  并写 `README.txt`。文本格式 csv / txt / dat 只改变分隔符（逗号 / 制表符 / 空格；空格分隔时表头空格改为 `_`、空格改写
+  `nan`），数值不变。`frames/` 中的探测器数据为读取原样（模块拼接、帧求和、缝隙码保留），不经掩膜与校正。
+- 批量拟合（`application/batch_fit.py`）：GIWAXS 峰为区域 χ 范围内、区域 q 窗口两侧各扩一个宽度的 I(q)（探测器 q 步长，
+  σ 按帧类型为泊松或像素离散度），`fit_peak` 加权最小二乘；GISAXS 模型为 `fit_input_curve` 交给注入的快速物理拟合。
+  起始值（上一帧 / 第一帧 / 每帧重新）只影响初值，不改变数据；失败帧不作为下一帧起点。
+- 设置文件 `gimap-analyze-settings` 只保存处理参数（不含数据）；仪器配置随文件保存几何，保证换电脑后 q 相同。
+- in-situ 序列只处理这些曲线文件；Recipe 捕获 Fitting 的模型与输入选择，不含任何探测器预处理。
 
-### q 网格缓存与显示 LOD
+## 显示状态
 
-q 坐标分为“科学网格”和“显示网格”，两者不得混用：
+DetectorView 的色图、Auto levels、强度范围、log、Detector / q map 视图、Fit view、光标读数，以及
+CurvePlot 的 log 轴与图例都属于显示状态：
 
-```mermaid
-flowchart LR
-    A["Detector geometry fingerprint"] --> B["Full-resolution qy / qr / qz cache"]
-    B --> C["Cut / fitting / nearest-cell selection"]
-    B --> D["Screen-resolution LOD sampler"]
-    E["Full-resolution AnalysisImage"] --> C
-    E --> D
-    D --> F["Matplotlib q-space preview"]
-```
-
-- geometry fingerprint 包含 image shape、pixel size、beam center、distance、入射角和波长；只有这些
-  值变化时才允许重算完整 q 网格；
-- colormap、log/linear、vmin/vmax、overlay、pixel/q 显示切换和 `qy ↔ qr` 不得使完整 q 网格失效；
-- 主 Detector preview 与独立 viewer 共享同一组只读完整 q 网格，不得各自重复计算或复制；
-- Matplotlib 只接收与 viewport 像素数相称的 display LOD。LOD 必须同时以相同 stride 抽取 intensity、
-  水平 q 和 qz；不得把显示抽样后的数组用于 cut、fitting、export 或 detector-cell snapping；
-- 初次计算或 detector geometry 真正变化时允许产生一次重算。若该重算以后仍形成可感知卡顿，应通过
-  worker 生成新的完整网格并在完成后原子替换，不能让 presentation 维护另一套科学结果。
-
-## 三类状态
-
-### RawImage
-
-`RawImage` 是 loader 返回数据的只读快照。加载完成后不得原地修改，也不得被 scientific
-preprocessing、renderer 或算法拿来复用为可写工作区。
-
-允许读取 RawImage 的情况只有：
-
-- 重新执行 preprocessing pipeline；
-- 用户明确选择 Raw Preview 或 Raw Export；
-- 有明确标识的诊断和 characterization test。
-
-### AnalysisImage
-
-`AnalysisImage` 是 `RawImage + PreprocessingConfig` 的确定性输出，是当前 preprocessing revision
-下唯一的科学数组。以下流程默认且只能消费它：
-
-- detector preview 的像素底图；
-- Yoneda/center finding；
-- ROI、pixel cut、q-space cut；
-- fitting、AI fitting 和 in-situ/batch analysis；
-- processed-data export。
-
-下游代码不得在 AnalysisImage 缺失时静默回退到 RawImage。缺失应表现为明确的“尚未准备数据”
-状态或结构化错误。
-
-### DisplayState
-
-`DisplayState` 包含 colormap、vmin/vmax、auto scale、log intensity、zoom/pan、q 轴投影、center
-overlay 和 cut overlay。它由 presentation/rendering 拥有，可以与 AnalysisImage 一起传给 renderer。
-其中纯颜色/viewport 选项不得：
-
-- 修改 RawImage 或 AnalysisImage；
-- 改变 Yoneda、cut 或 fitting 输入；
-- 触发 cut、fit 或自动切换结果页；
-- 被 application/domain 当作 scientific request。
-
-## PreprocessingConfig
-
-### CBF 有效性掩码（2026-09-21）
-
-CBF loader 之后，统一 preprocessing 把非有限值、负数 detector invalid code 及其
-`invalid_margin_px` 邻域标成 NaN（默认邻域半宽 3 px，可在 Preprocessing 中调整）。
-这是探测器规则，不根据拟合残差删点；正常零计数保留。mask 随 Flip UD 一起变换，
-在 mirror-fill 之前应用，屏蔽区域不能被镜像恢复为有效测量。非 CBF 的负强度不适用此规则。
-
-Preview、Yoneda、pixel/q cut、1D 拟合、in-situ 和 processed export 消费同一 AnalysisImage。
-CBF cut 使用有限像素均值，保留原生测量坐标，不跨 NaN 间隙插值生成观察值；500 点只用于
-正演显示。in-situ worker 携带 `preserve_native` 和 `analysis_revision`，实现同一列均值语义。
-旧拟合入口自行读取 raw 并扩展 gap 的逻辑已移除；CBF 计数误差也由预处理后实际有效像素计算。
-改变 guard 会生成新的 analysis revision，旧 cut 需 Extract / Update 后才能用于拟合。
-in-situ recipe 保存并恢复 guard；旧 recipe 的 `workflow_v5.cbf_gap_margin` 仅作为迁移来源。
-
-PreprocessingConfig 必须是 framework-neutral、可比较和可测试的数据。当前 fitting 至少包含：
-
-- `flip_ud`；
-- threshold 是否启用以及上下限；
-- mirror-fill 是否启用、镜像中心和 gap margin。
-
-Pipeline 每次都从 RawImage 重建 AnalysisImage，禁止在上一版 AnalysisImage 上累计 flip、mirror 或
-threshold。这样可以避免重复翻转、重复填充和切换选项后无法恢复原数据。
-
-Mirror-fill 的镜像轴属于 preprocessing input。当前 fitting 使用 Setup 中保存的 detector
-`beam_center_x`，不得把正在求解的临时 Yoneda 结果作为未声明输入，从而形成循环依赖。
+- 不修改帧、有效像素或曲线；
+- 不触发重新分析（拖动带、拾取中心、改校正除外——它们是科学输入，会重新分析）；
+- q map 视图是同一校正后数据在规范几何下的投影，显示用下采样不得进入曲线或导出。
 
 ## 2D Prediction module preprocessing
 
-Prediction 的 detector input 与 fitting 的 AnalysisImage 是两个明确的 workflow。Prediction 加载
-单张 CBF 或先求和一个 stack，然后只执行一次所选 module 的 preprocessing entry；它不复用界面
-显示数组，也不在 TensorFlow worker 中再次预处理。
+Prediction 的 detector input 与 Analyze 是两个明确的 workflow。Prediction 加载单张 CBF 或先求和
+一个 stack，然后只执行一次所选 module 的 preprocessing entry；它不复用界面显示数组，也不在
+TensorFlow worker 中再次预处理。
 
 每个 Prediction module 的 `module.yaml` 是预处理顺序和参数的唯一事实来源：
 
@@ -216,36 +143,7 @@ mask 和 column cut；随后使用排除指定 detector bands 后的正最大值
 row 是 `R=0.05–15 nm`，column 在训练 bundle 中是半高度 `h=0.05–15 nm`；对用户和论文图展示时转换为
 完整高度 `H=2h=0.1–30 nm`，但不得 transpose 或修改模型输出概率。
 
-## Revision、失效和谱系
-
-每次导入新数据或改变 scientific preprocessing 后，应生成新的 preprocessing revision。依赖旧
-revision 的 Yoneda、cut 和 fitting 结果必须标记为 stale；改变纯 DisplayState 不生成 scientific
-revision，也不得使分析结果失效。
-
-派生结果逐步采用以下谱系：
-
-```text
-AnalysisImage(revision=N)
-    → CenterResult(source_revision=N)
-    → CutResult(source_revision=N)
-    → FitResult(source_cut_revision=N)
-```
-
-裸数组兼容字段只能作为 AnalysisImage 的只读别名，不能形成第二套数据所有权。代码必须使用
-语义明确的 data-flow API，而不是新增 `data`、`current_data` 或 `processed` 等含义不明的字段。
-
-## Stack 和内存
-
-RawImage 与 AnalysisImage 是逻辑上独立的数据状态，不要求无条件复制所有底层内存。实现可以在
-确认只读和安全时共享 backing storage，也可以按 preprocessing revision 缓存结果。优化不得改变：
-
-- RawImage 不可变；
-- pipeline 从 raw 确定性重建；
-- 下游统一读取 AnalysisImage；
-- revision 与失效规则。
-
-对于 multi-frame、stack 和 in-situ，必须明确记录 preprocessing 是逐 frame 还是聚合后执行；不得在
-worker 和 GUI 进程中各自隐式执行一次相同 transform。
+## XRR
 
 XRR angle series 采用逐 frame 的只读 streaming：全分辨率 detector frame 只在 worker 中完成一次
 ROI 提取，GUI 收到的降采样 preview 只能用于显示，不能成为 scientific input。NXS module/frame、
@@ -254,20 +152,15 @@ CBF ordering、specular geometry 和 intensity 定义见
 
 ## 实现与 review 门禁
 
-- Domain 拥有 preprocessing config、科学变换和 framework-neutral 数据类型；
-- Application 暴露准备 AnalysisImage 的 command/use case；
-- Presentation 只收集选项、保存 UI state、请求 application command 并渲染结果；
-- Renderer 只能读取 AnalysisImage 和 DisplayState；
-- 禁止 scientific code 调用 `_get_current_display_image()` 或其他 presentation helper；
-- 禁止用 RawImage 修补某个局部 workflow；需要 raw 的例外必须在 API 名称和测试中显式表达；
-- 新增 preprocessing option 时必须同时增加 pipeline、谱系和 downstream-consistency tests。
+- Domain 拥有有效像素、校正、binning、切割与对称中心等 framework-neutral 科学函数；
+- Application（`AnalyzeFrame`）是唯一把帧、校正、几何和切割串起来的地方；
+- Presentation 只收集选项、保存 UI state、请求分析并渲染结果；
+- 新增科学选项时同时记录到 `_analysis.json` / `# observation:`，并增加谱系与下游一致性测试。
 
 最低测试要求：
 
-1. RawImage 在处理前后保持数值不变且不可写；
-2. pipeline 顺序和重复执行确定；
-3. preview、Yoneda 和 cut 消费同一 revision 的 AnalysisImage；
-4. mirror-fill、flip、threshold 会进入 AnalysisImage；
-5. colormap、vmin/vmax、log 和 overlay 不改变 AnalysisImage；
-6. preprocessing 变化使派生结果 stale，DisplayState 变化不会；
-7. Raw Export 与 Processed Export 的来源是显式且可区分的。
+1. 有效像素、gap guard、帧相加与背景的规则（含边界与 0 / 最大值）；
+2. 原生列平均的 I、σ、pixels 与逐像素手算一致，缝隙不插值；
+3. `_fit_input.dat` 往返：Fitting 读回的 q、I、σ、pixels 与 observation 与 Analyze 一致；
+4. V5 选择对 q 与 pixel counts 使用同一掩码（含折叠视图的 |q| 范围）；
+5. 显示选项不改变分析结果。

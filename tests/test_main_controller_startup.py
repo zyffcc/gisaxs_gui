@@ -62,29 +62,14 @@ def test_application_runtime_uses_app_context_without_global_registry() -> None:
     assert "def _register_ui_controls" not in source
 
 
-def test_legacy_main_controller_path_is_a_thin_reexport() -> None:
-    source = (PROJECT_ROOT / "controllers/main_controller.py").read_text(encoding="utf-8")
-
-    assert "src.gimap.app.runtime" in source
-    assert len(source.splitlines()) <= 7
-
-    app_legacy = (PROJECT_ROOT / "src/gimap/app/legacy_controller.py").read_text(
-        encoding="utf-8"
-    )
-    assert "from .runtime import ApplicationRuntime" in app_legacy
-    assert len(app_legacy.splitlines()) <= 9
-
-
-def test_legacy_main_window_and_settings_paths_are_thin_reexports() -> None:
-    main_window = (PROJECT_ROOT / "ui/main_window.py").read_text(encoding="utf-8")
-    settings = (PROJECT_ROOT / "ui/settings_dialog.py").read_text(encoding="utf-8")
+def test_main_entry_imports_feature_owned_shell_modules() -> None:
     production_main = (PROJECT_ROOT / "main.py").read_text(encoding="utf-8")
 
-    assert "class Ui_MainWindow" not in main_window
-    assert "class SettingsDialog" not in settings
-    assert len(main_window.splitlines()) <= 7
-    assert len(settings.splitlines()) <= 7
     assert "src.gimap.app.window_view" in production_main
-    assert "src.gimap.app.presentation.settings_dialog" in production_main
-    assert "from ui.main_window" not in production_main
-    assert "from ui.settings_dialog" not in production_main
+    assert "src.gimap.app.main_window" in production_main
+    assert "src.gimap.app.menus" in production_main
+    # Qt's own high-DPI scaling replaces the removed per-resolution profiles.
+    assert "HighDpiScaleFactorRoundingPolicy.PassThrough" in production_main
+    for alias_root in ("ui", "controllers", "calibration", "trainset"):
+        assert f"from {alias_root}." not in production_main
+        assert f"import {alias_root}." not in production_main

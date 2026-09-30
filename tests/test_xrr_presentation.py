@@ -10,7 +10,6 @@ import numpy as np
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import QApplication, QDialog, QMainWindow
 
-from src.gimap.app.presentation.menu_manager import MenuManager
 from src.gimap.features.xrr.application import (
     XrrExtractionProgress,
     XrrExtractionResult,
@@ -105,28 +104,3 @@ def test_xrr_layout_remains_available_at_required_viewports():
         assert dialog.controls_scroll.verticalScrollBar().maximum() >= 0
     dialog.close()
 
-
-def test_tools_menu_opens_one_modeless_xrr_dialog_without_workspace_navigation():
-    _app()
-    window = QMainWindow()
-    window.active_workspace = 3
-    created = []
-
-    def factory(parent):
-        dialog = QDialog(parent)
-        dialog.setModal(False)
-        created.append(dialog)
-        return dialog
-
-    manager = MenuManager(
-        window,
-        settings=object(),
-        xrr_series_dialog_factory=factory,
-    )
-    manager.create_tools_menu()
-    assert window.actionXrrSeriesExtractor.text() == "XRR Series Extractor..."
-    manager.open_xrr_series_extractor()
-    manager.open_xrr_series_extractor()
-    assert len(created) == 1
-    assert window.active_workspace == 3
-    created[0].close()

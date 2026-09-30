@@ -17,7 +17,6 @@ from PyQt5.QtWidgets import (
 
 from src.gimap.app.presentation import (
     JobStatus,
-    apply_design_system,
 )
 
 from src.gimap.app.presentation.section_bindings import (
@@ -99,7 +98,6 @@ class RunMonitorMixin:
         ui.modelConfigureContentLayout.addWidget(training)
         self.model_summary = ui.model_summary
         self.model_validate_button = ui.model_validate_button
-        apply_design_system(page)
         self.add_model_layer_button.clicked.connect(
             lambda: self.add_model_layer(
                 {"type": "conv2d", "units": 32, "kernel": 3, "activation": "relu"}
@@ -133,7 +131,6 @@ class RunMonitorMixin:
             ui.exportContent,
             ui.exportContentLayout,
         )
-        apply_design_system(page)
         tabs = QTabWidget()
         local = QWidget()
         local_form = QFormLayout(local)
@@ -299,5 +296,4 @@ class RunMonitorMixin:
         self.metrics_table = ui.metrics_table
         self.metrics_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.register_model_button = ui.register_model_button
-        apply_design_system(page)
         return page

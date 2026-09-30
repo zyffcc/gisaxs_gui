@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from ..styles import apply_design_system
 
 
 class EmptyState(QFrame):
@@ -48,7 +47,6 @@ class EmptyState(QFrame):
         layout.addWidget(self.action_button, 0)
         layout.addStretch(1)
         self.action_button.clicked.connect(self.actionRequested)
-        apply_design_system(self)
 
     def set_content(self, title: str, message: str = "", action_text: str = "") -> None:
         self.title_label.setText(title)
@@ -97,7 +95,6 @@ class ErrorBanner(QFrame):
         self.details_button.clicked.connect(self.detailsRequested)
         self.dismiss_button.clicked.connect(self._dismiss)
         self.set_level(level)
-        apply_design_system(self)
 
     def set_level(self, level: str) -> None:
         normalized = level if level in self.LEVELS else "error"
@@ -162,7 +159,6 @@ class JobStatus(QFrame):
         self.cancel_button.clicked.connect(self.cancelRequested)
         self.details_button.clicked.connect(self.detailsRequested)
         self.set_state("idle", "Ready", progress=0.0)
-        apply_design_system(self)
 
     def set_state(
         self,

@@ -70,14 +70,13 @@ guard 会由 root 保持，避免 Qt event filter 被垃圾回收。
 3. 保持 component 无业务逻辑，只发出 intent signal 或接收 display state；
 4. 从两个 `__init__.py` public API 显式导出；
 5. 在 `tests/test_ui_design_system.py` 增加 offscreen construction、signal/state test；
-6. 有明显视觉状态时更新 `src/gimap/app/presentation/showcase.py`；
-7. 让一个 caller 采用该组件，并运行 feature、design-system 和 architecture tests。
+6. 让一个 caller 采用该组件，并运行 feature、design-system 和 architecture tests。
 
 若只是视觉相似但业务语义不同，保留 feature-owned component，不要通过大量 flags 做成万能组件。
 
 ## ScientificImageViewer
 
-`ScientificImageViewer` is exported from app presentation and is shared by WAXS and GISAXS detector
+`ScientificImageViewer` is exported from app presentation and is used by the Fitting detector
 inspection. It owns only pixel rendering, viewport interactions and intent signals. Scientific
 preparation, ROI submission and frame loading remain with each feature. See
 [display lifecycle and compatibility boundaries](display-system.md).

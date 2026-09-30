@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from utils.ai_fitting_models import ModelRegistry, discover_ai_fitting_models, validate_model_info
+from src.gimap.features.fitting.infrastructure.adapters.ai_model_registry import ModelRegistry, discover_ai_fitting_models, validate_model_info
 
 
 ROOT = Path(__file__).resolve().parents[1]

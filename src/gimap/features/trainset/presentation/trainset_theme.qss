@@ -1,0 +1,185 @@
+#freshTrainsetBuildPage {
+    background: @bg@;
+    color: @text@;
+    font-size: @font_pt@;
+}
+#freshTrainsetBuildPage QLabel,
+#freshTrainsetBuildPage QCheckBox,
+#freshTrainsetBuildPage QRadioButton { color: @text@; }
+#pageTitle { color: @text@; font-size: @font_display_pt@; font-weight: 700; }
+#pageSubtitle { color: @text_muted@; font-size: @font_pt@; }
+#trainsetActionHint {
+    color: @text_muted@;
+    padding: 4px 8px;
+}
+#validationBadge, #jobState {
+    background: @info_soft@;
+    color: @info@;
+    border: 1px solid @info_border@;
+    border-radius: 12px;
+    padding: 5px 11px;
+    font-weight: 600;
+}
+#trainsetStepList {
+    background: @surface@;
+    color: @text_muted@;
+    border: 1px solid @border@;
+    border-radius: 10px;
+    padding: 7px;
+    outline: 0;
+}
+#trainsetStepList::item {
+    color: @text_muted@;
+    padding: 13px 10px;
+    margin: 2px;
+    border-radius: 7px;
+}
+#trainsetStepList::item:hover { background: @surface_hover@; }
+#trainsetStepList::item:selected {
+    background: @info_soft@;
+    color: @info@;
+    border: 1px solid @info_border@;
+    font-weight: 600;
+}
+#designPreviewCard {
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 10px;
+}
+#freshTrainsetBuildPage QLabel[sectionTitle="true"] {
+    color: @text@;
+    font-size: @font_heading_pt@;
+    font-weight: 700;
+}
+#freshTrainsetBuildPage QLabel[cardBody="true"] { color: @text_muted@; }
+#freshTrainsetBuildPage QWidget[displayBar="true"] {
+    background: @surface_alt@;
+    border: 1px solid @border@;
+    border-radius: 7px;
+}
+#freshTrainsetBuildPage QLabel[infoPanel="true"] {
+    background: @info_soft@;
+    color: @info@;
+    border: 1px solid @info_border@;
+    border-radius: 7px;
+    padding: 9px;
+}
+#freshTrainsetBuildPage QGroupBox {
+    background: @surface@;
+    color: @text@;
+    border: 1px solid @border@;
+    border-radius: 9px;
+    margin-top: 13px;
+    padding: 12px 9px 9px 9px;
+    font-weight: 600;
+}
+#freshTrainsetBuildPage QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 5px;
+    background: @surface@;
+    color: @text@;
+}
+#freshTrainsetBuildPage QLineEdit,
+#freshTrainsetBuildPage QSpinBox,
+#freshTrainsetBuildPage QDoubleSpinBox,
+#freshTrainsetBuildPage QComboBox,
+#freshTrainsetBuildPage QTextEdit,
+#freshTrainsetBuildPage QTableWidget {
+    background: @surface@;
+    color: @text@;
+    border: 1px solid @border_strong@;
+    border-radius: 6px;
+    padding: 5px;
+    selection-background-color: @accent_soft@;
+    selection-color: @info@;
+}
+#freshTrainsetBuildPage QLineEdit:focus,
+#freshTrainsetBuildPage QSpinBox:focus,
+#freshTrainsetBuildPage QDoubleSpinBox:focus,
+#freshTrainsetBuildPage QComboBox:focus,
+#freshTrainsetBuildPage QTextEdit:focus,
+#freshTrainsetBuildPage QTableWidget:focus { border: 1px solid @accent_border@; }
+#freshTrainsetBuildPage QComboBox QAbstractItemView {
+    background: @surface@;
+    color: @text@;
+    border: 1px solid @border_strong@;
+    selection-background-color: @accent_soft@;
+}
+#freshTrainsetBuildPage QPushButton {
+    background: @surface@;
+    color: @text@;
+    border: 1px solid @border_strong@;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-weight: 500;
+}
+#freshTrainsetBuildPage QPushButton:hover {
+    background: @surface_alt@;
+    border-color: @text_faint@;
+}
+#freshTrainsetBuildPage QPushButton:pressed { background: @surface_hover@; }
+#freshTrainsetBuildPage QPushButton:disabled {
+    color: @text_faint@;
+    background: @surface_hover@;
+    border-color: @divider@;
+}
+#freshTrainsetBuildPage QPushButton#primaryAction {
+    background: @accent@;
+    color: @on_accent@;
+    border-color: @accent@;
+    font-weight: 600;
+}
+#freshTrainsetBuildPage QPushButton#primaryAction:hover { background: @accent_hover@; }
+#freshTrainsetBuildPage QPushButton[trainsetPrimaryAction="true"] {
+    background: @accent@;
+    color: @on_accent@;
+    border-color: @accent@;
+    font-weight: 650;
+}
+#freshTrainsetBuildPage QPushButton[trainsetPrimaryAction="true"]:hover {
+    background: @accent_hover@;
+}
+#freshTrainsetBuildPage QHeaderView::section {
+    background: @surface_alt@;
+    color: @text_muted@;
+    border: 0;
+    border-bottom: 1px solid @border@;
+    padding: 7px;
+    font-weight: 600;
+}
+#freshTrainsetBuildPage QTabWidget::pane {
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 7px;
+    top: -1px;
+}
+#freshTrainsetBuildPage QTabBar::tab {
+    background: @bg@;
+    color: @text_muted@;
+    border: 1px solid @border@;
+    border-bottom: 0;
+    padding: 8px 12px;
+    margin-right: 2px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+#freshTrainsetBuildPage QTabBar::tab:hover { background: @surface_sunken@; }
+#freshTrainsetBuildPage QTabBar::tab:selected {
+    background: @surface@;
+    color: @info@;
+    font-weight: 600;
+}
+#designStageTabs QTabBar::tab { padding: 8px 7px; }
+/* Qt sizes tabs with the regular weight: a bold selected tab would clip its text. */
+#designStageTabs QTabBar::tab:selected { font-weight: 400; }
+#trainsetConfigurationTabs::pane {
+    background: @surface_alt@;
+    border-color: @border@;
+}
+#trainsetConfigurationTabs QTabBar::tab {
+    min-width: 132px;
+    padding: 9px 12px;
+}
+#freshTrainsetBuildPage QScrollArea,
+#freshTrainsetBuildPage QStackedWidget { background: transparent; border: 0; }

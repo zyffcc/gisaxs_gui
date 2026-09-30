@@ -3,104 +3,113 @@
 #gisaxsPredictPageContents,
 #predictionLeftContents,
 #predictionRightContents {
-    background: #f5f7fb;
+    background: @surface_alt@;
 }
 
 #predictionControlRail {
-    background: #f5f7fb;
+    background: @surface_alt@;
     border: none;
 }
 QFrame[predictionStickyRun="true"] {
-    background: white;
-    border: 1px solid #d7e0ec;
+    background: @surface@;
+    border: 1px solid @border@;
     border-radius: 10px;
 }
 
+/* The workflow header: a section like the others, its steps in the colours of the Analyze step rail. */
 QFrame[predictionWorkflowHeader="true"] {
-    background: #152238;
-    border: 1px solid #223451;
-    border-radius: 12px;
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 10px;
 }
 QLabel[predictionWorkflowTitle="true"] {
-    color: white;
-    font-size: 18px;
+    color: @text@;
+    font-size: @font_heading_pt@;
     font-weight: 700;
 }
-QLabel[predictionWorkflowSubtitle="true"] { color: #b9c7da; }
+QLabel[predictionWorkflowSubtitle="true"] { color: @text_muted@; }
 QFrame[predictionWorkflowStep="true"] {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: @surface_alt@;
+    border: 1px solid @border@;
     border-radius: 8px;
 }
 QFrame[predictionWorkflowStep="true"][workflowState="active"] {
-    background: #245dcb;
-    border-color: #4f86e8;
+    background: @accent_soft@;
+    border-color: @accent_border@;
 }
 QFrame[predictionWorkflowStep="true"][workflowState="complete"] {
-    background: #173e3b;
-    border-color: #2a756b;
+    background: @success_soft@;
+    border-color: @success_border@;
 }
 QFrame[predictionWorkflowStep="true"][workflowState="running"] {
-    background: #5b3a08;
-    border-color: #d99a2b;
+    background: @warning_soft@;
+    border-color: @warning_border@;
 }
 QFrame[predictionWorkflowStep="true"][workflowState="error"] {
-    background: #5b2024;
-    border-color: #d86b72;
+    background: @danger_soft@;
+    border-color: @danger_border@;
 }
 QLabel[predictionWorkflowBadge="true"] {
-    background: rgba(255, 255, 255, 0.14);
+    background: @surface_sunken@;
     border-radius: 11px;
-    color: white;
+    color: @text_muted@;
     font-weight: 700;
 }
+QFrame[predictionWorkflowStep="true"][workflowState="active"] QLabel[predictionWorkflowBadge="true"] {
+    background: @accent@;
+    color: @on_accent@;
+}
+QFrame[predictionWorkflowStep="true"][workflowState="complete"] QLabel[predictionWorkflowBadge="true"] {
+    background: @success@;
+    color: @on_accent@;
+}
 QLabel[predictionWorkflowLabel="true"] {
-    color: #e8eef7;
+    color: @text@;
     font-weight: 600;
 }
 
 QFrame#gimapPredictSection,
 QFrame[gimapSection="true"] {
-    background: white;
-    border: 1px solid #e1e7f0;
+    background: @surface@;
+    border: 1px solid @divider@;
     border-radius: 10px;
 }
 
 QFrame#predictionModeSelector {
-    background: #edf1f7;
-    border: 1px solid #dce3ed;
+    background: @surface_hover@;
+    border: 1px solid @border@;
     border-radius: 9px;
 }
 QFrame#predictionModeSelector QRadioButton {
     background: transparent;
     border: 1px solid transparent;
     border-radius: 7px;
-    color: #5b687c;
+    color: @text_muted@;
     font-weight: 600;
     padding: 8px 12px;
 }
 QFrame#predictionModeSelector QRadioButton::indicator { width: 0; height: 0; }
 QFrame#predictionModeSelector QRadioButton:checked {
-    background: white;
-    border-color: #cfd8e6;
-    color: #245dcb;
+    background: @surface@;
+    border-color: @border@;
+    color: @accent@;
 }
 
 QFrame#gisaxsPredictRangePanel {
-    background: #f8fafc;
-    border: 1px solid #e0e6ef;
+    background: @surface_alt@;
+    border: 1px solid @divider@;
     border-radius: 8px;
 }
 QLabel[predictionFieldLabel="true"] {
-    color: #4c5a6f;
-    font-size: 11px;
+    color: @text_muted@;
+    font-size: @font_small_pt@;
     font-weight: 600;
 }
 QLabel[predictionBatchSummary="true"] {
-    background: #eef5ff;
-    border: 1px solid #cfe0fb;
+    background: @info_soft@;
+    border: 1px solid @border@;
     border-radius: 7px;
-    color: #234b85;
+    color: @info@;
     font-weight: 600;
     padding: 8px 10px;
 }
@@ -108,66 +117,66 @@ QLabel[predictionBatchSummary="true"] {
 QToolButton[predictionDisclosure="true"] {
     background: transparent;
     border: none;
-    color: #536177;
+    color: @text_muted@;
     font-weight: 600;
     padding: 5px 2px;
     text-align: left;
 }
-QToolButton[predictionDisclosure="true"]:hover { color: #245dcb; }
+QToolButton[predictionDisclosure="true"]:hover { color: @accent@; }
 
 QPushButton[gimapPrimaryAction="true"] {
-    background: #245dcb;
-    border: 1px solid #245dcb;
-    color: white;
+    background: @accent@;
+    border: 1px solid @accent@;
+    color: @on_accent@;
     font-weight: 650;
 }
-QPushButton[gimapPrimaryAction="true"]:hover { background: #1e50b4; }
+QPushButton[gimapPrimaryAction="true"]:hover { background: @accent_hover@; }
 QPushButton[gimapDangerAction="true"] {
-    background: #fff7f6;
-    border-color: #f0b4ad;
-    color: #b42318;
+    background: @danger_soft@;
+    border-color: @danger_border@;
+    color: @danger@;
 }
 QPushButton[gimapDangerAction="true"]:disabled {
-    background: #f8fafc;
-    border-color: #d8e0ea;
-    color: #9aa6b5;
+    background: @surface_alt@;
+    border-color: @border@;
+    color: @text_disabled@;
 }
 
 QLabel[predictionReadiness="true"] {
-    background: #f8fafc;
-    border: 1px solid #e0e6ef;
+    background: @surface_alt@;
+    border: 1px solid @divider@;
     border-radius: 7px;
     padding: 7px 9px;
     font-weight: 600;
 }
 QLabel[predictionModelStatus="true"] {
-    background: #f8fafc;
-    border: 1px solid #dde4ee;
+    background: @surface_alt@;
+    border: 1px solid @border@;
     border-radius: 7px;
-    color: #536177;
+    color: @text_muted@;
     padding: 8px 10px;
 }
 QLabel[predictionModelStatus="true"][modelState="ready"] {
-    background: #ecfdf3;
-    border-color: #abefc6;
-    color: #067647;
+    background: @success_soft@;
+    border-color: @success_border@;
+    color: @success@;
 }
 QLabel[predictionModelStatus="true"][modelState="working"] {
-    background: #fff7ed;
-    border-color: #fed7aa;
-    color: #c2410c;
+    background: @warning_soft@;
+    border-color: @warning_border@;
+    color: @warning@;
 }
 QLabel[predictionEmptyState="true"] {
-    background: rgba(248, 250, 253, 0.95);
-    border: 1px dashed #b9c5d5;
+    background: @surface_alt@;
+    border: 1px dashed @border_strong@;
     border-radius: 10px;
-    color: #64748b;
+    color: @text_muted@;
     padding: 18px;
 }
 
 #gisaxsPredictImageShowTabWidget::pane {
-    background: white;
-    border: 1px solid #dde4ee;
+    background: @surface@;
+    border: 1px solid @border@;
     border-radius: 10px;
     top: -1px;
 }
@@ -175,13 +184,19 @@ QLabel[predictionEmptyState="true"] {
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    color: #637086;
+    color: @text_muted@;
     min-width: 150px;
     min-height: 34px;
     padding: 4px 12px;
     font-weight: 600;
 }
 #gisaxsPredictImageShowTabWidget QTabBar::tab:selected {
-    border-bottom-color: #245dcb;
-    color: #245dcb;
+    border-bottom-color: @accent@;
+    color: @accent@;
+}
+
+QFrame#predictPreviewSection {
+    background: @surface_alt@;
+    border: 1px solid @border@;
+    border-radius: 8px;
 }

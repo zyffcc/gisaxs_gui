@@ -4,8 +4,8 @@
 - **Scope**: GIMaP Prediction workspace 的 PyQt layout ownership、控件映射与手动验收
 - **Related code**:
   [`src/gimap/features/prediction/presentation/`](../../../src/gimap/features/prediction/presentation/)、
-  [`ui/components/main_window_components.py`](../../../ui/components/main_window_components.py)、
-  [`ui/main_window.py`](../../../ui/main_window.py)
+  [`src/gimap/app/main_window.py`](../../../src/gimap/app/main_window.py)、
+  [`src/gimap/app/window_view.py`](../../../src/gimap/app/window_view.py)
 - **Related tests**:
   [`tests/test_prediction_presentation.py`](../../../tests/test_prediction_presentation.py)、
   [`tests/test_prediction_multifile_presentation.py`](../../../tests/test_prediction_multifile_presentation.py)、
@@ -29,9 +29,8 @@ feature-owned GisaxsPredictWorkspace / PredictionWorkbenchLayout
 PredictionViewBinding → PredictionViewModel → application use cases
 ```
 
-`ui/components/main_window_components.py` 不再定义 Prediction workspace 或专用 cards，只从
-feature public presentation API 导入并在 application shell 中组装，因此旧 import path 仍返回
-同一个 feature-owned class，不存在第二套页面实现。
+Application shell（`src/gimap/app/main_window.py`）不定义 Prediction workspace 或专用 cards，
+只从 feature public presentation API 导入并组装。旧的 `ui/` 与 `controllers/` 兼容别名已删除。
 
 Prediction controls 的构造现由 `presentation/control_view_factory.py` 单一拥有；
 `Ui_MainWindow.setupUi` 只调用该工厂并继续提供 binding 所需的相同属性名；页面文本、默认

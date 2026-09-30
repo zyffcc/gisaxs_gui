@@ -1,15 +1,15 @@
 QWidget#ClassificationPageRoot {
-    background: #f5f7fb;
-    color: #162033;
+    background: @surface_alt@;
+    color: @text@;
 }
 
 QLabel#classificationTitle {
-    font-size: 18pt;
+    font-size: @font_display_pt@;
     font-weight: 700;
 }
 
 QLabel#classificationSubtitle {
-    color: #5f6b7a;
+    color: @text_muted@;
 }
 
 QFrame#datasetSummaryFrame,
@@ -21,75 +21,86 @@ QFrame#runFrame,
 QFrame#overviewFrame,
 QFrame#logPanel,
 QFrame[classificationCard="true"] {
-    background: #ffffff;
-    border: 1px solid #dbe3ef;
+    background: @surface@;
+    border: 1px solid @border@;
     border-radius: 8px;
 }
 
+/* The workflow header: a section like the others, its steps in the colours of the Analyze step rail. */
 QFrame[classificationWorkflowHeader="true"] {
-    background: #152238;
-    border: 1px solid #223451;
-    border-radius: 12px;
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 10px;
 }
 
 QFrame[classificationWorkflowStep="true"] {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: @surface_alt@;
+    border: 1px solid @border@;
     border-radius: 8px;
 }
 
 QFrame[classificationWorkflowStep="true"][workflowState="available"] {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(255, 255, 255, 0.16);
+    background: @surface@;
+    border-color: @border_strong@;
 }
 
 QFrame[classificationWorkflowStep="true"][workflowState="running"] {
-    background: #245dcb;
-    border-color: #4f86e8;
+    background: @warning_soft@;
+    border-color: @warning_border@;
 }
 
 QFrame[classificationWorkflowStep="true"][workflowState="complete"] {
-    background: #173e3b;
-    border-color: #2a756b;
+    background: @success_soft@;
+    border-color: @success_border@;
 }
 
 QFrame[classificationWorkflowStep="true"][workflowState="error"] {
-    background: #5f2027;
-    border-color: #d05a67;
+    background: @danger_soft@;
+    border-color: @danger_border@;
 }
 
 QFrame[classificationWorkflowStep="true"][workflowState="stale"] {
-    background: #5c441b;
-    border-color: #c89736;
+    background: @warning_soft@;
+    border-color: @warning_border@;
 }
 
 QFrame[classificationWorkflowStep="true"][workflowState="blocked"] {
-    background: rgba(255, 255, 255, 0.035);
-    border-color: rgba(255, 255, 255, 0.07);
+    background: @surface_alt@;
+    border-color: @divider@;
 }
 
 QFrame[classificationWorkflowStep="true"][workflowSelected="true"] {
-    background: #245dcb;
-    border: 2px solid #8db7ff;
+    background: @accent_soft@;
+    border: 2px solid @accent@;
 }
 
 QLabel[workflowTitle="true"] {
-    color: #ffffff;
-    font-size: 18px;
+    color: @text@;
+    font-size: @font_heading_pt@;
     font-weight: 700;
 }
 
 QLabel[workflowSubtitle="true"] {
-    color: #b9c7da;
-    font-size: 12px;
+    color: @text_muted@;
+    font-size: @font_pt@;
 }
 
 QLabel[workflowBadge="true"] {
-    background: rgba(255, 255, 255, 0.14);
+    background: @surface_sunken@;
     border-radius: 11px;
-    color: #ffffff;
-    font-size: 11px;
+    color: @text_muted@;
+    font-size: @font_small_pt@;
     font-weight: 700;
+}
+
+QFrame[classificationWorkflowStep="true"][workflowSelected="true"] QLabel[workflowBadge="true"] {
+    background: @accent@;
+    color: @on_accent@;
+}
+
+QFrame[classificationWorkflowStep="true"][workflowState="complete"] QLabel[workflowBadge="true"] {
+    background: @success@;
+    color: @on_accent@;
 }
 
 QToolButton[workflowLabel="true"],
@@ -97,47 +108,51 @@ QToolButton[workflowLabel="true"]:checked,
 QToolButton[workflowLabel="true"]:hover {
     min-height: 16px;
     padding: 0;
-    color: #e8eef7;
+    color: @text@;
     background: transparent;
     border: 0;
-    font-size: 11px;
+    font-size: @font_small_pt@;
     font-weight: 600;
     text-align: left;
 }
 
+QFrame[classificationWorkflowStep="true"][workflowState="blocked"] QToolButton[workflowLabel="true"] {
+    color: @text_faint@;
+}
+
 QLabel[workflowMessage="true"] {
-    color: #c9d5e7;
-    font-size: 9px;
+    color: @text_muted@;
+    font-size: @font_small_pt@;
 }
 
 QToolButton#classificationWorkflowGuidedButton {
-    color: #dce7f7;
-    background: rgba(255, 255, 255, 0.09);
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: @text@;
+    background: @surface@;
+    border: 1px solid @border_strong@;
     border-radius: 7px;
     padding: 5px 9px;
 }
 
 QToolButton#classificationWorkflowGuidedButton:hover,
 QToolButton#classificationWorkflowGuidedButton:checked {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.16);
-    border-color: rgba(255, 255, 255, 0.28);
+    color: @accent@;
+    background: @accent_soft@;
+    border-color: @accent_border@;
 }
 
 QToolButton[workflowUtility="true"] {
     min-height: 24px;
     padding: 4px 8px;
-    color: #dce7f7;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: @text@;
+    background: @surface@;
+    border: 1px solid @border_strong@;
     border-radius: 6px;
 }
 
 QToolButton[workflowUtility="true"]:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.28);
+    color: @accent@;
+    background: @accent_soft@;
+    border-color: @accent_border@;
 }
 
 QFrame#classificationContextBar,
@@ -147,83 +162,83 @@ QFrame#explorationSelectionPanel {
 }
 
 QFrame#classificationContextBar {
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    border-bottom: 1px solid #e2e8f0;
+    background: @surface_alt@;
+    border-top: 1px solid @divider@;
+    border-bottom: 1px solid @divider@;
 }
 
 QLabel#sectionTitle {
     font-weight: 700;
-    color: #1f2a44;
+    color: @text@;
 }
 
 QLabel#stateBadgeLabel,
 QLabel#qualityStatusLabel,
 QLabel[classificationBadge="true"] {
-    background: #e9f2ff;
-    color: #0f4d8f;
+    background: @accent_soft@;
+    color: @info@;
     border-radius: 7px;
     padding: 3px 8px;
     font-weight: 600;
 }
 
 QLabel#stateBadgeLabel[classificationState="idle"] {
-    background: #eef2f6;
-    color: #475467;
+    background: @bg@;
+    color: @text_muted@;
 }
 
 QLabel#stateBadgeLabel[classificationState="running"] {
-    background: #e8f1ff;
-    color: #124c8b;
+    background: @accent_soft@;
+    color: @info@;
 }
 
 QLabel#stateBadgeLabel[classificationState="ready"] {
-    background: #ecfdf3;
-    color: #067647;
+    background: @success_soft@;
+    color: @success@;
 }
 
 QLabel#stateBadgeLabel[classificationState="error"] {
-    background: #fff1f2;
-    color: #b42318;
+    background: @danger_soft@;
+    color: @danger@;
 }
 
 QPushButton {
     min-height: 28px;
     padding: 4px 10px;
-    border: 1px solid #c9d4e2;
+    border: 1px solid @border_strong@;
     border-radius: 6px;
-    background: #ffffff;
+    background: @surface@;
 }
 
 QPushButton:hover {
-    background: #eef5ff;
-    border-color: #9bb9dd;
+    background: @info_soft@;
+    border-color: @info_border@;
 }
 
 QPushButton#runComparisonButton {
     min-height: 36px;
-    background: #1767c2;
-    color: #ffffff;
-    border-color: #1767c2;
+    background: @accent@;
+    color: @on_accent@;
+    border-color: @accent@;
     font-weight: 700;
 }
 
 QPushButton#runComparisonButton:hover {
-    background: #0f56a5;
+    background: @accent_hover@;
 }
 
 QPushButton[classificationPrimaryAction="true"],
 QPushButton[gimapPrimaryAction="true"] {
     min-height: 34px;
-    background: #1767c2;
-    color: #ffffff;
-    border-color: #1767c2;
+    background: @accent@;
+    color: @on_accent@;
+    border-color: @accent@;
     font-weight: 700;
 }
 
 QPushButton[classificationPrimaryAction="true"]:hover,
 QPushButton[gimapPrimaryAction="true"]:hover {
-    background: #0f56a5;
+    background: @accent_hover@;
 }
 
 QPushButton#addDataButton,
@@ -235,15 +250,15 @@ QPushButton#scanImportButton {
 QToolButton {
     min-height: 28px;
     padding: 4px 9px;
-    border: 1px solid #c9d4e2;
+    border: 1px solid @border_strong@;
     border-radius: 6px;
-    background: #ffffff;
+    background: @surface@;
 }
 
 QToolButton:checked {
-    background: #e8f1ff;
-    color: #124c8b;
-    border-color: #7aa7d9;
+    background: @accent_soft@;
+    color: @info@;
+    border-color: @accent_border@;
 }
 
 QLineEdit,
@@ -251,63 +266,63 @@ QComboBox,
 QSpinBox,
 QDoubleSpinBox {
     min-height: 26px;
-    border: 1px solid #c9d4e2;
+    border: 1px solid @border_strong@;
     border-radius: 5px;
     padding: 2px 6px;
-    background: #ffffff;
+    background: @surface@;
 }
 
 QTableWidget,
 QListWidget,
 QTextBrowser,
 QGraphicsView {
-    background: #ffffff;
-    border: 1px solid #d7dfeb;
+    background: @surface@;
+    border: 1px solid @border@;
     border-radius: 6px;
-    gridline-color: #e6edf5;
+    gridline-color: @divider@;
 }
 
 QHeaderView::section {
-    background: #eef3f8;
-    color: #263449;
+    background: @surface_hover@;
+    color: @text@;
     padding: 5px 6px;
     border: 0;
-    border-right: 1px solid #d7dfeb;
+    border-right: 1px solid @border@;
     font-weight: 600;
 }
 
 QProgressBar {
     min-height: 14px;
-    border: 1px solid #c9d4e2;
+    border: 1px solid @border_strong@;
     border-radius: 7px;
-    background: #edf2f7;
+    background: @surface_hover@;
     text-align: center;
 }
 
 QProgressBar::chunk {
     border-radius: 7px;
-    background: #27a26a;
+    background: @success@;
 }
 
 QLabel#validationWarningLabel {
-    color: #a15c00;
+    color: @warning@;
 }
 
 QLabel#qualityStatusLabel[qualityState="empty"] {
-    background: #f2f4f7;
-    color: #475467;
+    background: @bg@;
+    color: @text_muted@;
 }
 
 QLabel#qualityStatusLabel[qualityState="ready"] {
-    background: #ecfdf3;
-    color: #067647;
+    background: @success_soft@;
+    color: @success@;
 }
 
 QLabel#classificationPreviewEmptyState {
-    background: rgba(248, 250, 253, 0.96);
-    border: 1px dashed #b8c4d4;
+    background: @surface_alt@;
+    border: 1px dashed @border_strong@;
     border-radius: 10px;
-    color: #667085;
+    color: @text_muted@;
     padding: 18px;
 }
 
@@ -316,24 +331,24 @@ QPushButton#preprocessingContinueButton {
 }
 
 QLabel#metricChartLabel {
-    color: #5f6b7a;
+    color: @text_muted@;
 }
 
 QTabWidget#classificationResultTabs::pane {
-    border: 1px solid #dbe3ef;
+    border: 1px solid @border@;
     border-radius: 6px;
-    background: #ffffff;
+    background: @surface@;
 }
 
 QTabWidget#classificationResultTabs QTabBar::tab {
     min-width: 105px;
     padding: 7px 10px;
-    color: #5f6b7a;
+    color: @text_muted@;
     border: 0;
     border-bottom: 2px solid transparent;
 }
 
 QTabWidget#classificationResultTabs QTabBar::tab:selected {
-    color: #245dcb;
-    border-bottom-color: #245dcb;
+    color: @accent@;
+    border-bottom-color: @accent@;
 }

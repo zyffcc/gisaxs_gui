@@ -14,6 +14,8 @@ def _cubic_q(a_angstrom: float, squared_indices: tuple[int, ...]) -> tuple[float
 # Ag behenate uses the accepted 58.38 A lamellar spacing. LaB6 and CeO2
 # values are generated transparently from their room-temperature cubic cells.
 AGBH_Q1 = 2.0 * math.pi / 58.38
+LAB6_Q = _cubic_q(4.1569, (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22))
+CEO2_Q = _cubic_q(5.41165, (3, 4, 8, 11, 12, 16, 19, 20, 24, 27, 32, 35, 36, 40, 43, 44, 48))
 
 STANDARDS: dict[str, CalibrationStandard] = {
     "agbh": CalibrationStandard(
@@ -26,14 +28,20 @@ STANDARDS: dict[str, CalibrationStandard] = {
     "lab6": CalibrationStandard(
         key="lab6",
         display_name="Lanthanum hexaboride (LaB6)",
-        q_values_inv_angstrom=_cubic_q(4.1569, (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22)),
+        q_values_inv_angstrom=LAB6_Q,
         notes="Cubic LaB6, a = 4.1569 A; unique low-order powder lines.",
     ),
     "ceo2": CalibrationStandard(
         key="ceo2",
         display_name="Cerium dioxide (CeO2)",
-        q_values_inv_angstrom=_cubic_q(5.41165, (3, 4, 8, 11, 12, 16, 19, 20, 24, 27, 32, 35, 36, 40, 43, 44, 48)),
+        q_values_inv_angstrom=CEO2_Q,
         notes="Fluorite CeO2, a = 5.41165 A; allowed all-odd/all-even reflections.",
+    ),
+    "lab6_ceo2": CalibrationStandard(
+        key="lab6_ceo2",
+        display_name="LaB6 + CeO2 mixture",
+        q_values_inv_angstrom=tuple(sorted(set(LAB6_Q) | set(CEO2_Q))),
+        notes="Both powder line sets, for a mixed LaB6/CeO2 calibrant (e.g. GIWAXS at P03).",
     ),
 }
 

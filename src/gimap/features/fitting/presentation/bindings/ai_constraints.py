@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
     QHeaderView,
 )
 
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.features.fitting.application import (
     ConstraintSet,
 )
@@ -51,41 +52,7 @@ class AiConstraintsMixin:
             )
             return False
         try:
-            mapping = self.fitting_view_model.map_candidate_parameters(row)
-            while len(self._iter_particle_widget_ids()) < len(mapping.components):
-                self._on_add_particle_clicked()
-            for widget_id in self._iter_particle_widget_ids():
-                self.set_particle_shape(widget_id, "None")
-
-            widget_ids = self._iter_particle_widget_ids()
-            for idx, component in enumerate(mapping.components):
-                widget_id = widget_ids[idx]
-                shape = component.shape
-                if shape not in COMPONENT_PARAMETER_SCHEMAS:
-                    shape = "Sphere"
-                particle_id = f"particle_{widget_id}"
-                self.model_params_manager.set_particle_shape("fitting", particle_id, shape)
-                self.model_params_manager.set_particle_enabled("fitting", particle_id, True)
-                for parameter_name, value in component.parameters.items():
-                    self.model_params_manager.set_particle_parameter(
-                        "fitting",
-                        particle_id,
-                        shape,
-                        parameter_name,
-                        float(value),
-                    )
-
-            for key, value in mapping.global_parameters.items():
-                self.model_params_manager.set_global_parameter(
-                    "fitting",
-                    key,
-                    float(value),
-                )
-            self.model_params_manager.save_parameters()
-            if not self.reload_particle_parameters():
-                raise RuntimeError(
-                    "candidate parameters were saved but could not be reloaded into the GUI"
-                )
+            self._load_parameter_mapping(self.fitting_view_model.map_candidate_parameters(row))
             if refresh_plot:
                 self._perform_manual_fitting()
             self._set_ai_workspace_status(
@@ -99,6 +66,43 @@ class AiConstraintsMixin:
                 f"Failed to load candidate parameters:\n{exc}",
             )
             return False
+
+    def _load_parameter_mapping(self, mapping) -> None:
+        """Put a candidate's components and global parameters into Components and Global."""
+        while len(self._iter_particle_widget_ids()) < len(mapping.components):
+            self._on_add_particle_clicked()
+        for widget_id in self._iter_particle_widget_ids():
+            self.set_particle_shape(widget_id, "None")
+
+        widget_ids = self._iter_particle_widget_ids()
+        for idx, component in enumerate(mapping.components):
+            widget_id = widget_ids[idx]
+            shape = component.shape
+            if shape not in COMPONENT_PARAMETER_SCHEMAS:
+                shape = "Sphere"
+            particle_id = f"particle_{widget_id}"
+            self.model_params_manager.set_particle_shape("fitting", particle_id, shape)
+            self.model_params_manager.set_particle_enabled("fitting", particle_id, True)
+            for parameter_name, value in component.parameters.items():
+                self.model_params_manager.set_particle_parameter(
+                    "fitting",
+                    particle_id,
+                    shape,
+                    parameter_name,
+                    float(value),
+                )
+
+        for key, value in mapping.global_parameters.items():
+            self.model_params_manager.set_global_parameter(
+                "fitting",
+                key,
+                float(value),
+            )
+        self.model_params_manager.save_parameters()
+        if not self.reload_particle_parameters():
+            raise RuntimeError(
+                "candidate parameters were saved but could not be reloaded into the GUI"
+            )
 
     def build_ai_constraints_json_from_ui(self) -> dict:
         mode = self._ai_fitting_settings().get("last_constraint_mode", "Free")
@@ -162,7 +166,7 @@ class AiConstraintsMixin:
             + (", ".join(name.replace("_", " ") for name in geometries) or "none"),
             dialog,
         )
-        geometry_label.setStyleSheet("font-weight: 600;")
+        set_role(geometry_label, "strong")
         layout.addWidget(geometry_label)
 
         physical_set = ConstraintSet.from_dict(self._ai_run_settings().get("constraint_set"))

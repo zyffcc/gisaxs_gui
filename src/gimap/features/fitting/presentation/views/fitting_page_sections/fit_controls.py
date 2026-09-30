@@ -19,15 +19,6 @@ class FitControlsMixin:
         self.curvePlotControlWidget.setSizePolicy(sizePolicy)
         self.curvePlotControlWidget.setMinimumSize(QtCore.QSize(420, 0))
         self.curvePlotControlWidget.setMaximumSize(QtCore.QSize(420, 16777215))
-        self.curvePlotControlWidget.setStyleSheet(
-            "#curvePlotControlWidget {\n"
-            "  border: 1px solid rgba(0,0,0,0.12);  /* 细外框 */\n"
-            "  padding: 8px;                        /* 让内容不贴边 */\n"
-            "  /* 伪“阴影”：用浅色外描边模拟（Qt 没有 box-shadow） */\n"
-            "  outline: 6px solid rgba(0,0,0,0.03);\n"
-            "  outline-offset: -6px;                /* 紧贴边缘 */\n"
-            "}"
-        )
         self.curvePlotControlWidget.setObjectName("curvePlotControlWidget")
         self.gridLayout_33 = QtWidgets.QGridLayout(self.curvePlotControlWidget)
         self.gridLayout_33.setObjectName("gridLayout_33")
@@ -69,16 +60,6 @@ class FitControlsMixin:
         self.gridLayout_33.addWidget(self.fitDataPointsNumWidget, 3, 0, 1, 1)
         self.fitFittingRegionwidget = QtWidgets.QWidget(self.curvePlotControlWidget)
         self.fitFittingRegionwidget.setMaximumSize(QtCore.QSize(16777215, 80))
-        self.fitFittingRegionwidget.setStyleSheet(
-            "#fitFittingRegionwidget {\n"
-            "  border: 1px solid rgba(0,0,0,0.12);  /* 细外框 */\n"
-            "  border-radius: 12px;                 /* 圆角大小可改 */\n"
-            "  padding: 8px;                        /* 让内容不贴边 */\n"
-            "  /* 伪“阴影”：用浅色外描边模拟（Qt 没有 box-shadow） */\n"
-            "  outline: 6px solid rgba(0,0,0,0.03);\n"
-            "  outline-offset: -6px;                /* 紧贴边缘 */\n"
-            "}"
-        )
         self.fitFittingRegionwidget.setObjectName("fitFittingRegionwidget")
         self.gridLayout_41 = QtWidgets.QGridLayout(self.fitFittingRegionwidget)
         self.gridLayout_41.setObjectName("gridLayout_41")
@@ -218,13 +199,6 @@ class FitControlsMixin:
         self.fitGraphicsView.setSizePolicy(sizePolicy)
         self.fitGraphicsView.setMinimumSize(QtCore.QSize(400, 300))
         self.fitGraphicsView.setMaximumSize(QtCore.QSize(400, 16777215))
-        self.fitGraphicsView.setStyleSheet(
-            "QGraphicsView {\n"
-            "    background: transparent;\n"
-            "    border: 1px solid #888888; \n"
-            "    border-radius: 4px;  \n"
-            "}"
-        )
         self.fitGraphicsView.setObjectName("fitGraphicsView")
         self.gridLayout_33.addWidget(self.fitGraphicsView, 0, 0, 1, 1)
         self.gridLayout_24.addWidget(self.curvePlotControlWidget, 0, 3, 6, 1)

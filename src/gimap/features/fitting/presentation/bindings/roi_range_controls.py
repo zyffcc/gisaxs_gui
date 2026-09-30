@@ -139,39 +139,40 @@ class RoiRangeControlsMixin:
             return None
         return float(np.min(q_valid)), float(np.max(q_valid))
 
-    def _roi_controls_use_abs_negative(self) -> bool:
-        return False
+    def _roi_unit_factor(self) -> float:
+        """The range controls use the plot's q unit: control value = factor × data value."""
+        try:
+            converted = self._convert_q_values_for_display(np.array([1.0]))
+            factor = float(np.asarray(converted, dtype=float).reshape(-1)[0])
+        except Exception:
+            return 1.0
+        return factor if np.isfinite(factor) and factor > 0 else 1.0
 
     def _roi_data_to_control_range(self, q_min: float, q_max: float):
-        if self._roi_controls_use_abs_negative():
-            vals = np.sort(np.abs(np.array([q_min, q_max], dtype=float)))
-            return float(vals[0]), float(vals[1])
-        return float(q_min), float(q_max)
+        factor = self._roi_unit_factor()
+        return float(q_min) * factor, float(q_max) * factor
 
     def _roi_data_to_control_values(self, q_min: float, q_max: float):
         return self._roi_data_to_control_range(q_min, q_max)
 
     def _roi_control_to_data_values(self, vmin: float, vmax: float):
-        if self._roi_controls_use_abs_negative():
-            lo, hi = sorted((abs(float(vmin)), abs(float(vmax))))
-            return -hi, -lo
-        return float(vmin), float(vmax)
+        factor = self._roi_unit_factor()
+        return float(vmin) / factor, float(vmax) / factor
 
     def _nearest_roi_control_value(self, value: float):
+        """Snap a control value to the nearest measured q, in control units."""
         try:
-            q = np.asarray(self.q) if self.q is not None else None
-            if q is None or q.size == 0:
-                return float(value)
-            finite = q[np.isfinite(q)]
+            q = np.asarray(self.q, dtype=float) if self.q is not None else None
+            finite = q[np.isfinite(q)] if q is not None else np.array([])
             if finite.size == 0:
                 return float(value)
-            if self._roi_controls_use_abs_negative():
-                finite = np.abs(finite[finite < 0])
-            if finite.size == 0:
-                return float(value)
-            return float(finite[np.argmin(np.abs(finite - value))])
+            factor = self._roi_unit_factor()
+            return float(finite[np.argmin(np.abs(finite - float(value) / factor))] * factor)
         except Exception:
             return float(value)
+
+    def _roi_unit_suffix(self) -> str:
+        return " nm⁻¹" if self._get_q_display_unit() == "nm" else " Å⁻¹"
 
     def _sync_roi_controls_to_current_display(self, reset_to_domain: bool = False):
         """Update ROI bounds/editability to match the current Fitting Plot display."""
@@ -201,10 +202,13 @@ class RoiRangeControlsMixin:
                 s.setRangeF(control_min, control_max)
                 s.setMinValueF(control_roi_min)
                 s.setMaxValueF(control_roi_max)
+            suffix = self._roi_unit_suffix()
             if hasattr(self.ui, "fitFittingRegionMinValue"):
+                self.ui.fitFittingRegionMinValue.setSuffix(suffix)
                 self.ui.fitFittingRegionMinValue.setRange(control_min, control_max)
                 self.ui.fitFittingRegionMinValue.setValue(control_roi_min)
             if hasattr(self.ui, "fitFittingRegionMaxValue"):
+                self.ui.fitFittingRegionMaxValue.setSuffix(suffix)
                 self.ui.fitFittingRegionMaxValue.setRange(control_min, control_max)
                 self.ui.fitFittingRegionMaxValue.setValue(control_roi_max)
         finally:
@@ -259,11 +263,7 @@ class RoiRangeControlsMixin:
                         self._points_num_current = int(value)
                     except Exception:
                         self._points_num_current = int(self._points_num_default)
-                    if getattr(self, "data_source", None) == "cut":
-                        self._mark_cut_stale(
-                            "Sampling changed; click Extract / Update Cut to apply it"
-                        )
-                    elif getattr(self, "data_source", None) == "1d":
+                    if getattr(self, "data_source", None) == "1d":
                         self._resample_1d(n_points=int(self._points_num_current))
 
                 mode = self._signal_mode_overrides.get(
@@ -337,22 +337,7 @@ class RoiRangeControlsMixin:
                 # Clamp ROI into new bounds
                 self._roi_min = max(q_min, min(self._roi_min, q_max))
                 self._roi_max = max(self._roi_min, min(self._roi_max, q_max))
-        # Update UI controls
-        self._updating_roi_controls = True
-        try:
-            if hasattr(self.ui, "fitFittingRegionSlider"):
-                s = self.ui.fitFittingRegionSlider
-                s.setRangeF(q_min, q_max)
-                s.setMinValueF(self._roi_min)
-                s.setMaxValueF(self._roi_max)
-            if hasattr(self.ui, "fitFittingRegionMinValue"):
-                self.ui.fitFittingRegionMinValue.setRange(q_min, q_max)
-                self.ui.fitFittingRegionMinValue.setValue(self._roi_min)
-            if hasattr(self.ui, "fitFittingRegionMaxValue"):
-                self.ui.fitFittingRegionMaxValue.setRange(q_min, q_max)
-                self.ui.fitFittingRegionMaxValue.setValue(self._roi_max)
-        finally:
-            self._updating_roi_controls = False
+        # The controls (in the plot's unit) follow from the data range.
         self._sync_roi_controls_to_current_display(reset_to_domain=force_full)
 
     def _on_roi_slider_changed_int(self, imin, imax):

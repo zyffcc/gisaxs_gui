@@ -17,6 +17,7 @@ from src.gimap.shared.detector_io import (
     _dataset_candidates,
     load_detector_image,
     select_nxs_dataset,
+    write_frame,
 )
 from src.gimap.shared.file_paths import normalize_path
 
@@ -290,47 +291,10 @@ class LocalConversionExecutor:
         metadata: dict[str, Any],
         options: ConversionOptions,
     ) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if options.output_format == "NumPy":
-            np.save(str(path), data, allow_pickle=False)
-            return
-        if options.output_format == "HDF5":
-            with h5py.File(str(path), "w") as handle:
-                entry = handle.create_group("entry")
-                entry.attrs["NX_class"] = "NXentry"
-                dataset = entry.create_dataset("data/data", data=data, compression="gzip", shuffle=True)
-                if options.preserve_metadata:
-                    dataset.attrs["metadata_json"] = json.dumps(metadata, ensure_ascii=False)
-            return
-        if options.output_format == "TIFF":
-            from fabio.tifimage import TifImage
-
-            header = (
-                {"GIMaP_metadata": json.dumps(metadata, ensure_ascii=False)}
-                if options.preserve_metadata
-                else {}
-            )
-            TifImage(data=data, header=header).write(str(path))
-            return
-        if options.output_format == "CBF":
-            from fabio.cbfimage import CbfImage
-
-            cbf_data = data
-            if not np.issubdtype(cbf_data.dtype, np.integer):
-                cbf_data = np.nan_to_num(
-                    cbf_data,
-                    nan=0.0,
-                    posinf=0.0,
-                    neginf=0.0,
-                ).astype(np.float32)
-            header = (
-                {"GIMaP_metadata": json.dumps(metadata, ensure_ascii=False)}
-                if options.preserve_metadata
-                else {}
-            )
-            CbfImage(data=cbf_data, header=header).write(str(path))
-            return
-        raise ValueError(f"Unsupported output format: {options.output_format}")
+        formats = {"NumPy": "npy", "HDF5": "hdf5", "TIFF": "tiff", "CBF": "cbf", "EDF": "edf"}
+        if options.output_format not in formats:
+            raise ValueError(f"Unsupported output format: {options.output_format}")
+        write_frame(path, data, formats[options.output_format], metadata if options.preserve_metadata else None)
 
     @staticmethod
     def _write_container_frame(
