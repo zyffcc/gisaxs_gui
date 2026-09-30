@@ -302,9 +302,12 @@ def _errors(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tu
     if not paths or data.q.size <= len(paths):
         return {path: math.nan for path in paths}, ()
     values = np.array([model.get(path).value for path in paths], dtype=float)
+    # The size of every parameter on its own (its range when it is 0): the finite-difference step
+    # and the unit of its column. A parameter of 1e30 next to R ≈ 5 nm must not set R's step.
+    scale = np.array([abs(value) if value else _width(model.get(path)) for path, value in zip(paths, values)])
     jacobian = np.empty((data.q.size, len(paths)))
     for column, (path, value) in enumerate(zip(paths, values)):
-        step = 1e-4 * max(abs(value), 1e-6 * (abs(values).max() or 1.0), 1e-12)
+        step = 1e-4 * scale[column]
         with np.errstate(all="ignore"):
             upper = residuals(model.with_values({path: value + step}), data)
             lower = residuals(model.with_values({path: value - step}), data)
@@ -313,7 +316,9 @@ def _errors(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tu
     variance = float(residual @ residual) / (data.q.size - len(paths))
     if not np.all(np.isfinite(jacobian)):
         return {path: math.nan for path in paths}, ()
-    covariance = np.linalg.pinv(jacobian.T @ jacobian) * variance
+    # Columns in relative units, so that no parameter pushes the others below the cut-off of the inverse.
+    scaled = jacobian * scale
+    covariance = np.linalg.pinv(scaled.T @ scaled) * variance * np.outer(scale, scale)
     diagonal = np.diag(covariance)
     errors = {path: float(np.sqrt(d)) if d > 0 else math.nan for path, d in zip(paths, diagonal)}
     correlated = []
@@ -324,6 +329,11 @@ def _errors(model: FitModel, data: FitData, problem: _Problem) -> tuple[dict, tu
                 if abs(rho) >= CORRELATED:
                     correlated.append((paths[i], paths[j], float(rho)))
     return errors, tuple(correlated)
+
+
+def _width(parameter) -> float:
+    width = parameter.upper - parameter.lower
+    return float(width) if math.isfinite(width) and width > 0 else 1.0
 
 
 def _at_bounds(model: FitModel, problem: _Problem) -> tuple:

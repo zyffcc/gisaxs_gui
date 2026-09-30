@@ -83,6 +83,21 @@ def test_a_local_fit_finds_the_parameters_with_errors_that_cover_them() -> None:
     assert result.model.get((0, "Int")).value == pytest.approx(1000.0, rel=0.05)  # solved, not searched
 
 
+def test_a_huge_parameter_does_not_wipe_out_the_errors_of_the_others() -> None:
+    # In a series the resolution peak can run off to a vanishing width with an amplitude of 1e28 or more:
+    # it must not set the finite-difference step (or the cut-off of the inverse) of R.
+    from src.gimap.features.fitting.domain.fit_engine import _errors, _Problem
+
+    truth = _truth().with_values({("globals", "res_amplitude"): 0.0})
+    data = _noisy(truth)
+    runaway = truth.with_values({("globals", "res_amplitude"): 1e28, ("globals", "res_width"): 0.0021,
+                                 ("globals", "res_exponent"): 20.0})
+    reference, _ = _errors(truth, data, _Problem(truth, data, None, None, 1))
+    errors, _ = _errors(runaway, data, _Problem(runaway, data, None, None, 1))
+    for key in ("R", "sigma_R", "Int"):
+        assert reference[(0, key)] / 3 < errors[(0, key)] < 3 * reference[(0, key)], key
+
+
 def test_a_wide_search_escapes_a_bad_start() -> None:
     truth = _truth()
     data = _noisy(truth, seed=9)

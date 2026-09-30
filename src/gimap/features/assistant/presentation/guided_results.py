@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.components import AdvancedSection
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr
 
 from ..application import ring_overlays, series_changes
 from .guided_details import PeakDetails
@@ -126,6 +126,8 @@ class GuidedResultsPanel(QWidget):
             self._series(report)
         self._report(report)
         self.layout_.addStretch(1)
+        if current_language() != DEFAULT_LANGUAGE:  # built after the window was translated
+            apply_to(self, current_language())
         self.show()
 
     def _outcome(self, report: dict) -> None:
@@ -305,7 +307,7 @@ class GuidedResultsPanel(QWidget):
         toggle = QPushButton("Show the Full Text", self)
         toggle.setCheckable(True)
         toggle.toggled.connect(self.report_view.setVisible)
-        toggle.toggled.connect(lambda on: toggle.setText("Hide the Full Text" if on else "Show the Full Text"))
+        toggle.toggled.connect(lambda on: toggle.setText(tr("Hide the Full Text") if on else tr("Show the Full Text")))
         self.layout_.addWidget(toggle, 0, Qt.AlignLeft)
         self.layout_.addWidget(self.report_view)
 

@@ -55,6 +55,7 @@ class ClassificationWorkflowStep(QFrame):
         self.button.setAutoRaise(True)
         self.button.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.button.setProperty("workflowLabel", True)
+        self.button.setToolTip(f"Go to the {title} step")
         self.button.clicked.connect(lambda _checked=False: self.requested.emit(self.key))
         self.message_label = QLabel("", self)
         self.message_label.setProperty("workflowMessage", True)

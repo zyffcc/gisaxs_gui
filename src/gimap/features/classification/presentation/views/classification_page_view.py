@@ -211,6 +211,7 @@ class ClassificationPageView:
         for label, text in copy:
             label.setText(text)
         self.logToggleButton.setText("Operation log")
+        self.logToggleButton.setToolTip("Show or hide the log of what was done on this page")
         self.classificationLogDescription.setText(
             "Import, reduction, grouping, labeling, training, prediction, and export messages."
         )

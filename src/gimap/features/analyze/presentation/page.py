@@ -21,6 +21,7 @@ from .bindings.options import OptionsMixin
 from .bindings.marks import MarksMixin
 from .bindings.masks import MaskToolsMixin
 from .bindings.profile_actions import ProfileActionsMixin
+from .bindings.project import ProjectMixin
 from .bindings.region_pick import RegionPickMixin
 from .bindings.regions import RegionsMixin
 from .bindings.series import SeriesMixin
@@ -35,6 +36,7 @@ STATUS_LEVELS = ("info", "ok", "warning", "error")
 
 
 class AnalyzePage(
+    ProjectMixin,
     WorkspaceMixin,
     RegionsMixin,
     RegionPickMixin,

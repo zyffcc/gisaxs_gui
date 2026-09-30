@@ -59,6 +59,7 @@ class FitRunMixin:
         method = self.method()
         self.families_row.setVisible(method == "shapes")
         self.fit_step_button.setText(tr(METHOD_NAMES[method]))
+        self.fit_step_button.setToolTip(self.method_buttons[method].toolTip())
         self._remember(method=method)
 
     def fit_running(self) -> bool:

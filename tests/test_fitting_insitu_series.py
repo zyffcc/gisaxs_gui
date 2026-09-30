@@ -120,26 +120,6 @@ def test_series_page_is_curve_based_and_versions_the_recipe() -> None:
     window.close()
 
 
-def test_series_page_fits_supported_viewports() -> None:
-    app, window, _binding = _window()
-    workspace = window.components.fitting_workspace
-    page = workspace.insitu_series_page
-    window.menus.show_workspace("fitting")
-    workspace.show_context("insitu")
-    for width, height in ((1280, 800), (1440, 900), (1920, 1080)):
-        window.resize(width, height)
-        QTest.qWait(40)
-        app.processEvents()
-        assert page.ui.startProcessButton.isVisible()
-        browse = page.ui.workflowControls.sequenceBrowseButton
-        browse_right = browse.mapTo(page, browse.rect().bottomRight()).x()
-        viewport = page.ui.settingsScrollArea.viewport()
-        assert browse_right <= viewport.mapTo(page, viewport.rect().bottomRight()).x()
-        assert page.ui.settingsScrollArea.horizontalScrollBar().maximum() == 0
-        assert page.ui.jobStatus.mapTo(page, QPoint(0, page.ui.jobStatus.height())).y() <= page.height()
-    window.close()
-
-
 def test_single_curve_is_captured_as_the_series_recipe(tmp_path: Path) -> None:
     _app_, window, binding = _window()
     curve = _write_curve(tmp_path / "run_00001_fit_input.dat")

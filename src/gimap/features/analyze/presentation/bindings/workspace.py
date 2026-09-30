@@ -153,6 +153,8 @@ class WorkspaceMixin:
         self.file_chip.setToolTip(str(path))
         self.file_meta.setText("reading…")
         count = self.file_list.count()
+        for button in (self.previous_file_button, self.next_file_button):
+            button.setVisible(count > 1)  # stepping through files: only with more than one
         self.previous_file_button.setEnabled(self.file_list.currentRow() > 0)
         self.next_file_button.setEnabled(0 <= self.file_list.currentRow() < count - 1)
         self.set_step_state("data", "busy", f"Reading {path.name} …")

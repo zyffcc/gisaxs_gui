@@ -1,6 +1,10 @@
 # In-situ 序列分析契约
 
-- **Status**: Current
+- **Status**: Superseded in the interface (2026-10-01)：Fitting ▸ In-situ series 现在是新页面
+  （`presentation/single/series_page.py` + `application/series_fit.py`，说明见
+  [`../ui/workspaces/fitting.md`](../ui/workspaces/fitting.md#in-situ-series)）：直接用 Single analysis 的
+  模型、两半、范围和排除的点，每帧从上一帧结果开始。下面的 Recipe 契约与代码仍在（旧页面隐藏，
+  其测试照常运行），作为以后恢复 Recipe 版本记录时的参考。
 - **Scope**: Fitting 中单条曲线分析与实时、批量曲线序列处理之间的配置和数据边界；探测器帧序列由
   Analyze 先转成曲线（Send Series to Fitting）
 - **Related code**:

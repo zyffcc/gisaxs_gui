@@ -77,9 +77,8 @@ class ManualRefinementMixin:
         analyze = getattr(getattr(self.main_window, "components", None), "analyze_page", None)
         if analyze is not None and hasattr(analyze, "_refresh_profiles"):
             analyze._refresh_profiles()
-        if hasattr(self.main_window, "statusbar"):
-            self.main_window.statusbar.showMessage(
-                "Geometry calibration applied: center "
-                f"({candidate.center_x_px:.2f}, {candidate.center_y_px:.2f}), "
-                f"distance {candidate.distance_mm:.2f} mm"
-            )
+        from src.gimap.app.presentation.components import show_toast
+
+        show_toast(self.main_window, "Geometry calibration applied: centre "
+                   f"({candidate.center_x_px:.2f}, {candidate.center_y_px:.2f}) px, "
+                   f"distance {candidate.distance_mm:.2f} mm", level="ok")

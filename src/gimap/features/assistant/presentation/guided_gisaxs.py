@@ -58,7 +58,7 @@ def outcome_text(report: dict) -> str:
     if solutions:
         best = solutions[0]
         component = (best.get("components") or [{}])[0]
-        parts.append(f"best fit {best['model']} R {_number(component.get('R'))} nm (χ² {_number(best['chi2'])})")
+        parts.append(f"best fit {model_name(best['model'])} R {_number(component.get('R'))} nm (χ² {_number(best['chi2'])})")
     return "Done: " + (", ".join(parts) if parts else "the horizontal cut is ready") + "."
 
 

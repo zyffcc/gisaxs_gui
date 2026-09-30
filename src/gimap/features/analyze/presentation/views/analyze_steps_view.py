@@ -65,8 +65,10 @@ def info_card(parent: QWidget) -> tuple[QFrame, QLabel]:
     return card, label
 
 
-def action_row(button: QPushButton, description: str, parent: QWidget) -> QWidget:
-    """A button with one line saying what it produces (the Export step)."""
+def action_row(button: QPushButton, description: str, parent: QWidget, tip: str = "") -> QWidget:
+    """A button with one short line saying what it produces (the Export step); the details in its tooltip."""
+    if tip or not button.toolTip():
+        button.setToolTip(tip or description)
     row = QWidget(parent)
     layout = QVBoxLayout(row)
     layout.setContentsMargins(0, 0, 0, 2)
@@ -300,14 +302,17 @@ class AnalyzeStepsView:
         self.mask_list.setMaximumHeight(96)
         layout.addWidget(self.mask_list)
         mask_actions = QHBoxLayout()
-        self.mask_remove_button = QPushButton("Remove", page)
+        self.mask_remove_button = QPushButton("Remove Selected", page)
+        self.mask_remove_button.setToolTip("Remove the mask selected in the list above")
         self.mask_clear_button = QPushButton("Clear Masks", page)
+        self.mask_clear_button.setToolTip("Remove every drawn or loaded mask (the detector gaps stay masked)")
         mask_actions.addWidget(self.mask_remove_button)
         mask_actions.addWidget(self.mask_clear_button)
         mask_actions.addStretch(1)
         layout.addLayout(mask_actions)
         self.show_mask_button = QPushButton("Show Masked Pixels on the Image", page)
         self.show_mask_button.setObjectName("analyzeShowMaskButton")
+        self.show_mask_button.setToolTip("Circle every pixel left out (gaps, hot and dead pixels, your masks) on the image")
         self.show_mask_button.setCheckable(True)
         layout.addWidget(self.show_mask_button, 0, Qt.AlignLeft)
         self.corrections_section.set_expanded(False)
@@ -379,16 +384,21 @@ class AnalyzeStepsView:
         self.export_fit_button = QPushButton("Send to Fitting", page)
         self.export_series_button = QPushButton("Send Series to Fitting…", page)
         self.export_all_button.setProperty("gimapRole", "primary")
-        for button, text in (
-            (self.export_all_button, "Every listed frame with the current settings, to a folder you choose: a table per curve with every frame a column, and per-frame files. Settings can be saved for the next data set."),
-            (self.export_curves_button, "One CSV per curve (q, I, σ, pixels) and a JSON record of the settings, next to the data (gimap_analysis/)."),
-            (self.export_image_button, "The detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF)."),
-            (self.export_map_button, "The intensity on a regular q grid (qy–qz or q∥–qz) as a CSV table with its axes."),
-            (self.export_plots_button, "The upper and lower plots as figures, one column wide."),
-            (self.export_fit_button, "The horizontal cut (GISAXS) or I(q) (GIWAXS) opened in Fitting."),
-            (self.export_series_button, "Every listed frame exported and opened in Fitting ▸ In-situ series."),
+        for button, text, tip in (
+            (self.export_all_button, "Every listed frame, to a folder you choose.",
+             "Every listed frame with the current settings, to a folder you choose: a table per curve with every frame a column, and per-frame files. Settings can be saved for the next data set."),
+            (self.export_curves_button, "This frame's curves as CSV, next to the data.",
+             "One CSV per curve (q, I, σ, pixels) and a JSON record of the settings, next to the data (gimap_analysis/)."),
+            (self.export_image_button, "The image as shown, with its colour bar.",
+             "The detector image or q map as shown, with a colour bar (PNG, TIFF, SVG, PDF)."),
+            (self.export_map_button, "The q map as a table.",
+             "The intensity on a regular q grid (qy–qz or q∥–qz) as a CSV table with its axes."),
+            (self.export_plots_button, "The two plots as figures.", "The upper and lower plots as figures, one column wide."),
+            (self.export_fit_button, "The cut, fitted in Fitting.", "The horizontal cut (GISAXS) or I(q) (GIWAXS) opened in Fitting."),
+            (self.export_series_button, "Every frame, fitted in Fitting ▸ In-situ series.",
+             "Every listed frame exported and opened in Fitting ▸ In-situ series."),
         ):
-            layout.addWidget(action_row(button, text, page))
+            layout.addWidget(action_row(button, text, page, tip))
         self.export_extra_host = QVBoxLayout()
         layout.addLayout(self.export_extra_host)
         layout.addStretch(1)

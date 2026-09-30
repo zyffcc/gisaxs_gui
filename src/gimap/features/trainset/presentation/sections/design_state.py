@@ -28,7 +28,7 @@ class DesignStateMixin:
         if index < 0:
             return
         self.stack.setCurrentIndex(index)
-        self.back_button.setEnabled(index > 0)
+        self.back_button.setVisible(index > 0)  # nothing to go back to on the first step
         self._sync_workflow_actions(index)
         self.step_changed.emit(index)
         QTimer.singleShot(0, self._apply_responsive_layout)

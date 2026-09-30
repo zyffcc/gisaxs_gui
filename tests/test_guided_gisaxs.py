@@ -172,6 +172,27 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     panel.deleteLater()
 
 
+def test_the_results_built_in_chinese_are_in_chinese(galaxi_run) -> None:
+    # The results are built after the window was translated: they are translated themselves.
+    from PyQt5.QtWidgets import QToolButton
+
+    from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
+    from src.gimap.features.assistant.presentation import GuidedResultsPanel
+
+    _app()
+    session, report = galaxi_run
+    apply_language("zh")
+    try:
+        panel = GuidedResultsPanel(session.page.automation)
+        panel.show_report(report)
+        assert panel.findChild(QToolButton, "guidedSaveFitPlot").text() == "保存图…"
+        assert "拟合" in panel.findChild(QPushButton, "guidedRefineFit").text()
+        panel.gisaxs.dispose()
+        panel.deleteLater()
+    finally:
+        apply_language(DEFAULT_LANGUAGE)
+
+
 def test_halves_and_spacing_rules_on_synthetic_curves() -> None:
     q = np.linspace(-0.2, 0.2, 401)
     intensity = 100 * np.exp(-np.abs(q) / 0.05) + 5

@@ -129,6 +129,7 @@ class MainWindowComponents:
         page.openRequested.connect(lambda: self._open_and_guide(self.analyze_page.open_files))
         page.folderRequested.connect(lambda: self._open_and_guide(self.analyze_page.open_folder))
         page.batchRequested.connect(lambda: self._open_and_guide(self.analyze_page.batch_from_folder))
+        page.projectRequested.connect(lambda: getattr(self.ui, "menus", None) and self.ui.menus.open_project())
         page.set_recent_provider(self.analyze_page.recent_paths)
         page.recentRequested.connect(lambda path: (self.analyze_page.add_paths([path]), self._page_requested("analyze")))
         page.filesDropped.connect(self._open_dropped)
@@ -172,6 +173,11 @@ class MainWindowComponents:
             self._page_requested("analyze")
 
     def _open_dropped(self, paths) -> None:
+        projects = [path for path in paths if str(path).lower().endswith(".gimap")]
+        menus = getattr(self.ui, "menus", None)
+        if projects and menus is not None:
+            menus.open_project(projects[0])
+            return
         if self.analyze_page.add_paths(paths):
             self._page_requested("analyze")
 
@@ -233,7 +239,7 @@ class MainWindowComponents:
         if runtime is None:
             raise RuntimeError("Fitting is still starting; try again in a moment.")
         runtime.navigate("fitting")
-        runtime.fitting.show_insitu_series(folder=folder, pattern="*_fit_input.dat")
+        self.fitting_workspace.open_series(folder, "*_fit_input.dat")
 
     def _replace_page_host(self, host_name: str, page) -> int:
         stack = self.ui.mainWindowWidget

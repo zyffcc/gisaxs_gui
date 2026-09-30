@@ -401,6 +401,7 @@ def test_fitting_static_controls_and_workspace_are_python_view_owned():
     assert len(factory_source.splitlines()) <= 40
     assert {path.name for path in views.glob("*_view.py")} == {
         "fit_page_view.py",
+        "fit_series_view.py",
         "fit_steps_view.py",
         "fitting_page_view.py",
         "independent_fit_window_view.py",

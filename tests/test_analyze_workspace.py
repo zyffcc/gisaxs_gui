@@ -462,7 +462,7 @@ def main():
         "file": fitting.current_1d_data["file_path"],
         "points": len(fitting.current_1d_data["q"]),
         "q_view": window.fitQViewModeComboBox.currentData(),
-        "curve_name": window.components.fitting_workspace.curve_card.name_label.text(),
+        "curve_name": window.components.fitting_workspace.fit_page.curve_chip.text(),
     }
     # Send Series to Fitting: every listed frame is exported, then the series opens.
     second = Path(sys.argv[1]) / ("second_" + CBF.name)
@@ -473,12 +473,13 @@ def main():
     page.apply_to_all(destination, then=page._send_series_to_fitting)
     page.tasks.wait(120)
     workspace = window.components.fitting_workspace
-    series = workspace.insitu_series_page.ui.workflowControls
+    series = workspace.series_page
     print(json.dumps({
         **single,
-        "series_context": workspace.context_stack.currentWidget() is workspace.insitu_series_page,
-        "series_folder": series.sequenceFolderEdit.text(),
-        "series_pattern": series.sequencePatternEdit.text(),
+        "series_context": workspace.context_stack.currentWidget() is series,
+        "series_folder": series.folder,
+        "series_pattern": series.pattern_edit.text(),
+        "series_listed": len(series.paths),
         "fit_inputs": sorted(path.name for path in (destination / "fit_input").glob("*_fit_input.dat")),
         "start_is_home": start_page == window.mainWindowWidget.indexOf(window.components.home_page),
         "page_after_fit": window.mainWindowWidget.currentIndex(),
@@ -525,7 +526,7 @@ def test_fit_opens_the_curve_and_the_series_in_fitting(tmp_path: Path) -> None:
     assert "Exported 2/2 frames" in result["status"]
     assert result["series_context"]
     assert Path(result["series_folder"]) == tmp_path / "gimap_analysis" / "fit_input"
-    assert result["series_pattern"] == "*_fit_input.dat"
+    assert result["series_pattern"] == "*_fit_input.dat" and result["series_listed"] == 2
     assert result["fit_inputs"] == sorted(
         [f"{CBF.stem}_fit_input.dat", f"second_{CBF.stem}_fit_input.dat"]
     )

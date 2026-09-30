@@ -8,7 +8,7 @@ from typing import Optional
 
 from src.gimap.app.presentation.i18n import tr
 
-from ...application.single_fit import FAMILIES, Curve, FitData, FitModel, FitResult, new_component, prepare_curve
+from ...application.single_fit import FAMILIES, INFO, Curve, FitData, FitModel, FitResult, new_component, prepare_curve
 
 HISTORY = 50
 
@@ -30,6 +30,17 @@ def model_label(model: FitModel) -> str:
     return " + ".join(tr(FAMILIES[component.family][0]) for component in model.components) or tr("no particle")
 
 
+def path_name(model: FitModel, path: tuple, *, unit: bool = False, translate: bool = True) -> str:
+    """“1·Sphere R”, or “background” for a global value, in the interface language (and its unit);
+    ``translate=False`` for the axes of a figure."""
+    owner, key = path
+    say = tr if translate else str
+    label = say(INFO[key].label) + (f" ({INFO[key].unit})" if unit and INFO[key].unit else "")
+    if owner == "globals" or owner >= len(model.components):
+        return label
+    return f"{owner + 1}·{say(FAMILIES[model.components[owner].family][0])} {label}"
+
+
 def starting_model() -> FitModel:
     return FitModel((new_component("sphere"),))
 
@@ -45,6 +56,8 @@ class FitSession:
     solutions: list = field(default_factory=list)
     edited: bool = False
     """Whether the person or a fit has changed the starting model."""
+    excluded: set = field(default_factory=set)
+    """Points left out of the fit (``point_key`` of their |q|)."""
     _undo: list = field(default_factory=list)
     _redo: list = field(default_factory=list)
 
@@ -54,9 +67,10 @@ class FitSession:
         """The points fitted (the halves chosen, inside the range)."""
         if self.curve is None:
             return None
-        return prepare_curve(self.curve, self.side, self.q_range)
+        return prepare_curve(self.curve, self.side, self.q_range, self.excluded)
 
     def all_points(self) -> Optional[FitData]:
+        """Every point of the halves chosen (also those outside the range or left out)."""
         if self.curve is None:
             return None
         return prepare_curve(self.curve, self.side, None)
@@ -65,6 +79,7 @@ class FitSession:
         self.curve = curve
         self.q_range = None
         self.result = None
+        self.excluded = set()
         if not curve.signed:
             self.side = "mean"
 

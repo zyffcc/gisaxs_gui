@@ -176,8 +176,8 @@ class OptionsMixin:
         self.giwaxs_section.setVisible(kind != "gisaxs")
         self.regions_panel.setVisible(kind == "giwaxs")
         self.gisaxs_cuts.setVisible(kind == "gisaxs")
-        self.mirror_fill_check.setEnabled(kind != "gisaxs")
-        self.intensity_section.setEnabled(kind != "gisaxs")
+        self.mirror_fill_check.setVisible(kind != "gisaxs")  # a GIWAXS correction: not offered for GISAXS
+        self.intensity_section.setVisible(kind != "gisaxs")  # GIWAXS corrections: not offered for GISAXS
 
 
 __all__ = ["OptionsMixin"]

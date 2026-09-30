@@ -81,8 +81,14 @@ def _half(curve: Curve, positive: bool):
     return q[order], curve.intensity[keep][order], sigma
 
 
-def prepare_curve(curve: Curve, side: str = "mean", q_range: Optional[tuple] = None) -> FitData:
-    """The points fitted (|q| in nm⁻¹), in ``q_range`` (nm⁻¹) when given."""
+def point_key(q: float) -> float:
+    """How a point is named when it is left out: its |q| (nm⁻¹) to nine significant digits."""
+    return float(f"{abs(float(q)):.9g}")
+
+
+def prepare_curve(curve: Curve, side: str = "mean", q_range: Optional[tuple] = None, excluded=()) -> FitData:
+    """The points fitted (|q| in nm⁻¹), in ``q_range`` (nm⁻¹) when given, without the ``excluded`` ones
+    (``point_key`` values)."""
     if not curve.signed:
         q, intensity, sigma = np.abs(curve.q), curve.intensity, curve.sigma
     elif side in ("positive", "negative"):
@@ -94,6 +100,10 @@ def prepare_curve(curve: Curve, side: str = "mean", q_range: Optional[tuple] = N
     if q_range is not None:
         low, high = sorted(float(value) for value in q_range)
         keep = (q >= low) & (q <= high)
+        q, intensity = q[keep], intensity[keep]
+        sigma = None if sigma is None else sigma[keep]
+    if excluded:
+        keep = ~np.isin(np.array([point_key(value) for value in q]), np.array(sorted(excluded), dtype=float))
         q, intensity = q[keep], intensity[keep]
         sigma = None if sigma is None else sigma[keep]
     return FitData.prepare(q, intensity, sigma)
@@ -151,14 +161,16 @@ def export_table(model: FitModel, data: FitData) -> tuple[list[str], np.ndarray]
     return names, np.column_stack(columns)
 
 
-def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: str, q_range, result: Optional[FitResult]) -> dict:
+def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: str, q_range, result: Optional[FitResult],
+               excluded=()) -> dict:
     """What the export writes next to the table: the model, the fit and how it was made."""
     record = {
         "model": model_to_dict(model),
         "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_D_i/D_i) + A / (1 + (|q|/w)^nu)]",
         "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit},
         "points": {"side": side, "q_range_nm^-1": None if q_range is None else [float(v) for v in q_range],
-                   "count": int(data.q.size), "weighting": data.weighting},
+                   "count": int(data.q.size), "weighting": data.weighting,
+                   "left_out_q_nm^-1": sorted(float(value) for value in excluded)},
         "log_rmse": log_rmse(model, data),
     }
     if result is not None:
@@ -176,6 +188,6 @@ __all__ = [
     "ANALYZE_SIDES", "FAMILIES", "GLOBALS", "INFO", "LINEAR", "NM_PER_A", "SIDES",
     "Component", "Curve", "FitData", "FitModel", "FitResult", "FitStopped", "Parameter",
     "evaluate", "export_table", "fit", "fit_record", "fit_scales", "from_manual", "log_rmse", "model_from_dict",
-    "model_from_solution", "model_to_dict", "new_component", "parameter_text", "prepare_curve",
+    "model_from_solution", "model_to_dict", "new_component", "parameter_text", "point_key", "prepare_curve",
     "residuals", "to_manual",
 ]

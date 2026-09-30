@@ -80,6 +80,7 @@ class DatasetMixin:
         ref_form = QGridLayout(reference)
         self.reference_path = self._line("project.reference_file")
         self.reference_button = QPushButton("Load file...")
+        self.reference_button.setToolTip("A measured detector image, to place the beam centre, ROI and masks on")
         ref_form.addWidget(QLabel("Reference file"), 0, 0)
         ref_form.addWidget(self.reference_path, 0, 1)
         ref_form.addWidget(self.reference_button, 1, 1)
@@ -133,6 +134,7 @@ class DatasetMixin:
             grid.addWidget(QLabel(label), row, 0)
             grid.addWidget(widget, row, 1)
         self.pick_beam_center_button = QPushButton("Pick beam center on detector")
+        self.pick_beam_center_button.setToolTip("Click the direct-beam position on the image on the right")
         self.beam_cursor_label = QLabel("Move over the full detector to inspect x, y and intensity")
         self.beam_cursor_label.setWordWrap(True)
         grid.addWidget(self.pick_beam_center_button, len(entries), 0, 1, 2)
@@ -153,6 +155,7 @@ class DatasetMixin:
             roi_grid.addWidget(QLabel(label), row, 0)
             roi_grid.addWidget(self._spin(path, value, 0), row, 1)
         self.draw_roi_button = QPushButton("Draw rectangle ROI")
+        self.draw_roi_button.setToolTip("Drag a rectangle on the image: the region the training images keep")
         self.roi_range_label = QLabel(
             "phi / alpha range will be calculated from the detector geometry"
         )

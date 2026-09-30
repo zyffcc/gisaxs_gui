@@ -91,9 +91,10 @@ class MaskToolsMixin:
             self.mask_list.addItem(f"Mask file: {Path(corrections.mask_path).name}")
         empty = not corrections.mask_shapes and not corrections.mask_path
         self.mask_list.setVisible(not empty)
-        self.mask_remove_button.setEnabled(not empty)
-        self.mask_clear_button.setEnabled(not empty)
-        self.mask_save_button.setEnabled(bool(corrections.mask_shapes))
+        # Only what can be used: Remove / Clear / Save appear once there is a mask.
+        self.mask_remove_button.setVisible(not empty)
+        self.mask_clear_button.setVisible(not empty)
+        self.mask_save_button.setVisible(bool(corrections.mask_shapes))
 
     def _remove_mask(self) -> None:
         row = self.mask_list.currentRow()

@@ -61,7 +61,9 @@ class ShellLayoutMixin:
             "Design a simulated GISAXS dataset, validate it locally, then prepare training jobs."
         )
         self.validate_button.setText("Validate design")
+        self.validate_button.setToolTip("Check the detector, ROI, particles and sampling before generating anything")
         self.preview_button.setText("Open local preview")
+        self.preview_button.setToolTip("Simulate a few images with these settings to see what the training set looks like")
         self.prepare_button.setText("Prepare job package")
         self.submit_button.setText("Maxwell (unavailable)")
 

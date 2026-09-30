@@ -14,13 +14,12 @@ from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 from src.gimap.app.presentation.i18n import tr
 
 from ...application.single_fit import (
-    FAMILIES,
-    INFO,
     export_table,
     fit_record,
     model_to_dict,
     parameter_text,
 )
+from .session import path_name
 
 
 def _item(text: str, tip: str = "") -> QTableWidgetItem:
@@ -60,7 +59,12 @@ class FitResultsMixin:
     def render_results(self) -> None:
         session = self.session
         result = session.result
-        if result is None:
+        if result is None and session.solutions:
+            self.quality_label.setText(tr("{count} solutions below; the best is in Model. Fit (Refine) gives its quality "
+                                          "and the error of every value.").format(count=len(session.solutions)))
+            self.warnings_label.setText("")
+            self.step_intro["results"].setText(tr("{count} solutions to compare.").format(count=len(session.solutions)))
+        elif result is None:
             self.quality_label.setText(tr("No fit yet: Fit shows here how good it is and the error of every value."))
             self.warnings_label.setText("")
             self.step_intro["results"].setText(tr("After a fit: its quality, the errors and the solutions to compare."))
@@ -91,11 +95,7 @@ class FitResultsMixin:
         return lines
 
     def _path_name(self, path: tuple) -> str:
-        owner, key = path
-        label = tr(INFO[key].label)
-        if owner == "globals" or owner >= len(self.session.model.components):
-            return label
-        return f"{owner + 1}·{tr(FAMILIES[self.session.model.components[owner].family][0])} {label}"
+        return path_name(self.session.model, path)
 
     def _fill_parameters(self, result) -> None:
         rows = []
@@ -166,7 +166,8 @@ class FitResultsMixin:
         np.savetxt(path, table, delimiter=",", header=",".join(names), comments="", fmt="%.8g")
         record = fit_record(self.session.model, data, self.session.curve, side=self.session.side,
                             q_range=self.session.q_range,
-                            result=self.session.result if self.session.result_is_current() else None)
+                            result=self.session.result if self.session.result_is_current() else None,
+                            excluded=self.session.excluded)
         Path(path).with_suffix(".json").write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
         self._status(tr("Saved {name} and its record {record}.").format(
             name=Path(path).name, record=Path(path).with_suffix(".json").name), "ok")

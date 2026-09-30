@@ -233,3 +233,28 @@ def test_the_page_comes_back_with_the_model_and_the_curve_of_last_time(tmp_path)
     assert again.session.curve is not None and again.session.side == "positive"
     assert again.session.q_range == pytest.approx((0.3, 1.2))
     again.dispose()
+
+
+def test_points_are_left_out_by_a_click_or_a_box_and_taken_back(tmp_path) -> None:
+    page = _page()
+    page.open_curve(_curve_file(tmp_path))
+    full = page.session.all_points()
+    page.exclude_button.setChecked(True)
+    target = full.q[100]
+    page._clicked(float(target), float(full.intensity[100]))  # a click on a point
+    assert page._data().q.size == 239 and page.left_out() == 1 and not page.excluded_row.isHidden()
+    assert page.excluded_label.text().endswith(": 1")
+    page._clicked(float(target), float(full.intensity[100]))  # again: back in
+    assert page._data().q.size == 240 and page.excluded_row.isHidden()
+    from PyQt5.QtCore import QRectF
+
+    xs, ys = page._shown(full.q[10:20], full.intensity[10:20])
+    page._exclude_box(QRectF(float(xs.min()) - 1e-9, float(ys.min()) - 1e-9,
+                             float(xs.max() - xs.min()) + 2e-9, float(ys.max() - ys.min()) + 2e-9))
+    assert page.left_out() >= 10 and page._data().q.size <= 230
+    page.export_data_dialog(str(tmp_path / "fit.csv"))
+    record = json.loads((tmp_path / "fit.json").read_text(encoding="utf-8"))
+    assert len(record["points"]["left_out_q_nm^-1"]) == page.left_out()
+    page.include_all()
+    assert page._data().q.size == 240 and page.left_out() == 0
+    page.dispose()

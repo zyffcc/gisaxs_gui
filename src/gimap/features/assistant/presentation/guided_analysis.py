@@ -135,6 +135,8 @@ class GuidedAnalysis(QObject):
         layout.addWidget(self.notes_found)
         self.run_button = QPushButton("Run Automatic Analysis", box)
         self.run_button.setObjectName("guidedRunButton")
+        self.run_button.setToolTip("The standard procedure without AI: geometry, mask, cuts and results, each step "
+                                   "with what it found")
         self.run_button.setProperty("gimapRole", "primary")
         layout.addWidget(self.run_button, 0, Qt.AlignLeft)
         self.status_label = label("No AI needed: the standard procedure, each decision with its reason.", box, role="muted")

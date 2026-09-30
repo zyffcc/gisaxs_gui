@@ -129,6 +129,7 @@ class DisclosurePanel(QWidget):
         self.toggle.setCheckable(True)
         self.toggle.setChecked(expanded)
         self.toggle.setText(title)
+        self.toggle.setToolTip(f"Show or hide: {title}")
         self.toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.content = QWidget(self)
         self.content.setObjectName(f"{object_name}Content")

@@ -7,6 +7,7 @@ the newer Analyze tools are in ``zh_analyze.py``.
 
 from .zh_analyze import ANALYZE_ZH
 from .zh_fitting import FITTING_ZH
+from .zh_night import NIGHT_ZH
 
 ZH = {
     # -- menus --------------------------------------------------------------------------
@@ -547,5 +548,6 @@ ZH = {
 
 ZH.update(ANALYZE_ZH)
 ZH.update(FITTING_ZH)
+ZH.update(NIGHT_ZH)
 
 __all__ = ["ZH"]

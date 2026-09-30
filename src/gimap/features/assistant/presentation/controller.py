@@ -21,6 +21,7 @@ from typing import Callable, Optional
 from PyQt5.QtCore import QObject, Qt, pyqtSignal
 from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QDockWidget, QFileDialog, QMessageBox, QVBoxLayout
 
+from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ..application import (
@@ -352,9 +353,8 @@ class AssistantController(QObject):
             self.services.save_run(self._record(outcome, transcript=True))
         except OSError:
             pass
-        status_bar = getattr(self.window, "statusBar", None)
-        if callable(status_bar):
-            status_bar().showMessage(f"AI: {outcome.message}", 8000)
+        if self.window is not None:
+            show_toast(self.window, f"AI: {outcome.message}", level="info")
 
     # -- the changes (operation cards) ----------------------------------------------------
 
@@ -391,9 +391,8 @@ class AssistantController(QObject):
     def _after_operation(self, message: str) -> None:
         if self.panel is not None and self.outcome is not None:
             self.panel.show_operations(self.outcome.results.operations)
-        status_bar = getattr(self.window, "statusBar", None)
-        if callable(status_bar):
-            status_bar().showMessage(f"AI change: {message}", 6000)
+        if self.window is not None:
+            show_toast(self.window, f"AI change: {message}", level="info")
 
     def _language(self) -> str:
         return self._goals.language if self._goals is not None else "English"

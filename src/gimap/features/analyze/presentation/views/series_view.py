@@ -40,13 +40,18 @@ class SeriesView:
     """Adds the Series tab widgets to ``host`` (a vertical layout on ``parent``)."""
 
     def setup_series_panel(self, parent: QWidget, host: QVBoxLayout) -> None:
-        controls = QHBoxLayout()
+        self.series_controls = QWidget(parent)
+        self.series_controls.setObjectName("analyzeSeriesControls")
+        controls = QHBoxLayout(self.series_controls)
+        controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(6)
         caption = QLabel("Curve", parent)
         caption.setProperty("gimapRole", "muted")
         self.series_curve_combo = QComboBox(parent)
         self.series_curve_combo.setObjectName("analyzeSeriesCurve")
         self.series_curve_combo.setToolTip("Which curve of every frame the map stacks")
+        self.series_curve_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.series_curve_combo.setMinimumContentsLength(16)
         self.series_build_button = QPushButton("Build Map", parent)
         self.series_build_button.setObjectName("analyzeSeriesBuild")
         self.series_build_button.setProperty("gimapRole", "primary")
@@ -66,7 +71,8 @@ class SeriesView:
         self.series_export_track_action = menu.addAction("Peak Table of Every Frame…")
         self.series_export_track_action.setToolTip("CSV: frame, file, peak position, FWHM, area and height in the q window")
         self.series_export_button.setMenu(menu)
-        self.series_export_button.setEnabled(False)
+        self.series_export_button.setToolTip("Save the map, a frame's curve, a trace or the peak table (once a map is built)")
+        self.series_export_button.hide()  # shown once there is a map to export
         self.series_step_spin = QSpinBox(parent)
         self.series_step_spin.setObjectName("analyzeSeriesStep")
         self.series_step_spin.setRange(1, 1000)
@@ -86,7 +92,8 @@ class SeriesView:
         controls.addWidget(self.series_build_button)
         controls.addWidget(self.series_export_button)
         controls.addWidget(self.series_batch_button)
-        host.addLayout(controls)
+        self.series_controls.hide()  # shown once several frames are listed
+        host.addWidget(self.series_controls)
         self.series_info_label = QLabel("", parent)
         self.series_info_label.setObjectName("analyzeSeriesInfo")
         self.series_info_label.setProperty("gimapRole", "muted")

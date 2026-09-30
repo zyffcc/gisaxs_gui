@@ -39,6 +39,9 @@ class MenuCommands:
     clear_recent: Command = None
     save_parameters: Command = None
     load_parameters: Command = None
+    open_project: Command = None
+    save_project: Command = None
+    save_project_as: Command = None
     quit: Command = None
     show_workspace: Optional[Callable[[str], object]] = None
     set_theme: Optional[Callable[[str], object]] = None
@@ -121,12 +124,21 @@ class MainMenuBar(QObject):
             self.recent_menu = menu.addMenu("Open &Recent")
             self.recent_menu.aboutToShow.connect(self._fill_recent)
         menu.addSeparator()
-        self._add(menu, "load_parameters", "&Load Workspace Parameters…", c.load_parameters,
-                  shortcut="Ctrl+L", tip="Load the parameters of Fitting and the Labs from a JSON file "
-                  "(Analyze keeps its own set-up: Export ▸ Load Settings…)")
-        self._add(menu, "save_parameters", "&Save Workspace Parameters As…", c.save_parameters,
-                  shortcut="Ctrl+Shift+S", tip="Save the parameters of Fitting and the Labs to a JSON file")
+        self._add(menu, "open_project", "Open &Project…", c.open_project, shortcut="Ctrl+Shift+P",
+                  tip="Reopen a sample as it was left: the frames and set-up of Analyze, the curve and model of Fitting")
+        self._add(menu, "save_project", "&Save Project", c.save_project, shortcut=QKeySequence.Save,
+                  tip="Save what is open in Analyze and Fitting as a project (.gimap)")
+        self._add(menu, "save_project_as", "Save Project &As…", c.save_project_as, shortcut="Ctrl+Shift+S",
+                  tip="Save the project under another name")
         menu.addSeparator()
+        if c.load_parameters is not None or c.save_parameters is not None:
+            labs = menu.addMenu("&Labs Parameters")
+            labs.setToolTip("The settings of 2D Prediction, Trainset Build and Classification")
+            self._add(labs, "load_parameters", "&Load…", c.load_parameters,
+                      tip="Load the settings of the Labs pages (2D Prediction, Trainset Build, Classification) from a JSON file")
+            self._add(labs, "save_parameters", "&Save As…", c.save_parameters,
+                      tip="Save the settings of the Labs pages to a JSON file")
+            menu.addSeparator()
         self._add(menu, "quit", "E&xit", c.quit, shortcut=QKeySequence.Quit)
 
     def _fill_recent(self) -> None:
@@ -141,7 +153,8 @@ class MainMenuBar(QObject):
             empty.setEnabled(False)
         for number, path in enumerate(paths, start=1):
             path = Path(path)
-            label = f"&{number}  {path.name or str(path)}" + ("  (folder)" if path.is_dir() else "")
+            kind = "  (folder)" if path.is_dir() else "  (project)" if path.suffix.lower() == ".gimap" else ""
+            label = f"&{number}  {path.name or str(path)}" + kind
             action = menu.addAction(label)
             action.setToolTip(str(path))
             action.setStatusTip(str(path))

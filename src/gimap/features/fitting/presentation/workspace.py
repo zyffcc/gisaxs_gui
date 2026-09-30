@@ -41,6 +41,7 @@ from .preview_cards import FittingPlotControlsCard, PlotPreviewCard, StatusCard
 from .run_card import FittingControlsCard
 from ..application.single_fit import to_manual
 from .single.page import FitPage
+from .single.series_page import FitSeriesPage
 from .workspace_context import FittingContextContainer
 
 LEGACY_Q_VIEW = {"mean": "average", "both": "fold", "positive": "positive", "negative": "negative_abs"}
@@ -80,6 +81,9 @@ class FittingWorkspace:
         self._legacy = None
         self.fit_page = FitPage(view_model, quick_fit=quick_fit, preferences=preferences)
         self.fit_page.setObjectName("fittingSinglePage")
+        self.series_page = FitSeriesPage(view_model, self.fit_page, preferences=preferences)
+        self.series_page.editModelRequested.connect(lambda: self.show_context("single"))
+        self.series_page.openFrameRequested.connect(self._frame_in_single)
         self.profile = profile or LAYOUT
         legacy_scroll_area = ui.gisaxsFittingPageScrollArea
         self.page_splitter = QSplitter(Qt.Horizontal, ui.gisaxsFittingPage)
@@ -225,6 +229,7 @@ class FittingWorkspace:
             self.fit_page,
             self.view_model.insitu,
             self.ui.gisaxsFittingPage,
+            series_page=self.series_page,
         )
         self.context_container.stack.addWidget(self.page_splitter)  # the former page: kept, never shown
         self.context_bar = self.context_container.context_bar
@@ -262,6 +267,17 @@ class FittingWorkspace:
         """A curve from Analyze (``side`` as Analyze names the halves) on the Single analysis page."""
         self.show_context("single")
         return self.fit_page.open_curve(path, side)
+
+    def open_series(self, folder, pattern: str = "*_fit_input.dat") -> bool:
+        """A folder of curves (Analyze ▸ Send Series to Fitting) on the In-situ series page."""
+        self.show_context("insitu")
+        return self.series_page.open_series(folder, pattern)
+
+    def _frame_in_single(self, path: str, model) -> None:
+        """A frame of the series, with its fitted model, in Single analysis."""
+        self.show_context("single")
+        if self.fit_page.open_curve(path, self.fit_page.session.side) and model is not None:
+            self.fit_page.set_model(model)
 
     def show_solution(self, row: dict) -> bool:
         """A solution of Analyze's automatic analysis as the model of Single analysis."""

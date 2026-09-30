@@ -14,7 +14,7 @@ import time
 from typing import Optional
 
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QToolButton, QVBoxLayout, QWidget
 
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import theme_manager
@@ -46,8 +46,16 @@ class GuidedProgressPanel(QFrame):
         self.stop_button.setObjectName("guidedStopButton")
         self.stop_button.setProperty("gimapDangerAction", True)
         self.stop_button.setToolTip(tr("End the run before its next step; what was found so far is kept"))
+        self.steps_button = QToolButton(self)
+        self.steps_button.setObjectName("guidedStepsToggle")
+        self.steps_button.setText(tr("Steps"))
+        self.steps_button.setCheckable(True)
+        self.steps_button.setAutoRaise(True)
+        self.steps_button.setToolTip(tr("Show the steps of the finished run and how long each took"))
+        self.steps_button.hide()
         header.addWidget(self.title_label, 1)
         header.addWidget(self.elapsed_label)
+        header.addWidget(self.steps_button)
         header.addWidget(self.stop_button)
         layout.addLayout(header)
         self.now_label = QLabel("", self)
@@ -78,6 +86,7 @@ class GuidedProgressPanel(QFrame):
         self.after_row.hide()
         layout.addWidget(self.after_row)
         self.stop_button.clicked.connect(self._stop_clicked)
+        self.steps_button.toggled.connect(self.phases_label.setVisible)
         self.save_button.clicked.connect(self.saveRequested)
         self.discard_button.clicked.connect(self.discardRequested)
         self._timer = QTimer(self)
@@ -109,6 +118,9 @@ class GuidedProgressPanel(QFrame):
         self.stop_button.setText(tr("Stop"))
         self.stop_button.show()
         self.after_row.hide()
+        self.steps_button.hide()
+        for widget in (self.now_label, self.bar, self.phases_label):
+            widget.show()
         self._render_phases()
         self.show()
         self._timer.start()
@@ -165,11 +177,16 @@ class GuidedProgressPanel(QFrame):
                 self._done_phases.add(phase)
             self.bar.setValue(self.bar.maximum())
             self.title_label.setText(tr("Automatic analysis — done"))
-            text = tr("{steps} steps in {time}; the results are below.").format(steps=self._steps, time=total)
-            if self._stopping:
-                text = tr("It finished the last step before it could stop.") + " " + text
+            self.elapsed_label.setText(tr("{steps} steps · {time}").format(steps=self._steps, time=total))
+            text = tr("It finished the last step before it could stop.") if self._stopping else ""
             self.now_label.setText(text)
+            self.now_label.setVisible(bool(text))
             self.after_row.hide()
+            # Done: one line; the steps stay one click away.
+            self.bar.hide()
+            self.steps_button.setChecked(False)
+            self.phases_label.hide()
+            self.steps_button.show()
         self._render_phases()
 
     def dismiss(self) -> None:

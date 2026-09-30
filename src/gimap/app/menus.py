@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices
 from .presentation.app_dialogs import ask_open_json, ask_save_json, inform, warn
+from .presentation.components import show_toast
+from .project import PROJECT_SUFFIX
+
+RECENT_PROJECTS_KEY = "recent_projects"
 from .presentation.menu_bar import MainMenuBar, MenuCommands, ToolWindows
 from .presentation.navigation import NAVIGATION_ITEMS
 from .presentation.settings_dialog import SettingsDialog
@@ -44,11 +50,14 @@ class ApplicationMenus:
         commands = MenuCommands(
             open_files=lambda: self._analyze_action("open_files"),
             open_folder=lambda: self._analyze_action("open_folder"),
-            recent_paths=lambda: components.analyze_page.recent_paths(),
+            recent_paths=self.recent_paths,
             open_recent=self.open_recent,
             clear_recent=lambda: components.analyze_page.clear_recent(),
             save_parameters=self.save_parameters,
             load_parameters=self.load_parameters,
+            open_project=self.open_project,
+            save_project=self.save_project,
+            save_project_as=self.save_project_as,
             quit=window.close,
             show_workspace=self.show_workspace,
             set_theme=self.appearance.set_theme,
@@ -85,8 +94,80 @@ class ApplicationMenus:
         getattr(self.window.components.analyze_page, name)()
 
     def open_recent(self, path: str) -> None:
+        if str(path).lower().endswith(PROJECT_SUFFIX):
+            self.open_project(path)
+            return
         self.show_workspace("analyze")
         self.window.components.analyze_page.add_paths([path])
+
+    def recent_paths(self) -> list:
+        """Recent projects first, then the recent data of Analyze."""
+        projects = [path for path in self._recent_projects() if Path(path).exists()]
+        return (projects + list(self.window.components.analyze_page.recent_paths()))[:12]
+
+    # -- projects -------------------------------------------------------------
+
+    project_path = ""
+
+    def _recent_projects(self) -> list:
+        stored = self.window.app_context.preferences.get(RECENT_PROJECTS_KEY, [])
+        return [str(path) for path in stored] if isinstance(stored, list) else []
+
+    def _remember_project(self, path) -> None:
+        self.project_path = str(path)
+        recent = [str(path)] + [item for item in self._recent_projects() if item != str(path)]
+        self.window.app_context.preferences.set(RECENT_PROJECTS_KEY, recent[:6])
+        self.window.setWindowTitle(f"GIMaP — {Path(path).stem}")
+
+    def open_project(self, path=None) -> bool:
+        from . import project
+
+        if not path:
+            folder = str(Path(self.project_path).parent) if self.project_path else ""
+            path = ask_open_json(self.window, "Open Project", folder, project.PROJECT_FILTER)
+            if not path:
+                return False
+        try:
+            data = project.read(path)
+        except (OSError, ValueError) as exc:
+            warn(self.window, "Open Project", f"{Path(path).name} could not be opened: {exc}")
+            return False
+        components = self.window.components
+        notes = project.apply(components, data)
+        self._remember_project(path)
+        page = data.get("page") if data.get("page") in components.pages else "analyze"
+        self.show_workspace(page)
+        text = f"Opened the project {Path(path).name}" + (": " + "; ".join(notes) if notes else ".")
+        show_toast(self.window, text, level="warning" if notes else "ok")
+        return True
+
+    def save_project(self) -> bool:
+        if not self.project_path:
+            return self.save_project_as()
+        return self._write_project(self.project_path)
+
+    def save_project_as(self) -> bool:
+        from . import project
+
+        components = self.window.components
+        files = components.analyze_page.view_model.state.files
+        suggested = Path(self.project_path) if self.project_path else (
+            Path(files[0]).parent / f"{Path(files[0]).stem}.gimap" if files else Path("sample.gimap"))
+        path = ask_save_json(self.window, "Save Project", str(suggested), project.PROJECT_FILTER)
+        return bool(path) and self._write_project(path)
+
+    def _write_project(self, path) -> bool:
+        from . import project
+
+        try:
+            written = project.save(self.window.components, path, self.window.components.current_page_key() or "")
+        except OSError as exc:
+            warn(self.window, "Save Project", f"The project could not be saved: {exc}")
+            return False
+        self._remember_project(written)
+        show_toast(self.window, f"Saved the project {written.name}", level="ok",
+                   action=("Open Folder", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(written.parent)))))
+        return True
 
     def toggle_full_screen(self) -> None:
         if self.window.isFullScreen():
@@ -103,28 +184,30 @@ class ApplicationMenus:
         return runtime
 
     def save_parameters(self) -> None:
-        runtime = self._runtime_or_warn("Save Workspace Parameters")
+        runtime = self._runtime_or_warn("Save Labs Parameters")
         if runtime is None:
             return
-        path = ask_save_json(self.window, "Save Workspace Parameters", "gimap_parameters.json")
+        path = ask_save_json(self.window, "Save Labs Parameters", "gimap_parameters.json")
         if not path:
             return
         if runtime.save_parameters_to_file(normalize_path(path)):
-            self.window.statusbar.showMessage(f"Parameters saved to {path}", 6000)
+            folder = Path(normalize_path(path)).parent
+            show_toast(self.window, f"Saved {path}", level="ok",
+                       action=("Open Folder", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))))
         else:
-            warn(self.window, "Save Workspace Parameters", "The parameters could not be saved.")
+            warn(self.window, "Save Labs Parameters", "The parameters could not be saved.")
 
     def load_parameters(self) -> None:
-        runtime = self._runtime_or_warn("Load Workspace Parameters")
+        runtime = self._runtime_or_warn("Load Labs Parameters")
         if runtime is None:
             return
-        path = ask_open_json(self.window, "Load Workspace Parameters")
+        path = ask_open_json(self.window, "Load Labs Parameters")
         if not path:
             return
         if runtime.load_parameters_from_file(normalize_path(path)):
-            self.window.statusbar.showMessage(f"Parameters loaded from {path}", 6000)
+            show_toast(self.window, f"Loaded {path}", level="ok")
         else:
-            warn(self.window, "Load Workspace Parameters", "The parameters could not be loaded.")
+            warn(self.window, "Load Labs Parameters", "The parameters could not be loaded.")
 
     # -- tools --------------------------------------------------------------
 

@@ -104,6 +104,7 @@ class HomePage(QWidget):
     openRequested = pyqtSignal()
     folderRequested = pyqtSignal()
     batchRequested = pyqtSignal()
+    projectRequested = pyqtSignal()
     recentRequested = pyqtSignal(str)
     """A recently opened file or folder, to open again."""
     filesDropped = pyqtSignal(list)
@@ -142,15 +143,21 @@ class HomePage(QWidget):
         buttons.addStretch(1)
         self.open_button = QPushButton("Open Files…", self.drop_zone)
         self.open_button.setObjectName("homeOpenButton")
+        self.open_button.setToolTip("Detector frames (CBF, NXS, TIFF, EDF), opened in Analyze — Ctrl+O")
         self.folder_button = QPushButton("Open Folder…", self.drop_zone)
+        self.folder_button.setToolTip("Every detector frame of a folder, opened in Analyze")
         self.batch_button = QPushButton("Batch Export…", self.drop_zone)
         self.batch_button.setObjectName("homeBatchButton")
         self.batch_button.setToolTip(
             "A folder of raw frames straight to curves in a folder of your choice, with the settings of last time"
         )
+        self.project_button = QPushButton("Open Project…", self.drop_zone)
+        self.project_button.setObjectName("homeProjectButton")
+        self.project_button.setToolTip("Reopen a sample as it was left (File ▸ Save Project)")
         buttons.addWidget(self.open_button)
         buttons.addWidget(self.folder_button)
         buttons.addWidget(self.batch_button)
+        buttons.addWidget(self.project_button)
         buttons.addStretch(1)
         drop.addLayout(buttons)
         column.addWidget(self.drop_zone)
@@ -187,6 +194,8 @@ class HomePage(QWidget):
         )
         self.ask_button = QPushButton("Ask the AI…", column_host)
         self.ask_button.setObjectName("homeAskButton")
+        self.ask_button.setToolTip("The AI works with the same tools as you, with what you wrote as its task; "
+                                   "its changes come back as cards to preview, apply or undo")
         ask.addWidget(self.ask_edit, 1)
         ask.addWidget(self.ask_button)
         column.addLayout(ask)
@@ -197,6 +206,7 @@ class HomePage(QWidget):
         column.addStretch(1)
 
         self.open_button.clicked.connect(self.openRequested)
+        self.project_button.clicked.connect(self.projectRequested)
         self.folder_button.clicked.connect(self.folderRequested)
         self.batch_button.clicked.connect(self.batchRequested)
         self.drop_zone.filesDropped.connect(self.filesDropped)

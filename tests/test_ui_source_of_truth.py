@@ -24,6 +24,7 @@ EXPECTED_VIEWS_BY_OWNER = {
     },
     "fitting": {
         "fit_page_view.py",
+        "fit_series_view.py",
         "fit_steps_view.py",
         "fitting_page_view.py",
         "independent_fit_window_view.py",

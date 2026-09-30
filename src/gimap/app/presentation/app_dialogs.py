@@ -9,13 +9,13 @@ from PyQt5.QtWidgets import QFileDialog, QMessageBox, QWidget
 JSON_FILTER = "JSON Files (*.json);;All Files (*)"
 
 
-def ask_open_json(parent: Optional[QWidget], title: str, folder: str = "") -> str:
-    path, _ = QFileDialog.getOpenFileName(parent, title, folder, JSON_FILTER)
+def ask_open_json(parent: Optional[QWidget], title: str, folder: str = "", file_filter: str = JSON_FILTER) -> str:
+    path, _ = QFileDialog.getOpenFileName(parent, title, folder, file_filter)
     return path
 
 
-def ask_save_json(parent: Optional[QWidget], title: str, suggested: str) -> str:
-    path, _ = QFileDialog.getSaveFileName(parent, title, suggested, JSON_FILTER)
+def ask_save_json(parent: Optional[QWidget], title: str, suggested: str, file_filter: str = JSON_FILTER) -> str:
+    path, _ = QFileDialog.getSaveFileName(parent, title, suggested, file_filter)
     return path
 
 

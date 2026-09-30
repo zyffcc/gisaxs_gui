@@ -8,16 +8,6 @@ from .fitting_session import FittingSessionCoordinator
 from .presentation.parameter_validation import show_parameter_validation
 from .workspace_parameters import WorkspaceParameterCoordinator
 
-PAGE_STATUS = {
-    "home": "Start: open data and choose a task",
-    "analyze": "Analyze: open or drop detector frames",
-    "fitting": "Fitting: fit 1D curves",
-    "predict": "2D prediction",
-    "trainset": "Trainset build",
-    "classification": "Classification",
-}
-
-
 class ApplicationRuntime(QObject):
     """Connect the application shell to feature-owned presentation runtimes."""
 
@@ -190,7 +180,6 @@ class ApplicationRuntime(QObject):
     def navigate(self, key: str) -> None:
         """Show a workspace and initialise its feature on first use."""
         self.ui.components.show_page(key)
-        self.status_updated.emit(PAGE_STATUS.get(key, key))
         binding = {
             "fitting": self.fitting,
             "predict": self.prediction,

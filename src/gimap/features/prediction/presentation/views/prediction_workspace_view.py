@@ -72,6 +72,7 @@ class PredictionWorkspaceView(object):
         self.predictionAdvancedToggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         self.predictionAdvancedToggle.setArrowType(QtCore.Qt.RightArrow)
         self.predictionAdvancedToggle.setObjectName("predictionAdvancedToggle")
+        self.predictionAdvancedToggle.setToolTip("Show or hide: where the model files come from")
         self.predictionAdvancedSectionLayout.addWidget(self.predictionAdvancedToggle)
         self.predictionAdvancedDescription = QtWidgets.QLabel(self.predictionAdvancedSection)
         self.predictionAdvancedDescription.setVisible(False)

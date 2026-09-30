@@ -147,6 +147,8 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         for text, value in MODE_ITEMS:
             self.mode_combo.addItem(text, value)
         self.mode_combo.setItemToolTip(0, "Decide from the largest scattering angle on the detector")
+        self.mode_combo.setItemToolTip(1, "Small angles: Yoneda cut, vertical cut, the symmetric halves")
+        self.mode_combo.setItemToolTip(2, "Wide angles: rings, sectors, the q map and the cake")
         self.incidence_spin = QDoubleSpinBox(bar)
         self.incidence_spin.setObjectName("analyzeIncidenceSpin")
         self.incidence_spin.setDecimals(3)
@@ -314,6 +316,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.view_combo.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.view_combo.addItems(VIEW_ITEMS)
         self.view_combo.setToolTip("Show the detector, or the intensity regridded onto q")
+        self.view_combo.setItemToolTip(0, "The detector frame as measured, in pixels")
         self.view_combo.setItemToolTip(1, "Intensity regridded onto q∥ (qr, qy) and qz")
         self.view_combo.setItemToolTip(2, "GIWAXS unwrapped: χ against q; a ring is a vertical line, a region a rectangle")
         self.detector_view = DetectorView(center)
@@ -331,6 +334,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.canvas_save_button = QToolButton(center)
         self.canvas_save_button.setObjectName("analyzeCanvasSave")
         self.canvas_save_button.setText("Save")
+        self.canvas_save_button.setToolTip("Save the view as shown (a figure) or its data (a table)")
         self.canvas_save_button.setPopupMode(QToolButton.InstantPopup)
         canvas_menu = QMenu(self.canvas_save_button)
         self.canvas_save_figure_action = canvas_menu.addAction("View as Figure…")
@@ -351,6 +355,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.right_tabs.setObjectName("analyzeRightTabs")
         for text, key in RIGHT_TABS:
             self.right_tabs.addItem(text, key)
+        self.right_tabs.setItemToolTip(0, "The curves of this frame (cuts, rings, sectors)")
         self.right_tabs.setItemToolTip(1, "What the automatic analysis (or the AI) found, with its evidence")
         self.right_tabs.setItemToolTip(2, "Every frame of a series: intensity against frame and q")
         header = QHBoxLayout()

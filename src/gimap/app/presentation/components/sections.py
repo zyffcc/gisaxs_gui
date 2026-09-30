@@ -101,6 +101,9 @@ class AdvancedSection(QFrame):
             Qt.DownArrow if expanded else Qt.RightArrow
         )
         self.toggle_button.setText(title)
+        from ..i18n import tr
+
+        self.toggle_button.setToolTip(description or tr("Show or hide: {title}").format(title=tr(title)))
         root.addWidget(self.toggle_button)
 
         self.description_label = QLabel(description, self)

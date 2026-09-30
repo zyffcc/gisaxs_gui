@@ -17,7 +17,7 @@
 
 | 区域 | 内容 |
 |---|---|
-| 命令栏 | Open…（下拉 Open Folder…）· ‹ 文件 › · Auto / GISAXS / GIWAXS · αi · Run Automatic Analysis（运行时旁边出现 Stop）· Ask AI… · Export ▾ · Batch Export…（列出多于一帧时出现）· Send to Fitting ▾ |
+| 命令栏 | Open…（下拉 Open Folder…）· ‹ 文件 ›（列出多于一个文件时出现）· Auto / GISAXS / GIWAXS · αi · Run Automatic Analysis（运行时旁边出现 Stop）· Ask AI… · Export ▾ · Batch Export…（列出多于一帧时出现）· Send to Fitting ▾ |
 | 左：步骤 | 1 Data · 2 Geometry · 3 Mask & corrections · 4 Cuts · 5 Results · 6 Export；每步显示状态（✓ / ! / ✕ / 进行中）与一句结论，点开是该步的少数常用控件，高级项折叠 |
 | 中：图像 | Detector / q map、Log、色图、Auto levels、Zoom、Fit view、Sources（每条曲线来自图上的哪里，可点曲线只看它的来源）；光标读数（过长时截断，完整内容在提示中，不会改变视图大小） |
 | 右：标签页 | Curves（两个曲线图）· Results（自动分析或 AI 的结果与证据）· Series（帧 × q 热图） |
@@ -67,7 +67,7 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
 
 ## Series（原位 / 批量）
 
-- 列出多个文件、打开文件夹或多帧 NeXus 后，Series ▸ 选择曲线（GISAXS 默认水平切线，GIWAXS 默认 I(q)）▸ Build Map：
+- 列出多个文件、打开文件夹或多帧 NeXus 后，Series ▸ 选择曲线（只有一帧时这里只说明怎样得到序列，控件隐藏；Export 在有热图后出现）（GISAXS 默认水平切线，GIWAXS 默认 I(q)）▸ Build Map：
   每帧（或每组相加帧）用当前设置处理，热图逐步长出来（至多每秒重画一次）；和 Batch Export 共用同一个运行器
   （`bindings/batch_run.py`）：长序列在多个低优先级进程里同时处理，面板显示进度、剩余时间，可暂停 / 停止（已处理的行保留）。
 - Batch Export 运行时同样把每帧的行实时加进 Series 热图，下方曲线跟随最新的一帧（点热图某行即停止跟随）；
@@ -103,15 +103,15 @@ Fitting ▸ In-situ series。
   青色 = 由镜像补齐（已参与计算）。
 - Leave out hot and dead pixels（默认开，记住）：只标记孤立像素——比 8 个邻居都亮很多（计数探测器用 Poisson 标准差，
   浮点帧用全帧稳健噪声），或读数为 0 而邻居都 ≥ 20 counts；峰、条纹、beam stop 边缘都保留。
-- Fill gaps from the mirror side（GIWAXS，默认关）：GIWAXS 对 ±q∥ 对称；没有数据的像素（模块缝隙、掩膜、热像素）取它关于
+- Fill gaps from the mirror side（只在 GIWAXS 显示，默认关）：GIWAXS 对 ±q∥ 对称；没有数据的像素（模块缝隙、掩膜、热像素）取它关于
   束流中心列的镜像位置的值（两列之间插值，两列都须有数据）。镜像也没有数据的地方保持空缺。补齐的像素计数写进导出记录，
   Fitting 的计数模型标记为不再成立（`counting_model_valid: false`）。
 - Masks you draw：Rectangle（在探测器图上点两个对角）、Polygon（逐点单击，双击或 Enter 闭合，Backspace 删最后一点，Esc 取消）；
-  列表中可删除；Save… 存为 JSON（规范像素坐标），Load… 载入 JSON 或同尺寸的掩膜图（EDF / TIFF，非零 = 掩膜，pyFAI 约定）。
+  列表与 Remove Selected / Clear Masks 只在有掩膜时出现；Save… 存为 JSON（规范像素坐标），Load… 载入 JSON 或同尺寸的掩膜图（EDF / TIFF，非零 = 掩膜，pyFAI 约定）。
   掩膜在图上以红色轮廓显示，立即从所有曲线中排除。
 - Corrections（折叠区）：背景帧（缩放、帧号）、有效原始强度 Min / Max、gap guard（0–20 px，记住）。
   顺序：探测器无效像素 → 热 / 死像素 → 掩膜 → 背景 → gap guard → 强度范围 → 镜像补齐 → 强度校正；曲线、q 图、展开图与导出都用处理后的帧。
-- Intensity corrections (GIWAXS)（折叠区，默认关，`domain/intensity.py`）：立体角 cos³2θ、偏振（pyFAI 公式，因子 f）、
+- Intensity corrections (GIWAXS)（折叠区，只在 GIWAXS 显示，默认关，`domain/intensity.py`）：立体角 cos³2θ、偏振（pyFAI 公式，因子 f）、
   薄膜吸收（厚度 t、衰减长度 L，相对 αf = αi，不含折射）；I / factor，q 不变。计数帧的方差按 value / factor 传递
   （`BinnedMean.add(..., scale)`），导出记录的 `intensity_corrections` 写明公式与参数，Fitting 的计数模型标记为不成立。
 - Undo / Redo（命令栏 ↶ ↷，Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y，`setup_history.py`）：设置的每次改动是一步，同类快速改动合并

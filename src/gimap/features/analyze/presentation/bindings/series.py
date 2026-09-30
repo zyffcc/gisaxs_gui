@@ -66,6 +66,7 @@ class SeriesMixin:
         files = len(self.view_model.state.files)
         frames = int(getattr(analysis, "frame_count", 1) or 1)
         ready = bool(curves) and (files > 1 or frames > 1)
+        self.series_controls.setVisible(files > 1 or frames > 1)  # one frame: only the explanation
         self.series_build_button.setEnabled(ready and not self._series_queue and not self.batch_running())
         if self._series_map is None:
             if not curves:
@@ -96,7 +97,7 @@ class SeriesMixin:
             return
         remembered = self.view_model.batch_preferences()[0]
         choices = BatchChoices(tables=False, every=self.series_step_spin.value(), speed=remembered.speed)
-        self.series_export_button.setEnabled(False)
+        self.series_export_button.hide()
         self.run_batch(Path("."), choices, stem="series", map_only=True, live_key=key)
 
     def cancel_series_map(self) -> None:
@@ -137,7 +138,7 @@ class SeriesMixin:
         stretch = self.series_host.itemAt(self.series_stretch_index)
         if stretch is not None and stretch.spacerItem() is not None:
             self.series_host.setStretch(self.series_stretch_index, 0)
-        self.series_export_button.setEnabled(True)
+        self.series_export_button.show()
         self.series_info_label.setText(
             f"{series.rows} frames × {series.x.size} points. Click or drag the horizontal band to pick a frame, "
             "drag the vertical band (and its edges) to pick a q window; Open shows the frame in Analyze."

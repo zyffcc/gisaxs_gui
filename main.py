@@ -40,7 +40,8 @@ class MainWindow(QMainWindow, ApplicationWindowView):
         self.setMinimumSize(LAYOUT.min_window)
         self.components = MainWindowComponents(self)
         self.menus = ApplicationMenus(self)
-        self.statusbar.showMessage("Starting…")
+        # Every page has its own status line; the window's own bar only repeated or outdated them.
+        self.statusbar.hide()
         # Feature runtimes start after the window is on screen.
         QTimer.singleShot(100, self._delayed_initialization)
 
@@ -51,11 +52,11 @@ class MainWindow(QMainWindow, ApplicationWindowView):
                 self,
                 simulation_port=BornAgainSimulator(runner=self.app_context.jobs),
             )
-            elapsed = time.monotonic() - self._startup_time
-            self.statusbar.showMessage(f"GIMaP ready ({elapsed:.1f} s)", 6000)
         except Exception as exc:  # keep the window usable; the error is shown, not hidden
             print(f"Deferred initialization failed: {exc}")
-            self.statusbar.showMessage(f"Some workspaces could not start: {exc}")
+            from src.gimap.app.presentation.components import show_toast
+
+            show_toast(self, f"Some workspaces could not start: {exc}", level="error", timeout_ms=0)
         finally:
             self._initialization_completed = True
             Appearance(self.app_context.preferences).apply_language([self])
@@ -73,7 +74,11 @@ class MainWindow(QMainWindow, ApplicationWindowView):
         self.app_context.preferences.set(WINDOW_GEOMETRY_KEY, geometry)
 
     def closeEvent(self, event):
-        """Save the session, layout and preferences, then stop background work."""
+        """Save the session, layout and preferences, then stop background work (once)."""
+        if getattr(self, "_closed", False):
+            event.accept()
+            return
+        self._closed = True
         try:
             if hasattr(self, "runtime"):
                 self.runtime.handle_window_close()

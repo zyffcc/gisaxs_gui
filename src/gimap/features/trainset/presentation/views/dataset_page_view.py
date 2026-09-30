@@ -90,6 +90,7 @@ class TrainsetDatasetPageView(object):
         self.trainsetAdvancedToggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         self.trainsetAdvancedToggle.setArrowType(QtCore.Qt.RightArrow)
         self.trainsetAdvancedToggle.setObjectName("trainsetAdvancedToggle")
+        self.trainsetAdvancedToggle.setToolTip("Show or hide: detector, particle and sampling settings used less often")
         self.trainsetAdvancedSectionLayout.addWidget(self.trainsetAdvancedToggle)
         self.trainsetAdvancedDescription = QtWidgets.QLabel(self.trainsetAdvancedSection)
         self.trainsetAdvancedDescription.setVisible(False)

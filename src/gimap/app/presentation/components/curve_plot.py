@@ -60,6 +60,29 @@ SIDE_TIPS = (
 )
 
 
+class _Title(QLabel):
+    """The plot's title, shortened with “…” when the header is narrow; ``text()`` is the whole title."""
+
+    def __init__(self, text: str, parent: QWidget):
+        super().__init__(parent)
+        self._full = ""
+        self.setText(text)
+
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt API
+        self._full = str(text)
+        self._refresh()
+
+    def text(self) -> str:
+        return self._full
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.ElideRight, max(0, self.width())))
+
+
 def _has_both_signs(x) -> bool:
     x = np.asarray(x, dtype=np.float64)
     finite = x[np.isfinite(x)]
@@ -112,7 +135,7 @@ class CurvePlot(QWidget):
         header = QHBoxLayout()
         self.header_layout = header
         header.setContentsMargins(0, 0, 0, 0)
-        self.title_label = QLabel(title, self)
+        self.title_label = _Title(title, self)
         self.title_label.setObjectName("curvePlotTitle")
         self.title_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.log_check = QCheckBox("Log I", self)
@@ -163,7 +186,7 @@ class CurvePlot(QWidget):
         self.plot.setLogMode(x=bool(log_x), y=log_y)
         layout.addWidget(self.plot_widget, 1)
         self.x_window = pg.LinearRegionItem(
-            orientation="vertical", brush=(249, 115, 22, 35), pen=pg.mkPen("#f97316", width=1.5)
+            orientation="vertical", brush=(249, 115, 22, 14), pen=pg.mkPen("#f97316", width=1.5)
         )
         self.x_window.setZValue(10)
         self.plot.addItem(self.x_window, ignoreBounds=True)
@@ -211,7 +234,7 @@ class CurvePlot(QWidget):
         self.title_label.setToolTip(tr(title))
 
     def set_labels(self, x_label: str, y_label: str) -> None:
-        self.plot.setLabel("bottom", x_label)
+        self.plot.setLabel("bottom", x_label)  # figure content: not translated
         self.plot.setLabel("left", y_label)
         symbol = str(x_label).split(" (")[0].split(" or ")[0].strip().strip("|") or "x"  # “χ or |χ| (°)” → χ
         self.side_control.button(3).setText(f"|{symbol}|")
@@ -255,6 +278,7 @@ class CurvePlot(QWidget):
         menu.addAction("Curves as Data…", self.saveDataRequested.emit)
         button.setMenu(menu)
         self.header_layout.insertWidget(1, button)
+        button.setToolTip("Save this plot as a figure, or its curves as data")
         self.save_button = button
 
     def set_curves(self, curves: Sequence[tuple[str, np.ndarray, np.ndarray]], colors: Optional[Sequence[str]] = None,
@@ -262,7 +286,8 @@ class CurvePlot(QWidget):
         """``curves`` is a sequence of ``(name, x, y)``; non-positive y is hidden in log mode.
 
         ``colors``: one colour per curve (e.g. the colour of the region it comes from); by default
-        the plot's own sequence. ``markers``: per curve, points instead of a line (measured data).
+        the plot's own sequence. ``markers``: per curve, points instead of a line (measured data) —
+        ``True`` for dots or a pyqtgraph symbol (``"x"``, ``"s"`` …).
         """
         import pyqtgraph as pg
 
@@ -280,7 +305,7 @@ class CurvePlot(QWidget):
         signed = any(_has_both_signs(x) for _name, x, _y in curves)
         self.side_control.setVisible(signed)
         self._curves, self._colors, self._styles, self._origin = [], [], [], []
-        self._markers = [bool(markers[index]) if markers is not None and index < len(markers) else False
+        self._markers = [markers[index] if markers is not None and index < len(markers) else False
                          for index in range(len(curves))]
         for index, (name, x, y) in enumerate(curves):
             for shown in _halves(name, x, y, self._side if signed else "both"):
@@ -296,9 +321,12 @@ class CurvePlot(QWidget):
             if self.log_x_check.isChecked():
                 y = np.where(x > 0, y, np.nan)
                 x = np.where(x > 0, x, np.nan)
-            if self._markers[self._origin[index]]:
+            marker = self._markers[self._origin[index]]
+            if marker:
                 keep = np.isfinite(x) & np.isfinite(y)
-                item = self.plot.plot(x[keep], y[keep], pen=None, symbol="o", symbolSize=4, symbolPen=None,
+                symbol = marker if isinstance(marker, str) else "o"
+                item = self.plot.plot(x[keep], y[keep], pen=None, symbol=symbol, symbolSize=4 if symbol == "o" else 7,
+                                      symbolPen=None if symbol == "o" else pg.mkPen(self._colors[index], width=1.4),
                                       symbolBrush=self._colors[index], name=tr(name))
                 self._items.append(item)
                 continue

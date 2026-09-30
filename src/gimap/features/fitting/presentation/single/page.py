@@ -34,9 +34,11 @@ from ...application.single_fit import (
     model_from_dict,
     model_from_solution,
     model_to_dict,
+    point_key,
     residuals,
 )
 from ..views.fit_page_view import FitPageView
+from .exclusion import FitExclusionMixin
 from .model_editor import FitModelEditor
 from .results import FitResultsMixin
 from .run import FitRunMixin
@@ -45,10 +47,10 @@ from .session import FitSession, Solution, model_label
 CURVE_FILTER = "Curves (*.dat *.txt *.csv);;All files (*)"
 MODEL_POINTS = 600
 PREFERENCES_KEY = "fitting_single_page"
-DATA_COLOR, OUTSIDE_COLOR, MODEL_COLOR = "#2563eb", "#94a3b8", "#f97316"
+DATA_COLOR, OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#2563eb", "#94a3b8", "#f97316", "#dc2626"
 
 
-class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin):
+class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -78,6 +80,7 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin):
         self._connect()
         self.setup_run()
         self.setup_results()
+        self.setup_exclusion()
         self._restore()
         self._render_all()
 
@@ -198,7 +201,8 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin):
         curve = self.session.curve
         if curve is not None and curve.path:
             self._remember(curve={"path": curve.path, "side": self.session.side, "unit": curve.source_unit,
-                                  "q_range": None if self.session.q_range is None else list(self.session.q_range)})
+                                  "q_range": None if self.session.q_range is None else list(self.session.q_range),
+                                  "excluded": sorted(self.session.excluded)})
 
     def set_range(self, q_range) -> None:
         self.session.q_range = None if q_range is None else tuple(sorted(float(value) for value in q_range))
@@ -297,8 +301,10 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin):
         session = self.session
         curve = session.curve
         self.curve_chip.setText(curve.name if curve is not None else tr("No curve yet — open one, or send a cut from Analyze"))
+        self._show_left_out()
         self.side_combo.setCurrentIndex(max(0, self.side_combo.findData(session.side)))
         signed = curve is not None and curve.signed
+        self.open_curve_step_button.setVisible(curve is None)  # afterwards: Open Curve… in the command bar
         self.side_combo.setVisible(signed)
         self.side_label.setVisible(signed)
         self._fill_curve_card()
@@ -338,10 +344,17 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin):
         curves, colors, markers = [], [], []
         if full is not None and full.q.size:
             inside = np.zeros(full.q.size, bool) if data is None else np.isin(full.q, data.q)
-            if (~inside).any():
-                curves.append((tr("not fitted"), full.q[~inside], full.intensity[~inside]))
+            left_out = np.array([point_key(value) in session.excluded for value in full.q]) if session.excluded \
+                else np.zeros(full.q.size, bool)
+            outside = ~inside & ~left_out
+            if outside.any():
+                curves.append((tr("outside the range"), full.q[outside], full.intensity[outside]))
                 colors.append(OUTSIDE_COLOR)
                 markers.append(True)
+            if left_out.any():
+                curves.append((tr("left out"), full.q[left_out], full.intensity[left_out]))
+                colors.append(LEFT_OUT_COLOR)
+                markers.append("x")
             if data is not None and data.q.size:
                 curves.append((tr("measured"), data.q, data.intensity))
                 colors.append(DATA_COLOR)
@@ -435,9 +448,46 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin):
         if self.session.curve is not None:  # a curve arrived meanwhile (Send to Fitting)
             return
         if self.open_curve(last["path"], last.get("side"), unit=last.get("unit")):
+            self.session.excluded = {float(value) for value in last.get("excluded") or ()}
             q_range = last.get("q_range")
             if isinstance(q_range, list) and len(q_range) == 2:
                 self.set_range(q_range)
+            else:
+                self._exclusions_changed()
+
+    # -- a project -------------------------------------------------------------------------
+
+    def project_state(self) -> dict:
+        session, curve = self.session, self.session.curve
+        return {
+            "curve": None if curve is None or not curve.path else {
+                "path": curve.path, "unit": curve.source_unit, "side": session.side,
+                "q_range": None if session.q_range is None else list(session.q_range),
+                "excluded": sorted(session.excluded)},
+            "model": model_to_dict(session.model), "method": self.method(),
+        }
+
+    def apply_project_state(self, data: dict) -> list[str]:
+        notes = []
+        if isinstance(data.get("model"), dict):
+            try:
+                self.session.model = model_from_dict(data["model"])
+                self.session.edited = True
+            except (ValueError, KeyError, TypeError) as exc:
+                notes.append(tr("the Fitting model could not be read: {reason}").format(reason=exc))
+        if data.get("method") in self.method_buttons:
+            self.method_buttons[data["method"]].setChecked(True)
+        curve = data.get("curve") or {}
+        if curve.get("path") and Path(curve["path"]).is_file():
+            if self.open_curve(curve["path"], curve.get("side"), unit=curve.get("unit")):
+                self.session.excluded = {float(value) for value in curve.get("excluded") or ()}
+                if curve.get("q_range"):
+                    self.set_range(curve["q_range"])
+        elif curve.get("path"):
+            notes.append(tr("the Fitting curve {name} is no longer there").format(name=Path(curve["path"]).name))
+        self._model_changed(editor=True)
+        self._render_all()
+        return notes
 
     def dispose(self) -> None:
         self.stop_fit()

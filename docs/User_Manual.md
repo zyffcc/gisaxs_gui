@@ -102,13 +102,25 @@ is in Analyze's GIWAXS mode. The detector half of the former Cut & Fitting page 
 
 | Menu | Entries |
 |---|---|
-| File | Open Data… (`Ctrl+O`), Open Folder… (`Ctrl+Shift+O`), Open Recent, Load Workspace Parameters… (`Ctrl+L`), Save Workspace Parameters As… (`Ctrl+Shift+S`), Exit |
+| File | Open Data… (`Ctrl+O`), Open Folder… (`Ctrl+Shift+O`), Open Recent, Open Project… (`Ctrl+Shift+P`), Save Project (`Ctrl+S`), Save Project As… (`Ctrl+Shift+S`), Labs Parameters ▸ Load… / Save As…, Exit |
 | View | the workspaces (`Ctrl+1`…), Collapse Sidebar (`Ctrl+B`), Full Screen, Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`) |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), Fit Settings & Batch…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
 | Help | User Manual (`F1`), GitHub Repository, Open User Data Folder, About GIMaP |
 
-*Workspace parameters* are those of Fitting and the Labs; Analyze keeps its own set-up in settings
-files (**Export ▸ Save Settings… / Load Settings…**, also used by Batch Export).
+*Labs parameters* are the settings of 2D Prediction, Trainset Build and Classification; Analyze keeps
+its own set-up in settings files (**Export ▸ Save Settings… / Load Settings…**, also used by Batch
+Export), and a project keeps everything of one sample (below).
+
+### Projects
+
+A project (`.gimap`, a JSON file) reopens a sample as it was left: the frames and the whole set-up of
+Analyze (mode, profile, masks and drawn regions, corrections, cuts), the curve, halves, fitting range,
+left-out points and model of Fitting, and the folder and choices of the In-situ series. **File ▸ Save
+Project** (`Ctrl+S`) writes it (the first time it asks where, next to the first frame by default);
+**Open Project…**, the Start page's **Open Project…**, **Open Recent** (projects first) or dropping a
+`.gimap` file on the window opens it. The window title shows the project's name. Data are referenced
+by path, not copied: when a file has moved, the project still opens and a message lists what is
+missing.
 
 ### Memory between sessions
 
@@ -187,7 +199,10 @@ is one step), **Fit** (Ctrl+Return) and **Save** (data and fit, plot, model).
    weights each point by 1/σ; without σ every point gets the same relative weight). For a cut through
    the beam: **Halves of the cut** — their mean (where both exist; beyond, the longer half alone), both
    on |q|, or one half. **Fitting range** in nm⁻¹ (or drag the band; **Whole Curve**). Under *File*: the
-   q unit of the file (Å⁻¹ for Analyze's curves).
+   q unit of the file (Å⁻¹ for Analyze's curves). **Leaving points out**: switch on **Exclude** above the
+   plot, then click a point to leave it out of the fit (click again to take it back) or drag a box around
+   several; they are drawn as red ×, the Curve step says how many, and **Include All** takes them back.
+   The left-out points are kept with the curve (and in a project) and written in the fit's record.
 2. **Model** — one card per particle: its family (sphere, random cylinder, vertical cylinder), **Distance D**
    on or off (the paracrystal interference), and its values — scale, R, **σR/R**, h and **σh/h** for
    cylinders, D and **σD/D**. Spreads are relative everywhere (as in Analyze's results and 1D Predict).
@@ -211,7 +226,8 @@ is one step), **Fit** (Ctrl+Return) and **Save** (data and fit, plot, model).
    value stopped at a bound of its range, when values are strongly correlated (|ρ| ≥ 0.95: the data do not
    separate them) or when χ²ᵣ is well above 1; every value ± its 1σ error (covariance at the solution,
    scaled by χ²ᵣ); the **Solutions** of *Find the particle shape* or 1D Predict with their χ²ᵣ on these
-   points (**Use This Solution** puts one into Model). **Save Data and Fit…** writes q (nm⁻¹ and Å⁻¹), I, σ,
+   points (**Use This Solution** puts one into Model; after *Find the particle shape* the best is already
+   there, and **Fit** refines it and gives its errors). **Save Data and Fit…** writes q (nm⁻¹ and Å⁻¹), I, σ,
    the model, the residuals and every term as CSV, with a JSON record of the model, the fit (errors,
    bounds, correlations) and the points next to it; **Save Plot…** (PNG or SVG) and **Save Model…** (JSON,
    to load for another curve). The log is folded at the bottom.
@@ -228,8 +244,7 @@ Analyze's curve files, `<name>_fit_input.dat`, have four columns — q (Å⁻¹)
 of detector pixels averaged — and a header recording where the curve came from; any `.dat` / `.txt` /
 `.csv` file with columns `q I [σ]` opens too.
 
-**In-situ series** takes its set-up from Single analysis (*Use current setup*): the curve and the model
-shown there.
+**In-situ series** fits every curve of a folder with the model of Single analysis (below).
 
 Typical AI fitting outputs are written to:
 
@@ -245,37 +260,32 @@ The output may include:
 - `residuals_top5.npz`
 - PNG plots for top candidates and residuals
 
-### Resolution Function Parameters
-
-Resolution-related controls are available in the fitting workflow. These parameters affect the model
-calculation and should be matched to the experiment when quantitative fitting is required. The Global
-tab's `Default step` column controls intentional arrow-key or Alt/Option-wheel increments and saves the
-chosen values for later sessions. Resolution Sigma uses an initial default step of `0.0001`; Reset
-restores the built-in value.
-
-### Global Scale / Background
-
-The fitting model includes global scale and background terms. These are important for matching the measured intensity level and baseline.
-
-### Export Plot / Export Data
-
-**Export Plot…** saves the plot as shown (data, model and components) as a publication figure: one
-journal column (8.5 cm) wide, PNG/TIFF at 600 dpi or SVG/PDF as vectors, like Analyze's figures and
-independent of the light/dark theme. **Export Data…** writes the curve, the fitted curve or the data used
-for fitting as text, with a header that records the parameters.
-
 ### In-situ series
 
-1. In Analyze, list the frames (or a folder) and choose **Send to Fitting ▸ Send Series to Fitting…**;
-   every frame is exported (optionally summed N at a time) and the series opens here with the folder
-   and the pattern `*_fit_input.dat` filled in. Curves written by other tools work too.
-2. Fit one representative curve in Single analysis, then choose **Use current setup** to capture the
-   model and fit settings as a read-only Recipe (v1). Changing them in the series saves a new version
-   and never changes Single analysis.
-3. **Process sequence** fits the existing curves in natural order (a start / end / step range uses the
-   last number in each file name); **Start live watch** fits every new curve written into the folder.
-   A failing curve is recorded and the run continues (or stops, if chosen).
-4. **Results**: trend monitor, curve heatmap and **Export results…**.
+Every curve of a folder, fitted with the model of Single analysis — the same steps, command bar and
+plots as there.
+
+1. **Curves** — **Choose Folder…**, or in Analyze list the frames and choose **Send to Fitting ▸ Send
+   Series to Fitting…** (every frame is exported, optionally summed N at a time, and the series opens
+   here with its curves listed). **Files** is the pattern (`*_fit_input.dat` by default; any `.dat` /
+   `.txt` curves work), optionally **Also in subfolders**; **Frames** first – last and every n-th (the
+   number is the last one in the file name, natural order). **Watch for new curves** keeps fitting
+   curves written into the folder while the series runs (an in-situ measurement).
+2. **Start** — what every frame uses: the model, the halves, the fitting range and the left-out points of
+   Single analysis (**Edit in Single Analysis** to change them). Each frame starts from **the previous
+   frame's result** (a slowly changing sample; if a frame did not converge the next starts from Single's
+   model again) or **the model in Single analysis**. Method: **Refine (fast)** or **Search the ranges,
+   then refine (slow)**. Then **Start** in the command bar; **Pause** and **Stop** while it runs.
+3. **Results** — how many frames were fitted, failed or did not converge; a table with every frame's χ²ᵣ
+   and each free value ± 1σ (click a row to see that frame's curve and model); a plot of one value
+   against the frame, with its ±1σ error bars (or χ²ᵣ); **Open Frame in Single Analysis** takes a frame
+   and its fitted model back to Single analysis. **Save ▸ Table of Every Frame…** writes a CSV (frame,
+   file, χ²ᵣ, log RMSE, converged, every value and its error) with a JSON record next to it (the start
+   model, halves, range, left-out points, method, and why a frame failed); **Trend Plot…** and **Selected
+   Frame's Plot…** save the figures.
+
+A curve that cannot be read or fitted is marked ✗ in the list and the series goes on. The folder and
+the choices are kept for the next session and in a project.
 
 ## 5. GIMaP Predict Page
 
