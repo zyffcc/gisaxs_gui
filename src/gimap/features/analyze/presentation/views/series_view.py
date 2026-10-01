@@ -8,19 +8,22 @@ both can be dragged. Behaviour lives in ``bindings/series.py``.
 
 from __future__ import annotations
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QLabel,
     QMenu,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from src.gimap.app.presentation.components import CurvePlot, DetectorView, EmptyState
+from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, DetectorView, EmptyState
 
 TRACE_ITEMS = (
     ("Mean intensity", "intensity"),
@@ -28,6 +31,7 @@ TRACE_ITEMS = (
     ("Peak FWHM", "fwhm"),
     ("Peak area", "area"),
     ("Peak height", "height"),
+    ("Change along the series", "change"),
 )
 SERIES_EMPTY_TITLE = "One frame"
 SERIES_EMPTY_TEXT = (
@@ -65,6 +69,9 @@ class SeriesView:
         menu = QMenu(self.series_export_button)
         self.series_export_csv_action = menu.addAction("Map as CSV Table…")
         self.series_export_figure_action = menu.addAction("Map as Figure…")
+        self.series_export_stages_action = menu.addAction("Stages as Table…")
+        self.series_export_stages_action.setToolTip(
+            "CSV: every frame's stage, whether it is odd and why, and its place along the main changes; a JSON record next to it")
         menu.addSeparator()
         self.series_export_profile_action = menu.addAction("Selected Frame's Curve…")
         self.series_export_trace_action = menu.addAction("Intensity against Frame…")
@@ -91,6 +98,12 @@ class SeriesView:
         )
         controls.addWidget(self.series_build_button)
         controls.addWidget(self.series_export_button)
+        self.series_compare_button = QPushButton("Send to Compare", parent)
+        self.series_compare_button.setObjectName("analyzeSeriesCompare")
+        self.series_compare_button.setToolTip(
+            "Add this series (every frame's curve) to Compare, to set it beside other samples or series")
+        self.series_compare_button.hide()  # shown once there is a map
+        controls.addWidget(self.series_compare_button)
         controls.addWidget(self.series_batch_button)
         self.series_controls.hide()  # shown once several frames are listed
         host.addWidget(self.series_controls)
@@ -99,6 +112,7 @@ class SeriesView:
         self.series_info_label.setProperty("gimapRole", "muted")
         self.series_info_label.setWordWrap(True)
         host.addWidget(self.series_info_label)
+        self._setup_stages(parent, host)
         self.series_empty = EmptyState(SERIES_EMPTY_TITLE, SERIES_EMPTY_TEXT, parent)
         host.addWidget(self.series_empty)
         self.series_map_view = DetectorView(parent)
@@ -134,6 +148,56 @@ class SeriesView:
         host.addWidget(self.series_plots, 2)
         self.series_stretch_index = host.count()
         host.addStretch(1)
+
+    def _setup_stages(self, parent: QWidget, host: QVBoxLayout) -> None:
+        """Under the controls: how many stages, where they are; folded: what changes and the odd frames."""
+        self.series_stages_row = QWidget(parent)
+        self.series_stages_row.setObjectName("analyzeSeriesStages")
+        row = QHBoxLayout(self.series_stages_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        caption = QLabel("Stages", parent)
+        caption.setProperty("gimapRole", "muted")
+        self.series_stages_combo = QComboBox(parent)
+        self.series_stages_combo.setObjectName("analyzeSeriesStagesCount")
+        self.series_stages_combo.setToolTip(
+            "How many stages the series is cut into. Auto: a stage is added while it explains at least 5 % of the "
+            "change and more than noise would")
+        self.series_stages_label = QLabel("", parent)
+        self.series_stages_label.setObjectName("analyzeSeriesStagesText")
+        self.series_stages_label.setWordWrap(True)
+        self.series_stages_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        row.addWidget(caption)
+        row.addWidget(self.series_stages_combo)
+        row.addWidget(self.series_stages_label, 1)
+        self.series_stages_row.hide()  # shown once a map has stages
+        host.addWidget(self.series_stages_row)
+        section = AdvancedSection(
+            "What changes, and the odd frames",
+            "Where the curves change course; a stage describes the series, it is not a phase by itself — what "
+            "grows or falls between stages says whether the structure changed.",
+            parent,
+        )
+        section.setObjectName("analyzeSeriesStagesDetails")
+        self.series_stages_details = section
+        scroll = QScrollArea(section)  # a long list of odd frames must not squeeze the map
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setMaximumHeight(170)
+        self.series_changes_label = QLabel("", scroll)
+        self.series_changes_label.setObjectName("analyzeSeriesChanges")
+        self.series_changes_label.setWordWrap(True)
+        self.series_changes_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.series_changes_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        scroll.setWidget(self.series_changes_label)
+        section.add_widget(scroll)
+        self.series_skip_odd_check = QCheckBox("Leave the odd frames out of Batch Export", section)
+        self.series_skip_odd_check.setObjectName("analyzeSeriesSkipOdd")
+        self.series_skip_odd_check.setToolTip(
+            "A Batch Export of this list then skips the frames marked odd here (the map keeps them)")
+        section.add_widget(self.series_skip_odd_check)
+        section.hide()
+        host.addWidget(section)
 
 
 __all__ = ["SERIES_EMPTY_TEXT", "SERIES_EMPTY_TITLE", "SeriesView"]

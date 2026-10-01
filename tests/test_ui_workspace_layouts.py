@@ -14,7 +14,6 @@ from src.gimap.integrations.state import (
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
 )
-from src.gimap.features.classification.presentation.page import ClassificationPage
 from src.gimap.features.format_converter.presentation.dialog import (
     ConversionProgressDialog,
     FormatConverterDialog,
@@ -186,28 +185,20 @@ def test_prediction_layout_uses_modern_three_step_workbench_and_original_actions
     window.close()
 
 
-def test_classification_layout_uses_shared_stages_advanced_sections_and_job_status():
+def test_compare_layout_is_steps_and_plots_with_every_command_explained():
+    from src.gimap.features.compare.bootstrap import create_compare_service
+    from src.gimap.features.compare.presentation.page import ComparePage
+
     _app()
-    page = ClassificationPage()
-
-    assert page.classification_input_section.title_label.text() == "Import data"
-    assert page.classification_configure_section.title_label.text() == "Feature recipe"
-    assert page.classification_preview_panel.title_label.text() == "Sample preview"
-    assert page.classification_run_section.title_label.text() == "Train selected models"
-    assert page.classification_results_section.title_label.text() == "Model results"
-    assert page.classification_apply_section.title_label.text() == "Classify new data"
-    assert page.classification_export_section.title_label.text() == "Save & export"
-    assert page.classification_preprocessing_advanced.is_expanded() is False
-    assert page.classification_algorithm_advanced.is_expanded() is False
-    assert page.classification_log_section.is_expanded() is False
-
-    page.set_job_state("running", progress=40)
-    assert page.taskProgressBar is page.classification_job_status.progress_bar
-    assert page.runStatusLabel is page.classification_job_status.message_label
-    assert page.taskProgressBar.maximum() == 100
-    assert page.taskProgressBar.value() == 40
-    assert page.classification_job_status.state_label.text() == "RUNNING"
-    assert page.exportResultsButton.parent() is page.classification_export_section.content
-    assert page.workflowStack.count() == 5
+    page = ComparePage(create_compare_service())
+    assert page.step_rail.keys() == ["series", "compare", "results"] and page.step_rail.current() == "series"
+    actions = [action.text() for action in page.add_button.menu().actions()]
+    assert actions == ["The Series Map of Analyze", "Folder of Curves…", "Curve Files…"]
+    assert all(action.toolTip() for action in page.add_button.menu().actions())
+    assert page.save_button.isHidden() and page.remove_button.isHidden()  # nothing to save or remove yet
+    assert not page.series_hint.isHidden()
+    for plot in (page.change_plot, page.paths_plot, page.end_plot):
+        assert plot.parent() is not None
+    page.dispose()
     page.close()
 

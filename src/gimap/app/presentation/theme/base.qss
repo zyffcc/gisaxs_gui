@@ -1359,13 +1359,22 @@ QLabel#analyzeFileChip {
     padding: 0 4px;
 }
 
+QLabel#compareChip {
+    color: @text@;
+    font-weight: 600;
+    padding: 0 4px;
+}
+
 QLabel#analyzeFileMeta {
     color: @text_muted@;
 }
 
 QFrame#analyzeProcessPanel,
 QFrame#analyzeCanvasPanel,
-QFrame#analyzeCurvesPanel {
+QFrame#analyzeCurvesPanel,
+QFrame#compareCommandBar,
+QFrame#compareProcessPanel,
+QFrame#comparePlotPanel {
     background: @surface@;
     border: 1px solid @border@;
     border-radius: 10px;

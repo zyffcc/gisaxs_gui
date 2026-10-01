@@ -13,7 +13,7 @@
 ## 当前状态
 
 通过 **Tools → XRR Series Extractor…** 或 `Ctrl+Shift+R` 打开独立、非模态窗口。打开、处理和
-关闭该工具都不改变主窗口当前的 Fitting、Prediction、Trainset、Classification 或 WAXS 页面。
+关闭该工具都不改变主窗口当前的 Fitting、Compare、Prediction、Trainset 或 WAXS 页面。
 
 左侧参数区只有一个垂直滚动容器；ROI、Run、Export 和 JobStatus 位于固定命令区，在
 1280×800、1440×900 和 1920×1080 下保持可见。右侧 `Live frame` 与 `XRR points` 标签位置稳定。

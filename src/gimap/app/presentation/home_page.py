@@ -32,7 +32,7 @@ TASKS = (
     ("gisaxs", "Nanostructure", "GISAXS",
      "Yoneda cut, symmetric halves, spacing and a model fit — automatic, no AI needed."),
     ("series", "In-situ or batch series", "Series",
-     "A frame × q map of the run, peaks followed through it, and Batch Export of every frame to a folder."),
+     "A frame × q map of the run with its stages and odd frames, peaks followed through it, Batch Export of every frame — and Compare for several runs."),
     ("calibrate", "Calibrate the detector", "Calibration",
      "Distance and beam centre from an image of a standard (AgBh, LaB6, CeO2, LaB6 + CeO2)."),
 )

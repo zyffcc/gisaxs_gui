@@ -102,6 +102,49 @@ def test_a_series_is_fitted_frame_after_frame_from_the_previous_result(tmp_path)
     single.dispose()
 
 
+def test_stages_and_odd_frames_steer_the_run(tmp_path) -> None:
+    from src.gimap.features.fitting.application.series_fit import SeriesSettings, next_start
+
+    radii = [5.0 + 0.1 * i for i in range(10)] + [6.0] * 10  # grows, then holds: two stages
+    folder = tmp_path / "gimap_analysis"
+    folder.mkdir()
+    for index, radius in enumerate(radii):
+        exact = evaluate(_model(radius), Q_NM)
+        if index == 5:
+            exact = exact * np.exp(-Q_NM)  # frame 6: a curve unlike its neighbours
+        sigma = 0.01 * exact
+        measured = exact + np.random.default_rng(index).normal(0.0, sigma)
+        np.savetxt(folder / f"run_{index + 1:05d}_fit_input.dat", np.column_stack([Q_NM / 10.0, measured, sigma]))
+    single, series = _pages()
+    single.open_curve(folder / "run_00001_fit_input.dat")
+    single.set_model(_model(5.0))
+    series.open_series(folder)
+    end = time.monotonic() + 60
+    while series._series_stages is None and time.monotonic() < end:
+        series.stage_tasks.wait(0.1)
+        QApplication.processEvents()
+    stages = series._series_stages
+    assert stages is not None and [frame.row for frame in stages.odd] == [5]
+    assert stages.count >= 2 and abs(stages.boundaries[stages.count][0] - 10) <= 2
+    assert series.stages_label.text().startswith(f"{stages.count} stages: frames 1–") and "odd frames: 6" in series.stages_label.text()
+    assert not series.skip_odd_check.isHidden() and series.skip_odd_check.isChecked()
+    assert series.frame_list.item(5).text().endswith("odd") and series.stage_of_frame(15) == stages.count
+    series.start_stages.setChecked(True)
+    series.start()
+    _wait(series)
+    assert 5 not in series.fits and len(series.fits) == 19  # the odd frame was left out
+    assert series._settings.start == "stages"
+    names = [curve[0] for curve in series.trend_plot.figure_state()["curves"]]
+    assert any(name.endswith("stage 1") for name in names) and any(name.endswith(f"stage {stages.count}") for name in names)
+    # A new stage starts from the model of Single analysis, within a stage from the previous result.
+    previous = series.fits[9]
+    settings = SeriesSettings(start="stages")
+    assert next_start(previous, single.session.model, settings, new_stage=True) is single.session.model
+    assert next_start(previous, single.session.model, settings, new_stage=False) is previous.result.model
+    series.dispose()
+    single.dispose()
+
+
 def test_a_bad_file_does_not_stop_the_series_and_stop_keeps_what_was_done(tmp_path) -> None:
     single, series = _pages()
     folder = _series(tmp_path)

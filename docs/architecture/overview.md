@@ -31,7 +31,7 @@ features/
         domain/
         infrastructure/
     trainset/
-    classification/
+    compare/
     calibration/
     format_converter/
     xrr/
@@ -45,7 +45,7 @@ features/
 优先采用 feature-first 的原因包括：
 
 - 将一个用户工作流及其实现代码放在一起；
-- 为 analyze、fitting、prediction、trainset、classification、calibration 和 XRR
+- 为 analyze、fitting、compare、prediction、trainset、calibration 和 XRR
   建立清晰的所有权边界；
 - 减少对全局 `controllers/`、`services/`、`models/` 和 `utils/` 技术目录的依赖，
   避免其职责随时间逐渐模糊；
@@ -254,9 +254,10 @@ Prediction ─┐
 Fitting ────┘
 ```
 
-当前的 shared scientific kernel：`shared/detector_io`（CBF/NXS/TIFF 读取与元数据）和
+当前的 shared scientific kernel：`shared/detector_io`（CBF/NXS/TIFF 读取与元数据）、
 `shared/geometry`（探测器几何、像素 → q 映射、仪器配置，约定见
-[`geometry.md`](geometry.md)）。
+[`geometry.md`](geometry.md)）和 `shared/series_stages`（一组曲线的异常帧、主成分与分段：
+Analyze 的 Series、Fitting 的 In-situ series 与 Compare 三处共用，纯 NumPy）。
 
 `shared/` 不是默认放置位置。只有至少两个 feature 已经稳定需要同一项领域能力，且其
 语义、边界和 ownership 都明确时，才允许提取 shared abstraction。禁止为了“未来可能

@@ -17,7 +17,6 @@ from .presentation.collapsible_card import (
 from .presentation.layout_metrics import LAYOUT
 from .presentation.navigation import NAVIGATION_ITEMS, NavigationSidebar
 from .presentation.task_runner import TaskRunner
-from src.gimap.features.classification.presentation.page import ClassificationPage
 from src.gimap.features.prediction.presentation import (
     GisaxsPredictWorkspace,
     PredictCard,
@@ -45,8 +44,8 @@ class MainWindowComponents:
         self.task_runner = TaskRunner(ui.centralwidget)
         self._assistant = None
         self.trainset_page = self._create_trainset_page()
-        self.classification_page = self._create_classification_page()
         self.analyze_page = self._create_analyze_page()
+        self.compare_page = self._create_compare_page()
         from src.gimap.features.fitting.bootstrap import create_fitting_view_model, create_quick_fit
 
         self.fitting_view_model = create_fitting_view_model(ui.app_context)
@@ -66,7 +65,7 @@ class MainWindowComponents:
             "fitting": ui.gisaxsFittingPage,
             "predict": ui.gisaxsPredictPage,
             "trainset": ui.trainsetBuildPage,
-            "classification": ui.classificationPage,
+            "compare": self.compare_page,
         }
         self.sidebar = NavigationSidebar(
             NAVIGATION_ITEMS,
@@ -93,16 +92,22 @@ class MainWindowComponents:
         self.ui.trainsetWorkspace = page
         return page
 
-    def _create_classification_page(self) -> ClassificationPage:
-        host = self.ui.classificationPage
-        layout = host.layout()
-        if layout is None:  # an empty QLayout is falsy (len == 0)
-            layout = QVBoxLayout(host)
-        layout.setContentsMargins(0, 0, 0, 0)
-        page = ClassificationPage(host)
-        layout.addWidget(page)
-        self.ui.classificationWorkspace = page
+    def _create_compare_page(self):
+        """Compare: Analyze's Series maps (Send to Compare) and curve files side by side."""
+        from src.gimap.features.compare.bootstrap import create_compare_service
+        from src.gimap.features.compare.presentation.page import ComparePage
+
+        page = ComparePage(create_compare_service(), task_runner=self.task_runner, preferences=self.preferences,
+                           analyze_map=self.analyze_page.current_series)
+        self._replace_page_host("comparePageHost", page)
+        self.ui.comparePage = page
+        self.analyze_page.set_compare_target(self._send_series_to_compare)
         return page
+
+    def _send_series_to_compare(self, series_map, name: str) -> None:
+        """Analyze ▸ Series ▸ Send to Compare: the map joins the comparison, and Compare is shown."""
+        if self.compare_page.add_map(series_map, name) is not None:
+            self.show_page("compare")
 
     def _create_analyze_page(self):
         from src.gimap.features.analyze.bootstrap import create_analyze_view_model

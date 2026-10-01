@@ -133,9 +133,9 @@ class MainMenuBar(QObject):
         menu.addSeparator()
         if c.load_parameters is not None or c.save_parameters is not None:
             labs = menu.addMenu("&Labs Parameters")
-            labs.setToolTip("The settings of 2D Prediction, Trainset Build and Classification")
+            labs.setToolTip("The settings of 2D Prediction and Trainset Build")
             self._add(labs, "load_parameters", "&Load…", c.load_parameters,
-                      tip="Load the settings of the Labs pages (2D Prediction, Trainset Build, Classification) from a JSON file")
+                      tip="Load the settings of the Labs pages (2D Prediction, Trainset Build) from a JSON file")
             self._add(labs, "save_parameters", "&Save As…", c.save_parameters,
                       tip="Save the settings of the Labs pages to a JSON file")
             menu.addSeparator()

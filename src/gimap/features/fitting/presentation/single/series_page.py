@@ -37,6 +37,7 @@ from ...application.series_fit import (
 )
 from ...application.single_fit import Curve, evaluate, prepare_curve
 from ..views.fit_series_view import FitSeriesView
+from .series_stages import FitSeriesStagesMixin
 from .session import model_label, path_name
 
 PREFERENCES_KEY = "fitting_series_page"
@@ -45,7 +46,7 @@ STATE_MARK = {"waiting": "·", "running": "▸", "done": "✓", "warn": "!", "fa
 CHI2 = "chi2"
 
 
-class FitSeriesPage(QWidget, FitSeriesView):
+class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
     editModelRequested = pyqtSignal()
     """Show Single analysis (the model is set up there)."""
     openFrameRequested = pyqtSignal(str, object)
@@ -75,6 +76,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
         self._watch.setInterval(WATCH_MS)
         self._watch.timeout.connect(self._look_for_new)
         self._connect()
+        self._connect_stages()
         self._restore()
         self.refresh()
 
@@ -109,6 +111,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
     def refresh(self) -> None:
         """Where each step stands, and what the Start step will use."""
         listed = self._listed()
+        self._schedule_stages()
         if not self.paths:
             self.step_rail.set_state("curves", "pending", tr("Choose the folder of the curves"))
             self.step_intro["curves"].setText(tr("A folder of curves, e.g. the gimap_analysis folder of Analyze's "
@@ -125,7 +128,8 @@ class FitSeriesPage(QWidget, FitSeriesView):
         self.model_summary.setText(tr("{model} · {free} values fitted\n{side}; {range}{left_out}").format(
             model=model_label(model), free=free, side=tr(dict(SIDE_TEXT).get(single.side, single.side)),
             range=range_text, left_out=left_out))
-        start = tr("from the previous frame") if self.start_previous.isChecked() else tr("from the same model")
+        start = {"previous": tr("from the previous frame"), "same": tr("from the same model"),
+                 "stages": tr("from the previous frame, afresh at each stage")}[self._start_choice()]
         self.step_rail.set_state("start", "ok" if model.components else "warn",
                                  f"{model_label(model)} · {start}" if model.components else tr("No model: set one in Single analysis"))
         self.step_intro["start"].setText(tr("The model of Single analysis, fitted to every frame."))
@@ -195,6 +199,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
             self._status(tr("No curves matching {pattern} in {folder}.").format(pattern=self.pattern_edit.text(), folder=self.folder), "warning")
         else:
             self._status(tr("{count} curves listed.").format(count=len(self.paths)))
+        self._schedule_stages()
         return bool(self.paths)
 
     def _listed(self) -> list[int]:
@@ -209,6 +214,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
         self.frame_list.clear()
         for index in self._listed():
             self.frame_list.addItem(QListWidgetItem(self._item_text(index)))
+        self._mark_stages()
         self.frame_list.blockSignals(False)
         self.refresh()
 
@@ -227,7 +233,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
     # -- the run ------------------------------------------------------------------------------
 
     def start(self) -> None:
-        listed = self._listed()
+        listed = self._without_odd(self._listed())
         model = self.single.session.model
         if not listed or not model.components:
             return
@@ -235,7 +241,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
             side=self.single.session.side, q_range=self.single.session.q_range,
             excluded=frozenset(self.single.session.excluded),
             method="global" if self.method_global.isChecked() else "local",
-            start="previous" if self.start_previous.isChecked() else "same")
+            start=self._start_choice())
         self._start_model = model
         self.fits, self.queue, self._previous, self._curves = {}, list(listed), None, {}
         self._selected = self._last_done = None
@@ -272,7 +278,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
         loaded = outcome.value
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=Path(path).name, path=path,
                                   unit=loaded.q_source_unit)
-        start = next_start(self._previous, self._start_model, self._settings)
+        start = next_start(self._previous, self._start_model, self._settings, new_stage=self._new_stage(index))
         settings, stop = self._settings, self._stop.is_set
         self._set_item(index)
         self.tasks.submit("series", lambda: (fit_frame(index, path, curve, start, settings, stop), curve),
@@ -401,33 +407,6 @@ class FitSeriesPage(QWidget, FitSeriesView):
         self.trend_combo.setCurrentIndex(index)
         self.trend_combo.blockSignals(False)
 
-    def _draw_trend(self) -> None:
-        key = self.trend_combo.currentData()
-        frames = [self.fits[index] for index in sorted(self.fits) if self.fits[index].ok]
-        if key is None or not frames:
-            self.trend_plot.set_curves([])
-            return
-        x = np.array([frame.index + 1 for frame in frames], float)
-        if key == CHI2:
-            y = np.array([frame.result.chi2_reduced for frame in frames])
-            curves, colors, markers = [("χ²ᵣ", x, y)], ["#2563eb"], ["o"]
-        else:
-            y = np.array([frame.result.model.get(key).value for frame in frames])
-            error = np.array([frame.result.errors.get(key, math.nan) for frame in frames])
-            curves, colors, markers = [(self.trend_combo.currentText(), x, y)], ["#2563eb"], ["o"]
-        self.trend_plot.set_labels("frame", "χ²ᵣ" if key == CHI2 else path_name(self._start_model, key, unit=True, translate=False))
-        self.trend_plot.set_curves(curves, colors, markers=markers)
-        if key != CHI2 and np.isfinite(error).any():  # ±1σ as vertical bars, in the plot's coordinates
-            import pyqtgraph as pg
-
-            keep = np.isfinite(error)
-            low, high = y[keep] - error[keep], y[keep] + error[keep]
-            if self.trend_plot.log_check.isChecked():
-                low = np.where(low > 0, low, y[keep] / 10.0)
-            bars = self.trend_plot.plot.plot(np.repeat(x[keep], 2), np.column_stack([low, high]).ravel(),
-                                             pen=pg.mkPen("#2563eb", width=1.2), connect="pairs")
-            self.trend_plot._items.append(bars)  # cleared with the curves
-
     def _fill_results(self) -> None:
         if self._start_model is None:
             self.results_summary.setText(tr("Choose the curves, check the start, then Start."))
@@ -518,7 +497,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
         self.preferences.set(PREFERENCES_KEY, stored)
 
     def _remember_choices(self) -> None:
-        self._remember(start="same" if self.start_same.isChecked() else "previous",
+        self._remember(start=self._start_choice(),
                        method="global" if self.method_global.isChecked() else "local")
         self.refresh()
 
@@ -526,8 +505,7 @@ class FitSeriesPage(QWidget, FitSeriesView):
         pattern = self._remembered("pattern")
         if pattern:
             self.pattern_edit.setText(str(pattern))
-        if self._remembered("start") == "same":
-            self.start_same.setChecked(True)
+        self._set_start(self._remembered("start"))
         if self._remembered("method") == "global":
             self.method_global.setChecked(True)
 
@@ -536,11 +514,11 @@ class FitSeriesPage(QWidget, FitSeriesView):
     def project_state(self) -> dict:
         return {"folder": self.folder, "pattern": self.pattern_edit.text(), "subfolders": self.subfolders_check.isChecked(),
                 "first": self.first_spin.value(), "last": self.last_spin.value(), "every": self.every_spin.value(),
-                "start": "same" if self.start_same.isChecked() else "previous",
+                "start": self._start_choice(),
                 "method": "global" if self.method_global.isChecked() else "local"}
 
     def apply_project_state(self, data: dict) -> list[str]:
-        (self.start_same if data.get("start") == "same" else self.start_previous).setChecked(True)
+        self._set_start(data.get("start"))
         (self.method_global if data.get("method") == "global" else self.method_local).setChecked(True)
         self.subfolders_check.blockSignals(True)
         self.subfolders_check.setChecked(bool(data.get("subfolders")))

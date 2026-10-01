@@ -70,7 +70,14 @@ def test_a_project_reopens_analyze_and_fitting_as_they_were(tmp_path) -> None:
     workspace.series_page.open_series(folder)
     workspace.series_page.every_spin.setValue(2)
     workspace.series_page.start_same.setChecked(True)
+    from types import SimpleNamespace
+
+    compare = components.compare_page
+    compare.add_map(SimpleNamespace(x=np.linspace(0.05, 0.2, 40), image=np.random.default_rng(0).uniform(1, 2, (6, 40)),
+                                    labels=tuple(f"f{i}" for i in range(6)), x_label="q (Å⁻¹)"), "map run")
+    compare.add_folder(folder)
     path = window.menus._write_project(tmp_path / "sample.gimap") and Path(window.menus.project_path)
+    assert (tmp_path / "sample.compare.npz").exists()  # the map from Analyze, next to the project
     record = json.loads(path.read_text(encoding="utf-8"))
     assert record["format"] == "gimap-project" and record["analyze"]["files"] == [str(GALAXI)]
     assert window.windowTitle() == "GIMaP — sample"
@@ -95,6 +102,8 @@ def test_a_project_reopens_analyze_and_fitting_as_they_were(tmp_path) -> None:
     series = reopened.fitting_workspace.series_page
     assert series.folder == str(folder) and series.every_spin.value() == 2 and series.start_same.isChecked()
     assert np.isfinite(single.session.all_points().q).all()
+    assert [item.name for item in reopened.compare_page.series] == ["map run", folder.name]
+    assert reopened.compare_page.series[0].rows == 6 and reopened.compare_page.series[1].paths
     again.close()
 
 

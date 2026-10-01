@@ -16,13 +16,11 @@ class WorkspaceParameterCoordinator:
         repository,
         trainset,
         fitting,
-        classification,
         prediction,
         status: Callable[[str], None],
     ):
         self.trainset = trainset
         self.fitting = fitting
-        self.classification = classification
         self.prediction = prediction
         self.status = status
         self._load = LoadProjectParameters(repository) if repository is not None else None
@@ -39,7 +37,6 @@ class WorkspaceParameterCoordinator:
             }
             if hasattr(self.fitting, "model_params_manager")
             else {},
-            "classification": self.classification.get_parameters(),
             "gisaxs_predict": self.prediction.get_parameters(),
         }
 
@@ -53,8 +50,6 @@ class WorkspaceParameterCoordinator:
             if "fitting" in parameters:
                 self.fitting.set_parameters(parameters["fitting"])
             self._restore_fitting_model_parameters(parameters)
-            if "classification" in parameters:
-                self.classification.set_parameters(parameters["classification"])
             if "gisaxs_predict" in parameters:
                 self.prediction.set_parameters(parameters["gisaxs_predict"])
             self.status(f"Parameters loaded from {file_path} successfully")
@@ -79,7 +74,6 @@ class WorkspaceParameterCoordinator:
         for name, runtime in (
             ("Trainset parameters", self.trainset),
             ("Fitting parameters", self.fitting),
-            ("Classification parameters", self.classification),
             ("GISAXS prediction parameters", self.prediction),
         ):
             if hasattr(runtime, "validate_parameters"):
@@ -91,7 +85,6 @@ class WorkspaceParameterCoordinator:
         for runtime in (
             self.trainset,
             self.fitting,
-            self.classification,
             self.prediction,
         ):
             runtime.reset_to_defaults()

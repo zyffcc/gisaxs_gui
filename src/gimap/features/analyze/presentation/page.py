@@ -25,6 +25,7 @@ from .bindings.project import ProjectMixin
 from .bindings.region_pick import RegionPickMixin
 from .bindings.regions import RegionsMixin
 from .bindings.series import SeriesMixin
+from .bindings.series_stages import SeriesStagesMixin
 from .bindings.batch_run import BatchRunMixin
 from .bindings.session_memory import SessionMemoryMixin
 from .bindings.undo import UndoMixin
@@ -42,6 +43,7 @@ class AnalyzePage(
     RegionPickMixin,
     MaskToolsMixin,
     SeriesMixin,
+    SeriesStagesMixin,
     ProfileActionsMixin,
     BatchWatchMixin,
     BatchExportMixin,
@@ -115,6 +117,7 @@ class AnalyzePage(
         self._connect_options()
         self._connect_workspace()
         self._connect_series()
+        self._connect_stages()
         self._connect_batch_run()
         self._connect_regions()
         self._connect_undo()

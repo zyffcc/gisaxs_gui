@@ -121,6 +121,14 @@ from .ports import CurveWriter, FigureWriter, FrameSource, InstrumentProfileStor
 from .series import CorrectSeriesFrame
 from .settings_file import SETTINGS_FORMAT, AnalyzeSettings, settings_from_record, settings_record
 from .series_map import SERIES_TITLE, build_series_map, export_series_map, export_series_track, row_label, series_row
+from .series_stages import (
+    change_curve,
+    export_series_stages,
+    odd_frame_refs,
+    stage_summary,
+    stages_of,
+    stages_record,
+)
 from .use_cases import (
     AnalyzeFrame,
     ExportAnalysis,
@@ -235,6 +243,12 @@ __all__ = [
     "SERIES_TITLE",
     "SeriesMap",
     "build_series_map",
+    "change_curve",
+    "export_series_stages",
+    "odd_frame_refs",
+    "stage_summary",
+    "stages_of",
+    "stages_record",
     "export_series_map",
     "export_series_track",
     "row_label",

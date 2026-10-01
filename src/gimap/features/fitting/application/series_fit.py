@@ -8,16 +8,19 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 import numpy as np
+
+from src.gimap.shared.series_stages import SeriesStages, find_stages
 
 from ..domain.fit_engine import FitResult, fit
 from ..domain.fit_model import FAMILIES, INFO, FitModel, model_to_dict
 from .single_fit import Curve, prepare_curve
 
 STARTS = (("previous", "Each frame starts from the previous frame's result"),
-          ("same", "Every frame starts from the model in Single analysis"))
+          ("same", "Every frame starts from the model in Single analysis"),
+          ("stages", "From the previous frame's result, and from the model in Single analysis at every new stage"))
 
 
 @dataclass(frozen=True)
@@ -55,11 +58,30 @@ def fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: Se
         return FrameFit(index, path, error=str(exc) or type(exc).__name__)
 
 
-def next_start(previous: Optional[FrameFit], single: FitModel, settings: SeriesSettings) -> FitModel:
-    """Where the next frame starts: the previous frame's result (when it converged) or the Single model."""
-    if settings.start == "previous" and previous is not None and previous.ok and previous.result.converged:
+def next_start(previous: Optional[FrameFit], single: FitModel, settings: SeriesSettings, *,
+               new_stage: bool = False) -> FitModel:
+    """Where the next frame starts: the previous frame's result (when it converged) or the Single model —
+    also at the first frame of a new stage when ``start`` is ``"stages"``."""
+    follows = settings.start == "previous" or (settings.start == "stages" and not new_stage)
+    if follows and previous is not None and previous.ok and previous.result.converged:
         return previous.result.model
     return single
+
+
+def stages_of_curves(curves: Sequence[Curve], settings: SeriesSettings) -> SeriesStages:
+    """Stages and odd frames of the curves as they are fitted (the halves, range and left-out points),
+    on the first curve's q (nm⁻¹)."""
+    prepared = [prepare_curve(curve, settings.side, settings.q_range, settings.excluded) for curve in curves]
+    grid = np.sort(np.asarray(prepared[0].q, dtype=float))
+    image = np.full((len(prepared), grid.size), np.nan)
+    for row, data in enumerate(prepared):
+        order = np.argsort(data.q)
+        q, intensity = np.asarray(data.q, dtype=float)[order], np.asarray(data.intensity, dtype=float)[order]
+        if q.size < 2:
+            continue
+        inside = (grid >= q[0]) & (grid <= q[-1])
+        image[row, inside] = np.interp(grid[inside], q, intensity)
+    return find_stages(grid, image)
 
 
 def parameter_columns(model: FitModel) -> list[tuple[tuple, str]]:
@@ -110,4 +132,4 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
 
 
 __all__ = ["FrameFit", "STARTS", "SeriesSettings", "fit_frame", "next_start", "parameter_columns",
-           "series_record", "series_table"]
+           "series_record", "series_table", "stages_of_curves"]

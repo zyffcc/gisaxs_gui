@@ -7,6 +7,7 @@ the newer Analyze tools are in ``zh_analyze.py``.
 
 from .zh_analyze import ANALYZE_ZH
 from .zh_fitting import FITTING_ZH
+from .zh_compare import COMPARE_ZH
 from .zh_night import NIGHT_ZH
 
 ZH = {
@@ -71,7 +72,7 @@ ZH = {
     "Nanostructure": "纳米结构",
     "Yoneda cut, symmetric halves, spacing and a model fit — automatic, no AI needed.": "Yoneda 切线、左右对称的两半、间距和模型拟合——自动完成，无需 AI。",
     "In-situ or batch series": "原位或批量序列",
-    "A frame × q map of the run, peaks followed through it, and Batch Export of every frame to a folder.": "整个测量的帧 × q 热图、峰随时间的变化，以及把每一帧批量导出到文件夹。",
+    "A frame × q map of the run with its stages and odd frames, peaks followed through it, Batch Export of every frame — and Compare for several runs.": "整个测量的帧 × q 热图及其阶段和异常帧、峰随时间的变化、每一帧的批量导出——以及比较多次测量。",
     "Calibrate the detector": "标定探测器",
     "Distance and beam centre from an image of a standard (AgBh, LaB6, CeO2, LaB6 + CeO2).":
         "由标样图像（AgBh、LaB6、CeO2、LaB6 + CeO2）得到距离和光束中心。",
@@ -458,18 +459,6 @@ ZH = {
     "Substrate": "基底",
     "Interference model": "干涉模型",
     "Population model": "颗粒群模型",
-    # -- labs: classification ---------------------------------------------------------------
-    "Import, map, label, train, and reuse a model in one verified workflow.": "在一个经过验证的流程中导入、映射、标注、训练并复用模型。",
-    "Add data": "添加数据",
-    "Add files or folders": "添加文件或文件夹",
-    "Classify new data": "对新数据分类",
-    "Train and compare": "训练并比较",
-    "Suggest groups": "建议分组",
-    "Classes": "类别",
-    "Classifier": "分类器",
-    "Confusion matrix": "混淆矩阵",
-    "Accuracy": "准确率",
-    "Balanced accuracy": "平衡准确率",
     # -- texts written while you work (the most visible ones) ----------------------------
     "WORKSPACES": "工作区",
     "LABS": "实验室",
@@ -549,5 +538,6 @@ ZH = {
 ZH.update(ANALYZE_ZH)
 ZH.update(FITTING_ZH)
 ZH.update(NIGHT_ZH)
+ZH.update(COMPARE_ZH)
 
 __all__ = ["ZH"]

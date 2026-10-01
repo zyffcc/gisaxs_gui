@@ -123,12 +123,15 @@ class CurvePlot(QWidget):
 
     def __init__(
         self, title: str = "", parent: Optional[QWidget] = None, *, log_y: bool = True, log_x: Optional[bool] = None,
+        sides: bool = True,
     ):
-        """``log_x``: ``None`` keeps x linear (no toggle); ``True``/``False`` adds a "Log q" toggle."""
+        """``log_x``: ``None`` keeps x linear (no toggle); ``True``/``False`` adds a "Log q" toggle.
+        ``sides=False``: x is not a signed q or χ (e.g. a component), so no choice of halves."""
         import pyqtgraph as pg
 
         super().__init__(parent)
         self.setObjectName("curvePlot")
+        self._sides = bool(sides)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
@@ -302,7 +305,7 @@ class CurvePlot(QWidget):
             (colors[index] if colors is not None and index < len(colors) and colors[index] else CURVE_COLORS[index % len(CURVE_COLORS)])
             for index in range(len(curves))
         ]
-        signed = any(_has_both_signs(x) for _name, x, _y in curves)
+        signed = self._sides and any(_has_both_signs(x) for _name, x, _y in curves)
         self.side_control.setVisible(signed)
         self._curves, self._colors, self._styles, self._origin = [], [], [], []
         self._markers = [markers[index] if markers is not None and index < len(markers) else False

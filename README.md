@@ -4,7 +4,7 @@ GIMaP (Grazing-Incidence Mapping Package) is a desktop application for GISAXS/GI
 
 ## Overview
 
-GIMaP provides a single desktop interface for working with grazing-incidence scattering data. **Analyze** reduces GISAXS and GIWAXS detector frames to curves (exact q, instrument profiles, in-situ series); **Fitting** fits those curves with particle models, one curve or a whole series; the **Labs** pages hold trained-model prediction, trainset generation and classification.
+GIMaP provides a single desktop interface for working with grazing-incidence scattering data. **Analyze** reduces GISAXS and GIWAXS detector frames to curves (exact q, instrument profiles, in-situ series); **Fitting** fits those curves with particle models, one curve or a whole series; **Compare** sets runs or samples side by side; the **Labs** pages hold trained-model prediction and trainset generation.
 
 The application entry point is `main.py`.
 
@@ -41,9 +41,12 @@ The application entry point is `main.py`.
   Analyze tools on the open frame while you watch; its changes come back as cards you can preview,
   apply or undo, and it says why anything could not be determined. Claude runs on a Claude Pro/Max
   plan through a local Claude Code (no API key) or on the API with a key.
-- **Labs**: 2D Prediction with trained models (single files or folder batches), Trainset Build
-  (simulated GISAXS training sets with BornAgain) and Classification (import, reduce dimensions,
-  train and apply classifiers).
+- **Stages and Compare** (no AI): a series map in Analyze shows where the curves change course
+  (stages), which frames do not belong (odd frames: a detector glitch, a shutter) and what changes between
+  stages; Compare puts several runs or samples side by side — how fast each changed, where each ended,
+  which are alike.
+- **Labs**: 2D Prediction with trained models (single files or folder batches) and Trainset Build
+  (simulated GISAXS training sets with BornAgain).
 - **Interface**: English or Chinese, light or dark theme, adjustable font size; unexpected errors are
   logged (`<user data>/logs/errors.log`) and shown without closing the application.
 

@@ -159,7 +159,7 @@ def test_every_style_sheet_parses_in_qt_in_both_themes():
 
     app = _app()
     sheets = sorted(Path("src").rglob("*.qss"))
-    assert len(sheets) >= 5
+    assert len(sheets) >= 4  # the app's and Fitting's, Prediction's and Trainset's
     messages = []
     previous = qInstallMessageHandler(lambda _kind, _context, text: messages.append(text))
     try:

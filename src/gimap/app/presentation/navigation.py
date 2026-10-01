@@ -37,12 +37,12 @@ NAVIGATION_ITEMS = (
                    "GISAXS and GIWAXS step by step: data, geometry, mask, cuts, results, export"),
     NavigationItem("fitting", "Fitting", "1D_Cut.svg", "Workspaces",
                    "Fit 1D curves with particle models: one curve or an in-situ series"),
+    NavigationItem("compare", "Compare", "Compare.svg", "Workspaces",
+                   "Runs or samples side by side: odd frames, stages, how fast each changed, which are alike"),
     NavigationItem("predict", "2D Prediction", "Predict.svg", "Labs",
                    "Machine-learning prediction from 2D patterns"),
     NavigationItem("trainset", "Trainset Build", "TraintingSetBuild.svg", "Labs",
                    "Simulate training sets"),
-    NavigationItem("classification", "Classification", "Classification.svg", "Labs",
-                   "Classify detector images"),
 )
 """Workspaces in sidebar order: everyday analysis first, then the
 experimental machine-learning tools ("Labs")."""

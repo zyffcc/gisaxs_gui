@@ -196,6 +196,16 @@ class FitSeriesView:
             "While the series runs, fit curves that appear in the folder (e.g. written by Analyze during a measurement)"
         )
         layout.addWidget(self.watch_check)
+        self.stages_label = muted("", page)
+        self.stages_label.setObjectName("fitSeriesStages")
+        layout.addWidget(self.stages_label)
+        self.skip_odd_check = QCheckBox("Leave out the odd frames", page)
+        self.skip_odd_check.setObjectName("fitSeriesSkipOdd")
+        self.skip_odd_check.setChecked(True)
+        self.skip_odd_check.setToolTip(
+            "Frames that match neither the frames before nor after them (a detector glitch, a shutter) are not fitted")
+        self.skip_odd_check.hide()  # shown once odd frames are found
+        layout.addWidget(self.skip_odd_check)
         self.frame_list = QListWidget(page)
         self.frame_list.setObjectName("fitSeriesFrames")
         self.frame_list.setMinimumHeight(180)
@@ -223,7 +233,11 @@ class FitSeriesView:
         self.start_same = QRadioButton("The model in Single analysis", page)
         self.start_same.setObjectName("fitSeriesStartSame")
         self.start_same.setToolTip("Every frame independent of the others")
-        for index, button in enumerate((self.start_previous, self.start_same)):
+        self.start_stages = QRadioButton("The previous result; the Single model at each new stage", page)
+        self.start_stages.setObjectName("fitSeriesStartStages")
+        self.start_stages.setToolTip(
+            "Follows the sample within a stage, and starts afresh where the curves change course (Curves step)")
+        for index, button in enumerate((self.start_previous, self.start_same, self.start_stages)):
             self.start_group.addButton(button, index)
             layout.addWidget(button)
         self.start_previous.setChecked(True)

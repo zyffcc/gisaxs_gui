@@ -132,6 +132,9 @@ Fitting
   `_error`）旁边写同名 `.json` 记录（起始模型、两半、范围、排除的点、方法、失败的帧与原因）；
   Trend Plot…、Selected Frame's Plot…（PNG / SVG）。
 - 文件夹、pattern、帧范围与选择下次启动时恢复，也随项目（.gimap）保存。
+- **阶段与异常帧**（`series_fit.stages_of_curves`，内核 `shared/series_stages`）：列出曲线后在后台按 Single 的两半、范围、
+  排除点比较全部曲线；Curves 步骤写出阶段与异常帧，帧列表按阶段着色；Leave out the odd frames（默认开）；Start 的第三个
+  选项“上一帧的结果；每个新阶段从 Single 的模型开始”；趋势图按阶段着色。见 [compare.md](compare.md)。
 
 ## 验证
 

@@ -16,6 +16,7 @@ from PyQt5.QtCore import QSignalBlocker
 from PyQt5.QtWidgets import QFileDialog
 
 from src.gimap.app.presentation.components import show_toast
+from src.gimap.app.presentation.i18n import tr
 
 from ...application import GISAXS, BatchChoices, SeriesMap, build_series_map, track_peak
 
@@ -98,6 +99,7 @@ class SeriesMixin:
         remembered = self.view_model.batch_preferences()[0]
         choices = BatchChoices(tables=False, every=self.series_step_spin.value(), speed=remembered.speed)
         self.series_export_button.hide()
+        self._clear_stages()
         self.run_batch(Path("."), choices, stem="series", map_only=True, live_key=key)
 
     def cancel_series_map(self) -> None:
@@ -117,6 +119,7 @@ class SeriesMixin:
         text = f"Series map: {len(self._series_rows)} frames of {self.series_curve_combo.currentText()}{failed}"
         self._status(text, "warning" if failed else "ok")
         show_toast(self.window(), text, level="warning" if failed else "ok", action=("Export CSV…", self.export_series_csv))
+        self._find_stages()
 
     def _show_series_map(self, *, keep_view: bool, keep_q: Optional[bool] = None) -> None:
         try:
@@ -139,10 +142,10 @@ class SeriesMixin:
         if stretch is not None and stretch.spacerItem() is not None:
             self.series_host.setStretch(self.series_stretch_index, 0)
         self.series_export_button.show()
-        self.series_info_label.setText(
-            f"{series.rows} frames × {series.x.size} points. Click or drag the horizontal band to pick a frame, "
-            "drag the vertical band (and its edges) to pick a q window; Open shows the frame in Analyze."
-        )
+        self.series_info_label.setText(tr(
+            "{rows} frames × {points} points. Click or drag the horizontal band to pick a frame, drag the vertical "
+            "band (and its edges) to pick a q window; Open shows the frame in Analyze.").format(rows=series.rows,
+                                                                                               points=series.x.size))
         self._series_pick_row(min(self._series_row, series.rows - 1) + 0.5)
         if not (keep_view if keep_q is None else keep_q) or not hasattr(self, "_series_q"):  # where the series changes most
             centre = series.most_changing_x()
@@ -187,6 +190,8 @@ class SeriesMixin:
         centre, half = 0.5 * (low + high), 0.5 * (high - low)
         frames = np.arange(1, series.rows + 1, dtype=float)
         kind = self.series_trace_combo.currentData() or "intensity"
+        if kind == "change" and self._draw_change_trace():
+            return
         name = series.x_label.split(" (")[0]
         if kind == "intensity":
             self.series_trace_plot.set_title(f"I at {name} = {centre:.3g} ± {half:.1g}")

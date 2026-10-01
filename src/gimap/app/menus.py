@@ -133,7 +133,7 @@ class ApplicationMenus:
             warn(self.window, "Open Project", f"{Path(path).name} could not be opened: {exc}")
             return False
         components = self.window.components
-        notes = project.apply(components, data)
+        notes = project.apply(components, data, path)
         self._remember_project(path)
         page = data.get("page") if data.get("page") in components.pages else "analyze"
         self.show_workspace(page)

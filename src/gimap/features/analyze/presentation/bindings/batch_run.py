@@ -111,6 +111,8 @@ class BatchRunMixin:
                   live_key: Optional[str] = None) -> None:
         """Every listed frame (every n-th) with ``choices``; ``map_only``: nothing written, the Series map only."""
         requests = self.view_model.batch_requests()[:: max(1, int(choices.every))]
+        if not map_only:
+            requests = self._without_odd_frames(requests)
         if not requests or self.batch_running():
             return
         if not map_only:
@@ -512,6 +514,7 @@ class BatchRunMixin:
         self._series_rows, self._series_failures = [], []
         self._series_key = key
         self._series_map = None
+        self._clear_stages()
         self._series_row = 0
         self._batch_last_draw, self._batch_rows_drawn = 0.0, 0
         index = self.series_curve_combo.findData(key)
@@ -548,6 +551,7 @@ class BatchRunMixin:
     def _batch_live_finish(self) -> None:
         if self._batch_live:
             self._batch_live_redraw(force=True)
+            self._find_stages()
         self._batch_live = False
         self.series_build_button.setEnabled(self.series_curve_combo.count() > 0)
 

@@ -12,6 +12,7 @@ from ..application import (
     FrameAnalysis,
     SeriesMap,
     export_series_map,
+    export_series_stages,
     export_series_track,
     write_frame_images,
     row_label,
@@ -68,6 +69,9 @@ class ExportModelMixin:
 
     def export_series_map(self, series: SeriesMap, path: Path) -> Path:
         return export_series_map(self._export.writer, series, Path(path))
+
+    def export_series_stages(self, series: SeriesMap, stages, path: Path) -> Path:
+        return export_series_stages(self._export.writer, series, stages, Path(path))
 
     def write_fit_input(self) -> Path:
         """Write the curve for Fitting next to the data and return its path."""

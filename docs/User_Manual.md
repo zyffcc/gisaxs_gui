@@ -45,10 +45,10 @@ The source dependency file is `requirements.txt`. No `environment.yml` file was 
 ## 3. Main Interface
 
 The main window has a sidebar on the left, the active workspace in the middle, a menu bar
-(**File, View, Tools, Help**) and a status bar.
+(**File, View, Tools, Help**); messages appear as short notes at the bottom right.
 
-The sidebar groups the pages into **Workspaces** (Start, Analyze, Fitting) and **Labs**
-(2D Prediction, Trainset Build, Classification — the machine-learning tools). `« Collapse`
+The sidebar groups the pages into **Workspaces** (Start, Analyze, Fitting, Compare) and **Labs**
+(2D Prediction, Trainset Build — the machine-learning tools). `« Collapse`
 (or **View ▸ Collapse Sidebar**, `Ctrl+B`) reduces it to icons; `Ctrl+1` … switch pages.
 
 - **Start** (the first page): drop detector images or a folder, or open them — Analyze opens at
@@ -87,12 +87,14 @@ The sidebar groups the pages into **Workspaces** (Start, Analyze, Fitting) and *
     intensity map against frame and q, with adjustable colour scale. Drag the horizontal band to
     pick a frame (its curve is drawn below, **Open** shows it in Analyze) and the vertical band to
     pick a q window (its intensity against frame is drawn below). Export the map as a CSV table or
-    a figure.
+    a figure. The map's stages and odd frames are found at once (section 7); **Send to Compare** puts the
+    series beside others.
   - The geometry comes from an *instrument profile* matched by detector name and frame size; the
     first time, **Find Calibration Automatically**, enter it, or run Geometry Calibration once.
     See `docs/ui/workspaces/analyze.md`.
 - **Fitting**: fit 1D curves — one curve, or an in-situ series of curves. See section 4.
-- **2D Prediction**, **Trainset Build**, **Classification**: Labs (sections 5–7).
+- **Compare**: runs or samples side by side, with their stages and odd frames. See section 7.
+- **2D Prediction**, **Trainset Build**: Labs (sections 5–6).
 
 The former WAXS page has been retired: every WAXS/GIWAXS function (background, masks, sectors,
 q-range and circle cuts, integration axis, image export, batch with calibration/normalization)
@@ -107,7 +109,7 @@ is in Analyze's GIWAXS mode. The detector half of the former Cut & Fitting page 
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), Fit Settings & Batch…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
 | Help | User Manual (`F1`), GitHub Repository, Open User Data Folder, About GIMaP |
 
-*Labs parameters* are the settings of 2D Prediction, Trainset Build and Classification; Analyze keeps
+*Labs parameters* are the settings of 2D Prediction and Trainset Build; Analyze keeps
 its own set-up in settings files (**Export ▸ Save Settings… / Load Settings…**, also used by Batch
 Export), and a project keeps everything of one sample (below).
 
@@ -357,19 +359,50 @@ The Trainset Build page provides controls for generating training data. The cont
 
 **This feature is under development.**
 
-## 7. Classification Page
+## 7. Compare Page and Stages
 
-The Classification page supports dataset import, category management, 1D/2D preview, feature extraction, dimensionality reduction, classifier training, and model save/load workflows.
+*Classification* was replaced (2026-10-01) by what a series of scattering frames actually needs — no labels and
+no AI: which frames do not belong, where the series changes course, how fast, and which runs or samples are
+alike. Everything uses Analyze's curves (the same geometry, masks and cuts).
 
-Detected functionality includes:
+**Stages in Analyze ▸ Series.** Once a map is built, the stages are found in the background: a colour strip at
+the right of the map, dashed lines where a stage begins, red arrows at odd frames (Marks ▸ Stages hides them).
+Under the controls: **Stages** Auto (n) or a number you choose, and the frames of every stage. Folded below, *What
+changes, and the odd frames*: the typical frame of each stage, where the curve grows or falls most between stages
+(relative to the rest of it), by which frame half and 90 % of the change had happened, and why each odd frame is
+odd — a difference near one q in a few points is the detector (mask it in the Mask step). **Leave the odd frames
+out of Batch Export** does what it says. The lower-right plot can show *Change along the series* (the main
+component, coloured by stage). **Export ▸ Stages as Table…** writes every frame's stage, odd or not and why, with a
+JSON record of the method.
 
-- Import category lists or folders
-- Preview imported data
-- Use dimensionality reduction methods such as PCA, t-SNE, or UMAP
-- Train classifiers such as KNN or SVM
-- Save and load classification models
+How they are found: log I is compared in shape (each frame's mean level removed), odd frames first (a frame that
+matches neither the frames before nor after it), then the main components of the other frames, cut into stages by
+straight lines in frame order; a stage is added while it explains at least 5 % of the change and more than noise
+would. A stage describes the series; it is not a phase by itself — a smooth change is also cut where its pace
+bends. What grows or falls between stages says whether the structure changed.
 
-**This feature is under development.**
+**Stages in Fitting ▸ In-situ series.** The listed curves are compared as they will be fitted: the Curves step says
+how many stages and odd frames there are, the frame list is coloured by stage, **Leave out the odd frames** is on
+by default, and *Each frame starts from* offers **The previous result; the Single model at each new stage**. The
+trend is drawn in the colours of the stages.
+
+**The Compare page** (sidebar ▸ Compare). Add series with **Add Series**: the Series map of Analyze (or **Send to
+Compare** in its Series tab), a folder of curve files, or curve files (q and I columns; nm⁻¹ is converted). Typical
+use: open one sample in Analyze, build its map, Send to Compare; repeat for every sample.
+
+1. **Series** — the list (double-click a name to rename it), Remove Selected, Remove All.
+2. **Compare** — the q range compared (the range every series covers; narrow it to leave out a noisy edge or a
+   detector artefact, **Whole Range** to go back), **Compare the shape only** (on by default), and how many of the
+   last frames make a series' end state. Every change compares again within a second or two.
+3. **Results** — groups (three or more series, split where the end states clearly separate), the series that
+   differs most at the end and at the start, and per series: frames, odd frames, stages, the frame by which half
+   and 90 % of its change had happened; a table of how different the series are, at the end or at the start (in
+   percent of intensity).
+
+On the right: how far each series has changed (against frame, or the share of each series for runs recorded at
+different rates), their paths through the two main changes, and their end states. **Save** writes a table of every
+series or of every frame (CSV with a JSON record) and the plots. A project keeps the series (curve files by path,
+Analyze maps in `<project>.compare.npz`).
 
 ## 8. WAXS / GIWAXS
 

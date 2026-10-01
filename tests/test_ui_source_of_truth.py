@@ -12,16 +12,7 @@ SOURCE_ROOT = PROJECT_ROOT / "src" / "gimap"
 EXPECTED_VIEWS_BY_OWNER = {
     "app": {"main_window_view.py", "settings_dialog_view.py"},
     "calibration": {"geometry_calibration_dialog_view.py"},
-    "classification": {
-        "classification_apply_panel_view.py",
-        "classification_dataset_panel_view.py",
-        "classification_experiment_panel_view.py",
-        "classification_exploration_panel_view.py",
-        "classification_inspection_panel_view.py",
-        "classification_page_view.py",
-        "classification_preprocessing_panel_view.py",
-        "classification_results_panel_view.py",
-    },
+    "compare": {"compare_page_view.py"},
     "fitting": {
         "fit_page_view.py",
         "fit_series_view.py",
@@ -137,7 +128,7 @@ def test_application_shell_view_contains_hosts_not_feature_controls() -> None:
         "trainsetBuildPage",
         "gisaxsPredictPageHost",
         "gisaxsFittingPageHost",
-        "classificationPage",
+        "comparePageHost",
         "analyzePageHost",
     ):
         assert host in source

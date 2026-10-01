@@ -39,7 +39,6 @@ class ApplicationRuntime(QObject):
             repository=self.app_context.project_parameters,
             trainset=self.trainset,
             fitting=self.fitting,
-            classification=self.classification,
             prediction=self.prediction,
             status=self.status_updated.emit,
         )
@@ -48,12 +47,6 @@ class ApplicationRuntime(QObject):
 
     def _compose_features(self, components, simulation_port) -> None:
         """Construct feature presentation runtimes with injected dependencies."""
-        from src.gimap.features.classification.bootstrap import (
-            create_classification_view_model,
-        )
-        from src.gimap.features.classification.presentation.view_binding import (
-            ClassificationViewBinding,
-        )
         from src.gimap.features.fitting.bootstrap import create_fitting_view_model
         from src.gimap.features.fitting.presentation.view_binding import (
             FittingViewBinding,
@@ -87,14 +80,6 @@ class ApplicationRuntime(QObject):
             )
             or create_fitting_view_model(self.app_context),
         )
-        self.classification = ClassificationViewBinding(
-            self.ui,
-            self,
-            classification_view_model=create_classification_view_model(
-                self.app_context
-            ),
-            page=components.classification_page,
-        )
         self.prediction = PredictionViewBinding(
             self.ui,
             self,
@@ -111,7 +96,6 @@ class ApplicationRuntime(QObject):
             workspace = getattr(self.ui, "fittingWorkspace", None)
             if workspace is not None and hasattr(workspace, "attach_legacy"):
                 workspace.attach_legacy(self.fitting)  # In-situ series follows the Single analysis page
-            self.classification.initialize()
             self.prediction.initialize()
             QTimer.singleShot(1000, self.fitting_session.load_last_session)
             print("Application runtime: Feature initialization complete")
@@ -143,18 +127,6 @@ class ApplicationRuntime(QObject):
         fitting.status_updated.connect(self.status_updated)
         fitting.progress_updated.connect(self.progress_updated)
 
-        classification = self.classification
-        classification.parameters_changed.connect(
-            lambda params: self._on_parameters_changed(
-                "Classification parameters", params
-            )
-        )
-        classification.status_updated.connect(self.status_updated)
-        classification.progress_updated.connect(self.progress_updated)
-        classification.classification_completed.connect(
-            self._on_classification_completed
-        )
-
         prediction = self.prediction
         prediction.parameters_changed.connect(
             lambda params: self._on_parameters_changed(
@@ -183,7 +155,6 @@ class ApplicationRuntime(QObject):
         binding = {
             "fitting": self.fitting,
             "predict": self.prediction,
-            "classification": self.classification,
         }.get(key)
         if binding is not None and not binding._initialized:
             binding.initialize()
@@ -220,20 +191,10 @@ class ApplicationRuntime(QObject):
     def handle_window_close(self) -> None:
         self.save_session_on_close()
 
-    def _on_classification_completed(self, results) -> None:
-        self.status_updated.emit(
-            f"Classification completed, processed {len(results)} items"
-        )
-
     @property
     def trainset_controller(self):
         """Deprecated runtime attribute retained for third-party integrations."""
         return self.trainset
-
-    @property
-    def classification_controller(self):
-        """Deprecated runtime attribute retained for third-party integrations."""
-        return self.classification
 
     @property
     def gisaxs_predict_controller(self):

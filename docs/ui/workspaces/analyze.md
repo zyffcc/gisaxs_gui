@@ -67,6 +67,9 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
 
 ## Series（原位 / 批量）
 
+- 热图生成后自动给出**阶段与异常帧**（彩色阶段条、边界虚线、红箭头；Stages 行；折叠的“变化了什么，以及异常帧”；
+  Change along the series；Stages as Table；Batch Export 可跳过异常帧；Send to Compare）。方法与验收见 [compare.md](compare.md)。
+
 - 列出多个文件、打开文件夹或多帧 NeXus 后，Series ▸ 选择曲线（只有一帧时这里只说明怎样得到序列，控件隐藏；Export 在有热图后出现）（GISAXS 默认水平切线，GIWAXS 默认 I(q)）▸ Build Map：
   每帧（或每组相加帧）用当前设置处理，热图逐步长出来（至多每秒重画一次）；和 Batch Export 共用同一个运行器
   （`bindings/batch_run.py`）：长序列在多个低优先级进程里同时处理，面板显示进度、剩余时间，可暂停 / 停止（已处理的行保留）。

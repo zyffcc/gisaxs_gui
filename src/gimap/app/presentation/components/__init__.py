@@ -20,6 +20,7 @@ from .shape_layer import MASK_PURPOSE, POINT, ShapeLayer
 from .step_rail import StepRail
 from .toast import Toast, show_toast, visible_toasts
 from .results import ResultTable
+from .row_groups import STAGE_COLORS, RowGroups, stage_color
 from .sections import AdvancedSection, ParameterSection
 
 __all__ = [
@@ -42,6 +43,8 @@ __all__ = [
     "PlotPanel",
     "ScientificImageViewer",
     "ResultTable",
+    "RowGroups",
+    "STAGE_COLORS",
     "SafeWheelComboBox",
     "SafeWheelDoubleSpinBox",
     "SafeWheelInputFilter",
@@ -51,5 +54,6 @@ __all__ = [
     "Toast",
     "install_safe_wheel_behavior",
     "show_toast",
+    "stage_color",
     "visible_toasts",
 ]

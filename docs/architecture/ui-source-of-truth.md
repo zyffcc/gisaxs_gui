@@ -78,7 +78,7 @@ QSS 优先放在 owner 的 `presentation/styles/` 或应用级 design system 中
 | app | main shell、Settings | feature pages、navigation state、menus |
 | Format Converter | main、folder import、progress | preview、conversion worker state |
 | Calibration | calibration dialog | Matplotlib figure、candidate overlays |
-| Classification | page + dataset/preprocessing/experiment/results/inspection panels | 数据驱动表格与图 |
+| Compare | page | 比较结果表格与 pyqtgraph 曲线图 |
 | Analyze | page、Options panel | pyqtgraph detector/curve views、batch dialog |
 | Trainset | shell + Dataset/Preview/Model/Run/Monitor 五步页面 | catalog/plugin 字段、交互画布、JobStatus |
 | Prediction | controls、workspace、multi-file results、export/heatmap/trend dialogs | model-driven controls、Matplotlib canvas |
