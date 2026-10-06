@@ -8,7 +8,7 @@ status line with a progress bar closes the page.
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtWidgets import (
     QAction,
     QActionGroup,
@@ -45,6 +45,23 @@ VIEW_ITEMS = ("Detector", "q map", "Cake")
 VIEW_DETECTOR, VIEW_Q_MAP, VIEW_CAKE = range(3)
 RIGHT_TABS = (("Curves", "curves"), ("Results", "results"), ("Series", "series"))
 INCIDENCE_FROM_PROFILE = -0.001
+SPLITTER_SIZES = [300, 610, 610]
+"""Steps | image | curves and results before the page has its width."""
+INCIDENCE_TIP = (
+    "Grazing angle αi of this measurement. At the minimum (“from profile”) the "
+    "instrument profile's value is used."
+)
+TOP_SIDE_TIPS = (
+    "Both halves, as measured (display only)",
+    "Only the positive half (display only)",
+    "Only the negative half (display only)",
+    "Both halves on |qy|, the negative one dashed in a second shade (display only)",
+)
+"""The halves control of the upper plot, item by item (also the entries of its “⋯” menu when the plot is narrow):
+it starts at the halves chosen for Fitting, then is the plot's own."""
+TOP_SIDES_TIP = "The halves shown in this plot (display only): the halves for Fitting are chosen in the Cuts step"
+INCIDENCE_FROM_PROFILE_TEXT = "αi from profile"
+"""What the αi field shows at its minimum: Qt draws no prefix there, so the name is in the text."""
 
 
 def _separator(parent: QWidget) -> QFrame:
@@ -55,10 +72,22 @@ def _separator(parent: QWidget) -> QFrame:
     return line
 
 
-def _caption(text: str, parent: QWidget) -> QLabel:
-    label = QLabel(text, parent)
-    label.setProperty("gimapRole", "muted")
-    return label
+FILE_STEP_SIZE = 24
+"""The previous / next file buttons: at least this square (px), an easy target; the chevron is drawn at 16 px."""
+
+
+def _step_button(bar: QWidget, name: str, text: str, tip: str) -> QToolButton:
+    """A previous / next file button: an icon only (the text is its accessible fallback)."""
+    button = QToolButton(bar)
+    button.setObjectName(name)
+    button.setText(text)
+    button.setAccessibleName(tip)
+    button.setToolButtonStyle(Qt.ToolButtonIconOnly)
+    button.setIconSize(QSize(16, 16))
+    button.setMinimumSize(FILE_STEP_SIZE, FILE_STEP_SIZE)
+    button.setAutoRaise(True)
+    button.setToolTip(tip)
+    return button
 
 
 class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesView):
@@ -81,10 +110,12 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.splitter.addWidget(self.process_panel)
         self.splitter.addWidget(self._detector_panel(self.splitter))
         self.splitter.addWidget(self._curves_panel(self.splitter))
+        # The steps keep their width; the image and the curves / results share the rest (``bindings/workspace.py``
+        # ``EvenSplit`` balances them until the person moves a handle).
         self.splitter.setStretchFactor(0, 0)
-        self.splitter.setStretchFactor(1, 3)
-        self.splitter.setStretchFactor(2, 2)
-        self.splitter.setSizes([300, 680, 540])
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setStretchFactor(2, 1)
+        self.splitter.setSizes(SPLITTER_SIZES)
         root.addWidget(self.splitter, 1)
         root.addLayout(self._status_row(page))
         # Kept for callers of the former Options toggle: checking it shows the Mask step.
@@ -96,7 +127,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
     # -- command bar ---------------------------------------------------------------------
 
     def _command_bar(self, page: QWidget) -> QFrame:
-        bar = CommandBar(page)
+        bar = self.command_bar = CommandBar(page)
         bar.setObjectName("analyzeCommandBar")
         row = QHBoxLayout(bar)
         row.setContentsMargins(8, 6, 8, 6)
@@ -124,16 +155,15 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.redo_button.setAutoRaise(True)
         self.redo_button.setToolTip("Redo (Ctrl+Shift+Z)")
 
-        self.previous_file_button = QToolButton(bar)
-        self.previous_file_button.setObjectName("analyzePreviousFile")
-        self.previous_file_button.setText("‹")
-        self.previous_file_button.setAutoRaise(True)
-        self.previous_file_button.setToolTip("Previous file (Page Up)")
-        self.next_file_button = QToolButton(bar)
-        self.next_file_button.setObjectName("analyzeNextFile")
-        self.next_file_button.setText("›")
-        self.next_file_button.setAutoRaise(True)
-        self.next_file_button.setToolTip("Next file (Page Down)")
+        # Chevrons drawn in the theme's text colour (``bindings/file_list.py``), as large as undo / redo.
+        self.previous_file_button = _step_button(bar, "analyzePreviousFile", "‹", "Previous file (Page Up)")
+        self.next_file_button = _step_button(bar, "analyzeNextFile", "›", "Next file (Page Down)")
+        self.file_position_label = QLabel("", bar)
+        self.file_position_label.setObjectName("analyzeFilePosition")
+        self.file_position_label.setProperty("gimapRole", "muted")
+        for widget in (self.previous_file_button, self.next_file_button, self.file_position_label):
+            widget.setProperty("gimapWanted", False)  # shown (“3 / 40”) once more than one file is listed
+            widget.hide()
         self.file_chip = ElidedLabel("No data yet — open or drop detector frames", bar)
         self.file_chip.setObjectName("analyzeFileChip")
         self.file_chip.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -154,15 +184,17 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.incidence_spin.setDecimals(3)
         self.incidence_spin.setRange(INCIDENCE_FROM_PROFILE, 10.0)
         self.incidence_spin.setSingleStep(0.01)
+        self.incidence_spin.setPrefix("αi ")  # the name stays in view when the narrow bar drops captions
         self.incidence_spin.setSuffix(" °")
-        self.incidence_spin.setSpecialValueText("from profile")
+        self.incidence_spin.setSpecialValueText(INCIDENCE_FROM_PROFILE_TEXT)
         self.incidence_spin.setKeyboardTracking(False)
         self.incidence_spin.setValue(INCIDENCE_FROM_PROFILE)
-        self.incidence_spin.setMinimumWidth(104)
-        self.incidence_spin.setToolTip(
-            "Grazing angle αi of this measurement. At the minimum (“from profile”) the "
-            "instrument profile's value is used."
-        )
+        # No fixed minimum width: its size hint (the special text, the widest value) is its minimum, so
+        # “αi from profile” is never cut, in any language.
+        self.incidence_spin.setContextMenuPolicy(Qt.CustomContextMenu)  # “Back to Profile αi”
+        self.incidence_spin.setToolTip(INCIDENCE_TIP)
+        self.incidence_reset_action = QAction("Back to Profile αi", page)
+        self.incidence_reset_action.setToolTip("Use the grazing angle of the instrument profile again")
 
         self.run_pipeline_button = QPushButton("Run Automatic Analysis", bar)
         self.run_pipeline_button.setObjectName("analyzeRunButton")
@@ -201,10 +233,9 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         row.addWidget(self.previous_file_button)
         row.addWidget(self.file_chip)
         row.addWidget(self.next_file_button)
+        row.addWidget(self.file_position_label)
         row.addWidget(self.file_meta, 1)
         row.addWidget(self.mode_combo)
-        incidence_caption = _caption("αi", bar)
-        row.addWidget(incidence_caption)
         row.addWidget(self.incidence_spin)
         row.addWidget(_separator(bar))
         row.addWidget(self.run_pipeline_button)
@@ -214,7 +245,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         row.addWidget(self.batch_export_button)
         row.addWidget(self.fit_button)
         bar.set_compact_parts(
-            hidden=(self.previous_file_button, self.next_file_button, self.file_meta, incidence_caption),
+            hidden=(self.previous_file_button, self.next_file_button, self.file_position_label, self.file_meta),
             texts=((self.run_pipeline_button, "Run Automatic Analysis", "Run Analysis"),
                    (self.batch_export_button, "Batch Export…", "Batch…"),
                    (self.fit_button, "Send to Fitting", "Fitting")),
@@ -326,7 +357,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.sources_button.setText("Sources")
         self.sources_button.setCheckable(True)
         self.sources_button.setToolTip(
-            "Show on the image which pixels each curve comes from, in the colours of the plots; "
+            "Show on the detector image which pixels each curve comes from, in the colours of the plots; "
             "click a curve to show only its pixels"
         )
         self.detector_view.toolbar_layout.addWidget(self.sources_button)
@@ -372,6 +403,9 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         curves_layout.setContentsMargins(0, 0, 0, 0)
         curves_layout.setSpacing(6)
         self.top_plot = CurvePlot("", curves)
+        for index, tip in enumerate(TOP_SIDE_TIPS):
+            self.top_plot.side_control.setItemToolTip(index, tip)
+        self.top_plot.side_control.setToolTip(TOP_SIDES_TIP)
         self.bottom_plot = CurvePlot("", curves)
         for plot in (self.top_plot, self.bottom_plot):
             plot.add_save_menu()
@@ -442,6 +476,7 @@ __all__ = [
     "FILE_FILTER",
     "FIT_SIDE_ITEMS",
     "INCIDENCE_FROM_PROFILE",
+    "INCIDENCE_TIP",
     "MODE_ITEMS",
     "RIGHT_TABS",
     "STEPS",

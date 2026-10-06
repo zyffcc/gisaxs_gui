@@ -22,6 +22,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.presentation.components import FlowLayout
+
 
 class BatchProgressPanel(QFrame):
     def __init__(self, parent: Optional[QWidget] = None):
@@ -62,11 +64,15 @@ class BatchProgressPanel(QFrame):
         self.close_button.setObjectName("batchPanelClose")
         header.addWidget(self.title_label, 1)
         header.addWidget(self.elapsed_label)
-        header.addWidget(self.at_once_combo)
-        header.addWidget(self.pause_button)
-        header.addWidget(self.stop_button)
-        header.addWidget(self.open_button)
-        header.addWidget(self.close_button)
+        # The controls after the title on one line while there is room; in a narrow panel on a line of their own,
+        # wrapping further, so a running batch does not widen the panel (and squeeze the image beside it).
+        controls = FlowLayout(spacing=6)
+        for widget in (self.at_once_combo, self.pause_button, self.stop_button, self.open_button, self.close_button):
+            controls.addWidget(widget)
+        self.controls_host = QWidget(self)
+        self.controls_host.setObjectName("batchPanelControls")
+        self.controls_host.setLayout(controls)
+        header.addWidget(self.controls_host)
         layout.addLayout(header)
         self.now_label = QLabel("", self)
         self.now_label.setObjectName("batchPanelNow")

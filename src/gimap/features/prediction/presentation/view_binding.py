@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+from PyQt5.QtCore import QCoreApplication, QObject, pyqtSignal, QTimer
 
 from PyQt5.QtGui import QPixmap
 
@@ -24,7 +24,11 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.theme import theme_manager
 from src.gimap.features.prediction.presentation.image_worker import PredictionImageLoader
+from src.gimap.features.prediction.presentation.page_status import PageStatus
+from src.gimap.features.prediction.presentation.prediction_worker import PredictionWorker
 
 from src.gimap.features.prediction.presentation.view_model import PredictionViewModel
 
@@ -46,11 +50,14 @@ from .bindings.module_catalog import ModuleCatalogMixin
 from .bindings.prediction_execution import PredictionExecutionMixin
 from .bindings.multifile_results import MultifileResultsMixin
 from .bindings.widget_access import WidgetAccessMixin
+from .bindings.export_files import ExportFilesMixin
+from .workflow_components import PredictionDisclosure
 
 __all__ = ["PredictionViewBinding"]
 
 
 class PredictionViewBinding(
+    ExportFilesMixin,
     SetupStatusMixin,
     MultifileSetupMixin,
     InputParametersMixin,
@@ -76,6 +83,9 @@ class PredictionViewBinding(
     prediction_completed = pyqtSignal(dict)
 
     model_load_finished = pyqtSignal(object, str, str)
+
+    # (message, level) from a worker thread, appended to the activity log on the GUI thread
+    _log_requested = pyqtSignal(str, str)
 
     _DEFAULT_COLORMAPS = [
         "viridis",
@@ -175,8 +185,78 @@ class PredictionViewBinding(
         self._multifile_prediction_active: bool = False
         self._prediction_active: bool = False
         self._multifile_batch_map: Dict[str, List[str]] = {}
+        # Single-file prediction runs in a PredictionWorker; Stop discards its result.
+        self._prediction_run_id = 0
+        self._prediction_workers: Dict[int, PredictionWorker] = {}
+        self._model_load_error: str = ""
 
+        # The Labs status bar is shared with Trainset: showing this page puts back Prediction's own message.
+        self.page_status = PageStatus(getattr(ui, "gisaxsPredictPage", None), self.status_updated, self)
         # 读取全局参数
         self._set_default_parameters()
         self._load_saved_parameters()
+        # The page (GisaxsPredictWorkspace.refresh_language, which the shell calls) reaches this binding here.
+        ui.predictionRefreshLanguage = self.refresh_language
+        self._log_requested.connect(self._append_status_message_gui)
         self.model_load_finished.connect(self._on_model_load_finished)
+        theme_manager().changed.connect(self._on_theme_changed)
+        application = QCoreApplication.instance()
+        if application is not None:
+            application.aboutToQuit.connect(self._wait_for_prediction_workers)
+
+    def refresh_language(self) -> None:
+        """After a switch of the interface language: compose the texts this page made at run time again,
+        for what it shows now (the widget walker only swaps exact table keys)."""
+        self._refresh_predict_readiness()  # chips, Predict button, canvas status (through the workflow)
+        self._refresh_framework_status()
+        status = getattr(self, "_model_status_text", None)
+        label = getattr(self.ui, "gisaxsPredictModelStatusTextLabel", None)
+        if status and label is not None:
+            label.setText(tr(status))
+        self._show_range_labels(self.current_parameters.get("mode", "single_file"))
+        self._update_range_tooltip()
+        shown = getattr(self, "_current_file_shown", None)
+        if shown:
+            self._update_current_file_display(*shown)
+        for name in ("predictionInputModePanel", "predictionWorkbenchLayout"):
+            part = getattr(self.ui, name, None)
+            if part is not None and hasattr(part, "refresh_language"):
+                part.refresh_language()
+        # Every disclosure (log, model configuration, manual colour ranges): its title and tooltip.
+        page = getattr(self.ui, "gisaxsPredictPage", None)
+        disclosures = list(page.findChildren(PredictionDisclosure)) if page is not None else []
+        technical = getattr(self.ui, "predictionTechnicalModelDisclosure", None)
+        if technical is not None and technical not in disclosures:
+            disclosures.append(technical)
+        for disclosure in disclosures:
+            disclosure.refresh_language()
+        if self._multifile_results_widget is not None:
+            self._multifile_results_widget.updateStats()
+            # An open heatmap or trend window draws its figure titles and labels again (only when shown).
+            self._multifile_results_widget.refreshDistributionHeatmap()
+            self._multifile_results_widget.refreshParameterTrend()
+
+    def _stop_gisaxs_predict(self) -> None:
+        """Stop: discard a running single-file prediction, otherwise stop the batch."""
+        if self._stop_single_prediction():
+            return
+        super()._stop_gisaxs_predict()
+
+    def _on_predict_export_clicked(self) -> None:
+        """'Export result… → image' saves the shown distribution or curve in the light
+        publication palette: the theme colours of the figure are for display only."""
+        shown = self._predict_pixmap
+        publication = None
+        if (
+            shown is not None
+            and self.prediction_results
+            and self.current_parameters.get("mode", "single_file") != "multi_files"
+        ):
+            publication = self._publication_pixmap()
+        if publication is not None:
+            self._predict_pixmap = publication  # what RenderControlsMixin saves
+        try:
+            super()._on_predict_export_clicked()
+        finally:
+            if publication is not None and self._predict_pixmap is publication:
+                self._predict_pixmap = shown

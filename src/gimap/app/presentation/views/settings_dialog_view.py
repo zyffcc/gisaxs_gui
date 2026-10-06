@@ -1,10 +1,21 @@
-"""Python View of the Settings dialog: a category list and one page per category."""
+"""Python View of the Settings dialog: a category list and one page per category.
+
+Every page scrolls, so a long page (the Assistant's) keeps its controls at their own size in a
+small dialog instead of squeezing them into each other.
+"""
 
 from PyQt5 import QtCore, QtWidgets
 
 
 def _page(stack, title_text, description):
+    """A scrolling page in ``stack``; returns its content widget and layout."""
+    scroll = QtWidgets.QScrollArea()
+    scroll.setObjectName("settingsPageScroll")
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
     page = QtWidgets.QWidget()
+    page.setObjectName("settingsPageContent")
     layout = QtWidgets.QVBoxLayout(page)
     layout.setContentsMargins(16, 12, 16, 12)
     layout.setSpacing(10)
@@ -16,7 +27,8 @@ def _page(stack, title_text, description):
         note.setProperty("gimapRole", "muted")
         note.setWordWrap(True)
         layout.addWidget(note)
-    stack.addWidget(page)
+    scroll.setWidget(page)
+    stack.addWidget(scroll)
     return page, layout
 
 
@@ -35,11 +47,11 @@ class SettingsDialogView(object):
         SettingsDialog.setWindowTitle("Settings")
         SettingsDialog.setMinimumSize(QtCore.QSize(640, 420))
         root = QtWidgets.QVBoxLayout(SettingsDialog)
-        root.setContentsMargins(0, 0, 0, 10)
+        root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
         body = QtWidgets.QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(0)
+        body.setSpacing(4)
         root.addLayout(body, 1)
 
         self.category_list = QtWidgets.QListWidget(SettingsDialog)
@@ -57,6 +69,7 @@ class SettingsDialogView(object):
         form.setHorizontalSpacing(16)
         form.setVerticalSpacing(10)
         theme_row = QtWidgets.QHBoxLayout()
+        theme_row.setSpacing(16)
         self.light_radio = QtWidgets.QRadioButton("Light", page)
         self.dark_radio = QtWidgets.QRadioButton("Dark", page)
         theme_row.addWidget(self.light_radio)
@@ -64,6 +77,7 @@ class SettingsDialogView(object):
         theme_row.addStretch(1)
         form.addRow("Theme", theme_row)
         font_row = QtWidgets.QHBoxLayout()
+        font_row.setSpacing(8)
         self.font_size_spin = QtWidgets.QDoubleSpinBox(page)
         self.font_size_spin.setObjectName("fontSizeSpin")
         self.font_size_spin.setDecimals(1)
@@ -83,6 +97,7 @@ class SettingsDialogView(object):
         )
         self.language_combo.setMinimumWidth(160)
         language_row = QtWidgets.QHBoxLayout()
+        language_row.setSpacing(8)
         language_row.addWidget(self.language_combo)
         language_row.addStretch(1)
         form.addRow("Language", language_row)
@@ -117,14 +132,15 @@ class SettingsDialogView(object):
         fit_form.addRow("Send horizontal cut to Fitting", self.fit_side_combo)
         layout.addLayout(fit_form)
         layout.addWidget(_hint(page, (
-            "Which half of the horizontal cut Fit… sends. The default keeps both "
-            "halves as |qy| in two colours so asymmetry stays visible."
+            "Which half of the horizontal cut Analyze ▸ Send to Fitting passes on. The default keeps "
+            "both halves as |qy| in two colours, so an asymmetry stays visible."
         )))
         layout.addStretch(1)
 
         # Data -------------------------------------------------------------
         page, layout = _page(self.pages, "Data", "")
         folder_row = QtWidgets.QHBoxLayout()
+        folder_row.setSpacing(8)  # as the other rows: the button does not touch the field
         self.data_folder_edit = QtWidgets.QLineEdit(page)
         self.data_folder_edit.setObjectName("dataFolderEdit")
         self.data_folder_edit.setReadOnly(True)
@@ -153,7 +169,7 @@ class SettingsDialogView(object):
         layout.addStretch(1)
 
         buttons = QtWidgets.QHBoxLayout()
-        buttons.setContentsMargins(12, 0, 12, 0)
+        buttons.setContentsMargins(0, 0, 0, 0)
         buttons.addStretch(1)
         self.close_button = QtWidgets.QPushButton("Close", SettingsDialog)
         self.close_button.setDefault(True)

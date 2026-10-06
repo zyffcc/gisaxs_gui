@@ -13,9 +13,21 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.features.trainset.application import (
     RegisterTrainsetModelRequest,
 )
+
+
+SLURM_STATE_WORDS = {
+    "PENDING": "Pending",
+    "RUNNING": "Running",
+    "COMPLETED": "Completed",
+    "FAILED": "Failed",
+    "CANCELLED": "Cancelled",
+    "TIMEOUT": "Timed out",
+    "OUT_OF_MEMORY": "Out of memory",
+}
 
 
 class HpcJobsMixin:
@@ -43,7 +55,7 @@ class HpcJobsMixin:
                     self.page.connection_button.setEnabled(True),
                     self.page.preview_gate_table.item(3, 1).setText("Ready"),
                     QMessageBox.information(
-                        self.window, "Maxwell", f"Connection successful: {result}"
+                        self.window, "Maxwell", trf("Connection successful: {result}", result=result)
                     ),
                 ),
                 "Maxwell connection failed",
@@ -59,7 +71,8 @@ class HpcJobsMixin:
             QMessageBox.warning(
                 self.window,
                 "Submission checks incomplete",
-                "Complete these checks before submitting:\n\n"
+                tr("Complete these checks before submitting:")
+                + "\n\n"
                 + "\n".join(f"• {item}" for item in missing),
             )
             return
@@ -70,7 +83,7 @@ class HpcJobsMixin:
         reply = QMessageBox.question(
             self.window,
             "Submit to Maxwell",
-            f"Upload and submit this job package?\n\n{self.package_dir}",
+            trf("Upload and submit this job package?\n\n{path}", path=self.package_dir),
             QMessageBox.Yes | QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
@@ -92,14 +105,16 @@ class HpcJobsMixin:
         self.page.hpc_submit_button.setEnabled(True)
         job_id = jobs["train_job_id"]
         self.config["runtime"]["last_job_id"] = job_id
-        self.page.job_id_label.setText(f"Generate: {jobs['generate_job_id']} · Train: {job_id}")
+        self.page.job_id_label.setText(
+            trf("Generate: {generate} · Train: {train}", generate=jobs["generate_job_id"], train=job_id)
+        )
         self.page.job_state.setText("SUBMITTED")
         self.page.set_step_state(3, "Submitted")
-        self.page.set_step_state(4, f"Job {job_id}")
+        self.page.set_step_state(4, "Job {job}", job=job_id)
         self.page.step_list.setCurrentRow(4)
         self._result_sync_started = False
         self.monitor_timer.start()
-        self.status_updated.emit(f"Submitted Maxwell jobs: {jobs}")
+        self.status_updated.emit(trf("Submitted Maxwell jobs: {jobs}", jobs=jobs))
 
     def _refresh_job(self) -> None:
         if self._remote_refresh_running:
@@ -125,15 +140,19 @@ class HpcJobsMixin:
     def _job_refreshed(self, payload) -> None:
         self._remote_refresh_running = False
         status, log = payload
-        self.page.job_state.setText(status.state)
-        self.page.set_step_state(4, status.state)
-        self.page.job_id_label.setText(
-            f"Job ID: {status.job_id} · Elapsed: {status.elapsed} · MaxRSS: {status.max_rss}"
-        )
-        self.page.job_log.setPlainText(log or status.raw)
         normalized_state = (
             status.state.upper().split("+", 1)[0].split()[0] if status.state else "UNKNOWN"
         )
+        self.page.job_state.setText(status.state)  # the scheduler's own code
+        # The step line in words of the interface language; an unknown code as the scheduler wrote it.
+        self.page.set_step_state(4, SLURM_STATE_WORDS.get(normalized_state, status.state))
+        self.page.job_id_label.setText(
+            trf(
+                "Job ID: {job} · Elapsed: {elapsed} · MaxRSS: {rss}",
+                job=status.job_id, elapsed=status.elapsed, rss=status.max_rss,
+            )
+        )
+        self.page.job_log.setPlainText(log or status.raw)
         terminal = normalized_state in {
             "COMPLETED",
             "FAILED",
@@ -158,7 +177,7 @@ class HpcJobsMixin:
                     QMessageBox.information(
                         self.window,
                         "Results",
-                        f"Results synchronized to:\n{destination}",
+                        trf("Results synchronized to:\n{path}", path=destination),
                     ),
                 ),
                 "Result synchronization failed",
@@ -207,5 +226,5 @@ class HpcJobsMixin:
         QMessageBox.information(
             self.window,
             "Model registered",
-            f"Registered prediction module:\n{registered.module_dir}",
+            trf("Registered prediction module:\n{path}", path=registered.module_dir),
         )

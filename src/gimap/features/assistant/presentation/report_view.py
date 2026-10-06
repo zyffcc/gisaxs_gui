@@ -19,6 +19,9 @@ ITEM_TITLES = {
     "orientation": "Orientation (in-plane vs out-of-plane)",
     "ring_orientation": "Ring orientation distribution",
     "crystallite_size": "Crystallite size",
+    "gisaxs_cut": "GISAXS cut",
+    "in_plane_spacing": "In-plane spacing",
+    "gisaxs_fit": "GISAXS fit",
     "other": "Other",
 }
 CHINESE = {
@@ -26,6 +29,9 @@ CHINESE = {
     "Orientation (in-plane vs out-of-plane)": "取向（面内 vs 面外）",
     "Ring orientation distribution": "单个环的取向分布",
     "Crystallite size": "晶粒尺寸",
+    "GISAXS cut": "GISAXS 水平切线",
+    "In-plane spacing": "面内间距",
+    "GISAXS fit": "GISAXS 拟合",
     "Other": "其他",
     "done": "完成",
     "partial": "部分",

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import QEvent, Qt, pyqtSignal
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 STATES = ("pending", "ok", "warn", "error", "busy")
@@ -25,7 +25,7 @@ class _Step(QWidget):
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setProperty("gimapStep", True)
         self.setCursor(Qt.PointingHandCursor)
-        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFocusPolicy(Qt.TabFocus)  # the keyboard reaches it; a click does not leave a focus frame
         self.number = number
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 7, 10, 7)
@@ -43,6 +43,7 @@ class _Step(QWidget):
         self.detail.setProperty("gimapStepDetail", True)
         self.detail.setWordWrap(True)
         self.detail.hide()
+        self.detail.installEventFilter(self)
         text.addWidget(self.title)
         text.addWidget(self.detail)
         layout.addWidget(self.mark, 0, Qt.AlignTop)
@@ -59,6 +60,31 @@ class _Step(QWidget):
             self.clicked.emit()
             return
         super().keyPressEvent(event)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        self.fit_detail()
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
+        """The detail's own width can change after this row's resize (the layout runs later)."""
+        if watched is self.detail and event.type() == QEvent.Resize and event.size().width() != event.oldSize().width():
+            self.fit_detail()
+        return False
+
+    def fit_detail(self) -> None:
+        """Room for every line of the wrapped detail at the width it has (a fixed-height row cuts it otherwise).
+
+        The height of the text itself: ``QLabel.heightForWidth`` includes the minimum height set here, so a
+        minimum from an earlier, narrower width would stay."""
+        detail = self.detail
+        height = 0
+        if not detail.isHidden() and detail.text():
+            margins = detail.contentsMargins()
+            room = max(1, detail.width() - margins.left() - margins.right() - 2 * detail.margin())
+            text = detail.fontMetrics().boundingRect(0, 0, room, 100_000, int(Qt.AlignLeft | Qt.TextWordWrap), detail.text())
+            height = text.height() + margins.top() + margins.bottom() + 2 * detail.margin()
+        if height != detail.minimumHeight():
+            detail.setMinimumHeight(height)
 
     def restyle(self) -> None:
         for widget in (self, self.mark, self.title, self.detail):
@@ -116,6 +142,7 @@ class StepRail(QWidget):
         step.detail.setVisible(bool(detail))
         step.setToolTip(detail)
         step.restyle()
+        step.fit_detail()
 
     def state(self, key: str) -> str:
         step = self._steps.get(key)

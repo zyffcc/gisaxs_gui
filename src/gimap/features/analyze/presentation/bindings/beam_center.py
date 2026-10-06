@@ -4,7 +4,9 @@ The calibrated centre of the instrument profile is used for every new frame,
 so a routine measurement needs no action.  When the centre is wrong for a
 beamtime, the user drags the cross on the image, clicks "Pick on Image" or
 types coordinates; that session centre then applies to every following frame
-until it is reset or saved into the profile.
+of the same detector (frame shape) until it is reset or saved into the profile.
+A frame of another shape keeps its own header or profile centre and says so
+(``application/geometry_resolution.py``).
 """
 
 from __future__ import annotations
@@ -18,16 +20,18 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_state
 
+from ..texts import message_text
 from ..view_model import CENTER_HEADER, CENTER_SESSION
 
-SOURCE_TEXT = {
-    None: "",
-    "profile": "profile",
-    CENTER_SESSION: "this session",
-    CENTER_HEADER: "file header",
+CENTER_TEXT = {
+    "profile": "Beam {x}, {y} px · profile",
+    CENTER_SESSION: "Beam {x}, {y} px · this session",
+    CENTER_HEADER: "Beam {x}, {y} px · file header",
 }
+"""The beam-centre button, one template per source (whole sentences translate better than pieces)."""
 
 
 class CenterDialog(QDialog):
@@ -87,16 +91,14 @@ class BeamCenterMixin:
             self.pick_center_action.setChecked(enabled)
             self.pick_center_action.blockSignals(False)
         if enabled:
-            self._status("Click the direct-beam position on the image (Esc cancels).")
+            self._status(tr("Click the direct-beam position on the image (Esc cancels)."))
 
     def set_session_center(self, x: float, y: float) -> None:
-        """Use (x, y) for this and every following frame of the session."""
+        """Use (x, y) for this and every following frame of this shape in the session."""
         self.view_model.set_beam_center(x, y)
-        self._status(
-            f"Beam centre ({x:.1f}, {y:.1f}) px for this session; "
-            "Beam centre ▸ Save to Profile keeps it for good.",
-            "warning",
-        )
+        self._status(trf(
+            "Beam centre ({x}, {y}) px for this session; Beam centre ▸ Save to Profile keeps it for good.",
+            x=f"{x:.1f}", y=f"{y:.1f}"), "warning")
         self.run_analysis()
 
     def _enter_center(self) -> None:
@@ -116,32 +118,29 @@ class BeamCenterMixin:
         try:
             result = self.view_model.refine_center_x()
         except ValueError as exc:
-            self._status(f"Could not refine the beam centre: {exc}", "warning")
+            self._status(trf("Could not refine the beam centre: {error}", error=message_text(exc)), "warning")
             return
-        self._status(
-            f"Beam centre x {result.initial_x_px:.2f} → {result.x_px:.2f} px from the symmetry "
-            f"of the horizontal cut (this session; Beam centre ▸ Save to Profile keeps it).",
-            "warning",
-        )
+        self._status(trf(
+            "Beam centre x {old} → {new} px from the symmetry of the horizontal cut (this session; "
+            "Beam centre ▸ Save to Profile keeps it).", old=f"{result.initial_x_px:.2f}", new=f"{result.x_px:.2f}"),
+            "warning")
         self.run_analysis()
 
     def reset_center(self) -> None:
         self.view_model.clear_beam_center()
-        self._status("Beam centre back to the instrument profile.", "ok")
+        self._status(tr("Beam centre back to the instrument profile."), "ok")
         self.run_analysis()
 
     def save_center(self) -> None:
         try:
             profile = self.view_model.save_center_to_profile()
         except (ValueError, OSError) as exc:
-            self._status(f"Could not save the beam centre: {exc}", "error")
+            self._status(trf("Could not save the beam centre: {error}", error=message_text(exc)), "error")
             return
         self._refresh_profiles()
         center = profile.geometry.beam_center_x_px, profile.geometry.beam_center_y_px
-        self._status(
-            f"Saved beam centre ({center[0]:.1f}, {center[1]:.1f}) px to profile “{profile.name}”.",
-            "ok",
-        )
+        self._status(trf("Saved beam centre ({x}, {y}) px to profile “{name}”.", x=f"{center[0]:.1f}",
+                         y=f"{center[1]:.1f}", name=profile.name), "ok")
         self.run_analysis()
 
     def _update_center_control(self) -> None:
@@ -150,18 +149,19 @@ class BeamCenterMixin:
         button = self.center_button
         button.setEnabled(center is not None)
         if center is None:
-            button.setText("Beam centre")
+            button.setText(tr("Beam centre"))
             set_state(button, "centerSource", None)
         else:
-            origin = SOURCE_TEXT.get(source, source)
-            button.setText(f"Beam {center[0]:.1f}, {center[1]:.1f} px · {origin}")
+            x, y = f"{center[0]:.1f}", f"{center[1]:.1f}"
+            template = CENTER_TEXT.get(source) or ("Beam {x}, {y} px · {source}" if source else "Beam {x}, {y} px")
+            button.setText(trf(template, x=x, y=y, source=source))
             set_state(button, "centerSource", source)
         header = state["header_center"]
         self.header_center_action.setEnabled(header is not None and center != header)
         self.header_center_action.setText(
-            f"Use File Header Centre ({header[0]:.1f}, {header[1]:.1f})"
+            trf("Use File Header Centre ({x}, {y})", x=f"{header[0]:.1f}", y=f"{header[1]:.1f}")
             if header is not None
-            else "Use File Header Centre (none in this file)"
+            else tr("Use File Header Centre (none in this file)")
         )
         # Picking and dragging work in detector pixels, not on the q map.
         self.pick_center_action.setEnabled(center is not None and self.view_combo.currentIndex() == 0)
@@ -175,12 +175,12 @@ class BeamCenterMixin:
             profile_name is not None and source in (CENTER_SESSION, CENTER_HEADER)
         )
         self.save_center_action.setText(
-            f"Save to Profile “{profile_name}”" if profile_name else "Save to Profile"
+            trf("Save to Profile “{name}”", name=profile_name) if profile_name else tr("Save to Profile")
         )
-        button.setToolTip(
+        button.setToolTip(tr(
             "Beam centre of this frame and where it comes from. Drag the cross on the image, "
             "or use this menu to pick, type, reset or save it."
-        )
+        ))
 
 
 __all__ = ["BeamCenterMixin", "CenterDialog"]

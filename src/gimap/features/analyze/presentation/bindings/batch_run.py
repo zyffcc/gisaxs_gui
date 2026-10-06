@@ -25,7 +25,7 @@ from typing import Callable, Optional
 from PyQt5.QtCore import QSignalBlocker, QTimer, QUrl
 from PyQt5.QtGui import QDesktopServices
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import BALANCED, FAST, FOLDERS, GENTLE, GISAXS, BatchChoices, frames_at_once
 
@@ -80,6 +80,11 @@ class BatchRunMixin:
 
     def batch_running(self) -> bool:
         return bool(self._batch) or bool(self._batch_inflight) or self._batch_timer.isActive()
+
+    def batch_kind(self) -> str:
+        """What the batch is (meaningful while ``batch_running()``): ``series_map`` (Series ▸ Build Map, nothing
+        written) or ``export`` (Batch Export, also when it fills the map)."""
+        return "series_map" if self._batch_map_only else "export"
 
     def _batch_pixels(self) -> int:
         analysis = self.view_model.state.analysis
@@ -362,10 +367,14 @@ class BatchRunMixin:
             self._series_finished(list(run.failures))
             self._batch_panel_finish(done, seconds, live=False)
             self._batch_map_only = False
+            if done and not run.failures and not self._batch_stopping:
+                self.batch_panel.hide()  # the map says it (with a toast and the status line): its room goes to the map
             return
         level = "warning" if run.failures else "ok"
-        details = f"; failed: {', '.join(run.failures[:5])}" if run.failures else ""
-        text = f"Exported {done}/{self._batch_total} frames to {destination} in {seconds:.0f} s{details}"
+        values = dict(done=done, total=self._batch_total, folder=destination, seconds=f"{seconds:.0f}")
+        text = (trf("Exported {done}/{total} frames to {folder} in {seconds} s; failed: {names}",
+                    names=", ".join(run.failures[:5]), **values) if run.failures else
+                trf("Exported {done}/{total} frames to {folder} in {seconds} s", **values))
         if level == "ok":
             self.notify_written(text, destination)
         else:
@@ -377,7 +386,7 @@ class BatchRunMixin:
             try:
                 then(destination / FOLDERS["fit_input"] if run.choices.fit_input else destination)
             except (RuntimeError, ValueError, OSError) as exc:
-                self._status(f"Could not open the series in Fitting: {exc}", "error")
+                self._status(trf("Could not open the series in Fitting: {error}", error=exc), "error")
 
     # -- the panel -----------------------------------------------------------------------
 
@@ -462,7 +471,7 @@ class BatchRunMixin:
             panel.fit_label.show()
             panel.fit_label.setText(tr("Latest fit ({frame}): {fit}").format(frame=run.frames[-1] if run.frames else "", fit=run.last_fit))
         name = _frame_name(self._batch_inflight[running[0]][0]) if running else ""
-        text = f"Batch {done}/{total}" + (f": {name} …" if name else "")
+        text = trf("Batch {done}/{total}: {name} …", done=done, total=total, name=name) if name else             trf("Batch {done}/{total}", done=done, total=total)
         if per_frame is not None and total > done:
             text += "  " + eta_text(per_frame * (total - done))
         self._status(text)
@@ -523,9 +532,10 @@ class BatchRunMixin:
                 self.series_curve_combo.setCurrentIndex(index)
         with QSignalBlocker(self.batch_panel.follow_check):
             self.batch_panel.follow_check.setChecked(True)
-        self.series_info_label.setText(
-            tr("Reducing {n} frames: each appears here as soon as it is done.").format(n=self._batch_total)
-            if self._batch_map_only else tr("Batch Export: every frame appears here as soon as it is done."))
+        if self._batch_map_only:
+            self._series_say("Reducing {n} frames: each appears here as soon as it is done.", n=self._batch_total)
+        else:
+            self._series_say("Batch Export: every frame appears here as soon as it is done.")
         self.show_right("series")
 
     def _batch_live_redraw(self, *, force: bool = False) -> None:

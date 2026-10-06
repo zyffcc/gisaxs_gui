@@ -1,13 +1,16 @@
 """Offscreen construction and navigation-state tests for the XRR Tools window."""
 
 import os
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
-from PyQt5.QtCore import QPoint
+from PyQt5.QtCore import QCoreApplication, QEvent, QPoint, Qt
+from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QApplication, QDialog, QMainWindow
 
 from src.gimap.features.xrr.application import (
@@ -104,3 +107,101 @@ def test_xrr_layout_remains_available_at_required_viewports():
         assert dialog.controls_scroll.verticalScrollBar().maximum() >= 0
     dialog.close()
 
+
+# -- Esc while extracting, pick-mode Esc, theme ---------------------------------------------------
+
+
+class SlowViewModel(FakeViewModel):
+    """Extraction that runs until released, like a long synthetic stack."""
+
+    def __init__(self):
+        super().__init__()
+        self.release = threading.Event()
+        self.cancelled = threading.Event()
+
+    def extract(self, request, *, on_progress=None):
+        self.release.wait(10)
+        return XrrExtractionResult(())
+
+    def cancel(self):
+        self.cancelled.set()
+        return True
+
+
+def _settle(app, seconds=0.1):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        app.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        time.sleep(0.01)
+
+
+def test_escape_during_extraction_waits_for_the_thread_before_closing(tmp_path):
+    app = _app()
+    view_model = SlowViewModel()
+    dialog = XrrSeriesDialog(view_model=view_model, app_context=object())
+    dialog.source_picker.set_path(str(tmp_path))
+    dialog.show()
+    events = []
+    dialog.destroyed.connect(lambda *_: events.append("destroyed"))
+    dialog._run_extraction()
+    thread = dialog._extract_thread
+    assert thread is not None and thread.isRunning()
+    thread.finished.connect(lambda: events.append("finished"))
+
+    QTest.keyClick(dialog, Qt.Key_Escape)
+    _settle(app, 0.2)
+    assert events == []
+    assert view_model.cancelled.is_set()  # Esc asks the extraction to stop
+    assert thread.isRunning()
+
+    view_model.release.set()
+    end = time.monotonic() + 10
+    while "destroyed" not in events and time.monotonic() < end:
+        _settle(app, 0.05)
+    assert events == ["finished", "destroyed"]
+
+
+def test_escape_in_pick_mode_only_leaves_pick_mode():
+    app = _app()
+    dialog = XrrSeriesDialog(view_model=FakeViewModel(), app_context=object())
+    dialog.show()
+    dialog.pick_center_button.setChecked(True)
+    QTest.keyClick(dialog, Qt.Key_Escape)
+    app.processEvents()
+    assert not dialog.pick_center_button.isChecked()
+    assert dialog.isVisible()
+    assert dialog.pick_center_button.text() == "Pick direct-beam center"
+    dialog.close()
+
+
+def test_plots_use_the_theme_plot_background_and_follow_a_switch():
+    from src.gimap.app.presentation.theme import apply_theme, theme_color
+
+    _app()
+    apply_theme("dark", 9)
+    try:
+        dialog = XrrSeriesDialog(view_model=FakeViewModel(), app_context=object())
+        dialog.plotter.render_detector(
+            np.ones((20, 30)),
+            (200, 300),
+            roi_center=(10.0, 12.0),
+            radius_px=2,
+            direct_center=(15.0, 100.0),
+            title="frame",
+        )
+        dialog.plotter.render_curve(XrrExtractionResult((_point(1), _point(2))), log_y=True)
+        for canvas in (dialog.plotter.live_canvas, dialog.plotter.curve_canvas):
+            canvas.draw()
+            pixel = np.asarray(canvas.buffer_rgba())[2, 2, :3]
+            assert tuple(pixel) == theme_color("plot_bg").getRgb()[:3]
+        foreground = theme_color("plot_fg").name()
+        assert dialog.plotter.live_axis.title.get_color() == foreground
+        apply_theme("light", 9)
+        for canvas in (dialog.plotter.live_canvas, dialog.plotter.curve_canvas):
+            canvas.draw()
+            pixel = np.asarray(canvas.buffer_rgba())[2, 2, :3]
+            assert tuple(pixel) == theme_color("plot_bg").getRgb()[:3]
+        dialog.close()
+    finally:
+        apply_theme("light", 9)

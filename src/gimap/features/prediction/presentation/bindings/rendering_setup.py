@@ -24,32 +24,39 @@ from PyQt5.QtWidgets import (
     QToolButton,
 )
 
+from src.gimap.app.presentation.i18n import trf
+
+
+def _typed_module(owner):
+    """Ensure a module is selected (saved name, else the first one) and return its typed module."""
+    if not owner._current_module:
+        try:
+            name = (
+                owner.current_parameters.get("module_name", "")
+                if isinstance(owner.current_parameters, dict)
+                else ""
+            )
+            if not name and owner._modules_by_name:
+                name = sorted(owner._modules_by_name.keys())[0]
+            if name and name in owner._modules_by_name:
+                owner._current_module = owner._modules_by_name.get(name)
+        except Exception:
+            pass
+    module = owner._current_module
+    return module.get("_prediction_module") if isinstance(module, dict) else None
+
 
 class RenderingSetupMixin:
     """Own rendering setup presentation behavior."""
 
+    def _typed_prediction_module(self):
+        """The typed module of the selection (falls back to the saved name or the first module)."""
+        return _typed_module(self)
+
     def _preprocess_for_module(self, image: np.ndarray) -> Optional[np.ndarray]:
-        # Ensure a module is selected; fall back to saved name or first available
-        if not self._current_module:
-            try:
-                name = (
-                    self.current_parameters.get("module_name", "")
-                    if isinstance(self.current_parameters, dict)
-                    else ""
-                )
-                if not name and self._modules_by_name:
-                    name = sorted(self._modules_by_name.keys())[0]
-                if name and name in self._modules_by_name:
-                    self._current_module = self._modules_by_name.get(name)
-            except Exception:
-                pass
+        typed_module = _typed_module(self)
         if image is None:
             return None
-        typed_module = (
-            self._current_module.get("_prediction_module")
-            if isinstance(self._current_module, dict)
-            else None
-        )
         if typed_module is None:
             self._append_status_message(
                 "Selected module has no typed prediction contract",
@@ -66,7 +73,7 @@ class RenderingSetupMixin:
         self._latest_preprocess_steps = list(prepared.steps)
         self._latest_model_input = prepared.values
         self._latest_preprocess_source = image
-        self._append_status_message(f"Module preprocess output shape {prepared.values.shape}")
+        self._append_status_message(trf("Module preprocess output shape {shape}", shape=prepared.values.shape))
         return prepared.values
 
     def _predict_with_current_model(self, inp: np.ndarray) -> Optional[Dict[str, np.ndarray]]:
@@ -130,7 +137,11 @@ class RenderingSetupMixin:
             inner_tabs = QTabWidget(pred_page)
             inner_tabs.setObjectName("predictionOutputTabs")
             inner_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            if isinstance(layout, QGridLayout):
+            body = getattr(self.ui, "predict2dPreviewBody", None)
+            if isinstance(layout, QGridLayout) and body is not None:
+                # PredictionPreviewLayout keeps row 0 free above the view/inspector box.
+                layout.addWidget(inner_tabs, 0, 0)
+            elif isinstance(layout, QGridLayout):
                 # Keep the output selector and step gallery above the large
                 # canvas, where they remain visible without scrolling past the
                 # image and inspector.

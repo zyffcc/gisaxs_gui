@@ -41,6 +41,8 @@ class AnalyzeSettings:
     profile: Optional[InstrumentProfile] = None
     incidence_deg: Optional[float] = None
     beam_center: Optional[tuple[float, float]] = None
+    beam_center_shape: Optional[tuple[int, int]] = None
+    """The (rows, columns) of the frames the beam centre was set on (``None``: every frame)."""
     sum_count: int = 1
     corrections: Corrections = field(default_factory=Corrections)
     giwaxs: GiwaxsSettings = field(default_factory=GiwaxsSettings)
@@ -54,6 +56,13 @@ def _pair(value) -> Optional[tuple[float, float]]:
         return None
     first, second = value
     return float(first), float(second)
+
+
+def _shape(value) -> Optional[tuple[int, int]]:
+    if not value:
+        return None
+    rows, columns = value
+    return int(rows), int(columns)
 
 
 def _optional_float(value) -> Optional[float]:
@@ -72,6 +81,7 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
         "profile": settings.profile.to_dict() if settings.profile is not None else None,
         "incidence_deg": settings.incidence_deg,
         "beam_center_px": list(settings.beam_center) if settings.beam_center is not None else None,
+        "beam_center_shape_px": list(settings.beam_center_shape) if settings.beam_center_shape else None,
         "sum_frames": int(settings.sum_count),
         "corrections": {
             "gap_guard_px": int(corrections.gap_guard_px),
@@ -174,6 +184,7 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             profile=profile,
             incidence_deg=_optional_float(record.get("incidence_deg")),
             beam_center=_pair(record.get("beam_center_px")),
+            beam_center_shape=_shape(record.get("beam_center_shape_px")),
             sum_count=max(1, int(record.get("sum_frames", 1))),
             corrections=corrections,
             giwaxs=giwaxs,

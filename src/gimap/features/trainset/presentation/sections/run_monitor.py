@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QTabWidget,
     QTextEdit,
     QWidget,
@@ -140,18 +141,19 @@ class RunMonitorMixin:
         )
         local_intro.setWordWrap(True)
         local_form.addRow(local_intro)
-        local_form.addRow("Output folder", self._line("project.workspace", ""))
-        local_form.addRow("Dataset folder", self._line("runtime.dataset_output_dir", ""))
-        local_form.addRow("Training results folder", self._line("runtime.results_output_dir", ""))
-        local_form.addRow("Python executable", self._line("training.local_python", ""))
-        self.local_python_button = QPushButton("Choose Python executable…")
-        local_form.addRow(self.local_python_button)
-        self.local_folder_button = QPushButton("Choose output folder…")
-        local_form.addRow(self.local_folder_button)
-        self.local_dataset_folder_button = QPushButton("Choose dataset folder…")
-        self.local_results_folder_button = QPushButton("Choose training results folder…")
-        local_form.addRow(self.local_dataset_folder_button)
-        local_form.addRow(self.local_results_folder_button)
+        # Each path: its label, the field, and a Browse… button right beside the field it fills.
+        self.local_folder_button = self._path_row(
+            local_form, "Output folder", "project.workspace", "Choose output folder…"
+        )
+        self.local_dataset_folder_button = self._path_row(
+            local_form, "Dataset folder", "runtime.dataset_output_dir", "Choose dataset folder…"
+        )
+        self.local_results_folder_button = self._path_row(
+            local_form, "Training results folder", "runtime.results_output_dir", "Choose training results folder…"
+        )
+        self.local_python_button = self._path_row(
+            local_form, "Python executable", "training.local_python", "Choose Python executable…"
+        )
         cache_group = QGroupBox("BornAgain form-factor grid cache")
         cache_form = QFormLayout(cache_group)
         cache_form.addRow(
@@ -161,11 +163,10 @@ class RunMonitorMixin:
                 "Use the precomputed particle-parameter matrix during dataset generation",
             )
         )
-        cache_form.addRow(
-            "Cache folder", self._line("simulation.grid_cache.directory", "_bornagain_cache")
+        self.local_cache_folder_button = self._path_row(
+            cache_form, "Cache folder", "simulation.grid_cache.directory", "Choose cache folder…",
+            value="_bornagain_cache",
         )
-        self.local_cache_folder_button = QPushButton("Choose cache folder…")
-        cache_form.addRow(self.local_cache_folder_button)
         cache_form.addRow(
             "Maximum cache files", self._spin("simulation.grid_cache.max_files", 5, 1, 50)
         )
@@ -264,6 +265,21 @@ class RunMonitorMixin:
         )
         ui.exportContentLayout.addWidget(self.package_tree, 1)
         return page
+
+    def _path_row(self, form: QFormLayout, label: str, path: str, tip: str, *, value: str = "") -> QPushButton:
+        """Add ``label | field | Browse…`` to ``form`` (the field stretches); returns the Browse… button."""
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        field = self._line(path, value)
+        button = QPushButton("Browse…", row)
+        button.setToolTip(tip)
+        button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        layout.addWidget(field, 1)
+        layout.addWidget(button)
+        form.addRow(label, row)
+        return button
 
     def _monitor_page(self) -> QWidget:
         page = QWidget()

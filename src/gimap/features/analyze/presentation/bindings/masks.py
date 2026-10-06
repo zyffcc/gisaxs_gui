@@ -14,8 +14,10 @@ from PyQt5.QtCore import QSignalBlocker
 from PyQt5.QtWidgets import QFileDialog
 
 from src.gimap.app.presentation.components import MASK_PURPOSE
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import POLYGON, RECTANGLE, MaskShape
+from ..texts import mask_text, message_text
 from .display import VIEW_DETECTOR
 
 MASK_FILTER = "Masks (*.json *.edf *.tif *.tiff *.npy);;GIMaP masks (*.json);;Mask images (*.edf *.tif *.tiff)"
@@ -50,7 +52,7 @@ class MaskToolsMixin:
             return
         if self.view_model.state.analysis is None:
             self._set_draw_buttons("")
-            self._status("Open a frame first.", "warning")
+            self._status(tr("Open a frame first."), "warning")
             return
         if self.view_combo.currentIndex() != VIEW_DETECTOR:
             self.set_view(VIEW_DETECTOR)
@@ -59,7 +61,7 @@ class MaskToolsMixin:
             "Click two opposite corners on the image (Esc cancels)." if kind == RECTANGLE else
             "Click the corners on the image; double-click or Enter closes the polygon, Esc cancels."
         )
-        self._status(hint)
+        self._status(tr(hint))
 
     def _drawing_changed(self, kind: str) -> None:
         self._set_draw_buttons(kind if self.shape_layer.purpose == MASK_PURPOSE else "")
@@ -73,11 +75,11 @@ class MaskToolsMixin:
         try:
             shape = MaskShape(kind, tuple(points))
         except ValueError as exc:
-            self._status(str(exc), "warning")
+            self._status(message_text(exc), "warning")
             return
         self.view_model.add_mask_shape(shape)
         self._refresh_mask_list()
-        self._status(f"Mask added: {shape.describe()}", "ok")
+        self._status(trf("Mask added: {shape}", shape=mask_text(shape)), "ok")
         self.run_analysis()
 
     # -- the list ------------------------------------------------------------------------
@@ -86,9 +88,9 @@ class MaskToolsMixin:
         corrections = self.view_model.state.corrections
         self.mask_list.clear()
         for shape in corrections.mask_shapes:
-            self.mask_list.addItem(shape.describe())
+            self.mask_list.addItem(mask_text(shape))
         if corrections.mask_path:
-            self.mask_list.addItem(f"Mask file: {Path(corrections.mask_path).name}")
+            self.mask_list.addItem(trf("Mask file: {name}", name=Path(corrections.mask_path).name))
         empty = not corrections.mask_shapes and not corrections.mask_path
         self.mask_list.setVisible(not empty)
         # Only what can be used: Remove / Clear / Save appear once there is a mask.
@@ -126,7 +128,7 @@ class MaskToolsMixin:
         analysis = self.view_model.state.analysis
         if path is None:
             folder = self.view_model.default_export_dir() or Path(self._last_folder or ".")
-            path, _ = QFileDialog.getSaveFileName(self, "Save Masks", str(folder / "masks.json"), "GIMaP masks (*.json)")
+            path, _ = QFileDialog.getSaveFileName(self, tr("Save Masks"), str(folder / "masks.json"), "GIMaP masks (*.json)")
             if not path:
                 return None
         record = {
@@ -137,12 +139,12 @@ class MaskToolsMixin:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(record, indent=2), encoding="utf-8")
-        self.notify_written(f"Saved {path.name}", path.parent)
+        self.notify_written(trf("Saved {name}", name=path.name), path.parent)
         return path
 
     def load_masks(self, path: str | Path | None = None) -> bool:
         if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Load Masks", self._last_folder, MASK_FILTER)
+            path, _ = QFileDialog.getOpenFileName(self, tr("Load Masks"), self._last_folder, MASK_FILTER)
             if not path:
                 return False
         path = Path(path)
@@ -154,10 +156,10 @@ class MaskToolsMixin:
             else:
                 self.view_model.set_mask_path(path)
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            self._status(f"Could not read the masks: {exc}", "error")
+            self._status(trf("Could not read the masks: {error}", error=exc), "error")
             return False
         self._refresh_mask_list()
-        self._status(f"Masks loaded from {path.name}", "ok")
+        self._status(trf("Masks loaded from {name}", name=path.name), "ok")
         self.run_analysis()
         return True
 

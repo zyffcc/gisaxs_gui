@@ -79,6 +79,50 @@ def test_the_view_keeps_dragged_limits_and_updates_itself_quietly() -> None:
     view.close()
 
 
+def test_a_compact_bar_is_slim_and_its_handles_still_set_the_limits() -> None:
+    import pyqtgraph as pg
+    from PyQt5.QtWidgets import QApplication
+
+    from src.gimap.app.presentation.components.levels import level_bar
+
+    _app()
+    widget = pg.GraphicsLayoutWidget()
+    image = pg.ImageItem(axisOrder="row-major")
+    widget.addPlot(row=0, col=0).addItem(image)
+    bar = level_bar(image)
+    widget.addItem(bar, row=0, col=1)
+    image.setImage(np.log10(FRAME), autoLevels=False, levels=(0.5, 2.5))  # log₁₀ I, as a detector view shows it
+    bar.set_label("I")
+    widget.resize(500, 300)
+    widget.show()
+    edits = []
+    bar.edited.levels.connect(lambda low, high: edits.append((low, high)))
+
+    def settle():
+        for _ in range(10):
+            QApplication.processEvents()
+
+    try:
+        settle()
+        full = bar.boundingRect().width()
+        bar.set_compact(True)
+        bar.set_label("log₁₀ I")  # a redraw keeps the compact look
+        settle()
+        assert bar.compact and bar.boundingRect().width() <= 60 < full
+        assert not bar.axis.label.isVisible() and bar.toolTip() == "log₁₀ I"
+        assert bar.vb.width() >= 15
+        strip = bar.gradient.mapRectToParent(bar.gradient.gradRect.rect())
+        assert bar.vb.geometry().right() - 1 <= strip.left() and strip.right() <= bar.boundingRect().right() + 1
+        bar.region.setRegion((1.0, 2.0))  # the handles, dragged
+        assert edits and edits[-1] == pytest.approx((1.0, 2.0))
+        bar.set_compact(False)
+        settle()
+        assert bar.boundingRect().width() == pytest.approx(full, abs=12) and bar.axis.label.isVisible()
+        assert bar.vb.width() > 30 and bar.axis.style["tickFont"] is None and bar.toolTip() == ""
+    finally:
+        widget.close()
+
+
 def test_batch_pictures_use_the_limits_on_screen_or_their_own(tmp_path, monkeypatch) -> None:
     from src.gimap.features.analyze.application import BatchChoices
     from src.gimap.features.analyze.bootstrap import create_analyze_view_model

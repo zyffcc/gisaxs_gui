@@ -178,6 +178,21 @@ def _number(value) -> str:
     return "auto" if value is None else f"{float(value):g}"
 
 
+HALVES_NAMES = {
+    "mean": ("两半平均", "Mean of both halves"), "negative": ("只用 qy < 0 一半", "Only the qy < 0 half"),
+    "positive": ("只用 qy > 0 一半", "Only the qy > 0 half"), "both_abs": ("两半都保留（|qy|）", "Both halves on |qy|"),
+}
+"""The halves of a GISAXS horizontal cut (``set_halves`` sides), in words: (中文, English)."""
+
+
+def halves_label(side: str, language: str = "English") -> str:
+    """Which halves of the horizontal cut are used, in words (``language``: "English" or "中文"; "zh" works too)."""
+    pair = HALVES_NAMES.get(str(side))
+    if pair is None:
+        return str(side)
+    return pair[0] if str(language).startswith(("中", "zh")) else pair[1]
+
+
 def describe(tool: str, arguments: dict, language: str = "English") -> str:
     """A title a person understands, in the report language."""
     chinese = language.startswith("中")
@@ -186,12 +201,7 @@ def describe(tool: str, arguments: dict, language: str = "English") -> str:
         where = f"x = {_number(a.get('x_px'))}, y = {_number(a.get('y_px'))} px"
         return f"光束中心 {where}" if chinese else f"Beam centre {where}"
     if tool == "set_halves":
-        names = {
-            "mean": ("两半平均", "Mean of both halves"), "negative": ("只用 qy < 0 一半", "Only the qy < 0 half"),
-            "positive": ("只用 qy > 0 一半", "Only the qy > 0 half"), "both_abs": ("两半都保留（|qy|）", "Both halves on |qy|"),
-        }
-        pair = names.get(str(a.get("side")), (str(a.get("side")), str(a.get("side"))))
-        return pair[0] if chinese else pair[1]
+        return halves_label(str(a.get("side")), language)
     if tool == "set_gisaxs_cuts":
         if a.get("automatic"):
             return "自动切线（Yoneda、光束中心）" if chinese else "Automatic cuts (Yoneda, beam centre)"
@@ -255,12 +265,14 @@ __all__ = [
     "FAILED",
     "FROM_PROPOSAL",
     "FROM_RUN",
+    "HALVES_NAMES",
     "OPERATION_TOOLS",
     "Operation",
     "PROPOSED",
     "SUPERSEDED",
     "UNDONE",
     "describe",
+    "halves_label",
     "inverse_arguments",
     "setting_state",
 ]

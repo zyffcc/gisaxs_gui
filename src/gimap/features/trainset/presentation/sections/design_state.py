@@ -18,7 +18,23 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr, trf
+
+from ..value_combos import combo_value, fill_values, set_combo_value
 from ..visualization_widgets import ArrayCanvas
+
+LAYER_KINDS = (
+    "conv2d", "maxpool2d", "batch_normalization", "dropout", "global_average_pooling2d", "flatten", "dense",
+)
+
+# What to do on each workflow step (under the step pages, beside Back).
+ACTION_HINTS = (
+    "Validate the detector, ROI, particle and sampling design.",
+    "Generate a small BornAgain comparison before scaling up.",
+    "Define and validate the model contract for this dataset.",
+    "Run locally or export a portable job package.",
+    "Inspect progress, logs, metrics and registered models.",
+)
 
 
 class DesignStateMixin:
@@ -51,14 +67,11 @@ class DesignStateMixin:
             button.style().unpolish(button)
             button.style().polish(button)
 
-        hints = (
-            "Validate the detector, ROI, particle and sampling design.",
-            "Generate a small BornAgain comparison before scaling up.",
-            "Define and validate the model contract for this dataset.",
-            "Run locally or export a portable job package.",
-            "Inspect progress, logs, metrics and registered models.",
-        )
-        self.trainset_action_hint.setText(hints[index])
+        self._show_action_hint(index)
+
+    def _show_action_hint(self, index: int) -> None:
+        if 0 <= index < len(ACTION_HINTS):
+            self.trainset_action_hint.setText(tr(ACTION_HINTS[index]))
 
     def add_mask_shape(self, shape: Dict[str, Any]) -> None:
         row = self.mask_shape_table.rowCount()
@@ -94,10 +107,9 @@ class DesignStateMixin:
             table.insertRow(row)
             key = str(definition["key"])
             spec = values.get(key, {}) if isinstance(values, dict) else {}
-            distribution = QComboBox()
-            distribution.addItems(("uniform", "log_uniform"))
-            distribution.setCurrentText(str(spec.get("distribution", "uniform")))
-            distribution.currentTextChanged.connect(self.configuration_edited)
+            distribution = fill_values(QComboBox(), ("uniform", "log_uniform"))
+            set_combo_value(distribution, spec.get("distribution", "uniform"))
+            distribution.currentIndexChanged.connect(self.configuration_edited)
             table.setItem(row, 0, QTableWidgetItem(key))
             table.item(row, 0).setFlags(table.item(row, 0).flags() & ~Qt.ItemIsEditable)
             table.setCellWidget(row, 1, distribution)
@@ -131,7 +143,7 @@ class DesignStateMixin:
             name = table.item(row, 0).text().strip()
             distribution = table.cellWidget(row, 1)
             parameters[name] = {
-                "distribution": distribution.currentText()
+                "distribution": combo_value(distribution)
                 if isinstance(distribution, QComboBox)
                 else "uniform",
                 "minimum": float(table.item(row, 2).text()),
@@ -152,13 +164,23 @@ class DesignStateMixin:
         nodes = int(np.prod([points for _name, points in axes], dtype=np.int64)) if axes else 0
         roi = config.get("roi", {})
         estimated_gib = nodes * int(roi.get("width", 0)) * int(roi.get("height", 0)) * 2 / (1024**3)
-        shape_text = " × ".join(str(points) for _name, points in axes) or "no axes"
-        names_text = ", ".join(name for name, _points in axes) or "none"
         max_files = int(config.get("simulation", {}).get("grid_cache", {}).get("max_files", 5))
-        self.cache_grid_summary.setText(
-            f"Matrix: {shape_text} = {nodes:,} BornAgain basis images ({names_text}). "
-            f"Estimated float16 cache: {estimated_gib:.2f} GiB/file. "
-            f"Least-recently-used retention: {max_files} file(s)."
+        if not axes:
+            self.texts.set(
+                self.cache_grid_summary,
+                "Matrix: no particle-parameter axes yet. Least-recently-used retention: {files} file(s).",
+                files=max_files,
+            )
+            return
+        self.texts.set(
+            self.cache_grid_summary,
+            "Matrix: {shape} = {nodes:,} BornAgain basis images ({names}). Estimated float16 cache: "
+            "{gib:.2f} GiB/file. Least-recently-used retention: {files} file(s).",
+            shape=" × ".join(str(points) for _name, points in axes),
+            nodes=nodes,
+            names=", ".join(name for name, _points in axes),
+            gib=estimated_gib,
+            files=max_files,
         )
 
     def _add_layer_row(self) -> None:
@@ -170,24 +192,13 @@ class DesignStateMixin:
     def add_model_layer(self, spec: Dict[str, Any], row: Optional[int] = None) -> None:
         row = self.model_layer_table.rowCount() if row is None else row
         self.model_layer_table.insertRow(row)
-        kind = QComboBox()
-        kind.addItems(
-            (
-                "conv2d",
-                "maxpool2d",
-                "batch_normalization",
-                "dropout",
-                "global_average_pooling2d",
-                "flatten",
-                "dense",
-            )
-        )
-        kind.setCurrentText(str(spec.get("type", "conv2d")))
-        kind.currentTextChanged.connect(self.configuration_edited)
-        activation = QComboBox()
-        activation.addItems(("relu", "gelu", "tanh", "sigmoid", "linear"))
-        activation.setCurrentText(str(spec.get("activation", "relu")))
-        activation.currentTextChanged.connect(self.configuration_edited)
+        kind = fill_values(QComboBox(), LAYER_KINDS)
+        set_combo_value(kind, spec.get("type", "conv2d"))
+        kind.currentIndexChanged.connect(self.configuration_edited)
+        # The data is the Keras name ("linear" may be shown translated; the model still gets "linear").
+        activation = fill_values(QComboBox(), ("relu", "gelu", "tanh", "sigmoid", "linear"))
+        set_combo_value(activation, spec.get("activation", "relu"))
+        activation.currentIndexChanged.connect(self.configuration_edited)
         self.model_layer_table.setCellWidget(row, 0, kind)
         self.model_layer_table.setItem(row, 1, QTableWidgetItem(str(spec.get("units", ""))))
         self.model_layer_table.setItem(
@@ -206,7 +217,7 @@ class DesignStateMixin:
         for row in range(self.model_layer_table.rowCount()):
             kind_widget = self.model_layer_table.cellWidget(row, 0)
             activation_widget = self.model_layer_table.cellWidget(row, 3)
-            kind = kind_widget.currentText() if isinstance(kind_widget, QComboBox) else "conv2d"
+            kind = combo_value(kind_widget) if isinstance(kind_widget, QComboBox) else "conv2d"
             units_text = (
                 self.model_layer_table.item(row, 1).text().strip()
                 if self.model_layer_table.item(row, 1)
@@ -226,7 +237,7 @@ class DesignStateMixin:
             if kind in {"conv2d", "dense"}:
                 spec["units"] = int(float(units_text or 32))
                 spec["activation"] = (
-                    activation_widget.currentText()
+                    combo_value(activation_widget)
                     if isinstance(activation_widget, QComboBox)
                     else "relu"
                 )
@@ -331,17 +342,26 @@ class DesignStateMixin:
             self.preview_canvases[key] = canvas
             self.preview_tabs.addTab(canvas, name)
         if not stages:
-            empty = QLabel("No enabled preprocessing stages were returned.")
+            empty = QLabel(tr("No enabled preprocessing stages were returned."))
             empty.setAlignment(Qt.AlignCenter)
-            self.preview_tabs.addTab(empty, "No stages")
-        self.preview_views.setTabText(1, f"Pipeline stages ({len(stages)})")
+            self.preview_tabs.addTab(empty, tr("No stages"))
+        self._pipeline_stage_count = len(stages)
+        self._show_pipeline_tab()
         self._apply_display_settings("preview")
         self.histogram.set_data(spectrum_x, spectrum_y)
         self.preview_stats.setText(
             "\n".join(f"{key.replace('_', ' ').title()}: {value}" for key, value in stats.items())
         )
 
-    def set_preview_busy(self, busy: bool, progress: int = 0, message: str = "") -> None:
+    def _show_pipeline_tab(self) -> None:
+        count = getattr(self, "_pipeline_stage_count", None)
+        if count is not None:
+            self.preview_views.setTabText(1, trf("Pipeline stages ({count})", count=count))
+
+    def set_preview_busy(
+        self, busy: bool, progress: int = 0, message: str = "", *, failed: bool = False
+    ) -> None:
+        """``failed``: the preview ended in an error (the message may be translated, so it is not parsed)."""
         for button in (
             self.generate_preview_button,
             self.force_simulation_button,
@@ -351,7 +371,7 @@ class DesignStateMixin:
         self.preview_job_status.setVisible(busy or bool(message))
         if busy:
             state = "running"
-        elif message.lower().startswith("preview failed"):
+        elif failed or message.lower().startswith("preview failed"):
             state = "failed"
         elif progress >= 100:
             state = "succeeded"

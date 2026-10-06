@@ -106,13 +106,46 @@ class XrrExtractionResult:
 
 
 @dataclass(frozen=True)
+class XrrCalibrationGeometry:
+    """The geometry of the last applied Geometry Calibration, in the units of the XRR window
+    (``None``: not stored). Pixel indices as numpy rows/columns, row 0 at the top."""
+
+    distance_mm: float | None = None
+    energy_kev: float | None = None
+    pixel_size_x_um: float | None = None
+    pixel_size_y_um: float | None = None
+    beam_center_x_px: float | None = None
+    beam_center_y_px: float | None = None
+    source_image: str = ""
+    timestamp: str = ""
+    image_shape: tuple[int, int] | None = None
+    """(rows, columns) of the calibrated frame; ``None`` for calibrations that did not record it."""
+    detector: str = ""
+
+
+@dataclass(frozen=True)
 class ExportXrrCurveRequest:
+    """The points to write; ``settings`` (the extraction that made them), ``geometry_sources``
+    (where each geometry value came from: file, last calibration, default, typed …) and the
+    ``calibration`` those values were taken from go into the JSON record next to the CSV."""
+
     path: Path
     result: XrrExtractionResult
+    settings: XrrExtractionRequest | None = None
+    geometry_sources: dict[str, str] = field(default_factory=dict)
+    calibration: XrrCalibrationGeometry | None = None
+
+
+@dataclass(frozen=True)
+class ExportedXrrCurve:
+    csv_path: Path
+    record_path: Path | None = None
 
 
 __all__ = [
     "ExportXrrCurveRequest",
+    "ExportedXrrCurve",
+    "XrrCalibrationGeometry",
     "XrrDetectorFrame",
     "XrrExtractionProgress",
     "XrrExtractionRequest",

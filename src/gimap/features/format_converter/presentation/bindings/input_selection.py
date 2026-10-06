@@ -15,6 +15,8 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr, trf
+
 from ..folder_import_dialog import FolderImportDialog
 from ..display_formatting import INPUT_FILTER
 
@@ -26,6 +28,7 @@ class InputSelectionMixin:
         result = self.view_model.add_paths([path for path in paths if path])
         self._refresh_input_tree()
         self._refresh_selection_table()
+        self._follow_default_destination()
         if result.errors:
             QMessageBox.warning(
                 self,
@@ -33,34 +36,49 @@ class InputSelectionMixin:
                 "\n".join(result.errors[:12]),
             )
         elif not result.added and paths:
-            self.input_note.setText("The selected inputs are already in the task list.")
+            self.input_note.setText(tr("The selected inputs are already in the task list."))
+
+    def _follow_default_destination(self) -> None:
+        """While the destination is the default, it is ``converted`` next to the first input."""
+        if self.destination_edit.text().strip() != self._auto_destination:
+            return  # chosen by the user: kept
+        self._auto_destination = self.view_model.default_destination()
+        self.destination_edit.setText(self._auto_destination)
 
     def _choose_files(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, "Add detector images", "", INPUT_FILTER)
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Add detector images", self.view_model.last_folder(), INPUT_FILTER
+        )
         if paths:
+            self.view_model.remember_folder(paths[0])
             self.add_paths(paths)
 
     def _choose_folder(self) -> None:
-        dialog = FolderImportDialog(self, self.view_model)
+        dialog = FolderImportDialog(self, self.view_model, folder=self.view_model.last_folder())
         if dialog.exec_() != QDialog.Accepted:
             return
+        self.view_model.remember_folder(dialog.path_edit.text().strip())
         paths = dialog.paths
         if not paths:
             QMessageBox.information(
                 self, "Add Folder", "No matching files were found in that folder."
             )
             return
-        if len(paths) > 10_000:
-            answer = QMessageBox.question(
-                self,
-                "Large folder selection",
-                f"This folder contains {len(paths):,} matching files. Add them to the task list?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if answer != QMessageBox.Yes:
-                return
-        self.add_paths(paths)
+        if self._many_files_confirmed(len(paths)):
+            self.add_paths(paths)
+
+    def _many_files_confirmed(self, count: int) -> bool:
+        if count <= 10_000:
+            return True
+        answer = QMessageBox.question(
+            self,
+            tr("Large folder selection"),
+            # Also for a drop of files and folders: no "this folder".
+            trf("{count} matching files were found. Add them to the task list?", count=f"{count:,}"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return answer == QMessageBox.Yes
 
     def _refresh_input_tree(self) -> None:
         self.input_tree.clear()
@@ -75,6 +93,7 @@ class InputSelectionMixin:
                 )
             )
             root.setData(0, Qt.UserRole, index)
+            root.setToolTip(0, source.path)
             self.input_tree.addTopLevelItem(root)
             if source.file_type == "NXS":
                 shape = " × ".join(str(value) for value in source.dataset_shape) or "Unknown"
@@ -128,7 +147,9 @@ class InputSelectionMixin:
             use.setCheckState(Qt.Checked if source.included else Qt.Unchecked)
             use.setData(Qt.UserRole, row)
             self.selection_table.setItem(row, 0, use)
-            self.selection_table.setItem(row, 1, QTableWidgetItem(source.name))
+            name = QTableWidgetItem(source.name)
+            name.setToolTip(source.path)
+            self.selection_table.setItem(row, 1, name)
             self.selection_table.setItem(row, 2, QTableWidgetItem(source.file_type))
             self.selection_table.setItem(row, 3, QTableWidgetItem(str(source.frame_count)))
             self.selection_table.setItem(row, 4, QTableWidgetItem(source.selection_summary))
@@ -162,11 +183,13 @@ class InputSelectionMixin:
         self.view_model.remove_indices(selected)
         self._refresh_input_tree()
         self._refresh_selection_table()
+        self._follow_default_destination()
 
     def _sort_sources(self) -> None:
         self.view_model.sort_sources()
         self._refresh_input_tree()
         self._refresh_selection_table()
+        self._follow_default_destination()
 
     def _filter_sources(self, text: str) -> None:
         needle = text.strip().lower()
@@ -188,8 +211,12 @@ class InputSelectionMixin:
         self.range_end.setValue(maximum)
         self._start_preview(source)
 
-    def _update_frame_editor(self) -> None:
-        mode = self.frame_mode.currentText()
+    def _frame_mode_key(self) -> str:
+        """The English mode key of the frame-mode combo; its displayed text may be translated."""
+        return self.frame_mode.currentData() or "All"
+
+    def _update_frame_editor(self, *_args) -> None:
+        mode = self._frame_mode_key()
         range_enabled = mode == "Frame range"
         custom_enabled = mode == "Custom"
         nth_enabled = mode == "Every Nth frame"
@@ -212,7 +239,7 @@ class InputSelectionMixin:
             )()
             self.view_model.apply_frame_selection(
                 indices,
-                self.frame_mode.currentText(),
+                self._frame_mode_key(),
                 current_file=self.current_file,
                 current_frame=current_frame,
                 range_start=self.range_start.value(),

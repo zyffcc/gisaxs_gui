@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from .gisaxs_report import cut_spans
+
 CLOSE_CHI2 = 1.1
 """Solutions within 10 % of the best χ² are not distinguished by the curve."""
 UNCORRELATED_D_NM = 250.0
@@ -67,8 +69,8 @@ class GisaxsProcedureMixin:
 
     def _horizontal_cut(self, cuts: dict) -> None:
         source = cuts.get("horizontal_source")
-        rows = cuts.get("horizontal_rows") or [None, None]
-        where = f"rows {rows[0]:.0f}–{rows[1]:.0f}" if rows[0] is not None else "rows ?"
+        # The rows the cut uses, both ends included (as Analyze's Cuts card says them).
+        where = f"rows {cut_spans(cuts, self.catalog.results.status)[0]}"
         if source == "yoneda":
             self._decide(
                 "horizontal cut", f"at the Yoneda band, αf = {cuts.get('yoneda_alpha_f_deg'):.3f}° ({where})",

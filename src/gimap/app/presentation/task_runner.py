@@ -10,10 +10,12 @@ need cooperative cancellation pass a flag into ``fn``.
 
 from __future__ import annotations
 
+import logging
 import time
 import traceback
 from typing import Any, Callable, Optional
 
+from PyQt5 import sip
 from PyQt5.QtCore import QCoreApplication, QObject, QRunnable, QThreadPool, pyqtSignal, pyqtSlot
 
 
@@ -113,13 +115,27 @@ class TaskRunner(QObject):
     def _deliver(self, ticket: int, result: Any) -> None:
         callbacks = self._finish(ticket)
         if callbacks and callbacks[0] is not None:
-            callbacks[0](result)
+            _call(callbacks[0], result)
 
     @pyqtSlot(int, str, str)
     def _deliver_error(self, ticket: int, message: str, details: str) -> None:
         callbacks = self._finish(ticket)
         if callbacks and callbacks[1] is not None:
-            callbacks[1](message, details)
+            _call(callbacks[1], message, details)
+
+
+def _call(callback: Callable, *values) -> None:
+    """Call back, unless the widget the result was for has been deleted meanwhile (a dialog closed while its
+    task ran): then the result has nowhere to go and is dropped."""
+    receiver = getattr(callback, "__self__", None)
+    if isinstance(receiver, QObject) and sip.isdeleted(receiver):
+        return
+    try:
+        callback(*values)
+    except RuntimeError as exc:
+        if "has been deleted" not in str(exc):
+            raise
+        logging.getLogger(__name__).debug("A task's result was dropped: %s", exc)
 
 
 __all__ = ["TaskRunner"]

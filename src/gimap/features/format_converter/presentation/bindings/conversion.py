@@ -108,14 +108,38 @@ class ConversionMixin:
         self._conversion_thread = None
         self.close()
 
+    def reject(self) -> None:
+        """Esc closes through ``closeEvent``, which keeps the dialog alive for running threads.
+
+        QDialog's own reject() hides the dialog without a close event; with WA_DeleteOnClose a
+        running preview or conversion QThread would be deleted with it and end the application.
+        ``closeEvent`` does not call ``QDialog.closeEvent``, so this cannot recurse.
+        """
+        self.close()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # Shown again (the Tools menu reuses the hidden window) before an earlier preview read
+        # returned: the close that waited for that read no longer applies.
+        self._close_when_idle = False
+
+    def _close_after_preview(self) -> None:
+        """The preview read that a close waited for has returned (after ``_preview_cleanup``)."""
+        if self._close_when_idle:
+            self.close()
+
     def closeEvent(self, event) -> None:
         if self._conversion_thread is not None and self._conversion_thread.isRunning():
             event.ignore()
             return
         # A native file read cannot be killed safely. Keep this dialog alive until it returns.
         if self._preview_thread is not None and self._preview_thread.isRunning():
+            if not self._close_when_idle:
+                # Connected after _preview_cleanup, so the thread is gone when this runs.
+                self._preview_thread.finished.connect(self._close_after_preview)
+            self._close_when_idle = True
             self.hide()
-            self._preview_thread.finished.connect(self.close)
             event.ignore()
             return
+        self._close_when_idle = False
         event.accept()

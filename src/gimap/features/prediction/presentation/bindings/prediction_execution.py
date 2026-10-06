@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-
+import time
 
 from pathlib import Path
 
@@ -14,59 +14,250 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 
+from src.gimap.app.presentation.components import show_toast
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.file_paths import normalize_path
+
+from ..prediction_worker import PredictionWorker
+
+BUSY_TEXT = "Predicting… (the model starts in a separate process)"
+# The model process cannot be interrupted: Predict stays disabled until it ends (one run at a time).
+STOPPING_TEXT = "Stopping… (waiting for the model process to end)"
+INPUT_CHANGED_TEXT = "The input, module or model changed during the prediction; its result was discarded."
+# At quit a worker ends within its preprocessing plus ~1 s; this only bounds a step that hangs.
+QUIT_WAIT_LIMIT_S = 60.0
+
+
+def _path_key(path) -> str:
+    return os.path.normcase(os.path.abspath(normalize_path(path)))
+
+
+def _module_changed(current, started_with) -> bool:
+    """Whether the module differs in value from the one the run was started with.
+
+    Clicking or focusing the module list re-reads every module.yaml into new (equal) objects,
+    so identity is not the question; a YAML edit saved during the run is. A comparison that
+    cannot be made counts as changed.
+    """
+    if current is started_with:
+        return False
+    try:
+        return bool(current != started_with)
+    except Exception:  # noqa: BLE001 - e.g. an array in the YAML parameters
+        return True
+
 
 class PredictionExecutionMixin:
     """Own prediction execution presentation behavior."""
 
     def _execute_prediction(self) -> None:
+        if self._prediction_active:
+            return  # a single-file prediction is still running
         self._update_parameters_from_ui()
         if not self._validate_parameters():
+            return
+        if self.current_parameters.get("mode", "single_file") == "single_file":
+            self._start_single_prediction()
             return
         self._prediction_active = True
         self._refresh_predict_readiness()
         try:
             self.status_updated.emit("Starting GISAXS prediction...")
             self.progress_updated.emit(0)
-            mode = self.current_parameters.get("mode", "single_file")
-            if mode == "single_file":
-                # Predict for the currently loaded image
-                if self._current_image is None:
-                    self._append_status_message("No image loaded for prediction", level="WARN")
-                    return
-                self.progress_updated.emit(10)
-                inp = self._preprocess_for_module(self._current_image)
-                if inp is None:
-                    self._append_status_message("Preprocessing failed", level="ERROR")
-                    return
-                self.progress_updated.emit(40)
-                outs = self._predict_with_current_model(inp)
-                if not outs:
-                    self._append_status_message("Prediction failed", level="ERROR")
-                    self.progress_updated.emit(0)
-                    return
-                self.progress_updated.emit(70)
-                self._display_prediction(outs)
-                self.progress_updated.emit(100)
-                self.status_updated.emit("GISAXS prediction finished!")
-            else:
-                # Multi-files: use new queue-based processing
-                results = self._predict_multi_files()
-                if results and results.get("processing_started"):
-                    # 不需要等待完成，处理在后台进行
-                    # progress和completion信号会由multifile_manager发出
-                    pass
-                else:
-                    self.progress_updated.emit(0)
-                    self.status_updated.emit("Failed to start multi-file prediction")
+            # Multi-files: queue-based processing; progress and completion come from the manager.
+            results = self._predict_multi_files()
+            if not (results and results.get("processing_started")):
+                self.progress_updated.emit(0)
+                self.status_updated.emit("Failed to start multi-file prediction")
         except Exception as exc:  # pragma: no cover - runtime safety
             QMessageBox.critical(self.main_window, "Prediction Error", str(exc))
-            self.status_updated.emit(f"GISAXS prediction error: {exc}")
+            self.status_updated.emit(trf("GISAXS prediction error: {error}", error=exc))
             # 重置多文件预测状态
             if self._multifile_prediction_active:
                 self._on_multifile_prediction_completed()
         finally:
             self._prediction_active = False
             self._refresh_predict_readiness()
+
+    # -- single file: the model runs in a PredictionWorker, the window stays responsive ------
+
+    def _start_single_prediction(self) -> None:
+        self.status_updated.emit("Starting GISAXS prediction...")
+        self.progress_updated.emit(0)
+        if self._current_image is None:
+            self._append_status_message("No image loaded for prediction", level="WARN")
+            return
+        typed_module = self._typed_prediction_module()
+        if typed_module is None:
+            self._append_status_message("Selected module has no typed prediction contract", level="ERROR")
+            self._append_status_message("Preprocessing failed", level="ERROR")
+            return
+        model_path = str(self.current_parameters.get("module_model_path") or "")
+        if self._current_model is None or not model_path:
+            if not model_path:
+                self._append_status_message(
+                    "Selected module has no typed prediction contract or model path", level="ERROR"
+                )
+            self._append_status_message("Prediction failed", level="ERROR")
+            return
+        self._prediction_run_id += 1
+        worker = PredictionWorker(
+            self.prediction_view_model,
+            self._current_image,
+            typed_module,
+            Path(model_path),
+            self._prediction_run_id,
+            self,
+        )
+        worker.prediction_finished.connect(self._on_single_prediction_finished)
+        worker.finished.connect(worker.deleteLater)
+        self._prediction_workers[worker.run_id] = worker
+        self._prediction_active = True  # until the result slot runs: Predict stays disabled
+        self._set_prediction_busy(BUSY_TEXT)  # English: the canvas shows it translated
+        self._refresh_predict_readiness()
+        self.progress_updated.emit(10)
+        worker.start()
+
+    def _on_single_prediction_finished(self, run_id: int, prepared, result, error: str) -> None:
+        """GUI thread: log, keep the preprocessing snapshots and show the result.
+
+        Only here does the run end (``_prediction_active`` false, Predict enabled again), also
+        after Stop, so at most one model process runs at a time.
+        """
+        worker = self._prediction_workers.pop(run_id, None)
+        try:
+            if worker is None or worker.discard:
+                self._append_status_message("Ignored the result of a stopped prediction.", level="INFO")
+                return
+            if self._prediction_inputs_changed(worker):
+                # One result view must not mix two frames, modules or models (data lineage).
+                message = tr(INPUT_CHANGED_TEXT)
+                self._append_status_message(message, level="WARN")
+                self.progress_updated.emit(0)
+                parent = getattr(self.ui, "gisaxsPredictPage", None) or self.main_window
+                if parent is not None:
+                    show_toast(parent, message, level="warning")
+                return
+            if prepared is None:
+                self._append_status_message(error or "Module preprocessing failed", level="ERROR")
+                self._append_status_message("Preprocessing failed", level="ERROR")
+                self.progress_updated.emit(0)
+                return
+            self._latest_preprocess_steps = list(prepared.steps)
+            self._latest_model_input = prepared.values
+            self._latest_preprocess_source = worker.image
+            self._append_status_message(trf("Module preprocess output shape {shape}", shape=prepared.values.shape))
+            if result is None:
+                self._append_status_message(error or "Isolated prediction failed", level="ERROR")
+                self._append_status_message("Prediction failed", level="ERROR")
+                self.progress_updated.emit(0)
+                return
+            self.progress_updated.emit(70)
+            self._latest_runtime = getattr(result, "runtime", None)  # the export record names it
+            self._display_prediction(dict(result.outputs))
+            self.progress_updated.emit(100)
+            self.status_updated.emit("GISAXS prediction finished!")
+        except Exception as exc:  # pragma: no cover - runtime safety
+            QMessageBox.critical(self.main_window, "Prediction Error", str(exc))
+            self.status_updated.emit(trf("GISAXS prediction error: {error}", error=exc))
+        finally:
+            if not self._prediction_workers:
+                self._prediction_active = False
+                self._set_prediction_busy(None)
+                self._refresh_predict_readiness()
+
+    def _prediction_inputs_changed(self, worker) -> bool:
+        """Whether the frame, module or model differs from what the run was started with."""
+        module = self._current_module
+        typed_module = module.get("_prediction_module") if isinstance(module, dict) else None
+        model_path = str(self.current_parameters.get("module_model_path") or "")
+        return bool(
+            worker.image is not self._current_image
+            or _module_changed(typed_module, worker.module)
+            or self._current_model is None
+            or not model_path
+            or _path_key(model_path) != _path_key(worker.model_path)
+        )
+
+    def _stop_single_prediction(self) -> bool:
+        """Stop the running single-file prediction: its result will be discarded.
+
+        The model process cannot be interrupted, so the run stays active ('Stopping…', Predict
+        disabled) until the worker reports back; only then can the next prediction start.
+        """
+        if not self._prediction_workers:
+            return False
+        running = [worker for worker in self._prediction_workers.values() if not worker.discard]
+        if not running:
+            return True  # already stopping
+        for worker in running:
+            worker.discard = True
+        self._set_prediction_busy(STOPPING_TEXT)
+        self._append_status_message(
+            "Prediction stopped. The model process finishes in the background; its result is discarded.",
+            level="WARN",
+        )
+        self.progress_updated.emit(0)
+        self._refresh_predict_readiness()
+        return True
+
+    def _prediction_stopping(self) -> bool:
+        """A stopped single-file run whose model process has not ended yet."""
+        workers = getattr(self, "_prediction_workers", None) or {}
+        return bool(workers) and all(worker.discard for worker in workers.values())
+
+    def prediction_running(self) -> bool:
+        """A 2D prediction the user has not stopped is still running (for the question on quit)."""
+        workers = getattr(self, "_prediction_workers", None) or {}
+        if any(not worker.discard for worker in workers.values()):
+            return True
+        manager = getattr(self, "_multifile_manager", None)
+        return bool(getattr(manager, "is_running", False))
+
+    def stop_predictions(self) -> None:
+        """At quit, before the job runner cancels its jobs: discard every single-file result, so
+        a worker still preprocessing starts no model process, and end the batch after its file."""
+        for worker in list((getattr(self, "_prediction_workers", None) or {}).values()):
+            worker.discard = True
+        manager = getattr(self, "_multifile_manager", None)
+        if manager is not None and getattr(manager, "is_running", False):
+            manager.cancel_prediction()
+
+    def _wait_for_prediction_workers(self, limit_s: float = QUIT_WAIT_LIMIT_S) -> None:
+        """aboutToQuit: wait until every worker has ended, since a QThread destroyed while
+        running aborts the process.
+
+        A discarded worker ends after its preprocessing, or about 1 s after its model job is
+        cancelled (process terminated and joined). A model job started after the window shut
+        the job runner down is cancelled here, so the wait has no fixed short cap; the limit
+        only guards against a preprocessing step that never returns.
+        """
+        self.stop_predictions()
+        deadline = time.monotonic() + limit_s
+        for worker in list(self._prediction_workers.values()):
+            try:
+                while not worker.wait(100):
+                    self._cancel_model_jobs()
+                    if time.monotonic() >= deadline:
+                        return
+            except RuntimeError:
+                continue  # already finished and deleted
+
+    def _cancel_model_jobs(self) -> None:
+        """Cancel the model processes still registered with the job runner (quitting only)."""
+        context = getattr(self.prediction_view_model, "context", None)
+        jobs = getattr(context, "jobs", None)
+        shutdown = getattr(jobs, "shutdown", None)
+        if shutdown is not None:
+            try:
+                shutdown()
+            except Exception:  # noqa: BLE001 - quitting goes on
+                pass
+
+    def _set_prediction_busy(self, text) -> None:
+        workbench = getattr(self.ui, "predictionWorkbenchLayout", None)
+        if workbench is not None and hasattr(workbench, "set_busy"):
+            workbench.set_busy(text)
 
     def _update_parameters_from_ui(self) -> None:
         combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
@@ -112,7 +303,7 @@ class PredictionExecutionMixin:
         file_path = self.current_parameters.get("input_file")
         if not file_path:
             return None
-        self.status_updated.emit(f"Processing file: {os.path.basename(file_path)}")
+        self.status_updated.emit(trf("Processing file: {name}", name=os.path.basename(file_path)))
         self.progress_updated.emit(25)
         results = {
             "file": file_path,
@@ -138,7 +329,7 @@ class PredictionExecutionMixin:
         ]
         if not files and self.prediction_view_model.state.error_message:
             self._append_status_message(
-                f"Error scanning folder: {self.prediction_view_model.state.error_message}",
+                trf("Error scanning folder: {error}", error=self.prediction_view_model.state.error_message),
                 level="ERROR",
             )
             return None
@@ -163,10 +354,10 @@ class PredictionExecutionMixin:
                         if len(missing) > 10:
                             missing_text += ", ..."
                         self._append_status_message(
-                            f"Range skipped missing CBF indices: {missing_text}", level="WARN"
+                            trf("Range skipped missing CBF indices: {indices}", indices=missing_text), level="WARN"
                         )
             except Exception as e:
-                self._append_status_message(f"Error parsing range: {e}", level="WARN")
+                self._append_status_message(trf("Error parsing range: {error}", error=e), level="WARN")
 
         if not files:
             self._append_status_message("No files selected by range", level="WARN")
@@ -187,7 +378,10 @@ class PredictionExecutionMixin:
             skipped = len(files) - (len(batches) * every)
             if skipped:
                 self._append_status_message(
-                    f"Skipped {skipped} trailing file(s) that do not make a full Every={every} stack.",
+                    trf(
+                        "Skipped {count} trailing file(s) that do not make a full Every={every} stack.",
+                        count=skipped, every=every,
+                    ),
                     level="WARN",
                 )
         else:
@@ -201,7 +395,10 @@ class PredictionExecutionMixin:
             return None
         if every > 1:
             self._append_status_message(
-                f"Multi-file range grouped into {len(files_to_process)} batch(es), Every={every}.",
+                trf(
+                    "Multi-file range grouped into {count} batch(es), Every={every}.",
+                    count=len(files_to_process), every=every,
+                ),
                 level="INFO",
             )
 
@@ -223,7 +420,10 @@ class PredictionExecutionMixin:
                         result.stack_count = len(batch)
                         self._multifile_results_widget.table_model.updateResult(row, result)
                         self._append_status_message(
-                            f"Queued stack: {os.path.basename(batch[0])} - {os.path.basename(batch[-1])} ({len(batch)} files)",
+                            trf(
+                                "Queued stack: {first} - {last} ({count} files)",
+                                first=os.path.basename(batch[0]), last=os.path.basename(batch[-1]), count=len(batch),
+                            ),
                             level="INFO",
                         )
                 elif batch:
@@ -252,10 +452,13 @@ class PredictionExecutionMixin:
             batch = self._multifile_batch_map.get(file_path) or [file_path]
             if len(batch) > 1:
                 self.status_updated.emit(
-                    f"Predicting stack ({len(batch)} files): {os.path.basename(batch[0])} - {os.path.basename(batch[-1])}"
+                    trf(
+                        "Predicting stack ({count} files): {first} - {last}",
+                        count=len(batch), first=os.path.basename(batch[0]), last=os.path.basename(batch[-1]),
+                    )
                 )
             else:
-                self.status_updated.emit(f"Predicting file: {os.path.basename(file_path)}")
+                self.status_updated.emit(trf("Predicting file: {name}", name=os.path.basename(file_path)))
 
             # 执行实际预测逻辑（这里需要调用真正的预测代码）
             result = self._execute_single_file_prediction(file_path, batch)

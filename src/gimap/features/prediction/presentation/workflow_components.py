@@ -15,9 +15,21 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.layout_primitives import CARD_SPACING
 
 from .workflow_state import PredictionWorkflowSnapshot
+
+CBF_ONLY_HINT = "Prediction reads CBF frames (.cbf) only."
+CBF_FOLDER_HINT = "The numbered CBF frames (.cbf) in this folder are used."
+
+
+def _mode_hint(is_batch: bool) -> str:
+    return (
+        "Use an inclusive file-number range and choose how many files form one prediction."
+        if is_batch
+        else "Stack controls how many consecutive detector files contribute to this prediction."
+    )
 
 
 class PredictionDisclosure(QWidget):
@@ -40,8 +52,9 @@ class PredictionDisclosure(QWidget):
         self.toggle.setObjectName(f"{object_name}Toggle")
         self.toggle.setProperty("predictionDisclosure", True)
         self.toggle.setCheckable(True)
+        self._title = title
         self.toggle.setText(title)
-        self.toggle.setToolTip(f"Show or hide: {title}")
+        self.refresh_language()
         self.toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.content = QWidget(self)
         self.content.setObjectName(f"{object_name}Content")
@@ -52,6 +65,12 @@ class PredictionDisclosure(QWidget):
         layout.addWidget(self.content)
         self.toggle.toggled.connect(self.set_expanded)
         self.set_expanded(expanded)
+
+    def refresh_language(self) -> None:
+        """The title (an exact key) and the tooltip composed from it, in the interface language."""
+        title = tr(self._title)
+        self.toggle.setText(title)
+        self.toggle.setToolTip(trf("Show or hide: {title}", title=title))
 
     def set_expanded(self, expanded: bool) -> None:
         self.toggle.setChecked(bool(expanded))
@@ -113,17 +132,14 @@ class PredictionWorkflowHeader(QFrame):
         self.setObjectName("predictionWorkflowHeader")
         self.setProperty("predictionWorkflowHeader", True)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         title = QLabel("Prediction workbench", self)
         title.setProperty("predictionWorkflowTitle", True)
-        subtitle = QLabel(
-            "Import detector data, load a compatible model, then run prediction.", self
-        )
-        subtitle.setProperty("predictionWorkflowSubtitle", True)
-        subtitle.setWordWrap(True)
+        # The three steps below say the same; the sentence stays as the tooltip so the rail
+        # keeps room for step 2 above the sticky Predict card.
+        title.setToolTip("Import detector data, load a compatible model, then run prediction.")
         layout.addWidget(title)
-        layout.addWidget(subtitle)
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -188,15 +204,19 @@ class PredictionInputModePanel(QWidget):
 
         self.pages = QStackedWidget(self)
         self.pages.setObjectName("predictionInputModePages")
+        # Prediction reads CBF frames only: the button and a hint line say so before anything is picked.
+        ui.gisaxsPredictChooseGisaxsFileButton.setText("Choose CBF frame…")
         single_page = self._make_picker_page(
-            "Choose detector file",
+            "Detector frame",
             ui.gisaxsPredictChooseGisaxsFileButton,
             ui.gisaxsPredictChooseGisaxsFileValue,
+            CBF_ONLY_HINT,
         )
         batch_page = self._make_picker_page(
             "Choose data folder",
             ui.gisaxsPredictChooseFolderButton,
             ui.gisaxsPredictChooseFolderValue,
+            CBF_FOLDER_HINT,
         )
         self.pages.addWidget(single_page)
         self.pages.addWidget(batch_page)
@@ -208,11 +228,14 @@ class PredictionInputModePanel(QWidget):
         range_layout.setContentsMargins(10, 8, 10, 8)
         range_layout.setHorizontalSpacing(8)
         range_layout.setVerticalSpacing(6)
+        for label in (ui.gisaxsPredictStackLabel, ui.gisaxsPredictEveryLabel):
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)  # a form: label, then its field
         range_layout.addWidget(ui.gisaxsPredictStackLabel, 0, 0)
-        range_layout.addWidget(ui.gisaxsPredictStackValue, 0, 1)
+        range_layout.addWidget(ui.gisaxsPredictStackValue, 0, 1, Qt.AlignLeft)
         range_layout.addWidget(ui.gisaxsPredictEveryLabel, 1, 0)
-        range_layout.addWidget(ui.gisaxsPredictEveryValue, 1, 1)
-        range_layout.setColumnStretch(1, 1)
+        range_layout.addWidget(ui.gisaxsPredictEveryValue, 1, 1, Qt.AlignLeft)
+        # The free width goes to an empty third column: each field stays right beside its label.
+        range_layout.setColumnStretch(2, 1)
         layout.addWidget(range_panel)
 
         self.hint = QLabel(self)
@@ -220,18 +243,24 @@ class PredictionInputModePanel(QWidget):
         self.hint.setProperty("cardMeta", True)
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
+        self._summary_values = None  # the last batch plan shown (set_batch_summary)
         self.summary = QLabel("Choose a folder to calculate the batch plan.", self)
         self.summary.setObjectName("predictionBatchPlanSummary")
         self.summary.setProperty("predictionBatchSummary", True)
         self.summary.setWordWrap(True)
-        layout.addWidget(self.summary)
-        layout.addWidget(ui.gisaxsPredictShowMultiFileResultsButton)
+        # The plan and the button to its results share one row (keeps step 2 in view).
+        summary_row = QHBoxLayout()
+        summary_row.setContentsMargins(0, 0, 0, 0)
+        summary_row.setSpacing(8)
+        summary_row.addWidget(self.summary, 1)
+        summary_row.addWidget(ui.gisaxsPredictShowMultiFileResultsButton, 0, Qt.AlignVCenter)
+        layout.addLayout(summary_row)
         ui.predictionBatchPlanSummary = self.summary
         ui.gisaxsPredictSingleFileRadioButton.toggled.connect(self.sync_mode)
         ui.gisaxsPredictMultiFilesRadioButton.toggled.connect(self.sync_mode)
         self.sync_mode()
 
-    def _make_picker_page(self, title: str, button, value) -> QWidget:
+    def _make_picker_page(self, title: str, button, value, hint: str = "") -> QWidget:
         page = QWidget(self.pages)
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(0, 0, 0, 0)
@@ -245,27 +274,41 @@ class PredictionInputModePanel(QWidget):
         row.addWidget(value, 1)
         page_layout.addWidget(label)
         page_layout.addLayout(row)
+        if hint:
+            note = QLabel(hint, page)
+            note.setObjectName("predictionCbfOnlyHint")
+            note.setProperty("cardMeta", True)
+            note.setWordWrap(True)
+            page_layout.addWidget(note)
         return page
 
     def sync_mode(self) -> None:
         is_batch = self.ui.gisaxsPredictMultiFilesRadioButton.isChecked()
         self.pages.setCurrentIndex(1 if is_batch else 0)
-        self.hint.setText(
-            "Use an inclusive file-number range and choose how many files form one prediction."
-            if is_batch
-            else "Stack controls how many consecutive detector files contribute to this prediction."
-        )
+        self.hint.setText(tr(_mode_hint(is_batch)))
         self.summary.setVisible(is_batch)
         self.ui.gisaxsPredictShowMultiFileResultsButton.setVisible(is_batch)
         self.mode_changed.emit("multi_files" if is_batch else "single_file")
 
+    def refresh_language(self) -> None:
+        """The hint and the batch plan in the interface language (after a switch)."""
+        self.hint.setText(tr(_mode_hint(self.ui.gisaxsPredictMultiFilesRadioButton.isChecked())))
+        if getattr(self, "_summary_values", None) is not None:
+            self.set_batch_summary(**self._summary_values)
+
     def set_batch_summary(self, *, files: int, jobs: int, skipped: int = 0) -> None:
+        self._summary_values = dict(files=files, jobs=jobs, skipped=skipped)
         if files <= 0:
-            self.summary.setText("No detector files selected by the current folder and range.")
+            self.summary.setText(tr("No detector files selected by the current folder and range."))
             return
-        message = f"{files} files selected · {jobs} prediction job{'s' if jobs != 1 else ''}"
-        if skipped:
-            message += f" · {skipped} trailing file{'s' if skipped != 1 else ''} skipped"
+        if jobs == 1:
+            message = trf("{files} files selected · {jobs} prediction job", files=files, jobs=jobs)
+        else:
+            message = trf("{files} files selected · {jobs} prediction jobs", files=files, jobs=jobs)
+        if skipped == 1:
+            message = trf("{summary} · {skipped} trailing file skipped", summary=message, skipped=skipped)
+        elif skipped:
+            message = trf("{summary} · {skipped} trailing files skipped", summary=message, skipped=skipped)
         self.summary.setText(message)
 
 

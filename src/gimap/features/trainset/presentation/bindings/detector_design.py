@@ -17,6 +17,20 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 
+from src.gimap.app.presentation.i18n import tr, trf
+
+from ..value_combos import combo_value
+
+NO_REFERENCE_THRESHOLD = "Load a reference to calculate detector-gap and hot-pixel locations."
+REFERENCE_FILTER = (
+    "Scattering files (*.cbf *.edf *.tif *.tiff *.png *.jpg *.npy *.npz *.h5 *.hdf5 *.nxs);;All files (*)"
+)
+# The status line while a fixed mask shape is drawn: one sentence per shape.
+MASK_DRAW_TEXTS = {
+    "rectangle": "Draw a rectangular fixed mask in ROI coordinates",
+    "ellipse": "Draw an elliptical fixed mask in ROI coordinates",
+}
+
 
 class DetectorDesignMixin:
     """Own detector design presentation behavior."""
@@ -29,10 +43,9 @@ class DetectorDesignMixin:
 
     def _update_reference_threshold_suggestion(self) -> None:
         self._update_threshold_controls()
+        texts = self.page.texts
         if self.reference_image is None:
-            self.page.threshold_summary.setText(
-                "Load a reference to calculate detector-gap and hot-pixel locations."
-            )
+            texts.set(self.page.threshold_summary, NO_REFERENCE_THRESHOLD)
             return
         try:
             threshold = self.config.get("mask", {}).get("threshold", {})
@@ -60,13 +73,21 @@ class DetectorDesignMixin:
                 )
             total = int(summary["total"])
             masked = int(summary["masked"])
-            self.page.threshold_summary.setText(
-                f"Reference threshold locations: {masked:,}/{total:,} masked "
-                f"({masked / max(total, 1):.2%}) · below {low:.5g}: {int(summary['below']):,} · "
-                f"above {high:.5g}: {int(summary['above']):,} · non-finite: {int(summary['invalid']):,}"
+            texts.set(
+                self.page.threshold_summary,
+                "Reference threshold locations: {masked:,}/{total:,} masked ({fraction:.2%}) · below {low:.5g}: "
+                "{below:,} · above {high:.5g}: {above:,} · non-finite: {invalid:,}",
+                masked=masked,
+                total=total,
+                fraction=masked / max(total, 1),
+                low=low,
+                below=int(summary["below"]),
+                high=high,
+                above=int(summary["above"]),
+                invalid=int(summary["invalid"]),
             )
         except Exception as exc:
-            self.page.threshold_summary.setText(f"Reference threshold unavailable: {exc}")
+            texts.set(self.page.threshold_summary, "Reference threshold unavailable: {error}", error=str(exc))
 
     def _particle_plugin_changed(self, label: str) -> None:
         plugin = next(
@@ -85,7 +106,7 @@ class DetectorDesignMixin:
         self.page.particle_help.setText(plugin.description)
         is_segment = plugin.key == "spherical_segment"
         self.page.segment_constraint_check.setVisible(is_segment)
-        show_spacing = self.page.interference_combo.currentText() == "Paracrystal" and any(
+        show_spacing = combo_value(self.page.interference_combo) == "Paracrystal" and any(
             item["key"] == "radius_nm" for item in plugin.parameters
         )
         self.page.spacing_constraint_check.setEnabled(show_spacing)
@@ -107,20 +128,30 @@ class DetectorDesignMixin:
         )
         self.page.interference_help.setText(plugin.description)
         is_paracrystal = plugin.key == "paracrystal"
-        show_spacing = is_paracrystal and self.page.particle_combo.currentText() != "Box"
+        show_spacing = is_paracrystal and combo_value(self.page.particle_combo) != "Box"
         self.page.spacing_constraint_check.setEnabled(show_spacing)
         self.page.spacing_constraint_check.setVisible(show_spacing)
 
     def _select_reference(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self.window,
-            "Load real 2D scattering file",
-            str(Path.home()),
-            "Scattering files (*.cbf *.edf *.tif *.tiff *.png *.jpg *.npy *.npz *.h5 *.hdf5 *.nxs);;All files (*)",
+            tr("Load real 2D scattering file"),
+            self._start_folder("reference", self.page.reference_path.text().strip() or str(Path.home())),
+            REFERENCE_FILTER,
         )
         if path:
+            self._remember_folder("reference", path)
             self.page.reference_path.setText(path)
             self._load_reference(path)
+
+    def _reference_dropped(self, path: str) -> None:
+        """A file dropped on the design preview becomes the reference (as if chosen with Load file...)."""
+        if not path or not Path(path).is_file():
+            self.status_updated.emit("Drop one detector image file to use it as the reference")
+            return
+        self._remember_folder("reference", path)
+        self.page.reference_path.setText(path)
+        self._load_reference(path)
 
     def _load_reference_from_field(self) -> None:
         path = self.page.reference_path.text().strip()
@@ -138,7 +169,7 @@ class DetectorDesignMixin:
             self.reference_image = image
             self.config["project"]["reference_file"] = path
             self.page.reference_path.setText(path)
-            if self.page.fields["detector.preset"].currentText() == "Custom":
+            if combo_value(self.page.fields["detector.preset"]) == "Custom":
                 self.page.fields["detector.pixels_x"].setValue(int(image.shape[1]))
                 self.page.fields["detector.pixels_y"].setValue(int(image.shape[0]))
             self._update_reference_threshold_suggestion()
@@ -147,12 +178,17 @@ class DetectorDesignMixin:
             self._refresh_design_overlay()
             self.page.design_tabs.setCurrentIndex(0)
             self.page.set_step_state(0, "Reference loaded")
-            self.page.design_info.setText(
-                f"{Path(path).name}\nShape: {image.shape[1]} × {image.shape[0]} · dtype: {image.dtype}"
+            self.page.texts.set(
+                self.page.design_info,
+                "{name}\nShape: {width} × {height} · dtype: {dtype}",
+                name=Path(path).name,
+                width=image.shape[1],
+                height=image.shape[0],
+                dtype=str(image.dtype),
             )
-            self.status_updated.emit(f"Loaded reference scattering file: {Path(path).name}")
+            self.status_updated.emit(trf("Loaded reference scattering file: {name}", name=Path(path).name))
         except Exception as exc:
-            QMessageBox.critical(self.window, "Reference load failed", str(exc))
+            QMessageBox.critical(self.window, tr("Reference load failed"), str(exc))
         finally:
             QApplication.restoreOverrideCursor()
 
@@ -172,7 +208,7 @@ class DetectorDesignMixin:
         self.page.set_step_state(0, "ROI ready")
 
     def _mask_config_changed(self, *_args) -> None:
-        mode = self.page.fields["mask.mode"].currentText()
+        mode = combo_value(self.page.fields["mask.mode"])
         self.page.random_mask_panel.setVisible(mode == "random")
         self._random_mask_example = None
         self._update_reference_threshold_suggestion()
@@ -212,12 +248,16 @@ class DetectorDesignMixin:
                 raise RuntimeError(
                     self.trainset_view_model.state.error_message or "Geometry calculation failed"
                 )
-            self.page.roi_range_label.setText(
-                f"BornAgain detector: φ {ranges['phi_min_deg']:.4f}° … {ranges['phi_max_deg']:.4f}° · "
-                f"α {ranges['alpha_min_deg']:.4f}° … {ranges['alpha_max_deg']:.4f}°"
+            self.page.texts.set(
+                self.page.roi_range_label,
+                "BornAgain detector: φ {phi_min:.4f}° … {phi_max:.4f}° · α {alpha_min:.4f}° … {alpha_max:.4f}°",
+                phi_min=ranges["phi_min_deg"],
+                phi_max=ranges["phi_max_deg"],
+                alpha_min=ranges["alpha_min_deg"],
+                alpha_max=ranges["alpha_max_deg"],
             )
         except Exception as exc:
-            self.page.roi_range_label.setText(f"Geometry incomplete: {exc}")
+            self.page.texts.set(self.page.roi_range_label, "Geometry incomplete: {error}", error=str(exc))
 
     def _begin_roi(self, mode: str = "roi") -> None:
         if self.reference_image is None:
@@ -259,7 +299,8 @@ class DetectorDesignMixin:
             self.page.roi_design_canvas.set_data(roi_image)
             self.page.roi_design_canvas.set_draw_mode(mode)
             self.page.design_tabs.setCurrentIndex(1)
-            self.status_updated.emit(f"Draw a {mode} fixed mask in ROI coordinates")
+            # One sentence per shape (no "a ellipse"); the status bar shows it in the interface language.
+            self.status_updated.emit(MASK_DRAW_TEXTS.get(mode, MASK_DRAW_TEXTS["rectangle"]))
         except Exception as exc:
             QMessageBox.warning(self.window, "Mask", str(exc))
 
@@ -270,7 +311,7 @@ class DetectorDesignMixin:
             self._update_geometry_label()
             self.page.set_step_state(0, "Beam center selected")
             self.status_updated.emit(
-                f"Beam center selected at x={payload['x']:.1f}, y={payload['y']:.1f} px"
+                trf("Beam center selected at x={x:.1f}, y={y:.1f} px", x=payload["x"], y=payload["y"])
             )
         elif mode == "roi":
             for key in ("x", "y", "width", "height"):
@@ -348,16 +389,25 @@ class DetectorDesignMixin:
             )
             self.page.masked_design_canvas.set_data(roi_image, mask=mask)
             self.page.mask_only_canvas.set_data(mask.astype(np.float32), binary=True)
-            self.page.design_info.setText(
-                f"Reference: {self.reference_image.shape[1]} × {self.reference_image.shape[0]}\n"
-                f"ROI tensor: {roi_image.shape[1]} × {roi_image.shape[0]} · {mask_label} masked: {mask.mean():.2%}\n"
-                "Use Draw ROI for detector coordinates; mask shapes are edited in ROI coordinates."
+            values = dict(mask_label=str(mask_label), fraction=float(mask.mean()) if mask.size else 0.0)
+            self.page.texts.set(
+                self.page.design_info,
+                "Reference: {width} × {height}\nROI tensor: {roi_width} × {roi_height} · {mask_label} masked: "
+                "{fraction:.2%}\nUse Draw ROI for detector coordinates; mask shapes are edited in ROI coordinates.",
+                width=self.reference_image.shape[1],
+                height=self.reference_image.shape[0],
+                roi_width=roi_image.shape[1],
+                roi_height=roi_image.shape[0],
+                **values,
             )
-            self.page.design_info.setToolTip(
-                f"Mask mode: {mask_label}; masked fraction: {mask.mean():.2%}"
+            self.page.texts.set(
+                self.page.design_info,
+                "Mask mode: {mask_label}; masked fraction: {fraction:.2%}",
+                setter="setToolTip",
+                **values,
             )
         except Exception as exc:
-            self.page.design_info.setText(str(exc))
+            self.page.texts.set(self.page.design_info, "{error}", error=str(exc))
 
     def _new_random_mask_example(self) -> None:
         try:
@@ -377,9 +427,13 @@ class DetectorDesignMixin:
                     self._random_mask_example.astype(np.float32), binary=True
                 )
                 self.page.design_tabs.setCurrentIndex(3)
-                self.page.design_info.setText(
-                    f"Random mask example: {shape[1]} × {shape[0]} · masked {self._random_mask_example.mean():.2%}. "
-                    "Load an experimental image only if you want to overlay it."
+                self.page.texts.set(
+                    self.page.design_info,
+                    "Random mask example: {width} × {height} · masked {fraction:.2%}. Load an experimental "
+                    "image only if you want to overlay it.",
+                    width=shape[1],
+                    height=shape[0],
+                    fraction=float(self._random_mask_example.mean()),
                 )
             self.status_updated.emit("Generated a fresh unseeded random-mask example")
         except Exception as exc:

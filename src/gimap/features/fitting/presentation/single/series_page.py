@@ -11,14 +11,12 @@ they appear (Watch). Save: the table of every frame (values, errors, χ²ᵣ) wi
 from __future__ import annotations
 
 import csv
-import json
-import math
 import threading
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QTableWidgetItem, QWidget
 
 from src.gimap.app.presentation.components import show_toast
@@ -35,18 +33,23 @@ from ...application.series_fit import (
     series_record,
     series_table,
 )
-from ...application.single_fit import Curve, evaluate, prepare_curve
+from ...application.single_fit import Curve
 from ..views.fit_series_view import FitSeriesView
+from .drops import FolderDropMixin, SplitterMemoryMixin
+from .results import folder_action, write_pair, write_plot
+from .series_preview import FitSeriesPreviewMixin
 from .series_stages import FitSeriesStagesMixin
 from .session import model_label, path_name
 
 PREFERENCES_KEY = "fitting_series_page"
 WATCH_MS = 2000
 STATE_MARK = {"waiting": "·", "running": "▸", "done": "✓", "warn": "!", "failed": "✗"}
-CHI2 = "chi2"
+FIGURE_SPACE = "\u2007"
+"""Pads the frame numbers: as wide as a digit (a space is narrower)."""
 
 
-class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
+class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesStagesMixin, FitSeriesPreviewMixin, QWidget,
+                    FitSeriesView):
     editModelRequested = pyqtSignal()
     """Show Single analysis (the model is set up there)."""
     openFrameRequested = pyqtSignal(str, object)
@@ -67,14 +70,20 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         self._stop = threading.Event()
         self._start_model = None
         self._settings = SeriesSettings()
+        self._unit = "angstrom"
+        """The unit of q in the files, as Single analysis read its curve at Start (fixed for the run)."""
         self._previous: Optional[FrameFit] = None
+        self._status_text = None
+        """Makes the status line again in another interface language (``refresh_language``)."""
         self._curves: dict = {}
+        self._preview_curves: dict = {}
         self._current = -1
         self._selected: Optional[int] = None
         self._last_done: Optional[int] = None
         self._watch = QTimer(self)
         self._watch.setInterval(WATCH_MS)
         self._watch.timeout.connect(self._look_for_new)
+        self.setAcceptDrops(True)  # a folder dropped here is listed (``drops.py``)
         self._connect()
         self._connect_stages()
         self._restore()
@@ -154,6 +163,8 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         self.save_button.setVisible(bool(self.fits))
         self.to_single_button.setVisible(bool(self.fits))
         self._fill_results()
+        self._preview_trend()
+        self._redraw_preview()
 
     # -- the curves ---------------------------------------------------------------------------
 
@@ -183,22 +194,28 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
             frames = self.view_model.storage.discover_insitu_frames(DiscoverInSituFramesRequest(
                 Path(self.folder), self.pattern_edit.text().strip() or "*_fit_input.dat", self.subfolders_check.isChecked()))
         except (OSError, ValueError, RuntimeError) as exc:
-            self._status(tr("Could not list the curves: {reason}").format(reason=exc), "error")
+            self._status(lambda reason=str(exc): tr("Could not list the curves: {reason}").format(reason=reason), "error")
             return False
-        self.paths = [str(frame.path) for frame in frames]
+        paths = [str(frame.path) for frame in frames]
+        if paths != self.paths:
+            self._forget_stages()  # those of the curves listed before (Start would leave out their odd frames)
+        self.paths = paths
         self.fits, self._curves, self._selected, self._start_model = {}, {}, None, None
-        for spin in (self.first_spin, self.last_spin):
+        self._preview_curves = {}
+        for spin in (self.first_spin, self.last_spin, self.every_spin):
             spin.blockSignals(True)
             spin.setRange(1, max(1, len(self.paths)))
         self.first_spin.setValue(1)
         self.last_spin.setValue(max(1, len(self.paths)))
-        for spin in (self.first_spin, self.last_spin):
+        for spin in (self.first_spin, self.last_spin, self.every_spin):
             spin.blockSignals(False)
         self._frames_changed()
+        self._select_first()
         if not self.paths:
-            self._status(tr("No curves matching {pattern} in {folder}.").format(pattern=self.pattern_edit.text(), folder=self.folder), "warning")
+            self._status(lambda pattern=self.pattern_edit.text(), folder=self.folder: tr(
+                "No curves matching {pattern} in {folder}.").format(pattern=pattern, folder=folder), "warning")
         else:
-            self._status(tr("{count} curves listed.").format(count=len(self.paths)))
+            self._status(lambda count=len(self.paths): tr("{count} curves listed.").format(count=count))
         self._schedule_stages()
         return bool(self.paths)
 
@@ -215,20 +232,23 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         for index in self._listed():
             self.frame_list.addItem(QListWidgetItem(self._item_text(index)))
         self._mark_stages()
+        self._keep_selection()
         self.frame_list.blockSignals(False)
         self.refresh()
 
-    def _item_text(self, index: int) -> str:
+    def _frame_state(self, index: int) -> tuple[str, str]:
+        """``(state, detail)``: waiting, running, done, warn (not converged) or failed, and χ²ᵣ or the error."""
         frame = self.fits.get(index)
         if frame is None:
-            state = "running" if self.running and index == self._current else "waiting"
-            detail = ""
-        elif not frame.ok:
-            state, detail = "failed", frame.error
-        else:
-            state = "done" if frame.result.converged else "warn"
-            detail = f"χ²ᵣ {frame.result.chi2_reduced:.3g}"
-        return f"{STATE_MARK[state]} {index + 1:>4}  {Path(self.paths[index]).name}" + (f"  —  {detail}" if detail else "")
+            return ("running" if self.running and index == self._current else "waiting"), ""
+        if not frame.ok:
+            return "failed", tr(frame.error)  # shown in the interface language; the record keeps it as it came
+        return ("done" if frame.result.converged else "warn"), f"χ²ᵣ {frame.result.chi2_reduced:.3g}"
+
+    def _item_text(self, index: int) -> str:
+        state, detail = self._frame_state(index)
+        number = str(index + 1).rjust(len(str(len(self.paths))), FIGURE_SPACE)  # as wide as a digit: names line up
+        return f"{STATE_MARK[state]} {number}  {Path(self.paths[index]).name}" + (f"  —  {detail}" if detail else "")
 
     # -- the run ------------------------------------------------------------------------------
 
@@ -242,6 +262,8 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
             excluded=frozenset(self.single.session.excluded),
             method="global" if self.method_global.isChecked() else "local",
             start=self._start_choice())
+        curve = self.single.session.curve  # the unit too is read once: another curve opened meanwhile changes nothing
+        self._unit = curve.source_unit if curve is not None else "angstrom"
         self._start_model = model
         self.fits, self.queue, self._previous, self._curves = {}, list(listed), None, {}
         self._selected = self._last_done = None
@@ -270,8 +292,7 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         index = self.queue.pop(0)
         self._current = index
         path = self.paths[index]
-        outcome = self.view_model.load_curve(LoadCurveRequest(Path(path), self.single.session.curve.source_unit
-                                                              if self.single.session.curve is not None else "angstrom"))
+        outcome = self.view_model.load_curve(LoadCurveRequest(Path(path), self._unit))  # the unit at Start
         if outcome.error is not None:
             self._frame_done(FrameFit(index, path, error=outcome.error.message))
             return
@@ -292,11 +313,11 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         self._curves[frame.index] = curve
         self._set_item(frame.index)
         self.status_progress.setValue(len(self.fits))
-        self._status(tr("Frame {frame}: {state}").format(
-            frame=frame.index + 1, state=f"χ²ᵣ {frame.result.chi2_reduced:.3g}" if frame.ok else frame.error))
+        self._status(lambda: tr("Frame {frame}: {state}").format(
+            frame=frame.index + 1, state=f"χ²ᵣ {frame.result.chi2_reduced:.3g}" if frame.ok else tr(frame.error)))
         if not frame.ok:
             self._log(tr("Frame {frame} ({name}) failed: {reason}").format(
-                frame=frame.index + 1, name=Path(frame.path).name, reason=frame.error))
+                frame=frame.index + 1, name=Path(frame.path).name, reason=tr(frame.error)))
         if self._selected is None or self._selected == self._last_done:  # following the run
             self._select(frame.index, follow=True)
         self._last_done = frame.index
@@ -324,10 +345,13 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         self.running = False
         self._watch.stop()
         self.status_progress.hide()
-        failed = sum(1 for frame in self.fits.values() if not frame.ok)
-        text = tr("Series done: {count} frames fitted, {failed} failed.").format(count=len(self.fits), failed=failed)
-        self._log(text)
-        self._status(text, "warning" if failed else "ok")
+        failed, count = sum(1 for frame in self.fits.values() if not frame.ok), len(self.fits)
+
+        def done() -> str:
+            return tr("Series done: {count} frames fitted, {failed} failed.").format(count=count, failed=failed)
+
+        self._log(done())
+        self._status(done, "warning" if failed else "ok")
         self._frames_changed()
 
     def _look_for_new(self) -> None:
@@ -346,11 +370,14 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         for path in new:
             self.paths.append(path)
             self.queue.append(len(self.paths) - 1)
-            self.frame_list.addItem(QListWidgetItem(self._item_text(len(self.paths) - 1)))
+            item = QListWidgetItem()
+            self.frame_list.addItem(item)
+            self._style_item(item, len(self.paths) - 1)
         self.last_spin.blockSignals(True)
         self.last_spin.setRange(1, len(self.paths))
         self.last_spin.setValue(len(self.paths))
         self.last_spin.blockSignals(False)
+        self.every_spin.setMaximum(len(self.paths))
         self.status_progress.setMaximum(self.status_progress.maximum() + len(new))
         self._log(tr("{count} new curves.").format(count=len(new)))
         if not self.tasks.is_busy():
@@ -361,51 +388,14 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         if index in listed:
             item = self.frame_list.item(listed.index(index))
             if item is not None:
-                item.setText(self._item_text(index))
+                self._style_item(item, index)  # its state's mark and colour; an odd frame keeps its “· odd”
 
-    # -- showing ------------------------------------------------------------------------------
-
-    def _select(self, index: Optional[int], *, follow: bool = False) -> None:
-        if index is None:
-            return
-        listed = self._listed()
-        if follow and index in listed:
-            self.frame_list.blockSignals(True)
-            self.frame_list.setCurrentRow(listed.index(index))
-            self.frame_list.blockSignals(False)
-        self._selected = index
-        frame = self.fits.get(index)
-        curve = self._curves.get(index)
-        if curve is None:
-            self.frame_plot.set_title(Path(self.paths[index]).name)
-            self.frame_plot.set_curves([])
-            return
-        data = prepare_curve(curve, self._settings.side, self._settings.q_range, self._settings.excluded)
-        curves = [(tr("measured"), data.q, data.intensity)]
-        colors, markers = ["#2563eb"], [True]
-        if frame is not None and frame.ok:
-            q = np.geomspace(max(data.q.min(), 1e-6), data.q.max(), 400)
-            curves.append((tr("model"), q, evaluate(frame.result.model, q)))
-            colors.append("#f97316")
-            markers.append(False)
-        self.frame_plot.set_title(f"{index + 1} · {curve.name}")
-        self.frame_plot.set_curves(curves, colors, markers=markers)
+    # -- showing (the selected frame and the trend's choices: ``series_preview.py``) -----------
 
     def _select_table_row(self, row: int) -> None:
         indices = sorted(self.fits)
         if 0 <= row < len(indices):
             self._select(indices[row], follow=True)
-
-    def _fill_trend_choices(self) -> None:
-        self.trend_combo.blockSignals(True)
-        self.trend_combo.clear()
-        self.trend_combo.addItem("χ²ᵣ", CHI2)
-        for path, _name in parameter_columns(self._start_model):
-            self.trend_combo.addItem(path_name(self._start_model, path, unit=True), path)
-        index = next((i for i in range(self.trend_combo.count()) if isinstance(self.trend_combo.itemData(i), tuple)
-                      and self.trend_combo.itemData(i)[1] == "R"), 0)
-        self.trend_combo.setCurrentIndex(index)
-        self.trend_combo.blockSignals(False)
 
     def _fill_results(self) -> None:
         if self._start_model is None:
@@ -419,8 +409,11 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
             done=len(self.fits), failed=failed, loose=loose))
         shown = ["frame", "chi2_reduced"] + [name for name in header[5::2]]
         self.results_table.setColumnCount(len(shown))
+        columns = parameter_columns(self._start_model)
         self.results_table.setHorizontalHeaderLabels(
-            ["#", "χ²ᵣ"] + [path_name(self._start_model, path, unit=True) for path, _name in parameter_columns(self._start_model)])
+            ["#", "χ²ᵣ"] + [path_name(self._start_model, path, unit=True) for path, _name in columns])
+        for column, (path, _name) in enumerate(columns, start=2):  # the whole name (“1·Sphere R (nm)”) on hover
+            self.results_table.horizontalHeaderItem(column).setToolTip(path_name(self._start_model, path, unit=True, full=True))
         self.results_table.setRowCount(len(rows))
         for line, row in enumerate(rows):
             record = dict(zip(header, row))
@@ -449,13 +442,21 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         if not path:
             return None
         header, rows = series_table(list(self.fits.values()), self._start_model)
-        with open(path, "w", newline="", encoding="utf-8") as stream:
-            writer = csv.writer(stream)
-            writer.writerow(header)
-            writer.writerows(rows)
+
+        def write(target) -> None:
+            with open(target, "w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(header)
+                writer.writerows(rows)
+
         record = series_record(self._start_model, self._settings, self.folder, self.pattern_edit.text(), list(self.fits.values()))
-        Path(path).with_suffix(".json").write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
-        self._status(tr("Saved {name} and its record.").format(name=Path(path).name), "ok")
+        try:
+            write_pair(path, write, record)  # both, or neither
+        except OSError as exc:
+            self._status(lambda error=str(exc): tr("Could not save: {error}").format(error=error), "error")
+            return None
+        self._status(lambda name=Path(path).name: tr("Saved {name} and its record.").format(name=name), "ok",
+                     action=folder_action(path))
         return path
 
     def _save_plot(self, plot, name: str, path=None):
@@ -463,21 +464,24 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
                                                    "PNG image (*.png);;SVG vector (*.svg)")[0]
         if not path:
             return None
-        from pyqtgraph import exporters
-
-        exporter = exporters.SVGExporter(plot.plot) if str(path).lower().endswith(".svg") else exporters.ImageExporter(plot.plot)
-        if isinstance(exporter, exporters.ImageExporter):
-            exporter.parameters()["width"] = 1600
-        exporter.export(str(path))
-        self._status(tr("Saved {name}.").format(name=Path(path).name), "ok")
+        try:
+            write_plot(plot.plot, path)
+        except OSError as exc:
+            self._status(lambda error=str(exc): tr("Could not save: {error}").format(error=error), "error")
+            return None
+        self._status(lambda name=Path(path).name: tr("Saved {name}.").format(name=name), "ok", action=folder_action(path))
         return path
 
     # -- status, log, preferences -------------------------------------------------------------
 
-    def _status(self, text: str, level: str = "info") -> None:
+    def _status(self, text, level: str = "info", action=None) -> None:
+        """The status line; a toast for outcomes (``action``: e.g. Open Folder after a save). ``text``: the line,
+        or a function that makes it — made again after a switch of the interface language."""
+        self._status_text = text if callable(text) else None
+        text = text() if callable(text) else text
         self.status_label.setText(text)
         if level in ("ok", "warning", "error") and self.isVisible():
-            show_toast(self.window(), text, level=level)
+            show_toast(self.window(), text, level=level, action=action)
 
     def _log(self, text: str) -> None:
         from datetime import datetime
@@ -502,6 +506,7 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
         self.refresh()
 
     def _restore(self) -> None:
+        self._keep_splitter()
         pattern = self._remembered("pattern")
         if pattern:
             self.pattern_edit.setText(str(pattern))
@@ -518,6 +523,8 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
                 "method": "global" if self.method_global.isChecked() else "local"}
 
     def apply_project_state(self, data: dict) -> list[str]:
+        if self.running:  # nothing changes under a running series (its folder, frames and choices stay)
+            return [tr("the In-situ series was not restored: a series is running")]
         self._set_start(data.get("start"))
         (self.method_global if data.get("method") == "global" else self.method_local).setChecked(True)
         self.subfolders_check.blockSignals(True)
@@ -534,7 +541,27 @@ class FitSeriesPage(FitSeriesStagesMixin, QWidget, FitSeriesView):
                     spin.setValue(int(data[key]))
         return []
 
+    def refresh_language(self) -> None:
+        """After a switch of the interface language (``i18n.language_changed``): what this page composed with
+        ``tr`` at run time — the steps, the stages line, the frame list, the trend's values and legend, the
+        selected frame's legend and the table's headers — again, the chosen trend value kept."""
+        if self.trend_combo.count():
+            chosen = self.trend_combo.currentData()
+            self._fill_trend_choices(self._start_model if self._start_model is not None else self.single.session.model)
+            index = next((i for i in range(self.trend_combo.count()) if self.trend_combo.itemData(i) == chosen), -1)
+            if index >= 0:
+                self.trend_combo.blockSignals(True)
+                self.trend_combo.setCurrentIndex(index)
+                self.trend_combo.blockSignals(False)
+        self.refresh()
+        self._refresh_stages_language()
+        if self._selected is not None:
+            self._select(self._selected)
+        if self._status_text is not None:
+            self.status_label.setText(self._status_text())
+
     def dispose(self) -> None:
+        self._dispose_stages()
         self.stop()
         self.tasks.shutdown(2000)
         self.frame_plot.dispose()

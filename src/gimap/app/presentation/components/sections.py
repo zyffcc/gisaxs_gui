@@ -101,6 +101,7 @@ class AdvancedSection(QFrame):
             Qt.DownArrow if expanded else Qt.RightArrow
         )
         self.toggle_button.setText(title)
+        self.toggle_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # the whole row opens it
         from ..i18n import tr
 
         self.toggle_button.setToolTip(description or tr("Show or hide: {title}").format(title=tr(title)))

@@ -34,6 +34,7 @@ from .bindings.preview import PreviewMixin
 from .bindings.output_options import OutputOptionsMixin
 from .bindings.workflow import WorkflowMixin
 from .bindings.conversion import ConversionMixin
+from .bindings.dropping import DropMixin
 
 __all__ = ["ConversionProgressDialog", "FolderImportDialog", "FormatConverterDialog"]
 
@@ -45,6 +46,7 @@ class FormatConverterDialog(
     OutputOptionsMixin,
     WorkflowMixin,
     ConversionMixin,
+    DropMixin,
     QDialog,
     FormatConverterDialogView,
 ):
@@ -84,6 +86,7 @@ class FormatConverterDialog(
         self._progress_dialog: Optional[ConversionProgressDialog] = None
         self._conversion_started_at = 0.0
         self._paused = False
+        self.setAcceptDrops(True)  # detector files and folders
         self._bind_form()
         if current_file and self.view_model.supports_input_path(current_file):
             self.add_paths([current_file])

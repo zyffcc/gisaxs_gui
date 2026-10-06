@@ -13,12 +13,14 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
+from PyQt5.QtCore import Qt
 
 from src.gimap.app.presentation.components import RowGroups, stage_color
-from src.gimap.app.presentation.i18n import tr
-from src.gimap.app.presentation.stage_text import change_text, odd_reason, stages_summary
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.stage_text import axis_symbol, change_text, odd_reason, stages_summary
 
 from ...application import change_curve, odd_frame_refs, stages_of
+from ..views.series_view import CHANGE_TITLE
 
 
 class SeriesStagesMixin:
@@ -44,6 +46,7 @@ class SeriesStagesMixin:
         self.series_stages_row.hide()
         self.series_stages_details.hide()
         self.series_compare_button.hide()
+        self._change_item_tip()
 
     def _find_stages(self) -> None:
         series = self._series_map
@@ -60,7 +63,7 @@ class SeriesStagesMixin:
 
     def _stages_failed(self, series, message: str) -> None:
         if series is self._series_map:
-            self.series_stages_label.setText(tr("No stages: {reason}").format(reason=message))
+            self.series_stages_label.setText(tr("No stages: {reason}").format(reason=tr(message)))
 
     def _stages_found(self, series, stages) -> None:
         if series is not self._series_map:  # a newer map replaced it meanwhile
@@ -100,16 +103,28 @@ class SeriesStagesMixin:
         self.series_skip_odd_check.setVisible(bool(stages.odd))
         self.series_stages_row.show()
         self.series_stages_details.show()
+        self._change_item_tip()
         if (self.series_trace_combo.currentData() or "") == "change":
             self._series_redraw_trace()
 
+    def _stages_language(self) -> None:
+        """The stages' sentences again in the interface language (after a language switch)."""
+        stages = self._series_stages
+        if stages is None or self._series_map is None:
+            return
+        if self.series_stages_combo.count() and self.series_stages_combo.itemData(0) is None:
+            self.series_stages_combo.setItemText(0, trf("Auto ({count})", count=stages.suggested))
+        self._show_stages()
+
     def _stages_text(self, series, stages) -> str:
+        """The stages, what changes between them and the odd frames, on the map's own axis (q, χ …)."""
+        axis = axis_symbol(series.x_label)
         lines = []
         typical = stages.stage_representatives()
         for index, (first, last) in enumerate(stages.ranges()):
             lines.append(tr("Stage {n}: frames {a}–{b} (typical: frame {t})").format(
                 n=index + 1, a=first + 1, b=last + 1, t=typical[index] + 1))
-        lines += [change_text(change) for change in stages.stage_changes()]
+        lines += [change_text(change, axis) for change in stages.stage_changes()]
         if stages.half_row is not None and stages.count > 1:
             lines.append(tr("Half of the change by frame {half}, 90 % by frame {ninety}.").format(
                 half=stages.half_row + 1, ninety="—" if stages.ninety_row is None else stages.ninety_row + 1))
@@ -118,16 +133,18 @@ class SeriesStagesMixin:
             span=span, points=stages.q.size))
         for frame in stages.odd:
             lines.append(tr("Odd frame {n} ({label}): {why}").format(
-                n=frame.row + 1, label=series.labels[frame.row], why=odd_reason(frame)))
+                n=frame.row + 1, label=series.labels[frame.row], why=odd_reason(frame, axis)))
         if any(frame.narrow for frame in stages.odd):
-            lines.append(tr("A difference near one q in a few points is the detector: mask it in the Mask step."))
+            lines.append(trf("A difference near one {axis} in a few points is the detector: mask it in the Mask step.",
+                             axis=axis))
         return "\n".join(lines)
 
     def _draw_change_trace(self) -> bool:
         """The lower-right plot as “Change along the series”: the first component, one colour per stage."""
         stages = self._series_stages
-        if stages is None:
-            self.series_trace_plot.set_title(tr("Change along the series: once the stages are found"))
+        if stages is None:  # the plot's empty text says when it fills (``views/series_view.py``)
+            self.series_trace_plot.set_title(CHANGE_TITLE)
+            self.series_trace_plot.set_labels("frame", "component 1")
             self.series_trace_plot.set_curves([])
             return True
         values = change_curve(stages)
@@ -144,11 +161,23 @@ class SeriesStagesMixin:
             curves.append((tr("odd frames"), frames[rows], values[rows]))
             colors.append("#ef4444")
             markers.append("x")
-        share = 100.0 * float(stages.explained[0]) if stages.explained.size else 0.0
-        self.series_trace_plot.set_title(tr("Main component: {share:.0f} % of the change").format(share=share))
-        self.series_trace_plot.set_labels("frame", "component 1")
+        # A short title (the header is shared with the trace combo and the plot's buttons); the share of the
+        # change in the y label, and as a sentence in the title's tooltip and the combo item's.
+        share = change_share(stages)
+        self.series_trace_plot.set_title(CHANGE_TITLE)
+        self.series_trace_plot.title_label.setToolTip(trf("Main component: {share:.0f} % of the change", share=share))
+        self.series_trace_plot.set_labels("frame", f"component 1 ({share:.0f} %)")
         self.series_trace_plot.set_curves(curves, colors, markers=markers)
         return True
+
+    def _change_item_tip(self) -> None:
+        """The “Change along the series” item of the trace combo says how much of the change it shows."""
+        index = self.series_trace_combo.findData("change")
+        if index < 0:
+            return
+        stages = self._series_stages
+        tip = trf("Main component: {share:.0f} % of the change", share=change_share(stages)) if stages is not None else None
+        self.series_trace_combo.setItemData(index, tip, Qt.ToolTipRole)
 
     # -- export, Batch Export, Compare -------------------------------------------------------
 
@@ -157,7 +186,7 @@ class SeriesStagesMixin:
         if series is None or stages is None:
             self._status(tr("The stages are found once a map is built."), "warning")
             return None
-        path = path or self._series_path("Export Stages", "stages.csv", "CSV (*.csv)")
+        path = path or self._series_path("Export Stages", "stages.csv", "CSV (*.csv)")  # the title is translated there
         if path is None:
             return None
         try:
@@ -187,14 +216,28 @@ class SeriesStagesMixin:
         series = self._series_map
         if series is None or series.rows < 2:
             return None
-        return series, series_name([Path(item) for item in self.view_model.state.files])
+        return series, self._map_name(series)
 
     def send_series_to_compare(self) -> bool:
         series = self._series_map
         if series is None or self._send_to_compare is None:
             return False
-        self._send_to_compare(series, series_name([Path(item) for item in self.view_model.state.files]))
+        self._send_to_compare(series, self._map_name(series))
         return True
+
+    def _map_name(self, series) -> str:
+        """The name kept with the map when it was built (its own frames, not the files listed now)."""
+        name = getattr(self, "_series_name", None)
+        if name:
+            return name
+        refs = getattr(series, "refs", None) or ()
+        return series_name(list({str(path).casefold(): Path(path) for path, _frame in refs}.values())
+                           or [Path(item) for item in self.view_model.state.files])
+
+
+def change_share(stages) -> float:
+    """The share (%) of the change along the series that its main component carries."""
+    return 100.0 * float(stages.explained[0]) if stages.explained.size else 0.0
 
 
 def series_name(files: list) -> str:
@@ -210,4 +253,4 @@ def series_name(files: list) -> str:
     return name.strip("_-. ") or (files[0].parent.name if files else "series")
 
 
-__all__ = ["SeriesStagesMixin", "series_name"]
+__all__ = ["SeriesStagesMixin", "change_share", "series_name"]

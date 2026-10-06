@@ -6,6 +6,10 @@ errors.  A peak must rise ``min_snr`` standard errors *and* ``min_relative_heigh
 above the background (many pixels per bin make tiny ripples statistically
 "significant").  When nothing qualifies, the search says why, with the
 strongest feature it saw.
+
+Detector artefacts are flagged ``spike`` (``caveat``): a resolution-limited peak far above its
+background (hot pixels, a zinger), and — flag ``step_edges`` — a flat-topped box with an edge within one
+bin (a detector row or column segment, a module edge, a gap), wider than a pair of sharp peaks can look.
 """
 
 from __future__ import annotations
@@ -33,6 +37,23 @@ BROAD_RELATIVE_WIDTH = 0.15
 """A peak wider than this fraction of its q is a halo (amorphous or liquid-like order)."""
 SPIKE_HEIGHT_OVER_BACKGROUND = 5.0
 """A resolution-limited peak this far above its background is a spike, not diffraction."""
+STEP_EDGE_RATIO = 3.0
+"""A feature whose half-maximum width is this many times the width of its edges (20 → 80 % of its top)
+is a box: flat-topped, with edges sharper than any peak shape. A Gaussian's edges take about 40 % of its
+FWHM (ratio ≈ 2.4 at most), a Lorentzian's longer; a hard-edged set of pixels — one detector row or column
+crossing the rings at a slant (a stuck segment), a module edge, a gap — rises within the binning, however
+wide it is and whatever its height above the background. Measured on the profile averaged over three
+bins: the row's pixels fall one or two to a bin and make the top a comb."""
+STEP_EDGE_SIGNIFICANCE = 10.0
+"""The box's top must be this many standard errors (of the three-bin average) above the background."""
+STEP_EDGE_BINS = 3
+"""At least one edge of a box rises within one bin: 20 → 80 % over at most three bins of the three-bin average.
+A pair of overlapping reflections can look flat-topped too, but its edges are those of its peaks: as wide as
+they are (two peaks 20 bins wide have edges of about ten)."""
+STEP_EDGE_MIN_WIDTH = 15
+"""Bins (half-maximum width of the three-bin average) a box needs. Peaks with an edge within one bin are at most
+about six bins wide, and a pair of them stays one flat-topped maximum up to about 1.4 widths apart: up to ~15 bins
+a box cannot be told from two sharp reflections side by side, and is left a peak."""
 
 
 @dataclass(frozen=True)
@@ -128,6 +149,61 @@ def _fit_peak(data: Profile, index: int, width_points: float, baseline: np.ndarr
     return height, center, fwhm, b0, errors, chi2, b1, (float(x[0]), float(x[-1]))
 
 
+def _fit_candidate(
+    data: Profile, index: int, width_points: float, span: tuple[float, float], baseline: np.ndarray, min_snr: float,
+):
+    """``_fit_peak``, refitted on the candidate's cleaner flank when the fit left its half-maximum ``span``.
+
+    A bump whose half maximum runs into a shoulder or a neighbour on one side looks wider than it is;
+    a Gaussian started that wide, in a window three times that size, can settle on a broad sum of
+    several features elsewhere, and the candidate's own peak is lost. Its own width is that of the
+    other flank. The refit is kept when it stays on the candidate and is significant (``min_snr``);
+    else the first fit stands. ``span``: the half-maximum crossings as fractional indices of ``data``.
+    """
+    fitted = _fit_peak(data, index, width_points, baseline)
+    if fitted is None:
+        return None
+    low, high = np.interp(span, np.arange(data.size), data.x)
+    if low <= fitted[1] <= high:
+        return fitted
+    flank = min(index - span[0], span[1] - index)
+    refitted = _fit_peak(data, index, 2.0 * flank, baseline) if flank >= 1.0 else None
+    if refitted is None or not low <= refitted[1] <= high or not refitted[0] >= min_snr * refitted[4][0]:
+        return fitted
+    return refitted
+
+
+def _step_edges(data: Profile, residual: np.ndarray, center: float, fwhm: float, step: float) -> bool:
+    """Whether the feature at ``center`` is a box (``STEP_EDGE_RATIO``); a window with a gap in q is not judged."""
+    inside = np.flatnonzero(np.abs(data.x - center) <= max(1.5 * fwhm, 8.0 * step))
+    if inside.size < 12 or np.any(np.diff(data.x[inside]) > 1.5 * step):
+        return False
+    kernel = np.full(3, 1.0 / 3.0)
+    level = np.convolve(residual[inside], kernel, mode="valid")
+    noise = np.sqrt(np.convolve(data.sigma[inside] ** 2, kernel / 3.0, mode="valid"))
+    middle = int(np.argmin(np.abs(data.x[inside][1:-1] - center)))
+    above = level >= 0.5 * float(level.max())
+    if not above[middle]:
+        return False
+    left = right = middle
+    while left > 0 and above[left - 1]:
+        left -= 1
+    while right < level.size - 1 and above[right + 1]:
+        right += 1
+    top = float(np.median(level[left : right + 1]))
+    if top <= STEP_EDGE_SIGNIFICANCE * float(np.median(noise[left : right + 1])):
+        return False
+    low, high = (np.flatnonzero(level[: left + 1] < 0.2 * top), np.flatnonzero(level[right:] < 0.2 * top))
+    if low.size == 0 or high.size == 0:
+        return False  # the feature runs out of the window: not a box seen whole
+    start, stop = int(low[-1]), right + int(high[0])
+    rise = int(np.flatnonzero(level[start:] >= 0.8 * top)[0])
+    fall = stop - int(np.flatnonzero(level[: stop + 1] >= 0.8 * top)[-1])
+    if min(rise, fall) > STEP_EDGE_BINS or right - left < STEP_EDGE_MIN_WIDTH:
+        return False  # no edge within a bin, or too narrow to tell from two sharp peaks side by side
+    return right - left >= STEP_EDGE_RATIO * max(rise, fall)
+
+
 def _same_peak(center: float, fwhm: float, snr: float, other: "Peak") -> bool:
     """Whether a new fit converged on ``other``: close, and not a significant sharp peak on a halo."""
     if abs(center - other.q) >= 0.5 * max(fwhm, other.fwhm):
@@ -139,6 +215,11 @@ def _same_peak(center: float, fwhm: float, snr: float, other: "Peak") -> bool:
 
 def caveat(peak: "Peak") -> str:
     """Why a peak should not be analysed as a crystalline reflection ("" when it can be)."""
+    if "step_edges" in peak.flags:
+        return (
+            "a spike-like artefact (flat top, edges sharper than one bin): one detector row or column, a "
+            "module edge or a gap among the averaged pixels rather than diffraction (look at the image at this q)"
+        )
     if "spike" in peak.flags:
         return (
             "a spike one or two bins wide far above the background: hot pixels, a module edge or a "
@@ -213,11 +294,12 @@ def find_peaks(
         if strongest is None or snr > strongest["snr"]:
             strongest = feature
         if snr >= min_snr and relative >= min_relative_height and width_points >= 2.0:
-            candidates.append((float(properties["prominences"][position]), int(index), width_points, snr))
+            half_maximum = (float(properties["left_ips"][position]), float(properties["right_ips"][position]))
+            candidates.append((float(properties["prominences"][position]), int(index), width_points, snr, half_maximum))
     candidates.sort(reverse=True)
     peaks: list[Peak] = []
-    for _prominence, index, width_points, candidate_snr in candidates[: int(max_peaks)]:
-        fitted = _fit_peak(data, index, width_points, baseline)
+    for _prominence, index, width_points, candidate_snr, half_maximum in candidates[: int(max_peaks)]:
+        fitted = _fit_candidate(data, index, width_points, half_maximum, baseline, min_snr)
         flags: list[str] = []
         if fitted is None:
             if candidate_snr < 2.0 * min_snr:
@@ -253,6 +335,8 @@ def find_peaks(
             flags.append("resolution_limited")
             if peak.height > SPIKE_HEIGHT_OVER_BACKGROUND * max(abs(peak.background), 1e-12):
                 flags.append("spike")
+        elif peak.window and _step_edges(data, residual, peak.q, peak.fwhm, step):
+            flags += ["step_edges", "spike"]
         if peak.fwhm > BROAD_RELATIVE_WIDTH * peak.q:
             flags.append("broad")
         if any(other is not peak and abs(peak.q - other.q) < 0.75 * (peak.fwhm + other.fwhm) for other in peaks):

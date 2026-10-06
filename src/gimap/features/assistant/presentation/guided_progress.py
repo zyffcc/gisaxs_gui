@@ -101,6 +101,8 @@ class GuidedProgressPanel(QFrame):
         self._expected: tuple = PHASES["giwaxs"]
         self._stopping = False
         self._steps = 0
+        self._ended: Optional[tuple[Optional[dict], str, float]] = None
+        """(report, failure, seconds) of the run that ended; ``None`` while one runs (``refresh_language``)."""
         self.hide()
 
     # -- a run ---------------------------------------------------------------------------
@@ -109,7 +111,7 @@ class GuidedProgressPanel(QFrame):
         self._expected = PHASES["geometry"] if geometry_only else PHASES["giwaxs"]
         self._started = self._step_started = time.monotonic()
         self._current, self._phases, self._done_phases, self._phase_seconds = None, [], set(), {}
-        self._stopping, self._steps = False, 0
+        self._stopping, self._steps, self._ended = False, 0, None
         self.title_label.setText(tr("Automatic analysis — running"))
         self.now_label.setText(tr(message))
         self.bar.setRange(0, len(self._expected))
@@ -158,35 +160,53 @@ class GuidedProgressPanel(QFrame):
         """The run ended: done, stopped (results kept, Save / Discard) or failed."""
         self._timer.stop()
         self._current = None
-        total = _seconds(time.monotonic() - self._started)
+        self._ended = (report, failed, time.monotonic() - self._started)
         self.stop_button.hide()
-        self.elapsed_label.setText(total)
+        self._say_end(report, failed, _seconds(self._ended[2]))
         if failed:
-            self.title_label.setText(tr("Automatic analysis — stopped by an error"))
-            self.now_label.setText(failed)
             self.after_row.hide()
         elif report is not None and report.get("stopped"):
-            self.title_label.setText(tr("Automatic analysis — stopped"))
-            self.now_label.setText(tr(
-                "Stopped after {steps} steps, before: {next}. What was found so far is below — keep it, "
-                "save it as a report, or discard it."
-            ).format(steps=self._steps, next=step_text(str(report["stopped"]), None, tr)))
             self.after_row.show()
         else:
             for phase in self._phases:
                 self._done_phases.add(phase)
             self.bar.setValue(self.bar.maximum())
-            self.title_label.setText(tr("Automatic analysis — done"))
-            self.elapsed_label.setText(tr("{steps} steps · {time}").format(steps=self._steps, time=total))
-            text = tr("It finished the last step before it could stop.") if self._stopping else ""
-            self.now_label.setText(text)
-            self.now_label.setVisible(bool(text))
             self.after_row.hide()
             # Done: one line; the steps stay one click away.
             self.bar.hide()
             self.steps_button.setChecked(False)
             self.phases_label.hide()
             self.steps_button.show()
+        self._render_phases()
+
+    def _say_end(self, report: Optional[dict], failed: str, total: str) -> None:
+        """The title, the time and the line of a run that ended, in the interface language."""
+        self.elapsed_label.setText(total)
+        if failed:
+            self.title_label.setText(tr("Automatic analysis — stopped by an error"))
+            self.now_label.setText(failed)
+        elif report is not None and report.get("stopped"):
+            self.title_label.setText(tr("Automatic analysis — stopped"))
+            self.now_label.setText(tr(
+                "Stopped after {steps} steps, before: {next}. What was found so far is below — keep it, "
+                "save it as a report, or discard it."
+            ).format(steps=self._steps, next=step_text(str(report["stopped"]), None, tr)))
+        else:
+            self.title_label.setText(tr("Automatic analysis — done"))
+            self.elapsed_label.setText(tr("{steps} steps · {time}").format(steps=self._steps, time=total))
+            text = tr("It finished the last step before it could stop.") if self._stopping else ""
+            self.now_label.setText(text)
+            self.now_label.setVisible(bool(text))
+
+    def refresh_language(self) -> None:
+        """After a switch of the interface language: the title, the time and the line of the run that ended
+        (a run in progress says its step again at the next tick), and the phases."""
+        if self._ended is not None:
+            report, failed, seconds = self._ended
+            self._say_end(report, failed, _seconds(seconds))
+        elif self._timer.isActive():  # a run in progress
+            self.title_label.setText(tr("Automatic analysis — running"))
+            self.stop_button.setText(tr("Stopping…") if self._stopping else tr("Stop"))
         self._render_phases()
 
     def dismiss(self) -> None:

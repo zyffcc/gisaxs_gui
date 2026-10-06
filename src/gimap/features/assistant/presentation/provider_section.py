@@ -22,6 +22,8 @@ from PyQt5.QtWidgets import (
 )
 
 from ..application import PROVIDERS, provider
+from src.gimap.app.presentation.i18n import tr
+
 from . import preferences
 from .services import ProviderServices
 
@@ -35,7 +37,7 @@ def _muted(text: str, parent: QWidget) -> QLabel:
 
 class ProviderSection(QGroupBox):
     def __init__(self, settings, providers: ProviderServices, tasks, parent=None):
-        super().__init__("Other AI providers — OpenAI-compatible API", parent)
+        super().__init__(tr("Other AI providers — OpenAI-compatible API"), parent)
         self.setObjectName("assistantProviderSection")
         self.settings = settings
         self.providers = providers
@@ -48,41 +50,41 @@ class ProviderSection(QGroupBox):
         self.provider_combo.setObjectName("assistantProviderCombo")
         for preset in PROVIDERS:
             self.provider_combo.addItem(preset.name, preset.key)
-        form.addRow("Provider", self.provider_combo)
+        form.addRow(tr("Provider"), self.provider_combo)
 
         self.url_edit = QLineEdit(self)
         self.url_edit.setObjectName("assistantProviderUrl")
-        form.addRow("Address", self.url_edit)
+        form.addRow(tr("Address"), self.url_edit)
 
         key_row = QHBoxLayout()
         self.key_edit = QLineEdit(self)
         self.key_edit.setObjectName("assistantProviderKey")
         self.key_edit.setEchoMode(QLineEdit.Password)
         self.key_edit.setPlaceholderText("sk-…")
-        self.save_key_button = QPushButton("Save", self)
-        self.remove_key_button = QPushButton("Remove", self)
+        self.save_key_button = QPushButton(tr("Save"), self)
+        self.remove_key_button = QPushButton(tr("Remove"), self)
         key_row.addWidget(self.key_edit, 1)
         key_row.addWidget(self.save_key_button)
         key_row.addWidget(self.remove_key_button)
-        form.addRow("API key", key_row)
+        form.addRow(tr("API key"), key_row)
         self.source_label = QLabel("", self)
         self.source_label.setObjectName("assistantProviderSource")
         self.source_label.setWordWrap(True)
-        form.addRow("Credentials", self.source_label)
+        form.addRow(tr("Credentials"), self.source_label)
 
         model_row = QHBoxLayout()
         self.model_combo = QComboBox(self)
         self.model_combo.setObjectName("assistantProviderModel")
         self.model_combo.setEditable(True)
-        self.fetch_button = QPushButton("Get List", self)
+        self.fetch_button = QPushButton(tr("Get List"), self)
         self.fetch_button.setObjectName("assistantProviderFetch")
-        self.fetch_button.setToolTip("Ask the provider which models this key can use")
+        self.fetch_button.setToolTip(tr("Ask the provider which models this key can use"))
         model_row.addWidget(self.model_combo, 1)
         model_row.addWidget(self.fetch_button)
-        form.addRow("Model", model_row)
+        form.addRow(tr("Model"), model_row)
 
         test_row = QHBoxLayout()
-        self.test_button = QPushButton("Test Connection", self)
+        self.test_button = QPushButton(tr("Test Connection"), self)
         self.test_button.setObjectName("assistantProviderTest")
         self.test_label = QLabel("", self)
         self.test_label.setObjectName("assistantProviderTestResult")
@@ -92,11 +94,11 @@ class ProviderSection(QGroupBox):
         form.addRow("", test_row)
         self.notes_label = _muted("", self)
         form.addRow(self.notes_label)
-        form.addRow(_muted(
+        form.addRow(_muted(tr(
             "The model must support tool calling (function calling): the test sends one tiny request "
             "with a tool. Keys saved here stay in the user data folder (readable by your account only) "
             "and take precedence over the provider's environment variable. Runs send the frame's status "
-            "and reduced curves as numbers, never the detector file.", self,
+            "and reduced curves as numbers, never the detector file."), self,
         ))
 
         current = str(preferences.read(settings, "provider"))
@@ -135,8 +137,8 @@ class ProviderSection(QGroupBox):
         self.model_combo.setEditText(self.model())
         needs = preset.needs_key
         self.key_edit.setEnabled(True)
-        self.key_edit.setPlaceholderText("sk-…" if needs else "optional for this provider")
-        self.notes_label.setText(preset.notes)
+        self.key_edit.setPlaceholderText("sk-…" if needs else tr("optional for this provider"))
+        self.notes_label.setText(tr(preset.notes) if preset.notes else "")
         self.notes_label.setVisible(bool(preset.notes))
         self.test_label.clear()
         self._sync_source()
@@ -147,9 +149,10 @@ class ProviderSection(QGroupBox):
         if source:
             text = source
         elif preset.needs_key:
-            text = "none found — save a key above" + (f" or set {preset.env_key}" if preset.env_key else "")
+            text = (tr("none found — save a key above or set {variable}").format(variable=preset.env_key)
+                    if preset.env_key else tr("none found — save a key above"))
         else:
-            text = "no key needed"
+            text = tr("no key needed")
         self.source_label.setText(text)
         self.remove_key_button.setEnabled(self.providers.has_saved_key(self.key()))
 
@@ -182,27 +185,28 @@ class ProviderSection(QGroupBox):
         try:
             self.providers.save_key(self.key(), key)
         except OSError as exc:
-            QMessageBox.warning(self, "API Key", f"The key could not be saved: {exc}")
+            QMessageBox.warning(self, tr("API key"), tr("The key could not be saved: {error}").format(error=exc))
             return
         self.key_edit.clear()
         self._sync_source()
-        self.test_label.setText("Key saved.")
+        self.test_label.setText(tr("Key saved."))
 
     def _remove_key(self) -> None:
         name = provider(self.key()).name
         answer = QMessageBox.question(
-            self, "API Key", f"Remove the {name} key saved in GIMaP?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            self, tr("API key"), tr("Remove the {provider} key saved in GIMaP?").format(provider=name),
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
             self.providers.delete_key(self.key())
             self._sync_source()
-            self.test_label.setText("Key removed.")
+            self.test_label.setText(tr("Key removed."))
 
     def _fetch(self) -> None:
         self._remember_url()
         key, model, url = self.key(), self.model(), self.url()
         self.fetch_button.setEnabled(False)
-        self.test_label.setText("Asking the provider for its models…")
+        self.test_label.setText(tr("Asking the provider for its models…"))
         self.tasks.submit(
             "assistant-provider-models",
             lambda: self.providers.list_models(key, model, url),
@@ -215,20 +219,20 @@ class ProviderSection(QGroupBox):
         if key != self.key():
             return
         if names is None:
-            self.test_label.setText(f"Failed: {error}")
+            self.test_label.setText(tr("Failed: {error}").format(error=error))
             return
         current = self.model_combo.currentText()
         self.model_combo.clear()
         self.model_combo.addItems(list(names))
         self.model_combo.setEditText(current)
-        self.test_label.setText(f"{len(names)} models available.")
+        self.test_label.setText(tr("{count} models available.").format(count=len(names)))
 
     def _test(self) -> None:
         self._remember_url()
         self._remember_model()
         key, model, url = self.key(), self.model(), self.url()
         self.test_button.setEnabled(False)
-        self.test_label.setText("Connecting…")
+        self.test_label.setText(tr("Connecting…"))
         self.tasks.submit(
             "assistant-provider-test",
             lambda: self.providers.check(key, model, url),
@@ -238,7 +242,10 @@ class ProviderSection(QGroupBox):
 
     def _tested(self, name, error: str = "") -> None:
         self.test_button.setEnabled(True)
-        self.test_label.setText(f"Connected: {name} answered with a tool call." if name else f"Failed: {error}")
+        self.test_label.setText(
+            tr("Connected: {name} answered with a tool call.").format(name=name) if name
+            else tr("Failed: {error}").format(error=error)
+        )
 
 
 def chosen_provider(settings) -> tuple[str, str, str]:
@@ -254,15 +261,15 @@ def describe_provider(settings, providers: ProviderServices | None) -> tuple[boo
     """(ready, status text, label) of the provider chosen in the settings."""
     key, model, _url = chosen_provider(settings)
     preset = provider(key)
-    label = f"{preset.name} · {model or 'no model'}"
+    label = f"{preset.name} · {model or tr('no model')}"
     if providers is None:
-        return False, "Other AI providers need the openai package (python -m pip install openai).", label
+        return False, tr("Other AI providers need the openai package (python -m pip install openai)."), label
     if not model:
-        return False, f"{preset.name}: choose a model in Set Up AI….", label
+        return False, tr("{provider}: choose a model in Set Up AI….").format(provider=preset.name), label
     source = providers.source(key)
     if preset.needs_key and not source:
-        return False, f"No {preset.name} key yet: use Set Up AI… to add one.", label
-    return True, f"{label} · credentials: {source or 'none needed'}.", label
+        return False, tr("No {provider} key yet: use Set Up AI… to add one.").format(provider=preset.name), label
+    return True, tr("{label} · credentials: {source}.").format(label=label, source=source or tr("none needed")), label
 
 
 __all__ = ["ProviderSection", "chosen_provider", "describe_provider"]

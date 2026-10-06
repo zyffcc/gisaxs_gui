@@ -2,6 +2,7 @@
 
 from .calibration import (
     CalibrationImagePort,
+    CalibrationInputFolderPort,
     CalibrationPathPort,
     CalibrationRunnerPort,
     CalibrationStoragePort,
@@ -14,6 +15,7 @@ from .calibration import (
 
 __all__ = [
     "CalibrationImagePort",
+    "CalibrationInputFolderPort",
     "CalibrationPathPort",
     "CalibrationRunnerPort",
     "CalibrationStoragePort",

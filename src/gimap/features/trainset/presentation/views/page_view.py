@@ -3,6 +3,8 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from ..step_rail import STEP_TITLES, TrainsetStepRail
+
 
 class TrainsetPageView(object):
     def setupUi(self, freshTrainsetBuildPage):
@@ -56,21 +58,17 @@ class TrainsetPageView(object):
         self.trainsetContentSplitter = QtWidgets.QSplitter(freshTrainsetBuildPage)
         self.trainsetContentSplitter.setOrientation(QtCore.Qt.Horizontal)
         self.trainsetContentSplitter.setObjectName("trainsetContentSplitter")
-        self.trainsetStepList = QtWidgets.QListWidget(self.trainsetContentSplitter)
+        # The workflow steps: the shared StepRail (number or mark, title, state line) in a card.
+        self.trainsetStepList = QtWidgets.QFrame(self.trainsetContentSplitter)
         self.trainsetStepList.setMinimumSize(QtCore.QSize(176, 0))
         self.trainsetStepList.setMaximumSize(QtCore.QSize(218, 16777215))
-        self.trainsetStepList.setWordWrap(True)
         self.trainsetStepList.setObjectName("trainsetStepList")
-        item = QtWidgets.QListWidgetItem()
-        self.trainsetStepList.addItem(item)
-        item = QtWidgets.QListWidgetItem()
-        self.trainsetStepList.addItem(item)
-        item = QtWidgets.QListWidgetItem()
-        self.trainsetStepList.addItem(item)
-        item = QtWidgets.QListWidgetItem()
-        self.trainsetStepList.addItem(item)
-        item = QtWidgets.QListWidgetItem()
-        self.trainsetStepList.addItem(item)
+        self.trainsetStepListLayout = QtWidgets.QVBoxLayout(self.trainsetStepList)
+        self.trainsetStepListLayout.setContentsMargins(6, 6, 6, 6)
+        self.trainsetStepListLayout.setSpacing(0)
+        self.trainsetStepRail = TrainsetStepRail(STEP_TITLES, self.trainsetStepList)
+        self.trainsetStepListLayout.addWidget(self.trainsetStepRail)
+        self.trainsetStepListLayout.addStretch(1)
         self.trainsetWorkflowStack = QtWidgets.QStackedWidget(self.trainsetContentSplitter)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
@@ -190,8 +188,6 @@ class TrainsetPageView(object):
         QtCore.QMetaObject.connectSlotsByName(freshTrainsetBuildPage)
         freshTrainsetBuildPage.setTabOrder(self.project_name, self.auto_remember_check)
         freshTrainsetBuildPage.setTabOrder(self.auto_remember_check, self.reset_defaults_button)
-        freshTrainsetBuildPage.setTabOrder(self.reset_defaults_button, self.trainsetStepList)
-        freshTrainsetBuildPage.setTabOrder(self.trainsetStepList, self.back_button)
         freshTrainsetBuildPage.setTabOrder(self.back_button, self.validate_button)
         freshTrainsetBuildPage.setTabOrder(self.validate_button, self.load_button)
         freshTrainsetBuildPage.setTabOrder(self.load_button, self.save_button)
@@ -211,19 +207,6 @@ class TrainsetPageView(object):
         self.auto_remember_check.setText(_translate("TrainsetPage", "Remember changes"))
         self.reset_defaults_button.setToolTip(_translate("TrainsetPage", "Restore built-in TrainSet defaults. Generated datasets are not deleted."))
         self.reset_defaults_button.setText(_translate("TrainsetPage", "Reset defaults"))
-        __sortingEnabled = self.trainsetStepList.isSortingEnabled()
-        self.trainsetStepList.setSortingEnabled(False)
-        item = self.trainsetStepList.item(0)
-        item.setText(_translate("TrainsetPage", "1.  Dataset Design"))
-        item = self.trainsetStepList.item(1)
-        item.setText(_translate("TrainsetPage", "2.  Local Preview"))
-        item = self.trainsetStepList.item(2)
-        item.setText(_translate("TrainsetPage", "3.  Model Design"))
-        item = self.trainsetStepList.item(3)
-        item.setText(_translate("TrainsetPage", "4.  Local Run"))
-        item = self.trainsetStepList.item(4)
-        item.setText(_translate("TrainsetPage", "5.  Monitor & Results"))
-        self.trainsetStepList.setSortingEnabled(__sortingEnabled)
         self.back_button.setText(_translate("TrainsetPage", "Back"))
         self.validate_button.setText(_translate("TrainsetPage", "Validate"))
         self.load_button.setToolTip(_translate("TrainsetPage", "Load trainset project"))

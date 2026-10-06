@@ -86,3 +86,79 @@ def test_a_built_map_shows_its_stages_odd_frames_and_what_changes(tmp_path: Path
     finally:
         page.tasks.wait(30)
         page.dispose()
+
+
+def test_the_map_keeps_its_name_and_goes_with_the_file_list(tmp_path: Path) -> None:
+    from src.gimap.features.analyze.bootstrap import create_analyze_view_model
+    from src.gimap.features.analyze.presentation.page import AnalyzePage
+    from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
+    from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+    from tests.test_analyze_workspace import GALAXI
+
+    _app()
+    paths = [save_tiff(tmp_path / f"run_{index:03d}.tif", _ring_frame(40.0 * (index + 1), seed=index)) for index in range(4)]
+    profile = InstrumentProfile("synthetic", DetectorGeometry(PIXEL, PIXEL, DISTANCE_M, CENTER[0], CENTER[1], WAVELENGTH, 0.2),
+                                None, SHAPE)
+    page = AnalyzePage(create_analyze_view_model(_context(InMemoryInstrumentProfileRepository([profile]))))
+    try:
+        page.set_mode_choice("giwaxs")
+        page.add_paths([str(path) for path in paths])
+        page.tasks.wait(60)
+        page.build_series_map()
+        _wait(page, lambda: not page._series_queue and page._series_map is not None and page._series_map.rows == 4)
+        assert page.current_series()[1] == "run"
+
+        # More files: the map stays (it holds for its own frames), with its own name, and says so.
+        other = GALAXI if GALAXI.is_file() else save_tiff(tmp_path / "galaxi_data.tif", _ring_frame(10.0, seed=9))
+        page.add_paths([str(other)])
+        page.tasks.wait(120)
+        _app().processEvents()
+        series, name = page.current_series()
+        assert series.rows == 4 and name == "run"
+        assert "Map of the earlier list (4 frames)" in page.series_info_label.text()
+
+        # A frame of the map that left the list cannot be opened, and that is said.
+        removed = page.view_model.state.files.pop(3)
+        assert not page.open_series_row(3)
+        assert page.status_level() == "warning" and page.status_text() == "That frame is no longer listed"
+        page.view_model.state.files.insert(3, removed)
+
+        page.clear_files()
+        assert page.current_series() is None and page._series_rows == []
+        assert not page.series_empty.isHidden() and page.series_map_view.isHidden() and page.series_plots.isHidden()
+        assert page.series_export_button.isHidden() and page.series_compare_button.isHidden()
+        assert page.series_stages_row.isHidden()
+    finally:
+        page.tasks.wait(30)
+        page.dispose()
+
+
+def test_clearing_the_list_stops_a_map_being_built(tmp_path: Path) -> None:
+    from src.gimap.features.analyze.bootstrap import create_analyze_view_model
+    from src.gimap.features.analyze.presentation.page import AnalyzePage
+    from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
+    from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile
+
+    _app()
+    paths = [save_tiff(tmp_path / f"run_{index:03d}.tif", _ring_frame(40.0 * (index + 1), seed=index)) for index in range(8)]
+    profile = InstrumentProfile("synthetic", DetectorGeometry(PIXEL, PIXEL, DISTANCE_M, CENTER[0], CENTER[1], WAVELENGTH, 0.2),
+                                None, SHAPE)
+    page = AnalyzePage(create_analyze_view_model(_context(InMemoryInstrumentProfileRepository([profile]))))
+    try:
+        page.set_mode_choice("giwaxs")
+        page.add_paths([str(path) for path in paths])
+        page.tasks.wait(60)
+        _app().processEvents()
+        page.build_series_map()
+        assert page.batch_running()
+        page.clear_files()  # while the map is still being built
+        _wait(page, lambda: not page.batch_running())
+        for _ in range(3):  # late rows would redraw the map now
+            page.tasks.wait(0.2)
+            _app().processEvents()
+        assert page.current_series() is None and page._series_rows == []
+        assert not page.series_empty.isHidden() and page.series_map_view.isHidden() and page.series_plots.isHidden()
+        assert page.status_level() != "error" and "No frame gave the curve" not in page.series_info_label.text()
+    finally:
+        page.tasks.wait(30)
+        page.dispose()

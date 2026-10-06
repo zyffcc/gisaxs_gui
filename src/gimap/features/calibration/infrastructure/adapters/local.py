@@ -97,6 +97,15 @@ class JsonDetectorCatalogAdapter:
             return {}
 
 
+def _image_shape(result: CalibrationResult) -> list[int] | None:
+    shape = (result.metadata or {}).get("image_shape")
+    try:
+        rows, columns = (int(value) for value in shape)
+    except (TypeError, ValueError):
+        return None
+    return [rows, columns]
+
+
 class SettingsGeometryAdapter:
     """Keep the last applied calibration in the shared settings.
 
@@ -146,9 +155,40 @@ class SettingsGeometryAdapter:
                 "standard": candidate.standard_key,
                 "confidence": candidate.confidence,
                 "residual_px": candidate.rms_residual_px,
+                # Which frames the geometry belongs to (rows, columns), for tools that reuse it.
+                "image_shape": _image_shape(result),
+                "detector": result.detector_name or "",
             },
         )
         return geometry
 
     def save(self) -> None:
         self.settings.save()
+
+
+class PreferencesCalibrationFolderAdapter:
+    """The folder of the last calibration image, in the user preferences."""
+
+    KEY = "calibration.last_folder"
+
+    def __init__(self, preferences, key: str = KEY):
+        self.preferences = preferences
+        self.key = key
+
+    def last_folder(self) -> str:
+        try:
+            folder = str(self.preferences.get(self.key, "") or "")
+        except Exception:
+            return ""
+        return folder if folder and Path(folder).is_dir() else ""
+
+    def remember(self, path: str | Path) -> None:
+        if not path:
+            return
+        location = Path(path)
+        folder = location if location.is_dir() else location.parent
+        try:
+            self.preferences.set(self.key, str(folder))
+            self.preferences.save()
+        except OSError:
+            pass

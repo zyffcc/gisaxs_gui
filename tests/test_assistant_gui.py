@@ -7,6 +7,7 @@ synthetic film, and what the panel, the start dialog and the settings show.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import sys
 import threading
@@ -201,8 +202,11 @@ def test_claude_operates_analyze_and_reports_every_requested_result(analyze, tmp
     panel = controller.panel
     assert panel.state_label.text() == "Finished"
     texts = [panel.step_list.item(row).text() for row in range(panel.step_list.count())]
-    assert texts[0].startswith("1. get_status — GIWAXS")
-    assert any("find_peaks — 4 peak(s)" in text for text in texts) or any("find_peaks" in text for text in texts)
+    # Steps in words; the raw call stays in the tooltip.
+    assert texts[0].startswith("1. Reading the frame and its header — GIWAXS")
+    assert any(text.startswith("2. Finding the peaks of I(q)") for text in texts)
+    assert panel.step_list.item(0).toolTip().startswith("get_status(")
+    assert not any("_" in text.split(" — ")[0] for text in texts if text[:1].isdigit())
     assert "Claude: Peaks first." in texts
     report_text = panel.report_view.toPlainText()
     assert "Peak table" in report_text and "Computed results" in report_text and "Crystallite size" in report_text
@@ -230,7 +234,7 @@ def test_confirm_mode_asks_before_writing_and_a_no_is_respected(analyze, tmp_pat
     _wait(lambda: controller.outcome is not None)
 
     assert controller.outcome.state == RUN_COMPLETED
-    assert asked and "Allow Claude" in asked[0]
+    assert asked and "Allow the AI" in asked[0]
     assert not (tmp_path / "gimap_analysis").exists()
     assert '"declined": true' in tool_results(llm.requests[1]["messages"])[0]["content"]
 
@@ -448,3 +452,97 @@ def test_settings_choose_the_brain_and_sign_in_to_claude_code(tmp_path: Path) ->
     page.code_radio.setChecked(True)
     assert settings.get("assistant", "backend") == BACKEND_CLAUDE_CODE
     tasks.shutdown()
+
+
+def test_the_panel_stays_narrow_and_uses_the_theme(tmp_path: Path) -> None:
+    from src.gimap.features.assistant.application import LlmUsage, Operation
+    from src.gimap.features.assistant.presentation.operation_cards import OperationCard
+
+    _app()
+    from src.gimap.features.assistant.presentation import AssistantPanel
+
+    panel = AssistantPanel()
+    panel.usage(LlmUsage(52000, 3100, 40000, 2000), 0.42, 48.0, BILLING_SUBSCRIPTION)
+    assert panel.usage_label.text() == (
+        "94.0k tokens in (40.0k cached) · 3.1k out · your Claude plan (≈ $0.42 at API prices) · 48 s")
+    assert panel.minimumSizeHint().width() <= 420, panel.minimumSizeHint()  # the line wraps; Analyze keeps its room
+    # A change without a picture (confirm and automatic modes) has no empty picture column.
+    card = OperationCard(Operation("set_halves", {"side": "mean"}, "Average both halves", why="They agree."))
+    assert card.picture.isHidden() and card.state_label.property("gimapRole") == "info" and not card.state_label.styleSheet()
+    assert card.origin_label.text() == "Suggested by the AI" and card.origin_label.toolTip().startswith("set_halves(")
+    # Colours come from the theme (light and dark), never from fixed hex values.
+    folder = Path(__file__).parents[1] / "src" / "gimap" / "features" / "assistant" / "presentation"
+    for name in ("guided_text.py", "panel.py", "operation_cards.py"):
+        source = (folder / name).read_text(encoding="utf-8").lower()
+        assert not any(colour in source for colour in ("#2e7d32", "#1e88e5", "#ef6c00", "#c62828")), name
+    card.deleteLater()
+    panel.deleteLater()
+
+
+def test_the_ai_flow_follows_the_interface_language(analyze, tmp_path: Path, monkeypatch) -> None:
+    from src.gimap.app.presentation import i18n
+    from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language, apply_to
+
+    window, page, context = analyze
+    for english, chinese in {"Finished": "已完成", "Undo All": "全部撤销", "Copy": "复制", "Ask": "提问",
+                             "Suggested by the AI": "由 AI 建议", "AI Assistant": "AI 助手",
+                             "Report language": "报告语言"}.items():
+        monkeypatch.setitem(i18n.ZH, english, chinese)  # the keys the Chinese table gets for the AI flow
+    apply_language("zh")
+    try:
+        # A fresh profile in Chinese asks for the report in Chinese; the language names are never translated.
+        dialog = AssistantStartDialog(InMemorySettingsRepository({}), status={"file": "film.tif", "measurement": "giwaxs"})
+        apply_to(dialog, "zh")
+        assert [dialog.language_combo.itemText(row) for row in range(dialog.language_combo.count())] == ["English", "中文"]
+        assert dialog.language_combo.currentText() == "中文" and dialog.goals().language == "中文"
+        chosen = InMemorySettingsRepository({"assistant": {"language": "English"}})
+        assert AssistantStartDialog(chosen, status={"file": "film.tif"}).goals().language == "English"
+        llm = ScriptedLlm([
+            turn(call("propose_operations", operations=[
+                {"tool": "set_sector_widths", "arguments": {"in_plane_half_width_deg": 5.0, "out_of_plane_half_width_deg": 5.0},
+                 "title": "Narrower sectors", "why": "Separate them."}])),
+            turn(report(("peaks", "done"))),
+        ])
+        controller = _controller(window, page, context, _services(tmp_path, llm))
+        assert controller.run(AnalysisGoals(goals=("peaks",), permission=PERMISSION_AUTO))
+        _wait(lambda: controller.outcome is not None)
+        panel = controller.panel
+        assert controller._dock.windowTitle() == "AI 助手"
+        assert panel.state_label.text() == "已完成" and panel.copy_button.text() == "复制" and panel.follow_button.text() == "提问"
+        assert panel.operations.undo_all_button.text() == "全部撤销"
+        assert panel.operations.cards[0].origin_label.text() == "由 AI 建议"  # cards are rebuilt for every run
+    finally:
+        apply_language(DEFAULT_LANGUAGE)
+
+
+def test_the_ai_report_is_saved_next_to_the_data(analyze, tmp_path: Path, monkeypatch) -> None:
+    from PyQt5.QtWidgets import QFileDialog
+
+    from src.gimap.app.presentation.components import visible_toasts
+    from src.gimap.features.assistant.presentation import guided_text
+
+    window, page, context = analyze
+    monkeypatch.setattr(guided_text, "_SAVE_FOLDERS", {})
+    proposed = []
+    target = tmp_path / "saved" / "film_giwaxs_ai_report.html"
+    target.parent.mkdir()
+
+    def save_dialog(_parent, _title, start, _filters):
+        proposed.append(start)
+        return str(target), "HTML report (*.html)"
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(save_dialog))
+    llm = ScriptedLlm([turn(report(("peaks", "done")))])
+    controller = _controller(window, page, context, _services(tmp_path, llm))
+    assert controller.run(AnalysisGoals(goals=("peaks",), permission=PERMISSION_AUTO))
+    _wait(lambda: controller.outcome is not None)
+    assert controller.save_report() == str(target) and target.with_suffix(".json").exists()
+    assert Path(proposed[0]) == tmp_path / "film_giwaxs_ai_report.html"  # the frame's folder (no gimap_analysis yet)
+    toast = visible_toasts(window)[-1]
+    assert toast.property("level") == "ok" and toast.action_button.text() == "Open Folder"
+    controller.services = dataclasses.replace(controller.services, save_text=_refuse)
+    assert controller.save_report() is None and visible_toasts(window)[-1].property("level") == "error"
+
+
+def _refuse(_path, _text):
+    raise PermissionError(13, "Permission denied")

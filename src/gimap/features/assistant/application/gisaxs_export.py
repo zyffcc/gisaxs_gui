@@ -34,7 +34,8 @@ def fit_curve_table(fit: dict) -> tuple[str, np.ndarray]:
 
 
 def fit_solutions_csv(fit: dict) -> str:
-    """One line per component of each solution: rank, model, χ², parameters (R, h, D, σ in nm)."""
+    """One line per component of each solution: rank, model, χ², parameters (R, h, D in nm; the σ columns are
+    relative widths σ/value, without a unit)."""
     rows = fit.get("solutions") or []
     keys = sorted({key for row in rows for component in row["components"] for key in component if key != "type"})
     lines = ["rank,model,chi2,log_rmse,converged,component," + ",".join(keys)]

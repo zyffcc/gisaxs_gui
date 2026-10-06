@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
+    QAbstractItemView,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -37,6 +38,8 @@ from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, St
 from .fit_steps_view import info_card, muted, read_only_table
 
 SERIES_STEPS = (("curves", "Curves"), ("start", "Start"), ("results", "Results"))
+TREND_EMPTY = "The trend of the chosen value appears here after Start"
+"""Shown over the trend plot while it has no points."""
 
 
 class FitSeriesView:
@@ -181,13 +184,18 @@ class FitSeriesView:
                                 (self.last_spin, "fitSeriesLast", "Last frame to fit"),
                                 (self.every_spin, "fitSeriesEvery", "Fit every n-th frame (a quick look at a long series)")):
             spin.setObjectName(name)
-            spin.setRange(1, 1_000_000)
+            spin.setRange(1, 1)  # the page sets the range once the curves are listed
             spin.setToolTip(tip)
-        self.every_spin.setPrefix("every ")
+            spin.setMinimumWidth(56)
+            spin.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)  # not as wide as the largest number
+        every = QLabel("Every", page)
+        every.setToolTip(self.every_spin.toolTip())
         frames.addWidget(QLabel("Frames", page))
         frames.addWidget(self.first_spin, 1)
         frames.addWidget(QLabel("–", page))
         frames.addWidget(self.last_spin, 1)
+        frames.addSpacing(6)
+        frames.addWidget(every)
         frames.addWidget(self.every_spin, 1)
         layout.addLayout(frames)
         self.watch_check = QCheckBox("Watch for new curves", page)
@@ -260,7 +268,9 @@ class FitSeriesView:
     def _series_results_step(self, page: QWidget, layout: QVBoxLayout) -> None:
         self.results_card, self.results_summary = info_card(page)
         layout.addWidget(self.results_card)
-        self.results_table = read_only_table(("#", "χ²ᵣ", "parameter"), page, "fitSeriesTable")
+        self.results_table = read_only_table(("#", "χ²ᵣ", "parameter"), page, "fitSeriesTable",
+                                             QAbstractItemView.ExtendedSelection)  # rows to copy; the current one is shown
+        self.results_table.setProperty("gimapDataHeaders", True)  # parameter names with units
         self.results_table.setMinimumHeight(200)
         layout.addWidget(self.results_table, 1)
         self.to_single_button = QPushButton("Open Frame in Single Analysis", page)
@@ -268,7 +278,7 @@ class FitSeriesView:
         self.to_single_button.setToolTip("The selected frame's curve and fitted model in Single analysis, to look closer")
         self.to_single_button.hide()
         layout.addWidget(self.to_single_button, 0, Qt.AlignLeft)
-        log = AdvancedSection("Log", "", page)
+        log = AdvancedSection("Run Log", "", page)
         self.log_view = QPlainTextEdit(log)
         self.log_view.setObjectName("fitSeriesLog")
         self.log_view.setReadOnly(True)
@@ -287,10 +297,12 @@ class FitSeriesView:
         self.frame_plot = CurvePlot("", panel, log_y=True, log_x=False)
         self.frame_plot.setObjectName("fitSeriesFramePlot")
         self.frame_plot.set_labels("|q| (nm⁻¹)", "Intensity")
+        self.frame_plot.set_empty_text("The selected frame and its fit appear here.")
         layout.addWidget(self.frame_plot, 3)
         self.trend_plot = CurvePlot("", panel, log_y=False, log_x=None)
         self.trend_plot.setObjectName("fitSeriesTrendPlot")
         self.trend_plot.set_labels("frame", "")
+        self.trend_plot.set_empty_text(TREND_EMPTY)
         self.trend_combo = QComboBox(self.trend_plot)
         self.trend_combo.setObjectName("fitSeriesTrendParameter")
         self.trend_combo.setToolTip("Which parameter to follow through the series")
@@ -300,4 +312,4 @@ class FitSeriesView:
         return panel
 
 
-__all__ = ["FitSeriesView", "SERIES_STEPS"]
+__all__ = ["FitSeriesView", "SERIES_STEPS", "TREND_EMPTY"]

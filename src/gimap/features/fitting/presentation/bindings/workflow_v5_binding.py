@@ -1,8 +1,9 @@
 """Bridge the portable native-node workflow to single and in-situ fitting."""
 
 import numpy as np
+from PyQt5.QtCore import Qt
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ..workflow_v5_dialog import WorkflowV5Dialog
 from ...application.workflow_v5 import bundled_workflow, default_options
@@ -115,9 +116,11 @@ class WorkflowV5BindingMixin:
                 )
             )
             self.ui.fittingInsituSeriesPage.render_recipe(revision.recipe)
-            dialog.status.setText(f"Saved settings v{revision.recipe.version} for future frames.")
+            version = revision.recipe.version
+            dialog.show_status(lambda: trf("Saved settings v{version} for future frames.", version=version))
 
         dialog.settings_changed.connect(save)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)  # one made per opening: gone when closed (no language hook left)
         self._insitu_prediction_dialog = dialog
         dialog.show()
 

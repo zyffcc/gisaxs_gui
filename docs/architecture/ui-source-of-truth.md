@@ -4,7 +4,7 @@
 - **Scope**: application shell、workspace pages、dialogs、windows、QSS
 - **Related code**: `src/gimap/app/presentation/`、`src/gimap/features/*/presentation/`
 - **Related tests**: `tests/test_ui_source_of_truth.py`、`tests/test_ui_workspace_layouts.py`
-- **Last verified**: 2026-08-25
+- **Last verified**: 2026-10-06（View 清单、所有权表、QSS 位置）
 
 ## 决策
 
@@ -55,8 +55,9 @@ TensorFlow、BornAgain 或科学工作流。View 不显示 `QMessageBox`、不�
 - 安装 Matplotlib canvas、toolbar 和其他运行时组件；
 - 在需要时保留薄兼容属性，但不得复制静态布局。
 
-QSS 优先放在 owner 的 `presentation/styles/` 或应用级 design system 中。状态驱动的少量动态
-样式可以留在 presentation behavior，但禁止在多个页面复制整套 stylesheet。
+QSS 放在应用级 `app/presentation/theme/base.qss` 或 owner 的 `presentation/<feature>_theme.qss` 模板
+（新规则的颜色写 `@token@`，现有字面颜色的例外见 `app/presentation/README.md`；用 `style_widget(root, path)` 设置）。状态驱动的外观用 `set_role` / `set_state` 改语义属性，
+不在代码里写颜色；禁止在多个页面复制整套 stylesheet。
 
 ## 动态组件
 
@@ -79,14 +80,16 @@ QSS 优先放在 owner 的 `presentation/styles/` 或应用级 design system 中
 | Format Converter | main、folder import、progress | preview、conversion worker state |
 | Calibration | calibration dialog | Matplotlib figure、candidate overlays |
 | Compare | page | 比较结果表格与 pyqtgraph 曲线图 |
-| Analyze | page、Options panel | pyqtgraph detector/curve views、batch dialog |
+| Analyze | page、steps、Options panel、regions、series、batch export、batch progress | pyqtgraph detector/curve views、automatic analysis panels |
 | Trainset | shell + Dataset/Preview/Model/Run/Monitor 五步页面 | catalog/plugin 字段、交互画布、JobStatus |
 | Prediction | controls、workspace、multi-file results、export/heatmap/trend dialogs | model-driven controls、Matplotlib canvas |
-| Fitting | controls、workspace、detector dialog、两个独立绘图窗口 | 动态模型参数、Matplotlib canvas/toolbar |
+| Fitting | Single（page、steps）、In-situ series（新页面与经典页面的序列区）、经典 Fitting 控制面、独立拟合窗口 | 动态模型参数、pyqtgraph 曲线、经典页面的 Matplotlib canvas/toolbar |
 | XRR | series extractor dialog | detector/ROI 与 XRR curve Matplotlib canvases、worker progress |
 
-当前共有 35 个显式 Python View。`tests/test_ui_source_of_truth.py` 维护完整 owner inventory，并
-阻止 `.ui`、`_generated`、pyuic 标记和非法 runtime/workflow 依赖重新进入仓库。
+当前共有 33 个显式 Python View（2026-10-06 核对）。`tests/test_ui_source_of_truth.py` 的
+`EXPECTED_VIEWS_BY_OWNER` 维护完整 owner inventory（必须与实际文件完全一致），并阻止 `.ui`、`_generated`、
+pyuic 标记和非法 runtime/workflow 依赖重新进入仓库。Assistant 没有 `views/`：其面板和对话框在 presentation 模块里直接构建（`guided_*.py`、`panel.py`、
+`start_dialog.py` …）。
 
 ## 修改页面的标准流程
 

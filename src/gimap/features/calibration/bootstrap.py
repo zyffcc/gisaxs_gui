@@ -19,6 +19,7 @@ from .infrastructure.adapters import (
     LegacyCalibrationRunnerAdapter,
     LocalCalibrationImageAdapter,
     LocalCalibrationPathAdapter,
+    PreferencesCalibrationFolderAdapter,
     SettingsGeometryAdapter,
 )
 from .presentation import CalibrationViewModel
@@ -28,6 +29,7 @@ def create_calibration_view_model(app_context: AppContext) -> CalibrationViewMod
     images = LocalCalibrationImageAdapter()
     storage = JsonCalibrationStorageAdapter()
     profiles = getattr(app_context, "instrument_profiles", None)
+    preferences = getattr(app_context, "preferences", None)
     return CalibrationViewModel(
         app_context=app_context,
         load_image=LoadCalibrationImage(images),
@@ -38,6 +40,9 @@ def create_calibration_view_model(app_context: AppContext) -> CalibrationViewMod
         load_detector_catalog=LoadDetectorCatalog(JsonDetectorCatalogAdapter()),
         normalize_path=NormalizeCalibrationPath(LocalCalibrationPathAdapter()),
         record_profile=RecordInstrumentProfile(profiles) if profiles is not None else None,
+        input_folders=(
+            PreferencesCalibrationFolderAdapter(preferences) if preferences is not None else None
+        ),
     )
 
 

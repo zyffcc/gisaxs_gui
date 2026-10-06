@@ -2,12 +2,13 @@
 
 A command bar — Add ▾, what is loaded, Save ▾ — then the steps Series → Compare → Results on the left
 and three plots on the right: how far every series has changed frame by frame, their paths through
-the two main changes, and the end state of each. A status line closes the page.
+the two main changes, and the end state of each (an empty state with Add Series until there is a
+comparison). A status line closes the page.
 """
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QEvent, QObject, Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -32,11 +33,32 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, StepRail
+from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, EmptyState, StepRail
+from src.gimap.app.presentation.components.table_copy import enable_table_copy
 from src.gimap.app.presentation.i18n import tr
 
 COMPARE_STEPS = (("series", "Series"), ("compare", "Compare"), ("results", "Results"))
 X_AXES = (("Frame", "frame"), ("Share of the series (0–1)", "share"))
+RESULT_COLUMNS = ("Series", "Group", "Frames", "Odd", "Stages", "Half done", "90 % done")
+GROUP_COLUMN = 1
+RANGE_LIMITS = (-100.0, 100.0)
+"""The range spins' limits before a comparison; then the common grid of the series (q, χ, …)."""
+RANGE_DECIMALS = 4
+NAME_WIDTH = 160
+"""Widest the name column of the results and distance tables starts (it can be dragged wider)."""
+LEAST_NAME_WIDTH = 48
+COLUMNS_PROPERTY = "compareColumns"
+"""The English titles of a result table's columns (its headers are made from them, on one line or two)."""
+EMPTY_TITLE = "Nothing to compare yet"
+EMPTY_TEXT = ("Add the Series map of a sample from Analyze (Series ▸ Send to Compare), a folder of curve files or "
+              "chosen curve files (or drop them here). Two or more series are compared with each other; one alone "
+              "is described.")
+CHANGE_TIP = ("How far each series has changed, frame by frame, along the chosen main change; × marks an odd frame "
+              "(left out of the comparison) in the colour of its series")
+PATHS_TIP = ("Each series through the first two main changes: ○ its first kept frame, ■ its last; odd frames are "
+             "left out")
+PATHS_EMPTY = "A second main change is needed to draw the paths."
+"""The paths plot without paths: every series has one main change only."""
 
 
 def _muted(text: str, parent: QWidget) -> QLabel:
@@ -59,7 +81,10 @@ def _card(parent: QWidget, name: str) -> tuple[QFrame, QLabel]:
     return card, label
 
 
-def _table(columns, parent: QWidget, name: str, *, editable: bool = False) -> QTableWidget:
+def _table(columns, parent: QWidget, name: str, *, editable: bool = False, fitted: bool = False) -> QTableWidget:
+    """``fitted``: a result table — names elided in the middle, the columns fitted to the width
+    (``fit_columns``, again when the table is resized) and as tall as its rows (``fit_to_rows``) instead
+    of a fixed height with blank rows."""
     table = QTableWidget(0, len(columns), parent)
     table.setObjectName(name)
     table.setHorizontalHeaderLabels([tr(column) for column in columns])  # headers: not reached by the translator
@@ -69,7 +94,89 @@ def _table(columns, parent: QWidget, name: str, *, editable: bool = False) -> QT
     table.setSelectionBehavior(QAbstractItemView.SelectRows)
     table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
     table.horizontalHeader().setStretchLastSection(True)
+    enable_table_copy(table)  # Ctrl+C and Copy Rows / Copy Table: the rows with the column names
+    if fitted:
+        table.setTextElideMode(Qt.ElideMiddle)
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        if columns:  # headers that may break onto two lines (an elided header would hide its two lines)
+            table.setProperty(COLUMNS_PROPERTY, list(columns))
+            table.horizontalHeader().setTextElideMode(Qt.ElideNone)
+        table.horizontalScrollBar().rangeChanged.connect(lambda *_range: fit_to_rows(table))
+        # A new font or style (Settings ▸ font size, the theme) changes the header's height: fit again,
+        # or the last row would be cut off with no scroll bar to reach it.
+        table.horizontalHeader().geometriesChanged.connect(lambda: fit_to_rows(table))
+        table.viewport().installEventFilter(_RefitOnResize(table))  # the viewport: resized after the table
+        fit_to_rows(table)
     return table
+
+
+class _RefitOnResize(QObject):
+    """A result table (the parent) made wider or narrower — the window, the splitter: its columns fitted
+    again to the new width of its viewport."""
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
+        if event.type() == QEvent.Resize and event.size().width() != event.oldSize().width():
+            table = self.parent()
+            if table is not None and table.rowCount():
+                fit_columns(table)
+                fit_to_rows(table)
+        return False
+
+
+def fit_to_rows(table: QTableWidget) -> None:
+    """As tall as the header and the rows (and the horizontal scroll bar when the columns overflow)."""
+    height = table.horizontalHeader().sizeHint().height() + 2 * table.frameWidth() + 2
+    height += sum(table.rowHeight(row) for row in range(table.rowCount()))
+    bar = table.horizontalScrollBar()
+    if bar.maximum() > bar.minimum():
+        height += bar.sizeHint().height()
+    table.setFixedHeight(height)
+
+
+def two_lines(text: str) -> str:
+    """A column title on two lines, broken at the space nearest its middle — never between a number and its
+    “%”: “90 % done” → “90 %” over “done”. A single word stays as it is."""
+    spaces = [at for at, char in enumerate(text) if char == " " and not text[at + 1:].startswith("%")]
+    if not spaces:
+        return text
+    at = min(spaces, key=lambda index: max(index, len(text) - index - 1))
+    return text[:at] + "\n" + text[at + 1:]
+
+
+def _headers(table: QTableWidget, *, wrapped: bool) -> None:
+    """The column titles (``COLUMNS_PROPERTY``) in the interface language, on one line or on two."""
+    for column, key in enumerate(table.property(COLUMNS_PROPERTY) or ()):
+        item = table.horizontalHeaderItem(column)
+        text = two_lines(tr(key)) if wrapped else tr(key)
+        if item is not None and item.text() != text:
+            item.setText(text)
+
+
+def fit_columns(table: QTableWidget, column: int = 0) -> None:
+    """Every column in view, as far as the width allows: the titles on one line, or on two when one line
+    does not fit (“Half / done”, “90 % / done”: the values under them are short); the name column
+    ``column`` as wide as its names, at most ``NAME_WIDTH``, and narrower — never below its title — when the
+    others need the room (the names are elided in the middle; the full name is the tooltip). The user can
+    drag it wider; a narrow panel that still cannot hold every column scrolls."""
+    header = table.horizontalHeader()
+    header.setSectionResizeMode(column, QHeaderView.Interactive)
+
+    def others() -> int:
+        return sum(max(table.sizeHintForColumn(index), header.sectionSizeHint(index))
+                   for index in range(table.columnCount()) if index != column and not table.isColumnHidden(index))
+
+    least = max(header.sectionSizeHint(column), LEAST_NAME_WIDTH)
+    wanted = min(NAME_WIDTH, max(table.sizeHintForColumn(column) + 8, least))
+    room = table.viewport().width()
+    _headers(table, wrapped=False)
+    if table.property(COLUMNS_PROPERTY) and wanted + others() > room:
+        _headers(table, wrapped=True)
+    table.setColumnWidth(column, max(least, min(wanted, room - others())))
+    # The stretched last column never gets narrower than it was when stretching began (Qt): begin again
+    # from its width now, or a title that once needed one line would keep the table too wide.
+    header.setStretchLastSection(False)
+    header.resizeSections()
+    header.setStretchLastSection(True)
 
 
 class ComparePageView:
@@ -87,7 +194,7 @@ class ComparePageView:
         self.splitter.addWidget(self._plots_panel(self.splitter))
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
-        self.splitter.setSizes([420, 900])
+        self.splitter.setSizes([440, 900])  # room for every column of the result table (``fit_columns``)
         root.addWidget(self.splitter, 1)
         row = QHBoxLayout()
         self.status_label = QLabel("", page)
@@ -209,37 +316,50 @@ class ComparePageView:
         layout.addLayout(row)
         self.series_hint = _muted(
             "In Analyze, open a sample and build its map in the Series tab, then Send to Compare; repeat for every "
-            "sample. Curve files (q and I columns, e.g. a Batch Export) can be added as a folder too.", parent)
+            "sample. Curve files (q and I columns, e.g. a Batch Export) can be added as a folder too, or dropped on "
+            "this page.", parent)
         layout.addWidget(self.series_hint)
 
     def _compare_step(self, parent: QWidget, layout: QVBoxLayout) -> None:
         form = QFormLayout()
         form.setHorizontalSpacing(8)
+        form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        range_box = QVBoxLayout()
+        range_box.setSpacing(4)
         range_row = QHBoxLayout()
         self.q_low_spin = QDoubleSpinBox(parent)
         self.q_low_spin.setObjectName("compareQLow")
         self.q_high_spin = QDoubleSpinBox(parent)
         self.q_high_spin.setObjectName("compareQHigh")
         for spin in (self.q_low_spin, self.q_high_spin):
-            spin.setDecimals(4)
-            spin.setRange(-100.0, 100.0)
+            spin.setDecimals(RANGE_DECIMALS)
+            spin.setRange(*RANGE_LIMITS)  # then the series' own range (page: ``_show_range``)
             spin.setSingleStep(0.01)
             spin.setKeyboardTracking(False)
-            spin.setToolTip("The q range compared (Å⁻¹); leave out a noisy edge or a detector artefact")
+            spin.setMaximumWidth(110)
+            spin.setToolTip("The q range compared (Å⁻¹); leave out a noisy edge or a detector artefact")  # the page names the axis
         self.whole_range_button = QPushButton("Whole Range", parent)
         self.whole_range_button.setObjectName("compareWholeRange")
         self.whole_range_button.setToolTip("Compare every q the series share")
         range_row.addWidget(self.q_low_spin)
         range_row.addWidget(QLabel("–", parent))
         range_row.addWidget(self.q_high_spin)
-        range_row.addWidget(self.whole_range_button)
-        form.addRow("q range", range_row)
+        range_row.addStretch(1)
+        range_box.addLayout(range_row)
+        button_row = QHBoxLayout()
+        button_row.addWidget(self.whole_range_button)
+        button_row.addStretch(1)
+        range_box.addLayout(button_row)
+        self.range_label = QLabel("q range", parent)  # the axis of the series (“χ range”): set by the page
+        self.range_label.setObjectName("compareRangeLabel")
+        form.addRow(self.range_label, range_box)
         self.end_spin = QSpinBox(parent)
         self.end_spin.setObjectName("compareEndFrames")
         self.end_spin.setRange(1, 1000)
         self.end_spin.setValue(10)
         self.end_spin.setPrefix("last ")
         self.end_spin.setSuffix(" frames")
+        self.end_spin.setMaximumWidth(160)
         self.end_spin.setToolTip("The end state of a series: the mean of its last frames (odd frames left out)")
         form.addRow("End state", self.end_spin)
         layout.addLayout(form)
@@ -257,23 +377,29 @@ class ComparePageView:
     def _results_step(self, parent: QWidget, layout: QVBoxLayout) -> None:
         card, self.summary_label = _card(parent, "compareSummary")
         layout.addWidget(card)
-        self.results_table = _table(("Series", "Frames", "Odd", "Stages", "Half done", "90 % done", "Group"), parent,
-                                    "compareResultsTable")
+        self.results_table = _table(RESULT_COLUMNS, parent, "compareResultsTable", fitted=True)
         self.results_table.setToolTip("Half / 90 % done: the frame by which half / 90 % of the series' change had happened")
-        self.results_table.setMinimumHeight(140)
+        self.results_table.setColumnHidden(GROUP_COLUMN, True)  # groups exist from three series on
         layout.addWidget(self.results_table)
-        row = QHBoxLayout()
-        row.addWidget(_muted("How different (percent of intensity, shape):", parent), 1)
-        self.distance_combo = QComboBox(parent)
+        self.distance_row = QWidget(parent)  # hidden below two series
+        self.distance_row.setObjectName("compareDistanceRow")
+        row = QHBoxLayout(self.distance_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.distance_label = _muted("How different (percent of intensity, shape):", self.distance_row)
+        self.distance_label.setObjectName("compareDistanceLabel")
+        row.addWidget(self.distance_label, 1)
+        self.distance_combo = QComboBox(self.distance_row)
         self.distance_combo.setObjectName("compareDistanceKind")
         self.distance_combo.addItem("At the end", "end")
         self.distance_combo.addItem("At the start", "start")
         self.distance_combo.setToolTip("Compare the series where they ended (the last frames) or where they began")
         row.addWidget(self.distance_combo)
-        layout.addLayout(row)
-        self.distance_table = _table((), parent, "compareDistanceTable")
-        self.distance_table.setMinimumHeight(120)
+        layout.addWidget(self.distance_row)
+        self.distance_table = _table((), parent, "compareDistanceTable", fitted=True)
+        self.distance_table.setProperty("gimapDataHeaders", True)  # its headers are the series' names
         layout.addWidget(self.distance_table)
+        self.distance_row.hide()
+        self.distance_table.hide()
         self.details_section = AdvancedSection("Odd frames and stages of every series", "", parent)
         self.details_section.setObjectName("compareDetails")
         self.details_label = QLabel("", self.details_section)
@@ -286,15 +412,42 @@ class ComparePageView:
     # -- plots ------------------------------------------------------------------------------
 
     def _plots_panel(self, parent: QWidget) -> QFrame:
-        panel = QFrame(parent)
-        panel.setObjectName("comparePlotPanel")
+        frame = QFrame(parent)
+        frame.setObjectName("comparePlotPanel")
+        outer = QVBoxLayout(frame)
+        outer.setContentsMargins(8, 8, 8, 8)
+        self.plot_stack = QStackedWidget(frame)
+        self.plot_stack.setObjectName("comparePlotStack")
+        self.empty_state = EmptyState(EMPTY_TITLE, EMPTY_TEXT, self.plot_stack, action_text="Add Series")
+        self.empty_state.setObjectName("compareEmpty")
+        self.empty_state.action_button.setToolTip("Add a series: Analyze's Series map, a folder of curve files, or curve files")
+        empty_page = QWidget(self.plot_stack)  # the card centred, not stretched over the whole panel
+        empty_layout = QVBoxLayout(empty_page)
+        empty_layout.setContentsMargins(24, 24, 24, 24)
+        centre = QHBoxLayout()
+        centre.addStretch(1)
+        centre.addWidget(self.empty_state, 4)
+        centre.addStretch(1)
+        empty_layout.addStretch(1)
+        empty_layout.addLayout(centre)
+        empty_layout.addStretch(2)
+        self.empty_state.setMaximumWidth(520)
+        self.empty_state.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.plot_stack.addWidget(empty_page)
+        self.empty_page = empty_page
+        panel = QWidget(self.plot_stack)
+        self.plots_page = panel
+        self.plot_stack.addWidget(panel)
+        outer.addWidget(self.plot_stack)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         self.change_plot = CurvePlot("How far each series has changed", panel, log_y=False, sides=False)
         self.change_plot.setObjectName("compareChangePlot")
         self.change_plot.log_check.hide()  # a component can be negative
         self.change_plot.set_labels("frame", "component 1")
+        self.change_plot.legend.setOffset((-10, -10))  # bottom right: every curve rises to the top right
+        self.change_plot.setToolTip(CHANGE_TIP)
         self.x_axis_combo = QComboBox(panel)
         self.x_axis_combo.setObjectName("compareXAxis")
         for text, key in X_AXES:
@@ -315,13 +468,18 @@ class ComparePageView:
         self.paths_plot.setObjectName("comparePathsPlot")
         self.paths_plot.log_check.hide()
         self.paths_plot.set_labels("component 1", "component 2")
+        self.paths_plot.setToolTip(PATHS_TIP)
+        self.paths_plot.set_empty_text(PATHS_EMPTY)  # shown when every series has one main change only
         self.end_plot = CurvePlot("End states", panel, log_y=True)
         self.end_plot.setObjectName("compareEndPlot")
         self.end_plot.set_labels("q (Å⁻¹)", "Intensity")
         lower.addWidget(self.paths_plot, 1)
         lower.addWidget(self.end_plot, 1)
         layout.addLayout(lower, 2)
-        return panel
+        self.x_axis_combo.setEnabled(False)  # until there is a comparison
+        self.component_combo.setEnabled(False)
+        return frame
 
 
-__all__ = ["COMPARE_STEPS", "ComparePageView", "X_AXES"]
+__all__ = ["CHANGE_TIP", "COMPARE_STEPS", "ComparePageView", "GROUP_COLUMN", "PATHS_EMPTY", "PATHS_TIP", "RANGE_DECIMALS",
+           "RANGE_LIMITS", "RESULT_COLUMNS", "X_AXES", "fit_columns", "fit_to_rows", "two_lines"]

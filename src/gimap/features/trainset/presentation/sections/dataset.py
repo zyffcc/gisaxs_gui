@@ -31,6 +31,7 @@ from ..views import (
     TrainsetDatasetPageView,
 )
 
+from ..file_drop import FileDropFilter
 from ..visualization_widgets import ArrayCanvas
 
 
@@ -518,7 +519,7 @@ class DatasetMixin:
         self.design_tabs.tabBar().setExpanding(True)
         self.design_tabs.tabBar().setUsesScrollButtons(False)
         self.design_tabs.tabBar().setElideMode(Qt.ElideRight)
-        self.full_detector_canvas = ArrayCanvas("Load a real scattering file to begin")
+        self.full_detector_canvas = ArrayCanvas("Load a real scattering file to begin, or drop one here")
         self.roi_design_canvas = ArrayCanvas("Define an ROI to inspect the cropped detector region")
         self.masked_design_canvas = ArrayCanvas("Configure a mask to see it overlaid on the ROI")
         self.mask_only_canvas = ArrayCanvas("The binary mask will appear here (white = masked)")
@@ -543,6 +544,8 @@ class DatasetMixin:
         self.design_info.setWordWrap(True)
         self.design_info.setProperty("infoPanel", True)
         ui.designPreviewContentLayout.addWidget(self.design_info)
+        # A file dropped anywhere on the design preview becomes the reference (as Load file... does).
+        self._reference_drop = FileDropFilter(self.trainset_design_preview_panel, self.reference_dropped.emit)
         self.dataset_splitter.setStretchFactor(0, 7)
         self.dataset_splitter.setStretchFactor(1, 3)
         self.dataset_splitter.setSizes((720, 420))

@@ -82,7 +82,8 @@ class FitPageView(FitStepsView):
         self.undo_button.setObjectName("fitUndoButton")
         self.undo_button.setText("Undo")
         self.undo_button.setAutoRaise(True)
-        self.undo_button.setToolTip("Undo the last change of the model or the last fit (Ctrl+Z)")
+        self.undo_button.setToolTip(
+            "Undo the last change of the model, the fitting range or the left-out points, or the last fit (Ctrl+Z)")
         self.redo_button = QToolButton(bar)
         self.redo_button.setObjectName("fitRedoButton")
         self.redo_button.setText("Redo")
@@ -129,6 +130,7 @@ class FitPageView(FitStepsView):
         self.plot = CurvePlot("", panel, log_y=True, log_x=False)
         self.plot.setObjectName("fitCurvePlot")
         self.plot.set_labels("|q| (nm⁻¹)", "Intensity")
+        self.plot.set_empty_text("Open a curve (q, I, σ), or send a cut from Analyze ▸ Send to Fitting.")
         self.terms_check = QCheckBox("Terms", self.plot)
         self.terms_check.setObjectName("fitShowTerms")
         self.terms_check.setToolTip("Also draw each term of the model: the particles, the background, the resolution peak")
@@ -146,7 +148,8 @@ class FitPageView(FitStepsView):
         self.residual_plot.setObjectName("fitResidualPlot")
         self.residual_plot.log_check.hide()
         self.residual_plot.setFixedHeight(RESIDUAL_HEIGHT)
-        self.residual_plot.set_labels("|q| (nm⁻¹)", "(I − model)/σ")
+        self.residual_plot.set_labels("|q| (nm⁻¹)", "Δ/σ")  # the formula is in the tooltip (the page sets it)
+        self.residual_plot.set_empty_text("Open a curve: the residuals of the model appear here.")
         layout.addWidget(self.residual_plot)
         return panel
 

@@ -2,38 +2,47 @@
 
 The English text in the code stays the source of truth; ``zh.py`` maps exact English strings
 to Chinese. ``apply_language`` walks a widget tree (labels, buttons, group boxes, tabs, combo
-items, placeholders, tooltips, menus and actions) and replaces every text it knows, in either
-direction, so switching back to English restores the originals. Windows, dialogs and menus
-that appear later are translated when they are shown. Text that is not in the table — values,
-file names, messages composed at run time — stays as it is. Scientific values and units are
-never translated.
+items, table and tree headers, spin-box prefixes, suffixes and special texts, placeholders,
+tooltips, menus and actions) and replaces every text it knows, in either direction, so switching
+back to English restores the originals. Windows, dialogs and menus that appear later are
+translated when they are shown. Text that is not in the table — values, file names, messages
+composed at run time — stays as it is (``tr`` / ``trf`` translate those where they are made, and
+``language_changed()`` tells their owners to compose them again after a switch), and so do the headers
+of a table that holds names in them (``DATA_HEADERS``).
+Scientific values and units are never translated.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from PyQt5.QtCore import QEvent, QObject
+from PyQt5.QtCore import QEvent, QObject, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractButton,
+    QAbstractSpinBox,
     QAction,
     QApplication,
     QComboBox,
+    QDoubleSpinBox,
     QGroupBox,
     QLabel,
     QLineEdit,
     QListWidget,
     QMenu,
     QPlainTextEdit,
+    QSpinBox,
+    QTableWidget,
     QTabBar,
     QTabWidget,
+    QTreeWidget,
     QWidget,
 )
 
 from .zh import ZH as _ZH
 
-# The Chinese interface fonts have no "▸" (U+25B8, drawn as an empty box): use "›" in the menu paths.
-ZH = {english: chinese.replace("▸", "›") for english, chinese in _ZH.items()}
+# The Chinese interface fonts have no "▸" (U+25B8) or "▾" (U+25BE), drawn as empty boxes: use "›" in the
+# menu paths and "▼" for a drop-down.
+ZH = {english: chinese.replace("▸", "›").replace("▾", "▼") for english, chinese in _ZH.items()}
 
 LANGUAGES = {"en": "English", "zh": "中文"}
 LANGUAGE_KEY = "appearance.language"
@@ -61,7 +70,13 @@ def translate(text: str, language: str) -> Optional[str]:
 
 
 class _Translator(QObject):
-    """Keeps the current language and translates windows and menus as they are shown."""
+    """Keeps the current language and translates windows and menus as they are shown.
+
+    ``changed(language)`` comes after ``apply_language`` switched the language and walked its widgets: a
+    widget whose text is made from its own state (a status chip, a sentence composed with ``tr``) redraws
+    it there, since the walker only knows the texts in the table."""
+
+    changed = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -138,6 +153,37 @@ def _action(action: QAction, language: str) -> None:
         _swap(menu, "title", menu.title, menu.setTitle, language)
 
 
+DATA_HEADERS = "gimapDataHeaders"
+"""A table or tree with this property set has headers that are data (series, sample or parameter names):
+they are never translated, even when a name is also an interface word (“Background”, “Data”)."""
+
+
+def _headers(widget: QWidget, language: str) -> None:
+    """The column (and row) titles of a table or a tree (not when they are data: ``DATA_HEADERS``)."""
+    if widget.property(DATA_HEADERS):
+        return
+    if isinstance(widget, QTableWidget):
+        for prefix, count, item_at in (("hh", widget.columnCount(), widget.horizontalHeaderItem),
+                                       ("vh", widget.rowCount(), widget.verticalHeaderItem)):
+            for index in range(count):
+                item = item_at(index)
+                if item is not None:
+                    _swap(widget, f"{prefix}{index}", item.text, item.setText, language)
+    elif isinstance(widget, QTreeWidget):
+        header = widget.headerItem()
+        for column in range(header.columnCount() if header is not None else 0):
+            _swap(widget, f"th{column}", lambda column=column: header.text(column),
+                  lambda text, column=column: header.setText(column, text), language)
+
+
+def _spin_texts(widget: QAbstractSpinBox, language: str) -> None:
+    """“last ” 10 “ frames”, or the special text shown at the minimum (“auto”, “from profile”); padding kept."""
+    if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+        _swap(widget, "prefix", widget.prefix, widget.setPrefix, language)
+        _swap(widget, "suffix", widget.suffix, widget.setSuffix, language)
+    _swap(widget, "special", widget.specialValueText, widget.setSpecialValueText, language)
+
+
 def apply_to(root: QWidget, language: str) -> None:
     """Translate ``root`` and every widget and action under it."""
     for widget in [root, *root.findChildren(QWidget)]:
@@ -145,6 +191,10 @@ def apply_to(root: QWidget, language: str) -> None:
             _swap(widget, "text", widget.text, widget.setText, language)
         elif isinstance(widget, QGroupBox):
             _swap(widget, "title", widget.title, widget.setTitle, language)
+        if isinstance(widget, (QTableWidget, QTreeWidget)):
+            _headers(widget, language)
+        if isinstance(widget, QAbstractSpinBox):
+            _spin_texts(widget, language)
         if isinstance(widget, (QLineEdit, QPlainTextEdit)):
             _swap(widget, "placeholder", widget.placeholderText, widget.setPlaceholderText, language)
         if isinstance(widget, QComboBox):
@@ -171,15 +221,24 @@ def apply_to(root: QWidget, language: str) -> None:
 
 
 def apply_language(language: str, roots=()) -> str:
-    """Switch the interface language: the given widgets now, windows and menus when shown."""
+    """Switch the interface language: the given widgets now, windows and menus when shown; then
+    ``language_changed`` (when the language is not the one before)."""
     language = normalized_language(language)
     state = translator()
+    previous = state.language
     state.language = language
     state.install()
     for root in roots:
         if root is not None:
             apply_to(root, language)
+    if language != previous:
+        state.changed.emit(language)
     return language
+
+
+def language_changed():
+    """The signal ``(language)`` that comes after each switch of the interface language (``apply_language``)."""
+    return translator().changed
 
 
 def tr(text: str) -> str:
@@ -187,7 +246,12 @@ def tr(text: str) -> str:
     return translate(text, current_language()) or text if current_language() != DEFAULT_LANGUAGE else text
 
 
+def trf(template: str, **values) -> str:
+    """``tr(template).format(**values)``: the table holds the template, the values are filled in after."""
+    return tr(template).format(**values)
+
+
 __all__ = [
-    "DEFAULT_LANGUAGE", "LANGUAGES", "LANGUAGE_KEY", "apply_language", "apply_to", "current_language",
-    "normalized_language", "tr", "translate",
+    "DATA_HEADERS", "DEFAULT_LANGUAGE", "LANGUAGES", "LANGUAGE_KEY", "apply_language", "apply_to", "current_language",
+    "language_changed", "normalized_language", "tr", "translate", "trf",
 ]

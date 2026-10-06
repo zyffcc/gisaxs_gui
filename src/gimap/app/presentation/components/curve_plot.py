@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import numpy as np
 from PyQt5 import sip
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import QSize, Qt, pyqtSignal
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 from src.gimap.shared.figures import break_at_gaps
@@ -14,9 +16,14 @@ from src.gimap.shared.figures import break_at_gaps
 from ..theme import theme_manager
 from .marks import MarkLayers
 from .box_zoom import tool_icon, zoom_button
+from .curve_plot_extras import (
+    CompactHeader, CursorReadout, EmptyOverlay, PlotMenu, axis_symbol, curves_text, folded_label, style_window,
+)
 from .segmented import SegmentedControl
 
 CURVE_COLORS = ("#2563eb", "#f97316", "#16a34a", "#9333ea", "#dc2626", "#0891b2")
+LEGEND_ALPHA = 150
+"""Opacity of the legend's background: its text stays readable, the data under it still shows."""
 LOG_LABEL_SPACING_PX = 16.0
 """Least distance between two labels of a log axis."""
 _MANTISSAS = ((1,), (1, 3), (1, 2, 5), tuple(range(1, 10)))  # sparse → dense
@@ -51,12 +58,22 @@ def readable_log_ticks(min_val: float, max_val: float, size: float, std_ticks) -
 
 
 
+@dataclass(frozen=True)
+class Marker:
+    """A curve drawn as points of one symbol (``set_curves(markers=…)``): a pyqtgraph symbol (``"o"``, ``"s"``,
+    ``"x"`` …), its size in pixels, and ``hollow`` for an outline only (e.g. where a path starts)."""
+
+    symbol: str = "o"
+    size: float = 7.0
+    hollow: bool = False
+
+
 SIDES = (("±", "both"), ("+", "positive"), ("−", "negative"), ("|x|", "folded"))
 SIDE_TIPS = (
     "Both halves, as measured",
     "Only the positive half (x > 0)",
     "Only the negative half (x < 0)",
-    "Both halves on |x|, the negative one dashed: are they the same?",
+    "Both halves on |x|, the negative one dashed in a second shade: are they the same?",
 )
 
 
@@ -90,23 +107,33 @@ def _has_both_signs(x) -> bool:
 
 
 def _halves(name: str, x, y, side: str) -> list:
-    """``(name, x, y, pen style)`` of what to draw of one curve for the chosen half (display only)."""
-    from PyQt5.QtCore import Qt
+    """``(name, x, y, half)`` of what to draw of one curve for the chosen half (display only).
 
+    ``half``: ``""`` as measured, ``"+"`` / ``"−"`` one half, ``"|+|"`` / ``"|−|"`` a half drawn on |x|
+    (the negative one mirrored: its x is −x, dashed and in a second shade)."""
     x = np.asarray(x, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64)
     if side == "both" or not _has_both_signs(x):
-        return [(name, x, y, Qt.SolidLine)]
+        return [(name, x, y, "")]
     positive, negative = x > 0, x < 0
     if side == "positive":
-        return [(name, x[positive], y[positive], Qt.SolidLine)]
+        return [(name, x[positive], y[positive], "+")]
     if side == "negative":
-        return [(name, x[negative], y[negative], Qt.SolidLine)]
+        return [(name, x[negative], y[negative], "−")]
     order = np.argsort(-x[negative], kind="stable")  # the negative half mirrored, in increasing |x|
     return [
-        (f"{name} (+)", x[positive], y[positive], Qt.SolidLine),
-        (f"{name} (−)", -x[negative][order], y[negative][order], Qt.DashLine),
+        (f"{name} (+)" if name else "", x[positive], y[positive], "|+|"),
+        (f"{name} (−)" if name else "", -x[negative][order], y[negative][order], "|−|"),
     ]
+
+
+def second_shade(color) -> str:
+    """The colour of a folded negative half: the curve's own hue, darker on a light plot and lighter on a
+    dark one, so the two halves differ in colour as well as in dash (display only)."""
+    import pyqtgraph as pg
+
+    base = pg.mkColor(color)
+    return (base.lighter(150) if theme_manager().is_dark else base.darker(170)).name()
 
 
 class CurvePlot(QWidget):
@@ -185,12 +212,12 @@ class CurvePlot(QWidget):
             self.plot.getAxis(side).enableAutoSIPrefix(False)
             self.plot.getAxis(side).logTickValues = readable_log_ticks
         self.legend = self.plot.addLegend(offset=(-10, 10))
+        self.plot.setMenuEnabled(False)  # pyqtgraph's English menu: ours (``PlotMenu``) is translated
         self.plot_widget.scene().sigMouseClicked.connect(self._mouse_clicked)
         self.plot.setLogMode(x=bool(log_x), y=log_y)
         layout.addWidget(self.plot_widget, 1)
-        self.x_window = pg.LinearRegionItem(
-            orientation="vertical", brush=(249, 115, 22, 14), pen=pg.mkPen("#f97316", width=1.5)
-        )
+        self.x_window = pg.LinearRegionItem(orientation="vertical")
+        style_window(self.x_window)
         self.x_window.setZValue(10)
         self.plot.addItem(self.x_window, ignoreBounds=True)
         self.x_window.hide()
@@ -199,15 +226,30 @@ class CurvePlot(QWidget):
         self._source: list[tuple[str, np.ndarray, np.ndarray]] = []
         self._source_colors: Optional[list] = None
         self._source_markers: Optional[list] = None
+        self._source_legend: Optional[list] = None
         self._curves: list[tuple[str, np.ndarray, np.ndarray]] = []
         """The curves as shown (after choosing a half); ``figure_state`` and the log range use them."""
         self._colors: list[str] = []
         self._styles: list = []
         self._origin: list[int] = []
         """For each curve shown, the index of the curve it comes from (``curveClicked``)."""
+        self._shown_halves: list[str] = []
+        """For each curve shown, which half it is (``_halves``): Copy Data labels a half on |x| as such."""
+        self._source_line_colors: list[str] = []
+        """The colour of each curve given to ``set_curves`` (``curve_colors``)."""
         self.log_check.toggled.connect(self._log_toggled)
         self.log_x_check.toggled.connect(self._log_toggled)
         self.x_window.sigRegionChangeFinished.connect(self._window_finished)
+        self.compact_header = CompactHeader(self)
+        """A narrow plot: the title on its own row, the halves and log toggles in a “⋯” menu."""
+        self.title_wrapped = self.compact_header.title
+        self.more_button = self.compact_header.more_button
+        self.plot_menu = PlotMenu(self)
+        """The right-click menu (``plot_menu.menu``)."""
+        self.readout = CursorReadout(self)
+        """The values under the cursor, in a bottom corner of the plot area (``readout.label``)."""
+        self.empty_overlay = EmptyOverlay(self)
+        """The sentence shown while the plot has no curves (``set_empty_text``)."""
         self._apply_theme()
         theme_manager().changed.connect(self._apply_theme)
 
@@ -228,22 +270,48 @@ class CurvePlot(QWidget):
             self.reset_button.setIcon(tool_icon("fit", foreground))
             self.marks_button.setIcon(tool_icon("marks", foreground))
         if self._source:
-            self.set_curves(self._source, self._source_colors, markers=self._source_markers)  # legend labels take the new colour
+            self._redraw()  # legend labels take the new colour
+        self._style_legend()
+
+    def _style_legend(self) -> None:
+        """A translucent background and a frame behind the legend's entries; nothing at all without entries
+        (an empty legend would draw an empty box over the data). Its visibility stays the owner's choice."""
+        import pyqtgraph as pg
+
+        if not self.legend.items:
+            self.legend.setBrush(QColor(0, 0, 0, 0))
+            self.legend.setPen(pg.mkPen(None))
+            return
+        manager = theme_manager()
+        fill = QColor(manager.color("plot_bg"))
+        fill.setAlpha(LEGEND_ALPHA)
+        self.legend.setBrush(fill)
+        self.legend.setPen(pg.mkPen(manager.color("plot_grid")))
 
     def set_title(self, title: str) -> None:
         from ..i18n import tr
 
         self.title_label.setText(tr(title))
         self.title_label.setToolTip(tr(title))
+        self.compact_header.update()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        self.compact_header.update(event.size().width())
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt API
+        """As narrow as the compact header allows: a narrower plot moves its title and toggles out of the row."""
+        hint = super().minimumSizeHint()
+        return QSize(min(hint.width(), self.compact_header.least_width()), hint.height())
 
     def set_labels(self, x_label: str, y_label: str) -> None:
         self.plot.setLabel("bottom", x_label)  # figure content: not translated
         self.plot.setLabel("left", y_label)
-        symbol = str(x_label).split(" (")[0].split(" or ")[0].strip().strip("|") or "x"  # “χ or |χ| (°)” → χ
-        self.side_control.button(3).setText(f"|{symbol}|")
+        self.side_control.button(3).setText(f"|{axis_symbol(x_label)}|")  # “χ or |χ| (°)” → |χ|
 
     def set_side(self, side: str) -> None:
-        """``both``, ``positive``, ``negative`` or ``folded`` (both halves on |x|, the negative one dashed)."""
+        """``both``, ``positive``, ``negative`` or ``folded`` (both halves on |x|, the negative one dashed in a
+        second shade)."""
         index = self.side_control.findData(side)
         if index >= 0:
             self.side_control.setCurrentIndex(index)
@@ -255,18 +323,40 @@ class CurvePlot(QWidget):
     def _side_chosen(self, index: int) -> None:
         self._side = self.side_control.itemData(index) or "both"
         if self._source:
-            self.set_curves(self._source, self._source_colors, markers=self._source_markers)
+            self._redraw()
+
+    def _redraw(self) -> None:
+        """The curves of the last ``set_curves`` again, with their colours, markers and legend choice."""
+        self.set_curves(self._source, self._source_colors, markers=self._source_markers, legend=self._source_legend)
 
     def clear_curves(self) -> None:
         for item in self._items:
             self.plot.removeItem(item)
         self._items.clear()
         self.legend.clear()
-        self.side_control.hide()  # shown again by ``set_curves`` when a curve has both signs
+        self._style_legend()
+        self.compact_header.show_sides(False)  # shown again by ``set_curves`` when a curve has both signs
+        self._overlays()
+
+    def _overlays(self) -> None:
+        self.empty_overlay.refresh()
+        self.readout.refresh()
+
+    def has_curves(self) -> bool:
+        """Whether a curve with finite values is drawn (by ``set_curves``, until ``clear_curves``)."""
+        return bool(self._items) and any(
+            np.isfinite(np.asarray(x, dtype=np.float64)).any() and np.isfinite(np.asarray(y, dtype=np.float64)).any()
+            for _name, x, y in self._curves
+        )
+
+    def set_empty_text(self, text: str) -> None:
+        """A muted sentence centred on the plot area while the plot has no curves (``""``: none). Give the
+        English: it is shown in the interface language (``tr`` when shown and after a switch of the language)."""
+        self.empty_overlay.set_text(text)
 
     def _log_toggled(self, _checked: bool) -> None:
         self.plot.setLogMode(x=self.log_x_check.isChecked(), y=self.log_check.isChecked())
-        self.set_curves(self._source, self._source_colors, markers=self._source_markers)
+        self._redraw()
 
     def add_save_menu(self) -> None:
         """A “Save” button in the header: the plot as a figure, or its curves as data."""
@@ -279,18 +369,51 @@ class CurvePlot(QWidget):
         menu = QMenu(button)
         menu.addAction("Plot as Figure…", self.saveFigureRequested.emit)
         menu.addAction("Curves as Data…", self.saveDataRequested.emit)
+        menu.addSeparator()
+        menu.addAction("Copy Image", self.copy_image)
+        menu.addAction("Copy Data", self.copy_data)
         button.setMenu(menu)
         self.header_layout.insertWidget(1, button)
         button.setToolTip("Save this plot as a figure, or its curves as data")
         self.save_button = button
+        self.compact_header.update()
+
+    def copy_image(self) -> None:
+        """The plot as shown (without the cursor readout or the empty text over it), as a picture on the clipboard."""
+        from PyQt5.QtWidgets import QApplication
+
+        shown = [item.label for item in (self.readout, self.empty_overlay) if item.alive() and not item.label.isHidden()]
+        for label in shown:
+            label.hide()
+        QApplication.clipboard().setPixmap(self.plot_widget.grab())
+        for label in shown:
+            label.show()
+
+    def copy_data(self) -> None:
+        """The curves as shown, tab-separated with a header row, on the clipboard (``curves_text``).
+
+        The header says what is shown: a half drawn on |x| has “|qy| (Å⁻¹)” over its x column (the
+        negative half's x there is −qy), and a single half shown is named “(+)” or “(−)”."""
+        from PyQt5.QtWidgets import QApplication
+
+        state = self.figure_state()
+        curves, x_labels = [], []
+        for index, ((name, x, y), half) in enumerate(zip(state["curves"], self._shown_halves)):
+            if half in ("+", "−"):
+                name = f"{name or f'curve {index + 1}'} ({half})"
+            curves.append((name, x, y))
+            x_labels.append(folded_label(state["x_label"]) if half.startswith("|") else state["x_label"])
+        QApplication.clipboard().setText(curves_text(curves, state["x_label"], state["y_label"], x_labels=x_labels))
 
     def set_curves(self, curves: Sequence[tuple[str, np.ndarray, np.ndarray]], colors: Optional[Sequence[str]] = None,
-                   *, markers: Optional[Sequence[bool]] = None) -> None:
+                   *, markers: Optional[Sequence] = None, legend: Optional[Sequence[bool]] = None) -> None:
         """``curves`` is a sequence of ``(name, x, y)``; non-positive y is hidden in log mode.
 
         ``colors``: one colour per curve (e.g. the colour of the region it comes from); by default
         the plot's own sequence. ``markers``: per curve, points instead of a line (measured data) —
-        ``True`` for dots or a pyqtgraph symbol (``"x"``, ``"s"`` …).
+        ``True`` for dots, a pyqtgraph symbol (``"x"``, ``"s"`` …) or a ``Marker`` (symbol, size, hollow).
+        ``legend``: per curve, ``False`` for no legend entry (a mark that belongs to a curve already in the
+        legend: where a path starts, an odd frame); the curve keeps its name for Copy Data.
         """
         import pyqtgraph as pg
 
@@ -301,21 +424,25 @@ class CurvePlot(QWidget):
         self._source = curves
         self._source_colors = None if colors is None else list(colors)
         self._source_markers = None if markers is None else list(markers)
+        self._source_legend = None if legend is None else list(legend)
         source_colors = [
             (colors[index] if colors is not None and index < len(colors) and colors[index] else CURVE_COLORS[index % len(CURVE_COLORS)])
             for index in range(len(curves))
         ]
         signed = self._sides and any(_has_both_signs(x) for _name, x, _y in curves)
-        self.side_control.setVisible(signed)
-        self._curves, self._colors, self._styles, self._origin = [], [], [], []
+        self.compact_header.show_sides(signed)
+        self._curves, self._colors, self._styles, self._origin, self._shown_halves = [], [], [], [], []
+        self._source_line_colors = list(source_colors)
         self._markers = [markers[index] if markers is not None and index < len(markers) else False
                          for index in range(len(curves))]
         for index, (name, x, y) in enumerate(curves):
-            for shown in _halves(name, x, y, self._side if signed else "both"):
-                self._curves.append(shown[:3])
-                self._colors.append(source_colors[index])
-                self._styles.append(shown[3])
+            for shown_name, shown_x, shown_y, half in _halves(name, x, y, self._side if signed else "both"):
+                mirrored = half == "|−|"  # dashed, in a second shade: the two halves on |x| tell apart
+                self._curves.append((shown_name, shown_x, shown_y))
+                self._colors.append(second_shade(source_colors[index]) if mirrored else source_colors[index])
+                self._styles.append(Qt.DashLine if mirrored else Qt.SolidLine)
                 self._origin.append(index)
+                self._shown_halves.append(half)
         for index, (name, x, y) in enumerate(self._curves):
             x = np.asarray(x, dtype=np.float64)
             y = np.asarray(y, dtype=np.float64)
@@ -325,24 +452,31 @@ class CurvePlot(QWidget):
                 y = np.where(x > 0, y, np.nan)
                 x = np.where(x > 0, x, np.nan)
             marker = self._markers[self._origin[index]]
+            listed = legend is None or self._origin[index] >= len(legend) or bool(legend[self._origin[index]])
+            entry = tr(name) if name and listed else None  # an empty name: no legend entry either (a guide)
             if marker:
                 keep = np.isfinite(x) & np.isfinite(y)
-                symbol = marker if isinstance(marker, str) else "o"
-                item = self.plot.plot(x[keep], y[keep], pen=None, symbol=symbol, symbolSize=4 if symbol == "o" else 7,
-                                      symbolPen=None if symbol == "o" else pg.mkPen(self._colors[index], width=1.4),
-                                      symbolBrush=self._colors[index], name=tr(name))
+                spec = marker if isinstance(marker, Marker) else Marker(marker if isinstance(marker, str) else "o",
+                                                                        4.0 if marker is True or marker == "o" else 7.0)
+                dot = spec.symbol == "o" and not spec.hollow and spec.size <= 4.0  # measured points: no outline
+                item = self.plot.plot(x[keep], y[keep], pen=None, symbol=spec.symbol, symbolSize=spec.size,
+                                      symbolPen=None if dot else pg.mkPen(self._colors[index], width=1.4),
+                                      symbolBrush=pg.mkBrush(0, 0, 0, 0) if spec.hollow else self._colors[index],
+                                      name=entry)
                 self._items.append(item)
                 continue
             x, y = break_at_gaps(x, y)  # no line across bins without pixels
             pen = pg.mkPen(self._colors[index], width=1.6, style=self._styles[index])
-            item = self.plot.plot(x, y, pen=pen, name=tr(name), connect="finite")
+            item = self.plot.plot(x, y, pen=pen, name=entry, connect="finite")
             item.setCurveClickable(True, width=8)
             origin = self._origin[index]
             item.sigClicked.connect(lambda _item, *_args, origin=origin: self.curveClicked.emit(origin))
             self._items.append(item)
+        self._style_legend()
         self.plot.enableAutoRange()
         if self.log_check.isChecked():
             self._robust_log_range()
+        self._overlays()
 
     def reset_view(self) -> None:
         """Every curve in view again (after a zoom or a pan)."""
@@ -391,8 +525,9 @@ class CurvePlot(QWidget):
         return len(self._items)
 
     def curve_colors(self) -> list[str]:
-        """The colour of each curve shown, in ``set_curves`` order."""
-        return list(self._colors)
+        """The colour of each curve given to ``set_curves``, one per curve in that order (a curve shown as two
+        halves on |x| counts once: its own colour; ``figure_state()["colors"]`` has each line drawn)."""
+        return list(self._source_line_colors)
 
     def figure_state(self) -> dict:
         """The curves and labels shown, for exporting the plot as a figure."""
@@ -415,10 +550,15 @@ class CurvePlot(QWidget):
         self._items.clear()
         self._curves = []
         self._colors = []
+        self._shown_halves = []
+        self._source_line_colors = []
         if not sip.isdeleted(self.plot_widget):
             self.plot_widget.deleteLater()
 
-    def show_window(self, low: float, high: float) -> None:
+    def show_window(self, low: float, high: float, color: Optional[str] = None) -> None:
+        """The x window ``low … high``; ``color`` (e.g. the colour of the ring it belongs to) for its lines
+        and a translucent fill, ``None`` for the band's own orange."""
+        style_window(self.x_window, color)
         self._updating_window = True
         try:
             self.x_window.setRegion((float(low), float(high)))
@@ -435,4 +575,4 @@ class CurvePlot(QWidget):
             self.windowChanged.emit(float(low), float(high))
 
 
-__all__ = ["CURVE_COLORS", "CurvePlot"]
+__all__ = ["CURVE_COLORS", "CurvePlot", "Marker"]

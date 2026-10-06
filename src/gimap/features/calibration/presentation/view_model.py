@@ -17,7 +17,7 @@ from ..application import (
     RecordInstrumentProfile,
     RunCalibration,
 )
-from ..application.ports import CancellationCheck, ProgressCallback
+from ..application.ports import CalibrationInputFolderPort, CancellationCheck, ProgressCallback
 from ..application import (
     CalibrationCandidate,
     CalibrationRequest,
@@ -52,6 +52,7 @@ class CalibrationViewModel:
         load_detector_catalog: LoadDetectorCatalog,
         normalize_path: NormalizeCalibrationPath,
         record_profile: RecordInstrumentProfile | None = None,
+        input_folders: CalibrationInputFolderPort | None = None,
     ):
         self.app_context = app_context
         self.state = app_context.project_state.feature_state(
@@ -67,11 +68,20 @@ class CalibrationViewModel:
         self._apply_calibration = apply_calibration
         self._normalize_path = normalize_path
         self._record_profile = record_profile
+        self._input_folders = input_folders
         self.last_profile = None
         self.detector_models = load_detector_catalog()
 
     def normalize_path(self, path: str | Path) -> str:
         return self._normalize_path(path)
+
+    def last_folder(self) -> str:
+        """The folder of the last calibration image read ('' when none is known)."""
+        return self._input_folders.last_folder() if self._input_folders is not None else ""
+
+    def remember_folder(self, path: str | Path) -> None:
+        if self._input_folders is not None and path:
+            self._input_folders.remember(path)
 
     @staticmethod
     def source_name(path: str | Path) -> str:

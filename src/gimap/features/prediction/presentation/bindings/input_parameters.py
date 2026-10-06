@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.theme import set_role
 from src.gimap.shared.file_paths import normalize_path
 
@@ -75,15 +76,29 @@ class InputParametersMixin:
             self._initialize_ui()
 
     def _choose_gisaxs_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self.main_window, "Select GISAXS Folder", "")
-        if not folder:
-            return
+        folder = QFileDialog.getExistingDirectory(
+            self.main_window, tr("Select a Folder of CBF Frames"), self.current_parameters.get("input_folder", "")
+        )
+        if folder:
+            self._use_gisaxs_folder(folder)
+
+    def _use_gisaxs_folder(self, folder: str) -> None:
         folder = normalize_path(folder)
         self.current_parameters["input_folder"] = folder
         self._set_line_edit("gisaxsPredictChooseFolderValue", folder)
         self._scan_directory_for_cbf(folder)
         self._persist_parameters()
         self._refresh_predict_readiness()
+
+    def _handle_dropped_input(self, path: str) -> None:
+        """A path dropped on the canvas: a folder becomes the folder batch, a file is opened (CBF only)."""
+        if os.path.isdir(path):
+            radio = getattr(self.ui, "gisaxsPredictMultiFilesRadioButton", None)
+            if radio is not None and not radio.isChecked():
+                radio.setChecked(True)  # the Folder batch mode, as if chosen
+            self._use_gisaxs_folder(path)
+            return
+        self._handle_new_file_selection(path)
 
     def _handle_folder_line_edit_committed(self) -> None:
         widget = getattr(self.ui, "gisaxsPredictChooseFolderValue", None)
@@ -104,9 +119,9 @@ class InputParametersMixin:
     def _choose_gisaxs_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self.main_window,
-            "Select GISAXS File",
+            tr("Select CBF Frame"),
             self.current_parameters.get("input_folder", ""),
-            "GISAXS Files (*.cbf);;All Files (*)",
+            tr("CBF frames (*.cbf)") + ";;" + tr("All files (*)"),
         )
         if file_path:
             file_path = normalize_path(file_path)
@@ -124,7 +139,7 @@ class InputParametersMixin:
         self.current_parameters["export_path"] = folder
         self._set_line_edit("gisaxsPredictExportFolderValue", folder)
         self._persist_parameters()
-        self._append_status_message(f"Export folder selected: {folder}")
+        self._append_status_message(trf("Export folder selected: {path}", path=folder))
 
     def _prompt_export_folder(self, title: str = "Select Export Folder") -> str:
         folder = QFileDialog.getExistingDirectory(
@@ -156,8 +171,9 @@ class InputParametersMixin:
         if os.path.exists(candidate):
             self._handle_new_file_selection(candidate)
             return
-        self._append_status_message(f"Unable to locate file: {text}", level="WARN")
-        QMessageBox.warning(self.main_window, "File Not Found", f"Unable to locate file: {text}")
+        message = trf("Unable to locate file: {name}", name=text)
+        self._append_status_message(message, level="WARN")
+        QMessageBox.warning(self.main_window, tr("File Not Found"), message)
 
     def _on_import_images_clicked(self) -> None:
         # Behaves like pressing Enter in the file input: try to load the typed file
@@ -167,11 +183,12 @@ class InputParametersMixin:
     def _handle_new_file_selection(self, file_path: str) -> None:
         file_path = normalize_path(file_path)
         if not os.path.exists(file_path):
-            QMessageBox.warning(self.main_window, "File Not Found", file_path)
+            QMessageBox.warning(self.main_window, tr("File Not Found"), file_path)
             return
         if not file_path.lower().endswith(".cbf"):
             QMessageBox.warning(
-                self.main_window, "Unsupported Format", "Only CBF files are supported."
+                self.main_window, tr("Unsupported Format"),
+                trf("Prediction reads CBF frames (.cbf) only; {name} is not one.", name=os.path.basename(file_path)),
             )
             return
 
@@ -257,16 +274,19 @@ class InputParametersMixin:
             self._update_range_tooltip()
             self._refresh_batch_plan_summary()
         except Exception as exc:
-            self._append_status_message(f"Failed to scan folder: {exc}", level="ERROR")
+            self._append_status_message(trf("Failed to scan folder: {error}", error=exc), level="ERROR")
 
     def _extract_index(self, file_name: str) -> Optional[int]:
         return self.prediction_view_model.files.file_index(file_name)
 
     def _update_range_tooltip(self) -> None:
         if not self._available_indices:
-            tooltip = "No valid indices detected yet"
+            tooltip = tr("No valid indices detected yet")
         else:
-            tooltip = f"Available index range: {self._available_indices[0]} - {self._available_indices[-1]}"
+            tooltip = trf(
+                "Available index range: {first} - {last}",
+                first=self._available_indices[0], last=self._available_indices[-1],
+            )
 
         label = getattr(self.ui, "gisaxsPredictStackLabel", None)
         line_edit = getattr(self.ui, "gisaxsPredictStackValue", None)
@@ -289,14 +309,12 @@ class InputParametersMixin:
         self._refresh_predict_readiness()
 
     def _update_mode_controls(self, mode: str) -> None:
-        label = getattr(self.ui, "gisaxsPredictStackLabel", None)
         stack_edit = getattr(self.ui, "gisaxsPredictStackValue", None)
         showing = getattr(self.ui, "gisaxsImageShowingValue", None)
         every_label = getattr(self.ui, "gisaxsPredictEveryLabel", None)
         every_value = getattr(self.ui, "gisaxsPredictEveryValue", None)
 
-        if label:
-            label.setText("Range:" if mode == "multi_files" else "Stack:")
+        self._show_range_labels(mode)
         if stack_edit:
             text = (
                 self.current_parameters.get("range_value", "")
@@ -313,7 +331,6 @@ class InputParametersMixin:
             current_section.setVisible(mode == "multi_files")
         # Only show the "Every" controls in multi-file mode
         if every_label:
-            every_label.setText("Files per prediction:")
             every_label.setVisible(mode == "multi_files")
         if every_value:
             every_value.setVisible(mode == "multi_files")
@@ -325,6 +342,14 @@ class InputParametersMixin:
         # 在多文件模式下调整布局
         self._adjust_predict_layout_for_mode(mode)
         self._refresh_batch_plan_summary()
+
+    def _show_range_labels(self, mode: str) -> None:
+        label = getattr(self.ui, "gisaxsPredictStackLabel", None)
+        if label is not None:
+            label.setText(tr("Range:" if mode == "multi_files" else "Stack:"))
+        every_label = getattr(self.ui, "gisaxsPredictEveryLabel", None)
+        if every_label is not None:
+            every_label.setText(tr("Files per prediction:"))
 
     def _sync_pending_text_fields(self) -> None:
         """Apply user-typed values without triggering loads."""
@@ -490,41 +515,50 @@ class InputParametersMixin:
         input_ready = self._input_ready()
         model_ready = self._model_ready()
         framework_ready = self._framework_ready()
-        mode = self.current_parameters.get("mode", "single_file")
-
+        load_error = str(getattr(self, "_model_load_error", "") or "")
+        if model_ready:
+            model_text, model_role = "Model: Loaded", "success"
+        elif self._model_loading:
+            model_text, model_role = "Model: Loading…", "muted"
+        elif load_error:
+            model_text, model_role = "Model: Load failed", "error"
+        else:
+            model_text, model_role = "Model: Not loaded", "muted"
+        # Pending steps are muted; "error" only for a missing framework or a failed model load.
         labels = {
             "gisaxsPredictInputReadyLabel": (
                 "Input: Ready" if input_ready else "Input: Missing",
-                input_ready,
+                "success" if input_ready else "muted",
             ),
-            "gisaxsPredictModelReadyLabel": (
-                "Model: Loaded" if model_ready else "Model: Not loaded",
-                model_ready,
-            ),
+            "gisaxsPredictModelReadyLabel": (model_text, model_role),
             "gisaxsPredictFrameworkReadyLabel": (
                 "Framework: OK" if framework_ready else "Framework: Missing/Incompatible",
-                framework_ready,
-            ),
-            "gisaxsPredictModeLabel": (
-                f"Mode: {'Multi Files' if mode == 'multi_files' else 'Single File'}",
-                True,
+                "success" if framework_ready else "error",
             ),
         }
-        for name, (text, ok) in labels.items():
+        for name, (text, role) in labels.items():
             label = getattr(self.ui, name, None)
             if label is not None:
-                label.setText(text)
-                set_role(label, "success" if ok else "error")
+                label.setText(tr(text))
+                set_role(label, role)
+        model_label = getattr(self.ui, "gisaxsPredictModelReadyLabel", None)
+        if model_label is not None:
+            model_label.setToolTip(load_error if model_role == "error" else "")
 
         btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
         running = bool(self._prediction_active or self._multifile_prediction_active)
+        # A stopped run stays active until its model process ends (one model run at a time).
+        stopping = running and bool(getattr(self, "_prediction_stopping", lambda: False)())
         if btn is not None:
             btn.setEnabled(input_ready and model_ready and framework_ready and not running)
-            btn.setText("Predicting..." if running else "Predict")
+            btn.setText(tr("Stopping…" if stopping else "Predicting..." if running else "Predict"))
+        hint = getattr(self.ui, "gisaxsPredictReadinessHint", None)
+        if hint is not None:
+            hint.setVisible(btn is not None and not btn.isEnabled() and not running)
         stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
         if stop_btn is not None:
-            stop_btn.setEnabled(bool(self._multifile_prediction_active))
-            stop_btn.setVisible(bool(self._multifile_prediction_active))
+            stop_btn.setEnabled(running and not stopping)
+            stop_btn.setVisible(running and not stopping)
 
         input_export = getattr(self.ui, "gisaxsImageExportButton", None)
         if input_export is not None:

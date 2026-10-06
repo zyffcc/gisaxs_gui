@@ -15,6 +15,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.gimap.app.presentation.i18n import tr
+
 from .gui_bridge import GuiBridge
 
 
@@ -22,7 +24,7 @@ class ChoiceDialog(QDialog):
     def __init__(self, question: str, options: Sequence[dict], allow_text: bool, parent=None):
         super().__init__(parent)
         self.setObjectName("assistantChoiceDialog")
-        self.setWindowTitle("Claude asks")
+        self.setWindowTitle(tr("The AI asks"))
         self.setMinimumWidth(560)
         layout = QVBoxLayout(self)
         prompt = QLabel(question, self)
@@ -43,12 +45,12 @@ class ChoiceDialog(QDialog):
         layout.addWidget(self.option_list, 1)
         self.text_edit = QLineEdit(self)
         self.text_edit.setObjectName("assistantChoiceText")
-        self.text_edit.setPlaceholderText("Or type the answer here…" if options else "Type the answer here…")
+        self.text_edit.setPlaceholderText(tr("Or type the answer here…") if options else tr("Type the answer here…"))
         self.text_edit.setVisible(bool(allow_text))
         layout.addWidget(self.text_edit)
         buttons = QDialogButtonBox(self)
-        self.use_button = buttons.addButton("Use This", QDialogButtonBox.AcceptRole)
-        self.none_button = buttons.addButton("None of These" if options else "Skip", QDialogButtonBox.RejectRole)
+        self.use_button = buttons.addButton(tr("Use This"), QDialogButtonBox.AcceptRole)
+        self.none_button = buttons.addButton(tr("None of These") if options else tr("Skip"), QDialogButtonBox.RejectRole)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

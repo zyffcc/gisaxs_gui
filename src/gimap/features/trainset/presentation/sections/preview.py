@@ -97,7 +97,8 @@ class PreviewMixin:
         self.preview_count.setToolTip(
             "Number of label samples drawn for the parameter-coverage diagnostic; it does not rerun BornAgain."
         )
-        selection_controls.addWidget(self.preview_count, 1, 1)
+        self.preview_count.setMaximumWidth(240)  # a number keeps a natural width, beside its label
+        selection_controls.addWidget(self.preview_count, 1, 1, Qt.AlignLeft | Qt.AlignVCenter)
         selection_controls.setColumnStretch(1, 1)
         controls.addLayout(selection_controls)
 

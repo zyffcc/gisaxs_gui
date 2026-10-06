@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Optional
 
 
-from PyQt5.QtCore import QSignalBlocker
+from PyQt5.QtCore import QSignalBlocker, QThread
 
 
 from PyQt5.QtWidgets import (
@@ -67,6 +67,17 @@ class WidgetAccessMixin:
         return float(widget.value()) if widget is not None else None
 
     def _append_status_message(self, message: str, level: str = "INFO") -> None:
+        """Add a line to the activity log; safe to call from any thread.
+
+        Model loading and the batch fallback call this from worker threads: there the line is
+        queued to the GUI thread (``_log_requested``) instead of touching the widgets.
+        """
+        if QThread.currentThread() is not self.thread():
+            self._log_requested.emit(str(message), str(level))
+            return
+        self._append_status_message_gui(message, level)
+
+    def _append_status_message_gui(self, message: str, level: str = "INFO") -> None:
         self.status_updated.emit(message)
         browser = getattr(self.ui, "predictStatusTextBrowser", None)
         line = f"[{level}] {message}"

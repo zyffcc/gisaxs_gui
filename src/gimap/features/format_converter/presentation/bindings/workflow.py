@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import set_role
 from ..display_formatting import _human_bytes
 
@@ -50,7 +51,11 @@ class WorkflowMixin:
             else:
                 set_role(label, "step")
         self.back_button.setEnabled(current > 0)
-        self.next_button.setText("Review & Convert" if current == 2 else "Next")
+        # "&&" is a literal ampersand; a single "&" would become an Alt mnemonic ("Review _Convert").
+        self.next_button.setText(tr("Review && Convert") if current == 2 else tr("Next"))
+        # The one primary action of every step. No setDefault(): Enter in the filter or the
+        # custom-frames field must not jump to the next step.
+        set_role(self.next_button, "primary")
 
     def _review_and_convert(self) -> None:
         options = self._options()

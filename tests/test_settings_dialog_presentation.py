@@ -73,3 +73,50 @@ def test_appearance_changes_apply_immediately_and_are_saved() -> None:
         dialog.close()
     assert theme_manager().mode == "light"
     assert theme_manager().font_pt == 9
+
+
+def test_the_halves_read_as_in_analyze() -> None:
+    from src.gimap.app.presentation.settings_dialog import FIT_SIDES
+    from src.gimap.features.analyze.presentation.views.analyze_steps_view import FIT_SIDE_ITEMS
+
+    assert tuple(FIT_SIDES) == tuple(FIT_SIDE_ITEMS)
+
+
+def test_every_page_scrolls_and_the_dialog_opens_at_a_usable_size(tmp_path) -> None:
+    from PyQt5.QtCore import QSize
+    from PyQt5.QtWidgets import QGroupBox, QScrollArea
+
+    from src.gimap.app.presentation.layout_metrics import available_geometry
+    from src.gimap.app.presentation.task_runner import TaskRunner
+    from src.gimap.features.assistant.presentation.settings_page import AssistantSettingsPage
+    from tests.test_assistant_gui import _services
+
+    _app()
+    settings = InMemorySettingsRepository()
+    tasks = TaskRunner()
+    dialog = SettingsDialog(
+        preferences=InMemoryUserPreferencesRepository(), settings=settings,
+        extra_pages=(("Assistant", "The AI runs the Analyze tools on the open GIWAXS frame and reports what it finds.",
+                      lambda parent: AssistantSettingsPage(settings, _services(tmp_path, None), tasks, parent)),),
+    )
+    try:
+        assert dialog.pages.count() == dialog.category_list.count() == 4
+        for index in range(dialog.pages.count()):
+            assert isinstance(dialog.pages.widget(index), QScrollArea), index
+        assert dialog.minimumSizeHint().height() <= 560
+        area = available_geometry(dialog)
+        expected = QSize(max(dialog.minimumWidth(), min(920, area.width() - 48)),
+                         max(dialog.minimumHeight(), min(700, area.height() - 48)))
+        assert dialog.size() == expected == dialog.first_size
+        assert dialog.category_list.objectName() == "settingsCategoryList"
+        dialog.show()
+        dialog.category_list.setCurrentRow(3)
+        for _ in range(5):
+            QApplication.processEvents()
+        boxes = [box for box in dialog.pages.widget(3).findChildren(QGroupBox) if box.isVisible()]
+        assert boxes
+        for box in boxes:
+            assert box.height() >= box.minimumSizeHint().height(), box.title()
+    finally:
+        dialog.close()
+        tasks.shutdown()

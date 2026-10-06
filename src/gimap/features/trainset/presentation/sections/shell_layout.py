@@ -22,6 +22,14 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.theme import set_state
+
+from ..value_combos import fill_values
+
+# Numbers and choices keep a natural width; only text fields (paths, hosts) stretch with the form.
+NUMBER_FIELD_MAX_WIDTH = 240
+
 
 class ShellLayoutMixin:
     """Own the shell layout section."""
@@ -29,11 +37,13 @@ class ShellLayoutMixin:
     def _bind_shell(self) -> None:
         """Install dynamic workflow pages into the Python-owned shell."""
         self.validation_badge = self.validationBadge
-        self.step_list = self.trainsetStepList
+        set_state(self.validation_badge, "state", "pending")  # pending / ok / warn / error
+        # The steps: the shared StepRail (row API: setCurrentRow, currentRow, currentRowChanged) in a card.
+        self.step_list = self.trainsetStepRail
+        self.step_panel = self.trainsetStepList
         self.stack = self.trainsetWorkflowStack
-
-        for index in range(self.step_list.count()):
-            self.step_list.item(index).setData(Qt.UserRole, index)
+        for index in range(len(self.STEPS)):
+            self._show_step(index)
         self.step_list.currentRowChanged.connect(self._step_selected)
 
         for layout, page in (
@@ -44,8 +54,20 @@ class ShellLayoutMixin:
             (self.monitorPageHostLayout, self._monitor_page()),
         ):
             layout.addWidget(page)
+        self._keep_fields_beside_labels()
 
         self.trainsetContentSplitter.setStretchFactor(1, 1)
+        info = getattr(self, "design_info", None)
+        if info is not None:
+            # A long reference file name must not widen the preview pane (and so force the
+            # stacked layout); the full path stays in the Reference file field.
+            info.setMinimumWidth(120)
+        for name in ("full_detector_canvas", "roi_design_canvas", "masked_design_canvas", "mask_only_canvas"):
+            canvas = getattr(self, name, None)
+            if canvas is not None:
+                # The design preview shares a 1280 × 800 window with its hint, display bar and
+                # file info: a smaller canvas scales the whole image down instead of being cut.
+                canvas.setMinimumHeight(150)
         self._polish_workflow_shell()
         self.back_button.clicked.connect(
             lambda: self.step_list.setCurrentRow(max(0, self.step_list.currentRow() - 1))
@@ -53,6 +75,16 @@ class ShellLayoutMixin:
         self.step_list.setCurrentRow(0)
         QTimer.singleShot(0, self._apply_responsive_layout)
         QTimer.singleShot(80, self._apply_responsive_layout)
+
+    def _keep_fields_beside_labels(self) -> None:
+        """A capped number or choice field sits at the left of its cell, right beside its label: aligned, its
+        column may still grow (the free width stays empty instead of widening the label column)."""
+        for widget in self.fields.values():
+            if isinstance(widget, (QSpinBox, QDoubleSpinBox, QComboBox)):
+                parent = widget.parentWidget()
+                layout = parent.layout() if parent is not None else None
+                if layout is not None:
+                    _align_left(layout, widget)
 
     def _polish_workflow_shell(self) -> None:
         """Clarify project actions without changing their connected commands."""
@@ -93,20 +125,54 @@ class ShellLayoutMixin:
         ):
             self.trainsetActionGrid.addWidget(button, 0, column)
 
-    def set_step_state(self, index: int, state: str) -> None:
+    def set_step_state(self, index: int, state: str, **values) -> None:
+        """The state line of step ``index`` in English ("Reference loaded"; a template with ``values``, as
+        "Job {job}"): shown in the interface language, its colour from the state (step_rail.rail_state)."""
         if not 0 <= index < len(self.STEPS):
             return
-        self._step_states[index] = state
-        item = self.step_list.item(index)
-        item.setText(f"{index + 1}.  {self.STEPS[index]}\n{state}")
-        item.setToolTip(state)
+        self._step_states[index] = str(state).format(**values) if values else str(state)
+        self._step_values[index] = (str(state), dict(values))
+        self._show_step(index)
+
+    def _show_step(self, index: int) -> None:
+        template, values = self._step_values[index] or (self._step_states[index], {})
+        shown = trf(template, **values) if values else tr(template)
+        self.step_list.set_row_state(index, self._step_states[index], shown)
+
+    def set_validation_state(self, text: str, state: str) -> None:
+        """Badge text (English, shown translated) and its colour state: pending, ok, warn or error."""
+        self._validation_text = str(text)
+        self.validation_badge.setText(tr(text))
+        set_state(self.validation_badge, "state", state)
+
+    def validation_state(self) -> str:
+        return str(self.validation_badge.property("state") or "pending")
+
+    def validation_text(self) -> str:
+        """The badge text in English (what set_validation_state was given)."""
+        return self._validation_text
 
     def set_design_stage_ready(self, index: int, ready: bool = True) -> None:
         if not 0 <= index < len(self._design_stage_ready):
             return
         self._design_stage_ready[index] = ready
         labels = ("Full detector", "ROI", "Masked image", "Mask only")
-        self.design_tabs.setTabText(index, f"{'✓ ' if ready else ''}{labels[index]}")
+        self.design_tabs.setTabText(index, ("✓ " if ready else "") + tr(labels[index]))
+
+    def step_states(self) -> list:
+        """The state line of each workflow step (as given to set_step_state)."""
+        return list(self._step_states)
+
+    def step_entries(self) -> list:
+        """Each step's (English template, values), so ``set_step_state(i, template, **values)`` shows it again
+        in either language ("Job {job}" stays a template, not the composed "Job 4711")."""
+        return [
+            (entry[0], dict(entry[1])) if entry is not None else (state, {})
+            for entry, state in zip(self._step_values, self._step_states)
+        ]
+
+    def design_stages_ready(self) -> list:
+        return list(self._design_stage_ready)
 
     def _scroll(self, content: QWidget) -> QScrollArea:
         area = QScrollArea()
@@ -117,7 +183,8 @@ class ShellLayoutMixin:
 
     def _spin(self, path: str, value: int, minimum: int = 0, maximum: int = 100000000) -> QSpinBox:
         widget = QSpinBox()
-        widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        widget.setMaximumWidth(NUMBER_FIELD_MAX_WIDTH)
         widget.setMinimumWidth(72)
         widget.setRange(minimum, maximum)
         widget.setValue(value)
@@ -133,7 +200,8 @@ class ShellLayoutMixin:
         decimals: int = 6,
     ) -> QDoubleSpinBox:
         widget = QDoubleSpinBox()
-        widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        widget.setMaximumWidth(NUMBER_FIELD_MAX_WIDTH)
         widget.setMinimumWidth(82)
         widget.setRange(minimum, maximum)
         widget.setDecimals(decimals)
@@ -150,11 +218,10 @@ class ShellLayoutMixin:
 
     def _combo(self, path: str, values, current: Optional[str] = None) -> QComboBox:
         widget = QComboBox()
-        widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        widget.setMaximumWidth(NUMBER_FIELD_MAX_WIDTH)
         widget.setMinimumWidth(90)
-        widget.addItems(list(values))
-        if current and widget.findText(current) >= 0:
-            widget.setCurrentText(current)
+        fill_values(widget, values, current)  # the item data is the configuration value
         self.fields[path] = widget
         return widget
 
@@ -251,3 +318,15 @@ class ShellLayoutMixin:
                 controls["vmin"].value(),
                 controls["vmax"].value(),
             )
+
+
+def _align_left(layout, widget) -> bool:
+    """Align ``widget`` left in ``layout`` or in one of its nested layouts; whether it was found."""
+    if layout.setAlignment(widget, Qt.AlignLeft | Qt.AlignVCenter):
+        widget.updateGeometry()  # the layout item caches its maximum size: drop it, the aligned item may grow
+        return True
+    for index in range(layout.count()):
+        child = layout.itemAt(index).layout()
+        if child is not None and _align_left(child, widget):
+            return True
+    return False

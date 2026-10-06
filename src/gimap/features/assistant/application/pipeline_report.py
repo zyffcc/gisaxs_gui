@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from ..domain import assessment
 from .gisaxs_report import gisaxs_batch_table, gisaxs_sections
 
 OPTION_FLAGS = {
@@ -18,7 +19,41 @@ OPTION_FLAGS = {
     "energy_kev": "--energy-kev E",
     "incidence_deg": "--incidence-deg A",
     "pixel_size_um": "--pixel-size-um P",
+    "technique": "--technique giwaxs|gisaxs",
 }
+"""The command-line flag that answers an open question (``needs_attention[].option``; MCP: the argument of that name)."""
+
+
+def compact_report(report: dict) -> dict:
+    """The report without the full tables, the calibration record and the fitted arrays (kept in report.json)."""
+    compact = {key: value for key, value in report.items() if key not in ("tables", "calibration")}
+    fit = (compact.get("gisaxs") or {}).get("fit")
+    if fit:
+        compact["gisaxs"] = {**compact["gisaxs"], "fit": {
+            key: value for key, value in fit.items() if key not in ("data", "best_curve", "curves", "native")}}
+    if compact.get("peaks"):
+        compact["peaks"] = [
+            {**peak, "fit": {key: value for key, value in peak["fit"].items() if key not in ("x", "y", "sigma")}}
+            if peak.get("fit") else peak for peak in compact["peaks"]
+        ]
+    return compact
+
+
+def calibration_quality(result: Optional[dict]) -> Optional[dict]:
+    """How good the calibration a run used is: its assessment, the standard and the line check."""
+    if not result:
+        return None
+    if result.get("from_file"):
+        return {"assessment": "a saved calibration file (not re-checked against a standard image)", "warnings": []}
+    check = result.get("line_check") or {}
+    return {
+        "assessment": assessment(result),
+        "standard": result.get("standard"),
+        "lines_checked": check.get("lines_checked"),
+        "mean_line_q_error_percent": None if check.get("mean_relative") is None else round(100 * check["mean_relative"], 3),
+        "matched_rings": result.get("matched_rings"),
+        "warnings": list(result.get("warnings") or ()),
+    }
 
 
 def _number(value, digits: int = 4) -> str:
@@ -97,8 +132,12 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
     name = title or Path(frame).name or "frame"
     attention = report.get("needs_attention") or []
     state = "OK" if report.get("ok") and not attention else ("NEEDS INPUT" if attention else "FAILED")
+    if report.get("failed"):  # ended early (the frame changed, the file could not be read): its point says why
+        state = "FAILED"
     gisaxs = report.get("procedure") == "gisaxs"
-    lines = [f"# {'GISAXS' if gisaxs else 'GIWAXS'} — {name}", "", f"Status: **{state}**  ", f"File: `{frame}`", ""]
+    undecided = _no_technique(report)
+    heading = "GISAXS" if gisaxs else ("GIMaP" if undecided else "GIWAXS")
+    lines = [f"# {heading} — {name}", "", f"Status: **{state}**  ", f"File: `{frame}`", ""]
     if attention:
         lines += ["## 需要处理 / Needs attention (answer, then run again)", ""]
         for number, item in enumerate(attention, 1):
@@ -130,13 +169,25 @@ def pipeline_markdown(report: dict, *, title: Optional[str] = None) -> str:
         f"{number}. `{step['tool']}` {'ERROR ' if step.get('error') else ''}{step.get('summary', '')}"
         for number, step in enumerate(report.get("steps") or [], 1)
     ]
-    lines += ["", (
-        "q in Å⁻¹, sizes and distances in nm. The fit compares particle families; the model is a choice, "
-        "not a measurement." if gisaxs else
-        "Sizes are Scherrer lower bounds (no instrumental width subtracted). Phases are not assigned: "
-        "name the material to compare q with known lines."
-    )]
+    if not undecided:
+        lines += ["", (
+            "q in Å⁻¹, sizes and distances in nm. The fit compares particle families; the model is a choice, "
+            "not a measurement." if gisaxs else
+            "Sizes are Scherrer lower bounds (no instrumental width subtracted). Phases are not assigned: "
+            "name the material to compare q with known lines."
+        )]
     return "\n".join(lines) + "\n"
+
+
+def _no_technique(report: dict) -> bool:
+    """Neither procedure ran and none was chosen: Auto had no geometry to tell the technique from, or the run
+    ended at the frame itself (not read, not open). Such a report is titled "GIMaP", not "GIWAXS"."""
+    if report.get("ok") or report.get("procedure") == "geometry":
+        return False
+    decided = [item for item in report.get("decisions") or () if item.get("what") == "technique"]
+    if decided:
+        return decided[-1].get("decision") == "none"
+    return any(item.get("item") == "frame" for item in report.get("needs_attention") or ())
 
 
 SAME_Q = 0.003
@@ -171,9 +222,13 @@ def batch_markdown(reports: list[dict]) -> str:
         attention = report.get("needs_attention") or []
         if report.get("error"):
             return f"error: {report['error']}"
+        if report.get("failed"):
+            return f"failed: {report['failed']}"
         return "OK" if report.get("ok") and not attention else ("needs input" if attention else "failed")
 
-    gisaxs = bool(reports) and all(report.get("procedure") == "gisaxs" or report.get("error") for report in reports)
+    gisaxs = any(not report.get("error") for report in reports) and all(
+        report.get("procedure") == "gisaxs" or report.get("error") for report in reports
+    )
     lines = [f"# {'GISAXS' if gisaxs else 'GIWAXS'} — batch", "", f"{len(reports)} frame(s); each has its own report.md.", ""]
     if gisaxs:
         questions = {item["item"]: item for report in reports for item in report.get("needs_attention") or []}
@@ -192,10 +247,7 @@ def batch_markdown(reports: list[dict]) -> str:
         attention = report.get("needs_attention") or []
         for item in attention:
             questions.setdefault(item["item"], item)
-        if report.get("error"):
-            state = f"error: {report['error']}"
-        else:
-            state = "OK" if report.get("ok") and not attention else ("needs input" if attention else "failed")
+        state = state_of(report)
         peaks = ", ".join(
             f"{peak['q']:.3f}" + ("*" if peak.get("caveat") else "") for peak in report.get("peaks") or [] if peak.get("q")
         ) or "—"
@@ -301,7 +353,7 @@ def series_markdown(start: dict, end: dict) -> str:
         return f"{first}–{first + summed - 1}"
 
     lines = [
-        "## Start versus end of the series", "",
+        "## 序列 / Start versus end of the series", "",  # bilingual like the report's other sections
         f"Frames {frames(start)} compared with frames {frames(end)}. Reliable peaks only; peaks closer than "
         "half their width are the same line.", "",
         "| q (Å⁻¹) | at the start | at the end | change |", "|---|---|---|---|",
@@ -328,6 +380,6 @@ def ring_overlays(report: dict) -> list[dict]:
 
 
 __all__ = [
-    "OPTION_FLAGS", "SAME_Q", "batch_markdown", "common_peaks", "peak_markers", "pipeline_markdown", "ring_overlays",
-    "series_changes", "series_markdown",
+    "OPTION_FLAGS", "SAME_Q", "batch_markdown", "calibration_quality", "common_peaks", "compact_report", "peak_markers",
+    "pipeline_markdown", "ring_overlays", "series_changes", "series_markdown",
 ]

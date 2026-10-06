@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.presentation.components import FlowLayout
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
@@ -33,6 +34,8 @@ from .workflow_components import (
     PredictionDisclosure,
     PredictionInputModePanel,
 )
+
+PREDICT_CARD_MIN_WIDTH = 300  # below the shared 360: rail and canvas fit a 1024 px window
 
 
 def _take_widget(layout, widget: QWidget) -> None:
@@ -145,6 +148,10 @@ class GisaxsPredictWorkspace:
         self.model_card = self._build_model_card(contents)
         self.run_card = self._build_run_card(contents)
         self.results_card = self._build_results_card(contents)
+        for card in (self.input_card, self.model_card, self.run_card, self.results_card):
+            # Narrower than the shared section minimum (360), so the control rail and the canvas
+            # column both fit the smallest window (1024 px) without clipping.
+            card.setMinimumWidth(PREDICT_CARD_MIN_WIDTH)
         self.model_library_card = PredictModelLibraryCard(contents, self.profile)
         self.model_library_card.set_expanded(True)
         workspace_ui.predictionInputContentLayout.addWidget(self.input_card)
@@ -153,11 +160,12 @@ class GisaxsPredictWorkspace:
         workspace_ui.predictionPreviewContentLayout.addWidget(self.results_card)
         workspace_ui.predictionRunContentLayout.addWidget(self.run_card)
 
+        # The "Run Log" title is kept for compatibility but sits in no layout: the Activity log
+        # disclosure already names the log.
         _detach_from_parent_layout(self.ui.gisaxsPredictRunLogTitle)
+        self.ui.gisaxsPredictRunLogTitle.setParent(workspace_ui.predictionResultsContent)
+        self.ui.gisaxsPredictRunLogTitle.hide()
         _detach_from_parent_layout(self.ui.predictStatusTextBrowser)
-        workspace_ui.predictionResultsContentLayout.addWidget(
-            self.ui.gisaxsPredictRunLogTitle
-        )
         workspace_ui.predictionResultsContentLayout.addWidget(
             self.ui.predictStatusTextBrowser
         )
@@ -317,47 +325,47 @@ class GisaxsPredictWorkspace:
         self.ui.gisaxsPredictStopButton.setVisible(False)
         normalize_button(self.ui.gisaxsPredictStopButton)
 
-        status_grid = QGridLayout()
-        status_grid.setContentsMargins(0, 0, 0, 0)
-        status_grid.setHorizontalSpacing(CARD_SPACING)
-        status_grid.setVerticalSpacing(4)
+        # Input, Model and Framework chips in one row that wraps when narrow (the mode selector
+        # already shows the mode). Their roles: success when done, muted while pending, error
+        # only for a real failure (see InputParametersMixin._refresh_predict_readiness).
+        status_row = FlowLayout(spacing=6)
         self.ui.gisaxsPredictInputReadyLabel = QLabel("Input: Missing", run)
         self.ui.gisaxsPredictModelReadyLabel = QLabel("Model: Not loaded", run)
         self.ui.gisaxsPredictFrameworkReadyLabel = QLabel("Framework: Checking", run)
-        self.ui.gisaxsPredictModeLabel = QLabel("Mode: Single File", run)
         for label in (
             self.ui.gisaxsPredictInputReadyLabel,
             self.ui.gisaxsPredictModelReadyLabel,
             self.ui.gisaxsPredictFrameworkReadyLabel,
-            self.ui.gisaxsPredictModeLabel,
         ):
             label.setProperty("predictionReadiness", True)
-        status_grid.addWidget(self.ui.gisaxsPredictInputReadyLabel, 0, 0)
-        status_grid.addWidget(self.ui.gisaxsPredictModelReadyLabel, 0, 1)
-        status_grid.addWidget(self.ui.gisaxsPredictFrameworkReadyLabel, 1, 0)
-        status_grid.addWidget(self.ui.gisaxsPredictModeLabel, 1, 1)
+            label.setProperty("gimapRole", "muted")
+            status_row.addWidget(label)
 
         self.ui.gisaxsPredictPredictButton.setProperty("gimapPrimaryAction", True)
         self.ui.gisaxsPredictStopButton.setProperty("gimapDangerAction", True)
+        # Shown only while Predict is disabled (InputParametersMixin._refresh_predict_readiness),
+        # beside the button so the sticky card stays one row shorter.
+        readiness_hint = QLabel(
+            "Prediction becomes available when input, model and framework are ready.", run
+        )
+        readiness_hint.setObjectName("gisaxsPredictReadinessHint")
+        readiness_hint.setProperty("cardMeta", True)
+        readiness_hint.setWordWrap(True)
+        self.ui.gisaxsPredictReadinessHint = readiness_hint
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
+        button_row.addWidget(readiness_hint, 1)
         button_row.addWidget(self.ui.gisaxsPredictPredictButton, 1)
         button_row.addWidget(self.ui.gisaxsPredictStopButton)
 
         log_title = QLabel("Run Log", run)
         log_title.setObjectName("gisaxsPredictRunLogTitle")
         log_title.setProperty("sectionTitle", True)
+        log_title.hide()
         self.ui.gisaxsPredictRunLogTitle = log_title
 
-        layout.addLayout(status_grid)
-        readiness_hint = QLabel(
-            "Prediction becomes available when input, model and framework are ready.", run
-        )
-        readiness_hint.setProperty("cardMeta", True)
-        readiness_hint.setWordWrap(True)
-        layout.addWidget(readiness_hint)
+        layout.addLayout(status_row)
         layout.addLayout(button_row)
-        layout.addWidget(log_title)
         layout.addWidget(self.ui.predictStatusTextBrowser)
 
         card.add_content(run)
@@ -390,6 +398,17 @@ class GisaxsPredictWorkspace:
         self.activity_disclosure = self.workbench_layout.activity_disclosure
         self.input_empty_state = self.workbench_layout.input_empty_state
         self.result_empty_state = self.workbench_layout.result_empty_state
+
+    def refresh_language(self) -> None:
+        """The shell calls this after a switch of the interface language: the Prediction binding composes its
+        run-time texts again (it registers ``ui.predictionRefreshLanguage``); without one, the layout's own."""
+        refresh = getattr(self.ui, "predictionRefreshLanguage", None)
+        if refresh is not None:
+            refresh()
+            return
+        for part in (getattr(self, "input_mode_panel", None), getattr(self, "workbench_layout", None)):
+            if part is not None:
+                part.refresh_language()
 
     def apply_responsive_profile(self, profile) -> None:
         self.profile = profile

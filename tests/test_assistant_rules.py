@@ -28,6 +28,7 @@ from src.gimap.features.assistant.domain import (
     scherrer_size,
     standard_from_name,
 )
+from src.gimap.features.analyze.domain import find_bad_pixels
 from src.gimap.features.calibration.domain import STANDARDS, best_by_lines, check_lines, detect_standard_keys
 
 
@@ -59,6 +60,101 @@ def test_a_spike_is_flagged_and_completes_no_series() -> None:
     assert not search.series, search.series
     real = find_peaks(_profile((*lamellar, (2.16, 0.035, 5.0))))
     assert any(hint.startswith("q = 0.72") and "lamellar" in hint for hint in real.series), real.series
+
+
+Q0, Q_PER_PIXEL = 1.0, 0.0017
+
+
+def _radial(image: np.ndarray, valid: np.ndarray, radius: np.ndarray) -> Profile:
+    """I(q) of a flat detector: mean counts of the valid pixels per one-pixel radius bin, q linear in radius."""
+    index = np.floor(radius[valid]).astype(int)
+    pixels = np.bincount(index)
+    sums = np.bincount(index, weights=image[valid].astype(float))
+    filled = pixels > 0
+    r = np.flatnonzero(filled) + 0.5
+    return Profile.of(
+        Q0 + Q_PER_PIXEL * r, sums[filled] / pixels[filled], np.sqrt(np.maximum(sums[filled], 1.0)) / pixels[filled],
+        pixels[filled],
+    )
+
+
+def _q(radius: float) -> float:
+    return Q0 + Q_PER_PIXEL * radius
+
+
+def test_a_detector_row_is_never_a_reflection_with_or_without_the_bad_pixel_mask() -> None:
+    # Two defective detector rows, one ring. Row A has scattered bright pixels near the beam's column: it runs
+    # along a ring, so in I(q) it is a spike one or two bins wide. The bad-pixel finder removes it as a defective
+    # line. Row B is stuck: a continuous run of one value, which the finder leaves alone (continuous is how real
+    # rods look). It crosses the rings at a slant, so in I(q) it is a box ~27 bins wide, ~3× the background,
+    # with a comb on top (one or two of its pixels per bin). Once row A was masked, row B was what remained, and
+    # its box was reported as a reliable reflection: not resolution-limited, so not a spike.
+    rng = np.random.default_rng(5)
+    rows, columns = np.indices((600, 600))
+    radius = np.hypot(rows - 595.0, columns - 60.0)
+    ring = 30.0 * np.exp(-0.5 * ((radius - 250.0) / (12.0 / 2.3548)) ** 2)
+    image = rng.poisson(2.0 + 300.0 / np.maximum(radius, 30.0) + ring).astype(np.float32)
+    scattered = np.array([28, 29, 35, 41, 42, 50, 57, 58, 66, 73, 74, 82, 90, 91])
+    image[145, scattered] = rng.integers(10_000, 400_000, scattered.size)  # row A: radius 450, singly and in pairs
+    image[265, 250:301] = 3000.0  # row B: radius 381–408
+    valid = np.ones(image.shape, dtype=bool)
+    bad = find_bad_pixels(image, valid)
+    assert bad.mask[145, scattered].all() and not bad.mask[265, 250:301].any()
+
+    masked = find_peaks(_radial(image, valid & ~bad.mask, radius))
+    assert not any(abs(peak.q - _q(450.0)) < 0.01 for peak in masked.peaks)  # row A never reaches the curve
+    box = [peak for peak in masked.peaks if _q(381.0) <= peak.q <= _q(408.0)]
+    assert box and all(caveat(peak) for peak in box), [(peak.q, peak.flags) for peak in box]
+    fitted = [peak for peak in box if peak.window]
+    assert fitted and all({"step_edges", "spike"} <= set(peak.flags) for peak in fitted)
+    assert caveat(fitted[0]).startswith("a spike")  # the peak table's word for it: artefact (spike)
+    real = min(masked.peaks, key=lambda peak: abs(peak.q - _q(250.0)))
+    assert abs(real.q - _q(250.0)) < 0.002 and not caveat(real)
+
+    unmasked = find_peaks(_radial(image, valid, radius))  # the Mask step's "Leave out hot and dead pixels" off
+    spike = min(unmasked.peaks, key=lambda peak: abs(peak.q - _q(450.5)))
+    assert abs(spike.q - _q(450.5)) < 0.002 and {"resolution_limited", "spike"} <= set(spike.flags)
+
+
+def test_a_box_is_an_artefact_and_a_peak_of_its_width_and_height_is_not() -> None:
+    profile = _profile(((1.2, 0.03, 12.0),))
+    counts = profile.y.copy()
+    box = (profile.x >= 1.80) & (profile.x < 1.83)  # 24 bins, about 2.5× the background, edges within a bin
+    counts[box] += 12.0
+    search = find_peaks(Profile.of(profile.x, counts, profile.sigma, profile.pixels))
+    flat = min(search.peaks, key=lambda peak: abs(peak.q - 1.815))
+    assert abs(flat.q - 1.815) < 0.005 and "step_edges" in flat.flags and caveat(flat).startswith("a spike")
+    assert flat.height < 5.0 * flat.background  # the spike rule's height test would not have caught it
+    gaussian = min(search.peaks, key=lambda peak: abs(peak.q - 1.2))
+    assert abs(gaussian.q - 1.2) < 0.002 and not gaussian.flags and not caveat(gaussian)
+
+
+def test_two_overlapping_reflections_are_not_a_box() -> None:
+    # Two reflections about one width apart make one flat-topped maximum, about four times wider than its edges:
+    # a box by width alone. Their edges are those of the peaks, not a step within one bin (wide pair), or the
+    # whole maximum is too narrow to tell from two sharp peaks (sharp pair): reflections, not artefacts.
+    pairs = (((1.48625, 0.025, 2.0), (1.51375, 0.025, 2.0)), ((1.49625, 0.00625, 2.0), (1.50375, 0.00625, 2.0)))
+    for pair in pairs:
+        for seed in (1, 5):
+            search = find_peaks(_profile(pair, seed=seed))
+            near = [peak for peak in search.peaks if abs(peak.q - 1.5) < 0.05]
+            assert near and not any({"step_edges", "spike"} & set(peak.flags) for peak in near), (
+                pair[0][1], seed, [(round(peak.q, 4), round(peak.fwhm, 4), peak.flags) for peak in near],
+            )
+            assert any(not caveat(peak) for peak in near)
+
+
+def test_a_peak_with_a_shoulder_is_not_swallowed_by_a_broad_fit() -> None:
+    # The peak's half maximum runs into a broad shoulder on one side, so it looks about three times wider than it
+    # is. The Gaussian started that wide settled on peak + shoulder as one broad "halo" away from the peak, and the
+    # reflection was lost (seen on real data once the radial bins followed the pixels' q step). A fit that leaves
+    # the candidate's own half-maximum span is redone with the width of its cleaner flank.
+    for seed in (1, 9, 11):
+        search = find_peaks(_profile(((1.40, 0.08, 1.0), (1.55, 0.25, 1.0)), seed=seed))
+        peak = min(search.peaks, key=lambda item: abs(item.q - 1.40))
+        assert abs(peak.q - 1.40) < 0.015 and abs(peak.fwhm - 0.08) < 0.015 and not caveat(peak), (
+            seed, [(round(item.q, 3), round(item.fwhm, 3), item.flags) for item in search.peaks],
+        )
 
 
 def test_a_halo_is_flagged_and_a_sharp_peak_on_it_is_kept() -> None:

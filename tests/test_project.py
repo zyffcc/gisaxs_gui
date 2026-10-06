@@ -80,13 +80,15 @@ def test_a_project_reopens_analyze_and_fitting_as_they_were(tmp_path) -> None:
     assert (tmp_path / "sample.compare.npz").exists()  # the map from Analyze, next to the project
     record = json.loads(path.read_text(encoding="utf-8"))
     assert record["format"] == "gimap-project" and record["analyze"]["files"] == [str(GALAXI)]
-    assert window.windowTitle() == "GIMaP — sample"
+    assert window.windowTitle() == "GIMaP — sample · galaxi_data.tif"  # the project and the frame shown
     before = analyze.project_state()["settings"]
     window.close()
 
     again = _window()
     assert again.menus.open_project(path)
     again.components.analyze_page.tasks.wait(120)
+    assert again.menus.project_path == str(path)  # clearing Analyze while the project opens keeps it
+    assert again.windowTitle() == "GIMaP — sample · galaxi_data.tif"
     reopened = again.components
     assert [str(p) for p in reopened.analyze_page.view_model.state.files] == [str(GALAXI)]
     after = reopened.analyze_page.project_state()["settings"]
@@ -105,6 +107,84 @@ def test_a_project_reopens_analyze_and_fitting_as_they_were(tmp_path) -> None:
     assert [item.name for item in reopened.compare_page.series] == ["map run", folder.name]
     assert reopened.compare_page.series[0].rows == 6 and reopened.compare_page.series[1].paths
     again.close()
+
+
+@pytest.mark.skipif(not GALAXI.exists(), reason="GALAXI example not present")
+def test_save_project_after_clear_asks_for_a_file_and_keeps_the_project(tmp_path, monkeypatch) -> None:
+    from src.gimap.app import menus as menus_module
+
+    window = _window()
+    menus, analyze = window.menus, window.components.analyze_page
+    assert window.windowTitle() == "GIMaP"
+    analyze.add_paths([str(GALAXI)])
+    analyze.tasks.wait(120)
+    assert window.windowTitle() == "GIMaP — galaxi_data.tif"
+    project_a = tmp_path / "A.gimap"
+    assert menus._write_project(project_a)
+
+    asked = []
+    monkeypatch.setattr(menus_module, "ask_save_json", lambda *args, **kwargs: asked.append(args) or "")
+    assert menus.open_project(project_a)
+    analyze.tasks.wait(120)
+    QApplication.processEvents()
+    assert menus.project_path == str(project_a) and window.windowTitle() == "GIMaP — A · galaxi_data.tif"
+    assert menus.save_project() and asked == []  # the open project is saved without asking
+
+    saved = project_a.read_text(encoding="utf-8")
+    analyze.clear_files()
+    if not hasattr(type(analyze), "filesCleared"):  # the Analyze package adds the signal
+        menus._files_cleared()
+    assert menus.project_path == "" and window.windowTitle() == "GIMaP"
+    analyze.add_paths([str(GALAXI)])
+    analyze.tasks.wait(120)
+    QApplication.processEvents()
+    assert window.windowTitle() == "GIMaP — galaxi_data.tif"
+    assert menus.save_project() is False and len(asked) == 1  # Save As…, cancelled
+    assert project_a.read_text(encoding="utf-8") == saved
+    window.close()
+
+
+def test_a_project_does_not_open_while_a_series_runs(tmp_path, monkeypatch) -> None:
+    """Opening a project under a running In-situ series would leave the series going on under it, and Save
+    would write its frames into that project: refused before anything is asked or applied."""
+    from src.gimap.app import menus as menus_module
+    from src.gimap.app import project
+
+    window = _window()
+    menus, workspace = window.menus, window.components.fitting_workspace
+    other = menus._write_project(tmp_path / "other.gimap") and Path(menus.project_path)
+    menus.project_path = str(tmp_path / "current.gimap")
+    menus._sync_title()
+    recent = list(window.app_context.preferences.get("recent_projects", []))
+    folder = _series(tmp_path)
+    single, series = workspace.fit_page, workspace.series_page
+    single.open_curve(folder / "run_00001_fit_input.dat")
+    single.set_model(FitModel((new_component("cylinder", radius=4.2),)))
+    series.open_series(folder)
+    series.start()
+    assert series.running
+    before = series.project_state()
+    warned, asked, applied = [], [], []
+    monkeypatch.setattr(menus_module, "warn", lambda _parent, title, text: warned.append((title, text)))
+    monkeypatch.setattr(menus_module, "ask_open_json", lambda *args, **kwargs: asked.append(args) or str(other))
+    monkeypatch.setattr(project, "apply", lambda *args, **kwargs: applied.append(args) or [])
+    try:
+        assert menus.open_project(other) is False
+        assert menus.open_project() is False and asked == []  # not even a file is asked for
+        assert warned == [("Open Project", "Stop In-situ series first, then open the project.")] * 2
+        assert applied == [] and series.running and series.project_state() == before
+        assert menus.project_path == str(tmp_path / "current.gimap") and window.windowTitle() == "GIMaP — current"
+        assert window.app_context.preferences.get("recent_projects", []) == recent
+    finally:
+        series.stop()
+        end = time.monotonic() + 60
+        while series.running and time.monotonic() < end:
+            QApplication.processEvents()
+            time.sleep(0.02)
+    assert not series.running
+    monkeypatch.undo()
+    assert menus.open_project(other) and menus.project_path == str(other)  # with the series done it opens
+    window.close()
 
 
 def test_a_file_that_is_not_a_project_is_refused(tmp_path) -> None:

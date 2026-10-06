@@ -22,7 +22,7 @@ from PyQt5.QtCore import QSignalBlocker
 from PyQt5.QtWidgets import QFileDialog
 
 from src.gimap.app.presentation.components import POINT, show_toast
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import (
     GISAXS,
@@ -35,6 +35,7 @@ from ...application import (
     region_key,
     regions_from_cut_set,
 )
+from ..texts import message_text
 from .display import VIEW_CAKE, VIEW_Q_MAP
 
 PICK_PURPOSE = "region-pick"
@@ -148,7 +149,7 @@ class RegionPickMixin:
             try:
                 q, chi = self.view_model.region_at_pixel(analysis, x, y)
             except ValueError as exc:
-                self._status(str(exc), "warning")
+                self._status(message_text(exc), "warning")
                 return
         if not math.isfinite(q) or q <= 0:
             self._status(tr("No q at that point: click on the pattern."), "warning")
@@ -188,10 +189,11 @@ class RegionPickMixin:
         self.run_analysis()
         note = pick_note(pick)
         show_toast(
-            self.window(), f"{region.name} " + tr("added") + (f" — {note}" if note else ""), level="ok",
+            self.window(), trf("{name} added — {note}", name=region.name, note=note) if note else
+            trf("{name} added", name=region.name), level="ok",
             action=(tr("Undo"), lambda region=region: self._undo_region(region)),
         )
-        self._status(f"{region.name}: {note}" if note else region.name, "ok")
+        self._status(trf("{name}: {note}", name=region.name, note=note) if note else region.name, "ok")
 
     def _undo_region(self, region: CutRegion) -> None:
         regions = list(self.view_model.state.giwaxs.regions)
@@ -224,7 +226,7 @@ class RegionPickMixin:
         try:
             region = CutRegion(name, (q_low, q_high), chi_range, both)
         except ValueError as exc:
-            self._status(str(exc), "warning")
+            self._status(message_text(exc), "warning")
             return
         index = self.view_model.add_region(region)
         self._pending_region_key = region_key(index)

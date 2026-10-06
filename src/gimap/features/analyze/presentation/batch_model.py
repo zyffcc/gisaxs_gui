@@ -301,6 +301,7 @@ class BatchModelMixin:
             profile=profile,
             incidence_deg=state.incidence_deg,
             beam_center=state.beam_center,
+            beam_center_shape=self.session_center_shape() if hasattr(self, "session_center_shape") else None,
             sum_count=self.sum_count,
             corrections=state.corrections,
             giwaxs=state.giwaxs,
@@ -327,7 +328,10 @@ class BatchModelMixin:
         self.state.mode = settings.mode
         self.state.profile_name = name
         self.state.incidence_deg = settings.incidence_deg
-        self.state.beam_center = settings.beam_center
+        if settings.beam_center is None:
+            self.clear_beam_center()
+        else:
+            self.set_beam_center(*settings.beam_center, shape=settings.beam_center_shape)
         self.state.corrections = corrections
         self.state.giwaxs = settings.giwaxs
         self.state.gisaxs = settings.gisaxs

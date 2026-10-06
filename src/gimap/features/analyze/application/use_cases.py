@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, is_dataclass, replace
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -37,68 +37,12 @@ from ..domain import (
     reduce_giwaxs,
     valid_pixels,
 )
-from .models import (
-    AUTO,
-    CENTER_HEADER,
-    CENTER_PROFILE,
-    CENTER_SESSION,
-    AnalysisRequest,
-    FrameAnalysis,
-    GeometryResolution,
-)
+from .models import AUTO, AnalysisRequest, FrameAnalysis
 from .frame_preprocessing import FramePreprocessingMixin, floating
+from .geometry_resolution import ResolveGeometry, center_not_used_message
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
 
 SOFTWARE = "GIMaP Analyze 1"
-
-
-class ResolveGeometry:
-    """Pick the geometry for a frame: an explicit profile, else the best match.
-
-    The beam centre is the profile's (the calibrated one) unless the session
-    overrides it, or the user asked to trust file headers and the file has a
-    header centre.  A session override wins over the header.
-    """
-
-    def __init__(self, profiles: Optional[InstrumentProfileStore]):
-        self.profiles = profiles
-
-    def __call__(
-        self,
-        *,
-        detector_name: Optional[str],
-        shape: tuple[int, int],
-        profile_name: Optional[str] = None,
-        incidence_deg: Optional[float] = None,
-        beam_center: Optional[tuple[float, float]] = None,
-        use_header_center: bool = False,
-        header_center: Optional[tuple[float, float]] = None,
-        distance_m: Optional[float] = None,
-    ) -> GeometryResolution:
-        profile: Optional[InstrumentProfile] = None
-        how = "missing"
-        if self.profiles is not None:
-            if profile_name:
-                profile = self.profiles.find(profile_name)
-                how = "chosen" if profile is not None else "missing"
-            else:
-                profile = self.profiles.match(detector_name=detector_name, shape=shape)
-                how = "matched" if profile is not None else "missing"
-        if profile is None:
-            return GeometryResolution(None, None, "missing", header_center=header_center)
-        geometry = profile.geometry
-        source = CENTER_PROFILE
-        if beam_center is not None:
-            geometry = geometry.with_beam_center(*(float(value) for value in beam_center))
-            source = CENTER_SESSION
-        elif use_header_center and header_center is not None:
-            geometry = geometry.with_beam_center(*header_center)
-            source = CENTER_HEADER
-        if incidence_deg is not None:
-            geometry = geometry.with_incidence(float(incidence_deg))
-        if distance_m is not None:
-            geometry = replace(geometry, distance_m=float(distance_m))
-        return GeometryResolution(geometry, profile, how, source, header_center)
 
 
 class AnalyzeFrame(FramePreprocessingMixin):
@@ -224,11 +168,12 @@ class AnalyzeFrame(FramePreprocessingMixin):
             use_header_center=request.use_header_center,
             header_center=header_beam_center(common["metadata"], shape),
             distance_m=request.distance_m,
+            beam_center_shape=request.beam_center_shape,
         )
         geometry = resolution.geometry
-        kind = None if geometry is None else (
-            request.mode if request.mode != AUTO else classify_measurement(shape, geometry)
-        )
+        # What Auto would choose, in every mode: a pinned mode that disagrees is pointed out.
+        detected = None if geometry is None else classify_measurement(shape, geometry)
+        kind = None if geometry is None else (request.mode if request.mode != AUTO else detected)
         mirror_x = geometry.beam_center_x_px if geometry is not None and kind == GIWAXS else None
         common.update(self._preprocess(raw_data, raw_valid, request.corrections, common["metadata"], mirror_x))
         # Errors from counting statistics only for photon counts; otherwise from the scatter of the pixels.
@@ -247,6 +192,9 @@ class AnalyzeFrame(FramePreprocessingMixin):
             return FrameAnalysis(
                 **common, resolution=resolution, reduction=None, kind=None, messages=tuple(messages)
             )
+        unused_center = center_not_used_message(resolution, shape)
+        if unused_center:
+            messages.append(unused_center)
         profile_shape = resolution.profile.detector_shape if resolution.profile else None
         if profile_shape is not None and tuple(profile_shape) != shape:
             messages.append(
@@ -270,6 +218,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
             reduction=reduction,
             kind=kind,
             messages=tuple(messages),
+            detected_kind=detected,
         )
 
 

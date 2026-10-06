@@ -45,6 +45,7 @@ from .models import (
 from .calibration_tools import CalibrationToolsMixin
 from .operation_tools import OperationToolsMixin
 from .operations import OPERATION_TOOLS
+from .pipeline_progress import FrameChanged
 from .ports import AnalysisWorkbench, Chooser, Confirmer, CurveFitter, FileExplorer, GeometryCalibrator, ResultStore
 from .tool_specs import FINAL, WRITE, tool_specs
 
@@ -207,7 +208,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         )
         if spec.kind == WRITE and asks:
             question = self._describe_write(spec.name, arguments)
-            if self.confirmer is None or not self.confirmer.confirm("Claude wants to change something", question):
+            if self.confirmer is None or not self.confirmer.confirm("The AI wants to change something", question):
                 data = {"declined": True, "message": f"The user declined, so this was not done: {question}"}
                 return ToolOutcome(json.dumps(data), "declined by the user", data=data)
         try:
@@ -216,6 +217,9 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
             return getattr(self, f"_tool_{spec.name}")(**arguments)
         except ToolInputError as exc:
             return ToolOutcome(json.dumps({"error": str(exc)}), str(exc), is_error=True)
+        except FrameChanged as exc:  # the workbench refused to act on another file than the run's
+            data = {"error": str(exc), "frame_changed": True}
+            return ToolOutcome(json.dumps(data), f"failed: {exc}", is_error=True, data=data)
         except Exception as exc:  # a tool failure is reported to the model, never raised
             message = str(exc) or type(exc).__name__
             return ToolOutcome(json.dumps({"error": message}), f"failed: {message}", is_error=True)
@@ -308,6 +312,7 @@ class ToolCatalog(CalibrationToolsMixin, OperationToolsMixin, GisaxsToolsMixin, 
         if degrees is not None and not 0.0 < degrees < 10.0:
             raise ToolInputError("The incidence angle must be between 0 and 10 degrees (or null)")
         status = self.workbench.set_incidence(degrees)
+        self.results.status = status  # the report's geometry gives the αi the run used, not the one before it
         return self._ok(status, f"αi = {'profile' if degrees is None else f'{degrees:g}°'}")
 
     def _tool_set_sector_widths(self, in_plane_half_width_deg: float, out_of_plane_half_width_deg: float) -> ToolOutcome:

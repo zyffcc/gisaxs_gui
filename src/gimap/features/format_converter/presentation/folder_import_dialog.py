@@ -22,7 +22,8 @@ from .views import (
 
 
 class FolderImportDialog(QDialog, FolderImportDialogView):
-    def __init__(self, parent: QWidget | None = None, view_model=None):
+    def __init__(self, parent: QWidget | None = None, view_model=None, *, folder: str = ""):
+        """``folder``: where the path starts (the folder the converter last read from)."""
         super().__init__(parent)
         self.view_model = view_model or getattr(parent, "view_model", None)
         if self.view_model is None:
@@ -32,6 +33,8 @@ class FolderImportDialog(QDialog, FolderImportDialogView):
         self.paths: list[str] = []
         self.setupUi(self)
         self.setWindowIcon(app_icon())
+        if folder:
+            self.path_edit.setText(folder)
         self.browse_button.clicked.connect(self._browse)
         self.buttons.accepted.connect(self._accept_if_valid)
         self.buttons.rejected.connect(self.reject)

@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.features.prediction.application import (
     PredictionExportItem,
 )
@@ -78,7 +79,7 @@ class MultifileResultsMixin:
                 except Exception as e:
                     # 如果图像加载失败，仍然显示预测结果
                     self._append_status_message(
-                        f"Could not load image for preprocessing display: {e}", level="WARN"
+                        trf("Could not load image for preprocessing display: {error}", error=e), level="WARN"
                     )
                     self._current_image = None
                     self._display_prediction(prediction_data)
@@ -91,17 +92,17 @@ class MultifileResultsMixin:
 
                 # 更新状态
                 self._append_status_message(
-                    f"Displaying results for: {os.path.basename(result.file_path.splitlines()[0])}",
+                    trf("Displaying results for: {name}", name=os.path.basename(result.file_path.splitlines()[0])),
                     level="INFO",
                 )
             else:
                 self._append_status_message(
-                    f"No prediction data available for: {os.path.basename(result.file_path.splitlines()[0])}",
+                    trf("No prediction data available for: {name}", name=os.path.basename(result.file_path.splitlines()[0])),
                     level="WARN",
                 )
 
         except Exception as e:
-            self._append_status_message(f"Error displaying result: {e}", level="ERROR")
+            self._append_status_message(trf("Error displaying result: {error}", error=e), level="ERROR")
 
     def _on_multifile_export_requested(self, config: dict, results: List[PredictResult]) -> None:
         """多文件导出请求处理"""
@@ -136,11 +137,11 @@ class MultifileResultsMixin:
             if config.get("ascii", False):
                 self._export_results_ascii(completed_results, export_path, timestamp)
 
-            self._append_status_message(f"Export completed to {export_path}", level="INFO")
+            self._append_status_message(trf("Export completed to {path}", path=export_path), level="INFO")
 
         except Exception as e:
-            QMessageBox.critical(self.main_window, "Export Error", f"Export failed: {e}")
-            self._append_status_message(f"Export error: {e}", level="ERROR")
+            QMessageBox.critical(self.main_window, "Export Error", trf("Export failed: {error}", error=e))
+            self._append_status_message(trf("Export error: {error}", error=e), level="ERROR")
 
     def _on_multifile_prediction_started(self) -> None:
         """多文件预测开始"""
@@ -149,7 +150,7 @@ class MultifileResultsMixin:
         btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
         if btn:
             btn.setEnabled(False)
-            btn.setText("Predicting...")
+            btn.setText(tr("Predicting..."))
         stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
         if stop_btn:
             stop_btn.setEnabled(True)
@@ -163,7 +164,7 @@ class MultifileResultsMixin:
         btn = getattr(self.ui, "gisaxsPredictPredictButton", None)
         if btn:
             btn.setEnabled(True)
-            btn.setText("Predict")
+            btn.setText(tr("Predict"))
         stop_btn = getattr(self.ui, "gisaxsPredictStopButton", None)
         if stop_btn:
             stop_btn.setEnabled(False)
@@ -183,9 +184,11 @@ class MultifileResultsMixin:
                         result.file_path.splitlines()[0] if result.file_path else result.file_name
                     )
                     stack_count = max(1, int(getattr(result, "stack_count", 1)))
+                    template = "Running stack ({count} file): {name}" if stack_count == 1 else (
+                        "Running stack ({count} files): {name}"
+                    )
                     self._append_status_message(
-                        f"Running stack ({stack_count} file{'s' if stack_count != 1 else ''}): {os.path.basename(first)}",
-                        level="INFO",
+                        trf(template, count=stack_count, name=os.path.basename(first)), level="INFO"
                     )
 
     def _on_multifile_progress_updated(self, completed: int, total: int) -> None:
@@ -294,7 +297,7 @@ class MultifileResultsMixin:
             return loaded.image
         self._append_status_message(
             self.prediction_view_model.state.error_message
-            or f"Failed to load CBF file {file_path}",
+            or trf("Failed to load CBF file {path}", path=file_path),
             level="ERROR",
         )
         return None
@@ -313,4 +316,4 @@ class MultifileResultsMixin:
             qimage.save(image_path, "JPEG", 90)
 
         except Exception as e:
-            self._append_status_message(f"Failed to save image {image_path}: {e}", level="WARN")
+            self._append_status_message(trf("Failed to save image {path}: {error}", path=image_path, error=e), level="WARN")

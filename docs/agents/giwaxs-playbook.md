@@ -1,187 +1,182 @@
-# GIWAXS 处理手册（给 agent：Codex、Claude Code、GUI 里的 Claude、脚本）
+# GIWAXS 处理手册
 
-原则：**判断交给代码，好奇心留给 agent。**
+适用于命令行 agent（Codex、Claude Code、脚本）和 MCP 客户端。GISAXS 见 [gisaxs-playbook.md](gisaxs-playbook.md)，
+仓库规则见 `AGENTS.md`。GIMaP 里的 Process with AI 不读这份手册：它的提示在
+`src/gimap/features/assistant/application/prompts.py`，改这里的规则时要同步改那里。
 
-- GIMaP 的工具负责有确定答案的判断：标定好不好、哪个峰是伪影、一个环能不能算取向、
-  笔记里有没有唯一的 αi。它们给出结论和理由，任何模型读到的都一样。
-- agent 负责有问题要问的部分：看什么、比较什么、结果对用户的问题意味着什么。
+## 底线
 
-手册分两层。第一层每个 agent 都做，弱 agent 做到这里就合格；第二层是能力够的 agent
-在基线之上该做的事。基线的每个决定都是**默认值，不是上限**。
+1. **测量值只来自工具。** 界面和 JSON 记录能复现的就是这些值。自己算的派生量（比值、d、晶格常数）要写出算式和
+   用到的工具数值。
+2. **数据目录只读。** 那是用户的、常常未发表的数据；所有输出写到 `--out`。命令行和 MCP 本来就不往数据旁边写；
+   GUI 里则不同：`export_results` 写到数据旁边的 `gimap_analysis/`，只在用户要文件时调用。GUI 里的 `use_geometry`
+   会把几何存成磁盘上的仪器配置，之后命令行默认会用它（Decisions 会写明）。
+3. **不编参数。** 能量猜错，所有 q 都跟着缩放；αi 猜错，qz 跟着偏。去头文件、笔记、日志、幻灯片里找，
+   找不到就问，并说清找过哪里。
+4. **分清发现和假设。** 数据显示了什么是发现；可能意味着什么是假设，要写出依据和怎样证实。
+   物相在用户给出材料、或者数据毫无歧义之前，都只是假设。
 
-## 0. 底线（所有 agent，只有这四条）
-
-1. **测量值只来自工具**。自己算的派生量（比值、d、晶格常数）要写出用了哪些工具数值。
-2. **数据目录只读**。用户没要求就不导出、不改校正。
-3. **不编参数**。能量、αi、距离、束心、像素尺寸找不到就问，并说清找过哪里。
-4. **分清发现和假设**。数据显示了什么是发现；可能意味着什么是假设，要标明并写出依据
-   （如 Δq）。物相只有在用户给了材料、或数据毫无歧义时才当结论。
-
-## 1. 第一层：基线
+## 基线：做了什么，能信到什么程度
 
 ```bash
-python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户给的笔记原文>"
+python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记原文>" --out <文件夹>
 ```
 
-- NeXus 多模块序列（`*_m01.nxs … *_m11.nxs`）只给 `_m01`；多个样品一次给全
-  （同一探测器只标定一次）。解释器：`D:\conda\envs\GUI\python.exe`。
-- 输出在 GIMaP 用户数据目录 `assistant_runs/cli/<时间>/`（或 `--out`），每个样品一个
-  `report.md`（另有 `report.json`、曲线 CSV 和 `qmap.png`：q 图上画出分析过的环，白 = 测到、橙 = 阴影、
-  红虚线 = 没测到），外加 `summary.md`。四个 Lambda 9M 样品（每个 403 帧）约 80 秒。
-- GUI 里的 Claude 和 MCP 客户端用同一个工具 `run_standard_pipeline`（可选，参数同下表）。
+- NeXus 给任意一个模块文件即可（如 `_m01`）：同前缀的 `_m02`、`_m03` 等探测器模块会拼成一张图，帧在文件内部；
+  同一组模块只给一次。多个样品一次给全：同一批里尺寸相同的帧沿用前面从文件或标样图得到的标定。
+- 每个样品写一个 `<out>/<名字>/` 文件夹，包含：
+  - `report.md`、`report.json`；
+  - `radial.csv`、`in_plane.csv`、`out_of_plane.csv`、`azimuthal_last_ring.csv`；
+  - `qmap.png`：q 图上画出分析过的环，白色是测到的，橙色是阴影，红色虚线是没测到的。
 
-| 退出码 | 状态 | 做什么 |
+  外加整批的 `summary.md` 和 `summary.json`。`<名字>` 是文件名去掉扩展名：不同文件夹里同名的帧会写进同一个文件夹，
+  互相覆盖而不报错。这种情况要分开跑，各用一个 `--out`。
+- 耗时：给了 `.poni` 的单帧约 10 秒；要从标样图标定或读大的 NeXus 时，一帧几十秒到一分多钟；
+  四个 Lambda 9M 原位样品（每个 403 帧）约 2.5 分钟。
+- 退出码：
+  - **0**：全部分析完，没有待回答的问题。
+  - **2**：至少一个样品有 “Needs attention”。可能是缺一个值（会写出补这个值的选项）、一个选项定不了的判断，
+    或者没找到几何、什么也没分析。
+  - **1**：至少一帧失败，比如读不了的文件；其他帧照样有报告。1 优先于 2：有失败也有待回答的问题时退出码是 1，
+    仍要读其他样品的 Needs attention。
+
+基线的价值在于两点：判断标准始终一致（下面的阈值），每个默认决定和理由都记在 `report.md` 的 **Decisions** 里。
+它对用户的问题未必合适。转述数字之前先读 Decisions，下面几处最容易“数字没错，问题不对”：
+
+| Decision | 默认 | 什么时候不合适 | 怎么改 |
+|---|---|---|---|
+| technique | GIMaP 应用几何后自动识别：探测器任一角超过 2θ = 20° 就是 GIWAXS，否则 GISAXS | 小探测器或长距离的 GIWAXS 会被认成 GISAXS | `--technique giwaxs` |
+| geometry | 依次尝试：`--calibration` → 笔记里点名的标定文件 → 已保存的仪器配置 → 在附近搜索（同目录及子目录、父目录和兄弟目录、往上两三层；2 个标定文件 + 3 张标样图） | 仪器配置只按探测器名和图像尺寸匹配，不管是哪次束线实验；搜索也可能挑到别的实验的标定，“quality: good” 只说明标定和它自己的标样一致；`.poni` 和 GIMaP 的 `.json` 直接采用，不再用标样核对 | `--calibration <文件>`、`--no-saved-profiles`、`--recalibrate` |
+| frames | 序列取最后 10 帧求和（终态） | 问题关心的是过程，或者开头 | `--frame N --sum K`（负数从末尾数；只给 `--frame` 时仍从该帧起求和 10 帧，单帧用 `--sum 1`） |
+| rings | 面积最大的 3 个没有警告的峰算取向和尺寸 | 用户问的是别的环 | `--rings N`；指定某个 q 要用 `call` 或 MCP 的 `ring_orientation`、`crystallite_size` |
+| 能量 / αi / 像素 | 能量：选项 > 头文件 > 笔记（只认 “12.4 keV” 这种写法；波长要自己换算后传 `--energy-kev`）> 标定文件的波长（这时 Decisions 里没有 energy 一行，能量来源就是几何来源）。αi：选项 > 笔记 > 仪器配置（只在几何也取自仪器配置时），都没有时先用 0° 并提问。像素：选项 > 头文件 > 笔记。笔记里的值只有唯一时才取 | 笔记里有两个不同的值，或者有效值只在幻灯片、日志里 | `--energy-kev`、`--incidence-deg`、`--pixel-size-um` |
+| 标样 | `--standard` > 笔记里唯一点名的标样 > 文件名 > 所有标样拟合比较（笔记和文件名不一致时也比较） | 混合标样的写法：`LaB6+CeO2` 是混合，`LaB6, CeO2` 是两种 | `--standard` |
+
+标定验收看的是标样的线落在的 q：平均误差 ≤ 0.2 % 为好，≤ 0.5 % 可用（需要至少 3 条线）。测到 3 条以上线时不看
+像素残差：宽角和探测器倾斜时 rms 会很大（几个像素），线的位置仍然可以很准；少于 3 条线时才退回看环数和像素残差（≤ 1.5 px）。
+
+## 基线没看的地方：判断力最有用的地方
+
+- **峰只在径向 I(q) 上找。** 只出现在某个扇区的峰会漏掉：对 `in_plane`、`out_of_plane` 曲线也跑 `find_peaks`。
+- **只有终态。** 原位实验的意义在变化：`auto --frame 1 --sum 10 --out A` 加上默认的那次运行，再比较两份
+  `report.json`。GUI 的 “Compare with the Start of the Series” 用同一套规则：只比较可靠峰的有无和位置（appeared、
+  disappeared、shifted、moved?；grew 是开始时弱、结束时可靠，faded 相反），不比较强度。对两份 report.json 可以直接调用
+  `src.gimap.features.assistant.application.series_markdown(start, end)` 得到同一张表。
+- **本批所有样品都有的线**（≥ 2 个样品时 summary.md 的 “Lines at the same q”，±0.3 %，包括带提示的峰）可能来自衬底、
+  窗口或探测器，而不是样品：对比初态、标定图和空衬底。
+- **几个峰按同一比例偏移**，指向几何问题（样品与标样的位置即距离不同，或能量不对），而不是晶格变化；
+  αi 主要移动 qz，几乎不改 |q|。用户给了材料时，把测到的 q 和已知线逐条比较。
+- **峰的比值是晶系的线索。** 基线只检查层状和六方序列（2 % 以内），从不判定物相。
+  只用可靠峰，并写出算式，例如 q₂ / q₁ = 1.158，与 fcc (200)/(111) 的 1.155 相比。
+- **Scherrer 尺寸是下限**：基线没有扣除仪器展宽。有标样的峰宽时，用 `crystallite_size(q_center, instrumental_fwhm=…)`
+  扣除（高斯平方相减），并写出宽度从哪里来。
+- **缺失楔边上的极大值**：真正的极大可能落在测不到的 χ 里。
+  先 `ring_orientation(q_center=…)`（它设定这个环的 q 窗口），再 `get_curve azimuthal` 看 I(χ)；
+  用 `set_custom_sector` 只取测到的区域。
+- **笔记、日志、幻灯片**：αi、材料和实验设计常常只写在那里。GIMaP 的工具只读图像、`.poni` 和文本或日志文件；
+  `.pptx` / `.odp` 要自己读（文字分别在 `ppt/slides/*.xml` 和 `content.xml` 里），截图需要多模态或问人。
+
+## 报告里的提示语：含义和阈值
+
+数据和某个提示矛盾时，拿工具的证据说话（`get_curve`、调整 `min_snr` 或背景窗口后的 `find_peaks`），并写出来。
+如果它是有确定答案的判断，就去改规则（见文末“维护”）。
+
+| 提示 | 阈值 | 排除了什么 |
 |---|---|---|
-| 0 | OK | 转述 `report.md`，数字不改 |
-| 2 | NEEDS INPUT | 回答 “Needs attention” 的每一条：每条写了该加的参数（如 `--incidence-deg`）。按第 4 节去找值，找到就重跑，找不到按第 5 节问用户 |
-| 1 | FAILED | 把错误原样告诉用户 |
+| weak | SNR < 5（3–5σ 视为暂定） | 不算可靠峰 |
+| a spike | 窄到分辨率极限（FWHM < 3 个 bin），且高于局部背景 5 倍 | 当作热像素、模块边缘或宇宙射线；不做环、尺寸和序列 |
+| a spike-like artefact (flat top …) | 平顶宽 ≥ 15 个 bin，至少一侧边缘在 1 个 bin 内陡升 | 探测器的一行或一列、模块边缘；同上处理。窄于 15 个 bin 的方块不会被识别 |
+| a broad halo | FWHM > q 的 15 % | 非晶有序；不给晶粒尺寸 |
+| shadowed | 强度低于同一 q 漫散射背景的 20 % | 这些 χ 算作没测到；扇区落在阴影里就不比较 |
+| Only …% of the orientation range | sin χ 加权覆盖 < 80 % | 不给 Herman f，只给测到的范围 |
+| not measured (missing wedge) | 靠近 qz 的 \|χ\| 没有像素 | f 偏低，照实写 |
+| no single preferred orientation | 两个极大高度差在 15 % 以内、相距 ≥ 30° | 不说取向 |
+| weak or no preferred orientation | \|f\| < 0.1 | — |
+| mainly in-plane / out-of-plane | 两个扇区之比 ≥ 2 | — |
+| its shape could not be fitted | 高斯拟合失败，但信号 ≥ 2 × min_snr（默认 6σ） | 不算可靠峰；看图像上这个 q（模块缝隙、探测器边缘、重叠） |
+| `at_edge`（GUI 显示 “at the end of the data: check”） | 峰在 q 范围末端 1.5 个峰宽以内 | 不排除：仍算可靠峰，可能被选去算环和尺寸；形状、位置和宽度可能被截断，要自己核对 |
 
-弱 agent 到此为止也合格：基线里所有容易犯的错都已经在代码里挡住了（见第 4 节）。
+所问的 q 处没有峰时：`ring_orientation` 的结果里 `analysed` 字段写 “no peak at q = … the nearest feature … was
+analysed”；`crystallite_size` 不提示，直接用 2 个峰宽内最近的峰，要核对它返回的 q。两者分析的都可能不是所问的峰。
 
-## 2. 第二层：在基线之上
+## 问用户
 
-先读 `report.md` 的 “决策 / Decisions”：每个默认值（哪几帧、哪几个环、哪个标定）是否适合用户的
-问题？然后看基线看不到的东西，只要它和问题有关：
+一次问完：缺什么、找过哪里、有哪些候选（附文件时间）。能从文件得到的值（距离、束心）不要问。例如：
 
-| 看什么 | 为什么 | 怎么做 |
-|---|---|---|
-| 序列怎么变 | 原位实验的意义在变化，终态不是全部 | `auto … --frame 1 --sum 10` 与默认的末帧对比；需要时取中间几段 |
-| 所有样品 / 帧都有的线 | 可能来自衬底、窗口、坏点，而不是样品 | 汇总表 “Lines at the same q”；对比初态、标定图、空衬底 |
-| 多个峰偏同一相对量 | 几何问题（样品与标样位置不同、αi），不是晶格 | 用户给了材料时，把测到的 q 和已知线逐条比：同一比例的偏移指向几何 |
-| 峰的比值 | 晶系、层状、六方的线索 | 只用可靠峰；写出算式（如 3.408/2.942 = 1.158） |
-| 被跳过的峰 | 基线只分析最强的 3 个可靠峰（加上用户点名的环） | `ring_orientation` / `crystallite_size` 指定 q |
-| 缺失楔边上的极大 | 真实极大可能落在测不到的 χ 里 | `get_curve azimuthal` 看 I(χ)；`set_custom_sector` 只取测到的区域 |
-| 笔记、日志、幻灯片 | αi、材料、实验设计常只写在那里 | 读文本（`.pptx/.odp` 是 zip，文字在 slide XML 的 `<a:t>`）；截图要多模态或问人 |
-| 用户到底想知道什么 | 决定哪些结果值得追 | 不清楚就问 |
+> 这组数据没有入射角 αi。我查过：你的笔记、`Calibration/` 下 60 张标定图的文件名、4 个 `.log`（只有时间戳）。
+> `…_calib.odp` 里可能有，但那是截图，我读不了。请告诉我 αi（常见 0.1–0.5°）。
 
-更细的操作：
+## 汇报
+
+围绕用户的问题来组织，不必套固定格式，但要做到：
+
+- 每个数都能追到工具或来源；
+- 派生量写出算式；
+- 写明标定（文件、标样、线误差）、αi 和能量从哪里来、分析的是哪些帧；
+- 假设要标为假设，并写出支持它的数据和证实或否定的方法；
+- 列出 Needs attention 里和你没能回答的问题；
+- 需要时指向 `qmap.png` 和 CSV。
+
+## 工具和接入
 
 ```bash
 python tools/gimap_agent.py status <图像>            # GIMaP 看到的：探测器、帧数、头文件、有没有几何
-python tools/gimap_agent.py find-calibration <图像>  # 周围的标定、标样图、日志，已排序并附理由
-python tools/gimap_agent.py tools                    # 所有工具的定义
-python tools/gimap_agent.py call <图像> steps.json   # 按顺序执行 [{"tool": ..., "args": {...}}]
+python tools/gimap_agent.py find-calibration <图像>  # 周围的标定文件、标样图、日志，已排序并附理由
+python tools/gimap_agent.py tools                    # 所有工具的定义（34 个）
+python tools/gimap_agent.py call <图像> steps.json   # 按顺序执行 [{"tool": ..., "args": {...}}]，--out 指定输出
 ```
 
-或者用 MCP（第 7 节）在同一帧上连续调用任意工具。
+每次 `call` 都是一个新会话：步骤里先放 `run_standard_pipeline`（带 calibration、incidence_deg 等）或 `use_geometry`，
+再放 `find_peaks`、`ring_orientation`、`crystallite_size`；`crystallite_size` 需要同一会话里先对同一条曲线跑过
+`find_peaks`。MCP 的会话在两次 `open_frame` 之间一直保持。
 
-**实例（Yuxin，P03 2021-11，Cu 溅射到 PEO）**：
-
-- 基线给出 4 个样品的峰、f 和尺寸，并挡住了坏点、晕和覆盖不足。
-- 第二层又多做了三件事，都是基线做不到的：
-  - 读了 `data analysis.pptx`，知道样品是 PEO + Cu；
-  - 对比初态和终态，看出 2.56、3.90 在沉积前就有，2.94、3.41 是沉积中出现的；
-  - 算出 3.408/2.942 = 1.158 ≈ fcc (111)/(200) 的 1.155，对应 a ≈ 3.70 Å，比 Cu 大 2.3%。
-    于是提出假设：样品和标样位置不同。这是需要核对的假设，不是结论。
-- 真实的 Claude Code 运行（GUI 助手，Opus 5.5，16 次工具调用，约 4 分钟）还自己发现了一件事：
-  - χ > 57° 的区域在所有 q 上都比漫散射背景低 20–150 倍，是阴影；
-  - 基线原来的 f = 0.42，以及非晶晕 “面外/面内 = 40”，都是这个阴影造成的，不是取向。
-  - 这是有确定答案的判断，所以按第 9 节写进了代码，现在基线也不会再错（第 4 节 “阴影” 一行）。
-
-## 3. 基线的默认决定（都能改）
-
-| 步 | 默认 | 怎么改 |
-|---|---|---|
-| 能量 / αi / 像素 | 参数 > 头文件 > 笔记里唯一的值；笔记里有两个不同值就不取，改为提问 | `--energy-kev`、`--incidence-deg`、`--pixel-size-um` |
-| 几何 | 已有仪器配置就保留；否则在周围找标定（同目录、父目录、兄弟目录、上两层整棵树） | `--calibration <文件>`、`--recalibrate` |
-| 标定候选顺序 | GIMaP 能拟合 > 同类探测器文件 > 名字含 giwaxs/waxs > final/redone > 样品之前测的；多模块序列算一个；最多 2 个文件 + 3 张图 | `--calibration` |
-| 标样 | 文件名（含 `lab6_ceo2` 混合）> 全部拟合比较 | `--standard` |
-| 标定验收 | 标样的线落在的 q：平均误差 ≤ 0.2% 好，≤ 0.5% 可用；不看像素残差 | — |
-| 帧 | 序列取末 10 帧求和（终态） | `--frame N --sum K`（负数从末尾数） |
-| 模式 | 自动识别不是 GIWAXS 就切到 GIWAXS | GUI 里分析 GISAXS |
-| 环和尺寸 | 面积最大的 3 个可靠峰 + 用户点名的环；晕不给尺寸；sin χ 加权覆盖 < 80% 不给 f，阴影区算未测 | `--rings`；或直接调工具 |
-
-代码：`src/gimap/features/assistant/application/pipeline.py`，判断规则在 `domain/`。
-
-## 4. 情况 → 怎么处理
-
-来自真实数据。“代码” 一栏是工具已经做的，“agent” 一栏是还要做的。
-
-| 情况 | 怎么认出来 | 代码 | agent |
-|---|---|---|---|
-| 没有几何 | status `geometry: null` | 在周围找标定、拟合、验收 | 失败时看 Decisions；用户给了路径就 `--calibration` |
-| 标定在别的目录、文件夹名不一致（`lmbd` ↔ `lmbdp03`，`p2m` ↔ `embl_2m`） | 标定在 `../../Calibration/...` | 按文件类型、模块序列、图像尺寸匹配，不看文件夹名 | 汇报用了哪一个 |
-| 多个候选（`_00001/_00002`、`redone`、`redone_final`） | 列表里同一标样多个版本 | final > redone > 普通，样品之前 > 之后 | 同上 |
-| 混合标样 | 名字含 `lab6_ceo2` | 两套线一起拟合 | — |
-| 像素残差大（rms 4.2 px） | 宽角、探测器倾斜 | 以线位置为准（本例 0.06%） | 不要因为 rms 大就拒绝 |
-| 束心在探测器外 | “limited azimuthal coverage” | 线检查确认后注明 | 照写 |
-| 能量 | NeXus 头文件（11.8 keV） | 自动读 | TIFF 没有 → 找笔记/日志 |
-| αi 缺失 | Needs attention: “incidence angle αi” | 先用 0° 出结果，同时提问 | 查笔记、日志、**幻灯片**（本例 0.4° 只在 `.odp` 截图里） |
-| 像素尺寸缺失 | TIFF 无头文件 | 提问 | Pilatus 172 µm、Eiger 75 µm、Lambda 55 µm |
-| 原位序列 | `frames: 403` | 末 10 帧求和 | 第二层：对比初态 |
-| 扇区覆盖不到 | “only the in-plane sector is measured here” / “not measured” | 明说，不给比值 | 不要说成 “只在面内” |
-| 环覆盖太少 | “Only …% of the orientation range Herman's f weighs (sin χ) is measured” | f 按 sin χ 加权，靠近面内的部分最重要；加权覆盖 < 80% 不给 f，给出测到的范围 | 需要时看 I(χ) 原始曲线 |
-| 阴影 / 遮挡 / 不灵敏区 | 强度低于同一 q 漫散射背景的 20%（本例 χ > 57°，低 20–150 倍） | 这些 χ 算未测；扇区在阴影里就不比较（“the other is shadowed”）；部分覆盖时给出同范围各向同性环的 f 作对照 | 看标定图同一区域是否也暗；需要时加掩模或用 `set_custom_sector` 只取亮区 |
-| 缺失楔 | “\|χ\| < 13° is not measured” | f 偏低，照注 | 照写；第二层考虑极大在楔里 |
-| 两个等高极大 / f ≈ 0 | “no single preferred orientation” | 不说取向 | 照写 |
-| 坏点 / 模块边缘 | caveat “a spike”（本例 4.893） | 不做环和尺寸，不进序列判断 | 标为伪影 |
-| 非晶晕 | caveat “a broad halo”（FWHM > 15% q） | 不给尺寸 | 可以说有晕 |
-| 晕上的尖峰 | 晕和尖峰都列出 | 都保留 | 分开描述 |
-| 所问 q 没有峰 | ring 结果 `analysed: no peak at q = …` | 分析最近的特征并说明 | 不要当成所问的峰 |
-| 所有样品共有的线 | 汇总表 “Lines at the same q” | 列出 | 第二层：追查来源 |
-| 中文 Windows GBK 乱码 | UnicodeEncodeError | CLI 强制 UTF-8 | 自己写脚本也要 UTF-8 |
-| 大文件慢 | 2.4 GB NeXus | 加载超时 15 分钟 | 等，不要中途重跑 |
-
-## 5. 问用户
-
-一次问完：缺什么、找过哪里、可选项（带文件时间）。例如：
-
-> 这组数据没有入射角 αi。我查了：命令行笔记、`Calibration/` 下 60 张标定图的文件名、4 个 `.log`
-> （只有时间戳）。`DFG_Nov2021_calib.odp` 里可能有，但是截图，我读不了。请告诉我 αi（常见 0.1–0.5°）。
-
-能从文件得到的值（距离、束心）不要问。
-
-## 6. 汇报
-
-1. **基线**：标定（文件、标样、线误差）、αi 和能量的来源、分析了哪些帧；峰表、面内/面外、
-   取向（f 和原话、覆盖率、缺失楔）、尺寸下限——照 `report.md`。
-2. **发现**：第二层看到的东西，每条写出依据（哪个工具、哪些数值）。
-3. **假设**：标明 “假设”，写出支持的数据和怎样能证实或否定。
-4. **未解决**：Needs attention 和你没能回答的问题。
-
-## 7. 工具和接入
-
-- **Codex**：读仓库根的 `AGENTS.md`，它指向本手册。不用配置就能用命令行。
-  需要在同一帧上连续调用工具时加 MCP（`~/.codex/config.toml`）：
+- **MCP**：Codex 写在 `~/.codex/config.toml`，或用 `claude mcp add`：
 
   ```toml
   [mcp_servers.gimap]
   command = 'D:\conda\envs\GUI\python.exe'
   args = ['E:\PythonCode\gisaxs_gui\tools\gimap_agent.py', 'mcp']
   startup_timeout_sec = 60
-  tool_timeout_sec = 900
+  tool_timeout_sec = 900   # 标定一个大的 NeXus 要一分钟以上
   ```
 
-  或 `codex mcp add gimap -- D:\conda\envs\GUI\python.exe E:\PythonCode\gisaxs_gui\tools\gimap_agent.py mcp`
-  （再把 `tool_timeout_sec` 调到 900：标定一个大 NeXus 要一分钟）。
-- **Claude Code**：`claude mcp add gimap -- D:\conda\envs\GUI\python.exe E:\PythonCode\gisaxs_gui\tools\gimap_agent.py mcp`
-- **MCP 工具**：`open_frame(path, notes)`，然后是 GUI 助手的全部工具：`run_standard_pipeline`（可加
-  `out_dir` 写文件）、`find_peaks`、`ring_orientation`、`set_frame`、`calibrate_geometry` 等。
-- **GUI**：Process with Claude 里的 Claude 有同一个 `run_standard_pipeline`，可以先拿基线，再自由用其他工具。
+  ```bash
+  claude mcp add gimap -- D:/conda/envs/GUI/python.exe E:/PythonCode/gisaxs_gui/tools/gimap_agent.py mcp
+  ```
 
-## 8. 评估（两层分开评）
+  （在 bash 里用正斜杠：反斜杠会被吞掉。长调用超时时，调大 `MCP_TOOL_TIMEOUT`，单位毫秒。）
+  `--no-saved-profiles` 只能写在启动参数里（`… gimap_agent.py mcp --no-saved-profiles`），会话中不能切换。
+
+  - 先用 `open_frame(path, notes, out_dir)` 打开帧，然后可以连续调用所有工具。
+  - `run_standard_pipeline` 的参数：
+    - 和命令行同名的：`calibration`、`standard`、`energy_kev`、`incidence_deg`、`pixel_size_um`、`frame`、`rings`、
+      `recalibrate`、`technique`；
+    - 和命令行不同的：`sum_frames`（对应 `--sum`）、`fit`（对应 `--no-fit`）、`out_dir`；
+    - 没有 notes 参数，笔记来自 `open_frame`。
+  - 同一会话里用 `technique=X` 跑过一次后，之后不指定 technique 的运行也沿用 X。
+- **GUI**：Analyze 的 Run Automatic Analysis 不需要 AI，跑的是同一套流程。
+  Process with AI（Tools 菜单，或 Analyze 的 Ask AI…）可以先拿基线，再自由使用其他工具；
+  它的 `run_standard_pipeline` 在 Analyze 处于 Auto 时跑 GIWAXS（已选模式时跑所选模式），所以 GISAXS 任务要传 `technique`。
+
+## 评估
 
 ```bash
-python tools/eval_giwaxs_agent.py baseline     # 在真实数据上跑基线，检查不该错的事
-python tools/eval_giwaxs_agent.py report <agent 的报告.md>   # 给 agent 写的报告打分
+python tools/eval_giwaxs_agent.py baseline             # 在案例数据上跑基线，检查不该错的事
+python tools/eval_giwaxs_agent.py report <报告.md>      # 给 agent 写的报告打分（错误说法、发现）
 ```
 
-- **第一层：不犯错。**
-  - `baseline` 检查：用对了标定文件、线误差 ≤ 0.2%、坏点被标出、没有假序列、2.94 环的 f 在合理范围、
-    给了 αi 就没有未解决问题。
-  - `report` 检查报告里的错误说法（六方序列、把坏点当衍射峰、给晕算晶粒、13% 覆盖报 f）。
-    命中的句子会打印出来，由人确认——否定句（“没有六方序列”）不算。
-- **第二层：发现更多。** `report` 给 “发现” 打分：缺失楔的影响、初态与终态的对比、共有线、fcc 比值或
-  q 偏移、阴影区。只能作为参考，最终要人读报告。
-- 上面那次真实运行的得分：错误 0，第一层事实 4/4，第二层 8/8。评分时只给 agent 自己写的报告打分，
-  不要把工具日志一起放进去：日志里的原始输出会被误判成 agent 的说法。
-- 案例和规则在 `docs/agents/eval/yuxin-p03-2021.json`，可以加新案例。
+- 案例和规则在 `docs/agents/eval/*.json`。现有的一个案例需要用户的本地数据（只读）。
+- `report` 只给 agent 自己写的报告打分。不要把工具日志放进去，日志里的原始输出会被误当成 agent 的说法。
+  命中的句子会打印出来，由人确认。只有规则的 `unless` 里列了否定词时，否定句才不算（如 “没有六方序列”）；
+  “4.89 不是衍射峰” 这类句子仍会被标出，要人判断。
+- 已知不过的一项：“spike at 4.893 flagged”。逐帧排除缺陷探测器行之后，原来那个窄尖峰已经被去掉；留下的平顶方块在
+  q ≈ 4.875 处，已被标为伪影。是否改案例的预期，由用户决定。其余检查都应通过，以实际运行 `baseline` 的结果为准。
 
-## 9. 维护：遇到新情况
+## 维护：遇到新情况
 
-- **有确定答案的判断出错**（如把坏点当峰）：
+- **有确定答案的判断出错**（如把坏点当成峰）：
   - 用 `call` 复现；
   - 把判断写进 `src/gimap/features/assistant/domain/` 的函数，输出一句带理由的结论；
-  - 在 `tests/test_assistant_rules.py` 加测试，在第 4 节加一行。
-- **需要判断力的新情况**（如一种新的实验设计）：写进第 2 节的表，不要写成代码或硬规则。
-- 不要为了弱模型把强模型能做的事禁掉：弱模型靠第一层的代码保护，第二层留给能做的 agent。
+  - 用合成数据在 `tests/test_assistant_rules.py` 加测试；整次运行的回归加一个 eval 案例；
+  - 在上面的提示语表里补一行。
+- **需要判断力的新情况**（如一种新的实验设计）：写进“基线没看的地方”，不要写成代码里的硬性拦截。

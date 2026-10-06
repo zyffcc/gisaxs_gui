@@ -18,15 +18,18 @@ from typing import Callable, Optional
 
 import numpy as np
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QGridLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from src.gimap.app.presentation.components import CurvePlot
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import theme_manager
 
-from .guided_text import label
+from .guided_text import ScaledPixmapLabel, label
+from .guided_words import words
 
 FIT_PLOT_HEIGHT = 190
+NAME_WIDTH = 64
+"""The narrowest a name of Fit details wraps to (px): a few words or Chinese characters per line."""
 NM_PER_A = 10.0
 COMPONENT_VALUES = (("R", "R", "nm"), ("sigma_R", "σR / R", ""), ("h", "h", "nm"), ("sigma_h", "σh / h", ""),
                     ("D", "D", "nm"), ("sigma_D", "σD / D", ""), ("weight", "weight", ""), ("amplitude", "amplitude", ""))
@@ -50,14 +53,21 @@ def _plus_minus(value, error, unit: str = "", digits: int = 5) -> str:
 
 
 class _Values(QWidget):
-    """Name–value pairs in two columns (the widgets are replaced for every row shown)."""
+    """Name–value pairs in two columns, or in one when the panel is too narrow for two (the widgets are
+    replaced for every row shown). The width is the panel's: the pairs never push it wider (a value and its
+    error stay on one line, so two columns of them were wider than the Results tab of a 1280-px window)."""
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
+        policy = self.sizePolicy()
+        policy.setHorizontalPolicy(QSizePolicy.Ignored)  # the width the panel gives, never more
+        self.setSizePolicy(policy)
         self.grid = QGridLayout(self)
         self.grid.setContentsMargins(0, 0, 0, 0)
         self.grid.setHorizontalSpacing(12)
         self.grid.setVerticalSpacing(2)
+        self._cells: list[tuple[QLabel, QLabel]] = []
+        self._columns = 0
 
     def set_values(self, pairs) -> None:
         while self.grid.count():
@@ -65,17 +75,44 @@ class _Values(QWidget):
             if widget is not None:
                 widget.setParent(None)  # off the screen now, not when the deletion comes round
                 widget.deleteLater()
-        half = (len(pairs) + 1) // 2
-        for index, (name, value) in enumerate(pairs):
-            row, column = index % half, 2 * (index // half)
+        self._cells = []
+        for name, value in pairs:
             key = label(tr(name), self, role="muted")
+            key.setMinimumWidth(min(key.sizeHint().width(), NAME_WIDTH))  # wrapped, never a character per line
             shown = label(str(value), self)
             shown.setWordWrap(False)  # a number and its error on one line; the names wrap
             shown.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            self._cells.append((key, shown))
+        self._arrange(self._fitting_columns())
+
+    def _fitting_columns(self) -> int:
+        """2 when two columns of pairs fit the width given (names wrapped to their longest word), else 1."""
+        half = (len(self._cells) + 1) // 2
+        if not half:
+            return 2
+        columns = (self._cells[:half], self._cells[half:])
+        needed = sum(max((max(cell[part].minimumSizeHint().width(), cell[part].minimumWidth()) for cell in column),
+                         default=0) for column in columns for part in (0, 1))
+        return 2 if needed + 3 * self.grid.horizontalSpacing() <= self.width() else 1
+
+    def _arrange(self, columns: int) -> None:
+        self._columns = columns
+        for key, shown in self._cells:
+            self.grid.removeWidget(key)
+            self.grid.removeWidget(shown)
+        rows = (len(self._cells) + 1) // 2 if columns == 2 else len(self._cells)
+        for index, (key, shown) in enumerate(self._cells):
+            row, column = index % max(1, rows), 2 * (index // max(1, rows))
             self.grid.addWidget(key, row, column)
             self.grid.addWidget(shown, row, column + 1)
         self.grid.setColumnStretch(1, 1)
-        self.grid.setColumnStretch(3, 1)
+        self.grid.setColumnStretch(3, 1 if columns == 2 else 0)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        columns = self._fitting_columns()
+        if self._cells and columns != self._columns:
+            self._arrange(columns)
 
 
 class PeakDetails(QWidget):
@@ -99,7 +136,7 @@ class PeakDetails(QWidget):
         layout.addWidget(self.method)
         self.warnings = label("", self)
         layout.addWidget(self.warnings)
-        self.where = QLabel(self)
+        self.where = ScaledPixmapLabel(self)  # shrinks with a narrow panel instead of pushing it wider
         self.where.setObjectName("guidedPeakMap")
         self.where.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.where.setToolTip(tr("Where the peak lies on the detector: white = measured, orange = in a shadow, "
@@ -147,7 +184,7 @@ class PeakDetails(QWidget):
                  window=_number(search.get("background_window"), 3), snr=_number(search.get("min_snr"), 3),
                  height=_number(100 * float(search.get("min_relative_height") or 0.02), 3)))
         caveat = str(peak.get("caveat") or "")
-        self.warnings.setText("⚠ " + caveat if caveat else tr("No warnings for this peak."))
+        self.warnings.setText("⚠ " + tr(caveat) if caveat else tr("No warnings for this peak."))
         ring = min(report.get("rings") or (), key=lambda item: abs(item["q"] - peak["q"]), default=None)
         shadowed = ring.get("shadowed") if ring and abs(ring["q"] - peak["q"]) <= peak.get("fwhm", 0.0) else ()
         self._picture(self.where, [{"q": peak["q"], "shadowed": shadowed or (), "label": f"q = {peak['q']:.4g} Å⁻¹"}],
@@ -208,6 +245,12 @@ class SolutionDetails(QWidget):
         self.show_button.clicked.connect(self._show_in_fitting)
         self._fit: dict = {}
         self._index = 0
+        self.allowed = True
+        """False while another frame is shown in Analyze: Show in Fitting would draw this solution on its curve."""
+
+    def set_allowed(self, allowed: bool) -> None:
+        self.allowed = bool(allowed)
+        self.show_button.setEnabled(self.allowed and candidate_row(self._fit, self._index) is not None)
 
     def show_solution(self, fit: dict, index: int) -> None:
         self._fit, self._index = fit, int(index)
@@ -238,14 +281,14 @@ class SolutionDetails(QWidget):
         ).format(points=fit.get("points", "—"), low=_number(low), high=_number(high),
                  low_nm=_number(NM_PER_A * low), high_nm=_number(NM_PER_A * high),
                  screen=screen, start=tr("the in-plane spacing, {d} nm").format(d=_number(start)) if start else tr("free"),
-                 algorithm=solution.get("algorithm") or tr("Bounded least squares")))
+                 algorithm=words(solution.get("algorithm")) or tr("Bounded least squares")))
         notes = list(solution.get("warnings") or ()) + ([] if solution.get("converged") else ["not converged"])
         self.warnings.setText("\n".join("⚠ " + tr(note) for note in notes) if notes else tr("No warnings for this solution."))
-        self.show_button.setEnabled(candidate_row(fit, self._index) is not None)
+        self.show_button.setEnabled(self.allowed and candidate_row(fit, self._index) is not None)
 
     def _show_in_fitting(self) -> None:
         row = candidate_row(self._fit, self._index)
-        if row is not None:
+        if row is not None and self.allowed:
             self.showRequested.emit(row)
 
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 from PyQt5.QtCore import QSignalBlocker
 
+from src.gimap.app.presentation.i18n import tr, trf
+
 from ...application import (
     GISAXS,
     X_AXIS_TWO_THETA,
@@ -13,6 +15,8 @@ from ...application import (
     q_from_two_theta,
     two_theta_deg,
 )
+from ..texts import curve_title, message_text
+from .regions import STANDARD_COLORS
 
 LOWER_PROFILES = (
     ("chi", "I(χ) of the regions"),
@@ -25,6 +29,52 @@ CHI_PROFILES = ("azimuthal", "sector_chi")
 BOX_COLOR = "#facc15"
 MASK_OUTLINE = "#f43f5e"
 VIEW_DETECTOR, VIEW_Q_MAP, VIEW_CAKE = range(3)
+PLOT_SIDES = {"both_abs": "folded", "mean": "folded", "positive": "positive", "negative": "negative"}
+"""The halves chosen for Fitting (Cuts step) → what the upper plot of a GISAXS frame shows first."""
+
+
+def pixel_range(start, stop) -> str:
+    """A region's half-open pixel range ``(start, stop)`` as people count pixels: ``592–602`` (both included)."""
+    start, stop = int(start), int(stop)
+    return f"{start}–{max(start, stop - 1)}"
+
+
+def cake_title(analysis: FrameAnalysis) -> str:
+    """The title of the Cake view (the frame unwrapped onto χ–q)."""
+    return trf("{name} — unwrapped", name=analysis.path.name)
+
+
+def _horizontal_where(reduction, *, short: bool) -> str:
+    markers = reduction.markers
+    yoneda, source = markers.get("yoneda"), markers.get("horizontal_source")
+    if source == "yoneda" and yoneda is not None:
+        template = "Yoneda αf {alpha}°" if short else "at the Yoneda band (αf = {alpha}°)"
+        return tr(template).format(alpha=f"{yoneda.alpha_f_deg:.3f}")
+    if source == "manual":
+        return tr("set by hand")
+    return tr("above the horizon" if short else "just above the horizon (no Yoneda band found)")
+
+
+def cut_lines(analysis: FrameAnalysis) -> list[str]:
+    """Where the two GISAXS cuts are, in detector pixels taken from the curves themselves (both ends included)."""
+    reduction = analysis.reduction
+    if reduction is None or reduction.kind != GISAXS:
+        return []
+    lines = []
+    horizontal, vertical = reduction.curve("horizontal"), reduction.curve("vertical")
+    if horizontal is not None:
+        lines.append(tr("Horizontal cut I(qy) over rows {rows}, {where}.").format(
+            rows=pixel_range(*horizontal.region["rows"]), where=_horizontal_where(reduction, short=False)))
+    if vertical is not None:
+        geometry = analysis.geometry
+        centre = vertical.region.get("center_column")
+        on_beam = geometry is not None and centre is not None and abs(float(centre) - geometry.beam_center_x_px) < 0.01
+        template = (
+            "Vertical cut I(qz) over columns {columns} (the beam centre)." if on_beam
+            else "Vertical cut I(qz) over columns {columns} (set by hand)."
+        )
+        lines.append(tr(template).format(columns=pixel_range(*vertical.region["columns"])))
+    return lines
 
 
 class DisplayMixin:
@@ -96,18 +146,18 @@ class DisplayMixin:
             (q0, q1), (c0, c1) = cake.q_range, cake.chi_range
             self.detector_view.set_image(
                 cake.image, valid=np.isfinite(cake.image), rect=(q0, c0, q1 - q0, c1 - c0), y_down=False,
-                title=f"{analysis.path.name} — unwrapped", x_label="q (Å⁻¹)", y_label="χ (°)", keep_view=keep_view,
+                title=cake_title(analysis), x_label="q (Å⁻¹)", y_label="χ (°)", keep_view=keep_view,
                 context="cake",
             )
             self.detector_view.clear_overlays()
             self._refresh_shapes()
             return
-        self.detector_view.title_label.setText("Unwrapping onto χ–q …")
+        self.detector_view.title_label.setText(tr("Unwrapping onto χ–q …"))
         self.tasks.submit(
             "cake",
             lambda: self.view_model.cake(analysis),
             on_done=lambda cake: self._cake_ready(analysis, cake, keep_view),
-            on_error=lambda message, _details: self._status(f"Could not unwrap the frame: {message}", "error"),
+            on_error=lambda message, _details: self._status(trf("Could not unwrap the frame: {error}", error=message_text(message)), "error"),
         )
 
     def _cake_ready(self, analysis: FrameAnalysis, cake, keep_view: bool) -> None:
@@ -153,28 +203,44 @@ class DisplayMixin:
         reduction = analysis.reduction
         self.lower_choice.setVisible(reduction is not None and reduction.kind != GISAXS)
         self._plot_keys = {"top": [], "bottom": []}
-        if reduction is None:
-            top.clear_curves()
-            bottom.clear_curves()
-            top.set_title("No curves yet: the frame needs a geometry (step 2)")
+        if reduction is None:  # ``set_curves([])``: a Log or theme change then draws no curves of the frame before
+            top.set_curves([])
+            bottom.set_curves([])
+            top.set_title("")  # the sentence over the empty plot (no axes of the previous frame) says it
+            top.set_empty_text("No curves yet: the frame needs a geometry (step 2)")
             bottom.set_title("")
             return
+        top.set_empty_text("")
         if reduction.kind == GISAXS:
             self._plot_keys = {"top": ["horizontal"], "bottom": ["vertical"]}
             horizontal, vertical = reduction.curve("horizontal"), reduction.curve("vertical")
-            yoneda = reduction.markers.get("yoneda")
-            source = reduction.markers.get("horizontal_source")
-            where = (
-                f"Yoneda, αf = {yoneda.alpha_f_deg:.3f}°" if source == "yoneda" and yoneda else source
-            )
-            top.set_title(f"Horizontal cut I(qy) · rows {horizontal.region['rows']} ({where})")
+            lines = cut_lines(analysis)
+            # Short titles (the header also holds the halves, Save and Log); the whole sentence in the tooltip.
+            top.set_title(tr("I(qy) · rows {rows} · {where}").format(
+                rows=pixel_range(*horizontal.region["rows"]), where=_horizontal_where(reduction, short=True)))
+            top.title_label.setToolTip(lines[0])
             top.set_labels(horizontal.x_label, horizontal.y_label)
             top.set_curves([("I(qy)", horizontal.x, horizontal.intensity)])
-            bottom.set_title(f"Vertical cut I(qz) · columns {vertical.region['columns']}")
+            bottom.set_title(tr("I(qz) · columns {columns}").format(columns=pixel_range(*vertical.region["columns"])))
+            bottom.title_label.setToolTip(lines[-1])
             bottom.set_labels(vertical.x_label, vertical.y_label)
             bottom.set_curves([("I(qz)", vertical.x, vertical.intensity)])
             return
         self._show_giwaxs_curves(analysis)
+
+    def _redraw_curves(self, analysis: FrameAnalysis) -> None:
+        """The curves of ``analysis`` drawn again as they are (their titles and legends in the interface language,
+        after a switch); a plot zoomed or panned by the person keeps its view."""
+        kept = []
+        for plot in (self.top_plot, self.bottom_plot):
+            box = plot.plot.getViewBox()
+            kept.append((box, box.viewRange(), box.autoRangeEnabled()))
+        self._show_curves(analysis)
+        for box, (x_range, y_range), auto in kept:  # only the axes the person set: the others follow the data
+            if not auto[0]:
+                box.setXRange(*x_range, padding=0)
+            if not auto[1]:
+                box.setYRange(*y_range, padding=0)
 
     def _region_curves(self, reduction, keys) -> list:
         """``(name, curve, colour)`` of the visible regions' curves among ``keys``, in list order."""
@@ -186,7 +252,7 @@ class DisplayMixin:
         for key in keys:
             curve = reduction.curve(key)
             if curve is not None and not curve.is_empty and self.visible_region(key):
-                shown.append((names.get(key, curve.title), curve, colors.get(key)))
+                shown.append((names.get(key) or curve_title(curve.title), curve, colors.get(key)))
         return shown
 
     def _show_giwaxs_curves(self, analysis: FrameAnalysis) -> None:
@@ -207,7 +273,7 @@ class DisplayMixin:
         self._plot_keys["top"] = [curve.key for _name, curve, _color in family]
         window = reduction.markers.get("chi_q_window")
         if window is not None:
-            top.show_window(*self._window_for_display(window, analysis))
+            top.show_window(*self._window_for_display(window, analysis), color=STANDARD_COLORS["ring"])
         self._fill_lower_choice(reduction)
         self._show_lower_profile()
 
@@ -219,7 +285,7 @@ class DisplayMixin:
             self.lower_choice.clear()
             for key, title in LOWER_PROFILES:
                 if key == "chi" or reduction.curve(key) is not None:
-                    self.lower_choice.addItem(title, key)
+                    self.lower_choice.addItem(tr(title), key)  # made again with every frame: in the language now
             index = self.lower_choice.findData(wanted)
             self.lower_choice.setCurrentIndex(max(0, index))
 
@@ -236,7 +302,7 @@ class DisplayMixin:
             chi_keys = [row.chi_curve for row in self._region_rows if row.chi_curve]
             shown = self._region_curves(reduction, chi_keys)
             if not shown:
-                bottom.clear_curves()
+                bottom.set_curves([])  # forgotten too: Log I does not draw them again
                 bottom.set_title("I(χ): no ring or region selected")
                 self._plot_keys["bottom"] = []
                 return
@@ -249,13 +315,13 @@ class DisplayMixin:
             return
         curve = reduction.curve(key) if reduction is not None and key else None
         if curve is None:
-            bottom.clear_curves()
+            bottom.set_curves([])
             bottom.set_title("I(χ): no ring selected")
             self._plot_keys["bottom"] = []
             return
-        bottom.set_title(curve.title)
+        bottom.set_title(curve_title(curve.title))
         bottom.set_labels(curve.x_label, curve.y_label)
-        bottom.set_curves([(curve.title.split(",")[0], curve.x, curve.intensity)], [BOX_COLOR])
+        bottom.set_curves([(curve.title.split(",")[0], curve.x, curve.intensity)], [BOX_COLOR])  # a key: translated
         self._plot_keys["bottom"] = [curve.key]
 
     # -- q ↔ 2θ for the I(χ) window ------------------------------------------------------
@@ -292,4 +358,7 @@ class DisplayMixin:
         )
 
 
-__all__ = ["DisplayMixin", "LOWER_PROFILES", "VIEW_CAKE", "VIEW_DETECTOR", "VIEW_Q_MAP"]
+__all__ = [
+    "DisplayMixin", "LOWER_PROFILES", "PLOT_SIDES", "VIEW_CAKE", "VIEW_DETECTOR", "VIEW_Q_MAP", "cake_title", "cut_lines",
+    "pixel_range",
+]

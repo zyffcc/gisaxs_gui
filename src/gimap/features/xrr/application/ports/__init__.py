@@ -1,5 +1,19 @@
 """XRR application ports."""
 
-from .series import XrrCurveExportPort, XrrExtractionRunnerPort, XrrSeriesRepository
+from .series import (
+    XrrCurveExportPort,
+    XrrExportRecordPort,
+    XrrExtractionRunnerPort,
+    XrrGeometryDefaultsPort,
+    XrrInputFolderPort,
+    XrrSeriesRepository,
+)
 
-__all__ = ["XrrCurveExportPort", "XrrExtractionRunnerPort", "XrrSeriesRepository"]
+__all__ = [
+    "XrrCurveExportPort",
+    "XrrExportRecordPort",
+    "XrrExtractionRunnerPort",
+    "XrrGeometryDefaultsPort",
+    "XrrInputFolderPort",
+    "XrrSeriesRepository",
+]

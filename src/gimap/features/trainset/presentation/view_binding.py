@@ -15,6 +15,7 @@ from PyQt5.QtCore import QObject, QThreadPool, QTimer, pyqtSignal
 from src.gimap.features.trainset.application.ports import SimulationPort
 
 from .page import TrainsetBuildPage
+from .page_status import PageStatus
 
 from .view_model import TrainsetViewModel
 
@@ -113,4 +114,13 @@ class TrainsetViewBinding(
         self.monitor_timer = QTimer(self)
         self.monitor_timer.setInterval(15000)
         self.monitor_timer.timeout.connect(self._refresh_job)
+        # The Labs status bar is shared with 2D Prediction: showing this page puts back Trainset's own
+        # last message. The runtime says these two for Trainset, so they count as Trainset's too.
+        self.page_status = PageStatus(page, self.status_updated, self)
+        self.generation_started.connect(lambda: self.page_status.remember("Trainset generation started..."))
+        self.generation_finished.connect(lambda: self.page_status.remember("Trainset generation completed!"))
         self._connect_page()
+
+    def refresh_language(self) -> None:
+        """After a switch of the interface language: the page composes its run-time texts again."""
+        self.page.refresh_language()

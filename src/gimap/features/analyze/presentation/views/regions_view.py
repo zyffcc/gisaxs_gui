@@ -127,7 +127,9 @@ class RegionsView:
         self.region_list.setObjectName("analyzeRegionList")
         self.region_list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.region_list.setWordWrap(True)
-        self.region_list.setToolTip("Tick a region to show its curves and outline; select it to change it below")
+        self.region_list.setToolTip(
+            "Tick a region to show its curves and outline; select it to change it below. Delete removes a region "
+            "you added")
         layout.addWidget(self.region_list)
 
         self.region_editor = QStackedWidget(panel)

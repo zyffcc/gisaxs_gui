@@ -43,10 +43,20 @@ class AnalyzeState:
     giwaxs: GiwaxsSettings = field(default_factory=GiwaxsSettings)
     analysis: Optional[FrameAnalysis] = None
     beam_center: Optional[tuple[float, float]] = None
-    """Session override of the beam centre (canonical px); kept for every new file."""
+    """Session override of the beam centre (canonical px); kept for every new file of the same shape."""
+    center_shapes: dict = field(default_factory=dict)
+    """Every centre set in this session → ``(rows, columns)`` of the frame it was set on (``None``: any
+    frame). The one record of the shape: Undo and loaded settings change ``beam_center`` only."""
     corrections: Corrections = field(default_factory=Corrections)
     sum_count: int = 1
     """Consecutive frames summed into one analysis (1: none)."""
+
+    @property
+    def beam_center_shape(self) -> Optional[tuple[int, int]]:
+        """``(rows, columns)`` of the frame the session centre was set on (``None``: no centre, or any frame)."""
+        if self.beam_center is None:
+            return None
+        return self.center_shapes.get(tuple(float(value) for value in self.beam_center))
 
 
 class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, ExportModelMixin, BatchModelMixin):
@@ -76,14 +86,21 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
             corrections=Corrections(gap_guard_px=self.stored_gap_guard(), bad_pixels=self.stored_bad_pixels())
         )
         self.watch = FolderWatch(frames.expand, frames.settled_size)
+        self.already_listed: list[int] = []
+        """After ``add_paths``: list positions of the frames asked for that were listed already."""
         self._init_frames()
 
     # -- files -------------------------------------------------------------------------
 
     def add_paths(self, paths: Sequence[str | Path]) -> list[Path]:
-        """Add frames from files/folders; returns the newly added ones."""
-        known = {str(path).casefold() for path in self.state.files}
-        added = [path for path in self._frames.expand(paths) if str(path).casefold() not in known]
+        """Add frames from files/folders; returns the newly added ones.
+
+        ``already_listed`` then holds the list positions of the frames among ``paths`` that were listed before.
+        """
+        known = {str(path).casefold(): index for index, path in enumerate(self.state.files)}
+        expanded = self._frames.expand(paths)
+        added = [path for path in expanded if str(path).casefold() not in known]
+        self.already_listed = [known[str(path).casefold()] for path in expanded if str(path).casefold() in known]
         self.state.files.extend(added)
         return added
 
@@ -120,6 +137,7 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
             gisaxs=self.state.gisaxs,
             giwaxs=self.state.giwaxs,
             beam_center=self.state.beam_center,
+            beam_center_shape=self.state.beam_center_shape,
             use_header_center=self.use_header_center,
             corrections=self.state.corrections,
         )
@@ -127,6 +145,24 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
     def clear_files(self) -> None:
         self.state = replace(self.state, files=[], current_index=-1, frame_index=0, analysis=None)
         self._init_frames()
+
+    def remove_file(self, index: int) -> Optional[Path]:
+        """Take one file off the list; returns it (``None``: no such row). The file shown keeps its place in
+        the list; when it is the one removed, the file that took its row (else the one before) becomes current,
+        at its first frame, and nothing is analysed yet (``analysis`` is ``None``: it was the removed file's)."""
+        state = self.state
+        if not 0 <= int(index) < len(state.files):
+            return None
+        index = int(index)
+        removed = state.files.pop(index)
+        self._forget_frames(removed)
+        if index < state.current_index:
+            state.current_index -= 1
+        elif index == state.current_index:
+            state.current_index = min(index, len(state.files) - 1)
+            state.frame_index = 0
+            state.analysis = None
+        return removed
 
     def select(self, index: int) -> bool:
         if not 0 <= index < len(self.state.files):
@@ -203,25 +239,28 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
         self.state.analysis = analysis
         self.remember_frame_count(analysis.path, analysis.frame_count)
 
-    def geometry_summary(self) -> str:
+    def geometry_summary(self, translate: Callable[[str], str] = str) -> str:
+        """The frame and its geometry in one line. ``translate`` turns each English template into the interface
+        language before it is filled (the page passes ``tr``); names, numbers and units are kept. A frame whose
+        file names no detector is described by its size alone."""
         analysis = self.state.analysis
         if analysis is None:
-            return "No frame loaded"
+            return translate("No frame loaded")
         rows, columns = analysis.shape
-        detector = analysis.detector_name or "Detector"
-        head = f"{detector} {rows}×{columns}"
+        head = " ".join(part for part in (analysis.detector_name, f"{rows}×{columns}") if part)
         geometry = analysis.geometry
         if geometry is None:
-            return f"{head} · no geometry"
+            return translate("{frame} · no geometry").format(frame=head)
         profile = analysis.resolution.profile
         origin = {
-            "matched": f"profile “{profile.name}” (matched)" if profile else "",
-            "chosen": f"profile “{profile.name}”" if profile else "",
+            "matched": translate("profile “{name}” (matched)").format(name=profile.name) if profile else "",
+            "chosen": translate("profile “{name}”").format(name=profile.name) if profile else "",
         }.get(analysis.resolution.how, "")
-        return (
-            f"{head} · D = {geometry.distance_m * 1e3:.1f} mm · λ = {geometry.wavelength_angstrom:.4f} Å"
-            f" · αi = {geometry.incidence_deg:.3f}° · {(analysis.kind or '').upper()} · {origin}"
-        )
+        parts = [
+            head, f"D = {geometry.distance_m * 1e3:.1f} mm", f"λ = {geometry.wavelength_angstrom:.4f} Å",
+            f"αi = {geometry.incidence_deg:.3f}°", (analysis.kind or "").upper(), origin,
+        ]
+        return " · ".join(part for part in parts if part)
 
     @staticmethod
     def is_gisaxs(analysis: Optional[FrameAnalysis]) -> bool:

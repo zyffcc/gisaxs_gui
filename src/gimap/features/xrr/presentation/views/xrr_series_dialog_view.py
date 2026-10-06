@@ -152,14 +152,25 @@ class XrrSeriesDialogView:
         self.direction_combo = SafeWheelComboBox(self.geometry_section.content)
         self.direction_combo.setObjectName("xrrDirectionCombo")
         self.direction_combo.addItems(["Specular moves up (−y)", "Specular moves down (+y)"])
-        form.addRow("Distance (mm)", self.distance_spin)
-        form.addRow("Energy (keV)", self.energy_spin)
-        form.addRow("Pixel X (µm)", self.pixel_x_spin)
-        form.addRow("Pixel Y (µm)", self.pixel_y_spin)
-        form.addRow("Beam center X (px)", self.center_x_spin)
-        form.addRow("Beam center Y (px)", self.center_y_spin)
+        # Beside each value: where it came from (file, last calibration, default …); empty once typed.
+        self.geometry_source_labels = {}
+        for label, key, spin in (
+            ("Distance (mm)", "distance", self.distance_spin),
+            ("Energy (keV)", "energy", self.energy_spin),
+            ("Pixel X (µm)", "pixel_x", self.pixel_x_spin),
+            ("Pixel Y (µm)", "pixel_y", self.pixel_y_spin),
+            ("Beam center X (px)", "center_x", self.center_x_spin),
+            ("Beam center Y (px)", "center_y", self.center_y_spin),
+        ):
+            form.addRow(label, self._sourced_field(key, spin))
         form.addRow("Reflection direction", self.direction_combo)
         self.geometry_section.add_layout(form)
+        self.geometry_note = QtWidgets.QLabel("", self.geometry_section.content)
+        self.geometry_note.setObjectName("xrrGeometryNote")
+        self.geometry_note.setProperty("gimapMeta", True)
+        self.geometry_note.setWordWrap(True)
+        self.geometry_note.hide()
+        self.geometry_section.add_widget(self.geometry_note)
         self.pick_center_button = QtWidgets.QPushButton(
             "Pick direct-beam center", self.geometry_section.content
         )
@@ -247,6 +258,22 @@ class XrrSeriesDialogView:
         self.curve_splitter.setSizes([480, 220])
         curve_layout.addWidget(self.curve_splitter)
         self.preview_tabs.addTab(self.curve_tab, "XRR points")
+
+    def _sourced_field(self, key, spin):
+        field = QtWidgets.QWidget(self.geometry_section.content)
+        layout = QtWidgets.QHBoxLayout(field)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(spin, 1)
+        tag = QtWidgets.QLabel("", field)
+        tag.setObjectName(f"xrrGeometrySource_{key}")
+        tag.setProperty("gimapRole", "muted")
+        tag.setWordWrap(True)  # a narrow rail puts "(from last calibration)" on two lines
+        # Value and tag share the row equally (stretch 1 each), whatever the tag says: the value
+        # fields line up. A narrow rail squeezes the tag first, and it wraps.
+        layout.addWidget(tag, 1)
+        self.geometry_source_labels[key] = tag
+        return field
 
     def _double(self, value, minimum, maximum, decimals, step):
         spin = SafeWheelDoubleSpinBox(self.controls)

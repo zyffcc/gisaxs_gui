@@ -59,7 +59,13 @@ from .ports import (
     ResultStore,
     RunEvents,
 )
-from ..domain import energy_from_notes, incidence_from_notes, pixel_size_from_notes
+from ..domain import (
+    READABLE_IMAGE_SUFFIXES,
+    SUPPORTED_STANDARDS,
+    energy_from_notes,
+    incidence_from_notes,
+    pixel_size_from_notes,
+)
 from .operations import (
     APPLIED,
     DISMISSED,
@@ -76,8 +82,18 @@ from .operations import (
     setting_state,
 )
 from .gisaxs_export import fit_curve_table, fit_on, fit_solutions_csv
+from .gisaxs_report import cut_spans, pixel_span
 from .pipeline import SERIES_SUM, PipelineOptions, StandardPipeline, compact_report
-from .pipeline_progress import PHASES, SLOW, PipelineStopped, phase_of, step_text
+from .pipeline_progress import (
+    PHASES,
+    SLOW,
+    FrameChanged,
+    PipelineStopped,
+    frame_changed,
+    phase_of,
+    same_file,
+    step_text,
+)
 from .pipeline_report import (
     OPTION_FLAGS,
     batch_markdown,
@@ -106,6 +122,8 @@ __all__ = [
     "SUPERSEDED",
     "UNDONE",
     "describe",
+    "READABLE_IMAGE_SUFFIXES",
+    "SUPPORTED_STANDARDS",
     "energy_from_notes",
     "incidence_from_notes",
     "pixel_size_from_notes",
@@ -161,9 +179,12 @@ __all__ = [
     "PERMISSION_PREVIEW",
     "PipelineOptions",
     "PHASES",
+    "FrameChanged",
     "PipelineStopped",
     "SLOW",
+    "frame_changed",
     "phase_of",
+    "same_file",
     "step_text",
     "PROVIDERS",
     "PROVIDER_KEYS",
@@ -192,6 +213,8 @@ __all__ = [
     "clean",
     "common_peaks",
     "compact_report",
+    "cut_spans",
+    "pixel_span",
     "fit_curve_table",
     "fit_on",
     "fit_solutions_csv",

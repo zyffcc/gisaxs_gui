@@ -7,8 +7,11 @@ from typing import Optional
 from PyQt5.QtCore import QSignalBlocker
 from PyQt5.QtWidgets import QMessageBox
 
+from src.gimap.app.presentation.i18n import tr, trf
+
 from ..geometry_dialog import GeometryDialog, geometry_defaults
 from ..preferences import AnalyzePreferences, load_preferences, save_preferences
+from ..texts import message_text
 from ..views.analyze_page_view import AUTO_PROFILE_TEXT
 
 
@@ -32,7 +35,7 @@ class ProfileActionsMixin:
 
     def _profile_saved(self, name: str) -> None:
         self._refresh_profiles()
-        self._status(f"Saved instrument profile “{name}”.", "ok")
+        self._status(trf("Saved instrument profile “{name}”.", name=name), "ok")
         self.run_analysis()
 
     def _offer_previous_geometry(self) -> None:
@@ -40,22 +43,21 @@ class ProfileActionsMixin:
         geometry = self.view_model.fitting_geometry()
         self.use_fitting_button.setVisible(geometry is not None)
         if geometry is not None:
-            self.use_fitting_button.setToolTip(
-                "Save the detector geometry of the former Cut & Fitting page as the "
-                f"instrument profile of this detector:\n{_describe(geometry)}"
-            )
+            self.use_fitting_button.setToolTip(trf(
+                "Save the detector geometry of the former Cut & Fitting page as the instrument profile of this "
+                "detector:\n{geometry}", geometry=_describe(geometry)))
 
     def _use_fitting_geometry(self) -> None:
         geometry = self.view_model.fitting_geometry()
         if geometry is None:
-            self._status("No previous geometry is stored; enter the geometry instead.", "error")
+            self._status(tr("No previous geometry is stored; enter the geometry instead."), "error")
             return
         name = self.view_model.suggested_profile_name()
         answer = QMessageBox.question(
             self,
-            "Use previous geometry",
-            f"Save profile “{name}” with the geometry of the former Cut & Fitting page?\n\n"
-            f"{_describe(geometry)}",
+            tr("Use previous geometry"),
+            trf("Save profile “{name}” with the geometry of the former Cut & Fitting page?\n\n{geometry}",
+                name=name, geometry=_describe(geometry)),
         )
         if answer == QMessageBox.Yes:
             self.view_model.save_profile(name, geometry, source="former Cut & Fitting settings")
@@ -65,7 +67,7 @@ class ProfileActionsMixin:
         """Edit the geometry in use (or enter one); save it as a profile or delete that profile."""
         analysis = self.view_model.state.analysis
         if analysis is None:
-            self._status("Open a frame first; the geometry is edited for its detector.", "warning")
+            self._status(tr("Open a frame first; the geometry is edited for its detector."), "warning")
             return
         current = analysis.geometry
         profile = analysis.resolution.profile
@@ -85,19 +87,19 @@ class ProfileActionsMixin:
         result = dialog.exec_()
         if result == GeometryDialog.DELETED and profile is not None:
             answer = QMessageBox.question(
-                self, "Delete profile", f"Delete instrument profile \u201c{profile.name}\u201d?"
+                self, tr("Delete profile"), trf("Delete instrument profile \u201c{name}\u201d?", name=profile.name)
             )
             if answer == QMessageBox.Yes and self.view_model.delete_profile(profile.name):
                 self._refresh_profiles()
                 self._remember()
-                self._status(f"Deleted instrument profile \u201c{profile.name}\u201d.", "ok")
+                self._status(trf("Deleted instrument profile \u201c{name}\u201d.", name=profile.name), "ok")
                 self.run_analysis()
             return
         if result == GeometryDialog.Accepted:
             try:
                 geometry = dialog.geometry()
             except ValueError as exc:
-                self._status(str(exc), "error")
+                self._status(message_text(exc), "error")
                 return
             self.view_model.save_profile(dialog.profile_name(), geometry, source="entered by hand")
             self._profile_saved(dialog.profile_name())
@@ -122,6 +124,8 @@ class ProfileActionsMixin:
         if preferences.incidence_deg is not None:
             with QSignalBlocker(self.incidence_spin):
                 self.incidence_spin.setValue(preferences.incidence_deg)
+        # An αi kept from the last session is said once, with the first frame (``bindings/incidence.py``).
+        self._incidence_notice_pending = preferences.incidence_deg is not None
         with QSignalBlocker(self.auto_export_check):
             self.auto_export_check.setChecked(preferences.auto_export)
         self._refresh_profiles()
@@ -134,7 +138,7 @@ class ProfileActionsMixin:
             save_preferences(
                 self.view_model.settings,
                 AnalyzePreferences(
-                    mode=state.mode,
+                    mode=getattr(self, "_kept_mode", None) or state.mode,  # not a switch the automatic run made
                     profile_name=state.profile_name,
                     incidence_deg=state.incidence_deg,
                     last_folder=self._last_folder,
@@ -142,15 +146,16 @@ class ProfileActionsMixin:
                 ),
             )
         except OSError as exc:
-            self._status(f"Could not save the Analyze preferences: {exc}", "warning")
+            self._status(trf("Could not save the Analyze preferences: {error}", error=exc), "warning")
 
 
 def _describe(geometry) -> str:
-    return (
-        f"D = {geometry.distance_m * 1e3:.1f} mm, λ = {geometry.wavelength_angstrom:.4f} Å, "
-        f"αi = {geometry.incidence_deg:.3f}°,\n"
-        f"beam centre ({geometry.beam_center_x_px:.2f}, {geometry.beam_center_y_px:.2f}) px, "
-        f"pixel {geometry.pixel_size_x_m * 1e6:.1f} × {geometry.pixel_size_y_m * 1e6:.1f} µm"
+    return trf(
+        "D = {distance} mm, λ = {wavelength} Å, αi = {incidence}°,\nbeam centre ({x}, {y}) px, pixel {px} × {py} µm",
+        distance=f"{geometry.distance_m * 1e3:.1f}", wavelength=f"{geometry.wavelength_angstrom:.4f}",
+        incidence=f"{geometry.incidence_deg:.3f}", x=f"{geometry.beam_center_x_px:.2f}",
+        y=f"{geometry.beam_center_y_px:.2f}", px=f"{geometry.pixel_size_x_m * 1e6:.1f}",
+        py=f"{geometry.pixel_size_y_m * 1e6:.1f}",
     )
 
 

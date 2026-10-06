@@ -16,9 +16,13 @@ from PyQt5.QtCore import QSignalBlocker
 from PyQt5.QtWidgets import QFileDialog
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.stage_text import axis_symbol
 
 from ...application import GISAXS, BatchChoices, SeriesMap, build_series_map, track_peak
+from ..texts import curve_title, message_text
+from ..views.series_view import CHANGE_EMPTY, CHANGE_FEW
+from .series_stages import series_name
 
 DEFAULT_CURVE = {GISAXS: "horizontal"}
 """The curve a series map starts with; GIWAXS and others: the radial I(q)."""
@@ -31,10 +35,14 @@ class SeriesMixin:
 
     def _connect_series(self) -> None:
         self._series_map: Optional[SeriesMap] = None
+        self._series_name: Optional[str] = None
+        """The map's own name (from the files of its rows), kept when the file list changes."""
         self._series_rows: list = []
         self._series_failures: list[str] = []
         self._series_total = 0
         self._series_row = 0
+        # Every way files are listed (opened, dropped, folder watching) tells a map of the earlier list.
+        self.file_list.model().rowsInserted.connect(lambda *_args: self._series_list_grew())
         self.series_build_button.clicked.connect(self.build_series_map)
         self.series_open_button.clicked.connect(lambda: self.open_series_row())
         self.series_export_csv_action.triggered.connect(self.export_series_csv)
@@ -59,11 +67,13 @@ class SeriesMixin:
         with QSignalBlocker(self.series_curve_combo):
             self.series_curve_combo.clear()
             for curve in curves:
-                self.series_curve_combo.addItem(curve.title, curve.key)
+                self.series_curve_combo.addItem(curve_title(curve.title), curve.key)
             keys = [curve.key for curve in curves]
             wanted = current if current in keys else DEFAULT_CURVE.get(getattr(analysis, "kind", None), "radial")
             if wanted in keys:
                 self.series_curve_combo.setCurrentIndex(keys.index(wanted))
+        popup = self.series_curve_combo.view()  # the combo may be narrower than a name: its list shows them whole
+        popup.setMinimumWidth(popup.sizeHintForColumn(0) + 2 * popup.frameWidth() + 24 if curves else 0)
         files = len(self.view_model.state.files)
         frames = int(getattr(analysis, "frame_count", 1) or 1)
         ready = bool(curves) and (files > 1 or frames > 1)
@@ -71,12 +81,36 @@ class SeriesMixin:
         self.series_build_button.setEnabled(ready and not self._series_queue and not self.batch_running())
         if self._series_map is None:
             if not curves:
-                self.series_info_label.setText("The frame needs a geometry before its curves can be stacked.")
+                self._series_say("The frame needs a geometry before its curves can be stacked.")
+            elif ready and files > 1:
+                self._series_say("{n} files listed: Build Map stacks the chosen curve of every frame.", n=files)
             elif ready:
-                count = f"{files} files" if files > 1 else f"{frames} frames"
-                self.series_info_label.setText(f"{count} listed: Build Map stacks the chosen curve of every frame.")
+                self._series_say("{n} frames listed: Build Map stacks the chosen curve of every frame.", n=frames)
             else:
-                self.series_info_label.setText("")
+                self._series_say("")
+
+    def _series_say(self, template: str, **values) -> None:
+        """The sentence under the Series controls: ``template`` (English) filled with ``values`` in the interface
+        language, kept so a switch of the language says it again (``_series_language``)."""
+        self._series_info = (template, values)
+        self.series_info_label.setText(trf(template, **values) if values else tr(template))
+
+    def _series_language(self, analysis) -> None:
+        """After a switch of the interface language: the curve names, the sentence under the controls, the map's
+        title and the titles of the frame and trace plots again (nothing is reduced again)."""
+        self._refresh_series_curves(analysis)
+        info = getattr(self, "_series_info", None)
+        if info is not None and info[0]:
+            self.series_info_label.setText(trf(info[0], **info[1]) if info[1] else tr(info[0]))
+        series = self._series_map
+        if series is None:
+            return
+        self.series_map_view.title_label.setText(self._series_title(series))
+        self._series_pick_row(self._series_row + 0.5, move_band=False)
+        self._series_redraw_trace()
+
+    def _series_title(self, series) -> str:
+        return trf("{curve} — {n} frames", curve=self.series_curve_combo.currentText(), n=series.rows)
 
     # -- building ----------------------------------------------------------------------
 
@@ -91,10 +125,10 @@ class SeriesMixin:
         key = self.series_curve_combo.currentData()
         requests = self.view_model.batch_requests()[:: max(1, self.series_step_spin.value())]
         if key is None or len(requests) < 2:
-            self._status("A series map needs at least two frames with a geometry.", "warning")
+            self._status(tr("A series map needs at least two frames with a geometry."), "warning")
             return
         if self.batch_running():
-            self._status("A batch is running: its frames appear in this map as they are done.", "warning")
+            self._status(tr("A batch is running: its frames appear in this map as they are done."), "warning")
             return
         remembered = self.view_model.batch_preferences()[0]
         choices = BatchChoices(tables=False, every=self.series_step_spin.value(), speed=remembered.speed)
@@ -107,31 +141,90 @@ class SeriesMixin:
         if getattr(self, "_batch_map_only", False):
             self.cancel_batch()
 
+    def _reset_series(self) -> None:
+        """The file list was cleared: no map, the explanation of the empty tab again.
+
+        A map being built is stopped and its late rows are dropped; a running Batch Export goes on
+        writing its files, but no longer draws its frames into the map."""
+        if getattr(self, "_batch_map_only", False) and self.batch_running():
+            self._series_dropped = True  # ``_series_finished`` then says nothing
+            self.cancel_series_map()
+        self._batch_live = False
+        self._series_map, self._series_name = None, None
+        self._series_rows = []
+        self._series_row = 0
+        self._clear_stages()
+        for widget in (self.series_map_view, self.series_plots, self.series_export_button, self.series_compare_button):
+            widget.hide()
+        self.series_empty.show()
+        stretch = self.series_host.itemAt(self.series_stretch_index)
+        if stretch is not None and stretch.spacerItem() is not None:
+            self.series_host.setStretch(self.series_stretch_index, 1)
+        self._series_say("")
+
+    def _series_list_grew(self) -> None:
+        """Files were added: a map built before still holds for its own frames, and says so."""
+        series = self._series_map
+        if series is not None and not getattr(self, "_batch_live", False):
+            self._series_say("Map of the earlier list ({n} frames) — Build Map again to include the new files", n=series.rows)
+
+    def _series_drop_file(self, path, *, summed_across: bool = False) -> None:
+        """A file left the list (not while a batch runs): its rows leave the map, which is drawn again, and its
+        stages are found again; fewer than two rows left: no map. With frames summed across files
+        (``summed_across``) every later group changes, so the map stays and says it is of the earlier list."""
+        series = self._series_map
+        if series is None:
+            return
+        key = str(path).casefold()
+        kept = [row for row in self._series_rows if str(row[4][0]).casefold() != key]
+        if summed_across:
+            self._series_say("Map of the earlier list ({n} frames) — Build Map again without the removed file",
+                             n=series.rows)
+            return
+        if len(kept) == len(self._series_rows):
+            return  # none of its frames is in the map (every n-th frame)
+        if len(kept) < 2:
+            self._reset_series()
+            return
+        self._series_rows = kept
+        self._clear_stages()
+        self._show_series_map(keep_view=False, keep_q=True)
+        self._find_stages()
+
     def _series_finished(self, failures) -> None:
         """A map-only batch ended: the whole map, a note of what failed, Export."""
+        if getattr(self, "_series_dropped", False):  # the list was cleared while it ran: nothing to show
+            self._series_dropped = False
+            self._series_rows = []
+            self.series_build_button.setEnabled(len(self.view_model.state.files) > 1)
+            return
         self.series_build_button.setEnabled(True)
         if not self._series_rows:
-            self._status("No frame gave the curve: " + "; ".join(failures[:3]), "error")
-            self.series_info_label.setText("No frame gave the curve.")
+            self._status(trf("No frame gave the curve: {reasons}", reasons="; ".join(failures[:3])), "error")
+            self._series_say("No frame gave the curve.")
             return
         self._show_series_map(keep_view=False)
-        failed = f"; {len(failures)} failed: {', '.join(failures[:3])}" if failures else ""
-        text = f"Series map: {len(self._series_rows)} frames of {self.series_curve_combo.currentText()}{failed}"
-        self._status(text, "warning" if failed else "ok")
-        show_toast(self.window(), text, level="warning" if failed else "ok", action=("Export CSV…", self.export_series_csv))
+        values = dict(n=len(self._series_rows), curve=self.series_curve_combo.currentText())
+        text = (trf("Series map: {n} frames of {curve}; {failed} failed: {names}", failed=len(failures),
+                    names=", ".join(failures[:3]), **values) if failures else
+                trf("Series map: {n} frames of {curve}", **values))
+        self._status(text, "warning" if failures else "ok")
+        show_toast(self.window(), text, level="warning" if failures else "ok",
+                   action=(tr("Export CSV…"), self.export_series_csv))
         self._find_stages()
 
     def _show_series_map(self, *, keep_view: bool, keep_q: Optional[bool] = None) -> None:
         try:
             series = build_series_map(self._series_rows, self._series_key)
         except ValueError as exc:
-            self.series_info_label.setText(str(exc))
+            self._series_say(str(exc))
             return
         self._series_map = series
+        self._series_name = series_name(_ref_files(series))
         width = float(series.x[-1] - series.x[0]) if series.x.size > 1 else 1.0
         self.series_map_view.set_image(
             series.image, valid=np.isfinite(series.image), rect=(float(series.x[0]), 0.0, width, float(series.rows)),
-            y_down=True, title=f"{self.series_curve_combo.currentText()} — {series.rows} frames",
+            y_down=True, title=self._series_title(series),
             x_label=series.x_label, y_label="frame", keep_view=keep_view,
             context=f"series:{self._series_key}",  # each curve its own limits (I(q) and I(χ) differ)
         )
@@ -142,10 +235,10 @@ class SeriesMixin:
         if stretch is not None and stretch.spacerItem() is not None:
             self.series_host.setStretch(self.series_stretch_index, 0)
         self.series_export_button.show()
-        self.series_info_label.setText(tr(
+        self._series_say(
             "{rows} frames × {points} points. Click or drag the horizontal band to pick a frame, drag the vertical "
-            "band (and its edges) to pick a q window; Open shows the frame in Analyze.").format(rows=series.rows,
-                                                                                               points=series.x.size))
+            "band (and its edges) to pick a {axis} window; Open shows the frame in Analyze.",
+            rows=series.rows, points=series.x.size, axis=axis_symbol(series.x_label))
         self._series_pick_row(min(self._series_row, series.rows - 1) + 0.5)
         if not (keep_view if keep_q is None else keep_q) or not hasattr(self, "_series_q"):  # where the series changes most
             centre = series.most_changing_x()
@@ -167,9 +260,9 @@ class SeriesMixin:
         self._series_row = row
         if move_band:
             self.series_map_view.show_horizontal_band(row, row + 1)
-        self.series_profile_plot.set_title(f"Frame {row + 1}: {series.labels[row]}")
+        self.series_profile_plot.set_title(trf("Frame {n}: {label}", n=row + 1, label=series.labels[row]))
         self.series_profile_plot.set_labels(series.x_label, "Intensity")
-        self.series_profile_plot.set_curves([(f"frame {row + 1}", series.x, series.profile(row))])
+        self.series_profile_plot.set_curves([(trf("frame {n}", n=row + 1), series.x, series.profile(row))])
 
     def _series_pick_q(self, low: float, high: float, *, move_band: bool = True) -> None:
         series = self._series_map
@@ -190,11 +283,14 @@ class SeriesMixin:
         centre, half = 0.5 * (low + high), 0.5 * (high - low)
         frames = np.arange(1, series.rows + 1, dtype=float)
         kind = self.series_trace_combo.currentData() or "intensity"
+        # The stages are looked for in a map of three frames or more (``_find_stages``).
+        self.series_trace_plot.set_empty_text("" if kind != "change" else CHANGE_EMPTY if series.rows >= 3 else CHANGE_FEW)
         if kind == "change" and self._draw_change_trace():
             return
         name = series.x_label.split(" (")[0]
         if kind == "intensity":
-            self.series_trace_plot.set_title(f"I at {name} = {centre:.3g} ± {half:.1g}")
+            self.series_trace_plot.set_title(trf("I at {axis} = {centre} ± {half}", axis=name, centre=f"{centre:.3g}",
+                                                 half=f"{half:.1g}"))
             self.series_trace_plot.set_labels("frame", "Intensity")
             self.series_trace_plot.set_curves([(f"{centre:.4g}", frames, series.trace(centre, half))])
             return
@@ -202,7 +298,7 @@ class SeriesMixin:
         self._series_track = track
         unit = series.x_label[series.x_label.find("("):] if "(" in series.x_label else ""
         labels = {"position": f"peak position {unit}", "fwhm": f"FWHM {unit}", "area": "area", "height": "height"}
-        self.series_trace_plot.set_title(f"Peak in {low:.3g}–{high:.3g}")
+        self.series_trace_plot.set_title(trf("Peak in {low}–{high}", low=f"{low:.3g}", high=f"{high:.3g}"))
         self.series_trace_plot.set_labels("frame", labels[kind])
         self.series_trace_plot.set_curves([(kind, frames, dict(track.table())[kind])])
 
@@ -217,9 +313,9 @@ class SeriesMixin:
         try:
             written = self.view_model.export_series_track(series, track_peak(series, *self._series_q), Path(path))
         except (ValueError, OSError) as exc:
-            self._status(f"Could not export the peak table: {exc}", "error")
+            self._status(trf("Could not export the peak table: {error}", error=message_text(exc)), "error")
             return None
-        self.notify_written(f"Saved {written.name}", written.parent)
+        self.notify_written(trf("Saved {name}", name=written.name), written.parent)
         return written
 
     def _series_clicked(self, x: float, y: float) -> None:
@@ -233,7 +329,8 @@ class SeriesMixin:
         column = int(np.argmin(np.abs(series.x - x)))
         value = series.image[row, column]
         text = "—" if not np.isfinite(value) else f"{value:.4g}"
-        return f"frame {row + 1} ({series.labels[row]}) · {series.x_label.split(' (')[0]} = {series.x[column]:.4g} · I = {text}"
+        return trf("frame {n} ({label})", n=row + 1, label=series.labels[row]) + (
+            f" · {series.x_label.split(' (')[0]} = {series.x[column]:.4g} · I = {text}")
 
     def open_series_row(self, row: Optional[int] = None) -> bool:
         """Show the frame of a map row in Analyze (its file, and its frame of a series)."""
@@ -244,6 +341,7 @@ class SeriesMixin:
         path, frame_index = series.refs[row]
         keys = [str(item).casefold() for item in self.view_model.state.files]
         if str(path).casefold() not in keys:
+            self._status(tr("That frame is no longer listed"), "warning")
             return False
         index = keys.index(str(path).casefold())
         if self.file_list.currentRow() != index:
@@ -257,7 +355,7 @@ class SeriesMixin:
 
     def _series_path(self, title: str, suffix: str, filters: str) -> Optional[Path]:
         folder = self.view_model.default_export_dir() or Path(self._last_folder or ".")
-        path, _ = QFileDialog.getSaveFileName(self, title, str(folder / f"series_{self._series_key}_{suffix}"), filters)
+        path, _ = QFileDialog.getSaveFileName(self, tr(title), str(folder / f"series_{self._series_key}_{suffix}"), filters)
         return Path(path) if path else None
 
     def export_series_csv(self, path: Optional[Path] = None) -> Optional[Path]:
@@ -269,9 +367,9 @@ class SeriesMixin:
         try:
             written = self.view_model.export_series_map(self._series_map, Path(path))
         except (ValueError, OSError) as exc:
-            self._status(f"Could not export the map: {exc}", "error")
+            self._status(trf("Could not export the map: {error}", error=message_text(exc)), "error")
             return None
-        self.notify_written(f"Saved {written.name}", written.parent)
+        self.notify_written(trf("Saved {name}", name=written.name), written.parent)
         return written
 
     def export_series_figure(self, path: Optional[Path] = None) -> Optional[Path]:
@@ -285,14 +383,22 @@ class SeriesMixin:
         try:
             written = self.view_model.save_image_figure(Path(path), image, **state)
         except (ValueError, OSError) as exc:
-            self._status(f"Could not save the figure: {exc}", "error")
+            self._status(trf("Could not save the figure: {error}", error=message_text(exc)), "error")
             return None
-        self.notify_written(f"Saved {written.name}", written.parent)
+        self.notify_written(trf("Saved {name}", name=written.name), written.parent)
         return written
 
     def _export_series_plot(self, plot, suffix: str) -> None:
         if self._series_map is not None:
             self.save_plot(plot, f"series_{suffix}")
+
+
+def _ref_files(series) -> list[Path]:
+    """The files of a map's rows, each once, in row order (a multi-frame file gives several rows)."""
+    files: dict[str, Path] = {}
+    for path, _frame in getattr(series, "refs", None) or ():
+        files.setdefault(str(path).casefold(), Path(path))
+    return list(files.values())
 
 
 __all__ = ["SeriesMixin"]

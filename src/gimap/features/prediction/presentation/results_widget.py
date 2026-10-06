@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
 )
 
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.layout_metrics import move_window_to_cursor_screen
 
 from .views import (
@@ -180,7 +181,7 @@ class MultiFilePredictResultsWidget(QWidget, MultiFileResultsWidgetView):
         """更新统计信息"""
         results = self.table_model.getAllResults()
         if not results:
-            self.stats_label.setText("Ready")
+            self.stats_label.setText(tr("Ready"))
             return
 
         total = len(results)
@@ -188,9 +189,11 @@ class MultiFilePredictResultsWidget(QWidget, MultiFileResultsWidgetView):
         failed = sum(1 for r in results if r.status == PredictStatus.FAILED)
         running = sum(1 for r in results if r.status == PredictStatus.RUNNING)
 
-        text = f"Total: {total}, Completed: {completed}, Failed: {failed}"
+        counts = {"total": total, "completed": completed, "failed": failed, "running": running}
         if running > 0:
-            text += f", Running: {running}"
+            text = trf("Total: {total}, Completed: {completed}, Failed: {failed}, Running: {running}", **counts)
+        else:
+            text = trf("Total: {total}, Completed: {completed}, Failed: {failed}", **counts)
 
         self.stats_label.setText(text)
 

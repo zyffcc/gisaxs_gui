@@ -34,6 +34,14 @@ SPLIT_RATIO = 2.0
 SPLIT_FLOOR = 2.0
 """… and the series it separates differ by more than this percentage."""
 
+# Why a comparison cannot be made: the English of each error (``str(exc)``), from these templates so that the
+# page can say it in the interface language (exact keys, or a template whose values it fills in again).
+NO_SERIES = "Add a series first."
+NO_DATA = "{name} has no data."
+NO_COMMON_RANGE = "The series share no common q range."
+DIFFERENT_AXES = "The series have different x axes: {axes}"
+COMPARE_ERRORS = (NO_SERIES, NO_DATA, NO_COMMON_RANGE, DIFFERENT_AXES)
+
 
 @dataclass(frozen=True)
 class SeriesData:
@@ -65,7 +73,8 @@ class SeriesResult:
     scores: np.ndarray
     """``(rows, k)``: the frames in the common space of the main changes."""
     stages: Optional[SeriesStages]
-    """The series' own stages (on the common grid); ``None`` below three frames."""
+    """The series' own stages (on the common grid); ``None`` when it is too short to cut (fewer than
+    ``shared/series_stages`` ``SHORTEST`` frames kept)."""
     half_row: Optional[int]
     ninety_row: Optional[int]
     end: np.ndarray
@@ -98,7 +107,8 @@ class Comparison:
         return [result.name for result in self.results]
 
     def group_text(self) -> str:
-        """“116, 117, 123 alike; 120 different”."""
+        """“116, 117, 123 alike; 120 different”: the label of the groups in the table and the record
+        (English; the page writes its own words from ``groups``). Empty below three series."""
         if len(self.results) < 3:
             return ""
         members: dict[int, list[str]] = {}
@@ -106,7 +116,8 @@ class Comparison:
             members.setdefault(group, []).append(name)
         if len(members) == 1:
             return "All alike at the end (no clear split)."
-        return "; ".join(", ".join(names) for names in members.values())
+        return "; ".join(", ".join(names) + (" alike" if len(names) > 1 else " different")
+                         for names in members.values())
 
 
 def common_grid(series: Sequence[SeriesData]) -> np.ndarray:
@@ -115,13 +126,13 @@ def common_grid(series: Sequence[SeriesData]) -> np.ndarray:
     for item in series:
         finite = np.isfinite(item.x) & np.isfinite(item.image).any(axis=0)
         if not finite.any():
-            raise ValueError(f"{item.name} has no data.")
+            raise ValueError(NO_DATA.format(name=item.name))
         lows.append(float(np.min(item.x[finite])))
         highs.append(float(np.max(item.x[finite])))
     low, high = max(lows), min(highs)
     grid = series[0].x[(series[0].x >= low) & (series[0].x <= high)]
     if grid.size < 3:
-        raise ValueError("The series share no common q range.")
+        raise ValueError(NO_COMMON_RANGE)
     return np.sort(grid)
 
 
@@ -164,10 +175,10 @@ def _groups(end: np.ndarray, distance: np.ndarray) -> tuple:
 def compare(series: Sequence[SeriesData], *, q_range: Optional[Sequence[float]] = None, shape_only: bool = True,
             end_frames: int = END_FRAMES) -> Comparison:
     if not series:
-        raise ValueError("Add a series first.")
+        raise ValueError(NO_SERIES)
     labels = {item.x_label for item in series}
     if len(labels) > 1:
-        raise ValueError("The series have different x axes: " + ", ".join(sorted(labels)))
+        raise ValueError(DIFFERENT_AXES.format(axes=", ".join(sorted(labels))))
     grid = common_grid(series)
     images = [on_grid(item, grid) for item in series]
     stacked = np.vstack(images)
@@ -195,8 +206,8 @@ def compare(series: Sequence[SeriesData], *, q_range: Optional[Sequence[float]] 
         starts.append(start)
         try:
             stages = find_stages(grid, images[index], data=block) if item.rows >= 3 else None
-        except ValueError:
-            stages = None
+        except (ValueError, KeyError):  # too short to cut: ValueError below SHORTEST kept frames (KeyError: a net)
+            stages = None  # this series without stages; the others are still compared
         with np.errstate(all="ignore"):
             end_curve = np.nanmean(images[index][last], axis=0)
         results.append(SeriesResult(name=item.name, rows=item.rows, odd=odd_by_series[index], scores=scores, stages=stages,
@@ -236,4 +247,5 @@ def _oriented(results: list) -> list:
     return turned
 
 
-__all__ = ["END_FRAMES", "Comparison", "SeriesData", "SeriesResult", "common_grid", "compare", "on_grid"]
+__all__ = ["COMPARE_ERRORS", "DIFFERENT_AXES", "END_FRAMES", "NO_COMMON_RANGE", "NO_DATA", "NO_SERIES", "Comparison",
+           "SeriesData", "SeriesResult", "common_grid", "compare", "on_grid"]

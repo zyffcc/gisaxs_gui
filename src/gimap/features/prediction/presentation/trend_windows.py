@@ -16,6 +16,8 @@ import numpy as np
 
 from PyQt5.QtWidgets import QLabel, QDialog
 
+from src.gimap.app.presentation.i18n import current_language, tr, trf
+
 
 from .views import (
     DistributionHeatmapDialogView,
@@ -29,6 +31,26 @@ from .result_types import (
 
 if TYPE_CHECKING:
     from .results_widget import MultiFilePredictResultsWidget
+
+ALL_PARAMETERS = "__all__"
+_CJK_FONTS = ("Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "SimHei", "PingFang SC", "WenQuanYi Zen Hei")
+
+
+def figure_font() -> Dict[str, Any]:
+    """Keyword arguments for figure texts: in Chinese a CJK font after matplotlib's own (whose font has
+    no Chinese glyphs), so the titles and axis labels are not drawn as empty boxes."""
+    if current_language() != "zh":
+        return {}
+    try:
+        from matplotlib import font_manager
+
+        names = {font.name for font in font_manager.fontManager.ttflist}
+    except Exception:  # noqa: BLE001 - no matplotlib font list: the default font
+        return {}
+    fallback = next((name for name in _CJK_FONTS if name in names), None)
+    if fallback is None:
+        return {}
+    return {"fontfamily": ["DejaVu Sans", fallback] if "DejaVu Sans" in names else [fallback]}
 
 
 class DistributionHeatmapWindow(QDialog, DistributionHeatmapDialogView):
@@ -54,7 +76,7 @@ class DistributionHeatmapWindow(QDialog, DistributionHeatmapDialogView):
             self.plot_host_layout.addWidget(self.canvas, 1)
         except Exception as exc:
             self.plot_host_layout.addWidget(
-                QLabel(f"Matplotlib is required for heatmap display: {exc}", self), 1
+                QLabel(trf("Matplotlib is required for heatmap display: {error}", error=exc), self), 1
             )
 
         self.component_combo.currentIndexChanged.connect(self.refresh_plot)
@@ -157,20 +179,22 @@ class DistributionHeatmapWindow(QDialog, DistributionHeatmapDialogView):
             self.figure.clear()
             self.ax = self.figure.add_subplot(111)
             self.figure.subplots_adjust(left=0.16, right=0.88, top=0.9, bottom=0.12)
+        font = figure_font()
         component_key = self.component_combo.currentData()
         if not component_key or component_key not in self._component_map:
             self.ax.clear()
             self.ax.text(
                 0.5,
                 0.5,
-                "No completed R/h distribution results yet.",
+                tr("No completed R/h distribution results yet."),
                 ha="center",
                 va="center",
                 transform=self.ax.transAxes,
+                **font,
             )
             self.ax.set_axis_off()
             self.canvas.draw_idle()
-            self.status_label.setText("No completed R/h distribution results yet.")
+            self.status_label.setText(tr("No completed R/h distribution results yet."))
             return
         self._last_component_key = component_key
         meta = self._component_map[component_key]
@@ -189,7 +213,7 @@ class DistributionHeatmapWindow(QDialog, DistributionHeatmapDialogView):
             labels.append(result.file_name)
 
         if not rows:
-            self.status_label.setText("No data available for the selected component.")
+            self.status_label.setText(tr("No data available for the selected component."))
             return
 
         width = max(row.size for row in rows)
@@ -199,9 +223,9 @@ class DistributionHeatmapWindow(QDialog, DistributionHeatmapDialogView):
 
         self.ax.clear()
         image = self.ax.imshow(matrix, aspect="auto", interpolation="nearest", origin="lower")
-        self.ax.set_title(f"{meta['label']} heatmap")
-        self.ax.set_xlabel("Distribution bin")
-        self.ax.set_ylabel("Input file / stack (low to high)")
+        self.ax.set_title(trf("{component} heatmap", component=meta["label"]), **font)
+        self.ax.set_xlabel(tr("Distribution bin"), **font)
+        self.ax.set_ylabel(tr("Input file / stack (low to high)"), **font)
         if len(labels) <= 25:
             self.ax.set_yticks(np.arange(len(labels)))
             self.ax.set_yticklabels(labels, fontsize=7)
@@ -210,9 +234,11 @@ class DistributionHeatmapWindow(QDialog, DistributionHeatmapDialogView):
             self.ax.set_yticks(tick_idx)
             self.ax.set_yticklabels([labels[i] for i in tick_idx], fontsize=7)
         self._colorbar = self.figure.colorbar(image, ax=self.ax, fraction=0.046, pad=0.04)
-        self._colorbar.set_label("Predicted intensity / probability")
+        self._colorbar.set_label(tr("Predicted intensity / probability"), **font)
         self.canvas.draw_idle()
-        self.status_label.setText(f"Showing {len(rows)} completed result(s), {width} bins.")
+        self.status_label.setText(
+            trf("Showing {count} completed result(s), {bins} bins.", count=len(rows), bins=width)
+        )
 
 
 class ParameterTrendWindow(QDialog, ParameterTrendDialogView):
@@ -235,7 +261,7 @@ class ParameterTrendWindow(QDialog, ParameterTrendDialogView):
             self.plot_host_layout.addWidget(self.canvas, 1)
         except Exception as exc:
             self.plot_host_layout.addWidget(
-                QLabel(f"Matplotlib is required for parameter trend display: {exc}", self), 1
+                QLabel(trf("Matplotlib is required for parameter trend display: {error}", error=exc), self), 1
             )
 
         self.parameter_combo.currentIndexChanged.connect(self.refresh_plot)
@@ -282,15 +308,15 @@ class ParameterTrendWindow(QDialog, ParameterTrendDialogView):
         return names
 
     def refresh_parameters_and_plot(self) -> None:
-        previous = self.parameter_combo.currentText()
+        previous = self.parameter_combo.currentData()
         names = self._discover_parameter_names()
         self.parameter_combo.blockSignals(True)
         self.parameter_combo.clear()
-        self.parameter_combo.addItem("All parameters")
+        self.parameter_combo.addItem(tr("All parameters"), ALL_PARAMETERS)
         for name in names:
-            self.parameter_combo.addItem(name)
+            self.parameter_combo.addItem(name, name)  # parameter names are data: never translated
         if previous:
-            idx = self.parameter_combo.findText(previous)
+            idx = self.parameter_combo.findData(previous)
             if idx >= 0:
                 self.parameter_combo.setCurrentIndex(idx)
         self.parameter_combo.blockSignals(False)
@@ -325,41 +351,43 @@ class ParameterTrendWindow(QDialog, ParameterTrendDialogView):
             rows.append(arr)
             labels.append(result.file_name)
 
+        font = figure_font()
         if not rows:
             self.ax.text(
                 0.5,
                 0.5,
-                "No completed parameter predictions yet.",
+                tr("No completed parameter predictions yet."),
                 ha="center",
                 va="center",
                 transform=self.ax.transAxes,
+                **font,
             )
             self.ax.set_axis_off()
-            self.status_label.setText("No completed parameter predictions yet.")
+            self.status_label.setText(tr("No completed parameter predictions yet."))
             self.canvas.draw_idle()
             return
 
-        selected = self.parameter_combo.currentText()
+        selected = self.parameter_combo.currentData()
         x = np.arange(len(rows))
         matrix = np.full((len(rows), max(row.size for row in rows)), np.nan, dtype=float)
         for i, row in enumerate(rows):
             matrix[i, : row.size] = row
 
-        if selected and selected != "All parameters" and selected in names:
+        if selected and selected != ALL_PARAMETERS and selected in names:
             idx = names.index(selected)
             self.ax.scatter(x, matrix[:, idx], s=34)
             self.ax.plot(x, matrix[:, idx], linewidth=1.0, alpha=0.75)
             self.ax.set_ylabel(selected)
-            self.ax.set_title(f"{selected} trend")
+            self.ax.set_title(trf("{parameter} trend", parameter=selected), **font)
         else:
             for idx, name in enumerate(names[: matrix.shape[1]]):
                 self.ax.scatter(x, matrix[:, idx], s=24, label=name)
                 self.ax.plot(x, matrix[:, idx], linewidth=1.0, alpha=0.65)
-            self.ax.set_ylabel("Predicted value")
-            self.ax.set_title("SF parameter trends")
+            self.ax.set_ylabel(tr("Predicted value"), **font)
+            self.ax.set_title(tr("SF parameter trends"), **font)
             self.ax.legend(loc="best")
 
-        self.ax.set_xlabel("Input file / stack (low to high)")
+        self.ax.set_xlabel(tr("Input file / stack (low to high)"), **font)
         if len(labels) <= 25:
             self.ax.set_xticks(x)
             self.ax.set_xticklabels(labels, rotation=65, ha="right", fontsize=7)
@@ -372,4 +400,4 @@ class ParameterTrendWindow(QDialog, ParameterTrendDialogView):
         self.ax.grid(alpha=0.25)
         self.figure.tight_layout()
         self.canvas.draw_idle()
-        self.status_label.setText(f"Showing {len(rows)} completed result(s).")
+        self.status_label.setText(trf("Showing {count} completed result(s).", count=len(rows)))

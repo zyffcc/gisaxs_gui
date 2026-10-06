@@ -62,6 +62,12 @@ STARTS = (
 )
 
 
+CURVE_LIST_HEIGHT = 130
+"""The most height (px) the list of curves takes; fewer rows: just their height."""
+SCREEN_SHARE = 0.9
+"""The dialog opens as tall as its content, at most this share of the screen's free height."""
+
+
 def _muted(text: str, parent: QWidget) -> QLabel:
     label = QLabel(text, parent)
     label.setWordWrap(True)
@@ -140,7 +146,7 @@ class BatchExportView:
         top.setColumnStretch(1, 1)
         layout.addLayout(top)
 
-        scroll = QScrollArea(self)
+        scroll = self.options_scroll = QScrollArea(self)  # the dialog opens as tall as it (``batch_dialog.py``)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         body = QWidget(scroll)
@@ -161,7 +167,7 @@ class BatchExportView:
         self.curve_list = QListWidget(self.data_group)
         self.curve_list.setObjectName("batchCurveList")
         self.curve_list.setSelectionMode(QAbstractItemView.NoSelection)
-        self.curve_list.setMaximumHeight(130)
+        self.curve_list.setMaximumHeight(CURVE_LIST_HEIGHT)  # as tall as its rows, up to this (``batch_dialog.py``)
         curves.addWidget(self.curve_list)
         curve_buttons = QHBoxLayout()
         self.all_curves_button = QPushButton("All", self.data_group)
@@ -374,4 +380,7 @@ class BatchExportView:
         self.output_files[key] = name
 
 
-__all__ = ["BatchExportView", "DATA_OUTPUTS", "FRAME_OUTPUT", "MODELS", "OUTPUTS", "PEAK_SHAPES", "PICTURE_OUTPUTS", "STARTS"]
+__all__ = [
+    "BatchExportView", "CURVE_LIST_HEIGHT", "DATA_OUTPUTS", "FRAME_OUTPUT", "MODELS", "OUTPUTS", "PEAK_SHAPES",
+    "PICTURE_OUTPUTS", "SCREEN_SHARE", "STARTS",
+]

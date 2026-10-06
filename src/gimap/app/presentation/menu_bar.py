@@ -12,12 +12,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
-from PyQt5.QtCore import QObject, Qt, QUrl
+from PyQt5.QtCore import QEvent, QObject, QRect, Qt, QUrl
 from PyQt5.QtGui import QDesktopServices, QKeySequence, QTextDocument
-from PyQt5.QtWidgets import QAction, QActionGroup, QMainWindow, QMenu, QMessageBox, QWidget
+from PyQt5.QtWidgets import QAction, QActionGroup, QApplication, QMainWindow, QMenu, QMessageBox, QWidget
 
 from .assets import app_colored_logo_pixmap, app_icon
+from .i18n import LANGUAGES, tr
+from .layout_metrics import available_geometry
 from .navigation import NavigationItem
+from .recent_items import recent_label
+from .theme import theme_manager
 
 APP_NAME = "GIMaP"
 APP_VERSION = "0.1.0"
@@ -33,6 +37,8 @@ class MenuCommands:
     """What the menu entries do; ``None`` hides the entry."""
 
     open_files: Command = None
+    open_files_label: Optional[Callable[[], tuple]] = None
+    """``(text, tip)`` of the Open Data entry, asked each time the File menu opens (what Ctrl+O does there)."""
     open_folder: Command = None
     recent_paths: Callable[[], list] = lambda: []
     open_recent: Optional[Callable[[str], object]] = None
@@ -46,6 +52,9 @@ class MenuCommands:
     show_workspace: Optional[Callable[[str], object]] = None
     set_theme: Optional[Callable[[str], object]] = None
     current_theme: Callable[[], str] = lambda: "light"
+    set_language: Optional[Callable[[str], object]] = None
+    """View ▸ Language: the same switch as Settings ▸ Appearance ▸ Language (``en`` or ``zh``)."""
+    current_language: Callable[[], str] = lambda: "en"
     change_font_size: Optional[Callable[[float], object]] = None
     reset_font_size: Command = None
     set_sidebar_collapsed: Optional[Callable[[bool], object]] = None
@@ -76,6 +85,7 @@ class MainMenuBar(QObject):
         self.commands = commands
         self.workspaces = tuple(workspaces)
         self.actions: dict[str, QAction] = {}
+        self._submenus: list[QMenu] = []
         menubar = window.menuBar()
         menubar.clear()
         self.file_menu = menubar.addMenu("&File")
@@ -86,6 +96,9 @@ class MainMenuBar(QObject):
         self._build_view()
         self._build_tools()
         self._build_help()
+        # The status bar is hidden on most pages: the descriptions show as tooltips in the menus.
+        for menu in (self.file_menu, self.view_menu, self.tools_menu, self.help_menu, *self._submenus):
+            menu.setToolTipsVisible(True)
 
     # -- helpers ------------------------------------------------------------
 
@@ -118,11 +131,14 @@ class MainMenuBar(QObject):
         c, menu = self.commands, self.file_menu
         self._add(menu, "open_files", "&Open Data…", c.open_files,
                   shortcut=QKeySequence.Open, tip="Open detector frames (CBF, NXS, TIFF, EDF) in Analyze")
+        if c.open_files is not None and c.open_files_label is not None:
+            menu.aboutToShow.connect(self._sync_open_files)
         self._add(menu, "open_folder", "Open &Folder…", c.open_folder,
                   shortcut="Ctrl+Shift+O", tip="Open every frame of a folder in Analyze")
         if c.open_recent is not None:
             self.recent_menu = menu.addMenu("Open &Recent")
             self.recent_menu.aboutToShow.connect(self._fill_recent)
+            self._submenus.append(self.recent_menu)
         menu.addSeparator()
         self._add(menu, "open_project", "Open &Project…", c.open_project, shortcut="Ctrl+Shift+P",
                   tip="Reopen a sample as it was left: the frames and set-up of Analyze, the curve and model of Fitting")
@@ -132,8 +148,9 @@ class MainMenuBar(QObject):
                   tip="Save the project under another name")
         menu.addSeparator()
         if c.load_parameters is not None or c.save_parameters is not None:
-            labs = menu.addMenu("&Labs Parameters")
+            labs = self.labs_menu = menu.addMenu("&Labs Parameters")
             labs.setToolTip("The settings of 2D Prediction and Trainset Build")
+            self._submenus.append(labs)
             self._add(labs, "load_parameters", "&Load…", c.load_parameters,
                       tip="Load the settings of the Labs pages (2D Prediction, Trainset Build) from a JSON file")
             self._add(labs, "save_parameters", "&Save As…", c.save_parameters,
@@ -141,10 +158,22 @@ class MainMenuBar(QObject):
             menu.addSeparator()
         self._add(menu, "quit", "E&xit", c.quit, shortcut=QKeySequence.Quit)
 
-    def _fill_recent(self) -> None:
-        """The files and folders opened last, newest first (built each time the menu opens)."""
-        from pathlib import Path
+    def _sync_open_files(self) -> None:
+        """Open Data says what it opens on the page shown (Open Curve… on Fitting's Single analysis)."""
+        action = self.actions.get("open_files")
+        if action is None or self.commands.open_files_label is None:
+            return
+        text, tip = self.commands.open_files_label()
+        action.setText(text)
+        action.setToolTip(tip)
+        action.setStatusTip(tip)
 
+    def _fill_recent(self) -> None:
+        """The projects, files and folders opened last, newest first (built each time the menu opens).
+
+        Rows read ``&N  name — parent folder name`` plus `` (folder)`` / `` (project)``; the full path
+        is the tooltip.
+        """
         menu, c = self.recent_menu, self.commands
         menu.clear()
         paths = list(c.recent_paths() or [])
@@ -153,9 +182,7 @@ class MainMenuBar(QObject):
             empty.setEnabled(False)
         for number, path in enumerate(paths, start=1):
             path = Path(path)
-            kind = "  (folder)" if path.is_dir() else "  (project)" if path.suffix.lower() == ".gimap" else ""
-            label = f"&{number}  {path.name or str(path)}" + kind
-            action = menu.addAction(label)
+            action = menu.addAction(f"&{number}  {recent_label(path)}")
             action.setToolTip(str(path))
             action.setStatusTip(str(path))
             action.triggered.connect(lambda _checked=False, target=str(path): c.open_recent(target))
@@ -177,35 +204,51 @@ class MainMenuBar(QObject):
                 )
             menu.addSeparator()
         if c.set_sidebar_collapsed is not None:
-            action = QAction("Collapse &Sidebar", self.window)
-            action.setCheckable(True)
-            action.setChecked(bool(c.sidebar_collapsed()))
+            # Not checkable (a check column would indent this one item): the text says what it does.
+            action = QAction(self._sidebar_text(), self.window)
             action.setShortcut(QKeySequence("Ctrl+B"))
-            action.toggled.connect(lambda checked: c.set_sidebar_collapsed(bool(checked)))
+            action.triggered.connect(lambda _checked=False: self._toggle_sidebar())
             menu.addAction(action)
             self.actions["collapse_sidebar"] = action
         self._add(menu, "full_screen", "&Full Screen", c.toggle_full_screen,
                   shortcut=QKeySequence.FullScreen)
-        if c.set_theme is not None:
+        if any(command is not None for command in (c.set_theme, c.change_font_size, c.set_language)):
             menu.addSeparator()
-            theme_menu = menu.addMenu("&Theme")
-            group = QActionGroup(self.window)
-            group.setExclusive(True)
-            for mode, title in (("light", "&Light"), ("dark", "&Dark")):
-                action = QAction(title, self.window)
-                action.setCheckable(True)
-                action.setChecked(c.current_theme() == mode)
-                action.triggered.connect(lambda _checked=False, m=mode: c.set_theme(m))
-                group.addAction(action)
-                theme_menu.addAction(action)
-                self.actions[f"theme_{mode}"] = action
+        if c.set_theme is not None:
+            self.theme_menu = self._choice_menu(
+                menu, "&Theme", "theme", (("light", "&Light"), ("dark", "&Dark")), c.current_theme(), c.set_theme)
         if c.change_font_size is not None:
-            font_menu = menu.addMenu("Font &Size")
+            font_menu = self.font_menu = menu.addMenu("Font Si&ze")  # S is Collapse Sidebar's key
+            self._submenus.append(font_menu)
             self._add(font_menu, "font_larger", "&Larger", lambda: c.change_font_size(+0.5),
                       shortcut=QKeySequence.ZoomIn)
             self._add(font_menu, "font_smaller", "&Smaller", lambda: c.change_font_size(-0.5),
                       shortcut=QKeySequence.ZoomOut)
             self._add(font_menu, "font_reset", "&Reset", c.reset_font_size, shortcut="Ctrl+0")
+        if c.set_language is not None:
+            # Each language in its own name (English, 中文), in either interface language: never translated.
+            self.language_menu = self._choice_menu(
+                menu, "&Language", "language", tuple(LANGUAGES.items()), c.current_language(), self._set_language)
+
+    def _choice_menu(self, menu: QMenu, title: str, name: str, choices, current: str, choose) -> QMenu:
+        """A submenu of exclusive checkable entries (Theme, Language); ``choose(key)`` on a click."""
+        submenu = menu.addMenu(title)
+        self._submenus.append(submenu)
+        group = QActionGroup(self.window)
+        group.setExclusive(True)
+        for key, text in choices:
+            action = QAction(text, self.window)
+            action.setCheckable(True)
+            action.setChecked(current == key)
+            action.triggered.connect(lambda _checked=False, k=key: choose(k))
+            group.addAction(action)
+            submenu.addAction(action)
+            self.actions[f"{name}_{key}"] = action
+        return submenu
+
+    def _set_language(self, key: str) -> None:
+        self.commands.set_language(key)
+        self.sync()
 
     def _build_tools(self) -> None:
         c, menu = self.commands, self.tools_menu
@@ -220,8 +263,8 @@ class MainMenuBar(QObject):
         self._add(menu, "xrr_extractor", "&XRR Series Extractor…", c.xrr_extractor,
                   shortcut="Ctrl+Shift+R", tip="Extract XRR intensity from NXS or CBF series")
         menu.addSeparator()
-        self._add(menu, "ai_fitting_workspace", "&Fit Settings && Batch…", c.ai_fitting_workspace,
-                  tip="The fitting method, components and limits, and fitting many curve files at once")
+        self._add(menu, "ai_fitting_workspace", "1D &Predict — Fit Many Curves…", c.ai_fitting_workspace,
+                  tip="1D Predict: a list of curve files fitted one after another, with their results")
         self._add(menu, "claude_assistant", "Process with &AI…", c.claude_assistant,
                   shortcut="Ctrl+Shift+L",
                   tip="Let the AI (Claude, DeepSeek, Qwen, OpenAI, a local model …) analyse the frame shown in Analyze, "
@@ -243,49 +286,159 @@ class MainMenuBar(QObject):
 
     # -- state sync ---------------------------------------------------------
 
+    def _sidebar_text(self) -> str:
+        return tr("Expand &Sidebar") if self.commands.sidebar_collapsed() else tr("Collapse &Sidebar")
+
+    def _toggle_sidebar(self) -> None:
+        self.commands.set_sidebar_collapsed(not bool(self.commands.sidebar_collapsed()))
+        self.sync()
+
     def sync(self) -> None:
         """Reflect state changed elsewhere (settings dialog, sidebar button)."""
         c = self.commands
-        mode = c.current_theme()
-        for key in ("light", "dark"):
-            action = self.actions.get(f"theme_{key}")
-            if action is not None:
-                action.setChecked(key == mode)
+        for name, chosen, keys in (("theme", c.current_theme(), ("light", "dark")),
+                                   ("language", c.current_language(), tuple(LANGUAGES))):
+            for key in keys:
+                action = self.actions.get(f"{name}_{key}")
+                if action is not None:
+                    action.setChecked(key == chosen)
         action = self.actions.get("collapse_sidebar")
-        if action is not None and action.isChecked() != bool(c.sidebar_collapsed()):
-            action.blockSignals(True)
-            action.setChecked(bool(c.sidebar_collapsed()))
-            action.blockSignals(False)
+        if action is not None:
+            action.setText(self._sidebar_text())
 
 
-class ToolWindows:
-    """Single-instance modeless tool windows, created on demand."""
+TOOL_GEOMETRY_KEY = "tool_windows.{name}.geometry"
+"""Preference: ``[x, y, width, height]`` of a tool window as it was last closed (``name``: calibration, converter …)."""
+SCREEN_SHARE = 0.9
+"""A tool window takes at most this share of the screen's available width and height."""
+TITLE_ROOM = 32
+"""Room above a window for its title bar, so it can always be grabbed and moved."""
+_TOOL_NAME = "gimapToolWindow"
 
-    def __init__(self, parent: QWidget):
-        self.parent = parent
+
+def clamp_to_screen(rect: QRect, area: QRect, *, share: float = SCREEN_SHARE) -> QRect:
+    """``rect`` at most ``share`` of ``area`` wide and high, moved (not shrunk further) to lie inside ``area`` with
+    room for the title bar above it."""
+    width = max(1, min(rect.width(), int(area.width() * share)))
+    height = max(1, min(rect.height(), int(area.height() * share)))
+    left = min(max(rect.x(), area.left()), area.right() + 1 - width)
+    top = area.top() + min(TITLE_ROOM, max(0, area.height() - height))
+    return QRect(left, min(max(rect.y(), top), area.bottom() + 1 - height), width, height)
+
+
+class ToolWindows(QObject):
+    """Single-instance modeless tool windows, created on demand.
+
+    A new window opens where it was last closed (``preferences``), else at its own size; either way at most
+    about 90 % of the screen and on it (a 1280 × 820 window on a 1366 × 768 laptop would put its buttons
+    under the task bar)."""
+
+    def __init__(self, parent: QWidget, preferences=None):
+        super().__init__(parent)
+        self.owner = parent
+        self.preferences = preferences
         self._open: dict[str, QWidget] = {}
 
     def get(self, name: str) -> QWidget | None:
         return self._open.get(name)
 
+    def windows(self) -> list[QWidget]:
+        """The tool windows open now (shown or waiting hidden for a job to end)."""
+        return list(self._open.values())
+
     def show(self, name: str, factory: Callable[[QWidget], QWidget], *, reuse=None) -> QWidget:
         window = self._open.get(name)
         if window is None:
-            window = factory(self.parent)
-            window.destroyed.connect(lambda *_args, key=name: self._open.pop(key, None))
+            window = factory(self.owner)
+            # The dict, not self: as the main window goes, this object may be deleted before its tool windows.
+            window.destroyed.connect(lambda *_args, key=name, opened=self._open: opened.pop(key, None))
             self._open[name] = window
+            self.place(name, window)
         elif reuse is not None:
             reuse(window)
-        window.show()
+        if window.isMinimized():
+            window.showNormal()
+        else:
+            window.show()
+        self.keep_on_screen(window)
         window.raise_()
         window.activateWindow()
         return window
+
+    # -- geometry -----------------------------------------------------------
+
+    def place(self, name: str, window: QWidget) -> None:
+        """Before ``window`` is first shown: its last geometry, or its own size, clamped to the screen; and
+        remembered when it is hidden or closed."""
+        window.setProperty(_TOOL_NAME, name)
+        window.installEventFilter(self)
+        saved = self._saved(name)
+        if saved is not None:
+            screen = QApplication.screenAt(saved.center())
+            area = screen.availableGeometry() if screen is not None else available_geometry(self.owner)
+            window.setGeometry(clamp_to_screen(saved, area))
+            return
+        area = available_geometry(self.owner)
+        size = clamp_to_screen(QRect(area.topLeft(), window.size()), area).size()
+        window.resize(size)  # a dialog is centred on the main window as it is shown, inside its screen
+
+    def keep_on_screen(self, window: QWidget) -> None:
+        """Move a shown window back inside its screen (title bar included) when it lies partly outside."""
+        frame = window.frameGeometry()
+        screen = QApplication.screenAt(frame.center()) or window.screen()
+        if screen is None:
+            return
+        area = screen.availableGeometry()
+        if area.contains(frame):
+            return
+        # move() places the frame; one larger than the screen (a large minimum size) keeps its top left corner.
+        x = min(max(frame.x(), area.left()), max(area.left(), area.right() + 1 - frame.width()))
+        y = min(max(frame.y(), area.top()), max(area.top(), area.bottom() + 1 - frame.height()))
+        window.move(x, y)
+
+    def remember(self, name: str, window: QWidget) -> None:
+        if self.preferences is None:
+            return
+        rect = window.normalGeometry() if window.isMaximized() or window.isFullScreen() else window.geometry()
+        if rect.isValid() and not rect.isEmpty():
+            self.preferences.set(TOOL_GEOMETRY_KEY.format(name=name),
+                                 [rect.x(), rect.y(), rect.width(), rect.height()])
+
+    def remember_all(self) -> None:
+        """The geometry of every tool window still shown (as the main window closes, before preferences are saved)."""
+        for name, window in list(self._open.items()):
+            try:
+                if window.isVisible():
+                    self.remember(name, window)
+            except RuntimeError:  # already gone
+                continue
+
+    def _saved(self, name: str) -> QRect | None:
+        if self.preferences is None:
+            return None
+        value = self.preferences.get(TOOL_GEOMETRY_KEY.format(name=name))
+        if not isinstance(value, (list, tuple)):
+            return None
+        try:
+            x, y, width, height = (int(part) for part in value)
+        except (TypeError, ValueError):
+            return None
+        return QRect(x, y, width, height) if width > 0 and height > 0 else None
+
+    def eventFilter(self, watched, event):  # noqa: N802 - Qt API
+        # Not when the window system hides it (minimised): its geometry then is not the one to come back to.
+        if event.type() == QEvent.Hide and not event.spontaneous() and isinstance(watched, QWidget):
+            name = watched.property(_TOOL_NAME)
+            if name:
+                self.remember(str(name), watched)
+        return False
 
 
 def open_user_manual(parent: QWidget | None = None) -> None:
     """Render the Markdown manual to HTML and open it in the default browser."""
     if not USER_MANUAL.is_file():
-        QMessageBox.warning(parent, "User Manual", f"The user manual was not found:\n{USER_MANUAL}")
+        QMessageBox.warning(parent, tr("User Manual"),
+                            tr("The user manual was not found:\n{path}").format(path=USER_MANUAL))
         return
     document = QTextDocument()
     document.setMarkdown(USER_MANUAL.read_text(encoding="utf-8"))
@@ -303,19 +456,21 @@ def open_user_manual(parent: QWidget | None = None) -> None:
 
 def show_about(parent: QWidget | None = None) -> None:
     dialog = QMessageBox(parent)
-    dialog.setWindowTitle(f"About {APP_NAME}")
+    dialog.setWindowTitle(tr("About {name}").format(name=APP_NAME))
     dialog.setWindowIcon(app_icon())
     dialog.setTextFormat(Qt.RichText)
-    logo = app_colored_logo_pixmap(88, 88)
+    # The coloured logo is a dark blue G: on the dark theme the application icon (a white G) stands out instead.
+    logo = app_icon().pixmap(88, 88) if theme_manager().mode == "dark" else app_colored_logo_pixmap(88, 88)
     if not logo.isNull():
         dialog.setIconPixmap(logo)
+    release = tr("{name} v{version} (Pre-release)").format(name=APP_NAME, version=APP_VERSION)
+    summary = tr("Desktop analysis of GISAXS / GIWAXS data: detector geometry, cuts, "
+                 "fitting and machine-learning assisted workflows.")
     dialog.setText(
-        f"<b style='font-size:16pt'>{APP_NAME}</b><br>{APP_RELEASE}<br><br>"
-        "Desktop analysis of GISAXS / GIWAXS data: detector geometry, cuts, "
-        "fitting and machine-learning assisted workflows.<br><br>"
+        f"<b style='font-size:16pt'>{APP_NAME}</b><br>{release}<br><br>{summary}<br><br>"
         f"<a href='{GITHUB_URL}'>{GITHUB_URL}</a>"
     )
-    dialog.setStandardButtons(QMessageBox.Ok)
+    dialog.setStandardButtons(QMessageBox.Close)  # "Close" is in the zh table; Qt's own "OK" would stay English
     dialog.exec_()
 
 
@@ -326,7 +481,10 @@ __all__ = [
     "GITHUB_URL",
     "MainMenuBar",
     "MenuCommands",
+    "SCREEN_SHARE",
+    "TOOL_GEOMETRY_KEY",
     "ToolWindows",
+    "clamp_to_screen",
     "open_user_manual",
     "show_about",
 ]

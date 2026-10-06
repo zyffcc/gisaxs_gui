@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from PyQt5.QtCore import QEvent, QObject, pyqtSignal
 from PyQt5.QtWidgets import (
+    QBoxLayout,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -16,6 +18,76 @@ from src.gimap.app.presentation.layout_primitives import normalize_button
 
 from .workflow_components import PredictionDisclosure
 
+PANEL_MIN_WIDTH = 270  # the one minimum of the Current/Display/Zoom inspector
+PANEL_MAX_WIDTH = 340
+BODY_SPACING = 8
+_UNLIMITED = 16777215
+
+
+class ResponsivePreviewBody(QObject):
+    """Image view and inspector side by side, or the inspector under the view on a narrow page.
+
+    The tab page (``page``) is resized by its tab widget; when it is narrower than the view and
+    the inspector need side by side, the box turns ``TopToBottom`` so nothing overlaps.
+    ``layout_changed`` fires when the direction or the stacked height changes, so the host can
+    give the canvas card the extra height.
+    """
+
+    layout_changed = pyqtSignal()
+
+    def __init__(self, page: QWidget, view: QWidget, panel: QWidget) -> None:
+        super().__init__(page)
+        self.page = page
+        self.view = view
+        self.panel = panel
+        self.box = QBoxLayout(QBoxLayout.LeftToRight)
+        self.box.setContentsMargins(0, 0, 0, 0)
+        self.box.setSpacing(BODY_SPACING)
+        self.box.addWidget(view, 1)
+        self.box.addWidget(panel, 0)
+        self._stacked_height = 0
+        page.installEventFilter(self)
+        panel.installEventFilter(self)
+
+    @property
+    def stacked(self) -> bool:
+        return self.box.direction() == QBoxLayout.TopToBottom
+
+    def side_by_side_width(self) -> int:
+        margins = self.page.layout().contentsMargins() if self.page.layout() is not None else None
+        extra = margins.left() + margins.right() if margins is not None else 0
+        return self.view.minimumWidth() + self.panel.minimumWidth() + self.box.spacing() + extra
+
+    def stacked_extra_height(self) -> int:
+        """Height the inspector adds under the view (0 when side by side or hidden)."""
+        if not self.stacked or self.panel.isHidden():
+            return 0
+        return self.panel.sizeHint().height() + self.box.spacing()
+
+    def update_direction(self, width: int | None = None) -> None:
+        width = self.page.width() if width is None else int(width)
+        stacked = width < self.side_by_side_width()
+        direction = QBoxLayout.TopToBottom if stacked else QBoxLayout.LeftToRight
+        changed = direction != self.box.direction()
+        if changed:
+            self.box.setDirection(direction)
+            self.panel.setMaximumWidth(_UNLIMITED if stacked else PANEL_MAX_WIDTH)
+            self.panel.setSizePolicy(
+                QSizePolicy.Preferred, QSizePolicy.Maximum if stacked else QSizePolicy.Expanding
+            )
+        height = self.stacked_extra_height()
+        if changed or height != self._stacked_height:
+            self._stacked_height = height
+            self.layout_changed.emit()
+
+    def eventFilter(self, watched, event):  # noqa: N802 - Qt API
+        kind = event.type()
+        if watched is self.page and kind in (QEvent.Resize, QEvent.Show):
+            self.update_direction()
+        elif watched is self.panel and kind in (QEvent.LayoutRequest, QEvent.Show, QEvent.Hide):
+            self.update_direction()
+        return False
+
 
 class PredictionPreviewLayout:
     """Reorganize generated preview controls without replacing them。"""
@@ -25,6 +97,8 @@ class PredictionPreviewLayout:
         self.profile = profile
         self.gisaxs_output_section: QFrame | None = None
         self.predict2d_output_section: QFrame | None = None
+        self.gisaxs_body: ResponsivePreviewBody | None = None
+        self.predict2d_body: ResponsivePreviewBody | None = None
 
     def rebuild(self) -> None:
         self._rebuild_gisaxs_tab()
@@ -132,9 +206,7 @@ class PredictionPreviewLayout:
         self._clear_layout(panel_layout)
         self.ui.gisaxsImageColorScaleLabel.setParent(panel)
         self.ui.gisaxsImageColorScaleLabel.hide()
-        panel.setMinimumWidth(270)
-        panel.setMaximumWidth(340)
-        panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        self._size_panel(panel)
 
         current_section, current_layout = self._make_section("Current", panel)
         current_row = QHBoxLayout()
@@ -181,10 +253,8 @@ class PredictionPreviewLayout:
         self.ui.gisaxsPreviewDisplaySection = scale_section
         self.ui.gisaxsPreviewZoomSection = zoom_section
 
-        page_layout.addWidget(view, 0, 0)
-        page_layout.addWidget(panel, 0, 1)
-        page_layout.setColumnStretch(0, 1)
-        page_layout.setColumnStretch(1, 0)
+        self.gisaxs_body = self._install_body(page_layout, tab, view, panel)
+        self.ui.gisaxsPreviewBody = self.gisaxs_body
 
     def _rebuild_predict2d_tab(self) -> None:
         tab = self.ui.predict2dImageTab
@@ -201,9 +271,7 @@ class PredictionPreviewLayout:
         self._clear_layout(panel_layout)
         self.ui.predict2dColorScaleLabel.setParent(panel)
         self.ui.predict2dColorScaleLabel.hide()
-        panel.setMinimumWidth(270)
-        panel.setMaximumWidth(340)
-        panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        self._size_panel(panel)
 
         scale_section = self._build_display_section(
             panel,
@@ -246,10 +314,27 @@ class PredictionPreviewLayout:
         self.ui.predict2dPreviewZoomSection = zoom_section
         self.ui.predict2dPreviewCurveSection = curve_section
 
-        page_layout.addWidget(view, 0, 0)
-        page_layout.addWidget(panel, 0, 1)
-        page_layout.setColumnStretch(0, 1)
-        page_layout.setColumnStretch(1, 0)
+        self.predict2d_body = self._install_body(page_layout, tab, view, panel)
+        self.ui.predict2dPreviewBody = self.predict2d_body
+
+    @staticmethod
+    def _size_panel(panel: QWidget) -> None:
+        panel.setMinimumWidth(PANEL_MIN_WIDTH)
+        panel.setMaximumWidth(PANEL_MAX_WIDTH)
+        panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+    @staticmethod
+    def _install_body(page_layout, page: QWidget, view: QWidget, panel: QWidget) -> ResponsivePreviewBody:
+        """Row 1 of the tab grid holds the view/inspector box; row 0 stays free for output tabs."""
+        body = ResponsivePreviewBody(page, view, panel)
+        if isinstance(page_layout, QGridLayout):
+            page_layout.addLayout(body.box, 1, 0)
+            page_layout.setRowStretch(1, 1)
+            page_layout.setColumnStretch(0, 1)
+        else:
+            page_layout.addLayout(body.box, 1)
+        body.update_direction()
+        return body
 
 
-__all__ = ["PredictionPreviewLayout"]
+__all__ = ["PANEL_MIN_WIDTH", "PredictionPreviewLayout", "ResponsivePreviewBody"]

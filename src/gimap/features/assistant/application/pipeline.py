@@ -1,12 +1,14 @@
-"""The standard GIWAXS procedure in code: a baseline any agent (or script) can start from.
+"""The standard procedure in code, GIWAXS or GISAXS: a baseline any agent (or script) can start from.
 
 ``StandardPipeline`` drives the assistant's own tools, so the numbers are the
-ones Process with Claude reports, in a fixed order: status → geometry →
-frames → peaks → in-/out-of-plane → ring orientation → crystallite size.
-Every routine decision is taken the same way each time and recorded with its
-reason (``decisions``).  What code cannot decide — a value only the notes or
-the person know, a calibration that is not good enough — goes into
-``needs_attention`` with the option that supplies it.
+ones Process with AI and Run Automatic Analysis report, in a fixed order:
+status → geometry → frames → the technique → for GIWAXS peaks, in-/out-of-plane,
+ring orientation and crystallite size; for GISAXS the cut, symmetry, halves,
+spacing and fit (``GisaxsProcedureMixin``). Every routine decision is taken the
+same way each time and recorded with its reason (``decisions``).  What code
+cannot decide — a value only the notes or the person know, a calibration that is
+not good enough, a judgement such as the GISAXS model — goes into
+``needs_attention`` with the option that supplies it (if any).
 
 The decisions are defaults, not limits: an agent that can do more revisits
 them with the other tools (another frame, another ring, custom sectors).
@@ -17,20 +19,15 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable, Optional
 
-from ..domain import (
-    assessment,
-    caveat,
-    energy_from_notes,
-    incidence_from_notes,
-    pixel_size_from_notes,
-    standard_from_name,
-)
+from ..domain import caveat, energy_from_notes, incidence_from_notes, pixel_size_from_notes
+from ..domain.notes import calibrants_in_notes
 from .gisaxs_procedure import GisaxsProcedureMixin
 from .models import ToolCall
-from .pipeline_progress import PipelineStopped
+from .pipeline_geometry import GeometryStepsMixin
+from .pipeline_progress import FrameChanged, PipelineStopped, frame_changed, same_file
+from .pipeline_report import calibration_quality, compact_report
 from .pipeline_rows import peak_rows as _peak_rows
 from .pipeline_rows import peak_search as _peak_search
 from .pipeline_rows import ring_row as _ring_row
@@ -38,22 +35,33 @@ from .tools import ToolCatalog, clean, results_payload
 
 SERIES_SUM = 10
 """Frames summed for the state of a series: the last ten show the final state of an in-situ run."""
-MAX_FILES = 2
-MAX_IMAGES = 3
-"""Calibration files and standard images tried before giving up."""
-ACCEPTED = ("good", "usable")
+TECHNIQUES = ("gisaxs", "giwaxs")
+FORCED = "forced: the technique was given (--technique, technique=)"
+DETECTED = "detected: GIMaP's Auto detection classified the frame once the geometry was applied"
+CHOSEN = "the mode chosen in Analyze"
+DEFAULT = "the default while Analyze is on Auto"
+FALLBACK = "Auto could not classify the frame, so GIWAXS was assumed"
+NO_GEOMETRY = "no geometry: Auto tells GISAXS from GIWAXS only once a geometry is applied"
+"""Why the ``technique`` decision is what it is (the report's Decisions)."""
+SWITCHED = (
+    "the automatic detection chose otherwise; this is the GIWAXS procedure (choose GISAXS in Analyze, "
+    "or --technique gisaxs, for the GISAXS one)"
+)
 
 
 @dataclass(frozen=True)
 class PipelineOptions:
     calibration: Optional[str] = None
-    """A calibration file (.poni, GIMaP calibration) or an image of a standard; None: search for one."""
+    """A calibration file (.poni, GIMaP calibration) or an image of a standard, tried first; then the
+    calibration files the notes name, the instrument profile and the automatic search."""
     standard: Optional[str] = None
-    """The standard an image shows (agbh, lab6, ceo2, lab6_ceo2); None: from its name, else compared."""
+    """The standard an image shows (agbh, lab6, ceo2, lab6_ceo2); None: the one calibrant the notes name,
+    else from the image's name, else compared (also when the notes and the name disagree)."""
     energy_kev: Optional[float] = None
     incidence_deg: Optional[float] = None
     pixel_size_um: Optional[float] = None
-    """Detector pixel size, for images whose header has none (plain TIFF)."""
+    """Detector pixel size (µm): the person's statement, used even when the image header gives another
+    (the decision names both)."""
     frame: Optional[int] = None
     """1-based frame of a series, negative from the end; None: the last frames (the final state)."""
     sum_frames: Optional[int] = None
@@ -64,13 +72,19 @@ class PipelineOptions:
     recalibrate: bool = False
     """Calibrate even when the detector already has an instrument profile."""
     notes: str = ""
-    """Free text from the person (beamtime notes): αi and the energy are read from it."""
+    """Free text from the person (beamtime notes): αi, the energy and the pixel size (each when the notes give
+    exactly one), the calibrant (when they name exactly one) and calibration files named in it are used."""
     geometry: Optional[dict] = None
     """A calibration result from an earlier frame of the same detector (a batch of samples)."""
     stop_after_geometry: bool = False
     """Only find and check the geometry (``Find Calibration Automatically``)."""
     technique: Optional[str] = None
-    """``gisaxs`` or ``giwaxs``; ``None``: the technique chosen in Analyze, GIWAXS when it is automatic."""
+    """``gisaxs`` or ``giwaxs`` forces that procedure; ``None``: the mode chosen in Analyze, else (Auto) see
+    ``follow_detection``."""
+    follow_detection: bool = False
+    """With Analyze on Auto and no technique: the technique Auto detects once the geometry is applied (Run
+    Automatic Analysis, the command line, MCP); GIWAXS, flagged in needs_attention, when Auto cannot classify
+    the frame. Off: GIWAXS (Process with AI names its technique)."""
     fit: bool = True
     """GISAXS: fit the horizontal cut when a fitter is available."""
 
@@ -85,9 +99,11 @@ class _Run:
     geometry_source: str = ""
     stopped: Optional[str] = None
     """The step that was not started because a stop was requested (``None``: ran to the end)."""
+    failed: Optional[str] = None
+    """Why the run ended early as a failure (the frame changed); ``None`` otherwise."""
 
 
-class StandardPipeline(GisaxsProcedureMixin):
+class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
     def __init__(
         self,
         catalog: ToolCatalog,
@@ -108,8 +124,18 @@ class StandardPipeline(GisaxsProcedureMixin):
         self._energy: Optional[float] = None
         self._incidence: Optional[float] = None
         self._pixel: Optional[float] = None
+        self._pixel_given = False
+        """The pixel size is the person's (``pixel_size_um``): it beats image headers, files and profiles."""
+        self._noted_standard: Optional[str] = None
+        """The one calibrant the notes name."""
+        self._given_rejected: Optional[str] = None
+        """Why the calibration given (``calibration``) was not used, when another geometry was."""
         self._declined = False
         self._procedure = "giwaxs"
+        self._start_path: Optional[str] = None
+        """The file the run started on (its first ``get_status``): the report's ``frame``."""
+        self._frame_status: Optional[dict] = None
+        """The last status of that file: the report describes it even when the frame changed."""
 
     @property
     def calibration(self) -> Optional[dict]:
@@ -134,34 +160,60 @@ class StandardPipeline(GisaxsProcedureMixin):
                 "summary": outcome.summary, "error": outcome.is_error, "seconds": time.monotonic() - started,
             })
         self.progress(f"{name}: {outcome.summary}")
+        data = outcome.data if isinstance(outcome.data, dict) else {}
+        self._same_frame(data)
         if outcome.is_error:
             return None
-        data = outcome.data if isinstance(outcome.data, dict) else {}
         if data.get("declined"):  # the person said no: not done, and not asked again in this run
             self._declined = True
             self._decide("declined", name, str(data.get("message", "the person declined")))
             return None
         return data
 
+    def _same_frame(self, data: dict) -> None:
+        """End the run when Analyze no longer shows the file it started on (Analyze cleared, a project opened):
+        a workbench that refused to act on another file says so (``frame_changed``), a new status names
+        another file or none (Analyze cleared)."""
+        if self._start_path is None:
+            return
+        if data.get("frame_changed"):
+            raise FrameChanged(str(data.get("error") or frame_changed(self._start_path, None)))
+        status = self.catalog.results.status
+        if status is None or status is self._frame_status:  # no new status since the last check
+            return
+        if not same_file(status.get("path"), self._start_path):
+            raise frame_changed(self._start_path, status.get("path"))
+        self._frame_status = status
+
     def _decide(self, what: str, decision: str, why: str) -> None:
         self._run.decisions.append({"what": what, "decision": decision, "why": why})
 
     def _attention(self, item: str, why: str, option: Optional[str], hint: str) -> None:
-        self._run.attention.append({"item": item, "why": why, "option": option, "hint": hint})
+        entry = {"item": item, "why": why, "option": option, "hint": hint}
+        if entry not in self._run.attention:  # e.g. the same missing energy for every image tried
+            self._run.attention.append(entry)
 
     # -- the procedure ---------------------------------------------------------------
 
     def run(self) -> dict:
-        """The whole procedure; a stop request ends it between two steps with what was found so far."""
+        """The whole procedure; a stop request ends it between two steps with what was found so far, and a
+        frame that changed (Analyze shows another file than the run's) ends it as a failure (``failed``)."""
         try:
             return self._procedure_run()
         except PipelineStopped as stopped:
             self._run.stopped = str(stopped) or "the next step"
             self._decide("stopped", f"before {self._run.stopped}", "the person pressed Stop; the results so far are kept")
             return self._report()
+        except FrameChanged as changed:
+            self._run.ok, self._run.failed = False, str(changed)
+            self.catalog.results.status = self._frame_status  # the report describes the file the run started on
+            self._decide("frame", "the run ended", f"{changed}; nothing more was done")
+            self._attention("frame", f"{changed}.", None, "Show that file in Analyze again and run the analysis again.")
+            return self._report()
 
     def _procedure_run(self) -> dict:
         status = self._call("get_status") or {}
+        self._start_path, self._frame_status = status.get("path"), self.catalog.results.status
         if not status.get("path"):
             self._attention("frame", "No detector image is open.", None, "Give the path of a detector image.")
             return self._report()
@@ -170,33 +222,51 @@ class StandardPipeline(GisaxsProcedureMixin):
             return self._report()
         self._values(status)
         if not self._geometry(status):
+            options = self.options
+            if options.technique is None and options.follow_detection and not options.stop_after_geometry:
+                self._decide("technique", "none", NO_GEOMETRY)
             return self._report()
         if self.options.stop_after_geometry:
             self._run.ok = True
             return self._report()
         self._frames()
         status = self.catalog.results.status or {}
-        mode = status.get("measurement")
-        chosen = status.get("mode") if status.get("mode") in ("gisaxs", "giwaxs") else None
-        if (self.options.technique or chosen) == "gisaxs":
-            if mode != "gisaxs" and self._call("set_measurement_mode", {"mode": "gisaxs"}) is None:
-                self._attention("measurement", f"GIMaP reduces this frame as {mode} and could not switch to GISAXS.", None, "Check the frame in the GUI.")
+        kind = status.get("measurement")
+        technique, why = self._technique(status)
+        self._decide("technique", technique.upper(), why)
+        if kind != technique:
+            if self._call("set_measurement_mode", {"mode": technique}) is None:
+                self._attention(
+                    "measurement", f"GIMaP reduces this frame as {kind} and could not switch to {technique.upper()}.",
+                    None, "Check the frame in the GUI.",
+                )
                 return self._report()
-            self._procedure = "gisaxs"
-            self._analyse_gisaxs()
-            self._run.ok = True
-            return self._report()
-        if mode != "giwaxs":
-            if self._call("set_measurement_mode", {"mode": "giwaxs"}) is None:
-                self._attention("measurement", f"GIMaP reduces this frame as {mode} and could not switch to GIWAXS.", None, "Check the frame in the GUI.")
-                return self._report()
-            self._decide(
-                "measurement", f"switched from {mode or 'no reduction'} to GIWAXS",
-                "the automatic detection chose otherwise; this is the GIWAXS procedure (analyse GISAXS in the GUI)",
-            )
-        self._analyse()
+            self._decide("measurement", f"switched from {kind or 'no reduction'} to {technique.upper()}",
+                         SWITCHED if why == DEFAULT else why)
+        self._procedure = technique
+        self._analyse_gisaxs() if technique == "gisaxs" else self._analyse()
         self._run.ok = True
         return self._report()
+
+    def _technique(self, status: dict) -> tuple[str, str]:
+        """The procedure to run and why: the technique given, the mode chosen in Analyze, what Auto detected
+        (``follow_detection``) or GIWAXS — flagged when Auto was to be followed but could not classify the frame."""
+        options, mode, kind = self.options, status.get("mode"), status.get("measurement")
+        detected = kind if kind in TECHNIQUES and mode not in TECHNIQUES else None
+        if options.technique:
+            return options.technique, DETECTED if options.follow_detection and detected == options.technique else FORCED
+        if mode in TECHNIQUES:
+            return mode, CHOSEN
+        if not options.follow_detection:
+            return "giwaxs", DEFAULT
+        if detected:
+            return detected, DETECTED
+        self._attention(
+            "technique", f"GIMaP's Auto detection could not classify this frame ({kind or 'no reduction'}), so the "
+            "GIWAXS procedure ran.", "technique",
+            "Give the technique (GIWAXS or GISAXS); the notes or the set-up (detector distance) say which.",
+        )
+        return "giwaxs", FALLBACK
 
     def _values(self, status: dict) -> None:
         options, header = self.options, status.get("header") or {}
@@ -215,208 +285,22 @@ class StandardPipeline(GisaxsProcedureMixin):
                 self._decide("incidence angle", f"αi = {self._incidence:g}°", f"from {source}")
                 break
         header_pixel = (header.get("pixel_size_um") or [None])[0]
-        for value, source in ((options.pixel_size_um, "given"), (pixel_size_from_notes(options.notes), "the notes")):
-            if value and not header_pixel:
-                self._pixel = float(value)
-                self._decide("pixel size", f"{self._pixel:g} µm", f"from {source} (the image header has none)")
-                break
-
-    def _incidence_missing(self) -> None:
-        self._attention(
-            "incidence angle αi",
-            "Neither the options, the notes nor an instrument profile give αi, so 0° is used. Ring "
-            "positions |q| barely change, but qz shifts by about k·sin αi (≈0.04 Å⁻¹ at 0.4° and 12 keV) "
-            "and the missing wedge moves.",
-            "incidence_deg",
-            "Beamtime notes, the logbook or the slides usually state it (typically 0.1–0.5°); otherwise ask.",
-        )
-
-    def _geometry(self, status: dict) -> bool:
-        options = self.options
-        existing = status.get("geometry")
-        if options.geometry is not None:
-            self.catalog.results.calibrations.append(options.geometry)
-            origin = Path(str(options.geometry.get("source_image") or "")).name
-            return self._use_calibration(len(self.catalog.results.calibrations) - 1, f"{origin} (reused from the first frame of this batch)")
-        if existing and options.calibration is None and not options.recalibrate:
-            name = existing.get("instrument_profile") or "saved"
-            self._run.geometry_source = f"instrument profile '{name}'"
-            self._decide(
-                "geometry", f"kept the instrument profile '{name}' this detector already has",
-                "a saved profile is the person's own calibration (recalibrate to replace it)",
+        noted = pixel_size_from_notes(options.notes)
+        if options.pixel_size_um:  # the person's statement: it beats the header
+            self._pixel, self._pixel_given = float(options.pixel_size_um), True
+            why = "from given (the image header has none)" if not header_pixel else (
+                f"given; the image header says {header_pixel:g} µm, the given value is used"
+                if abs(header_pixel - self._pixel) > 0.01 * header_pixel else "from given (the image header agrees)"
             )
-            if self._incidence is not None:
-                self._call("set_incidence_angle", {"degrees": self._incidence})
-            elif not existing.get("incidence_deg"):
-                self._incidence_missing()
-            return True
-        for candidate in self._candidates():
-            if self._try(candidate):
-                return True
-            if self._declined:
-                self._attention(
-                    "geometry", "The person declined saving the geometry, so nothing is in q.", None,
-                    "Approve the geometry, or calibrate in Tools ▸ Geometry Calibration.",
-                )
-                return False
-        if not any(item["item"].startswith(("calibration", "X-ray energy", "pixel size")) for item in self._run.attention):
-            self._attention(
-                "calibration",
-                "No calibration candidate gave a good geometry (see decisions for each one).",
-                "calibration",
-                "Name the calibration image or file used at the beamtime; the notes usually say which.",
-            )
-        return False
-
-    def _candidates(self) -> list[dict]:
-        options = self.options
-        if options.calibration:
-            name = Path(options.calibration).name
-            return [{"path": options.calibration, "standard_key": standard_from_name(name), "given": True}]
-        listing = self._call("find_calibration_files", {"max_results": 12})
-        if listing is None:
-            self._attention("calibration", "The folders around the frame could not be searched.", "calibration", "Name the calibration file.")
-            return []
-        files = [dict(item, file=True) for item in listing.get("calibration_results", [])][:MAX_FILES]
-        images = [item for item in listing.get("standard_images", []) if item.get("gimap_can_fit")][:MAX_IMAGES]
-        if not files and not images:
-            searched = len(listing.get("folders_searched", []))
-            self._attention(
-                "calibration",
-                f"No calibration file and no image of a standard GIMaP can fit was found ({searched} folders searched).",
-                "calibration",
-                "An image of AgBh, LaB6, CeO2 or a LaB6+CeO2 mixture taken with this detector, or a .poni / "
-                "GIMaP calibration file; a log or the beamtime notes usually name it.",
-            )
-        ranked = ", ".join(Path(item["path"]).name for item in files + images)
-        if ranked:
-            self._decide("calibration candidates", ranked, str(listing.get("ranking", "ranked by the search")))
-        return files + images
-
-    def _try(self, candidate: dict) -> bool:
-        path, name = candidate["path"], Path(candidate["path"]).name
-        info = self._call("inspect_file", {"path": path})
-        if info is None:
-            self._decide("calibration", f"skipped {name}", "it could not be read")
-            return False
-        frame = self.catalog.results.status or {}
-        if candidate.get("file") or info.get("kind") in ("pyFAI calibration (.poni)", "GIMaP calibration"):
-            return self._use_file(path, name, info, frame)
-        if info.get("kind") != "detector image":
-            self._decide("calibration", f"skipped {name}", f"it is a {info.get('kind')} file, not a calibration")
-            return False
-        if info.get("same_detector_size_as_frame") is False:
-            self._decide("calibration", f"skipped {name}", f"{info.get('shape')} pixels, the frame has {frame.get('shape')}: another detector")
-            return False
-        energy = info.get("energy_kev") or self._energy
-        if not energy:
-            self._attention(
-                "X-ray energy",
-                "Neither the images' headers, the options nor the notes give the energy; calibration needs it.",
-                "energy_kev",
-                "Beamtime notes or the logbook; P03 GIWAXS is often 11.8 or 12.4 keV but never guess.",
-            )
-            return False
-        standard = self.options.standard or candidate.get("standard_key") or info.get("standard") or "compare"
-        arguments = {"path": path, "standard": standard, "energy_kev": float(energy)}
-        if self._pixel and not (info.get("pixel_size_um") or [None])[0]:
-            arguments["pixel_size_um"] = self._pixel
-        fitted = self._call("calibrate_geometry", arguments)
-        if fitted is None:
-            failure = self._run.steps[-1]["summary"]
-            self._decide("calibration", f"{name} ({standard}) failed", failure)
-            if "pixel size" in failure.lower():
-                self._attention(
-                    "pixel size",
-                    f"{name} has no pixel size in its header, so it cannot be calibrated.",
-                    "pixel_size_um",
-                    "The detector's pixel size: Pilatus 172 µm, Eiger 75 µm, Lambda 55 µm; the notes or the "
-                    "detector name usually say which.",
-                )
-            return False
-        if standard == "compare":
-            verdict = str(fitted.get("verdict", ""))
-            best = next((row for row in fitted.get("comparison", []) if row["calibration_index"] == fitted.get("best_calibration_index")), None)
-            if best is None or not verdict.startswith(("clear", "probably")) or not str(best.get("assessment", "")).startswith(ACCEPTED):
-                self._decide("calibration", f"rejected {name}", verdict or "no standard fitted")
-                if verdict.startswith("ambiguous"):
-                    self._attention("calibration standard", verdict, "standard", "The notes or the file name usually say which standard it is.")
-                return False
-            self._decide("calibration standard", str(best.get("standard")), verdict)
-            index = int(fitted["best_calibration_index"])
-        else:
-            quality = str(fitted.get("assessment", ""))
-            if not quality.startswith(ACCEPTED):
-                self._decide("calibration", f"rejected {name} ({standard})", quality)
-                return False
-            index = int(fitted["calibration_index"])
-        return self._use_calibration(index, f"{name}")
-
-    def _use_calibration(self, index: int, origin: str) -> bool:
-        result = self.catalog.results.calibrations[index]
-        arguments: dict = {"source": "calibration", "calibration_index": index}
-        fit_energy = result.get("energy_kev")
-        if self._energy and fit_energy and abs(fit_energy - self._energy) > 2e-3 * self._energy:
-            # The calibrant was measured at another energy: its distance and centre hold, the frame's energy is used.
-            arguments = {
-                "source": "values", "distance_mm": result["distance_mm"],
-                "beam_center_x_px": result["beam_center_px"][0], "beam_center_y_px": result["beam_center_px"][1],
-                "energy_kev": self._energy, "pixel_size_um": result["pixel_size_um"][0],
-                "note": f"{origin} (calibrated at {fit_energy:g} keV; the frame's {self._energy:g} keV used)",
-            }
-        if self._incidence is not None:
-            arguments["incidence_deg"] = self._incidence
-        if self._call("use_geometry", arguments) is None:
-            self._decide("geometry", f"could not use {origin}", self._run.steps[-1]["summary"])
-            return False
-        self._run.calibration = result
-        self._run.geometry_source = origin
-        if result.get("from_file"):
-            self._decide("geometry", f"from {origin}", "a saved calibration (not re-checked against a standard image)")
-        else:
-            self._decide("geometry", f"calibrated from {origin}", assessment(result))
-        if self._incidence is None:
-            self._incidence_missing()
-        return True
-
-    def _use_file(self, path: str, name: str, info: dict, frame: dict) -> bool:
-        header = frame.get("header") or {}
-        frame_pixel = (header.get("pixel_size_um") or [None])[0]
-        file_pixel = info.get("pixel_size_x_m")
-        file_pixel = file_pixel * 1e6 if file_pixel else (info.get("pixel_size_um") or [None])[0]
-        if frame_pixel and file_pixel and abs(file_pixel - frame_pixel) > 0.01 * frame_pixel:
-            self._decide("calibration", f"skipped {name}", f"made for {file_pixel:g} µm pixels, the frame has {frame_pixel:g} µm: another detector")
-            return False
-        if info.get("shape") and frame.get("shape") and list(info["shape"]) != list(frame["shape"]):
-            self._decide("calibration", f"skipped {name}", f"made for {info['shape']} pixels, the frame has {frame['shape']}")
-            return False
-        energy = self._energy or info.get("energy_kev")
-        if not energy:
-            self._attention("X-ray energy", f"{name} and the frame give no energy.", "energy_kev", "Beamtime notes or the logbook.")
-            return False
-        values = _file_geometry(path, info, file_pixel)
-        arguments = {"source": "file", "path": path, "energy_kev": float(energy)}
-        file_energy = info.get("energy_kev")
-        if self._energy and file_energy and abs(file_energy - self._energy) > 2e-3 * self._energy:
-            # Measured at another energy: the distance and centre hold, the frame's energy is used.
-            arguments = {
-                "source": "values", "distance_mm": values["distance_mm"],
-                "beam_center_x_px": values["beam_center_px"][0], "beam_center_y_px": values["beam_center_px"][1],
-                "energy_kev": self._energy, "note": f"{name} (made at {file_energy:g} keV; the frame's {self._energy:g} keV used)",
-            }
-            if file_pixel:
-                arguments["pixel_size_um"] = float(file_pixel)
-        if self._incidence is not None:
-            arguments["incidence_deg"] = self._incidence
-        if self._call("use_geometry", arguments) is None:
-            self._decide("geometry", f"could not use {name}", self._run.steps[-1]["summary"])
-            return False
-        self._run.geometry_source = name
-        self._run.calibration = values
-        self._decide("geometry", f"from {name}", str(info.get("assessment") or info.get("kind")))
-        if self._incidence is None:
-            self._incidence_missing()
-        return True
+            self._decide("pixel size", f"{self._pixel:g} µm", why)
+        elif noted and not header_pixel:
+            self._pixel = float(noted)
+            self._decide("pixel size", f"{self._pixel:g} µm", "from the notes (the image header has none)")
+        calibrants = calibrants_in_notes(options.notes)
+        if len(calibrants) == 1:
+            self._noted_standard = calibrants[0]
+        elif calibrants and not options.standard:
+            self._decide("calibration standard", "none from the notes", f"the notes name {len(calibrants)}: {', '.join(calibrants)}")
 
     def _frames(self) -> None:
         status = self.catalog.results.status or {}
@@ -467,13 +351,14 @@ class StandardPipeline(GisaxsProcedureMixin):
         return {
             "ok": run.ok,
             "stopped": run.stopped,
+            "failed": run.failed,
             "procedure": "geometry" if self.options.stop_after_geometry else self._procedure,
             "gisaxs": self._gisaxs_report(),
-            "frame": status.get("path"),
+            "frame": self._start_path or status.get("path"),
             "measurement": status.get("measurement"),
             "frames": {"total": status.get("frames"), "first": status.get("frame"), "summed": status.get("summed_frames")},
             "geometry": {"source": run.geometry_source, **clean(status.get("geometry") or {})},
-            "calibration_quality": _quality(run.calibration),
+            "calibration_quality": calibration_quality(run.calibration),
             "peaks": _peak_rows(results),
             "peak_search": _peak_search(results),
             "rings": [_ring_row(ring) for ring in results.rings],
@@ -484,54 +369,6 @@ class StandardPipeline(GisaxsProcedureMixin):
             "calibration": clean(run.calibration),
             "tables": results_payload(results),
         }
-
-
-def compact_report(report: dict) -> dict:
-    """The report without the full tables, the calibration record and the fitted arrays (kept in report.json)."""
-    compact = {key: value for key, value in report.items() if key not in ("tables", "calibration")}
-    fit = (compact.get("gisaxs") or {}).get("fit")
-    if fit:
-        compact["gisaxs"] = {**compact["gisaxs"], "fit": {
-            key: value for key, value in fit.items() if key not in ("data", "best_curve", "curves", "native")}}
-    if compact.get("peaks"):
-        compact["peaks"] = [
-            {**peak, "fit": {key: value for key, value in peak["fit"].items() if key not in ("x", "y", "sigma")}}
-            if peak.get("fit") else peak for peak in compact["peaks"]
-        ]
-    return compact
-
-
-def _file_geometry(path: str, info: dict, pixel_um: Optional[float]) -> dict:
-    """A saved calibration (.poni or GIMaP) in the shape of a calibration result, for reuse in a batch."""
-    if info.get("kind") == "GIMaP calibration":
-        return {key: value for key, value in info.items() if key != "kind"}
-    wavelength = info.get("wavelength_angstrom")
-    return {
-        "distance_mm": info["distance_mm"],
-        "beam_center_px": [info["beam_center_x_px"], info["beam_center_y_px"]],
-        "wavelength_angstrom": wavelength,
-        "energy_kev": info.get("energy_kev"),
-        "pixel_size_um": [pixel_um, pixel_um] if pixel_um else None,
-        "source_image": path,
-        "shape": None,
-        "from_file": True,
-    }
-
-
-def _quality(result: Optional[dict]) -> Optional[dict]:
-    if not result:
-        return None
-    if result.get("from_file"):
-        return {"assessment": "a saved calibration file (not re-checked against a standard image)", "warnings": []}
-    check = result.get("line_check") or {}
-    return {
-        "assessment": assessment(result),
-        "standard": result.get("standard"),
-        "lines_checked": check.get("lines_checked"),
-        "mean_line_q_error_percent": None if check.get("mean_relative") is None else round(100 * check["mean_relative"], 3),
-        "matched_rings": result.get("matched_rings"),
-        "warnings": list(result.get("warnings") or ()),
-    }
 
 
 __all__ = ["PipelineOptions", "SERIES_SUM", "StandardPipeline", "compact_report"]

@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import trf
+
 from ..display_formatting import _human_bytes
 
 
@@ -65,11 +67,14 @@ class OutputOptionsMixin:
         try:
             options = self._options()
             preview = self.view_model.output_preview(options)
-            self.naming_example.setText(f"Example: {preview.example}")
+            self.naming_example.setText(trf("Example: {example}", example=preview.example))
             self.output_summary.setText(
-                f"Estimated output: {preview.image_count:,} image(s) in "
-                f"{preview.file_count:,} file(s), approximately "
-                f"{_human_bytes(preview.estimated_bytes)}"
+                trf(
+                    "Estimated output: {images} image(s) in {files} file(s), approximately {size}",
+                    images=f"{preview.image_count:,}",
+                    files=f"{preview.file_count:,}",
+                    size=_human_bytes(preview.estimated_bytes),
+                )
             )
             self.dtype_warning.setText(preview.dtype_warning)
         except Exception:

@@ -3,7 +3,8 @@
 The beam centre of a frame is the instrument profile's (the calibrated one)
 unless the user moves it for this session, or opts in to file-header
 centres (Settings ▸ Analyze).  A session centre stays for every following
-frame until it is reset or saved into the profile.
+frame of the same detector shape until it is reset or saved into the
+profile; a frame of another shape (another detector) keeps its own centre.
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ BOTH = "both_abs"
 FIT_SIDES = (BOTH, "mean", "negative", "positive")
 """How Fitting shows the horizontal cut: both halves on |qy| (two colours),
 their average, or one half.  Fitting's own q view applies it."""
+FRAME_SHOWN = object()
+"""``set_beam_center(shape=…)`` default: the shape of the frame shown."""
 
 
 class GeometryModelMixin:
@@ -37,12 +40,26 @@ class GeometryModelMixin:
         """Settings ▸ Analyze: trust the beam centre in file headers (off by default)."""
         return bool(self._read_setting(SECTION, HEADER_CENTER_KEY, False))
 
-    def set_beam_center(self, x: float, y: float) -> None:
-        """Use this centre for this and every following frame until reset or saved."""
-        self.state.beam_center = (float(x), float(y))
+    def set_beam_center(self, x: float, y: float, *, shape: Any = FRAME_SHOWN) -> None:
+        """Use this centre for this and every following frame of ``shape`` until reset or saved.
+
+        ``shape``: ``(rows, columns)`` of the frames it holds for — by default the frame shown; ``None``:
+        every frame (a centre from a settings file or project that does not say which detector it is for).
+        """
+        center = (float(x), float(y))
+        if shape is FRAME_SHOWN:
+            analysis = self.state.analysis
+            shape = analysis.shape if analysis is not None else None
+        self.state.center_shapes[center] = tuple(int(value) for value in shape) if shape is not None else None
+        self.state.beam_center = center
 
     def clear_beam_center(self) -> None:
         self.state.beam_center = None
+
+    def session_center_shape(self) -> Optional[tuple[int, int]]:
+        """The frame shape the session centre applies to; ``None``: every frame (no centre, or one loaded
+        without a shape). The same as ``state.beam_center_shape`` — for a settings record or a project."""
+        return self.state.beam_center_shape
 
     def refine_center_x(self) -> SymmetryCenter:
         """GISAXS: move the centre column to the symmetry axis of the horizontal cut (session)."""
@@ -88,7 +105,7 @@ class GeometryModelMixin:
             shape=profile.detector_shape,
             source="beam centre set in Analyze",
         )
-        self.state.beam_center = None
+        self.clear_beam_center()
         return saved
 
     # -- fitting hand-over ------------------------------------------------------------

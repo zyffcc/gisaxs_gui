@@ -101,6 +101,26 @@ class CalibrationToolsMixin:
         self._prepare_access()
         return [f"{item['kind']} named by the user, readable and searchable: {item['path']}" for item in self._user_paths]
 
+    def named_calibration_files(self, text: str) -> list[str]:
+        """Files ``text`` (the person's notes) names that may hold a calibration, in the order named: a .poni,
+        a .json (a GIMaP calibration, which ``inspect_file`` confirms) or an image named like a standard or a
+        calibration. They become readable like every path in the notes; the open frame is never one of them."""
+        self._prepare_access()
+        if self.explorer is None:
+            return []
+        frame = self._frame().get("path")
+        found: list[str] = []
+        for options in path_candidates(text or ""):
+            path = next((candidate for candidate in options if self.explorer.kind(candidate) == "file"), None)
+            if path is None or (frame and file_key(path) == file_key(frame)) or file_key(path) in map(file_key, found):
+                continue
+            if not any(file_key(item["path"]) == file_key(path) for item in self._user_paths):
+                self._grant(path, "file")  # the person named it: trusted
+            named = f"{Path(path).parent.name}/{Path(path).name}"
+            if suffix(path) in (".poni", ".json") or (suffix(path) in IMAGE_ENDINGS and classify(named) == STANDARD_IMAGE):
+                found.append(path)
+        return found
+
     def _open_folders(self) -> list[str]:
         roots = list(self._open_roots)
         frame = self._frame().get("path")
@@ -138,7 +158,7 @@ class CalibrationToolsMixin:
         if self.goals.permission != PERMISSION_CONFIRM:
             return
         question = f"{what} {path}? It is away from the folders around the frame."
-        if self.confirmer is None or not self.confirmer.confirm("Claude wants to look at your files", question):
+        if self.confirmer is None or not self.confirmer.confirm("The AI wants to look at your files", question):
             raise ToolInputError("The user did not allow this; ask for another file or folder, or for the values.")
 
     def _allow(self, path: str) -> str:
@@ -518,4 +538,21 @@ class CalibrationToolsMixin:
         )
 
 
-__all__ = ["CalibrationToolsMixin", "OPEN_LEVELS", "file_key"]
+def file_geometry(path: str, info: dict, pixel_um: Optional[float]) -> dict:
+    """A saved calibration (.poni or GIMaP, as ``inspect_file`` read it) in the shape of a calibration result,
+    for reuse in a batch."""
+    if info.get("kind") == "GIMaP calibration":
+        return {key: value for key, value in info.items() if key != "kind"}
+    return {
+        "distance_mm": info["distance_mm"],
+        "beam_center_px": [info["beam_center_x_px"], info["beam_center_y_px"]],
+        "wavelength_angstrom": info.get("wavelength_angstrom"),
+        "energy_kev": info.get("energy_kev"),
+        "pixel_size_um": [pixel_um, pixel_um] if pixel_um else None,
+        "source_image": path,
+        "shape": None,
+        "from_file": True,
+    }
+
+
+__all__ = ["CalibrationToolsMixin", "OPEN_LEVELS", "file_geometry", "file_key"]

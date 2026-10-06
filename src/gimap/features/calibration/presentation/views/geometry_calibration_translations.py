@@ -19,14 +19,21 @@ class GeometryCalibrationTranslations:
         self.calibration_file_group.setTitle(
             _translate("GeometryCalibrationDialog", "Calibration image")
         )
+        # Short enough for the narrowest left column; Open… and the empty preview list formats.
         self.path_edit.setPlaceholderText(
-            _translate("GeometryCalibrationDialog", "Paste a .cbf/.nxs path or use Open...")
+            _translate("GeometryCalibrationDialog", "Paste a path or use Open…")
         )
-        self.open_button.setText(_translate("GeometryCalibrationDialog", "Open..."))
-        self.calibration_input_group.setTitle(_translate("GeometryCalibrationDialog", "Input"))
+        self.open_button.setText(_translate("GeometryCalibrationDialog", "Open…"))
+        self.calibration_input_group.setTitle(_translate("GeometryCalibrationDialog", "Experiment"))
         self.energyLabel.setText(_translate("GeometryCalibrationDialog", "Energy:"))
         self.energy_spin.setSuffix(_translate("GeometryCalibrationDialog", " keV"))
         self.standardLabel.setText(_translate("GeometryCalibrationDialog", "Standard:"))
+        self.standard_combo.setToolTip(
+            _translate(
+                "GeometryCalibrationDialog",
+                "Calibration standard. Auto Detect compares the ring patterns of all known standards.",
+            )
+        )
         self.estimatedDistanceLabel.setText(
             _translate("GeometryCalibrationDialog", "Estimated distance:")
         )
@@ -35,21 +42,29 @@ class GeometryCalibrationTranslations:
             _translate("GeometryCalibrationDialog", "Optional")
         )
         self.rangeLabel.setText(_translate("GeometryCalibrationDialog", "Distance range:"))
-        self.range_combo.setItemText(
-            0, _translate("GeometryCalibrationDialog", "Auto (30-10000 mm)")
-        )
-        self.range_combo.setItemText(
-            1, _translate("GeometryCalibrationDialog", "SAXS (500-10000 mm)")
-        )
-        self.range_combo.setItemText(
-            2, _translate("GeometryCalibrationDialog", "WAXS (30-1500 mm)")
-        )
+        self.range_combo.setItemText(0, _translate("GeometryCalibrationDialog", "Auto · 30–10000 mm"))
+        self.range_combo.setItemText(1, _translate("GeometryCalibrationDialog", "SAXS · 500–10000 mm"))
+        self.range_combo.setItemText(2, _translate("GeometryCalibrationDialog", "WAXS · 30–1500 mm"))
         self.range_combo.setItemText(3, _translate("GeometryCalibrationDialog", "Custom"))
+        self.range_combo.setToolTip(
+            _translate(
+                "GeometryCalibrationDialog",
+                "Sample-to-detector distances the search tries. Custom uses the bounds in "
+                "Advanced configuration.",
+            )
+        )
         self.pixelSizeLabel.setText(_translate("GeometryCalibrationDialog", "Pixel size:"))
         self.pixel_label.setText(_translate("GeometryCalibrationDialog", "Open an image"))
         self.detectorLabel.setText(_translate("GeometryCalibrationDialog", "Detector:"))
         self.detector_label.setText(_translate("GeometryCalibrationDialog", "Open an image"))
         self.detectorModelLabel.setText(_translate("GeometryCalibrationDialog", "Detector model:"))
+        self.detector_combo.setToolTip(
+            _translate(
+                "GeometryCalibrationDialog",
+                "Detector model; sets the pixel size. Auto detected keeps the pixel size from the "
+                "file metadata.",
+            )
+        )
         self.calibrationAdvancedToggle.setText(
             _translate("GeometryCalibrationDialog", "Advanced configuration")
         )
@@ -100,6 +115,9 @@ class GeometryCalibrationTranslations:
         self.preview_info_label.setText(
             _translate("GeometryCalibrationDialog", "Open a calibration image to begin")
         )
+        self.preview_empty_label.setText(
+            _translate("GeometryCalibrationDialog", "Open a .nxs, .cbf, .tif or .edf calibration image")
+        )
         self.calibrationResultsTitle.setText(_translate("GeometryCalibrationDialog", "Results"))
         self.calibrationResultsDescription.setText(
             _translate(
@@ -107,7 +125,7 @@ class GeometryCalibrationTranslations:
                 "Review the selected solution and alternative candidates before applying it.",
             )
         )
-        self.result_group.setTitle(_translate("GeometryCalibrationDialog", "Results"))
+        self.result_group.setTitle(_translate("GeometryCalibrationDialog", "Selected solution"))
         self.resultCenterXTitle.setText(_translate("GeometryCalibrationDialog", "Beam center X:"))
         self.result_center_x.setText(_translate("GeometryCalibrationDialog", "—"))
         self.resultCenterYTitle.setText(_translate("GeometryCalibrationDialog", "Beam center Y:"))
@@ -150,25 +168,28 @@ class GeometryCalibrationTranslations:
                 "Fine-tune the selected center, distance or ring correspondence.",
             )
         )
-        self.manual_group.setTitle(
-            _translate(
-                "GeometryCalibrationDialog",
-                "Manual refinement · drag the center marker or edit values",
-            )
-        )
+        self.manual_group.setTitle(_translate("GeometryCalibrationDialog", "Use manual values"))
         self.manual_hint.setText(
             _translate(
                 "GeometryCalibrationDialog",
-                "Fine-tune only when the overlay needs correction. Changes are previewed immediately.",
+                "Drag the center marker on the preview or edit the values. The overlay updates "
+                "at once; Apply and Export use these values.",
             )
         )
-        self.manualXLabel.setText(_translate("GeometryCalibrationDialog", "Center X:"))
-        self.manualYLabel.setText(_translate("GeometryCalibrationDialog", "Center Y:"))
+        self.manualXLabel.setText(_translate("GeometryCalibrationDialog", "Center X (px):"))
+        self.manualYLabel.setText(_translate("GeometryCalibrationDialog", "Center Y (px):"))
         self.manualDistanceLabel.setText(_translate("GeometryCalibrationDialog", "Distance (mm):"))
         self.detectedRingLabel.setText(_translate("GeometryCalibrationDialog", "Detected ring:"))
         self.theoryPeakLabel.setText(_translate("GeometryCalibrationDialog", "Theoretical peak:"))
         self.refine_ring_button.setText(
             _translate("GeometryCalibrationDialog", "Fit selected ring")
+        )
+        self.reset_manual_button.setText(_translate("GeometryCalibrationDialog", "Reset to fitted"))
+        self.reset_manual_button.setToolTip(
+            _translate(
+                "GeometryCalibrationDialog",
+                "Restore the center and distance of the selected fitted solution.",
+            )
         )
         self.calibrationExportTitle.setText(_translate("GeometryCalibrationDialog", "Export"))
         self.calibrationExportDescription.setText(
@@ -177,7 +198,7 @@ class GeometryCalibrationTranslations:
                 "Import or save a calibration, or apply the selected result to the project.",
             )
         )
-        self.import_button.setText(_translate("GeometryCalibrationDialog", "Import Calibration..."))
-        self.export_button.setText(_translate("GeometryCalibrationDialog", "Export Calibration..."))
+        self.import_button.setText(_translate("GeometryCalibrationDialog", "Import Calibration…"))
+        self.export_button.setText(_translate("GeometryCalibrationDialog", "Export Calibration…"))
         self.apply_button.setText(_translate("GeometryCalibrationDialog", "Apply"))
         self.close_button.setText(_translate("GeometryCalibrationDialog", "Close"))

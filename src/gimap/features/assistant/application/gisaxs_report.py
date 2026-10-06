@@ -2,7 +2,50 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
+
+
+def pixel_span(band, limit=None, pixels=None) -> str:
+    """The detector pixels a cut uses, both ends included, as Analyze's Cuts card counts them (``605–609``).
+
+    ``band``: the band's continuous edges ``(low, high)`` (``horizontal_rows``); the cut reduces the whole
+    pixels ``floor(low)`` up to ``ceil(high)`` (exclusive), within ``0…limit`` (the image's rows or columns).
+    ``pixels``: ``[first, last]``, both included, when Analyze's status names them (``horizontal_pixel_rows``,
+    ``vertical_pixel_columns``); they win.
+    """
+    try:
+        if pixels is not None:
+            start, stop = int(pixels[0]), int(pixels[1]) + 1
+        else:
+            low, high = float(band[0]), float(band[1])
+            start, stop = max(0, math.floor(low)), math.ceil(high)
+            if limit:
+                stop = min(int(limit), stop)
+    except (TypeError, ValueError, IndexError):
+        return "?"
+    return f"{start}–{max(start, stop - 1)}"
+
+
+def image_shape(status) -> tuple:
+    """(rows, columns) of the frame a status describes (``(None, None)`` when it does not say)."""
+    shape = (status or {}).get("shape") or ()
+    return (shape[0], shape[1]) if len(shape) == 2 else (None, None)
+
+
+def cut_spans(cuts: dict, status) -> tuple[str, str]:
+    """(rows of the horizontal cut, columns of the vertical cut), both ends included, as Analyze counts them.
+
+    ``cuts``: the status's ``gisaxs`` part; the pixels it names (``horizontal_pixel_rows``,
+    ``vertical_pixel_columns``: first and last, both included) win over the band edges, which are clipped
+    to the frame of ``status``.
+    """
+    cuts = cuts or {}
+    rows, columns = image_shape(status)
+    return (
+        pixel_span(cuts.get("horizontal_rows"), rows, cuts.get("horizontal_pixel_rows")),
+        pixel_span(cuts.get("vertical_columns"), columns, cuts.get("vertical_pixel_columns")),
+    )
 
 
 def _number(value, digits: int = 4) -> str:
@@ -38,17 +81,17 @@ def gisaxs_sections(report: dict) -> list[str]:
     gisaxs = report.get("gisaxs") or {}
     cuts = gisaxs.get("cuts") or {}
     lines = ["## 切线 / Cuts", ""]
-    rows = cuts.get("horizontal_rows") or [None, None]
+    # The pixels each cut uses, both ends included (as Analyze's Cuts card and the Results tab say them).
+    rows, columns = cut_spans(cuts, (report.get("tables") or {}).get("status"))
     source = {"yoneda": "at the Yoneda band", "horizon": "just above the horizon (no Yoneda band found)"}.get(
         cuts.get("horizontal_source"), "set by hand"
     )
     alpha = cuts.get("yoneda_alpha_f_deg")
     lines.append(
-        f"- horizontal cut I(qy) {source}: rows {_number(rows[0])}–{_number(rows[1])}"
+        f"- horizontal cut I(qy) {source}: rows {rows}"
         + (f", αf = {_number(alpha, 3)}°" if alpha is not None else "")
     )
-    columns = cuts.get("vertical_columns") or [None, None]
-    lines.append(f"- vertical cut I(qz): columns {_number(columns[0])}–{_number(columns[1])}")
+    lines.append(f"- vertical cut I(qz): columns {columns}")
     symmetry = gisaxs.get("symmetry")
     if symmetry:
         lines.append(
@@ -111,4 +154,6 @@ def gisaxs_batch_table(reports: list[dict], state_of) -> list[str]:
     return lines
 
 
-__all__ = ["fit_rows", "gisaxs_batch_row", "gisaxs_batch_table", "gisaxs_sections"]
+__all__ = [
+    "cut_spans", "fit_rows", "gisaxs_batch_row", "gisaxs_batch_table", "gisaxs_sections", "image_shape", "pixel_span",
+]

@@ -47,6 +47,9 @@ class AnalysisRequest:
     """Further frames added to this one before any correction (frame summing)."""
     with_map: bool = True
     """``False``: the curves only, no q map (a series map needs one curve of every frame)."""
+    beam_center_shape: Optional[tuple] = None
+    """``(rows, columns)`` of the frame ``beam_center`` was set on: it is used only on frames of that
+    shape (another detector gets its header or profile centre). ``None``: on every frame."""
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -56,6 +59,8 @@ class AnalysisRequest:
             "summed_frames",
             tuple((Path(path), int(index)) for path, index in self.summed_frames),
         )
+        if self.beam_center_shape is not None:
+            object.__setattr__(self, "beam_center_shape", tuple(int(value) for value in self.beam_center_shape))
 
     @property
     def frames(self) -> tuple[FrameRef, ...]:
@@ -73,6 +78,8 @@ class GeometryResolution:
     """Where the beam centre of ``geometry`` came from: profile, header or session."""
     header_center: Optional[tuple[float, float]] = None
     """Canonical beam centre written in the file header, if the file has one."""
+    ignored_center_shape: Optional[tuple[int, int]] = None
+    """The frame shape a session beam centre was set for, when it was not used for this frame (another shape)."""
 
 
 @dataclass(frozen=True)
@@ -105,6 +112,9 @@ class FrameAnalysis:
     intensity_scale: Optional[np.ndarray] = None
     """GIWAXS with intensity corrections on photon counts: the factor each pixel's counts were multiplied
     by (1 / solid angle × polarisation × absorption), so its Poisson variance is that factor × its value."""
+    detected_kind: Optional[str] = None
+    """GISAXS or GIWAXS as Auto would classify the frame from its geometry, whatever the mode chosen
+    (``kind`` is the reduction used); ``None`` without a geometry."""
 
     @property
     def shape(self) -> tuple[int, int]:

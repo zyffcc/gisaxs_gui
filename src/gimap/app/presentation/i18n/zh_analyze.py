@@ -181,7 +181,6 @@ ANALYZE_ZH = {
     'Both halves, as measured': '两侧，按测量显示',
     'Only the positive half (x > 0)': '只显示正半轴（x > 0）',
     'Only the negative half (x < 0)': '只显示负半轴（x < 0）',
-    'Both halves on |x|, the negative one dashed: are they the same?': '两侧都画在 |x| 上，负半轴为虚线：两侧是否一致？',
     'Display log10 of the intensity (display only)': '显示强度的 log10（仅显示）',
     'Colour map': '色图',
     'Beam centre: drag to move it': '光束中心：拖动以移动',
@@ -508,6 +507,22 @@ ANALYZE_ZH = {
     'Bounded least squares': '有界最小二乘',
     'No warnings for this solution.': '这个解没有警告。',
     'not converged': '未收敛',
+    # -- review round (2026-10-06) -------------------------------------------------------------------
+    "The automatic analysis works on this frame until it ends; stop it to show another one":
+        "自动分析结束前一直处理这一帧；要显示其他帧，请先停止它",
+    "{n} new frame(s) listed; the automatic analysis works on this frame until it ends": "已列出 {n} 个新帧；自动分析结束前一直处理这一帧",
+    # -- cross-area fixes (2026-10-06) -------------------------------------------------------------
+    "Beam {x}, {y} px · profile": "光束 {x}, {y} px · 配置",
+    "Beam {x}, {y} px · this session": "光束 {x}, {y} px · 本次会话",
+    "Beam {x}, {y} px · file header": "光束 {x}, {y} px · 文件头",
+    "Use File Header Centre ({x}, {y})": "使用文件头中的中心（{x}, {y}）",
+    "Use File Header Centre (none in this file)": "使用文件头中的中心（此文件中没有）",
+    "Save to Profile “{name}”": "保存到配置“{name}”",
+    "{name}: {curves} curves in {seconds} s": "{name}：{curves} 条曲线，用时 {seconds} s",
+    "No geometry.": "没有几何。",
+    "q box: I(qz)": "q 框：I(qz)",
+    "q box: I(q∥)": "q 框：I(q∥)",
+    "Analyze was cleared.": "分析页已清空。",
 }
 
 __all__ = ["ANALYZE_ZH"]

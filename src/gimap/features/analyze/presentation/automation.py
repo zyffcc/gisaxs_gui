@@ -19,6 +19,7 @@ from PyQt5.QtCore import QSignalBlocker
 from src.gimap.shared.geometry import DetectorGeometry
 
 from ..application import q_from_two_theta, refine_center_by_symmetry, regions_from_dicts
+from .bindings.batch_watch import exported_text
 from .geometry_dialog import geometry_defaults
 from .views.analyze_page_view import INCIDENCE_FROM_PROFILE
 
@@ -28,6 +29,16 @@ Done = Callable[[bool, str], None]
 def _number(metadata: dict, key: str, scale: float = 1.0) -> Optional[float]:
     value = metadata.get(key)
     return float(value) * scale if isinstance(value, (int, float)) and np.isfinite(value) else None
+
+
+def _pixel_span(curve, axis: str) -> Optional[list[int]]:
+    """``[first, last]`` detector rows or columns a GISAXS cut reduces, both included (as the Cuts step says
+    them: ``display.pixel_range``); ``horizontal_rows`` / ``vertical_columns`` are the band's continuous edges."""
+    span = (curve.region or {}).get(axis) if curve is not None else None
+    if not span:
+        return None
+    start, stop = int(span[0]), int(span[1])
+    return [start, max(start, stop - 1)]
 
 
 def header_values(metadata: dict) -> dict:
@@ -58,6 +69,9 @@ class AnalyzeAutomation:
         self._waiting: list[Done] = []
         page.analysisShown.connect(self._shown)
         page.analysisFailed.connect(self._failed)
+        cleared = getattr(page, "filesCleared", None)  # a step waiting on a re-analysis ends at once
+        if cleared is not None:
+            cleared.connect(lambda: self._failed("Analyze was cleared."))
         self._symmetry: Optional[dict] = None
 
     # -- re-analysis -------------------------------------------------------------------
@@ -161,11 +175,13 @@ class AnalyzeAutomation:
             left, right = markers["vertical_band"]
             info["gisaxs"] = {
                 "horizontal_rows": [float(low), float(high)],
+                "horizontal_pixel_rows": _pixel_span(reduction.curve("horizontal"), "rows"),
                 "horizontal_source": markers.get("horizontal_source"),
                 "yoneda_alpha_f_deg": None if yoneda is None else float(yoneda.alpha_f_deg),
                 "yoneda_row": None if yoneda is None else float(yoneda.row),
                 "horizon_row": markers.get("horizon_row"),
                 "vertical_columns": [float(left), float(right)],
+                "vertical_pixel_columns": _pixel_span(reduction.curve("vertical"), "columns"),
                 "halves": view_model.fit_side,
                 "symmetry": self._symmetry,
             }
@@ -210,12 +226,18 @@ class AnalyzeAutomation:
             else:
                 widget.setValue(value)
 
-    def set_mode(self, mode: str, done: Done) -> None:
+    def set_mode(self, mode: str, done: Done, *, remember: bool = True) -> None:
+        """``remember=False``: a switch the procedure makes for its own run; the person's mode stays the one
+        saved for the next session until they choose one."""
         page = self._page
         index = page.mode_combo.findData(mode)
         if index >= 0:
             with QSignalBlocker(page.mode_combo):
                 page.mode_combo.setCurrentIndex(index)
+        if not remember and page._kept_mode is None:
+            page._kept_mode = page.view_model.state.mode
+        elif remember:
+            page._kept_mode = None
         page.view_model.set_mode(mode)
         page._remember()
         self.reanalyse(done)
@@ -448,7 +470,7 @@ class AnalyzeAutomation:
 
     def export_current(self) -> list[str]:
         written = self._page.view_model.export()
-        self._page._status(f"Exported {len(written)} files to {written[0].parent}", "ok")
+        self._page._status(exported_text(written), "ok")
         return [str(path) for path in written]
 
     def preview_png(self, max_size: int = 900, rings: Sequence[dict] = ()) -> Optional[bytes]:

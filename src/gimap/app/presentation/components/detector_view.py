@@ -29,10 +29,11 @@ from PyQt5.QtWidgets import (
 from .levels import LevelControl, auto_levels, level_bar
 from .marks import DETECTOR_MARKS, MarkLayers
 from .box_zoom import zoom_button
+from .curve_plot_extras import IconTools, roomy_ticks
 from .flow_layout import FlowLayout
 
 COMPACT_WIDTH = 520
-"""Below this width the toolbar uses short texts."""
+"""Below this width the toolbar shows icons, the colour bar is slim and the x axis has fewer labels."""
 COLORMAPS = ("viridis", "inferno", "magma", "plasma", "cividis", "turbo", "gray")
 LEVEL_PERCENTILES = (1.0, 99.7)
 
@@ -151,6 +152,7 @@ class DetectorView(QWidget):
                        self.marks_button):
             controls.addWidget(widget)
         self._compact: Optional[bool] = None
+        self._icons = IconTools(self, {"zoom": self.zoom_button, "fit": self.fit_button, "marks": self.marks_button})
         controls.addStretch(1)
         controls.addWidget(self.title_label)
         layout.addLayout(controls)
@@ -160,6 +162,7 @@ class DetectorView(QWidget):
         for side in ("left", "bottom"):
             # Units are in the axis label (Å⁻¹, pixel); never rescale them to "x0.001".
             self.plot.getAxis(side).enableAutoSIPrefix(False)
+        self.plot.getAxis("bottom").tickSpacing = roomy_ticks(self.plot.getAxis("bottom"))  # labels never run together
         self.image_item = _image_item_class()(axisOrder="row-major")
         self.image_item.setAutoDownsample(True)
         self.plot.addItem(self.image_item)
@@ -280,7 +283,9 @@ class DetectorView(QWidget):
         self.clear_overlays()
         self.hide_labels()
         self.title_label.setText("")
-        self.readout_label.setText("Open a detector frame")
+        from ..i18n import tr
+
+        self.readout_label.setText(tr("Open a detector frame"))
 
     def has_image(self) -> bool:
         return self._data is not None
@@ -359,7 +364,7 @@ class DetectorView(QWidget):
                 self.colormap_combo.setCurrentIndex(index)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
-        """Narrow views keep every control whole: shorter button texts, no title."""
+        """Narrow views keep the image large: icon buttons, no title, a slim colour bar, fewer x labels."""
         super().resizeEvent(event)
         compact = event.size().width() < COMPACT_WIDTH
         if compact != self._compact:
@@ -368,6 +373,9 @@ class DetectorView(QWidget):
 
             self.fit_button.setText(tr("Reset" if compact else "Fit view"))
             self.title_label.setVisible(not compact)
+            self._icons.set_on(compact)
+            self.color_bar.set_compact(compact)  # slim, but its handles still drag
+            self.plot.getAxis("bottom").setTickDensity(0.5 if compact else 1.0)  # labels that do not run together
 
     def fit_view(self) -> None:
         """The whole image — and the beam centre when it is to stay in view (``show_beam_center``)."""

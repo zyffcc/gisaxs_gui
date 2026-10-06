@@ -35,6 +35,15 @@ PyQt Dialog → FormatConverterViewModel → application use cases → ports
 旧的 `ui/format_converter_dialog.py` 与 `utils/format_converter.py` 兼容别名已删除；调用方直接
 导入 `src.gimap.features.format_converter` 中的 owner 模块。
 
+使用上的要点（2026-10-06）：帧选择模式按英文键保存在下拉项的数据里，中文界面下选择同样生效；
+源列表各列按内容定宽、文件名列伸展，长路径中间省略（完整路径在提示里）；Open 的过滤器先列出所有
+探测器格式（NXS、CBF、TIFF、EDF）。Esc 关闭窗口，转换运行中会先询问。
+
+输出位置默认是第一个输入所在文件夹下的 `converted`（随输入变化，直到你自己选了位置）；上次的输出格式会恢复；
+Add files / Add folder 从上次的文件夹开始。可以把文件或文件夹拖进窗口。预览：单帧的源只显示一张缩略图（多帧显示首 / 中 / 末），
+统计（尺寸、类型、最小 / 最大、NaN、负值、可能饱和的像素）在缩略图上方；缩略图仅用于显示，取 log(1 + 值) 与 viridis 色图，
+统计仍是存储的原始值。
+
 ## 控件映射
 
 | 功能/控件区域 | Python View object / feature-owned 位置 | 行为 |

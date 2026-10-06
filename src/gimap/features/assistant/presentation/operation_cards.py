@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Optional, Sequence
 
 from PyQt5.QtCore import Qt, pyqtSignal
@@ -17,7 +18,9 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from ..application import APPLIED, DISMISSED, FAILED, FROM_PROPOSAL, FROM_RUN, PROPOSED, SUPERSEDED, UNDONE, Operation
+from src.gimap.app.presentation.i18n import tr
+
+from ..application import APPLIED, DISMISSED, FAILED, FROM_PROPOSAL, PROPOSED, SUPERSEDED, UNDONE, Operation
 
 THUMBNAIL_WIDTH = 150
 STATE_TEXT = {
@@ -27,7 +30,8 @@ STATE_TEXT = {
     UNDONE: "Undone",
     FAILED: "Could not be applied",
 }
-STATE_COLOR = {PROPOSED: "#1e88e5", APPLIED: "#2e7d32", DISMISSED: "#78909c", UNDONE: "#78909c", FAILED: "#c62828"}
+STATE_ROLE = {PROPOSED: "info", APPLIED: "success", DISMISSED: "muted", UNDONE: "muted", FAILED: "error"}
+"""``gimapRole`` of the state word: the theme colours it in light and dark."""
 
 
 def _muted(text: str, parent: QWidget) -> QLabel:
@@ -53,14 +57,14 @@ class OperationCard(QFrame):
         self.picture = QLabel(self)
         self.picture.setObjectName("assistantOperationPicture")
         self.picture.setAlignment(Qt.AlignCenter)
-        self.picture.setFixedWidth(THUMBNAIL_WIDTH)
         if operation.preview_png:
             pixmap = QPixmap()
             if pixmap.loadFromData(operation.preview_png):
                 self.picture.setPixmap(pixmap.scaledToWidth(THUMBNAIL_WIDTH, Qt.SmoothTransformation))
-        if self.picture.pixmap() is None or self.picture.pixmap().isNull():
-            self.picture.setText("no picture")
-            self.picture.setProperty("gimapRole", "muted")
+        has_picture = self.picture.pixmap() is not None and not self.picture.pixmap().isNull()
+        if has_picture:
+            self.picture.setFixedWidth(THUMBNAIL_WIDTH)
+        self.picture.setVisible(has_picture)  # no empty column when a change has no picture (confirm / auto modes)
         layout.addWidget(self.picture)
 
         text = QVBoxLayout()
@@ -73,9 +77,10 @@ class OperationCard(QFrame):
         font.setBold(True)
         self.title_label.setFont(font)
         head.addWidget(self.title_label, 1)
-        self.state_label = QLabel(STATE_TEXT.get(operation.state, operation.state), self)
+        state = STATE_TEXT.get(operation.state)
+        self.state_label = QLabel(tr(state) if state else operation.state, self)
         self.state_label.setObjectName("assistantOperationState")
-        self.state_label.setStyleSheet(f"color: {STATE_COLOR.get(operation.state, '#607d8b')};")
+        self.state_label.setProperty("gimapRole", STATE_ROLE.get(operation.state, "muted"))
         head.addWidget(self.state_label)
         text.addLayout(head)
         if operation.source == FROM_PROPOSAL:
@@ -84,18 +89,20 @@ class OperationCard(QFrame):
             origin = "Made by the AI during its analysis"
         else:
             origin = "The AI used this during its analysis; Analyze was restored — apply to keep it"
-        text.addWidget(_muted(f"{origin} · {operation.tool}", self))
+        self.origin_label = _muted(tr(origin), self)
+        self.origin_label.setToolTip(f"{operation.tool}({json.dumps(operation.arguments, ensure_ascii=False, default=str)})")
+        text.addWidget(self.origin_label)
         if operation.why:
-            self.why_label = _muted(f"Why: {operation.why}", self)
+            self.why_label = _muted(tr("Why: {why}").format(why=operation.why), self)
             text.addWidget(self.why_label)
         if operation.effect:
-            text.addWidget(_muted(f"Effect: {operation.effect}", self))
+            text.addWidget(_muted(tr("Effect: {effect}").format(effect=operation.effect), self))
         buttons = QHBoxLayout()
-        self.apply_button = QPushButton("Apply", self)
+        self.apply_button = QPushButton(tr("Apply"), self)
         self.apply_button.setObjectName("assistantOperationApply")
-        self.undo_button = QPushButton("Undo", self)
+        self.undo_button = QPushButton(tr("Undo"), self)
         self.undo_button.setObjectName("assistantOperationUndo")
-        self.dismiss_button = QPushButton("Dismiss", self)
+        self.dismiss_button = QPushButton(tr("Dismiss"), self)
         self.dismiss_button.setObjectName("assistantOperationDismiss")
         for button in (self.apply_button, self.undo_button, self.dismiss_button):
             buttons.addWidget(button)
@@ -125,11 +132,11 @@ class OperationList(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         head = QHBoxLayout()
-        self.heading = QLabel("Changes", self)
+        self.heading = QLabel(tr("Changes"), self)
         self.heading.setProperty("gimapRole", "heading")
         head.addWidget(self.heading)
         head.addStretch(1)
-        self.undo_all_button = QPushButton("Undo All", self)
+        self.undo_all_button = QPushButton(tr("Undo All"), self)
         self.undo_all_button.setObjectName("assistantOperationsUndoAll")
         head.addWidget(self.undo_all_button)
         layout.addLayout(head)
@@ -167,11 +174,11 @@ class OperationList(QWidget):
             self.cards.append(card)
         waiting = sum(1 for operation in operations if operation.state == PROPOSED)
         applied = sum(1 for operation in operations if operation.state == APPLIED)
-        self.heading.setText(f"Changes ({len(operations)})")
+        self.heading.setText(tr("Changes ({count})").format(count=len(operations)))
         self.hint.setText(
-            f"{waiting} suggested change(s) wait for you: the picture shows the result; Apply changes Analyze, "
-            "Undo takes it back." if waiting else
-            ("Every change can be undone." if applied else "")
+            tr("{count} suggested change(s) wait for you: the picture shows the result; Apply changes Analyze, "
+               "Undo takes it back.").format(count=waiting) if waiting else
+            (tr("Every change can be undone.") if applied else "")
         )
         self.undo_all_button.setEnabled(applied > 0)
         self.setVisible(bool(operations))

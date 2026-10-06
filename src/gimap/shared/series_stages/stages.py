@@ -270,6 +270,9 @@ def find_stages(q, image, *, q_range: Optional[Sequence[float]] = None, shape_on
     starts = kept[::block]
     scores = np.array([parts.scores[kept[i:i + block]].mean(axis=0) for i in range(0, kept.size, block)])
     found = segment(scores, starts.astype(float), most=most, shortest=max(1, math.ceil(shortest / block)))
+    if 1 not in found:  # fewer frames than one stage needs (3 or 4, or more with odd frames left out)
+        raise ValueError(f"At least {shortest} frames besides the odd ones are needed to find stages." if odd
+                         else f"At least {shortest} frames are needed to find stages.")
     suggested = choose(found, gain, noise_penalty(scores))
     with np.errstate(invalid="ignore", divide="ignore"):
         log = np.where(image > 0, np.log10(image), np.nan)[:, data.columns]

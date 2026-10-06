@@ -3,7 +3,10 @@
 from ..domain import END_FRAMES, Comparison, SeriesData, SeriesResult
 from .use_cases import (
     CURVE_SUFFIXES,
+    ERRORS,
     METHOD,
+    TOO_FEW_READ,
+    UNREAD_FILE,
     CompareService,
     CompareSettings,
     CurveReader,
@@ -13,6 +16,7 @@ from .use_cases import (
 )
 
 __all__ = [
-    "CURVE_SUFFIXES", "END_FRAMES", "METHOD", "CompareService", "CompareSettings", "Comparison", "CurveReader",
-    "SeriesData", "SeriesResult", "TableWriter", "curve_files", "natural_key",
+    "CURVE_SUFFIXES", "END_FRAMES", "ERRORS", "METHOD", "TOO_FEW_READ", "UNREAD_FILE", "CompareService",
+    "CompareSettings", "Comparison", "CurveReader", "SeriesData", "SeriesResult", "TableWriter", "curve_files",
+    "natural_key",
 ]

@@ -7,6 +7,8 @@ from pathlib import Path
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QFileDialog
 
+from src.gimap.app.presentation.i18n import tr
+
 from ..views.analyze_page_view import FILE_FILTER
 
 APPLY_DELAY_MS = 250
@@ -73,7 +75,7 @@ class OptionsMixin:
 
     def _choose_background(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Background frame", self._last_folder, FILE_FILTER
+            self, tr("Background frame"), self._last_folder, FILE_FILTER
         )
         if path:
             self._apply_background(path)
@@ -90,7 +92,7 @@ class OptionsMixin:
 
     def _clear_background(self) -> None:
         self.view_model.set_background(None)
-        self.background_label.setText("No background")
+        self.background_label.setText(tr("No background"))
         self.background_label.setToolTip("")
         self._options_changed()
 

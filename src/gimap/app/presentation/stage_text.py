@@ -9,18 +9,27 @@ from typing import Callable
 from .i18n import tr
 
 
-def odd_reason(frame) -> str:
+def axis_symbol(x_label: str) -> str:
+    """The axis a series runs along, for ``odd_reason`` and ``change_text``: “q (Å⁻¹)” → “q”,
+    “χ (°)” → “χ” (as ``CurvePlot.set_labels`` reads it)."""
+    return str(x_label).split(" (")[0].split(" or ")[0].strip().strip("|") or "x"
+
+
+def odd_reason(frame, axis: str = "q") -> str:
+    """Why a frame is odd; ``axis`` names the x of the series (“q”, “χ” …; ``frame.q`` is on it)."""
     if frame.narrow:
-        return tr("differs only near q {q}: probably the detector, not the sample").format(q=f"{frame.q:.4g}")
-    return tr("differs from the frames before and after it ({times}× their step), most near q {q}").format(
-        times=f"{frame.z:.0f}", q=f"{frame.q:.4g}")
+        return tr("differs only near {axis} {q}: probably the detector, not the sample").format(
+            axis=axis, q=f"{frame.q:.4g}")
+    return tr("differs from the frames before and after it ({times}× their step), most near {axis} {q}").format(
+        times=f"{frame.z:.0f}", axis=axis, q=f"{frame.q:.4g}")
 
 
-def change_text(change) -> str:
+def change_text(change, axis: str = "q") -> str:
+    """What grows and falls from one stage to the next; ``axis`` names the x of the series."""
     grows = ", ".join(f"{q:.4g} (+{percent:.0f} %)" for q, percent in change.rises)
     drops = ", ".join(f"{q:.4g} ({percent:.0f} %)" for q, percent in change.falls)
-    parts = [tr("grows most at q {list}").format(list=grows) if grows else "",
-             tr("falls most at q {list}").format(list=drops) if drops else ""]
+    parts = [tr("grows most at {axis} {list}").format(axis=axis, list=grows) if grows else "",
+             tr("falls most at {axis} {list}").format(axis=axis, list=drops) if drops else ""]
     return tr("Stage {a} → {b}: {what}").format(a=change.stage - 1, b=change.stage,
                                                what="; ".join(part for part in parts if part))
 
@@ -37,4 +46,4 @@ def stages_summary(stages, frame: Callable[[int], str] = lambda row: str(row + 1
     return text
 
 
-__all__ = ["change_text", "odd_reason", "stages_summary"]
+__all__ = ["axis_symbol", "change_text", "odd_reason", "stages_summary"]

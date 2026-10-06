@@ -209,7 +209,7 @@ def test_open_recent_lists_the_paths_and_opens_the_chosen_one(tmp_path: Path) ->
     menus = MainMenuBar(window, commands)
     menus._fill_recent()
     texts = [action.text() for action in menus.recent_menu.actions()]
-    assert texts[0] == "&1  frame_001.tif" and texts[1].endswith("(folder)") and texts[-1] == "Clear the List"
+    assert texts[0] == f"&1  frame_001.tif — {tmp_path.name}" and texts[1].endswith("(folder)") and texts[-1] == "Clear the List"
     menus.recent_menu.actions()[0].trigger()
     menus.recent_menu.actions()[-1].trigger()
     assert opened == [str(frame)] and cleared == [True]

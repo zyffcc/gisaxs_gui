@@ -19,9 +19,10 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PyQt5.QtCore import QObject, Qt, pyqtSignal
-from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QDockWidget, QFileDialog, QMessageBox, QVBoxLayout
+from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QDockWidget, QMessageBox, QVBoxLayout
 
 from src.gimap.app.presentation.components import show_toast
+from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr
 from src.gimap.app.presentation.task_runner import TaskRunner
 
 from ..application import (
@@ -46,6 +47,7 @@ from .choice_dialog import GuiChooser
 from .code_section import describe_code_status
 from .gui_bridge import GuiBridge
 from .gui_workbench import GuiConfirmer, GuiWorkbench
+from .guided_text import ask_save_path, save_failed_toast, saved_toast
 from .panel import AssistantPanel
 from .provider_section import chosen_provider, describe_provider
 from .report_view import report_html
@@ -55,6 +57,22 @@ from .start_dialog import AssistantStartDialog
 
 TITLE = "Process with AI"
 SHUTDOWN_WAIT_S = 3.0
+
+
+def _title_follows_language(dock: QDockWidget) -> None:
+    """A docked dock's title follows a language switch made later.
+
+    Switching the language translates the actions under the window, the dock's show/hide action among
+    them, but a window title only for top-level windows (a docked dock is none). The dock keeps the
+    action's text in step with its title; this takes the action's translated text back as the title.
+    """
+    action = dock.toggleViewAction()
+
+    def follow() -> None:
+        if action.text() and action.text() != dock.windowTitle():
+            dock.setWindowTitle(action.text())
+
+    action.changed.connect(follow)
 
 
 class _RunWorker(QObject):
@@ -146,7 +164,7 @@ class AssistantController(QObject):
             self._show_analyze()
             status = self._automation().status()
         except Exception as exc:  # a slot must never raise
-            QMessageBox.warning(self.window, TITLE, f"Analyze is not ready: {exc}")
+            QMessageBox.warning(self.window, tr(TITLE), tr("Analyze is not ready: {error}").format(error=exc))
             return
         dialog = AssistantStartDialog(
             self.settings,
@@ -170,12 +188,12 @@ class AssistantController(QObject):
         if backend == BACKEND_API:
             source = self.services.credentials()
             text = (
-                f"Claude API · {self.model()} · credentials: {source}." if source
-                else "No Claude API key yet: use Set Up AI… to add one."
+                tr("Claude API · {model} · credentials: {source}.").format(model=self.model(), source=source) if source
+                else tr("No Claude API key yet: use Set Up AI… to add one.")
             )
             dialog.set_status(bool(source), text)
             return
-        dialog.set_status(False, "Checking Claude Code…")
+        dialog.set_status(False, tr("Checking Claude Code…"))
         cli, model = self.code_cli(), self.code_model()
 
         def checked(info: dict) -> None:
@@ -192,7 +210,7 @@ class AssistantController(QObject):
     def configure(self, parent=None) -> None:
         """The Assistant settings in a small dialog (brain, sign-in, API key)."""
         dialog = QDialog(parent or self.window)
-        dialog.setWindowTitle("Set Up AI")
+        dialog.setWindowTitle(tr("Set Up AI"))
         dialog.setMinimumWidth(640)
         layout = QVBoxLayout(dialog)
         page = self.settings_page(dialog)
@@ -241,10 +259,10 @@ class AssistantController(QObject):
         try:
             brain, model, task_type = self._brain()
         except LlmError as exc:
-            QMessageBox.warning(self.window, TITLE, exc.message)
+            QMessageBox.warning(self.window, tr(TITLE), exc.message)
             return False
         except Exception as exc:  # a slot must never raise
-            QMessageBox.warning(self.window, TITLE, f"Claude could not be started: {exc}")
+            QMessageBox.warning(self.window, tr(TITLE), tr("The AI could not be started: {error}").format(error=exc))
             return False
         standing = str(preferences.read(self.settings, "standing_instructions") or "").strip()
         if standing:
@@ -315,8 +333,9 @@ class AssistantController(QObject):
     def show_panel(self) -> AssistantPanel:
         if self._dock is None:
             self.panel = AssistantPanel()
-            dock = QDockWidget("AI Assistant", self.window)
+            dock = QDockWidget(tr("AI Assistant"), self.window)
             dock.setObjectName("assistantDock")
+            _title_follows_language(dock)
             dock.setAllowedAreas(Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea)
             dock.setWidget(self.panel)
             self.window.addDockWidget(Qt.RightDockWidgetArea, dock)
@@ -328,6 +347,8 @@ class AssistantController(QObject):
             self.panel.undoAllRequested.connect(self.undo_all_operations)
             self.panel.followUpRequested.connect(self.follow_up)
             self._dock = dock
+            if current_language() != DEFAULT_LANGUAGE:  # a docked panel is not translated when it is shown
+                apply_to(self.panel, current_language())
         self._dock.show()
         self._dock.raise_()
         return self.panel
@@ -354,7 +375,7 @@ class AssistantController(QObject):
         except OSError:
             pass
         if self.window is not None:
-            show_toast(self.window, f"AI: {outcome.message}", level="info")
+            show_toast(self.window, tr("AI: {message}").format(message=outcome.message), level="info")
 
     # -- the changes (operation cards) ----------------------------------------------------
 
@@ -373,10 +394,11 @@ class AssistantController(QObject):
         try:
             if action == "dismiss":
                 tools.dismiss_operation(identifier)
-                message = "Dismissed."
+                message = tr("Dismissed.")
             else:
                 outcome = tools.apply_operation(identifier) if action == "apply" else tools.undo_operation(identifier)
-                message = outcome.summary if not outcome.is_error else f"Could not {action}: {outcome.summary}"
+                failed = tr("Could not apply: {reason}") if action == "apply" else tr("Could not undo: {reason}")
+                message = outcome.summary if not outcome.is_error else failed.format(reason=outcome.summary)
         except KeyError:
             return
         self._after_operation(message)
@@ -386,13 +408,13 @@ class AssistantController(QObject):
         if tools is None:
             return
         count = tools.undo_all_operations()
-        self._after_operation(f"Undid {count} change(s).")
+        self._after_operation(tr("Undid {count} change(s).").format(count=count))
 
     def _after_operation(self, message: str) -> None:
         if self.panel is not None and self.outcome is not None:
             self.panel.show_operations(self.outcome.results.operations)
         if self.window is not None:
-            show_toast(self.window, f"AI change: {message}", level="info")
+            show_toast(self.window, tr("AI change: {message}").format(message=message), level="info")
 
     def _language(self) -> str:
         return self._goals.language if self._goals is not None else "English"
@@ -429,12 +451,12 @@ class AssistantController(QObject):
         )
 
     def save_report(self) -> Optional[str]:
+        """The AI report (HTML) and its record (JSON beside it), proposed next to the data."""
         outcome = self.outcome
         if outcome is None:
             return None
-        source = Path(self._frame) if self._frame else Path.home() / "frame"
-        suggested = source.parent / "gimap_analysis" / f"{source.stem}_claude_report.html"
-        path, _ = QFileDialog.getSaveFileName(self.window, "Save Claude Report", str(suggested), "HTML report (*.html)")
+        frame = self._frame or str(Path.home() / "frame")
+        path, _ = ask_save_path(self.window, "Save AI Report", frame, "ai_report.html", "HTML report (*.html)")
         if not path:
             return None
         try:
@@ -444,8 +466,9 @@ class AssistantController(QObject):
                 json.dumps(self._record(outcome), indent=2, ensure_ascii=False) + "\n",
             )
         except OSError as exc:
-            QMessageBox.warning(self.window, "Save Claude Report", f"The report could not be saved: {exc}")
+            save_failed_toast(self.window, path, exc.strerror or str(exc))
             return None
+        saved_toast(self.window, written)
         return written
 
 

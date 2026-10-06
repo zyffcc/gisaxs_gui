@@ -41,6 +41,12 @@ class FramesModelMixin:
     def remember_frame_count(self, path: Path, count: int) -> None:
         self._frame_counts[str(path).casefold()] = max(1, int(count))
 
+    def _forget_frames(self, path: Path) -> None:
+        """A file left the list: its frame count, and its frames waiting for a group of the folder watch."""
+        key = str(path).casefold()
+        self._frame_counts.pop(key, None)
+        self._watch_pending = [frame for frame in self._watch_pending if str(frame[0]).casefold() != key]
+
     @property
     def sum_count(self) -> int:
         return self.state.sum_count

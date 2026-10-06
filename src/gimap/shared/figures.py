@@ -68,22 +68,58 @@ def break_at_gaps(x, y) -> tuple[np.ndarray, np.ndarray]:
     return np.insert(x, gaps + 1, np.nan), np.insert(y, gaps + 1, np.nan)
 
 
+CJK_FONTS = ("Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "SimHei",
+             "PingFang SC", "WenQuanYi Zen Hei")
+"""Fonts with Chinese glyphs, in order of preference (Matplotlib's own font has none)."""
+
+
+def _has_wide_text(text: str) -> bool:
+    return any(ord(character) >= 0x2E80 for character in text)  # CJK and full-width punctuation
+
+
+def cjk_fallback(figure) -> int:
+    """Texts of ``figure`` with Chinese characters get a Chinese font after Matplotlib's own, so they are
+    not drawn as empty boxes (Matplotlib falls back glyph by glyph; Latin letters keep their font).
+
+    Other texts are left as they are, so an English figure is unchanged. Returns how many texts changed.
+    """
+    from matplotlib import font_manager
+    from matplotlib.text import Text
+
+    texts = [text for text in figure.findobj(Text) if _has_wide_text(text.get_text() or "")]
+    if not texts:
+        return 0
+    names = {font.name for font in font_manager.fontManager.ttflist}
+    fallback = next((name for name in CJK_FONTS if name in names), None)
+    if fallback is None:
+        return 0
+    family = ["DejaVu Sans", fallback] if "DejaVu Sans" in names else [fallback]
+    for text in texts:
+        text.set_fontfamily(family)
+    return len(texts)
+
+
 def save_figure(figure, path: str | Path) -> Path:
-    """Write ``figure``; raster formats at :data:`RASTER_DPI`, vector formats as vectors."""
+    """Write ``figure``; raster formats at :data:`RASTER_DPI`, vector formats as vectors.
+
+    Titles and labels in Chinese (the interface language) are written with a Chinese font."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     raster = path.suffix.lower() in RASTER_SUFFIXES
+    cjk_fallback(figure)
     figure.savefig(path, dpi=RASTER_DPI if raster else None)
     return path
 
 
 __all__ = [
+    "CJK_FONTS",
     "CM",
     "COLUMN_WIDTH_CM",
     "FIGURE_FILE_FILTER",
     "GAP_FACTOR",
     "RASTER_DPI",
     "break_at_gaps",
+    "cjk_fallback",
     "publication_figure",
     "save_figure",
     "style_publication_axes",

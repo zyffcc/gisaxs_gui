@@ -17,7 +17,23 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.theme import theme_color
+
+COLORBAR_BAR_WIDTH = 13
+COLORBAR_GAP = 10  # image to bar; then 4 px to the limits and 6 px to the edge
+# The label column fits the widest limit f"{value:.3g}" writes (sign, 3 digits, exponent) in the
+# canvas font, so no limit is cut and the image does not move when the limits change.
+WIDEST_LIMIT_SAMPLES = ("-8.88e+08", "-0.000888")
+# What to do in each draw mode, shown in a strip at the top of the canvas.
+DRAW_MODE_INSTRUCTIONS = {
+    "beam_center": "Click the direct beam · Esc to cancel",
+    "roi": "Drag a rectangle for the ROI · Esc to cancel",
+    "roi_ellipse": "Drag an ellipse for the ROI · Esc to cancel",
+    "rectangle": "Drag a rectangle to mask · Esc to cancel",
+    "ellipse": "Drag an ellipse to mask · Esc to cancel",
+    "circle": "Drag an ellipse to mask · Esc to cancel",
+}
 
 
 class ArrayCanvas(QWidget):
@@ -33,6 +49,7 @@ class ArrayCanvas(QWidget):
         self.setMinimumSize(300, 260)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.StrongFocus)  # Esc leaves a draw mode
         self.empty_text = empty_text
         self.image: Optional[np.ndarray] = None
         self.mask: Optional[np.ndarray] = None
@@ -45,6 +62,7 @@ class ArrayCanvas(QWidget):
         self.display_vmin = 0.0
         self.display_vmax = 1.0
         self.mode = ""
+        self.colorbar_labels: tuple = ()  # (low, high) as drawn beside the colour bar
         self._press: Optional[QPoint] = None
         self._current: Optional[QPoint] = None
         self._draw_rect = QRect()
@@ -67,6 +85,34 @@ class ArrayCanvas(QWidget):
     def set_draw_mode(self, mode: str) -> None:
         self.mode = mode
         self.setCursor(Qt.CrossCursor if mode else Qt.ArrowCursor)
+        if mode:
+            self.setFocus(Qt.OtherFocusReason)
+        self.update()
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if event.key() == Qt.Key_Escape and (self.mode or self._press is not None):
+            self._press = self._current = None
+            self.set_draw_mode("")
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _instruction_height(self) -> int:
+        """Height of the draw-mode strip; the image moves below it, so nothing is covered."""
+        return self.fontMetrics().height() + 10 if DRAW_MODE_INSTRUCTIONS.get(self.mode) else 0
+
+    def _paint_instruction(self, painter: QPainter) -> None:
+        text = DRAW_MODE_INSTRUCTIONS.get(self.mode)
+        if not text:
+            return
+        strip = QRect(1, 1, self.width() - 2, self._instruction_height())
+        painter.fillRect(strip, theme_color("info_soft"))
+        painter.setPen(QPen(theme_color("info_border"), 1))
+        painter.drawLine(strip.bottomLeft(), strip.bottomRight())
+        painter.setPen(theme_color("info"))
+        area = strip.adjusted(8, 0, -8, 0)
+        shown = painter.fontMetrics().elidedText(tr(text), Qt.ElideRight, area.width())
+        painter.drawText(area, Qt.AlignVCenter | Qt.AlignLeft, shown)
 
     def set_display_options(
         self,
@@ -83,17 +129,27 @@ class ArrayCanvas(QWidget):
         self.display_vmax = float(vmax)
         self.update()
 
+    def _colorbar_text_width(self) -> int:
+        metrics = self.fontMetrics()
+        return max(metrics.horizontalAdvance(sample) for sample in WIDEST_LIMIT_SAMPLES) + 2
+
     def _image_rect(self) -> QRect:
         if self.image is None or not self.image.size:
             return QRect()
         height, width = self.image.shape[:2]
-        colorbar_space = 54 if not self.binary_mode else 0
+        colorbar_space = (
+            0
+            if self.binary_mode
+            else COLORBAR_GAP + COLORBAR_BAR_WIDTH + 4 + self._colorbar_text_width() + 6
+        )
+        top = self._instruction_height()
         available_width = max(1, self.width() - colorbar_space)
-        scale = min(available_width / max(width, 1), self.height() / max(height, 1))
+        available_height = max(1, self.height() - top)
+        scale = min(available_width / max(width, 1), available_height / max(height, 1))
         draw_width, draw_height = int(width * scale), int(height * scale)
         return QRect(
             (available_width - draw_width) // 2,
-            (self.height() - draw_height) // 2,
+            top + (available_height - draw_height) // 2,
             draw_width,
             draw_height,
         )
@@ -175,10 +231,12 @@ class ArrayCanvas(QWidget):
         painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
         if self.image is None or not self.image.size:
             painter.setPen(theme_color("text_muted"))
-            painter.drawText(self.rect(), Qt.AlignCenter | Qt.TextWordWrap, self.empty_text)
+            painter.drawText(self.rect(), Qt.AlignCenter | Qt.TextWordWrap, tr(self.empty_text))
+            self._paint_instruction(painter)
             return
         data = np.asarray(self.image, dtype=np.float64)
         finite = data[np.isfinite(data)]
+        low = high = None  # the displayed limits (linear values, also in log mode)
         if self.binary_mode:
             normalized = (np.nan_to_num(data) > 0).astype(np.float64)
         elif finite.size:
@@ -222,9 +280,12 @@ class ArrayCanvas(QWidget):
         target = self._image_rect()
         painter.drawPixmap(target, QPixmap.fromImage(qimage))
         if not self.binary_mode and target.width() > 40:
-            bar_width = 13
-            bar_x = min(self.width() - bar_width - 28, target.right() + 10)
-            bar_rect = QRect(bar_x, target.top(), bar_width, target.height())
+            text_width = self._colorbar_text_width()
+            bar_x = min(
+                self.width() - COLORBAR_BAR_WIDTH - 4 - text_width - 6,
+                target.right() + COLORBAR_GAP,
+            )
+            bar_rect = QRect(bar_x, target.top(), COLORBAR_BAR_WIDTH, target.height())
             gradient_values = np.linspace(1.0, 0.0, max(2, bar_rect.height()), dtype=np.float64)[
                 :, None
             ]
@@ -240,14 +301,22 @@ class ArrayCanvas(QWidget):
                 QImage.Format_RGBA8888,
             ).copy()
             painter.drawPixmap(bar_rect, QPixmap.fromImage(gradient_image))
-            painter.setPen(QPen(QColor(71, 85, 105), 1))
+            painter.setPen(QPen(theme_color("text_muted"), 1))
             painter.drawRect(bar_rect)
-            painter.drawText(
-                QRect(bar_rect.right() + 4, bar_rect.top() - 2, 24, 16), Qt.AlignLeft, "max"
-            )
-            painter.drawText(
-                QRect(bar_rect.right() + 4, bar_rect.bottom() - 14, 24, 16), Qt.AlignLeft, "min"
-            )
+            if low is not None and high is not None:
+                text_x = bar_rect.right() + 4
+                line = painter.fontMetrics().height()
+                self.colorbar_labels = (f"{float(low):.3g}", f"{float(high):.3g}")
+                painter.drawText(
+                    QRect(text_x, bar_rect.top() - 2, text_width, line),
+                    Qt.AlignLeft,
+                    self.colorbar_labels[1],
+                )
+                painter.drawText(
+                    QRect(text_x, bar_rect.bottom() - line + 2, text_width, line),
+                    Qt.AlignLeft,
+                    self.colorbar_labels[0],
+                )
         if self.beam_center is not None:
             center_x, center_y = self.beam_center
             sx = target.width() / max(data.shape[1], 1)
@@ -288,6 +357,7 @@ class ArrayCanvas(QWidget):
                 painter.drawEllipse(rect)
             else:
                 painter.drawRect(rect)
+        self._paint_instruction(painter)
 
 
 class HistogramWidget(QWidget):

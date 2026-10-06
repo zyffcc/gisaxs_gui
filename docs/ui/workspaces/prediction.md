@@ -88,8 +88,19 @@ result。二维输出保留 AutoScale、LogScale、Colormap 和 Zoom，手动 Vm
 二维色阶。Input 与 Prediction export 是当前 tab 的上下文 action。
 
 顶部工作流状态来自 input/model/framework/job/result 的成功状态，不再根据“点击过按钮”
-推断完成。步骤可点击或通过键盘跳转；Predict/Stop 位于固定底部 action area，Stop 只在
-batch job 运行时出现。
+推断完成。步骤可点击或通过键盘跳转；Predict/Stop 位于固定底部 action area。
+
+单文件预测在后台线程运行（`presentation/prediction_worker.py`），窗口不会冻结；运行时显示 Stop。
+Stop 后 Predict 显示 “Stopping…” 并保持禁用，直到模型进程结束，因此同一时间最多一个模型进程。
+运行期间改了帧、module 或模型时，结果被丢弃并给出警告 toast，不会把两帧的结果混在一个视图里。
+活动日志经信号写入（线程安全），Show Log 会滚动到日志处。界面上的图跟随主题，Export 写出的图
+仍是原来的浅色出版样式。关闭 GIMaP 时若预测在运行，退出确认会列出 “2D Prediction”。1280 px 宽
+的窗口下视图与面板上下排列。
+
+输入只接受 CBF：按钮为 “Choose CBF frame…”，对话框标题 “Select CBF Frame”，旁边一行提示只支持 CBF；空状态的按钮直接
+打开选择框；也可以把 CBF 拖到图区。导出结果：保存对话框建议 `<输入文件名>_prediction.png`（PNG），数据以同名写在旁边，
+另写 `<同名>.json` 记录（模块、模型路径、框架、运行时版本、预处理步骤、输入文件与叠加数），完成后 toast 可打开文件夹，
+失败时显示错误。状态栏只显示当前打开的 Labs 页面自己的消息，切换语言后随之翻译。
 
 ## 控件映射
 

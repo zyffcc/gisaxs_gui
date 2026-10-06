@@ -9,32 +9,65 @@ from typing import Callable, Optional
 
 from PyQt5.QtWidgets import QMessageBox
 
-from ..application import CurveData
+from src.gimap.app.presentation.i18n import tr
+
+from ..application import CurveData, frame_changed, same_file
 from .gui_bridge import GuiBridge
 
 
 class GuiWorkbench:
-    def __init__(self, automation, bridge: GuiBridge, *, cancelled: Callable[[], bool] = lambda: False):
+    def __init__(
+        self, automation, bridge: GuiBridge, *, cancelled: Callable[[], bool] = lambda: False, pin_frame: bool = False,
+    ):
+        """``pin_frame``: the run belongs to the file Analyze shows at its first ``status()``. While Analyze
+        shows another file (cleared, a project opened), every call raises ``FrameChanged`` on the GUI thread
+        before it acts, so a step still in progress never changes or reads the next frame."""
         self._automation = automation
         self._bridge = bridge
         self._cancelled = cancelled
+        self._pin = pin_frame
+        self.start_path: Optional[str] = None
+        """The file the run started on (``pin_frame``)."""
+
+    def _check_frame(self, path: Optional[str] = None) -> None:
+        """Raise ``FrameChanged`` when Analyze shows another file than the run's (on the GUI thread)."""
+        if not self._pin or self.start_path is None:
+            return
+        now = path if path is not None else (self._automation.status() or {}).get("path")
+        if not same_file(now, self.start_path):
+            raise frame_changed(self.start_path, now)
+
+    def _on_frame(self, fn, *args):
+        self._check_frame()
+        return fn(*args)
 
     def _call(self, fn, *args):
-        return self._bridge.call(fn, *args, cancelled=self._cancelled)
+        return self._bridge.call(self._on_frame, fn, *args, cancelled=self._cancelled)
 
     def _apply(self, start) -> dict:
-        ok, message = self._bridge.call_async(
-            lambda done: start(lambda ok, text: done((ok, text))), cancelled=self._cancelled
-        )
+        def begin(done) -> None:
+            self._check_frame()
+            start(lambda ok, text: done((ok, text)))
+
+        ok, message = self._bridge.call_async(begin, cancelled=self._cancelled)
         if not ok:
+            if self._pin:
+                self._call(lambda: None)  # a frame that changed meanwhile is the reason: FrameChanged
             raise RuntimeError(message or "The analysis failed.")
         return self.status()
 
     def status(self) -> dict:
-        return self._call(self._automation.status)
+        status = self._bridge.call(self._automation.status, cancelled=self._cancelled)
+        path = status.get("path") if isinstance(status, dict) else None
+        if self._pin and self.start_path is None:
+            self.start_path = path
+        else:
+            self._check_frame(path or "")  # "": no frame open any more
+        return status
 
     def set_mode(self, mode: str) -> dict:
-        return self._apply(lambda done: self._automation.set_mode(mode, done))
+        # A switch the procedure makes for the person is not saved as their mode in Analyze.
+        return self._apply(lambda done: self._automation.set_mode(mode, done, remember=False))
 
     def set_incidence(self, degrees: Optional[float]) -> dict:
         return self._apply(lambda done: self._automation.set_incidence(degrees, done))
@@ -103,7 +136,7 @@ class GuiConfirmer:
     def confirm(self, title: str, text: str) -> bool:
         def ask() -> bool:
             answer = QMessageBox.question(
-                self._parent, title, f"{text}\n\nAllow Claude to do this?",
+                self._parent, tr(title), f"{text}\n\n{tr('Allow the AI to do this?')}",  # any provider, not only Claude
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             return answer == QMessageBox.Yes

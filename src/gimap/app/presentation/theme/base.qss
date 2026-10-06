@@ -104,7 +104,7 @@ QMenu::right-arrow {
 }
 
 QStatusBar {
-    background: @surface@;
+    background: @bg@;
     color: @text_muted@;
     border-top: 1px solid @border@;
 }
@@ -854,7 +854,6 @@ QTabBar::tab:hover:!selected {
 QTabBar::tab:selected {
     color: @text@;
     border-bottom-color: @accent@;
-    font-weight: 600;
 }
 
 QTabBar::tab:disabled {
@@ -999,6 +998,11 @@ QRadioButton[gimapRole="error"] {
     color: @danger@;
 }
 
+/* The "info" badges of the automatic-analysis results, the "Suggested" state of a change card. */
+QLabel[gimapRole="info"] {
+    color: @info@;
+}
+
 QLabel[gimapRole="hint"] {
     color: @info@;
     background: @info_soft@;
@@ -1105,16 +1109,19 @@ QToolButton[gimapAdvancedToggle="true"] {
     color: @text@;
     font-weight: 600;
     text-align: left;
-    background: @surface_alt@;
-    border: 1px solid @border@;
+    background: transparent;
+    border: none;
     border-radius: 6px;
     padding: 5px 8px;
 }
 
+QToolButton[gimapAdvancedToggle="true"]:hover {
+    background: @surface_hover@;
+}
+
 QToolButton[gimapAdvancedToggle="true"]:checked {
-    background: @accent_soft@;
-    border-color: @accent_border@;
-    color: @text@;
+    background: transparent;
+    color: @accent@;
 }
 
 QFrame[gimapEmptyState="true"] {
@@ -1421,4 +1428,85 @@ QLabel[gimapToastText="true"] {
 
 QPushButton[gimapToastAction="true"] {
     padding: 3px 10px;
+}
+
+/* -- 2026-10-05 polish --------------------------------------------------------------------------- */
+
+/* A page heading inside a tool window or a page (XRR, In-situ). */
+QLabel[gimapPageTitle="true"] {
+    color: @text@;
+    font-size: 13pt;
+    font-weight: 700;
+}
+
+/* Start page: the task cards are clickable (QFrame[card="true"] gives their look). */
+QFrame[homeTask="true"]:hover {
+    background: @surface_hover@;
+    border-color: @accent_border@;
+}
+
+/* Start page: the dashed drop box, and while files are dragged over it. */
+QFrame#homeDropZone {
+    background: @surface_alt@;
+    border: 2px dashed @border_strong@;
+    border-radius: 10px;
+}
+
+QFrame#homeDropZone[dragActive="true"] {
+    background: @accent_soft@;
+    border-color: @accent@;
+}
+
+/* Settings: the category list as a bordered panel beside the pages. */
+QListWidget#settingsCategoryList {
+    background: @surface@;
+    border: 1px solid @border@;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QListWidget#settingsCategoryList::item {
+    padding: 6px 10px;
+    border-radius: 4px;
+}
+
+/* Analyze: an αi typed for this session (not the profile's) stands out like a session beam centre. */
+QDoubleSpinBox#analyzeIncidenceSpin[override="true"] {
+    background: @warning_soft@;
+    border-color: @warning_border@;
+    color: @warning@;
+    font-weight: 600;
+}
+
+/* Steps reached with the keyboard. */
+QWidget[gimapStep="true"]:focus {
+    border: 1px solid @focus@;
+}
+
+/* The "⋯" menu of a narrow plot header: dots only, no arrow. */
+QToolButton#curvePlotMore::menu-indicator {
+    image: none;
+    width: 0px;
+}
+
+QToolButton#curvePlotMore {
+    font-weight: 700;
+    padding: 0px 3px;
+}
+
+/* Analyze: the file list is disabled while the automatic analysis keeps its frame; show it. */
+QListWidget#analyzeFileList:disabled {
+    color: @text_disabled@;
+}
+
+QListWidget#analyzeFileList::item:selected:disabled {
+    background: @surface_alt@;
+    color: @text_muted@;
+}
+
+/* Analyze command bar: the position of the file shown in the list ("3 / 40"), small and muted. */
+QLabel#analyzeFilePosition {
+    color: @text_muted@;
+    font-size: @font_small_pt@;
+    padding: 0 2px;
 }

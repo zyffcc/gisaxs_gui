@@ -75,6 +75,7 @@ class CalibrationRunMixin:
 
     def _calibration_finished(self, result: CalibrationResult) -> None:
         self.result = result
+        self._remember_fitted_geometry()
         self.job_status.set_state(
             "succeeded",
             "Calibration complete. Review the selected candidate, then Apply.",
@@ -84,9 +85,10 @@ class CalibrationRunMixin:
         self._populate_candidates()
         self.candidate_table.selectRow(0)
         del candidate_blocker
+        # Manual mode starts only from 'Manual refine': the fitted values stay as they are.
+        self.manual_group.setChecked(False)
         self._show_candidate(result.selected_candidate)
         self._set_running(False)
-        self.manual_group.setChecked(True)
 
     def _calibration_failed(self, exc: Exception) -> None:
         if isinstance(exc, CalibrationCancelledError):
@@ -130,5 +132,7 @@ class CalibrationRunMixin:
         rows = self.candidate_table.selectionModel().selectedRows()
         if not rows:
             return
+        # Manual values committed for the previous candidate do not stay on it.
+        self._restore_fitted_geometry()
         candidate = self.view_model.select_candidate(rows[0].row())
         self._show_candidate(candidate)

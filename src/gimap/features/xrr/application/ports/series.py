@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from ..models import (
+    XrrCalibrationGeometry,
     XrrDetectorFrame,
     XrrExtractionProgress,
     XrrExtractionRequest,
@@ -37,4 +38,31 @@ class XrrCurveExportPort(Protocol):
     def export(self, path: Path, result: XrrExtractionResult) -> None: ...
 
 
-__all__ = ["XrrCurveExportPort", "XrrExtractionRunnerPort", "XrrSeriesRepository"]
+class XrrExportRecordPort(Protocol):
+    """Writes the JSON record (settings, geometry, formulas) that goes next to an export."""
+
+    def write(self, path: Path, record: dict[str, Any]) -> None: ...
+
+
+class XrrGeometryDefaultsPort(Protocol):
+    """The geometry of the last applied Geometry Calibration, ``None`` when none was applied."""
+
+    def last_calibration(self) -> XrrCalibrationGeometry | None: ...
+
+
+class XrrInputFolderPort(Protocol):
+    """The folder the XRR window last read data from (kept between sessions)."""
+
+    def last_folder(self) -> str: ...
+
+    def remember(self, path: str | Path) -> None: ...
+
+
+__all__ = [
+    "XrrCurveExportPort",
+    "XrrExportRecordPort",
+    "XrrExtractionRunnerPort",
+    "XrrGeometryDefaultsPort",
+    "XrrInputFolderPort",
+    "XrrSeriesRepository",
+]

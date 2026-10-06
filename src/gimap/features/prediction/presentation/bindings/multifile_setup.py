@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
     QLabel,
 )
 
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.features.prediction.presentation.multifile_results import (
     MultiFilePredictResultsWidget,
     MultiFilePredictManager,
@@ -67,7 +68,7 @@ class MultifileSetupMixin:
             self._append_status_message("Batch results are ready in the workspace", level="INFO")
 
         except Exception as e:
-            self._append_status_message(f"Failed to setup multi-file UI: {e}", level="ERROR")
+            self._append_status_message(trf("Failed to setup multi-file UI: {error}", error=e), level="ERROR")
 
     def _show_multifile_results_window(self) -> None:
         if self._multifile_results_widget is None:
@@ -119,28 +120,25 @@ class MultifileSetupMixin:
         if hasattr(self, "_current_file_label"):
             if mode == "multi_files":
                 self._current_file_label.setVisible(True)
-                if (
-                    not self._current_file_label.text()
-                    or self._current_file_label.text() == "Current: No file selected"
-                ):
-                    self._current_file_label.setText("No file selected")
+                if not getattr(self, "_current_file_shown", None) and not self._current_file_label.text():
+                    self._update_current_file_display("")
             else:
                 self._current_file_label.setVisible(False)
 
     def _update_current_file_display(self, file_path: str, stack_count: int = 1) -> None:
-        """更新当前文件显示"""
+        """The batch file shown in the canvas (its name and stack size), in the interface language."""
         if hasattr(self, "_current_file_label"):
+            self._current_file_shown = (file_path, stack_count) if file_path else None
             if file_path:
                 file_name = os.path.basename(file_path)
-                suffix = (
-                    f" ({stack_count} files stacked)"
-                    if stack_count and stack_count > 1
-                    else " (1 file)"
-                )
-                self._current_file_label.setText(f"{file_name}{suffix}")
+                if stack_count and stack_count > 1:
+                    text = trf("{name} ({count} files stacked)", name=file_name, count=stack_count)
+                else:
+                    text = trf("{name} (1 file)", name=file_name)
+                self._current_file_label.setText(text)
                 self._current_file_label.setToolTip(file_path)
             else:
-                self._current_file_label.setText("No file selected")
+                self._current_file_label.setText(tr("No file selected"))
                 self._current_file_label.setToolTip("")
 
     def _connect_line_edit(self, name: str, slot) -> None:

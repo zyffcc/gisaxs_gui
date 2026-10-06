@@ -54,6 +54,34 @@ def test_a_chinese_report_translates_the_fixed_headings() -> None:
     assert "计算结果（来自工具）" in page and "注意事项" in page and "记录的缺失功能" in page
 
 
+def test_gisaxs_results_have_readable_headings() -> None:
+    from src.gimap.features.assistant.application import AssistantReport, ReportItem
+
+    results = RunResults()
+    results.report = AssistantReport(
+        summary="Cut at the Yoneda band.",
+        items=(ReportItem("gisaxs_cut", "done", "Rows 605–610.", "", ""),
+               ReportItem("in_plane_spacing", "partial", "A shoulder.", "", "Not a resolved peak."),
+               ReportItem("gisaxs_fit", "done", "Cylinders.", "", "")),
+        caveats=(), suggestions=(),
+    )
+    outcome = RunOutcome(RUN_COMPLETED, "Report submitted.", [], results, LlmUsage())
+    page = report_html(outcome)
+    for title in ("GISAXS cut", "In-plane spacing", "GISAXS fit"):
+        assert f"<h4>{title} " in page
+    assert "gisaxs_cut" not in page and "in_plane_spacing" not in page and "gisaxs_fit" not in page
+    chinese = report_html(outcome, language="中文")
+    assert "GISAXS 水平切线" in chinese and "面内间距" in chinese and "GISAXS 拟合" in chinese
+
+
+def test_halves_are_named_in_words() -> None:
+    from src.gimap.features.assistant.application.operations import describe, halves_label
+
+    assert halves_label("both_abs") == "Both halves on |qy|" and halves_label("mean", "中文") == "两半平均"
+    assert halves_label("positive", "zh") == "只用 qy > 0 一半" and halves_label("odd") == "odd"
+    assert describe("set_halves", {"side": "negative"}) == "Only the qy < 0 half"
+
+
 def test_a_run_without_report_explains_why() -> None:
     outcome = RunOutcome(RUN_FAILED, "The Claude API rejected the credentials.", [], RunResults(), LlmUsage())
     page = report_html(outcome)

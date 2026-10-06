@@ -290,6 +290,12 @@ class FormatConverterDialogView(FormatConverterTranslations):
         self.formatPreviewContentLayout.setContentsMargins(0, 0, 0, 0)
         self.formatPreviewContentLayout.setSpacing(8)
         self.formatPreviewContentLayout.setObjectName("formatPreviewContentLayout")
+        # The statistics first: the thumbnails below them may run past the fold.
+        self.preview_stats = QtWidgets.QLabel(self.formatPreviewContent)
+        self.preview_stats.setWordWrap(True)
+        self.preview_stats.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        self.preview_stats.setObjectName("preview_stats")
+        self.formatPreviewContentLayout.addWidget(self.preview_stats)
         self.first_preview_caption = QtWidgets.QLabel(self.formatPreviewContent)
         self.first_preview_caption.setProperty("gimapRole", "strong")
         self.first_preview_caption.setObjectName("first_preview_caption")
@@ -320,11 +326,6 @@ class FormatConverterDialogView(FormatConverterTranslations):
         self.last_preview_label.setAlignment(QtCore.Qt.AlignCenter)
         self.last_preview_label.setObjectName("last_preview_label")
         self.formatPreviewContentLayout.addWidget(self.last_preview_label)
-        self.preview_stats = QtWidgets.QLabel(self.formatPreviewContent)
-        self.preview_stats.setWordWrap(True)
-        self.preview_stats.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
-        self.preview_stats.setObjectName("preview_stats")
-        self.formatPreviewContentLayout.addWidget(self.preview_stats)
         spacerItem2 = QtWidgets.QSpacerItem(
             20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )

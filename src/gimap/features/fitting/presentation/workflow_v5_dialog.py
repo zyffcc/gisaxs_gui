@@ -1,4 +1,11 @@
-"""One-click fitting and text batch workspace; all heavy work runs out of process."""
+"""One-click fitting and text batch workspace; all heavy work runs out of process.
+
+The window is in the interface language: its static texts are translated by the i18n walker when it
+is shown, and what it writes at run time — the status line, the input line, the table's headers,
+tooltips and stage names, the placeholders and the figure's placeholder — goes through ``tr`` and is
+made again after a switch of the language (``_say``, ``_retranslate``). The prediction settings and the
+options they give are in ``workflow_v5_settings.py``; their values never depend on the language.
+"""
 
 from __future__ import annotations
 
@@ -15,12 +22,6 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
-    QSpinBox,
-    QFormLayout,
-    QGroupBox,
     QFileDialog,
     QMessageBox,
     QTableWidget,
@@ -34,10 +35,32 @@ from PyQt5.QtWidgets import (
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
-from src.gimap.app.presentation.theme import set_role
+from src.gimap.app.presentation.i18n import language_changed, tr, trf
+from src.gimap.app.presentation.theme import set_role, theme_manager
 from src.gimap.app.jobs import JobRequest
 from src.gimap.integrations.jobs import LocalProcessJobRunner
 from ..application.workflow_v5 import validate_options, bundled_workflow
+from .curve_rendering import follow_plot_theme, text_font_family, theme_figure
+from .workflow_v5_settings import WorkflowV5SettingsMixin
+
+HEADERS = ("Curve / side", "#", "Components", "logRMSE", "RMS/σ", "Stage")
+HEADER_TIPS = {
+    2: "S: sphere; RC: random cylinder; VC: vertical cylinder. Repeated types are distinct components.",
+    3: "Natural-log RMSE on original positive-intensity observations only.",
+    4: "RMS of (forward − observed)/sigma, including negative observations; not a calibrated probability.",
+}
+FIGURE_EMPTY = "Add curves (or Use current cut), then Fit curve.\nSelect a candidate to see its fit here."
+PARAMETERS_EMPTY = "Select a candidate on the left: its components and parameters, with units."
+LOG_EMPTY = "What each curve's fit did, while the batch runs."
+STAGE_LABELS = {
+    "stable_amplitude_calibrated": "Model + amplitude",
+    "stable_neural": "Neural model",
+    "stable_numerical_fallback": "Numerical fallback",
+}
+RMSE_TIP = ("Natural-log RMSE over the measured curve, including measurement noise. "
+            "Review peak positions, overall shape and residuals; no mandatory cutoff is applied.")
+UNITS_NOTE = ("Lengths: nm. sigma_R/h/D: relative standard deviations.\nMixture weights are not posterior "
+              "probabilities.\nResolution sigma: nm^-1; nu: dimensionless.")
 
 
 class WorkflowJobThread(QThread):
@@ -63,7 +86,7 @@ class WorkflowJobThread(QThread):
         self.runner.cancel(self.request.job_id)
 
 
-class WorkflowV5Dialog(QDialog):
+class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
     settings_changed = pyqtSignal(dict)
     candidate_selected = pyqtSignal(dict)
 
@@ -87,6 +110,10 @@ class WorkflowV5Dialog(QDialog):
         self.rows = []
         self.job = None
         self.output_dir = None
+        self._folder = ""
+        """Where Add curves… opens: the folder of the curves added last."""
+        self._texts = {}
+        """Run-time texts (widget → the function that makes it), made again after a switch of the language."""
         self._options = validate_options(options or {})
         root = QVBoxLayout(self)
         title = QLabel("1D Predict", self)
@@ -123,6 +150,7 @@ class WorkflowV5Dialog(QDialog):
         root.addWidget(self.input_label)
         self.settings_panel = self._build_settings()
         root.addWidget(self.settings_panel)
+        self._follow_language()
         if settings_only:
             self.setWindowTitle("In-situ · 1D prediction parameters")
             title.setText("In-situ prediction parameters")
@@ -148,19 +176,7 @@ class WorkflowV5Dialog(QDialog):
             return
         self.settings_panel.hide()
         split = QSplitter(Qt.Horizontal)
-        self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(
-            ["Curve / side", "#", "Components", "logRMSE", "RMS/σ", "Stage"]
-        )
-        self.table.horizontalHeaderItem(2).setToolTip(
-            "S: sphere; RC: random cylinder; VC: vertical cylinder. Repeated types are distinct components."
-        )
-        self.table.horizontalHeaderItem(3).setToolTip(
-            "Natural-log RMSE on original positive-intensity observations only."
-        )
-        self.table.horizontalHeaderItem(4).setToolTip(
-            "RMS of (forward − observed)/sigma, including negative observations; not a calibrated probability."
-        )
+        self.table = QTableWidget(0, len(HEADERS))
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -176,25 +192,26 @@ class WorkflowV5Dialog(QDialog):
         tabs.tabBar().setFont(bold)
         self.figure = Figure(figsize=(6, 4), tight_layout=True)
         self.canvas = FigureCanvasQTAgg(self.figure)
-        self.figure.text(0.5, 0.5, "Add curves (or Use current cut), then Fit curve.\nSelect a candidate to see its fit here.",
-                         ha="center", va="center", color="#64748b")
+        self._figure_empty = self.figure.text(0.5, 0.5, tr(FIGURE_EMPTY), ha="center", va="center",
+                                              color=theme_manager().color("plot_fg").name(),
+                                              fontfamily=text_font_family())  # Chinese too, not empty boxes
+        follow_plot_theme(self, self.figure, self.canvas)
         self.parameters = QTextBrowser()
-        self.parameters.setPlaceholderText("Select a candidate on the left: its components and parameters, with units.")
         self.log = QTextBrowser()
-        self.log.setPlaceholderText("What each curve's fit did, while the batch runs.")
         tabs.addTab(self.canvas, "Fit plot")
         tabs.addTab(self.parameters, "Parameters and units")
         tabs.addTab(self.log, "Batch log")
         split.addWidget(tabs)
         split.setSizes([520, 640])
         root.addWidget(split, 1)
-        self.status = QLabel(
-            "Ready. Automatic conditions are estimates; candidates are not calibrated probabilities."
-        )
+        self.status = QLabel()
         self.status.setWordWrap(True)
+        self._say(self.status, lambda: tr(
+            "Ready. Automatic conditions are estimates; candidates are not calibrated probabilities."))
         root.addWidget(self.status)
         self.progress = QProgressBar()
         root.addWidget(self.progress)
+        self._static_texts()
         self.load_button.clicked.connect(self._choose_files)
         self.current_button.clicked.connect(self._use_current)
         self.settings_button.toggled.connect(self.settings_panel.setVisible)
@@ -205,160 +222,84 @@ class WorkflowV5Dialog(QDialog):
         )
         self.table.currentCellChanged.connect(lambda row, *_: self._preview(row))
 
-    def _build_settings(self):
-        box = QGroupBox(
-            "Prediction settings — saved for single curves and future batch / in-situ runs"
-        )
-        outer = QHBoxLayout(box)
-        left, right = QFormLayout(), QFormLayout()
-        self.component_boxes = []
-        row = QHBoxLayout()
-        for index in range(4):
-            combo = QComboBox()
-            combo.addItems(["Auto / unused", "Sphere", "Random cylinder", "Vertical cylinder"])
-            combo.setCurrentIndex(
-                self._options["components"][index]
-                if index < len(self._options["components"])
-                else 0
-            )
-            row.addWidget(combo)
-            self.component_boxes.append(combo)
-        left.addRow("Complete composition", row)
-        self.unit = QComboBox()
-        self.unit.addItems(["nm^-1", "A^-1"])
-        self.unit.setCurrentText(self._options["q_unit"])
-        self.side = QComboBox()
-        self.side.addItems(["both", "positive", "negative"])
-        self.side.setCurrentText(self._options["side"])
-        self.numerical = QCheckBox("General V5: improve fit with four numerical steps")
-        self.numerical.setChecked(self._options["numerical"])
-        self.amplitude_calibration = QCheckBox("Calibrate intensity amplitudes")
-        self.amplitude_calibration.setChecked(self._options.get("amplitude_calibration", True))
-        self.amplitude_calibration.setToolTip(
-            "The single-RC specialist can adjust particle, background and resolution amplitudes while keeping "
-            "the neural shape parameters fixed. Broader fitting may still run when curve agreement is poor."
-        )
-        self.method = QComboBox()
-        self.method.addItem("General V5 (experimental)", "model")
-        self.method.addItem("Single RC specialist (experimental)", "stable")
-        self.method.addItem("Physical fit (numerical)", "experimental")
-        self.method.setCurrentIndex(self.method.findData(self._options["method"]))
-        self.method.setToolTip(
-            "General V5 proposes multiple compositions but remains experimental. "
-            "The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. "
-            "Other inputs, fixed resolution and poor curve agreement use numerical fallback; "
-            "that fallback does not make the specialist a general model. Scores are not probabilities."
-        )
-        left.addRow("Fit method", self.method)
-        left.addRow("Text-file q unit", self.unit)
-        left.addRow("q sides", self.side)
-        left.addRow(self.amplitude_calibration)
-        left.addRow(self.numerical)
-        self.fix_sigma = QCheckBox("Fix σ res (nm⁻¹)")
-        self.fix_sigma.setChecked(self._options["sigma_res"] is not None)
-        self.sigma_res = self._spin(0.001, 0.1, self._options["sigma_res"] or 0.01, 8)
-        self.fix_nu = QCheckBox("Fix ν res")
-        self.fix_nu.setChecked(self._options["nu_res"] is not None)
-        self.nu_res = self._spin(1, 20, self._options["nu_res"] or 7, 6)
-        self.sigma_res.setToolTip("General V5: 0.007–0.013 nm⁻¹. RC specialist / physical fit: 0.001–0.1 nm⁻¹; fixed resolution uses numerical fallback.")
-        self.nu_res.setToolTip("General V5: 5–10. RC specialist / physical fit: 1–20; fixed resolution uses numerical fallback.")
-        right.addRow(self.fix_sigma, self.sigma_res)
-        right.addRow(self.fix_nu, self.nu_res)
-        self.relative_noise = self._spin(0, 10, self._options["relative_noise"], 4)
-        self.noise_floor = self._spin(0, 1e12, self._options["absolute_noise"], 6)
-        self.noise_floor.setSpecialValueText("Auto: 0.1% peak")
-        self.normalizer = self._spin(0, 1e20, self._options["normalizer"] or 0, 6)
-        self.normalizer.setSpecialValueText("Auto: measured max")
-        right.addRow("Relative σ (if missing)", self.relative_noise)
-        right.addRow("Absolute σ floor", self.noise_floor)
-        right.addRow("Intensity normalizer", self.normalizer)
-        self.search = QSpinBox()
-        self.search.setRange(1, 34)
-        self.search.setValue(self._options["search_combinations"])
-        self.conditions = QSpinBox()
-        self.conditions.setRange(1, 34)
-        self.conditions.setValue(self._options["condition_combinations"])
-        left.addRow("Discover combinations", self.search)
-        left.addRow("Condition best combinations", self.conditions)
-        self.method.currentIndexChanged.connect(self._update_method_controls)
-        self._update_method_controls()
-        save = QPushButton("Save settings")
-        save.clicked.connect(self.save_settings)
-        right.addRow(save)
-        outer.addLayout(left, 1)
-        outer.addLayout(right, 1)
-        return box
+    # -- texts in the interface language ------------------------------------------------------
 
-    def _update_method_controls(self):
-        legacy = self.method.currentData() == "model"
-        self.amplitude_calibration.setEnabled(self.method.currentData() == "stable")
-        for widget in (self.numerical, self.normalizer, self.search, self.conditions):
-            widget.setEnabled(legacy)
+    def _say(self, widget, text) -> None:
+        """``text`` on ``widget`` (a label or a button); a function that makes it is made again after a
+        switch of the interface language (a message from the job is shown as it came)."""
+        self._texts[widget] = text if callable(text) else None
+        widget.setText(text() if callable(text) else str(text))
 
-    @staticmethod
-    def _spin(lo, hi, value, decimals):
-        s = QDoubleSpinBox()
-        s.setDecimals(decimals)
-        s.setRange(lo, hi)
-        s.setValue(value)
-        return s
+    def show_status(self, text) -> None:
+        """The status line: a text, or a function that makes it in the interface language."""
+        self._say(self.status, text)
 
-    def options(self):
-        return validate_options(
-            {
-                **self._options,
-                "method": self.method.currentData(),
-                "components": [b.currentIndex() for b in self.component_boxes if b.currentIndex()],
-                "q_unit": self.unit.currentText(),
-                "side": self.side.currentText(),
-                "sigma_res": self.sigma_res.value() if self.fix_sigma.isChecked() else None,
-                "nu_res": self.nu_res.value() if self.fix_nu.isChecked() else None,
-                "relative_noise": self.relative_noise.value(),
-                "absolute_noise": self.noise_floor.value(),
-                "normalizer": self.normalizer.value() or None,
-                "numerical": self.numerical.isChecked(),
-                "amplitude_calibration": self.amplitude_calibration.isChecked(),
-                "search_combinations": self.search.value(),
-                "condition_combinations": self.conditions.value(),
-            }
-        )
+    def _static_texts(self) -> None:
+        """What the walker cannot reach: the headers' tooltips, the placeholders of the text views, the
+        figure's placeholder (the header labels too, so that they follow a switch while the window is open)."""
+        self.table.setHorizontalHeaderLabels([tr(text) for text in HEADERS])
+        for column, tip in HEADER_TIPS.items():
+            self.table.horizontalHeaderItem(column).setToolTip(tr(tip))
+        self.parameters.setPlaceholderText(tr(PARAMETERS_EMPTY))
+        self.log.setPlaceholderText(tr(LOG_EMPTY))
+        if self._figure_empty in self.figure.texts:
+            self._figure_empty.set_text(tr(FIGURE_EMPTY))
+            self.canvas.draw_idle()
 
-    def save_settings(self):
-        try:
-            self._options = self.options()
-        except ValueError as exc:
-            self.status.setText(str(exc))
-            return
-        self.status.setText(
-            "Settings saved. Existing in-situ recipes keep their captured settings."
-        )
-        self.settings_changed.emit(self._options)
+    def _follow_language(self) -> None:
+        changed = language_changed()
+
+        def retranslate(*_args) -> None:
+            try:
+                self._retranslate()
+            except RuntimeError:  # the window is gone
+                pass
+
+        def disconnect(*_args) -> None:
+            try:
+                changed.disconnect(retranslate)
+            except TypeError:
+                pass
+
+        changed.connect(retranslate)
+        self.destroyed.connect(disconnect)
+
+    def _retranslate(self) -> None:
+        for widget, make in list(self._texts.items()):
+            if make is not None:
+                widget.setText(make())
+        if hasattr(self, "table"):
+            self._static_texts()
+            if self.rows:
+                self._fill_table(keep=True)  # the stage names and tooltips
+
+    # -- input --------------------------------------------------------------------------------
 
     def _choose_files(self):
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Select one or more 1D curves", "", "Curves (*.txt *.dat *.csv);;All files (*)"
+            self, tr("Select one or more 1D curves"), self._folder, "Curves (*.txt *.dat *.csv);;All files (*)"
         )
         if files:
             self.files = files
-            self.input_label.setText(
-                f"{len(files)} file(s): " + ", ".join(Path(f).name for f in files[:5])
-            )
-            self.run_button.setText(f"Fit {len(files)} files" if len(files) > 1 else "Fit curve")
+            self._folder = str(Path(files[0]).parent)
+            names = ", ".join(Path(f).name for f in files[:5])
+            self._say(self.input_label, lambda: trf("{count} file(s): {names}", count=len(files), names=names))
+            self._say(self.run_button, (lambda: trf("Fit {count} files", count=len(files))) if len(files) > 1
+                      else (lambda: tr("Fit curve")))
 
     def _use_current(self):
         self.files = []
-        self.input_label.setText(
-            "Current cut — native points, q converted to nm⁻¹ by the fitting workspace."
-        )
-        self.run_button.setText("Fit curve")
+        self._say(self.input_label, lambda: tr(
+            "Current cut — native points, q converted to nm⁻¹ by the fitting workspace."))
+        self._say(self.run_button, lambda: tr("Fit curve"))
+
+    # -- the run --------------------------------------------------------------------------------
 
     def start(self):
         if self.job is not None:
             return
         if not self.can_start():
-            self.status.setText(
-                "A fitting / in-situ job is already running. Finish or cancel it first."
-            )
+            self.show_status(lambda: tr("A fitting / in-situ job is already running. Finish or cancel it first."))
             return
         try:
             self.save_settings()
@@ -377,7 +318,7 @@ class WorkflowV5Dialog(QDialog):
             else:
                 arrays = self.current_curve() if self.current_curve else None
                 if arrays is None:
-                    raise ValueError("Load a curve or select files first")
+                    raise ValueError(tr("Load a curve or select files first"))
                 payload.update(
                     {
                         k: None if v is None else np.asarray(v).tolist()
@@ -397,16 +338,17 @@ class WorkflowV5Dialog(QDialog):
             self.job.finished.connect(self._finished)
             self._set_running(True)
             method = payload["options"]["method"]
-            self.status.setText(
+            starting = (
                 "Starting the experimental single-RC specialist… Checking the known composition and input scope."
                 if method == "stable"
                 else "Starting numerical physical fitting…"
                 if method == "experimental"
                 else "Loading experimental General V5… First run includes loading and compilation."
             )
+            self.show_status(lambda: tr(starting))
             self.job.start()
         except Exception as exc:
-            QMessageBox.warning(self, "1D fitting", str(exc))
+            QMessageBox.warning(self, tr("1D Predict"), str(exc))
 
     def _set_running(self, running):
         for widget in (self.run_button, self.load_button, self.current_button, self.settings_panel):
@@ -414,7 +356,7 @@ class WorkflowV5Dialog(QDialog):
         self.cancel_button.setEnabled(running)
 
     def _progress(self, progress):
-        self.status.setText(progress.message)
+        self.show_status(progress.message)  # the job's own words
         self.log.append(progress.message)
         self.progress.setValue(int(100 * progress.fraction))
 
@@ -425,16 +367,17 @@ class WorkflowV5Dialog(QDialog):
                 if isinstance(result, Exception)
                 else (result.error.message if result.error else result.status)
             )
-            self.status.setText(message)
+            self.show_status(message)
             self.log.append(message)
             return
         value = result.value
         self.set_results(value["candidates"], value["output_dir"])
-        quality_status = self.status.text()
+        saved = self._texts.get(self.status)
+        quality = saved if saved is not None else (lambda text=self.status.text(): text)
         failures = sum(r["status"] == "failed" for r in value["records"])
-        self.status.setText(
-            f"Finished in {value['summary']['runtime_seconds']:.2f} s · {failures} failed files. {quality_status}"
-        )
+        seconds = f"{value['summary']['runtime_seconds']:.2f}"
+        self.show_status(lambda: trf("Finished in {seconds} s · {failures} failed files. {quality}",
+                                     seconds=seconds, failures=failures, quality=quality()))
         self.log.append(json.dumps(value["records"], indent=2))
 
     def _finished(self):
@@ -447,19 +390,35 @@ class WorkflowV5Dialog(QDialog):
         if self._close_owner_when_finished:
             self.parentWidget().close()
 
+    # -- the candidates -------------------------------------------------------------------------
+
     def set_results(self, rows, output_dir):
         self.rows = list(rows)
         self.output_dir = Path(output_dir)
-        self.table.setRowCount(len(rows))
-        for i, r in enumerate(rows):
+        self._fill_table()
+        if rows:
+            if self.table.currentRow() == 0:
+                self._preview(0)  # already the current row: no signal, drawn here
+            else:
+                self.table.selectRow(0)
+        self.export_button.setEnabled(True)
+        self.progress.setValue(100)
+        count = len(rows)
+        self.show_status(lambda: trf(
+            "{count} candidates saved. Review curve shape and residuals; "
+            "observed-data scores include noise and are not probabilities.", count=count))
+
+    def _fill_table(self, *, keep: bool = False) -> None:
+        """The candidates' rows; ``keep``: the same rows again in another language (the selection kept, the
+        selected candidate not sent again)."""
+        current = self.table.currentRow()
+        if keep:
+            self.table.blockSignals(True)
+        self.table.setRowCount(len(self.rows))
+        for i, r in enumerate(self.rows):
             error = r.get("best_log_rmse")
             stage = r["best_source"]
-            stage_label = {
-                "stable_amplitude_calibrated": "Model + amplitude",
-                "stable_neural": "Neural model",
-                "stable_numerical_fallback": "Numerical fallback",
-            }.get(stage, stage)
-            short_file = "Current" if r.get("file") == "Current curve" else r.get("file", "")
+            short_file = tr("Current") if r.get("file") == "Current curve" else r.get("file", "")
             combination = (
                 r["combination"]
                 .replace("random_cylinder", "RC")
@@ -472,32 +431,27 @@ class WorkflowV5Dialog(QDialog):
                 combination,
                 "—" if error is None else f"{error:.4f}",
                 f"{r['signed_weighted_rms']:.3f}",
-                stage_label,
+                tr(STAGE_LABELS.get(stage, stage)),
             ]
             for j, v in enumerate(values):
                 self.table.setItem(i, j, QTableWidgetItem(str(v)))
             self.table.item(i, 0).setToolTip(f"{r.get('file', '')} / {r['side']}")
             self.table.item(i, 2).setToolTip(r["combination"])
-            stage_detail = [f"Stage: {stage}"]
+            stage_detail = [trf("Stage: {stage}", stage=stage)]
             if r.get("fallback_reason"):
-                stage_detail.append(f"Reason: {r['fallback_reason']}")
+                stage_detail.append(trf("Reason: {reason}", reason=r["fallback_reason"]))
             warnings = r.get("warnings") or []
             if isinstance(warnings, str):
                 warnings = [warnings]
             stage_detail.extend(str(warning) for warning in warnings)
             self.table.item(i, 5).setToolTip("\n".join(stage_detail))
-            self.table.item(i, 3).setToolTip(
-                "Natural-log RMSE over the measured curve, including measurement noise. "
-                "Review peak positions, overall shape and residuals; no mandatory cutoff is applied."
-            )
-        if rows:
-            self.table.selectRow(0)
-        self.export_button.setEnabled(True)
-        self.progress.setValue(100)
-        self.status.setText(
-            f"{len(rows)} candidates saved. Review curve shape and residuals; "
-            "observed-data scores include noise and are not probabilities."
-        )
+            self.table.item(i, 3).setToolTip(tr(RMSE_TIP))
+        if keep:
+            if 0 <= current < len(self.rows):
+                self.table.setCurrentCell(current, 0)
+            self.table.blockSignals(False)
+            if 0 <= current < len(self.rows):
+                self._show_parameters(self.rows[current])
 
     def _preview(self, index):
         if not 0 <= index < len(self.rows):
@@ -527,22 +481,23 @@ class WorkflowV5Dialog(QDialog):
         ax.set_ylabel("Intensity (input units)")
         ax.legend(fontsize=8)
         ax.grid(alpha=0.15)
+        theme_figure(self.figure)  # screen colours only: the data and the fit are drawn as they are
         self.canvas.draw_idle()
+        self._show_parameters(r)
+        self.candidate_selected.emit(r)
+
+    def _show_parameters(self, r) -> None:
         detail = {
             k: v
             for k, v in r.items()
             if k not in ("native_q", "native_fit", "observed", "sigma", "display_q", "display_fit")
         }
-        self.parameters.setPlainText(
-            "Lengths: nm. sigma_R/h/D: relative standard deviations.\nMixture weights are not posterior probabilities.\nResolution sigma: nm^-1; nu: dimensionless.\n\n"
-            + json.dumps(detail, indent=2, ensure_ascii=False)
-        )
-        self.candidate_selected.emit(r)
+        self.parameters.setPlainText(tr(UNITS_NOTE) + "\n\n" + json.dumps(detail, indent=2, ensure_ascii=False))
 
     def _cancel(self):
         if self.job:
             self.job.cancel()
-            self.status.setText("Cancelling… completed file results remain saved.")
+            self.show_status(lambda: tr("Cancelling… completed file results remain saved."))
 
     def closeEvent(self, event):
         if self.job is not None:

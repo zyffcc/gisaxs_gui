@@ -14,6 +14,7 @@ from .application import (
     ExportPredictionAscii,
     ExportPredictionJsonl,
     ExportPredictionArray,
+    ExportPredictionRecord,
     InspectPredictionModel,
     LoadPredictionImage,
     LoadPredictionMask,
@@ -73,5 +74,6 @@ def create_prediction_view_model(
         export_jsonl=ExportPredictionJsonl(exports),
         export_ascii=ExportPredictionAscii(exports),
         export_array=ExportPredictionArray(exports),
+        export_record=ExportPredictionRecord(exports),
         sequence_rules=PredictionSequenceRules(),
     )

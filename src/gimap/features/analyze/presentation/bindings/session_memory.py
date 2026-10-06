@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import settings_from_record, settings_record
 
@@ -109,6 +109,8 @@ def _setup_summary(settings) -> str:
     parts = [settings.mode.upper() if settings.mode != "auto" else tr("GISAXS or GIWAXS by angle")]
     if settings.profile_name:
         parts.append(tr("profile “{name}”").format(name=settings.profile_name))
+    if settings.incidence_deg is not None:  # an αi typed for the beamtime, not the profile's
+        parts.append(trf("αi {value}°", value=f"{settings.incidence_deg:g}"))
     if settings.giwaxs.regions:
         parts.append(tr("{n} cut regions").format(n=len(settings.giwaxs.regions)))
     shapes = len(settings.corrections.mask_shapes) + (1 if settings.corrections.mask_path else 0)

@@ -6,10 +6,11 @@ from pathlib import Path
 
 
 class PredictionExportViewModel:
-    def __init__(self, *, jsonl, ascii, array, on_error):
+    def __init__(self, *, jsonl, ascii, array, on_error, record=None):
         self._jsonl = jsonl
         self._ascii = ascii
         self._array = array
+        self._record = record
         self._on_error = on_error
 
     def _run(self, command, unavailable_message, *args):
@@ -42,3 +43,7 @@ class PredictionExportViewModel:
 
     def export_array(self, request):
         return self._run(self._array, "Array export is unavailable", request)
+
+    def export_record(self, request):
+        """The JSON record beside an export (``ExportPredictionRecord``); None and an error when it failed."""
+        return self._run(self._record, "Export record is unavailable", request)

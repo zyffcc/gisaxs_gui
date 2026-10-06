@@ -4,11 +4,14 @@ Every tool call of ``StandardPipeline`` belongs to a phase (reading the frame, g
 peaks …). ``step_text`` says in one sentence what a call does; ``SLOW`` names the calls that can
 take long, so a person who pressed Stop knows the run ends only after them. A stop request is
 checked between two calls: ``PipelineStopped`` ends the run there, and the report keeps what was
-found so far (``report["stopped"]`` names the step that was not started).
+found so far (``report["stopped"]`` names the step that was not started). A run also ends, as a
+failure, when Analyze no longer shows the file it started on (``FrameChanged``).
 """
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
 READ, GEOMETRY, FRAMES = "Reading the frame", "Geometry", "Frames of the series"
@@ -68,6 +71,27 @@ class PipelineStopped(Exception):
     """A stop was requested; raised before the next tool call starts."""
 
 
+class FrameChanged(RuntimeError):
+    """Analyze no longer shows the file a run started on (Analyze cleared, a project opened).
+
+    Raised before anything acts on the other file; the run ends there (``report["failed"]``) and its
+    report stays the one of the file it started on (``report["frame"]``).
+    """
+
+
+def same_file(first, second) -> bool:
+    """Whether two paths name the same file (case and separators as the system compares them)."""
+    if not first or not second:
+        return False
+    return os.path.normcase(os.path.abspath(str(first))) == os.path.normcase(os.path.abspath(str(second)))
+
+
+def frame_changed(start, now) -> FrameChanged:
+    """The failure of a run on ``start`` while Analyze now shows ``now`` (``None``: no frame)."""
+    shown = Path(str(now)).name if now else "no frame"
+    return FrameChanged(f"The frame changed during the run: it started on {Path(str(start)).name}, Analyze now shows {shown}")
+
+
 def phase_of(tool: str) -> Optional[str]:
     return TOOL_PHASE.get(tool)
 
@@ -87,5 +111,6 @@ def step_text(
 
 
 __all__ = [
-    "PHASES", "PipelineStopped", "SLOW", "TOOL_PHASE", "TOOL_TEXT", "phase_of", "step_text",
+    "FrameChanged", "PHASES", "PipelineStopped", "SLOW", "TOOL_PHASE", "TOOL_TEXT", "frame_changed", "phase_of",
+    "same_file", "step_text",
 ]

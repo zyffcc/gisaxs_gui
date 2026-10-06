@@ -71,17 +71,20 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
         ToolSpec(
             "run_standard_pipeline",
             "Optional baseline in one call: GIMaP's standard procedure on this frame — geometry "
-            "(keeps the instrument profile, or finds, fits and checks a calibration nearby), the last "
-            "frames of a series summed, then for GIWAXS peaks, in-/out-of-plane, ring orientation and "
-            "size of the strongest reliable peaks (and of the ring the user asked about); for GISAXS "
-            "(technique gisaxs, or when Analyze reduces the frame as GISAXS) the horizontal cut at the "
-            "Yoneda band, the beam centre on the symmetry axis, the halves, the in-plane spacing and a "
-            "physical fit of I(qy) when a fitter is available. Returns every decision "
-            "with its reason, needs_attention (values only the notes or the user know, with the option "
-            "that supplies them), the peak table and the rings. Its choices are defaults, not limits: "
-            "revisit any of them with the other tools when the question needs it (another frame, "
-            "another ring, custom sectors, a skipped peak). Arguments override its defaults; writes "
-            "(use_geometry) follow the permission mode.",
+            "(a calibration given or named in the notes first, then the instrument profile, then a "
+            "calibration found, fitted and checked nearby), the last frames of a series summed, then for "
+            "GIWAXS peaks, in-/out-of-plane, ring orientation and size of the strongest reliable peaks (and "
+            "of the ring the user asked about); for GISAXS the horizontal cut at the Yoneda band, the beam "
+            "centre on the symmetry axis, the halves, the in-plane spacing and a physical fit of I(qy) when "
+            "a fitter is available. technique 'giwaxs' or 'gisaxs' forces that procedure; without it the "
+            "mode chosen in Analyze is used, and with Analyze on Auto a session without a window (command "
+            "line, MCP) follows what Auto detects once the geometry is applied (GIWAXS in the GUI). Returns "
+            "every decision with its reason (the 'technique' decision says which procedure ran and why), "
+            "needs_attention (values only the notes or the user know, with the argument that supplies "
+            "them, and judgements left open such as the GISAXS model), the peak table and the rings. Its "
+            "choices are defaults, not limits: revisit any of them with the other tools when the question "
+            "needs it (another frame, another ring, custom sectors, a skipped peak). Arguments override its "
+            "defaults (pixel_size_um beats the image header); writes (use_geometry) follow the permission mode.",
             _object(
                 {
                     "calibration": {"type": ["string", "null"]},
@@ -285,7 +288,7 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "Detect and fit the peaks of an I(q) curve: q, d = 2π/q (Å), FWHM, height above the "
             "background, area, significance (snr) and flags — weak (3–5σ, may be noise), overlap, "
             "at_edge, resolution_limited, fit_failed, spike (hot pixels or a module edge, not "
-            "diffraction), broad (a halo, not a crystalline peak) — plus q-ratio series hints from the "
+            "diffraction; with step_edges: a flat-topped box from one detector row or column), broad (a halo, not a crystalline peak) — plus q-ratio series hints from the "
             "reliable peaks. When nothing "
             "qualifies it says why. Run it on 'radial' first, then on 'in_plane'/'out_of_plane' "
             "when sector-specific peaks matter. Raise background_window (Å⁻¹, default 0.15) when a "
@@ -478,9 +481,11 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
         ),
         ToolSpec(
             "export_results",
-            "Write the Analyze curves (CSV + JSON) and, with include_tables, the tables of this run "
-            "(peaks, orientation, sizes) next to the data in gimap_analysis/. Only when the user asked "
-            "for files; the user may have to approve it.",
+            "Write the Analyze curves (CSV + JSON record) and, with include_tables, the tables of this run "
+            "(peaks, orientation, sizes) to a folder gimap_analysis/: in the GUI next to the data, in a "
+            "session without a window (command line, MCP) under the session's output folder, never next to "
+            "the data. The result lists the files written. Only when the user asked for files; the user may "
+            "have to approve it.",
             _object({"include_tables": {"type": "boolean"}}, ("include_tables",)),
             kind=WRITE,
         ),

@@ -36,6 +36,7 @@ from ...application import (
     settings_record,
 )
 from ..batch_dialog import BatchExportDialog
+from ..texts import curve_title, message_text
 
 SETTINGS_FILTER = "GIMaP Analyze settings (*.json)"
 
@@ -94,7 +95,7 @@ class BatchExportMixin:
             return
         self._remember(last_folder=folder)
         before = len(self.view_model.state.files)
-        added = self.add_paths([folder])
+        added = self.add_paths([folder], show_listed=False)
         if not added and not before:
             return
         self._batch_pending = True
@@ -190,7 +191,7 @@ class BatchExportMixin:
         analysis = self.view_model.state.analysis
         if analysis is None or analysis.reduction is None:
             return []
-        return [(curve.key, curve.title) for curve in analysis.reduction.curves if not curve.is_empty]
+        return [(curve.key, curve_title(curve.title)) for curve in analysis.reduction.curves if not curve.is_empty]
 
     def settings_summary(self) -> str:
         """The set-up in one line: mode, profile, αi, cuts, masks, corrections."""
@@ -257,6 +258,7 @@ class BatchExportMixin:
         self._sync_settings_widgets()
         self.run_analysis()
         text = tr("Settings loaded from {name}").format(name=path.name)
+        notes = [message_text(note) for note in notes]  # the view model's notes are English
         self._status(text + ("; " + "; ".join(notes) if notes else ""), "warning" if notes else "ok")
         return settings, (BatchChoices.from_dict(settings.export) if settings.export is not None else None)
 
@@ -274,7 +276,7 @@ class BatchExportMixin:
         QApplication.processEvents()
 
     def _sync_settings_widgets(self) -> None:
-        """Every control shows the state again (after a settings file was applied)."""
+        """Every control shows the state again (after a settings file, a project or Undo/Redo was applied)."""
         state = self.view_model.state
         corrections, giwaxs = state.corrections, state.giwaxs
         self._refresh_profiles()
@@ -329,6 +331,11 @@ class BatchExportMixin:
         self.background_label.setText(Path(background).name if background else tr("No background"))
         self.background_label.setToolTip(background or "")
         self._refresh_mask_list()
+        # αi now comes from this set-up, not from the last session: no "from your last session" notice, and
+        # the field's marker, tooltip and Back to Profile follow the value even when no frame is analysed.
+        self._incidence_notice_pending = False
+        self._show_incidence_state()
+        self._kept_mode = None  # a set-up the person loaded: its mode is theirs, not a switch of the automatic run
         self._remember()
 
     # -- running -------------------------------------------------------------------------

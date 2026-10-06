@@ -60,3 +60,11 @@ class InstrumentProfilePort(Protocol):
 
 class DetectorCatalogPort(Protocol):
     def load(self) -> dict[str, dict[str, Any]]: ...
+
+
+class CalibrationInputFolderPort(Protocol):
+    """The folder Geometry Calibration last read an image from (kept between sessions)."""
+
+    def last_folder(self) -> str: ...
+
+    def remember(self, path: str | Path) -> None: ...

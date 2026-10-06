@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import math
+from pathlib import Path
 
 from ..domain import extract_circular_roi, qz_from_theta, specular_pixel
+from .export_record import record_path_for, xrr_export_record
 from .models import (
     ExportXrrCurveRequest,
+    ExportedXrrCurve,
+    XrrCalibrationGeometry,
     XrrExtractionProgress,
     XrrExtractionRequest,
     XrrExtractionResult,
@@ -15,7 +19,13 @@ from .models import (
     XrrSeriesInspection,
     XrrSeriesSpec,
 )
-from .ports import XrrCurveExportPort, XrrExtractionRunnerPort, XrrSeriesRepository
+from .ports import (
+    XrrCurveExportPort,
+    XrrExportRecordPort,
+    XrrExtractionRunnerPort,
+    XrrGeometryDefaultsPort,
+    XrrSeriesRepository,
+)
 
 
 class InspectXrrSeries:
@@ -114,13 +124,40 @@ class RunXrrExtraction:
 
 
 class ExportXrrCurve:
-    def __init__(self, exporter: XrrCurveExportPort):
-        self._exporter = exporter
+    """Write the CSV, then (with a ``recorder``) the JSON record of its settings next to it."""
 
-    def execute(self, request: ExportXrrCurveRequest) -> None:
+    def __init__(self, exporter: XrrCurveExportPort, recorder: XrrExportRecordPort | None = None):
+        self._exporter = exporter
+        self._recorder = recorder
+
+    def execute(self, request: ExportXrrCurveRequest) -> ExportedXrrCurve:
         if not request.result.points:
             raise ValueError("There are no extracted XRR points to export.")
         self._exporter.export(request.path, request.result)
+        record_path = None
+        if self._recorder is not None:
+            record_path = record_path_for(request.path)
+            self._recorder.write(record_path, xrr_export_record(request, request.path))
+        return ExportedXrrCurve(Path(request.path), record_path)
 
 
-__all__ = ["ExportXrrCurve", "ExtractXrrSeries", "InspectXrrSeries", "RunXrrExtraction"]
+class LoadLastCalibrationGeometry:
+    """The geometry of the last applied calibration, or ``None`` (none applied, or unreadable)."""
+
+    def __init__(self, defaults: XrrGeometryDefaultsPort):
+        self._defaults = defaults
+
+    def execute(self) -> XrrCalibrationGeometry | None:
+        try:
+            return self._defaults.last_calibration()
+        except (OSError, TypeError, ValueError, KeyError):
+            return None
+
+
+__all__ = [
+    "ExportXrrCurve",
+    "ExtractXrrSeries",
+    "InspectXrrSeries",
+    "LoadLastCalibrationGeometry",
+    "RunXrrExtraction",
+]

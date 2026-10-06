@@ -6,7 +6,7 @@ it stands (``step_intro[key]``, filled by the page), the controls used most, and
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QEvent, QObject, Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -30,10 +30,13 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.components import AdvancedSection, FlowLayout, StepRail
+from src.gimap.app.presentation.components.table_copy import enable_table_copy
 
 from ..layout_primitives import ScientificDoubleSpinBox
 
 STEPS = (("curve", "Curve"), ("model", "Model"), ("fit", "Fit"), ("results", "Results"))
+STEP_INTROS = {"fit": "Choose a method; the button below runs it (Ctrl+Return)."}
+"""The intro of a step whose sentence does not change (the others are written by the page)."""
 METHODS = (
     ("local", "Refine the current values",
      "Least squares from the values in Model: fast; finds the nearest good fit."),
@@ -66,17 +69,46 @@ def info_card(parent: QWidget) -> tuple[QFrame, QLabel]:
     return card, label
 
 
-def read_only_table(columns, parent: QWidget, name: str) -> QTableWidget:
+def read_only_table(columns, parent: QWidget, name: str,
+                    selection=QAbstractItemView.SingleSelection) -> QTableWidget:
+    """Rows selected whole; Ctrl+C and the right button copy them with the column names (``enable_table_copy``).
+    ``SingleSelection`` where the current row drives something (“Use This Solution”), else ``ExtendedSelection``."""
     table = QTableWidget(0, len(columns), parent)
     table.setObjectName(name)
     table.setHorizontalHeaderLabels(list(columns))
     table.verticalHeader().hide()
     table.setEditTriggers(QAbstractItemView.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectRows)
-    table.setSelectionMode(QAbstractItemView.SingleSelection)
+    table.setSelectionMode(selection)
     table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
     table.horizontalHeader().setStretchLastSection(True)
+    enable_table_copy(table)
     return table
+
+
+class _KeepToRows(QObject):
+    """Sizes the table again once it is shown or restyled (its header's height is known only then)."""
+
+    def eventFilter(self, watched, event):  # noqa: N802 - Qt API
+        if event.type() in (QEvent.Show, QEvent.StyleChange, QEvent.FontChange):
+            fit_to_rows(watched)
+        return False
+
+
+def fit_to_rows(table: QTableWidget) -> None:
+    """As tall as its header and rows, with no scroll bar of its own: the step's page scrolls instead.
+    Call again after the rows change."""
+    if not table.property("gimapFitToRows"):
+        table.setProperty("gimapFitToRows", True)
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        table._gimap_keep_to_rows = _KeepToRows(table)
+        table.installEventFilter(table._gimap_keep_to_rows)
+    header = table.horizontalHeader()
+    top = header.height() if header.isVisible() and header.height() > 0 else header.sizeHint().height()
+    scroll = table.horizontalScrollBar()
+    bottom = scroll.sizeHint().height() if table.horizontalScrollBarPolicy() != Qt.ScrollBarAlwaysOff \
+        and scroll.isVisible() else 0
+    table.setFixedHeight(top + table.verticalHeader().length() + bottom + 2 * table.frameWidth())
 
 
 class FitStepsView:
@@ -111,7 +143,7 @@ class FitStepsView:
             page_layout.setSpacing(8)
             heading = QLabel(title, content)
             heading.setProperty("gimapInspectorTitle", True)
-            intro = QLabel("", content)
+            intro = QLabel(STEP_INTROS.get(key, ""), content)
             intro.setProperty("gimapInspectorIntro", True)
             intro.setWordWrap(True)
             intro.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -135,7 +167,7 @@ class FitStepsView:
         self.open_curve_step_button = QPushButton("Open Curve…", page)
         self.open_curve_step_button.setObjectName("fitOpenCurveStep")
         self.open_curve_step_button.setToolTip(
-            "A 1D curve: columns q, I and optionally σ (.dat, .txt, .csv). Analyze ▸ Send to Fitting opens its cut here."
+            "A 1D curve: columns q, I and optionally σ (.dat, .txt). Analyze ▸ Send to Fitting opens its cut here."
         )
         layout.addWidget(self.open_curve_step_button, 0, Qt.AlignLeft)
 
@@ -207,7 +239,7 @@ class FitStepsView:
         row.setSpacing(6)
         self.add_component_button = QToolButton(page)
         self.add_component_button.setObjectName("fitAddComponent")
-        self.add_component_button.setText("Add Particle ▾")
+        self.add_component_button.setText("Add Particle")  # the menu arrow is drawn by the button
         self.add_component_button.setPopupMode(QToolButton.InstantPopup)
         self.add_component_button.setToolTip("Add a particle family to the model")
         self.show_ranges_check = QCheckBox("Ranges", page)
@@ -305,13 +337,19 @@ class FitStepsView:
         self.warnings_label.setWordWrap(True)
         self.warnings_label.setProperty("gimapRole", "warning")
         layout.addWidget(self.warnings_label)
-        self.parameters_table = read_only_table(("", "value", "±"), page, "fitParametersTable")
-        self.parameters_table.setMinimumHeight(160)
+        self.parameters_table = read_only_table(("", "value", "±"), page, "fitParametersTable",
+                                                QAbstractItemView.ExtendedSelection)
+        header = self.parameters_table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)  # a long name is cut short (its tooltip has it whole)
+        self.parameters_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        fit_to_rows(self.parameters_table)  # every row shown: only the page scrolls
         layout.addWidget(self.parameters_table)
 
         self.solutions_title = QLabel("Solutions", page)
         self.solutions_title.setProperty("gimapRole", "strong")
         layout.addWidget(self.solutions_title)
+        # One row at a time: “Use This Solution” takes the current one.
         self.solutions_table = read_only_table(("#", "model", "R (nm)", "D (nm)", "χ²"), page, "fitSolutionsTable")
         self.solutions_table.setMinimumHeight(120)
         layout.addWidget(self.solutions_table)
@@ -336,7 +374,7 @@ class FitStepsView:
             exports.addWidget(button)
         layout.addLayout(exports)
 
-        log = AdvancedSection("Log", "", page)
+        log = AdvancedSection("Run Log", "", page)
         log.setObjectName("fitLogSection")
         self.log_view = QPlainTextEdit(log)
         self.log_view.setObjectName("fitLog")
@@ -346,4 +384,5 @@ class FitStepsView:
         layout.addWidget(log)
 
 
-__all__ = ["FitStepsView", "METHODS", "QUICK_FAMILIES", "STEPS", "info_card", "muted", "read_only_table"]
+__all__ = ["FitStepsView", "METHODS", "QUICK_FAMILIES", "STEPS", "STEP_INTROS", "fit_to_rows", "info_card", "muted",
+           "read_only_table"]

@@ -51,8 +51,18 @@ The sidebar groups the pages into **Workspaces** (Start, Analyze, Fitting, Compa
 (2D Prediction, Trainset Build — the machine-learning tools). `« Collapse`
 (or **View ▸ Collapse Sidebar**, `Ctrl+B`) reduces it to icons; `Ctrl+1` … switch pages.
 
-- **Start** (the first page): drop detector images or a folder, or open them — Analyze opens at
-  once and shows the file, its detector and frames while the image loads. Or choose what you want
+Files, folders and `.gimap` projects can be dropped anywhere on the window. The window title names
+the frame shown (and the project, when one is open). Closing GIMaP while something still runs —
+Batch Export, a Series map, the automatic analysis, a fit, an In-situ series, a 2D prediction — asks
+first and lists what runs; **Yes** stops them and quits.
+
+Every curve plot has a menu on the right mouse button (**Reset View**, the log axes, **Plot as
+Figure…**, **Curves as Data…**, **Copy Image**, **Copy Data**); dragging with the right button
+zooms. When a plot is narrow, its title wraps above it and its options move into a **⋯** menu.
+
+- **Start** (the first page): drop detector images or a folder on the drop box, or open them —
+  Analyze opens at once and shows the file, its detector and frames while the image loads. Recent
+  files are listed with their folder; the page scrolls instead of squeezing on a small screen. Or choose what you want
   to know: *Crystals and orientation* (GIWAXS), *Nanostructure* (GISAXS), *In-situ or batch series*,
   *Calibrate the detector* — or describe your data and question to the AI (**Ask the AI…**).
 - **Analyze**: one workspace for GISAXS and GIWAXS. The command bar holds the file, the mode
@@ -105,7 +115,7 @@ is in Analyze's GIWAXS mode. The detector half of the former Cut & Fitting page 
 | Menu | Entries |
 |---|---|
 | File | Open Data… (`Ctrl+O`), Open Folder… (`Ctrl+Shift+O`), Open Recent, Open Project… (`Ctrl+Shift+P`), Save Project (`Ctrl+S`), Save Project As… (`Ctrl+Shift+S`), Labs Parameters ▸ Load… / Save As…, Exit |
-| View | the workspaces (`Ctrl+1`…), Collapse Sidebar (`Ctrl+B`), Full Screen, Theme ▸ Light / Dark, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`) |
+| View | the workspaces (`Ctrl+1`…), Collapse Sidebar (`Ctrl+B`), Full Screen, Theme ▸ Light / Dark, Language ▸ English / 中文, Font Size ▸ Larger (`Ctrl++`) / Smaller (`Ctrl+-`) / Reset (`Ctrl+0`) |
 | Tools | Geometry Calibration… (`Ctrl+Shift+G`), Format Converter… (`Ctrl+Shift+C`), Convert Current File…, XRR Series Extractor… (`Ctrl+Shift+R`), Fit Settings & Batch…, Process with AI… (`Ctrl+Shift+L`), Settings… (`Ctrl+,`) |
 | Help | User Manual (`F1`), GitHub Repository, Open User Data Folder, About GIMaP |
 
@@ -120,9 +130,11 @@ Analyze (mode, profile, masks and drawn regions, corrections, cuts), the curve, 
 left-out points and model of Fitting, and the folder and choices of the In-situ series. **File ▸ Save
 Project** (`Ctrl+S`) writes it (the first time it asks where, next to the first frame by default);
 **Open Project…**, the Start page's **Open Project…**, **Open Recent** (projects first) or dropping a
-`.gimap` file on the window opens it. The window title shows the project's name. Data are referenced
-by path, not copied: when a file has moved, the project still opens and a message lists what is
-missing.
+`.gimap` file on the window opens it. The window title shows the project's name and the frame shown.
+After **Clear** in Analyze, what you open next is no longer that project: **Save Project** asks where
+to save instead of overwriting it. A project cannot be opened while a job runs (an In-situ series,
+Batch Export …): stop it first. Data are referenced by path, not copied: when a file has moved, the
+project still opens and a message lists what is missing.
 
 ### Memory between sessions
 
@@ -649,7 +661,10 @@ Open **Tools > Geometry Calibration...** (`Ctrl+Shift+G`) to calibrate a SAXS, G
 5. Click **Auto Calibration**. The calculation runs in the background and can be cancelled.
 6. Review the center, distance, residual, confidence, high-contrast overlay legend, and alternative candidates. **Clean image** temporarily hides all calibration overlays, **Reset view** restores the complete detector mosaic after zooming or panning, and **Focus image** hides the result panels to give tall WAXS mosaics more room. The horizontal divider can also be dragged.
 7. After calibration, **Manual refine** opens automatically. Drag the center marker, edit the center/distance values, or pair a detected ring with a theoretical peak. Use **Finish manual** to collapse the panel when more image space is needed.
-8. Click **Apply** to update the shared application geometry. Calibration results can also be exported to or imported from JSON.
+8. Click **Apply** to update the shared application geometry; one note says what was applied and the
+   instrument profile Analyze will use. Calibration results can also be exported to or imported from
+   JSON (the note after Export opens the folder). An image or an exported `.json` can also be dropped
+   on the window; the file dialogs start in the last folder used.
 
 Solid yellow overlays are matched theoretical rings, dashed orange overlays are unused theoretical rings, and dotted white overlays are detected experimental radii; the preview legend identifies each style. Partial WAXS arcs and centers outside the active detector area are supported. A low-confidence result or a one-ring result should be treated as ambiguous and reviewed manually.
 
@@ -663,9 +678,13 @@ GIWAXS/GISAXS detector angle series without leaving the current workspace.
    one point.
 2. Choose a linear sample-angle sequence (`theta start` and `theta step`) or enter an NXS motor
    dataset containing one theta value per frame.
-3. Enter detector distance, beam energy, pixel sizes and the direct-beam center. Use **Load first
-   frame** and **Pick direct-beam center** to choose the center with the mouse. Select whether the
-   specular reflection moves up or down in detector-y.
+3. Enter detector distance, beam energy, pixel sizes and the direct-beam center. The window starts
+   from the last applied Geometry Calibration (marked *from last calibration*; only its energy when that
+   calibration was of frames of another size). **Load first frame** never overwrites a value you typed;
+   a tag beside each field and the summary say which values come from the file, the last calibration,
+   the image centre or the built-in defaults. Use **Pick direct-beam center** to choose the center with
+   the mouse. Select whether the specular reflection moves up or down in detector-y. A file or folder
+   can also be dropped on the window.
 4. Choose an ROI radius and `Sum` or `Mean`. Radius 0 reads one pixel; larger values integrate a
    circular neighborhood around the calculated specular beam.
 5. Click **Run extraction**. The worker loads one full frame at a time, displays the current detector
@@ -673,7 +692,9 @@ GIWAXS/GISAXS detector angle series without leaving the current workspace.
    into memory.
 6. Switch freely between **Live frame** and **XRR points**. Processing updates both but never changes
    the selected tab. Use **Export CSV** to save theta, qz, intensity, ROI position and valid-pixel
-   count.
+   count (by default `<source folder>/<source name>_xrr.csv`). A `.json` record beside it keeps every
+   value that determines qz (series, θ, distance, energy, pixels, centre, direction, ROI) and where
+   each came from.
 
 The current extractor reports the raw ROI sum or mean. It does not apply monitor/flux normalization,
 footprint correction, background subtraction or resolution correction.

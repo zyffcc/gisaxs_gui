@@ -20,27 +20,41 @@
     padding: 5px 11px;
     font-weight: 600;
 }
-#trainsetStepList {
-    background: @surface@;
+/* The validation badge is a status, not a button: its colour follows its "state" property. */
+#validationBadge[state="pending"] {
+    background: @surface_alt@;
     color: @text_muted@;
+    border-color: @border@;
+}
+#validationBadge[state="ok"] {
+    background: @success_soft@;
+    color: @success@;
+    border-color: @success_border@;
+}
+#validationBadge[state="warn"] {
+    background: @warning_soft@;
+    color: @warning@;
+    border-color: @warning_border@;
+}
+#validationBadge[state="error"] {
+    background: @danger_soft@;
+    color: @danger@;
+    border-color: @danger_border@;
+}
+/* The card around the workflow steps (the shared StepRail inside keeps the app-wide step styles). */
+QFrame#trainsetStepList {
+    background: @surface@;
     border: 1px solid @border@;
     border-radius: 10px;
-    padding: 7px;
-    outline: 0;
 }
-#trainsetStepList::item {
-    color: @text_muted@;
-    padding: 13px 10px;
-    margin: 2px;
-    border-radius: 7px;
-}
-#trainsetStepList::item:hover { background: @surface_hover@; }
-#trainsetStepList::item:selected {
-    background: @info_soft@;
-    color: @info@;
-    border: 1px solid @info_border@;
-    font-weight: 600;
-}
+/* The page colours every QLabel with @text@ above; the step marks and state lines keep the StepRail colours. */
+#freshTrainsetBuildPage QLabel[gimapStepMark="true"] { color: @chip_text@; }
+#freshTrainsetBuildPage QLabel[gimapStepMark="true"][state="ok"] { color: @success@; }
+#freshTrainsetBuildPage QLabel[gimapStepMark="true"][state="warn"] { color: @warning@; }
+#freshTrainsetBuildPage QLabel[gimapStepMark="true"][state="error"] { color: @danger@; }
+#freshTrainsetBuildPage QLabel[gimapStepMark="true"][state="busy"] { color: @accent@; }
+#freshTrainsetBuildPage QWidget[gimapStep="true"][current="true"] QLabel[gimapStepMark="true"] { color: @on_accent@; }
+#freshTrainsetBuildPage QLabel[gimapStepDetail="true"] { color: @text_muted@; }
 #designPreviewCard {
     background: @surface@;
     border: 1px solid @border@;
@@ -165,20 +179,20 @@
     border-top-right-radius: 6px;
 }
 #freshTrainsetBuildPage QTabBar::tab:hover { background: @surface_sunken@; }
+/* Regular weight (also against a bold rule in base.qss): Qt sizes tabs with the regular weight,
+   so a bold selected tab clips its text. The selection shows by its colour and fill. */
 #freshTrainsetBuildPage QTabBar::tab:selected {
     background: @surface@;
     color: @info@;
-    font-weight: 600;
+    font-weight: 400;
 }
 #designStageTabs QTabBar::tab { padding: 8px 7px; }
-/* Qt sizes tabs with the regular weight: a bold selected tab would clip its text. */
-#designStageTabs QTabBar::tab:selected { font-weight: 400; }
 #trainsetConfigurationTabs::pane {
     background: @surface_alt@;
     border-color: @border@;
 }
+/* No fixed tab width: the tabs expand to the bar, and the form keeps fitting beside the preview. */
 #trainsetConfigurationTabs QTabBar::tab {
-    min-width: 132px;
     padding: 9px 12px;
 }
 #freshTrainsetBuildPage QScrollArea,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 
 import numpy as np
@@ -233,6 +234,206 @@ def test_the_page_comes_back_with_the_model_and_the_curve_of_last_time(tmp_path)
     assert again.session.curve is not None and again.session.side == "positive"
     assert again.session.q_range == pytest.approx((0.3, 1.2))
     again.dispose()
+
+
+def test_a_fit_goes_stale_when_the_range_or_the_left_out_points_change(tmp_path) -> None:
+    page = _page()
+    page.open_curve(_curve_file(tmp_path))
+    page.set_range((0.2, 1.9))
+    page.method_buttons["local"].setChecked(True)
+    page.run_fit()
+    _wait(page)
+    assert page.session.result_is_current() and page.step_rail.state("fit") == "ok"
+    assert page.model_editor.row((0, "R")).error.text().startswith("± ")
+    page.set_range((0.5, 1.5))  # a band drag: the result stays, but no longer holds
+    assert page.session.result is not None and not page.session.result_is_current()
+    assert "fitting range or the left-out points changed after this fit" in page.warnings_label.text()
+    assert "model was changed" not in page.warnings_label.text()
+    assert page.step_rail.state("fit") == "warn" and page.model_editor.row((0, "R")).error.text() == ""
+    page.export_data_dialog(str(tmp_path / "stale.csv"))
+    assert "fit" not in json.loads((tmp_path / "stale.json").read_text(encoding="utf-8"))
+    page.set_range((0.2, 1.9))  # the range of the fit again
+    assert page.session.result_is_current() and page.step_rail.state("fit") == "ok"
+    assert "changed after this fit" not in page.warnings_label.text()
+    assert page.model_editor.row((0, "R")).error.text().startswith("± ")
+    full = page.session.all_points()
+    page.exclude_button.setChecked(True)
+    page._clicked(float(full.q[100]), float(full.intensity[100]))  # a point left out
+    assert not page.session.result_is_current() and page.step_rail.state("fit") == "warn"
+    assert "left-out points changed" in page.warnings_label.text()
+    page.export_data_dialog(str(tmp_path / "left_out.csv"))
+    assert "fit" not in json.loads((tmp_path / "left_out.json").read_text(encoding="utf-8"))
+    page._clicked(float(full.q[100]), float(full.intensity[100]))  # taken back
+    assert page.session.result_is_current() and page.step_rail.state("fit") == "ok"
+    page.export_data_dialog(str(tmp_path / "current.csv"))
+    assert "fit" in json.loads((tmp_path / "current.json").read_text(encoding="utf-8"))
+    page.dispose()
+
+
+def test_saves_report_errors_and_leave_no_table_without_its_record(tmp_path, monkeypatch) -> None:
+    from pathlib import Path
+
+    from src.gimap.app.presentation.components.toast import visible_toasts
+
+    page = _page()
+    page.open_curve(_curve_file(tmp_path))
+
+    def refused(*_args, **_kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(np, "savetxt", refused)
+        assert page.export_data_dialog(str(tmp_path / "a.csv")) is None  # no exception, so no error dialog
+    assert page.status_label.text().startswith("Could not save:") and "Permission denied" in page.status_label.text()
+    assert not (tmp_path / "a.csv").exists() and not (tmp_path / "a.json").exists()
+    write_text = Path.write_text
+
+    def no_record(self, *args, **kwargs):
+        if ".json" in self.name:  # the record (also under its temporary name)
+            raise PermissionError(13, "Permission denied", str(self))
+        return write_text(self, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "write_text", no_record)
+        assert page.export_data_dialog(str(tmp_path / "b.csv")) is None
+        assert page.save_model_dialog(str(tmp_path / "model.json")) is None
+    assert not (tmp_path / "b.csv").exists() and not (tmp_path / "b.json").exists()  # the table went with its record
+    assert page.status_label.text().startswith("Could not save:")
+    assert page.export_plot_dialog(str(tmp_path / "missing" / "plot.png")) is None  # QImage.save says False
+    assert page.status_label.text().startswith("Could not save:") and "Saved" not in page.status_label.text()
+    assert page.export_data_dialog(str(tmp_path / "ok.csv")) == str(tmp_path / "ok.csv")
+    assert (tmp_path / "ok.csv").exists() and (tmp_path / "ok.json").exists()
+    saved = [toast for toast in visible_toasts(page.window()) if toast.text().startswith("Saved ok.csv")]
+    assert saved and saved[0].action_button is not None and saved[0].action_button.text() == "Open Folder"
+    pair = {name: (tmp_path / name).read_bytes() for name in ("ok.csv", "ok.json")}
+    page.set_range((0.5, 1.5))  # a new table, over the earlier pair
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "write_text", no_record)
+        assert page.export_data_dialog(str(tmp_path / "ok.csv")) is None
+    assert {name: (tmp_path / name).read_bytes() for name in pair} == pair  # the earlier pair as it was
+    replace = os.replace
+
+    def record_in_use(source, target):
+        if str(target).endswith(".json"):
+            raise PermissionError(13, "The file is in use", str(target))
+        return replace(source, target)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "replace", record_in_use)  # the table takes its name, then the record cannot
+        assert page.export_data_dialog(str(tmp_path / "ok.csv")) is None
+        assert page.export_data_dialog(str(tmp_path / "new.csv")) is None
+    assert {name: (tmp_path / name).read_bytes() for name in pair} == pair  # the earlier table is back
+    assert not (tmp_path / "new.csv").exists() and not (tmp_path / "new.json").exists()
+    left = sorted(path.name for path in tmp_path.iterdir() if path.suffix in (".part", ".old"))
+    assert left == []  # no temporary file stays behind
+    page.dispose()
+
+
+def _shape_solution(radius: float) -> dict:
+    """A row of the quick physical fit (Find the particle shape): a sphere of this radius."""
+    from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import forward
+
+    params = {"R": radius, "sigma_R": 0.15, "D": 40.0, "sigma_D": 0.3}
+    components = [{"type": "sphere", "type_id": 1, "weight": 1.0, "amplitude": 2000.0, "params": params}]
+    globals_ = {"background": 3.0, "resolution_amplitude": 0.0, "sigma_Res": 0.02, "nu_Res": 3.0}
+    return {"combination": "sphere", "components": components, "global_params": globals_,
+            "native_q": Q_NM.tolist(), "native_fit": forward(Q_NM, components, globals_).tolist()}
+
+
+def test_a_fit_that_ends_after_another_curve_was_opened_is_not_kept(tmp_path) -> None:
+    first = _curve_file(tmp_path, name="a_fit_input.dat")
+    q, intensity, sigma = np.loadtxt(first, unpack=True)
+    second = tmp_path / "b_fit_input.dat"
+    np.savetxt(second, np.column_stack([q, intensity * 7.0 + 50, sigma * 3]))  # another curve, the same q
+    page = _page()
+    page.open_curve(first)
+    page.method_buttons["global"].setChecked(True)
+    page.run_fit()
+    assert page.fit_running()
+    page.open_curve(second)  # Open Curve, Send to Fitting, a unit change … while the fit runs
+    _wait(page)
+    assert not page.fit_running() and page.session.curve.name == "b_fit_input.dat"
+    assert page.session.result is None and not page.session.result_is_current()  # a's fit is not b's
+    assert page.step_rail.state("fit") == "pending" and page.step_rail.state("results") == "pending"
+    assert "fit of a_fit_input.dat ended after another curve was opened" in page.status_label.text()
+    page.export_data_dialog(str(tmp_path / "b.csv"))
+    assert "fit" not in json.loads((tmp_path / "b.json").read_text(encoding="utf-8"))
+    page.dispose()
+
+    page = _page(quick_fit=lambda *args, **kwargs: [_shape_solution(radius) for radius in (5.0, 6.0, 7.0)])
+    page.open_curve(first)
+    assert page.method() == "shapes"
+    page.run_fit()
+    page.open_curve(second)
+    model = page.session.model
+    _wait(page)
+    assert page.session.solutions == [] and page.session.model == model  # a's solutions, χ² on a's points
+    assert page.step_rail.state("fit") == "pending" and not page.solutions_table.isVisibleTo(page)
+    page.dispose()
+
+
+def test_find_the_particle_shape_shows_on_the_rail_and_its_row_is_selected(tmp_path) -> None:
+    solution = _shape_solution
+    page = _page(quick_fit=lambda *args, **kwargs: [solution(radius) for radius in (5.0, 5.5, 6.0, 6.5, 7.0)])
+    page.open_curve(_curve_file(tmp_path))
+
+    def cells(name: str) -> tuple:
+        table = page.parameters_table
+        line = next(line for line in range(table.rowCount()) if table.item(line, 0).text() == name)
+        return table.item(line, 1).text(), table.item(line, 2).text()
+
+    assert cells("R")[0].endswith(" nm")  # before any fit: the unit in the value column
+    assert page.method() == "shapes"
+    page.run_fit()
+    _wait(page)
+    solutions = page.session.solutions
+    assert len(solutions) == 5 and page.session.result is None
+    assert page.step_rail.state("fit") == "ok" and page.step_rail.state("results") == "ok"
+    assert page.step_rail.detail("fit").startswith("5 solutions · best Sphere χ²ᵣ")
+    assert page.step_rail.detail("results") == "5 solutions to compare"
+    assert page.solutions_table.horizontalHeaderItem(4).text() == "χ²ᵣ"
+    best = next(line for line, item in enumerate(solutions) if item.model == page.session.model)
+    assert page.solutions_table.currentRow() == best and page.use_solution_button.isEnabled()
+    page.run_fit()  # Refine the chosen solution
+    _wait(page)
+    value, error = cells("R")
+    assert value.endswith(" nm") and error.startswith("± ") and not error.endswith("nm")
+    page.dispose()
+
+
+def test_the_page_has_no_open_shortcut_of_its_own_and_short_residual_labels(tmp_path) -> None:
+    from pathlib import Path
+
+    from PyQt5.QtWidgets import QShortcut
+
+    from src.gimap.features.fitting.presentation.single import page as page_module
+
+    assert "Ctrl+O" not in Path(page_module.__file__).read_text(encoding="utf-8")  # File ▸ Open Data does it
+    page = _page()
+    keys = {shortcut.key().toString() for shortcut in page.findChildren(QShortcut)}
+    assert {"Ctrl+Z", "Ctrl+Y", "Ctrl+Return"} <= keys and "Ctrl+O" not in keys
+    page.open_curve(_curve_file(tmp_path))
+    assert page.residual_plot.figure_state()["y_label"] == "Δ/σ" and "(I − model)/σ" in page.residual_plot.toolTip()
+    page.open_curve(_curve_file(tmp_path, sigma=False, name="no_sigma_fit_input.dat"))
+    assert page.residual_plot.figure_state()["y_label"] == "Δ ln I" and "ln(I / model)" in page.residual_plot.toolTip()
+    assert page.add_component_button.text() == "Add Particle"
+    assert page.model_editor.row(("globals", "res_width")).name.text() == "Peak w (nm⁻¹)"
+    page.dispose()
+
+
+def test_a_parameter_name_is_translated_and_its_unit_kept() -> None:
+    from src.gimap.app.presentation.i18n import translator
+    from src.gimap.features.fitting.presentation.single.model_editor import FitModelEditor
+
+    _app()
+    state = translator()
+    language, state.language = state.language, "zh"
+    try:
+        editor = FitModelEditor()
+        editor.set_model(_truth())
+        assert editor.row(("globals", "res_width")).name.text() == "峰 w (nm⁻¹)"
+    finally:
+        state.language = language
 
 
 def test_points_are_left_out_by_a_click_or_a_box_and_taken_back(tmp_path) -> None:

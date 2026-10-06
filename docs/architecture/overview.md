@@ -4,7 +4,7 @@
 >
 > **Scope**：生产代码的 feature ownership、分层职责和依赖方向
 >
-> **Last verified**：2026-09-28
+> **Last verified**：2026-09-28（全文）；2026-10-06（assistant 一行、Feature 边界、文件大小）
 
 ## 架构风格
 
@@ -17,7 +17,7 @@ presentation、application、domain 和 infrastructure 代码。
 ```text
 features/
     analyze/        # 默认工作区：GISAXS 与 GIWAXS（含原 WAXS 页面功能，见 docs/ui/workspaces/analyze.md）
-    assistant/      # Process with Claude：Claude 通过工具操作 Analyze，报告 GIWAXS 结果（见其 README）
+    assistant/      # Run Automatic Analysis（无需 AI，GIWAXS 与 GISAXS）与 Process with AI（见其 README）
     fitting/
         presentation/
         application/
@@ -232,18 +232,18 @@ application 真正需要的能力，不能照搬 BornAgain、TensorFlow 或操�
 
 ## Feature 边界
 
-一个 feature 禁止导入另一个 feature 的 presentation、controller、adapter 或内部实现。
-例如 prediction 不得通过调用 `FittingController.SomeHelper` 复用 fitting 的 helper。
+一个 feature 不导入另一个 feature 的任何模块（包括 application）：`src/gimap/features/X/` 里出现
+`src.gimap.features.Y` 就会让 `test_features_do_not_import_other_feature_internals` 失败（2026-10-06 核对）。
 
-跨 feature 复用只允许通过：
+跨 feature 协作只允许通过：
 
-- public application API；
-- 明确的 port 或 interface；
-- 具有清晰所有权的稳定 shared domain/scientific primitive。
+- 组合根注入：`src/gimap/app/`（`main_window.py`、`menus.py`、`runtime.py`、`headless_assistant.py`）创建一个
+  feature 的对象，作为参数交给另一个 feature（例如 Fitting 的 `create_quick_fit()`、Calibration 的
+  `create_headless_calibration()` 注入自动分析）；接收方只依赖自己定义的 port 或 protocol；
+- 具有清晰所有权的稳定 shared domain/scientific primitive（`src/gimap/shared/`）。
 
-跨 feature application API 调用只适用于真正的业务协作。如果复用的是稳定的数学或
-科学能力，应优先提取为具有明确所有权的 shared scientific kernel，而不是通过另一个
-feature 的 use case 间接调用。例如 q-space conversion 不应通过 FittingUseCase 复用：
+如果复用的是稳定的数学或科学能力，应提取为具有明确所有权的 shared scientific kernel，而不是通过注入
+另一个 feature 的 use case 间接调用。例如 q-space conversion 不应通过 FittingUseCase 复用：
 
 ```text
 Prediction ─┐
@@ -292,6 +292,7 @@ characterization tests 或记录可信输出。架构、UI 和性能修改必须
 
 ## 文件大小指导
 
-新手写 Python 文件通常应控制在 400 行以内。Controller 和 ViewModel 通常应控制在
-300 行以内。这些是 architecture review 阈值，不是机械硬限制。职责内聚的模块可以在
-有明确理由时超过阈值；禁止为了满足行数要求而进行没有意义的拆分。
+`src/` 下每个 Python 模块最多 600 行，每个 feature 的 `view_model.py` 最多 300 行；两者都是测试强制的
+硬门禁（`tests/test_architecture_dependencies.py`，2026-10-06 核对），目的是让模块保持可读、可 review。
+接近上限时按职责拆分；禁止为了满足行数而把内聚的代码切成没有意义的碎片。全部由测试强制的规则见
+[`dependency-rules.md`](dependency-rules.md)。

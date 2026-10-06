@@ -20,9 +20,16 @@ from ...application import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr
+
 from ..workers import ImageLoaderWorker
 
 LOGGER = logging.getLogger(__name__)
+# Every format the shared detector loader reads; the standards in the repository are EDF/TIFF.
+CALIBRATION_IMAGE_FILTER = (
+    "Detector Images (*.nxs *.cbf *.tif *.tiff *.edf);;NXS (*.nxs);;CBF (*.cbf);;"
+    "TIFF (*.tif *.tiff);;EDF (*.edf)"
+)
 
 
 class ImageLoadingMixin:
@@ -31,9 +38,9 @@ class ImageLoadingMixin:
     def open_image_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Open Calibration Image",
-            "",
-            "Detector Images (*.nxs *.cbf);;NXS Files (*.nxs);;CBF Files (*.cbf)",
+            tr("Open Calibration Image"),
+            self._start_folder(),
+            CALIBRATION_IMAGE_FILTER,
         )
         if path:
             self.load_image(self.view_model.normalize_path(path))
@@ -62,7 +69,9 @@ class ImageLoadingMixin:
 
     def _image_loaded(self, image: DetectorImage) -> None:
         self.image = image
+        self._remember_folder(image.source_path)  # where Open… and Import… start next time
         self.result = None
+        self._fitted_geometry = None
         self._preview_cache.clear()
         self._reset_preview_view = True
         self.clean_preview_button.setChecked(False)
@@ -92,9 +101,9 @@ class ImageLoadingMixin:
                 f"{image.pixel_size_x_m * 1e6:.3f} × {image.pixel_size_y_m * 1e6:.3f} µm (metadata)"
             )
         else:
-            self.pixel_label.setText("Not detected — enter in Advanced Settings")
+            self.pixel_label.setText(tr("Not detected — enter it under Advanced configuration"))
             self.calibration_advanced_section.set_expanded(True)
-        self.detector_label.setText(image.detector_name or "Not identified")
+        self.detector_label.setText(image.detector_name or tr("Not identified"))
         detector_index = 0
         if image.detector_name:
             normalized = " ".join(image.detector_name.lower().split())
@@ -105,7 +114,7 @@ class ImageLoadingMixin:
                     break
         self.detector_combo.setCurrentIndex(detector_index)
         if not image.detector_name:
-            self.detector_label.setText("Not identified — choose a detector model")
+            self.detector_label.setText(tr("Not identified — choose a detector model"))
         detected_standards = self.view_model.detected_standard_keys(image.source_path)
         if len(detected_standards) == 1:
             standard_index = self.standard_combo.findData(detected_standards[0])

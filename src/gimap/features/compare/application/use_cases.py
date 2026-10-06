@@ -10,7 +10,7 @@ from typing import Optional, Protocol, Sequence
 
 import numpy as np
 
-from ..domain import Comparison, SeriesData, compare
+from ..domain import COMPARE_ERRORS, Comparison, SeriesData, compare
 
 CURVE_SUFFIXES = (".dat", ".txt", ".csv", ".xy", ".chi")
 METHOD = (
@@ -20,6 +20,16 @@ METHOD = (
     "mean shape of the last frames; difference of two end states: RMS of their log I difference, as a percentage; "
     "groups (3+ series): Ward clustering of the end states, split where a merge distance jumps (≥ 2×)."
 )
+# Why a series cannot be made from files: the English of each error (``str(exc)``), from these templates so that
+# the page can say it in the interface language (``ERRORS``: these and the comparison's own).
+TOO_FEW_FILES = "A series needs at least two curve files."
+TOO_FEW_READ = "Fewer than two curves could be read: {files}"
+UNREAD_FILE = "{name} ({error})"
+"""One file of ``TOO_FEW_READ`` (``{files}``: these joined with “; ”)."""
+DIFFERENT_FILE_AXES = "The files have different x axes: {axes}"
+TOO_FEW_IN_FOLDER = "Fewer than two curve files ({suffixes}) in {folder}."
+ERRORS = (TOO_FEW_FILES, TOO_FEW_READ, DIFFERENT_FILE_AXES, TOO_FEW_IN_FOLDER, *COMPARE_ERRORS)
+"""Every error template of Compare's files and comparison (a template without values is an exact text)."""
 
 
 class CurveReader(Protocol):
@@ -61,18 +71,18 @@ class CompareService:
         """One series from curve files (in counting order); frames on the first file's grid."""
         paths = sorted((Path(path) for path in paths), key=natural_key)
         if len(paths) < 2:
-            raise ValueError("A series needs at least two curve files.")
+            raise ValueError(TOO_FEW_FILES)
         curves, failed = [], []
         for path in paths:
             try:
                 curves.append((path, *self.reader.read(path)))
             except (OSError, ValueError) as exc:
-                failed.append(f"{path.name} ({exc})")
+                failed.append(UNREAD_FILE.format(name=path.name, error=exc))
         if len(curves) < 2:
-            raise ValueError("Fewer than two curves could be read: " + "; ".join(failed[:3]))
+            raise ValueError(TOO_FEW_READ.format(files="; ".join(failed[:3])))
         x_labels = {label for _p, _x, _y, label in curves}
         if len(x_labels) > 1:
-            raise ValueError("The files have different x axes: " + ", ".join(sorted(x_labels)))
+            raise ValueError(DIFFERENT_FILE_AXES.format(axes=", ".join(sorted(x_labels))))
         grid = np.sort(curves[0][1])
         image = np.full((len(curves), grid.size), np.nan)
         for row, (_path, x, y, _label) in enumerate(curves):
@@ -87,7 +97,7 @@ class CompareService:
     def series_from_folder(self, folder: Path, pattern: str = "*") -> SeriesData:
         files = curve_files(Path(folder), pattern)
         if len(files) < 2:
-            raise ValueError(f"Fewer than two curve files ({', '.join(CURVE_SUFFIXES)}) in {Path(folder).name}.")
+            raise ValueError(TOO_FEW_IN_FOLDER.format(suffixes=", ".join(CURVE_SUFFIXES), folder=Path(folder).name))
         return self.series_from_files(files, Path(folder).name)
 
     @staticmethod
@@ -162,5 +172,5 @@ class CompareService:
         }
 
 
-__all__ = ["CURVE_SUFFIXES", "CompareService", "CompareSettings", "CurveReader", "METHOD", "TableWriter",
-           "curve_files", "natural_key"]
+__all__ = ["CURVE_SUFFIXES", "ERRORS", "CompareService", "CompareSettings", "CurveReader", "METHOD", "TOO_FEW_READ",
+           "TableWriter", "UNREAD_FILE", "curve_files", "natural_key"]

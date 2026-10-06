@@ -10,6 +10,9 @@ from PyQt5.QtWidgets import (
     QCheckBox,
 )
 
+from ..value_combos import combo_value
+from .configuration import is_design_field
+
 
 class PageConnectionsMixin:
     """Own page connections presentation behavior."""
@@ -25,6 +28,7 @@ class PageConnectionsMixin:
         page.clear_masks_button.clicked.connect(self._clear_masks)
         page.random_mask_preview_button.clicked.connect(self._new_random_mask_example)
         page.mask_region_created.connect(self._region_created)
+        page.reference_dropped.connect(self._reference_dropped)
         page.generate_preview_button.clicked.connect(self._generate_preview)
         page.force_simulation_button.clicked.connect(self._force_generate_preview)
         page.new_realization_button.clicked.connect(self._new_preview_realization)
@@ -56,42 +60,51 @@ class PageConnectionsMixin:
         page.register_model_button.clicked.connect(self._register_best_model)
         page.storage_accept_check.toggled.connect(self._storage_acceptance_changed)
         page.auto_remember_check.toggled.connect(self._auto_remember_toggled)
-        page.reset_defaults_button.clicked.connect(self.reset_to_defaults)
+        page.reset_defaults_button.clicked.connect(self._reset_clicked)  # with Undo
         page.configuration_edited.connect(self._schedule_autosave_from_page)
-        page.project_name.textChanged.connect(self._schedule_autosave_from_page)
+        page.configuration_edited.connect(self._design_edited)
+        page.project_name.textChanged.connect(self._schedule_autosave_from_page)  # not the design
         page.reference_path.editingFinished.connect(self._load_reference_from_field)
-        page.fields["detector.preset"].currentTextChanged.connect(self._apply_detector_preset)
-        page.particle_combo.currentTextChanged.connect(self._particle_plugin_changed)
-        page.interference_combo.currentTextChanged.connect(self._interference_plugin_changed)
+        # Choices are followed by index and read as values (their shown text may be translated).
+        preset = page.fields["detector.preset"]
+        preset.currentIndexChanged.connect(lambda _index: self._apply_detector_preset(combo_value(preset)))
+        page.particle_combo.currentIndexChanged.connect(
+            lambda _index: self._particle_plugin_changed(combo_value(page.particle_combo))
+        )
+        page.interference_combo.currentIndexChanged.connect(
+            lambda _index: self._interference_plugin_changed(combo_value(page.interference_combo))
+        )
         for path, widget in page.fields.items():
             if path.startswith("roi."):
                 signal = getattr(widget, "valueChanged", None) or getattr(
-                    widget, "currentTextChanged", None
+                    widget, "currentIndexChanged", None
                 )
                 if signal is not None:
                     signal.connect(self._roi_config_changed)
             elif path.startswith("detector.") or path.startswith("beam."):
                 signal = getattr(widget, "valueChanged", None) or getattr(
-                    widget, "currentTextChanged", None
+                    widget, "currentIndexChanged", None
                 )
                 if signal is not None:
                     signal.connect(self._geometry_changed)
             if path.startswith("mask."):
                 signal = (
                     getattr(widget, "valueChanged", None)
-                    or getattr(widget, "currentTextChanged", None)
+                    or getattr(widget, "currentIndexChanged", None)
                     or getattr(widget, "toggled", None)
                 )
                 if signal is not None:
                     signal.connect(self._mask_config_changed)
             edit_signal = (
                 getattr(widget, "valueChanged", None)
-                or getattr(widget, "currentTextChanged", None)
+                or getattr(widget, "currentIndexChanged", None)
                 or getattr(widget, "toggled", None)
                 or getattr(widget, "textChanged", None)
             )
             if edit_signal is not None:
                 edit_signal.connect(self._schedule_autosave_from_page)
+                if is_design_field(path):
+                    edit_signal.connect(self._design_edited)
             if path in {
                 "pre.background.enabled",
                 "pre.gaussian.enabled",
@@ -109,6 +122,7 @@ class PageConnectionsMixin:
             page.model_layer_table,
         ):
             table.itemChanged.connect(self._schedule_autosave_from_page)
+            table.itemChanged.connect(self._design_edited)
 
     def initialize(self) -> None:
         if self._initialized:
@@ -126,9 +140,10 @@ class PageConnectionsMixin:
         if reference and Path(reference).exists():
             self._load_reference(reference)
         elif reference:
-            self.page.design_info.setText(
+            self.page.texts.set(
+                self.page.design_info,
                 "Remembered reference is unavailable. Choose a new file to restore "
-                "the ROI and threshold-mask preview."
+                "the ROI and threshold-mask preview.",
             )
         if self.page.auto_remember_check.isChecked():
             self.status_updated.emit(

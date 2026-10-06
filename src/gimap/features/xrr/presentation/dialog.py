@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt5.QtCore import QThread, Qt
-from PyQt5.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QDialog, QMessageBox
 
 from src.gimap.app.bootstrap import create_standalone_legacy_context
 from src.gimap.app.presentation import install_safe_wheel_behavior
 from src.gimap.app.presentation.assets import app_icon
+from src.gimap.app.presentation.i18n import tr
 
 from ..application import (
     SpecularGeometry,
@@ -18,12 +19,14 @@ from ..application import (
     XrrExtractionSettings,
     XrrSeriesSpec,
 )
+from .bindings.files import XrrFilesMixin
+from .bindings.geometry_sources import GeometrySourcesMixin
 from .plotting import XrrPlotPresenter
 from .views import XrrSeriesDialogView
 from .workers import XrrExtractionWorker, XrrInspectWorker
 
 
-class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
+class XrrSeriesDialog(XrrFilesMixin, GeometrySourcesMixin, QDialog, XrrSeriesDialogView):
     def __init__(self, parent=None, *, app_context=None, view_model=None):
         super().__init__(parent)
         self.app_context = (
@@ -59,6 +62,10 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self._last_progress_total = 0
         self._cancel_requested = False
         self._close_when_idle = False
+        self._run_geometry_sources: dict[str, str] = {}
+        """Where each geometry value of the running (or last) extraction came from."""
+        self.setAcceptDrops(True)
+        self._init_geometry_sources()
         self._connect_signals()
         self._update_angle_controls()
         self._update_source_controls()
@@ -75,19 +82,6 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self.log_y_check.toggled.connect(self._redraw_curve)
         for control in (self.center_x_spin, self.center_y_spin, self.radius_spin):
             control.valueChanged.connect(self._redraw_detector)
-
-    def _browse_source(self) -> None:
-        if self.source_kind_combo.currentIndex() == 2:
-            path = QFileDialog.getExistingDirectory(self, "Select CBF series folder")
-        else:
-            path, _ = QFileDialog.getOpenFileName(
-                self,
-                "Select detector series",
-                "",
-                "Detector data (*.nxs *.cbf);;NXS (*.nxs);;CBF (*.cbf)",
-            )
-        if path:
-            self.source_picker.set_path(path)
 
     def _series_spec(self) -> XrrSeriesSpec:
         path = self.source_picker.path()
@@ -141,7 +135,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
             self._show_input_error(str(exc))
             return
         self.inspect_button.setEnabled(False)
-        self.series_summary.setText("Reading first frame…")
+        self.series_summary.setText(tr("Reading first frame…"))
         self._inspect_thread = QThread(self)
         self._inspect_worker = XrrInspectWorker(self.view_model, spec)
         self._inspect_worker.moveToThread(self._inspect_thread)
@@ -155,11 +149,10 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
 
     def _on_inspected(self, inspection) -> None:
         frame = inspection.first_frame
-        self._apply_metadata(frame.metadata, frame.data.shape)
-        self.series_summary.setText(
-            f"{inspection.frame_count} frame(s) · first: {inspection.first_ref.label} · "
-            f"shape {frame.data.shape[1]} × {frame.data.shape[0]}"
-        )
+        unused_values = self._apply_metadata(frame.metadata, frame.data.shape)
+        self._show_inspection_summary(inspection, unused_values)
+        if self.source_picker.path():  # a series that could be read: Browse… starts there next time
+            self._remember_folder(self.source_picker.path())
         self._last_preview = frame.data
         self._last_preview_shape = tuple(frame.data.shape)
         self._last_roi_center = None
@@ -167,7 +160,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self._redraw_detector()
 
     def _on_inspect_failed(self, message: str) -> None:
-        self.series_summary.setText("Series inspection failed")
+        self.series_summary.setText(tr("Series inspection failed"))
         self.job_status.set_state("failed", message, progress=0.0)
 
     def _cleanup_inspection(self) -> None:
@@ -193,6 +186,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
             return
         self._cancel_requested = False
         self._last_progress_total = 0
+        self._run_geometry_sources = self.geometry_sources()
         self.view_model.state.result = None
         self.results_table.set_rows(())
         self.export_button.setEnabled(False)
@@ -301,7 +295,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
 
     def _pick_center_toggled(self, active: bool) -> None:
         self.pick_center_button.setText(
-            "Click the direct beam · Esc cancels" if active else "Pick direct-beam center"
+            tr("Click the direct beam · Esc cancels") if active else tr("Pick direct-beam center")
         )
         self.live_canvas_cursor(active)
 
@@ -325,22 +319,14 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
             return
         super().keyPressEvent(event)
 
-    def _apply_metadata(self, metadata: dict, shape) -> None:
-        mappings = (
-            (self.energy_spin, metadata.get("energy_kev"), 1.0),
-            (self.distance_spin, metadata.get("distance_m"), 1000.0),
-            (self.pixel_x_spin, metadata.get("pixel_size_x_m"), 1e6),
-            (self.pixel_y_spin, metadata.get("pixel_size_y_m"), 1e6),
-            (self.center_x_spin, metadata.get("beam_center_x_px"), 1.0),
-            (self.center_y_spin, metadata.get("beam_center_y_px"), 1.0),
-        )
-        for control, value, scale in mappings:
-            if value is not None:
-                control.setValue(float(value) * scale)
-        if metadata.get("beam_center_x_px") is None:
-            self.center_x_spin.setValue((shape[1] - 1) / 2.0)
-        if metadata.get("beam_center_y_px") is None:
-            self.center_y_spin.setValue((shape[0] - 1) / 2.0)
+    def reject(self) -> None:
+        """Esc closes through ``closeEvent``, which waits for a running worker thread.
+
+        QDialog's own reject() hides the dialog without a close event; with WA_DeleteOnClose the
+        running QThread child would then be deleted and take the application down.
+        ``closeEvent`` does not call ``QDialog.closeEvent``, so this cannot recurse.
+        """
+        self.close()
 
     def _update_angle_controls(self) -> None:
         dataset_mode = self.angle_mode_combo.currentIndex() == 1
@@ -355,18 +341,6 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         if cbf and self.angle_mode_combo.currentIndex() == 1:
             self.angle_mode_combo.setCurrentIndex(0)
         self.angle_mode_combo.model().item(1).setEnabled(not cbf)
-
-    def _export_curve(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export XRR points", "xrr_curve.csv", "CSV (*.csv)"
-        )
-        if not path:
-            return
-        try:
-            self.view_model.export(Path(path))
-            self.job_status.set_state("succeeded", f"Exported {Path(path).name}", progress=1.0)
-        except Exception as exc:
-            self.job_status.set_state("failed", str(exc), progress=0.0)
 
     def _show_input_error(self, message: str) -> None:
         self.job_status.set_state("failed", message, progress=0.0)

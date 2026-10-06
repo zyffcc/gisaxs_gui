@@ -11,14 +11,17 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
-from PyQt5.QtCore import QSignalBlocker, Qt, QUrl
+from PyQt5.QtCore import QEvent, QObject, QSignalBlocker, Qt, QTimer, QUrl
 from PyQt5.QtGui import QDesktopServices, QKeySequence
-from PyQt5.QtWidgets import QFileDialog, QMenu, QShortcut
+from PyQt5.QtWidgets import QFileDialog, QMenu, QShortcut, QSizePolicy
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import GISAXS, FrameAnalysis, source_labels
+from ..texts import detector_text, message_text
+from .display import PLOT_SIDES, VIEW_DETECTOR, cut_lines
+from .results_state import RESULTS_INTRO
 
 MASK_COLOR = "#ef4444"
 BAD_PIXEL_COLOR = "#f59e0b"
@@ -27,8 +30,66 @@ FILLED_COLOR = "#22d3ee"
 """Hot and dead pixels found in the frame (amber, circled so single pixels stay visible)."""
 
 
+CUT_SOURCES = {"yoneda": "Yoneda cut", "manual": "Cut set by hand", "horizon": "Cut above the horizon"}
+"""The Cuts step's detail: where the horizontal GISAXS cut is (``markers["horizontal_source"]``)."""
+
+
 def _pixels(count: int, total: int) -> str:
     return f"{count:,} px ({100.0 * count / max(total, 1):.2g} %)".replace(",", " ")
+
+
+IMAGE_KEEPS = 400
+"""Width (px) of the image panel below which its toolbar takes a third line: kept while the curves have room."""
+RIGHT_SHARE = 0.45
+"""The least share of the curves and results while the image keeps ``IMAGE_KEEPS``."""
+
+
+class EvenSplit(QObject):
+    """Steps | image | curves and results: the image and the right panel share what the steps leave, equally
+    (a wide window: the Results tables keep their columns), the image keeping ``keep`` px as long as the right
+    panel keeps ``RIGHT_SHARE`` of the room (a 1280 px window: 400 | 356). Until the person moves a handle:
+    their split stays, and further room is shared by the splitter's stretch factors."""
+
+    def __init__(self, splitter, keep: int = IMAGE_KEEPS):
+        super().__init__(splitter)
+        self._splitter, self._keep, self.by_hand = splitter, int(keep), False
+        splitter.splitterMoved.connect(self._moved)  # only a drag by the person (``setSizes`` does not emit it)
+        splitter.installEventFilter(self)
+
+    def _moved(self, *_args) -> None:
+        self.by_hand = True
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
+        if event.type() in (QEvent.Resize, QEvent.Show) and not self.by_hand:
+            QTimer.singleShot(0, self.balance)  # once the splitter has laid out its new width
+        return False
+
+    def balance(self) -> None:
+        splitter = self._splitter
+        try:
+            sizes = splitter.sizes()
+        except RuntimeError:  # the page is gone
+            return
+        if self.by_hand or len(sizes) != 3 or sizes[1] + sizes[2] <= 0:
+            return
+        shared = sizes[1] + sizes[2]
+        right_least = max(splitter.widget(2).minimumSizeHint().width(), int(RIGHT_SHARE * shared))
+        image = max(shared // 2, min(self._keep, shared - right_least))
+        if image != sizes[1]:
+            splitter.setSizes([sizes[0], image, shared - image])
+
+
+def fit_stack_to_page(stack) -> None:
+    """Size a ``QStackedWidget`` from the page it shows: by default it is as tall as its tallest page, which
+    leaves a short page floating in empty space and squeezes the widgets above it."""
+    current = stack.currentWidget()
+    for index in range(stack.count()):
+        page = stack.widget(index)
+        if page is current:
+            page.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        else:  # left out of the stack's size hint
+            page.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+    stack.updateGeometry()
 
 
 class WorkspaceMixin:
@@ -36,7 +97,6 @@ class WorkspaceMixin:
 
     _find_geometry: Optional[Callable[[], None]] = None
     _run_pipeline: Optional[Callable[[], None]] = None
-    _stop_pipeline: Optional[Callable[[], None]] = None
 
     def _connect_workspace(self) -> None:
         self._overlay = None  # "mask", "sources" or None
@@ -79,6 +139,10 @@ class WorkspaceMixin:
         self.find_geometry_button.setVisible(has_finder)
         self.banner_find_button.setVisible(has_finder)
         self.run_pipeline_button.setVisible(self._run_pipeline is not None)
+        # The region editor (Cuts) as tall as the page it shows: a one-line note leaves its height to the list.
+        self.region_editor.currentChanged.connect(lambda _index: fit_stack_to_page(self.region_editor))
+        fit_stack_to_page(self.region_editor)
+        self.even_split = EvenSplit(self.splitter)
         self.show_step("data")
         self.show_right("curves")
         self._sync_halves()
@@ -142,6 +206,8 @@ class WorkspaceMixin:
     # -- files -----------------------------------------------------------------------
 
     def _step_file(self, delta: int) -> None:
+        if self._frame_kept():  # the automatic analysis works on the frame shown
+            return
         count = self.file_list.count()
         if count:
             row = min(max(0, self.file_list.currentRow() + int(delta)), count - 1)
@@ -151,13 +217,9 @@ class WorkspaceMixin:
         """Immediately after a file is chosen: its name, and that it is being read."""
         self.file_chip.setText(path.name)
         self.file_chip.setToolTip(str(path))
-        self.file_meta.setText("reading…")
-        count = self.file_list.count()
-        for button in (self.previous_file_button, self.next_file_button):
-            button.setVisible(count > 1)  # stepping through files: only with more than one
-        self.previous_file_button.setEnabled(self.file_list.currentRow() > 0)
-        self.next_file_button.setEnabled(0 <= self.file_list.currentRow() < count - 1)
-        self.set_step_state("data", "busy", f"Reading {path.name} …")
+        self.file_meta.setText(tr("reading…"))
+        self._show_file_position()  # ‹ 3 / 40 ›: only with more than one file (``bindings/file_list.py``)
+        self.set_step_state("data", "busy", trf("Reading {name} …", name=path.name))
 
     def _busy_changed(self, busy: bool) -> None:
         if busy:
@@ -168,88 +230,110 @@ class WorkspaceMixin:
 
     # -- what each step found ----------------------------------------------------------
 
-    def _intro(self, key: str, text: str) -> None:
-        """One sentence of what the step found, in the interface language when the table has it."""
-        self.step_intro[key].setText(tr(text))
+    def _intro(self, key: str, template: str, **values) -> None:
+        """One sentence of what the step found, in the interface language: ``template`` is the English (a key
+        of the table), ``values`` fill it after the translation (numbers, names: never translated)."""
+        self.step_intro[key].setText(trf(template, **values) if values else tr(template))
 
     def _refresh_workspace(self, analysis: Optional[FrameAnalysis]) -> None:
-        files = self.file_list.count()
         if analysis is None:
-            self._intro("data", 
+            self._intro(
+                "data",
                 "Open or drop detector frames (CBF, NXS, TIFF, EDF) or a folder. A multi-module "
-                "NeXus series (…_m01.nxs … _m11.nxs) opens as one stitched frame."
+                "NeXus series (…_m01.nxs … _m11.nxs) opens as one stitched frame.",
             )
-            self.data_info_label.setText("No file yet.")
+            self.data_info_label.setText(tr("No file yet."))
             for key in ("geometry", "mask", "cuts", "results", "export"):
                 self.set_step_state(key, "pending")
             self.set_step_state("data", "pending")
             self._intro("geometry", "The geometry turns pixels into q: distance, beam centre, wavelength, αi.")
             self._intro("mask", "Detector gaps and bad pixels are left out of every curve.")
             self._intro("cuts", "Where the curves are taken from on the detector.")
-            self._intro("export", 
-                "Everything is written next to the data in gimap_analysis/, with a JSON record of how it was made."
+            self._intro("results", RESULTS_INTRO)
+            self._intro(
+                "export",
+                "Everything is written next to the data in gimap_analysis/, with a JSON record of how it was made.",
             )
-            self.mask_summary_label.setText("No frame yet.")
+            self.mask_summary_label.setText(tr("No frame yet."))
             self.cuts_info_label.setText("")
             return
-        self._show_data_info(analysis, files)
+        self._show_step_states(analysis)
+        self._refresh_overlay()
+
+    def _show_step_states(self, analysis: FrameAnalysis) -> None:
+        """What the Data, Geometry, Mask and Cuts steps found for ``analysis`` (also after a language switch)."""
+        self._show_data_info(analysis, self.file_list.count())
         self._show_geometry_state(analysis)
         self._show_mask_state(analysis)
         self._show_cut_state(analysis)
-        self._refresh_overlay()
 
     def _show_data_info(self, analysis: FrameAnalysis, files: int) -> None:
+        """The command-bar meta, the Data step's detail, card and intro. The detector is the name the file gives
+        it (else the instrument profile it matched); without either, nothing is said of it."""
         rows, columns = analysis.shape
-        detector = analysis.detector_name or "Detector"
-        frames = analysis.frame_count
-        summed = f", sum of {analysis.frame_total} frames" if analysis.summed_frames else ""
-        meta = f"{detector} · {rows}×{columns} px"
+        shape = f"{rows}×{columns} px"
+        detector = detector_text(analysis)
+        frames, shown, total = analysis.frame_count, analysis.frame_index + 1, analysis.frame_total
+        meta = [part for part in (detector, shape) if part]  # a name and a size: the same in every language
         if frames > 1:
-            meta += f" · frame {analysis.frame_index + 1} of {frames}{summed}"
+            meta.append(trf("frame {i} of {n}, sum of {total} frames", i=shown, n=frames, total=total)
+                        if analysis.summed_frames else trf("frame {i} of {n}", i=shown, n=frames))
+        meta = " · ".join(meta)
         self.file_chip.setText(analysis.path.name)
         self.file_chip.setToolTip(str(analysis.path))
         self.file_meta.setText(meta)
         self.set_step_state("data", "ok", meta)
         metadata = analysis.metadata or {}
-        lines = [f"Detector: {detector}", f"Frame: {rows} × {columns} pixels"]
+        lines = [trf("Detector: {name}", name=analysis.detector_name)] if analysis.detector_name else []
         geometry = analysis.geometry
         pixel = geometry.pixel_size_x_m if geometry is not None else metadata.get("pixel_size_x_m")
-        if pixel:
-            lines[-1] += f", {pixel * 1e6:g} µm pixels"
-        lines.append(f"Frames in the file: {frames}" + (f" (showing {analysis.frame_index + 1}{summed})" if frames > 1 else ""))
+        lines.append(trf("Frame: {rows} × {columns} pixels, {size} µm pixels", rows=rows, columns=columns,
+                         size=f"{pixel * 1e6:g}") if pixel else
+                     trf("Frame: {rows} × {columns} pixels", rows=rows, columns=columns))
+        if frames <= 1:
+            lines.append(trf("Frames in the file: {n}", n=frames))
+        elif analysis.summed_frames:
+            lines.append(trf("Frames in the file: {n} (showing {i}, sum of {total} frames)", n=frames, i=shown, total=total))
+        else:
+            lines.append(trf("Frames in the file: {n} (showing {i})", n=frames, i=shown))
         header = []
         if metadata.get("energy_kev"):
             header.append(f"{float(metadata['energy_kev']):g} keV")
         if metadata.get("header_distance_m"):
-            header.append(f"distance {float(metadata['header_distance_m']) * 1e3:g} mm")
+            header.append(trf("distance {value} mm", value=f"{float(metadata['header_distance_m']) * 1e3:g}"))
         if metadata.get("exposure_time_s"):
-            header.append(f"exposure {float(metadata['exposure_time_s']):g} s")
+            header.append(trf("exposure {value} s", value=f"{float(metadata['exposure_time_s']):g}"))
         if header:
-            lines.append("File header: " + ", ".join(header))
-        lines.append(f"Files listed: {files}")
+            lines.append(trf("File header: {items}", items=", ".join(header)))
+        lines.append(trf("Files listed: {n}", n=files))
         self.data_info_label.setText("\n".join(lines))
-        self._intro("data", 
-            f"{analysis.path.name}: {detector}, {rows}×{columns} px"
-            + (f", {frames} frames" if frames > 1 else "") + "."
-        )
+        values = dict(name=analysis.path.name, detector=detector, shape=shape, frames=frames)
+        if detector:
+            self._intro("data", "{name}: {detector}, {shape}, {frames} frames." if frames > 1 else
+                        "{name}: {detector}, {shape}.", **values)
+        else:
+            self._intro("data", "{name}: {shape}, {frames} frames." if frames > 1 else "{name}: {shape}.", **values)
 
     def _show_geometry_state(self, analysis: FrameAnalysis) -> None:
         geometry = analysis.geometry
         if geometry is None:
-            detector = analysis.detector_name or "this detector"
-            self.set_step_state("geometry", "warn", "No geometry yet")
-            self._intro("geometry", 
-                f"No geometry for {detector} ({analysis.shape[0]}×{analysis.shape[1]}) yet. "
-                + ("Find a calibration automatically, calibrate" if self._find_geometry else "Calibrate")
-                + " from an image of a standard, or enter the values once: they are saved as an "
-                "instrument profile and used for every such frame."
+            detector = analysis.detector_name or tr("this detector")
+            self.set_step_state("geometry", "warn", tr("No geometry yet"))
+            self._intro(
+                "geometry",
+                "No geometry for {detector} ({shape}) yet. Find a calibration automatically, calibrate from an image "
+                "of a standard, or enter the values once: they are saved as an instrument profile and used for every "
+                "such frame." if self._find_geometry else
+                "No geometry for {detector} ({shape}) yet. Calibrate from an image of a standard, or enter the values "
+                "once: they are saved as an instrument profile and used for every such frame.",
+                detector=detector, shape=f"{analysis.shape[0]}×{analysis.shape[1]}",
             )
             return
         profile = analysis.resolution.profile if analysis.resolution is not None else None
-        name = profile.name if profile is not None else "instrument profile"
+        name = profile.name if profile is not None else tr("instrument profile")
         detail = f"{geometry.distance_m * 1e3:.1f} mm · λ {geometry.wavelength_angstrom:.4g} Å · αi {geometry.incidence_deg:g}°"
         self.set_step_state("geometry", "ok", detail)
-        self._intro("geometry", f"Geometry from “{name}”: {detail}.")
+        self._intro("geometry", "Geometry from “{name}”: {detail}.", name=name, detail=detail)
 
     def _show_mask_state(self, analysis: FrameAnalysis) -> None:
         valid = np.asarray(analysis.valid, dtype=bool)
@@ -290,8 +374,8 @@ class WorkspaceMixin:
         self.mask_summary_label.setText("\n".join(lines))
         share = 100.0 * (total - int(valid.sum())) / max(total, 1)
         self.set_step_state("mask", "ok", tr("{share} % of the pixels left out").format(share=f"{share:.2g}"))
-        self._intro("mask", 
-            "Pixels without data are left out of every curve before any cut; corrections below apply to the frame."
+        self._intro(
+            "mask", "Pixels without data are left out of every curve before any cut; corrections below apply to the frame."
         )
 
     def _show_cut_state(self, analysis: FrameAnalysis) -> None:
@@ -300,28 +384,18 @@ class WorkspaceMixin:
         self.gisaxs_cuts.setVisible(gisaxs)
         self.giwaxs_section.setVisible(not gisaxs)
         if reduction is None:
-            self.set_step_state("cuts", "pending", "Needs a geometry")
+            self.set_step_state("cuts", "pending", tr("Needs a geometry"))
             self._intro("cuts", "The cuts need a geometry (step 2).")
             return
         markers = reduction.markers
         if gisaxs:
-            low, high = markers["horizontal_band"]
-            left, right = markers["vertical_band"]
-            yoneda = markers.get("yoneda")
             source = markers.get("horizontal_source")
-            where = (
-                f"at the Yoneda band (αf = {yoneda.alpha_f_deg:.3f}°)" if source == "yoneda" and yoneda
-                else "set by hand" if source == "manual" else "just above the horizon (no Yoneda band found)"
-            )
-            text = (
-                f"Horizontal cut I(qy) over rows {low:.0f}–{high:.0f}, {where}.\n"
-                f"Vertical cut I(qz) over columns {left:.0f}–{right:.0f} (the beam centre)."
-            )
-            self.cuts_info_label.setText(text)
-            self.set_step_state("cuts", "ok", "Yoneda cut" if source == "yoneda" else f"Cut {source}")
-            self._intro("cuts", 
+            self.cuts_info_label.setText("\n".join(cut_lines(analysis)))
+            self.set_step_state("cuts", "ok", tr(CUT_SOURCES.get(source, "Cut {source}")).format(source=source))
+            self._intro(
+                "cuts",
                 "GISAXS: the horizontal cut at the Yoneda band gives the in-plane structure, the vertical cut the "
-                "out-of-plane one. Make left and right symmetric before averaging the halves."
+                "out-of-plane one. Make left and right symmetric before averaging the halves.",
             )
         else:
             regions = len(self.view_model.state.giwaxs.regions)
@@ -344,6 +418,12 @@ class WorkspaceMixin:
     def _sync_halves(self) -> None:
         with QSignalBlocker(self.halves_combo):
             self.halves_combo.setCurrentIndex(max(0, self.halves_combo.findData(self.view_model.fit_side)))
+        self._show_halves_on_plot()
+
+    def _show_halves_on_plot(self) -> None:
+        """A GISAXS frame: the upper plot shows the halves chosen for Fitting (its own control stays free)."""
+        if self.view_model.is_gisaxs(self.view_model.state.analysis):
+            self.top_plot.set_side(PLOT_SIDES.get(self.view_model.fit_side, "both"))
 
     # -- overlays on the image ----------------------------------------------------------
 
@@ -354,7 +434,7 @@ class WorkspaceMixin:
             self._overlay = "mask"
         elif self._overlay == "mask":
             self._overlay = None
-        self._refresh_overlay()
+        self._overlay_on_detector(on, "Masked pixels are drawn on the detector image")
 
     def _sources_toggled(self, on: bool) -> None:
         self._only_source = None
@@ -364,10 +444,18 @@ class WorkspaceMixin:
             self._overlay = "sources"
         elif self._overlay == "sources":
             self._overlay = None
+        self._overlay_on_detector(on, "Sources are drawn on the detector image")
+
+    def _overlay_on_detector(self, on: bool, message: str) -> None:
+        """Overlays are drawn in detector pixels: turning one on over the q map or the cake shows the detector."""
+        if on and self.view_combo.currentIndex() != VIEW_DETECTOR and self.view_model.state.analysis is not None:
+            self.set_view(VIEW_DETECTOR)  # redraws the image, and the overlay with it
+            self._status(tr(message))
+            return
         self._refresh_overlay()
 
     def _curve_clicked(self, plot: str, index: int) -> None:
-        """Clicking a curve shows where (only) it comes from."""
+        """Clicking a curve shows where (only) it comes from, on the detector image."""
         keys = self._plot_keys.get(plot, [])
         if not 0 <= index < len(keys):
             return
@@ -377,6 +465,8 @@ class WorkspaceMixin:
         with QSignalBlocker(self.sources_button):
             self.sources_button.setChecked(True)
         self._overlay = "sources"
+        if self.view_combo.currentIndex() != VIEW_DETECTOR:
+            self._status(tr("Switch to Detector to see where this curve comes from"))
         self._refresh_overlay()
 
     def _refresh_overlay(self) -> None:
@@ -410,7 +500,8 @@ class WorkspaceMixin:
             "sources",
             lambda: self.view_model.source_masks(analysis, keys),
             on_done=lambda masks: self._show_sources(analysis, entries, masks),
-            on_error=lambda message, _details: self._status(f"Could not draw the sources: {message}", "error"),
+            on_error=lambda message, _details: self._status(
+                trf("Could not draw the sources: {error}", error=message), "error"),
         )
 
     def _show_sources(self, analysis: FrameAnalysis, entries, masks: dict) -> None:
@@ -429,27 +520,27 @@ class WorkspaceMixin:
     def save_map_data(self) -> None:
         analysis = self.view_model.state.analysis
         if analysis is None or analysis.reduction is None or analysis.reduction.reciprocal_space_map is None:
-            self._status("The q map needs a frame with a geometry.", "warning")
+            self._status(tr("The q map needs a frame with a geometry."), "warning")
             return
         folder = self.view_model.default_export_dir() or Path(self._last_folder or ".")
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save q-Map Data", str(folder / f"{analysis.path.stem}_qmap.csv"), "CSV table (*.csv)"
+            self, tr("Save q-Map Data"), str(folder / f"{analysis.path.stem}_qmap.csv"), "CSV table (*.csv)"
         )
         if not path:
             return
         try:
             written = self.view_model.export_q_map(Path(path))
         except (ValueError, OSError) as exc:
-            self._status(f"Could not save the q map: {exc}", "error")
+            self._status(trf("Could not save the q map: {error}", error=message_text(exc)), "error")
             return
-        self.notify_written(f"Saved the q map to {written.name}", written.parent)
+        self.notify_written(trf("Saved the q map to {name}", name=written.name), written.parent)
 
     def notify_written(self, text: str, folder: Optional[Path]) -> None:
-        """Status line and a toast with a button that opens the folder."""
+        """Status line and a toast with a button that opens the folder (``text`` in the interface language)."""
         self._status(text, "ok")
         action = None
         if folder is not None:
-            action = ("Open Folder", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))))
+            action = (tr("Open Folder"), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))))
         show_toast(self, text, level="ok", action=action)
 
     # -- extensions from the composition root -----------------------------------------------
@@ -463,57 +554,6 @@ class WorkspaceMixin:
         self.find_geometry_button.show()
         self.banner_find_button.show()
 
-    def automatic_started(self, message: str) -> None:
-        self._automatic_busy = True
-        self.run_pipeline_button.setEnabled(False)
-        self.find_geometry_button.setEnabled(False)
-        self.banner_find_button.setEnabled(False)
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.show()
-        self.stop_pipeline_button.setVisible(self._stop_pipeline is not None)
-        self.stop_pipeline_button.setEnabled(True)
-        self.stop_pipeline_button.setText(tr("Stop"))
-        self.show_right("results")  # the progress of the run is at the top of the Results tab
-        self.set_step_state("results", "busy", "Running…")
-        self._status(message)
-
-    def automatic_progress(self, text: str) -> None:
-        self._status(text)
-
-    def automatic_stopping(self) -> None:
-        """Stop was asked for (here or on the progress panel): the run ends after the step in progress."""
-        self.stop_pipeline_button.setEnabled(False)
-        self.stop_pipeline_button.setText(tr("Stopping…"))
-        self._status(tr("Stopping after the current step …"))
-
-    def _stop_clicked(self) -> None:
-        if self._stop_pipeline is not None:
-            self._stop_pipeline()
-
-    def automatic_finished(self, state: str, detail: str, *, show_results: bool = True) -> None:
-        """``state``: ``ok`` or ``warn`` (questions only a person can answer)."""
-        self._automatic_busy = False
-        for button in (self.run_pipeline_button, self.find_geometry_button, self.banner_find_button):
-            button.setEnabled(True)
-        self.stop_pipeline_button.hide()
-        self.progress_bar.setVisible(self.tasks.is_busy())
-        self.set_step_state("results", state, detail)
-        self._intro("results", detail)
-        if show_results:
-            self.show_right("results")
-        if state != "ok":
-            self.show_step("results")
-        self._status(detail, "ok" if state == "ok" else "warning")
-
-    def automatic_failed(self, message: str) -> None:
-        self._automatic_busy = False
-        for button in (self.run_pipeline_button, self.find_geometry_button, self.banner_find_button):
-            button.setEnabled(True)
-        self.stop_pipeline_button.hide()
-        self.progress_bar.setVisible(self.tasks.is_busy())
-        self.set_step_state("results", "error", message)
-        self._status(f"The automatic analysis stopped: {message}", "error")
-
     def _find_geometry_clicked(self) -> None:
         if self._find_geometry is not None:
             self.show_step("geometry")
@@ -524,4 +564,4 @@ class WorkspaceMixin:
             self._run_pipeline()
 
 
-__all__ = ["MASK_COLOR", "WorkspaceMixin"]
+__all__ = ["EvenSplit", "IMAGE_KEEPS", "MASK_COLOR", "WorkspaceMixin", "fit_stack_to_page"]

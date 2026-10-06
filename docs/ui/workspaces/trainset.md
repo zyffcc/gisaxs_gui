@@ -24,6 +24,15 @@ Configure section 内分为 `Geometry + ROI`、`Particle population` 和
 当前步骤相关的全局动作；Load/Save 始终可用，Validate design 和 Prepare job package
 分别只在需要的步骤出现。字段、默认值和命令实例未复制。
 
+Reset 恢复内置默认值之前先记下当前设置，toast 提供 Undo；Undo 也恢复步骤状态和徽标（只在
+它们仍与恢复的设置一致时）。Trainset 的状态信息显示在主窗口状态栏。窗口较窄时（约 1395 px 以下）
+Monitor 步骤上下排列，Local Preview 的影响视图在约 1520 px 以下改用标签页。色标的数值列宽按字体
+测量，长的上下限不再被截断。
+
+Local Run 的每个路径是一行：标签 | 输入框 | Browse…（从上次选的文件夹开始）；数值框最宽约 240 px。可以把参考散射图
+拖到设计预览上载入。步骤列表换成与其他工作区相同的步骤栏（StepRail，每步显示状态与一句说明）。阈值摘要、ROI 角度范围
+等运行时文字有中文，切换语言时重写；作为配置值的下拉项（形状、分布名等）不翻译，中文界面下写入配置的仍是原值。
+
 `TrainsetViewBinding` 只负责页面 signal、控件值映射、文件对话框和结果渲染；配置、preview、
 simulation、job package、local/Slurm workflow 和模型注册均经 `TrainsetViewModel` 调用
 application use cases/ports。旧 `TrainsetController` 名称只 re-export 同一个 binding，不存在

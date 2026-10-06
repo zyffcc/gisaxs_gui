@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 from typing import Callable, Optional
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -37,6 +37,8 @@ from ..application import (
     PERMISSION_PREVIEW,
     AnalysisGoals,
 )
+from src.gimap.app.presentation.i18n import tr
+
 from . import preferences
 
 GOAL_LABELS = {
@@ -82,35 +84,36 @@ class AssistantStartDialog(QDialog):
     ):
         super().__init__(parent)
         self.setObjectName("assistantStartDialog")
-        self.setWindowTitle("Process with AI")
+        self.setWindowTitle(tr("Process with AI"))
         self.settings = settings
         self._ready = False
         self._configure = configure
         self._has_frame = status.get("file") is not None
         layout = QVBoxLayout(self)
-        frame = status.get("file") or "no frame"
+        frame = status.get("file") or tr("no frame")
         if status.get("file") and status.get("geometry") is None:
-            kind = "NO GEOMETRY YET"
+            kind = tr("NO GEOMETRY YET")
         else:
-            kind = (status.get("measurement") or "not analysed").upper()
-        layout.addWidget(QLabel(f"<b>{html.escape(frame)}</b> · {kind}", self))
-        explanation = (
+            measurement = status.get("measurement")
+            kind = str(measurement).upper() if measurement else tr("NOT ANALYSED")
+        layout.addWidget(QLabel(f"<b>{html.escape(frame)}</b> · {html.escape(kind)}", self))
+        explanation = [tr(
             "The AI operates the Analyze tools on this frame while you watch each step, then "
             "reports every result you tick below. What cannot be determined is reported with the "
             "reason (e.g. no signal above the noise)."
-        )
+        )]
         if status.get("file") and status.get("geometry") is None:
-            explanation += (
-                " This frame has no geometry yet: the AI looks for calibration files (standard "
+            explanation.append(tr(
+                "This frame has no geometry yet: the AI looks for calibration files (standard "
                 "images, .poni) and logs around it, fits or reads the geometry, and asks you when "
                 "it cannot tell which calibration is right."
-            )
+            ))
         gisaxs = status.get("measurement") == "gisaxs" or status.get("mode") == "gisaxs"
         if gisaxs:
-            explanation += " GISAXS: the horizontal cut at the Yoneda band, its halves, the spacing and a fit."
-        layout.addWidget(_muted(explanation, self))
+            explanation.append(tr("GISAXS: the horizontal cut at the Yoneda band, its halves, the spacing and a fit."))
+        layout.addWidget(_muted(" ".join(explanation), self))
 
-        goals_box = QGroupBox("Results", self)
+        goals_box = QGroupBox(tr("Results"), self)
         goals_layout = QVBoxLayout(goals_box)
         offered = GISAXS_GOALS if gisaxs else GIWAXS_GOALS
         chosen = set(preferences.read(settings, "goals") or GOALS) & set(offered) or set(offered)
@@ -121,19 +124,19 @@ class AssistantStartDialog(QDialog):
         self.ring_spin.setDecimals(3)
         self.ring_spin.setSingleStep(0.01)
         self.ring_spin.setSuffix(" Å⁻¹")
-        self.ring_spin.setSpecialValueText("choose automatically")
+        self.ring_spin.setSpecialValueText(tr("choose automatically"))
         self.ring_spin.setValue(float(preferences.read(settings, "ring_q") or 0.0))
         for key in offered:
-            check = QCheckBox(GOAL_LABELS[key], goals_box)
+            check = QCheckBox(tr(GOAL_LABELS[key]), goals_box)
             check.setObjectName(f"assistantGoal_{key}")
-            check.setToolTip(GOALS[key])
+            check.setToolTip(tr(GOALS[key]))
             check.setChecked(key in chosen)
             goals_layout.addWidget(check)
             self.goal_checks[key] = check
             if key == GOAL_RING:
                 ring_row = QHBoxLayout()
                 ring_row.addSpacing(24)
-                ring_row.addWidget(QLabel("Ring at q =", goals_box))
+                ring_row.addWidget(QLabel(tr("Ring at q ="), goals_box))
                 ring_row.addWidget(self.ring_spin)
                 ring_row.addStretch(1)
                 goals_layout.addLayout(ring_row)
@@ -144,13 +147,13 @@ class AssistantStartDialog(QDialog):
             self.ring_spin.hide()
         layout.addWidget(goals_box)
 
-        layout.addWidget(QLabel("Sample and instructions (optional)", self))
+        layout.addWidget(QLabel(tr("Sample and instructions (optional)"), self))
         self.notes_edit = QPlainTextEdit(self)
         self.notes_edit.setObjectName("assistantNotesEdit")
-        self.notes_edit.setPlaceholderText(
+        self.notes_edit.setPlaceholderText(tr(
             "e.g. P3HT film on Si, annealed at 150 °C; judge edge-on versus face-on from the "
             "(100) and (010) peaks"
-        )
+        ))
         self.notes_edit.setFixedHeight(72)
         layout.addWidget(self.notes_edit)
 
@@ -158,32 +161,33 @@ class AssistantStartDialog(QDialog):
         self.brain_combo = QComboBox(self)
         self.brain_combo.setObjectName("assistantBrainCombo")
         for key, title in BRAINS:
-            self.brain_combo.addItem(title, key)
+            self.brain_combo.addItem(tr(title), key)
         self.brain_combo.setCurrentIndex(max(0, self.brain_combo.findData(preferences.read(settings, "backend"))))
         self.brain_combo.currentIndexChanged.connect(self._brain_chosen)
-        options.addRow("Brain", self.brain_combo)
+        options.addRow(tr("Brain"), self.brain_combo)
         permission_row = QVBoxLayout()
-        self.preview_radio = QRadioButton(
-            "Preview first — the AI's changes come back as cards: look at the picture, then apply or dismiss", self
-        )
+        self.preview_radio = QRadioButton(tr(
+            "Preview first — the AI's changes come back as cards: look at the picture, then apply or dismiss"
+        ), self)
         self.preview_radio.setObjectName("assistantPermissionPreview")
-        self.confirm_radio = QRadioButton("Ask me before writing files or changing corrections", self)
-        self.auto_radio = QRadioButton("Fully automatic (everything is logged and can be undone)", self)
+        self.confirm_radio = QRadioButton(tr("Ask me before writing files or changing corrections"), self)
+        self.auto_radio = QRadioButton(tr("Fully automatic (everything is logged and can be undone)"), self)
         group = QButtonGroup(self)
         radios = {PERMISSION_PREVIEW: self.preview_radio, PERMISSION_CONFIRM: self.confirm_radio, PERMISSION_AUTO: self.auto_radio}
         for radio in radios.values():
             group.addButton(radio)
             permission_row.addWidget(radio)
         radios.get(preferences.read(settings, "permission"), self.preview_radio).setChecked(True)
-        options.addRow("Permissions", permission_row)
-        self.images_check = QCheckBox("Let the AI see a small image of the q map (qualitative only; Claude brains)", self)
+        options.addRow(tr("Permissions"), permission_row)
+        self.images_check = QCheckBox(tr("Let the AI see a small image of the q map (qualitative only; Claude brains)"), self)
         self.images_check.setChecked(bool(preferences.read(settings, "allow_images")))
-        options.addRow("Images", self.images_check)
+        options.addRow(tr("Images"), self.images_check)
         self.language_combo = QComboBox(self)
-        self.language_combo.addItems(LANGUAGES)
-        index = self.language_combo.findText(str(preferences.read(settings, "language")))
-        self.language_combo.setCurrentIndex(max(0, index))
-        options.addRow("Report language", self.language_combo)
+        self.language_combo.setObjectName("assistantReportLanguage")
+        for name in LANGUAGES:  # the names stay as they are (never translated): the report language is read from them
+            self.language_combo.addItem(name, name)
+        self.language_combo.setCurrentIndex(max(0, self.language_combo.findData(preferences.report_language(settings))))
+        options.addRow(tr("Report language"), self.language_combo)
         layout.addLayout(options)
 
         self.credentials_label = _muted("", self)
@@ -191,8 +195,9 @@ class AssistantStartDialog(QDialog):
         layout.addWidget(self.credentials_label)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
         self.start_button = self.buttons.button(QDialogButtonBox.Ok)
-        self.start_button.setText("Start")
-        self.setup_button = self.buttons.addButton("Set Up AI…", QDialogButtonBox.ResetRole)
+        self.start_button.setText(tr("Start"))
+        self.buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        self.setup_button = self.buttons.addButton(tr("Set Up AI…"), QDialogButtonBox.ResetRole)
         self.setup_button.setObjectName("assistantSetupButton")
         self.setup_button.setVisible(configure is not None)
         self.setup_button.clicked.connect(self._set_up)
@@ -201,7 +206,7 @@ class AssistantStartDialog(QDialog):
         layout.addWidget(self.buttons)
         for check in self.goal_checks.values():
             check.toggled.connect(self._sync_start)
-        self.set_status(False, "Checking…")
+        self.set_status(False, tr("Checking…"))
 
     # Wrapped labels need more height when the dialog is narrow; Qt does not
     # grow a window for that by itself and squeezes the other rows instead.
@@ -224,19 +229,21 @@ class AssistantStartDialog(QDialog):
     def set_status(self, ready: bool, text: str) -> None:
         """Whether the chosen brain can start, and what to tell the person about it."""
         self._ready = bool(ready)
-        self.credentials_label.setText(f"{text} {PRIVACY_NOTE}".strip())
+        self.credentials_label.setText(f"{text} {tr(PRIVACY_NOTE)}".strip())
         self._sync_start()
+        if self.isVisible():  # a longer answer (e.g. where to find Claude Code) needs more height, not squeezed rows
+            QTimer.singleShot(0, self._fit_height)
 
     def _brain_chosen(self, _index: int) -> None:
         preferences.write(self.settings, "backend", self.backend())
-        self.set_status(False, "Checking…")
+        self.set_status(False, tr("Checking…"))
         self.backendChanged.emit(self.backend())
 
     def _sync_start(self, *_args) -> None:
         chosen = any(check.isChecked() for check in self.goal_checks.values())
         self.start_button.setEnabled(self._ready and self._has_frame and chosen)
         if not self._has_frame:
-            self.start_button.setToolTip("Open and analyse a frame in Analyze first.")
+            self.start_button.setToolTip(tr("Open and analyse a frame in Analyze first."))
 
     def _set_up(self) -> None:
         if self._configure is not None:
@@ -254,7 +261,7 @@ class AssistantStartDialog(QDialog):
                 else PERMISSION_PREVIEW if self.preview_radio.isChecked() else PERMISSION_CONFIRM
             ),
             allow_images=self.images_check.isChecked(),
-            language=self.language_combo.currentText(),
+            language=str(self.language_combo.currentData() or self.language_combo.currentText()),
         )
 
     def _accept(self) -> None:

@@ -166,10 +166,158 @@ def test_the_results_panel_shows_the_fit_and_saves_it(galaxi_run, tmp_path: Path
     assert len(row["native_q"]) == len(row["observed"]) == len(row["sigma"]) > 500
     section.fit_details.set_expanded(False)
     GuidedResultsPanel.details_open = False
+    # The model choice is advice to look at (no field to fill in): a point to check, never a "question".
     state, line = automatic_outcome(report)
-    assert state == "ok" and "halves: mean" in line and "question" in line
+    assert state == "ok" and line.startswith("GISAXS — halves: mean of both halves, D ≈ ")
+    assert line.endswith("; 1 point(s) to check.") and "question" not in line and "both_abs" not in line
+    texts = [item.text() for item in panel.findChildren(QLabel)]
+    assert texts[0].startswith("GISAXS — halves: mean of both halves") and not any("question" in text for text in texts)
+    assert "1 point(s) to check — see below" in texts and any(text.startswith("Model choice: ") for text in texts)
+    assert any(text.startswith("Halves: Mean of both halves — ") for text in texts)
     panel.gisaxs.dispose()
     panel.deleteLater()
+
+
+def _guided(session):
+    from src.gimap.features.assistant.presentation import GuidedAnalysis
+
+    written = []
+
+    def save_text(path, text):
+        written.append(path)
+        Path(path).write_text(text, encoding="utf-8")
+        return str(path)
+
+    guided = GuidedAnalysis(session.page.automation, save_text=save_text)
+    return guided, written
+
+
+def test_results_follow_the_frame_shown_in_analyze(galaxi_run) -> None:
+    import threading
+
+    from src.gimap.features.assistant.presentation import GuidedResultsPanel
+
+    _app()
+    session, report = galaxi_run
+    GuidedResultsPanel.details_open = False
+    guided, _written = _guided(session)
+    frame_a = report["frame"]
+    frame_b = str(Path(frame_a).with_name("another_frame.tif"))
+    sent = []
+    guided.refineRequested.connect(lambda: sent.append("refine"))
+
+    def buttons():
+        results = guided.results
+        return (results.findChild(QPushButton, "guidedRefineFit"), results.findChild(QPushButton, "guidedSaveReport"),
+                results.gisaxs.solution_details.show_button)
+
+    guided.frame_shown(frame_a)
+    guided._finished(report)
+    assert not guided.results.isHidden() and all(button.isEnabled() for button in buttons())
+    guided.frame_shown(frame_a)  # the run's own re-reduction of the same file: nothing changes
+    assert guided.report is report and all(button.isEnabled() for button in buttons())
+    # Another file: the results of the first are put away, and nothing can send them on with the new frame.
+    guided.frame_shown(frame_b)
+    assert guided.results.isHidden() and guided.questions.isHidden() and guided.report is None
+    assert not any(button.isEnabled() for button in buttons())
+    assert guided.status_label.text() == "Results are for galaxi_data.tif; run again for this frame"
+    assert guided.save_report() is None
+    guided.results.refineRequested.emit()
+    assert sent == []
+    # A run on the second file; going back and forth brings each file's own results back.
+    report_b = dict(report, frame=frame_b)
+    guided._finished(report_b)
+    guided.frame_shown(frame_a)
+    assert guided.report is report and not guided.results.isHidden() and all(button.isEnabled() for button in buttons())
+    assert guided.results.report is report and guided.status_label.text().startswith("Done — see the Results tab.")
+    guided.frame_shown(frame_b)
+    assert guided.report is report_b and guided.results.report is report_b
+    guided.frame_shown(frame_a)
+    # While a run lasts nothing changes; the file shown meanwhile is looked at when it ends.
+    release = threading.Event()
+    guided._thread = threading.Thread(target=release.wait, daemon=True)
+    guided._thread.start()
+    guided.frame_shown(frame_b)
+    assert guided.report is report and all(button.isEnabled() for button in buttons())
+    release.set()
+    guided._thread.join()
+    guided._done()
+    guided._after_run()
+    assert guided.report is report_b
+    guided.results.gisaxs.dispose()
+    guided.results.deleteLater()
+
+
+def test_saves_are_proposed_next_to_the_data_and_say_where_they_went(galaxi_run, tmp_path: Path, monkeypatch) -> None:
+    from PyQt5.QtWidgets import QFileDialog
+
+    from src.gimap.app.presentation.components import visible_toasts
+    from src.gimap.features.assistant.presentation import guided_text
+
+    _app()
+    session, report = galaxi_run
+    monkeypatch.setattr(guided_text, "_SAVE_FOLDERS", {})
+    proposed, answers = [], []
+
+    def save_dialog(_parent, _title, start, _filters):
+        proposed.append(start)
+        return answers.pop(0), "CSV (*.csv)"
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(save_dialog))
+    guided, written = _guided(session)
+    guided._finished(report)
+    section = guided.results.gisaxs
+    frame = Path(report["frame"])
+    answers.append(str(tmp_path / "curve.csv"))
+    assert section.save_curve() == str(tmp_path / "curve.csv")
+    # Next to the data: its gimap_analysis folder when it exists (Analyze's exports), else the data folder.
+    assert Path(proposed[-1]).parent in (frame.parent, frame.parent / "gimap_analysis")
+    assert Path(proposed[-1]).name == "galaxi_data_gisaxs_fit_curve.csv"
+    toast = visible_toasts(section.window())[-1]
+    assert toast.property("level") == "ok" and toast.action_button.text() == "Open Folder"
+    # The next save starts where the last one went (this session).
+    answers.append(str(tmp_path / "table.csv"))
+    section.save_table()
+    assert Path(proposed[-1]) == tmp_path / "galaxi_data_gisaxs_fit_solutions.csv"
+    answers.append(str(tmp_path / "fit.png"))
+    assert section.save_plot() == str(tmp_path / "fit.png") and (tmp_path / "fit.png").stat().st_size > 5000
+    assert Path(proposed[-1]).name == "galaxi_data_gisaxs_fit.png"
+    # A file that cannot be written: an error toast, no exception (no error dialog).
+    blocked = tmp_path / "blocked.csv"
+    blocked.mkdir()
+    answers.append(str(blocked))
+    assert section.save_table() is None
+    assert visible_toasts(section.window())[-1].property("level") == "error"
+    answers.append(str(tmp_path / "galaxi_data_report.html"))
+    assert guided.save_report() == str(tmp_path / "galaxi_data_report.html") and written
+    assert Path(proposed[-1]).name == "galaxi_data_report.html"
+    assert visible_toasts(guided.controls.window())[-1].action_button.text() == "Open Folder"
+
+    def refuse(_path, _text):
+        raise PermissionError(13, "Permission denied")
+
+    guided._save_text = refuse
+    answers.append(str(tmp_path / "again.html"))
+    assert guided.save_report() is None
+    toast = visible_toasts(guided.controls.window())[-1]
+    assert toast.property("level") == "error" and "Permission denied" in toast.text()
+    section.dispose()
+    guided.results.deleteLater()
+
+
+def test_the_saved_gisaxs_report_has_its_title_and_pictures(galaxi_run) -> None:
+    import re
+
+    from src.gimap.features.assistant.presentation.guided_report import report_page
+
+    _app()
+    session, report = galaxi_run
+    page = report_page(report, None, session.page.automation)
+    assert "<h1>GISAXS report</h1>" in page and "GIWAXS" not in page.split("<h1>")[1].split("</p>")[0]
+    assert "Automatic analysis, no AI" in page and page.count("data:image/png;base64,") >= 2
+    captions = re.findall(r"<figcaption>(.*?)</figcaption>", page)
+    assert len(captions) == 2 and not any("ring" in caption.lower() for caption in captions), captions
+    assert "best fit" in captions[1]
 
 
 def test_the_results_built_in_chinese_are_in_chinese(galaxi_run) -> None:

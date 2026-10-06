@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QFileDialog, QListWidgetItem
+from PyQt5.QtWidgets import QApplication, QDialog, QFileDialog, QListWidgetItem
 
 from src.gimap.app.presentation.i18n import tr
 
@@ -28,7 +28,7 @@ from ..application import (
     SeriesCorrection,
     output_names,
 )
-from .views.batch_export_view import OUTPUTS, BatchExportView
+from .views.batch_export_view import CURVE_LIST_HEIGHT, OUTPUTS, SCREEN_SHARE, BatchExportView
 
 LoadSettings = Callable[[], Optional[tuple[str, list, Optional[BatchChoices]]]]
 TryFit = Callable[[BatchChoices, Callable[[str, str], None]], None]
@@ -61,6 +61,7 @@ class BatchExportDialog(QDialog, BatchExportView):
     ):
         super().__init__(parent)
         self.setup_batch_export()
+        self._sized = False
         self._stem = stem
         self._frame_stem = frame_stem or "frame"
         self._frames = int(frames)
@@ -206,6 +207,49 @@ class BatchExportDialog(QDialog, BatchExportView):
             item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if not wanted or key in wanted else Qt.Unchecked)
         self.curve_list.blockSignals(False)
+        self._fit_curve_list()
+
+    def _fit_curve_list(self) -> None:
+        """As tall as its rows (one row's height when empty), at most ``CURVE_LIST_HEIGHT``: two curves do not
+        take the room of eight, and push the other groups below the fold."""
+        listing = self.curve_list
+        rows = sum(max(0, listing.sizeHintForRow(row)) for row in range(listing.count()))
+        rows = rows or listing.fontMetrics().height() + 8
+        listing.setFixedHeight(min(CURVE_LIST_HEIGHT, rows + 2 * listing.frameWidth() + 2))
+
+    # -- the first size ----------------------------------------------------------------
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().showEvent(event)
+        if not self._sized:  # once: a size the person gives it afterwards stays
+            self._sized = True
+            self._fit_curve_list()  # the rows' height with the style sheet applied
+            self.fit_to_screen()
+
+    def fit_to_screen(self, room: Optional[int] = None) -> int:
+        """Open as tall as the options need — Pictures, Converted detector frames and Fitting in view, not under a
+        scroll bar — at most ``SCREEN_SHARE`` of the screen's free height (``room``, px: that height); the width
+        stays. Returns the height given."""
+        screen = self.screen() or QApplication.primaryScreen()
+        if room is None:
+            room = int(SCREEN_SHARE * screen.availableGeometry().height()) if screen is not None else self.height()
+        self.setMinimumHeight(min(self.minimumHeight(), int(room)))  # a small screen: the dialog still fits on it
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        scroll, body = self.options_scroll, self.options_scroll.widget()
+        width = max(1, scroll.viewport().width())
+        needed = body.heightForWidth(width) if body.hasHeightForWidth() else -1
+        needed = needed if needed > 0 else body.sizeHint().height()
+        before = self.height()
+        height = max(self.minimumHeight(), min(int(room), before - scroll.viewport().height() + needed))
+        self.resize(self.width(), height)
+        if self.isVisible() and screen is not None and height != before:  # still centred where it opened, on screen
+            free, frame = screen.availableGeometry(), self.frameGeometry()
+            top = frame.top() - (height - before) // 2
+            top = max(free.top(), min(top, free.bottom() + 1 - frame.height()))
+            self.move(frame.left(), top)
+        return height
 
     def set_curve_options(self, options: Sequence[tuple[str, str]]) -> None:
         """New curves (after loading settings); the ticks of the curves that stay are kept."""
@@ -289,6 +333,7 @@ class BatchExportDialog(QDialog, BatchExportView):
         self.image_scale_label.setText(
             tr("On screen: {scale}").format(scale=self._screen_scale)
             if self.image_scale_combo.currentData() == "screen" and self._screen_scale else "")
+        self.image_scale_label.setVisible(bool(self.image_scale_label.text()))  # no empty line in Pictures
         count = self.frame_count()
         self.every_label.setText(tr("frame(s): {count} of {total}").format(count=count, total=self._frames))
         if self._for_fitting:

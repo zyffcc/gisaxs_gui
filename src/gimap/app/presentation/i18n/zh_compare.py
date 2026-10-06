@@ -155,6 +155,71 @@ COMPARE_ZH = {
     "shape": "形状",
     "{rows} frames × {points} points. Click or drag the horizontal band to pick a frame, drag the vertical band (and its edges) to pick a q window; Open shows the frame in Analyze.":
         "{rows} 帧 × {points} 个点。点击或拖动水平带选择一帧，拖动竖直带（及其边缘）选择 q 窗口；“打开”在分析页显示这一帧。",
+    # -- 2026-10-05 polish ------------------------------------------------------------------------
+    "No clear groups: the end states are all alike.": "没有明显的分组：各序列的终态都相似。",
+    "Group {n}: {names}": "第 {n} 组：{names}",
+    "{a} and {b}: end states {end:.0f} % apart ({start:.0f} % at the start).":
+        "{a} 和 {b}：终态相差 {end:.0f} %（开始时相差 {start:.0f} %）。",
+    "At the start, every two series are {value:.0f} % apart.": "开始时，任意两个序列都相差 {value:.0f} %。",
+    "The end states of every two series are {value:.0f} % apart.": "任意两个序列的终态都相差 {value:.0f} %。",
+    "At the start, {name} differs most ({value:.0f} %).": "开始时 {name} 差别最大（{value:.0f} %）。",
+    "{name} differs most from the others (end states {value:.0f} % apart).": "{name} 与其他序列差别最大（终态相差 {value:.0f} %）。",
+    "could not write {path}": "无法写入 {path}",
+    "All alike": "全都相似",
+    "Select a series to remove": "请先选中要移除的序列",
+    "{n} series compared: all alike.": "已比较 {n} 个序列：全都相似。",
+    "The range of {label} compared; leave out a noisy edge or a detector artefact": "比较的 {label} 范围；可去掉噪声大的边缘或探测器伪影",
+    "How different (percent of intensity, shape and level):": "差别有多大（强度的百分比，形状和整体强度）：",
+    "{n} series compared: {k} groups.": "已比较 {n} 个序列：分成 {k} 组。",
+    "{axis} range": "{axis} 范围",
+    "{n} groups": "{n} 组",
+    "{name} is already in Compare.": "{name} 已经在比较中。",
+    "Nothing to compare yet": "还没有可比较的内容",
+    "Add the Series map of a sample from Analyze (Series ▸ Send to Compare), a folder of curve files or chosen curve files. Two or more series are compared with each other; one alone is described.":
+        "从分析页添加一个样品的序列热图（序列 ▸ 发送到比较），或一个曲线文件夹、若干选中的曲线文件。两个或更多序列相互比较；只有一个时给出它的描述。",
+    "differs from the frames before and after it ({times}× their step), most near {axis} {q}":
+        "与前后的帧都不同（是它们帧间变化的 {times} 倍），在 {axis} {q} 附近最明显",
+    "differs only near {axis} {q}: probably the detector, not the sample": "只在 {axis} {q} 附近不同：多半是探测器，不是样品",
+    "grows most at {axis} {list}": "增长最多的 {axis}：{list}",
+    "falls most at {axis} {list}": "减少最多的 {axis}：{list}",
+    # -- review round (2026-10-06) -------------------------------------------------------------------
+    "Curves on the q range every series covers (the first series' points, the others interpolated); log10 I compared in shape (each frame's mean removed) unless the level is included; odd frames per series (a frame matching neither the frames before nor after it) left out; main components of all kept frames; end state: mean shape of the last frames; difference of two end states: RMS of their log I difference, as a percentage; groups (3+ series): Ward clustering of the end states, split where a merge distance jumps (≥ 2×).":
+        "在所有序列都覆盖的 q 范围上比较曲线（取第一个序列的数据点，其他序列插值到这些点上）；比较 log10 I 的形状（去掉每帧的平均值），除非选择同时比较整体强度；排除每个序列中的异常帧（与前后的帧都不一致的帧）；对所有保留的帧求主成分；终态：最后几帧的平均形状；两个终态的差别：它们 log I 之差的均方根，以百分比表示；分组（3 个及以上序列）：对终态做 Ward 聚类，在合并距离跳变（≥ 2×）处分组。",
+    "Could not compare these series": "无法比较这些序列",
+    "Remove the series that does not fit (Series step) or widen the range (Whole Range, Compare step): the series are compared again by themselves.":
+        "移除不匹配的序列（序列步骤），或放宽范围（比较步骤中的“全部范围”）：之后会自动重新比较。",
+    "The comparison appears here when it is ready.": "比较完成后，结果会显示在这里。",
+    "Could not compare": "无法比较",
+    "The series changed: save when they are compared again.": "序列已改变：请在重新比较完成后再保存。",
+    "{name} is already a series: this one is {unique}.": "已有名为 {name} 的序列：这个序列改名为 {unique}。",
+    # -- cross-area fixes (2026-10-06) -------------------------------------------------------------
+    "At least 5 frames are needed to find stages.": "至少需要 5 帧才能寻找阶段。",
+    "At least 5 frames besides the odd ones are needed to find stages.": "除异常帧外，至少需要 5 帧才能寻找阶段。",
+    "The series share no common q range.": "这些序列没有共同的 q 范围。",
+    # -- second wave (2026-10-06) ------------------------------------------------------------------
+    "A second main change is needed to draw the paths.": "需要第二个主要变化才能画出路径。",
+    "How far each series has changed, frame by frame, along the chosen main change; × marks an odd frame (left out of the comparison) in the colour of its series":
+        "每个序列沿所选主要变化逐帧变化了多少；× 标出异常帧（不参与比较），颜色与其序列相同",
+    "Each series through the first two main changes: ○ its first kept frame, ■ its last; odd frames are left out":
+        "每个序列在前两个主要变化上的路径：○ 为第一个保留的帧，■ 为最后一个；异常帧不计入",
+    "Removed {n} series.": "已移除 {n} 个序列。",
+    "{n} series put back.": "已恢复 {n} 个序列。",
+    "Not added: {names}. Compare takes a folder or curve files ({suffixes}).":
+        "未添加：{names}。比较页只接受文件夹或曲线文件（{suffixes}）。",
+    "A series needs at least two curve files.": "一个序列至少需要两个曲线文件。",
+    "Fewer than two curves could be read: {files}": "能读取的曲线不足两条：{files}",
+    "The files have different x axes: {axes}": "这些文件的横轴不同：{axes}",
+    "Fewer than two curve files ({suffixes}) in {folder}.": "{folder} 中的曲线文件（{suffixes}）不足两个。",
+    "Add a series first.": "请先添加一个序列。",
+    "{name} has no data.": "{name} 没有数据。",
+    "The series have different x axes: {axes}": "这些序列的横轴不同：{axes}",
+    "fewer than three points of two numbers": "两列数值的点不足三个",
+    "Fewer than three q points have data in nearly every frame: widen the q range.": "几乎每帧都有数据的 q 点不足三个：请放宽 q 范围。",
+    "At least two frames are needed.": "至少需要两帧。",
+    "Add the Series map of a sample from Analyze (Series ▸ Send to Compare), a folder of curve files or chosen curve files (or drop them here). Two or more series are compared with each other; one alone is described.":
+        "从分析页添加一个样品的序列热图（序列 ▸ 发送到比较），或一个曲线文件夹、若干选中的曲线文件（也可以直接拖放到这里）。两个或更多序列相互比较；只有一个时给出它的描述。",
+    "In Analyze, open a sample and build its map in the Series tab, then Send to Compare; repeat for every sample. Curve files (q and I columns, e.g. a Batch Export) can be added as a folder too, or dropped on this page.":
+        "在分析页打开一个样品，在序列标签页生成热图，再点“发送到比较”；每个样品重复一次。曲线文件（q、I 两列，例如批量导出的结果）也可以按文件夹添加，或直接拖放到本页。",
 }
 
 __all__ = ["COMPARE_ZH"]

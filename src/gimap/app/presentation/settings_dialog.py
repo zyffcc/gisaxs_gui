@@ -8,12 +8,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
-from PyQt5.QtCore import QUrl
+from PyQt5.QtCore import QSize, QUrl
 from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWidgets import QDialog, QMessageBox, QWidget
+from PyQt5.QtWidgets import QDialog, QMessageBox, QScrollArea, QWidget
 
 from src.gimap.app.ports import SettingsRepository, UserPreferencesRepository
 
+from .i18n import tr
+from .layout_metrics import fit_to_screen
 from .theme import FONT_PT_RANGE
 from .theme.appearance import Appearance
 from .views import SettingsDialogView
@@ -24,11 +26,15 @@ FIT_SIDE_KEY = "fit_side"
 """Analyze options live in the ``analyze`` settings section, next to the
 choices the Analyze page remembers itself."""
 FIT_SIDES = (
-    ("both_abs", "Both halves as |qy| (two colours)"),
-    ("mean", "Symmetric average of both halves"),
-    ("negative", "qy < 0 only"),
-    ("positive", "qy > 0 only"),
+    ("both_abs", "Both halves on |qy| (two colours)"),
+    ("mean", "Mean of both halves"),
+    ("negative", "qy < 0 half"),
+    ("positive", "qy > 0 half"),
 )
+"""The same words as Analyze's halves choice (``FIT_SIDE_ITEMS`` of its Cuts step), copied: the
+application shell does not import a feature's views."""
+FIRST_SIZE = QSize(920, 700)
+"""The size the dialog opens at (wider when a page needs it), clamped to the screen."""
 
 
 class SettingsDialog(QDialog, SettingsDialogView):
@@ -52,7 +58,21 @@ class SettingsDialog(QDialog, SettingsDialogView):
             page, layout = self.add_category(title, description)
             layout.addWidget(create(page))
         self._load(migrated_from)
+        self.first_size = fit_to_screen(self, self._first_size())  # measured with the choices filled in
         self._connect()
+
+    def _first_size(self) -> QSize:
+        """``FIRST_SIZE``, wider when a page needs more room (the Assistant's): no sideways scrolling where the
+        screen has room for it (``fit_to_screen`` keeps the dialog on the screen)."""
+        self.resize(FIRST_SIZE)
+        self.layout().activate()
+        needed = 0
+        for index in range(self.pages.count()):
+            scroll = self.pages.widget(index)
+            content = scroll.widget() if isinstance(scroll, QScrollArea) else None
+            if content is not None:  # the content at its narrowest, beside a vertical scroll bar; a little slack
+                needed = max(needed, content.minimumSizeHint().width() + scroll.verticalScrollBar().sizeHint().width() + 8)
+        return QSize(FIRST_SIZE.width() + max(0, needed - self.pages.width()), FIRST_SIZE.height())
 
     def _load(self, migrated_from: Optional[dict]) -> None:
         dark = self.appearance.mode == "dark"
@@ -78,15 +98,21 @@ class SettingsDialog(QDialog, SettingsDialogView):
             self.fit_side_combo.setCurrentIndex(max(0, index))
         for widget in (self.header_center_check, self.fit_side_combo):
             widget.setEnabled(self.settings is not None)
-        self.data_folder_edit.setText(str(self.data_dir) if self.data_dir else "(not saved: in-memory session)")
+        if self.data_dir is not None:  # a long path shows its end (the folder); the whole of it on hover
+            self.data_folder_edit.setToolTip(str(self.data_dir))
         self.open_folder_button.setEnabled(self.data_dir is not None)
-        files = (migrated_from or {}).get("files") or []
-        self.migration_label.setText(
-            "Imported once from the previous version: " + ", ".join(Path(f).name for f in files)
-            if files else ""
-        )
-        self.migration_label.setVisible(bool(files))
+        self._migrated = [Path(f).name for f in (migrated_from or {}).get("files") or []]
+        self.migration_label.setVisible(bool(self._migrated))
+        self._compose_texts()
         self.reset_button.setEnabled(self.settings is not None)
+
+    def _compose_texts(self) -> None:
+        """The texts made here rather than taken from the table: again after the language is chosen here."""
+        self.data_folder_edit.setText(str(self.data_dir) if self.data_dir else tr("(not saved: in-memory session)"))
+        self.migration_label.setText(
+            tr("Imported once from the previous version: {files}").format(files=", ".join(self._migrated))
+            if self._migrated else ""
+        )
 
     def _connect(self) -> None:
         self.light_radio.toggled.connect(lambda on: on and self.appearance.set_theme("light"))
@@ -114,6 +140,7 @@ class SettingsDialog(QDialog, SettingsDialogView):
         from PyQt5.QtWidgets import QApplication
 
         self.appearance.set_language(self.language_combo.currentData(), QApplication.topLevelWidgets())
+        self._compose_texts()  # the menus cannot be reached while Settings is open: only here does it switch
 
     def _reset_font(self) -> None:
         self.appearance.reset_font()
@@ -129,10 +156,10 @@ class SettingsDialog(QDialog, SettingsDialogView):
     def _reset_all(self) -> None:
         answer = QMessageBox.question(
             self,
-            "Reset All Settings",
-            "Reset every setting and preference to its default?\n\n"
-            "Instrument profiles are kept. Restart GIMaP afterwards so every "
-            "workspace reloads the defaults.",
+            tr("Reset All Settings"),
+            tr("Reset every setting and preference to its default?\n\n"
+               "Instrument profiles are kept. Restart GIMaP afterwards so every "
+               "workspace reloads the defaults."),
             QMessageBox.Reset | QMessageBox.Cancel,
             QMessageBox.Cancel,
         )

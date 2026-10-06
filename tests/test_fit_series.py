@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from PyQt5.QtWidgets import QApplication
 
+from src.gimap.app.presentation.components.toast import visible_toasts
 from src.gimap.features.fitting.application.single_fit import FitModel, evaluate, new_component
 from tests.test_assistant_gui import _app
 
@@ -87,8 +88,8 @@ def test_a_series_is_fitted_frame_after_frame_from_the_previous_result(tmp_path)
     assert radii == pytest.approx(RADII, rel=0.05)  # the trend of the series
     assert series.step_rail.state("results") == "ok" and series.results_table.rowCount() == 5
     assert series.trend_combo.currentData() == (0, "R") and series.trend_plot.curve_count() == 2  # R and its ±1σ bars
-    assert series.results_table.horizontalHeaderItem(2).text() == "1·Sphere Scale"
-    assert series.results_table.horizontalHeaderItem(3).text() == "1·Sphere R (nm)"
+    assert series.results_table.horizontalHeaderItem(2).text() == "Scale"
+    assert series.results_table.horizontalHeaderItem(3).text() == "R (nm)"
     series.trend_plot.log_check.setChecked(not series.trend_plot.log_check.isChecked())
     assert series.trend_plot.curve_count() == 2  # the bars are drawn again after the axis changes
     assert series.frame_list.item(4).text().startswith("✓")
@@ -98,6 +99,109 @@ def test_a_series_is_fitted_frame_after_frame_from_the_previous_result(tmp_path)
     assert "1_Sphere_R_nm_error" in rows[0]
     record = json.loads((tmp_path / "series.json").read_text(encoding="utf-8"))
     assert record["frames"] == 5 and record["settings"]["start"] == "previous" and record["failed"] == []
+    saved = [toast for toast in visible_toasts(series.window()) if toast.text().startswith("Saved series.csv")]
+    assert saved and saved[0].action_button.text() == "Open Folder"
+    series.dispose()
+    single.dispose()
+
+
+def test_series_saves_report_errors_and_leave_no_table_without_its_record(tmp_path, monkeypatch) -> None:
+    from pathlib import Path
+
+    single, series = _pages()
+    folder = _series(tmp_path, RADII[:3])
+    single.open_curve(folder / "run_00001_fit_input.dat")
+    single.set_model(_model(5.2))
+    series.open_series(folder)
+    series.start()
+    _wait(series)
+    write_text = Path.write_text
+
+    def no_record(self, *args, **kwargs):
+        if ".json" in self.name:  # the record (also under its temporary name)
+            raise PermissionError(13, "Permission denied", str(self))
+        return write_text(self, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "write_text", no_record)
+        assert series.save_table(str(tmp_path / "table.csv")) is None  # no exception: no error dialog
+    assert series.status_label.text().startswith("Could not save:")
+    assert not (tmp_path / "table.csv").exists() and not (tmp_path / "table.json").exists()
+    assert not list(tmp_path.glob("table*"))  # nor a temporary one
+    assert series._save_plot(series.trend_plot, "trend", str(tmp_path / "missing" / "trend.png")) is None
+    assert series.status_label.text().startswith("Could not save:")
+    assert series._save_plot(series.frame_plot, "frame", str(tmp_path / "frame.png")) == str(tmp_path / "frame.png")
+    assert (tmp_path / "frame.png").stat().st_size > 1000 and series.status_label.text() == "Saved frame.png."
+    series.dispose()
+    single.dispose()
+
+
+def test_before_start_the_frames_and_the_trend_choices_are_shown(tmp_path) -> None:
+    from pathlib import Path
+
+    from src.gimap.features.fitting.application.single_fit import Curve, prepare_curve
+    from src.gimap.features.fitting.presentation.single import series_page
+    from src.gimap.features.fitting.presentation.single.series_stages import TREND_EMPTY
+
+    single, series = _pages()
+    folder = _series(tmp_path)
+    single.open_curve(folder / "run_00001_fit_input.dat")
+    single.set_model(_model(5.2))
+    single.set_range((0.5, 1.5))  # the preview fits what Single analysis would fit
+    assert series.open_series(folder)
+    assert series.frame_list.currentRow() == 0 and series.frame_plot.curve_count() >= 1
+    assert series.frame_plot.figure_state()["title"].startswith("1 · run_00001")
+    series.frame_list.setCurrentRow(3)
+    state = series.frame_plot.figure_state()
+    assert state["title"] == "4 · run_00004_fit_input.dat"
+    q, intensity, sigma = np.loadtxt(folder / "run_00004_fit_input.dat", unpack=True)
+    expected = prepare_curve(Curve.from_arrays(q, intensity, sigma, name="run_00004_fit_input.dat"), "mean", (0.5, 1.5))
+    name, x, y = state["curves"][0]
+    assert np.allclose(x, expected.q) and np.allclose(y, expected.intensity) and x.min() >= 0.5 and x.max() <= 1.5
+    assert series.trend_combo.count() > 1 and series.trend_combo.currentData() == (0, "R")
+    assert series.trend_plot.figure_state()["title"] == "" and series.trend_plot.curve_count() == 0
+    assert series.trend_plot.empty_overlay.label.text() == TREND_EMPTY  # said once, over the empty plot
+    end = time.monotonic() + 60
+    while series._series_stages is None and time.monotonic() < end:  # the stage search keeps the curves it read
+        series.stage_tasks.wait(0.1)
+        QApplication.processEvents()
+    assert len(series._preview_curves) == 5 and series.frame_list.currentRow() == 3  # still selected
+    assert len(Path(series_page.__file__).read_text(encoding="utf-8").splitlines()) <= 600
+    series.dispose()
+    single.dispose()
+
+
+def test_after_start_a_frame_not_fitted_yet_is_drawn_on_the_points_of_the_run(tmp_path) -> None:
+    single, series = _pages()
+    folder = _series(tmp_path)
+    single.open_curve(folder / "run_00001_fit_input.dat")
+    single.set_model(_model(5.2))
+    single.set_range((0.5, 1.5))
+    series.open_series(folder)
+    series.start()
+    series.stop()  # stopped early: the frames after the first are not fitted
+    _wait(series)
+    assert 3 not in series.fits and series._settings.q_range == (0.5, 1.5)
+    single.set_range((0.2, 1.9))  # Single analysis moves on
+    series.frame_list.setCurrentRow(3)
+    name, x, _y = series.frame_plot.figure_state()["curves"][0]
+    assert x.min() >= 0.5 and x.max() <= 1.5  # the points the run fits, not Single's new range
+    series.open_series(folder)  # listed again: before Start, the frames follow Single analysis
+    series.frame_list.setCurrentRow(3)
+    name, x, _y = series.frame_plot.figure_state()["curves"][0]
+    assert x.min() < 0.5 and x.max() > 1.5
+    series.dispose()
+    single.dispose()
+
+
+def test_the_curves_step_fits_its_panel_before_a_folder_is_chosen() -> None:
+    single, series = _pages()
+    assert series.every_spin.prefix() == "" and series.every_spin.maximum() == 1  # set once the curves are listed
+    series.splitter.setSizes([340, 1060])  # the narrowest steps panel
+    for _ in range(3):
+        QApplication.processEvents()
+    scroll = series.step_pages["curves"]
+    assert scroll.widget().minimumSizeHint().width() <= scroll.viewport().width()
     series.dispose()
     single.dispose()
 

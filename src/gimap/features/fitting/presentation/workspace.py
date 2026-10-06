@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.ports import UserPreferencesRepository
 from src.gimap.app.presentation import install_safe_wheel_behavior
 from src.gimap.app.presentation.components import AdvancedSection
+from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.layout_metrics import LAYOUT
 from src.gimap.app.presentation.layout_primitives import (
     CARD_SPACING,
@@ -205,7 +206,7 @@ class FittingWorkspace:
         self.plot_controls_section.add_widget(self.fitting_controls_plot_card)
         layout.addWidget(self.plot_controls_section)
 
-        self.log_section = AdvancedSection("Log", "", panel)
+        self.log_section = AdvancedSection("Run Log", "", panel)
         self.run_log_card = StatusCard(self.ui.FittingTextBrowser, self.profile)
         _embed_in_section(self.run_log_card)
         self.log_section.add_widget(self.run_log_card)
@@ -274,10 +275,22 @@ class FittingWorkspace:
         return self.series_page.open_series(folder, pattern)
 
     def _frame_in_single(self, path: str, model) -> None:
-        """A frame of the series, with its fitted model, in Single analysis."""
+        """A frame of the series, with its fitted model, in Single analysis — on the points the series
+        fitted (its halves, range and left-out points), so that the next Start reads the same settings."""
         self.show_context("single")
-        if self.fit_page.open_curve(path, self.fit_page.session.side) and model is not None:
-            self.fit_page.set_model(model)
+        settings = getattr(self.series_page, "_settings", None)
+        page = self.fit_page
+        if not page.open_curve(path, settings.side if settings is not None else page.session.side):
+            return
+        if settings is not None:
+            page.session.excluded = set(settings.excluded)
+            page.set_range(settings.q_range, record=False)  # with the curve: Undo then brings back the model
+        if model is not None:
+            page.set_model(model)
+            page._status(lambda: tr("The range and left-out points of the series are kept; the series now starts from "
+                                    "this frame's model (Undo brings the previous one back)."))
+        else:
+            page._status(lambda: tr("The range and left-out points of the series are kept."))  # again after a switch
 
     def show_solution(self, row: dict) -> bool:
         """A solution of Analyze's automatic analysis as the model of Single analysis."""

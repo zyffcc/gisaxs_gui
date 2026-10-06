@@ -18,6 +18,8 @@ from PyQt5.QtWidgets import (
 )
 
 from ..application import BILLING_SUBSCRIPTION, CLAUDE_CODE_MODELS, LlmError
+from src.gimap.app.presentation.i18n import tr
+
 from . import preferences
 from .services import AssistantServices
 
@@ -37,18 +39,21 @@ def describe_code_status(info: dict, model: str = "") -> tuple[bool, str]:
     version = str(info.get("version") or "").replace("(Claude Code)", "").strip()
     name = f"Claude Code {version}".strip()
     if not info.get("logged_in"):
-        return False, f"{name} is not signed in: use Sign In… in Settings ▸ Assistant with your Claude account."
-    shown_model = model or "Claude Code default"
+        return False, tr("{name} is not signed in: use Sign In… in Settings ▸ Assistant with your Claude account.").format(
+            name=name)
+    shown_model = model or tr("Claude Code default")
     if info.get("billing") == BILLING_SUBSCRIPTION:
         plan = f" ({info['subscription']})" if info.get("subscription") else ""
-        return True, f"{name} · signed in with your Claude plan{plan} · model {shown_model}."
-    method = info.get("auth_method") or "an API account"
-    return True, f"{name} · signed in with {method}: billed per token, not your Claude plan · model {shown_model}."
+        return True, tr("{name} · signed in with your Claude plan{plan} · model {model}.").format(
+            name=name, plan=plan, model=shown_model)
+    method = info.get("auth_method") or tr("an API account")
+    return True, tr("{name} · signed in with {method}: billed per token, not your Claude plan · model {model}.").format(
+        name=name, method=method, model=shown_model)
 
 
 class ClaudeCodeSection(QGroupBox):
     def __init__(self, settings, services: AssistantServices, tasks, parent: QWidget = None):
-        super().__init__("Claude Code — your Claude plan", parent)
+        super().__init__(tr("Claude Code — your Claude plan"), parent)
         self.setObjectName("assistantCodeSection")
         self.settings = settings
         self.services = services
@@ -59,30 +64,30 @@ class ClaudeCodeSection(QGroupBox):
         cli_row = QHBoxLayout()
         self.cli_edit = QLineEdit(str(preferences.read(settings, "code_cli")), self)
         self.cli_edit.setObjectName("assistantCodeCliEdit")
-        self.browse_button = QPushButton("Browse…", self)
+        self.browse_button = QPushButton(tr("Browse…"), self)
         cli_row.addWidget(self.cli_edit, 1)
         cli_row.addWidget(self.browse_button)
-        form.addRow("Program", cli_row)
+        form.addRow(tr("Program"), cli_row)
         self.code_model_combo = QComboBox(self)
         self.code_model_combo.setObjectName("assistantCodeModelCombo")
         self.code_model_combo.setEditable(True)
         self.code_model_combo.addItems(CLAUDE_CODE_MODELS)
-        self.code_model_combo.lineEdit().setPlaceholderText("Claude Code default")
+        self.code_model_combo.lineEdit().setPlaceholderText(tr("Claude Code default"))
         self.code_model_combo.setEditText(str(preferences.read(settings, "code_model")))
-        form.addRow("Model", self.code_model_combo)
+        form.addRow(tr("Model"), self.code_model_combo)
         account_row = QHBoxLayout()
-        self.account_label = QLabel("Not checked yet.", self)
+        self.account_label = QLabel(tr("Not checked yet."), self)
         self.account_label.setObjectName("assistantCodeAccount")
         self.account_label.setWordWrap(True)
-        self.check_button = QPushButton("Check", self)
+        self.check_button = QPushButton(tr("Check"), self)
         self.check_button.setObjectName("assistantCodeCheckButton")
-        self.login_button = QPushButton("Sign In…", self)
+        self.login_button = QPushButton(tr("Sign In…"), self)
         self.login_button.setObjectName("assistantCodeLoginButton")
         account_row.addWidget(self.account_label, 1)
         account_row.addWidget(self.check_button)
         account_row.addWidget(self.login_button)
-        form.addRow("Account", account_row)
-        hint = QLabel(SIGN_IN_HINT, self)
+        form.addRow(tr("Account"), account_row)
+        hint = QLabel(tr(SIGN_IN_HINT), self)
         hint.setWordWrap(True)
         hint.setProperty("gimapRole", "muted")
         form.addRow(hint)
@@ -99,7 +104,9 @@ class ClaudeCodeSection(QGroupBox):
 
     def _show_found(self) -> None:
         found = self.services.find_cli("")
-        self.cli_edit.setPlaceholderText(f"found: {found}" if found else "not found — install Claude Code or browse to claude.exe")
+        self.cli_edit.setPlaceholderText(
+            tr("found: {path}").format(path=found) if found else tr("not found — install Claude Code or browse to claude.exe")
+        )
 
     def _remember_cli(self) -> None:
         preferences.write(self.settings, "code_cli", self.cli())
@@ -110,7 +117,7 @@ class ClaudeCodeSection(QGroupBox):
     def _browse(self) -> None:
         start = self.cli() or self.services.find_cli("") or str(Path.home())
         path, _ = QFileDialog.getOpenFileName(
-            self, "Choose Claude Code", start, "Claude Code (claude.exe claude claude.cmd);;All files (*)"
+            self, tr("Choose Claude Code"), start, "Claude Code (claude.exe claude claude.cmd);;All files (*)"
         )
         if path:
             self.cli_edit.setText(path)
@@ -121,7 +128,7 @@ class ClaudeCodeSection(QGroupBox):
         self._remember_model()
         cli = self.cli()
         self.check_button.setEnabled(False)
-        self.account_label.setText("Checking…")
+        self.account_label.setText(tr("Checking…"))
         self.tasks.submit(
             "assistant-code-status",
             lambda: self.services.code_status(cli),
@@ -139,9 +146,9 @@ class ClaudeCodeSection(QGroupBox):
         try:
             self.services.code_login(self.cli())
         except (LlmError, OSError) as exc:
-            QMessageBox.warning(self, "Sign In to Claude Code", getattr(exc, "message", None) or str(exc))
+            QMessageBox.warning(self, tr("Sign In to Claude Code"), getattr(exc, "message", None) or str(exc))
             return
-        self.account_label.setText("Finish signing in in the window that opened, then press Check.")
+        self.account_label.setText(tr("Finish signing in in the window that opened, then press Check."))
 
 
 __all__ = ["ClaudeCodeSection", "SIGN_IN_HINT", "describe_code_status"]

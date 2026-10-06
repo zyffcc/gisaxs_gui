@@ -30,7 +30,12 @@ from ..application import (
     validate_options,
     visible_output_formats,
 )
-from ..application.ports import ConversionExecutorPort, ProgressCallback, SourceRepositoryPort
+from ..application.ports import (
+    ConversionExecutorPort,
+    ConverterInputFolderPort,
+    ProgressCallback,
+    SourceRepositoryPort,
+)
 from .state import ConversionReviewState, FormatConverterState, OutputPreviewState
 
 
@@ -49,8 +54,10 @@ class FormatConverterViewModel:
         app_context: AppContext,
         repository: SourceRepositoryPort,
         executor: ConversionExecutorPort,
+        input_folders: ConverterInputFolderPort | None = None,
     ):
         self.app_context = app_context
+        self._input_folders = input_folders
         self.state = app_context.project_state.feature_state(
             "format_converter",
             FormatConverterState,
@@ -87,6 +94,21 @@ class FormatConverterViewModel:
 
     def normalize_path(self, path: str) -> str:
         return self._normalize_path(path)
+
+    def last_folder(self) -> str:
+        """The folder inputs were last added from ('' when none is known)."""
+        return self._input_folders.last_folder() if self._input_folders is not None else ""
+
+    def remember_folder(self, path: str) -> None:
+        if self._input_folders is not None and path:
+            self._input_folders.remember(path)
+
+    def default_destination(self) -> str:
+        """``converted`` next to the first input; before any, next to the folder last read."""
+        if self.sources:
+            return str(Path(self.sources[0].path).parent / "converted")
+        folder = self.last_folder()
+        return str(Path(folder or Path.cwd()) / "converted")
 
     @staticmethod
     def supports_input_path(path: str) -> bool:
@@ -200,10 +222,12 @@ class FormatConverterViewModel:
         )
 
     def load_preview(self, source: InputSource) -> list[dict]:
+        """The first, middle and last selected frame, each read once (one item for one frame)."""
         frames = source.selected_frames or [0]
-        picks = [frames[0], frames[len(frames) // 2], frames[-1]]
+        picks = list(dict.fromkeys((frames[0], frames[len(frames) // 2], frames[-1])))
+        labels = {1: ("",), 2: ("First", "Last")}.get(len(picks), ("First", "Middle", "Last"))
         payload = []
-        for label, frame in zip(("First", "Middle", "Last"), picks):
+        for label, frame in zip(labels, picks):
             data, _metadata = self._load_preview(source, frame)
             array = np.asarray(data)
             finite = array[np.isfinite(array)]

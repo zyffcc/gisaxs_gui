@@ -22,7 +22,7 @@ from typing import Optional
 
 import numpy as np
 from PyQt5.QtCore import QObject, Qt, pyqtSignal
-from PyQt5.QtGui import QDoubleValidator
+from PyQt5.QtGui import QDoubleValidator, QFont
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -48,6 +48,10 @@ AUTO_RULES = (
 PERCENTILES = {"p1": (1.0, 99.7), "p0.1": (0.1, 99.9), "p5": (5.0, 95.0)}
 DEFAULT_RULE = "p1"
 HISTOGRAM_BINS = 64
+COMPACT_HISTOGRAM_WIDTH = 18
+"""The histogram of a narrow view's bar: slim, but its two handles can still be dragged."""
+COMPACT_FONT_SCALE = 0.85
+"""The values beside a narrow view's bar, a little smaller."""
 SAMPLE = 400_000
 """Values sampled from a large frame to find its limits."""
 
@@ -119,8 +123,36 @@ def level_bar(image_item):
                 self.gradient.showTicks(False)
                 self.gradient.backgroundRect.hide()  # the hatch meant for transparent colour maps
                 self.gradient.mouseClickEvent = lambda event: event.ignore()  # the colour map comes from the combo
+                self.compact = False
+                self._label = ""
                 self.vb.setMaximumWidth(56)
                 self.vb.setMinimumWidth(32)
+
+            def set_compact(self, compact: bool) -> None:
+                """A narrow bar for a narrow view: a slim histogram whose handles still drag, the colour strip
+                without its (hidden) tick row, smaller values and no axis title (in the tooltip instead).
+                Off: the full bar again."""
+                compact = bool(compact)
+                if compact == self.compact:
+                    return
+                self.compact = compact
+                self.vb.setMaximumWidth(COMPACT_HISTOGRAM_WIDTH if compact else 56)
+                self.vb.setMinimumWidth(COMPACT_HISTOGRAM_WIDTH if compact else 32)
+                self.gradient.setMaxDim(self.gradient.rectSize + (2 if compact else self.gradient.tickSize))
+                self.gradient.setOrientation(self.gradient.orientation)
+                if compact:
+                    style = self.axis.style
+                    self._full_style = {"tickFont": style["tickFont"], "tickTextWidth": style["tickTextWidth"],
+                                        "tickTextOffset": style["tickTextOffset"][0]}  # [0]: a vertical axis
+                    font = QFont(style["tickFont"] or self.axis.font())
+                    if font.pointSizeF() > 0:
+                        font.setPointSizeF(font.pointSizeF() * COMPACT_FONT_SCALE)
+                    else:
+                        font.setPixelSize(max(6, round(font.pixelSize() * COMPACT_FONT_SCALE)))
+                    self.axis.setStyle(tickFont=font, tickTextWidth=12, tickTextOffset=3)
+                else:
+                    self.axis.setStyle(**self._full_style)
+                self.set_label(self._label)
 
             def regionChanged(self):  # noqa: N802 - pyqtgraph API
                 super().regionChanged()
@@ -160,7 +192,11 @@ def level_bar(image_item):
                 self.gradient.showTicks(False)  # a new map brings a tick per colour stop: they would hatch the bar
 
             def set_label(self, text: str) -> None:
-                self.axis.setLabel(text)
+                self._label = str(text)
+                self.axis.setLabel(self._label)
+                if self.compact:
+                    self.axis.showLabel(False)
+                self.setToolTip(self._label if self.compact else "")
 
         _BAR_CLASS = LevelBar
     return _BAR_CLASS(image_item)

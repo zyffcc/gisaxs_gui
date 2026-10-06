@@ -478,6 +478,7 @@ class InsituMonitoringMixin:
         headers = ["file_index", "file_name", "fit_status", "error_message"] + parameter_keys
         table.setColumnCount(len(headers))
         table.setRowCount(len(rows))
+        table.setProperty("gimapDataHeaders", True)  # column keys of the data
         table.setHorizontalHeaderLabels(headers)
         for r, row in enumerate(rows):
             for c, key in enumerate(headers):

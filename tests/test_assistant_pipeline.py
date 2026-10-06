@@ -223,11 +223,13 @@ def test_the_command_line_pipeline_analyses_real_images_end_to_end(tmp_path: Pat
     save_tiff(root / "calib" / "AgBH_00001.tif", agbh_image())
     notes = f"Energy: {ENERGY_KEV:.4f} keV, alpha_i = 0.2 deg, pixel size 100 um"
     out = tmp_path / "out"
-    reports = analyse_frames([str(frame)], PipelineOptions(notes=notes), out, saved_profiles=False)
+    # The synthetic detector reaches only about 18° of 2θ, which Auto reads as small-angle: ask for GIWAXS.
+    reports = analyse_frames([str(frame)], PipelineOptions(notes=notes, technique="giwaxs"), out, saved_profiles=False)
 
     report = reports[0]
     assert report["ok"] and report["needs_attention"] == [], report["needs_attention"]
     assert decision(report, "geometry")["decision"] == "calibrated from AgBH_00001.tif"
+    assert decision(report, "technique")["why"].startswith("forced")
     assert report["measurement"] == "giwaxs" and report["geometry"]["incidence_deg"] == pytest.approx(0.2)
     found = [peak["q"] for peak in report["peaks"]]
     for expected in (0.40, 0.80, 1.10):
@@ -244,7 +246,7 @@ def test_the_command_line_pipeline_analyses_real_images_end_to_end(tmp_path: Pat
         {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "find_peaks", "arguments": {"curve": "radial"}}},
         {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "open_frame", "arguments": {"path": str(frame), "notes": notes}}},
         {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "run_standard_pipeline", "arguments": {"out_dir": str(tmp_path / "mcp_out")}}},
+            "name": "run_standard_pipeline", "arguments": {"out_dir": str(tmp_path / "mcp_out"), "technique": "giwaxs"}}},
         # The baseline is a start, not the end: the other tools stay available on the same frame.
         {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "ring_orientation", "arguments": {"q_center": 1.1}}},
     ]

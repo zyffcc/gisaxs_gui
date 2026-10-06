@@ -181,6 +181,117 @@ FITTING_ZH = {
     "Save Data and Fit": "保存数据与拟合",
     "Save Plot": "保存曲线图",
     "Save Model": "保存模型",
+    # -- 2026-10-05 polish ------------------------------------------------------------------------
+    "Add Particle": "添加颗粒",
+    "Changed after the fit: Fit again": "拟合后已更改：请重新拟合",
+    "Residuals: {formula}": "残差：{formula}",
+    "{count} solutions to compare": "{count} 个解可以比较",
+    "{count} solutions · best {model} {chi} {value}": "{count} 个解 · 最佳 {model} {chi} {value}",
+    "The fitting range or the left-out points changed after this fit: Fit again for its quality and errors.":
+        "这次拟合之后，拟合范围或被排除的点已改变：请重新拟合以得到它的质量和误差。",
+    "The trend of the chosen value appears here after Start": "开始后，所选数值的趋势会显示在这里",
+    "The range and left-out points of the series are kept; the series now starts from this frame's model (Undo brings the previous one back).":
+        "保留了序列的范围和被排除的点；序列现在从这一帧的模型开始（撤销可恢复之前的模型）。",
+    "The range and left-out points of the series are kept.": "保留了序列的范围和被排除的点。",
+    "The fit of {name} ended after another curve was opened; its result was not kept.":
+        "{name} 的拟合在打开另一条曲线之后才结束，其结果没有保留。",
+    # -- static texts of the windows (2026-10-05) ---------------------------------------------------
+    "1D Predict": "一维预测",
+    "Load curves → Fit → compare candidates. General V5 proposes multiple compositions. The single-RC specialist requires a known single random cylinder and is experimental.":
+        "载入曲线 → 拟合 → 比较候选。通用 V5 会给出多种组成。单 RC 专用模型要求已知只有一个随机取向圆柱，仍是实验性的。",
+    "Current cut — original measured points; positive and negative sides are fitted separately.":
+        "当前切线——原始测量点；正负两侧分别拟合。",
+    "Curve / side": "曲线 / 侧",
+    "Stage": "阶段",
+    "Ready. Automatic conditions are estimates; candidates are not calibrated probabilities.":
+        "就绪。自动条件只是估计；候选不是校准过的概率。",
+    # -- review round (2026-10-06) -------------------------------------------------------------------
+    "From Analyze: Fit to refine it": "来自分析：请拟合来精修",
+    "The halves, the fitting range or the left-out points changed after the search: the χ² of the solutions is of the points before.":
+        "搜索之后，所用的半侧、拟合范围或被排除的点已改变：这些解的 χ² 仍是之前那些点上的值。",
+    "The file is read-only": "文件是只读的",
+    "the In-situ series was not restored: a series is running": "原位序列没有恢复：有序列正在运行",
+    "Stop {jobs} first, then open the project.": "请先停止{jobs}，再打开项目。",
+    # -- second wave (2026-10-06) ------------------------------------------------------------------
+    "Undo the last change of the model, the fitting range or the left-out points, or the last fit (Ctrl+Z)":
+        "撤销模型、拟合范围或被排除点的上一次修改，或上一次拟合（Ctrl+Z）",
+    "Open a curve: the residuals of the model appear here.": "打开曲线后，这里显示模型的残差。",
+    "Choose a method; the button below runs it (Ctrl+Return).": "选择一种方法；用下面的按钮运行（Ctrl+Return）。",
+    "One curve at a time here: {name} is open. Fit ▸ Advanced ▸ Fit Many Curves… takes several.":
+        "这里一次只打开一条曲线：已打开 {name}。拟合 ▸ 高级 ▸ 拟合多条曲线… 可以处理多条。",
+    "A 1D curve: columns q, I and optionally σ (.dat, .txt). Analyze ▸ Send to Fitting opens its cut here.":
+        "一维曲线：q、I 两列，可选 σ（.dat、.txt）。在分析里点“发送到拟合”会把切线打开到这里。",
+    "No data rows found (at least two numeric columns are needed).": "未找到数据行（至少需要两列数字）。",
+    "No (q, I[, σ]) rows could be read.": "没有读取到任何 (q, I[, σ]) 数据行。",
+    "Too few valid points (fewer than 2).": "有效数据点太少（少于 2 个）。",
+    "The selected frame and its fit appear here.": "所选帧及其拟合会显示在这里。",
+    "1D Predict · fit curves & batch": "一维预测 · 拟合曲线与批处理",
+    "Prediction settings — saved for single curves and future batch / in-situ runs": "预测设置——保存后用于单条曲线以及之后的批处理 / 原位运行",
+    "Auto / unused": "自动 / 不用",
+    "Complete composition": "完整组成",
+    "Fit method": "拟合方法",
+    "Text-file q unit": "文本文件的 q 单位",
+    "q sides": "q 的两侧",
+    "Each half separately": "两半分别拟合",
+    "General V5: improve fit with four numerical steps": "通用 V5：再用四个数值步骤改进拟合",
+    "Calibrate intensity amplitudes": "校准强度幅值",
+    "The single-RC specialist can adjust particle, background and resolution amplitudes while keeping the neural shape parameters fixed. Broader fitting may still run when curve agreement is poor.":
+        "单 RC 专用模型可以调整颗粒、背景和分辨率的幅值，同时保持神经网络给出的形状参数不变。曲线吻合较差时，仍可能运行范围更广的拟合。",
+    "General V5 (experimental)": "通用 V5（实验性）",
+    "Single RC specialist (experimental)": "单 RC 专用模型（实验性）",
+    "Physical fit (numerical)": "物理拟合（数值）",
+    "General V5 proposes multiple compositions but remains experimental. The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. Other inputs, fixed resolution and poor curve agreement use numerical fallback; that fallback does not make the specialist a general model. Scores are not probabilities.":
+        "通用 V5 会给出多种组成，但仍是实验性的。专用模型要求“完整组成”只有一个随机取向圆柱，并且输入是符合条件的原始 CBF 计数。其他输入、固定的分辨率或曲线吻合较差时会改用数值回退；这种回退并不会让专用模型变成通用模型。得分不是概率。",
+    "Fix σ res (nm⁻¹)": "固定 σ res（nm⁻¹）",
+    "Fix ν res": "固定 ν res",
+    "General V5: 0.007–0.013 nm⁻¹. RC specialist / physical fit: 0.001–0.1 nm⁻¹; fixed resolution uses numerical fallback.":
+        "通用 V5：0.007–0.013 nm⁻¹。RC 专用模型 / 物理拟合：0.001–0.1 nm⁻¹；固定分辨率时改用数值回退。",
+    "General V5: 5–10. RC specialist / physical fit: 1–20; fixed resolution uses numerical fallback.":
+        "通用 V5：5–10。RC 专用模型 / 物理拟合：1–20；固定分辨率时改用数值回退。",
+    "Auto: 0.1% peak": "自动：峰值的 0.1%",
+    "Auto: measured max": "自动：测量最大值",
+    "Relative σ (if missing)": "相对 σ（文件里没有时）",
+    "Absolute σ floor": "σ 绝对下限",
+    "Intensity normalizer": "强度归一化值",
+    "Discover combinations": "搜索的组合数",
+    "Condition best combinations": "细化的最佳组合数",
+    "In-situ · 1D prediction parameters": "原位 · 一维预测参数",
+    "In-situ prediction parameters": "原位预测参数",
+    "Save creates a new settings snapshot for future frames. Completed frames are unchanged.":
+        "保存会为之后的帧建立新的设置快照；已完成的帧不变。",
+    "Edit known components / resolution, or leave them automatic.": "编辑已知的组分 / 分辨率，或保持自动。",
+    "S: sphere; RC: random cylinder; VC: vertical cylinder. Repeated types are distinct components.":
+        "S：球；RC：随机取向圆柱；VC：竖直圆柱。重复的类型是不同的组分。",
+    "Natural-log RMSE on original positive-intensity observations only.": "只在原始的正强度观测点上计算的自然对数 RMSE。",
+    "RMS of (forward − observed)/sigma, including negative observations; not a calibrated probability.":
+        "(正演 − 观测)/sigma 的均方根，包括负的观测值；不是校准过的概率。",
+    "Add curves (or Use current cut), then Fit curve.\nSelect a candidate to see its fit here.":
+        "添加曲线（或使用当前切线），然后拟合曲线。\n选一个候选，在这里查看它的拟合。",
+    "Model + amplitude": "模型 + 幅值",
+    "Neural model": "神经网络模型",
+    "Numerical fallback": "数值回退",
+    "Stage: {stage}": "阶段：{stage}",
+    "Reason: {reason}": "原因：{reason}",
+    "Natural-log RMSE over the measured curve, including measurement noise. Review peak positions, overall shape and residuals; no mandatory cutoff is applied.":
+        "在整条测量曲线上计算的自然对数 RMSE，包含测量噪声。请检查峰位、整体形状和残差；不设强制阈值。",
+    "Lengths: nm. sigma_R/h/D: relative standard deviations.\nMixture weights are not posterior probabilities.\nResolution sigma: nm^-1; nu: dimensionless.":
+        "长度：nm。sigma_R/h/D：相对标准差。\n混合权重不是后验概率。\n分辨率 sigma：nm^-1；nu：无量纲。",
+    "Select one or more 1D curves": "选择一条或多条一维曲线",
+    "{count} file(s): {names}": "{count} 个文件：{names}",
+    "Fit {count} files": "拟合 {count} 个文件",
+    "Current cut — native points, q converted to nm⁻¹ by the fitting workspace.": "当前切线——原始数据点，q 由拟合工作区换算为 nm⁻¹。",
+    "A fitting / in-situ job is already running. Finish or cancel it first.": "已有拟合 / 原位任务在运行。请先等它完成或取消。",
+    "Load a curve or select files first": "请先载入曲线或选择文件",
+    "Starting the experimental single-RC specialist… Checking the known composition and input scope.":
+        "正在启动实验性的单 RC 专用模型…正在检查已知组成和输入范围。",
+    "Starting numerical physical fitting…": "正在开始数值物理拟合…",
+    "Loading experimental General V5… First run includes loading and compilation.": "正在载入实验性的通用 V5…第一次运行包括载入和编译。",
+    "Finished in {seconds} s · {failures} failed files. {quality}": "用时 {seconds} s 完成 · {failures} 个文件失败。{quality}",
+    "{count} candidates saved. Review curve shape and residuals; observed-data scores include noise and are not probabilities.":
+        "已保存 {count} 个候选。请检查曲线形状和残差；基于观测数据的得分包含噪声，不是概率。",
+    "Settings saved. Existing in-situ recipes keep their captured settings.": "设置已保存。已有的原位配方保留它们记录时的设置。",
+    "Cancelling… completed file results remain saved.": "正在取消…已完成文件的结果仍会保留。",
+    "Saved settings v{version} for future frames.": "已为之后的帧保存设置 v{version}。",
 }
 
 __all__ = ["FITTING_ZH"]

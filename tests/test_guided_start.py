@@ -55,13 +55,23 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     assert not page.run_pipeline_button.isHidden() and not page.find_geometry_button.isHidden()
     guided.notes_edit.setPlainText("GIWAXS, alpha_i = 0.2 deg, 12.4 keV")
     assert guided.notes_found.text() == "Found in the notes: αi = 0.2°, energy = 12.4 keV"
+    progress: list[str] = []
+    guided.progressed.connect(progress.append)
     page.run_pipeline_button.click()
     assert page.step_rail.state("results") == "busy"
     _wait(lambda: guided.report is not None, 120)
     report = guided.report
     assert report["ok"] and report["needs_attention"] == [] and report["procedure"] == "giwaxs"
     assert page.step_rail.state("results") == "ok" and page.current_right() == "results"
+    # The status during the run says what is done in words, never "find_peaks: …".
+    assert progress and all("_" not in line.split(" — ")[0] for line in progress), progress
+    assert any(line.startswith("Finding the peaks of I(q) — ") for line in progress), progress
+    assert guided.status_label.text() == "Done — see the Results tab."
     results = guided.results
+    badge = results.findChildren(QLabel)[0]
+    assert badge.text().startswith("GIWAXS — ") and badge.property("gimapRole") == "success" and not badge.styleSheet()
+    # Nothing in the Results tab asks for more width than a narrow panel has (the q map shrinks with it).
+    assert results.minimumSizeHint().width() <= 360, results.minimumSizeHint()
     peaks = results.peak_table
     assert peaks.rowCount() == len(report["peaks"]) > 0
     found = [float(peaks.item(row, 0).text()) for row in range(peaks.rowCount())]
@@ -92,6 +102,7 @@ def test_one_click_gives_results_with_their_evidence_without_any_model(analyze) 
     page_html = guided.report_page()
     assert page_html.startswith("<!DOCTYPE html>") and page_html.count("data:image/png;base64,") == 2
     assert "film_giwaxs.tif" in page_html and "Peaks" in page_html
+    assert "<h1>GIWAXS report</h1>" in page_html and "Automatic analysis, no AI" in page_html
 
 
 def test_the_check_picture_shows_where_each_ring_was_measured() -> None:
@@ -154,15 +165,184 @@ def test_a_ring_says_in_one_line_why_its_orientation_is_not_determined() -> None
 
 
 def test_a_peak_at_the_end_of_the_data_is_not_called_reliable() -> None:
-    from src.gimap.features.assistant.presentation.guided_text import peak_rows
+    from src.gimap.features.assistant.presentation.guided_text import PEAK_COLUMNS, peak_rows
 
+    # The verdict comes right after q, d and FWHM; the long orientation words last (the column that stretches).
+    assert [header for header, _tip in PEAK_COLUMNS][3:] == ["trust", "size (nm)", "in-/out-of-plane"]
     # The real 1.655 Å⁻¹ "peak" is a shoulder on the rising edge of I(q), 0.01 Å⁻¹ from where the data start.
     edge, inner = peak_rows([
         {"q": 1.655, "d_A": 3.797, "fwhm": 0.0123, "flags": ["at_edge", "overlap"], "caveat": ""},
         {"q": 2.942, "d_A": 2.136, "fwhm": 0.0793, "flags": [], "caveat": "", "size_nm": 7.14, "size_is_lower_bound": True},
     ])
-    assert edge[5][0] == "at the end of the data: check" and "cut off" in edge[5][1]
-    assert inner[5] == ("reliable", "") and inner[4][0] == "≥ 7.14"
+    assert edge[3][0] == "at the end of the data: check" and "cut off" in edge[3][1]
+    assert inner[3] == ("reliable", "") and inner[4][0] == "≥ 7.14" and inner[5][0] == "—"
+
+
+def test_only_questions_with_a_field_are_called_questions() -> None:
+    from src.gimap.features.assistant.presentation import automatic_outcome
+
+    _app()
+    report = {
+        "ok": True, "procedure": "giwaxs", "frame": "C:/data/film_00001.tif", "peaks": [], "rings": [],
+        "needs_attention": [
+            {"item": "incidence angle αi", "why": "No αi anywhere.", "option": "incidence_deg", "hint": "The notes."},
+            {"item": "beam centre", "why": "The axis is 25 px off.", "option": None, "hint": "Look at the cut."},
+        ],
+    }
+    state, line = automatic_outcome(report)
+    assert state == "warn" and line.startswith("GIWAXS — 0 peaks") and line.endswith("; 1 question(s).")  # Results step shown
+    guided = GuidedAnalysis(lambda: None)
+    guided._finished(report)
+    assert list(guided.question_fields) == ["incidence_deg"] and not guided.questions.isHidden()
+    assert guided.status_label.text() == "Done — see the Results tab. 1 question(s) below."
+    texts = [item.text() for item in guided.results.findChildren(QLabel)]
+    assert texts[0].startswith("GIWAXS — 0 peaks (0 reliable), 0 rings analysed. 1 question(s) in the Results step.")
+    assert "1 point(s) to check — see below" in texts and "Beam centre: The axis is 25 px off." in texts
+    # Advice alone (no field to fill in) is a point to check, not a question.
+    advice = dict(report, needs_attention=report["needs_attention"][1:])
+    assert automatic_outcome(advice) == ("ok", "GIWAXS — 0 peaks (0 reliable), 0 rings analysed; 1 point(s) to check.")
+    guided._finished(advice)
+    assert not guided.question_fields and guided.questions.isHidden()
+    assert guided.status_label.text() == "Done — see the Results tab. 1 point(s) to check there."
+    # The pipeline's own lines ("tool: summary", also used by the command line) are shown in words.
+    guided._stepped({"state": "start", "tool": "set_halves", "arguments": {"side": "both_abs"}})
+    guided._progress("set_halves: halves: both_abs")
+    assert guided.status_label.text() == "Choosing the halves of the cut — Both halves on |qy|"
+    guided._progress("fit_horizontal_cut: fitting spheres and cylinders to I(qy) (about half a minute)…")
+    assert guided.status_label.text().startswith("Fitting form-factor models to the horizontal cut — fitting spheres")
+    guided.results.deleteLater()
+
+
+def test_two_points_about_one_value_are_one_question() -> None:
+    # GISAXS without αi: the incidence angle and the Yoneda band are both answered by αi — one field, one question.
+    from src.gimap.features.assistant.presentation import automatic_outcome
+
+    _app()
+    report = {
+        "ok": True, "procedure": "gisaxs", "frame": "C:/data/galaxi_data.tif", "peaks": [], "rings": [], "gisaxs": {},
+        "needs_attention": [
+            {"item": "incidence angle αi", "why": "No αi anywhere.", "option": "incidence_deg", "hint": "The notes."},
+            {"item": "Yoneda band", "why": "No Yoneda band above the horizon.", "option": "incidence_deg", "hint": "Check αi."},
+        ],
+    }
+    state, line = automatic_outcome(report)
+    assert state == "warn" and line.startswith("GISAXS — ") and line.endswith("; 1 question(s).")
+    guided = GuidedAnalysis(lambda: None)
+    guided._finished(report)
+    assert list(guided.question_fields) == ["incidence_deg"]
+    assert guided.status_label.text() == "Done — see the Results tab. 1 question(s) below."
+    tip = guided.question_fields["incidence_deg"].toolTip()
+    assert "No αi anywhere." in tip and "No Yoneda band above the horizon." in tip  # both reasons on the one field
+    texts = [item.text() for item in guided.results.findChildren(QLabel)]
+    assert texts[0].endswith(" 1 question(s) in the Results step.")
+    guided.results.deleteLater()
+
+
+def test_find_geometry_is_reported_as_geometry_not_as_giwaxs() -> None:
+    import re
+
+    from PyQt5.QtCore import QBuffer, QByteArray, QIODevice
+    from PyQt5.QtGui import QImage
+
+    from src.gimap.features.assistant.presentation import automatic_outcome
+    from src.gimap.features.assistant.presentation.guided_report import report_page
+
+    _app()
+    report = {  # Find Geometry on a GISAXS frame, αi unknown
+        "ok": True, "procedure": "geometry", "measurement": "gisaxs", "frame": "C:/data/galaxi_data.tif",
+        "peaks": [], "rings": [], "decisions": [], "steps": [],
+        "geometry": {"distance_mm": 1730.0, "beam_center_px": [500.0, 900.0], "wavelength_A": 1.34},
+        "calibration_quality": {"assessment": "good: 7 lines of the standard land within 0.05% of their q on average"},
+        "needs_attention": [{"item": "incidence angle αi", "why": "No αi anywhere.", "option": "incidence_deg", "hint": ""}],
+    }
+    state, line = automatic_outcome(report)
+    assert state == "warn"  # the αi field waits in the Results step: the workspace shows it
+    assert line == "Geometry — good: 7 lines of the standard land within 0.05% of their q on average; 1 question(s)."
+    assert automatic_outcome(dict(report, needs_attention=[]))[0] == "ok"
+    guided = GuidedAnalysis(lambda: None)
+    guided._finished(report)
+    assert list(guided.question_fields) == ["incidence_deg"]
+    texts = [item.text() for item in guided.results.findChildren(QLabel)]
+    assert texts[0].startswith("Geometry — good: 7 lines") and not any("GIWAXS" in text or "peaks" in text for text in texts)
+    assert "Checks" not in texts  # no rings were analysed: nothing to check against them
+    assert guided.report_markdown().startswith("# Geometry — galaxi_data.tif")
+    assert "Scherrer" not in guided.report_markdown()
+
+    class Page:
+        @staticmethod
+        def preview_png(width, rings=()):
+            image, data = QImage(40, 20, QImage.Format_RGB32), QByteArray()
+            image.fill(0)
+            buffer = QBuffer(data)
+            buffer.open(QIODevice.WriteOnly)
+            image.save(buffer, "PNG")
+            return bytes(data)
+
+    page = report_page(report, None, Page)
+    assert "<h1>Geometry report</h1>" in page and "GIWAXS" not in page and page.count("data:image/png;base64,") == 1
+    captions = re.findall(r"<figcaption>(.*?)</figcaption>", page)
+    assert captions == ["The q map of the frame with the geometry found."]
+    guided.results.deleteLater()
+
+
+def test_a_frame_shown_before_the_end_of_a_run_is_handled_is_looked_at_after_it() -> None:
+    # The worker thread has ended but its result still waits in the event queue: the run is not over yet.
+    import threading
+
+    _app()
+    guided = GuidedAnalysis(lambda: None)
+    frame_a, frame_b = "C:/data/film_a.tif", "C:/data/film_b.tif"
+    report = {"ok": True, "procedure": "giwaxs", "frame": frame_a, "peaks": [], "rings": [], "needs_attention": []}
+    guided.frame_shown(frame_a)
+    guided._finished(report)
+    guided._thread = threading.Thread(target=lambda: None, daemon=True)
+    guided._thread.start()
+    guided._thread.join()
+    assert not guided.running()
+    guided.frame_shown(frame_b)  # handled before the finished signal
+    assert guided.report is report and not guided.results.isHidden()
+    rerun = dict(report)
+    guided._finished(rerun)  # the queued result of the run on A arrives
+    assert guided.report is None and guided.results.isHidden()
+    assert guided.status_label.text() == "Results are for film_a.tif; run again for this frame"
+    guided.frame_shown(frame_a)
+    assert guided.report is rerun and not guided.results.isHidden()
+    guided.results.deleteLater()
+
+
+def test_saves_start_next_to_the_data(tmp_path: Path, monkeypatch) -> None:
+    from src.gimap.features.assistant.presentation import guided_text
+
+    monkeypatch.setattr(guided_text, "_SAVE_FOLDERS", {})
+    frame = tmp_path / "beamtime" / "P3HT_00012.tif"
+    frame.parent.mkdir()
+    assert guided_text.proposed_save_path(frame, "report.html") == str(frame.parent / "P3HT_00012_report.html")
+    (frame.parent / "gimap_analysis").mkdir()  # where Analyze's exports go: used when it exists
+    assert guided_text.proposed_save_path(frame, "report.html") == str(frame.parent / "gimap_analysis" / "P3HT_00012_report.html")
+    guided_text.remember_save_folder(frame, str(tmp_path / "results" / "x.html"))
+    (tmp_path / "results").mkdir()
+    assert guided_text.proposed_save_path(frame, "fit.png") == str(tmp_path / "results" / "P3HT_00012_fit.png")
+
+
+def test_a_picture_shrinks_with_its_column() -> None:
+    from PyQt5.QtGui import QPixmap
+
+    from src.gimap.features.assistant.presentation.guided_text import ScaledPixmapLabel
+
+    _app()
+    picture = ScaledPixmapLabel()
+    source = QPixmap(500, 400)
+    picture.setPixmap(source)
+    assert picture.minimumSizeHint().width() == 0 and picture.sizeHint().width() == 500
+    assert picture.hasHeightForWidth() and picture.heightForWidth(250) == 200 and picture.heightForWidth(900) == 400
+    picture.show()  # a hidden widget gets its resize event only when it is shown
+    picture.resize(250, 200)
+    assert picture.pixmap().width() == 250 and picture.sizeHint().width() == 500  # the hint never follows the shown size
+    picture.resize(800, 400)
+    assert picture.pixmap().width() == 500  # never larger than the picture itself
+    picture.setText("No q map for this frame.")
+    assert picture.source_pixmap() is None and not picture.hasHeightForWidth()
+    picture.close()
 
 
 def test_questions_only_a_person_can_answer_become_fields(tmp_path: Path) -> None:
@@ -221,9 +401,16 @@ def test_questions_only_a_person_can_answer_become_fields(tmp_path: Path) -> Non
     window.close()
 
 
-def test_the_shell_starts_on_the_start_page_and_routes_tasks() -> None:
+def test_the_shell_starts_on_the_start_page_and_routes_tasks(monkeypatch) -> None:
     app = _app()
+    from PyQt5.QtWidgets import QFileDialog
+
     from main import MainWindow
+
+    # With nothing listed a Start card may also offer to open frames: the file dialog is cancelled here.
+    asked = []
+    monkeypatch.setattr(QFileDialog, "getOpenFileNames", staticmethod(lambda *args, **kwargs: asked.append(1) or ([], "")))
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", staticmethod(lambda *args, **kwargs: asked.append(1) or ""))
     from src.gimap.app import AppContext
     from src.gimap.integrations.jobs import LocalProcessJobRunner
     from src.gimap.integrations.state import (

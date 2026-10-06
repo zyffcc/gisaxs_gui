@@ -27,7 +27,6 @@ QLabel[predictionWorkflowTitle="true"] {
     font-size: @font_heading_pt@;
     font-weight: 700;
 }
-QLabel[predictionWorkflowSubtitle="true"] { color: @text_muted@; }
 QFrame[predictionWorkflowStep="true"] {
     background: @surface_alt@;
     border: 1px solid @border@;
@@ -88,7 +87,15 @@ QFrame#predictionModeSelector QRadioButton {
     font-weight: 600;
     padding: 8px 12px;
 }
-QFrame#predictionModeSelector QRadioButton::indicator { width: 0; height: 0; }
+/* A segmented switch: no radio dot or square is drawn at all (size, border, image and margin all gone). */
+QFrame#predictionModeSelector QRadioButton::indicator {
+    width: 0;
+    height: 0;
+    border: none;
+    background: transparent;
+    image: none;
+    margin: 0;
+}
 QFrame#predictionModeSelector QRadioButton:checked {
     background: @surface@;
     border-color: @border@;
@@ -131,6 +138,12 @@ QPushButton[gimapPrimaryAction="true"] {
     font-weight: 650;
 }
 QPushButton[gimapPrimaryAction="true"]:hover { background: @accent_hover@; }
+/* A disabled Predict / Import must not look ready. */
+QPushButton[gimapPrimaryAction="true"]:disabled {
+    background: @disabled_bg@;
+    border-color: @border@;
+    color: @text_disabled@;
+}
 QPushButton[gimapDangerAction="true"] {
     background: @danger_soft@;
     border-color: @danger_border@;
@@ -147,6 +160,19 @@ QLabel[predictionReadiness="true"] {
     border: 1px solid @divider@;
     border-radius: 7px;
     padding: 7px 9px;
+    font-weight: 600;
+}
+/* Text colour comes from the gimapRole (success / muted / error); the chip tints with it. */
+QLabel[predictionReadiness="true"][gimapRole="success"] {
+    background: @success_soft@;
+    border-color: @success_border@;
+}
+QLabel[predictionReadiness="true"][gimapRole="error"] {
+    background: @danger_soft@;
+    border-color: @danger_border@;
+}
+QLabel#predictionCanvasStatusLabel[busy="true"] {
+    color: @info@;
     font-weight: 600;
 }
 QLabel[predictionModelStatus="true"] {
@@ -185,7 +211,7 @@ QLabel[predictionEmptyState="true"] {
     border: none;
     border-bottom: 2px solid transparent;
     color: @text_muted@;
-    min-width: 150px;
+    min-width: 120px; /* both tabs fit the canvas column of a 1024 px window */
     min-height: 34px;
     padding: 4px 12px;
     font-weight: 600;

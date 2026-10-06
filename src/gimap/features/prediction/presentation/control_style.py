@@ -17,19 +17,13 @@ def apply_prediction_control_style(ui, profile) -> None:
 
     for view in (ui.gisaxsImageGraphicsView, ui.predict2dGraphicsView):
         view.setMinimumSize(
-            360,
+            300,  # fits the canvas column of the smallest window (1024 px)
             280,
         )
         view.setMaximumSize(16777215, 16777215)
         view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-    for controls in (
-        ui.gisaxsImageParametersWidget,
-        ui.predict2dParameterWidget,
-    ):
-        controls.setMinimumWidth(340)
-        controls.setMaximumWidth(420)
-        controls.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+    # The inspector panels (gisaxsImageParametersWidget, predict2dParameterWidget) are sized by
+    # PredictionPreviewLayout alone: one minimum (270 px), and they move under the view when narrow.
 
     ui.gisaxsPredictImageShowTabWidget.setMinimumHeight(430)
     ui.gisaxsPredictImageShowTabWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)

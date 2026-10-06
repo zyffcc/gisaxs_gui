@@ -1,146 +1,100 @@
 # GIMaP 桌面 UI 设计原则
 
 - **Status**: Current
-- **Scope**: 所有 workspace、page、dialog 和共享 presentation 组件的视觉层级、布局与验收规则
-- **Related code**: [`src/gimap/app/presentation/`](../../src/gimap/app/presentation/)、[`src/gimap/features/`](../../src/gimap/features/)
-- **Related tests**: [`tests/test_ui_design_system.py`](../../tests/test_ui_design_system.py)、[`tests/test_ui_workspace_layouts.py`](../../tests/test_ui_workspace_layouts.py)
-- **Last verified**: 2026-08-19
+- **Scope**: 所有 workspace、page、dialog、工具窗口和公共组件的反馈、布局、颜色与语言
+- **Related code**: [`src/gimap/app/presentation/`](../../src/gimap/app/presentation/)（`components/`、`theme/`、`i18n/`）
+- **Related tests**: `tests/test_ui_design_system.py`（含 QSS 在两种主题下都能被 Qt 解析）、
+  `tests/test_ui_workspace_layouts.py`、`tests/test_i18n.py`、`tests/test_wave2b_analyze_i18n.py`、
+  `tests/test_review_labs_status.py`
+- **Last verified**: 2026-10-06（逐条对照代码）
 
-## 设计目标
+组件 API 见 [`ui-components.md`](ui-components.md)；各 workspace 的控件与调用链见 `docs/ui/workspaces/`。
 
-GIMaP 的桌面界面应具有现代 Web 应用相同的**信息清晰度、空间节奏和渐进披露**，但仍保留
-桌面科学软件的原生键盘操作、精确数值输入和高密度数据展示。这里的“像 HTML”不表示把页面
-改成网页，也不表示依赖大量圆角卡片；它表示用户能立即回答三个问题：
+## 意图
 
-1. 我现在处于哪个任务？
-2. 当前必须完成什么？
-3. 结果和下一步在哪里？
+1. **用户从不需要猜某件事有没有发生。** 每个操作都有可见结果：正在做、做完了（发现了什么）、
+   失败了（为什么、怎么办）、或为什么什么也没有。
+2. **长时间的工作看得见、停得下。** 有进度，能取消（能暂停更好），不冻结界面，取消后界面回到可用状态。
+3. 用户随时能回答：我在哪个任务？现在要做什么？结果和下一步在哪里？
 
-PyQt5 Qt Widgets 已具备自动布局、伸缩策略和样式能力。默认继续使用 PyQt5；只有明确的产品
-需求或平台生命周期评审才允许迁移 PyQt6/PySide。不得把拥挤、裁切或僵硬布局归因于框架版本，
-也不得以框架迁移替代正确的 layout、size policy 和 information architecture。
+## 反馈：用哪个组件
 
-## 单层画布，而不是“框套框”
+| 情况 | 做法 |
+| --- | --- |
+| 读取、计算中 | `StepRail.set_state(key, "busy")`，结束后 `ok` / `warn` / `error` 并给一行 detail（发现了什么）；状态来自真实结果 |
+| 长任务 | 在后台运行（`TaskRunner` 或 `JobRunner`），`JobStatus` 显示进度、Pause / Cancel；`TaskRunner` 不会中断工作，取消要把标志传进函数并在循环里检查 |
+| 写了文件 | 文件确实写成后 `show_toast(page, "Saved …", level="ok", action=("Open Folder", …))`；`export_plot` 抛 `OSError` 时报错，不说 “Saved” |
+| 图或表是空的 | `CurvePlot.set_empty_text(...)`、`EmptyState`、`ResultTable` 的空状态：说明为什么空、下一步做什么 |
+| 出错 | `ErrorBanner`（页内）或 `level="error"` 的 toast（直到关闭）；说出原因和可做的事 |
+| 不常用的选项 | `AdvancedSection` 折叠，但可发现；核心流程不需要展开它 |
 
-页面使用一个主画布。视觉层级主要由留白、标题字号、字重、对齐和分隔线建立，而不是由边框建立。
+## 单层画布，默认可用
 
-```text
-Workspace canvas
-  Page/task heading
-  Section heading
-  Controls or content
-  Subheading
-  Controls or content
-```
+- 一个视觉区域最多一层带背景或边框的容器；层级靠留白、字号、字重和分隔线，不靠 `Section → Card → GroupBox`
+  的嵌套边框。`QGroupBox` 只在边界本身有意义时用。
+- 不同时显示含义重复的 workspace、section、card、group 标题。
+- 输入、主要参数、预览、主命令和当前结果默认可见。每个任务只有一个视觉主操作；核心命令不只存在于右键、
+  双击、手势或 tooltip。
+- 界面上的说明帮助用户做决定；不显示开发者备注或 “给 agent 的话”。
 
-强制规则：
+## 响应式布局
 
-- 同一视觉区域最多允许一层带背景或边框的容器；禁止 `Section → Card → GroupBox → Frame`
-  连续嵌套并让每层都显示边框；
-- `QGroupBox` 只在其边界本身表达必要语义时使用。普通表单分组优先使用无边框 `QWidget`、标题
-  `QLabel` 和 layout；
-- 相关控件优先共享同一 section，通过 8/12/16/24 px 的空间节奏区分层级；
-- 状态、警告和空状态可以有有色表面；普通参数区不应全部变成独立卡片；
-- 不同时显示含义重复的 workspace 标题、section 标题、card 标题和 group 标题。
+- 用 layout、`QSizePolicy`、stretch 和 `sizeHint` 表达意图，不用手工坐标；不把 `minimumHeight` 与
+  `maximumHeight` 锁成同一个动态值，不用固定高度掩盖布局问题（图标、短按钮、工具栏除外）。
+- 一个方向只有一个主要滚动容器；窄窗口退化为单列或外层滚动，不隐藏功能（`FlowLayout` 让按钮行换行）。
+- `QStackedWidget` / tab 的尺寸跟随当前页；导航（tab、步骤栏、侧栏）位置稳定，不因条件控件的显示而移动。
+- 至少在 1280×800、1440×900、1920×1080 下检查主操作和当前结果可达。
 
-## 默认状态必须可用
+## 科学图像与曲线
 
-Progressive disclosure 只用于低频、危险或专家级选项。核心工作流不能依赖默认折叠的面板。
+- 显示控制（log、色图、色阶、叠加层）紧挨图像且默认可发现；纯显示操作不触发切线、拟合、页面跳转，
+  也不改变科学数组；改变计算输入后只把下游结果标为过期或重算。
+- `Pick center`、选区等直接操作有明确按钮、选中态和 Esc 取消。
+- 有正负两半的曲线（GISAXS 的 qy、GIWAXS 的 χ）：`CurvePlot` 提供 ±、+、−、|x|（两半叠在 |x| 上，负半虚线）；
+  log 轴隐藏非正值。经典 Fitting 页面（Matplotlib）的 Signed ±q 与 Negative −q 在 Log X 时用 symlog。
+  预览、拟合区间、拟合输入和导出对同一 q 模式的解释一致。
 
-- Input、主要参数、Preview、主命令和当前结果默认可见；
-- `Advanced` 内的内容即使永远不展开，也不能阻塞一次标准工作流；
-- 禁止创建内容为空、内容已被 reparent 或展开后被固定高度裁切的 disclosure；
-- 核心 command 不得只存在于右键菜单、双击、隐藏手势或 tooltip；这些只能作为快捷方式；
-- 每个任务只有一个视觉主操作。次要操作使用普通按钮或文字按钮；危险操作必须有清晰语义；
-- 说明文字必须帮助用户决策。面向开发者的需求备注、实现解释和“告诉 agent 的话”不得显示在 UI。
+## 颜色与主题
 
-## 响应式 Qt Widgets 布局
+- **界面颜色来自主题 token**（`theme/tokens.py`：`LIGHT` 与 `DARK` 键完全相同）：`.qss` 模板里写 `@token@`；
+  代码里用语义属性 `set_role(widget, "muted")`（`gimapRole`）和 `set_state(widget, name, value)`；绘制时用
+  `theme_color(name)`。feature 的 `.qss` 用 `style_widget(root, path)` 在填充子控件之前设置。
+  不要为界面元素写 `setStyleSheet("color: #…")`。`.qss` 里现有的字面颜色只用在两种主题下都是深色的底上（侧栏和
+  Fitting workflow header 上的白字、overlay 的深色底牌）；新规则不要再加。
+- **数据颜色可以写字面值**：曲线（`CurvePlot` 的 `CURVE_COLORS`）、阶段（`STAGE_COLORS`）、拟合曲线等，
+  两种主题相同；它们作为列表或表格里的文字时用 `text_color` / `stage_text_color` 保证可读。
+- 浅色、深色都要看。`.qss` 必须能被 Qt 解析（CSS 才有的写法如 `:not()` 会让 Qt 丢掉整张样式表；测试检查）。
+- **导出的图总用浅色配色**：pyqtgraph 图经 `export_plot`；屏幕上跟随主题的 Matplotlib 图（`theme_figure`）
+  在 `with exported_colors(figure):` 里写文件。
 
-所有页面使用 layout 管理尺寸，不使用手工坐标。内容的高度由当前可见内容决定，并允许外层滚动。
+## 语言（i18n）
 
-- 使用 `QSizePolicy`、stretch factor、`sizeHint()` 和 `minimumSizeHint()` 表达意图；
-- 禁止为可变内容把 `minimumHeight` 与 `maximumHeight` 锁为同一动态计算值；这会导致字体、DPI、
-  翻译或内容变化时被裁切；
-- 禁止使用固定高度掩盖 layout 问题。确有固定尺寸的对象仅限 icon、短按钮、toolbar 或明确尺寸的
-  preview placeholder；
-- 一个页面方向上只保留一个主要滚动容器。避免 scroll area 内再嵌套 scroll area；
-- 宽屏可使用双列表单或 inspector，窄屏必须能退化为单列或外层滚动，不得隐藏功能；
-- 控件的最小宽度只保证可输入，不应把左侧工作区撑到挤压 preview；
-- `QStackedWidget` 和 tab 页的尺寸必须跟随当前页，不得被隐藏页或固定最大高度控制。
-- 每个 tab 的 disclosure、toolbar、表格和结果内容只拥有本页几何；展开隐藏页内容后切换标签，
-  新页的 `sizeHint`、`minimumSizeHint` 和滚动范围必须恢复为新页自身的值。不得用所有 tab 的
-  最大内容高度作为共享最小高度；这类问题应通过 current-page-aware container 解决，而不是
-  给页面写死高度；
-- tab、步骤导航和 workspace navigation 属于稳定坐标系：标签栏位置和顺序不得因当前页的 toolbar、
-  banner、筛选器或结果状态显示/隐藏而移动。条件控件必须放在对应 tab 内容内部、固定占位区或
-  overlay 中，禁止插在持久导航之前；
+- 代码里写英文；中文在 `src/gimap/app/presentation/i18n/` 的分区表（`zh_analyze.py`、`zh_shell.py` …），
+  由 `zh.py` 合并成 `ZH`，按英文原文精确匹配：改了英文就要改表。数值、单位、文件名、符号不翻译。
+- 静态文字（标签、按钮、tab、下拉项、表头、spin box 前后缀、占位符、tooltip、菜单）由遍历器在窗口或菜单
+  显示时翻译，不需要手动处理。
+- **运行时拼出的文字**用 `tr(text)` 或 `trf(template, **values)`：模板（含 `{字段}`）是表里的键，中文保留相同字段；
+  不写 `tr(f"…")`，也不先格式化再翻译（`test_wave2b_analyze_i18n.py` 扫描 Analyze presentation；
+  `test_review_labs_status.py`、`test_review_stages_cross.py` 检查 Labs 与 Compare 的文字都在表里）。
+- **切换语言后**，`language_changed()` 发出，`MainWindowComponents.refresh_language`（`src/gimap/app/main_window.py`）
+  对 `_language_pages()` 中每个页面（Start、Analyze、自动分析、Compare、Fitting 及其页面、Labs 的 view binding、
+  assistant、打开的 Tools 窗口）调用
+  `refresh_language()`。新页面或工具窗口若拼出文字，要实现 `refresh_language()` 并保留英文原始状态以便重拼。
+- 表头是数据名（序列、样品、参数名）的表格或树设 `setProperty(DATA_HEADERS, True)`（`"gimapDataHeaders"`），
+  它们不被翻译。
+- `CurvePlot.set_title` / `set_empty_text`、`show_toast`、`JobStatus.set_state`、`enable_table_copy` 的菜单
+  自己 `tr` 传入的英文。
+- application 与 domain 的消息、曲线标题保持英文（导出记录和 assistant 读取它们）；presentation 在显示时翻译
+  （Analyze 在 `presentation/texts.py`）。中文字体没有 “▸”“▾”，中文里显示为 “›”“▼”。
 
-Qt 官方的 [Layout Management](https://doc.qt.io/qt-6/layout.html) 说明 layout 会根据
-`sizePolicy`、minimum size、stretch 和内容变化自动重新分配空间。实现与 review 应以该模型为准。
+## 每次 UI 修改
 
-## 科学图像与曲线的交互
+1. 先写下任务流和容器树，找出重复标题、嵌套边框、被折叠的核心功能和固定尺寸。
+2. 优先复用公共组件，但不为复用多加一层容器；布局修改不夹带科学算法修改。
+3. 检查键盘焦点、safe-wheel、默认 / 空 / 错误状态、长文本，两种主题、两种语言。
+4. 新页面要有 offscreen 构造测试；新增、删除或改名 `*_view.py` 要更新
+   `tests/test_ui_source_of_truth.py` 的 `EXPECTED_VIEWS_BY_OWNER` 和 `docs/ui/workspaces/` 的说明。
 
-Preview 是工作流的一等区域，不是参数页面下方的附属结果。
-
-- 图像显示控制紧邻图像，以可见 inspector 或 toolbar 呈现；不得在 Input 和 Preview 各复制一套；
-- `Auto scale`、强度 log、vmin/vmax、colormap、中心和 cut overlay 等高频显示控制默认可发现；
-- preprocessing 与原始显示参数明确分组，但只有低频 preprocessing 可以放入 Advanced；
-- `Pick center`、`Select region` 等直接操作必须有显式按钮、选中态、光标/提示和 Esc 取消；
-- 纯显示操作不得隐式执行 cut、fit 或切换结果页；改变计算输入后只标记下游结果 stale；
-- 曲线 toolbar 使用用户任务语言，不暴露底层算法参数的笛卡尔积。
-
-包含正负 q 的曲线遵循以下界面语义：
-
-- `Signed ±q` 保留符号；勾选 Log X 时使用 symmetric-log；
-- `Positive +q` 或已经折叠到 `|q|` 的数据可以使用普通 log；
-- `Negative −q` 保留负号，Log X 使用 symmetric-log；
-- fold/overlay/average 是用户选择的 q 展示与数据准备模式，不作为三个互相冲突的下拉框暴露。
-
-Matplotlib 官方 [Symlog scale](https://matplotlib.org/stable/gallery/scales/symlog_demo.html)
-明确将 symlog 定义为覆盖负值的对数扩展，并在零附近使用有限的线性区。实现必须保持 preview、
-fitting region、拟合输入和 export 对同一 q 模式的解释一致。
-
-## 页面任务结构
-
-复杂 workspace 优先采用稳定的任务导航和当前任务内容区：
-
-```text
-Input → Setup → Locate/Select → Run → Results → Export
-```
-
-导航表示位置，不伪造完成状态。完成、失败和 stale 必须来自真实结果判断。熟练用户可以任意跳转；
-引导模式只增加说明，不改变功能可达性。
-
-一个任务内部如果有多个对等工作面，例如 `Components / Global / Manual fit / Auto fit`，使用同级
-tabs 或 segmented navigation。不得把常用工作面放在超长表单下方，也不得把它们混入 Advanced。
-
-## 文案与命名
-
-- 使用用户能执行的动词：`Import data`、`Find Yoneda`、`Extract cut`、`Run fit`；
-- 避免 `Para.`、`Widget`、`Method 2` 等实现语言；
-- 单位始终在 label 中清楚显示；
-- helper text 最多解释一个选择的影响，不重复标题，不陈述显而易见的事实；
-- tooltip 用于补充精确含义，不得成为发现核心功能的唯一方式。
-
-## 每次 UI 修改的必做流程
-
-1. 先画出当前页面的任务流和容器树，标记重复标题、嵌套边框、折叠核心功能和固定尺寸；
-2. 列出 Basic 与 Advanced；证明每个 Advanced 项确实低频；
-3. 优先复用公共组件，但不得为了复用制造新的容器层；
-4. 保持 View → ViewModel → Use Case 依赖，布局修改不夹带科学算法修改；
-5. 对至少 1280×800、1440×900、1920×1080 三种逻辑 viewport 做离屏或人工检查；
-6. 验证键盘焦点、safe-wheel、默认状态、空状态、错误状态和长文本；
-7. 截图检查以下问题：核心命令是否首屏可见、是否有裁切、是否有重复框线、视觉主操作是否唯一；
-8. 更新对应 workspace 控件映射和手动验收清单。
-
-## Review 门禁
-
-以下任一项出现时，UI change 不得视为完成：
-
-- 核心工作流需要展开 Advanced；
-- 可见区域出现两层以上连续边框容器；
-- 内容因固定最大高度而裁切；
-- 页面存在空 disclosure、重复控件或只有手势才能找到的命令；
-- 1440×900 下主操作或当前结果不可达；
-- 调整显示参数触发科学计算、页面跳转或修改原始数据；
-- 新页面没有 offscreen construction test 和对应手动验收清单。
+以下任一项出现时，UI 修改不算完成：核心流程需要展开 Advanced；两层以上连续边框；内容被固定高度裁切；
+命令只能靠手势找到；1440×900 下主操作或当前结果不可达；调整显示参数触发计算、跳页或改变数据；
+操作后用户看不出发生了什么；长任务停不下来。

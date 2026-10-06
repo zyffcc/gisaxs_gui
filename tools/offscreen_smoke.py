@@ -9,6 +9,8 @@ import sys
 import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# The Fitting page still writes its model parameters into the user data folder: a temporary one, not the real one.
+os.environ.setdefault("GIMAP_HOME", __import__("tempfile").mkdtemp(prefix="gimap-smoke-home-"))
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 

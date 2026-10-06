@@ -186,8 +186,8 @@ NIGHT_ZH = {
     "Simulate a few images with these settings to see what the training set looks like": "用这些设置模拟几张图，看看训练集是什么样",
     "Show or hide: detector, particle and sampling settings used less often": "显示或隐藏：不常用的探测器、颗粒和采样设置",
     # -- older texts of the main pages ----------------------------------------------------------
-    "Save Labs Parameters": "保存 Labs 参数",
-    "Load Labs Parameters": "载入 Labs 参数",
+    "Save Labs Parameters": "保存实验室参数",
+    "Load Labs Parameters": "载入实验室参数",
     "User Data": "用户数据",
     "This session keeps its data in memory.": "本次会话的数据只保存在内存中。",
     "Calibrate beam centre and detector distance from a standard (AgBh, LaB6 …)": "用标样（AgBh、LaB6 …）标定光束中心和探测器距离",
@@ -230,6 +230,57 @@ NIGHT_ZH = {
     "Every frame: the quality of its fit and each value ± 1σ. Click a row to see that frame; the plot below follows a value through the series.":
         "每一帧：拟合质量和每个值 ± 1σ。点击一行查看那一帧；下面的图跟踪一个值在整个序列中的变化。",
     "Manual distance updated from the selected experimental/theoretical ring pair.": "已根据所选的实验/理论环对更新手动距离。",
+    # -- 2026-10-05 polish ------------------------------------------------------------------------
+    "Already open — showing it": "已经打开——正在显示",
+    "Masked pixels are drawn on the detector image": "被掩膜的像素画在探测器图像上",
+    "Sources are drawn on the detector image": "来源画在探测器图像上",
+    "Switch to Detector to see where this curve comes from": "切换到“探测器”视图，可以看到这条曲线来自哪里",
+    "at the Yoneda band (αf = {alpha}°)": "在 Yoneda 带处（αf = {alpha}°）",
+    "set by hand": "手动设置",
+    "above the horizon": "样品地平线以上",
+    "just above the horizon (no Yoneda band found)": "紧贴样品地平线以上（未找到 Yoneda 带）",
+    "Horizontal cut I(qy) over rows {rows}, {where}.": "水平切线 I(qy)：第 {rows} 行，{where}。",
+    "Vertical cut I(qz) over columns {columns} (the beam centre).": "竖直切线 I(qz)：第 {columns} 列（光束中心）。",
+    "Vertical cut I(qz) over columns {columns} (set by hand).": "竖直切线 I(qz)：第 {columns} 列（手动设置）。",
+    "I(qy) · rows {rows} · {where}": "I(qy) · 第 {rows} 行 · {where}",
+    "I(qz) · columns {columns}": "I(qz) · 第 {columns} 列",
+    "That frame is no longer listed": "这一帧已不在列表中",
+    "Map of the earlier list ({n} frames) — Build Map again to include the new files":
+        "这是之前列表的热图（{n} 帧）——再点“生成热图”以包含新文件",
+    "Drag the cyan cross on the image to move the centre; the change holds for every file of this detector until you go back to the profile centre.":
+        "拖动图上的青色十字来移动中心；在回到配置中心之前，这一改动对这个探测器的所有文件有效。",
+    "Drag the orange band on the image to move the horizontal cut, or double-click a column to move the vertical cut.":
+        "拖动图上的橙色带移动水平切线，或双击某一列移动竖直切线。",
+    "Both halves, as measured (display only)": "两侧，按测量显示（仅显示）",
+    "Only the positive half (display only)": "只显示正半边（仅显示）",
+    "Only the negative half (display only)": "只显示负半边（仅显示）",
+    "Both halves on |qy|, the negative one dashed (display only)": "两侧都画在 |qy| 上，负半边为虚线（仅显示）",
+    "The halves shown in this plot (display only): the halves for Fitting are chosen in the Cuts step":
+        "此图显示的半边（仅显示）：拟合用的半边在“切线”步骤中选择",
+    "αi from profile": "αi 来自配置",
+    "Back to Profile αi": "回到配置中的 αi",
+    "Use the grazing angle of the instrument profile again": "重新使用仪器配置中的掠入射角",
+    "Show on the detector image which pixels each curve comes from, in the colours of the plots; click a curve to show only its pixels":
+        "在探测器图像上用曲线的颜色标出每条曲线来自哪些像素；点击一条曲线只显示它的像素",
+    "The beam centre you set for {set_shape} frames is not used for this {shape} frame (profile centre used).":
+        "你为 {set_shape} 的帧设置的光束中心不用于这个 {shape} 的帧（使用配置中的中心）。",
+    "The beam centre you set for {set_shape} frames is not used for this {shape} frame (file header centre used).":
+        "你为 {set_shape} 的帧设置的光束中心不用于这个 {shape} 的帧（使用文件头中的中心）。",
+    "Run the standard procedure: geometry, mask, cuts and results, each with its reason.":
+        "运行标准流程：几何、掩膜、切线和结果，每一步都附带理由。",
+    "Results are for {name}; run again for this frame": "这些结果属于 {name}；请为这一帧再运行一次",
+    "This frame looks like {detected} but {mode} is selected": "这一帧看起来是 {detected}，但选择的是 {mode}",
+    "Use Auto": "使用自动",
+    "αi set by you: {value}° · profile: {profile}°": "αi 由你设置：{value}° · 配置：{profile}°",
+    "αi {value}° from your last session (profile: {profile}°)": "αi {value}° 来自你上次的会话（配置：{profile}°）",
+    "Right-click: Back to Profile αi": "右键：回到配置中的 αi",
+    "Back to Profile": "回到配置",
+    # -- static texts of the windows (2026-10-05) ---------------------------------------------------
+    "Yoneda cut": "Yoneda 切线",
+    "Open the curve in Fitting (q in Å⁻¹). GISAXS: the horizontal cut, both halves on |qy| (two colours); GIWAXS: I(q). The arrow chooses the half.":
+        "在拟合中打开曲线（q 单位 Å⁻¹）。GISAXS：水平切线，两半都画在 |qy| 上（两种颜色）；GIWAXS：I(q)。箭头选择用哪一半。",
+    "Beam centre of this frame and where it comes from. Drag the cross on the image, or use this menu to pick, type, reset or save it.":
+        "这一帧的光束中心及其来源。在图上拖动十字，或用这个菜单点选、输入、重置或保存。",
 }
 
 __all__ = ["NIGHT_ZH"]

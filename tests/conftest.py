@@ -78,6 +78,65 @@ def _release_qt_widgets() -> None:
     app.processEvents()
 
 
+def _closed_main_windows(app) -> list:
+    """GIMaP main windows that went through their close (``MainWindow._closed``) and are hidden."""
+    window_class = getattr(sys.modules.get("main"), "MainWindow", None)
+    if window_class is None:
+        return []
+    return [widget for widget in app.topLevelWidgets()
+            if isinstance(widget, window_class) and getattr(widget, "_closed", False) and not widget.isVisible()]
+
+
+def _inside(widget, windows) -> bool:
+    parent = widget.parent()
+    while parent is not None:
+        if any(parent is window for window in windows):
+            return True
+        parent = parent.parent()
+    return False
+
+
+def _delete_closed_main_windows() -> None:
+    """Delete the main windows a test closed, in the order ``_release_qt_widgets`` uses (reference cycles
+    first, then embedded pyqtgraph views before their window)."""
+    if "PyQt5.QtWidgets" not in sys.modules or "main" not in sys.modules:
+        return
+    from PyQt5.QtCore import QCoreApplication, QEvent
+    from PyQt5.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is None or not _closed_main_windows(app):
+        return
+    import gc
+
+    gc.collect()
+    windows = _closed_main_windows(app)
+    if not windows:
+        return
+    pyqtgraph = sys.modules.get("pyqtgraph")
+    if pyqtgraph is not None:
+        for widget in list(app.allWidgets()):
+            if isinstance(widget, pyqtgraph.GraphicsView) and _inside(widget, windows):
+                widget.deleteLater()
+    for window in windows:
+        window.deleteLater()
+    del windows
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.processEvents()
+
+
+@pytest.fixture(autouse=True)
+def delete_closed_main_windows():
+    """After each test, the main windows it closed are deleted; a window kept open (across a module) stays.
+
+    A closed window is only hidden, and every later theme switch re-polishes it: by the end of a module
+    of window tests one ``apply_theme`` took a minute and more.
+    """
+    yield
+    if not os.environ.get("GIMAP_TEST_KEEP_WINDOWS"):
+        _delete_closed_main_windows()
+
+
 @pytest.fixture(scope="module", autouse=True)
 def release_windows_after_module():
     """Each test module starts without the previous module's windows.

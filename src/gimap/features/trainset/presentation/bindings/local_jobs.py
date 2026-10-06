@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 
+from src.gimap.app.presentation.i18n import trf
 from src.gimap.features.trainset.application import (
     PrepareTrainsetJobRequest,
     TrainsetLocalProcessRequest,
@@ -105,7 +106,7 @@ class LocalJobsMixin:
     def _local_process_started(self) -> None:
         self.generation_started.emit()
         self.page.job_state.setText("RUNNING")
-        self.page.set_step_state(4, "RUNNING")
+        self.page.set_step_state(4, "Running")
         self.page.set_local_job_status("running", "Starting local process…", 0)
         self.page.local_pause_button.setEnabled(True)
         self.page.local_stop_button.setEnabled(True)
@@ -225,13 +226,13 @@ class LocalJobsMixin:
     def _local_process_finished(self, exit_code: int, _status=None) -> None:
         state = "COMPLETED" if exit_code == 0 else "FAILED"
         self.page.job_state.setText(state)
-        self.page.set_step_state(4, state)
+        self.page.set_step_state(4, "Completed" if exit_code == 0 else "Failed")
         self.page.local_pause_button.setEnabled(False)
         self.page.local_stop_button.setEnabled(False)
         self.page.local_pause_button.setText("Pause")
         self.page.set_local_job_status(
             "succeeded" if exit_code == 0 else "failed",
-            "Completed." if exit_code == 0 else f"Stopped or failed (exit code {exit_code}).",
+            "Completed." if exit_code == 0 else trf("Stopped or failed (exit code {code}).", code=exit_code),
             100 if exit_code == 0 else self.page.local_progress.value(),
         )
         if exit_code == 0:
@@ -244,7 +245,7 @@ class LocalJobsMixin:
                 return
         else:
             self._pending_local_arguments = None
-            self.generation_error.emit(f"Local process exited with code {exit_code}")
+            self.generation_error.emit(trf("Local process exited with code {code}", code=exit_code))
         self._load_local_metrics()
 
     def _load_local_metrics(self) -> None:

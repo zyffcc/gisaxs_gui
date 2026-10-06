@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
+
+from src.gimap.app.presentation.i18n import current_language
 
 from ..application import (
     BACKEND_CLAUDE_CODE,
@@ -10,6 +12,7 @@ from ..application import (
     DEFAULT_MAX_TURNS,
     DEFAULT_MODEL,
     GOALS,
+    LANGUAGES,
     PERMISSION_PREVIEW,
 )
 
@@ -42,6 +45,16 @@ def read(settings, key: str) -> Any:
     return DEFAULTS[key] if value is None else value
 
 
+def report_language(settings, interface_language: Optional[str] = None) -> str:
+    """The report language to preselect: the one chosen before, else 中文 when the interface is in Chinese."""
+    stored = settings.get(SECTION, "language", None) if settings is not None else None
+    if stored in LANGUAGES:
+        return str(stored)
+    if interface_language is None:
+        interface_language = current_language()
+    return "中文" if interface_language == "zh" else DEFAULTS["language"]
+
+
 def write(settings, key: str, value: Any) -> None:
     if settings is None:
         return
@@ -49,4 +62,4 @@ def write(settings, key: str, value: Any) -> None:
     settings.save()
 
 
-__all__ = ["DEFAULTS", "SECTION", "read", "write"]
+__all__ = ["DEFAULTS", "SECTION", "read", "report_language", "write"]

@@ -21,7 +21,20 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from ..application import BILLING_SUBSCRIPTION, GOALS, RUN_CANCELLED, RUN_COMPLETED, RUN_FAILED, RunOutcome, StepRecord
+from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, tr
+from src.gimap.app.presentation.theme import theme_manager
+
+from ..application import (
+    BILLING_SUBSCRIPTION,
+    GOALS,
+    RUN_CANCELLED,
+    RUN_COMPLETED,
+    RUN_FAILED,
+    RunOutcome,
+    StepRecord,
+    step_text,
+)
+from .guided_text import step_summary
 from .operation_cards import OperationList
 from .report_view import report_html
 
@@ -34,13 +47,45 @@ STATE_TEXT = {
     RUN_CANCELLED: "Stopped",
     RUN_FAILED: "Failed",
 }
-FAILED_COLOR = QColor("#c62828")
-NOTE_COLOR = QColor("#607d8b")
-NOTICE_COLOR = QColor("#1e88e5")
+FAILED_ROLE, NOTE_ROLE, NOTICE_ROLE = "danger", "text_muted", "info"
+"""Theme colours of the step list's notes (read when a line is drawn, so light and dark both fit)."""
+AI_STEP_TEXT = {
+    "run_standard_pipeline": "Running the standard procedure",
+    "propose_operations": "Suggesting changes",
+    "set_beam_center": "Setting the beam centre",
+    "set_gisaxs_cuts": "Setting the GISAXS cuts",
+    "set_sector_widths": "Setting the sector widths",
+    "set_radial_bins": "Setting the radial bins",
+    "set_custom_sector": "Setting a custom sector",
+    "set_cut_regions": "Setting the cut regions",
+    "set_q_box": "Setting the q box",
+    "get_curve": "Reading a curve",
+    "show_view": "Showing a view in Analyze",
+    "search_files": "Searching files",
+    "ask_user": "Asking you",
+    "view_preview": "Looking at the q map",
+    "note_missing_capability": "Noting a missing capability",
+    "set_valid_intensity_range": "Setting the valid intensity range",
+    "export_results": "Exporting the results",
+    "submit_report": "Writing the report",
+}
+"""Words for the tools only the AI calls (``step_text`` knows those of the standard procedure)."""
+PERMISSION_TEXT = {"confirm": "asks before writing", "preview": "preview first"}
 
 
 def _tokens(count: int) -> str:
     return f"{count / 1000:.1f}k" if count >= 1000 else str(count)
+
+
+def _color(role: str) -> QColor:
+    return QColor(theme_manager().color(role))
+
+
+def step_name(tool: str, arguments=None) -> str:
+    """What a tool call does, in words of the interface language (the raw call is the tooltip)."""
+    if tool in AI_STEP_TEXT:
+        return tr(AI_STEP_TEXT[tool])
+    return step_text(tool, arguments, tr)
 
 
 class AssistantPanel(QWidget):
@@ -59,7 +104,7 @@ class AssistantPanel(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
         header = QHBoxLayout()
-        self.state_label = QLabel(STATE_TEXT["idle"], self)
+        self.state_label = QLabel(tr(STATE_TEXT["idle"]), self)
         self.state_label.setObjectName("assistantState")
         self.state_label.setProperty("gimapRole", "heading")
         header.addWidget(self.state_label)
@@ -91,7 +136,7 @@ class AssistantPanel(QWidget):
         self.report_view = QTextBrowser(splitter)
         self.report_view.setObjectName("assistantReport")
         self.report_view.setOpenExternalLinks(False)
-        self.report_view.setPlaceholderText("The report appears here when the AI finishes.")
+        self.report_view.setPlaceholderText(tr("The report appears here when the AI finishes."))
         splitter.setStretchFactor(0, 2)
         splitter.setStretchFactor(1, 2)
         splitter.setStretchFactor(2, 3)
@@ -102,24 +147,27 @@ class AssistantPanel(QWidget):
         self.usage_label = QLabel("", self)
         self.usage_label.setObjectName("assistantUsage")
         self.usage_label.setProperty("gimapRole", "muted")
+        self.usage_label.setWordWrap(True)  # a long plan / cost line wraps instead of widening the dock
         layout.addWidget(self.usage_label)
         follow = QHBoxLayout()
         self.follow_edit = QLineEdit(self)
         self.follow_edit.setObjectName("assistantFollowUp")
-        self.follow_edit.setPlaceholderText("Ask a follow-up about this frame… (the answer can bring new cards)")
-        self.follow_button = QPushButton("Ask", self)
+        self.follow_edit.setPlaceholderText(tr("Ask a follow-up about this frame… (the answer can bring new cards)"))
+        self.follow_button = QPushButton(tr("Ask"), self)
         self.follow_button.setObjectName("assistantFollowUpButton")
         follow.addWidget(self.follow_edit, 1)
         follow.addWidget(self.follow_button)
         layout.addLayout(follow)
         buttons = QHBoxLayout()
-        self.stop_button = QPushButton("Stop", self)
+        self.stop_button = QPushButton(tr("Stop"), self)
         self.stop_button.setObjectName("assistantStopButton")
-        self.again_button = QPushButton("Run Again…", self)
+        self.again_button = QPushButton(tr("Run Again…"), self)
         self.again_button.setObjectName("assistantAgainButton")
-        self.save_button = QPushButton("Save Report…", self)
+        self.save_button = QPushButton(tr("Save Report…"), self)
         self.save_button.setObjectName("assistantSaveButton")
-        self.copy_button = QPushButton("Copy", self)
+        self.copy_button = QPushButton(tr("Copy"), self)
+        self.copy_button.setObjectName("assistantCopyButton")
+        self.copy_button.setToolTip(tr("Copy the report as text"))
         for button in (self.stop_button, self.again_button, self.save_button, self.copy_button):
             buttons.addWidget(button)
         buttons.addStretch(1)
@@ -145,27 +193,33 @@ class AssistantPanel(QWidget):
         self.usage_label.clear()
         self.operations.show_operations(())
         self.speaker = "Claude" if "claude" in model.lower() else "AI"
-        self._set_live("", "Starting…")
-        self.state_label.setText(STATE_TEXT["running"])
+        self._set_live("", tr("Starting…"))
+        self.state_label.setText(tr(STATE_TEXT["running"]))
         self.model_label.setText(model)
-        wanted = ", ".join(GOALS[goal].split(":")[0].split(" (")[0] for goal in goals.goals)
-        mode = {"confirm": "asks before writing", "preview": "preview first"}.get(permission, "fully automatic")
+        wanted = ", ".join(tr(GOALS[goal].split(":")[0].split(" (")[0]) for goal in goals.goals)
+        mode = tr(PERMISSION_TEXT.get(permission, "fully automatic"))
         self.task_label.setText(f"{frame} · {wanted} · {mode}")
         self._set_buttons(running=True, finished=False)
 
     def stopping(self) -> None:
-        self.state_label.setText(STATE_TEXT["stopping"])
+        self.state_label.setText(tr(STATE_TEXT["stopping"]))
         self.stop_button.setEnabled(False)
 
     def finish(self, outcome: RunOutcome, *, cost: Optional[float], elapsed: float, language: str = "English") -> None:
         self._set_live("", "")
-        self.state_label.setText(STATE_TEXT.get(outcome.state, outcome.state.title()))
+        self.state_label.setText(tr(STATE_TEXT[outcome.state]) if outcome.state in STATE_TEXT else outcome.state.title())
         self.report_view.setHtml(report_html(outcome, cost=cost, elapsed=elapsed, language=language))
         self.show_operations(outcome.results.operations)
         self.usage(outcome.usage, cost, elapsed, outcome.billing)
         self._set_buttons(running=False, finished=True)
         if outcome.state == RUN_FAILED:
-            self._add_note(outcome.message, color=FAILED_COLOR)
+            self._add_note(outcome.message, color=_color(FAILED_ROLE))
+        self.translate()
+
+    def translate(self) -> None:
+        """Rows and cards are rebuilt on every run: put them in the interface language."""
+        if current_language() != DEFAULT_LANGUAGE:
+            apply_to(self, current_language())
 
     def _follow_up(self) -> None:
         text = self.follow_edit.text().strip()
@@ -185,28 +239,32 @@ class AssistantPanel(QWidget):
     # -- progress ----------------------------------------------------------------------
 
     def step_started(self, step: StepRecord) -> None:
-        item = QListWidgetItem(f"{step.index}. {step.tool} …")
+        name = step_name(step.tool, step.arguments)
+        item = QListWidgetItem(f"{step.index}. {name} …")
         item.setToolTip(self._tooltip(step))
         self.step_list.addItem(item)
         self.step_list.scrollToItem(item)
         self._rows[step.index] = item
-        self._set_live("tool", f"Running {step.tool}…")
+        self._set_live("tool", f"{name}…")
 
     def step_finished(self, step: StepRecord) -> None:
         item = self._rows.get(step.index)
         if item is None:
             return
         mark = "" if step.ok else " ×"
-        item.setText(f"{step.index}. {step.tool}{mark} — {step.summary}" if step.summary else f"{step.index}. {step.tool}{mark}")
+        name = step_name(step.tool, step.arguments)
+        summary = step_summary(step.tool, step.arguments, step.summary, current_language())
+        item.setText(f"{step.index}. {name}{mark} — {summary}" if summary else f"{step.index}. {name}{mark}")
         item.setToolTip(self._tooltip(step))
         if not step.ok:
-            item.setForeground(QBrush(FAILED_COLOR))
+            item.setForeground(QBrush(_color(FAILED_ROLE)))
 
     def show_operations(self, operations) -> None:
         self.operations.show_operations(list(operations))
         if self.operations.cards:
             total = max(1, sum(self.splitter.sizes()))
             self.splitter.setSizes([int(total * 0.2), int(total * 0.45), int(total * 0.35)])
+        self.translate()
 
     def model_text(self, text: str) -> None:
         self._add_note(f"{self.speaker}: {text}")
@@ -217,21 +275,23 @@ class AssistantPanel(QWidget):
         elif kind == "text":
             self._set_live("text", (self._live_text if self._live_kind == "text" else "") + text)
         elif kind == "tool":
-            self._set_live("tool", f"Preparing {text}…")
+            self._set_live("tool", tr("Next: {step}…").format(step=step_name(text)))
         elif kind == "retry":
             self._set_live("retry", text)
 
     def usage(self, total, cost: Optional[float], elapsed: float, billing: str = "") -> None:
         read = total.input_tokens + total.cache_read_input_tokens + total.cache_creation_input_tokens
-        text = f"{_tokens(read)} tokens in ({_tokens(total.cache_read_input_tokens)} cached) · {_tokens(total.output_tokens)} out"
+        text = tr("{read} tokens in ({cached} cached) · {out} out").format(
+            read=_tokens(read), cached=_tokens(total.cache_read_input_tokens), out=_tokens(total.output_tokens))
         if billing == BILLING_SUBSCRIPTION:
-            text += " · your Claude plan" + (f" (≈ ${cost:.2f} at API prices)" if cost is not None else "")
+            text += " · " + (tr("your Claude plan (≈ ${cost} at API prices)").format(cost=f"{cost:.2f}")
+                             if cost is not None else tr("your Claude plan"))
         elif cost is not None:
             text += f" · ≈ ${cost:.2f}"
         self.usage_label.setText(f"{text} · {elapsed:.0f} s")
 
     def notice(self, text: str) -> None:
-        self._add_note(text, color=NOTICE_COLOR)
+        self._add_note(text, color=_color(NOTICE_ROLE))
 
     # -- helpers -----------------------------------------------------------------------
 
@@ -241,15 +301,15 @@ class AssistantPanel(QWidget):
         shown = " ".join(text.split())
         if len(shown) > LIVE_CHARS:
             shown = "…" + shown[-LIVE_CHARS:]
-        prefix = {"thinking": "Thinking: ", "text": f"{self.speaker}: "}.get(kind, "")
+        prefix = {"thinking": tr("Thinking:") + " ", "text": f"{self.speaker}: "}.get(kind, "")
         self.live_label.setText(prefix + shown if shown else "")
 
-    def _add_note(self, text: str, *, color: QColor = NOTE_COLOR) -> None:
+    def _add_note(self, text: str, *, color: Optional[QColor] = None) -> None:
         item = QListWidgetItem(text)
         font = item.font()
         font.setItalic(True)
         item.setFont(font)
-        item.setForeground(QBrush(color))
+        item.setForeground(QBrush(color if color is not None else _color(NOTE_ROLE)))
         item.setToolTip(text)
         self.step_list.addItem(item)
         self.step_list.scrollToItem(item)

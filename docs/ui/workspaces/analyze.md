@@ -54,7 +54,11 @@ Run Automatic Analysis（Results 步骤可写束线时笔记：αi、能量、�
   q 范围、D 的初值、算法、警告，和 **Show in Fitting**（在拟合中打开曲线并画出这个解；拟合的步骤栏显示“当前画出的解”，
   Export Data… 保存拟合与参数）。数据在报告里（`peaks[].fit`、`peak_search`、`gisaxs.fit.solutions[]`、`gisaxs.fit.native`），
   给 AI 的精简报告去掉数组。
-- 只有你能回答的问题（αi、能量、标定文件等）在 Results 步骤里变成输入框，回答后 Run Again。
+- 只有你能回答的问题（αi、能量、标定文件等）在 Results 步骤里变成输入框，回答后 Run Again；步骤、标记和状态行中的
+  问题数相同（同一个值的几个问题算一个）。
+- 结果属于运行时的那一帧：运行期间文件列表锁定（变灰），新列出的帧排在后面；运行结束后换到别的帧，Results 步骤说明
+  显示的是哪一帧的结果；回到该帧时恢复（最近 24 个文件）。序列只对运行用到的帧显示 ✓。进度面板的 Discard 也会清掉
+  Results。报告标题为 GISAXS / GIWAXS / Geometry report，保存在数据旁边，写完有 toast 可打开文件夹。
 - 进度（和 AI 面板一样）：运行时右侧切到 Results，顶部是进度面板——“正在：……”一句话说明当前步骤和已用时间，阶段清单
   （读取帧 · 几何 · 序列中的帧 · 峰 / Yoneda 切线 · 面内面外 / 间距 · 取向与尺寸 / 模型拟合）逐项打勾并显示用时，
   不需要的阶段标为“不需要”，进度条按阶段前进。
@@ -78,6 +82,8 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
   短批次不开进程）；结果按帧顺序折叠（表格、从上一帧开始的拟合），工作进程意外退出时其余帧回到程序内逐帧处理。
   “every n frame”只取每 n 帧，长序列先快速看全貌（Lambda 9M 每帧约 1.7 s；序列行不计算 q 图）。
 - 热图就是一个 DetectorView：Log、色图、色阶可调；读数显示帧、文件、x 与强度。
+- 热图属于建图时的文件列表：之后再列出文件，热图保留并注明 “Map of the earlier list (N frames)”；Clear 清空列表时
+  热图一并清除（正在建的图也停止）。
 - 水平带选帧（下方左图画出该帧曲线，Open 在 Analyze 中打开该帧），竖直带选 q 窗口（下方右图画出强度随帧的变化，
   默认放在序列变化最显著的 q 处）；两条带都能拖动。
 - Export ▾：Map as CSV Table…（首行 x，首列帧号，每帧一行 `#` 注明文件）、Map as Figure…、所选帧曲线、强度随帧。
@@ -91,6 +97,13 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
 - Geometry 步骤 ▸ Beam centre：拖动图上的青色十字、Pick on Image、Enter Coordinates…、Use File Header Centre、
   Refine x by Symmetry（GISAXS：在水平切带内找左右对称轴，只改 x）。改动对之后的文件保持；Save to Profile 写入配置，
   Back to Profile Centre 放弃。
+- 本次会话设的中心只用于同一探测器尺寸（行 × 列）的帧；尺寸不同的帧回到配置的中心。尺寸随中心写入设置文件与项目
+  （`beam_center_shape_px`）。
+
+## αi 与模式
+
+- 命令栏的 αi：没有输入时显示 “αi from profile”；为本次会话输入的值以橙色标出，右键 ▸ Back to Profile 回到配置的值。
+- 模式固定为 GISAXS 或 GIWAXS 而帧看起来是另一种时，状态行会提醒；Auto 每帧重新判断。
 
 ## 送到 Fitting
 
@@ -152,7 +165,9 @@ Fitting ▸ In-situ series。
 - More cut settings（折叠）：Radial bins、I(q) 横轴 q 或 2θ、q 框（q∥ × qz，在 q 图上可拖动）。
 - 两个曲线图右上角 Save ▾：Plot as Figure…（论文图）/ Curves as Data…（该图的每条曲线一个 CSV + JSON 记录）。
 - 曲线的 x 有正负时（GISAXS 水平切线的 qy、环的 I(χ)），曲线图上方出现 ± / + / − / |qy|：两侧、只看正半轴、只看负半轴、
-  两侧都画在 |x| 上（负半轴虚线，比较两侧是否一致）。只改变显示和 Plot as Figure…，导出的数据不变。
+  两侧都画在 |x| 上（负半轴为另一深浅的虚线，比较两侧是否一致）。只改变显示和 Plot as Figure…，导出的数据不变。
+  图较窄时（例如 1280 px 窗口）标题换行显示在图上方，这些选项收进 **⋯** 菜单；右键菜单有 Reset View、对数轴、
+  Plot as Figure…、Curves as Data…、Copy Image、Copy Data，右键拖动缩放。
 - 放大：每个图像和曲线图都有 Zoom（放大镜）——按下后拖出矩形放大；在任何视图中按住 Shift 拖动也可以；Reset / Fit view
   恢复全部。Fitting 的曲线图（以及原位序列的图）直接拖出矩形放大，双击恢复；重新拟合、重画数据时保持放大，载入新曲线时恢复。
 - AI 工具 `set_cut_regions` 设置同一个区域列表（可预览、应用、撤销）。
@@ -223,8 +238,9 @@ Fitting ▸ In-situ series。
 
 ## 界面语言
 
-设置 ▸ Appearance ▸ Language：English（默认）/ 中文。命令、步骤、按钮、菜单等界面文字切换为中文；数值、单位、文件名不翻译，
-少数运行中生成的句子仍为英文。
+设置 ▸ Appearance ▸ Language，或菜单 View ▸ Language：English（默认）/ 中文。命令、步骤、按钮、菜单、表头、数值框的单位后缀和运行中生成的句子
+切换为中文；切换语言时当前页面的步骤说明、图标题和状态行随之重写。数值、单位、文件名，以及作为数据的表头（序列名、
+参数名）不翻译。
 
 ## 手动验收清单
 

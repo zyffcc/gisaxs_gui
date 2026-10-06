@@ -5,6 +5,7 @@ from pathlib import Path
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 
 from .fitting_session import FittingSessionCoordinator
+from .presentation.i18n import tr
 from .presentation.parameter_validation import show_parameter_validation
 from .workspace_parameters import WorkspaceParameterCoordinator
 
@@ -105,15 +106,21 @@ class ApplicationRuntime(QObject):
     def _setup_connections(self) -> None:
         statusbar = getattr(self.ui, "statusbar", None)
         if statusbar is not None:
-            self.status_updated.connect(lambda text: statusbar.showMessage(str(text), 6000))
+            # No timeout: a step instruction ("Click the direct-beam position …") stays while its mode lasts,
+            # until the next message replaces it. Fixed English texts are translated here (the zh table).
+            self.status_updated.connect(lambda text: statusbar.showMessage(tr(str(text))))
 
         trainset = self.trainset
+        # Step instructions and job messages of Trainset Build (the status bar is shown on the Labs pages).
+        # The two Labs pages share the bar: a page that is not shown does not write over the other's line
+        # (each page keeps its last message and shows it again when it is opened).
+        trainset.status_updated.connect(lambda text: self._page_says("trainset", text))
         trainset.parameters_changed.connect(self._on_parameters_changed)
         trainset.generation_started.connect(
-            lambda: self.status_updated.emit("Trainset generation started...")
+            lambda: self._page_says("trainset", "Trainset generation started...")
         )
         trainset.generation_finished.connect(
-            lambda: self.status_updated.emit("Trainset generation completed!")
+            lambda: self._page_says("trainset", "Trainset generation completed!")
         )
         trainset.progress_updated.connect(self.progress_updated)
         trainset.prediction_module_registered.connect(
@@ -133,8 +140,15 @@ class ApplicationRuntime(QObject):
                 "GISAXS prediction parameters", params
             )
         )
-        prediction.status_updated.connect(self.status_updated)
+        prediction.status_updated.connect(lambda text: self._page_says("predict", text))
         prediction.progress_updated.connect(self.progress_updated)
+
+    def _page_says(self, key: str, text: str) -> None:
+        """A Labs page's message reaches the shared status bar only while that page is shown."""
+        components = getattr(self.ui, "components", None)
+        current = getattr(components, "current_page_key", None)
+        if current is None or current() == key:
+            self.status_updated.emit(text)
 
     def _initialize_ui(self) -> None:
         # The composition chose the start page (Analyze); keep whatever is shown now.
@@ -160,8 +174,9 @@ class ApplicationRuntime(QObject):
             binding.initialize()
 
     def _on_parameters_changed(self, module_name, parameters) -> None:
+        """Keep the latest parameters of a module. Nothing is said: Trainset sends them on every edit and
+        autosave, which would fill the status bar with noise (and push out the step instruction)."""
         self.current_parameters[module_name] = parameters
-        self.status_updated.emit(f"{module_name} parameters updated")
 
     def get_all_parameters(self) -> dict:
         return self.workspace_parameters.snapshot()

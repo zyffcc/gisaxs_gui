@@ -89,22 +89,34 @@ class FitRunMixin:
         self._busy(True)
         budget = self.budget_spin.value() or None
         model = self.session.model
+        selection = self.session.selection()  # the points this fit is made on (a later change makes it stale)
+        curve = self.session.curve  # the curve it is of: when another one is open by the end, nothing is kept
+        failed = lambda message, details="": self._failed(message, details, curve)  # noqa: E731
         self._log(tr("{method}: {points} points, {free} free parameters").format(
             method=tr(METHOD_NAMES[method]), points=data.q.size,
             free=sum(1 for _path, parameter in model.parameters() if parameter.free)))
         if method in ("local", "global"):
             job = lambda: fit(model, data, method=method, max_evaluations=budget,  # noqa: E731
                               progress=self._progress.changed.emit, stop=self._stop_event.is_set)
-            self.tasks.submit("fit", job, on_done=self._fitted, on_error=self._failed)
+            self.tasks.submit("fit", job, on_done=lambda result: self._fitted(result, selection, curve), on_error=failed)
         elif method == "shapes":
             families, edited = self.families_combo.currentData(), self.session.edited  # read here, not in the worker
             self.tasks.submit("fit", lambda: self._find_shapes(data, model, families, edited),
-                              on_done=self._solutions_found, on_error=self._failed)
+                              on_done=lambda solutions: self._solutions_found(solutions, curve, selection),
+                              on_error=failed)
         else:
-            self.tasks.submit("fit", lambda: self._ai_solutions(data, model), on_done=self._solutions_found,
-                              on_error=self._failed)
+            self.tasks.submit("fit", lambda: self._ai_solutions(data, model),
+                              on_done=lambda solutions: self._solutions_found(solutions, curve, selection),
+                              on_error=failed)
 
     def stop_fit(self) -> None:
+        if not self.fit_running():
+            return
+        self._halt_fit()
+        self.fit_progress_text.setText(tr("Stopping … the best values so far are kept."))
+
+    def _halt_fit(self) -> None:
+        """Ask the running fit to stop (also when another curve is opened: its result is then not kept)."""
         if not self.fit_running():
             return
         self._stop_event.set()
@@ -113,7 +125,6 @@ class FitRunMixin:
                 self.view_model.cancel_ai_candidates()
             except (AttributeError, RuntimeError):
                 pass
-        self.fit_progress_text.setText(tr("Stopping … the best values so far are kept."))
 
     def _busy(self, on: bool) -> None:
         for widget in (self.stop_button, self.stop_step_button, self.fit_progress, self.status_progress):
@@ -132,6 +143,7 @@ class FitRunMixin:
         self.status_progress.setValue(value)
         self.fit_progress_text.setText(text)
         self.status_label.setText(text)
+        self._status_text = None  # the fit's own progress line, not one to make again
 
     # -- outcomes ---------------------------------------------------------------------------
 
@@ -139,36 +151,56 @@ class FitRunMixin:
         self._running = None
         self._busy(False)
 
-    def _failed(self, message: str, _details: str = "") -> None:
+    def _of_another_curve(self, curve) -> bool:
+        """The fit ended after another curve was opened: it ends here, and nothing of it is kept (its
+        values, χ² and solutions belong to the curve before)."""
+        if curve is None or curve is self.session.curve:
+            return False
         self._finish()
-        self._status(tr("The fit failed: {reason}").format(reason=message), "error")
+        self._status(lambda: tr("The fit of {name} ended after another curve was opened; its result was not kept.").format(
+            name=curve.name), "warning")
+        return True
 
-    def _fitted(self, result) -> None:
+    def _failed(self, message: str, _details: str = "", curve=None) -> None:
+        if self._of_another_curve(curve):
+            return
+        self._finish()
+        self._status(lambda: tr("The fit failed: {reason}").format(reason=message), "error")
+
+    def _fitted(self, result, selection=None, curve=None) -> None:
+        if self._of_another_curve(curve):
+            return
         self._finish()
         self.session.result = result
+        self.session.result_selection = self.session.selection() if selection is None else selection
         self.session.set_model(result.model)
         self._model_changed(editor=True)
-        text = self._quality_text(result)
         if result.stopped:
-            self._status(tr("Stopped: the best values so far are kept ({quality}).").format(quality=text), "warning")
+            self._status(lambda: tr("Stopped: the best values so far are kept ({quality}).").format(
+                quality=self._quality_text(result)), "warning")
         else:
-            self._status(tr("Fitted: {quality}.").format(quality=text), "ok" if result.converged else "warning")
+            self._status(lambda: tr("Fitted: {quality}.").format(quality=self._quality_text(result)),
+                         "ok" if result.converged else "warning")
         self.show_step("results")
 
-    def _solutions_found(self, solutions) -> None:
+    def _solutions_found(self, solutions, curve=None, selection=None) -> None:
+        if self._of_another_curve(curve):
+            return
         method = self._running
         self._finish()
         if not solutions:
             self._status(tr("No solution: the curve may be too short or too noisy for these families."), "warning")
             return
         self.session.solutions = list(solutions)
+        # The points their χ² is of: those when the search started (the band may be dragged meanwhile).
+        self.session.solutions_selection = self.session.selection() if selection is None else selection
         best = solutions[0]
         self.session.result = None
         self.set_model(best.model)
         self.method_buttons["local"].setChecked(True)  # next: refine the chosen solution here
-        self._status(tr("{count} solutions; the best, {model} (χ²ᵣ {chi2}), is in Model. Fit again to refine it, "
-                        "or choose another in Results.").format(count=len(solutions), model=best.label,
-                                                                 chi2=f"{best.chi2:.3g}"), "ok")
+        self._status(lambda: tr("{count} solutions; the best, {model} (χ²ᵣ {chi2}), is in Model. Fit again to refine "
+                                "it, or choose another in Results.").format(count=len(solutions), model=best.label,
+                                                                         chi2=f"{best.chi2:.3g}"), "ok")
         self._log(tr("{method}: {count} solutions").format(method=tr(METHOD_NAMES.get(method, "")), count=len(solutions)))
         self.show_step("results")
 

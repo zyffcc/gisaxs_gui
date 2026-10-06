@@ -3,21 +3,20 @@
 from __future__ import annotations
 
 
-from pathlib import Path
-
-
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QButtonGroup,
     QHeaderView,
 )
 
-
-
-
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
 )
+
+# English keys of the frame-mode combo items, in View order. Logic reads these keys, never the
+# displayed (possibly translated) item text.
+FRAME_MODE_KEYS = ("All", "Current frame", "Frame range", "Custom", "Every Nth frame")
 
 
 class FormSetupMixin:
@@ -25,6 +24,8 @@ class FormSetupMixin:
 
     def _bind_form(self) -> None:
         """Attach behavior and compatibility names to the Designer-owned form."""
+        # Set by a close that waits for a preview read; a new show clears it (ConversionMixin).
+        self._close_when_idle = False
         bind_parameter_section(
             self.format_input_section,
             self.formatInputTitle,
@@ -91,7 +92,9 @@ class FormSetupMixin:
             self.last_preview_label,
         ]
         self.current_button.setEnabled(bool(self.current_file))
-        self.destination_edit.setText(str(Path.cwd() / "converted"))
+        # ``converted`` next to the data; it follows the first input until the user sets another.
+        self._auto_destination = self.view_model.default_destination()
+        self.destination_edit.setText(self._auto_destination)
         self.selection_splitter.setSizes((650, 340))
         self.input_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
         for column in range(1, 5):
@@ -99,10 +102,16 @@ class FormSetupMixin:
                 column,
                 QHeaderView.ResizeToContents,
             )
-        self.selection_table.horizontalHeader().setSectionResizeMode(
-            1,
-            QHeaderView.Stretch,
-        )
+        selection_header = self.selection_table.horizontalHeader()
+        for column in range(self.selection_table.columnCount()):
+            selection_header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        selection_header.setSectionResizeMode(1, QHeaderView.Stretch)
+        self.selection_table.verticalHeader().hide()
+        # Series files differ only at the end (_00005, _00033 ...): elide in the middle.
+        self.selection_table.setTextElideMode(Qt.ElideMiddle)
+        self.input_tree.setTextElideMode(Qt.ElideMiddle)
+        for index, mode in enumerate(FRAME_MODE_KEYS[: self.frame_mode.count()]):
+            self.frame_mode.setItemData(index, mode)
 
         self.format_group = QButtonGroup(self.output_format_group)
         self.format_buttons = {
@@ -114,6 +123,9 @@ class FormSetupMixin:
         for format_name, button in self.format_buttons.items():
             button.setProperty("format_name", format_name)
             self.format_group.addButton(button)
+        remembered = self.format_buttons.get(self.view_model.state.output_format)
+        if remembered is not None:  # the format of the last conversion
+            remembered.setChecked(True)
         for index, mode in enumerate(("original", "float32", "scale_uint16", "clip_uint16")):
             self.data_mode.setItemData(index, mode)
 
@@ -129,7 +141,7 @@ class FormSetupMixin:
         self.filter_edit.textChanged.connect(self._filter_sources)
         self.selection_table.itemChanged.connect(self._include_changed)
         self.selection_table.itemSelectionChanged.connect(self._selection_current_changed)
-        self.frame_mode.currentTextChanged.connect(self._update_frame_editor)
+        self.frame_mode.currentIndexChanged.connect(self._update_frame_editor)
         self.apply_frames.clicked.connect(self._apply_frame_selection)
         self.destination_button.clicked.connect(self._choose_destination)
         self.naming_combo.currentTextChanged.connect(self._update_output_preview)

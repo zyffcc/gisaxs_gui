@@ -1,6 +1,7 @@
 """Leaving points out of the fit: **Exclude** on the plot, then click a point (again to take it back)
 or drag a box around several. Left-out points stay on the plot as grey crosses, are not fitted,
-and are listed in the export record; the Curve step says how many and has **Include All**.
+and are listed in the export record; the Curve step says how many and has **Include All**. Each
+click, box or Include All is one step of Undo.
 """
 
 from __future__ import annotations
@@ -61,11 +62,7 @@ class FitExclusionMixin:
         if distance[index] > PICK_RADIUS:
             return
         key = point_key(points.q[index])
-        if key in self.session.excluded:
-            self.session.excluded.discard(key)
-        else:
-            self.session.excluded.add(key)
-        self._exclusions_changed()
+        self._set_excluded(self.session.excluded ^ {key})  # in, or back out
 
     # -- a box ----------------------------------------------------------------------------
 
@@ -102,14 +99,16 @@ class FitExclusionMixin:
         xs, ys = self._shown(points.q, points.intensity)
         inside = (xs >= rect.left()) & (xs <= rect.right()) & (ys >= rect.top()) & (ys <= rect.bottom())
         if inside.any():
-            self.session.excluded.update(point_key(value) for value in points.q[inside])
-            self._exclusions_changed()
+            self._set_excluded(self.session.excluded | {point_key(value) for value in points.q[inside]})
 
     # -- all --------------------------------------------------------------------------------
 
     def include_all(self) -> None:
-        if self.session.excluded:
-            self.session.excluded.clear()
+        self._set_excluded(set())
+
+    def _set_excluded(self, excluded) -> None:
+        """The left-out points, as one step of Undo (a click, a box, Include All)."""
+        if self.session.set_excluded(excluded):
             self._exclusions_changed()
 
     def left_out(self) -> int:

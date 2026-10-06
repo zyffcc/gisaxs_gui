@@ -237,3 +237,100 @@ def test_refine_center_moves_the_session_centre_to_the_symmetry_axis(tmp_path: P
     assert result.x_px == pytest.approx(CENTER_INDEX + 0.5, abs=0.05)
     assert model.state.beam_center == pytest.approx((result.x_px, _geometry().beam_center_y_px))
     assert model.center_state()["overridden"]
+
+
+# -- a session centre belongs to the detector it was set on ----------------------------------------------
+
+
+def test_a_session_centre_set_for_another_frame_shape_is_not_used() -> None:
+    from src.gimap.features.analyze.application import ResolveGeometry
+
+    resolve = ResolveGeometry(InMemoryInstrumentProfileRepository([InstrumentProfile("Test", _geometry(), "Test", SHAPE)]))
+    common = dict(detector_name="Test", shape=SHAPE, beam_center=(150.0, 60.0))
+    same = resolve(**common, beam_center_shape=SHAPE)
+    assert same.center_source == "session" and same.geometry.beam_center_x_px == 150.0
+    assert same.ignored_center_shape is None
+    anywhere = resolve(**common)  # no shape known (a settings file): every frame
+    assert anywhere.center_source == "session"
+    other = resolve(**common, beam_center_shape=(1043, 981))
+    assert other.center_source == "profile" and other.ignored_center_shape == (1043, 981)
+    profile = _geometry()
+    assert (other.geometry.beam_center_x_px, other.geometry.beam_center_y_px) == (
+        profile.beam_center_x_px, profile.beam_center_y_px)
+    header = resolve(**common, beam_center_shape=(1043, 981), use_header_center=True, header_center=(190.0, 100.0))
+    assert header.center_source == "header" and header.geometry.beam_center_x_px == 190.0
+
+
+def test_the_frame_says_when_the_session_centre_was_left_out(tmp_path: Path) -> None:
+    frames = FakeFrames({"a.cbf": [_symmetric_frame()]})
+    analyze = AnalyzeFrame(frames, InMemoryInstrumentProfileRepository([InstrumentProfile("Test", _geometry(), "Test", SHAPE)]))
+    request = AnalysisRequest(tmp_path / "a.cbf", mode="gisaxs", beam_center=(150.0, 60.0), beam_center_shape=[1043, 981])
+    assert request.beam_center_shape == (1043, 981)
+    analysis = analyze(request)
+    assert analysis.resolution.center_source == "profile"
+    assert analysis.messages[0] == (
+        "The beam centre you set for 1043×981 frames is not used for this 120×400 frame (profile centre used).")
+    assert analysis.detected_kind == "gisaxs"
+    kept = analyze(AnalysisRequest(tmp_path / "a.cbf", mode="gisaxs", beam_center=(150.0, 60.0), beam_center_shape=SHAPE),
+                   loaded=analysis)
+    assert kept.resolution.center_source == "session" and not any("beam centre" in text for text in kept.messages)
+
+
+def test_requests_carry_the_shape_the_session_centre_was_set_on(tmp_path: Path) -> None:
+    frames = FakeFrames({"a.cbf": [_symmetric_frame()], "b.cbf": [_symmetric_frame()]})
+    model = _view_model(frames)
+    model.add_paths([tmp_path / "a.cbf", tmp_path / "b.cbf"])
+    model.select(0)
+    assert model.request().beam_center_shape is None
+    model.accept(model.analyze(model.request()))
+    model.set_beam_center(150.0, 60.0)
+    assert model.state.beam_center_shape == SHAPE
+    assert model.request().beam_center_shape == SHAPE
+    assert all(request.beam_center_shape == SHAPE for request in model.batch_requests())  # Batch Export too
+    # One record of the shape: the state and the requests always say the same.
+    model.state.beam_center = (151.0, 61.0)  # a centre from a settings file: no shape known, every frame
+    assert model.state.beam_center_shape is None and model.request().beam_center_shape is None
+    model.state.beam_center = (150.0, 60.0)  # Undo brings the centre back, with its shape
+    assert model.state.beam_center_shape == SHAPE and model.request().beam_center_shape == SHAPE
+    assert model.session_center_shape() == SHAPE
+    model.set_beam_center(152.0, 62.0, shape=[1043, 981])  # a centre loaded with the shape it was set on
+    assert model.state.beam_center_shape == (1043, 981) and model.request().beam_center_shape == (1043, 981)
+    model.set_beam_center(153.0, 63.0, shape=None)  # … or without one: every frame
+    assert model.state.beam_center_shape is None and model.request().beam_center_shape is None
+    model.clear_beam_center()
+    assert model.state.beam_center_shape is None and model.request().beam_center_shape is None
+
+
+@pytest.mark.skipif(
+    not (Path(__file__).parent / "data" / "external" / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif").is_file(),
+    reason="public test frames (tests/data/external) are not available",
+)
+def test_a_centre_set_on_one_detector_is_not_applied_to_another() -> None:
+    from tests.test_analyze_workspace import GALAXI, P08, _done, _public_page
+
+    page = _public_page()
+    page.add_paths([str(GALAXI)])
+    _done(page)
+    page.set_session_center(596.3, 719.6)
+    _done(page)
+    geometry = page.view_model.state.analysis.geometry
+    assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == (596.3, 719.6)
+    assert page.view_model.state.beam_center_shape == (1043, 981)
+
+    page.add_paths([str(P08)])
+    _done(page, 240)
+    analysis = page.view_model.state.analysis
+    assert analysis.path.name == P08.name
+    assert (analysis.geometry.beam_center_x_px, analysis.geometry.beam_center_y_px) == pytest.approx((545.5, 1826.9), abs=0.1)
+    assert analysis.resolution.center_source != "session"
+    assert page.status_level() == "warning"
+    assert "1043×981" in page.status_text() and "2048×2048" in page.status_text()
+    assert page.center_button.property("centerSource") == "profile"
+
+    page.file_list.setCurrentRow(0)
+    _done(page)
+    analysis = page.view_model.state.analysis
+    assert analysis.path.name == GALAXI.name and analysis.resolution.center_source == "session"
+    assert (analysis.geometry.beam_center_x_px, analysis.geometry.beam_center_y_px) == (596.3, 719.6)
+    page.dispose()
+    page.close()

@@ -74,6 +74,61 @@ def test_theme_actions_are_exclusive_and_follow_the_current_theme() -> None:
     window.close()
 
 
+def test_menus_show_their_descriptions_and_name_what_they_open(tmp_path) -> None:
+    _app()
+    window = QMainWindow()
+    state = {"collapsed": False}
+    menus = MainMenuBar(
+        window,
+        MenuCommands(
+            open_files=lambda: None, open_recent=lambda path: None, recent_paths=lambda: [],
+            load_parameters=lambda: None, save_parameters=lambda: None,
+            set_theme=lambda mode: None, change_font_size=lambda step: None, reset_font_size=lambda: None,
+            set_sidebar_collapsed=lambda on: state.update(collapsed=on), sidebar_collapsed=lambda: state["collapsed"],
+            ai_fitting_workspace=lambda: None, settings=lambda: None,
+        ),
+        NAVIGATION_ITEMS,
+    )
+    for menu in (menus.file_menu, menus.view_menu, menus.tools_menu, menus.help_menu, menus.recent_menu,
+                 menus.labs_menu, menus.theme_menu, menus.font_menu):
+        assert menu.toolTipsVisible(), menu.title()
+    tools = _titles(menus.tools_menu)
+    assert "1D &Predict — Fit Many Curves…" in tools and not any("Fit Settings" in text for text in tools)
+    assert menus.actions["ai_fitting_workspace"].toolTip().startswith("1D Predict")
+
+    # Not checkable (no check column that indents it); the text says what a click does.
+    sidebar = menus.actions["collapse_sidebar"]
+    assert not sidebar.isCheckable() and sidebar.text() == "Collapse &Sidebar"
+    sidebar.trigger()
+    assert state["collapsed"] is True and sidebar.text() == "Expand &Sidebar"
+    state["collapsed"] = False  # the sidebar's own button
+    menus.sync()
+    assert sidebar.text() == "Collapse &Sidebar"
+    window.close()
+
+
+def test_open_recent_rows_name_the_folder_and_tag_folders_and_projects(tmp_path) -> None:
+    _app()
+    window = QMainWindow()
+    folder = tmp_path / "beamtime"
+    folder.mkdir()
+    frame = folder / "frame_001.tif"
+    frame.write_bytes(b"x")
+    project = tmp_path / "sample.gimap"
+    project.write_text("{}", encoding="utf-8")
+    menus = MainMenuBar(window, MenuCommands(open_recent=lambda path: None,
+                                             recent_paths=lambda: [project, frame, folder]))
+    menus._fill_recent()
+    actions = menus.recent_menu.actions()
+    assert [action.text() for action in actions] == [
+        f"&1  sample.gimap — {tmp_path.name} (project)",
+        "&2  frame_001.tif — beamtime",
+        f"&3  beamtime — {tmp_path.name} (folder)",
+    ]
+    assert [action.toolTip() for action in actions] == [str(project), str(frame), str(folder)]
+    window.close()
+
+
 def test_tool_windows_reuse_one_modeless_instance() -> None:
     _app()
     window = QMainWindow()

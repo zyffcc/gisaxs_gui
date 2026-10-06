@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
     QTextBrowser,
 )
 
+from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.layout_metrics import move_window_to_cursor_screen
 from src.gimap.features.prediction.presentation.workflow_state import (
     PredictionWorkflowSnapshot,
@@ -320,6 +321,13 @@ class SetupStatusMixin:
         btn = getattr(self.ui, "gisaxsPredictChooseGisaxsFileButton", None)
         if btn:
             btn.clicked.connect(self._choose_gisaxs_file)
+        workbench = getattr(self.ui, "predictionWorkbenchLayout", None)
+        if workbench is not None and hasattr(workbench, "set_input_actions"):
+            # The empty canvas's "Choose CBF frame…" and a file dropped on the canvas open a frame here;
+            # a dropped folder becomes the folder batch.
+            workbench.set_input_actions(
+                choose=lambda: self._choose_gisaxs_file(), dropped=lambda path: self._handle_dropped_input(path)
+            )
 
         btn = getattr(self.ui, "gisaxsPredictExportFolderButton", None)
         if btn:
@@ -544,9 +552,10 @@ class SetupStatusMixin:
             label.setProperty("modelState", state_map.get(color, "idle"))
             label.style().unpolish(label)
             label.style().polish(label)
-            label.setText(status_text)
+            label.setText(tr(status_text))  # English kept in _model_status_text for refresh_language
             if tooltip:
-                label.setToolTip(tooltip)
+                label.setToolTip(tr(tooltip))
+        self._model_status_text = status_text
         self._refresh_predict_readiness()
 
     def _on_cancel_loading_shortcut(self) -> None:

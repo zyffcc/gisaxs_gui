@@ -12,7 +12,7 @@ import math
 from dataclasses import replace
 from typing import Mapping, Optional
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -51,8 +51,9 @@ def _set(spin: ScientificDoubleSpinBox, value: float) -> None:
 
 
 def _label(key: str) -> str:
+    """“Peak w (nm⁻¹)”: the name in the interface language, the unit as it is."""
     info = INFO[key]
-    return f"{info.label} ({info.unit})" if info.unit else info.label
+    return tr(info.label) + (f" ({info.unit})" if info.unit else "")
 
 
 class _Row:
@@ -63,7 +64,7 @@ class _Row:
         self.editor, self.path = editor, path
         parameter = editor.model.get(path)
         key = path[1]
-        self.name = QLabel(tr(_label(key)), parent)
+        self.name = QLabel(_label(key), parent)
         self.name.setToolTip(tr(INFO[key].tip))
         self.value = _spin(parent, parameter.value, f"fitValue_{path[0]}_{key}")
         self.error = QLabel("", parent)
@@ -164,6 +165,12 @@ class FitModelEditor(QWidget):
         self.show_ranges = bool(on)
         for row in self._rows.values():
             row.show_range(self.show_ranges)
+
+    def refresh_language(self) -> None:
+        """After a switch of the interface language: the cards again (names with their units, families, tips)."""
+        self._rebuild()
+        for row in self._rows.values():
+            row.refresh(self._errors, self._at_bounds)
 
     def add_component(self, family: str) -> None:
         radius = self.model.components[-1].value("R") if self.model.components else None

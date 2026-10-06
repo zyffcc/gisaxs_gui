@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.assets import ICON_ROOT, app_icon
+from src.gimap.app.presentation.i18n import tr
 
 
 @dataclass(frozen=True)
@@ -175,9 +176,12 @@ class NavigationSidebar(QWidget):
             button.setToolButtonStyle(style)
         for label in self._section_labels:
             label.setVisible(not self._collapsed)
+        # Collapsed, the rail shows one G: the Start entry's icon is the logo.
+        self.logo_label.setVisible(not self._collapsed)
         self.brand_label.setVisible(not self._collapsed)
-        self.toggle_button.setText("»" if self._collapsed else "«  Collapse")
-        self.toggle_button.setToolTip("Expand sidebar" if self._collapsed else "Collapse sidebar")
+        # Texts set again at run time go through tr(): the table is applied only when a window is shown.
+        self.toggle_button.setText(tr("»") if self._collapsed else tr("«  Collapse"))
+        self.toggle_button.setToolTip(tr("Expand sidebar") if self._collapsed else tr("Collapse sidebar"))
         self.setFixedWidth(self.COLLAPSED_WIDTH if self._collapsed else self.EXPANDED_WIDTH)
         if emit_signal:
             self.collapsedChanged.emit(self._collapsed)

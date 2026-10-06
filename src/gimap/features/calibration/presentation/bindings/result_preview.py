@@ -11,8 +11,9 @@ import numpy as np
 
 from matplotlib.patches import Ellipse
 
-from PyQt5.QtCore import QSignalBlocker
+from PyQt5.QtCore import QSignalBlocker, QTimer
 
+from src.gimap.app.presentation.theme.figures import restyle_figure
 
 from ...application import (
     CalibrationCandidate,
@@ -27,10 +28,86 @@ from ..preview_style import (
 )
 
 LOGGER = logging.getLogger(__name__)
+# Two-column selected solution only while the candidate table keeps at least this width.
+CANDIDATES_MIN_WIDTH = 260
 
 
 class ResultPreviewMixin:
     """Own result preview presentation behavior."""
+
+    def _two_column_solution_width(self) -> int:
+        """Width the selected-solution group needs for two title/value pairs per row."""
+        metrics = self.result_form_widget.fontMetrics()
+        titles = [title.sizeHint().width() for title, _value in self.result_rows[:6]]
+        form = self.resultForm.contentsMargins()
+        group = self.resultGroupLayout.contentsMargins()
+        return (
+            max(titles[0::2])
+            + metrics.horizontalAdvance("10000.000 mm")  # distance, the widest left value
+            + max(titles[1::2])
+            + metrics.horizontalAdvance("10000.000 px")
+            + 3 * self.resultForm.horizontalSpacing()
+            + form.left() + form.right() + group.left() + group.right()
+            + 12  # the group box frame
+        )
+
+    def _arrange_result_form(self, initial: bool = False) -> None:
+        """Two title/value pairs per row when the Results section is wide enough, else one.
+
+        Sizes of the results splitter are set initially, when the arrangement changes and when
+        two columns no longer fit their pane (other label texts after a language switch); in
+        between the user's own split stays.
+        """
+        try:
+            total = self.results_splitter.width()
+            current = self.results_splitter.sizes()[0]
+        except RuntimeError:  # the dialog is being destroyed
+            return
+        if total <= 0:
+            return
+        needed = self._two_column_solution_width()
+        two_columns = total - needed >= CANDIDATES_MIN_WIDTH
+        changed = two_columns != self._result_two_columns
+        if changed:
+            self._result_two_columns = two_columns
+            self.place_result_rows(two_columns)
+        if two_columns and (initial or changed or current < needed):
+            solution = needed
+        elif not two_columns and (initial or changed):
+            solution = min(max(int(total * 0.36), 260), 360)
+        else:
+            return
+        self.results_splitter.setSizes([solution, max(1, total - solution)])
+
+    def _result_language_changed(self, _language: str = "") -> None:
+        """Other title widths and line heights: refit once the texts are swapped."""
+        QTimer.singleShot(0, self._refit_results)
+
+    def _refit_results(self) -> None:
+        self._arrange_result_form()
+        self._fit_results_height()
+
+    def _fit_results_height(self) -> None:
+        """Give Results the few pixels a longer solution (a wrapped warning) needs, taken from
+        the preview only down to its minimum, and never after the user moved the split."""
+        try:
+            if self._results_user_sized or self.calibration_results_section.isHidden():
+                return
+            viewport = self.result_scroll.viewport()
+            form = self.result_form_widget
+            needed = (
+                form.heightForWidth(viewport.width())
+                if form.hasHeightForWidth()
+                else form.sizeHint().height()
+            )
+            overflow = needed - viewport.height()
+            preview, results = self.right_splitter.sizes()
+        except RuntimeError:  # the dialog is being destroyed
+            return
+        spare = preview - self.calibration_preview_panel.minimumSizeHint().height()
+        grow = min(overflow, spare)
+        if grow > 0:
+            self.right_splitter.setSizes([preview - grow, results + grow])
 
     def _show_candidate(self, candidate: CalibrationCandidate) -> None:
         self.result_labels["Beam center X"].setText(f"{candidate.center_x_px:.3f} px")
@@ -61,6 +138,7 @@ class ResultPreviewMixin:
         )
         self._populate_manual_rings(candidate)
         self.redraw_preview()
+        self._fit_results_height()
 
     def _clear_result_labels(self) -> None:
         for label in self.result_labels.values():
@@ -147,16 +225,15 @@ class ResultPreviewMixin:
         old_xlim, old_ylim = self.axes.get_xlim(), self.axes.get_ylim()
         had_image = bool(self.axes.images)
         self.axes.clear()
+        # The empty-state text is a Qt label over the canvas: matplotlib's font has no CJK glyphs.
+        self.preview_empty_label.setVisible(self.image is None)
+        # One empty-state message: the info line above the canvas returns with an image or result.
+        self.preview_info_label.setVisible(self.image is not None or self.result is not None)
         if self.image is None:
-            self.axes.text(
-                0.5,
-                0.5,
-                "Open a .nxs or .cbf calibration image",
-                ha="center",
-                va="center",
-                transform=self.axes.transAxes,
-            )
+            # An empty state, not a bare 0–1 axis.
+            self.axes.set_axis_off()
             self.overlay_legend.setVisible(False)
+            restyle_figure(self.figure)
             self.canvas.draw_idle()
             return
         display, invalid, extent, vmin, vmax, height, width = self._prepared_preview()
@@ -239,6 +316,8 @@ class ResultPreviewMixin:
             self.axes.set_xlim(-0.5, width - 0.5)
             self.axes.set_ylim(height - 0.5, -0.5)
             self._reset_preview_view = False
+        # Axes.clear() restores matplotlib's label colours: re-apply the theme's.
+        restyle_figure(self.figure)
         self.canvas.draw_idle()
 
     def _populate_manual_rings(self, candidate: CalibrationCandidate) -> None:

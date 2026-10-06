@@ -17,9 +17,10 @@ from PyQt5.QtGui import QColor, QIcon, QPixmap
 from PyQt5.QtWidgets import QListWidgetItem
 
 from src.gimap.app.presentation.components import show_toast
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import GISAXS, CutRegion, default_region_near, region_key, region_outline
+from ..texts import message_text
 
 STANDARD_COLORS = {
     "full": "#2563eb", "in_plane": "#f97316", "out_of_plane": "#16a34a", "ring": "#9333ea", "sector": "#dc2626",
@@ -95,6 +96,12 @@ def _range_text(q_range, chi_range, both_sides: bool) -> str:
     return f"{q_text} · {chi_text}"
 
 
+def _item_text(row: RegionRow) -> str:
+    """A row of the region list: its name, then its q and χ window (“every q” for the whole q range)."""
+    window = tr("every q") if row.q_range is None else f"q {row.q_text()} Å⁻¹"
+    return f"{tr(row.name)}\n{window} · {row.chi_text()}°"
+
+
 def _swatch(color: str) -> QIcon:
     pixmap = QPixmap(12, 12)
     pixmap.fill(QColor(color))
@@ -156,16 +163,34 @@ class RegionsMixin:
         with QSignalBlocker(listing):
             listing.clear()
             for row in self._region_rows:
-                item = QListWidgetItem(_swatch(row.color), f"{tr(row.name)}\nq {row.q_text()} Å⁻¹ · {row.chi_text()}°")
+                item = QListWidgetItem(_swatch(row.color), _item_text(row))
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Unchecked if row.key in self._hidden_regions else Qt.Checked)
                 item.setData(Qt.UserRole, row.key)
                 listing.addItem(item)
-            listing.setFixedHeight(min(300, 8 + 40 * len(self._region_rows)))
+            self._fit_region_list()
             keys = [row.key for row in self._region_rows]
             listing.setCurrentRow(keys.index(wanted) if wanted in keys else 0)
         self._region_selected()
         self._refresh_shapes()
+
+    def _fit_region_list(self) -> None:
+        """As tall as its rows, measured (two lines each, taller in a larger font), at most 300 px: every row
+        shows without scrolling."""
+        listing = self.region_list
+        rows = sum(max(0, listing.sizeHintForRow(row)) for row in range(listing.count()))
+        listing.setFixedHeight(min(300, 2 * listing.frameWidth() + rows + 2))
+
+    def _region_texts(self) -> None:
+        """The rows' names in the interface language again (after a language switch); the rows stay."""
+        with QSignalBlocker(self.region_list):
+            for index, row in enumerate(self._region_rows):
+                item = self.region_list.item(index)
+                if item is not None:
+                    item.setText(_item_text(row))
+        self._fit_region_list()  # the rows' height follows the font of the language
+        if self._region_rows:
+            self._region_selected()
 
     def _selected_row(self) -> Optional[RegionRow]:
         row = self.region_list.currentRow()
@@ -274,7 +299,7 @@ class RegionsMixin:
         try:
             region = CutRegion(self.region_name_edit.text().strip() or row.name, q_range, chi_range, both)
         except ValueError as exc:
-            self._status(str(exc), "warning")
+            self._status(message_text(exc), "warning")
             return
         self.view_model.update_region(row.index, region)
         self._options_changed()
@@ -309,7 +334,7 @@ class RegionsMixin:
             analysis = self.view_model.state.analysis
             window = analysis.reduction.markers.get("chi_q_window") if analysis is not None and analysis.reduction else None
             if window is None:
-                self._status("No ring stands out in I(q): set the q range of the new region.", "warning")
+                self._status(tr("No ring stands out in I(q): set the q range of the new region."), "warning")
                 region = CutRegion(name, None, (0.0, 90.0), True)
             else:
                 region = default_region_near(0.5 * (window[0] + window[1]), name=name)
@@ -322,8 +347,8 @@ class RegionsMixin:
         self.view_model.add_region(region)
         self._pending_region_key = region_key(count - 1)
         self.run_analysis()
-        show_toast(self.window(), f"{name} added: drag it on the Cake view, or change it in the list.", level="ok",
-                   action=("Show Cake", lambda: self.set_view(2)))
+        show_toast(self.window(), trf("{name} added: drag it on the Cake view, or change it in the list.", name=name),
+                   level="ok", action=(tr("Show Cake"), lambda: self.set_view(2)))
 
     def _remove_region(self) -> None:
         row = self._selected_row()
@@ -382,7 +407,7 @@ class RegionsMixin:
         try:
             region = CutRegion(row.name, q_range, (chi_low, chi_high), row.both_sides)
         except ValueError as exc:
-            self._status(str(exc), "warning")
+            self._status(message_text(exc), "warning")
             self._refresh_shapes()
             return
         self.view_model.update_region(row.index, region)

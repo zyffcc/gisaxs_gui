@@ -32,6 +32,18 @@ Qt signals、`QFileDialog` 和 `QMessageBox` 留在 dialog。路径规范化
 旧的 `ui/geometry_calibration_dialog.py` 与 `calibration/*.py` 兼容别名已删除；调用方直接导入
 `src.gimap.features.calibration.presentation.dialog`。
 
+使用上的要点（2026-10-06）：
+
+- Auto Calibration、Cancel 与任务状态固定在左栏底部，不随表单滚走；预览的工具栏在窄窗口时移到自己的一行。
+- 工具栏的缩放 / 平移打开时，点击预览不会移动手动精修的点。
+- “Advanced manual refinement” 只展开或收起这一节；手动模式只由 Manual refine 或 “Use manual values”
+  开启。Reset to fitted 回到拟合得到的解（导出或应用之后也可以）；只有改过的手动值才写入并标为手动调整。
+- 预览的空状态是界面文字（中文不会显示成方框）；图跟随浅色 / 深色主题，Save 写出的图用浅色。
+- Esc 关闭窗口；运行中按 Esc 会先询问，重新打开的窗口不会自己关闭。从 Analyze 打开的标定窗口关闭后释放。
+- Apply 只出一个 toast（中心、距离，以及“已保存为仪器配置 …，分析会自动使用”），不再另弹消息框；覆盖已有配置前仍会询问。
+  Apply 同时记下标定图像的尺寸与探测器（XRR 据此判断能否沿用）。Export 后的 toast 可打开文件夹；toast 显示在右侧，不挡按钮。
+- 可以拖入探测器图像（.nxs / .cbf / .tif / .edf，载入）或导出的 .json（导入）；Open… / Import… 从当前图像或上次的文件夹开始。
+
 ## 控件映射
 
 | 功能/控件区域 | Python View object / 当前位置 | 行为 |

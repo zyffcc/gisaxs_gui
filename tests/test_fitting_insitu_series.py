@@ -76,6 +76,50 @@ def _plain_recipe(binding):
     )
 
 
+def test_a_frame_opened_in_single_analysis_keeps_the_settings_of_the_series(tmp_path: Path) -> None:
+    """Open Frame in Single Analysis: the frame's model, on the points the series fitted, so that the
+    next Start reads the same halves, range and left-out points."""
+    from types import SimpleNamespace
+
+    import pytest
+
+    from src.gimap.features.fitting.application.single_fit import point_key
+    from src.gimap.features.fitting.presentation.workspace import FittingWorkspace
+    from tests.test_fit_series import RADII, _model, _pages, _series
+    from tests.test_fit_series import _wait as _wait_series
+
+    single, series = _pages()
+    folder = _series(tmp_path, RADII[:3])
+    single.open_curve(folder / "run_00001_fit_input.dat")
+    single.set_model(_model(5.2))
+    single.set_range((0.5, 1.5))
+    left_out = point_key(single.session.data().q[10])
+    single.session.excluded.add(left_out)
+    single._exclusions_changed()
+    series.open_series(folder)
+    series.start()
+    _wait_series(series)
+    assert len(series.fits) == 3 and series._settings.q_range == (0.5, 1.5)
+    single.set_range(None)  # meanwhile the person looks at something else in Single analysis
+    single.include_all()
+    contexts = []
+    host = SimpleNamespace(show_context=contexts.append, series_page=series, fit_page=single)
+    series.openFrameRequested.connect(lambda path, model: FittingWorkspace._frame_in_single(host, path, model))
+    series.frame_list.setCurrentRow(2)
+    series.to_single_button.click()
+    session = single.session
+    assert contexts == ["single"] and session.curve.name == "run_00003_fit_input.dat"
+    assert session.q_range == pytest.approx((0.5, 1.5)) and session.excluded == {left_out}
+    assert session.model == series.fits[2].result.model and session.can_undo()
+    assert "range and left-out points of the series are kept" in single.status_label.text()
+    series.start()  # the next run reads the same settings
+    assert series._settings.q_range == pytest.approx((0.5, 1.5)) and series._settings.excluded == frozenset({left_out})
+    series.stop()
+    _wait_series(series)
+    series.dispose()
+    single.dispose()
+
+
 def test_curve_numbers_ignore_analyze_suffixes() -> None:
     assert curve_number("run_00042_fit_input.dat") == 42
     assert curve_number("run_frame0007_sum10_fit_input.dat") == 7

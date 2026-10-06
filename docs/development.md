@@ -1,5 +1,7 @@
 # Development setup
 
+- **Last verified**: 2026-10-06 (Windows 11, Python 3.10.18, pytest 9.1, ruff 0.16)
+
 GIMaP currently supports Python 3.10 and 3.11. Python 3.10 is the safest common
 choice for TensorFlow 2.15 and BornAgain 24.1 compatibility.
 
@@ -56,40 +58,101 @@ the project team. The upstream build documentation is at
 
 ## Checks
 
-The individual commands are:
-
-```bash
-python -m pytest
-python -m ruff check .
-```
-
-Run the complete repository verification with one command:
+Run every check with one command (any platform):
 
 ```bash
 python tools/check.py
 ```
 
-The unified command sets Qt to the offscreen platform, runs the full test suite,
-starts and closes the real five-workspace window with in-memory repositories,
-and then runs the repository lint baseline. Ruff checks syntax, invalid control
-flow, and undefined names across the repository without legacy per-file exemptions;
-no broad formatting pass is enabled.
+It runs these steps in order. Each step runs even when an earlier one failed, and
+a summary with one line per step (result, time, pytest's counts) comes at the end.
+
+| Step | Command | Role |
+| --- | --- | --- |
+| Main test suite | `python -m pytest tests` | gate |
+| Offscreen smoke | `python tools/offscreen_smoke.py` | gate |
+| Ruff | `python -m ruff check .` | gate |
+| Research tests | `python -m pytest utils/ML_Fitting_1D_GISAXS/tests --continue-on-collection-errors` | reported only; skipped on Windows by default |
+
+- The **offscreen smoke** starts and closes the real main window with in-memory
+  settings, session and preferences. It requires 6 pages (Start, Analyze, Fitting,
+  Compare, 2D Prediction, Trainset Build), the Fitting, Prediction and Trainset
+  bindings, and the Compare page, and prints `Offscreen startup OK: pages=6, …`.
+- **Ruff** selects only `E9`, `F63`, `F7` and `F82`: syntax errors, invalid
+  comparisons and control flow, and undefined names. A pass says nothing about style.
+  Do not run a broad formatter; it would rewrite many files.
+- The **research tests** belong to the fitting research code in
+  `utils/ML_Fitting_1D_GISAXS`, which the GUI only runs as a subprocess. One of
+  them imports the POSIX-only `resource` module, which stops collection on Windows,
+  and many others fail there. Their result never changes the exit code.
+- Exit code: `0` when every gate step that ran passed, `1` when one failed or the
+  run was interrupted (`2` for a wrong command line).
+- Qt runs offscreen (`QT_QPA_PLATFORM=offscreen` unless set), and `GIMAP_HOME`
+  points to a temporary folder unless set, so the check never touches the real
+  user data folder.
+
+Options:
+
+```bash
+python tools/check.py --skip tests              # smoke and ruff only (seconds)
+python tools/check.py --research run            # also the research tests (on Windows too)
+python tools/check.py -- -x -k analyze          # arguments after -- go to the main suite's pytest
+python tools/check.py -- tests/test_ui_source_of_truth.py   # test paths replace tests/
+```
+
+An option's value (`-k tests`, `--deselect tests/test_x.py::t`) is not a test path,
+so `tests/` still runs.
+
+Times on the development machine (2026-10-06): main suite 14–15 minutes
+(about 1,380 tests), smoke about 7 s, ruff under 1 s, research tests about 5 minutes.
+
+When the output goes to a file or a pipe (a log, an agent), `check.py` writes UTF-8
+so that units such as `Å⁻¹` survive; set `PYTHONIOENCODING` to choose another encoding.
+
+### Windows
+
+A bare `python -m pytest` runs only `tests/` (`testpaths` in `pyproject.toml`); the research
+tests run only as the separate `check.py` step, which Windows skips (one of them imports the
+POSIX-only `resource` module and would stop collection). To run the main suite by hand:
+
+```powershell
+$env:QT_QPA_PLATFORM = "offscreen"
+python -m pytest tests -q
+python -m pytest tests/test_architecture_dependencies.py tests/test_ui_source_of_truth.py tests/test_ui_design_system.py
+```
+
+`tests/conftest.py` already sets `QT_QPA_PLATFORM=offscreen` (unless set), gives every
+run its own `GIMAP_HOME`, loads Arial, Segoe UI and Microsoft YaHei (offscreen Qt on
+Windows has no font database), and applies the light theme at 9 pt.
+
+### Screenshots
+
+Tests are already themed and have fonts. A standalone screenshot script has to do
+what `main()` and `conftest.py` do: load fonts including a CJK one
+(`QFontDatabase.addApplicationFont` on `C:/Windows/Fonts/msyh.ttc`, or
+`QT_QPA_FONTDIR=C:/Windows/Fonts`; without it Chinese shows as empty boxes),
+`app.setFont(QFont("Segoe UI", 9))`, and `apply_theme(mode, 9.0)`. Check both the
+light and the dark theme, and both languages. Set `GIMAP_HOME` to a temporary
+folder: a script that calls `create_app_context()` reads and writes the real user
+data folder, and even with in-memory repositories (as in `tools/offscreen_smoke.py`)
+opening Fitting writes `model_parameters.json` there when it is missing.
 
 ## Python Views
 
-GIMaP no longer uses Qt Designer forms or pyuic output. Each application or feature
-presentation owns hand-maintained layout files under `presentation/views/`. The
-View defines only widgets, layouts, object names, tab order, and visual defaults;
-`page.py` or `dialog.py` injects ViewModels and connects behavior. Update the
-explicit inventory in `tests/test_ui_source_of_truth.py` whenever a View is added,
-removed, or renamed.
+GIMaP does not use Qt Designer forms or pyuic output. Static layouts are
+hand-maintained `presentation/views/*_view.py` files: widgets, layouts, object
+names, tab order and visual defaults only, importing no application, domain or
+infrastructure module. Behaviour lives in the page, its bindings or mixins.
+Update `EXPECTED_VIEWS_BY_OWNER` in `tests/test_ui_source_of_truth.py` whenever a
+View is added, removed, or renamed. See `docs/architecture/dependency-rules.md` for
+every rule the tests enforce (600 lines per module, 300 per `view_model.py`, imports).
 
-## Interactive detector dependency
+## pyqtgraph
 
-`requirements.txt` includes `pyqtgraph>=0.13.7,<0.14` for the shared interactive pixel viewer.
-The 0.13 line works with the existing PyQt5 / NumPy runtime constraints. Imports are lazy so the
-existing Matplotlib workflow remains available in older environments without pyqtgraph; opening
-**Interactive** there explains the missing dependency.
+`requirements.txt` pins `pyqtgraph>=0.13.7,<0.15`. It draws the detector images
+and curves of Analyze, Fitting, Compare and the automatic analysis
+(`DetectorView`, `CurvePlot`), so it is required; modules import it lazily, inside
+the functions that use it.
 
 Focused display verification:
 

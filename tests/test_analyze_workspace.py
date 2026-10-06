@@ -171,7 +171,10 @@ def test_page_shows_curves_after_opening_a_cbf_with_zero_clicks(tmp_path: Path) 
 
     assert len(shown) == 1
     assert page.banner.isHidden()
-    assert page.top_plot.curve_count() == 1 and page.bottom_plot.curve_count() == 1
+    assert page._plot_keys == {"top": ["horizontal"], "bottom": ["vertical"]}
+    # The upper plot starts with the halves chosen for Fitting: both on |qy|, the negative one dashed.
+    assert page.top_plot.side() == "folded" and page.top_plot.curve_count() == 2
+    assert page.bottom_plot.curve_count() == 1
     assert page.detector_view.has_image()
     assert page.detector_view.horizontal_band.isVisible()
     assert "P03 Pilatus" in page.summary_label.text()
@@ -240,7 +243,7 @@ def test_missing_profile_offers_the_previous_fitting_geometry(monkeypatch) -> No
     assert profile is not None and profile.detector_shape == (1679, 1475)
     assert profile.geometry.beam_center_y_px == pytest.approx(1679 - 370.75 - 0.5)
     assert page.banner.isHidden()
-    assert page.top_plot.curve_count() == 1
+    assert page._plot_keys["top"] == ["horizontal"] and page.top_plot.curve_count() >= 1
     assert page.profile_combo.findText("PILATUS 2M 1679×1475") >= 0
     page.close()
 
@@ -301,7 +304,7 @@ def test_watching_follows_new_frames_and_exports_them(tmp_path: Path) -> None:
     assert page.tasks.wait(60)
 
     assert page.file_list.count() == 1 and page.file_list.currentRow() == 0
-    assert page.top_plot.curve_count() == 1
+    assert page._plot_keys["top"] == ["horizontal"] and page.top_plot.curve_count() >= 1
     assert (tmp_path / "gimap_analysis" / f"{CBF.stem}_horizontal.csv").is_file()
     page.stop_watch()
     assert not page.watch_button.isChecked()
@@ -620,3 +623,337 @@ def test_image_and_plots_are_saved_as_publication_figures(tmp_path: Path) -> Non
     assert "<svg" in svg.read_text(encoding="utf-8")[:400]
     page.dispose()
     page.close()
+
+
+# -- frames of other detectors, modes, results, hooks (public frames in tests/data/external) ------------------
+
+PUBLIC = ROOT / "tests" / "data" / "external"
+GALAXI = PUBLIC / "gisaxs_galaxi" / "galaxi_data.tif"
+P08 = PUBLIC / "giwaxs_p08_mapi" / "S121_MAI_A2_00841.tif"
+requires_public = pytest.mark.skipif(
+    not (GALAXI.is_file() and P08.is_file()), reason="public test frames (tests/data/external) are not available"
+)
+
+
+def _galaxi_profile() -> InstrumentProfile:
+    geometry = DetectorGeometry(172e-6, 172e-6, 1.73, 597.1, 719.6, 1.34, 0.463)
+    return InstrumentProfile("GALAXI Pilatus 1M", geometry, None, (1043, 981))
+
+
+def _p08_profile() -> InstrumentProfile:
+    """From the .poni of the P08 example: direct beam (545.5, 1826.9) px."""
+    geometry = DetectorGeometry(2e-4, 2e-4, 0.8117698592262872, 545.458310126973, 1826.9474767475651,
+                                0.6888011024066681, 0.075)
+    return InstrumentProfile("P08 PerkinElmer", geometry, None, (2048, 2048))
+
+
+def _public_page(context=None):
+    return _page(context or _context(InMemoryInstrumentProfileRepository([_galaxi_profile(), _p08_profile()])))
+
+
+def _done(page, timeout_s: float = 120.0) -> None:
+    assert page.tasks.wait(timeout_s)
+    _app().processEvents()
+
+
+@requires_public
+def test_a_pinned_mode_that_disagrees_with_the_frame_is_pointed_out_once(monkeypatch) -> None:
+    from src.gimap.features.analyze.presentation.bindings import frame_checks
+
+    toasts = []
+    monkeypatch.setattr(frame_checks, "show_toast", lambda parent, text, **options: toasts.append((text, options)))
+    context = _context(InMemoryInstrumentProfileRepository([_galaxi_profile(), _p08_profile()]))
+    page = _public_page(context)
+    page.choose_mode("gisaxs")  # the Start page's GISAXS card, before any file
+    assert page.mode_combo.currentData() == "gisaxs" and context.settings.get("analyze", "mode") == "gisaxs"
+    page.add_paths([str(P08)])
+    _done(page)
+    analysis = page.view_model.state.analysis
+    assert (analysis.kind, analysis.detected_kind) == ("gisaxs", "giwaxs")  # reduced as asked
+    assert page.status_level() == "warning"
+    assert "This frame looks like GIWAXS but GISAXS is selected" in page.status_text()
+    assert len(toasts) == 1 and toasts[0][1]["level"] == "warning" and toasts[0][1]["action"][0] == "Use Auto"
+    page.run_analysis()  # the same frame and mode again: no second notice
+    _done(page)
+    assert len(toasts) == 1 and "looks like GIWAXS" in page.status_text()
+
+    toasts[0][1]["action"][1]()  # Use Auto
+    _done(page)
+    assert page.view_model.state.mode == "auto" and page.mode_combo.currentData() == "auto"
+    assert context.settings.get("analyze", "mode") == "auto"
+    assert page.view_model.state.analysis.kind == "giwaxs" and "looks like" not in page.status_text()
+
+    page.choose_mode("gisaxs")
+    page.add_paths([str(GALAXI)])
+    _done(page)
+    assert page.view_model.state.analysis.kind == "gisaxs" and "looks like" not in page.status_text()
+    assert len(toasts) == 1  # GISAXS on a GISAXS frame says nothing; P08 in GISAXS was said already
+
+    # choose_mode with a frame on screen reduces it again and is remembered, as a click on the control.
+    page.choose_mode("giwaxs")
+    _done(page)
+    assert page.view_model.state.analysis.kind == "giwaxs" and context.settings.get("analyze", "mode") == "giwaxs"
+    assert page.mode_combo.currentData() == "giwaxs"
+    with pytest.raises(ValueError):
+        page.choose_mode("saxs")
+    page.dispose()
+    page.close()
+
+
+def test_the_results_step_and_tab_follow_the_frame_shown(tmp_path: Path) -> None:
+    from src.gimap.features.analyze.presentation.bindings.results_state import KEPT_RESULTS, RESULTS_INTRO
+    from tests.test_assistant_calibration import CENTER, DISTANCE_M, PIXEL, SHAPE, WAVELENGTH, save_tiff
+    from tests.test_series_map import _ring_frame
+
+    paths = [save_tiff(tmp_path / f"film_{index}.tif", _ring_frame(200.0, seed=index)) for index in range(3)]
+    geometry = DetectorGeometry(PIXEL, PIXEL, DISTANCE_M, CENTER[0], CENTER[1], WAVELENGTH, 0.2)
+    page = _page(_context(InMemoryInstrumentProfileRepository([InstrumentProfile("synthetic", geometry, None, SHAPE)])))
+    assert page.step_intro["results"].text() == RESULTS_INTRO  # before any run
+    page.add_paths([str(path) for path in paths])
+    _done(page)
+    assert page.file_list.currentRow() == 0
+
+    # The run keeps its frame: another file asked for while it works is not shown.
+    page.automatic_started("Automatic analysis …")
+    page.file_list.setCurrentRow(1)
+    _done(page)
+    assert page.step_rail.state("results") == "busy" and page.file_list.currentRow() == 0
+    page.run_analysis()  # the run's own re-reductions of its frame change nothing
+    _done(page)
+    assert page.step_rail.state("results") == "busy"
+    page.automatic_finished("ok", "Two rings in film_0.tif")
+    assert page.results_for() == paths[0].resolve() or page.results_for().name == "film_0.tif"
+    assert page.current_right() == "results"
+
+    page.file_list.setCurrentRow(1)
+    _done(page)
+    assert page.step_rail.state("results") == "pending"
+    assert page.step_rail.detail("results") == "Results are for film_0.tif; run again for this frame"
+    assert "film_0.tif" in page.step_intro["results"].text()
+    assert page.current_right() == "curves"
+
+    page.file_list.setCurrentRow(0)
+    _done(page)
+    assert page.step_rail.state("results") == "ok" and page.step_rail.detail("results") == "Two rings in film_0.tif"
+    assert page.step_intro["results"].text() == "Two rings in film_0.tif"
+
+    # Each file keeps its results, as the automatic analysis keeps a report per file and restores it.
+    page.file_list.setCurrentRow(1)
+    _done(page)
+    page.automatic_started("Automatic analysis …")
+    page.automatic_finished("warn", "One question about film_1.tif")
+    page.file_list.setCurrentRow(0)
+    _done(page)
+    assert page.step_rail.state("results") == "ok" and page.step_intro["results"].text() == "Two rings in film_0.tif"
+    assert page.current_right() == "results"  # the results put back in the tab stay in view
+    page.file_list.setCurrentRow(1)
+    _done(page)
+    assert page.step_rail.state("results") == "warn" and page.step_rail.detail("results") == "One question about film_1.tif"
+    page.file_list.setCurrentRow(2)
+    _done(page)
+    assert page.step_rail.state("results") == "pending" and "film_1.tif" in page.step_rail.detail("results")
+    assert page.current_right() == "curves"
+
+    # A discarded run is forgotten: its file is as before any run, even when shown again; the other keeps its own.
+    page.file_list.setCurrentRow(1)
+    _done(page)
+    page.forget_results()
+    assert page.step_rail.state("results") == "pending" and page.step_intro["results"].text() == RESULTS_INTRO
+    page.run_analysis()
+    _done(page)
+    assert page.step_intro["results"].text() == RESULTS_INTRO
+    page.file_list.setCurrentRow(0)
+    _done(page)
+    assert page.step_rail.state("results") == "ok"
+    page.file_list.setCurrentRow(1)
+    _done(page)
+    assert page.step_rail.state("results") == "pending" and "film_0.tif" in page.step_rail.detail("results")
+
+    # Results of the file the run names, while another one is shown.
+    page.automatic_finished("ok", "Rings in film_2.tif", path=paths[2])
+    assert page.step_rail.state("results") == "pending" and "film_2.tif" in page.step_rail.detail("results")
+    page.file_list.setCurrentRow(2)
+    _done(page)
+    assert page.step_rail.state("results") == "ok" and page.step_rail.detail("results") == "Rings in film_2.tif"
+
+    # The newest KEPT_RESULTS files are kept.
+    for index in range(KEPT_RESULTS):
+        page.automatic_finished("ok", f"Run {index}", path=tmp_path / f"other_{index}.tif")
+    page.file_list.setCurrentRow(0)
+    _done(page)
+    assert page.step_rail.state("results") == "pending"
+    assert f"other_{KEPT_RESULTS - 1}.tif" in page.step_rail.detail("results")
+
+    page.clear_files()
+    assert page.step_intro["results"].text() == RESULTS_INTRO and page.results_for() is None
+    assert page.step_rail.state("results") == "pending"
+    page.dispose()
+    page.close()
+
+
+@requires_public
+def test_the_hooks_the_main_window_relies_on(tmp_path: Path) -> None:
+    from PyQt5.QtCore import QMimeData, QPoint, Qt, QUrl
+    from PyQt5.QtGui import QDragEnterEvent
+
+    page = _public_page()
+    cleared = []
+    page.filesCleared.connect(lambda: cleared.append(True))
+
+    def drag(*paths) -> bool:
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(path)) for path in paths])
+        event = QDragEnterEvent(QPoint(4, 4), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
+        page.dragEnterEvent(event)
+        return event.isAccepted()
+
+    assert not drag(tmp_path / "sample.gimap")  # a project is the main window's to open
+    assert drag(GALAXI) and drag(GALAXI, tmp_path / "sample.gimap")
+
+    second = tmp_path / "second.tif"
+    shutil.copy2(GALAXI, second)
+    assert page.show_paths([str(GALAXI)]) is True
+    _done(page)
+    assert page.add_paths([str(second)]) and page.file_list.currentRow() == 1
+    _done(page)
+    assert page.add_paths([str(GALAXI)]) == []  # nothing new: the frame already listed is shown
+    assert page.file_list.currentRow() == 0 and page.current_step() == "data"
+    assert page.status_level() == "info" and "Already open" in page.status_text()
+    assert "No new detector frames" not in page.status_text()
+    _done(page)
+    page.file_list.setCurrentRow(1)
+    _done(page)
+    assert page.add_paths([str(GALAXI), str(second)]) == []  # the frame on screen is one of them: it stays
+    assert page.file_list.currentRow() == 1 and "Already open" in page.status_text()
+    page._status("Ready")
+    assert page.add_paths([str(GALAXI)], show_listed=False) == []  # e.g. Batch Export from a listed folder
+    assert page.file_list.currentRow() == 1 and page.status_text() == "Ready"
+    assert page.show_paths([str(GALAXI)]) is True
+    notes = tmp_path / "notes.txt"
+    notes.write_text("beamtime notes", encoding="utf-8")
+    assert page.show_paths([str(notes)]) is False and "No new detector frames" in page.status_text()
+    _done(page)
+
+    page.command_bar._apply(True)  # a narrow command bar leaves the file arrows out …
+    page.file_list.setCurrentRow(1)
+    _done(page)
+    assert page.previous_file_button.isHidden() and page.next_file_button.isHidden()
+    page.command_bar._apply(False)  # … and brings them back when wide again
+    assert not page.previous_file_button.isHidden() and not page.next_file_button.isHidden()
+
+    page.clear_files()
+    assert cleared == [True]
+    page.dispose()
+    page.close()
+
+
+@requires_public
+def test_overlays_are_drawn_on_the_detector_image() -> None:
+    page = _public_page()
+    page.add_paths([str(GALAXI)])
+    _done(page)
+    page.set_view(1)  # the q map
+    page.top_plot.curveClicked.emit(0)
+    _done(page)
+    assert page.view_combo.currentIndex() == 1  # a click on a curve does not change the view …
+    assert "Switch to Detector to see where this curve comes from" in page.status_text()  # … it says how
+    assert "on the detector image" in page.sources_button.toolTip()
+    page.sources_button.setChecked(False)
+    page.sources_button.setChecked(True)
+    _done(page)
+    assert page.view_combo.currentIndex() == 0 and page.detector_view.labels_shown()
+    assert page.status_text() == "Sources are drawn on the detector image"
+    page.set_view(1)
+    page.show_mask_button.setChecked(True)
+    assert page.view_combo.currentIndex() == 0 and page.detector_view.labels_shown()
+    assert page.status_text() == "Masked pixels are drawn on the detector image"
+    page.dispose()
+    page.close()
+
+
+@requires_public
+def test_the_cuts_card_and_the_plots_name_the_same_pixels() -> None:
+    import re
+
+    from PyQt5.QtWidgets import QLabel
+
+    page = _public_page()
+    page.add_paths([str(GALAXI)])
+    _done(page)
+    reduction = page.view_model.state.analysis.reduction
+    rows = reduction.curve("horizontal").region["rows"]
+    columns = reduction.curve("vertical").region["columns"]
+    card = page.cuts_info_label.text()
+    assert f"rows {rows[0]}–{rows[1] - 1}," in card and f"columns {columns[0]}–{columns[1] - 1} " in card
+    assert page.bottom_plot.title_label.text() == f"I(qz) · columns {columns[0]}–{columns[1] - 1}"
+    top = page.top_plot.title_label.text()
+    assert re.fullmatch(rf"I\(qy\) · rows {rows[0]}–{rows[1] - 1} · Yoneda αf 0\.\d{{3}}°", top), top
+    assert page.top_plot.title_label.toolTip() == card.splitlines()[0]  # the whole sentence
+    hints = [label.text() for label in page.gisaxs_cuts.findChildren(QLabel) if "band on the image" in label.text()]
+    assert hints and "orange" in hints[0] and "double-click" in hints[0]
+
+    # The halves for Fitting are what the upper plot shows first; the plot's own control stays free.
+    page.halves_combo.setCurrentIndex(page.halves_combo.findData("mean"))
+    page.halves_combo.activated.emit(page.halves_combo.currentIndex())
+    assert page.top_plot.side() == "folded"
+    page.fit_side_actions["positive"].trigger()  # Send to Fitting ▾: the Cuts step and the plot follow
+    assert page.halves_combo.currentData() == "positive" and page.top_plot.side() == "positive"
+    page.top_plot.set_side("both")
+    page.run_analysis()
+    _done(page)
+    assert page.top_plot.side() == "both" and page.view_model.fit_side == "positive"
+    sides = page.top_plot.side_control
+    assert all("display only" in sides.button(index).toolTip() and "Cuts step" not in sides.button(index).toolTip()
+               for index in range(sides.count()))  # short: they are also the entries of the narrow plot's “⋯” menu
+    assert "chosen in the Cuts step" in sides.toolTip()
+    page.dispose()
+    page.close()
+
+
+@requires_public
+def test_an_incidence_set_by_hand_is_marked_and_undone_in_one_step(monkeypatch) -> None:
+    from src.gimap.features.analyze.presentation.bindings import incidence
+
+    notices = []
+    monkeypatch.setattr(incidence, "show_toast", lambda parent, text, **options: notices.append((text, options)))
+    context = _context(InMemoryInstrumentProfileRepository([_galaxi_profile()]))
+    page = _public_page(context)
+    assert page.incidence_spin.text() == "αi from profile"  # Qt draws no prefix at the minimum: the name is in the text
+    assert page.incidence_menu.actions() == [page.incidence_reset_action]  # one context menu, reused
+    page.add_paths([str(GALAXI)])
+    _done(page)
+    spin = page.incidence_spin
+    assert spin.value() == pytest.approx(0.463) and spin.property("override") is False
+    assert spin.text().startswith("αi 0.463")  # the name stays in the field when the bar is narrow
+    spin.setValue(0.3)
+    _done(page)
+    assert spin.property("override") is True
+    assert "0.3°" in spin.toolTip() and "0.463°" in spin.toolTip()
+    assert page.view_model.state.analysis.geometry.incidence_deg == pytest.approx(0.3)
+    assert page.incidence_reset_action.isEnabled() and page.incidence_reset_action.text() == "Back to Profile αi"
+    page.incidence_reset_action.trigger()
+    _done(page)
+    assert page.view_model.state.incidence_deg is None and spin.value() == pytest.approx(0.463)
+    assert spin.property("override") is False and not page.incidence_reset_action.isEnabled()
+    assert page.view_model.state.analysis.geometry.incidence_deg == pytest.approx(0.463)
+    assert notices == []
+
+    spin.setValue(0.3)  # kept for the next session …
+    _done(page)
+    page.dispose()
+    page.close()
+    second = _page(context)
+    assert second.incidence_spin.property("override") is True
+    second.add_paths([str(GALAXI)])
+    _done(second)
+    second.run_analysis()
+    _done(second)
+    told = [notice for notice in notices if "from your last session" in notice[0]]
+    assert len(told) == 1  # … and said once, with the first frame
+    assert told[0][0] == "αi 0.3° from your last session (profile: 0.463°)"
+    assert told[0][1]["action"][0] == "Back to Profile"
+    told[0][1]["action"][1]()
+    _done(second)
+    assert second.view_model.state.incidence_deg is None and second.incidence_spin.property("override") is False
+    second.dispose()
+    second.close()

@@ -145,7 +145,8 @@ class AnalyzeStepsView:
         self.clear_button = QToolButton(page)
         self.clear_button.setText("Clear")
         self.clear_button.setAutoRaise(True)
-        self.clear_button.setToolTip("Remove every file from the list")
+        self.clear_button.setToolTip(
+            "Remove every file from the list. One file: select it and press Delete, or right-click it")
         header.addWidget(self.files_title, 1)
         header.addWidget(self.watch_button)
         header.addWidget(self.clear_button)
@@ -156,6 +157,7 @@ class AnalyzeStepsView:
         self.file_list.setTextElideMode(Qt.ElideMiddle)
         self.file_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.file_list.setMinimumHeight(120)
+        self.file_list.setContextMenuPolicy(Qt.CustomContextMenu)  # Remove from List, Show in Folder, Copy Path
         layout.addWidget(self.file_list, 1)
         frame_row = QHBoxLayout()
         self.frame_label = muted("Frame", page)
@@ -249,7 +251,7 @@ class AnalyzeStepsView:
         layout.addWidget(self.center_button, 0, Qt.AlignLeft)
         layout.addWidget(muted(
             "Drag the cyan cross on the image to move the centre; the change holds for every file "
-            "until you go back to the profile centre.", page,
+            "of this detector until you go back to the profile centre.", page,
         ))
         layout.addStretch(1)
 
@@ -303,7 +305,7 @@ class AnalyzeStepsView:
         layout.addWidget(self.mask_list)
         mask_actions = QHBoxLayout()
         self.mask_remove_button = QPushButton("Remove Selected", page)
-        self.mask_remove_button.setToolTip("Remove the mask selected in the list above")
+        self.mask_remove_button.setToolTip("Remove the mask selected in the list above (or press Delete in the list)")
         self.mask_clear_button = QPushButton("Clear Masks", page)
         self.mask_clear_button.setToolTip("Remove every drawn or loaded mask (the detector gaps stay masked)")
         mask_actions.addWidget(self.mask_remove_button)
@@ -348,7 +350,7 @@ class AnalyzeStepsView:
         self.halves_combo.setToolTip("Which half of I(qy) the curve for Fitting uses (also in Send to Fitting ▾)")
         gisaxs.addWidget(self.halves_combo)
         gisaxs.addWidget(muted(
-            "Drag the yellow band on the image to move the horizontal cut, or click a column to "
+            "Drag the orange band on the image to move the horizontal cut, or double-click a column to "
             "move the vertical cut.", self.gisaxs_cuts,
         ))
         layout.addWidget(self.gisaxs_cuts)
@@ -368,7 +370,8 @@ class AnalyzeStepsView:
         layout.addWidget(self.results_empty)
         self.results_host = QVBoxLayout()
         self.results_host.setSpacing(8)
-        layout.addLayout(self.results_host, 1)
+        layout.addLayout(self.results_host, 0)  # panels at the top, the space left below them
+        layout.addStretch(1)
 
     # -- 6 export ----------------------------------------------------------------------
 

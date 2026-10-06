@@ -28,6 +28,7 @@ from .workers import CalibrationWorker, ImageLoaderWorker
 
 from .bindings.form_setup import FormSetupMixin
 from .bindings.image_loading import ImageLoadingMixin
+from .bindings.input_files import CalibrationFilesMixin
 from .bindings.calibration_run import CalibrationRunMixin
 from .bindings.result_preview import ResultPreviewMixin
 from .bindings.manual_refinement import ManualRefinementMixin
@@ -39,6 +40,7 @@ __all__ = ["CalibrationWorker", "GeometryCalibrationDialog", "ImageLoaderWorker"
 class GeometryCalibrationDialog(
     FormSetupMixin,
     ImageLoadingMixin,
+    CalibrationFilesMixin,
     CalibrationRunMixin,
     ResultPreviewMixin,
     ManualRefinementMixin,
@@ -98,6 +100,7 @@ class GeometryCalibrationDialog(
         self.setWindowFlags(
             self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint
         )
+        self.setAcceptDrops(True)  # a detector image or an exported calibration (.json)
         self._bind_form()
         self._apply_dialog_style()
         self._connect_signals()

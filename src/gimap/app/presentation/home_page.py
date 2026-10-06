@@ -9,6 +9,7 @@ the main window decides which workspace opens.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from PyQt5.QtCore import Qt, pyqtSignal
@@ -19,12 +20,14 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
-from .theme import set_role
+from .recent_items import recent_label
+from .theme import set_role, set_state
 
 TASKS = (
     ("giwaxs", "Crystals and orientation", "GIWAXS",
@@ -53,13 +56,17 @@ def _label(text: str, parent: QWidget, *, role: str = "", size: float = 0.0, bol
 
 
 class TaskCard(QFrame):
+    """A clickable card (``card`` look of the theme, ``homeTask`` for its hover state)."""
+
     clicked = pyqtSignal(str)
 
     def __init__(self, key: str, title: str, tag: str, text: str, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.key = key
         self.setObjectName(f"homeTask_{key}")
-        self.setFrameShape(QFrame.StyledPanel)
+        self.setProperty("card", True)
+        self.setProperty("homeTask", True)
+        self.setAttribute(Qt.WA_Hover, True)
         self.setCursor(Qt.PointingHandCursor)
         self.setMinimumHeight(128)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -80,21 +87,29 @@ class TaskCard(QFrame):
 
 
 class DropZone(QFrame):
+    """The dashed box (``#homeDropZone``); ``dragActive`` is true while files are dragged over it."""
+
     filesDropped = pyqtSignal(list)
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setObjectName("homeDropZone")
         self.setAcceptDrops(True)
-        self.setFrameShape(QFrame.StyledPanel)
-        self.setStyleSheet("#homeDropZone { border: 2px dashed palette(mid); border-radius: 10px; }")
+        self.setFrameShape(QFrame.StyledPanel)  # the theme's #homeDropZone rule draws the dashed border
+        self.setProperty("dragActive", False)
 
-    def dragEnterEvent(self, event) -> None:
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt API
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
+            set_state(self, "dragActive", True)
 
-    def dropEvent(self, event) -> None:
-        paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+    def dragLeaveEvent(self, event) -> None:  # noqa: N802 - Qt API
+        set_state(self, "dragActive", False)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event) -> None:  # noqa: N802 - Qt API
+        set_state(self, "dragActive", False)
+        paths = [str(Path(url.toLocalFile())) for url in event.mimeData().urls() if url.isLocalFile()]
         if paths:
             self.filesDropped.emit(paths)
             event.acceptProposedAction()
@@ -114,13 +129,26 @@ class HomePage(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setObjectName("homePage")
-        outer = QHBoxLayout(self)
+        # The page scrolls (vertically only) instead of squeezing its sections into each other on a small screen.
+        page_layout = QVBoxLayout(self)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(0)
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setObjectName("homeScrollArea")
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        page_layout.addWidget(self.scroll_area)
+        content = QWidget()
+        content.setObjectName("homeContent")
+        outer = QHBoxLayout(content)
         outer.setContentsMargins(24, 24, 24, 24)
-        column_host = QWidget(self)
+        column_host = QWidget(content)
         column_host.setMaximumWidth(MAX_WIDTH)
         outer.addStretch(1)
         outer.addWidget(column_host, 12)
         outer.addStretch(1)
+        self.scroll_area.setWidget(content)
         column = QVBoxLayout(column_host)
         column.setSpacing(16)
         column.addWidget(_label("GIMaP", column_host, size=2.0, bold=True))
@@ -219,16 +247,16 @@ class HomePage(QWidget):
         self.refresh_recent()
 
     def refresh_recent(self) -> None:
-        from pathlib import Path
-
+        """``name — parent folder name`` (with a folder or project tag) per row, the full path as tooltip."""
         while self.recent_rows.count():
             item = self.recent_rows.takeAt(0)
-            if item.widget() is not None:
+            if item.widget() is not None:  # hidden now: deleted only once the event loop runs again
+                item.widget().hide()
                 item.widget().deleteLater()
         paths = list(self._recent_provider() or [])[:5] if self._recent_provider is not None else []
         for path in paths:
             path = Path(path)
-            button = QPushButton(f"{path.name or path}   —   {path.parent}", self.recent_box)
+            button = QPushButton(recent_label(path), self.recent_box)
             button.setObjectName("homeRecentItem")
             button.setFlat(True)
             button.setCursor(Qt.PointingHandCursor)
@@ -240,6 +268,11 @@ class HomePage(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().showEvent(event)
+        self.refresh_recent()
+
+    def refresh_language(self) -> None:
+        """After a switch of the interface language (the shell calls it): the recent rows again, whose
+        `` (folder)`` / `` (project)`` tags are composed with ``tr`` (the page may be the one shown)."""
         self.refresh_recent()
 
     def _ask(self) -> None:

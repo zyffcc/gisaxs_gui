@@ -22,7 +22,7 @@ from src.gimap.app.presentation.components.curve_plot import CURVE_COLORS
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.task_runner import TaskRunner
 
-from ...application import LoadCurveRequest
+from ...application import CURVE_SUFFIXES, LoadCurveRequest
 from ...application.single_fit import (
     ANALYZE_SIDES,
     FAMILIES,
@@ -38,19 +38,22 @@ from ...application.single_fit import (
     residuals,
 )
 from ..views.fit_page_view import FitPageView
+from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
 from .model_editor import FitModelEditor
 from .results import FitResultsMixin
 from .run import FitRunMixin
 from .session import FitSession, Solution, model_label
 
-CURVE_FILTER = "Curves (*.dat *.txt *.csv);;All files (*)"
+CURVE_FILTER = "Curves ({});;All files (*)".format(" ".join(f"*{suffix}" for suffix in CURVE_SUFFIXES))
+"""The curve files the reader takes (``application.CURVE_SUFFIXES``: .dat, .txt)."""
 MODEL_POINTS = 600
 PREFERENCES_KEY = "fitting_single_page"
 DATA_COLOR, OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#2563eb", "#94a3b8", "#f97316", "#dc2626"
 
 
-class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMixin):
+class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
+              FitExclusionMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -63,6 +66,8 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
         self.quick_fit = quick_fit
         self.preferences = preferences
         self.session = FitSession()
+        self._status_text: Optional[Callable[[], str]] = None
+        """Makes the status line again in another interface language (``refresh_language``)."""
         self.tasks = TaskRunner(self)
         self.setup_ui(self)
         self.model_editor = FitModelEditor(self)
@@ -77,6 +82,7 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
         for button in (self.residual_plot.zoom_button, self.residual_plot.marks_button, self.residual_plot.reset_button):
             button.hide()
         self.residual_plot.legend.hide()
+        self.setAcceptDrops(True)  # a curve file dropped here opens (``drops.py``)
         self._connect()
         self.setup_run()
         self.setup_results()
@@ -104,7 +110,7 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
         self.model_editor.edited.connect(self._model_edited)
         self.batch_button.clicked.connect(self.batchRequested)
         for keys, slot in (("Ctrl+Z", self.undo), ("Ctrl+Shift+Z", self.redo), ("Ctrl+Y", self.redo),
-                           ("Ctrl+O", self.open_curve_dialog), ("Ctrl+Return", self.run_fit)):
+                           ("Ctrl+Return", self.run_fit)):  # File ▸ Open Data opens a curve while Fitting is shown
             shortcut = QShortcut(QKeySequence(keys), self)
             shortcut.setContext(Qt.WidgetWithChildrenShortcut)
             shortcut.activated.connect(slot)
@@ -133,17 +139,38 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
             tr("{names}; {free} values are fitted.").format(names=names, free=free) if session.edited else
             tr("A starting model: set values you know, or let Fit ▸ Find the particle shape choose the family.")
         )
-        result = session.result
+        result, solutions = session.result, session.solutions
+        # Solutions count as a fit only when searched here, and only on the points they were searched on.
+        searched, current = session.solutions_searched(), session.solutions_are_current()
+        stale = tr("Changed after the fit: Fit again")
         if self.fit_running():
             self.step_rail.set_state("fit", "busy", tr("Fitting …"))
+        elif result is not None and not session.result_is_current():
+            self.step_rail.set_state("fit", "warn", stale)
         elif result is not None and result.stopped:
             self.step_rail.set_state("fit", "warn", tr("Stopped: the best values so far are kept"))
         elif result is not None:
             self.step_rail.set_state("fit", "ok" if result.converged else "warn", self._quality_text(result))
+        elif searched and not current:
+            self.step_rail.set_state("fit", "warn", stale)
+        elif searched:
+            best = solutions[0]
+            self.step_rail.set_state("fit", "ok", tr("{count} solutions · best {model} {chi} {value}").format(
+                count=len(solutions), model=best.label, chi="var ln I" if curve is not None and curve.sigma is None
+                else "χ²ᵣ", value=f"{best.chi2:.3g}" if np.isfinite(best.chi2) else "—"))
+        elif solutions:  # a solution of Analyze: its χ² is Analyze's, not of a fit here
+            self.step_rail.set_state("fit", "pending", tr("From Analyze: Fit to refine it"))
         else:
             self.step_rail.set_state("fit", "pending", tr("Choose a method, then Fit"))
-        self.step_rail.set_state("results", "ok" if result is not None else "pending",
-                                 tr("Errors, solutions, Save") if result is not None else tr("After a fit"))
+        if result is not None:
+            current_result = session.result_is_current()
+            self.step_rail.set_state("results", "ok" if current_result else "warn",
+                                     tr("Errors, solutions, Save") if current_result else stale)
+        elif searched:
+            self.step_rail.set_state("results", "ok" if current else "warn",
+                                     tr("{count} solutions to compare").format(count=len(solutions)) if current else stale)
+        else:
+            self.step_rail.set_state("results", "pending", tr("After a fit"))
         self.undo_button.setEnabled(session.can_undo())
         self.redo_button.setEnabled(session.can_redo())
         self.fit_button.setEnabled(curve is not None and not self.fit_running())
@@ -163,10 +190,12 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
         unit = unit or self.unit_combo.currentData() or "angstrom"
         outcome = self.view_model.load_curve(LoadCurveRequest(path, unit))
         if outcome.error is not None:
-            self._status(tr("Could not open {name}: {reason}").format(name=path.name, reason=outcome.error.message), "error")
+            self._status(lambda: tr("Could not open {name}: {reason}").format(name=path.name,
+                                                                              reason=tr(outcome.error.message)), "error")
             return False
         loaded = outcome.value
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=path.name, path=str(path), unit=unit)
+        self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
         if side is not None:
             self.session.side = ANALYZE_SIDES.get(side, side if side in dict(SIDES) else "mean")
@@ -182,7 +211,7 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
             self.show_step("fit")
         else:
             self.show_step("model")
-        self._status(tr("Opened {name}.").format(name=path.name), "ok")
+        self._status(lambda: tr("Opened {name}.").format(name=path.name), "ok")
         self.curveOpened.emit(str(path))
         return True
 
@@ -204,20 +233,22 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
                                   "q_range": None if self.session.q_range is None else list(self.session.q_range),
                                   "excluded": sorted(self.session.excluded)})
 
-    def set_range(self, q_range) -> None:
-        self.session.q_range = None if q_range is None else tuple(sorted(float(value) for value in q_range))
+    def set_range(self, q_range, *, record: bool = True, coalesce: bool = False) -> None:
+        """``record=False``: set again from a project or the last session (not a step of Undo); ``coalesce``:
+        a drag or typing, one step of Undo with the range changes just before it."""
+        self.session.set_range(q_range, record=record, coalesce=coalesce)
         self._remember_curve()
         self._render_all()
 
     def _range_typed(self) -> None:
         low, high = self.range_min_spin.value(), self.range_max_spin.value()
         if high > low:
-            self.set_range((low, high))
+            self.set_range((low, high), coalesce=True)
 
     def _band_dragged(self, low: float, high: float) -> None:
         if self.plot.log_x_check.isChecked():
             low, high = 10.0 ** low, 10.0 ** high
-        self.set_range((max(low, 0.0), high))
+        self.set_range((max(low, 0.0), high), coalesce=True)
 
     def _log_x_toggled(self, on: bool) -> None:
         self.residual_plot.log_x_check.setChecked(on)
@@ -245,32 +276,44 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
         self._refresh_steps()
         self.render_results()
 
-    def set_model(self, model, *, message: str = "") -> None:
+    def set_model(self, model, *, message=None) -> None:
+        """``message``: the status line (or a function that makes it), when one is wanted."""
         if self.session.set_model(model):
             self._model_changed(editor=True)
         if message:
             self._status(message, "ok")
 
     def undo(self) -> None:
+        """The model, the fitting range and the left-out points before the last change; back at a fit's
+        own, the fit holds again (its quality and errors)."""
         if self.session.undo():
-            self._model_changed(editor=True)
+            self._history_moved()
 
     def redo(self) -> None:
         if self.session.redo():
-            self._model_changed(editor=True)
+            self._history_moved()
+
+    def _history_moved(self) -> None:
+        self._remember(model=model_to_dict(self.session.model))
+        self._remember_curve()
+        self._render_all()
 
     def show_solution(self, row: dict) -> bool:
         """A solution of Analyze's automatic analysis (Results ▸ Show in Fitting) as the model."""
         try:
             model, deviation = model_from_solution(row, self.session.model)
         except (ValueError, KeyError, TypeError) as exc:
-            self._status(tr("Could not use this solution: {reason}").format(reason=exc), "error")
+            self._status(lambda reason=str(exc): tr("Could not use this solution: {reason}").format(reason=reason), "error")
             return False
         label = model_label(model)
         self.session.solutions = [Solution(label, model, float(row.get("best_chi2_weighted") or np.nan), "Analyze", deviation)]
+        self.session.solutions_selection = None  # not searched here: its χ² is Analyze's, of Analyze's points
+        self.session.result = None  # as when a solution is chosen in Results: a new start
         self.set_model(model)
+        self._refresh_steps()  # also when the model was already this one
+        self.render_results()
         self.show_step("model")
-        self._status(self._deviation_text(label, deviation), "ok" if deviation <= 0.01 else "warning")
+        self._status(lambda: self._deviation_text(label, deviation), "ok" if deviation <= 0.01 else "warning")
         return True
 
     @staticmethod
@@ -291,9 +334,9 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
         try:
             model = model_from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            self._status(tr("Could not load the model: {reason}").format(reason=exc), "error")
+            self._status(lambda reason=str(exc): tr("Could not load the model: {reason}").format(reason=reason), "error")
             return
-        self.set_model(model, message=tr("Loaded the model from {name}.").format(name=Path(path).name))
+        self.set_model(model, message=lambda: tr("Loaded the model from {name}.").format(name=Path(path).name))
 
     # -- the plot -------------------------------------------------------------------------
 
@@ -308,7 +351,8 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
         self.side_combo.setVisible(signed)
         self.side_label.setVisible(signed)
         self._fill_curve_card()
-        self.model_editor.set_model(session.model)
+        result = session.result if session.result_is_current() else None  # errors only of a fit that still holds
+        self.model_editor.set_model(session.model, result.errors if result else {}, result.at_bounds if result else ())
         self._redraw()
         self._refresh_steps()
         self.render_results()
@@ -394,18 +438,25 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
             values = residuals(self.session.model, data)
         except (ValueError, FloatingPointError):
             values = np.full(data.q.size, np.nan)
-        label = "(I − model)/σ" if data.sigma is not None else "ln(I / model)"
-        self.residual_plot.set_labels("|q| (nm⁻¹)", label)
+        weighted = data.sigma is not None
+        self.residual_plot.set_labels("|q| (nm⁻¹)", "Δ/σ" if weighted else "Δ ln I")  # short: the plot is low
+        tip = tr("Residuals: {formula}").format(formula="Δ/σ = (I − model)/σ" if weighted else "Δ ln I = ln(I / model)")
+        self.residual_plot.setToolTip(tip)
+        self.residual_plot.plot.getAxis("left").setToolTip(tip)
         self.residual_plot.set_curves([("0", data.q[[0, -1]], np.zeros(2)), (tr("residual"), data.q, values)],
                                       [OUTSIDE_COLOR, DATA_COLOR], markers=[False, True])
 
     # -- status, log, preferences ---------------------------------------------------------
 
-    def _status(self, text: str, level: str = "info") -> None:
+    def _status(self, text, level: str = "info", action=None) -> None:
+        """The status line and the log; a toast for outcomes (``action``: e.g. Open Folder after a save).
+        ``text``: the line, or a function that makes it — made again after a switch of the interface language."""
+        self._status_text = text if callable(text) else None
+        text = text() if callable(text) else text
         self.status_label.setText(text)
         self._log(text)
         if level in ("ok", "warning", "error") and self.isVisible():
-            show_toast(self.window(), text, level=level)
+            show_toast(self.window(), text, level=level, action=action)
 
     def _log(self, text: str) -> None:
         from datetime import datetime
@@ -425,7 +476,8 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
         self.preferences.set(PREFERENCES_KEY, stored)
 
     def _restore(self) -> None:
-        """The model, method and choices of last time; the last curve is opened again once shown."""
+        """The model, method, choices and panel widths of last time; the last curve is opened again once shown."""
+        self._keep_splitter()
         stored = self._remembered("model")
         if isinstance(stored, dict):
             try:
@@ -451,7 +503,7 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
             self.session.excluded = {float(value) for value in last.get("excluded") or ()}
             q_range = last.get("q_range")
             if isinstance(q_range, list) and len(q_range) == 2:
-                self.set_range(q_range)
+                self.set_range(q_range, record=False)  # as last time: not a step of Undo
             else:
                 self._exclusions_changed()
 
@@ -482,12 +534,21 @@ class FitPage(QWidget, FitPageView, FitRunMixin, FitResultsMixin, FitExclusionMi
             if self.open_curve(curve["path"], curve.get("side"), unit=curve.get("unit")):
                 self.session.excluded = {float(value) for value in curve.get("excluded") or ()}
                 if curve.get("q_range"):
-                    self.set_range(curve["q_range"])
+                    self.set_range(curve["q_range"], record=False)
         elif curve.get("path"):
             notes.append(tr("the Fitting curve {name} is no longer there").format(name=Path(curve["path"]).name))
+        self.session.clear_history()  # a new start: Undo does not bring back the work before the project
         self._model_changed(editor=True)
         self._render_all()
         return notes
+
+    def refresh_language(self) -> None:
+        """After a switch of the interface language (``i18n.language_changed``): what this page composed with
+        ``tr`` at run time — the steps, the curve card, the model's cards, the legends, the results — again."""
+        self.model_editor.refresh_language()
+        self._render_all()
+        if self._status_text is not None:
+            self.status_label.setText(self._status_text())
 
     def dispose(self) -> None:
         self.stop_fit()
