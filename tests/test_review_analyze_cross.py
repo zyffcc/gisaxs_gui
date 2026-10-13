@@ -80,7 +80,8 @@ def test_every_region_row_shows_without_scrolling() -> None:
     listing = page.region_list
     assert listing.count() >= 4  # full ring, in-plane, out-of-plane, the ring of I(χ)
     rows = sum(listing.sizeHintForRow(row) for row in range(listing.count()))
-    assert rows > 40 * listing.count()  # two lines each: the former 40 px a row cut the last one
+    # Row heights follow the platform font: two lines can fit in 40 px on macOS.
+    assert rows >= 2 * listing.fontMetrics().height() * listing.count()
     assert listing.height() >= rows + 2 * listing.frameWidth()
     page.dispose()
     page.close()

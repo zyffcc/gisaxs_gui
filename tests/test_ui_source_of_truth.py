@@ -15,6 +15,7 @@ EXPECTED_VIEWS_BY_OWNER = {
     "compare": {"compare_page_view.py"},
     "fitting": {
         "fit_page_view.py",
+        "fit1d_settings_view.py",
         "fit_series_view.py",
         "fit_steps_view.py",
         "fitting_page_view.py",
@@ -47,21 +48,22 @@ EXPECTED_VIEWS_BY_OWNER = {
         "analyze_page_view.py", "analyze_steps_view.py", "batch_export_view.py", "batch_progress_view.py",
         "options_panel_view.py",
         "regions_view.py", "series_view.py",
+        "geometry_dialog_view.py", "center_dialog_view.py",
     },
 }
 
 
-def _owned_views() -> dict[str, set[str]]:
+def _owned_views(source_root: Path = SOURCE_ROOT) -> dict[str, set[str]]:
     actual = {
         "app": {
             path.name
-            for path in (SOURCE_ROOT / "app/presentation/views").glob("*_view.py")
+            for path in (source_root / "app/presentation/views").glob("*_view.py")
         }
     }
-    for views_dir in (SOURCE_ROOT / "features").glob("*/presentation/views"):
-        actual[views_dir.parents[1].name] = {
-            path.name for path in views_dir.glob("*_view.py")
-        }
+    for views_dir in (source_root / "features").glob("*/presentation/views"):
+        views = {path.name for path in views_dir.glob("*_view.py")}
+        if views:  # Retired features can leave empty directories and ignored bytecode caches.
+            actual[views_dir.parents[1].name] = views
     return actual
 
 
@@ -75,6 +77,19 @@ def _all_view_paths() -> list[Path]:
 
 def test_python_view_inventory_is_explicit_and_feature_owned() -> None:
     assert _owned_views() == EXPECTED_VIEWS_BY_OWNER
+
+
+def test_view_inventory_ignores_cache_only_directories_but_keeps_new_sources(tmp_path: Path) -> None:
+    empty = tmp_path / "features/retired_empty/presentation/views"
+    empty.mkdir(parents=True)
+    cache = tmp_path / "features/retired_cached/presentation/views/__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "old_view.cpython-311.pyc").write_bytes(b"cached bytecode")
+    new = tmp_path / "features/unregistered/presentation/views"
+    new.mkdir(parents=True)
+    (new / "new_view.py").write_text("", encoding="utf-8")
+
+    assert _owned_views(tmp_path) == {"app": set(), "unregistered": {"new_view.py"}}
 
 
 def test_qt_designer_sources_and_generated_modules_are_retired() -> None:

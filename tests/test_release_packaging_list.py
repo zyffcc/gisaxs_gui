@@ -23,8 +23,12 @@ from pathlib import Path
 
 import pytest
 
+from test_fit1d_release_manifest import install_kit
+from tools.list_fit1d_release_files import KIT, MANIFEST, release_files
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "build_portable_release.ps1"
+KIT_HELPER = ROOT / "tools" / "list_fit1d_release_files.py"
 V5 = "modules/Fitting_1D_Model/Workflow_v5"
 
 pytestmark = pytest.mark.skipif(
@@ -46,7 +50,7 @@ TRACKED = {
     ".gitignore": (
         "config/user_parameters.json\nconfig/user_settings.json\nconfig/instrument_profiles.json\n"
         "research/\nvalidation/\nresults/\n*.h5\n*.npz\n__pycache__/\ngimap_analysis/\ntest.ipynb\n"
-        f"{V5}/development/\n"
+        f"{V5}/development/\n{KIT}/\n"
     ),
     "main.py": "print('GIMaP')\n",
     "Start_GIMaP.bat": "@echo off\n",
@@ -88,7 +92,14 @@ MANIFESTS = {
         "predict.py", "results/r1/final.weights.h5", "bundle/example_input.npz"),
     f"{V5}/stable_blue_rc_v1/MANIFEST.json": ("protocol.json", "network.npz"),
 }
-PACKED = set(TRACKED) | set(MODEL) | set(MANIFESTS) | {"tools/build_portable_release.ps1"}
+PACKED = set(TRACKED) | set(MODEL) | set(MANIFESTS) | {
+    "tools/build_portable_release.ps1", "tools/list_fit1d_release_files.py",
+}
+
+
+def _personal(path: str) -> bool:
+    # The single research exception contains only independently verified frozen runtime files.
+    return bool(PERSONAL.search(path)) and not path.startswith(f"{KIT}/app/research/")
 
 
 def _git(root: Path, *arguments: str) -> None:
@@ -127,6 +138,7 @@ def developer_folder(tmp_path):
         (root / name).write_text(json.dumps({"files": checksums}), encoding="utf-8")
     (root / "tools").mkdir()
     shutil.copy2(SCRIPT, root / "tools" / SCRIPT.name)
+    shutil.copy2(KIT_HELPER, root / "tools" / KIT_HELPER.name)
     _git(root, "init", "--quiet")
     # ``git add`` with paths: the ignored files stay out, and so does the untracked ``_handoff``.
     _git(root, "add", "--", ".gitignore", "main.py", "Start_GIMaP.bat", "src", "config", "docs",
@@ -141,14 +153,15 @@ def test_the_list_is_what_git_tracks_plus_the_model_files(developer_folder):
     assert code == 0, said
     assert set(listed) == PACKED
     assert len(listed) == len(set(listed))
-    assert not [path for path in listed if PERSONAL.search(path)]
+    assert not [path for path in listed if _personal(path)]
     assert "model files git ignores: 3; tracked but left out (working papers): 3" in said
     # The version is the program's own, so the package cannot be named after another release.
     assert "GIMaP-9.8.7-windows-x64-portable" in said
     assert not (developer_folder / "release").exists()  # nothing is written
 
 
-def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path, monkeypatch):
+@pytest.mark.parametrize("with_fit1d", [False, True])
+def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path, monkeypatch, with_fit1d):
     """The whole build on the small repository, with stand-ins for ``conda`` and ``conda-pack``.
 
     The stand-in "environment" is one file, so nothing large is packed; what is tested is which
@@ -156,13 +169,21 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
     """
     import zipfile
 
+    kit_paths = set()
+    if with_fit1d:
+        install_kit(developer_folder)
+        kit_paths = set(release_files(developer_folder)["files"])
+
     stand_ins = tmp_path / "stand_ins"
     stand_ins.mkdir()
     conda_pack = stand_ins / "conda_pack_stand_in.py"
     conda_pack.write_text(
-        "import sys, zipfile\n"
+        "import sys, zipfile, runpy\n"
         "arguments = sys.argv[1:]\n"
-        "if '-o' in arguments:\n"
+        "if '--root' in arguments:\n"
+        "    sys.argv = arguments\n"
+        "    runpy.run_path(arguments[0], run_name='__main__')\n"
+        "elif '-o' in arguments:\n"
         "    archive = arguments[arguments.index('-o') + 1]\n"
         "    runtime = arguments[arguments.index('--arcroot') + 1]\n"
         "    with zipfile.ZipFile(archive, 'w') as packed:\n"
@@ -179,9 +200,59 @@ def test_the_package_holds_the_list_and_nothing_else(developer_folder, tmp_path,
     with zipfile.ZipFile(developer_folder / "release" / f"{package}.zip") as archive:
         names = {name[len(package) + 1:] for name in archive.namelist()}
         predict = archive.read(f"{package}/{V5}/conditional_v2/predict.py")
-    assert names == PACKED | {"runtime/pythonw.exe"}
-    assert not [name for name in names - {"runtime/pythonw.exe"} if PERSONAL.search(name)]
+        if with_fit1d:
+            subset = json.loads(archive.read(f"{package}/{KIT}/{MANIFEST}"))
+            assert subset == release_files(developer_folder)["manifest"]
+            archive.extractall(tmp_path / "extracted")
+    assert names == PACKED | kit_paths | {"runtime/pythonw.exe"}
+    assert not [name for name in names - {"runtime/pythonw.exe"} if _personal(name)]
     assert predict == b"print('predict')\r\n"  # the bytes on disk: the manifests are made from them
+    if with_fit1d:
+        assert release_files(tmp_path / "extracted" / package) == release_files(developer_folder)
+
+
+def test_fit1d_runtime_is_listed_without_tracking_private_examples(developer_folder):
+    install_kit(developer_folder)
+    # Even accidentally tracked private examples must be filtered out of the public kit subset.
+    _git(developer_folder, "add", "--force", "--", f"{KIT}/examples/private_curve.npz")
+    code, listed, said = _list(developer_folder)
+    assert code == 0, said
+    assert set(listed) == PACKED | set(release_files(developer_folder)["files"])
+    assert not [path for path in listed if _personal(path)]
+    assert not any("private_curve" in path or "selftest" in path or "expected" in path for path in listed)
+    assert not (developer_folder / "release").exists()
+
+
+def test_fit1d_checksum_failure_stops_before_packing(developer_folder):
+    install_kit(developer_folder)
+    (developer_folder / KIT / "models/general/weights_numpy.npz").write_bytes(b"wrong weights")
+    code, listed, said = _list(developer_folder)
+    assert code == 1 and "fit1d checksum mismatch" in said
+    assert not any(path.startswith(f"{KIT}/") for path in listed)
+    assert not (developer_folder / "release").exists()
+
+
+def test_fit1d_missing_runtime_dependency_stops_before_packing(developer_folder, tmp_path, monkeypatch):
+    install_kit(developer_folder)
+    stand_ins = tmp_path / "dependency_stand_ins"
+    stand_ins.mkdir()
+    python = stand_ins / "python_stand_in.py"
+    python.write_text(
+        "import sys, runpy\n"
+        "arguments = sys.argv[1:]\n"
+        "if '--root' in arguments:\n"
+        "    sys.argv = arguments\n"
+        "    runpy.run_path(arguments[0], run_name='__main__')\n",
+        encoding="utf-8")
+    (stand_ins / "python.cmd").write_text(f'@"{sys.executable}" "{python}" %*\r\n')
+    (stand_ins / "conda.cmd").write_text(
+        '@echo off\r\nif "%1"=="run" exit /b 1\r\n'
+        'echo {"envs": ["C:/stand-in/gimap-stand-in"]}\r\n')
+    monkeypatch.setenv("PATH", str(stand_ins), prepend=";")
+    build = _builder(developer_folder, "-EnvironmentName", "gimap-stand-in")
+    assert build.returncode != 0
+    assert "hostruntimeisincompleteorincompatible" in re.sub(r"\s+", "", build.stderr)
+    assert not (developer_folder / "release").exists()
 
 
 def test_a_personal_file_that_git_was_told_to_track_stops_the_build(developer_folder):
@@ -243,7 +314,7 @@ def test_this_repository_lists_no_personal_file():
                  "config/detectors.json", "docs/User_Manual.md",
                  f"{V5}/conditional_v2/conditional_fast_manifest_v2.json"):
         assert name in listed
-    assert not [path for path in listed if PERSONAL.search(path)]
+    assert not [path for path in listed if _personal(path)]
     assert not [path for path in listed if path.startswith("docs/research/")]
     on_disk = [
         path.relative_to(ROOT).as_posix()

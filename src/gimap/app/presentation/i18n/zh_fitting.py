@@ -240,8 +240,39 @@ FITTING_ZH = {
     "General V5 (experimental)": "通用 V5（实验性）",
     "Single RC specialist (experimental)": "单 RC 专用模型（实验性）",
     "Physical fit (numerical)": "物理拟合（数值）",
-    "General V5 proposes multiple compositions but remains experimental. The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. Other inputs, fixed resolution and poor curve agreement use numerical fallback; that fallback does not make the specialist a general model. Scores are not probabilities.":
-        "通用 V5 会给出多种组成，但仍是实验性的。专用模型要求“完整组成”只有一个随机取向圆柱，并且输入是符合条件的原始 CBF 计数。其他输入、固定的分辨率或曲线吻合较差时会改用数值回退；这种回退并不会让专用模型变成通用模型。得分不是概率。",
+    "fit1d (network + physical fit)": "fit1d（网络 + 物理拟合）",
+    "Fast (one search)": "快速（一次搜索）",
+    "Auto (more starts when needed)": "自动（需要时多起点）",
+    "Robust (always many starts)": "稳健（总是多起点）",
+    "GISAXS (Yoneda cut)": "GISAXS（Yoneda 线切）",
+    "SAXS (dilute, no structure factor)": "SAXS（稀薄体系，无结构因子）",
+    "General network": "通用网络",
+    "Au nanoparticles on Si (adapted)": "Si 上的 Au 纳米颗粒（已适配）",
+    "Cut qz (nm⁻¹)": "线切的 qz（nm⁻¹）",
+    "fit1d search": "fit1d 搜索策略",
+    "fit1d curve type": "fit1d 曲线类型",
+    "fit1d network": "fit1d 网络",
+    "fit1d systematic error (%)": "fit1d 系统误差（%）",
+    "fit1d is an external kit (folder utils/gisaxs1d_gui_kit, or GISAXS1D_KIT_HOME). It needs the Complete "
+    "composition (Sphere / Vertical cylinder; it has no random cylinder): one curve does not identify the "
+    "composition. Its physics differs from the manual model: number-weighted sizes, Hosemann paracrystal, "
+    "spheres at |q| = sqrt(q∥² + qz²). The curve shown is fit1d's own.":
+        "fit1d 是外部工具包（文件夹 utils/gisaxs1d_gui_kit，或环境变量 GISAXS1D_KIT_HOME）。它需要“完整组成”"
+        "（球 / 竖直圆柱；没有随机取向圆柱）：一条曲线无法识别组成。它的物理模型与手动模型不同：数目加权的尺寸分布、"
+        "Hosemann 准晶、球按 |q| = sqrt(q∥² + qz²) 计算。显示的曲线是 fit1d 自己的曲线。",
+    "fit1d: the out-of-plane q of the horizontal cut; spheres are evaluated at |q| = sqrt(q∥² + qz²). "
+    "Unticked: qz = 0, and the result says so.":
+        "fit1d：水平线切所在的面外 q；球按 |q| = sqrt(q∥² + qz²) 计算。不勾选：qz = 0，结果里会注明。",
+    "fit1d: a relative systematic error added to σ in quadrature. 2–5 % suits bright measured curves.":
+        "fit1d：按平方和加到 σ 上的相对系统误差。很亮的实测曲线适合 2–5 %。",
+    "Starting fit1d (network + physical fit)…": "正在开始 fit1d（网络 + 物理拟合）…",
+    "{model} is in Components and Global as a start: Fitting's model of it differs from fit1d's curve by up to "
+    "{percent} % (fit1d has its own physics: number-weighted sizes, Hosemann paracrystal, qz for spheres). "
+    "Refine it here.":
+        "{model} 已作为起点放进 Components 和 Global：拟合页的模型与 fit1d 的曲线最多相差 {percent} %"
+        "（fit1d 有自己的物理模型：数目加权的尺寸分布、Hosemann 准晶、球带 qz）。请在这里精修。",
+    "General V5 proposes multiple compositions but remains experimental. The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. Other inputs, fixed resolution and poor curve agreement use numerical fallback; that fallback does not make the specialist a general model. Scores are not probabilities. fit1d is an external kit with its own physics and needs the Complete composition (Sphere / Vertical cylinder).":
+        "通用 V5 会给出多种组成，但仍是实验性的。专用模型要求“完整组成”只有一个随机取向圆柱，并且输入是符合条件的原始 CBF 计数。其他输入、固定的分辨率或曲线吻合较差时会改用数值回退；这种回退并不会让专用模型变成通用模型。得分不是概率。fit1d 是外部工具包，有自己的物理模型，需要“完整组成”（球 / 竖直圆柱）。",
     "Fix σ res (nm⁻¹)": "固定 σ res（nm⁻¹）",
     "Fix ν res": "固定 ν res",
     "General V5: 0.007–0.013 nm⁻¹. RC specialist / physical fit: 0.001–0.1 nm⁻¹; fixed resolution uses numerical fallback.":
@@ -301,6 +332,36 @@ FITTING_ZH = {
     "Searching the ranges": "正在范围内搜索",
     "Refining": "正在精修",
     "Stopped before the search finished: no new solutions.": "已在搜索完成前停止：没有新的解。",
+    "Fits 1–4 Sphere / Vertical cylinder populations given in Model, with the current v2 networks.":
+        "用当前 v2 网络拟合模型中由你指定的 1–4 群球 / 竖直圆柱。",
+    "For a Yoneda cut, enter the vacuum qz of the cut; unset means qz = 0 with a warning.":
+        "Yoneda 切线请填入切线的真空 qz；不勾选时按 qz = 0 计算并提示。",
+    "Add 1–4 Sphere / Vertical cylinder particles in Model. Their families are given by you; fit1d fits all populations together. Its v2 curve, errors and terms are kept separately from the manual model. Only the composition is used: Model values, ranges and fixed parameters are not passed to fit1d.":
+        "在模型中添加 1–4 群球 / 竖直圆柱。形状由你给定，fit1d 将各群共同拟合。v2 曲线、误差及分量独立保存。只使用组分：模型中的参数值、范围和固定项不会传给 fit1d。",
+    "fit1d finished: χ²/point {chi2}. Its original v2 curve and errors are in Results; Model is a starting point for manual refinement.":
+        "fit1d 完成：χ²/点 {chi2}。结果页保留原 v2 曲线及误差；模型仅作为手动精修的初值。",
+    "fit1d · χ²/point {chi2} · {points} points · {model}":
+        "fit1d · χ²/点 {chi2} · {points} 个点 · {model}",
+    "The original fit1d v2 curve is shown. Model is only a manual starting point; its physics and parameter widths differ.":
+        "显示的是原 fit1d v2 曲线。模型仅作手动初值，其物理和分布宽度约定不同。",
+    "fit1d residual: (I − model) / effective σ": "fit1d 残差：(I − 模型) / 有效 σ",
+    "fit1d uses σ from the file with the selected systematic error floor.":
+        "fit1d 使用文件中的 σ，并加入所选的系统误差下限。",
+    "No σ in the file: fit1d assumes Poisson errors; the selected systematic error floor is added in quadrature.":
+        "文件没有 σ：fit1d 假设泊松误差，再按平方和开根号加入所选的系统误差下限。",
+    "state": "状态",
+    "fit1d v2 model": "fit1d v2 模型",
+    "manual starting model": "手动初始模型",
+    "{quality} (previous fit1d result)": "{quality}（先前的 fit1d 结果）",
+    "The plot shows the manual starting model. The saved fit1d result is stale: fit again.":
+        "当前图为手动初始模型。保存的 fit1d 结果已过期，请重新拟合。",
+    "Parameter warnings are in the State column; hover for ranges. All warnings are kept in the saved JSON.":
+        "参数提示见状态列，悬停可看范围。全部提示保留在保存的 JSON 中。",
+    "ambiguous": "有等价解",
+    "weak": "弱约束",
+    "at_bound": "触边界",
+    "inactive": "无贡献",
+    "derived": "派生量",
 }
 
 __all__ = ["FITTING_ZH"]

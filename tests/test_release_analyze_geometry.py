@@ -65,7 +65,7 @@ def test_a_centre_set_on_another_detector_survives_a_geometry_saved_for_this_one
     assert model.state.beam_center is None
 
 
-def test_edit_geometry_in_the_page_saves_the_centre_typed_and_uses_it(tmp_path: Path, monkeypatch) -> None:
+def test_edit_geometry_in_the_page_saves_the_centre_typed_and_uses_it(tmp_path: Path) -> None:
     paths = _frames(tmp_path, 1)
     page = _page(_context(_profiles()))
     try:
@@ -75,15 +75,14 @@ def test_edit_geometry_in_the_page_saves_the_centre_typed_and_uses_it(tmp_path: 
         _done(page)
         assert page.center_button.property("centerSource") == "session"
 
-        def accept(dialog) -> int:  # the dialog is pre-filled with the centre in use; the person types another
-            assert dialog.center_x_spin.value() == 150.0 and dialog.center_y_spin.value() == 200.0
-            dialog.center_x_spin.setValue(201.5)
-            dialog.center_y_spin.setValue(251.25)
-            return GeometryDialog.Accepted
-
-        monkeypatch.setattr(GeometryDialog, "exec_", accept)
         page._enter_geometry()
+        dialog = page._geometry_dialog
+        assert dialog.center_x_spin.value() == 150.0 and dialog.center_y_spin.value() == 200.0
+        dialog.center_x_spin.setValue(201.5)
+        dialog.center_y_spin.setValue(251.25)
+        dialog.save_button.click()
         _done(page)
+        assert dialog.isVisible()
         geometry = page.view_model.state.analysis.geometry
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == (201.5, 251.25)
         assert page.center_button.property("centerSource") == "profile"

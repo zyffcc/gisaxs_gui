@@ -32,7 +32,7 @@ from ..binding_primitives import (
 def workflow_options_for_mode(options, run_mode):
     """Main Fit honors the saved method; explicit prediction selects legacy V5."""
     result = {**options, "q_unit": "nm^-1", "numerical": run_mode != "fast"}
-    if run_mode in ("stable", "experimental"):
+    if run_mode in ("stable", "experimental", "fit1d"):
         result["method"] = run_mode
     elif run_mode == "fast":
         result["method"] = "model"
@@ -156,6 +156,8 @@ class AiJobExecutionMixin:
             label = "experimental physical fit (numerical)"
         elif options["method"] == "stable":
             label = "single-RC specialist prediction with curve checks"
+        elif options["method"] == "fit1d":
+            label = "fit1d (network + physical fit)"
         self._begin_fitting_step("fit", f"Running {label}")
         self._set_ai_running_state(True)
         self._set_ai_workspace_status(

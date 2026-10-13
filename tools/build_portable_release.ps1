@@ -4,6 +4,8 @@
 #   1. the files git tracks, and
 #   2. the model files 1D Predict needs at run time that git ignores (*.h5, *.npz, *.keras under
 #      modules/, outside the development records).
+#   3. the optional fit1d kit's runtime subset, checked against its SHA-256 file manifest.
+#      Personal examples and their reference runs are excluded; the ZIP receives a subset manifest.
 # A developer's folder also holds personal settings (config/user_*.json), the instrument geometry of
 # their own beamtime (config/instrument_profiles.json), reports, research folders, notebooks and
 # caches. None of them may reach a release: GIMaP imports <program>/config/*.json into a new user's
@@ -131,10 +133,40 @@ $IgnoredModelFiles = @(
     Get-GitPaths @("ls-files", "--others", "--ignored", "--exclude-standard", "--", "modules") |
         Where-Object { $_ -match '\.(h5|npz|keras)$' -and $_ -notmatch '(^|/)development/' }
 )
-$LeftOut = @($Tracked | Where-Object { Test-AnyPattern $_ $NotShipped })
+$Fit1DKitPaths = @()
+$Fit1DSubsetJson = ""
+$Fit1DManifestPath = "utils/gisaxs1d_gui_kit/FILES_SHA256.json"
+if (Test-Path -LiteralPath (Join-Path $ProjectRoot "utils/gisaxs1d_gui_kit")) {
+    Require-Command "python" "The fit1d runtime list is verified with a standard-library Python helper."
+    $KitHelper = Join-Path $ProjectRoot "tools/list_fit1d_release_files.py"
+    if (-not (Test-Path -LiteralPath $KitHelper -PathType Leaf)) {
+        $Problems.Add("The fit1d release validator is missing: tools/list_fit1d_release_files.py")
+    }
+    else {
+        $KitResultLines = & python $KitHelper --root $ProjectRoot
+        $KitExitCode = $LASTEXITCODE
+        $KitResult = ($KitResultLines -join "`n") | ConvertFrom-Json
+        if ($KitExitCode -ne 0) {
+            $Problems.Add("The fit1d kit cannot be released: $($KitResult.error)")
+        }
+        else {
+            $Fit1DKitPaths = @($KitResult.files)
+            $Fit1DSubsetJson = $KitResult.manifest | ConvertTo-Json -Depth 10
+        }
+    }
+}
+$Fit1DListed = [System.Collections.Generic.HashSet[string]]::new(
+    [string[]]$Fit1DKitPaths, [System.StringComparer]::OrdinalIgnoreCase)
+$LeftOut = @($Tracked | Where-Object {
+    (Test-AnyPattern $_ $NotShipped) -or
+    ($_.StartsWith("utils/gisaxs1d_gui_kit/") -and -not $Fit1DListed.Contains($_))
+})
 $ApplicationFiles = @(
-    @($Tracked) + @($IgnoredModelFiles) |
-        Where-Object { -not (Test-AnyPattern $_ $NotShipped) } |
+    @($Tracked) + @($IgnoredModelFiles) + @($Fit1DKitPaths) |
+        Where-Object {
+            -not (Test-AnyPattern $_ $NotShipped) -and
+            (-not $_.StartsWith("utils/gisaxs1d_gui_kit/") -or $Fit1DListed.Contains($_))
+        } |
         Sort-Object -Unique
 )
 if (-not $ApplicationFiles) {
@@ -149,6 +181,11 @@ $CountByTop = @{}
 foreach ($RelativePath in $ApplicationFiles) {
     foreach ($Rule in $Forbidden) {
         if ($RelativePath -match $Rule.Pattern) {
+            # Only files independently checked against the kit manifest may contain research/.
+            # Other forbidden paths (caches, outputs, personal material) still stop the build.
+            if ($Rule.Pattern -eq '(^|/)(_handoff|research|validation)/' -and
+                $RelativePath.StartsWith("utils/gisaxs1d_gui_kit/app/research/") -and
+                $Fit1DListed.Contains($RelativePath)) { continue }
             $Problems.Add("Not allowed in a release ($($Rule.Why)): $RelativePath")
             break
         }
@@ -167,7 +204,12 @@ foreach ($RelativePath in $ApplicationFiles) {
     }
     $Top = "(top folder)"
     if ($RelativePath.Contains("/")) { $Top = $RelativePath.Substring(0, $RelativePath.IndexOf("/")) + "/" }
-    $Length = (Get-Item -LiteralPath $FullPath -Force).Length
+    if ($RelativePath -eq $Fit1DManifestPath -and $Fit1DSubsetJson) {
+        $Length = [System.Text.Encoding]::UTF8.GetByteCount($Fit1DSubsetJson)
+    }
+    else {
+        $Length = (Get-Item -LiteralPath $FullPath -Force).Length
+    }
     $TotalBytes += $Length
     $BytesByTop[$Top] = [int64]$BytesByTop[$Top] + $Length
     $CountByTop[$Top] = [int]$CountByTop[$Top] + 1
@@ -224,6 +266,9 @@ Write-Note ("Application files for $PackageName" + ": $($ApplicationFiles.Count)
     ("{0:N1} MB" -f ($TotalBytes / 1MB)) + " (from $ProjectRoot)")
 Write-Note ("  tracked by git: $($Tracked.Count - $LeftOut.Count); model files git ignores: " +
     "$($IgnoredModelFiles.Count); tracked but left out (working papers): $($LeftOut.Count)")
+if ($Fit1DKitPaths.Count) {
+    Write-Note "  verified fit1d runtime files: $($Fit1DKitPaths.Count) (personal examples and selftests excluded)"
+}
 foreach ($Top in ($CountByTop.Keys | Sort-Object)) {
     Write-Note ("  {0,-16} {1,5} files {2,8:N1} MB" -f $Top, $CountByTop[$Top], ($BytesByTop[$Top] / 1MB))
 }
@@ -262,6 +307,15 @@ $EnvironmentPath = $EnvironmentJson.envs | Where-Object {
 if (-not $EnvironmentPath) {
     throw "Conda environment '$EnvironmentName' was not found."
 }
+if ($Fit1DKitPaths.Count) {
+    # The packed runtime must control BLAS even after the host imported NumPy. Do not install or
+    # alter the developer's environment here; a missing/incompatible dependency stops the build.
+    $RuntimeCheck = "import numpy as np, scipy, threadpoolctl; assert (1,24) <= tuple(int(n) for n in np.__version__.split('.')[:2]) < (2,0), 'fit1d requires numpy>=1.24,<2'; assert tuple(int(n) for n in scipy.__version__.split('.')[:2]) >= (1,10), 'fit1d requires scipy>=1.10'; assert hasattr(threadpoolctl, 'ThreadpoolController'), 'fit1d requires threadpoolctl>=3.1'; print('fit1d runtime dependencies available')"
+    & conda run --no-capture-output -p $EnvironmentPath python -c $RuntimeCheck
+    if ($LASTEXITCODE -ne 0) {
+        throw "The fit1d host runtime is incomplete or incompatible. Install requirements.txt in '$EnvironmentName' before building. Nothing was packed."
+    }
+}
 
 New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
 if (Test-Path $ArchivePath) {
@@ -281,6 +335,12 @@ $Archive = [System.IO.Compression.ZipFile]::Open($ArchivePath, [System.IO.Compre
 try {
     # Only the checked list: the bytes on disk, which are the ones the model manifests were made from.
     foreach ($RelativePath in $ApplicationFiles) {
+        if ($RelativePath -eq $Fit1DManifestPath -and $Fit1DSubsetJson) {
+            $Entry = $Archive.CreateEntry("$PackageName/$RelativePath")
+            $Writer = [System.IO.StreamWriter]::new($Entry.Open(), [System.Text.UTF8Encoding]::new($false))
+            try { $Writer.Write($Fit1DSubsetJson) } finally { $Writer.Dispose() }
+            continue
+        }
         [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
             $Archive,
             (Join-Path $ProjectRoot $RelativePath),

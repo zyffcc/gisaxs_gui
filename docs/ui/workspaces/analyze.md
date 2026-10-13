@@ -95,10 +95,21 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
 
 - 默认用仪器配置里标定过的中心，不受文件头影响（设置 ▸ Analyze 可改为信任文件头）。
 - Geometry 步骤 ▸ Beam centre：拖动图上的青色十字、Pick on Image、Enter Coordinates…、Use File Header Centre、
-  Refine x by Symmetry（GISAXS：在水平切带内找左右对称轴，只改 x）。改动对之后的文件保持；Save to Profile 写入配置，
+  Refine x by Symmetry / Make Left and Right Symmetric（GISAXS：先在当前水平切带的有效数据中全局粗定位左右对称轴，
+  再精修，只改 x；列强度与显示曲线一致，取有效像素均值。精修按离中心距离的倒数加权，使不同倍数的距离区间获得
+  相近权重，避免远端大量点压过低 q 点；这近似对应 GISAXS 的对数 |qy| 分布。候选中心使用同一组实测配对点，
+  不跨缝隙插值；离中心不足 1 px 的点不参与。精修停止容差 0.0001 px，不代表实验定位精度）。
+  搜索在后台运行，同一按钮可取消；
+  数据覆盖不足或存在多个同样可靠的轴时保留原中心并说明原因。改动对之后的文件保持；Save to Profile 写入配置，
   Back to Profile Centre 放弃。
 - 本次会话设的中心只用于同一探测器尺寸（行 × 列）的帧；尺寸不同的帧回到配置的中心。尺寸随中心写入设置文件与项目
   （`beam_center_shape_px`）。
+- Geometry… 和 Enter Coordinates… 的窗口保持打开，不阻挡曲线操作。中心 x/y 显示四位小数，Centre step 设置上下按钮、
+  方向键和滚轮每次移动的像素步长（最小 0.0001 px，两个窗口共用并记住）。Apply Centre 应用本次会话的中心并刷新曲线，
+  可反复调整和应用；Save Profile 保存全部几何参数，窗口仍保持打开。Close 保留已应用的中心，放弃尚未应用的输入。
+  勾选 Live Preview 后，输入中心、上下按钮或滚轮调整会自动刷新曲线，步长仍由 Centre step 设置。
+  连续移动合并刷新；当前计算完成后只计算最新的中心，保留曲线的手动缩放。关闭预览或窗口会取消尚未提交的刷新。
+  切换文件或帧、清空和关闭页面时关闭调整窗口，避免将旧帧的输入应用到另一个探测器。
 
 ## αi 与模式
 

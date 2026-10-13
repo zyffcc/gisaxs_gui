@@ -1,35 +1,19 @@
-"""Enter a detector geometry by hand and store it as an instrument profile."""
+"""Apply manual beam centres repeatedly and save detector geometry profiles."""
 
 from __future__ import annotations
 
 from typing import Optional
 
-from PyQt5.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
-    QDoubleSpinBox,
-    QFormLayout,
-    QLabel,
-    QLineEdit,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import QDialog, QWidget
+
+from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.theme import set_role
 
 from ..application import DetectorGeometry
+from .views.geometry_dialog_view import GeometryDialogView, PROFILE_NAME_WIDTH
 
 HC_KEV_ANGSTROM = 12.398419843320026
-PROFILE_NAME_WIDTH = 260
-"""The least width (px) of the profile-name field: about 40 characters, a detector name with its size."""
-
-
-def _spin(parent, low, high, decimals, value, suffix, step=1.0) -> QDoubleSpinBox:
-    spin = QDoubleSpinBox(parent)
-    spin.setRange(low, high)
-    spin.setDecimals(decimals)
-    spin.setSingleStep(step)
-    spin.setSuffix(suffix)
-    spin.setValue(value)
-    return spin
 
 
 def geometry_defaults(metadata: dict, shape: tuple[int, int]) -> dict[str, float]:
@@ -52,9 +36,14 @@ def geometry_defaults(metadata: dict, shape: tuple[int, int]) -> dict[str, float
     }
 
 
-class GeometryDialog(QDialog):
+class GeometryDialog(QDialog, GeometryDialogView):
+    applyCenterRequested = pyqtSignal()
+    saveRequested = pyqtSignal()
+    deleteRequested = pyqtSignal()
+    validationFailed = pyqtSignal(str)
+
     DELETED = 2
-    """``exec_()`` result when the user deleted the profile being edited."""
+    """Legacy result retained for callers that compare the deleted result code."""
 
     def __init__(
         self,
@@ -63,59 +52,42 @@ class GeometryDialog(QDialog):
         parent: Optional[QWidget] = None,
         *,
         allow_delete: bool = False,
+        center_step_px: float = 1.0,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Detector geometry")
-        self.setObjectName("analyzeGeometryDialog")
-        layout = QVBoxLayout(self)
-        note = QLabel(
-            "Beam centre = direct beam in pixels, pixel j spanning [j, j+1] "
-            "(the centre of the first pixel is 0.5). The profile is used for every frame "
-            "from this detector with this size.",
-            self,
+        self.setup_geometry_ui(
+            name, defaults, allow_delete=allow_delete, center_step_px=center_step_px,
         )
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        form = QFormLayout()
-        self.name_edit = QLineEdit(name, self)
-        # Save overwrites and Delete removes the profile named here: a long name is shown from its start.
-        self.name_edit.setMinimumWidth(PROFILE_NAME_WIDTH)
-        self.name_edit.setCursorPosition(0)
-        self.distance_spin = _spin(self, 1.0, 1e5, 2, defaults["distance_mm"], " mm", 10.0)
-        self.pixel_x_spin = _spin(self, 1.0, 1e4, 3, defaults["pixel_x_um"], " µm")
-        self.pixel_y_spin = _spin(self, 1.0, 1e4, 3, defaults["pixel_y_um"], " µm")
-        self.wavelength_spin = _spin(self, 0.01, 50.0, 5, defaults["wavelength_angstrom"], " Å", 0.01)
-        self.center_x_spin = _spin(self, -1e5, 1e5, 2, defaults["center_x"], " px")
-        self.center_y_spin = _spin(self, -1e5, 1e5, 2, defaults["center_y"], " px")
-        self.incidence_spin = _spin(self, 0.0, 10.0, 3, defaults["incidence_deg"], " °", 0.01)
-        form.addRow("Profile name", self.name_edit)
-        form.addRow("Sample–detector distance", self.distance_spin)
-        form.addRow("Pixel size x", self.pixel_x_spin)
-        form.addRow("Pixel size y", self.pixel_y_spin)
-        form.addRow("Wavelength", self.wavelength_spin)
-        form.addRow("Beam centre x", self.center_x_spin)
-        form.addRow("Beam centre y", self.center_y_spin)
-        form.addRow("Incidence angle αi", self.incidence_spin)
-        layout.addLayout(form)
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel, self)
-        buttons.accepted.connect(self._accept_if_named)
-        buttons.rejected.connect(self.reject)
-        self.delete_button = None
-        if allow_delete:
-            self.delete_button = buttons.addButton("Delete profile", QDialogButtonBox.DestructiveRole)
-            self.delete_button.clicked.connect(lambda: self.done(self.DELETED))
-        layout.addWidget(buttons)
+        self.apply_button.clicked.connect(self.applyCenterRequested)
+        self.save_button.clicked.connect(self._save_if_named)
+        self.close_button.clicked.connect(self.reject)
+        if self.delete_button is not None:
+            self.delete_button.clicked.connect(self.deleteRequested)
 
-    def _accept_if_named(self) -> None:
+    def _save_if_named(self) -> None:
         if self.name_edit.text().strip():
-            self.accept()
+            self.saveRequested.emit()
         else:
             self.name_edit.setFocus()
+            self.set_status(tr("Enter a profile name before saving."), "warning")
+            self.validationFailed.emit("Enter a profile name before saving.")
+
+    def set_status(self, text: str, level: str = "info") -> None:
+        self.status_label.setText(text)
+        set_role(self.status_label, "success" if level == "ok" else level)
+
+    def center(self) -> tuple[float, float]:
+        self.center_x_spin.interpretText()
+        self.center_y_spin.interpretText()
+        return self.center_x_spin.value(), self.center_y_spin.value()
 
     def profile_name(self) -> str:
         return self.name_edit.text().strip()
 
     def geometry(self) -> DetectorGeometry:
+        for spin in (self.pixel_x_spin, self.pixel_y_spin, self.distance_spin, self.center_x_spin,
+                     self.center_y_spin, self.wavelength_spin, self.incidence_spin):
+            spin.interpretText()
         return DetectorGeometry(
             pixel_size_x_m=self.pixel_x_spin.value() * 1e-6,
             pixel_size_y_m=self.pixel_y_spin.value() * 1e-6,

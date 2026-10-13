@@ -56,6 +56,9 @@ class InsituMonitoringMixin:
                                 fmt="o", ms=3, alpha=.6, label=f"{row['side']} measured")
                     ax.plot(row["display_q"], row["display_fit"], lw=1.6,
                             label=f"{row['side']} model forward")
+                    for name, values in row.get("display_components", {}).items():
+                        ax.plot(row["display_q"], values, lw=1.1, ls="--",
+                                label=f"{row['side']} {name}")
                 if self._is_fit_log_y_enabled():
                     ax.set_yscale("symlog", linthresh=max(min(min(r["sigma"]) for r in sides), 1e-12))
                 ax.set_xlabel("q (nm⁻¹)"); ax.set_ylabel("Intensity (input units)")

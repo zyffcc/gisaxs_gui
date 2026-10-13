@@ -128,6 +128,34 @@ def test_the_range_and_the_halves_choose_the_points(tmp_path) -> None:
     page.dispose()
 
 
+def test_the_log_q_band_keeps_the_fitting_range_in_data_units(tmp_path) -> None:
+    page = _page(quick_fit=lambda *args, **kwargs: [])
+    try:
+        assert page.open_curve(_curve_file(tmp_path))
+        page.set_range((0.2, 1.5))
+        selections = []
+        page.plot.windowChanged.connect(lambda low, high: selections.append((low, high)))
+
+        page.plot.log_x_check.setChecked(True)
+        assert page.plot.x_window.getRegion() == pytest.approx(tuple(np.log10((0.2, 1.5))))
+        assert page.session.q_range == pytest.approx((0.2, 1.5))
+        assert selections == []
+
+        page.plot.x_window.setRegion(tuple(np.log10((0.35, 1.2))))
+        assert page.session.q_range == pytest.approx((0.35, 1.2))
+        assert page.range_min_spin.value() == pytest.approx(0.35)
+        assert page.range_max_spin.value() == pytest.approx(1.2)
+        assert len(selections) == 1
+        assert selections[0] == pytest.approx((0.35, 1.2))
+
+        page.plot.log_x_check.setChecked(False)
+        assert page.plot.x_window.getRegion() == pytest.approx((0.35, 1.2))
+        assert page.session.q_range == pytest.approx((0.35, 1.2))
+        assert len(selections) == 1
+    finally:
+        page.dispose()
+
+
 def test_a_solution_from_analyze_becomes_the_model(tmp_path) -> None:
     from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import forward
 

@@ -296,9 +296,15 @@ def run_workflow_job(payload, report, is_cancelled):
     )
     experimental = options["method"] == "experimental"
     stable = options["method"] == "stable"
+    fit1d = options["method"] == "fit1d"
+    kit = None
     if stable:
         from .stable_blue import StableEngine
         engine = StableEngine()
+    elif fit1d:
+        from .fit1d_method import fit_and_write as fit1d_and_write, load_kit
+
+        engine, kit = None, load_kit()  # a missing kit stops the job here, with where to put it
     else:
         engine = None if experimental else WorkflowEngine(payload.get("model_path"))
     sources = payload.get("files") or [None]
@@ -337,6 +343,8 @@ def run_workflow_job(payload, report, is_cancelled):
                     from .experimental_fit import fit_and_write
 
                     rows.extend(fit_and_write(directory / item["side"], item, options, report, is_cancelled))
+                elif fit1d:
+                    rows.extend(fit1d_and_write(directory / item["side"], item, options, report, is_cancelled, kit))
                 else:
                     result, artifact, raw = engine.fit_side(item, options, report, is_cancelled)
                     rows.extend(write_side(directory / item["side"], item, result, artifact, raw))
@@ -379,7 +387,7 @@ def run_workflow_job(payload, report, is_cancelled):
         )
         report(index + 1, len(sources), f"{index + 1}/{len(sources)} files finished — {name}", {})
     summary = dict(
-        profile="Single RC specialist (experimental) + numerical fallback" if stable else ("Experimental physical fit (numerical)" if experimental else ("V5 + four-step correction" if options["numerical"] else "V5 neural only")),
+        profile="Single RC specialist (experimental) + numerical fallback" if stable else ("Experimental physical fit (numerical)" if experimental else ("fit1d (network + physical fit)" if fit1d else ("V5 + four-step correction" if options["numerical"] else "V5 neural only"))),
         runtime_seconds=time.perf_counter() - started,
         configured_candidates=len(all_rows),
         best_log_rmse=all_rows[0]["best_log_rmse"] if all_rows else None,

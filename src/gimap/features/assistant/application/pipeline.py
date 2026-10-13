@@ -350,6 +350,12 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
     def _report(self) -> dict:
         results, run = self.catalog.results, self._run
         status = results.status or {}
+        geometry = clean(status.get("geometry") or {})
+        center = (status.get("geometry") or {}).get("beam_center_px")
+        if center is not None:
+            # Four significant digits can erase a resolved subpixel shift.
+            # Keep the applied coordinates in the report's geometry record.
+            geometry["beam_center_px"] = clean(center, digits=15)
         return {
             "ok": run.ok,
             "stopped": run.stopped,
@@ -359,7 +365,7 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
             "frame": self._start_path or status.get("path"),
             "measurement": status.get("measurement"),
             "frames": {"total": status.get("frames"), "first": status.get("frame"), "summed": status.get("summed_frames")},
-            "geometry": {"source": run.geometry_source, **clean(status.get("geometry") or {})},
+            "geometry": {"source": run.geometry_source, **geometry},
             "calibration_quality": calibration_quality(run.calibration),
             "peaks": _peak_rows(results),
             "peak_search": _peak_search(results),

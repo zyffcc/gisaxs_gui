@@ -35,7 +35,7 @@ from .session import Solution
 
 FAMILY_IDS = {"sphere": 1, "cylinder": 2, "vertical_cylinder": 3}
 METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "shapes": "Find the particle shape",
-                "ai": "AI proposal"}
+                "ai": "AI proposal", "fit1d": "fit1d"}
 START, START_OF = "Trying start {n} of {total}", "Trying start {n} of {total}: {model}"
 """One start of the shape search (each family is tried from several starting sizes)."""
 EVALUATED = "{line} — {evaluations} evaluations"
@@ -91,17 +91,20 @@ class FitRunMixin:
         self.stop_step_button.clicked.connect(self.stop_fit)
         self.method_group.buttonToggled.connect(lambda _button, _on: self._method_chosen())
         self.method_buttons["shapes"].setEnabled(self.quick_fit is not None)
-        self._method_chosen()
+        self._method_chosen(remember=False)
 
     def method(self) -> str:
         return next((key for key, button in self.method_buttons.items() if button.isChecked()), "local")
 
-    def _method_chosen(self) -> None:
+    def _method_chosen(self, *, remember=True) -> None:
         method = self.method()
         self.families_row.setVisible(method == "shapes")
+        self.fit1d_settings_panel.setVisible(method == "fit1d")
         self.fit_step_button.setText(tr(METHOD_NAMES[method]))
         self.fit_step_button.setToolTip(self.method_buttons[method].toolTip())
-        self._remember(method=method)
+        self._fill_curve_card()
+        if remember:
+            self._remember(method=method)
 
     def fit_running(self) -> bool:
         return self._running is not None
@@ -145,6 +148,11 @@ class FitRunMixin:
             self.tasks.submit("fit", lambda: self._find_shapes(data, model, families, edited),
                               on_done=lambda solutions: self._solutions_found(solutions, curve, selection),
                               on_error=failed)
+        elif method == "fit1d":
+            try:
+                self._start_fit1d(data, model, selection, curve)
+            except (ValueError, TypeError, RuntimeError) as exc:
+                failed(str(exc))
         else:
             self.tasks.submit("fit", lambda: self._ai_solutions(data, model),
                               on_done=lambda solutions: self._solutions_found(solutions, curve, selection),
@@ -162,6 +170,8 @@ class FitRunMixin:
         if not self.fit_running():
             return
         self._stop_event.set()
+        if self._running == "fit1d":
+            self._cancel_fit1d()
         if self._running == "ai":
             try:
                 self.view_model.cancel_ai_candidates()
@@ -205,6 +215,7 @@ class FitRunMixin:
 
     def _finish(self) -> None:
         self._running = None
+        self._fit1d_job_id = None
         self._busy(False)
 
     def _of_another_curve(self, curve) -> bool:
@@ -221,7 +232,7 @@ class FitRunMixin:
         if self._of_another_curve(curve):
             return
         # Stop during a search for solutions ends as an error of its fitter (“Fitting cancelled”): not a failure.
-        stopped = self._stop_event.is_set() and self._running in ("shapes", "ai")
+        stopped = self._stop_event.is_set() and self._running in ("shapes", "ai", "fit1d")
         self._finish()
         if stopped:
             self._status(lambda: tr("Stopped before the search finished: no new solutions."), "warning")
@@ -233,6 +244,7 @@ class FitRunMixin:
             return
         self._finish()
         self.session.result = result
+        self.session.native_result = None
         self.session.result_selection = self.session.selection() if selection is None else selection
         self.session.set_model(result.model)
         self._model_changed(editor=True)
@@ -253,6 +265,7 @@ class FitRunMixin:
             self._status(tr("No solution: the curve may be too short or too noisy for these families."), "warning")
             return
         self.session.solutions = list(solutions)
+        self.session.native_result = None
         # The points their χ² is of: those when the search started (the band may be dragged meanwhile).
         self.session.solutions_selection = self.session.selection() if selection is None else selection
         best = solutions[0]

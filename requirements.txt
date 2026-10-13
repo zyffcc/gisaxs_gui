@@ -1,5 +1,7 @@
 numpy>=1.24,<2.0
 scipy>=1.10
+# fit1d workers limit already-loaded BLAS runtimes to one thread per fitting process.
+threadpoolctl>=3.1
 matplotlib>=3.7
 pyqtgraph>=0.13.7,<0.15
 BornAgain==24.1; platform_system != "Darwin"

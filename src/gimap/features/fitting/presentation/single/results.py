@@ -177,6 +177,9 @@ class FitResultsMixin:
             chi=chi, value=f"{result.chi2_reduced:.3g}", points=result.points, free=result.free, state=state)
 
     def render_results(self) -> None:
+        if self._render_fit1d_results():
+            return
+        self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±"])
         session = self.session
         result = session.result
         old_search = session.solutions_searched() and not session.solutions_are_current()
@@ -305,11 +308,17 @@ class FitResultsMixin:
         path = path or self._save_path("Save Data and Fit", f"{self._stem()}_fit.csv", "CSV (*.csv)")
         if not path:
             return None
-        names, table = export_table(self.session.model, data)
-        record = fit_record(self.session.model, data, self.session.curve, side=self.session.side,
-                            q_range=self.session.q_range,
-                            result=self.session.result if self.session.result_is_current() else None,
-                            excluded=self.session.excluded)
+        if self.session.native_result is not None and self.session.result is None:
+            if not self.session.native_is_current():
+                self._status(tr("Changed after the fit: Fit again"), "warning")
+                return None
+            names, table, record = self._fit1d_export()
+        else:
+            names, table = export_table(self.session.model, data)
+            record = fit_record(self.session.model, data, self.session.curve, side=self.session.side,
+                                q_range=self.session.q_range,
+                                result=self.session.result if self.session.result_is_current() else None,
+                                excluded=self.session.excluded)
         try:
             record_path = write_pair(path, lambda target: np.savetxt(
                 target, table, delimiter=",", header=",".join(names), comments="", fmt="%.8g"), record)

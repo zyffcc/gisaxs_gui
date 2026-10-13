@@ -267,6 +267,9 @@ class AnalyzePage(
     def clear_files(self) -> None:
         """No frames any more (Analyze ▸ Clear, and before a project opens): every view as before the first
         file. An automatic analysis still working stops and its results are dropped with its files."""
+        self._close_geometry_editors()
+        self._cancel_center_refinement()
+        self._center_analysis_pending = False
         self._drop_run()
         self.tasks.cancel("analyze")
         self._shown_status = None  # nor the frame it names (``refresh_language``)
@@ -326,10 +329,14 @@ class AnalyzePage(
     # -- analysis ------------------------------------------------------------------------
 
     def run_analysis(self) -> None:
+        self._invalidate_geometry_editors()
+        self._cancel_center_refinement()
         self._observe_setup()
         request = self.view_model.request()
         if request is None:
             return
+        self._center_analysis_pending = True
+        self._update_center_control()
         self._started_at = time.perf_counter()
         self._failed = None  # what failed before is no longer what is asked for
         self._status(trf("Analysing {name} …", name=request.path.name))
@@ -341,6 +348,8 @@ class AnalyzePage(
         )
 
     def show_analysis(self, analysis: FrameAnalysis) -> None:
+        self._cancel_center_refinement()
+        self._center_analysis_pending = False
         previous = self.view_model.state.analysis
         self.view_model.accept(analysis)
         self._failed = None
@@ -361,7 +370,10 @@ class AnalyzePage(
             if not has_map or (self.view_combo.currentIndex() == 2 and not giwaxs):
                 self.view_combo.setCurrentIndex(0)
         self._show_image(keep_view=same_frame_shape)
-        self._show_curves(analysis)
+        if previous is not None and previous.kind == analysis.kind and self._is_live_center_analysis(analysis):
+            self._redraw_curves(analysis)
+        else:
+            self._show_curves(analysis)
         if analysis.kind == GISAXS and (previous is None or previous.kind != GISAXS):
             self._show_halves_on_plot()  # a GISAXS frame starts with the halves chosen for Fitting
         self._update_center_control()
@@ -513,6 +525,8 @@ class AnalyzePage(
 
     def dispose(self) -> None:
         """Stop background work and release the pyqtgraph views (call before deletion)."""
+        self._close_geometry_editors()
+        self._cancel_center_refinement()
         self.save_last_setup()
         self._watch_timer.stop()
         self.view_model.stop_watch()

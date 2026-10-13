@@ -388,6 +388,7 @@ Dependencies are listed in `requirements.txt`:
 
 - numpy>=1.24,<2.0
 - scipy>=1.10
+- threadpoolctl>=3.1 (limits BLAS threads in fit1d workers)
 - matplotlib>=3.7
 - pyqtgraph>=0.13.7,<0.15
 - BornAgain==24.1 on Windows and Linux; installed separately on macOS

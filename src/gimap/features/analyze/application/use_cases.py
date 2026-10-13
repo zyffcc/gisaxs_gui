@@ -367,7 +367,7 @@ def export_stem(analysis: FrameAnalysis) -> str:
     return stem
 
 
-def refine_center_by_symmetry(analysis: FrameAnalysis) -> SymmetryCenter:
+def refine_center_by_symmetry(analysis: FrameAnalysis, *, cancelled=None) -> SymmetryCenter:
     """Beam-centre x of a GISAXS frame from the left–right symmetry of its horizontal cut band."""
     reduction = analysis.reduction
     if analysis.kind != GISAXS or reduction is None or analysis.geometry is None:
@@ -376,7 +376,9 @@ def refine_center_by_symmetry(analysis: FrameAnalysis) -> SymmetryCenter:
     if curve is None:
         raise ValueError("This frame has no horizontal cut.")
     rows = tuple(int(value) for value in curve.region.get("rows", (0, 0)))
-    return symmetric_center_x(analysis.data, analysis.valid, rows, analysis.geometry.beam_center_x_px)
+    return symmetric_center_x(
+        analysis.data, analysis.valid, rows, analysis.geometry.beam_center_x_px, cancelled=cancelled
+    )
 
 
 class ExportAnalysis:

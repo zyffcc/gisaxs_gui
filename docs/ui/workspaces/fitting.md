@@ -58,9 +58,10 @@ Fitting
 - **Model**：每种颗粒一张卡片（类型、Distance D 开关、删除），每个参数一行：值、上次拟合的 ± 误差
   （或“到达边界”）、fit 勾选（自由 / 固定）；勾选 *Ranges* 后每行下面显示 min – max。尺寸分布
   宽度统一用相对值 σR/R、σh/h、σD/D。另有背景、分辨率峰 A/(1+(|q|/w)^ν)、因子 k 的卡片。
-- **Fit**：一个按钮、四种方法——精修当前值（局部，有界最小二乘）、在范围内搜索再精修（差分进化 +
-  三个起点精修）、寻找颗粒形状（不用 AI，与 Analyze 自动分析同一数值拟合）、AI 建议（1D Predict）。
-  进度条与 Stop（保留目前最好的值）；各组分的 scale、背景、峰 A 每步用非负最小二乘精确求解。
+- **Fit**：一个按钮、五种方法——精修当前值（局部，有界最小二乘）、在范围内搜索再精修（差分进化 +
+  三个起点精修）、寻找颗粒形状（不用 AI，与 Analyze 自动分析同一数值拟合）、AI 建议（1D Predict）、
+  fit1d（当前网络 + 物理拟合，见下节）。进度条与 Stop：精修 / 范围搜索保留目前最好的值，
+  取消寻找解或 fit1d 不产生新结果；各组分的 scale、背景、峰 A 每步用非负最小二乘精确求解。
   *Advanced*：最多计算次数、Fit Many Curves…（1D Predict 批量窗口）。
 - **Results**：χ²ᵣ（有 σ 时）、点数、自由参数、是否收敛；到达边界、强相关（|ρ| ≥ 0.95）、χ²ᵣ 远大于 1
   的警告；每个值 ± 误差；Solutions 表（Use This Solution）；Save Data and Fit…（CSV + JSON 记录）、
@@ -90,6 +91,26 @@ Fitting
 模型与拟合引擎在 domain：`fit_model.py`（参数、相对 σ 与手动模型 σ 的换算、`evaluate` 与
 `scattering_model` 同一公式和采样）、`fit_engine.py`（拟合、误差、相关、边界）；Analyze 结果或
 1D Predict 的解经 `native_solution.py` 换成模型（与该解曲线的最大相对差写在状态里）。
+
+## 主单曲线页的 fit1d
+
+- **Model → Fit**：在 Model 添加 1–4 群 Sphere / Vertical cylinder，允许同类重复；在 Fit 选
+  `fit1d (network + physical fit)`。同一条曲线的所有群共同拟合，组分由用户给定，不把拟合质量当作组分识别。
+- 网络：general = `cond_v2_ft4`，au_np_si = `cond_v2_ftr1`。主单页 search 默认 **Auto**，另有 Fast / Robust；
+  curve type 为 GISAXS / SAXS，systematic error 为相对误差下限。Yoneda 切线的真空 qz（nm⁻¹）需手填，
+  不自动从 Analyze 带入；不勾选按 0 计算，含球时给提示。SAXS 忽略 qz、关闭结构因子和低 q 项。
+- **只传组分**：Model 中参数值、范围、固定项、Distance D 开关及 Global 项不作为 v2 的约束。
+  v2 为数目加权截断高斯尺寸分布（相对宽度）和 Hosemann 准晶 w = w_rel·D，q 用 nm⁻¹、长度 nm；
+  球用 |q| = √(q∥² + qz²)，竖直圆柱用 q∥。手动模型的正演与宽度约定不同，映射只作为后续手动精修的起点。
+- **原结果保留**：图上的总曲线、Terms 各群分量、残差、Results 的 χ²/点及参数误差 / 状态来自原 v2 结果。
+  σ 使用文件误差与系统误差下限的平方和；无 σ 时明确提示 Poisson 假设。状态表与悬停范围说明等价解、弱约束、
+  触边界和无贡献的群；全部提示保留。Save Data and Fit 的 CSV / JSON 保存原曲线、分量、effective σ、参数和提示。
+- **过期结果**：改 Model、选区或 fit1d 设置后，旧表和 χ² 标为 previous fit1d；当前图标为手动初始模型，
+  不再宣称显示原 v2 曲线，禁止把过期结果作为当前 fit 导出。恢复相同条件可恢复有效状态，或重新拟合。
+- **进程边界**：`presentation/single/fit1d.py` → `application/single_fit1d.py` 的 JobRequest →
+  `infrastructure/adapters/single_fit1d.py` → 工具包。只在 JobRunner 子进程导入研究代码，Stop 终止该 job；
+  不依赖 V5 / TensorFlow 资产。工具包位置为 `utils/gisaxs1d_gui_kit` 或 `GISAXS1D_KIT_HOME`。
+  回归测试为 `tests/test_fit_page_fit1d.py`。
 
 ## 从 Analyze 接收曲线
 
@@ -124,6 +145,21 @@ Fitting
   specialist (experimental)** 只在显式选择一个 Random cylinder（`components=[2]`）且曲线带原生
   计数时使用局部网络，否则数值回退；第三种 **Physical fit (numerical)** 不用网络。Stage 列显示 Neural model / Model + amplitude /
   Numerical fallback，悬停可见原因；不显示伪概率。
+- 第四种 **fit1d (network + physical fit)** 调用外部的 gisaxs1d 工具包（放在 `utils/gisaxs1d_gui_kit`，或用环境变量
+  `GISAXS1D_KIT_HOME` 指定；只需 numpy、scipy）。找不到工具包时，任务以一句说明放在哪里的消息失败。
+  - 组分必须由用户在 Complete composition 里给定（Sphere=1、Vertical cylinder=3；没有 Random cylinder）：
+    一条曲线识别不了组分，空着或含 2 时 `validate_options` 报错。不能固定 σ res（可以固定 ν res）。
+  - Parameters… 里 fit1d 的设置：search（`fit1d_policy`：fast / auto / robust）、curve type（`fit1d_mode`：
+    gisaxs / saxs）、network（`fit1d_model`：general / au_np_si）、Cut qz（`fit1d_qz`，nm⁻¹；不勾选时为 0，
+    含球时行的 warnings 里注明）、systematic error（`fit1d_sigma_floor`，相对值）。
+  - 每个 q 半边一行（rank 1）。物理是工具包的 v2：数目加权的尺寸分布、Hosemann 准晶 w = w_rel·D、球按
+    |q| = √(q∥² + qz²)。`native_fit` / `display_fit` 是工具包自己在测量点上的曲线；`params.sigma_D` 是
+    `legacy_sigma_D = w_rel/√(2π)`（在手动模型里给出相同准晶阻尼的值），工具包自己的值、1σ 误差、等价解范围和
+    每个参数的状态在 `components[i].fit1d` 与行的 `fit1d`。多解 / 触边界 / 弱约束 / 模型未在误差内描述曲线都写进
+    `warnings`（Stage 列悬停可见）。选中 fit1d 行后保留原 v2 总曲线与分量；复制到 Components 的模型只是
+    手动精修初值，不用它重画替代原结果。批量窗口默认 fast，主单页默认 auto。
+  - 代码：`infrastructure/adapters/fit1d_method.py`（只在 job 进程里导入工具包）；测试 `tests/test_fit1d_method.py`
+    （没有工具包时跳过拟合部分）。
 - 单条曲线的 AI 建议在新页面 Fit 步骤里（AI proposal），它的解进 Results 的 Solutions 表。
 - `Fit ▸ Advanced ▸ Fit Many Curves…`（菜单 Tools ▸ 1D Predict — Fit Many Curves…）打开 1D Predict 窗口：
   Add curves…（若干曲线文件）、Use current cut、Parameters…（方法、组分、q 单位与两半）、Fit curve、Cancel、
@@ -172,9 +208,12 @@ Fitting
       q 范围；Send to Fitting ▾ 的四种半边选择对应 Curve 步骤的 Halves of the cut；
 - [ ] Open Curve… 打开两列 / 三列 / 四列 `.dat` / `.txt` 曲线；坏文件或其他格式（包括 `.csv`）给出明确错误；
 - [ ] 步骤栏 Curve、Model、Fit、Results 四步都能点开，每步写出状态；窄窗口下命令栏的 Fit 与 Save 不被截断；
-- [ ] 四种方法（Refine the current values / Search the ranges, then refine / Find the particle shape (no AI) /
-      AI proposal (1D Predict)）都由同一个 Fit 按钮（Ctrl+Return）启动；Stop 保留目前最好的值；
+- [ ] 五种方法（Refine the current values / Search the ranges, then refine / Find the particle shape (no AI) /
+      AI proposal (1D Predict) / fit1d）都由同一个 Fit 按钮（Ctrl+Return）启动；精修的 Stop 保留最优值，
+      fit1d 的 Stop 不产生新结果；
       Advanced ▸ Fit Many Curves… 打开 1D Predict 窗口，回退原因在 Stage 列的提示里；
+- [ ] fit1d 允许 1–4 群球 / 竖直圆柱、两网络和 GISAXS / SAXS；qz 手填、σ 说明准确，Terms 能显示原 v2 分量；
+      Results 状态及 CSV / JSON 保留原结果；改 Model / 选区 / qz / mode / network / search / 误差下限后标记过期并拒绝导出；
 - [ ] Halves of the cut 的四个选项（Mean of both halves / Both halves on |q| / q > 0 half / q < 0 half）切换后，
       Curve 步骤的点数和图上的点随之更新；Log q / Log I 切换正常；
 - [ ] 拟合后 Model 里每个自由值显示 ± 误差或“到达边界”，Results 列出警告；参数输入不静默舍入小值；

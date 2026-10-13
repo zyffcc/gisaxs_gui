@@ -56,6 +56,7 @@ STAGE_LABELS = {
     "stable_amplitude_calibrated": "Model + amplitude",
     "stable_neural": "Neural model",
     "stable_numerical_fallback": "Numerical fallback",
+    "fit1d": "fit1d",
 }
 RMSE_TIP = ("Natural-log RMSE over the measured curve, including measurement noise. "
             "Review peak positions, overall shape and residuals; no mandatory cutoff is applied.")
@@ -343,6 +344,8 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
                 if method == "stable"
                 else "Starting numerical physical fitting…"
                 if method == "experimental"
+                else "Starting fit1d (network + physical fit)…"
+                if method == "fit1d"
                 else "Loading experimental General V5… First run includes loading and compilation."
             )
             self.show_status(lambda: tr(starting))
@@ -474,8 +477,10 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
             r["display_fit"],
             color="#2563eb",
             lw=1.8,
-            label=("Physical fit" if r.get("physics_backend") == "experimental_calibrated" else "Model forward") + f" · {len(r['display_q'])} display points",
+            label=("Physical fit" if r.get("physics_backend") == "experimental_calibrated" else "fit1d model" if r.get("best_source") == "fit1d" else "Model forward") + f" · {len(r['display_q'])} display points",
         )
+        for name, values in r.get("display_components", {}).items():
+            ax.plot(r["display_q"], values, lw=1.1, ls="--", label=name)
         ax.set_yscale("symlog", linthresh=max(min(r["sigma"]), 1e-12))
         ax.set_xlabel("q (nm⁻¹)")
         ax.set_ylabel("Intensity (input units)")
@@ -490,7 +495,8 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
         detail = {
             k: v
             for k, v in r.items()
-            if k not in ("native_q", "native_fit", "observed", "sigma", "display_q", "display_fit")
+            if k not in ("native_q", "native_fit", "observed", "sigma", "measurement_sigma",
+                         "display_q", "display_fit", "display_components")
         }
         self.parameters.setPlainText(tr(UNITS_NOTE) + "\n\n" + json.dumps(detail, indent=2, ensure_ascii=False))
 

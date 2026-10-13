@@ -33,6 +33,7 @@ from src.gimap.app.presentation.components import AdvancedSection, FlowLayout, S
 from src.gimap.app.presentation.components.table_copy import enable_table_copy
 
 from ..layout_primitives import ScientificDoubleSpinBox
+from .fit1d_settings_view import setup_fit1d_settings
 
 STEPS = (("curve", "Curve"), ("model", "Model"), ("fit", "Fit"), ("results", "Results"))
 STEP_INTROS = {"fit": "Choose a method; the button below runs it (Ctrl+Return)."}
@@ -46,6 +47,8 @@ METHODS = (
      "Fits sphere, random cylinder and vertical cylinder from several starts and lists the solutions."),
     ("ai", "AI proposal (1D Predict)",
      "The V5 model proposes compositions and parameters, then corrects them numerically."),
+    ("fit1d", "fit1d (network + physical fit)",
+     "Fits 1–4 Sphere / Vertical cylinder populations given in Model, with the current v2 networks."),
 )
 QUICK_FAMILIES = (("Try every family", "auto"), ("The families in Model", "model"))
 
@@ -286,6 +289,7 @@ class FitStepsView:
             self.families_combo.addItem(text, value)
         families.addWidget(self.families_combo, 1)
         layout.addWidget(self.families_row)
+        setup_fit1d_settings(self, page, layout)
 
         self.fit_step_button = QPushButton("Fit", page)
         self.fit_step_button.setObjectName("fitRunStep")

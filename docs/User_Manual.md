@@ -332,8 +332,9 @@ is one step), **Fit** (Ctrl+Return) and **Save** (data and fit, plot, model).
    **fit** ticked: the fit may change the value; unticked: it stays fixed. **Ranges** shows each value's
    min – max (the fit keeps it inside, *Search the ranges* searches across it; a value typed outside widens
    its range). A card for the background, the resolution peak A/(1 + (|q|/w)^ν) and the factor k (fixed
-   at 1 by default). After a fit every value shows its ± error, or *at a bound*.
-3. **Fit** — one button, four methods:
+   at 1 by default). After a manual fit every value shows its ± error, or *at a bound*;
+   fit1d keeps its own parameter errors and states in Results.
+3. **Fit** — one button, five methods:
    - **Refine the current values** — bounded least squares from the values in Model; stays near them.
    - **Search the ranges, then refine** — differential evolution across the ranges of the free values
      (log scale when a range spans 10× or more), then refinement from the three best starts.
@@ -341,7 +342,10 @@ is one step), **Fit** (Ctrl+Return) and **Save** (data and fit, plot, model).
      several starts (as in Analyze's automatic analysis); the solutions go to Results, the best into Model.
      A first curve opens here.
    - **AI proposal (1D Predict)** — the V5 model with its numerical correction; its solutions likewise.
-   Progress and **Stop** (the best values so far are kept). The scales (every particle's scale, the
+   - **fit1d (network + physical fit)** — the current v2 networks and physical fit, for the 1–4
+     Sphere / Vertical cylinder populations you put in Model. See *fit1d* below.
+   Progress and **Stop** (Refine / Search keeps the best values; cancelling a search for solutions or
+   fit1d produces no new result). The scales (every particle's scale, the
    background, the peak A) are solved exactly at every step, so the search only moves sizes, spreads,
    distances and the peak's shape. *Advanced*: the number of evaluations; **Fit Many Curves…** (the 1D
    Predict window for a list of files, see *1D Predict* below).
@@ -358,6 +362,32 @@ is one step), **Fit** (Ctrl+Return) and **Save** (data and fit, plot, model).
 The model and the choices are kept for the next session, and the last curve opens again. A new installation
 starts with a neutral model, not with the values of an earlier fit: set the particle and its sizes for your
 sample, or let **Find the particle shape (no AI)** do it.
+
+**fit1d.** In **Model**, add 1–4 **Sphere** / **Vertical cylinder** particles; repeated families are
+allowed. In **Fit**, select **fit1d (network + physical fit)**: all populations in that one curve are
+fitted together. Their composition comes from you; a good fit does not identify the true composition.
+Choose **General network** (`cond_v2_ft4`) or **Au nanoparticles on Si (adapted)** (`cond_v2_ftr1`),
+and **Auto** (default), Fast or Robust search. Set GISAXS / SAXS. For a Yoneda cut, enter the vacuum
+**Cut qz** in nm⁻¹: it is not filled from Analyze automatically; unset means zero and adds a warning
+when a sphere is present. SAXS ignores qz and has no structure factor or low-q term.
+
+Only the particle families are taken from Model. Its parameter values, ranges, fixed parameters,
+Distance D switches and global terms are not sent as fit1d constraints. The v2 convention uses
+number-weighted truncated Gaussian sizes (relative widths), Hosemann spread w = w_rel·D, q in nm⁻¹
+and lengths in nm; spheres on a Yoneda cut use |q| = √(q∥² + qz²). Its widths and forward curve differ
+from the manual model.
+
+The plotted total and **Terms**, residuals and **Results** use the original v2 result. Results show
+χ²/point, native parameter values, errors, states and equivalent-solution ranges. CSV/JSON saved
+through **Save ▸ Data and Fit…** preserves the native total, components, effective σ and warnings.
+The selected systematic error floor is added to measurement σ in quadrature; without σ, fit1d
+assumes Poisson errors and says so. Values copied into Model are only a manual starting point;
+**Refine** subsequently uses the manual physics. Editing Model, selected points or fit1d settings
+marks the saved fit stale; its table and χ² are labelled as previous results, the plot shows the manual
+starting model, and exporting the stale fit is refused. Refit, or restore its conditions.
+
+Install `gisaxs1d_gui_kit` under `utils/gisaxs1d_gui_kit`, or set `GISAXS1D_KIT_HOME` to its folder.
+This single-curve method runs in a cancellable child process and needs no V5/TensorFlow assets.
 
 **From Analyze.** *Send to Fitting* opens the cut here with the halves chosen in Analyze;
 *Results ▸ Fit details ▸ Show in Fitting* puts that solution into Model — sizes and spreads converted,
@@ -384,8 +414,9 @@ check and refine, not as results.
 - **For a list of curve files**: **Tools ▸ 1D Predict — Fit Many Curves…** (or **Fit Many Curves…** under
   *Advanced* in the Fit step) opens the 1D Predict window. **Add curves…** lists text curve files (**Use
   current cut** takes the curve open in Fitting instead). **Parameters…** sets the fit method — *General V5
-  (experimental)*, *Single RC specialist (experimental)* or *Physical fit (numerical)*, which uses no
-  network — the particle families when you know them, the q unit of the files and which half of q is fitted.
+  (experimental)*, *Single RC specialist (experimental)*, *Physical fit (numerical)*, which uses no
+  network, or *fit1d (network + physical fit)*, an external kit for spheres and vertical cylinders that
+  needs the composition from you and the folder `utils/gisaxs1d_gui_kit` — the particle families when you know them, the q unit of the files and which half of q is fitted.
   **Fit curve** starts, **Cancel** stops, **Open results** opens the folder of the run. The table lists the
   candidates of every curve with their log RMSE and the stage that produced them; select one to see its
   fit, its parameters and units.
@@ -397,10 +428,15 @@ Each run writes a new folder `AI_Fitting_Output/v5_<date>_<time>/` in the folder
 writes `candidates.npz`).
 The folders are not removed automatically. Fits you save yourself (**Save**) go where you choose.
 
+Selecting a fit1d row in the batch window keeps its original v2 curve and components visible; a
+manual model is copied only as a starting point. The batch window's fit1d search defaults to Fast,
+while the main single-curve page defaults to Auto.
+
 The model and its trained weights are in `modules/Fitting_1D_Model/Workflow_v5/`, both in the portable version
 and in the Git repository, so 1D Predict runs from a source checkout too. Each network checks its files
 against their checksums before it is used: with a changed or missing file *General V5* does not start, and
 *Single RC specialist* goes on with its numerical fit and says why (section 13).
+fit1d uses its separately installed kit and the two networks described above.
 
 ### In-situ series
 
@@ -941,7 +977,8 @@ Prediction modules are configured with YAML files under `modules/`. Existing mod
 
 When adding a new module, make sure the model path, input type, preprocessing code, and output definition match the trained model.
 
-1D Predict (section 4) does not use these modules: it always runs its own bundled model in `modules/Fitting_1D_Model/Workflow_v5`.
+The V5 methods of 1D Predict (section 4) use their bundled model in
+`modules/Fitting_1D_Model/Workflow_v5`; fit1d uses its installed `gisaxs1d_gui_kit` instead.
 
 ## 13. Troubleshooting
 
@@ -967,6 +1004,9 @@ In 2D Prediction the three states beside **Predict** say what is missing: *Input
 - A model file that you changed yourself is left alone by the script; `git status` lists it as modified. `git checkout -- modules/Fitting_1D_Model/Workflow_v5` puts the files of the repository back (and discards your changes in that folder).
 
 The numerical methods of Fitting (*Refine*, *Search*, *Find the particle shape*) use no network: the check does not concern them.
+
+fit1d needs its own kit under `utils/gisaxs1d_gui_kit` (or `GISAXS1D_KIT_HOME`); its main single-curve
+route does not require V5/TensorFlow weights.
 
 ### A `.csv` Curve Does Not Open in Fitting
 
@@ -1011,7 +1051,9 @@ No. Version 0.1.0 is a pre-release: treat it as beta scientific software and che
 
 ### Can I use my own trained model?
 
-For 2D Prediction, yes, if it can be represented by a compatible module configuration and supported loader. Add or edit a `module.yaml` under `modules/` (section 12) and make sure preprocessing and output definitions match the model. The model of 1D Predict cannot be exchanged in the interface.
+For 2D Prediction, yes, if it can be represented by a compatible module configuration and supported loader.
+Add or edit a `module.yaml` under `modules/` (section 12) and make sure preprocessing and output definitions
+match the model. V5 uses its bundled model; fit1d offers General and Au nanoparticles on Si networks in its settings.
 
 ### Where are the results of 1D Predict saved?
 

@@ -2,6 +2,45 @@
 
 What changes for someone who uses GIMaP, version by version. Developer notes are in `docs/`.
 
+## Unreleased
+
+### Analyze
+
+- **Curves** has a **Log q** option alongside Log I. Plot selections keep their original
+  data coordinates when the axis scale changes.
+- **Geometry…** and **Enter Coordinates…** stay open while applying the beam centre.
+  Coordinates show four decimal places; **Centre step** sets the remembered increment for
+  arrow buttons, keys and the wheel. **Live Preview** refreshes the curves as the centre changes,
+  combines rapid adjustments and preserves the curve zoom.
+- **Make Left and Right Symmetric** finds the horizontal axis with a global coarse search,
+  then refines it using the displayed column mean and log-distance weighting so low-q structure
+  keeps its influence. Masked pairs stay fixed during refinement. Only x changes;
+  0.0001 px is the numerical stopping tolerance, not a measured uncertainty.
+
+### Fitting
+
+- **Single analysis** now has **fit1d (network + physical fit)** in its Fit step. Add 1–4
+  Sphere / Vertical cylinder particles in Model, then fit all their populations together.
+  **General network** uses `cond_v2_ft4`; **Au nanoparticles on Si (adapted)** uses
+  `cond_v2_ftr1`. Search defaults to **Auto**. Set GISAXS / SAXS and, for a Yoneda cut,
+  enter qz in nm⁻¹; unset qz means zero with a warning. This route uses an isolated process,
+  supports Stop and needs the installed kit, without V5/TensorFlow model assets.
+  Results, plots and CSV/JSON keep the original v2 total curve, component curves, effective σ,
+  parameter errors, states and warnings. Changed Model, curve selection or fit1d settings mark
+  the saved fit stale and prevent exporting it as a current fit. Model values, ranges and fixed
+  parameters are not passed to fit1d: only the composition is used; the mapped manual Model
+  is a starting point for later refinement with its different physics.
+- **1D Predict** has a fourth fit method, **fit1d (network + physical fit)**: an external kit
+  (`gisaxs1d_gui_kit`, put in `utils/gisaxs1d_gui_kit` or named by the environment variable
+  `GISAXS1D_KIT_HOME`; numpy and scipy only, no TensorFlow). It fits spheres and vertical cylinders
+  of the composition you give — the GUI route does not expose random cylinders, and it does not choose the composition
+  for you. **Parameters…** has its search (fast / auto / robust), curve type (GISAXS / SAXS),
+  network, the qz of the cut and a systematic error. Its physics is its own (number-weighted
+  sizes, Hosemann paracrystal, spheres at |q| = √(q∥² + qz²)): the curve shown is the kit's, and
+  the row says which parameters have another equally good solution, sit at a bound or are not
+  pinned down. Selecting a fit1d row keeps its original v2 curve and components visible while
+  copying a manual starting model. Without the kit the method says where to put the folder.
+
 ## 0.1.0 — 2026-10-13 (pre-release)
 
 The first version since 0.0.2 (2026-07-16). Most of the program is new. The detector work, the

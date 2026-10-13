@@ -33,6 +33,21 @@ FIT_METHODS = (
     ("General V5 (experimental)", "model"),
     ("Single RC specialist (experimental)", "stable"),
     ("Physical fit (numerical)", "experimental"),
+    ("fit1d (network + physical fit)", "fit1d"),
+)
+FIT1D_POLICIES = (
+    ("Fast (one search)", "fast"),
+    ("Auto (more starts when needed)", "auto"),
+    ("Robust (always many starts)", "robust"),
+)
+FIT1D_MODES = (("GISAXS (Yoneda cut)", "gisaxs"), ("SAXS (dilute, no structure factor)", "saxs"))
+FIT1D_MODELS = (("General network", "general"), ("Au nanoparticles on Si (adapted)", "au_np_si"))
+"""(shown, option value) of the fit1d kit's search, curve type and proposal network."""
+FIT1D_TIP = (
+    "fit1d is an external kit (folder utils/gisaxs1d_gui_kit, or GISAXS1D_KIT_HOME). It needs the Complete "
+    "composition (Sphere / Vertical cylinder; it has no random cylinder): one curve does not identify the "
+    "composition. Its physics differs from the manual model: number-weighted sizes, Hosemann paracrystal, "
+    "spheres at |q| = sqrt(q∥² + qz²). The curve shown is fit1d's own."
 )
 
 
@@ -95,7 +110,9 @@ class WorkflowV5SettingsMixin:
             "General V5 proposes multiple compositions but remains experimental. "
             "The specialist requires Complete composition = one Random cylinder and eligible native CBF counts. "
             "Other inputs, fixed resolution and poor curve agreement use numerical fallback; "
-            "that fallback does not make the specialist a general model. Scores are not probabilities."
+            "that fallback does not make the specialist a general model. Scores are not probabilities. "
+            "fit1d is an external kit with its own physics and needs the Complete composition "
+            "(Sphere / Vertical cylinder)."
         )
         left.addRow("Fit method", self.method)
         left.addRow("Text-file q unit", self.unit)
@@ -130,6 +147,7 @@ class WorkflowV5SettingsMixin:
         self.conditions.setValue(self._options["condition_combinations"])
         left.addRow("Discover combinations", self.search)
         left.addRow("Condition best combinations", self.conditions)
+        self._build_fit1d(right)
         self.method.currentIndexChanged.connect(self._update_method_controls)
         self._update_method_controls()
         save = QPushButton("Save Settings")
@@ -139,11 +157,44 @@ class WorkflowV5SettingsMixin:
         outer.addLayout(right, 1)
         return box
 
+    def _build_fit1d(self, form: QFormLayout) -> None:
+        """The settings only fit1d uses; enabled when it is the method."""
+        self.fit1d_policy = _choices(FIT1D_POLICIES, self._options["fit1d_policy"])
+        self.fit1d_mode = _choices(FIT1D_MODES, self._options["fit1d_mode"])
+        self.fit1d_model = _choices(FIT1D_MODELS, self._options["fit1d_model"])
+        if self.fit1d_model.findData(self._options["fit1d_model"]) < 0:  # a network named in a recipe
+            self.fit1d_model.addItem(self._options["fit1d_model"], self._options["fit1d_model"])
+            self.fit1d_model.setCurrentIndex(self.fit1d_model.count() - 1)
+        self.fit1d_use_qz = QCheckBox("Cut qz (nm⁻¹)")
+        self.fit1d_use_qz.setChecked(self._options["fit1d_qz"] is not None)
+        self.fit1d_qz = _spin(0, 10, self._options["fit1d_qz"] or 0.0, 6)
+        self.fit1d_sigma_floor = _spin(0, 50, 100 * self._options["fit1d_sigma_floor"], 4)
+        for widget in (self.fit1d_policy, self.fit1d_mode, self.fit1d_model):
+            widget.setToolTip(FIT1D_TIP)
+        tip = ("fit1d: the out-of-plane q of the horizontal cut; spheres are evaluated at "
+               "|q| = sqrt(q∥² + qz²). Unticked: qz = 0, and the result says so.")
+        self.fit1d_use_qz.setToolTip(tip)
+        self.fit1d_qz.setToolTip(tip)
+        self.fit1d_sigma_floor.setToolTip(
+            "fit1d: a relative systematic error added to σ in quadrature. 2–5 % suits bright measured curves.")
+        form.addRow("fit1d search", self.fit1d_policy)
+        form.addRow("fit1d curve type", self.fit1d_mode)
+        form.addRow("fit1d network", self.fit1d_model)
+        form.addRow(self.fit1d_use_qz, self.fit1d_qz)
+        form.addRow("fit1d systematic error (%)", self.fit1d_sigma_floor)
+        self._fit1d_widgets = (self.fit1d_policy, self.fit1d_mode, self.fit1d_model, self.fit1d_use_qz,
+                               self.fit1d_qz, self.fit1d_sigma_floor)
+
     def _update_method_controls(self) -> None:
         legacy = self.method.currentData() == "model"
+        fit1d = self.method.currentData() == "fit1d"
         self.amplitude_calibration.setEnabled(self.method.currentData() == "stable")
         for widget in (self.numerical, self.normalizer, self.search, self.conditions):
             widget.setEnabled(legacy)
+        for widget in self._fit1d_widgets:
+            widget.setEnabled(fit1d)
+        for widget in (self.fix_sigma, self.sigma_res):  # fit1d fits the width of its low-q term itself
+            widget.setEnabled(not fit1d)
 
     def options(self) -> dict:
         """The options as set in the panel (the values, never the text shown), validated."""
@@ -154,7 +205,8 @@ class WorkflowV5SettingsMixin:
                 "components": [b.currentIndex() for b in self.component_boxes if b.currentIndex()],
                 "q_unit": self.unit.currentData(),
                 "side": self.side.currentData(),
-                "sigma_res": self.sigma_res.value() if self.fix_sigma.isChecked() else None,
+                "sigma_res": self.sigma_res.value()
+                if self.fix_sigma.isChecked() and self.method.currentData() != "fit1d" else None,
                 "nu_res": self.nu_res.value() if self.fix_nu.isChecked() else None,
                 "relative_noise": self.relative_noise.value(),
                 "absolute_noise": self.noise_floor.value(),
@@ -163,6 +215,11 @@ class WorkflowV5SettingsMixin:
                 "amplitude_calibration": self.amplitude_calibration.isChecked(),
                 "search_combinations": self.search.value(),
                 "condition_combinations": self.conditions.value(),
+                "fit1d_policy": self.fit1d_policy.currentData(),
+                "fit1d_mode": self.fit1d_mode.currentData(),
+                "fit1d_model": self.fit1d_model.currentData(),
+                "fit1d_qz": self.fit1d_qz.value() if self.fit1d_use_qz.isChecked() else None,
+                "fit1d_sigma_floor": self.fit1d_sigma_floor.value() / 100,
             }
         )
 

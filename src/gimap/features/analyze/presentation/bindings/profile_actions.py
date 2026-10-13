@@ -11,11 +11,11 @@ from src.gimap.app.presentation.i18n import tr, trf
 
 from ..geometry_dialog import GeometryDialog, geometry_defaults
 from ..preferences import AnalyzePreferences, load_preferences, save_preferences
-from ..texts import message_text
 from ..views.analyze_page_view import AUTO_PROFILE_TEXT
+from .geometry_editor import GeometryEditorMixin
 
 
-class ProfileActionsMixin:
+class ProfileActionsMixin(GeometryEditorMixin):
     """Own the Instrument combo, the no-geometry banner actions and preferences."""
 
     def _refresh_profiles(self) -> None:
@@ -65,8 +65,11 @@ class ProfileActionsMixin:
 
     def _enter_geometry(self) -> None:
         """Edit the geometry in use (or enter one); save it as a profile or delete that profile."""
+        if self._raise_geometry_editor("_geometry_dialog"):
+            return
         analysis = self.view_model.state.analysis
-        if analysis is None:
+        target = self._geometry_editor_target()
+        if target is None:
             self._status(tr("Open a frame first; the geometry is edited for its detector."), "warning")
             return
         current = analysis.geometry
@@ -83,26 +86,43 @@ class ProfileActionsMixin:
                 incidence_deg=current.incidence_deg,
             )
         name = profile.name if profile is not None else self.view_model.suggested_profile_name()
-        dialog = GeometryDialog(name, defaults, self, allow_delete=profile is not None)
-        result = dialog.exec_()
-        if result == GeometryDialog.DELETED and profile is not None:
-            answer = QMessageBox.question(
-                self, tr("Delete profile"), trf("Delete instrument profile \u201c{name}\u201d?", name=profile.name)
-            )
-            if answer == QMessageBox.Yes and self.view_model.delete_profile(profile.name):
-                self._refresh_profiles()
-                self._remember()
-                self._status(trf("Deleted instrument profile \u201c{name}\u201d.", name=profile.name), "ok")
-                self.run_analysis()
+        dialog = GeometryDialog(
+            name, defaults, self, allow_delete=profile is not None, center_step_px=self._center_step_px(),
+        )
+        dialog._edited_profile_name = profile.name if profile is not None else None
+        dialog.applyCenterRequested.connect(lambda: self._apply_geometry_editor_center(dialog))
+        dialog.saveRequested.connect(lambda: self._save_geometry_editor_profile(dialog))
+        dialog.deleteRequested.connect(lambda: self._delete_geometry_editor_profile(dialog))
+        dialog.validationFailed.connect(lambda text: self._set_geometry_editor_status(dialog, text, "warning"))
+        self._show_geometry_editor("_geometry_dialog", dialog, target)
+
+    def _save_geometry_editor_profile(self, dialog) -> None:
+        if not self._geometry_editor_is_current(dialog):
+            dialog.close()
             return
-        if result == GeometryDialog.Accepted:
-            try:
-                geometry = dialog.geometry()
-            except ValueError as exc:
-                self._status(message_text(exc), "error")
-                return
-            self.view_model.save_profile(dialog.profile_name(), geometry, source="entered by hand")
-            self._profile_saved(dialog.profile_name())
+        try:
+            self.view_model.save_profile(dialog.profile_name(), dialog.geometry(), source="entered by hand")
+        except (ValueError, OSError) as exc:
+            self._set_geometry_editor_status(dialog, "Could not save the geometry: {error}", "error", error=str(exc))
+            return
+        self._cancel_geometry_previews()
+        dialog._edited_profile_name = dialog.profile_name()
+        self._profile_saved(dialog.profile_name())
+
+    def _delete_geometry_editor_profile(self, dialog) -> None:
+        if not self._geometry_editor_is_current(dialog):
+            dialog.close()
+            return
+        name = dialog._edited_profile_name
+        if name is None:
+            return
+        answer = QMessageBox.question(self, tr("Delete profile"), trf("Delete instrument profile “{name}”?", name=name))
+        if answer == QMessageBox.Yes and self.view_model.delete_profile(name):
+            dialog.close()
+            self._refresh_profiles()
+            self._remember()
+            self._status(trf("Deleted instrument profile “{name}”.", name=name), "ok")
+            self.run_analysis()
 
     def _open_calibration(self) -> None:
         if self._calibrate is None:
@@ -162,8 +182,8 @@ def _describe(geometry) -> str:
     return trf(
         "D = {distance} mm, λ = {wavelength} Å, αi = {incidence}°,\nbeam centre ({x}, {y}) px, pixel {px} × {py} µm",
         distance=f"{geometry.distance_m * 1e3:.1f}", wavelength=f"{geometry.wavelength_angstrom:.4f}",
-        incidence=f"{geometry.incidence_deg:.3f}", x=f"{geometry.beam_center_x_px:.2f}",
-        y=f"{geometry.beam_center_y_px:.2f}", px=f"{geometry.pixel_size_x_m * 1e6:.1f}",
+        incidence=f"{geometry.incidence_deg:.3f}", x=f"{geometry.beam_center_x_px:.4f}",
+        y=f"{geometry.beam_center_y_px:.4f}", px=f"{geometry.pixel_size_x_m * 1e6:.1f}",
         py=f"{geometry.pixel_size_y_m * 1e6:.1f}",
     )
 

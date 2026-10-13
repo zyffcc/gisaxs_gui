@@ -185,6 +185,25 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/test_display_artist_reuse.py te
 - 0.1.0 is a pre-release: the About box, `README.md`, the manual and `CHANGELOG.md` say so. Change them
   together when a version is released as final.
 
+- When `utils/gisaxs1d_gui_kit/` is installed, the builder also validates its `FILES_SHA256.json`
+  with `tools/list_fit1d_release_files.py` (standard-library Python, including for `-ListOnly`). It
+  includes only the declared runtime code, networks, packed tables and launchers. The only
+  `research/` exception is the checked kit's `app/research/`; other research and personal folders
+  remain forbidden. Missing resources or a checksum mismatch stop before packing the environment.
+- The public portable package excludes the personal kit's `examples/`, `expected.json`, recorded
+  selftest results, personal `README_zh.md` and the selftest/example launchers. Use GIMaP's User
+  Manual for the distributed fit1d instructions. It writes a subset `FILES_SHA256.json` into
+  the ZIP so the shipped runtime can be validated again without those private files. The personal
+  update package may include them for its owner. The host environment must install `threadpoolctl`
+  from `requirements.txt`, so fit1d limits BLAS even when NumPy was loaded before the job begins.
+  The builder checks NumPy/SciPy compatibility and threadpoolctl inside the selected Conda
+  environment before creating a ZIP; it does not install dependencies or modify the environment.
+- New GUI source files still need to be tracked before a normal release. `-AllowUntracked` leaves
+  them out; it does not make an incomplete application releasable. Modified tracked files are
+  included as they are on disk: review the warnings and intended changes before building. During
+  an integration in a dirty user checkout, deliver the isolated update patch rather than publish
+  that entire checkout.
+
 ## Updating a source checkout
 
 `tools/update_source.ps1` updates the checked-out branch of a checkout from `origin`

@@ -354,11 +354,7 @@ class AnalyzeAutomation:
         if analysis is None or analysis.geometry is None:
             raise ValueError("Open a frame with a geometry first.")
         result = refine_center_by_symmetry(analysis)
-        return {
-            "initial_x_px": float(result.initial_x_px), "x_px": float(result.x_px),
-            "loss_before": float(result.loss_before), "loss_after": float(result.loss_after),
-            "paired_samples": int(result.paired_samples), "search_px": float(result.search_px),
-        }
+        return result.to_dict()
 
     def set_beam_center(self, x_px: float, y_px: float, done: Done) -> None:
         """The beam centre for this session (canonical pixels); every frame is reduced with it."""
@@ -376,12 +372,8 @@ class AnalyzeAutomation:
         except ValueError as exc:
             done(False, str(exc))
             return
-        self._symmetry = {
-            "initial_x_px": float(result.initial_x_px), "x_px": float(result.x_px),
-            "loss_before": float(result.loss_before), "loss_after": float(result.loss_after),
-            "paired_samples": int(result.paired_samples), "search_px": float(result.search_px),
-        }
-        text = f"centre x {result.initial_x_px:.2f} → {result.x_px:.2f} px"
+        self._symmetry = result.to_dict()
+        text = f"centre x {result.coarse_x_px:.4f} → {result.x_px:.4f} px"
         self.reanalyse(lambda ok, message: done(ok, text if ok else message))
 
     def set_halves(self, side: str, done: Done) -> None:

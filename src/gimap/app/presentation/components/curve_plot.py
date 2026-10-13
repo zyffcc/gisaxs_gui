@@ -17,8 +17,9 @@ from ..theme import theme_manager
 from .marks import MarkLayers
 from .box_zoom import tool_icon, zoom_button
 from .curve_plot_extras import (
-    CompactHeader, CursorReadout, EmptyOverlay, PlotMenu, axis_symbol, curves_text, folded_label, style_window,
+    CompactHeader, CursorReadout, EmptyOverlay, PlotMenu, axis_symbol, curves_text, folded_label,
 )
+from .curve_plot_window import CurveWindow
 from .segmented import SegmentedControl
 
 CURVE_COLORS = ("#2563eb", "#f97316", "#16a34a", "#9333ea", "#dc2626", "#0891b2")
@@ -216,12 +217,8 @@ class CurvePlot(QWidget):
         self.plot_widget.scene().sigMouseClicked.connect(self._mouse_clicked)
         self.plot.setLogMode(x=bool(log_x), y=log_y)
         layout.addWidget(self.plot_widget, 1)
-        self.x_window = pg.LinearRegionItem(orientation="vertical")
-        style_window(self.x_window)
-        self.x_window.setZValue(10)
-        self.plot.addItem(self.x_window, ignoreBounds=True)
-        self.x_window.hide()
-        self._updating_window = False
+        self._window = CurveWindow(self)
+        self.x_window = self._window.item
         self._items = []
         self._source: list[tuple[str, np.ndarray, np.ndarray]] = []
         self._source_colors: Optional[list] = None
@@ -239,7 +236,6 @@ class CurvePlot(QWidget):
         """The colour of each curve given to ``set_curves`` (``curve_colors``)."""
         self.log_check.toggled.connect(self._log_toggled)
         self.log_x_check.toggled.connect(self._log_toggled)
-        self.x_window.sigRegionChangeFinished.connect(self._window_finished)
         self.compact_header = CompactHeader(self)
         """A narrow plot: the title on its own row, the halves and log toggles in a “⋯” menu."""
         self.title_wrapped = self.compact_header.title
@@ -305,9 +301,13 @@ class CurvePlot(QWidget):
         return QSize(min(hint.width(), self.compact_header.least_width()), hint.height())
 
     def set_labels(self, x_label: str, y_label: str) -> None:
+        from ..i18n import tr
+
         self.plot.setLabel("bottom", x_label)  # figure content: not translated
         self.plot.setLabel("left", y_label)
         self.side_control.button(3).setText(f"|{axis_symbol(x_label)}|")  # “χ or |χ| (°)” → |χ|
+        self.log_x_check.setText(tr({"χ": "Log χ", "2θ": "Log 2θ"}.get(axis_symbol(x_label), "Log q")))
+        self.compact_header.update()
 
     def set_side(self, side: str) -> None:
         """``both``, ``positive``, ``negative`` or ``folded`` (both halves on |x|, the negative one dashed in a
@@ -356,6 +356,7 @@ class CurvePlot(QWidget):
 
     def _log_toggled(self, _checked: bool) -> None:
         self.plot.setLogMode(x=self.log_x_check.isChecked(), y=self.log_check.isChecked())
+        self._window.refresh()
         self._redraw()
 
     def add_save_menu(self) -> None:
@@ -558,21 +559,10 @@ class CurvePlot(QWidget):
     def show_window(self, low: float, high: float, color: Optional[str] = None) -> None:
         """The x window ``low … high``; ``color`` (e.g. the colour of the ring it belongs to) for its lines
         and a translucent fill, ``None`` for the band's own orange."""
-        style_window(self.x_window, color)
-        self._updating_window = True
-        try:
-            self.x_window.setRegion((float(low), float(high)))
-            self.marks.track("window", self.x_window, True)
-        finally:
-            self._updating_window = False
+        self._window.show(low, high, color)
 
     def hide_window(self) -> None:
-        self.marks.track("window", self.x_window, False)
-
-    def _window_finished(self) -> None:
-        if not self._updating_window and self.marks.wanted(self.x_window):
-            low, high = self.x_window.getRegion()
-            self.windowChanged.emit(float(low), float(high))
+        self._window.hide()
 
 
 __all__ = ["CURVE_COLORS", "CurvePlot", "Marker"]

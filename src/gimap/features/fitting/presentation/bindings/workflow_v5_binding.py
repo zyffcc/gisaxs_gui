@@ -90,6 +90,7 @@ class WorkflowV5BindingMixin:
             "stable": "Single RC specialist (experimental; known single RC required)",
             "model": "General V5 (experimental)",
             "experimental": "Numerical physical fitting",
+            "fit1d": "fit1d (network + physical fit)",
         }[method]
         self._set_ai_workspace_status(f"{label} · ready to fit", 0)
 
@@ -242,7 +243,10 @@ class WorkflowV5BindingMixin:
                 tr("{model} is drawn, but not put into Components: {reason}").format(model=model, reason=exc), "warning"
             )
             return shown
-        self._perform_manual_fitting(reveal_result=True)  # the model on the data
+        if row.get("best_source") == "fit1d":
+            self._apply_workflow_candidate(row)  # retain the fit1d curve; mapped parameters are a start
+        else:
+            self._perform_manual_fitting(reveal_result=True)
         tabs = getattr(self.ui, "fittingModeTabs", None)
         if tabs is not None:
             tabs.setCurrentIndex(0)  # Components: where the values went
@@ -250,6 +254,12 @@ class WorkflowV5BindingMixin:
         if not np.isfinite(deviation) or deviation <= SAME_CURVE:
             message, kind = tr("{model} is in Components and Global; Fitting's model draws the same curve{within}.").format(
                 model=model, within="" if not np.isfinite(deviation) else f" (≤ {100 * deviation:.2g} %)"), "info"
+        elif row.get("best_source") == "fit1d":
+            message, kind = tr(
+                "{model} is in Components and Global as a start: Fitting's model of it differs from fit1d's curve by "
+                "up to {percent} % (fit1d has its own physics: number-weighted sizes, Hosemann paracrystal, qz for "
+                "spheres). Refine it here."
+            ).format(model=model, percent=f"{100 * deviation:.3g}"), "warning"
         else:
             message, kind = tr(
                 "{model} is in Components and Global as a start: Fitting's model of it differs from the solution by up "
@@ -316,7 +326,10 @@ class WorkflowV5BindingMixin:
                 label="Measured ± σ",
             )
         if mode in ("compare", "model"):
-            ax.plot(row["display_q"], row["display_fit"], color="#2563eb", label="V5 model forward")
+            ax.plot(row["display_q"], row["display_fit"], color="#2563eb",
+                    label="fit1d model" if row.get("best_source") == "fit1d" else "V5 model forward")
+            for name, values in row.get("display_components", {}).items():
+                ax.plot(row["display_q"], values, lw=1.1, ls="--", label=name)
         if self._is_fit_log_y_enabled():
             ax.set_yscale("symlog", linthresh=max(min(row["sigma"]), 1e-12))
         ax.set_xlabel("q (nm⁻¹)")

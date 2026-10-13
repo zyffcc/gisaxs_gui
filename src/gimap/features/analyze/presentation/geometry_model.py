@@ -63,12 +63,17 @@ class GeometryModelMixin:
         without a shape). The same as ``state.beam_center_shape`` — for a settings record or a project."""
         return self.state.beam_center_shape
 
+    def find_center_x(self, analysis=None, *, cancelled=None) -> SymmetryCenter:
+        """Compute a snapshot's horizontal symmetry axis without changing the session."""
+        analysis = self.state.analysis if analysis is None else analysis
+        if analysis is None or analysis.geometry is None:
+            raise ValueError("Open a frame with a geometry first.")
+        return refine_center_by_symmetry(analysis, cancelled=cancelled)
+
     def refine_center_x(self) -> SymmetryCenter:
         """GISAXS: move the centre column to the symmetry axis of the horizontal cut (session)."""
         analysis = self.state.analysis
-        if analysis is None or analysis.geometry is None:
-            raise ValueError("Open a frame with a geometry first.")
-        result = refine_center_by_symmetry(analysis)
+        result = self.find_center_x(analysis)
         self.set_beam_center(result.x_px, analysis.geometry.beam_center_y_px)
         return result
 

@@ -2,6 +2,20 @@
 (merged into ``zh.ZH``; keyed by the exact English text in the code, like the rest of the table)."""
 
 ANALYZE_ZH = {
+    "Apply Centre": "应用中心",
+    "Save Profile": "保存配置",
+    "Close": "关闭",
+    "Centre step": "中心调整步长",
+    "Live Preview": "实时预览",
+    "Update curves automatically as the beam centre changes; the centre step controls arrow buttons, keys, and the mouse wheel.":
+        "调整光束中心时自动更新曲线；中心调整步长用于上下按钮、方向键和鼠标滚轮。",
+    "Step used by the arrow buttons, Up/Down keys, and mouse wheel for both beam-centre coordinates.":
+        "中心 x、y 的上下按钮、方向键和鼠标滚轮每次使用的步长。",
+    "Apply Centre updates the curves for this session. Save Profile saves all geometry values for this detector.":
+        "应用中心会更新当前会话的曲线；保存配置会保留此探测器的全部几何参数。",
+    "Enter a profile name before saving.": "请先输入配置名称再保存。",
+    "Log χ": "对数 χ",
+    "Log 2θ": "对数 2θ",
     # Mask summary (templates, filled at run time)
     "Left out: {pixels}": "已排除：{pixels}",
     "· detector gaps and flagged pixels: {pixels}": "· 探测器缝隙和已标记像素：{pixels}",
@@ -154,7 +168,7 @@ ANALYZE_ZH = {
     'Edit the geometry of the profile in use (or save it under a new name), or delete it': '编辑当前配置的几何（或另存为新名称），或删除它',
     'Find the beam centre and distance from a standard (AgBh …)': '用标样（AgBh …）求光束中心和距离',
     'Click the direct-beam position on the detector image': '在探测器图像上点击直射束位置',
-    'GISAXS: move the centre column to the left–right symmetry axis of the horizontal cut (qy = 0), useful when the direct beam is hidden': 'GISAXS：把中心列移到水平切线的左右对称轴（qy = 0），直射束被遮挡时有用',
+    'GISAXS: automatically locate the symmetry axis of the horizontal cut (qy = 0), then refine centre x using the plotted mean intensity, with more weight near the centre (low q). Numerical tolerance 0.0001 px is not measured accuracy; centre y is kept. Click again to cancel.': 'GISAXS：先自动粗定位水平切线的对称轴（qy = 0），再用与曲线一致的平均强度精修中心 x，并提高近中心（低 q）点的权重。0.0001 px 是数值容差，不是实测精度；中心 y 保持不变。再次点击可取消。',
     'Single pixels far brighter than all their neighbours (stuck pixels, zingers, overflow codes) or reading zero among bright neighbours. Found in every frame; anything wider than one pixel (a peak, a streak, the beam-stop edge) is kept. Remembered between sessions.': '比所有相邻像素亮得多的单个像素（卡死像素、宇宙线、溢出码），或亮邻居中读数为零的像素。每帧都会查找；宽于一个像素的特征（峰、条纹、束阻边缘）会保留。设置会在会话之间记住。',
     'GIWAXS is symmetric in ±q∥: a pixel without data (module gap, mask, hot pixel) takes the value at its mirror position about the beam-centre column when that one was measured. Filled pixels are counted and recorded in the export.': 'GIWAXS 在 ±q∥ 上对称：没有数据的像素（模块缝隙、掩膜、热像素）取其关于光束中心列的镜像位置的值（若该位置有测量）。补齐的像素会计数并记入导出。',
     'Click two opposite corners on the detector image (Esc cancels)': '在探测器图像上点击两个对角（Esc 取消）',
@@ -162,7 +176,7 @@ ANALYZE_ZH = {
     'Masks saved by GIMaP (.json) or a mask image of the same size (EDF, TIFF: non-zero = masked)': 'GIMaP 保存的掩膜（.json），或同尺寸的掩膜图像（EDF、TIFF：非零 = 掩膜）',
     'The drawn masks as a .json file, to reuse with other data of this set-up': '把绘制的掩膜保存为 .json 文件，用于同一装置的其他数据',
     'Return to the automatic cut positions': '回到自动切线位置',
-    'Move the centre column to the symmetry axis of the horizontal cut (qy = 0); the direct beam is usually hidden by the beam stop': '把中心列移到水平切线的对称轴（qy = 0）；直射束通常被束阻挡住',
+    'Automatically locate the symmetry axis of the horizontal cut (qy = 0), then refine centre x using the plotted mean intensity, with more weight near the centre (low q). Numerical tolerance 0.0001 px is not measured accuracy; centre y is kept. Click again to cancel.': '先自动粗定位水平切线的对称轴（qy = 0），再用与曲线一致的平均强度精修中心 x，并提高近中心（低 q）点的权重。0.0001 px 是数值容差，不是实测精度；中心 y 保持不变。再次点击可取消。',
     'Which half of I(qy) the curve for Fitting uses (also in Send to Fitting ▾)': '拟合用的曲线取 I(qy) 的哪一半（也可在“发送到拟合 ▾”中选择）',
     "Export 1 Frame": "导出 1 帧",
     "1 frame from 1 file": "1 个文件中的 1 帧",

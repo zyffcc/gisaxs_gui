@@ -40,6 +40,7 @@ from ...application.single_fit import (
 from ..views.fit_page_view import FitPageView
 from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
+from .fit1d import Fit1DPageMixin
 from .model_editor import FitModelEditor
 from .results import FitResultsMixin
 from .run import FitRunMixin
@@ -53,7 +54,7 @@ DATA_COLOR, OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#2563eb", "#94a3b8", "
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin):
+              FitExclusionMixin, Fit1DPageMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -84,6 +85,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.residual_plot.legend.hide()
         self.setAcceptDrops(True)  # a curve file dropped here opens (``drops.py``)
         self._connect()
+        self.setup_fit1d()
         self.setup_run()
         self.setup_results()
         self.setup_exclusion()
@@ -145,6 +147,10 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         stale = tr("Changed after the fit: Fit again")
         if self.fit_running():
             self.step_rail.set_state("fit", "busy", tr("Fitting …"))
+        elif session.native_result is not None and result is None:
+            native = session.native_result["summary"]
+            state = "ok" if session.native_is_current() and native["status"] == "ok" else "warn"
+            self.step_rail.set_state("fit", state, f"fit1d · χ²/point {native['chi2_per_point']:.3g}")
         elif result is not None and not session.result_is_current():
             self.step_rail.set_state("fit", "warn", stale)
         elif result is not None and result.stopped:
@@ -162,7 +168,10 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.step_rail.set_state("fit", "pending", tr("From Analyze: Fit to refine it"))
         else:
             self.step_rail.set_state("fit", "pending", tr("Choose a method, then Fit"))
-        if result is not None:
+        if session.native_result is not None and result is None:
+            self.step_rail.set_state("results", "ok" if session.native_is_current() else "warn",
+                                     tr("Errors, solutions, Save") if session.native_is_current() else stale)
+        elif result is not None:
             current_result = session.result_is_current()
             self.step_rail.set_state("results", "ok" if current_result else "warn",
                                      tr("Errors, solutions, Save") if current_result else stale)
@@ -246,8 +255,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.set_range((low, high), coalesce=True)
 
     def _band_dragged(self, low: float, high: float) -> None:
-        if self.plot.log_x_check.isChecked():
-            low, high = 10.0 ** low, 10.0 ** high
         self.set_range((max(low, 0.0), high), coalesce=True)
 
     def _log_x_toggled(self, on: bool) -> None:
@@ -379,6 +386,11 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                  low_a=f"{low / NM_PER_A:.4g}", high_a=f"{high / NM_PER_A:.4g}", fitted=fitted))
         self.sigma_note.setText(tr("σ from the file: the fit weights each point by 1/σ.") if curve.sigma is not None else
                                 tr("No σ in the file: every point gets the same relative weight (ln I is fitted)."))
+        if self.method() == "fit1d":
+            self.sigma_note.setText(tr("fit1d uses σ from the file with the selected systematic error floor.")
+                                    if curve.sigma is not None else tr(
+                                        "No σ in the file: fit1d assumes Poisson errors; the selected systematic "
+                                        "error floor is added in quadrature."))
         self.weighting_note.setText(self.sigma_note.text())
 
     def _redraw(self) -> None:
@@ -404,11 +416,18 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                 markers.append(True)
             q_model = np.geomspace(max(full.q.min(), 1e-6), full.q.max(), MODEL_POINTS)
             try:
-                total, parts = evaluate(session.model, q_model, parts=True)
+                if session.native_is_current():
+                    native = session.native_result["curves"]
+                    q_model = np.asarray(native["q_nm_inv"], float)
+                    total, parts = native["model"], native.get("components", {})
+                else:
+                    total, parts = evaluate(session.model, q_model, parts=True)
             except (ValueError, FloatingPointError):
                 total, parts = None, {}
             if total is not None:
-                curves.append((tr("model"), q_model, total))
+                label = ("fit1d v2 model" if session.native_is_current() else "manual starting model"
+                         if session.native_result is not None and session.result is None else "model")
+                curves.append((tr(label), q_model, total))
                 colors.append(MODEL_COLOR)
                 markers.append(False)
                 if self.terms_check.isChecked():
@@ -425,11 +444,11 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.plot.hide_window()
             return
         low, high = self.session.q_range or (float(full.q.min()), float(full.q.max()))
-        if self.plot.log_x_check.isChecked():
-            low, high = np.log10(max(low, 1e-9)), np.log10(max(high, 1e-9))
         self.plot.show_window(low, high)
 
     def _draw_residuals(self, data) -> None:
+        if self._draw_fit1d_residuals():
+            return
         if data is None or not data.q.size:
             self.residual_plot.set_curves([])
             return

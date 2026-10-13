@@ -412,11 +412,11 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         curves_layout = QVBoxLayout(curves)
         curves_layout.setContentsMargins(0, 0, 0, 0)
         curves_layout.setSpacing(6)
-        self.top_plot = CurvePlot("", curves)
+        self.top_plot = CurvePlot("", curves, log_x=False)
         for index, tip in enumerate(TOP_SIDE_TIPS):
             self.top_plot.side_control.setItemToolTip(index, tip)
         self.top_plot.side_control.setToolTip(TOP_SIDES_TIP)
-        self.bottom_plot = CurvePlot("", curves)
+        self.bottom_plot = CurvePlot("", curves, log_x=False)
         for plot in (self.top_plot, self.bottom_plot):
             plot.add_save_menu()
             plot.set_empty_text(NO_FRAME_TEXT)  # a sentence, not an empty grid, until a frame has curves

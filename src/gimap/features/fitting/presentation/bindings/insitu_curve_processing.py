@@ -125,7 +125,7 @@ class InsituCurveProcessingMixin:
                 workflow_options = recipe.model.get("workflow_v5", {}) if recipe else {}
                 numerical = workflow_options.get("numerical", True)
                 method = workflow_options.get("method", "model")
-                mode = method if method in ("stable", "experimental") else ("full" if numerical else "fast")
+                mode = method if method in ("stable", "experimental", "fit1d") else ("full" if numerical else "fast")
                 self._start_ai_prediction(mode)
                 if getattr(self, "_ai_job_thread", None) is None:
                     self._insitu_workflow_ai_record = None

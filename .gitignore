@@ -207,3 +207,6 @@ gimap_analysis/
 
 # 建立在私有（未发表）数据上的评估案例：只留在本机，不进仓库（见 docs/agents/eval/README.md）
 docs/agents/eval/local/
+
+# Optional external fit1d kit (1D Predict method fit1d); installed locally, not part of the repository
+utils/gisaxs1d_gui_kit/

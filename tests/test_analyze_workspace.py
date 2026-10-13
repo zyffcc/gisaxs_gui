@@ -571,31 +571,27 @@ def test_analyze_choices_are_remembered_between_sessions() -> None:
 
 @requires_data
 def test_edit_updates_the_profile_in_use_and_can_delete_it(monkeypatch) -> None:
-    from src.gimap.features.analyze.presentation.geometry_dialog import GeometryDialog
-
     profiles = InMemoryInstrumentProfileRepository([_pilatus_profile()])
     page = _page(_context(profiles))
     page.add_paths([CBF])
     assert page.tasks.wait(60)
 
-    def edit_and_save(dialog):
-        assert dialog.profile_name() == "P03 Pilatus"
-        assert dialog.delete_button is not None
-        dialog.distance_spin.setValue(3000.0)
-        dialog.incidence_spin.setValue(0.25)
-        return GeometryDialog.Accepted
-
-    monkeypatch.setattr(GeometryDialog, "exec_", edit_and_save)
     page.edit_geometry_button.click()
+    dialog = page._geometry_dialog
+    assert dialog.profile_name() == "P03 Pilatus"
+    assert dialog.delete_button is not None
+    dialog.distance_spin.setValue(3000.0)
+    dialog.incidence_spin.setValue(0.25)
+    dialog.save_button.click()
     assert page.tasks.wait(60)
+    assert dialog.isVisible()
     edited = profiles.find("P03 Pilatus").geometry
     assert edited.distance_m == pytest.approx(3.0) and edited.incidence_deg == pytest.approx(0.25)
     assert profiles.find("P03 Pilatus").detector_shape == (1679, 1475)  # binding kept
     assert page.view_model.state.analysis.geometry.distance_m == pytest.approx(3.0)
 
-    monkeypatch.setattr(GeometryDialog, "exec_", lambda dialog: GeometryDialog.DELETED)
     monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args, **kwargs: QMessageBox.Yes))
-    page.edit_geometry_button.click()
+    dialog.delete_button.click()
     assert page.tasks.wait(60)
     assert profiles.load_all() == []
     assert not page.banner.isHidden()  # no geometry any more

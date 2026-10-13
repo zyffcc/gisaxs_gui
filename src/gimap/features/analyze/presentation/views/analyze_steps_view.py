@@ -232,8 +232,9 @@ class AnalyzeStepsView:
         self.header_center_action = QAction("Use File Header Centre", page)
         self.symmetry_center_action = QAction("Refine x by Symmetry", page)
         self.symmetry_center_action.setToolTip(
-            "GISAXS: move the centre column to the left–right symmetry axis of the "
-            "horizontal cut (qy = 0), useful when the direct beam is hidden"
+            "GISAXS: automatically locate the symmetry axis of the horizontal cut (qy = 0), "
+            "then refine centre x using the plotted mean intensity, with more weight near the centre (low q). "
+            "Numerical tolerance 0.0001 px is not measured accuracy; centre y is kept. Click again to cancel."
         )
         self.reset_center_action = QAction("Back to Profile Centre", page)
         self.save_center_action = QAction("Save to Profile", page)
@@ -338,8 +339,9 @@ class AnalyzeStepsView:
         self.symmetry_button = QPushButton("Make Left and Right Symmetric", self.gisaxs_cuts)
         self.symmetry_button.setObjectName("analyzeSymmetryButton")
         self.symmetry_button.setToolTip(
-            "Move the centre column to the symmetry axis of the horizontal cut (qy = 0); the "
-            "direct beam is usually hidden by the beam stop"
+            "Automatically locate the symmetry axis of the horizontal cut (qy = 0), then refine "
+            "centre x using the plotted mean intensity, with more weight near the centre (low q). "
+            "Numerical tolerance 0.0001 px is not measured accuracy; centre y is kept. Click again to cancel."
         )
         gisaxs.addWidget(self.symmetry_button, 0, Qt.AlignLeft)
         gisaxs.addWidget(muted("Halves of the horizontal cut", self.gisaxs_cuts))

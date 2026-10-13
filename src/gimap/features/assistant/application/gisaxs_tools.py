@@ -13,7 +13,7 @@ from typing import Optional
 from ..domain import Profile, choose_halves, find_peaks, fit_curve, spacing_from_peaks
 from .models import ToolInputError, ToolOutcome
 
-MIN_SHIFT_PX = 0.05
+MIN_SHIFT_PX = 0.0001
 TOP_SOLUTIONS = 3
 SPACING_MIN_POINTS = 10
 """A side maximum closer to qy = 0 than this many bins belongs to the central (Yoneda / beam-stop) peak."""
@@ -82,9 +82,11 @@ class GisaxsToolsMixin:
         outcome = self._tracked("set_beam_center", {"x_px": float(found["x_px"]), "y_px": centre_y})
         if outcome.is_error:
             return outcome
+        before = "unavailable" if found["loss_before"] is None else f"{found['loss_before']:.3g}"
         return self._ok(
             {**record, "changed": True},
-            f"centre x {found['initial_x_px']:.2f} → {found['x_px']:.2f} px (asymmetry {found['loss_before']:.3g} → {found['loss_after']:.3g})",
+            f"centre x {found['initial_x_px']:.4f} → {found['x_px']:.4f} px "
+            f"(asymmetry {before} → {found['loss_after']:.3g})",
         )
 
     def _tool_set_beam_center(self, x_px: float, y_px: float) -> ToolOutcome:

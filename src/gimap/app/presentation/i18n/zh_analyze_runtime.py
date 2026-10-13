@@ -1,6 +1,11 @@
 """Chinese for the texts Analyze composes at run time (steps, status line, beam centre, Series, file list)."""
 
 ANALYZE_RUNTIME_ZH = {
+    "Save a geometry profile before applying the centre.": "请先保存几何配置，再应用中心。",
+    "Curves use beam centre ({x}, {y}) px.": "当前曲线使用的光束中心为 ({x}, {y}) px。",
+    "Updating curves for beam centre ({x}, {y}) px …": "正在按光束中心 ({x}, {y}) px 更新曲线…",
+    "Could not update the curves: {error}": "无法更新曲线：{error}",
+    "Could not save the geometry: {error}": "无法保存几何：{error}",
     # -- second wave (2026-10-06) ------------------------------------------------------------------
     "reading…": "读取中…",
     "Reading {name} …": "正在读取 {name} …",
@@ -110,8 +115,17 @@ ANALYZE_RUNTIME_ZH = {
     "Beam centre ({x}, {y}) px for this session; Beam centre ▸ Save to Profile keeps it for good.":
         "本次会话的光束中心为 ({x}, {y}) px；光束中心 ▸ 保存到配置 可以长期保留。",
     "Could not refine the beam centre: {error}": "无法细化光束中心：{error}",
-    "Beam centre x {old} → {new} px from the symmetry of the horizontal cut (this session; Beam centre ▸ Save to Profile keeps it).":
-        "按水平切线的对称性，光束中心 x 从 {old} 改为 {new} px（本次会话；光束中心 ▸ 保存到配置 可以保留）。",
+    "Too few structured measured pixels pair up to locate a symmetry axis.": "成对且有结构的实测像素太少，无法定位对称轴。",
+    "The horizontal cut is not sufficiently mirror-symmetric to locate a centre.": "水平切线的左右对称性不足，无法定位中心。",
+    "The horizontal cut has several similarly supported symmetry axes.": "水平切线存在多个可信程度相近的对称轴。",
+    "The coarse symmetry axis could not be refined reliably; check the cut band and masks.": "无法可靠精修粗定位的对称轴；请检查切带与掩膜。",
+    "The valid-pixel mask must match the frame shape.": "有效像素掩膜的尺寸必须与图像一致。",
+    "The initial beam centre must be finite.": "初始光束中心必须是有限数值。",
+    "Finding the beam centre: automatic coarse search, then fine refinement …": "正在寻找光束中心：先自动粗定位，再精修…",
+    "Cancel Centre Search": "取消中心搜索",
+    "Beam centre search cancelled.": "已取消光束中心搜索。",
+    "Beam centre x: coarse {coarse} → refined {fine} px (this session). Numerical tolerance {tolerance} px; this is not measured accuracy.":
+        "光束中心 x：粗定位 {coarse} → 精修 {fine} px（本次会话）。数值容差 {tolerance} px；这不代表测量精度。",
     "Beam centre back to the instrument profile.": "光束中心已恢复为仪器配置中的值。",
     "Could not save the beam centre: {error}": "无法保存光束中心：{error}",
     "Saved beam centre ({x}, {y}) px to profile “{name}”.": "已把光束中心 ({x}, {y}) px 保存到配置“{name}”。",

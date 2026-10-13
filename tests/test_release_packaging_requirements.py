@@ -32,6 +32,9 @@ COMES_WITH = {"PIL": "matplotlib", "keras": "tensorflow", "sip": "pyqt5"}
 # only. The frozen model code (conditional_v2/train_teacher_path_control.py) imports them inside its
 # training entry point, which the program never calls.
 TRAINING_ONLY = {"train_scaled_condition", "train_generalization_controls"}
+# The optional kit is outside the source scanner, but its released fit1d worker needs this
+# dependency to limit BLAS after NumPy has already been imported by the host's spawned job.
+EXTERNAL_RUNTIME = {"threadpoolctl"}
 
 
 def _requirements(name: str) -> set[str]:
@@ -48,13 +51,15 @@ def code():
     """``(top-level modules imported anywhere, names of the program's own modules and folders)``."""
     if not hasattr(sys, "stdlib_module_names"):
         pytest.skip("needs Python 3.10 or later to tell the standard library apart")
-    imported, own = set(), {"main", "tests", *CODE}
+    imported, own = set(EXTERNAL_RUNTIME), {"main", "tests", *CODE}
     for entry in CODE:
         start = ROOT / entry
         for path in [start] if start.is_file() else sorted(start.rglob("*.py")):
             parts = path.relative_to(ROOT).parts
             if "development" in parts or "__pycache__" in parts:
                 continue  # research records and caches: not part of the program, nor of a release
+            if parts[:2] == ("utils", "gisaxs1d_gui_kit"):
+                continue  # frozen external kit; required host dependencies are EXTERNAL_RUNTIME above
             if parts[0] != "src":
                 # The research and model code imports its neighbours by their bare names. ``src`` is
                 # only ever imported as ``src.gimap...``: its folders (``integrations/tensorflow``
@@ -96,3 +101,8 @@ def test_every_package_the_program_imports_is_a_requirement(code):
     )
     assert not missing, f"imported by the program but not in requirements.txt: {missing}"
     assert "psutil" in listed and "tqdm" not in listed
+
+
+def test_fit1d_blas_controller_is_installed_in_the_host_runtime():
+    assert "threadpoolctl" in _requirements("requirements.txt")
+    assert "threadpoolctl" in EXTERNAL_RUNTIME
