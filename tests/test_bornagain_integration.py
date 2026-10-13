@@ -11,9 +11,9 @@ from src.gimap.integrations.bornagain import (
     BornAgainSimulator,
     BornAgainVersion,
 )
-from trainset.config import default_project_config, synchronize_parameter_specs
-from trainset.generator import DatasetGenerator
-from trainset.simulation import simulate_pattern
+from src.gimap.features.trainset.infrastructure.adapters.configuration import default_project_config, synchronize_parameter_specs
+from src.gimap.features.trainset.infrastructure.adapters.dataset_generator import DatasetGenerator
+from src.gimap.features.trainset.application.simulation import simulate_pattern
 
 
 class UnavailableRunner:

@@ -22,11 +22,7 @@ from src.gimap.features.calibration.domain import (
     DetectorImage,
     energy_to_wavelength,
 )
-from src.gimap.features.calibration.presentation.dialog import (
-    CalibrationWorker,
-    GeometryCalibrationDialog,
-    ImageLoaderWorker,
-)
+from src.gimap.features.calibration.presentation.dialog import GeometryCalibrationDialog
 from src.gimap.features.calibration.presentation.views import (
     GeometryCalibrationDialogView,
 )
@@ -34,21 +30,6 @@ from src.gimap.integrations.state import (
     InMemorySessionRepository,
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
-)
-from ui.geometry_calibration_dialog import CalibrationWorker as LegacyCalibrationWorker
-from ui.geometry_calibration_dialog import (
-    GeometryCalibrationDialog as LegacyGeometryCalibrationDialog,
-)
-from ui.geometry_calibration_dialog import ImageLoaderWorker as LegacyImageLoaderWorker
-from calibration.application import apply_calibration_result as legacy_apply_result
-from calibration.serialization import load_calibration as legacy_load_calibration
-from calibration.serialization import save_calibration as legacy_save_calibration
-from src.gimap.features.calibration.infrastructure.adapters.serialization import (
-    load_calibration,
-    save_calibration,
-)
-from src.gimap.features.calibration.presentation.legacy_application import (
-    apply_calibration_result,
 )
 
 
@@ -103,40 +84,8 @@ def _result(source_path: Path) -> CalibrationResult:
     )
 
 
-def test_legacy_calibration_entry_reexports_feature_owned_classes() -> None:
-    assert LegacyGeometryCalibrationDialog is GeometryCalibrationDialog
-    assert LegacyCalibrationWorker is CalibrationWorker
-    assert LegacyImageLoaderWorker is ImageLoaderWorker
-
-    legacy_source = (PROJECT_ROOT / "ui" / "geometry_calibration_dialog.py").read_text(
-        encoding="utf-8"
-    )
-    assert "class GeometryCalibrationDialog" not in legacy_source
-    assert len(legacy_source.splitlines()) <= 12
-
-
-def test_legacy_calibration_public_apis_reexport_feature_implementations() -> None:
-    assert legacy_apply_result is apply_calibration_result
-    assert legacy_load_calibration is load_calibration
-    assert legacy_save_calibration is save_calibration
-
-    source = (
-        PROJECT_ROOT
-        / "src/gimap/features/calibration/presentation/legacy_application.py"
-    ).read_text(encoding="utf-8")
-    assert "calibration.infrastructure" not in source
-    assert "create_calibration_view_model" in source
-
-    for relative in ("calibration/application.py", "calibration/serialization.py"):
-        source = (PROJECT_ROOT / relative).read_text(encoding="utf-8")
-        assert "def apply_calibration_result" not in source
-        assert "def save_calibration" not in source
-        assert "def load_calibration" not in source
-        assert len(source.splitlines()) <= 10
-
-
 def test_menu_opens_calibration_through_feature_owned_module() -> None:
-    menu_source = (PROJECT_ROOT / "src/gimap/app/menu_manager.py").read_text(encoding="utf-8")
+    menu_source = (PROJECT_ROOT / "src/gimap/app/menus.py").read_text(encoding="utf-8")
 
     assert "src.gimap.features.calibration.presentation.dialog" in menu_source
     assert "from ui.geometry_calibration_dialog" not in menu_source
@@ -189,17 +138,13 @@ def test_calibration_layout_is_owned_by_feature_python_view() -> None:
 def test_view_model_owns_calibration_presentation_commands_without_qapplication(
     tmp_path: Path,
 ) -> None:
-    settings = {
-        "fitting": {
-            "detector": {
-                "distance": 2000.0,
-                "beam_center_x": 100.0,
-                "beam_center_y": 200.0,
-            }
-        }
-    }
-    view_model = create_calibration_view_model(_context(settings))
+    from src.gimap.integrations.state import InMemoryInstrumentProfileRepository
+
+    context = _context()
+    context.instrument_profiles = InMemoryInstrumentProfileRepository()
+    view_model = create_calibration_view_model(context)
     view_model.result = _result(tmp_path / "scan_agbh.cbf")
+    view_model.apply_result()
 
     assert view_model.detected_standard_keys("scan_agbh.cbf") == ("agbh",)
     assert view_model.standard_display_name("agbh") == "Silver behenate (AgBH)"
@@ -219,7 +164,8 @@ def test_view_model_owns_calibration_presentation_commands_without_qapplication(
         distance_mm=1500.0,
     )
     assert view_model.result.selected_candidate.center_x_px == 130.0
-    assert view_model.result_differs_significantly()
+    # A few pixels and 3 % in distance: not a significant change of the saved profile.
+    assert view_model.significantly_changed_profile() is None
     assert view_model.default_export_path("scan.cbf") == "scan.gimap-calibration.json"
 
 

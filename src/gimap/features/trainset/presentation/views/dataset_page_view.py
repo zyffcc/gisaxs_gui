@@ -90,6 +90,7 @@ class TrainsetDatasetPageView(object):
         self.trainsetAdvancedToggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
         self.trainsetAdvancedToggle.setArrowType(QtCore.Qt.RightArrow)
         self.trainsetAdvancedToggle.setObjectName("trainsetAdvancedToggle")
+        self.trainsetAdvancedToggle.setToolTip("Show or hide: detector, particle and sampling settings used less often")
         self.trainsetAdvancedSectionLayout.addWidget(self.trainsetAdvancedToggle)
         self.trainsetAdvancedDescription = QtWidgets.QLabel(self.trainsetAdvancedSection)
         self.trainsetAdvancedDescription.setVisible(False)
@@ -135,6 +136,9 @@ class TrainsetDatasetPageView(object):
         self.designPreviewHint.setWordWrap(True)
         self.designPreviewHint.setProperty("cardBody", True)
         self.designPreviewHint.setObjectName("designPreviewHint")
+        # The card has a rounded 1 px border and its layout no margins (the tabs below need the whole
+        # width): the hint keeps its own distance, or the border runs through its first line.
+        self.designPreviewHint.setContentsMargins(10, 8, 10, 0)
         self.designPreviewContentLayout.addWidget(self.designPreviewHint)
         self.trainsetDesignPreviewPanelLayout.addWidget(self.designPreviewCard)
         self.datasetPageLayout.addWidget(self.dataset_splitter)

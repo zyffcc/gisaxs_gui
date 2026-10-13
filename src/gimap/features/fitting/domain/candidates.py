@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from .physical_constraints import ConstraintSet
+from .physical_constraints import ConstraintSet, normalize_geometry
 
 
 @dataclass(frozen=True)
@@ -58,12 +58,12 @@ def candidate_parameter_mapping(row: Mapping[str, Any]) -> CandidateParameterMap
     components = row.get("components") or []
     if not isinstance(components, list) or not components:
         raise ValueError("Selected candidate has no component parameters")
+    # The page's name of each family; the family is read as the constraints read it, so a component
+    # reviewed as a cylinder ("random_cylinder", "Random cylinder") is not loaded as another shape.
     shape_map = {
         "sphere": "Sphere",
         "cylinder": "Cylinder",
         "vertical_cylinder": "Vertical Cylinder",
-        "vertical cylinder": "Vertical Cylinder",
-        "verticalcylinder": "Vertical Cylinder",
     }
     parameter_map = {
         "R": "radius",
@@ -76,7 +76,7 @@ def candidate_parameter_mapping(row: Mapping[str, Any]) -> CandidateParameterMap
     mapped_components = []
     for component in components:
         raw_type = str(component.get("type", "")).strip()
-        shape = shape_map.get(raw_type.lower().replace("-", "_"), raw_type or "Sphere")
+        shape = shape_map.get(normalize_geometry(raw_type), raw_type or "Sphere")
         values = {"intensity": float(component.get("weight", 1.0))}
         source_parameters = component.get("params") or {}
         for source_key, target_key in parameter_map.items():

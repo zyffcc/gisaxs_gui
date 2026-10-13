@@ -2,13 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
-import datetime
-
-
-from pathlib import Path
-
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -18,7 +11,6 @@ from PyQt5.QtCore import QRectF
 from PyQt5.QtGui import QImage, QPixmap
 
 from PyQt5.QtWidgets import (
-    QMessageBox,
     QGraphicsScene,
     QLabel,
     QGridLayout,
@@ -27,9 +19,7 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.features.prediction.application import (
-    PredictionArrayExportRequest,
-)
+from src.gimap.app.presentation.i18n import trf
 
 
 class RenderControlsMixin:
@@ -116,7 +106,7 @@ class RenderControlsMixin:
             qimg = QImage(buf.data, width, height, buf.strides[0], QImage.Format_RGBA8888)
             return QPixmap.fromImage(qimg.copy())
         except Exception as exc:
-            self._append_status_message(f"Parameter plot failed: {exc}", level="ERROR")
+            self._append_status_message(trf("Parameter plot failed: {error}", error=exc), level="ERROR")
             return None
 
     def _refresh_predict_controls(self, kind: str) -> None:
@@ -323,127 +313,3 @@ class RenderControlsMixin:
         self.current_parameters["predict_log_scale"] = bool(checked)
         self._persist_parameters()
         self._rerender_predict_view()
-
-    def _on_predict_export_clicked(self) -> None:
-        """Export prediction results for single-file or multi-file mode."""
-
-        # 检查当前模式
-        mode = self.current_parameters.get("mode", "single_file")
-
-        if mode == "multi_files" and self._multifile_results_widget:
-            # 多文件模式：触发多文件导出界面
-            self._multifile_results_widget.onExportClicked()
-            return
-
-        if not self.prediction_results:
-            QMessageBox.information(
-                self.main_window, "Export", "Run a prediction before exporting the current result."
-            )
-            self._append_status_message("No prediction result to export", level="WARN")
-            return
-
-        # 单文件模式：使用原有逻辑
-        spec = None
-        tabs = getattr(self, "_predict_tabs", None)
-        try:
-            if tabs is not None and 0 <= tabs.currentIndex() < len(self._predict_tab_specs):
-                spec = self._predict_tab_specs[tabs.currentIndex()]
-        except Exception:
-            spec = None
-        if spec is None and self._predict_tab_specs:
-            spec = self._predict_tab_specs[0]
-        if spec is None:
-            self._append_status_message("No prediction output to export", level="WARN")
-            return
-
-        kind = self._predict_current_kind
-        if kind is None and isinstance(spec, dict):
-            kind = spec.get("kind")
-
-        dialog = QMessageBox(self.main_window)
-        dialog.setWindowTitle("Export Predict-2D")
-        dialog.setText("Select what to export")
-        btn_img = dialog.addButton("Image (JPG)", QMessageBox.AcceptRole)
-        btn_data = dialog.addButton("Data (ASCII)", QMessageBox.AcceptRole)
-        btn_both = dialog.addButton("Both", QMessageBox.AcceptRole)
-        dialog.addButton(QMessageBox.Cancel)
-        dialog.exec_()
-        clicked = dialog.clickedButton()
-        if clicked is None or clicked == dialog.button(QMessageBox.Cancel):
-            return
-        export_image = clicked in (btn_img, btn_both)
-        export_data = clicked in (btn_data, btn_both)
-
-        export_path = self._prompt_export_folder("Save Prediction Output To")
-        if not export_path:
-            return
-        if not os.path.isdir(export_path):
-            QMessageBox.warning(
-                self.main_window, "Export Path", f"Export folder not found: {export_path}"
-            )
-            return
-
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        if export_image:
-            if self._predict_pixmap is None:
-                self._append_status_message("No predict view image to export", level="WARN")
-            else:
-                img_path = os.path.join(export_path, f"predict_{kind or 'view'}_{timestamp}.jpg")
-                try:
-                    if not self._predict_pixmap.save(img_path, "JPG"):
-                        raise IOError("Save returned False")
-                    self._append_status_message(f"Predict image exported: {img_path}")
-                except Exception as exc:
-                    self._append_status_message(
-                        f"Predict image export failed: {exc}", level="ERROR"
-                    )
-
-        if export_data:
-            try:
-                if kind == "curve" and isinstance(self._predict_current_curve, np.ndarray):
-                    curve = np.array(self._predict_current_curve, dtype=np.float32)
-                    x = getattr(self, "_predict_current_curve_x", None)
-                    if not isinstance(x, np.ndarray) or x.shape != curve.shape:
-                        x = np.arange(len(curve), dtype=np.float32)
-                    data = np.column_stack([x, curve])
-                    data_path = os.path.join(export_path, f"predict_curve_{timestamp}.txt")
-                    exported = self.prediction_view_model.export_array(
-                        PredictionArrayExportRequest(
-                            Path(data_path), data, fmt="%.6g", header="x y", comments=""
-                        )
-                    )
-                    if exported is None:
-                        raise OSError(
-                            self.prediction_view_model.state.error_message
-                            or "Curve data export failed"
-                        )
-                    self._append_status_message(f"Curve data exported: {exported}")
-                elif kind in ("hr", "array", "steps") and isinstance(
-                    self._predict_current_image, np.ndarray
-                ):
-                    arr = np.array(self._predict_current_image, dtype=np.float32)
-                    step_suffix = ""
-                    if kind == "steps" and isinstance(getattr(self, "_step_snapshots", None), list):
-                        try:
-                            lbl = self._step_snapshots[self._current_step_index].get("label")
-                            if lbl:
-                                step_suffix = f"_{str(lbl)}"
-                        except Exception:
-                            step_suffix = ""
-                    data_path = os.path.join(
-                        export_path, f"predict_{kind}{step_suffix}_{timestamp}.txt"
-                    )
-                    exported = self.prediction_view_model.export_array(
-                        PredictionArrayExportRequest(Path(data_path), arr, fmt="%.6g")
-                    )
-                    if exported is None:
-                        raise OSError(
-                            self.prediction_view_model.state.error_message
-                            or "Matrix data export failed"
-                        )
-                    self._append_status_message(f"Matrix data exported: {exported}")
-                else:
-                    self._append_status_message("No data available to export", level="WARN")
-            except Exception as exc:
-                self._append_status_message(f"Predict data export failed: {exc}", level="ERROR")

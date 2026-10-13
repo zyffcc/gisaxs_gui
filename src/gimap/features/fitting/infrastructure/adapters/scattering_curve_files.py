@@ -37,6 +37,12 @@ class LoadOptions:
     encodings_try: tuple = ("utf-8", "utf-8-sig", "latin-1")
 
 
+# Why a file is not a curve: English, the pages show them in the interface language (``tr``).
+NO_DATA_ROWS = "No data rows found (at least two numeric columns are needed)."
+NO_ROWS_READ = "No (q, I[, σ]) rows could be read."
+TOO_FEW_POINTS = "Too few valid points (fewer than 2)."
+
+
 # ---------- Internal helpers ----------
 
 _NUM_LINE = re.compile(
@@ -80,7 +86,7 @@ def _detect_start_and_delim(lines: List[str], comments: tuple) -> Tuple[int, str
             start = i
             break
     if start is None:
-        raise ValueError("未找到数据行（至少需要两列数字）。")
+        raise ValueError(NO_DATA_ROWS)
 
     sample = lines[start].strip()
     if "\t" in sample:
@@ -156,7 +162,7 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
             continue
 
     if not q_list:
-        raise ValueError("解析失败：没有成功读取到任何 (q, I[, err]) 数据。")
+        raise ValueError(NO_ROWS_READ)
 
     q = np.asarray(q_list, dtype=float)
     I = np.asarray(I_list, dtype=float)
@@ -180,7 +186,7 @@ def load_xy_any(path: str, options: LoadOptions = LoadOptions()) -> XYData:
         err = err[mask]
 
     if q.size < 2:
-        raise ValueError("有效数据点太少（< 2）。")
+        raise ValueError(TOO_FEW_POINTS)
 
     meta = {
         "path": os.path.abspath(path),

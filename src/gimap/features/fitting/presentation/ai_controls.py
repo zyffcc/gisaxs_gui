@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.layout_primitives import normalize_button
-from src.gimap.app.presentation.responsive_layout import scale_value
+from src.gimap.app.presentation.theme import set_role
 
 from .layout_primitives import (
     DisclosurePanel,
@@ -28,7 +28,7 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     method_group = card._make_group("1D Predict · current workflow")
     method_layout = QVBoxLayout(method_group)
     card._configure_group_layout(
-        method_layout, group_margin, group_top, scale_value(10, card.profile, 8)
+        method_layout, group_margin, group_top, 10
     )
     _detach_from_parent_layout(ui.fitMethodLabel)
     _detach_from_parent_layout(ui.fitMethodValue)
@@ -116,31 +116,23 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     ui.aiFittingStatusLabel = card.methodInfoLabel
     card.methodInfoLabel.setObjectName("fitMethodInfoLabel")
     card.methodInfoLabel.setWordWrap(True)
-    card.methodInfoLabel.setMinimumHeight(scale_value(28, card.profile, 24))
-    card.methodInfoLabel.setStyleSheet(
-        "QLabel {"
-        "color: #1d4ed8;"
-        "background: #eff6ff;"
-        "border: 1px solid #bfdbfe;"
-        "border-radius: 6px;"
-        "padding: 5px 8px;"
-        "}"
-    )
+    card.methodInfoLabel.setMinimumHeight(28)
+    set_role(card.methodInfoLabel, "hint")
 
-    ui.aiFittingModelComboBox.setMinimumWidth(scale_value(300, card.profile, 240))
+    ui.aiFittingModelComboBox.setMinimumWidth(300)
     ui.aiFittingModelComboBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-    ui.aiFittingConstraintComboBox.setMinimumWidth(scale_value(210, card.profile, 180))
+    ui.aiFittingConstraintComboBox.setMinimumWidth(210)
     ui.aiFittingConstraintComboBox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     button_specs = (
-        (ui.aiFittingRefreshButton, scale_value(82, card.profile, 74)),
-        (ui.aiFittingOpenWorkspaceButton, scale_value(128, card.profile, 112)),
-        (ui.aiFittingExportOutputButton, scale_value(116, card.profile, 104)),
-        (ui.aiFittingCombinationButton, scale_value(148, card.profile, 132)),
-        (ui.aiFittingAdvancedConstraintsButton, scale_value(112, card.profile, 100)),
-        (ui.aiFittingFastPredictButton, scale_value(112, card.profile, 100)),
-        (ui.aiFittingFullAutoFitButton, scale_value(112, card.profile, 100)),
-        (ui.aiFittingStopButton, scale_value(72, card.profile, 66)),
+        (ui.aiFittingRefreshButton, 82),
+        (ui.aiFittingOpenWorkspaceButton, 128),
+        (ui.aiFittingExportOutputButton, 116),
+        (ui.aiFittingCombinationButton, 148),
+        (ui.aiFittingAdvancedConstraintsButton, 112),
+        (ui.aiFittingFastPredictButton, 112),
+        (ui.aiFittingFullAutoFitButton, 112),
+        (ui.aiFittingStopButton, 72),
     )
     for button in (
         ui.aiFittingRefreshButton,
@@ -153,7 +145,7 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
         ui.aiFittingStopButton,
     ):
         normalize_button(button)
-        button.setMinimumHeight(scale_value(34, card.profile, 30))
+        button.setMinimumHeight(34)
         button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
     for button, width in button_specs:
         button.setMinimumWidth(width)
@@ -162,8 +154,8 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
 
     def make_ai_label(text: str) -> QLabel:
         label = QLabel(text, method_group)
-        label.setMinimumWidth(scale_value(76, card.profile, 66))
-        label.setStyleSheet("font-size: 11px; font-weight: 600; color: #475569;")
+        label.setMinimumWidth(76)
+        set_role(label, "caption")
         return label
 
     ui.aiFittingModelLabel = make_ai_label("AI Model")
@@ -171,13 +163,13 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
 
     model_row = QHBoxLayout()
     model_row.setContentsMargins(0, 0, 0, 0)
-    model_row.setSpacing(scale_value(8, card.profile, 6))
+    model_row.setSpacing(8)
     model_row.addWidget(ui.aiFittingModelLabel)
     model_row.addWidget(ui.aiFittingModelComboBox, 1)
 
     model_actions_row = QHBoxLayout()
     model_actions_row.setContentsMargins(0, 0, 0, 0)
-    model_actions_row.setSpacing(scale_value(8, card.profile, 6))
+    model_actions_row.setSpacing(8)
     model_actions_row.addWidget(ui.aiFittingRefreshButton)
     model_actions_row.addWidget(ui.aiFittingOpenWorkspaceButton)
     model_actions_row.addWidget(ui.aiFittingExportOutputButton)
@@ -185,13 +177,13 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
 
     control_row = QHBoxLayout()
     control_row.setContentsMargins(0, 0, 0, 0)
-    control_row.setSpacing(scale_value(8, card.profile, 6))
+    control_row.setSpacing(8)
     control_row.addWidget(ui.aiFittingConstraintLabel)
     control_row.addWidget(ui.aiFittingConstraintComboBox, 1)
 
     constraint_actions_row = QHBoxLayout()
     constraint_actions_row.setContentsMargins(0, 0, 0, 0)
-    constraint_actions_row.setSpacing(scale_value(8, card.profile, 6))
+    constraint_actions_row.setSpacing(8)
     constraint_actions_row.addWidget(ui.aiFittingFixedKComboBox)
     constraint_actions_row.addWidget(ui.aiFittingCombinationButton)
     constraint_actions_row.addWidget(ui.aiFittingAdvancedConstraintsButton)
@@ -199,7 +191,7 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
 
     predict_row = QHBoxLayout()
     predict_row.setContentsMargins(0, 0, 0, 0)
-    predict_row.setSpacing(scale_value(8, card.profile, 6))
+    predict_row.setSpacing(8)
     predict_row.addWidget(ui.aiFittingFastPredictButton)
     predict_row.addWidget(ui.aiFittingFullAutoFitButton)
     predict_row.addWidget(ui.aiFittingStopButton)
@@ -213,8 +205,8 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     tuning_content = QWidget(tuning_disclosure.content)
     tuning_grid = QGridLayout(tuning_content)
     tuning_grid.setContentsMargins(0, 0, 0, 0)
-    tuning_grid.setHorizontalSpacing(scale_value(8, card.profile, 6))
-    tuning_grid.setVerticalSpacing(scale_value(6, card.profile, 5))
+    tuning_grid.setHorizontalSpacing(8)
+    tuning_grid.setVerticalSpacing(6)
     tuning_specs = (
         ("Samples", ui.aiFittingSamplesSpinBox),
         ("Refine top", ui.aiFittingRefineTopNSpinBox),
@@ -223,12 +215,12 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
     )
     for idx, (label_text, editor) in enumerate(tuning_specs):
         label = QLabel(label_text, method_group)
-        label.setStyleSheet("font-size: 11px; color: #475569;")
+        set_role(label, "caption")
         row, col = divmod(idx, 2)
         tuning_grid.addWidget(label, row, col * 2)
         tuning_grid.addWidget(editor, row, col * 2 + 1)
-        editor.setMinimumWidth(scale_value(82, card.profile, 72))
-        editor.setMaximumWidth(scale_value(116, card.profile, 104))
+        editor.setMinimumWidth(82)
+        editor.setMaximumWidth(116)
         editor.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
     # Retain compatibility handles for settings migration, outside the visible flow.
@@ -242,28 +234,63 @@ def build_ai_controls(card, ui, group_margin: int, group_top: int, group_spacing
                    ui.aiFittingRefineMaxEvalSpinBox, ui.aiFittingProgressEverySpinBox):
         widget.setParent(legacy)
     ui.aiFittingFullAutoFitButton.setText("Fit curve")
-    ui.aiFittingFastPredictButton.setText("General predict only")
-    ui.aiFittingFastPredictButton.setToolTip("Use the experimental general V5 neural model without correction. Fit curve uses the method selected in Parameters.")
+    ui.aiFittingFullAutoFitButton.setToolTip(
+        "Find the particles behind the curve with the method chosen in Fit Settings (by default: the neural network "
+        "proposes models, then a numerical fit refines them against the measured points)"
+    )
+    ui.aiFittingFastPredictButton.setText("AI guess only")
+    ui.aiFittingFastPredictButton.setToolTip(
+        "What the neural network (general V5, experimental) proposes, without the numerical refinement: fast, "
+        "a starting point rather than a result"
+    )
     ui.aiFittingFastPredictButton.setProperty("gimapPrimaryAction", False)
-    ui.aiFittingOpenWorkspaceButton.setText("Parameters / batch…")
-    caption = QLabel("Experimental composition candidates · single-RC specialist only for known single random cylinder · native measured points", method_group)
-    caption.setToolTip("Select the method in Parameters. The single-RC specialist has a local validation scope; numerical fallback does not establish generalization or a unique composition.")
+    ui.aiFittingOpenWorkspaceButton.setText("Fit settings && batch…")  # “&&”: a plain ampersand in a button
+    ui.aiFittingOpenWorkspaceButton.setToolTip(
+        "The method, the particle components and their limits, the fit range; and fitting many curve files at once"
+    )
+    caption = QLabel(
+        "Finds the particles behind the curve — shape (sphere, cylinders), size, size spread and spacing — "
+        "and draws the fitted curve on the data. Experimental: always compare the fit with the data.", method_group,
+    )
+    caption.setToolTip(
+        "Method details: the general V5 network proposes composition candidates; the single random-cylinder "
+        "specialist applies only to a known single random cylinder; points are the measured (native) ones. A numerical "
+        "fall-back does not establish a unique composition."
+    )
     caption.setWordWrap(True)
     method_layout.addWidget(caption)
-    primary = QHBoxLayout()
-    ui.aiFittingExperimentalButton = QPushButton("Quick physical fit", method_group)
-    ui.aiFittingExperimentalButton.setToolTip("Experimental numerical fitting with free amplitudes and broader resolution bounds. Auto compares single-component families; specify a complete composition in Parameters to fit a mixture.")
-    primary.addWidget(ui.aiFittingExperimentalButton)
-    primary.addWidget(ui.aiFittingFullAutoFitButton)
-    primary.addWidget(ui.aiFittingFastPredictButton)
-    primary.addWidget(ui.aiFittingStopButton)
-    method_layout.addLayout(primary)
-    secondary = QHBoxLayout()
-    secondary.addWidget(ui.aiFittingOpenWorkspaceButton)
-    secondary.addWidget(ui.aiFittingExportOutputButton)
-    method_layout.addLayout(secondary)
+    ui.aiFittingExperimentalButton = QPushButton("Physical fit (no AI)", method_group)
+    ui.aiFittingExperimentalButton.setToolTip(
+        "Sphere, random cylinder or vertical cylinder with size spread and spacing D, fitted numerically without the "
+        "neural network (free amplitudes, wider resolution limits); about half a minute. Auto compares the single "
+        "families; give a full composition in Fit Settings to fit a mixture."
+    )
+    normalize_button(ui.aiFittingExperimentalButton)
+    # Two columns fit the control panel at every supported width: the main
+    # action and Stop first, the alternatives below, then settings/output.
+    actions = QGridLayout()
+    actions.setContentsMargins(0, 0, 0, 0)
+    actions.setHorizontalSpacing(8)
+    actions.setVerticalSpacing(8)
+    for index, button in enumerate((
+        ui.aiFittingFullAutoFitButton,
+        ui.aiFittingStopButton,
+        ui.aiFittingExperimentalButton,
+        ui.aiFittingFastPredictButton,
+        ui.aiFittingOpenWorkspaceButton,
+        ui.aiFittingExportOutputButton,
+    )):
+        button.setMinimumWidth(0)
+        button.setMinimumHeight(30)
+        button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        actions.addWidget(button, index // 2, index % 2)
+    actions.setColumnStretch(0, 1)
+    actions.setColumnStretch(1, 1)
+    method_layout.addLayout(actions)
     ui.fittingAiTuningDisclosure = tuning_disclosure
     tuning_disclosure.setParent(legacy)
+    card.methodInfoLabel.setMinimumHeight(0)
+    card.methodInfoLabel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
     method_layout.addWidget(card.methodInfoLabel)
 
     return method_group

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from ..styles import apply_design_system
 
 
 class EmptyState(QFrame):
@@ -48,7 +47,6 @@ class EmptyState(QFrame):
         layout.addWidget(self.action_button, 0)
         layout.addStretch(1)
         self.action_button.clicked.connect(self.actionRequested)
-        apply_design_system(self)
 
     def set_content(self, title: str, message: str = "", action_text: str = "") -> None:
         self.title_label.setText(title)
@@ -97,7 +95,6 @@ class ErrorBanner(QFrame):
         self.details_button.clicked.connect(self.detailsRequested)
         self.dismiss_button.clicked.connect(self._dismiss)
         self.set_level(level)
-        apply_design_system(self)
 
     def set_level(self, level: str) -> None:
         normalized = level if level in self.LEVELS else "error"
@@ -129,9 +126,23 @@ class JobStatus(QFrame):
         "cancelled",
         "timed_out",
     }
+    STATE_TEXT = {
+        "idle": "Idle",
+        "queued": "Queued",
+        "running": "Running",
+        "paused": "Paused",
+        "succeeded": "Succeeded",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "timed_out": "Timed out",
+    }
+    """What the state chip says (translated; upper case in English)."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
+        from ..i18n import language_changed
+
         super().__init__(parent)
+        self._state = "idle"
         self.setProperty("gimapJobStatus", True)
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 8, 10, 8)
@@ -162,7 +173,9 @@ class JobStatus(QFrame):
         self.cancel_button.clicked.connect(self.cancelRequested)
         self.details_button.clicked.connect(self.detailsRequested)
         self.set_state("idle", "Ready", progress=0.0)
-        apply_design_system(self)
+        # The chip is made from the state, not from a text the language walker knows (“IDLE” is not in the
+        # table): it is redrawn after each switch of the language, also one made after this was built.
+        language_changed().connect(self._language_changed)
 
     def set_state(
         self,
@@ -171,12 +184,15 @@ class JobStatus(QFrame):
         *,
         progress: float | None = None,
     ) -> None:
+        from ..i18n import tr
+
         normalized = state if state in self.STATES else "idle"
-        self.state_label.setText(normalized.replace("_", " ").upper())
+        self._state = normalized
+        self._show_state()
         self.state_label.setProperty("gimapJobState", normalized)
         self.state_label.style().unpolish(self.state_label)
         self.state_label.style().polish(self.state_label)
-        self.message_label.setText(message)
+        self.message_label.setText(tr(message))
         if progress is None:
             self.progress_bar.setRange(0, 0)
         else:
@@ -187,7 +203,7 @@ class JobStatus(QFrame):
         self.cancel_button.setEnabled(active)
         self.pause_button.blockSignals(True)
         self.pause_button.setChecked(normalized == "paused")
-        self.pause_button.setText("Resume" if normalized == "paused" else "Pause")
+        self.pause_button.setText(tr("Resume") if normalized == "paused" else tr("Pause"))
         self.pause_button.blockSignals(False)
 
     def set_actions_visible(
@@ -201,6 +217,22 @@ class JobStatus(QFrame):
         self.cancel_button.setVisible(cancel)
         self.details_button.setVisible(details)
 
+    def _show_state(self) -> None:
+        """The chip in the interface language: upper case in English (“RUNNING”), as the table has it otherwise."""
+        from ..i18n import DEFAULT_LANGUAGE, current_language, tr
+
+        text = tr(self.STATE_TEXT[self._state])
+        self.state_label.setText(text.upper() if current_language() == DEFAULT_LANGUAGE else text)
+
+    @pyqtSlot(str)
+    def _language_changed(self, _language: str) -> None:
+        try:
+            self._show_state()
+        except RuntimeError:  # the label is gone with its window
+            pass
+
     def _pause_toggled(self, paused: bool) -> None:
-        self.pause_button.setText("Resume" if paused else "Pause")
+        from ..i18n import tr
+
+        self.pause_button.setText(tr("Resume") if paused else tr("Pause"))
         self.pauseRequested.emit(paused)

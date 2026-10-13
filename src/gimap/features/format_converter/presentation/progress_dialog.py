@@ -13,9 +13,9 @@ from PyQt5.QtWidgets import (
 )
 
 
-from src.gimap.app.presentation import apply_design_system
 
 from src.gimap.app.presentation.assets import app_icon
+from src.gimap.app.presentation.i18n import tr, trf
 
 
 from .views import (
@@ -41,19 +41,24 @@ class ConversionProgressDialog(QDialog, ConversionProgressDialogView):
         )
         self.report_button.clicked.connect(self._open_report)
         self.close_button.clicked.connect(self.accept)
-        apply_design_system(self)
 
     def complete(self, report) -> None:
         self.running = False
         self.report_path = report.report_path
         self.bar.setValue(self.bar.maximum())
         if report.cancelled:
-            self.title.setText("Conversion cancelled")
+            self.title.setText(tr("Conversion cancelled"))
             self.job_status.set_state("cancelled", "Conversion cancelled", progress=1.0)
         else:
-            self.title.setText("Conversion completed")
+            self.title.setText(tr("Conversion completed"))
             self.job_status.set_state("succeeded", "Conversion completed", progress=1.0)
-        self.result.setText(f"{len(report.succeeded)} succeeded\n{len(report.failed)} failed")
+        self.result.setText(
+            trf(
+                "{succeeded} succeeded\n{failed} failed",
+                succeeded=len(report.succeeded),
+                failed=len(report.failed),
+            )
+        )
         self.pause_button.hide()
         self.cancel_button.hide()
         self.open_button.show()
@@ -62,7 +67,7 @@ class ConversionProgressDialog(QDialog, ConversionProgressDialogView):
 
     def fail(self, message: str) -> None:
         self.running = False
-        self.title.setText("Conversion could not be completed")
+        self.title.setText(tr("Conversion could not be completed"))
         self.result.setText(message)
         self.job_status.set_state("failed", message, progress=0.0)
         self.pause_button.hide()

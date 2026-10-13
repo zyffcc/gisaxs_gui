@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from ..styles import apply_design_system
 
 
 class ParameterSection(QFrame):
@@ -56,7 +55,6 @@ class ParameterSection(QFrame):
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(8)
         root.addWidget(self.content)
-        apply_design_system(self)
 
     def set_title(self, title: str) -> None:
         self.title_label.setText(title)
@@ -103,6 +101,12 @@ class AdvancedSection(QFrame):
             Qt.DownArrow if expanded else Qt.RightArrow
         )
         self.toggle_button.setText(title)
+        self.toggle_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # the whole row opens it
+        from ..i18n import tr
+
+        # A fixed sentence (the title is the button's own text): the language walker knows it, so it follows a
+        # switch of the interface language in both directions, as the title and a description do.
+        self.toggle_button.setToolTip(description or tr("Show or hide this section"))
         root.addWidget(self.toggle_button)
 
         self.description_label = QLabel(description, self)
@@ -119,7 +123,6 @@ class AdvancedSection(QFrame):
         root.addWidget(self.content)
 
         self.toggle_button.toggled.connect(self.set_expanded)
-        apply_design_system(self)
 
     def is_expanded(self) -> bool:
         return self.toggle_button.isChecked()

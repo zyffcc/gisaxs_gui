@@ -20,16 +20,71 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import trf
+
 from ..config_fields import _deep_get, _deep_set
+from ..value_combos import combo_value, set_combo_value
+
+# Fields that say where and how a job runs, not what the design is: editing them keeps the
+# validation, the preview and the tensor-shape check (the project name is not in page.fields).
+JOB_SETTING_FIELDS = (
+    "hpc.",
+    "training.",
+    "runtime.",
+    "project.workspace",
+    "simulation.grid_cache.directory",
+)
+# Readiness rows the design decides: configuration valid, local samples, tensor shapes.
+# Row 3 (storage) follows its own check box.
+DESIGN_GATE_ROWS = (0, 1, 2)
+
+
+def is_design_field(path: str) -> bool:
+    return not str(path).startswith(JOB_SETTING_FIELDS)
 
 
 class ConfigurationMixin:
     """Own configuration presentation behavior."""
 
     def _schedule_autosave_from_page(self, *_args) -> None:
-        if self._applying_config or not self.page.auto_remember_check.isChecked():
+        if self._applying_config:
+            return  # programmatic loads are not edits
+        if not self.page.auto_remember_check.isChecked():
             return
         self._autosave_timer.start()
+
+    def _design_edited(self, *_args) -> None:
+        """An edit of the geometry, ROI, mask, sample, sampling, preprocessing or a layer table."""
+        if self._applying_config:
+            return  # programmatic loads are not edits
+        self._mark_changed_since_validation()
+
+    def _mark_changed_since_validation(self) -> None:
+        """A design edit makes the validation, the preview and the tensor-shape check stale."""
+        page = self.page
+        if not hasattr(page, "validation_state"):
+            return
+        if page.validation_state() == "ok":
+            page.set_validation_state("Changed since validation", "warn")
+        self._invalidate_design_checks()
+
+    def _invalidate_design_checks(self, last_step: int = 2) -> None:
+        """Gate rows 0-2 back to Pending and steps 1..last_step back to Not started.
+
+        The submission gates must not pass on a check made for another design: after an edit
+        (or a loaded project) the design is validated, previewed and checked against the model
+        again before a job is prepared or submitted.
+        """
+        page = self.page
+        table = page.preview_gate_table
+        for row in DESIGN_GATE_ROWS:
+            item = table.item(row, 1) if row < table.rowCount() else None
+            if item is not None and item.text() != "Pending":
+                item.setText("Pending")
+        states = page.step_states() if hasattr(page, "step_states") else []
+        for index in range(1, min(last_step, len(page.STEPS) - 1) + 1):
+            if index >= len(states) or states[index] != "Not started":
+                page.set_step_state(index, "Not started")
 
     def _auto_remember_toggled(self, checked: bool) -> None:
         if self._applying_config:
@@ -54,13 +109,13 @@ class ConfigurationMixin:
             self.trainset_view_model.save_settings(copy.deepcopy(config))
             self.status_updated.emit("TrainSet settings remembered automatically")
         except Exception as exc:
-            self.status_updated.emit(f"Could not remember TrainSet settings: {exc}")
+            self.status_updated.emit(trf("Could not remember TrainSet settings: {error}", error=exc))
 
     def _widget_value(self, widget):
         if isinstance(widget, (QSpinBox, QDoubleSpinBox)):
             return widget.value()
         if isinstance(widget, QComboBox):
-            return widget.currentText()
+            return combo_value(widget)  # the item data: the value, whatever language the item shows
         if isinstance(widget, QCheckBox):
             return widget.isChecked()
         if isinstance(widget, QLineEdit):
@@ -75,9 +130,7 @@ class ConfigurationMixin:
             elif isinstance(widget, QDoubleSpinBox):
                 widget.setValue(float(value))
             elif isinstance(widget, QComboBox):
-                if widget.findText(str(value)) < 0:
-                    widget.addItem(str(value))
-                widget.setCurrentText(str(value))
+                set_combo_value(widget, value)
             elif isinstance(widget, QCheckBox):
                 widget.setChecked(bool(value))
             elif isinstance(widget, QLineEdit):
@@ -100,7 +153,7 @@ class ConfigurationMixin:
                 continue
             _deep_set(config, path, self._widget_value(widget))
 
-        particle_label = self.page.fields["sample.particle_label"].currentText()
+        particle_label = combo_value(self.page.fields["sample.particle_label"])
         particle = next(
             (spec for spec in self.catalog.plugins("particle") if spec.label == particle_label),
             None,
@@ -108,12 +161,12 @@ class ConfigurationMixin:
         config["sample"]["particles"] = [
             {
                 "plugin": particle.key if particle else "spherical_segment",
-                "material": self.page.fields["sample.particle_material"].currentText(),
+                "material": combo_value(self.page.fields["sample.particle_material"]),
                 "enabled": True,
                 "parameters": self.page.plugin_parameters(self.page.particle_parameter_table),
             }
         ]
-        interference_label = self.page.fields["sample.interference_label"].currentText()
+        interference_label = combo_value(self.page.fields["sample.interference_label"])
         interference = next(
             (
                 spec
@@ -184,7 +237,7 @@ class ConfigurationMixin:
             {
                 "plugin": "normalize",
                 "enabled": self.page.fields["pre.normalize.enabled"].isChecked(),
-                "mode": self.page.fields["pre.normalize.mode"].currentText(),
+                "mode": combo_value(self.page.fields["pre.normalize.mode"]),
                 "lower": self.page.fields["pre.normalize.lower"].value(),
                 "upper": self.page.fields["pre.normalize.upper"].value(),
             },

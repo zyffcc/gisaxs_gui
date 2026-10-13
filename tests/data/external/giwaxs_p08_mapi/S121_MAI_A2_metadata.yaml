@@ -1,0 +1,46 @@
+data:
+  name: MAPbI3
+  structure:
+    stack: nitrogen | MAPbI3 | glass
+    materials:
+      MAPbI3:
+        name: MAPbI3
+        CAS_number_1: 14965-49-2 - methylammonium iodide
+        CAS_number_2: 10101-63-0 - lead iodide
+        CIF: MAPbBr3.cif
+        precursor:
+          solvents: DMF:DMSO
+          solvents_ratio: '4:1'
+          concentration_mM: '1.4'
+          volume_uL: '60'
+          additive: null
+        preparation:
+          deposition_method:
+            spin-coating_type: antisolvent-assisted
+            antisolvent: isopropanol
+            gas: null
+            spinning_speed_1: 1000
+            spinning_time_1: 10
+            spinning_speed_2: 4000
+            spinning_time_2: 30
+            antisolvent_volume: 150
+            antisolvent_drop_time: 62
+            gas_start_time: null
+            gas_stop_time: null
+          annealing_procedure:
+            annealing_type: halogen lamp
+            lamp_to_sample_distance: 0.04
+            annealing_start: 30
+            annealing_power_1: 150
+            annealing_time_1: 240
+            annealing_power_2: 85
+            annealing_time_2: 1260
+        type: 3D perovskite film
+      glass:
+        name: glass
+        preparation:
+          ultrasonic_bath: isopropanol 300 s, acetone 300 s
+          plasma_cleaning: 60s in Ar plasma
+        type: substrate
+    preparation: perovskite thin film deposited by antisolvent-assisted spin-coating
+    experimental_conditions: nitrogen atmosphere in spin-coater

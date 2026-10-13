@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import ast
 import os
+import threading
+import time
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import QCoreApplication, QEvent, Qt
+from PyQt5.QtGui import QKeySequence
+from PyQt5.QtTest import QTest
+from PyQt5.QtWidgets import QApplication, QHeaderView
 
 from src.gimap.app import AppContext
 from src.gimap.features.format_converter.bootstrap import (
@@ -30,11 +35,6 @@ from src.gimap.integrations.state import (
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
 )
-from ui.format_converter_dialog import (
-    ConversionProgressDialog as LegacyConversionProgressDialog,
-)
-from ui.format_converter_dialog import FolderImportDialog as LegacyFolderImportDialog
-from ui.format_converter_dialog import FormatConverterDialog as LegacyFormatConverterDialog
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -55,18 +55,8 @@ def _context() -> AppContext:
     )
 
 
-def test_legacy_dialog_entry_reexports_feature_owned_classes() -> None:
-    assert LegacyFormatConverterDialog is FormatConverterDialog
-    assert LegacyFolderImportDialog is FolderImportDialog
-    assert LegacyConversionProgressDialog is ConversionProgressDialog
-
-    legacy_source = (PROJECT_ROOT / "ui" / "format_converter_dialog.py").read_text(encoding="utf-8")
-    assert "class FormatConverterDialog" not in legacy_source
-    assert len(legacy_source.splitlines()) <= 12
-
-
 def test_menu_opens_converter_through_feature_owned_module() -> None:
-    menu_source = (PROJECT_ROOT / "src/gimap/app/menu_manager.py").read_text(encoding="utf-8")
+    menu_source = (PROJECT_ROOT / "src/gimap/app/menus.py").read_text(encoding="utf-8")
 
     assert "src.gimap.features.format_converter.presentation.dialog" in menu_source
     assert "from ui.format_converter_dialog" not in menu_source
@@ -78,7 +68,7 @@ def test_feature_dialog_preserves_workspace_controls_and_defaults() -> None:
 
     assert dialog.windowTitle() == "Format Converter"
     assert dialog.minimumWidth() == 920
-    assert dialog.minimumHeight() == 650
+    assert dialog.minimumHeight() == 600  # fits a 1280x720 logical screen (604 px for a window)
     assert dialog.stack.count() == 3
     assert [dialog.frame_mode.itemText(index) for index in range(dialog.frame_mode.count())] == [
         "All",
@@ -196,3 +186,141 @@ def test_presentation_has_no_conversion_or_file_adapter_implementation() -> None
     assert "QWidget" not in view_model_source
     assert "QMessageBox" not in view_model_source
     assert "QFileDialog" not in view_model_source
+
+
+# -- Tool-window fixes: frame modes in Chinese, step button, source table, Esc ------------------
+
+
+def _settle(app, seconds: float = 0.1) -> None:
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        app.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        time.sleep(0.01)
+
+
+def test_frame_modes_use_english_keys_in_the_chinese_interface(tmp_path) -> None:
+    from src.gimap.app.presentation.i18n import apply_language
+
+    _app()
+    dialog = FormatConverterDialog(app_context=_context())
+    dialog._start_preview = lambda _source: None  # no preview thread in this test
+    source = InputSource(path=str(tmp_path / "scan.nxs"), file_type="NXS", frame_count=100)
+    dialog.view_model.sources.append(source)
+    apply_language("zh", [dialog])
+    try:
+        assert dialog.frame_mode.itemText(0) == "全部"
+        assert dialog.frame_mode.itemText(3) == "自定义"
+        dialog._refresh_selection_table()
+        dialog.selection_table.selectRow(0)
+        dialog.frame_mode.setCurrentIndex(0)
+        dialog._apply_frame_selection()
+        assert source.selected_frames == list(range(100))
+        dialog.frame_mode.setCurrentIndex(3)
+        assert dialog.custom_frames.isEnabled()
+        assert not dialog.nth_frame.isEnabled()
+        dialog.frame_mode.setCurrentIndex(4)
+        assert dialog.nth_frame.isEnabled()
+        assert [dialog.frame_mode.itemData(i) for i in range(dialog.frame_mode.count())] == [
+            "All",
+            "Current frame",
+            "Frame range",
+            "Custom",
+            "Every Nth frame",
+        ]
+    finally:
+        apply_language("en", [dialog])
+        dialog.close()
+
+
+def test_step_button_is_the_primary_action_without_a_mnemonic(monkeypatch) -> None:
+    from src.gimap.app.presentation import i18n
+
+    _app()
+    dialog = FormatConverterDialog(app_context=_context())
+    dialog.stack.setCurrentIndex(2)
+    dialog._update_step_header()
+    text = dialog.next_button.text()
+    assert text == "Review && Convert"
+    assert text.replace("&&", "&") == "Review & Convert"
+    assert QKeySequence.mnemonic(text).isEmpty()
+    assert dialog.next_button.property("gimapRole") == "primary"
+    assert not dialog.next_button.isDefault()
+
+    monkeypatch.setitem(i18n.ZH, "Next", "下一步")
+    monkeypatch.setitem(i18n.ZH, "Review && Convert", "检查并转换")
+    i18n.apply_language("zh")
+    try:
+        for step, expected in ((0, "下一步"), (2, "检查并转换"), (1, "下一步")):
+            dialog.stack.setCurrentIndex(step)
+            dialog._update_step_header()
+            assert dialog.next_button.text() == expected
+    finally:
+        i18n.apply_language("en")
+        dialog.close()
+
+
+def test_source_table_shows_distinct_series_names_and_full_paths(tmp_path) -> None:
+    app = _app()
+    dialog = FormatConverterDialog(app_context=_context())
+    dialog._start_preview = lambda _source: None
+    stem = "jg_gisaxs_4nm_old_3ml_insitu_ds03_00001"
+    paths = [tmp_path / f"{stem}_{suffix}.cbf" for suffix in ("00005", "00033", "00045")]
+    dialog.view_model.sources.extend(InputSource(path=str(path), file_type="CBF") for path in paths)
+    dialog.resize(920, 650)
+    dialog.show()
+    dialog._next()
+    dialog.selection_splitter.setSizes([560, 320])  # narrow enough that the names elide
+    _settle(app, 0.2)
+    table = dialog.selection_table
+    header = table.horizontalHeader()
+
+    assert table.textElideMode() == Qt.ElideMiddle
+    assert dialog.input_tree.textElideMode() == Qt.ElideMiddle
+    assert not table.verticalHeader().isVisible()
+    assert header.sectionResizeMode(1) == QHeaderView.Stretch
+    for column in (0, 2, 3, 4):
+        assert header.sectionResizeMode(column) == QHeaderView.ResizeToContents
+    frames_title = table.horizontalHeaderItem(3).text()
+    assert header.sectionSize(3) >= header.fontMetrics().horizontalAdvance(frames_title)
+    width = header.sectionSize(1) - 12
+    assert table.fontMetrics().horizontalAdvance(table.item(0, 1).text()) > width
+    shown = [
+        table.fontMetrics().elidedText(table.item(row, 1).text(), table.textElideMode(), width)
+        for row in range(3)
+    ]
+    assert len(set(shown)) == 3
+    for row, suffix in enumerate(("00005", "00033", "00045")):
+        assert shown[row].endswith(f"{suffix}.cbf")
+        assert table.item(row, 1).toolTip() == str(paths[row])
+    dialog.close()
+
+
+def test_escape_while_a_preview_loads_keeps_the_dialog_until_the_thread_ends(tmp_path) -> None:
+    app = _app()
+    dialog = FormatConverterDialog(app_context=_context())
+    release = threading.Event()
+
+    def slow_preview(_source):
+        release.wait(10)
+        return []
+
+    dialog.view_model.load_preview = slow_preview
+    dialog.show()
+    events = []
+    dialog.destroyed.connect(lambda *_: events.append("destroyed"))
+    dialog._start_preview(InputSource(path=str(tmp_path / "frame.tif"), file_type="TIFF"))
+    thread = dialog._preview_thread
+    assert thread is not None and thread.isRunning()
+    thread.finished.connect(lambda: events.append("finished"))
+
+    QTest.keyClick(dialog, Qt.Key_Escape)
+    _settle(app, 0.2)
+    assert events == []
+    assert thread.isRunning()
+
+    release.set()
+    end = time.monotonic() + 10
+    while "destroyed" not in events and time.monotonic() < end:
+        _settle(app, 0.05)
+    assert events == ["finished", "destroyed"]

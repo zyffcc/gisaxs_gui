@@ -107,7 +107,7 @@ class TrainsetMonitorPageView(object):
         self.job_id_label.setText(_translate("TrainsetMonitorPage", "Job ID: —"))
         self.refresh_job_button.setText(_translate("TrainsetMonitorPage", "Refresh"))
         self.sync_results_button.setText(_translate("TrainsetMonitorPage", "Sync results"))
-        self.logToggle.setText(_translate("TrainsetMonitorPage", "Log"))
+        self.logToggle.setText(_translate("TrainsetMonitorPage", "Run Log"))
         self.logDescription.setText(_translate("TrainsetMonitorPage", "Local process and future remote scheduler output."))
         self.job_log.setPlaceholderText(_translate("TrainsetMonitorPage", "Slurm/local process output will appear here. Closing the GUI does not stop remote jobs."))
         self.resultsTitle.setText(_translate("TrainsetMonitorPage", "Results"))

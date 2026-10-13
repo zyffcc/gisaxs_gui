@@ -1,10 +1,7 @@
-"""Fitting presentation public API。"""
+"""Fitting presentation public API."""
 
-from .cut_card import CutLineCard
-from .detector_parameters_dialog import DetectorParametersDialog
-from .detector_setup_panel import DetectorSetupPanel
 from .control_view_factory import build_fitting_controls, translate_fitting_controls
-from .input_card import GisaxsInputCard
+from .curve_card import CurveSourceCard
 from .export_dialog import FittingDataExportDialog, FittingExportSelection
 from .layout_primitives import (
     CardFrame,
@@ -13,7 +10,6 @@ from .layout_primitives import (
 )
 from .model_card import ModelParameterCard
 from .preview_cards import (
-    DetectorPreviewCard,
     FittingPlotControlsCard,
     FittingRegionControl,
     ParticleOptionsLayout,
@@ -33,16 +29,13 @@ from .insitu_view_model import FittingInSituViewModel
 from .insitu_series_page import InSituSeriesPage
 from .scientific_view_model import FittingScientificViewModel
 from .ai_worker import AiCandidateWorker
-from .workspace import GisaxsFittingWorkspace
+from .workspace import FittingWorkspace
 
 __all__ = [
     "AiCandidateWorker",
     "CardFrame",
-    "CutLineCard",
     "CurrentPageHeightStackedWidget",
-    "DetectorPreviewCard",
-    "DetectorParametersDialog",
-    "DetectorSetupPanel",
+    "CurveSourceCard",
     "FittingControlsCard",
     "FittingDataExportDialog",
     "FittingExportSelection",
@@ -51,12 +44,11 @@ __all__ = [
     "FittingState",
     "FittingStorageViewModel",
     "FittingInSituViewModel",
+    "FittingWorkspace",
     "InSituSeriesPage",
     "FittingScientificViewModel",
     "FittingViewModel",
     "FittingViewBinding",
-    "GisaxsFittingWorkspace",
-    "GisaxsInputCard",
     "ModelParameterCard",
     "NoWheelDoubleSpinBox",
     "ParticleOptionsLayout",

@@ -129,6 +129,7 @@ class DisclosurePanel(QWidget):
         self.toggle.setCheckable(True)
         self.toggle.setChecked(expanded)
         self.toggle.setText(title)
+        self.toggle.setToolTip(f"Show or hide: {title}")
         self.toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.content = QWidget(self)
         self.content.setObjectName(f"{object_name}Content")
@@ -208,6 +209,18 @@ class CurrentPageHeightTabWidget(QTabWidget):
         if height > 0:
             hint.setHeight(height)
         return hint
+
+    # QTabWidget answers height-for-width with its tallest page; layouts that
+    # honour it (word-wrapped labels nearby) would reserve that height.
+    def hasHeightForWidth(self) -> bool:
+        page = self.currentWidget()
+        return page is not None and page.hasHeightForWidth()
+
+    def heightForWidth(self, width: int) -> int:
+        page = self.currentWidget()
+        if page is None or not page.hasHeightForWidth():
+            return -1
+        return self.tabBar().sizeHint().height() + max(1, page.heightForWidth(width)) + 12
 
 
 class CurrentPageSizeTabWidget(CurrentPageHeightTabWidget):

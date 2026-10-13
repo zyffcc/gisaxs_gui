@@ -1,4 +1,4 @@
-from utils.ai_fitting_profiles import DEFAULT_PROFILE_NAME, PROFILE_DEFAULTS, profile_registry
+from src.gimap.features.fitting.application.fitting_profiles import DEFAULT_PROFILE_NAME, PROFILE_DEFAULTS, profile_registry
 
 
 def test_profiles_are_ordered_by_search_cost_and_balanced_is_default():

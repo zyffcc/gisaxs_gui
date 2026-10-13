@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254">
+  <!-- Compare: three runs side by side; two alike, one taking another path. -->
+  <g fill="none" stroke="#ffb84d" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="140,160 140,1100 1130,1100"/>
+    <polyline points="250,960 430,720 640,600 860,540 1080,510"/>
+    <polyline points="250,1010 430,800 640,680 860,620 1080,590"/>
+    <polyline points="250,880 430,520 620,330 840,250 1080,220" stroke-dasharray="70 70"/>
+  </g>
+</svg>

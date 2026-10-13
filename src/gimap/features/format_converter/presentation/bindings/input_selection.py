@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 
 from PyQt5.QtCore import Qt
 
@@ -15,52 +16,113 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.theme import set_role
+
 from ..folder_import_dialog import FolderImportDialog
 from ..display_formatting import INPUT_FILTER
+
+UNSUPPORTED_CURRENT = "{name} is not an NXS, CBF or TIFF file: the converter cannot read it."
 
 
 class InputSelectionMixin:
     """Own input selection presentation behavior."""
 
+    def current_file_problem(self) -> str:
+        """Why the frame shown in Analyze cannot be an input ('' when it can, or when there is none)."""
+        current = self.current_file
+        if not current or self.view_model.supports_input_path(current):
+            return ""
+        return trf(UNSUPPORTED_CURRENT, name=os.path.basename(current))
+
+    def use_current_file(self, path: str) -> str:
+        """Tools ▸ Convert Current File…: make ``path`` (the frame Analyze shows) an input.
+
+        Returns '' when it is an input now (or when there is no frame), else the reason the
+        converter cannot read it. The window says that reason itself: under the input list, and
+        as the tooltip of the disabled "Use currently opened file".
+        """
+        self.current_file = path or ""
+        if self.current_file:
+            self.add_paths([self.current_file])
+        else:
+            self._show_current_button()
+        return self.current_file_problem()
+
+    def _show_current_button(self) -> None:
+        """"Use currently opened file" works only for a frame the converter can read."""
+        problem = self.current_file_problem()
+        self.current_button.setEnabled(bool(self.current_file) and not problem)
+        self.current_button.setToolTip(problem)
+
     def add_paths(self, paths: list[str]) -> None:
-        result = self.view_model.add_paths([path for path in paths if path])
+        paths = [path for path in paths if path]
+        # The frame of Analyze in a format the converter cannot read (EDF) is refused in words
+        # under the input list, not with an error box about an input nobody chose.
+        refused = self.current_file_problem()
+        if refused:
+            current = os.path.normcase(self.current_file)
+            wanted = [path for path in paths if os.path.normcase(path) != current]
+            refused = refused if len(wanted) != len(paths) else ""
+            paths = wanted
+        result = self.view_model.add_paths(paths)
         self._refresh_input_tree()
         self._refresh_selection_table()
+        self._follow_default_destination()
+        self._show_current_button()
+        if refused:
+            set_role(self.input_note, "warning")  # until the list is shown again
+            self.input_note.setText(refused)
         if result.errors:
             QMessageBox.warning(
                 self,
-                "Some inputs could not be added",
+                tr("Some inputs could not be added"),
                 "\n".join(result.errors[:12]),
             )
-        elif not result.added and paths:
-            self.input_note.setText("The selected inputs are already in the task list.")
+        elif not refused and not result.added and paths:
+            self.input_note.setText(tr("The selected inputs are already in the task list."))
+
+    def _follow_default_destination(self) -> None:
+        """While the destination is the default, it is ``converted`` next to the first input."""
+        if self.destination_edit.text().strip() != self._auto_destination:
+            return  # chosen by the user: kept
+        self._auto_destination = self.view_model.default_destination()
+        self.destination_edit.setText(self._auto_destination)
 
     def _choose_files(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(self, "Add detector images", "", INPUT_FILTER)
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, tr("Add detector images"), self.view_model.last_folder(), INPUT_FILTER
+        )
         if paths:
+            self.view_model.remember_folder(paths[0])
             self.add_paths(paths)
 
     def _choose_folder(self) -> None:
-        dialog = FolderImportDialog(self, self.view_model)
+        dialog = FolderImportDialog(self, self.view_model, folder=self.view_model.last_folder())
         if dialog.exec_() != QDialog.Accepted:
             return
+        self.view_model.remember_folder(dialog.path_edit.text().strip())
         paths = dialog.paths
         if not paths:
             QMessageBox.information(
-                self, "Add Folder", "No matching files were found in that folder."
+                self, tr("Add Folder"), tr("No matching files were found in that folder.")
             )
             return
-        if len(paths) > 10_000:
-            answer = QMessageBox.question(
-                self,
-                "Large folder selection",
-                f"This folder contains {len(paths):,} matching files. Add them to the task list?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if answer != QMessageBox.Yes:
-                return
-        self.add_paths(paths)
+        if self._many_files_confirmed(len(paths)):
+            self.add_paths(paths)
+
+    def _many_files_confirmed(self, count: int) -> bool:
+        if count <= 10_000:
+            return True
+        answer = QMessageBox.question(
+            self,
+            tr("Large folder selection"),
+            # Also for a drop of files and folders: no "this folder".
+            trf("{count} matching files were found. Add them to the task list?", count=f"{count:,}"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return answer == QMessageBox.Yes
 
     def _refresh_input_tree(self) -> None:
         self.input_tree.clear()
@@ -71,22 +133,31 @@ class InputSelectionMixin:
                     source.file_type,
                     str(source.frame_count),
                     source.selection_summary,
-                    source.status,
+                    tr(source.status),  # "Ready", "Failed" …: the model keeps the English
                 )
             )
             root.setData(0, Qt.UserRole, index)
+            root.setToolTip(0, source.path)
             self.input_tree.addTopLevelItem(root)
             if source.file_type == "NXS":
-                shape = " × ".join(str(value) for value in source.dataset_shape) or "Unknown"
-                root.addChild(QTreeWidgetItem((f"Dataset: {source.dataset_path}", "", "", "", "")))
-                root.addChild(QTreeWidgetItem((f"Shape: {shape}", "", "", "", "")))
-                root.addChild(QTreeWidgetItem((f"Frames: 1–{source.frame_count}", "", "", "", "")))
+                shape = " × ".join(str(value) for value in source.dataset_shape) or tr("Unknown")
+                for text in (
+                    trf("Dataset: {path}", path=source.dataset_path),
+                    trf("Shape: {shape}", shape=shape),
+                    trf("Frames: 1–{count}", count=source.frame_count),
+                ):
+                    root.addChild(QTreeWidgetItem((text, "", "", "", "")))
                 root.setExpanded(True)
         total_frames = sum(source.frame_count for source in self.sources)
+        set_role(self.input_note, "muted")
         self.input_note.setText(
-            f"{len(self.sources)} source file(s), {total_frames:,} available image(s) / frame(s)."
+            trf(
+                "{files} source file(s), {frames} available image(s) / frame(s).",
+                files=len(self.sources),
+                frames=f"{total_frames:,}",
+            )
             if self.sources
-            else "No input files yet."
+            else tr("No input files yet.")
         )
 
     def _input_current_changed(self, item: QTreeWidgetItem | None) -> None:
@@ -117,7 +188,7 @@ class InputSelectionMixin:
             self._refresh_input_tree()
             self._refresh_selection_table()
         except Exception as exc:
-            QMessageBox.warning(self, "Dataset selection", str(exc))
+            QMessageBox.warning(self, tr("Dataset selection"), str(exc))
 
     def _refresh_selection_table(self) -> None:
         self.selection_table.blockSignals(True)
@@ -128,7 +199,9 @@ class InputSelectionMixin:
             use.setCheckState(Qt.Checked if source.included else Qt.Unchecked)
             use.setData(Qt.UserRole, row)
             self.selection_table.setItem(row, 0, use)
-            self.selection_table.setItem(row, 1, QTableWidgetItem(source.name))
+            name = QTableWidgetItem(source.name)
+            name.setToolTip(source.path)
+            self.selection_table.setItem(row, 1, name)
             self.selection_table.setItem(row, 2, QTableWidgetItem(source.file_type))
             self.selection_table.setItem(row, 3, QTableWidgetItem(str(source.frame_count)))
             self.selection_table.setItem(row, 4, QTableWidgetItem(source.selection_summary))
@@ -162,11 +235,13 @@ class InputSelectionMixin:
         self.view_model.remove_indices(selected)
         self._refresh_input_tree()
         self._refresh_selection_table()
+        self._follow_default_destination()
 
     def _sort_sources(self) -> None:
         self.view_model.sort_sources()
         self._refresh_input_tree()
         self._refresh_selection_table()
+        self._follow_default_destination()
 
     def _filter_sources(self, text: str) -> None:
         needle = text.strip().lower()
@@ -188,8 +263,12 @@ class InputSelectionMixin:
         self.range_end.setValue(maximum)
         self._start_preview(source)
 
-    def _update_frame_editor(self) -> None:
-        mode = self.frame_mode.currentText()
+    def _frame_mode_key(self) -> str:
+        """The English mode key of the frame-mode combo; its displayed text may be translated."""
+        return self.frame_mode.currentData() or "All"
+
+    def _update_frame_editor(self, *_args) -> None:
+        mode = self._frame_mode_key()
         range_enabled = mode == "Frame range"
         custom_enabled = mode == "Custom"
         nth_enabled = mode == "Every Nth frame"
@@ -201,18 +280,20 @@ class InputSelectionMixin:
     def _apply_frame_selection(self) -> None:
         indices = self._selected_source_indices()
         if not indices:
-            QMessageBox.information(self, "Frame selection", "Select one or more input rows first.")
+            QMessageBox.information(
+                self, tr("Frame selection"), tr("Select one or more input rows first.")
+            )
             return
         try:
-            waxs = getattr(getattr(self.parent(), "components", None), "waxs_page", None)
+            analyze = getattr(getattr(self.parent(), "components", None), "analyze_page", None)
             current_frame = getattr(
-                getattr(waxs, "frame_spin", None),
+                getattr(analyze, "frame_spin", None),
                 "value",
                 lambda: 1,
             )()
             self.view_model.apply_frame_selection(
                 indices,
-                self.frame_mode.currentText(),
+                self._frame_mode_key(),
                 current_file=self.current_file,
                 current_frame=current_frame,
                 range_start=self.range_start.value(),
@@ -224,4 +305,4 @@ class InputSelectionMixin:
             self._refresh_selection_table()
             self._start_preview(self.sources[indices[0]])
         except ValueError as exc:
-            QMessageBox.warning(self, "Frame selection", str(exc))
+            QMessageBox.warning(self, tr("Frame selection"), tr(str(exc)))

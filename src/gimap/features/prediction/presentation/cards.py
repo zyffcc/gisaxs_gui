@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
 
 from src.gimap.app.presentation import CollapsibleCardFrame
 from src.gimap.app.presentation.layout_primitives import CARD_SPACING, SECTION_MIN_WIDTH, normalize_button
-from src.gimap.app.presentation.responsive_layout import current_profile, scale_value
+from src.gimap.app.presentation.layout_metrics import LAYOUT
 
 
 class PredictCard(CollapsibleCardFrame):
@@ -54,8 +54,8 @@ class PredictModelLibraryCard(PredictCard):
             parent,
             default_expanded=False,
         )
-        profile = profile or current_profile(parent)
-        self.setMinimumHeight(scale_value(54, profile, 46))
+        profile = profile or LAYOUT
+        self.setMinimumHeight(54)
 
         content = QWidget(self.content_widget)
         layout = QHBoxLayout(content)

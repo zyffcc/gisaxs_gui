@@ -1,11 +1,11 @@
 from src.gimap.features.fitting.application import AiFittingCatalog
 from src.gimap.features.fitting.infrastructure.adapters import (
-    LegacyAiFittingCatalogAdapter,
+    AiFittingCatalogAdapter,
 )
 
 
 def test_ai_catalog_preserves_profiles_and_model_discovery(tmp_path):
-    catalog = AiFittingCatalog(LegacyAiFittingCatalogAdapter())
+    catalog = AiFittingCatalog(AiFittingCatalogAdapter())
 
     assert catalog.profile_names() == ("Fast", "Balanced", "Exhaustive")
     assert catalog.default_profile_name == "Balanced"
@@ -22,7 +22,7 @@ def test_ai_catalog_preserves_profiles_and_model_discovery(tmp_path):
 
 
 def test_ai_catalog_default_directories_keep_both_legacy_spellings(tmp_path):
-    catalog = AiFittingCatalog(LegacyAiFittingCatalogAdapter())
+    catalog = AiFittingCatalog(AiFittingCatalogAdapter())
 
     assert catalog.default_model_directories(tmp_path) == (
         tmp_path / "modules/Fitting_1D_Model",

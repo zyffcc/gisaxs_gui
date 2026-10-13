@@ -1,47 +1,22 @@
-"""Presentation binding for the feature-owned Fitting In-situ series page."""
+"""Presentation binding for the Fitting In-situ series page (a series of 1D curves)."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QWidget
 
-from src.gimap.app.presentation import apply_design_system, install_safe_wheel_behavior
+from src.gimap.app.presentation import install_safe_wheel_behavior
 
-from ..application import (
-    InSituFittingPolicy,
-    InSituTrackingPolicy,
-    ReviseInSituRecipeRequest,
-)
+from ..application import ReviseInSituRecipeRequest
 from .views import InSituSeriesPageView
+from .views.insitu_workflow_controls import PLOT_ONLY
 
 
-_TRACKING_FROM_TEXT = {
-    "Fixed": "fixed",
-    "Detect each frame": "detect_each_frame",
-    "Previous success": "previous_success",
-}
-_TRACKING_TO_TEXT = {value: key for key, value in _TRACKING_FROM_TEXT.items()}
-_INITIAL_FROM_TEXT = {
-    "Previous success": "previous_success",
-    "Recipe values": "recipe_values",
-    "AI each frame": "ai_each_frame",
-}
-_INITIAL_TO_TEXT = {value: key for key, value in _INITIAL_FROM_TEXT.items()}
-_REFINEMENT_FROM_TEXT = {
-    "Plot only": "plot_only",
-    "Every frame": "every_frame",
-    "Every N frames": "every_n",
-    "On quality drop": "quality_drop",
-}
-_REFINEMENT_TO_TEXT = {value: key for key, value in _REFINEMENT_FROM_TEXT.items()}
-_FAILURE_FROM_TEXT = {
-    "Continue": "continue",
-    "Fallback to recipe": "fallback_recipe",
-    "Stop": "stop",
-}
-_FAILURE_TO_TEXT = {value: key for key, value in _FAILURE_FROM_TEXT.items()}
+_FAILURE_FROM_TEXT = {"Continue": "continue", "Stop": "stop"}
+_FAILURE_TO_TEXT = {"continue": "Continue", "stop": "Stop", "fallback_recipe": "Continue"}
 _SCOPE_FROM_TEXT = {
     "Future frames": "future",
     "Selected + future": "selected_and_future",
@@ -66,32 +41,13 @@ class InSituSeriesPage(QWidget):
         self.render_recipe(self.view_model.recipe)
         self.render_workflow(self.view_model.state)
         install_safe_wheel_behavior(self)
-        apply_design_system(self)
 
     def _connect(self) -> None:
         self.ui.backToSingleButton.clicked.connect(self.return_to_single_requested)
         self.ui.captureRecipeButton.clicked.connect(self.capture_recipe_requested)
         self.ui.workflowButtonGroup.idClicked.connect(self._show_workflow_step)
         self.ui.workflowControls.applyRecipeButton.clicked.connect(self._apply_recipe_edits)
-        self.ui.workflowControls.refinementCombo.currentTextChanged.connect(
-            lambda text: self.ui.workflowControls.refineEverySpinBox.setEnabled(
-                text == "Every N frames"
-            )
-        )
-        self.ui.workflowControls.sourceKindCombo.currentTextChanged.connect(
-            self._sync_source_pattern
-        )
         self.ui.resultsTable.itemSelectionChanged.connect(self._render_selected_record_status)
-        self.ui.workflowControls.refineEverySpinBox.setEnabled(False)
-
-    def _sync_source_pattern(self, text: str) -> None:
-        editor = self.ui.workflowControls.sequencePatternEdit
-        current = editor.text().strip().lower()
-        if not current or current in {"*.cbf", "*.nxs"}:
-            editor.setText("*.nxs" if text == "NXS module series" else "*.cbf")
-        is_nxs = text == "NXS module series"
-        self.ui.workflowControls.nxsModuleCountLabel.setVisible(is_nxs)
-        self.ui.workflowControls.nxsModuleCountSpinBox.setVisible(is_nxs)
 
     def _show_workflow_step(self, index: int) -> None:
         key = self.ui.STEP_DEFINITIONS[index][0]
@@ -101,26 +57,17 @@ class InSituSeriesPage(QWidget):
         controls = self.ui.workflowControls
         return {
             "run_mode": controls.runModeCombo,
-            "auto_show": controls.autoShowCheckBox,
-            "auto_cut": controls.autoCutCheckBox,
-            "auto_fit": controls.autoFitCheckBox,
-            "use_previous": controls.usePreviousCheckBox,
-            "full_auto_fit": controls.fullAutoFitCheckBox,
-            "auto_refine": controls.autoRefineCheckBox,
-            "profile": controls.profileCombo,
+            "fit_mode": controls.workflowModeCombo,
             "live_settings": controls.liveSettingsWidget,
             "sequence_settings": controls.sequenceSettingsWidget,
             "sequence_folder": controls.sequenceFolderEdit,
             "sequence_browse": controls.sequenceBrowseButton,
-            "source_kind": controls.sourceKindCombo,
             "sequence_pattern": controls.sequencePatternEdit,
             "recursive": controls.recursiveCheckBox,
-            "nxs_module_count": controls.nxsModuleCountSpinBox,
             "sequence_start": controls.sequenceStartSpinBox,
             "sequence_end": controls.sequenceEndSpinBox,
             "sequence_step": controls.sequenceStepSpinBox,
             "poll": controls.pollSpinBox,
-            "fit_every": controls.fitEverySpinBox,
             "ui_every": controls.uiEverySpinBox,
             "stable": controls.stableCheckBox,
             "start": self.ui.startWatchButton,
@@ -135,13 +82,6 @@ class InSituSeriesPage(QWidget):
             "status_labels": self.ui.statusValueLabels,
             "log": self.ui.logBrowser,
             "image_label": self.ui.currentImageLabel,
-            "preview_auto_scale": self.ui.previewAutoScaleCheckBox,
-            "preview_log": self.ui.previewLogCheckBox,
-            "preview_show_center": self.ui.previewShowCenterCheckBox,
-            "preview_show_roi": self.ui.previewShowRoiCheckBox,
-            "preview_vmin": self.ui.previewVminSpinBox,
-            "preview_vmax": self.ui.previewVmaxSpinBox,
-            "preview_colormap": self.ui.previewColormapCombo,
         }
 
     def render_recipe(self, recipe) -> None:
@@ -154,7 +94,7 @@ class InSituSeriesPage(QWidget):
             self.ui.recipeStatusLabel.setText("No Recipe")
             self.ui.recipeStatusLabel.setProperty("statusKind", "warning")
             self.ui.recipeMetaLabel.setText(
-                "Analyze one representative frame, then explicitly transfer its setup."
+                "Fit one representative curve in Single analysis, then use its setup here."
             )
             self._repolish(self.ui.recipeStatusLabel)
             return
@@ -168,64 +108,19 @@ class InSituSeriesPage(QWidget):
         )
         self._render_recipe_values(recipe)
         self._repolish(self.ui.recipeStatusLabel)
-        for key in ("preprocess", "geometry", "cut", "fit"):
-            self.set_step_state(key, "configured")
+        self.set_step_state("fit", "configured")
 
     def _render_recipe_values(self, recipe) -> None:
         controls = self.ui.workflowControls
-        setup = recipe.experiment_setup
-        preprocess = recipe.preprocessing
-        cut = recipe.cut
-        assignments = (
-            (controls.distanceSpinBox, setup.get("distance_mm", 2000.0)),
-            (controls.grazingSpinBox, setup.get("grazing_angle_deg", 0.2)),
-            (controls.wavelengthSpinBox, setup.get("wavelength_nm", 0.1)),
-            (controls.centerXSpinBox, setup.get("beam_center_x_px", 0.0)),
-            (controls.centerYSpinBox, setup.get("beam_center_y_px", 0.0)),
-            (controls.pixelXSpinBox, setup.get("pixel_size_x_um", 172.0)),
-            (controls.pixelYSpinBox, setup.get("pixel_size_y_um", 172.0)),
-            (controls.thresholdMinSpinBox, preprocess.get("threshold_min", -1e12)),
-            (controls.thresholdMaxSpinBox, preprocess.get("threshold_max", 1e12)),
-            (controls.mirrorMarginSpinBox, preprocess.get("mirror_gap_margin_px", 0)),
-            (controls.invalidMarginSpinBox, preprocess.get("invalid_margin_px", 3)),
-            (controls.cutCenterVerticalSpinBox, cut.get("center_vertical_px", 0.0)),
-            (controls.cutCenterParallelSpinBox, cut.get("center_parallel_px", 0.0)),
-            (controls.cutVerticalSpinBox, cut.get("cut_vertical_px", 10.0)),
-            (controls.cutParallelSpinBox, cut.get("cut_parallel_px", 10.0)),
-            (controls.yonedaThicknessSpinBox, cut.get("auto_horizontal_thickness_px", 5)),
-            (controls.refineEverySpinBox, recipe.fitting.refine_every_n),
-        )
-        for editor, value in assignments:
-            editor.blockSignals(True)
-            editor.setValue(float(value) if hasattr(editor, "decimals") else int(value))
-            editor.blockSignals(False)
-        controls.flipUdCheckBox.setChecked(bool(preprocess.get("flip_ud", False)))
-        controls.thresholdCheckBox.setChecked(
-            bool(preprocess.get("threshold_enabled", False))
-        )
-        controls.mirrorFillCheckBox.setChecked(
-            bool(preprocess.get("mirror_fill_gaps", False))
-        )
-        self._set_combo(controls.centerTrackingCombo, _TRACKING_TO_TEXT[recipe.tracking.center])
-        self._set_combo(controls.yonedaTrackingCombo, _TRACKING_TO_TEXT[recipe.tracking.yoneda])
-        self._set_combo(
-            controls.fitInitializationCombo,
-            _INITIAL_TO_TEXT[recipe.fitting.initialization],
-        )
-        self._set_combo(controls.refinementCombo, _REFINEMENT_TO_TEXT[recipe.fitting.refinement])
         self._set_combo(controls.failurePolicyCombo, _FAILURE_TO_TEXT[recipe.fitting.failure])
-        controls.refineEverySpinBox.setEnabled(recipe.fitting.refinement == "every_n")
-        controls.usePreviousCheckBox.setChecked(
-            recipe.fitting.initialization == "previous_success"
-        )
-        controls.fullAutoFitCheckBox.setChecked(
-            recipe.fitting.initialization == "ai_each_frame"
-        )
-        controls.autoRefineCheckBox.setChecked(recipe.fitting.refinement != "plot_only")
-        if recipe.model.get("workflow_v5"):
-            mode = 2 if recipe.model.get("extract_only") else (0 if recipe.model["workflow_v5"].get("numerical",True) else 1)
+        workflow = recipe.model.get("workflow_v5")
+        if workflow:
+            mode = PLOT_ONLY if recipe.model.get("extract_only") else (
+                0 if workflow.get("numerical", True) else 1
+            )
+            controls.workflowModeCombo.blockSignals(True)
             controls.workflowModeCombo.setCurrentIndex(mode)
-            controls._sync_workflow_mode(mode)
+            controls.workflowModeCombo.blockSignals(False)
 
     def render_workflow(self, workflow) -> None:
         total = workflow.processed_count + len(workflow.pending_paths)
@@ -256,17 +151,11 @@ class InSituSeriesPage(QWidget):
             status = self._record_attr(record, "status", values.get("status", "-"))
             paths = self._record_attr(record, "paths", ())
             file_name = ", ".join(paths) if paths else str(values.get("file_name", "-"))
-            load = values.get("load_status", "ok" if status == "succeeded" else status)
-            preprocess = values.get("preprocess_status", load)
-            geometry = values.get("geometry_status", load)
             rows.append(
                 (
                     self._record_attr(record, "index", values.get("file_index", "-")),
                     file_name,
-                    load,
-                    preprocess,
-                    geometry,
-                    values.get("cut_status", "-"),
+                    values.get("load_status", "ok" if status == "succeeded" else status),
                     values.get("fit_status", "-"),
                     values.get("recipe_version", recipe_version),
                     values.get("chi_square", "-"),
@@ -289,13 +178,6 @@ class InSituSeriesPage(QWidget):
         values = self._record_values(record)
         status = str(self._record_attr(record, "status", values.get("status", "pending")))
         self.set_step_state("source", self._normalize_step_state(values.get("load_status", status)))
-        self.set_step_state(
-            "preprocess", self._normalize_step_state(values.get("preprocess_status", status))
-        )
-        self.set_step_state(
-            "geometry", self._normalize_step_state(values.get("geometry_status", status))
-        )
-        self.set_step_state("cut", self._normalize_step_state(values.get("cut_status", "pending")))
         self.set_step_state("fit", self._normalize_step_state(values.get("fit_status", "pending")))
         self.set_step_state("results", self._normalize_step_state(status))
 
@@ -307,25 +189,19 @@ class InSituSeriesPage(QWidget):
         controls = self.ui.workflowControls
         try:
             scope = _SCOPE_FROM_TEXT[controls.changeScopeCombo.currentText()]
+            mode = controls.fit_mode()
+            model = recipe.to_dict()["model"]
             request = ReviseInSituRecipeRequest(
                 current=recipe,
                 scope=scope,
                 selected_frame_ids=self._selected_frame_ids() if scope == "selected_and_future" else (),
-                experiment_setup=self._experiment_setup_values(),
-                preprocessing=self._preprocessing_values(),
-                cut=self._cut_values(),
-                model={**recipe.to_dict()["model"],
-                       "workflow_v5": {**recipe.to_dict()["model"].get("workflow_v5", {}),
-                                       "numerical": controls.workflowModeCombo.currentIndex() == 0},
-                       "extract_only": controls.workflowModeCombo.currentIndex() == 2},
-                tracking=InSituTrackingPolicy(
-                    center=_TRACKING_FROM_TEXT[controls.centerTrackingCombo.currentText()],
-                    yoneda=_TRACKING_FROM_TEXT[controls.yonedaTrackingCombo.currentText()],
-                ),
-                fitting=InSituFittingPolicy(
-                    initialization=_INITIAL_FROM_TEXT[controls.fitInitializationCombo.currentText()],
-                    refinement=_REFINEMENT_FROM_TEXT[controls.refinementCombo.currentText()],
-                    refine_every_n=controls.refineEverySpinBox.value(),
+                model={
+                    **model,
+                    "workflow_v5": {**model.get("workflow_v5", {}), "numerical": mode == 0},
+                    "extract_only": mode == PLOT_ONLY,
+                },
+                fitting=replace(
+                    recipe.fitting,
                     failure=_FAILURE_FROM_TEXT[controls.failurePolicyCombo.currentText()],
                 ),
             )
@@ -333,40 +209,6 @@ class InSituSeriesPage(QWidget):
             self.render_recipe(revision.recipe)
         except (KeyError, TypeError, ValueError) as exc:
             self.error_occurred.emit(str(exc))
-
-    def _experiment_setup_values(self) -> dict[str, float]:
-        c = self.ui.workflowControls
-        return {
-            "distance_mm": c.distanceSpinBox.value(),
-            "grazing_angle_deg": c.grazingSpinBox.value(),
-            "wavelength_nm": c.wavelengthSpinBox.value(),
-            "beam_center_x_px": c.centerXSpinBox.value(),
-            "beam_center_y_px": c.centerYSpinBox.value(),
-            "pixel_size_x_um": c.pixelXSpinBox.value(),
-            "pixel_size_y_um": c.pixelYSpinBox.value(),
-        }
-
-    def _preprocessing_values(self) -> dict[str, object]:
-        c = self.ui.workflowControls
-        return {
-            "invalid_margin_px": c.invalidMarginSpinBox.value(),
-            "flip_ud": c.flipUdCheckBox.isChecked(),
-            "threshold_enabled": c.thresholdCheckBox.isChecked(),
-            "threshold_min": c.thresholdMinSpinBox.value(),
-            "threshold_max": c.thresholdMaxSpinBox.value(),
-            "mirror_fill_gaps": c.mirrorFillCheckBox.isChecked(),
-            "mirror_gap_margin_px": c.mirrorMarginSpinBox.value(),
-        }
-
-    def _cut_values(self) -> dict[str, object]:
-        c = self.ui.workflowControls
-        return {
-            "center_vertical_px": c.cutCenterVerticalSpinBox.value(),
-            "center_parallel_px": c.cutCenterParallelSpinBox.value(),
-            "cut_vertical_px": c.cutVerticalSpinBox.value(),
-            "cut_parallel_px": c.cutParallelSpinBox.value(),
-            "auto_horizontal_thickness_px": c.yonedaThicknessSpinBox.value(),
-        }
 
     def _selected_frame_ids(self) -> tuple[str, ...]:
         rows = sorted({item.row() for item in self.ui.resultsTable.selectedItems()})
@@ -394,7 +236,7 @@ class InSituSeriesPage(QWidget):
         text = str(value).lower()
         if text in {"ok", "succeeded", "complete", "completed"}:
             return "complete"
-        if text in {"running", "loading", "cutting", "fitting"}:
+        if text in {"running", "loading", "fitting"}:
             return "running"
         if text.startswith("fail") or text == "error":
             return "error"

@@ -20,6 +20,9 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.components import show_toast
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.shared.file_paths import normalize_path
 
 
@@ -132,14 +135,14 @@ class ModuleCatalogMixin:
         combo = getattr(self.ui, "gisaxsPredictFrameworkCombox", None)
         text = combo.currentText() if combo is not None else ""
         if self._framework_ready():
-            label.setText(f"Framework OK: {text}")
-            label.setStyleSheet("color: #166534;")
+            label.setText(trf("Framework OK: {framework}", framework=text))
+            set_role(label, "success")
         elif text.startswith("No compatible"):
-            label.setText("Framework missing or incompatible")
-            label.setStyleSheet("color: #b91c1c;")
+            label.setText(tr("Framework missing or incompatible"))
+            set_role(label, "error")
         else:
-            label.setText("Framework incompatible")
-            label.setStyleSheet("color: #b91c1c;")
+            label.setText(tr("Framework incompatible"))
+            set_role(label, "error")
 
     def _initialize_modules_ui(self) -> None:
         self._refresh_modules()
@@ -169,7 +172,7 @@ class ModuleCatalogMixin:
                 for module in modules
             }
         except Exception as exc:
-            self._append_status_message(f"Module scan failed: {exc}", level="ERROR")
+            self._append_status_message(trf("Module scan failed: {error}", error=exc), level="ERROR")
             return {}
 
     def _parse_module_yaml(self, yaml_path: str) -> Optional[Dict[str, object]]:
@@ -205,7 +208,7 @@ class ModuleCatalogMixin:
     def _select_model_folder(self, start_dir: str = "") -> str:
         folder = QFileDialog.getExistingDirectory(
             self.main_window,
-            "Select TensorFlow SavedModel Folder",
+            tr("Select TensorFlow SavedModel Folder"),  # a native dialog: the widget walker cannot reach it
             start_dir or "",
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
         )
@@ -222,6 +225,7 @@ class ModuleCatalogMixin:
         self.current_parameters["module_name"] = spec.get("name", name)
         self.current_parameters["module_model_path"] = ""
         self._current_model = None
+        self._model_load_error = ""
         self._set_model_status_color("gray", "Not loaded")
         self.refresh_framework_options_for_current_module()
 
@@ -246,7 +250,7 @@ class ModuleCatalogMixin:
         self._load_module_mask(self._current_module)
 
         self._persist_parameters()
-        self._append_status_message(f"Module selected: {self.current_parameters['module_name']}")
+        self._append_status_message(trf("Module selected: {name}", name=self.current_parameters["module_name"]))
 
     def _load_module_mask(self, spec: Dict[str, object]) -> None:
         self._current_mask = None
@@ -256,13 +260,13 @@ class ModuleCatalogMixin:
         mask_path = normalize_path(mask_path)
         self._current_mask = self.prediction_view_model.load_mask(Path(mask_path))
         if self._current_mask is not None:
-            self._append_status_message(f"Mask loaded: {os.path.basename(mask_path)}")
+            self._append_status_message(trf("Mask loaded: {name}", name=os.path.basename(mask_path)))
             return
         message = self.prediction_view_model.state.error_message or "Failed to load mask"
         if message == "Mask file found but unsupported format (only .npy)":
             self._append_status_message(message, level="WARN")
         else:
-            self._append_status_message(f"Failed to load mask: {message}", level="ERROR")
+            self._append_status_message(trf("Failed to load mask: {error}", error=message), level="ERROR")
 
     def _on_edit_module_clicked(self) -> None:
         combo = getattr(self.ui, "gisaxsPredictModuleSelectCombox", None)
@@ -280,7 +284,7 @@ class ModuleCatalogMixin:
             self._start_module_edit_watch(yaml_path)
         except Exception as exc:
             QMessageBox.warning(
-                self.main_window, "Open Failed", f"Cannot open file:\n{yaml_path}\n\n{exc}"
+                self.main_window, "Open Failed", trf("Cannot open file:\n{path}\n\n{error}", path=yaml_path, error=exc)
             )
 
     def _start_module_edit_watch(self, yaml_path: str) -> None:
@@ -397,7 +401,7 @@ class ModuleCatalogMixin:
             ", ".join(str(s) for s in steps) if isinstance(steps, list) and steps else "default"
         )
         self._append_status_message(
-            f"Module config reloaded: {new_name}; preprocess steps: {step_text}"
+            trf("Module config reloaded: {name}; preprocess steps: {steps}", name=new_name, steps=step_text)
         )
 
     def _on_model_import_clicked(self) -> None:
@@ -426,6 +430,7 @@ class ModuleCatalogMixin:
         self._append_status_message("Loading model (this may take a while)...")
         self.progress_updated.emit(5)
         self._model_loading = True
+        self._model_load_error = ""
         self._model_cancel_requested = False
         self._set_model_status_color("red", "Loading...")
         btn_import = getattr(self.ui, "gisaxsPredictModelImportButton", None)
@@ -433,7 +438,7 @@ class ModuleCatalogMixin:
             btn_import.setEnabled(False)
 
         def _load():
-            self._append_status_message(f"Loading model from: {model_path}")
+            self._append_status_message(trf("Loading model from: {path}", path=model_path))
             try:
                 model = self.prediction_view_model.inspect_model(
                     Path(model_path),
@@ -445,12 +450,12 @@ class ModuleCatalogMixin:
                     )
             except Exception as exc:
                 self._append_status_message(
-                    f"Failed to load model from: {model_path} | {exc}",
+                    trf("Failed to load model from: {path} | {error}", path=model_path, error=exc),
                     level="ERROR",
                 )
                 return None, str(exc)
             self._append_status_message(
-                f"Model successfully validated in isolated worker: {model.artifact_path}"
+                trf("Model successfully validated in isolated worker: {path}", path=model.artifact_path)
             )
             return model, None
 
@@ -470,7 +475,7 @@ class ModuleCatalogMixin:
             expected_model_path
         ):
             self._append_status_message(
-                f"Ignored stale model load result from: {model_path}",
+                trf("Ignored stale model load result from: {path}", path=model_path),
                 level="WARN",
             )
             self._model_loading = False
@@ -481,7 +486,7 @@ class ModuleCatalogMixin:
             return
         if not expected_model_path:
             self._append_status_message(
-                f"Ignored model load result because no module model is selected: {model_path}",
+                trf("Ignored model load result because no module model is selected: {path}", path=model_path),
                 level="WARN",
             )
             self._model_loading = False
@@ -491,12 +496,15 @@ class ModuleCatalogMixin:
             self._refresh_predict_readiness()
             return
         if err:
-            self._append_status_message(f"Model load failed: {err}", level="ERROR")
+            self._append_status_message(trf("Model load failed: {error}", error=err), level="ERROR")
             self.progress_updated.emit(0)
             self._current_model = None
             self._model_loading = False
+            self._model_load_error = err
             self._set_model_status_color("gray", "Not loaded")
+            self._show_model_load_error(err)
         else:
+            self._model_load_error = ""
             self._current_model = model
             self.current_parameters["module_model_path"] = model_path
             if self._current_module is not None:
@@ -518,13 +526,35 @@ class ModuleCatalogMixin:
         self._persist_parameters()
         self._refresh_predict_readiness()
 
+    def _show_model_load_error(self, error: str) -> None:
+        """A failed load is a visible error, with a way to the full log."""
+        parent = getattr(self.ui, "gisaxsPredictPage", None) or self.main_window
+        if parent is None:
+            return
+        show_toast(
+            parent,
+            trf("Could not load the model: {error}", error=error),
+            level="error",
+            action=(tr("Show Log"), self._show_activity_log),
+            timeout_ms=10000,
+        )
+
+    def _show_activity_log(self) -> None:
+        workbench = getattr(self.ui, "predictionWorkbenchLayout", None)
+        if workbench is not None and hasattr(workbench, "show_activity_log"):
+            workbench.show_activity_log()
+            return
+        disclosure = getattr(self.ui, "predictionActivityDisclosure", None)
+        if disclosure is not None:
+            disclosure.set_expanded(True)
+
     def _write_model_path_to_yaml(self, spec: Dict[str, object], model_path: str) -> None:
         module = spec.get("_prediction_module") if isinstance(spec, dict) else None
         if module is None:
             return
         if self.prediction_view_model.update_model_path(module, Path(model_path)):
             yaml_path = spec.get("yaml_path", "module.yaml")
-            self._append_status_message(f"Updated model_path in {os.path.basename(str(yaml_path))}")
+            self._append_status_message(trf("Updated model_path in {name}", name=os.path.basename(str(yaml_path))))
             return
         self._append_status_message(
             self.prediction_view_model.state.error_message or "Failed to update module.yaml",

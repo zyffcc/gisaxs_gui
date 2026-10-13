@@ -6,85 +6,24 @@ from ..domain import (
     default_global_search_bounds,
     default_global_search_selected,
     ai_q_key,
-    apply_input_image_options,
     chi_square,
-    compute_insitu_cut,
     default_refine_bounds,
     default_refine_selected,
-    DetectorPreprocessing,
-    extract_pixel_profile,
-    extract_q_profile,
     filter_axis,
     filter_for_display,
-    finite_log_profiles,
     interpolate_series,
-    mirror_fill_detector_gaps,
     normalize_geometry,
     normalize_intensity,
     optimize_scale_factor,
     prepare_ai_curve,
-    prepare_detector_image,
     prepare_signed_q_curve,
     q_values_for_display,
     q_values_for_model,
     run_manual_refinement,
-    sample_q_mesh_line,
     sort_filter_pairs,
     valid_y_values_for_limits,
 )
-from .ports import FittingModelPort, QSpacePort
-from ..domain.center_symmetry import optimize_horizontal_center
-from ..domain.cut_math import pixel_region_bounds, extract_native_pixel_profile
-from ..domain.cbf_observations import column_observations
-
-
-class FittingImageCalculations:
-    def prepare(self, image, *, revision=0, **options):
-        """Create the one immutable analysis image for a preprocessing revision."""
-
-        preprocessing = DetectorPreprocessing(**options)
-        return prepare_detector_image(image, preprocessing, revision=revision)
-
-    def transform(self, image, **options):
-        return apply_input_image_options(image, **options)
-
-    def mirror_gaps(self, image, **options):
-        return mirror_fill_detector_gaps(image, **options)
-
-    def center_profiles(self, image):
-        return finite_log_profiles(image)
-
-    def optimize_center_x(self, image, pixel_region, initial_x):
-        return optimize_horizontal_center(image, pixel_region, initial_x)
-
-
-class FittingCutCalculations:
-    def cbf_observations(self, *args, **kwargs):
-        return column_observations(*args, **kwargs)
-
-    def pixel_bounds(self, image_shape, selection):
-        return pixel_region_bounds(image_shape, selection)
-
-    def extract_pixel(self, image, selection):
-        return extract_pixel_profile(image, selection)
-
-    def extract_native_pixel(self, image, q_mesh, selection):
-        return extract_native_pixel_profile(image, q_mesh, selection)
-
-    def extract_q(self, image, horizontal_q_mesh, qz_mesh, selection):
-        return extract_q_profile(image, horizontal_q_mesh, qz_mesh, selection)
-
-    def sample_mesh_line(self, mesh, pixel_coords, **options):
-        return sample_q_mesh_line(mesh, pixel_coords, **options)
-
-    def sort_filter(self, x_values, intensity, **options):
-        return sort_filter_pairs(x_values, intensity, **options)
-
-    def filter_axis(self, q_values, intensity, mode="all", **options):
-        return filter_axis(q_values, intensity, mode, **options)
-
-    def interpolate(self, x, y, x_new, method):
-        return interpolate_series(x, y, x_new, method)
+from .ports import FittingModelPort
 
 
 class FittingCurveCalculations:
@@ -105,6 +44,15 @@ class FittingCurveCalculations:
 
     def normalize_intensity(self, intensity):
         return normalize_intensity(intensity)
+
+    def sort_filter(self, x_values, intensity, **options):
+        return sort_filter_pairs(x_values, intensity, **options)
+
+    def filter_axis(self, q_values, intensity, mode="all", **options):
+        return filter_axis(q_values, intensity, mode, **options)
+
+    def interpolate(self, x, y, x_new, method):
+        return interpolate_series(x, y, x_new, method)
 
 
 class FittingAiCalculations:
@@ -157,11 +105,6 @@ class ManualRefinementCalculations:
         )
 
 
-class ComputeInSituCut:
-    def execute(self, payload: dict) -> dict:
-        return compute_insitu_cut(dict(payload))
-
-
 class FittingModelCalculations:
     def __init__(self, model: FittingModelPort):
         self._model = model
@@ -176,12 +119,9 @@ class FittingModelCalculations:
         return self._model.build_function(tuple(shapes))
 
 
-class FittingQSpaceCalculations:
-    def __init__(self, q_space: QSpacePort):
-        self._q_space = q_space
-
-    def create_detector(self, **geometry):
-        return self._q_space.create_detector(**geometry)
-
-    def axis_labels_and_extent(self, detector):
-        return self._q_space.axis_labels_and_extent(detector)
+__all__ = [
+    "FittingAiCalculations",
+    "FittingCurveCalculations",
+    "FittingModelCalculations",
+    "ManualRefinementCalculations",
+]

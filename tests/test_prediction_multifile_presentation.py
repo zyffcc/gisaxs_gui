@@ -5,9 +5,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication
 
-from controllers.multifile_predict_results import (
-    MultiFilePredictResultsWidget as LegacyMultiFilePredictResultsWidget,
-)
 from src.gimap.features.prediction.presentation.multifile_results import (
     DistributionHeatmapWindow,
     ExportDialog,
@@ -31,10 +28,6 @@ def _app() -> QApplication:
     global _TEST_APP
     _TEST_APP = QApplication.instance() or QApplication([])
     return _TEST_APP
-
-
-def test_legacy_multifile_results_path_reexports_prediction_owner() -> None:
-    assert LegacyMultiFilePredictResultsWidget is MultiFilePredictResultsWidget
 
 
 def test_predict_result_remains_a_typed_dataclass_after_module_split() -> None:

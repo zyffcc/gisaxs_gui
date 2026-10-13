@@ -21,10 +21,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation import (
-    apply_design_system,
-)
-
 from src.gimap.app.presentation.section_bindings import (
     bind_advanced_section,
     bind_parameter_section,
@@ -35,6 +31,7 @@ from ..views import (
     TrainsetDatasetPageView,
 )
 
+from ..file_drop import FileDropFilter
 from ..visualization_widgets import ArrayCanvas
 
 
@@ -79,12 +76,12 @@ class DatasetMixin:
             ui.designPreviewCard,
             ui.designPreviewContentLayout,
         )
-        apply_design_system(page)
 
         reference = QGroupBox("1 · Real scattering reference")
         ref_form = QGridLayout(reference)
         self.reference_path = self._line("project.reference_file")
         self.reference_button = QPushButton("Load file...")
+        self.reference_button.setToolTip("A measured detector image, to place the beam centre, ROI and masks on")
         ref_form.addWidget(QLabel("Reference file"), 0, 0)
         ref_form.addWidget(self.reference_path, 0, 1)
         ref_form.addWidget(self.reference_button, 1, 1)
@@ -138,6 +135,7 @@ class DatasetMixin:
             grid.addWidget(QLabel(label), row, 0)
             grid.addWidget(widget, row, 1)
         self.pick_beam_center_button = QPushButton("Pick beam center on detector")
+        self.pick_beam_center_button.setToolTip("Click the direct-beam position on the image on the right")
         self.beam_cursor_label = QLabel("Move over the full detector to inspect x, y and intensity")
         self.beam_cursor_label.setWordWrap(True)
         grid.addWidget(self.pick_beam_center_button, len(entries), 0, 1, 2)
@@ -158,6 +156,7 @@ class DatasetMixin:
             roi_grid.addWidget(QLabel(label), row, 0)
             roi_grid.addWidget(self._spin(path, value, 0), row, 1)
         self.draw_roi_button = QPushButton("Draw rectangle ROI")
+        self.draw_roi_button.setToolTip("Drag a rectangle on the image: the region the training images keep")
         self.roi_range_label = QLabel(
             "phi / alpha range will be calculated from the detector geometry"
         )
@@ -520,7 +519,7 @@ class DatasetMixin:
         self.design_tabs.tabBar().setExpanding(True)
         self.design_tabs.tabBar().setUsesScrollButtons(False)
         self.design_tabs.tabBar().setElideMode(Qt.ElideRight)
-        self.full_detector_canvas = ArrayCanvas("Load a real scattering file to begin")
+        self.full_detector_canvas = ArrayCanvas("Load a real scattering file to begin, or drop one here")
         self.roi_design_canvas = ArrayCanvas("Define an ROI to inspect the cropped detector region")
         self.masked_design_canvas = ArrayCanvas("Configure a mask to see it overlaid on the ROI")
         self.mask_only_canvas = ArrayCanvas("The binary mask will appear here (white = masked)")
@@ -545,6 +544,8 @@ class DatasetMixin:
         self.design_info.setWordWrap(True)
         self.design_info.setProperty("infoPanel", True)
         ui.designPreviewContentLayout.addWidget(self.design_info)
+        # A file dropped anywhere on the design preview becomes the reference (as Load file... does).
+        self._reference_drop = FileDropFilter(self.trainset_design_preview_panel, self.reference_dropped.emit)
         self.dataset_splitter.setStretchFactor(0, 7)
         self.dataset_splitter.setStretchFactor(1, 3)
         self.dataset_splitter.setSizes((720, 420))

@@ -168,18 +168,12 @@ class AiInputDataMixin:
                     pass
         self._ai_excluded_input_q = excluded
         added = max(0, len(excluded) - before)
-        removed_from_current_cut = self._apply_deleted_point_mask_to_current_cut()
         self._refresh_ai_input_data_dialog()
         self._refresh_ai_input_outlier_views()
         self._draw_insitu_workflow_curve_preview()
         if added:
             label = "from Independent Fit Window" if source == "plot" else "from table"
             self._set_ai_workspace_status(f"Excluded {added} input point(s) {label}.", None)
-        if removed_from_current_cut:
-            self._add_fitting_message(
-                f"Deleted-point mask applied to current cut: removed {removed_from_current_cut} point(s)",
-                "INFO",
-            )
 
     def _restore_ai_input_points(self, q_values) -> None:
         excluded = set(getattr(self, "_ai_excluded_input_q", set()) or set())

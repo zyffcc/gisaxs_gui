@@ -11,25 +11,32 @@ from unittest.mock import patch
 import h5py
 import numpy as np
 
-from calibration.application import apply_calibration_result
-from calibration.candidate_ranker import rank_candidates
-from calibration.center_estimator import estimate_center_candidates
-from calibration.engine import CalibrationEngine
-from calibration.geometry_model import energy_to_wavelength, q_to_ring_radius_px
-from calibration.image_loader import (
+from src.gimap.app.bootstrap import create_standalone_legacy_context
+from src.gimap.features.calibration.bootstrap import create_calibration_view_model
+from src.gimap.features.calibration.domain.candidate_ranker import rank_candidates
+from src.gimap.features.calibration.domain.center_estimator import estimate_center_candidates
+from src.gimap.features.calibration.domain.engine import CalibrationEngine
+from src.gimap.features.calibration.domain.geometry_model import (
+    energy_to_wavelength,
+    q_to_ring_radius_px,
+)
+from src.gimap.shared.detector_io.loading import (
     detect_nxs_frame_count,
     load_detector_image,
     nxs_invalid_pixel_mask,
     nxs_series_paths,
 )
-from calibration.models import CalibrationCandidate, CalibrationResult, DetectorImage
-from calibration.peak_detector import DetectedPeak
-from calibration.peak_matcher import generate_distance_candidates
-from calibration.preprocessing import preprocess_detector_image
-from calibration.serialization import load_calibration, save_calibration
-from calibration.standards import STANDARDS
-from core.global_params import global_params
-from ui.waxs_page import load_image_matrix
+from src.gimap.features.calibration.domain.models import (
+    CalibrationCandidate,
+    CalibrationResult,
+    DetectorImage,
+)
+from src.gimap.features.calibration.domain.peak_detector import DetectedPeak
+from src.gimap.features.calibration.domain.peak_matcher import generate_distance_candidates
+from src.gimap.features.calibration.domain.preprocessing import preprocess_detector_image
+from src.gimap.features.calibration.infrastructure.adapters import JsonCalibrationStorageAdapter
+from src.gimap.features.calibration.domain.standards import STANDARDS
+from src.gimap.app.bootstrap import create_app_context
 
 
 def synthetic_rings(
@@ -67,10 +74,8 @@ class CalibrationTests(unittest.TestCase):
                 handle.create_dataset("/entry/instrument/detector/x_pixel_size", data=[75e-6])
                 handle.create_dataset("/entry/instrument/detector/y_pixel_size", data=[75e-6])
             detector = load_detector_image(path)
-            legacy_api = load_image_matrix(str(path))
             expected = np.flipud(source[0].T)
             np.testing.assert_array_equal(detector.data, expected)
-            np.testing.assert_array_equal(legacy_api, expected)
             self.assertAlmostEqual(detector.pixel_size_x_m, 75e-6)
 
     def test_nxs_module_series_and_frames_use_shared_loader(self):
@@ -108,8 +113,10 @@ class CalibrationTests(unittest.TestCase):
             self.assertEqual(detect_nxs_frame_count(paths[0]), 1)
 
     def test_loading_nxs_does_not_apply_beam_center_metadata(self):
-        before_x = global_params.get_parameter("fitting", "detector.beam_center_x")
-        before_y = global_params.get_parameter("fitting", "detector.beam_center_y")
+        with tempfile.TemporaryDirectory() as home:
+            context = create_app_context(data_dir=home, restore_session=False)
+            context.jobs.shutdown()
+            before = context.settings.snapshot()
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "metadata_only.nxs"
             with h5py.File(path, "w") as handle:
@@ -122,8 +129,8 @@ class CalibrationTests(unittest.TestCase):
             detector = load_detector_image(path)
             self.assertEqual(detector.beam_center_x_px, 999.0)
             self.assertEqual(detector.beam_center_y_px, 888.0)
-        self.assertEqual(global_params.get_parameter("fitting", "detector.beam_center_x"), before_x)
-        self.assertEqual(global_params.get_parameter("fitting", "detector.beam_center_y"), before_y)
+        # Loading reports the metadata but never writes it into the settings.
+        self.assertEqual(context.settings.snapshot(), before)
 
     def test_nxs_mask_preserves_undefined_and_virtual_pixel_bits(self):
         source = np.arange(24, dtype=np.float32).reshape(1, 4, 6) + 10.0
@@ -234,31 +241,33 @@ class CalibrationTests(unittest.TestCase):
         result = CalibrationResult("x.cbf", 10, 20, "abc", 12.0, energy_to_wavelength(12), "D", 1e-4, 1e-4, candidate, [candidate], datetime.now(timezone.utc).isoformat())
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cal.json"
-            save_calibration(result, path)
-            loaded = load_calibration(path)
+            JsonCalibrationStorageAdapter().save(result, path)
+            loaded = JsonCalibrationStorageAdapter().load(path)
             self.assertEqual(loaded.selected_candidate.standard_key, "agbh")
             self.assertEqual(loaded.selected_candidate.matched_ring_count, 3)
 
     def test_apply_updates_shared_geometry(self):
-        # The legacy API persists shared geometry. Exercise the real save path
-        # in a sandbox, never overwrite the operator's last detector setup.
-        stored = deepcopy(global_params._parameters)
-        real_path = Path(global_params.user_params_file)
-        real_bytes = real_path.read_bytes() if real_path.exists() else None
-        with tempfile.TemporaryDirectory() as folder:
-            isolated_path = Path(folder) / "calibration_parameters.json"
-            with patch.object(global_params, "user_params_file", str(isolated_path)):
-                try:
-                    candidate = CalibrationCandidate("agbh", 123.5, 234.5, 1456.7, matched_ring_count=3)
-                    result = CalibrationResult("x.cbf", 10, 20, "abc", 12.0, energy_to_wavelength(12), "D", 172e-6, 172e-6, candidate, [candidate], datetime.now(timezone.utc).isoformat())
-                    values = apply_calibration_result(result)
-                    self.assertAlmostEqual(values["distance"], 1456.7)
-                    self.assertAlmostEqual(global_params.get_parameter("fitting", "detector.beam_center_x"), 123.5)
-                    self.assertAlmostEqual(global_params.get_parameter("beam", "wavelength"), result.wavelength_angstrom / 10.0)
-                    self.assertTrue(isolated_path.exists())
-                finally:
-                    global_params._parameters = stored
-        self.assertEqual(real_path.read_bytes() if real_path.exists() else None, real_bytes)
+        # Applying a result persists the shared geometry through the real store,
+        # in a throw-away user folder (never the operator's own settings).
+        with tempfile.TemporaryDirectory() as home:
+            context = create_app_context(data_dir=home, restore_session=False)
+            context.jobs.shutdown()
+            candidate = CalibrationCandidate("agbh", 123.5, 234.5, 1456.7, matched_ring_count=3)
+            result = CalibrationResult("x.cbf", 10, 20, "abc", 12.0, energy_to_wavelength(12), "D", 172e-6, 172e-6, candidate, [candidate], datetime.now(timezone.utc).isoformat())
+            result.metadata["image_shape"] = [1679, 1475]
+            view_model = create_calibration_view_model(context)
+            view_model.result = result
+            values = view_model.apply_result()
+            self.assertAlmostEqual(values["distance"], 1456.7)
+            reopened = create_app_context(data_dir=home, restore_session=False)
+            reopened.jobs.shutdown()
+            settings = reopened.settings
+            self.assertAlmostEqual(settings.get("detector", "beam_center_x"), 123.5)
+            self.assertAlmostEqual(settings.get("detector", "beam_center_y"), 234.5)
+            self.assertAlmostEqual(settings.get("beam", "wavelength"), result.wavelength_angstrom / 10.0)
+            profile = reopened.instrument_profiles.find("D 1679×1475")
+            self.assertIsNotNone(profile)
+            self.assertAlmostEqual(profile.geometry.beam_center_x_px, 124.0)
 
     def test_full_engine_on_synthetic_standard(self):
         energy, distance, pixel = 12.0, 1000.0, 172e-6
@@ -278,7 +287,7 @@ class CalibrationTests(unittest.TestCase):
     def test_unknown_detector_can_be_selected_manually(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PyQt5.QtWidgets import QApplication
-        from ui.geometry_calibration_dialog import GeometryCalibrationDialog
+        from src.gimap.features.calibration.presentation.dialog import GeometryCalibrationDialog
 
         app = QApplication.instance() or QApplication([])
         dialog = GeometryCalibrationDialog()
@@ -303,7 +312,7 @@ class CalibrationTests(unittest.TestCase):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PyQt5.QtCore import Qt
         from PyQt5.QtWidgets import QApplication, QScrollArea
-        from ui.geometry_calibration_dialog import GeometryCalibrationDialog
+        from src.gimap.features.calibration.presentation.dialog import GeometryCalibrationDialog
 
         app = QApplication.instance() or QApplication([])
         dialog = GeometryCalibrationDialog()

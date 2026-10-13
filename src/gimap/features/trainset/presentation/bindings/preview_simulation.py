@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 
+from src.gimap.app.presentation.i18n import trf
 from src.gimap.features.trainset.application import (
     TrainsetPreviewRequest,
     TrainsetWhatIfRequest,
@@ -141,8 +142,12 @@ class PreviewSimulationMixin:
         )
         cache_hits = int(result["cache_hits"])
         cache_misses = int(result["cache_misses"])
-        self.page.preview_cache_status.setText(
-            f"BornAgain cache: {int(result['cache_size'])} image(s) · last update {cache_hits} hit / {cache_misses} rerun"
+        self.page.texts.set(
+            self.page.preview_cache_status,
+            "BornAgain cache: {size} image(s) · last update {hits} hit / {misses} rerun",
+            size=int(result["cache_size"]),
+            hits=cache_hits,
+            misses=cache_misses,
         )
         particle = next(iter(self.config.get("sample", {}).get("particles", [])), {})
         form_factor_names = list(particle.get("parameters", {}))
@@ -155,7 +160,7 @@ class PreviewSimulationMixin:
         self.page.preview_gate_table.item(1, 1).setText("Ready")
         self.page.preview_gate_table.item(2, 1).setText("Ready")
         self._storage_acceptance_changed(self.page.storage_accept_check.isChecked())
-        self.page.validation_badge.setText("Preview ready")
+        self.page.set_validation_state("Preview ready", "ok")
         self.page.set_step_state(1, "Preview ready")
         self.page.set_preview_busy(
             False, 100, "Preview ready. The GUI remained responsive during simulation."
@@ -166,7 +171,7 @@ class PreviewSimulationMixin:
     def _preview_failed(self, message: str) -> None:
         self._preview_busy = False
         self._preview_worker = None
-        self.page.set_preview_busy(False, 0, f"Preview failed: {message}")
+        self.page.set_preview_busy(False, 0, trf("Preview failed: {error}", error=message), failed=True)
         QMessageBox.warning(self.window, "Preview failed", message)
         self.generation_error.emit(message)
 
@@ -177,10 +182,7 @@ class PreviewSimulationMixin:
         request = {"physics": numeric, "overrides": copy.deepcopy(overrides)}
         if self._what_if_busy:
             self._pending_what_if_values = request
-            self.page.set_what_if_busy(
-                True,
-                "Current simulation is finishing · the latest edit is queued.",
-            )
+            self.page.set_what_if_busy(True, "Current simulation is finishing · the latest edit is queued.")
             return
         config = self._collect_config()
         for path, value in overrides.items():
@@ -219,17 +221,20 @@ class PreviewSimulationMixin:
         self._what_if_busy = False
         self._what_if_worker = None
         values = ", ".join(f"{key}={value:.5g}" for key, value in result["values"].items())
-        cache_text = "BornAgain cache reused" if result["cache_hit"] else "BornAgain recomputed"
         self.page.set_what_if_result(
             result["image"],
-            f"{cache_text} · {values}\nPipeline: {result['pipeline']}",
+            "BornAgain cache reused · {values}\nPipeline: {pipeline}"
+            if result["cache_hit"]
+            else "BornAgain recomputed · {values}\nPipeline: {pipeline}",
+            values=values,
+            pipeline=result["pipeline"],
         )
         self._run_pending_what_if()
 
     def _what_if_failed(self, message: str) -> None:
         self._what_if_busy = False
         self._what_if_worker = None
-        self.page.set_what_if_busy(False, f"Manual simulation not completed: {message}")
+        self.page.set_what_if_busy(False, "Manual simulation not completed: {error}", error=message)
         self._run_pending_what_if()
 
     def _run_pending_what_if(self) -> None:

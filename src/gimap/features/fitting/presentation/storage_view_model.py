@@ -4,18 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..application import LoadScatteringFileRequest
-
 
 class FittingStorageViewModel:
     def __init__(
         self,
         *,
-        load_scattering_file,
-        inspect_scattering_sequence,
         discover_insitu_frames=None,
-        scattering_loader_factory,
-        remote_file_cache,
         insitu_records,
         parameter_files,
         ai_artifacts,
@@ -23,12 +17,10 @@ class FittingStorageViewModel:
         check_dependency,
         model_parameters=None,
         ai_catalog=None,
+        export_curve_figure=None,
     ):
-        self._load_scattering_file = load_scattering_file
-        self._inspect_scattering_sequence = inspect_scattering_sequence
         self._discover_insitu_frames = discover_insitu_frames
-        self._scattering_loader_factory = scattering_loader_factory
-        self._remote_file_cache = remote_file_cache
+        self._export_curve_figure = export_curve_figure
         self._insitu_records = insitu_records
         self._parameter_files = parameter_files
         self._ai_artifacts = ai_artifacts
@@ -37,65 +29,16 @@ class FittingStorageViewModel:
         self.model_parameters = model_parameters
         self.ai_catalog = ai_catalog
 
-    def load_scattering_background(
-        self,
-        request: LoadScatteringFileRequest,
-        *,
-        prepare_path=None,
-        on_progress=None,
-    ):
-        loader = self._load_scattering_file
-        if self._scattering_loader_factory is not None:
-            loader = self._scattering_loader_factory(
-                prepare_path=prepare_path,
-                progress=on_progress,
-            )
-        return loader.execute(request)
-
-    def inspect_scattering_sequence(self, path: Path):
-        return self._inspect_scattering_sequence.execute(Path(path))
-
     def discover_insitu_frames(self, request):
         if self._discover_insitu_frames is None:
             raise RuntimeError("In-situ frame discovery is not configured")
         return self._discover_insitu_frames.execute(request)
 
-    def default_remote_cache_directory(self) -> str:
-        return self._remote_file_cache.default_directory()
-
-    def display_remote_cache_directory(self, cache_dir: str) -> str:
-        return self._remote_file_cache.display_directory(cache_dir)
-
-    def resolve_remote_cache_directory(self, cache_dir: str) -> str:
-        return str(self._remote_file_cache.resolve_directory(cache_dir))
-
-    def is_remote_source(self, path: str) -> bool:
-        return self._remote_file_cache.is_remote(path)
-
-    def remote_cache_target(self, source_path: str, cache_dir: str) -> str:
-        return str(self._remote_file_cache.target_path(source_path, cache_dir))
-
-    def prepare_remote_source(
-        self,
-        source_path: str,
-        cache_dir: str,
-        max_gb: float,
-        *,
-        on_progress=None,
-        is_cancelled=None,
-    ) -> str:
-        return str(
-            self._remote_file_cache.prepare(
-                source_path,
-                cache_dir,
-                max_gb,
-                on_progress=on_progress,
-                is_cancelled=is_cancelled,
-            )
-        )
-
-    def clear_remote_cache(self, cache_dir: str) -> int:
-        return self._remote_file_cache.clear(cache_dir)
+    def export_curve_figure(self, request):
+        """Publication figure of the plotted curve; returns an ``OperationResult``."""
+        if self._export_curve_figure is None:
+            raise RuntimeError("Figure export is not configured")
+        return self._export_curve_figure.execute(request)
 
     def insitu_cache_directory(self) -> Path:
         return self._insitu_records.cache_directory()

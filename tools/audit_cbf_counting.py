@@ -10,24 +10,24 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from src.gimap.features.fitting.domain.detector_image import (
-    DetectorPreprocessing,
-    prepare_detector_image,
-)
+from src.gimap.features.analyze.domain import guard_invalid, valid_pixels
 
 OUT = ROOT / "validation/cause_audit_20260921"
 
 
 def band(path, region):
+    """Rows ``r0..r1`` × columns ``x0..x1`` of the frame; gaps and a 3-px guard are NaN.
+
+    The same observations Analyze averages: negative or non-finite pixels and
+    their 3-px neighbourhood (Analyze's default gap guard) are not counts.
+    """
     raw = fabio.open(str(path))
-    image = raw.data.copy()
+    image = np.asarray(raw.data, dtype=np.float32)
     header = dict(raw.header)
     raw.close()
-    state = prepare_detector_image(
-        image, DetectorPreprocessing(mask_negative_pixels=True, invalid_margin_px=3), revision=1
-    )
+    analysis = np.where(guard_invalid(valid_pixels(image), 3), image, np.nan)
     r0, r1, x0, x1 = region
-    return state.analysis_image[r0 : r1 + 1, x0 : x1 + 1].astype(float), header
+    return analysis[r0 : r1 + 1, x0 : x1 + 1].astype(float), header
 
 
 def main():

@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 
+from pathlib import Path
+
 from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtWidgets import QScrollArea
+
+from src.gimap.app.presentation.theme import style_widget
+
+TRAINSET_QSS = Path(__file__).resolve().parents[1] / "trainset_theme.qss"
 
 
 class ResponsiveStyleMixin:
@@ -17,16 +24,16 @@ class ResponsiveStyleMixin:
     def _apply_responsive_layout(self) -> None:
         if not hasattr(self, "stack"):
             return
-        measured = self.stack.width()
-        fallback = self.width() - (self.step_list.width() if hasattr(self, "step_list") else 0) - 42
-        content_width = max(measured, fallback)
+        content_width = self._workflow_content_width()
         if hasattr(self, "impact_responsive_stack"):
             self.impact_responsive_stack.setCurrentIndex(0 if content_width >= 1040 else 1)
         if hasattr(self, "dataset_splitter"):
-            # The design form and preview have tested minimums of 480 + 340 px.
-            # Keep them side-by-side on a 1280×720 screen; stack only on truly
-            # narrow windows where those minimums cannot fit.
-            desired_orientation = Qt.Horizontal if content_width >= 820 else Qt.Vertical
+            # Side by side only when both panes fit whole: the form (its content plus the
+            # vertical scroll bar), the preview and the splitter handle. Otherwise the form
+            # would get a horizontal scroll bar and the preview would cover it.
+            desired_orientation = (
+                Qt.Horizontal if content_width >= self._dataset_side_by_side_width() else Qt.Vertical
+            )
             if desired_orientation != getattr(self, "_dataset_splitter_orientation", None):
                 self.dataset_splitter.setOrientation(desired_orientation)
                 self._dataset_splitter_orientation = desired_orientation
@@ -37,8 +44,30 @@ class ResponsiveStyleMixin:
             self.monitor_splitter.setOrientation(
                 Qt.Horizontal if content_width >= 900 else Qt.Vertical
             )
-        if hasattr(self, "step_list"):
-            self.step_list.setMaximumWidth(218 if self.width() >= 1180 else 190)
+        if hasattr(self, "step_panel"):
+            self.step_panel.setMaximumWidth(218 if self.width() >= 1180 else 190)
+
+    def _workflow_content_width(self) -> int:
+        """Width of the workflow pages: the stack as laid out, once it is shown.
+
+        Before the first layout pass the stack has no real width yet; then the page width minus
+        the step list is the estimate. It overestimates the stack by the content splitter's
+        margins and handle, so it is never used while the stack is laid out: a form that does
+        not fit beside the preview must not be put beside it.
+        """
+        measured = self.stack.width()
+        if self.stack.isVisible() and measured > 0:
+            return measured
+        steps = self.step_panel.width() if hasattr(self, "step_panel") else 0
+        return max(measured, self.width() - steps - 42)
+
+    def _dataset_side_by_side_width(self) -> int:
+        splitter = self.dataset_splitter
+        return (
+            _pane_min_width(splitter.widget(0))
+            + _pane_min_width(splitter.widget(1))
+            + splitter.handleWidth()
+        )
 
     def _balance_dataset_splitter(self) -> None:
         """Give both design panes usable space after Qt finishes the resize pass."""
@@ -46,206 +75,39 @@ class ResponsiveStyleMixin:
             return
         first = self.dataset_splitter.widget(0)
         second = self.dataset_splitter.widget(1)
-        if self.dataset_splitter.orientation() == Qt.Vertical:
-            first.setMinimumSize(0, 220)
+        stacked = self.dataset_splitter.orientation() == Qt.Vertical
+        ui = getattr(self, "_dataset_page_ui", None)
+        for name in ("trainsetDesignPreviewDescription", "designPreviewHint"):
+            # Stacked (narrow window): the preview keeps its image; the canvas strip says what to do.
+            label = getattr(ui, name, None)
+            if label is not None:
+                label.setVisible(not stacked)
+        if stacked:
+            first.setMinimumSize(0, 120)
             second.setMinimumSize(0, 220)
-            available = max(440, self.dataset_splitter.height())
-            self.dataset_splitter.setSizes(
-                [max(220, int(available * 0.50)), max(220, int(available * 0.50))]
-            )
+            available = max(340, self.dataset_splitter.height() - self.dataset_splitter.handleWidth())
+            preview = min(max(int(available * 0.5), second.minimumSizeHint().height()), available - 120)
+            self.dataset_splitter.setSizes([available - preview, preview])
         else:
-            first.setMinimumSize(480, 0)
-            second.setMinimumSize(340, 0)
-            available = max(820, self.dataset_splitter.width())
-            self.dataset_splitter.setSizes(
-                [max(480, int(available * 0.60)), max(340, int(available * 0.40))]
-            )
+            first_min, second_min = _pane_min_width(first), _pane_min_width(second)
+            first.setMinimumSize(first_min, 0)
+            second.setMinimumSize(second_min, 0)
+            available = self.dataset_splitter.width() - self.dataset_splitter.handleWidth()
+            first_width = max(first_min, int(available * 0.60))
+            second_width = max(second_min, available - first_width)
+            first_width = max(first_min, available - second_width)
+            self.dataset_splitter.setSizes([first_width, second_width])
 
     def _apply_style(self) -> None:
-        self.setStyleSheet(
-            """
-                #freshTrainsetBuildPage {
-                    background: #eef2f6;
-                    color: #1f2937;
-                    font-size: 13px;
-                }
-                #freshTrainsetBuildPage QLabel,
-                #freshTrainsetBuildPage QCheckBox,
-                #freshTrainsetBuildPage QRadioButton { color: #334155; }
-                #pageTitle { color: #0f172a; font-size: 22px; font-weight: 700; }
-                #pageSubtitle { color: #64748b; font-size: 13px; }
-                #trainsetActionHint {
-                    color: #64748b;
-                    padding: 4px 8px;
-                }
-                #validationBadge, #jobState {
-                    background: #eff6ff;
-                    color: #1d4ed8;
-                    border: 1px solid #bfdbfe;
-                    border-radius: 12px;
-                    padding: 5px 11px;
-                    font-weight: 600;
-                }
-                #trainsetStepList {
-                    background: #ffffff;
-                    color: #475569;
-                    border: 1px solid #d7dee8;
-                    border-radius: 10px;
-                    padding: 7px;
-                    outline: 0;
-                }
-                #trainsetStepList::item {
-                    color: #475569;
-                    padding: 13px 10px;
-                    margin: 2px;
-                    border-radius: 7px;
-                }
-                #trainsetStepList::item:hover { background: #f1f5f9; }
-                #trainsetStepList::item:selected {
-                    background: #eaf3ff;
-                    color: #1d4ed8;
-                    border: 1px solid #bfdbfe;
-                    font-weight: 600;
-                }
-                #designPreviewCard {
-                    background: #ffffff;
-                    border: 1px solid #d7dee8;
-                    border-radius: 10px;
-                }
-                #freshTrainsetBuildPage QLabel[sectionTitle="true"] {
-                    color: #0f172a;
-                    font-size: 16px;
-                    font-weight: 700;
-                }
-                #freshTrainsetBuildPage QLabel[cardBody="true"] { color: #64748b; }
-                #freshTrainsetBuildPage QWidget[displayBar="true"] {
-                    background: #f8fafc;
-                    border: 1px solid #d7dee8;
-                    border-radius: 7px;
-                }
-                #freshTrainsetBuildPage QLabel[infoPanel="true"] {
-                    background: #eff6ff;
-                    color: #1e40af;
-                    border: 1px solid #bfdbfe;
-                    border-radius: 7px;
-                    padding: 9px;
-                }
-                #freshTrainsetBuildPage QGroupBox {
-                    background: #ffffff;
-                    color: #0f172a;
-                    border: 1px solid #d7dee8;
-                    border-radius: 9px;
-                    margin-top: 13px;
-                    padding: 12px 9px 9px 9px;
-                    font-weight: 600;
-                }
-                #freshTrainsetBuildPage QGroupBox::title {
-                    subcontrol-origin: margin;
-                    left: 12px;
-                    padding: 0 5px;
-                    background: #ffffff;
-                    color: #334155;
-                }
-                #freshTrainsetBuildPage QLineEdit,
-                #freshTrainsetBuildPage QSpinBox,
-                #freshTrainsetBuildPage QDoubleSpinBox,
-                #freshTrainsetBuildPage QComboBox,
-                #freshTrainsetBuildPage QTextEdit,
-                #freshTrainsetBuildPage QTableWidget {
-                    background: #ffffff;
-                    color: #111827;
-                    border: 1px solid #c6cfdb;
-                    border-radius: 6px;
-                    padding: 5px;
-                    selection-background-color: #dbeafe;
-                    selection-color: #1e3a8a;
-                }
-                #freshTrainsetBuildPage QLineEdit:focus,
-                #freshTrainsetBuildPage QSpinBox:focus,
-                #freshTrainsetBuildPage QDoubleSpinBox:focus,
-                #freshTrainsetBuildPage QComboBox:focus,
-                #freshTrainsetBuildPage QTextEdit:focus,
-                #freshTrainsetBuildPage QTableWidget:focus { border: 1px solid #60a5fa; }
-                #freshTrainsetBuildPage QComboBox QAbstractItemView {
-                    background: #ffffff;
-                    color: #111827;
-                    border: 1px solid #c6cfdb;
-                    selection-background-color: #dbeafe;
-                }
-                #freshTrainsetBuildPage QPushButton {
-                    background: #ffffff;
-                    color: #334155;
-                    border: 1px solid #c6cfdb;
-                    border-radius: 6px;
-                    padding: 7px 12px;
-                    font-weight: 500;
-                }
-                #freshTrainsetBuildPage QPushButton:hover {
-                    background: #f8fafc;
-                    border-color: #94a3b8;
-                }
-                #freshTrainsetBuildPage QPushButton:pressed { background: #eef2f7; }
-                #freshTrainsetBuildPage QPushButton:disabled {
-                    color: #94a3b8;
-                    background: #f1f5f9;
-                    border-color: #e2e8f0;
-                }
-                #freshTrainsetBuildPage QPushButton#primaryAction {
-                    background: #2563eb;
-                    color: #ffffff;
-                    border-color: #2563eb;
-                    font-weight: 600;
-                }
-                #freshTrainsetBuildPage QPushButton#primaryAction:hover { background: #1d4ed8; }
-                #freshTrainsetBuildPage QPushButton[trainsetPrimaryAction="true"] {
-                    background: #2563eb;
-                    color: #ffffff;
-                    border-color: #2563eb;
-                    font-weight: 650;
-                }
-                #freshTrainsetBuildPage QPushButton[trainsetPrimaryAction="true"]:hover {
-                    background: #1d4ed8;
-                }
-                #freshTrainsetBuildPage QHeaderView::section {
-                    background: #f8fafc;
-                    color: #475569;
-                    border: 0;
-                    border-bottom: 1px solid #d7dee8;
-                    padding: 7px;
-                    font-weight: 600;
-                }
-                #freshTrainsetBuildPage QTabWidget::pane {
-                    background: #ffffff;
-                    border: 1px solid #d7dee8;
-                    border-radius: 7px;
-                    top: -1px;
-                }
-                #freshTrainsetBuildPage QTabBar::tab {
-                    background: #edf1f5;
-                    color: #64748b;
-                    border: 1px solid #d7dee8;
-                    border-bottom: 0;
-                    padding: 8px 12px;
-                    margin-right: 2px;
-                    border-top-left-radius: 6px;
-                    border-top-right-radius: 6px;
-                }
-                #freshTrainsetBuildPage QTabBar::tab:hover { background: #e2e8f0; }
-                #freshTrainsetBuildPage QTabBar::tab:selected {
-                    background: #ffffff;
-                    color: #1d4ed8;
-                    font-weight: 600;
-                }
-                #designStageTabs QTabBar::tab { padding: 8px 7px; }
-                #trainsetConfigurationTabs::pane {
-                    background: #f8fafc;
-                    border-color: #d7dee8;
-                }
-                #trainsetConfigurationTabs QTabBar::tab {
-                    min-width: 132px;
-                    padding: 9px 12px;
-                }
-                #freshTrainsetBuildPage QScrollArea,
-                #freshTrainsetBuildPage QStackedWidget { background: transparent; border: 0; }
-                """
+        style_widget(self, TRAINSET_QSS)
+
+
+def _pane_min_width(pane) -> int:
+    """Narrowest width that shows a pane whole; a scroll area counts its content and scroll bar."""
+    if isinstance(pane, QScrollArea) and pane.widget() is not None:
+        return (
+            pane.widget().minimumSizeHint().width()
+            + pane.verticalScrollBar().sizeHint().width()
+            + 2 * pane.frameWidth()
         )
+    return pane.minimumSizeHint().width()

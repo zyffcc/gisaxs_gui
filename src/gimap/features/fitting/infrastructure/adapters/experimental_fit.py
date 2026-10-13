@@ -15,6 +15,9 @@ from scipy.optimize import least_squares, nnls
 from ...application.workflow_v5 import bundled_workflow
 
 NAMES = {1: "sphere", 2: "random_cylinder", 3: "vertical_cylinder"}
+MAX_NFEV = 150
+"""Function evaluations one start may use (``least_squares``). With those of its numerical Jacobian, a start
+evaluates the model at most ``MAX_NFEV * (free values + 1)`` times: the ``budget`` given to ``evaluated``."""
 
 
 def component_function():
@@ -50,22 +53,37 @@ def forward(q, components, globals_):
     return result
 
 
-def fit_candidates(item, options, report, cancelled):
+def fit_candidates(item, options, report, cancelled, evaluated=None):
+    """``report(0, 1, line, details)`` before every start (``details``: which start of how many, its families).
+    ``evaluated(details)``, when given, at every evaluation of the model: the same details plus how many
+    ``evaluations`` this start has made of its ``budget`` — how far a start is, for a page that shows one curve.
+    A job of many files does not pass it: its ``report`` writes a log line per call."""
     component = component_function()
     q, y, sigma = (item[k] for k in ("q", "observed", "sigma"))
     combinations = [options["components"]] if options["components"] else [[1], [3], [2]]
     results = []
+    hint = options.get("distance_hint_nm")
+    starts = [(1.5, None), (4.0, None)] + ([(4.0, float(hint))] if hint and np.isfinite(hint) and hint > 0 else [])
+    number, start_count = 0, len(combinations) * len(starts)
     for types in combinations:
-        for radius in (1.5, 4.0):
+        for radius, distance in starts:
             if cancelled():
                 raise RuntimeError("Fitting cancelled")
-            report(0, 1, f"{item['side']}: numerical fit {types}, initial R={radius:g} nm", {})
+            number += 1
+            start = f"initial R={radius:g} nm" + (f", D={distance:.3g} nm" if distance else "")
+            # (done, total) stay (0, 1): in the 1D Predict job of many files the same callback counts the
+            # files, so which start this is goes in the free details (the single-curve page reads them).
+            details = {"start": number, "starts": start_count, "types": [int(typ) for typ in types]}
+            report(0, 1, f"{item['side']}: numerical fit {types}, {start}", dict(details))
+            used = [0]
             tick = time.perf_counter()
             initial, lower, upper = [], [], []
             for j, typ in enumerate(types):
                 r = radius * (1 + 0.6 * j)
                 dmin = max(3, 2 * r * 1.001)
                 eta = np.log(1.5) / np.log(500 / dmin)
+                if distance:
+                    eta = float(np.clip(np.log(max(distance, 1.01 * dmin) / dmin) / np.log(500 / dmin), 0.01, 0.99))
                 initial.extend([np.log(r), 0.2, eta, 0.12])
                 lower.extend([0, 0.02, 0, 0.05])
                 upper.extend([np.log(100), 0.9, 1, 0.9])
@@ -103,9 +121,14 @@ def fit_candidates(item, options, report, cancelled):
                         offset += 1
                 return components, resolution
 
+            budget = MAX_NFEV * (len(initial) + 1)
+
             def evaluate(z):
                 if cancelled():
                     raise RuntimeError("Fitting cancelled")
+                if evaluated is not None:
+                    used[0] += 1
+                    evaluated({**details, "evaluations": used[0], "budget": budget})
                 cs, res = decode(z)
                 columns = []
                 for c in cs:
@@ -135,7 +158,7 @@ def fit_candidates(item, options, report, cancelled):
                 initial,
                 bounds=(lower, upper),
                 loss="soft_l1",
-                max_nfev=150,
+                max_nfev=MAX_NFEV,
                 diff_step=1e-4,
                 ftol=1e-7,
                 xtol=1e-7,

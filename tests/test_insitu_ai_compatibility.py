@@ -1,4 +1,4 @@
-from controllers.fitting_controller import FittingController
+from src.gimap.features.fitting.presentation.view_binding import FittingViewBinding
 
 
 class Check:
@@ -25,26 +25,30 @@ class Text:
         return self.value_
 
 
-def test_simulated_insitu_settings_include_profile_without_acquisition():
+class Index:
+    def __init__(self, value):
+        self.value_ = value
+
+    def currentIndex(self):
+        return self.value_
+
+
+def test_simulated_insitu_settings_follow_the_fit_mode_without_acquisition():
     fake = type("FakeController", (), {})()
     fake._insitu_workflow_widgets = {
         "run_mode": Text("Process Existing Sequence"),
-        "auto_show": Check(True),
-        "auto_cut": Check(True),
-        "auto_fit": Check(True),
-        "use_previous": Check(True),
-        "full_auto_fit": Check(True),
-        "profile": Text("Fast"),
-        "auto_refine": Check(False),
+        "fit_mode": Index(0),
         "poll": Number(2.0),
-        "fit_every": Number(1),
         "ui_every": Number(5),
         "stable": Check(True),
+        "recursive": Check(False),
     }
-    settings = FittingController._insitu_workflow_settings(fake)
-    assert settings["profile"] == "Fast"
-    assert settings["auto_fit"] is True
-    assert settings["full_auto_fit"] is True
+    settings = FittingViewBinding._insitu_workflow_settings(fake)
+    assert settings["auto_fit"] is True and settings["full_auto_fit"] is True
+    assert settings["use_previous"] is False and settings["auto_refine"] is False
+    assert settings["fit_every"] == 1 and settings["recursive"] is False
+    fake._insitu_workflow_widgets["fit_mode"] = Index(2)  # plot curves only
+    assert FittingViewBinding._insitu_workflow_settings(fake)["auto_fit"] is False
 
 
 def test_ai_session_settings_migrate_without_breaking_old_sessions():
@@ -60,7 +64,7 @@ def test_ai_session_settings_migrate_without_breaking_old_sessions():
     fake._restore_ai_run_settings_to_widgets = lambda: None
     fake._sync_workspace_ai_run_widgets = lambda: None
 
-    FittingController._restore_ai_session_settings(
+    FittingViewBinding._restore_ai_session_settings(
         fake,
         {"profile": "Fast", "random_seed": 9, "unknown_future_key": "ignored"},
     )
@@ -68,7 +72,7 @@ def test_ai_session_settings_migrate_without_breaking_old_sessions():
 
     # Old sessions have no ai_fitting block and therefore retain defaults or
     # current user settings without raising.
-    FittingController._restore_ai_session_settings(fake, None)
+    FittingViewBinding._restore_ai_session_settings(fake, None)
 
 
 def test_candidate_row_preview_loads_parameters_and_requests_plot_refresh():
@@ -83,6 +87,6 @@ def test_candidate_row_preview_loads_parameters_and_requests_plot_refresh():
     fake = FakeController()
     rows = [{"rank": 1}, {"rank": 2}]
 
-    FittingController._preview_ai_candidate_from_table(fake, 1, rows)
+    FittingViewBinding._preview_ai_candidate_from_table(fake, 1, rows)
 
     assert fake.calls == [(rows[1], True)]

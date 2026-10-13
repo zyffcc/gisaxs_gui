@@ -11,14 +11,17 @@ import numpy as np
 
 from matplotlib.patches import Ellipse
 
-from PyQt5.QtCore import QSignalBlocker
+from PyQt5.QtCore import QSignalBlocker, QTimer
 
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.theme.figures import restyle_figure
 
 from ...application import (
     CalibrationCandidate,
 )
 
 
+from ..pixel_coordinates import fitted_center, image_extent, image_limits, shown_center
 from ..preview_style import (
     CENTER_COLOR,
     DETECTED_RING_COLOR,
@@ -27,20 +30,110 @@ from ..preview_style import (
 )
 
 LOGGER = logging.getLogger(__name__)
+# Two-column selected solution only while the candidate table keeps at least this width.
+CANDIDATES_MIN_WIDTH = 260
 
 
 class ResultPreviewMixin:
     """Own result preview presentation behavior."""
 
+    def _two_column_solution_width(self) -> int:
+        """Width the selected-solution group needs for two title/value pairs per row."""
+        metrics = self.result_form_widget.fontMetrics()
+        titles = [title.sizeHint().width() for title, _value in self.result_rows[:6]]
+        form = self.resultForm.contentsMargins()
+        group = self.resultGroupLayout.contentsMargins()
+        return (
+            max(titles[0::2])
+            + metrics.horizontalAdvance("10000.000 mm")  # distance, the widest left value
+            + max(titles[1::2])
+            + metrics.horizontalAdvance("10000.000 px")
+            + 3 * self.resultForm.horizontalSpacing()
+            + form.left() + form.right() + group.left() + group.right()
+            + 12  # the group box frame
+        )
+
+    def _arrange_result_form(self, initial: bool = False) -> None:
+        """Two title/value pairs per row when the Results section is wide enough, else one.
+
+        Sizes of the results splitter are set initially, when the arrangement changes and when
+        two columns no longer fit their pane (other label texts after a language switch); in
+        between the user's own split stays.
+        """
+        try:
+            total = self.results_splitter.width()
+            current = self.results_splitter.sizes()[0]
+        except RuntimeError:  # the dialog is being destroyed
+            return
+        if total <= 0:
+            return
+        needed = self._two_column_solution_width()
+        two_columns = total - needed >= CANDIDATES_MIN_WIDTH
+        changed = two_columns != self._result_two_columns
+        if changed:
+            self._result_two_columns = two_columns
+            self.place_result_rows(two_columns)
+        if two_columns and (initial or changed or current < needed):
+            solution = needed
+        elif not two_columns and (initial or changed):
+            solution = min(max(int(total * 0.36), 260), 360)
+        else:
+            return
+        self.results_splitter.setSizes([solution, max(1, total - solution)])
+
+    def _result_language_changed(self, _language: str = "") -> None:
+        """Other title widths and line heights: refit once the texts are swapped.
+
+        The legend is rich text, which the language walker does not know: it is written again.
+        The result itself is not composed again (that would reset the manual fields); it follows
+        the next candidate shown.
+        """
+        try:
+            self._show_overlay_legend()
+        except RuntimeError:  # the dialog is being destroyed
+            return
+        QTimer.singleShot(0, self._refit_results)
+
+    def _refit_results(self) -> None:
+        self._arrange_result_form()
+        self._fit_results_height()
+
+    def _fit_results_height(self) -> None:
+        """Give Results the few pixels a longer solution (a wrapped warning) needs, taken from
+        the preview only down to its minimum, and never after the user moved the split."""
+        try:
+            if self._results_user_sized or self.calibration_results_section.isHidden():
+                return
+            viewport = self.result_scroll.viewport()
+            form = self.result_form_widget
+            needed = (
+                form.heightForWidth(viewport.width())
+                if form.hasHeightForWidth()
+                else form.sizeHint().height()
+            )
+            overflow = needed - viewport.height()
+            preview, results = self.right_splitter.sizes()
+        except RuntimeError:  # the dialog is being destroyed
+            return
+        spare = preview - self.calibration_preview_panel.minimumSizeHint().height()
+        grow = min(overflow, spare)
+        if grow > 0:
+            self.right_splitter.setSizes([preview - grow, results + grow])
+
     def _show_candidate(self, candidate: CalibrationCandidate) -> None:
-        self.result_labels["Beam center X"].setText(f"{candidate.center_x_px:.3f} px")
-        self.result_labels["Beam center Y"].setText(f"{candidate.center_y_px:.3f} px")
+        # The centre in the pixels of Analyze and of the saved profile (see ``pixel_coordinates``).
+        center_x, center_y = shown_center(candidate)
+        self.result_labels["Beam center X"].setText(f"{center_x:.3f} px")
+        self.result_labels["Beam center Y"].setText(f"{center_y:.3f} px")
         self.result_labels["Distance"].setText(f"{candidate.distance_mm:.3f} mm")
         self.result_labels["Detector rotation"].setText(f"{candidate.detector_rotation_deg:.3f}°")
         self.result_labels["Matched rings"].setText(str(candidate.matched_ring_count))
         self.result_labels["RMS residual"].setText(f"{candidate.rms_residual_px:.3f} px")
-        self.result_labels["Confidence"].setText(candidate.confidence)
-        self.result_labels["Warning"].setText(" ".join(candidate.warnings) or "None")
+        # Confidence and warnings are the engine's English (also in the exported record), shown translated.
+        self.result_labels["Confidence"].setText(tr(candidate.confidence))
+        self.result_labels["Warning"].setText(
+            " ".join(tr(warning) for warning in candidate.warnings) or tr("None")
+        )
         blockers = [
             QSignalBlocker(widget)
             for widget in (
@@ -49,28 +142,38 @@ class ResultPreviewMixin:
                 self.manual_distance,
             )
         ]
-        self.manual_x.setValue(candidate.center_x_px)
-        self.manual_y.setValue(candidate.center_y_px)
+        self.manual_x.setValue(center_x)
+        self.manual_y.setValue(center_y)
         self.manual_distance.setValue(candidate.distance_mm)
         del blockers
         standard_name = self.view_model.standard_display_name(candidate.standard_key)
         self.preview_info_label.setText(
-            f"{self.view_model.source_name(self.image.source_path) if self.image else ''}  ·  "
-            f"{standard_name}  ·  {candidate.distance_mm:.2f} mm  ·  "
-            f"{candidate.matched_ring_count} matched rings  ·  {candidate.confidence} confidence"
+            trf(
+                "{image}  ·  {standard}  ·  {distance} mm  ·  {rings} matched rings  ·  "
+                "{confidence} confidence",
+                image=self.view_model.source_name(self.image.source_path) if self.image else "",
+                standard=tr(standard_name),
+                distance=f"{candidate.distance_mm:.2f}",
+                rings=candidate.matched_ring_count,
+                confidence=tr(candidate.confidence),
+            )
         )
         self._populate_manual_rings(candidate)
         self.redraw_preview()
+        self._fit_results_height()
 
     def _clear_result_labels(self) -> None:
         for label in self.result_labels.values():
             label.setText("—")
 
     def _display_candidate(self) -> Optional[CalibrationCandidate]:
+        """The selected candidate, with the manual values while manual mode is on (as the fit holds a
+        centre: pixel-centre indices)."""
+        center_x, center_y = fitted_center(self.manual_x.value(), self.manual_y.value())
         return self.view_model.display_candidate(
             manual_enabled=self.manual_group.isChecked(),
-            center_x_px=self.manual_x.value(),
-            center_y_px=self.manual_y.value(),
+            center_x_px=center_x,
+            center_y_px=center_y,
             distance_mm=self.manual_distance.value(),
         )
 
@@ -106,7 +209,7 @@ class ResultPreviewMixin:
         result = (
             display,
             invalid,
-            (-0.5, width - 0.5, height - 0.5, -0.5),
+            image_extent(sampled.shape, stride),
             float(vmin),
             float(max(vmax, vmin + 1e-6)),
             height,
@@ -124,10 +227,11 @@ class ResultPreviewMixin:
         width: int,
         height: int,
     ) -> bool:
+        """Whether a ring around a centre in canonical pixels crosses the frame (x 0…width, y 0…height)."""
         if radius_x <= 0 or radius_y <= 0:
             return False
-        nearest_x = float(np.clip(center_x, 0.0, width - 1.0))
-        nearest_y = float(np.clip(center_y, 0.0, height - 1.0))
+        nearest_x = float(np.clip(center_x, 0.0, float(width)))
+        nearest_y = float(np.clip(center_y, 0.0, float(height)))
         minimum = np.hypot(
             (nearest_x - center_x) / radius_x,
             (nearest_y - center_y) / radius_y,
@@ -136,9 +240,9 @@ class ResultPreviewMixin:
             np.hypot((x - center_x) / radius_x, (y - center_y) / radius_y)
             for x, y in (
                 (0.0, 0.0),
-                (width - 1.0, 0.0),
-                (0.0, height - 1.0),
-                (width - 1.0, height - 1.0),
+                (float(width), 0.0),
+                (0.0, float(height)),
+                (float(width), float(height)),
             )
         )
         return minimum <= 1.02 and maximum >= 0.98
@@ -147,16 +251,15 @@ class ResultPreviewMixin:
         old_xlim, old_ylim = self.axes.get_xlim(), self.axes.get_ylim()
         had_image = bool(self.axes.images)
         self.axes.clear()
+        # The empty-state text is a Qt label over the canvas: matplotlib's font has no CJK glyphs.
+        self.preview_empty_label.setVisible(self.image is None)
+        # One empty-state message: the info line above the canvas returns with an image or result.
+        self.preview_info_label.setVisible(self.image is not None or self.result is not None)
         if self.image is None:
-            self.axes.text(
-                0.5,
-                0.5,
-                "Open a .nxs or .cbf calibration image",
-                ha="center",
-                va="center",
-                transform=self.axes.transAxes,
-            )
+            # An empty state, not a bare 0–1 axis.
+            self.axes.set_axis_off()
             self.overlay_legend.setVisible(False)
+            restyle_figure(self.figure)
             self.canvas.draw_idle()
             return
         display, invalid, extent, vmin, vmax, height, width = self._prepared_preview()
@@ -184,9 +287,11 @@ class ResultPreviewMixin:
             )
         candidate = self._display_candidate()
         if candidate is not None and not clean_preview:
-            cx, cy = candidate.center_x_px, candidate.center_y_px
-            self.axes.axvline(cx, color=CENTER_COLOR, linestyle="-.", linewidth=1.2, alpha=0.95)
-            self.axes.axhline(cy, color=CENTER_COLOR, linestyle="-.", linewidth=1.2, alpha=0.95)
+            # The axes are in canonical pixels (pixel j spans j…j+1): so are the centre lines and the rings.
+            cx, cy = shown_center(candidate)
+            if self.center_check.isChecked():
+                self.axes.axvline(cx, color=CENTER_COLOR, linestyle="-.", linewidth=1.2, alpha=0.95)
+                self.axes.axhline(cy, color=CENTER_COLOR, linestyle="-.", linewidth=1.2, alpha=0.95)
             if self.rings_check.isChecked() and self.result is not None:
                 for radius in candidate.detected_peak_radii_px:
                     if not self._ellipse_intersects_image(cx, cy, radius, radius, width, height):
@@ -235,9 +340,12 @@ class ResultPreviewMixin:
             self.axes.set_xlim(old_xlim)
             self.axes.set_ylim(old_ylim)
         else:
-            self.axes.set_xlim(-0.5, width - 0.5)
-            self.axes.set_ylim(height - 0.5, -0.5)
+            x_limits, y_limits = image_limits(width, height)
+            self.axes.set_xlim(*x_limits)
+            self.axes.set_ylim(*y_limits)
             self._reset_preview_view = False
+        # Axes.clear() restores matplotlib's label colours: re-apply the theme's.
+        restyle_figure(self.figure)
         self.canvas.draw_idle()
 
     def _populate_manual_rings(self, candidate: CalibrationCandidate) -> None:

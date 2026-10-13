@@ -1,0 +1,302 @@
+# Changelog
+
+What changes for someone who uses GIMaP, version by version. Developer notes are in `docs/`.
+
+## 0.1.0 — 2026-10-13 (pre-release)
+
+The first version since 0.0.2 (2026-07-16). Most of the program is new. The detector work, the
+fitting and the comparison of series each have their own workspace, three pages of 0.0.2 are gone
+(see *Removed and replaced*), and the settings moved out of the program folder (see *Updating from
+0.0.2*).
+
+### Analyze (new workspace)
+
+- One workspace for GISAXS and GIWAXS. Open CBF, TIFF, EDF or NeXus frames or a whole folder
+  (multi-module NeXus series are stitched) and the reduced curves appear without further clicks.
+  The steps on the left — Data, Geometry, Mask & corrections, Cuts, Results, Export — each show
+  their state and one line of what they found.
+- **Geometry** is kept as an *instrument profile* of the detector (matched by detector name and
+  frame size), so it is set once: **Find Calibration Automatically**, **Enter Geometry** or
+  **Calibrate…**. q is exact for grazing incidence, in Å⁻¹; the beam centre is the direct beam.
+  A frame whose detector reaches beyond 2θ = 20° is reduced as GIWAXS, otherwise as GISAXS; the
+  mode can be forced.
+- **Masks and corrections**: detector gaps, and isolated hot and dead pixels found in every frame,
+  are left out automatically (the step and the export record say how many); rectangles and
+  polygons drawn on the image, mask files, a gap guard, a valid intensity range, a background
+  frame, and for GIWAXS filling gaps from the mirror side. The GIWAXS intensity corrections (solid
+  angle, polarisation, film absorption) are off by default; when on, the errors are propagated and
+  the record says what was applied.
+- **Cuts**: GISAXS — the horizontal cut at the Yoneda band and the vertical cut at the beam-centre
+  column. GIWAXS — I(q), in-plane and out-of-plane sectors, I(χ) of a ring, the q map and the cake;
+  your own cuts by clicking a peak (**Ring**, **Sector**, **Spot**), by typing centre ± half width,
+  or by drawing on the cake; cut sets can be saved and loaded.
+- **Sources** shows on the image where every curve comes from. Curves with a signed x can be shown
+  as both halves, one half, or folded onto |x|.
+- **Series**: **Build Map** reduces every frame of a list, a folder or a multi-frame NeXus file and
+  shows a curve as a map against frame and q, with the curve of a frame, the intensity or a peak
+  (position, FWHM, area, height) in a q window against frame, and export of the map and the tables.
+- **Batch Export**: one dialog from raw frames to a folder — tables per curve, per-frame curves,
+  the input for Fitting, q maps and cakes (CSV, TXT or DAT), pictures (PNG, TIFF, SVG, PDF),
+  converted detector frames (TIFF, EDF, NumPy, HDF5) and optional fitting of every frame. Several
+  frames are reduced at once in low-priority processes (Gentle / Balanced / Fast), with progress,
+  **Pause** and **Stop**; the folder gets a `README.txt` and a JSON record of the settings.
+- **Export**: every curve file is written with a `<name>_analysis.json` record (source, geometry,
+  corrections, pixels left out); the set-up of Analyze can be saved to a settings file and loaded
+  for the next data (**Save Settings…** / **Load Settings…**).
+- **Undo / Redo** of every change of the set-up, colour limits that stay where you put them
+  (**Levels**), a switch for every kind of mark on the images (**Marks**), and box zoom on every
+  image and plot.
+- **Send to Fitting** opens the horizontal cut in Fitting; **Send Series to Fitting…** exports every
+  frame and opens the series there.
+
+### Fitting (new page)
+
+- Four steps — **Curve → Model → Fit → Results** — laid out like Analyze, with the curve, the
+  model, its terms and the residuals on the right.
+- **Model**: one card per particle (sphere, random cylinder, vertical cylinder) with an optional
+  distance D, a background and a resolution peak; every value can be fitted or fixed and has a
+  range. Size spreads are relative everywhere (σR/R, σh/h, σD/D).
+- **Fit**: one button, four methods — **Refine the current values**, **Search the ranges, then
+  refine**, **Find the particle shape (no AI)** and **AI proposal (1D Predict)** — with progress
+  and **Stop** (the best values so far are kept).
+- **Results**: χ²ᵣ, every value ± its 1σ error, and warnings when a value stopped at a bound, when
+  values are strongly correlated or when χ²ᵣ is well above 1. **Save** writes the data and fit
+  (CSV with a JSON record), the plot and the model.
+- Points can be left out of the fit by clicking them on the plot (**Exclude**); the model has
+  **Undo / Redo**; the fitting range is dragged on the plot.
+- **In-situ series**: every curve of a folder fitted with the model of Single analysis, each frame
+  starting from the previous result or from the same model, with **Pause** and **Stop**, a table
+  and a trend plot of every value with its error, and new curves picked up while a measurement
+  runs (**Watch for new curves**).
+- Fitting works in nm⁻¹ and says so; the curve files Analyze writes (`<name>_fit_input.dat`) are in
+  Å⁻¹ and carry where the curve came from.
+
+### Compare and stages (new, replaces Classification)
+
+- **Stages**: once a Series map is built, Analyze marks where the curves change course (stages)
+  and which frames do not belong (odd frames), says what grows or falls between stages, and can
+  leave the odd frames out of Batch Export. Fitting's In-situ series uses the same stages.
+- **Compare**: several series or samples side by side — from Analyze's Series map, a folder of
+  curve files, or curve files — with how far each has changed, their paths through the main
+  changes, their end states, groups of similar series and a table of how different they are.
+  Tables and plots can be saved. No labels and no AI are needed.
+
+### Automatic analysis and AI (new)
+
+- **Run Automatic Analysis** needs no AI. GIWAXS: geometry, the last frames of a series summed,
+  peaks with positions, widths and their errors, in-plane against out-of-plane, the orientation of
+  the strongest reliable rings and crystallite sizes. GISAXS: the horizontal cut at the Yoneda
+  band, the beam-centre column from the symmetry of the cut, the halves, the in-plane distance
+  2π/q* and a numerical fit of I(qy). Every default decision is listed with its reason, questions
+  only you can answer become fields, and the result can be saved as a report.
+- **Process with AI…** / **Ask AI…** (optional): an AI works on the open frame with the same tools
+  while you watch. Its changes to the set-up come back as cards to preview, apply or undo, and
+  follow-up questions can be asked. It runs on your Claude plan through a local Claude Code (no
+  API key), on the Claude API, or on another provider with an OpenAI-compatible API (DeepSeek,
+  Qwen, OpenAI, a local model …).
+
+### Tools (new windows in the Tools menu)
+
+- **Geometry Calibration**: beam centre and detector distance from an image of a standard (NXS,
+  CBF, TIFF or EDF), with the fitted rings drawn over the image, manual refinement, and export and
+  import of the result. **Apply** saves the geometry as the instrument profile Analyze uses. The
+  window shows and accepts the beam centre in the same pixel coordinates as Analyze (the centre of
+  the first pixel is at 0.5), so a centre can be compared or copied between the two as it is. The
+  exported record names the GIMaP version that wrote it.
+- **Format Converter**: NXS, CBF and TIFF frames to TIFF, CBF, HDF5 or NumPy, with frame selection,
+  a preview and a report; **Convert Current File…** starts it with the file shown.
+- **XRR Series Extractor**: an XRR curve from a detector angle series (NXS modules or CBF files),
+  with a CSV and a JSON record of every value that determines qz. The window shows and accepts
+  the direct-beam centre in the pixel coordinates of Analyze and Geometry Calibration; the
+  exported CSV and JSON record count pixel centres from 0 (0.5 px lower), and the record says so
+  (`center_convention`).
+- **1D Predict — Fit Many Curves…**: the experimental neural model for a list of curve files. It
+  replaces the AI-assisted fitting of 0.0.2; each run writes its own folder
+  `AI_Fitting_Output/v5_<date>_<time>/`. The model and its trained weights come with the portable
+  version and with the Git repository, so 1D Predict also runs from a source checkout.
+- **Settings**: appearance, defaults of Analyze, the user data folder and the AI set-up.
+
+### Labs
+
+- **2D Prediction** (was *GIMaP Predict*): a three-step page — import data, import model, predict.
+  A prediction runs in the background and can be stopped; results are exported with a JSON record
+  of the module, the model and the preprocessing. Input is CBF only.
+- **Trainset Build** (was not implemented in 0.0.2): five steps from the design of a simulated
+  GISAXS data set to a local run and its results. Submission to the Maxwell cluster is disabled.
+
+### Interface
+
+- A **Start** page: drop data or open it, pick a recent file, or choose what you want to know.
+- **Projects** (`.gimap`): File ▸ Save Project keeps a sample as it was left — Analyze, Fitting,
+  the In-situ series and Compare — and reopens it; data are referenced by path.
+- Detector frames, folders and projects can be dropped anywhere on the window; curve files on the
+  Fitting page.
+- English or Chinese (View ▸ Language), a light and a dark theme, adjustable font size; the
+  interface follows the display scaling of Windows.
+- The recent data are remembered, and the set-up of the last session is offered (never applied
+  without asking).
+- Long jobs show progress and can be stopped; closing GIMaP while something runs asks first.
+- An unexpected error no longer closes the program: a window says what happened and the error is
+  written to `logs/errors.log` in the user data folder.
+- Help ▸ User Manual (`F1`) opens the manual in your browser.
+
+### Command line and agents (new)
+
+- `tools/gimap_agent.py auto <frames> --notes "…" --out <folder>` runs the automatic analysis
+  (GIWAXS or GISAXS) without the window and writes a report with every decision and its reason;
+  the exit code says whether something needs an answer (`2`) or a frame failed (`1`).
+- `status`, `find-calibration`, `tools` and `call` run single tools; `mcp` serves them to agents
+  such as Codex or Claude Code. Nothing is written next to the data.
+- `docs/agents/giwaxs-playbook.md` and `gisaxs-playbook.md` say what the automatic procedure
+  decides by default and where that may not fit a question.
+- `tools/eval_giwaxs_agent.py` checks the automatic procedure (`baseline`) or an agent's written
+  report (`report`) against a GIWAXS case: a JSON file you write for a measurement you know well.
+  Cases are read from `docs/agents/eval/local/`, a folder Git ignores, so a case on your own data
+  stays on your computer; the repository ships none. Reports saved by Windows tools are read
+  (UTF-8 with a byte order mark, UTF-16). When there is no case, or a case or a report cannot be
+  used — another encoding, an empty report, a malformed case — the tool says why in one sentence
+  and ends with exit code `2`.
+
+### Removed and replaced
+
+| In 0.0.2 | In 0.1.0 |
+|---|---|
+| Cut & Fitting page | **Analyze** for the detector image, the geometry and the cut; **Fitting** for the curve |
+| WAXS / GIWAXS page | Analyze, GIWAXS mode |
+| Classification page | Stages in Analyze ▸ Series, and **Compare** |
+| AI-assisted fitting, results in `AI_Fitting_Output/current_prediction` | 1D Predict, results in `AI_Fitting_Output/v5_<date>_<time>/` |
+| GIMaP Predict page | Labs ▸ 2D Prediction |
+
+The packages `umap-learn`, `scikit-learn` and `tqdm` are no longer needed. `pyqtgraph` is new and
+required; `anthropic` and `openai` (Process with AI) and `psutil` (Batch Export) are new and optional.
+
+### Fixed before the release
+
+These were found while 0.1.0 was checked; they matter to those who ran a development copy.
+
+- A geometry saved after the beam centre had been moved — typed in the geometry dialog,
+  calibrated, or found automatically — is now the one that is used. Before, the centre set
+  earlier in the session silently stayed in force.
+- Opening a project replaces what Fitting holds as well: a project without a Fitting curve or an
+  In-situ series no longer keeps those of the previous sample, and Save Project no longer writes
+  them into the opened project.
+- Run Automatic Analysis with no frame open now says “Open a frame first.” instead of leaving a
+  warning on the first frame opened afterwards.
+- A plain confirmation note of one page no longer stays over the buttons of the page you switch
+  to; warnings and notes with a button stay.
+- Geometry Calibration showed the beam centre half a pixel lower in x and y than Analyze showed
+  for the same profile. Both now use the same pixel coordinates. The geometry that is saved did
+  not change: profiles saved before are still right. An exported calibration file keeps its
+  numbers too (its centres count pixel centres from 0) and now says which convention they use.
+- Geometry Calibration no longer fills **Estimated distance** with a distance nobody measured.
+  Before, a new installation put the built-in 2000 mm into the field when an image was opened,
+  and the search prefers solutions near that value: on a silver behenate image taken at about
+  1630 mm, with silver behenate chosen, a solution near 1830 mm came first. Now the field is
+  filled only with the distance the image file states, or else with the distance of a
+  calibration applied before; with neither it shows *Optional* and the search gets no estimate.
+  A distance the field cannot show (more than 100 m) is no longer turned into 100000.00 mm.
+  Settings carried over from an earlier copy can lack the record of their last **Apply**: the
+  field then shows *Optional* until **Apply** is pressed once in this version.
+- XRR Series Extractor showed and took the direct-beam centre half a pixel lower in x and y than
+  Analyze and Geometry Calibration (it counted pixel centres from 0). Its centre fields, **Pick
+  direct-beam center**, the marks on the preview and the ROI x / ROI y columns now use the pixel
+  coordinates of the other two, so a centre is copied between the three as it is. A centre you
+  typed by hand in an earlier copy is typed 0.5 px larger in x and y now to name the same point;
+  the centre taken from the last calibration needs nothing. A centre picked with the mouse is
+  now the point clicked: before, the extraction used a point half a pixel to the right of and
+  below it, which mattered for a ROI of one or a few pixels. The exported CSV and JSON record
+  keep their numbers (pixel centres counted from 0); the record now says which convention they
+  use.
+- Fitting starts a new user with a neutral model. Before, a source checkout started with the
+  values left by an earlier fit.
+- A vertical cylinder taken over from a solution selected in the 1D Predict window is saved with
+  its own values. Before, `model_parameters.json` in the user data folder — and a file written
+  with **File ▸ Labs Parameters ▸ Save As…** — kept the radius and distance that were there and
+  gained a second block named `vertical cylinder`. The Fitting pages showed the right values,
+  and spheres and random cylinders were saved correctly. A file with the extra block still
+  loads: `vertical_cylinder` is the block that is used, and the extra one leaves the file the
+  next time a value of a vertical cylinder is saved.
+- 1D Predict runs from a source checkout: the trained weights are in the Git repository now.
+- Automatic analysis and the command line use a calibration the notes name by its file name
+  alone (`calibration LaB6_take2.poni`): the file of that name in the folder of the frame, or in
+  a folder the notes name. Before, only a full path counted as named, and such a file was left
+  to the automatic search, which could prefer the calibration of a neighbouring data set.
+
+### Known limitations
+
+- **Fitting does not read `.csv` curves**, although Analyze exports its curves as CSV. Use
+  **Send to Fitting**, or open the `<name>_fit_input.dat` that Analyze writes; `.dat` and `.txt`
+  files with columns `q I [σ]` open too.
+- **Geometry Calibration can put a wrong solution first.** Seen on a silver behenate image whose
+  path does not name the standard. With the standard left on “Auto Detect” and no estimated
+  distance, a LaB₆ solution at a much shorter distance came first, and the silver behenate
+  solution was last in the list of candidates. A wrong value in **Estimated distance** misleads
+  too, also with the right standard: with silver behenate chosen and 2000 mm typed in, a
+  solution near 1830 mm came first for a real distance of about 1630 mm. The field is no longer
+  filled with a built-in value, but a number can stand in it without your typing: each time an
+  image is opened it takes the distance the image file states, or else the distance of the
+  calibration applied last, which may belong to another set-up. Choose the standard yourself
+  when you know it. Leave **Estimated distance** on *Optional* (0) when you do not know the
+  distance, enter the approximate distance of your set-up when you do, and set a number you did
+  not type back to 0 unless it is that distance. Before you press **Apply**, check that the
+  distance is the one of your set-up. This will be corrected in a later version.
+- **Trainset Build (Labs) is not fully translated**: in the Chinese interface many texts of its
+  steps are still English. 2D Prediction has a few such texts too.
+- After the interface language is switched in the middle of a session, a few texts keep the old
+  language until the next run or restart (for example the outcome line of a finished automatic
+  analysis).
+- **A calibration found by the automatic search may belong to another experiment.** The search
+  looks in the folders around the frame, up to three levels up, and ranks ready calibration
+  files by how close in time they were written to the frame. In a folder that was copied or
+  downloaded in one go the file times say nothing. The report names the file it used and where
+  it was found; check that it is the calibration of your measurement, or name it in the notes or
+  give it yourself.
+- **XRR Series Extractor can place a beam centre from a NeXus file header wrongly.** It takes the
+  two numbers of the header as column and row of the frame it shows, without the turn (transpose
+  and flip) the frame gets when it is loaded; Analyze applies that turn to the same header. Such a
+  centre is marked *from file*, and it replaces the centre of the last calibration. Check on the
+  preview that the cross lies on the direct beam, or use **Pick direct-beam center**. CBF series
+  are not affected: their headers are not used for the centre.
+- Quitting GIMaP during a Batch Export keeps the files of the frames already done, but the batch
+  tables, `README.txt` and the JSON record of the batch are not written. **Stop** writes them.
+- 1D Predict writes its run folders into the folder GIMaP was started from (for the portable
+  version, the program folder); they are not removed automatically.
+- Windows is the platform GIMaP is developed and tested on. TensorFlow runs on the CPU; a GPU
+  set-up is not configured.
+
+### Updating from 0.0.2
+
+- From 0.1.0 on, the settings, the instrument profiles, the recent files and the fitting model
+  parameters are kept in one user data folder outside the program (`%APPDATA%\GIMaP` on Windows),
+  so later updates keep them.
+- Settings found in the program's own `config/` folder (a source checkout updated in place) are
+  imported once and left untouched. A new portable folder starts with the defaults: the settings
+  of a portable 0.0.2 are not carried over.
+- Geometry is now an instrument profile in Analyze: calibrate or enter it once for each detector.
+- When you run from source, install the requirements again (`python -m pip install -r
+  requirements.txt`): the list of packages changed.
+
+**Updating a source checkout.** The history of `main` on GitHub was rewritten on 2026-10-13. A
+clone last updated before that day can hold commits that are no longer on GitHub; `git pull`
+then stops with an error or tries to merge the old history with the new one. Do not merge, and do not
+push from such a clone. Move it to the new `main` instead:
+
+- Once, for a checkout that does not have the script yet: `git fetch origin`, then
+  `git reset --hard origin/main` (with `main` checked out). This discards your edits of tracked
+  files, and commits you made yourself are no longer on the branch: run `git stash` (edits) or
+  `git branch my-work` (commits) first if you want to keep them, and do not merge or push that
+  branch afterwards. Files Git does not track (data, results) and your settings in
+  `%APPDATA%\GIMaP` stay; only a file of your own at a place where the new version has one — such
+  as weight files of 1D Predict copied in by hand — is replaced by the file of the new version.
+  One edit you did not make yourself is `config/model_parameters.json`, where 0.0.2 kept the
+  model of Fitting: do not bring it back with `git stash pop`, which would put conflict markers
+  into the file (`README.md` says what to do instead).
+- Then, and from now on: `powershell -ExecutionPolicy Bypass -File tools\update_source.ps1`, run
+  in the folder of the checkout. Run it once right after the two commands: on Windows they leave
+  some model files of 1D Predict with the line endings of the older checkout, and 1D Predict
+  does not start until the script has written them again. For later updates the script keeps the
+  state you had as a branch `backup/…` when the history was rewritten, puts your edits of
+  tracked files aside and back on top of the new version, leaves files Git does not track alone,
+  and says what it did and how to go back; `-DryRun` only reports. `README.md` has the details.
+- This update downloads more than earlier ones: the weights of 1D Predict (about 56 MB) are part
+  of the repository now.

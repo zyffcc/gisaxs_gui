@@ -19,6 +19,7 @@ class PredictionPageView(object):
         self.gridLayout_18.addWidget(self.gisaxsPredictChooseFolderButton, 3, 1, 1, 1)
         self.gisaxsPredictChooseGisaxsFileButton = QtWidgets.QPushButton(self.widget_2)
         self.gisaxsPredictChooseGisaxsFileButton.setObjectName("gisaxsPredictChooseGisaxsFileButton")
+        self.gisaxsPredictChooseGisaxsFileButton.setToolTip("A detector frame (or the first of a numbered series) to predict from")
         self.gridLayout_18.addWidget(self.gisaxsPredictChooseGisaxsFileButton, 2, 1, 1, 1)
         self.predictStatusScrollArea = QtWidgets.QScrollArea(self.widget_2)
         self.predictStatusScrollArea.setWidgetResizable(True)
@@ -29,10 +30,6 @@ class PredictionPageView(object):
         self.verticalLayout_17 = QtWidgets.QVBoxLayout(self.predictStatusScrollAreaWidgetContents)
         self.verticalLayout_17.setObjectName("verticalLayout_17")
         self.predictStatusTextBrowser = QtWidgets.QTextBrowser(self.predictStatusScrollAreaWidgetContents)
-        self.predictStatusTextBrowser.setStyleSheet("QTextBrowser {\n"
-"    background: transparent;\n"
-"    border: none;\n"
-"}")
         self.predictStatusTextBrowser.setObjectName("predictStatusTextBrowser")
         self.verticalLayout_17.addWidget(self.predictStatusTextBrowser)
         self.predictStatusScrollArea.setWidget(self.predictStatusScrollAreaWidgetContents)
@@ -57,6 +54,7 @@ class PredictionPageView(object):
         self.horizontalLayout_15.addWidget(self.gisaxsPredictEditButton)
         self.gisaxsPredictModelImportButton = QtWidgets.QPushButton(self.widget_4)
         self.gisaxsPredictModelImportButton.setObjectName("gisaxsPredictModelImportButton")
+        self.gisaxsPredictModelImportButton.setToolTip("A trained model file for the prediction setup chosen above")
         self.horizontalLayout_15.addWidget(self.gisaxsPredictModelImportButton)
         self.gridLayout_18.addWidget(self.widget_4, 5, 2, 1, 1)
         self.gisaxsPredictModuleSelectLabel = QtWidgets.QLabel(self.widget_2)
@@ -64,6 +62,7 @@ class PredictionPageView(object):
         self.gridLayout_18.addWidget(self.gisaxsPredictModuleSelectLabel, 4, 1, 1, 1, QtCore.Qt.AlignHCenter)
         self.gisaxsPredictPredictButton = QtWidgets.QPushButton(self.widget_2)
         self.gisaxsPredictPredictButton.setObjectName("gisaxsPredictPredictButton")
+        self.gisaxsPredictPredictButton.setToolTip("Run the model on the chosen data (needs data, a model and the framework)")
         self.gridLayout_18.addWidget(self.gisaxsPredictPredictButton, 6, 1, 1, 1, QtCore.Qt.AlignBottom)
         self.gisaxsPredictMultiFilesRadioButton = QtWidgets.QRadioButton(self.widget_2)
         self.gisaxsPredictMultiFilesRadioButton.setObjectName("gisaxsPredictMultiFilesRadioButton")
@@ -127,15 +126,12 @@ class PredictionPageView(object):
         self.gridLayout_18.addWidget(self.widget_5, 2, 4, 1, 2)
         self.verticalLayout_16.addWidget(self.widget_2)
         self.gisaxsPredictImageShowWidget = QtWidgets.QWidget(gisaxsPredictPage)
-        self.gisaxsPredictImageShowWidget.setStyleSheet("")
         self.gisaxsPredictImageShowWidget.setObjectName("gisaxsPredictImageShowWidget")
         self.verticalLayout_18 = QtWidgets.QVBoxLayout(self.gisaxsPredictImageShowWidget)
         self.verticalLayout_18.setObjectName("verticalLayout_18")
         self.gisaxsPredictImageShowTabWidget = QtWidgets.QTabWidget(self.gisaxsPredictImageShowWidget)
-        self.gisaxsPredictImageShowTabWidget.setStyleSheet("")
         self.gisaxsPredictImageShowTabWidget.setObjectName("gisaxsPredictImageShowTabWidget")
         self.gisaxsImageTab = QtWidgets.QWidget()
-        self.gisaxsImageTab.setStyleSheet("")
         self.gisaxsImageTab.setObjectName("gisaxsImageTab")
         self.gridLayout_19 = QtWidgets.QGridLayout(self.gisaxsImageTab)
         self.gridLayout_19.setObjectName("gridLayout_19")
@@ -148,11 +144,6 @@ class PredictionPageView(object):
         sizePolicy.setHeightForWidth(self.gisaxsImageGraphicsView.sizePolicy().hasHeightForWidth())
         self.gisaxsImageGraphicsView.setSizePolicy(sizePolicy)
         self.gisaxsImageGraphicsView.setMinimumSize(QtCore.QSize(400, 300))
-        self.gisaxsImageGraphicsView.setStyleSheet("QGraphicsView {\n"
-"    background: transparent;\n"
-"    border: 1px solid #888888; \n"
-"    border-radius: 4px;  \n"
-"}")
         self.gisaxsImageGraphicsView.setObjectName("gisaxsImageGraphicsView")
         self.gridLayout_19.addWidget(self.gisaxsImageGraphicsView, 0, 0, 1, 1)
         self.gisaxsImageParametersWidget = QtWidgets.QWidget(self.gisaxsImageTab)
@@ -223,7 +214,6 @@ class PredictionPageView(object):
         self.gridLayout_19.addWidget(self.gisaxsImageParametersWidget, 0, 1, 1, 1)
         self.gisaxsPredictImageShowTabWidget.addTab(self.gisaxsImageTab, "")
         self.predict2dImageTab = QtWidgets.QWidget()
-        self.predict2dImageTab.setStyleSheet("")
         self.predict2dImageTab.setObjectName("predict2dImageTab")
         self.gridLayout_22 = QtWidgets.QGridLayout(self.predict2dImageTab)
         self.gridLayout_22.setObjectName("gridLayout_22")
@@ -236,11 +226,6 @@ class PredictionPageView(object):
         sizePolicy.setHeightForWidth(self.predict2dGraphicsView.sizePolicy().hasHeightForWidth())
         self.predict2dGraphicsView.setSizePolicy(sizePolicy)
         self.predict2dGraphicsView.setMinimumSize(QtCore.QSize(400, 300))
-        self.predict2dGraphicsView.setStyleSheet("QGraphicsView {\n"
-"    background: transparent;\n"
-"    border: 1px solid #888888; \n"
-"    border-radius: 4px;  \n"
-"}")
         self.predict2dGraphicsView.setObjectName("predict2dGraphicsView")
         self.gridLayout_22.addWidget(self.predict2dGraphicsView, 0, 0, 1, 1)
         self.predict2dParameterWidget = QtWidgets.QWidget(self.predict2dImageTab)

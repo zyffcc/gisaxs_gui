@@ -1,7 +1,9 @@
-"""Application-owned shared PyQt presentation building blocks。"""
+"""Application-owned shared PyQt presentation building blocks."""
 
 from .components import (
     AdvancedSection,
+    CurvePlot,
+    DetectorView,
     EmptyState,
     ErrorBanner,
     FilePicker,
@@ -17,25 +19,26 @@ from .components import (
     install_safe_wheel_behavior,
 )
 from .collapsible_card import CardContentResizeHandle, CollapsibleCardFrame
-from .navigation import NavigationSidebar
+from .navigation import NAVIGATION_ITEMS, NavigationItem, NavigationSidebar
 from .parameter_commit import ParameterCommitCoordinator, ParameterUpdatePolicy
-from .shell import ContentStack, MainShell, PageDefinition
-from .styles import apply_design_system
+from .task_runner import TaskRunner
+from .theme import apply_theme, set_role, set_state, style_widget, theme_color, theme_manager
 
 __all__ = [
     "AdvancedSection",
     "CardContentResizeHandle",
     "CollapsibleCardFrame",
-    "ContentStack",
+    "CurvePlot",
+    "DetectorView",
     "EmptyState",
     "ErrorBanner",
     "FilePicker",
     "JobStatus",
-    "MainShell",
+    "NAVIGATION_ITEMS",
+    "NavigationItem",
     "NavigationSidebar",
     "ParameterCommitCoordinator",
     "ParameterUpdatePolicy",
-    "PageDefinition",
     "ParameterSection",
     "PlotPanel",
     "ScientificImageViewer",
@@ -44,6 +47,12 @@ __all__ = [
     "SafeWheelDoubleSpinBox",
     "SafeWheelInputFilter",
     "SafeWheelSpinBox",
-    "apply_design_system",
+    "TaskRunner",
+    "apply_theme",
     "install_safe_wheel_behavior",
+    "set_role",
+    "set_state",
+    "style_widget",
+    "theme_color",
+    "theme_manager",
 ]

@@ -7,6 +7,10 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.patches import Circle
 
+from src.gimap.app.presentation.theme.figures import restyle_figure, theme_figure
+
+from .pixel_coordinates import image_extent, image_limits
+
 
 class XrrPlotPresenter:
     def __init__(self, live_panel, curve_panel, *, on_detector_click):
@@ -20,6 +24,9 @@ class XrrPlotPresenter:
         self.curve_axis = self.curve_figure.add_subplot(111)
         curve_panel.set_plot_widget(self.curve_canvas)
         curve_panel.show_empty()
+        # Screen colours follow the light/dark theme; the exported CSV has no figure.
+        theme_figure(self.live_figure, self.live_canvas)
+        theme_figure(self.curve_figure, self.curve_canvas)
         self._live_panel = live_panel
         self._curve_panel = curve_panel
         self.live_canvas.mpl_connect("button_press_event", on_detector_click)
@@ -34,8 +41,13 @@ class XrrPlotPresenter:
         direct_center: tuple[float, float],
         title: str,
     ) -> None:
+        """Draw the frame of ``full_shape`` from ``image`` (the frame, or every n-th pixel of it).
+
+        The axes, ``roi_center`` and ``direct_center`` are the pixels of the window (``pixel_coordinates``):
+        pixel j is drawn over j…j+1, and a marker lies on the point its numbers name.
+        """
         values = np.asarray(image, dtype=float)
-        height, width = (int(full_shape[0]), int(full_shape[1]))
+        x_limits, y_limits = image_limits(full_shape)
         finite = values[np.isfinite(values)]
         if finite.size:
             low, high = np.nanpercentile(finite, (1.0, 99.5))
@@ -53,7 +65,7 @@ class XrrPlotPresenter:
             display,
             cmap="viridis",
             origin="upper",
-            extent=(0.0, float(width), float(height), 0.0),
+            extent=image_extent(values.shape, full_shape),
             interpolation="nearest",
             vmin=display_low,
             vmax=display_high,
@@ -79,12 +91,13 @@ class XrrPlotPresenter:
             )
             axis.add_patch(circle)
             axis.plot(roi_center[0], roi_center[1], ".", color="#ff4d8d", markersize=4)
-        axis.set_xlim(0.0, float(width))
-        axis.set_ylim(float(height), 0.0)
+        axis.set_xlim(*x_limits)
+        axis.set_ylim(*y_limits)
         axis.set_xlabel("Detector x (pixel)")
         axis.set_ylabel("Detector y (pixel)")
         axis.set_title(title)
         axis.legend(loc="upper right")
+        restyle_figure(self.live_figure)
         self._live_panel.show_plot()
         self.live_canvas.draw_idle()
 
@@ -92,6 +105,7 @@ class XrrPlotPresenter:
         axis = self.curve_axis
         axis.clear()
         if result is None or not result.points:
+            restyle_figure(self.curve_figure)
             self._curve_panel.show_empty()
             self.curve_canvas.draw_idle()
             return
@@ -100,9 +114,11 @@ class XrrPlotPresenter:
         axis.plot(qz, intensity, "o-", color="#2f7ed8", markersize=4, linewidth=1.2)
         axis.set_xlabel("qz (Å⁻¹)")
         axis.set_ylabel("Extracted intensity")
-        axis.grid(True, which="both", alpha=0.22)
+        axis.grid(True, which="major")
+        axis.grid(True, which="minor", alpha=0.45)
         if log_y and np.any(np.isfinite(intensity) & (intensity > 0)):
             axis.set_yscale("log")
+        restyle_figure(self.curve_figure)
         self._curve_panel.show_plot()
         self.curve_canvas.draw_idle()
 

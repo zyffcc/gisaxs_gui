@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .jobs import JobRunner
 from .ports import (
+    InstrumentProfileRepository,
     ProjectParametersRepository,
     SessionRepository,
     SettingsRepository,
@@ -23,6 +25,9 @@ class AppContext:
     preferences: UserPreferencesRepository
     jobs: JobRunner | None = None
     project_parameters: ProjectParametersRepository | None = None
+    instrument_profiles: InstrumentProfileRepository | None = None
+    data_dir: Path | None = None
+    """User data folder of this context (None for in-memory test contexts)."""
     project_state: ProjectState = field(default_factory=ProjectState)
 
     def restore_session(self) -> bool:

@@ -143,39 +143,50 @@ def cylinder_form_factor_pd(q, R, sigma_R, h, sigma_h, n_R=13, n_h=13, nsig=4.0,
     - R ~ N(R, sigma_R), h ~ N(h, sigma_h), 截断为正并归一化
     - alpha 取 0..pi/2，随机取向权重 ~ sin(alpha)；用 Gauss-Legendre 或均匀采样近似
     """
-    q = np.asarray(q, dtype=float)
+    radial = cylinder_radial_average(q, R, sigma_R, n_R=n_R, nsig=nsig, n_orient=n_orient)
+    axial = cylinder_axial_average(q, h, sigma_h, n_h=n_h, nsig=nsig, n_orient=n_orient)
+    return cylinder_orientation_average(radial, axial, n_orient)
 
-    # 尺寸分布
-    Rs, WR = _gaussian_grid(R, sigma_R, nsig=nsig, n=n_R, clip_min=0.0)
-    Hs, WH = _gaussian_grid(h, sigma_h, nsig=nsig, n=n_h, clip_min=0.0)
 
-    # 取向权重：alpha in [0, pi/2]，权重 ~ sin(alpha)
-    # 用简单均匀 alpha 采样并乘 sin(alpha) 做权
+def _orientations(n_orient):
+    # 取向权重：alpha in [0, pi/2]，权重 ~ sin(alpha)；用简单均匀 alpha 采样并乘 sin(alpha) 做权
     alphas = np.linspace(0.0, np.pi / 2, int(n_orient))
-    WA = np.sin(alphas)
-    WA /= WA.sum() + 1e-300
+    weights = np.sin(alphas)
+    return alphas, weights / (weights.sum() + 1e-300)
 
-    # F(q,R,h,alpha)^2 is separable into radial(R)^2 * axial(h)^2.
-    # Factorizing the independent R/h averages removes the old
-    # n_R*n_h*n_orient Python loop without changing the quadrature.
-    q_col = q[:, np.newaxis, np.newaxis]
-    sin_alpha = np.sin(alphas)[np.newaxis, np.newaxis, :]
-    cos_alpha = np.cos(alphas)[np.newaxis, np.newaxis, :]
 
-    radial_x = q_col * Rs[np.newaxis, :, np.newaxis] * sin_alpha
+def cylinder_radial_average(q, R, sigma_R, *, n_R=13, nsig=4.0, n_orient=24):
+    """<[2 J1(qR sinα)/(qR sinα)]²>_R for every q and α (the radius part of a random cylinder).
+
+    F(q,R,h,alpha)^2 is separable into radial(R)^2 * axial(h)^2: the R and h averages are
+    independent (and can be reused while only the other changes).
+    """
+    q = np.asarray(q, dtype=float)
+    Rs, WR = _gaussian_grid(R, sigma_R, nsig=nsig, n=n_R, clip_min=0.0)
+    alphas, _weights = _orientations(n_orient)
+    radial_x = q[:, np.newaxis, np.newaxis] * Rs[np.newaxis, :, np.newaxis] * np.sin(alphas)[np.newaxis, np.newaxis, :]
     radial_sq = _cylinder_radial_amplitude(radial_x) ** 2
-    radial_avg = np.sum(radial_sq * WR[np.newaxis, :, np.newaxis], axis=1)
+    return np.sum(radial_sq * WR[np.newaxis, :, np.newaxis], axis=1)
 
-    axial_x = q_col * Hs[np.newaxis, :, np.newaxis] * cos_alpha / 2.0
+
+def cylinder_axial_average(q, h, sigma_h, *, n_h=13, nsig=4.0, n_orient=24):
+    """<sinc²(q h cosα / 2)>_h for every q and α (the height part of a random cylinder)."""
+    q = np.asarray(q, dtype=float)
+    Hs, WH = _gaussian_grid(h, sigma_h, nsig=nsig, n=n_h, clip_min=0.0)
+    alphas, _weights = _orientations(n_orient)
+    axial_x = q[:, np.newaxis, np.newaxis] * Hs[np.newaxis, :, np.newaxis] * np.cos(alphas)[np.newaxis, np.newaxis, :] / 2.0
     axial_sq = np.sinc(axial_x / np.pi) ** 2
-    axial_avg = np.sum(axial_sq * WH[np.newaxis, :, np.newaxis], axis=1)
+    return np.sum(axial_sq * WH[np.newaxis, :, np.newaxis], axis=1)
 
-    return np.sum(radial_avg * axial_avg * WA[np.newaxis, :], axis=1)
+
+def cylinder_orientation_average(radial, axial, n_orient=24):
+    _alphas, weights = _orientations(n_orient)
+    return np.sum(radial * axial * weights[np.newaxis, :], axis=1)
 
 
 def vertical_cylinder_form_factor_pd(q, R, sigma_R, n_samples=25, nsig=3.0):
     """Reference GISAXS-Fit vertical cylinder/qz=0 form factor."""
-    from scipy.special import jv as bessel
+    from scipy.special import j1  # J1, as jv(1, x) but faster
 
     q = np.asarray(q, dtype=float)
     sigma_abs = float(R) * float(sigma_R)
@@ -183,7 +194,7 @@ def vertical_cylinder_form_factor_pd(q, R, sigma_R, n_samples=25, nsig=3.0):
     q_col = q[:, np.newaxis]
     x = q_col * Rs
     denom = np.where(np.abs(q_col) < 1e-30, 1e-30, q_col)
-    form = W * ((Rs * bessel(1, x) / denom) ** 2)
+    form = W * ((Rs * j1(x) / denom) ** 2)
     return np.sum(form, axis=1) * 1e-6
 
 

@@ -29,7 +29,6 @@ from PyQt5.QtWidgets import (
 
 from src.gimap.app.presentation import (
     JobStatus,
-    apply_design_system,
 )
 
 from src.gimap.app.presentation.section_bindings import (
@@ -77,7 +76,6 @@ class PreviewMixin:
             ui.previewPanelContent,
             ui.previewPanelContentLayout,
         )
-        apply_design_system(page)
         intro = QLabel(
             "Simulation-first preview: BornAgain creates the scattering pattern. Choose any sampled physics, background or noise range "
             "to compare its minimum, midpoint and maximum without using the experimental image as training data."
@@ -99,7 +97,8 @@ class PreviewMixin:
         self.preview_count.setToolTip(
             "Number of label samples drawn for the parameter-coverage diagnostic; it does not rerun BornAgain."
         )
-        selection_controls.addWidget(self.preview_count, 1, 1)
+        self.preview_count.setMaximumWidth(240)  # a number keeps a natural width, beside its label
+        selection_controls.addWidget(self.preview_count, 1, 1, Qt.AlignLeft | Qt.AlignVCenter)
         selection_controls.setColumnStretch(1, 1)
         controls.addLayout(selection_controls)
 
@@ -330,7 +329,8 @@ class PreviewMixin:
         transform_help.setWordWrap(True)
         chain.addWidget(transform_help, 4, 0, 1, 4)
         chain.setColumnStretch(1, 1)
-        self.preprocessing_tabs.addTab(transform_page, "Mask & transforms")
+        # "&&" is a literal "&": a single one makes the next letter a keyboard mnemonic ("Mask _transforms").
+        self.preprocessing_tabs.addTab(transform_page, "Mask && transforms")
         self.preprocessing_tabs.setMinimumHeight(330)
         self.preview_views = QTabWidget()
         self.preview_views.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)

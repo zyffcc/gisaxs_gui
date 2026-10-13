@@ -22,11 +22,8 @@ from PyQt5.QtWidgets import (
     QTextBrowser,
 )
 
-from src.gimap.app.presentation.responsive_layout import (
-    apply_density_profile,
-    install_adaptive_window_profile,
-    move_window_to_cursor_screen,
-)
+from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.layout_metrics import move_window_to_cursor_screen
 from src.gimap.features.prediction.presentation.workflow_state import (
     PredictionWorkflowSnapshot,
 )
@@ -143,13 +140,6 @@ class SetupStatusMixin:
         layout.addWidget(viewer)
         self._status_text_window = win
         self._status_text_window_browser = viewer
-        install_adaptive_window_profile(
-            win,
-            lambda profile, screen, window=win: self._apply_floating_screen_profile(
-                window, profile
-            ),
-            apply_window_minimum=False,
-        )
         win.finished.connect(self._on_status_text_window_closed)
         move_window_to_cursor_screen(win)
         win.show()
@@ -157,12 +147,6 @@ class SetupStatusMixin:
     def _on_status_text_window_closed(self) -> None:
         self._status_text_window = None
         self._status_text_window_browser = None
-
-    def _apply_floating_screen_profile(self, window, profile) -> None:
-        try:
-            apply_density_profile(window, profile)
-        except Exception:
-            pass
 
     def _set_predict_main_tab(self, target_label: str) -> None:
         tabs = getattr(self.ui, "gisaxsPredictImageShowTabWidget", None)
@@ -337,6 +321,13 @@ class SetupStatusMixin:
         btn = getattr(self.ui, "gisaxsPredictChooseGisaxsFileButton", None)
         if btn:
             btn.clicked.connect(self._choose_gisaxs_file)
+        workbench = getattr(self.ui, "predictionWorkbenchLayout", None)
+        if workbench is not None and hasattr(workbench, "set_input_actions"):
+            # The empty canvas's "Choose CBF frame…" and a file dropped on the canvas open a frame here;
+            # a dropped folder becomes the folder batch.
+            workbench.set_input_actions(
+                choose=lambda: self._choose_gisaxs_file(), dropped=lambda path: self._handle_dropped_input(path)
+            )
 
         btn = getattr(self.ui, "gisaxsPredictExportFolderButton", None)
         if btn:
@@ -557,13 +548,14 @@ class SetupStatusMixin:
             if label is not None and label not in labels:
                 labels.append(label)
         for label in labels:
-            label.setStyleSheet("")
+            label.setProperty("gimapRole", None)
             label.setProperty("modelState", state_map.get(color, "idle"))
             label.style().unpolish(label)
             label.style().polish(label)
-            label.setText(status_text)
+            label.setText(tr(status_text))  # English kept in _model_status_text for refresh_language
             if tooltip:
-                label.setToolTip(tooltip)
+                label.setToolTip(tr(tooltip))
+        self._model_status_text = status_text
         self._refresh_predict_readiness()
 
     def _on_cancel_loading_shortcut(self) -> None:

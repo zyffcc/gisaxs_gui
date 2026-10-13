@@ -33,6 +33,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from ..value_combos import combo_value
 from ..visualization_widgets import ArrayCanvas, ParameterCoverageWidget
 
 
@@ -212,7 +213,8 @@ class ComparisonMixin:
             forms[group].addRow(path.replace("_", " "), control)
             self._what_if_controls[f"config.{path}"] = control
         for group, widget in grouped.items():
-            editor_tabs.addTab(self._scroll(widget), group)
+            # A tab text takes "&&" for a literal "&" (a single one is a mnemonic: "Mask _preprocessing").
+            editor_tabs.addTab(self._scroll(widget), group.replace("&", "&&"))
         editor_and_image.addWidget(editor_tabs)
         result_panel = QWidget()
         result_layout = QVBoxLayout(result_panel)
@@ -262,7 +264,7 @@ class ComparisonMixin:
             if isinstance(control, (QSpinBox, QDoubleSpinBox)):
                 return control.value()
             if isinstance(control, QComboBox):
-                return control.currentText()
+                return combo_value(control)
             return control.text() if isinstance(control, QLineEdit) else None
 
         def request_what_if() -> None:
@@ -308,7 +310,7 @@ class ComparisonMixin:
             elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
                 control.valueChanged.connect(schedule_what_if)
             elif isinstance(control, QComboBox):
-                control.currentTextChanged.connect(schedule_what_if)
+                control.currentIndexChanged.connect(schedule_what_if)
             elif isinstance(control, QLineEdit):
                 control.editingFinished.connect(schedule_what_if)
         tabs.addTab(what_if_page, "Manual simulation")
@@ -320,18 +322,23 @@ class ComparisonMixin:
         dialog.show()
         load_snapshot()
 
-    def set_what_if_busy(self, busy: bool, message: str) -> None:
+    def set_what_if_busy(self, busy: bool, message: str, **values) -> None:
+        """``message``: English (a template with ``values``), shown in the interface language."""
         if not hasattr(self, "_what_if_status"):
             return
-        self._what_if_progress.setVisible(busy)
-        self._what_if_status.setText(message)
+        try:
+            self._what_if_progress.setVisible(busy)
+            self.texts.set(self._what_if_status, message, **values)
+        except RuntimeError:  # the parameter window was closed
+            return
 
-    def set_what_if_result(self, image: np.ndarray, details: str) -> None:
+    def set_what_if_result(self, image: np.ndarray, details: str, **values) -> None:
+        """``details``: English (a template with ``values``), shown in the interface language."""
         if self._parameter_dialog is None:
             return
         self._what_if_canvas.set_data(image)
         self._what_if_progress.setVisible(False)
-        self._what_if_status.setText(details)
+        self.texts.set(self._what_if_status, details, **values)
 
     def set_preview_stages(
         self,

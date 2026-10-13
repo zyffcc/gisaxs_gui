@@ -8,7 +8,40 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.theme import set_role
 from ..display_formatting import _human_bytes
+
+
+def review_text(review, output_format: str) -> str:
+    """What "Review && Convert" asks to confirm, in the interface language.
+
+    Numbers, names, the format and the folder stay as they are; every sentence is a template of
+    the table.
+    """
+    inputs = ", ".join(
+        trf("{count} {kind} file(s)", count=count, kind=kind) for kind, count in review.input_counts
+    )
+    lines = [
+        tr("Input:"),
+        inputs or review.input_summary,
+        trf("{images} selected image(s) / frame(s)", images=f"{review.image_count:,}"),
+        "",
+        tr("Output:"),
+        output_format,
+        trf("Destination: {destination}", destination=review.destination),
+        trf("Naming: {naming}", naming=review.naming),
+        "",
+        tr("Estimated output:"),
+        trf(
+            "{files} file(s), approximately {size}",
+            files=f"{review.output_files:,}",
+            size=_human_bytes(review.estimated_bytes),
+        ),
+    ]
+    if review.is_large_output:
+        lines += ["", tr("⚠ Large output: conversion can take considerable time and disk space.")]
+    return "\n".join(lines)
 
 
 class WorkflowMixin:
@@ -22,14 +55,18 @@ class WorkflowMixin:
         index = self.stack.currentIndex()
         if index == 0:
             if not self.sources:
-                QMessageBox.information(self, "Format Converter", "Add at least one input file.")
+                QMessageBox.information(
+                    self, tr("Format Converter"), tr("Add at least one input file.")
+                )
                 return
             self._refresh_selection_table()
             self.stack.setCurrentIndex(1)
         elif index == 1:
             if not any(source.included and source.selected_frames for source in self.sources):
                 QMessageBox.information(
-                    self, "Format Converter", "Select at least one image or frame to convert."
+                    self,
+                    tr("Format Converter"),
+                    tr("Select at least one image or frame to convert."),
                 )
                 return
             self._configure_output_formats()
@@ -43,43 +80,37 @@ class WorkflowMixin:
         current = self.stack.currentIndex()
         for index, label in enumerate(self.step_labels):
             if index == current:
-                label.setStyleSheet(
-                    "background: #2563eb; color: white; border-radius: 5px; font-weight: 600;"
-                )
+                set_role(label, "step-current")
             elif index < current:
-                label.setStyleSheet("background: #dbeafe; color: #1d4ed8; border-radius: 5px;")
+                set_role(label, "step-done")
             else:
-                label.setStyleSheet("background: #f1f5f9; color: #475569; border-radius: 5px;")
+                set_role(label, "step")
         self.back_button.setEnabled(current > 0)
-        self.next_button.setText("Review & Convert" if current == 2 else "Next")
+        # "&&" is a literal ampersand; a single "&" would become an Alt mnemonic ("Review _Convert").
+        self.next_button.setText(tr("Review && Convert") if current == 2 else tr("Next"))
+        # The one primary action of every step. No setDefault(): Enter in the filter or the
+        # custom-frames field must not jump to the next step.
+        set_role(self.next_button, "primary")
 
     def _review_and_convert(self) -> None:
         options = self._options()
         if not options.destination:
-            QMessageBox.warning(self, "Output settings", "Choose an output destination.")
+            QMessageBox.warning(self, tr("Output settings"), tr("Choose an output destination."))
             return
         try:
             review = self.view_model.conversion_review(options)
         except Exception as exc:
-            QMessageBox.warning(self, "Output settings", f"Invalid output settings:\n{exc}")
+            QMessageBox.warning(
+                self, tr("Output settings"), trf("Invalid output settings:\n{error}", error=tr(str(exc)))
+            )
             return
-        text = (
-            f"Input:\n{review.input_summary}\n"
-            f"{review.image_count:,} selected image(s) / frame(s)\n\n"
-            f"Output:\n{options.output_format}\n"
-            f"Destination: {review.destination}\nNaming: {review.naming}\n\n"
-            f"Estimated output:\n{review.output_files:,} file(s), approximately "
-            f"{_human_bytes(review.estimated_bytes)}"
-        )
-        if review.is_large_output:
-            text += "\n\n⚠ Large output: conversion can take considerable time and disk space."
         dialog = QMessageBox(self)
-        dialog.setWindowTitle("Confirm conversion")
+        dialog.setWindowTitle(tr("Confirm conversion"))
         dialog.setIcon(QMessageBox.Information)
-        dialog.setText(text)
-        back = dialog.addButton("Back", QMessageBox.RejectRole)
-        convert = dialog.addButton("Convert", QMessageBox.AcceptRole)
-        dialog.addButton("Cancel", QMessageBox.DestructiveRole)
+        dialog.setText(review_text(review, options.output_format))
+        back = dialog.addButton(tr("Back"), QMessageBox.RejectRole)
+        convert = dialog.addButton(tr("Convert"), QMessageBox.AcceptRole)
+        dialog.addButton(tr("Cancel"), QMessageBox.DestructiveRole)
         dialog.setDefaultButton(convert)
         dialog.exec_()
         if dialog.clickedButton() == convert:

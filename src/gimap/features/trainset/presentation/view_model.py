@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 from src.gimap.app import AppContext
 
@@ -59,6 +60,29 @@ class TrainsetViewModel:
     def save_settings(self, values: dict[str, object]) -> None:
         self.context.settings.update_section("trainset", dict(values))
         self.context.settings.save()
+
+    def last_folder(self, kind: str) -> str:
+        """The folder a file or folder chooser of ``kind`` last used ("" when none or gone): user preferences,
+        not the project, so a shared project file does not carry one person's folders."""
+        preferences = getattr(self.context, "preferences", None)
+        try:
+            folder = str(preferences.get(f"trainset.last_folder.{kind}", "") or "") if preferences else ""
+        except Exception:  # noqa: BLE001 - a broken preferences store only loses the start folder
+            return ""
+        return folder if folder and Path(folder).is_dir() else ""
+
+    def remember_folder(self, kind: str, path) -> None:
+        """Remember where a chooser of ``kind`` ended (a file's folder, or the folder itself)."""
+        preferences = getattr(self.context, "preferences", None)
+        if preferences is None or not path:
+            return
+        location = Path(path)
+        folder = location if location.is_dir() else location.parent
+        try:
+            preferences.set(f"trainset.last_folder.{kind}", str(folder))
+            preferences.save()
+        except Exception:  # noqa: BLE001 - not remembering a folder never blocks the choice
+            pass
 
     def generate_preview(
         self, request: TrainsetPreviewRequest, *, on_progress=None

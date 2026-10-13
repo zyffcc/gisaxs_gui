@@ -4,7 +4,7 @@
 >
 > **Scope**：生产代码的 feature ownership、分层职责和依赖方向
 >
-> **Last verified**：2026-08-30
+> **Last verified**：2026-09-28（全文）；2026-10-06（assistant 一行、Feature 边界、文件大小）
 
 ## 架构风格
 
@@ -16,6 +16,8 @@ presentation、application、domain 和 infrastructure 代码。
 
 ```text
 features/
+    analyze/        # 默认工作区：GISAXS 与 GIWAXS（含原 WAXS 页面功能，见 docs/ui/workspaces/analyze.md）
+    assistant/      # Run Automatic Analysis（无需 AI，GIWAXS 与 GISAXS）与 Process with AI（见其 README）
     fitting/
         presentation/
         application/
@@ -29,16 +31,21 @@ features/
         domain/
         infrastructure/
     trainset/
-    classification/
-    waxs/
+    compare/
     calibration/
+    format_converter/
     xrr/
 ```
+
+应用壳（`app/`）：`main.py` → `app/main_window.py`（页面与侧栏）、`app/menus.py`（菜单命令）、
+`app/runtime.py`（feature 运行时与按 key 导航）；`app/presentation/theme/` 为唯一的样式来源
+（浅色 / 深色 token），缩放交给 Qt high-DPI。用户数据（设置、偏好、仪器配置、会话、模型参数）
+统一保存在用户数据目录（`integrations/state/user_store.py`）。
 
 优先采用 feature-first 的原因包括：
 
 - 将一个用户工作流及其实现代码放在一起；
-- 为 fitting、prediction、trainset、classification、WAXS、calibration 和 XRR
+- 为 analyze、fitting、compare、prediction、trainset、calibration 和 XRR
   建立清晰的所有权边界；
 - 减少对全局 `controllers/`、`services/`、`models/` 和 `utils/` 技术目录的依赖，
   避免其职责随时间逐渐模糊；
@@ -93,9 +100,8 @@ ViewBinding 在架构上属于 View 的实现细节，不是额外的
 orchestration 层；它不得绕过 ViewModel 调用 use case，也不得包含科学计算或具体 I/O。
 因此实际文件结构可能是 `View + ViewBinding → ViewModel → Use Case`，依赖含义仍与上图一致。
 
-顶层旧 Controller import path 仅允许薄 re-export 当前 feature owner，不能发展成与
-ViewModel 并列的第二层 orchestration，也不得建立
-`View → Controller → ViewModel → Use Case` 链路。Presentation 中确有 composition 或
+旧的顶层 Controller import path 已删除。Presentation 不得发展出与 ViewModel 并列的
+第二层 orchestration，也不得建立 `View → Controller → ViewModel → Use Case` 链路。Presentation 中确有 composition 或
 navigation 对象时，它不得包含工作流编排、科学计算、外部引擎调用或具体 I/O。
 
 ### Application
@@ -115,9 +121,9 @@ Application 不依赖 PyQt，也不能操作 `QWidget`、`QMessageBox`、`QFileD
 每个新的 application use case 都必须有测试。
 
 跨多个科学步骤的数据还必须遵守
-[`scientific-data-flow.md`](scientific-data-flow.md)：RawImage 保持不可变，application 从
-RawImage 和 framework-neutral preprocessing config 生成唯一 AnalysisImage，presentation 的
-DisplayState 不能成为 scientific input。
+[`scientific-data-flow.md`](scientific-data-flow.md)：Analyze 从原始帧、有效像素和校正确定性地
+得到曲线（`AnalyzeFrame` 是唯一串起它们的地方），导出的 `_fit_input.dat` 带着 observation
+交给 Fitting；显示状态（色图、范围、视图、缩放）不能成为 scientific input。
 
 Fitting 的总强度、form factor、结构因子、resolution、单位和 q–intensity 对齐以
 [`fitting-scientific-model.md`](fitting-scientific-model.md) 为权威科学契约。
@@ -209,7 +215,7 @@ SimulationPort
 PredictionModelPort
 FileRepositoryPort
 DatasetStoragePort
-WaxsConfigurationPort
+FigureWriter
 ```
 
 Adapter 示例：
@@ -218,29 +224,26 @@ Adapter 示例：
 BornAgainSimulationAdapter
 TensorFlowModelAdapter
 LocalFileSystemAdapter
-LocalWaxsConfigurationAdapter
+MatplotlibFigureWriter
 ```
 
 Use-case tests 可以使用内存 fake 或 test double 替代这些 adapters。Port 应描述
 application 真正需要的能力，不能照搬 BornAgain、TensorFlow 或操作系统的全部 API。
-WAXS 的 versioned portable JSON 由 `WaxsConfigurationPort` 隔离具体文件系统读写；
-presentation 只调用 `LoadWaxsConfiguration` / `SaveWaxsConfiguration`，自动记忆则继续使用
-应用级 settings repository 的 `waxs` section。
 
 ## Feature 边界
 
-一个 feature 禁止导入另一个 feature 的 presentation、controller、adapter 或内部实现。
-例如 prediction 不得通过调用 `FittingController.SomeHelper` 复用 fitting 的 helper。
+一个 feature 不导入另一个 feature 的任何模块（包括 application）：`src/gimap/features/X/` 里出现
+`src.gimap.features.Y` 就会让 `test_features_do_not_import_other_feature_internals` 失败（2026-10-06 核对）。
 
-跨 feature 复用只允许通过：
+跨 feature 协作只允许通过：
 
-- public application API；
-- 明确的 port 或 interface；
-- 具有清晰所有权的稳定 shared domain/scientific primitive。
+- 组合根注入：`src/gimap/app/`（`main_window.py`、`menus.py`、`runtime.py`、`headless_assistant.py`）创建一个
+  feature 的对象，作为参数交给另一个 feature（例如 Fitting 的 `create_quick_fit()`、Calibration 的
+  `create_headless_calibration()` 注入自动分析）；接收方只依赖自己定义的 port 或 protocol；
+- 具有清晰所有权的稳定 shared domain/scientific primitive（`src/gimap/shared/`）。
 
-跨 feature application API 调用只适用于真正的业务协作。如果复用的是稳定的数学或
-科学能力，应优先提取为具有明确所有权的 shared scientific kernel，而不是通过另一个
-feature 的 use case 间接调用。例如 q-space conversion 不应通过 FittingUseCase 复用：
+如果复用的是稳定的数学或科学能力，应提取为具有明确所有权的 shared scientific kernel，而不是通过注入
+另一个 feature 的 use case 间接调用。例如 q-space conversion 不应通过 FittingUseCase 复用：
 
 ```text
 Prediction ─┐
@@ -251,6 +254,11 @@ Prediction ─┐
 Fitting ────┘
 ```
 
+当前的 shared scientific kernel：`shared/detector_io`（CBF/NXS/TIFF 读取与元数据）、
+`shared/geometry`（探测器几何、像素 → q 映射、仪器配置，约定见
+[`geometry.md`](geometry.md)）和 `shared/series_stages`（一组曲线的异常帧、主成分与分段：
+Analyze 的 Series、Fitting 的 In-situ series 与 Compare 三处共用，纯 NumPy）。
+
 `shared/` 不是默认放置位置。只有至少两个 feature 已经稳定需要同一项领域能力，且其
 语义、边界和 ownership 都明确时，才允许提取 shared abstraction。禁止为了“未来可能
 复用”而提前创建 shared code。
@@ -259,12 +267,14 @@ Shared code 必须有明确的科学或 application 职责。禁止新增名为 
 `helpers.py`、`common.py` 或 `misc.py` 的 catch-all modules，也禁止让 `shared/` 成为
 新的 catch-all directory。
 
-## Public import 兼容边界
+## Import 边界
 
 Feature 源码按 presentation、application、domain 和 infrastructure 分层；presentation
 只通过 application 公共 API 使用 domain 能力。顶层 `controllers`、`ui`、`trainset`、
-`calibration`、`WAXS` 和 `utils` 路径只允许为用户脚本或第三方 import 提供薄别名，不能
-包含第二套业务实现，也不能被 `src/gimap` 生产代码反向导入。
+`calibration`、`WAXS` 和 `utils/*.py` 兼容别名已删除，调用方直接导入 `src.gimap` 中的
+owner 模块。唯一保留的稳定路径是
+`src.gimap.features.trainset.infrastructure.adapters.dataset_generator`：已注册模型生成的
+`preprocess.py` 和 portable job 脚本依赖它。
 
 ## 修改范围与科学安全
 
@@ -282,6 +292,7 @@ characterization tests 或记录可信输出。架构、UI 和性能修改必须
 
 ## 文件大小指导
 
-新手写 Python 文件通常应控制在 400 行以内。Controller 和 ViewModel 通常应控制在
-300 行以内。这些是 architecture review 阈值，不是机械硬限制。职责内聚的模块可以在
-有明确理由时超过阈值；禁止为了满足行数要求而进行没有意义的拆分。
+`src/` 下每个 Python 模块最多 600 行，每个 feature 的 `view_model.py` 最多 300 行；两者都是测试强制的
+硬门禁（`tests/test_architecture_dependencies.py`，2026-10-06 核对），目的是让模块保持可读、可 review。
+接近上限时按职责拆分；禁止为了满足行数而把内聚的代码切成没有意义的碎片。全部由测试强制的规则见
+[`dependency-rules.md`](dependency-rules.md)。

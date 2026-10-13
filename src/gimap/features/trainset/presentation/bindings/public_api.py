@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-
+import copy
 from pathlib import Path
 
 from typing import Any, Dict
+
+from src.gimap.app.presentation.components import show_toast
+from src.gimap.app.presentation.i18n import tr
+
+from .detector_design import NO_REFERENCE_THRESHOLD
 
 
 class PublicApiMixin:
@@ -13,10 +18,11 @@ class PublicApiMixin:
 
     def _update_capabilities(self) -> None:
         available = self.simulation_port.is_available()
-        self.page.preview_capability.setText(
+        self.page.texts.set(
+            self.page.preview_capability,
             "BornAgain local simulation available"
             if available
-            else "BornAgain not installed locally · reference preview only"
+            else "BornAgain not installed locally · reference preview only",
         )
 
     def get_parameters(self) -> Dict[str, Any]:
@@ -36,6 +42,12 @@ class PublicApiMixin:
         hpc = self.config.get("hpc", {})
         if runtime.get("last_job_id") and hpc.get("user") and hpc.get("remote_path"):
             self.monitor_timer.start()
+        # Whatever loaded the parameters (Load project, File ▸ Load parameters, Undo): this design
+        # has not been validated, previewed or checked against the model. Last, so it also
+        # overrides the edits _load_reference made. Undo restores its own progress afterwards;
+        # the Monitor step keeps showing a job that still runs.
+        self.page.set_validation_state("Not validated", "pending")
+        self._invalidate_design_checks(last_step=3)
 
     def validate_parameters(self):
         valid, errors, warnings = self.trainset_view_model.validate_config(
@@ -43,6 +55,61 @@ class PublicApiMixin:
             simulation_available=self.simulation_port.is_available(),
         )
         return valid, "\n".join(errors or warnings)
+
+    def _reset_clicked(self) -> None:
+        """The page's Reset button: reset at once, and offer Undo (the global reset has none)."""
+        previous = copy.deepcopy(self._collect_config())
+        progress = self._page_progress()
+        self.reset_to_defaults()
+
+        def undo() -> None:
+            self.set_parameters(previous)
+            reference = previous.get("project", {}).get("reference_file")
+            if not reference or self.reference_image is not None:
+                self._restore_page_progress(progress)
+            # else the reference could not be read again: keep the reloaded (not validated) state
+            if self.page.auto_remember_check.isChecked():
+                self._autosave_timer.start(100)  # remember the restored design again
+            self.status_updated.emit("Trainset settings restored")
+
+        show_toast(
+            self.page,
+            tr("Trainset reset to defaults"),
+            action=(tr("Undo"), undo),
+            timeout_ms=10000,
+        )
+
+    def _page_progress(self) -> Dict[str, Any]:
+        """What the page says about progress: steps, readiness gates, design stages and badge.
+
+        Undo restores it with the settings, so the badge never claims a validation or preview
+        that the step list or the gate table no longer shows.
+        """
+        page = self.page
+        table = page.preview_gate_table
+        return {
+            "steps": page.step_entries(),  # (English template, values): shown again in either language
+            "gates": [
+                table.item(row, 1).text() if table.item(row, 1) is not None else ""
+                for row in range(table.rowCount())
+            ],
+            "stages": page.design_stages_ready(),
+            "design_tab": page.design_tabs.currentIndex(),
+            "badge": (page.validation_text(), page.validation_state()),  # English: shown translated
+        }
+
+    def _restore_page_progress(self, progress: Dict[str, Any]) -> None:
+        page = self.page
+        for index, (state, values) in enumerate(progress["steps"]):
+            page.set_step_state(index, state, **values)
+        for row, state in enumerate(progress["gates"]):
+            item = page.preview_gate_table.item(row, 1)
+            if item is not None:
+                item.setText(state)
+        for index, ready in enumerate(progress["stages"]):
+            page.set_design_stage_ready(index, ready)
+        page.design_tabs.setCurrentIndex(progress["design_tab"])
+        page.set_validation_state(*progress["badge"])
 
     def reset_to_defaults(self) -> None:
         remember = self.page.auto_remember_check.isChecked()
@@ -63,11 +130,13 @@ class PublicApiMixin:
             self.page.set_design_stage_ready(index, False)
         for index in range(len(self.page.STEPS)):
             self.page.set_step_state(index, "Not started")
+        # The checks of the old design no longer hold (row 3 follows the storage check box).
+        self._invalidate_design_checks()
         self.page.design_tabs.setCurrentIndex(0)
-        self.page.validation_badge.setText("Not validated")
-        self.page.threshold_summary.setText(
-            "Load a reference to calculate detector-gap and hot-pixel locations."
-        )
+        self.page.set_validation_state("Not validated", "pending")
+        self.page.texts.set(self.page.design_info, "No reference loaded")  # not the file just dropped
+        self.page.texts.set(self.page.design_info, "", setter="setToolTip")
+        self.page.texts.set(self.page.threshold_summary, NO_REFERENCE_THRESHOLD)
         self._update_capabilities()
         self._update_geometry_label()
         if remember:

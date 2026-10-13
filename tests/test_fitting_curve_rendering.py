@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from src.gimap.features.fitting.presentation.bindings import detector_display
-from src.gimap.features.fitting.presentation.bindings.detector_display import (
-    DetectorDisplayMixin,
+from src.gimap.features.fitting.presentation.bindings import curve_plot as detector_display
+from src.gimap.features.fitting.presentation.bindings.curve_plot import (
+    CurvePlotMixin,
 )
 from src.gimap.features.fitting.presentation.curve_rendering import (
     NEGATIVE_Q_COLOR,
@@ -17,7 +17,7 @@ from src.gimap.features.fitting.presentation.curve_rendering import (
 )
 
 
-class _CurveDisplayHarness(DetectorDisplayMixin):
+class _CurveDisplayHarness(CurvePlotMixin):
     data_source = "cut"
     I_fitting = np.array([900.0, 100.0, 800.0, 200.0])
 

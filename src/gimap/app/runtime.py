@@ -3,13 +3,11 @@
 from pathlib import Path
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
-from PyQt5.QtWidgets import QMainWindow
 
 from .fitting_session import FittingSessionCoordinator
+from .presentation.i18n import tr
 from .presentation.parameter_validation import show_parameter_validation
-from .presentation.workspace_feedback import show_workspace_unavailable
 from .workspace_parameters import WorkspaceParameterCoordinator
-
 
 class ApplicationRuntime(QObject):
     """Connect the application shell to feature-owned presentation runtimes."""
@@ -42,7 +40,6 @@ class ApplicationRuntime(QObject):
             repository=self.app_context.project_parameters,
             trainset=self.trainset,
             fitting=self.fitting,
-            classification=self.classification,
             prediction=self.prediction,
             status=self.status_updated.emit,
         )
@@ -51,12 +48,6 @@ class ApplicationRuntime(QObject):
 
     def _compose_features(self, components, simulation_port) -> None:
         """Construct feature presentation runtimes with injected dependencies."""
-        from src.gimap.features.classification.bootstrap import (
-            create_classification_view_model,
-        )
-        from src.gimap.features.classification.presentation.view_binding import (
-            ClassificationViewBinding,
-        )
         from src.gimap.features.fitting.bootstrap import create_fitting_view_model
         from src.gimap.features.fitting.presentation.view_binding import (
             FittingViewBinding,
@@ -90,14 +81,6 @@ class ApplicationRuntime(QObject):
             )
             or create_fitting_view_model(self.app_context),
         )
-        self.classification = ClassificationViewBinding(
-            self.ui,
-            self,
-            classification_view_model=create_classification_view_model(
-                self.app_context
-            ),
-            page=components.classification_page,
-        )
         self.prediction = PredictionViewBinding(
             self.ui,
             self,
@@ -111,7 +94,9 @@ class ApplicationRuntime(QObject):
             self._initialize_ui()
             self.trainset.initialize()
             self.fitting.initialize()
-            self.classification.initialize()
+            workspace = getattr(self.ui, "fittingWorkspace", None)
+            if workspace is not None and hasattr(workspace, "attach_legacy"):
+                workspace.attach_legacy(self.fitting)  # In-situ series follows the Single analysis page
             self.prediction.initialize()
             QTimer.singleShot(1000, self.fitting_session.load_last_session)
             print("Application runtime: Feature initialization complete")
@@ -119,22 +104,23 @@ class ApplicationRuntime(QObject):
             print(f"Application runtime: Feature initialization failed: {exc}")
 
     def _setup_connections(self) -> None:
-        self.ui.trainsetBuildButton.clicked.connect(self._switch_to_trainset_build)
-        self.ui.gisaxsPredictButton.clicked.connect(self._switch_to_gisaxs_predict)
-        self.ui.cutAndFittingButton.clicked.connect(self._switch_to_cut_fitting)
-        self.ui.ClassficationButton.clicked.connect(self._switch_to_classification)
-        try:
-            self.ui.WAXSButton.clicked.connect(self._switch_to_waxs)
-        except Exception:
-            pass
+        statusbar = getattr(self.ui, "statusbar", None)
+        if statusbar is not None:
+            # No timeout: a step instruction ("Click the direct-beam position …") stays while its mode lasts,
+            # until the next message replaces it. Fixed English texts are translated here (the zh table).
+            self.status_updated.connect(lambda text: statusbar.showMessage(tr(str(text))))
 
         trainset = self.trainset
+        # Step instructions and job messages of Trainset Build (the status bar is shown on the Labs pages).
+        # The two Labs pages share the bar: a page that is not shown does not write over the other's line
+        # (each page keeps its last message and shows it again when it is opened).
+        trainset.status_updated.connect(lambda text: self._page_says("trainset", text))
         trainset.parameters_changed.connect(self._on_parameters_changed)
         trainset.generation_started.connect(
-            lambda: self.status_updated.emit("Trainset generation started...")
+            lambda: self._page_says("trainset", "Trainset generation started...")
         )
         trainset.generation_finished.connect(
-            lambda: self.status_updated.emit("Trainset generation completed!")
+            lambda: self._page_says("trainset", "Trainset generation completed!")
         )
         trainset.progress_updated.connect(self.progress_updated)
         trainset.prediction_module_registered.connect(
@@ -148,30 +134,24 @@ class ApplicationRuntime(QObject):
         fitting.status_updated.connect(self.status_updated)
         fitting.progress_updated.connect(self.progress_updated)
 
-        classification = self.classification
-        classification.parameters_changed.connect(
-            lambda params: self._on_parameters_changed(
-                "Classification parameters", params
-            )
-        )
-        classification.status_updated.connect(self.status_updated)
-        classification.progress_updated.connect(self.progress_updated)
-        classification.classification_completed.connect(
-            self._on_classification_completed
-        )
-
         prediction = self.prediction
         prediction.parameters_changed.connect(
             lambda params: self._on_parameters_changed(
                 "GISAXS prediction parameters", params
             )
         )
-        prediction.status_updated.connect(self.status_updated)
+        prediction.status_updated.connect(lambda text: self._page_says("predict", text))
         prediction.progress_updated.connect(self.progress_updated)
 
+    def _page_says(self, key: str, text: str) -> None:
+        """A Labs page's message reaches the shared status bar only while that page is shown."""
+        components = getattr(self.ui, "components", None)
+        current = getattr(components, "current_page_key", None)
+        if current is None or current() == key:
+            self.status_updated.emit(text)
+
     def _initialize_ui(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(2)
-        self._update_button_states(0)
+        # The composition chose the start page (Analyze); keep whatever is shown now.
         self.status_updated.emit("GIMaP ready")
 
     def _open_registered_prediction_module(self, module_name: str) -> None:
@@ -181,50 +161,22 @@ class ApplicationRuntime(QObject):
         if combo is not None and combo.findText(module_name) >= 0:
             combo.setCurrentText(module_name)
         prediction._on_module_selected(module_name)
-        self._switch_to_gisaxs_predict()
+        self.navigate("predict")
 
-    def _switch_to_waxs(self) -> None:
-        page_index = getattr(self.ui, "waxsPageIndex", None)
-        if page_index is None:
-            show_workspace_unavailable(
-                self.parent if isinstance(self.parent, QMainWindow) else None,
-                "WAXS",
-                "Embedded WAXS page is not available.",
-            )
-            return
-        self.ui.mainWindowWidget.setCurrentIndex(page_index)
-        self.status_updated.emit("Switched to WAXS / in-situ processing mode")
-        self._update_button_states(4)
-
-    def _switch_to_cut_fitting(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(2)
-        self.status_updated.emit("Switched to Cut Fitting mode")
-        self._update_button_states(0)
-        if not self.fitting._initialized:
-            self.fitting.initialize()
-
-    def _switch_to_gisaxs_predict(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(1)
-        self.status_updated.emit("Switched to GISAXS prediction mode")
-        self._update_button_states(1)
-        if not self.prediction._initialized:
-            self.prediction.initialize()
-
-    def _switch_to_trainset_build(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(0)
-        self.status_updated.emit("Switched to Trainset Build mode")
-        self._update_button_states(2)
-
-    def _switch_to_classification(self) -> None:
-        self.ui.mainWindowWidget.setCurrentIndex(3)
-        self.status_updated.emit("Switched to Classification mode")
-        self._update_button_states(3)
-        if not self.classification._initialized:
-            self.classification.initialize()
+    def navigate(self, key: str) -> None:
+        """Show a workspace and initialise its feature on first use."""
+        self.ui.components.show_page(key)
+        binding = {
+            "fitting": self.fitting,
+            "predict": self.prediction,
+        }.get(key)
+        if binding is not None and not binding._initialized:
+            binding.initialize()
 
     def _on_parameters_changed(self, module_name, parameters) -> None:
+        """Keep the latest parameters of a module. Nothing is said: Trainset sends them on every edit and
+        autosave, which would fill the status bar with noise (and push out the step instruction)."""
         self.current_parameters[module_name] = parameters
-        self.status_updated.emit(f"{module_name} parameters updated")
 
     def get_all_parameters(self) -> dict:
         return self.workspace_parameters.snapshot()
@@ -254,23 +206,10 @@ class ApplicationRuntime(QObject):
     def handle_window_close(self) -> None:
         self.save_session_on_close()
 
-    def _on_classification_completed(self, results) -> None:
-        self.status_updated.emit(
-            f"Classification completed, processed {len(results)} items"
-        )
-
-    def _update_button_states(self, active_index: int) -> None:
-        self.ui.components.sidebar.set_active_index(active_index)
-
     @property
     def trainset_controller(self):
         """Deprecated runtime attribute retained for third-party integrations."""
         return self.trainset
-
-    @property
-    def classification_controller(self):
-        """Deprecated runtime attribute retained for third-party integrations."""
-        return self.classification
 
     @property
     def gisaxs_predict_controller(self):

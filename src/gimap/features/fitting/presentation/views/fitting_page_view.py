@@ -1,9 +1,8 @@
 """Hand-maintained Python View for the Fitting control surface."""
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore
 
 from .fitting_page_sections.page_shell import PageShellMixin
-from .fitting_page_sections.input_section import InputSectionMixin
 from .fitting_page_sections.fit_scaffold import FitScaffoldMixin
 from .fitting_page_sections.particle_one import ParticleOneMixin
 from .fitting_page_sections.particle_two import ParticleTwoMixin
@@ -15,7 +14,6 @@ from .fitting_page_sections.page_finish import PageFinishMixin
 
 class FittingPageView(
     PageShellMixin,
-    InputSectionMixin,
     FitScaffoldMixin,
     ParticleOneMixin,
     ParticleTwoMixin,
@@ -28,7 +26,6 @@ class FittingPageView(
     def setupUi(self, gisaxsFittingPage):
         gisaxsFittingPage.setObjectName("gisaxsFittingPage")
         self._setup_page_shell(gisaxsFittingPage)
-        self._setup_input_section()
         self._setup_fit_scaffold()
         self._setup_particle_one()
         self._setup_particle_two()
@@ -45,33 +42,11 @@ class FittingPageView(
 
     def retranslateUi(self, gisaxsFittingPage):
         _translate = QtCore.QCoreApplication.translate
-        self.gisaxsInputBox.setTitle(_translate("FittingPage", "GIMaP Input"))
-        self.gisaxsInputCutLineLabel.setText(_translate("FittingPage", "Cut line:"))
-        self.gisaxsInputColorScaleLabel.setText(_translate("FittingPage", "Color Scale:"))
-        self.gisaxsInputImportButton.setText(_translate("FittingPage", "Import GISAXS"))
-        self.gisaxsInputCenterAutoFindingButton.setText(_translate("FittingPage", "Auto Finding"))
-        self.gisaxsInputVminLabel.setText(_translate("FittingPage", "Vmin:"))
-        self.gisaxsInputStackValue.setText(_translate("FittingPage", "1"))
-        self.gisaxsInputCenterVerticalLabel.setText(_translate("FittingPage", "Vertical."))
-        self.gisaxsInputCenterParallelLabel.setText(_translate("FittingPage", "Parallel."))
-        self.gisaxsInputAutoScaleCheckBox.setText(_translate("FittingPage", "Auto Scale"))
-        self.gisaxsInputIntLogCheckBox.setText(_translate("FittingPage", "Int. Log"))
-        self.gisaxsInputAutoShowCheckBox.setText(_translate("FittingPage", "Auto Show"))
-        self.gisaxsInputShowButton.setText(_translate("FittingPage", "Show >"))
-        self.gisaxsInputCutButton.setText(_translate("FittingPage", "Cut"))
-        self.gisaxsInputVmaxLabel.setText(_translate("FittingPage", "Vmax:"))
-        self.gisaxsInputCutLineVerticalLabel.setText(_translate("FittingPage", "Vertical."))
-        self.gisaxsInputCutLineParallelLabel.setText(_translate("FittingPage", "Parallel."))
-        self.gisaxsInputCenterLabel.setText(_translate("FittingPage", "Center:"))
-        self.gisaxsInputDetectorParaButton.setText(_translate("FittingPage", "Detector Para."))
-        self.gisaxsInputModelCombox.setItemText(0, _translate("FittingPage", "Single"))
-        self.gisaxsInputModelCombox.setItemText(1, _translate("FittingPage", "Stack"))
         self.fitBox.setTitle(_translate("FittingPage", "Fitting"))
         self.fitKLabel.setText(_translate("FittingPage", "k"))
         self.FittingManualFittingButton.setText(_translate("FittingPage", "Plot Current Model"))
         self.fitIntResLabel.setText(_translate("FittingPage", "Int [Res.]"))
         self.fitImport1dFileButton.setText(_translate("FittingPage", "Import 1D File"))
-        self.fitCurrentDataCheckBox.setText(_translate("FittingPage", "GISAXS Data"))
         self.fitLogXCheckBox.setText(_translate("FittingPage", "Log-x"))
         self.fitLogYCheckBox.setText(_translate("FittingPage", "Log-y"))
         self.fitNormCheckBox.setText(_translate("FittingPage", "Norm"))

@@ -80,6 +80,9 @@ class FittingAiViewModel:
     def map_candidate_parameters(self, row):
         return self._map.execute(row)
 
+    def map_native_solution(self, row):
+        return self._map.native(row)
+
     def load_candidate_results(self, output_dir):
         try:
             rows = self._load.execute(output_dir)

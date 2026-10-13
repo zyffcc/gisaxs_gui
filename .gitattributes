@@ -1,0 +1,6 @@
+# The bundled 1D Predict model (Workflow V5) is checked file by file against SHA-256 manifests
+# (conditional_v2/conditional_fast_manifest_v2.json and stable_blue_rc_v1/MANIFEST.json) before it
+# runs. The checksums were taken from the bytes on disk, where some files end their lines with
+# CRLF and others with LF, so git must hand out exactly those bytes on every computer:
+# no line-ending conversion in this folder.
+modules/Fitting_1D_Model/Workflow_v5/** -text

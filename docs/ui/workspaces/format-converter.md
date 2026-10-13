@@ -4,8 +4,7 @@
 - **Scope**: Format Converter 的 PyQt presentation 所有权、控件映射与手动验收
 - **Related code**:
   [`src/gimap/features/format_converter/presentation/`](../../../src/gimap/features/format_converter/presentation/)、
-  [`format_converter_dialog_view.py`](../../../src/gimap/features/format_converter/presentation/views/format_converter_dialog_view.py)、
-  [`ui/format_converter_dialog.py`](../../../ui/format_converter_dialog.py)
+  [`format_converter_dialog_view.py`](../../../src/gimap/features/format_converter/presentation/views/format_converter_dialog_view.py)
 - **Related tests**:
   [`tests/test_format_converter_presentation.py`](../../../tests/test_format_converter_presentation.py)、
   [`tests/test_format_converter_feature.py`](../../../tests/test_format_converter_feature.py)、
@@ -33,9 +32,18 @@ PyQt Dialog → FormatConverterViewModel → application use cases → ports
 `views/folder_import_dialog_view.py` 与 `views/conversion_progress_dialog_view.py` 独立拥有，
 与主对话框共用同一 behavior module，但不存在第二套布局实现。
 
-`ui/format_converter_dialog.py` 是 9 行 public import alias，直接 re-export feature 的三个
-dialog class，不包含第二套实现。生产 caller 按需导入 feature-owned dialog；该 alias 只服务
-已有外部脚本和 API 回归测试。
+旧的 `ui/format_converter_dialog.py` 与 `utils/format_converter.py` 兼容别名已删除；调用方直接
+导入 `src.gimap.features.format_converter` 中的 owner 模块。
+
+使用上的要点（2026-10-06）：帧选择模式按英文键保存在下拉项的数据里，中文界面下选择同样生效；
+源列表各列按内容定宽、文件名列伸展，长路径中间省略（完整路径在提示里）；Add files 的过滤器先列出转换器能读的
+全部格式（NXS、CBF、TIFF），再逐个列出。EDF 不是转换器的输入：EDF 帧用 Analyze ▸ Batch Export ▸
+Converted detector frames 转成 TIFF、EDF、NumPy 或 HDF5。Esc 关闭窗口，转换运行中会先询问。
+
+输出位置默认是第一个输入所在文件夹下的 `converted`（随输入变化，直到你自己选了位置）；上次的输出格式会恢复；
+Add files / Add folder 从上次的文件夹开始。可以把文件或文件夹拖进窗口。预览：单帧的源只显示一张缩略图（多帧显示首 / 中 / 末），
+统计（尺寸、类型、最小 / 最大、NaN、负值、可能饱和的像素）在缩略图上方；缩略图仅用于显示，取 log(1 + 值) 与 viridis 色图，
+统计仍是存储的原始值。
 
 ## 控件映射
 
@@ -57,7 +65,7 @@ Python 控件属性对应 Python View 中清晰可见的 objectName。该 dialog
 
 ## 手动验收清单
 
-- [ ] Add files、Add folder、Use current file 均可添加输入；
+- [ ] Add files、Add folder、Use currently opened file 均可添加输入；
 - [ ] NXS 多 dataset 选择仍能更新 frame/shape；
 - [ ] Select all/none、filter、sort、remove 正常；
 - [ ] 展开 Advanced 后 All、Current、Range、Custom、Every N 结果与原来一致；

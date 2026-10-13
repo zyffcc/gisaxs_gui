@@ -6,6 +6,8 @@ from typing import Any, Dict
 
 import numpy as np
 
+from src.gimap.shared.geometry.legacy_conventions import trainset_q_vectors
+
 
 def roi_to_spherical_ranges(config: Dict[str, Any]) -> Dict[str, float]:
     """Convert a rectangular detector ROI to BornAgain phi/alpha limits.
@@ -56,27 +58,5 @@ def roi_to_spherical_ranges(config: Dict[str, Any]) -> Dict[str, float]:
 
 
 def q_vectors(config: Dict[str, Any]) -> Dict[str, np.ndarray]:
-    detector = config["detector"]
-    beam = config["beam"]
-    nx, ny = int(detector["pixels_x"]), int(detector["pixels_y"])
-    px, py = float(detector["pixel_size_x_mm"]), float(detector["pixel_size_y_mm"])
-    distance = float(detector["distance_mm"])
-    theta_in = np.deg2rad(float(beam["grazing_angle_deg"]))
-    wavelength = float(beam["wavelength_nm"])
-    center_x = float(detector["beam_center_x_px"])
-    center_y = float(detector["beam_center_y_px"])
-    x = (np.arange(nx, dtype=np.float64) - center_x) * px
-    # Display row zero is the detector top.  Positive vertical displacement is
-    # therefore center_y - row, not row - center_y.  Computing it directly in
-    # display coordinates avoids the old bug where the full qz detector was
-    # flipped before an ROI was cropped from it.
-    y = (center_y - np.arange(ny, dtype=np.float64)) * py
-    xx, yy = np.meshgrid(x, y)
-    alpha_f = np.arctan2(yy, distance) - theta_in
-    psi = np.arctan2(xx, distance)
-    k0 = 2.0 * np.pi / wavelength
-    qx = k0 * (np.cos(alpha_f) * np.cos(psi) - np.cos(theta_in))
-    qy = k0 * np.cos(alpha_f) * np.sin(psi)
-    qz = k0 * (np.sin(alpha_f) + np.sin(theta_in))
-    qr = np.copysign(np.sqrt(qx**2 + qy**2), qy)
-    return {"qx": qx, "qy": qy, "qz": qz, "qr": qr}
+    """Detector q grids in nm⁻¹; the physics lives in shared.geometry."""
+    return trainset_q_vectors(config)

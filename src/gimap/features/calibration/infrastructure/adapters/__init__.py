@@ -6,6 +6,7 @@ from .local import (
     LegacyCalibrationRunnerAdapter,
     LocalCalibrationImageAdapter,
     LocalCalibrationPathAdapter,
+    PreferencesCalibrationFolderAdapter,
     SettingsGeometryAdapter,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "LegacyCalibrationRunnerAdapter",
     "LocalCalibrationImageAdapter",
     "LocalCalibrationPathAdapter",
+    "PreferencesCalibrationFolderAdapter",
     "SettingsGeometryAdapter",
 ]

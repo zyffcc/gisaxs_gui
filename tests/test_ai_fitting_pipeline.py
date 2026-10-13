@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from utils.ai_fitting_pipeline import FittingPipeline, FittingRequest
-from utils.ai_fitting_profiles import profile_registry
+from src.gimap.features.fitting.infrastructure.adapters.fitting_pipeline import FittingPipeline, FittingRequest
+from src.gimap.features.fitting.application.fitting_profiles import profile_registry
 
 
 def test_all_profiles_use_the_same_pipeline_script(tmp_path):

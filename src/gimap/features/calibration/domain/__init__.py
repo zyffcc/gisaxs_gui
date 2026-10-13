@@ -8,6 +8,14 @@ from .models import (
     MatchedRing,
 )
 from .requests import CalibrationRequest
+from .line_check import best_by_lines, check_lines
+from .instrument_profile import (
+    calibrated_geometry,
+    calibrated_shape,
+    profile_change_is_significant,
+    profile_from_calibration,
+    profile_name_for,
+)
 from .manual_refinement import (
     MANUAL_REFINEMENT_WARNING,
     commit_manual_refinement,
@@ -46,6 +54,13 @@ __all__ = [
     "MANUAL_REFINEMENT_WARNING",
     "TheoreticalRingOverlay",
     "available_standards",
+    "best_by_lines",
+    "check_lines",
+    "calibrated_geometry",
+    "calibrated_shape",
+    "profile_change_is_significant",
+    "profile_from_calibration",
+    "profile_name_for",
     "commit_manual_refinement",
     "detect_standard_keys",
     "distance_from_ring_radius",

@@ -2,266 +2,69 @@
 
 > **Status**：Current
 >
-> **Scope**：`src/gimap` 生产代码的允许依赖和禁止依赖
+> **Scope**：`src/` 生产代码的依赖方向、模块大小和由测试强制的边界
 >
-> **Last verified**：2026-08-20
+> **Related tests**：`tests/test_architecture_dependencies.py`、`tests/test_ui_source_of_truth.py`、
+> `tests/test_ui_design_system.py`、`tools/offscreen_smoke.py`
+>
+> **Last verified**：2026-10-06（逐条对照上述测试）
 
-这些规则适用于全部 `src/gimap` 生产代码。顶层 public import alias 可以向当前 owner 转发，但
-`src/gimap` 禁止反向导入 `controllers`、`ui`、`trainset`、`calibration`、`WAXS` 或
-`utils`；架构测试会阻止这类依赖重新出现。
+文档与测试不一致时以测试为准。下面第一节是测试会挡住的硬规则；其余是设计意图，靠 review 维护。
 
-## 允许的依赖
+## 测试强制的规则
 
-| 来源 | 可以依赖 | 用途 |
-|---|---|---|
-| `presentation` | 本 feature 的 public `application` API | 调用 use cases 并展示结果 |
-| `application` | `domain`、application-owned ports | 在不引入框架细节的情况下编排工作流 |
-| `domain` | Python 标准库、NumPy，以及适用于稳定 scientific primitive 的 SciPy | 表达稳定科学含义 |
-| `infrastructure` | `application` ports、`domain`、外部库 | 实现外部能力 |
-| composition root | presentation、application、具体 adapters | 构建并注入对象关系 |
+| 规则 | 测试 |
+| --- | --- |
+| `src/` 下每个 `.py` 不超过 **600 行**（`utils/ML_Fitting_1D_GISAXS` 研究代码不算）。为了模块可读、可 review；按职责拆分，不为凑行数切碎内聚的代码。 | `test_runtime_python_modules_do_not_regrow_into_monoliths` |
+| 每个 feature 的 `view_model.py` 不超过 **300 行**。 | `test_feature_view_models_stay_within_review_threshold` |
+| **domain** 不导入 PyQt5/6、PySide2/6、TensorFlow、Keras、BornAgain。 | `test_domain_files_do_not_import_forbidden_runtimes` |
+| **application** 不导入路径中含 `presentation`、`infrastructure` 的模块，也不导入 PyQt/PySide、TensorFlow、Keras、BornAgain。 | `test_application_cannot_depend_on_presentation`、`test_application_files_do_not_import_gui_runtimes_or_concrete_adapters` |
+| **presentation**（任何路径含 `presentation` 的文件，包括 `app/presentation`）不导入路径中含 `domain`、`infrastructure` 或 `adapters` 的模块，也不导入顶层 `utils`。可以导入本 feature 的 application、`src.gimap.shared`、`src.gimap.app`（AppContext、ports、jobs）和 `src.gimap.app.presentation`。 | `test_presentation_does_not_import_domain_directly`、`test_presentation_files_do_not_import_concrete_adapters`、`test_presentation_files_do_not_import_legacy_utils_package` |
+| **静态视图** `presentation/views/*_view.py` 更严：不导入 application、domain、infrastructure、controllers、TensorFlow、Keras、BornAgain；文件集合必须与 `EXPECTED_VIEWS_BY_OWNER` 完全一致（新增、删除、改名都要改表）。不再有 Qt Designer（`.ui`、`_generated`、`tools/compile_ui.py`）。 | `tests/test_ui_source_of_truth.py` |
+| **feature 之间不互相导入**：`src/gimap/features/X/` 里不能出现 `src.gimap.features.Y`（Y ≠ X）。 | `test_features_do_not_import_other_feature_internals` |
+| `src/gimap/shared` 和 `src/gimap/app/presentation` 都不导入 `src.gimap.features`。 | `test_shared_does_not_import_feature_implementations`、`test_ui_design_system.py::test_shared_components_construct_without_feature_or_scientific_dependencies` |
+| `QFileDialog`、`QMessageBox` 只在路径含 `presentation` 的模块里导入（`app/menus.py` 等经 `app/presentation/app_dialogs.py`）。 | `test_qt_file_and_message_dialogs_are_confined_to_presentation` |
+| 删除的顶层包不回来：`calibration/`、`controllers/`、`trainset/`、`ui/`、`WAXS/` 下没有 `.py`；`utils/` 顶层除 `__init__.py` 外没有 `.py`；`core/`、`config/` 没有 `.py`；没有 `legacy_bridge.py` / `legacy_controller.py`；`src/gimap` 不 `import` 顶层 `calibration`、`controllers`、`trainset`、`ui`、`utils`、`waxs`、`core`、`config`。 | `test_deleted_compatibility_aliases_do_not_regrow`、`test_new_source_does_not_depend_on_legacy_compatibility_packages`、`test_settings_live_in_the_user_store_only`、`test_production_source_does_not_use_internal_legacy_bridges` |
+| 每个 `.qss` 在浅色和深色主题下都能被 Qt 解析。 | `test_every_style_sheet_parses_in_qt_in_both_themes` |
+| 真实主窗口能 offscreen 启动：6 个页面、fitting / prediction / trainset 三个 binding、一个 Compare 页面。 | `tools/offscreen_smoke.py`（`tools/check.py` 的一步） |
 
-核心方向为：
+检查方式是扫描 `import` 语句的模块路径段，所以 `from ..domain import x` 和 `import src.gimap.features.y` 都会被发现。
+
+## 方向
 
 ```text
 presentation → application → domain
-
-infrastructure → implements application ports
+infrastructure → 实现 application 的 ports（并使用 domain）
+组合根（src/gimap/app/、main.py、各 feature 的 bootstrap.py）→ 创建 adapters 并注入
 ```
 
-## 禁止的依赖
-
-### Domain
-
-Domain 禁止导入或依赖：
-
-- PyQt 或 PySide；
-- TensorFlow 或 Keras；
-- BornAgain；
-- presentation code；
-- controllers、widgets、dialogs、windows 或其他 GUI-specific modules；
-- infrastructure adapters；
-- 具体文件系统行为。
-
-Domain 明确允许：
-
-- Python 标准库；
-- NumPy；
-- SciPy，但仅限语义稳定且适合成为 domain scientific primitive 的数值能力。
-
-因此，“domain 为纯 Python”表示它不依赖 GUI、ML runtime、simulation engine 和 I/O
-infrastructure，并不表示它只能使用 Python 标准库。引入其他数值库前需要 architecture
-review，确认其稳定性和 domain 适用性。
-
-Domain API 不得接受或返回 Qt objects、TensorFlow tensors、BornAgain objects、
-widgets 或 open file handles 作为 domain model 的组成部分。
-
-### Application
-
-Application 禁止：
-
-- 导入 PyQt 或 PySide；
-- 创建、检查或修改 `QWidget` instances；
-- 调用 `QMessageBox`、`QFileDialog` 或其他 GUI dialogs；
-- 导入具体 infrastructure adapters；
-- 直接调用 BornAgain 或 TensorFlow；
-- 通过原生文件对话框选择具体路径；
-- 依赖另一个 feature 的 presentation、controller 或内部模块。
-
-Application 可以为 simulation、inference 或 storage 定义 port，并通过 dependency
-injection 接收其实现。
-
-### Presentation
-
-Presentation 是唯一允许通过 `QMessageBox`、`QFileDialog` 和类似 GUI API 与用户
-交互的层。Presentation 禁止执行：
-
-- scientific calculation；
-- TensorFlow inference；
-- BornAgain simulation；
-- 具体文件系统实现；
-- 应属于 use case 的工作流编排。
-
-Presentation 可以收集用户选择的路径，并将路径作为 application request 的一部分。
-实际 repository/storage 操作必须通过 application port 完成。
-
-### ViewModels
-
-ViewModel 只允许负责：
-
-- UI state；
-- commands；
-- 调用 use cases；
-- 将 use-case results 转换为 display state。
-
-ViewModel 禁止负责：
-
-- scientific calculations；
-- TensorFlow inference；
-- BornAgain simulation；
-- 具体文件系统 implementations；
-- `QMessageBox`、`QFileDialog` 或 widget manipulation。
-
-### ViewBinding 与 public Controller aliases
-
-Presentation 的调用链必须是：
-
-```text
-PyQt View → ViewModel → Use Case
-```
-
-Feature-owned `ViewBinding` 可以连接 widget signals、dialogs、rendering 与
-ViewModel。ViewBinding 视为 View 的实现细节，只能做控件值映射和展示，不得调用具体 adapter、
-执行科学计算或形成第二层 workflow orchestration。生产代码不得同时保留同一页面的
-ViewBinding 实现和 Controller 实现。
-
-顶层 Controller import path 只能薄 re-export 当前 feature owner。生产代码不得建立以下链路：
-
-```text
-View → Controller → ViewModel → Use Case
-```
-
-Presentation 中确有 composition 或 navigation 对象时，它不得
-包含 application workflow orchestration、scientific calculation、BornAgain/TensorFlow
-调用或具体文件系统实现。
-
-## 跨 feature 规则
-
-一个 feature 禁止直接依赖另一个 feature 的：
-
-- presentation；
-- controller 或 ViewModel；
-- infrastructure adapter；
-- private/internal implementation。
-
-以下形式明确禁止：
-
-```text
-prediction → FittingController.SomeHelper
-```
-
-跨 feature 协作只允许通过：
-
-1. 由提供方 feature 维护的 public application API；
-2. 明确的 port 或 interface；
-3. 具有明确所有权的稳定 shared domain/scientific primitive。
-
-Public application API 不是普通代码复用通道。跨 feature application API 调用只适用
-于真正的业务协作。如果多个 feature 复用的是稳定数学或科学能力，应优先提取为具有
-明确 ownership 的 shared scientific kernel，而不是让一个 feature 间接调用另一个
-feature 的 use case。例如：
-
-```text
-不好：Prediction → FittingUseCase → q conversion
-
-推荐：Prediction ─┐
-                  ↓
-             shared scientific q-space
-                  ↑
-       Fitting ────┘
-```
-
-`shared/` 不是默认放置位置。只有至少两个 feature 已经稳定需要相同领域能力，并且该
-能力的语义、边界和 ownership 明确时，才能提取 shared abstraction。禁止为了“未来
-可能复用”而提前创建 shared code，也禁止将 `shared/` 变成新的 catch-all directory。
-
-禁止通过全局技术目录绕开 feature 边界。不得新增 `utils.py`、`helpers.py`、
-`common.py` 或 `misc.py`，因为这些名称没有表达明确职责。模块名称必须说明其负责的
-操作或科学概念。
-
-## Ports/adapters 规则
-
-Ports 是 application-owned interfaces，adapters 是 infrastructure-owned
-implementations。
-
-Feature 内推荐结构：
-
-```text
-application/
-    ports/
-
-infrastructure/
-    adapters/
-```
-
-常见 ports 包括：
-
-- `SimulationPort`；
-- `PredictionModelPort`；
-- `FileRepositoryPort`；
-- `DatasetStoragePort`。
-
-常见 adapters 包括：
-
-- `BornAgainSimulationAdapter`；
-- `TensorFlowModelAdapter`；
-- `LocalFileSystemAdapter`。
-
-具体规则：
-
-- use case 只能依赖 port，不能依赖具体 adapter；
-- adapter 实现 application 所需能力，并在边界处转换外部类型；
-- BornAgain、TensorFlow/Keras 和具体文件系统 imports 必须位于 infrastructure
-  adapters；
-- port 不得暴露外部库特有类型，除非该类型已经是稳定的 domain primitive；
-- adapter 不得调用 presentation 或展示 dialogs；
-- adapter 的构建属于 composition root；
-- use-case tests 应尽可能使用 fake 或 test double。
-
-## Use-case 规则
-
-每个新的 application use case 都必须有测试。Use case 应当：
-
-- 表达一个内聚的用户操作或批处理操作；
-- 接受 framework-neutral input；
-- 协调 domain logic 和 injected ports；
-- 返回 framework-neutral results 或 application errors；
-- 避免 widget state 和具体外部库细节。
-
-## 科学行为规则
-
-架构、UI、性能和维护性修改不得静默改变科学结果或语义，包括：
-
-- numerical definitions；
-- parameter meanings；
-- units；
-- array orientation；
-- constraints；
-- ranking；
-- fitting behavior；
-- preprocessing behavior。
-
-任何科学行为修改都必须有明确任务范围、专门测试和适当科学 review。禁止将行为修改
-隐藏在移动、重命名、提取或 dependency inversion 中。
-
-## 模块大小与内聚性
-
-- 新手写 Python 文件通常不超过 400 行；
-- Controller 和 ViewModel 通常不超过 300 行；
-- 以上数值用于触发 architecture review，并非机械硬限制；
-- 禁止仅为满足行数要求，将内聚逻辑拆成无意义的碎片。
-
-## Architecture violation 处理规则
-
-所有 `src/gimap` 生产代码必须符合这些规则：
-
-- 不得引入新的 violation；
-- 修改碰到已有 violation 时，不得扩大其影响范围；
-- public import alias 必须保持薄转发，不能承载业务实现；
-- 修复 violation 前先用 focused tests 固定科学和用户可见行为；
-- 一个任务只处理请求范围内的职责，不同时改写无关 feature。
-
-## Review checklist
-
-接受新增或修改代码之前，应检查：
-
-- 代码是否归属于一个 feature，而不是全局技术目录？
-- 所有依赖是否指向允许的方向？
-- PyQt 用户交互是否仅存在于 presentation？
-- BornAgain、TensorFlow 和文件系统细节是否位于 ports/adapters 后方？
-- 跨 feature 复用是否通过 public API、port 或稳定 primitive？
-- 跨 feature API 是否代表真实业务协作，而不是绕路复用数学能力？
-- Shared abstraction 是否已有至少两个稳定使用方，并具备明确语义和 ownership？
-- 模块名称是否表达明确职责？
-- 每个新 use case 是否有测试？
-- 科学输出和语义是否保持不变？
-- 本次修改是否保持职责内聚，没有混入无关 feature？
+- **domain**：纯科学含义。可用标准库、NumPy，以及语义稳定的 SciPy；不接收也不返回 Qt 对象、张量、BornAgain 对象或文件句柄。
+- **application**：用例与 ports；输入输出与框架无关；不碰控件、对话框和具体 adapter。每个新用例都有测试（尽量用 fake port）。
+- **infrastructure**：文件、BornAgain、TensorFlow/Keras 等具体实现，放在 `infrastructure/adapters/`；在边界处转换外部类型；不显示对话框。
+- **presentation**：页面、ViewModel、bindings。ViewModel 只管界面状态、命令、调用用例和把结果变成显示状态；
+  ViewModel 和 bindings 不做科学计算、不写具体文件系统实现、不编排第二层工作流。用户选的路径作为请求的一部分交给 application。
+
+## 跨 feature 协作
+
+feature 不导入另一个 feature。需要组合时在组合根注入：`src/gimap/app/main_window.py`（页面、Run Automatic Analysis 放进 Analyze、
+Process with AI）、`menus.py`（Tools 窗口）、`window_view.py`（经典 Fitting / Prediction 控件）、`runtime.py`（Labs 与 Fitting 的 binding）、
+`headless_assistant.py`（`tools/gimap_agent.py` 用）。例：Fitting 的快速物理拟合由 `create_quick_fit()` 创建，注入 Fitting workspace、
+自动分析与 Process with AI（assistant）和 Analyze 的批量拟合（`page.set_model_fitter`）；Calibration 的
+`create_headless_calibration()` 同样注入自动分析与 Process with AI。
+
+多个 feature 需要同一项稳定科学能力时，提取到 `src/gimap/shared/`（现有 `detector_io`、`geometry`、`series_stages`、
+`figures.py`、`file_paths.py`），而不是让一个 feature 调另一个的用例。`shared/` 不是 `utils/`：至少两个稳定使用方、
+语义和 ownership 明确才提取；模块名说明职责，不用 `utils.py`、`helpers.py`、`common.py`、`misc.py`。
+
+## 科学行为
+
+架构、UI、性能和维护性修改不得静默改变科学结果：数值定义、参数含义、单位、数组方向、约束、排序、拟合和预处理行为。
+科学行为修改是单独的任务，有专门的测试，不藏在移动、改名或抽取里。修改已有行为前先用 focused tests 固定它。
+
+## Review 时问
+
+- 代码属于哪个 feature？依赖方向对吗？对话框只在 presentation 吗？
+- BornAgain、TensorFlow 和文件系统细节在 ports / adapters 后面吗？
+- 跨 feature 的组合在组合根吗？shared 抽取有两个稳定使用方吗？
+- 模块接近 600 行（或 `view_model.py` 接近 300 行）时，是否按职责拆分了，而不是硬切？
+- 科学输出没变吗？每个新用例有测试吗？

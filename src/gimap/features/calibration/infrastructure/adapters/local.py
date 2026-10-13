@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -66,7 +67,11 @@ class LegacyCalibrationRunnerAdapter:
 
 
 class JsonCalibrationStorageAdapter:
-    """GIMaP calibration JSON v1 的本地存储实现。"""
+    """GIMaP calibration JSON v1 的本地存储实现。
+
+    The beam centres in the file are pixel-centre indices (the centre of the first pixel is 0.0), as in every
+    earlier export; ``metadata["center_convention"]`` names that convention (``CalibrationResult.to_dict``).
+    """
 
     def save(self, result: CalibrationResult, path: str | Path) -> None:
         Path(path).write_text(
@@ -97,36 +102,49 @@ class JsonDetectorCatalogAdapter:
             return {}
 
 
+def _image_shape(result: CalibrationResult) -> list[int] | None:
+    shape = (result.metadata or {}).get("image_shape")
+    try:
+        rows, columns = (int(value) for value in shape)
+    except (TypeError, ValueError):
+        return None
+    return [rows, columns]
+
+
+def _stored_number(value: Any, default: float) -> float:
+    """A number of the settings file; ``default`` for what a damaged file holds in its place (null, text, inf)."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if math.isfinite(number) else default
+
+
 class SettingsGeometryAdapter:
-    """通过 SettingsRepository 读取并保存共享 geometry settings。"""
+    """Keep the last applied calibration in the shared settings.
+
+    ``detector.*`` holds the geometry in calibration convention (numpy pixel
+    indices, row 0 at the top) and ``beam.*`` the energy; the instrument
+    profile Analyze uses is recorded separately (see ``RecordInstrumentProfile``).
+    """
 
     def __init__(self, settings: SettingsRepository):
         self.settings = settings
 
     def current_geometry(self, defaults: dict[str, float]) -> dict[str, float]:
-        return {
-            "distance": float(
-                self.settings.get(
-                    "fitting",
-                    "detector.distance",
-                    defaults["distance"],
-                )
-            ),
-            "beam_center_x": float(
-                self.settings.get(
-                    "fitting",
-                    "detector.beam_center_x",
-                    defaults["beam_center_x"],
-                )
-            ),
-            "beam_center_y": float(
-                self.settings.get(
-                    "fitting",
-                    "detector.beam_center_y",
-                    defaults["beam_center_y"],
-                )
-            ),
-        }
+        """The last applied geometry; ``defaults`` when no calibration was ever applied.
+
+        ``detector.*`` holds numbers on every installation: the settings store fills in the built-in
+        geometry of the simulation pages (2000 mm, centre 737), which nobody measured. ``apply`` writes
+        ``system.geometry_calibration`` together with the geometry, so that entry tells an applied
+        geometry from those numbers (the XRR window reads the settings the same way). Settings carried
+        over from an earlier version can hold an applied geometry without the entry: it counts as never
+        applied, since nothing says any more which image those numbers belong to.
+        """
+        keys = ("distance", "beam_center_x", "beam_center_y")
+        if not isinstance(self.settings.get("system", "geometry_calibration", None), dict):
+            return {key: float(defaults[key]) for key in keys}
+        return {key: _stored_number(self.settings.get("detector", key, None), float(defaults[key])) for key in keys}
 
     def apply(self, result: CalibrationResult) -> dict[str, float]:
         candidate = result.selected_candidate
@@ -139,7 +157,6 @@ class SettingsGeometryAdapter:
         }
         for key, value in geometry.items():
             self.settings.set("detector", key, value)
-            self.settings.set("fitting", f"detector.{key}", value)
         self.settings.set(
             "detector",
             "rotation_deg",
@@ -160,9 +177,40 @@ class SettingsGeometryAdapter:
                 "standard": candidate.standard_key,
                 "confidence": candidate.confidence,
                 "residual_px": candidate.rms_residual_px,
+                # Which frames the geometry belongs to (rows, columns), for tools that reuse it.
+                "image_shape": _image_shape(result),
+                "detector": result.detector_name or "",
             },
         )
         return geometry
 
     def save(self) -> None:
         self.settings.save()
+
+
+class PreferencesCalibrationFolderAdapter:
+    """The folder of the last calibration image, in the user preferences."""
+
+    KEY = "calibration.last_folder"
+
+    def __init__(self, preferences, key: str = KEY):
+        self.preferences = preferences
+        self.key = key
+
+    def last_folder(self) -> str:
+        try:
+            folder = str(self.preferences.get(self.key, "") or "")
+        except Exception:
+            return ""
+        return folder if folder and Path(folder).is_dir() else ""
+
+    def remember(self, path: str | Path) -> None:
+        if not path:
+            return
+        location = Path(path)
+        folder = location if location.is_dir() else location.parent
+        try:
+            self.preferences.set(self.key, str(folder))
+            self.preferences.save()
+        except OSError:
+            pass

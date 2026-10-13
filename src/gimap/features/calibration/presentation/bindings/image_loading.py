@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import struct
 
 from typing import Optional
 
@@ -20,20 +21,51 @@ from ...application import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr, trf
+
 from ..workers import ImageLoaderWorker
 
 LOGGER = logging.getLogger(__name__)
+# What a file reader raises when the content is not what the suffix promises (a cut-off CBF gives
+# "'NoneType' object has no attribute 'find'" or an empty AssertionError): its own text says
+# nothing to a person, so it only follows the sentence, in brackets.
+READER_TRIPPED = (
+    AssertionError, AttributeError, EOFError, LookupError, TypeError, ValueError, struct.error,
+)
+# Every format the shared detector loader reads; the standards in the repository are EDF/TIFF.
+CALIBRATION_IMAGE_FILTER = (
+    "Detector Images (*.nxs *.cbf *.tif *.tiff *.edf);;NXS (*.nxs);;CBF (*.cbf);;"
+    "TIFF (*.tif *.tiff);;EDF (*.edf)"
+)
+
+
+def read_error_text(name: str, exc: BaseException) -> str:
+    """Why the calibration image ``name`` could not be read, in words and in the interface language."""
+    if isinstance(exc, FileNotFoundError):
+        return trf("{name} was not found: it may have been moved or deleted.", name=name)
+    detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+    unreadable = isinstance(exc, OSError) and not isinstance(exc, PermissionError)
+    if unreadable or isinstance(exc, READER_TRIPPED):
+        return trf(
+            "{name} could not be read: the file looks damaged, incomplete or of another kind ({error}).",
+            name=name,
+            error=detail,
+        )
+    return trf("Could not read {name}: {error}", name=name, error=detail)
 
 
 class ImageLoadingMixin:
     """Own image loading presentation behavior."""
 
+    # What the window itself last put in Estimated distance (0: nothing). Another value was typed by the user.
+    _prefilled_distance_mm = 0.0
+
     def open_image_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Open Calibration Image",
-            "",
-            "Detector Images (*.nxs *.cbf);;NXS Files (*.nxs);;CBF Files (*.cbf)",
+            tr("Open Calibration Image"),
+            self._start_folder(),
+            CALIBRATION_IMAGE_FILTER,
         )
         if path:
             self.load_image(self.view_model.normalize_path(path))
@@ -62,7 +94,9 @@ class ImageLoadingMixin:
 
     def _image_loaded(self, image: DetectorImage) -> None:
         self.image = image
+        self._remember_folder(image.source_path)  # where Open… and Import… start next time
         self.result = None
+        self._fitted_geometry = None
         self._preview_cache.clear()
         self._reset_preview_view = True
         self.clean_preview_button.setChecked(False)
@@ -75,26 +109,19 @@ class ImageLoadingMixin:
             self.pixel_x_spin.setValue(image.pixel_size_x_m * 1e6)
         if image.pixel_size_y_m:
             self.pixel_y_spin.setValue(image.pixel_size_y_m * 1e6)
-        if image.distance_m:
-            self.estimated_distance_spin.setValue(image.distance_m * 1000.0)
-        else:
-            current_distance = self.view_model.current_geometry(
-                {
-                    "distance": 0.0,
-                    "beam_center_x": 0.0,
-                    "beam_center_y": 0.0,
-                }
-            )["distance"]
-            if current_distance and float(current_distance) > 0:
-                self.estimated_distance_spin.setValue(float(current_distance))
+        self._prefill_estimated_distance(image)
         if image.pixel_size_x_m and image.pixel_size_y_m:
             self.pixel_label.setText(
-                f"{image.pixel_size_x_m * 1e6:.3f} × {image.pixel_size_y_m * 1e6:.3f} µm (metadata)"
+                trf(
+                    "{x} × {y} µm (metadata)",
+                    x=f"{image.pixel_size_x_m * 1e6:.3f}",
+                    y=f"{image.pixel_size_y_m * 1e6:.3f}",
+                )
             )
         else:
-            self.pixel_label.setText("Not detected — enter in Advanced Settings")
+            self.pixel_label.setText(tr("Not detected — enter it under Advanced configuration"))
             self.calibration_advanced_section.set_expanded(True)
-        self.detector_label.setText(image.detector_name or "Not identified")
+        self.detector_label.setText(image.detector_name or tr("Not identified"))
         detector_index = 0
         if image.detector_name:
             normalized = " ".join(image.detector_name.lower().split())
@@ -105,7 +132,7 @@ class ImageLoadingMixin:
                     break
         self.detector_combo.setCurrentIndex(detector_index)
         if not image.detector_name:
-            self.detector_label.setText("Not identified — choose a detector model")
+            self.detector_label.setText(tr("Not identified — choose a detector model"))
         detected_standards = self.view_model.detected_standard_keys(image.source_path)
         if len(detected_standards) == 1:
             standard_index = self.standard_combo.findData(detected_standards[0])
@@ -115,17 +142,19 @@ class ImageLoadingMixin:
             auto_index = self.standard_combo.findData("auto")
             if auto_index >= 0:
                 self.standard_combo.setCurrentIndex(auto_index)
-        energy_note = ""
+        notes = ""
         if image.metadata.get("energy_source"):
-            energy_note = " | energy from companion NXS"
-        standard_note = ""
+            notes += " | " + tr("energy from companion NXS")
         if len(detected_standards) > 1:
-            standard_note = " | multiple standard names found; comparing patterns automatically"
+            notes += " | " + tr("multiple standard names found; comparing patterns automatically")
         self.stage_label.setText(
-            f"Loaded {self.view_model.source_name(image.source_path)} — "
-            f"{image.data.shape[1]} × {image.data.shape[0]} pixels"
-            f"{energy_note}{standard_note}. "
-            "Click Auto Calibration."
+            trf(
+                "Loaded {name} — {width} × {height} pixels{notes}. Click Auto Calibration.",
+                name=self.view_model.source_name(image.source_path),
+                width=image.data.shape[1],
+                height=image.data.shape[0],
+                notes=notes,
+            )
         )
         self.job_status.set_state(
             "succeeded",
@@ -140,6 +169,31 @@ class ImageLoadingMixin:
         self._clear_result_labels()
         self.redraw_preview()
         self._set_running(False)
+
+    def _prefill_estimated_distance(self, image: DetectorImage) -> None:
+        """Estimated distance for the image just read: a number that has a source, or none.
+
+        The distance the file states, else the distance of the calibration applied last. With neither, a
+        value the user typed stays, and what the window filled in for an earlier image goes back to 0
+        (shown as "Optional": the ranking then prefers no distance). The estimate weighs heavily in the
+        ranking, so the built-in default geometry (2000 mm, measured by nobody) is never offered as one.
+        """
+        spin = self.estimated_distance_spin
+
+        def offered(distance_mm: float) -> float:
+            # Only what the field can show: it would turn a larger number (a NeXus distance without its
+            # unit is read as metres; inf) into its own maximum, a distance that stands nowhere.
+            shown = round(distance_mm, spin.decimals())
+            return shown if 0 < shown <= spin.maximum() else 0.0
+
+        distance_mm = offered(float(image.distance_m or 0.0) * 1000.0)
+        if not distance_mm:
+            unknown = {"distance": 0.0, "beam_center_x": 0.0, "beam_center_y": 0.0}
+            distance_mm = offered(float(self.view_model.current_geometry(unknown)["distance"] or 0.0))
+        if not distance_mm and spin.value() != self._prefilled_distance_mm:
+            return
+        spin.setValue(distance_mm)
+        self._prefilled_distance_mm = spin.value()
 
     def _detector_model_changed(self) -> None:
         model_name = self.detector_combo.currentData()
@@ -163,12 +217,14 @@ class ImageLoadingMixin:
             from PyQt5.QtWidgets import QInputDialog
 
             selected, ok = QInputDialog.getItem(
-                self, "Select NXS Dataset", "Detector image dataset:", exc.paths, 0, False
+                self, tr("Select NXS Dataset"), tr("Detector image dataset:"), exc.paths, 0, False
             )
             if ok and selected:
                 QTimer.singleShot(150, lambda: self.load_image(path, selected))
         else:
-            QMessageBox.warning(self, "Calibration Image", str(exc))
+            QMessageBox.warning(
+                self, tr("Calibration Image"), read_error_text(self.view_model.source_name(path), exc)
+            )
         self._set_running(False)
 
     def _cleanup_loader(self) -> None:

@@ -27,6 +27,10 @@ class CurveData:
     error: np.ndarray | None = None
     q_source_unit: QUnit = "angstrom"
     source_path: str | None = None
+    pixels: np.ndarray | None = None
+    """Detector pixels averaged into each point (GIMaP Analyze fit inputs)."""
+    observation: dict = field(default_factory=dict)
+    """How the points were measured (GIMaP Analyze ``# observation:`` record)."""
 
     def __post_init__(self) -> None:
         q = _one_dimensional(self.q, "q")
@@ -38,9 +42,14 @@ class CurveData:
             raise ValueError("error and q must have the same length")
         if self.q_source_unit not in ("nm", "angstrom"):
             raise ValueError(f"Unsupported q unit: {self.q_source_unit}")
+        pixels = None if self.pixels is None else _one_dimensional(self.pixels, "pixels")
+        if pixels is not None and pixels.size != q.size:
+            raise ValueError("pixels and q must have the same length")
         object.__setattr__(self, "q", q)
         object.__setattr__(self, "intensity", intensity)
         object.__setattr__(self, "error", error)
+        object.__setattr__(self, "pixels", pixels)
+        object.__setattr__(self, "observation", dict(self.observation or {}))
 
 
 @dataclass(frozen=True)

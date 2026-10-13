@@ -9,7 +9,7 @@ from .scientific_kernel import STANDARDS, available_standards
 
 
 STANDARD_SOURCE_ALIASES = {
-    "agbh": ("agbh", "ag_behenate", "silver_behenate"),
+    "agbh": ("agbh", "agbeh", "ag_behenate", "silver_behenate"),
     "lab6": ("lab6", "lanthanum_hexaboride"),
     "ceo2": ("ceo2", "cerium_dioxide"),
 }
@@ -21,11 +21,14 @@ def standard_options() -> tuple[CalibrationStandard, ...]:
 
 def detect_standard_keys(source_path: str | Path) -> tuple[str, ...]:
     source_name = str(source_path).lower()
-    return tuple(
+    keys = tuple(
         key
         for key, aliases in STANDARD_SOURCE_ALIASES.items()
         if any(alias in source_name for alias in aliases)
     )
+    if "lab6" in keys and "ceo2" in keys:  # a mixed calibrant: fit both line sets at once
+        return ("lab6_ceo2", *keys)
+    return keys
 
 
 def standard_display_name(key: str) -> str:

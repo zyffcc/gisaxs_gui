@@ -13,9 +13,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation import apply_design_system
 
-from .fitting_theme import fitting_stylesheet
+from .fitting_theme import apply_fitting_style
 from .insitu_series_page import InSituSeriesPage
 
 
@@ -40,7 +39,7 @@ class _CurrentContextStack(QStackedWidget):
 class FittingContextContainer(QWidget):
     """Switch work contexts while preserving both child pages in memory."""
 
-    def __init__(self, single_page: QWidget, insitu_view_model, parent=None) -> None:
+    def __init__(self, single_page: QWidget, insitu_view_model, parent=None, *, series_page: QWidget = None) -> None:
         super().__init__(parent)
         self.setObjectName("fittingContextContainer")
         root = QVBoxLayout(self)
@@ -48,6 +47,7 @@ class FittingContextContainer(QWidget):
         root.setSpacing(0)
 
         self.context_bar = QFrame(self)
+        apply_fitting_style(self.context_bar)
         self.context_bar.setObjectName("fittingContextBar")
         bar_layout = QHBoxLayout(self.context_bar)
         bar_layout.setContentsMargins(16, 8, 16, 8)
@@ -72,10 +72,15 @@ class FittingContextContainer(QWidget):
         bar_layout.addStretch(1)
 
         self.stack = _CurrentContextStack(self)
+        apply_fitting_style(self.stack)
         self.stack.setObjectName("fittingContextStack")
         self.insitu_page = InSituSeriesPage(insitu_view_model, self.stack)
+        self.series_page = series_page
         self.stack.addWidget(single_page)
-        self.stack.addWidget(self.insitu_page)
+        # The In-situ series tab: the new series page; the former one stays built (its binding runs it), unseen.
+        self.stack.addWidget(series_page if series_page is not None else self.insitu_page)
+        if series_page is not None:
+            self.stack.addWidget(self.insitu_page)
         root.addWidget(self.context_bar)
         root.addWidget(self.stack, 1)
 
@@ -85,9 +90,6 @@ class FittingContextContainer(QWidget):
         self.insitu_page.return_to_single_requested.connect(
             lambda: self.show_context("single")
         )
-        for widget in (self.context_bar, self.stack):
-            apply_design_system(widget)
-            widget.setStyleSheet(widget.styleSheet() + "\n" + fitting_stylesheet())
         self.show_context("single")
 
     def show_context(self, context: str) -> None:
@@ -95,7 +97,9 @@ class FittingContextContainer(QWidget):
         self.stack.setCurrentIndex(1 if insitu else 0)
         self.single_button.setChecked(not insitu)
         self.insitu_button.setChecked(insitu)
-        if insitu:
+        if insitu and self.series_page is not None:
+            self.series_page.refresh()
+        elif insitu:
             self.insitu_page.render_recipe(self.insitu_page.view_model.recipe)
             self.insitu_page.render_workflow(self.insitu_page.view_model.state)
 

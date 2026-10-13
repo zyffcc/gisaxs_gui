@@ -4,7 +4,6 @@ import os
 import unicodedata
 
 from src.gimap.shared.file_paths import normalize_path
-from utils.path_utils import normalize_path as legacy_normalize_path
 
 
 def test_normalize_path_accepts_unicode_file_uri(tmp_path):
@@ -25,5 +24,3 @@ def test_normalize_path_resolves_environment_and_unicode_form(tmp_path, monkeypa
     assert os.path.samefile(resolved, composed)
 
 
-def test_legacy_path_entry_reexports_shared_implementation():
-    assert legacy_normalize_path is normalize_path

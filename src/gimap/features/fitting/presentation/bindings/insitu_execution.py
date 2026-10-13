@@ -1,13 +1,15 @@
 """Compose focused insitu execution bindings."""
 
-from .insitu_sequence import InsituSequenceMixin
-from .insitu_cut_refinement import InsituCutRefinementMixin
+from .insitu_curve_processing import InsituCurveProcessingMixin
 from .insitu_persistence_preview import InsituPersistencePreviewMixin
+from .insitu_refinement_lifecycle import InsituRefinementLifecycleMixin
+from .insitu_sequence import InsituSequenceMixin
 
 
 class InsituExecutionMixin(
-    InsituSequenceMixin, InsituCutRefinementMixin, InsituPersistencePreviewMixin
+    InsituSequenceMixin,
+    InsituCurveProcessingMixin,
+    InsituRefinementLifecycleMixin,
+    InsituPersistencePreviewMixin,
 ):
-    """Compatibility composition for focused insitu execution bindings."""
-
-    pass
+    """Queue, load, fit and record the curves of an in-situ series."""

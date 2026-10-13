@@ -136,7 +136,8 @@ class CalibrationEngine:
         py = float(pixel_size_y_m or image.pixel_size_y_m or px)
         if px <= 0 or py <= 0:
             raise CalibrationError(
-                "Pixel size could not be determined. Select the detector model or enter the pixel size in Advanced Settings."
+                "Pixel size could not be determined. Select the detector model or enter the pixel size "
+                "under Advanced configuration."
             )
         wavelength = energy_to_wavelength(energy_kev)
         analysis = preprocess_detector_image(image, subtract_background=subtract_background)
@@ -225,6 +226,8 @@ class CalibrationEngine:
             calibration_timestamp=datetime.now(timezone.utc).isoformat(),
             metadata={
                 "loader": image.metadata,
+                # Needed to express the beam centre in other pages' conventions.
+                "image_shape": [int(value) for value in np.shape(image.data)[:2]],
                 "estimated_distance_mm": estimated_distance_mm,
                 "distance_range_mm": list(distance_range_mm),
             },

@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt5.QtCore import QThread, Qt
-from PyQt5.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QDialog, QMessageBox
 
 from src.gimap.app.bootstrap import create_standalone_legacy_context
-from src.gimap.app.presentation import apply_design_system, install_safe_wheel_behavior
+from src.gimap.app.presentation import install_safe_wheel_behavior
 from src.gimap.app.presentation.assets import app_icon
+from src.gimap.app.presentation.i18n import language_changed, tr, trf
 
 from ..application import (
     SpecularGeometry,
@@ -18,12 +19,21 @@ from ..application import (
     XrrExtractionSettings,
     XrrSeriesSpec,
 )
+from .bindings.files import XrrFilesMixin
+from .bindings.geometry_sources import GeometrySourcesMixin
+from .pixel_coordinates import ROI_PIXEL_NOTE, extraction_coordinate, shown_roi_center
 from .plotting import XrrPlotPresenter
 from .views import XrrSeriesDialogView
 from .workers import XrrExtractionWorker, XrrInspectWorker
 
+ROI_CENTER_COLUMNS = (4, 5)
+"""``ROI x`` and ``ROI y`` of the results table."""
 
-class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
+
+class XrrSeriesDialog(XrrFilesMixin, GeometrySourcesMixin, QDialog, XrrSeriesDialogView):
+    """The window. Its beam centre fields, table and preview are in the pixels of Analyze; the extraction's
+    own numbers (``SpecularGeometry``, ``XrrPoint``) are reached only through ``pixel_coordinates``."""
+
     def __init__(self, parent=None, *, app_context=None, view_model=None):
         super().__init__(parent)
         self.app_context = (
@@ -43,7 +53,6 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self.setWindowFlags(
             self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint
         )
-        apply_design_system(self)
         install_safe_wheel_behavior(self)
         self.plotter = XrrPlotPresenter(
             self.live_panel,
@@ -60,6 +69,12 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self._last_progress_total = 0
         self._cancel_requested = False
         self._close_when_idle = False
+        self._run_geometry_sources: dict[str, str] = {}
+        """Where each geometry value of the running (or last) extraction came from."""
+        self.setAcceptDrops(True)
+        self._init_geometry_sources()
+        self._refresh_roi_column_tips()
+        language_changed().connect(self._refresh_roi_column_tips)
         self._connect_signals()
         self._update_angle_controls()
         self._update_source_controls()
@@ -76,19 +91,6 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self.log_y_check.toggled.connect(self._redraw_curve)
         for control in (self.center_x_spin, self.center_y_spin, self.radius_spin):
             control.valueChanged.connect(self._redraw_detector)
-
-    def _browse_source(self) -> None:
-        if self.source_kind_combo.currentIndex() == 2:
-            path = QFileDialog.getExistingDirectory(self, "Select CBF series folder")
-        else:
-            path, _ = QFileDialog.getOpenFileName(
-                self,
-                "Select detector series",
-                "",
-                "Detector data (*.nxs *.cbf);;NXS (*.nxs);;CBF (*.cbf)",
-            )
-        if path:
-            self.source_picker.set_path(path)
 
     def _series_spec(self) -> XrrSeriesSpec:
         path = self.source_picker.path()
@@ -110,13 +112,15 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         )
 
     def _geometry(self) -> SpecularGeometry:
+        """The geometry the extraction uses: the centre of the fields in the extraction's own pixels."""
+        center_x, center_y = self.center_x_spin, self.center_y_spin
         return SpecularGeometry(
             distance_m=self.distance_spin.value() * 1e-3,
             energy_kev=self.energy_spin.value(),
             pixel_size_x_m=self.pixel_x_spin.value() * 1e-6,
             pixel_size_y_m=self.pixel_y_spin.value() * 1e-6,
-            beam_center_x_px=self.center_x_spin.value(),
-            beam_center_y_px=self.center_y_spin.value(),
+            beam_center_x_px=extraction_coordinate(center_x.value(), center_x.decimals()),
+            beam_center_y_px=extraction_coordinate(center_y.value(), center_y.decimals()),
             vertical_direction=-1 if self.direction_combo.currentIndex() == 0 else 1,
         )
 
@@ -142,7 +146,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
             self._show_input_error(str(exc))
             return
         self.inspect_button.setEnabled(False)
-        self.series_summary.setText("Reading first frame…")
+        self.series_summary.setText(tr("Reading first frame…"))
         self._inspect_thread = QThread(self)
         self._inspect_worker = XrrInspectWorker(self.view_model, spec)
         self._inspect_worker.moveToThread(self._inspect_thread)
@@ -156,11 +160,10 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
 
     def _on_inspected(self, inspection) -> None:
         frame = inspection.first_frame
-        self._apply_metadata(frame.metadata, frame.data.shape)
-        self.series_summary.setText(
-            f"{inspection.frame_count} frame(s) · first: {inspection.first_ref.label} · "
-            f"shape {frame.data.shape[1]} × {frame.data.shape[0]}"
-        )
+        unused_values = self._apply_metadata(frame.metadata, frame.data.shape)
+        self._show_inspection_summary(inspection, unused_values)
+        if self.source_picker.path():  # a series that could be read: Browse… starts there next time
+            self._remember_folder(self.source_picker.path())
         self._last_preview = frame.data
         self._last_preview_shape = tuple(frame.data.shape)
         self._last_roi_center = None
@@ -168,7 +171,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self._redraw_detector()
 
     def _on_inspect_failed(self, message: str) -> None:
-        self.series_summary.setText("Series inspection failed")
+        self.series_summary.setText(tr("Series inspection failed"))
         self.job_status.set_state("failed", message, progress=0.0)
 
     def _cleanup_inspection(self) -> None:
@@ -194,6 +197,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
             return
         self._cancel_requested = False
         self._last_progress_total = 0
+        self._run_geometry_sources = self.geometry_sources()
         self.view_model.state.result = None
         self.results_table.set_rows(())
         self.export_button.setEnabled(False)
@@ -216,17 +220,14 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         self._last_progress_total = progress.total
         self._last_preview = progress.preview
         self._last_preview_shape = progress.preview_shape
-        self._last_roi_center = (
-            progress.point.roi_center_x_px,
-            progress.point.roi_center_y_px,
-        )
+        self._last_roi_center = shown_roi_center(progress.point)
         self.live_frame_label.setText(
             f"{progress.completed}/{progress.total} · {progress.point.source_name} · "
             f"θ {progress.point.theta_deg:.6g}°"
         )
         self.job_status.set_state(
             "running",
-            f"Extracted frame {progress.completed} of {progress.total}",
+            trf("Extracted frame {done} of {total}", done=progress.completed, total=progress.total),
             progress=progress.completed / max(1, progress.total),
         )
         self._redraw_detector()
@@ -237,11 +238,11 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
         completed = len(result.points) if result is not None else 0
         if self._cancel_requested or completed < self._last_progress_total:
             self.job_status.set_state(
-                "cancelled", f"Stopped after {completed} point(s).", progress=0.0
+                "cancelled", trf("Stopped after {count} point(s).", count=completed), progress=0.0
             )
         else:
             self.job_status.set_state(
-                "succeeded", f"Extracted {completed} XRR point(s).", progress=1.0
+                "succeeded", trf("Extracted {count} XRR point(s).", count=completed), progress=1.0
             )
         self._render_result(result)
 
@@ -271,24 +272,35 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
     def _render_result(self, result: XrrExtractionResult | None) -> None:
         self.plotter.render_curve(result, log_y=self.log_y_check.isChecked())
         points = () if result is None else result.points
-        self.results_table.set_rows(
-            (
-                point.sequence_index + 1,
-                f"{point.theta_deg:.8g}",
-                f"{point.qz_inv_angstrom:.8g}",
-                "—" if point.intensity is None else f"{point.intensity:.8g}",
-                f"{point.roi_center_x_px:.2f}",
-                f"{point.roi_center_y_px:.2f}",
-                point.valid_pixels,
+        rows = []
+        for point in points:
+            roi_x, roi_y = shown_roi_center(point)
+            rows.append(
+                (
+                    point.sequence_index + 1,
+                    f"{point.theta_deg:.8g}",
+                    f"{point.qz_inv_angstrom:.8g}",
+                    "—" if point.intensity is None else f"{point.intensity:.8g}",
+                    f"{roi_x:.2f}",
+                    f"{roi_y:.2f}",
+                    point.valid_pixels,
+                )
             )
-            for point in points
-        )
+        self.results_table.set_rows(rows)
         self.export_button.setEnabled(bool(points))
+
+    def _refresh_roi_column_tips(self, *_args) -> None:
+        """Which pixels ``ROI x`` and ``ROI y`` are (the exported CSV keeps the extraction's own numbers)."""
+        for column in ROI_CENTER_COLUMNS:
+            item = self.results_table.horizontalHeaderItem(column)
+            if item is not None:
+                item.setToolTip(tr(ROI_PIXEL_NOTE))
 
     def _redraw_curve(self) -> None:
         self._render_result(self.view_model.state.result)
 
     def _redraw_detector(self) -> None:
+        """The frame, the ROI and the direct beam, all in the pixels of the fields."""
         if self._last_preview is None or self._last_preview_shape is None:
             return
         self.plotter.render_detector(
@@ -302,7 +314,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
 
     def _pick_center_toggled(self, active: bool) -> None:
         self.pick_center_button.setText(
-            "Click the direct beam · Esc cancels" if active else "Pick direct-beam center"
+            tr("Click the direct beam · Esc cancels") if active else tr("Pick direct-beam center")
         )
         self.live_canvas_cursor(active)
 
@@ -314,6 +326,7 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
             return
         if event.xdata is None or event.ydata is None:
             return
+        # The axes are the pixels of the fields: the point clicked is the point entered.
         self.center_x_spin.setValue(float(event.xdata))
         self.center_y_spin.setValue(float(event.ydata))
         self.pick_center_button.setChecked(False)
@@ -326,22 +339,14 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
             return
         super().keyPressEvent(event)
 
-    def _apply_metadata(self, metadata: dict, shape) -> None:
-        mappings = (
-            (self.energy_spin, metadata.get("energy_kev"), 1.0),
-            (self.distance_spin, metadata.get("distance_m"), 1000.0),
-            (self.pixel_x_spin, metadata.get("pixel_size_x_m"), 1e6),
-            (self.pixel_y_spin, metadata.get("pixel_size_y_m"), 1e6),
-            (self.center_x_spin, metadata.get("beam_center_x_px"), 1.0),
-            (self.center_y_spin, metadata.get("beam_center_y_px"), 1.0),
-        )
-        for control, value, scale in mappings:
-            if value is not None:
-                control.setValue(float(value) * scale)
-        if metadata.get("beam_center_x_px") is None:
-            self.center_x_spin.setValue((shape[1] - 1) / 2.0)
-        if metadata.get("beam_center_y_px") is None:
-            self.center_y_spin.setValue((shape[0] - 1) / 2.0)
+    def reject(self) -> None:
+        """Esc closes through ``closeEvent``, which waits for a running worker thread.
+
+        QDialog's own reject() hides the dialog without a close event; with WA_DeleteOnClose the
+        running QThread child would then be deleted and take the application down.
+        ``closeEvent`` does not call ``QDialog.closeEvent``, so this cannot recurse.
+        """
+        self.close()
 
     def _update_angle_controls(self) -> None:
         dataset_mode = self.angle_mode_combo.currentIndex() == 1
@@ -357,21 +362,10 @@ class XrrSeriesDialog(QDialog, XrrSeriesDialogView):
             self.angle_mode_combo.setCurrentIndex(0)
         self.angle_mode_combo.model().item(1).setEnabled(not cbf)
 
-    def _export_curve(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export XRR points", "xrr_curve.csv", "CSV (*.csv)"
-        )
-        if not path:
-            return
-        try:
-            self.view_model.export(Path(path))
-            self.job_status.set_state("succeeded", f"Exported {Path(path).name}", progress=1.0)
-        except Exception as exc:
-            self.job_status.set_state("failed", str(exc), progress=0.0)
-
     def _show_input_error(self, message: str) -> None:
+        """``message`` is the English of this window or of the reader; shown in the interface language."""
         self.job_status.set_state("failed", message, progress=0.0)
-        QMessageBox.warning(self, "XRR Series Extractor", message)
+        QMessageBox.warning(self, tr("XRR Series Extractor"), tr(message))
 
     @staticmethod
     def _thread_running(thread) -> bool:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.gimap.app import AppContext
+from src.gimap.shared.geometry import InstrumentProfile
 
 from ..application import (
     ApplyCalibration,
@@ -13,9 +14,10 @@ from ..application import (
     LoadCalibrationImage,
     LoadDetectorCatalog,
     NormalizeCalibrationPath,
+    RecordInstrumentProfile,
     RunCalibration,
 )
-from ..application.ports import CancellationCheck, ProgressCallback
+from ..application.ports import CalibrationInputFolderPort, CancellationCheck, ProgressCallback
 from ..application import (
     CalibrationCandidate,
     CalibrationRequest,
@@ -23,9 +25,9 @@ from ..application import (
     DetectorImage,
     commit_manual_refinement,
     detect_standard_keys,
-    geometry_change_is_significant,
     manual_ring_distance,
     preview_manual_candidate,
+    profile_change_is_significant,
     select_calibration_candidate,
     standard_display_name,
     standard_options,
@@ -49,6 +51,8 @@ class CalibrationViewModel:
         apply_calibration: ApplyCalibration,
         load_detector_catalog: LoadDetectorCatalog,
         normalize_path: NormalizeCalibrationPath,
+        record_profile: RecordInstrumentProfile | None = None,
+        input_folders: CalibrationInputFolderPort | None = None,
     ):
         self.app_context = app_context
         self.state = app_context.project_state.feature_state(
@@ -63,10 +67,21 @@ class CalibrationViewModel:
         self._import_calibration = import_calibration
         self._apply_calibration = apply_calibration
         self._normalize_path = normalize_path
+        self._record_profile = record_profile
+        self._input_folders = input_folders
+        self.last_profile = None
         self.detector_models = load_detector_catalog()
 
     def normalize_path(self, path: str | Path) -> str:
         return self._normalize_path(path)
+
+    def last_folder(self) -> str:
+        """The folder of the last calibration image read ('' when none is known)."""
+        return self._input_folders.last_folder() if self._input_folders is not None else ""
+
+    def remember_folder(self, path: str | Path) -> None:
+        if self._input_folders is not None and path:
+            self._input_folders.remember(path)
 
     @staticmethod
     def source_name(path: str | Path) -> str:
@@ -122,7 +137,10 @@ class CalibrationViewModel:
     def apply_result(self) -> dict[str, float]:
         if self.result is None:
             raise ValueError("No calibration result is available.")
-        return self._apply_calibration(self.result)
+        geometry = self._apply_calibration(self.result)
+        if self._record_profile is not None:
+            self.last_profile = self._record_profile(self.result)
+        return geometry
 
     def select_candidate(self, index: int) -> CalibrationCandidate:
         if self.result is None:
@@ -137,6 +155,9 @@ class CalibrationViewModel:
         center_y_px: float,
         distance_mm: float,
     ) -> CalibrationCandidate | None:
+        """The selected candidate with the manual values. ``center_x_px`` / ``center_y_px`` are the fit's
+        pixel-centre indices here and in ``commit_manual_refinement``; the window converts what it shows and
+        what is typed (``pixel_coordinates.py``)."""
         if self.result is None:
             return None
         return preview_manual_candidate(
@@ -183,18 +204,16 @@ class CalibrationViewModel:
             theoretical_q_inv_angstrom,
         )
 
-    def result_differs_significantly(self) -> bool:
-        if self.result is None:
-            return False
-        candidate = self.result.selected_candidate
-        current = self.current_geometry(
-            {
-                "distance": candidate.distance_mm,
-                "beam_center_x": candidate.center_x_px,
-                "beam_center_y": candidate.center_y_px,
-            }
-        )
-        return geometry_change_is_significant(current, candidate)
+    def significantly_changed_profile(self) -> InstrumentProfile | None:
+        """The saved instrument profile that applying the result would change a lot."""
+        if self.result is None or self._record_profile is None:
+            return None
+        existing = self._record_profile.existing(self.result)
+        if existing is None:
+            return None
+        if profile_change_is_significant(existing, self.result.selected_candidate):
+            return existing
+        return None
 
     def export_result(self, path: str | Path) -> None:
         if self.result is None:

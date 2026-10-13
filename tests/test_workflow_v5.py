@@ -85,10 +85,21 @@ def test_new_bundle_routes_to_new_worker_preserving_existing_outputs(tmp_path):
 
 
 def test_imported_assets_remain_identical():
+    """Every file of the bundled model is the one its manifest was made from.
+
+    Git holds all of them, the weights (``*.h5``, ``*.npz``) included, so a source checkout can run
+    1D Predict. A checkout that converts line endings would change the files; a missing file is a
+    failure that names it.
+    """
     import hashlib
 
     root = bundled_workflow()
     manifest = json.loads((root / "conditional_fast_manifest_v2.json").read_text())
+    absent = [name for name in manifest["files"] if not (root / name).is_file()]
+    assert not absent, (
+        f"{len(absent)} model files are missing from {root}, so 1D Predict cannot run here "
+        f"(git holds them: `git checkout -- <that folder>` brings them back): " + ", ".join(absent)
+    )
     for name, sha in manifest["files"].items():
         assert hashlib.sha256((root / name).read_bytes()).hexdigest() == sha, name
 
@@ -121,6 +132,49 @@ def test_completed_job_reports_observed_residual_without_mandatory_cutoff(tmp_pa
     app.processEvents()
 
 
+def test_the_1d_predict_figure_follows_the_light_and_dark_theme(tmp_path):
+    from PyQt5.QtCore import QCoreApplication, QEvent
+    from PyQt5.QtWidgets import QApplication
+    from src.gimap.app.presentation.theme import apply_theme, theme_manager
+    from src.gimap.features.fitting.presentation.workflow_v5_dialog import WorkflowV5Dialog
+
+    app = QApplication.instance() or QApplication([])
+
+    def corner(dialog):
+        dialog.canvas.draw()
+        return tuple(int(value) for value in np.asarray(dialog.canvas.buffer_rgba())[2, 2, :3])
+
+    def token(name):
+        colour = theme_manager().color(name)
+        return colour.red(), colour.green(), colour.blue()
+
+    try:
+        apply_theme("dark", 9.0)
+        dialog = WorkflowV5Dialog()
+        assert corner(dialog) == token("plot_bg") != (255, 255, 255)
+        assert dialog.figure.texts[0].get_color() == theme_manager().color("plot_fg").name()
+        q = np.linspace(0.1, 2.0, 40)
+        observed = 100 * np.exp(-(q / 0.6) ** 2) + 1
+        row = dict(file="test", side="positive", rank=1, combination="sphere", best_log_rmse=.05, signed_weighted_rms=1,
+                   best_source="experimental_physical", native_q=q.tolist(), observed=observed.tolist(),
+                   sigma=(0.05 * observed).tolist(), display_q=q.tolist(), display_fit=(observed * 1.01).tolist())
+        dialog.set_results([row], str(tmp_path))
+        axes = dialog.figure.axes[0]
+        assert corner(dialog) == token("plot_bg") and axes.get_facecolor()[:3] == pytest.approx(
+            tuple(value / 255 for value in token("plot_bg")))
+        np.testing.assert_allclose(axes.lines[-1].get_ydata(), observed * 1.01)  # the fit as it is
+        apply_theme("light", 9.0)
+        assert corner(dialog) == token("plot_bg") == (255, 255, 255)
+        apply_theme("dark", 9.0)
+        assert corner(dialog) == token("plot_bg")
+        dialog.close()
+        dialog.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        app.processEvents()
+    finally:
+        apply_theme("light", 9.0)  # the suite's theme (and a deleted dialog no longer follows it)
+
+
 def test_simplified_insitu_controls_and_dialog_settings():
     from PyQt5.QtWidgets import QApplication, QWidget
     from src.gimap.features.fitting.presentation.views.insitu_series_page_view import (
@@ -136,13 +190,11 @@ def test_simplified_insitu_controls_and_dialog_settings():
     assert tuple(view.workflowButtons) == ("source", "fit", "results")
     controls = view.workflowControls
     controls.show_step("fit")
-    controls.workflowModeCombo.setCurrentIndex(1)
-    assert controls.autoFitCheckBox.isChecked() and controls.fullAutoFitCheckBox.isChecked()
-    assert not controls.autoRefineCheckBox.isChecked()
+    assert controls.stack.currentWidget() is controls.pages["fit"]
     controls.workflowModeCombo.setCurrentIndex(2)
-    assert not controls.autoFitCheckBox.isChecked()
-    controls.show_step("geometry")
-    assert controls.setupTabs.currentWidget() is controls.pages["geometry"]
+    assert controls.fit_mode() == 2 and controls.workflowModeCombo.currentText() == "Plot curves only"
+    controls.show_step("geometry")  # detector steps are gone: unknown keys are ignored
+    assert controls.stack.currentWidget() is controls.pages["fit"]
     dialog = WorkflowV5Dialog(
         options=dict(components=[2, 2], sigma_res=0.01, nu_res=7, numerical=False)
     )

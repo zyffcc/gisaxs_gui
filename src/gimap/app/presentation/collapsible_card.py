@@ -27,10 +27,7 @@ class CardContentResizeHandle(QFrame):
         self.setFixedHeight(9)
         self.setCursor(Qt.SizeVerCursor)
         self.setToolTip("Drag to resize this card's content area.")
-        self.setStyleSheet(
-            "QFrame { border: 0; border-top: 2px solid #d6dee9; margin: 3px 35%; }"
-            "QFrame:hover { border-top-color: #7c93ad; }"
-        )
+        self.setObjectName("cardResizeHandle")
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -94,6 +91,7 @@ class CollapsibleCardFrame(QFrame):
         self.header_button.setToolButtonStyle(Qt.ToolButtonIconOnly)
         self.header_button.setCheckable(True)
         self.header_button.setAutoRaise(True)
+        self.header_button.setProperty("cardToggle", True)
         self.header_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.header_button.toggled.connect(self.set_expanded)
         header_layout.addWidget(self.title_label, 1)
@@ -162,6 +160,7 @@ class CollapsibleCardFrame(QFrame):
         expanded = bool(expanded)
         self.header_button.setChecked(expanded)
         self.header_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self.header_button.setToolTip("Collapse" if expanded else "Expand")
         self.content_widget.setVisible(expanded)
         QSettings().setValue(self._settings_key, expanded)
         if expanded:

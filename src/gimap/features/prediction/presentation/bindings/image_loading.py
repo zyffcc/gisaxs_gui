@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import os
 
-import datetime
-
 
 from pathlib import Path
 
@@ -22,6 +20,7 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import trf
 from src.gimap.features.prediction.presentation.image_worker import PredictionImageLoader
 
 
@@ -87,7 +86,7 @@ class ImageLoadingMixin:
         loader.load_image(file_path, stack_count)
         self._latest_display_request = request_id
         self._append_status_message(
-            f"Loading {os.path.basename(file_path)} (Stack={stack_count}) ..."
+            trf("Loading {name} (Stack={stack}) ...", name=os.path.basename(file_path), stack=stack_count)
         )
 
     def _on_loader_progress(self, request_id: int, progress: int, message: str) -> None:
@@ -102,10 +101,10 @@ class ImageLoadingMixin:
             fname = parts[1].strip() if len(parts) == 2 else ""
             last_file = context.get("_last_progress_file")
             if fname and fname != last_file:
-                self._append_status_message(f"Loading {fname} ...")
+                self._append_status_message(trf("Loading {name} ...", name=fname))
                 context["_last_progress_file"] = fname
                 self._pending_contexts[request_id] = context
-        self.status_updated.emit(f"Image loading {progress}%: {message}")
+        self.status_updated.emit(trf("Image loading {progress}%: {message}", progress=progress, message=message))
         self.progress_updated.emit(progress)
 
     def _on_loader_error(self, request_id: int, error: str) -> None:
@@ -129,14 +128,21 @@ class ImageLoadingMixin:
 
         self._current_image = image_data.astype(np.float32, copy=False)
         self._current_image_path = file_path
+        # The frames behind this image, for the export record: the loaded stack's own paths when this is it.
+        loaded = getattr(getattr(self.prediction_view_model, "state", None), "current_image", None)
+        if loaded is not None and loaded.image is image_data:
+            self._current_input_files = [str(path) for path in loaded.source_paths]
+        else:
+            self._current_input_files = [str(file_path)]
+        self._current_input_stack = int(context.get("stack", 1) or 1)
 
         stack_files = context.get("stack_files") or []
         if context.get("stack", 1) and context.get("stack", 1) > 1 and stack_files:
             first = stack_files[0]
             last = stack_files[-1]
-            self._append_status_message(f"Image loaded: {first} - {last}")
+            self._append_status_message(trf("Image loaded: {first} - {last}", first=first, last=last))
         else:
-            self._append_status_message(f"Image loaded: {os.path.basename(file_path)}")
+            self._append_status_message(trf("Image loaded: {name}", name=os.path.basename(file_path)))
 
         if context.get("mode") == "multi_files" and context.get("index") is not None:
             self.current_parameters["showing_value"] = str(context["index"])
@@ -164,32 +170,6 @@ class ImageLoadingMixin:
         self.current_parameters["gisaxs_log_scale"] = bool(checked)
         self._persist_parameters()
         self._update_image_display()
-
-    def _export_gisaxs_image(self) -> None:
-        if self._current_pixmap is None:
-            QMessageBox.information(
-                self.main_window,
-                "Export",
-                "Import a detector image before exporting the input preview.",
-            )
-            self._append_status_message("No input preview to export", level="WARN")
-            return
-        export_path = self._prompt_export_folder("Save GISAXS Image To")
-        if not export_path:
-            return
-        if not os.path.isdir(export_path):
-            QMessageBox.warning(
-                self.main_window, "Export Path", f"Export folder not found: {export_path}"
-            )
-            return
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_path = os.path.join(export_path, f"gisaxs_{timestamp}.jpg")
-        try:
-            if not self._current_pixmap.save(file_path, "JPG"):
-                raise IOError("Save returned False")
-            self._append_status_message(f"GISAXS image exported: {file_path}")
-        except Exception as exc:
-            self._append_status_message(f"Export failed: {exc}", level="ERROR")
 
     def _update_image_display(self) -> None:
         if self._current_image is None or self._graphics_scene is None:
@@ -227,9 +207,9 @@ class ImageLoadingMixin:
         self._zoom_reset()
 
         cmap_name = self.current_parameters.get("colormap", "")
-        self.status_updated.emit(
-            f"Display complete (vmin={vmin:.3f}, vmax={vmax:.3f}, cmap={cmap_name})"
-        )
+        self.status_updated.emit(trf(
+            "Display complete (vmin={vmin:.3f}, vmax={vmax:.3f}, cmap={cmap})", vmin=vmin, vmax=vmax, cmap=cmap_name
+        ))
         self._persist_parameters()
 
     def _auto_scale_values(self, image: np.ndarray) -> Tuple[float, float]:

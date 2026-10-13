@@ -3,7 +3,6 @@ from pathlib import Path
 
 from src.gimap.app import AppContext, ProjectState
 from src.gimap.integrations.state import (
-    GlobalParamsSettingsRepository,
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
     JsonSessionRepository,
@@ -27,42 +26,6 @@ class ExampleFeatureState:
     def restore(self, state: dict) -> None:
         self.selected_file = str(state.get("selected_file", ""))
         self.counter = int(state.get("counter", 0))
-
-
-class FakeGlobalParams:
-    def __init__(self):
-        self.values = {"beam": {"wavelength": 0.1}, "fitting": {}}
-        self.saved = False
-
-    def get_parameter(self, section, key, default=None):
-        current = self.values.get(section, {})
-        for segment in key.split("."):
-            if not isinstance(current, dict) or segment not in current:
-                return default
-            current = current[segment]
-        return current
-
-    def set_parameter(self, section, key, value):
-        current = self.values.setdefault(section, {})
-        segments = key.split(".")
-        for segment in segments[:-1]:
-            current = current.setdefault(segment, {})
-        current[segments[-1]] = value
-
-    def get_module_parameters(self, section):
-        return dict(self.values.get(section, {}))
-
-    def set_module_parameters(self, section, values):
-        self.values.setdefault(section, {}).update(values)
-
-    def get_all_parameters(self):
-        return {section: dict(values) for section, values in self.values.items()}
-
-    def save_user_parameters(self):
-        self.saved = True
-
-    def load_parameters(self, _path):
-        return None
 
 
 def test_json_settings_preserve_legacy_user_parameter_shape(tmp_path: Path) -> None:
@@ -139,19 +102,6 @@ def test_app_context_persists_project_and_registered_feature_state(tmp_path: Pat
     assert restored.counter == 3
 
 
-def test_global_params_compatibility_adapter_delegates_without_new_singleton() -> None:
-    manager = FakeGlobalParams()
-    repository = GlobalParamsSettingsRepository(manager)
-
-    repository.set("fitting", "detector.distance", 999.0)
-    repository.update_section("beam", {"energy_kev": 10.0})
-    repository.save()
-
-    assert repository.get("fitting", "detector.distance") == 999.0
-    assert repository.get_section("beam")["energy_kev"] == 10.0
-    assert manager.saved
-
-
 def test_project_parameter_commands_preserve_legacy_json_shape(tmp_path: Path) -> None:
     repository = JsonProjectParametersRepository()
     save = SaveProjectParameters(repository)
@@ -166,3 +116,91 @@ def test_project_parameter_commands_preserve_legacy_json_shape(tmp_path: Path) -
     assert save.execute(path, values) == path
     assert load.execute(path) == values
     assert path.read_text(encoding="utf-8").startswith("{\n    \"trainset\"")
+
+
+def test_user_store_keeps_every_section_and_merges_defaults(tmp_path: Path) -> None:
+    import json
+
+    from src.gimap.integrations.state import StoreSettingsRepository, UserStore
+
+    path = tmp_path / "settings.json"
+    settings = StoreSettingsRepository(UserStore(path))
+    # Built-in defaults are present before anything was saved.
+    assert settings.get("beam", "wavelength") == 0.1
+    settings.set("preprocessing", "focus_region.qr_max", 2.0)
+    settings.update_section("analyze", {"mode": "giwaxs"})  # not a built-in section
+    settings.save()
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 1
+    restored = StoreSettingsRepository(UserStore(path))
+    assert restored.get("preprocessing", "focus_region.qr_max") == 2.0
+    # Nested defaults survive a partial section on disk (deep merge).
+    assert restored.get("preprocessing", "focus_region.qr_min") == 0.01
+    assert restored.get_section("analyze") == {"mode": "giwaxs"}
+
+    restored.reset()
+    assert restored.get("preprocessing", "focus_region.qr_max") == 3.0
+    assert restored.get_section("analyze") == {}
+
+
+def test_preferences_share_the_store_and_drop_scaling_keys(tmp_path: Path) -> None:
+    import json
+
+    from src.gimap.integrations.state import migrate_legacy_files
+    from src.gimap.integrations.state import StorePreferencesRepository, StoreSettingsRepository
+    from src.gimap.integrations.state import UserStore
+
+    project = tmp_path / "project"
+    (project / "config").mkdir(parents=True)
+    legacy_parameters = project / "config" / "user_parameters.json"
+    legacy_preferences = project / "config" / "user_settings.json"
+    legacy_parameters.write_text(
+        json.dumps({"fitting": {"detector": {"distance": 1456.7}}, "classification": {"k": 3}}),
+        encoding="utf-8",
+    )
+    legacy_preferences.write_text(
+        json.dumps({"fit.points_num": 80, "visual_font_scale": 120, "window_width": 1400}),
+        encoding="utf-8",
+    )
+    before = (legacy_parameters.read_bytes(), legacy_preferences.read_bytes())
+    data_dir = tmp_path / "home"
+
+    imported = migrate_legacy_files(data_dir, project_root=project)
+
+    assert sorted(Path(item).name for item in imported) == ["user_parameters.json", "user_settings.json"]
+    assert (legacy_parameters.read_bytes(), legacy_preferences.read_bytes()) == before
+    store = UserStore(data_dir / "settings.json")
+    settings = StoreSettingsRepository(store)
+    preferences = StorePreferencesRepository(store)
+    assert settings.get("fitting", "detector.distance") == 1456.7
+    assert settings.get_section("classification") == {"k": 3}
+    assert preferences.get("fit.points_num") == 80
+    assert preferences.get("visual_font_scale") is None
+    assert store.migrated_from["files"]
+    # A second start imports nothing and keeps the user's later changes.
+    settings.set("fitting", "detector.distance", 2000.0)
+    settings.save()
+    assert migrate_legacy_files(data_dir, project_root=project) == []
+    assert StoreSettingsRepository(UserStore(data_dir / "settings.json")).get(
+        "fitting", "detector.distance"
+    ) == 2000.0
+
+
+def test_create_app_context_uses_one_user_folder(tmp_path: Path) -> None:
+    from src.gimap.app.bootstrap import create_app_context
+
+    context = create_app_context(data_dir=tmp_path, restore_session=False)
+    context.settings.set("beam", "energy_kev", 12.0)
+    context.preferences.set("fit.points_num", 64)
+    context.settings.save()
+    context.save_session()
+    context.jobs.shutdown()
+
+    assert context.data_dir == tmp_path
+    assert (tmp_path / "settings.json").is_file()
+    assert (tmp_path / "session.json").is_file()
+    again = create_app_context(data_dir=tmp_path, restore_session=False)
+    assert again.settings.get("beam", "energy_kev") == 12.0
+    assert again.preferences.get("fit.points_num") == 64
+    again.jobs.shutdown()

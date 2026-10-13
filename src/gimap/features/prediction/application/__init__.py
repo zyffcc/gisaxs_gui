@@ -2,6 +2,7 @@
 
 from ..domain import ModelRuntimeInfo, PredictionModule
 
+from .export_record import ExportPredictionRecord, PredictionRecordRequest
 from .module_descriptions import describe_prediction_module
 from .sequence_rules import PredictionSequenceRules
 from .models import (
@@ -58,6 +59,7 @@ __all__ = [
     "ExportPredictionAscii",
     "ExportPredictionArray",
     "ExportPredictionJsonl",
+    "ExportPredictionRecord",
     "FilePredictionResult",
     "ImagePredictionResult",
     "IndexedPredictionFile",
@@ -82,6 +84,7 @@ __all__ = [
     "PredictionMaskRepository",
     "PredictionProgress",
     "PredictionModule",
+    "PredictionRecordRequest",
     "PredictionExportItem",
     "PredictionArrayExportRequest",
     "PredictionExportRepository",

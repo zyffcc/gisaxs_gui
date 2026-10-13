@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from ..styles import apply_design_system
 
 
 class ResultTable(QTableWidget):
@@ -41,7 +40,6 @@ class ResultTable(QTableWidget):
         self.empty_label.setProperty("gimapMeta", True)
         self.empty_label.setAttribute(Qt.WA_TransparentForMouseEvents)
         self._position_empty_label()
-        apply_design_system(self)
 
     def set_headers(self, headers: Iterable[str]) -> None:
         values = list(headers)

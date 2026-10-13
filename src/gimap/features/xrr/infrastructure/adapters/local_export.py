@@ -1,9 +1,11 @@
-"""CSV export adapter for extracted XRR curves."""
+"""CSV and JSON-record export adapters for extracted XRR curves."""
 
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
+from typing import Any
 
 from ...application import XrrExtractionResult
 
@@ -43,4 +45,13 @@ class LocalXrrCurveExportAdapter:
                 )
 
 
-__all__ = ["LocalXrrCurveExportAdapter"]
+class LocalXrrRecordAdapter:
+    """Writes the JSON settings record next to an exported curve."""
+
+    def write(self, path: Path, record: dict[str, Any]) -> None:
+        destination = Path(path).expanduser().resolve()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+__all__ = ["LocalXrrCurveExportAdapter", "LocalXrrRecordAdapter"]

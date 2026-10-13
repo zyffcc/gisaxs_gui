@@ -1,5 +1,4 @@
 import ast
-import importlib
 from pathlib import Path
 
 import pytest
@@ -349,18 +348,6 @@ def test_design_and_configuration_use_cases_depend_only_on_ports(tmp_path):
     assert configuration.validate(merged, require_hpc=False)[0] is True
 
 
-def test_legacy_trainset_has_no_concrete_bornagain_import():
-    for relative in (
-        "trainset/config.py",
-        "trainset/generator.py",
-        "trainset/grid_cache.py",
-        "trainset/simulation.py",
-    ):
-        imports = _imports(ROOT / relative)
-        assert "bornagain" not in imports
-        assert not any("integrations.bornagain" in name for name in imports)
-
-
 def test_trainset_view_binding_receives_simulation_port_from_composition_root():
     binding = (
         ROOT / "src/gimap/features/trainset/presentation/view_binding.py"
@@ -417,35 +404,6 @@ def test_trainset_presentation_does_not_import_infrastructure_or_manage_files_an
         "self.package_dir = prepare_job_package(",
     ):
         assert forbidden not in source
-
-
-def test_legacy_trainset_controller_path_is_a_thin_reexport():
-    source = (ROOT / "controllers/trainset_controller.py").read_text(encoding="utf-8")
-
-    assert "src.gimap.features.trainset.presentation.legacy_bridge" in source
-    assert len(source.splitlines()) <= 8
-
-    feature_legacy = (
-        ROOT / "src/gimap/features/trainset/presentation/legacy_bridge.py"
-    ).read_text(encoding="utf-8")
-    assert "from .view_binding import TrainsetViewBinding" in feature_legacy
-    assert len(feature_legacy.splitlines()) <= 8
-
-
-def test_legacy_trainset_modules_alias_feature_owned_implementations():
-    pairs = {
-        "trainset.backends": "src.gimap.features.trainset.infrastructure.adapters.job_backends",
-        "trainset.config": "src.gimap.features.trainset.infrastructure.adapters.configuration",
-        "trainset.generator": "src.gimap.features.trainset.infrastructure.adapters.dataset_generator",
-        "trainset.grid_cache": "src.gimap.features.trainset.infrastructure.adapters.grid_cache",
-        "trainset.job_package": "src.gimap.features.trainset.infrastructure.adapters.portable_job_package",
-        "trainset.simulation": "src.gimap.features.trainset.application.simulation",
-    }
-
-    for legacy_name, owner_name in pairs.items():
-        assert importlib.import_module(legacy_name) is importlib.import_module(owner_name)
-        legacy_source = ROOT.joinpath(*legacy_name.split(".")).with_suffix(".py")
-        assert len(legacy_source.read_text(encoding="utf-8").splitlines()) <= 8
 
 
 def test_domain_modules_do_not_import_runtime_or_io_infrastructure():

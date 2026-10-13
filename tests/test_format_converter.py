@@ -4,14 +4,19 @@ import h5py
 import numpy as np
 import pytest
 
-from utils.format_converter import (
-    ConversionEngine,
-    ConversionOptions,
+from src.gimap.features.format_converter.domain.models import ConversionOptions
+from src.gimap.features.format_converter.domain.rules import (
     build_jobs,
     compact_frame_summary,
-    inspect_source,
     parse_custom_frames,
 )
+from src.gimap.features.format_converter.infrastructure.adapters.local_files import (
+    ConversionEngine,
+    LocalSourceRepository,
+)
+
+
+inspect_source = LocalSourceRepository().inspect_source
 
 
 def _write_nxs(path: Path) -> None:

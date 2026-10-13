@@ -30,25 +30,14 @@ class ManualFitExecutionMixin:
             self._add_fitting_success(f"Active shapes: {active_shapes}")
             self._last_active_particle_ids = shape_configs.copy()
 
-            if (
-                hasattr(self.ui, "fitCurrentDataCheckBox")
-                and self.ui.fitCurrentDataCheckBox.isChecked()
-            ):
-                if getattr(self, "current_cut_data", None) is None:
-                    self._add_fitting_error("No Cut data available for fitting")
-                    return
-                q_data = np.asarray(self.current_cut_data["x_coords"], dtype=float)
-                intensity_data = np.asarray(
-                    self.current_cut_data["y_intensity"], dtype=float
+            if getattr(self, "current_1d_data", None) is None:
+                self._add_fitting_error(
+                    "No curve to fit: send one from Analyze or open a curve file"
                 )
-                q_source_kind = "cut"
-            else:
-                if getattr(self, "current_1d_data", None) is None:
-                    self._add_fitting_error("No 1D file data available for fitting")
-                    return
-                q_data = np.asarray(self.current_1d_data["q"], dtype=float)
-                intensity_data = np.asarray(self.current_1d_data["I"], dtype=float)
-                q_source_kind = "1d"
+                return
+            q_data = np.asarray(self.current_1d_data["q"], dtype=float)
+            intensity_data = np.asarray(self.current_1d_data["I"], dtype=float)
+            q_source_kind = "1d"
 
             prepared_curve = self._prepare_signed_q_data(q_data, intensity_data)
             q_data = prepared_curve.q
@@ -280,19 +269,10 @@ class ManualFitExecutionMixin:
             original_y_data = None
             data_label = ""
 
-            if (
-                hasattr(self.ui, "fitCurrentDataCheckBox")
-                and self.ui.fitCurrentDataCheckBox.isChecked()
-            ):
-                if hasattr(self, "current_cut_data") and self.current_cut_data is not None:
-                    original_x_data = np.array(self.current_cut_data["x_coords"])
-                    original_y_data = np.array(self.current_cut_data["y_intensity"])
-                    data_label = "Cut Data"
-            else:
-                if hasattr(self, "current_1d_data") and self.current_1d_data is not None:
-                    original_x_data = np.array(self.current_1d_data["q"])
-                    original_y_data = np.array(self.current_1d_data["I"])
-                    data_label = "1D File Data"
+            if getattr(self, "current_1d_data", None) is not None:
+                original_x_data = np.array(self.current_1d_data["q"])
+                original_y_data = np.array(self.current_1d_data["I"])
+                data_label = "Data"
 
             x_label = self._build_q_axis_label()
             y_label = "Normalized Intensity" if normalize else "Intensity (a.u.)"

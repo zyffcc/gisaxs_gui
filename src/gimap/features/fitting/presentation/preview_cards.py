@@ -1,4 +1,4 @@
-"""Feature-owned detector, plot, plot-control and log cards。"""
+"""Feature-owned plot, plot-control and log cards of Fitting."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.app.presentation import CollapsibleCardFrame
 from src.gimap.app.presentation.layout_primitives import (
     CARD_MARGIN,
@@ -27,52 +28,10 @@ from src.gimap.app.presentation.layout_primitives import (
     normalize_checkbox,
     normalize_input,
 )
-from src.gimap.app.presentation.responsive_layout import current_profile, scale_value
+from src.gimap.app.presentation.layout_metrics import LAYOUT
 
 from .layout_primitives import detach_from_parent_layout as _detach_from_parent_layout
 from .layout_primitives import take_widget as _take_widget
-from .detector_preview_controls import DetectorDisplayInspector, DetectorToolBar
-
-
-class DetectorPreviewCard(CollapsibleCardFrame):
-    def __init__(self, ui, graphics_view: QGraphicsView, profile=None):
-        super().__init__("Detector Preview", "DetectorPreviewCard", default_expanded=True)
-        profile = profile or current_profile(graphics_view)
-        self.setMinimumWidth(SECTION_MIN_WIDTH)
-        self.setMinimumHeight(scale_value(260, profile, 210))
-        hint = QLabel(
-            "Drop a CBF, NXS, or TIFF file here to load it. Double-click to open a larger independent image window.",
-            self,
-        )
-        hint.setObjectName("DetectorPreviewDoubleClickHint")
-        hint.setProperty("cardMeta", True)
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: #64748b;")
-        self.add_content(hint)
-        graphics_view.setToolTip(
-            "Drop a CBF, NXS, or TIFF file here to load it. Double-click to open a larger independent image window."
-        )
-        graphics_view.setMinimumSize(scale_value(320, profile, 260), scale_value(240, profile, 190))
-        graphics_view.setMaximumSize(16777215, 16777215)
-        graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.display_inspector = DetectorDisplayInspector(ui, self, profile)
-        self.display_inspector.setVisible(True)
-        self.toolbar = DetectorToolBar(ui, self.display_inspector, self)
-        self.add_content(self.toolbar)
-        body = QWidget(self)
-        body.setObjectName("fittingDetectorPreviewBody")
-        body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(10)
-        body_layout.addWidget(graphics_view, 1)
-        body_layout.addWidget(self.display_inspector)
-        self.add_content(body, 1)
-        ui.fittingDetectorDisplayInspector = self.display_inspector
-        self.empty_state = GraphicsViewEmptyState(
-            graphics_view,
-            "Import detector data to preview the image\nand locate the Yoneda feature.",
-        )
 
 
 class GraphicsViewEmptyState(QLabel):
@@ -123,18 +82,23 @@ class PlotCanvasArea(QFrame):
         empty_text: str | None = None,
     ):
         super().__init__(parent)
-        profile = profile or current_profile(parent or graphics_view)
+        profile = profile or LAYOUT
         self.setObjectName("plotCanvasContainer")
         self.setProperty("previewSection", True)
-        self.setMinimumHeight(scale_value(260, profile, 200))
+        self.setMinimumHeight(260)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        graphics_view.setMinimumSize(scale_value(320, profile, 260), scale_value(260, profile, 200))
+        graphics_view.setMinimumSize(320, 260)
         graphics_view.setMaximumSize(16777215, 16777215)
         graphics_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # The canvas is sized to the view (1:1), so the view never scrolls.
+        graphics_view.setFrameShape(QFrame.NoFrame)
+        graphics_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        graphics_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        graphics_view.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         layout.addWidget(graphics_view, 1)
         self.empty_state = GraphicsViewEmptyState(
             graphics_view,
@@ -155,14 +119,14 @@ class SectionCard(QFrame):
         profile=None,
     ):
         super().__init__(parent)
-        profile = profile or current_profile(parent or self)
+        profile = profile or LAYOUT
         self.setObjectName(object_name)
         self.setProperty("sectionCard", True)
         self.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Fixed if fixed_height else QSizePolicy.Preferred
         )
         if fixed_height is not None:
-            height = scale_value(fixed_height, profile, int(fixed_height * 0.78))
+            height = fixed_height
             self.setMinimumHeight(height)
             self.setMaximumHeight(height)
 
@@ -179,7 +143,7 @@ class SectionCard(QFrame):
 
 class FittingRegionControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None, profile=None):
-        profile = profile or current_profile(parent or ui.centralwidget)
+        profile = profile or LAYOUT
         super().__init__("Fitting Region", "FittingRegionControl", parent, profile=profile)
 
         for widget in (
@@ -197,15 +161,11 @@ class FittingRegionControl(SectionCard):
         self.section_layout.addLayout(layout)
 
         ui.fitFittingRegionLabel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        ui.fitFittingRegionSlider.setMinimumHeight(scale_value(28, profile, 24))
-        ui.fitFittingRegionSlider.setMaximumHeight(scale_value(36, profile, 30))
+        ui.fitFittingRegionSlider.setMinimumHeight(28)
+        ui.fitFittingRegionSlider.setMaximumHeight(36)
         ui.fitFittingRegionSlider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         normalize_input(ui.fitFittingRegionMinValue)
         normalize_input(ui.fitFittingRegionMaxValue)
-
-        filter_label = QLabel("Data Filter:", self)
-        filter_label.setObjectName("fitRegionDataFilterLabel")
-        filter_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
         filter_widget = QWidget(self)
         filter_layout = QHBoxLayout(filter_widget)
@@ -220,13 +180,13 @@ class FittingRegionControl(SectionCard):
         ui.fitRegionPositiveOnlyCheckBox.hide()
         ui.fitRegionNegativeOnlyCheckBox.hide()
         filter_note = QLabel(
-            "The q display mode above the curve is shared by preview, fitting and export.",
+            "In the plot's q unit. The q display above the plot decides which points are "
+            "shown and fitted; in the |q| views the range selects both halves.",
             filter_widget,
         )
         filter_note.setWordWrap(True)
         filter_note.setProperty("cardMeta", True)
-        filter_layout.addWidget(filter_note)
-        filter_layout.addStretch(1)
+        filter_layout.addWidget(filter_note, 1)
 
         hint_label = QLabel(
             "Select Positive Only or Negative Only to edit Fitting Region.",
@@ -234,39 +194,29 @@ class FittingRegionControl(SectionCard):
         )
         hint_label.setObjectName("fitRegionEditHintLabel")
         hint_label.setWordWrap(True)
-        hint_label.setStyleSheet(
-            "QLabel {"
-            "background: #eff6ff;"
-            "border: 1px solid #bfdbfe;"
-            "border-radius: 6px;"
-            "color: #1d4ed8;"
-            "padding: 6px 8px;"
-            "line-height: 135%;"
-            "}"
-        )
+        set_role(hint_label, "hint")
         hint_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        hint_label.setMinimumHeight(scale_value(42, profile, 34))
+        hint_label.setMinimumHeight(42)
         hint_label.setVisible(False)
         ui.fitRegionEditHintLabel = hint_label
 
-        layout.addWidget(filter_label, 0, 0)
-        layout.addWidget(filter_widget, 0, 1)
+        ui.fitFittingRegionLabel.hide()  # the card title names the range
+        layout.addWidget(filter_widget, 0, 0, 1, 2)
         layout.addWidget(hint_label, 1, 0, 1, 2)
-        layout.addWidget(ui.fitFittingRegionLabel, 2, 0, 1, 2)
         layout.addWidget(ui.fitFittingRegionSlider, 3, 0, 1, 2)
         layout.addWidget(ui.fitFittingRegionMinValue, 4, 0)
         layout.addWidget(ui.fitFittingRegionMaxValue, 4, 1)
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 1)
         self.setMinimumHeight(
-            max(self.minimumHeight(), self.sizeHint().height() + scale_value(10, profile, 8))
+            max(self.minimumHeight(), self.sizeHint().height() + 10)
         )
         self.setMaximumHeight(16777215)
 
 
 class PlotSamplingControl(SectionCard):
     def __init__(self, ui, parent: QWidget | None = None, profile=None):
-        profile = profile or current_profile(parent or ui.centralwidget)
+        profile = profile or LAYOUT
         super().__init__("Sampling", "PlotSamplingControl", parent, profile=profile)
 
         for widget in (
@@ -390,15 +340,15 @@ class PlotOptionsControl(SectionCard):
 class PlotPreviewCard(CollapsibleCardFrame):
     def __init__(self, ui, content: QWidget, graphics_view: QGraphicsView, profile=None):
         super().__init__("Curve", "PlotPreviewCard", default_expanded=True)
-        profile = profile or current_profile(content)
-        self._base_min_height = scale_value(360, profile, 280)
+        profile = profile or LAYOUT
+        self._base_min_height = 360
         hint = QLabel(
             "Inspect the experimental curve alone or compare it with the current model.", self
         )
         hint.setObjectName("FittingPlotDoubleClickHint")
         hint.setProperty("cardMeta", True)
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #64748b;")
+        set_role(hint, "muted")
         self.add_content(hint)
         self.toolbar = self._build_toolbar(ui)
         self.add_content(self.toolbar)
@@ -481,7 +431,7 @@ class PlotPreviewCard(CollapsibleCardFrame):
             _detach_from_parent_layout(widget)
             actions_layout.addWidget(widget)
         actions_layout.addStretch(1)
-        ui.fittingResultStatusChip = QLabel("Waiting for cut data", toolbar)
+        ui.fittingResultStatusChip = QLabel("No curve", toolbar)
         ui.fittingResultStatusChip.setObjectName("fittingResultStatusChip")
         ui.fittingResultStatusChip.setProperty("statusKind", "idle")
         actions_layout.addWidget(ui.fittingResultStatusChip)
@@ -499,8 +449,8 @@ class PlotPreviewCard(CollapsibleCardFrame):
 
         _take_widget(root_layout, graphics_view)
         plot_area = PlotCanvasArea(graphics_view, content, profile)
-        plot_area.setMinimumHeight(scale_value(320, profile, 260))
-        content.setMinimumSize(scale_value(300, profile, 260), scale_value(320, profile, 260))
+        plot_area.setMinimumHeight(320)
+        content.setMinimumSize(300, 320)
         content.setMaximumSize(16777215, 16777215)
         content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -511,7 +461,7 @@ class PlotPreviewCard(CollapsibleCardFrame):
 class FittingPlotControlsCard(CollapsibleCardFrame):
     def __init__(self, ui, content: QWidget, profile=None):
         super().__init__("Fitting Controls", "FittingPlotControlsCard", default_expanded=True)
-        profile = profile or current_profile(content)
+        profile = profile or LAYOUT
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setMinimumWidth(SECTION_MIN_WIDTH)
 
@@ -545,11 +495,11 @@ class FittingPlotControlsCard(CollapsibleCardFrame):
 class StatusCard(CollapsibleCardFrame):
     def __init__(self, browser: QWidget, profile=None):
         super().__init__("Run Log", "FittingStatusCard", default_expanded=True)
-        profile = profile or current_profile(browser)
+        profile = profile or LAYOUT
         self.body_layout.setContentsMargins(CARD_MARGIN, 6, CARD_MARGIN, 8)
         self.content_layout.setSpacing(4)
-        browser_min_height = scale_value(180, profile, 140)
-        self.setMinimumHeight(scale_value(230, profile, 176))
+        browser_min_height = 180
+        self.setMinimumHeight(230)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         browser.setMinimumHeight(browser_min_height)
         browser.setMaximumHeight(16777215)
@@ -558,9 +508,6 @@ class StatusCard(CollapsibleCardFrame):
 
 
 __all__ = [
-    "DetectorPreviewCard",
-    "DetectorDisplayInspector",
-    "DetectorToolBar",
     "GraphicsViewEmptyState",
     "PlotCanvasArea",
     "SectionCard",

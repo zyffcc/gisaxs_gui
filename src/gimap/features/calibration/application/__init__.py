@@ -10,6 +10,7 @@ from src.gimap.features.calibration.domain import (
     geometry_change_is_significant,
     manual_ring_distance,
     preview_manual_candidate,
+    profile_change_is_significant,
     select_calibration_candidate,
     standard_display_name,
     standard_options,
@@ -18,6 +19,7 @@ from src.gimap.features.calibration.domain import (
 )
 
 from .errors import AmbiguousImageDatasetError, CalibrationCancelledError
+from .headless import HeadlessCalibration, describe_calibration
 from .use_cases import (
     ApplyCalibration,
     ExportCalibration,
@@ -26,10 +28,13 @@ from .use_cases import (
     LoadCalibrationImage,
     LoadDetectorCatalog,
     NormalizeCalibrationPath,
+    RecordInstrumentProfile,
     RunCalibration,
 )
 
 __all__ = [
+    "HeadlessCalibration",
+    "describe_calibration",
     "AmbiguousImageDatasetError",
     "ApplyCalibration",
     "CalibrationCancelledError",
@@ -42,6 +47,7 @@ __all__ = [
     "geometry_change_is_significant",
     "manual_ring_distance",
     "preview_manual_candidate",
+    "profile_change_is_significant",
     "select_calibration_candidate",
     "standard_display_name",
     "standard_options",
@@ -53,5 +59,6 @@ __all__ = [
     "LoadCalibrationImage",
     "LoadDetectorCatalog",
     "NormalizeCalibrationPath",
+    "RecordInstrumentProfile",
     "RunCalibration",
 ]

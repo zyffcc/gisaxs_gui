@@ -1,10 +1,16 @@
-"""Centralized stylesheet loader for the Prediction workbench."""
+"""Theme-token style sheet of the Prediction workbench (see app ``theme``)."""
 
 from pathlib import Path
 
+from PyQt5.QtWidgets import QWidget
 
-def prediction_stylesheet() -> str:
-    return Path(__file__).with_name("prediction_theme.qss").read_text(encoding="utf-8")
+from src.gimap.app.presentation.theme import style_widget
+
+PREDICTION_QSS = Path(__file__).with_name("prediction_theme.qss")
 
 
-__all__ = ["prediction_stylesheet"]
+def apply_prediction_style(widget: QWidget) -> None:
+    style_widget(widget, PREDICTION_QSS)
+
+
+__all__ = ["PREDICTION_QSS", "apply_prediction_style"]

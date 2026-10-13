@@ -58,16 +58,9 @@ from src.gimap.integrations.state import (
     InMemorySettingsRepository,
     InMemoryUserPreferencesRepository,
 )
-from ui.components.main_window_components import (
-    GisaxsPredictWorkspace as LegacyGisaxsPredictWorkspace,
-)
-from ui.components.main_window_components import PredictCard as LegacyPredictCard
-from ui.components.main_window_components import (
-    PredictModelLibraryCard as LegacyPredictModelLibraryCard,
-)
 
 ROOT = Path(__file__).resolve().parents[1]
-LEGACY_COMPONENTS = ROOT / "ui" / "components" / "main_window_components.py"
+APP_COMPOSITION = ROOT / "src" / "gimap" / "app" / "main_window.py"
 GENERATED_MAIN_WINDOW = ROOT / "src" / "gimap" / "app" / "window_view.py"
 PRESENTATION_ROOT = ROOT / "src" / "gimap" / "features" / "prediction" / "presentation"
 _TEST_APP = None
@@ -195,17 +188,12 @@ def test_preprocessed_panel_shows_an_image_thumbnail_for_every_step():
     assert all(not button.icon().isNull() for button in buttons)
 
 
-def test_legacy_component_path_reexports_feature_owned_prediction_classes():
-    assert LegacyGisaxsPredictWorkspace is GisaxsPredictWorkspace
-    assert LegacyPredictCard is PredictCard
-    assert LegacyPredictModelLibraryCard is PredictModelLibraryCard
+def test_app_composition_does_not_redefine_feature_owned_prediction_classes():
     assert PredictionViewModel.__module__.startswith("src.gimap.features.prediction.presentation")
 
-    legacy_tree = ast.parse(LEGACY_COMPONENTS.read_text(encoding="utf-8"))
-    legacy_class_names = {node.name for node in legacy_tree.body if isinstance(node, ast.ClassDef)}
-    assert "GisaxsPredictWorkspace" not in legacy_class_names
-    assert "PredictCard" not in legacy_class_names
-    assert "PredictModelLibraryCard" not in legacy_class_names
+    composition_tree = ast.parse(APP_COMPOSITION.read_text(encoding="utf-8"))
+    class_names = {node.name for node in composition_tree.body if isinstance(node, ast.ClassDef)}
+    assert {"GisaxsPredictWorkspace", "PredictCard", "PredictModelLibraryCard"}.isdisjoint(class_names)
 
 
 def test_prediction_controls_are_owned_by_feature_factory():

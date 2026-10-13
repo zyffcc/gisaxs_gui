@@ -8,9 +8,7 @@ import numpy as np
 from PyQt5.QtCore import Qt
 
 
-from src.gimap.app.presentation.responsive_layout import (
-    move_window_to_cursor_screen,
-)
+from src.gimap.app.presentation.layout_metrics import move_window_to_cursor_screen
 
 from ..binding_primitives import (
     IndependentFitWindow,
@@ -88,19 +86,10 @@ class FittingResultDisplayMixin:
             original_y_data = None
             data_label = ""
 
-            if (
-                hasattr(self.ui, "fitCurrentDataCheckBox")
-                and self.ui.fitCurrentDataCheckBox.isChecked()
-            ):
-                if hasattr(self, "current_cut_data") and self.current_cut_data is not None:
-                    original_x_data = np.array(self.current_cut_data["x_coords"])
-                    original_y_data = np.array(self.current_cut_data["y_intensity"])
-                    data_label = "Cut Data"
-            else:
-                if hasattr(self, "current_1d_data") and self.current_1d_data is not None:
-                    original_x_data = np.array(self.current_1d_data["q"])
-                    original_y_data = np.array(self.current_1d_data["I"])
-                    data_label = "1D File Data"
+            if getattr(self, "current_1d_data", None) is not None:
+                original_x_data = np.array(self.current_1d_data["q"])
+                original_y_data = np.array(self.current_1d_data["I"])
+                data_label = "Data"
 
             projection = self._ensure_curve_canvas()
             if projection is None:
@@ -190,6 +179,7 @@ class FittingResultDisplayMixin:
             )
 
             self._draw_roi_guides_if_active(ax)
+            self._theme_curve_figure(fig)
 
             fig.tight_layout()
 
@@ -326,19 +316,10 @@ class FittingResultDisplayMixin:
             original_y_data = None
             data_label = ""
 
-            if (
-                hasattr(self.ui, "fitCurrentDataCheckBox")
-                and self.ui.fitCurrentDataCheckBox.isChecked()
-            ):
-                if hasattr(self, "current_cut_data") and self.current_cut_data is not None:
-                    original_x_data = np.array(self.current_cut_data["x_coords"])
-                    original_y_data = np.array(self.current_cut_data["y_intensity"])
-                    data_label = "Cut Data"
-            else:
-                if hasattr(self, "current_1d_data") and self.current_1d_data is not None:
-                    original_x_data = np.array(self.current_1d_data["q"])
-                    original_y_data = np.array(self.current_1d_data["I"])
-                    data_label = "1D File Data"
+            if getattr(self, "current_1d_data", None) is not None:
+                original_x_data = np.array(self.current_1d_data["q"])
+                original_y_data = np.array(self.current_1d_data["I"])
+                data_label = "Data"
 
             if not _qobject_is_alive(self.independent_fit_window):
                 self.independent_fit_window = None

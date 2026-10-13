@@ -21,6 +21,8 @@ class ConversionReviewState:
     destination: str
     naming: str
     is_large_output: bool
+    input_counts: tuple[tuple[str, int], ...] = ()
+    """(file type, files) of the selected inputs: the review says them in the interface language."""
 
 
 @dataclass

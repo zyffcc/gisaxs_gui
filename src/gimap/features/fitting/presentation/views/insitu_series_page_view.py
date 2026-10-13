@@ -5,12 +5,7 @@ from __future__ import annotations
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QButtonGroup,
-    QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
-    QFormLayout,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -24,7 +19,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation.components import JobStatus, ResultTable
+from src.gimap.app.presentation.components import JobStatus, MplBoxZoom, ResultTable
 
 from .insitu_workflow_controls import InSituWorkflowControls
 
@@ -33,8 +28,8 @@ class InSituSeriesPageView:
     """Create controls and layout only; commands are owned by the page binding."""
 
     STEP_DEFINITIONS = (
-        ("source", "1", "Source"),
-        ("fit", "2", "Analysis settings"),
+        ("source", "1", "Curves"),
+        ("fit", "2", "Fit settings"),
         ("results", "3", "Results"),
     )
 
@@ -65,7 +60,9 @@ class InSituSeriesPageView:
         self.titleLabel.setObjectName("fittingInsituTitleLabel")
         self.titleLabel.setProperty("gimapPageTitle", True)
         self.subtitleLabel = QLabel(
-            "Choose a folder, use the current detector / cut setup, then start.", page
+            "Fit a series of curves from Analyze with the setup of one curve fitted in "
+            "Single analysis.",
+            page,
         )
         self.subtitleLabel.setObjectName("fittingInsituSubtitleLabel")
         self.subtitleLabel.setProperty("gimapMeta", True)
@@ -86,7 +83,7 @@ class InSituSeriesPageView:
         self.backToSingleButton.hide()
         root.addLayout(row)
         self.recipeMetaLabel = QLabel(
-            "Analyze one representative frame, then explicitly transfer its setup.", page
+            "Fit one representative curve in Single analysis, then use its setup here.", page
         )
         self.recipeMetaLabel.setObjectName("fittingInsituRecipeMetaLabel")
         self.recipeMetaLabel.setProperty("gimapMeta", True)
@@ -151,7 +148,7 @@ class InSituSeriesPageView:
         layout.addWidget(self.previewTabs, 1)
 
         status_line = QHBoxLayout()
-        self.currentImageLabel = QLabel("Current image: -", work_area)
+        self.currentImageLabel = QLabel("Current curve: -", work_area)
         self.currentImageLabel.setObjectName("fittingInsituCurrentImageLabel")
         self.currentImageLabel.setProperty("gimapMeta", True)
         self.currentImageLabel.setWordWrap(True)
@@ -206,95 +203,18 @@ class InSituSeriesPageView:
         page = QWidget(self.previewTabs)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(6, 6, 6, 6)
-        self.imageCanvas = self._make_canvas_holder(page, "Detector / processed image")
-        image_row = QSplitter(Qt.Horizontal, page)
-        image_row.setChildrenCollapsible(False)
-        image_row.addWidget(self.imageCanvas)
-        image_row.addWidget(self._build_preview_display_inspector(page))
-        image_row.setStretchFactor(0, 1)
-        image_row.setSizes([700, 240])
-        self.curveCanvas = self._make_canvas_holder(page, "Cut / fitting curve")
-        splitter = QSplitter(Qt.Vertical, page)
-        splitter.setChildrenCollapsible(False)
-        splitter.addWidget(image_row)
-        splitter.addWidget(self.curveCanvas)
-        splitter.setSizes([420, 320])
-        layout.addWidget(splitter, 1)
+        self.curveCanvas = self._make_canvas_holder(page, "Curve / fit")
+        layout.addWidget(self.curveCanvas, 1)
         self.previewTabs.addTab(page, "Preview")
-
-    def _build_preview_display_inspector(self, parent: QWidget) -> QWidget:
-        inspector = QFrame(parent)
-        inspector.setObjectName("fittingInsituPreviewDisplayInspector")
-        inspector.setMinimumWidth(210)
-        inspector.setMaximumWidth(285)
-        layout = QVBoxLayout(inspector)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(9)
-        title = QLabel("Image display", inspector)
-        title.setProperty("gimapSectionTitle", True)
-        layout.addWidget(title)
-        hint = QLabel("Display only — Recipe and analysis data are unchanged.", inspector)
-        hint.setProperty("gimapMeta", True)
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-
-        quick = QGridLayout()
-        self.previewAutoScaleCheckBox = QCheckBox("Auto scale", inspector)
-        self.previewAutoScaleCheckBox.setChecked(True)
-        self.previewLogCheckBox = QCheckBox("Log intensity", inspector)
-        self.previewLogCheckBox.setChecked(True)
-        self.previewShowCenterCheckBox = QCheckBox("Center", inspector)
-        self.previewShowCenterCheckBox.setChecked(True)
-        self.previewShowRoiCheckBox = QCheckBox("Cut ROI", inspector)
-        self.previewShowRoiCheckBox.setChecked(True)
-        quick.addWidget(self.previewAutoScaleCheckBox, 0, 0)
-        quick.addWidget(self.previewLogCheckBox, 0, 1)
-        quick.addWidget(self.previewShowCenterCheckBox, 1, 0)
-        quick.addWidget(self.previewShowRoiCheckBox, 1, 1)
-        layout.addLayout(quick)
-
-        self.previewVminSpinBox = self._display_spin(inspector)
-        self.previewVmaxSpinBox = self._display_spin(inspector)
-        self.previewVminSpinBox.setEnabled(False)
-        self.previewVmaxSpinBox.setEnabled(False)
-        self.previewColormapCombo = QComboBox(inspector)
-        self.previewColormapCombo.addItems(
-            ("viridis", "plasma", "inferno", "magma", "cividis", "gray", "turbo")
-        )
-        form = QFormLayout()
-        form.addRow("Vmin", self.previewVminSpinBox)
-        form.addRow("Vmax", self.previewVmaxSpinBox)
-        form.addRow("Color map", self.previewColormapCombo)
-        layout.addLayout(form)
-        layout.addStretch(1)
-        return inspector
-
-    @staticmethod
-    def _display_spin(parent: QWidget) -> QDoubleSpinBox:
-        editor = QDoubleSpinBox(parent)
-        editor.setRange(-1e15, 1e15)
-        editor.setDecimals(5)
-        editor.setKeyboardTracking(False)
-        return editor
 
     def _build_frames_tab(self) -> None:
         page = QWidget(self.previewTabs)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(6, 6, 6, 6)
         self.resultsTable = ResultTable(
-            (
-                "Frame",
-                "File",
-                "Load",
-                "Preprocess",
-                "Geometry",
-                "Cut",
-                "Fit",
-                "Recipe",
-                "Fit quality",
-            ),
+            ("#", "Curve", "Load", "Fit", "Recipe", "Fit quality"),
             page,
-            empty_message="No processed frames yet",
+            empty_message="No processed curves yet",
         )
         layout.addWidget(self.resultsTable)
         self.previewTabs.addTab(page, "Frames")
@@ -321,6 +241,7 @@ class InSituSeriesPageView:
             canvas = FigureCanvasQTAgg(figure)
             holder._insitu_figure = figure
             holder._insitu_canvas = canvas
+            holder._insitu_zoom = MplBoxZoom(canvas)
             layout.addWidget(canvas)
         except (ImportError, RuntimeError):
             label = QLabel(f"{fallback_text} preview unavailable", holder)

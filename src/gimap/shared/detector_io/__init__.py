@@ -11,8 +11,12 @@ from .loading import (
     select_nxs_dataset,
 )
 from .models import DetectorImage
+from .writing import FRAME_FORMATS, frame_suffix, write_frame
 
 __all__ = [
+    "FRAME_FORMATS",
+    "frame_suffix",
+    "write_frame",
     "AmbiguousDatasetError",
     "DetectorImage",
     "_dataset_candidates",

@@ -9,8 +9,9 @@
   [`tests/test_xrr_domain.py`](../../tests/test_xrr_domain.py)、
   [`tests/test_xrr_application.py`](../../tests/test_xrr_application.py)、
   [`tests/test_xrr_adapters.py`](../../tests/test_xrr_adapters.py)、
-  [`tests/test_xrr_job_smoke.py`](../../tests/test_xrr_job_smoke.py)
-- **Last verified**: 2026-08-25
+  [`tests/test_xrr_job_smoke.py`](../../tests/test_xrr_job_smoke.py)、
+  [`tests/test_release2_xrr_window.py`](../../tests/test_release2_xrr_window.py) (the pixels of the window)
+- **Last verified**: 2026-10-13 (pixel coordinates; the rest 2026-08-25)
 
 ## Purpose and ownership
 
@@ -63,13 +64,22 @@ orientation differs between experiments. Pixel coordinates use the established d
 orientation: x grows right and y grows down. The beam center can be entered numerically or picked on
 the first detector preview.
 
+`beam_center_x`, `beam_center_y`, `x_specular` and `y_specular` of these formulas are pixel-centre
+indices: x is the column and y the row of the loaded frame, and the centre of the first pixel is 0.0.
+These are the numbers of `SpecularGeometry` and `XrrPoint`, of the exported CSV (`roi_center_x_px`,
+`roi_center_y_px`) and of its JSON record (`geometry.beam_center_x_px` / `_y_px`); the record names the
+convention in `center_convention`. The window shows and accepts the same points in canonical detector
+pixels, as Analyze and Geometry Calibration do (pixel corners on integers, the centre of the first pixel
+is 0.5): 0.5 px higher in x and y. Only `presentation/pixel_coordinates.py` converts between the two.
+
 ## Intensity definition
 
 The extraction ROI is a circle centered on the calculated specular pixel:
 
-- radius `0` selects the nearest single detector pixel;
-- radius `r > 0` selects pixel centers whose Euclidean distance from the fractional specular center is
-  at most `r` pixels;
+- radius `0` selects the nearest single detector pixel: the pixel whose centre index is nearest to the
+  specular position, which is the pixel that contains the position as the window shows it;
+- radius `r > 0` selects pixel centers whose Euclidean distance from the fractional specular center
+  (both as pixel-centre indices) is at most `r` pixels;
 - non-finite values and detector-mask pixels are excluded;
 - `Sum` returns the sum of valid selected pixels; `Mean` returns their arithmetic mean;
 - an ROI completely outside the detector or without valid pixels produces a missing intensity and a

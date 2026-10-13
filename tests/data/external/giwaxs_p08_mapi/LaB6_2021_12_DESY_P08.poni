@@ -1,0 +1,14 @@
+# Nota: C-Order, 1 refers to the Y axis, 2 to the X axis
+# Calibration done on Wed Apr  2 19:30:33 2025
+poni_version: 2.1
+Detector: Perkin
+Detector_config: {"pixel1": 0.0002, "pixel2": 0.0002, "orientation": 3}
+Distance: 0.8117581994080769
+Poni1: 0.36449664404276455
+Poni2: 0.11334993145872425
+Rot1: 0.005245688159047451
+Rot2: 0.0010998825302769666
+Rot3: 0.0
+Wavelength: 6.888011024066681e-11
+# Calibrant: LaB6
+# Image: fabio:////moneta.uni-tuebingen.de/groupshare/OMBD/xray/beamtimes/2021_12_DESY_P08/raw/Calibration2_00541/pe/Calibration2_00541-00001.tif

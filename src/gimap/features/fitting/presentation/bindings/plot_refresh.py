@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ..detector_data_access import analysis_image_for
 from ..curve_rendering import CurvePlotSpec, CurveSeries, render_curve_plot
 
 
@@ -119,17 +118,6 @@ class PlotRefreshMixin:
             if figure is not None and figure.axes:
                 figure.axes[0].set_title(f"Data Points Only - {label}")
 
-    def _update_fitting_plot_points_only(self):
-        cut = getattr(self, "current_cut_data", None)
-        if cut is None:
-            return
-        x, y = self._legacy_cut_arrays(cut)
-        if x is not None and y is not None:
-            self._render_legacy_curve_series((CurveSeries(
-                self._convert_q_values_for_display(x), y, "Data", "blue",
-                marker_size=20, alpha=0.7,
-            ),), y_label="Intensity", title="", log_y=self._get_checkbox_state("fitLogYCheckBox", False))
-
     def _on_fit_log_changed(self):
         """Log-x/Log-y"""
         try:
@@ -160,13 +148,6 @@ class PlotRefreshMixin:
             self._current_curve_view_state()
             self._update_q_view_hint()
             self._sync_axis_filter_controls()
-            if (
-                getattr(self, "data_source", None) == "cut"
-                and analysis_image_for(self) is not None
-            ):
-                self._mark_cut_stale(
-                    "q display mode changed; update the cut before fitting"
-                )
             self._sync_roi_controls_to_current_display(reset_to_domain=True)
             self._apply_roi_to_data_and_refresh()
             mode = getattr(self, "display_mode", "normal")
@@ -220,13 +201,6 @@ class PlotRefreshMixin:
             self._sync_axis_filter_controls()
             current_filter_mode = self._get_independent_axis_filter_mode()
             self._last_axis_filter_mode = current_filter_mode
-            if (
-                getattr(self, "data_source", None) == "cut"
-                and analysis_image_for(self) is not None
-            ):
-                self._mark_cut_stale(
-                    "q-branch selection changed; review the curve and update the cut if needed"
-                )
             try:
                 self._sync_roi_controls_to_current_display(
                     reset_to_domain=(previous_mode != current_filter_mode)
@@ -240,23 +214,6 @@ class PlotRefreshMixin:
             self.status_updated.emit("Display settings synced across main and independent views")
         except Exception as e:
             self.status_updated.emit(f"Error updating display sync: {str(e)}")
-
-    def _update_fitting_plot(self):
-        fitting = getattr(self, "fitting_data", None)
-        if fitting is None:
-            return
-        series = []
-        cut = getattr(self, "current_cut_data", None)
-        if cut is not None:
-            x, y = self._legacy_cut_arrays(cut)
-            if x is not None and y is not None:
-                series.append(CurveSeries(self._convert_q_values_for_display(x), y,
-                                          "Data", "blue", marker_size=20, alpha=0.7))
-        if isinstance(fitting, dict) and "x" in fitting and "y" in fitting:
-            series.append(CurveSeries(self._convert_q_values_for_display(fitting["x"]),
-                                      fitting["y"], "Fit", "red", style="line", linewidth=2, alpha=1))
-        self._render_legacy_curve_series(tuple(series), y_label="Intensity", title="",
-                                         log_y=self._get_checkbox_state("fitLogYCheckBox", False))
 
     def _update_fitting_mode_displays_without_line(self):
         """No description."""
@@ -319,24 +276,12 @@ class PlotRefreshMixin:
     def _get_current_data_for_display(self):
         """No description."""
         try:
-            if (
-                hasattr(self.ui, "fitCurrentDataCheckBox")
-                and self.ui.fitCurrentDataCheckBox.isChecked()
-            ):
-                if hasattr(self, "current_cut_data") and self.current_cut_data is not None:
-                    return (
-                        np.array(self.current_cut_data["x_coords"]),
-                        np.array(self.current_cut_data["y_intensity"]),
-                        "Cut Data",
-                    )
-            else:
-                if hasattr(self, "current_1d_data") and self.current_1d_data is not None:
-                    return (
-                        np.array(self.current_1d_data["q"]),
-                        np.array(self.current_1d_data["I"]),
-                        "1D File Data",
-                    )
-
+            if getattr(self, "current_1d_data", None) is not None:
+                return (
+                    np.array(self.current_1d_data["q"]),
+                    np.array(self.current_1d_data["I"]),
+                    "Data",
+                )
             return None, None, ""
 
         except Exception as e:
@@ -363,20 +308,3 @@ class PlotRefreshMixin:
         axes = figure.axes[0] if figure.axes else figure.add_subplot(111)
         render_curve_plot(axes, spec)
         self._current_fit_canvas.draw_idle()
-
-    def _render_legacy_curve_series(self, series, *, y_label, title, log_y):
-        figure = getattr(self, "_current_fit_figure", None)
-        if figure is None:
-            return
-        axes = figure.axes[0] if figure.axes else figure.add_subplot(111)
-        render_curve_plot(axes, CurvePlotSpec(series, self._build_q_axis_label(), y_label,
-                                             title, x_scale=self._get_x_axis_scale(), log_y=log_y))
-        self._current_fit_canvas.draw_idle()
-
-    @staticmethod
-    def _legacy_cut_arrays(cut):
-        if "x_coords" in cut and "y_intensity" in cut:
-            return cut["x_coords"], cut["y_intensity"]
-        if "x" in cut and "y" in cut:
-            return cut["x"], cut["y"]
-        return None, None

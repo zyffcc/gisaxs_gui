@@ -50,7 +50,7 @@ class FolderImportDialogView:
         self.folder_form.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.recursive)
         self.dialog_layout.addLayout(self.folder_form)
         self.subfolder_note = QtWidgets.QLabel(FolderImportDialog)
-        self.subfolder_note.setStyleSheet("color: #64748b;")
+        self.subfolder_note.setProperty("gimapRole", "muted")
         self.subfolder_note.setObjectName("subfolder_note")
         self.dialog_layout.addWidget(self.subfolder_note)
         self.buttons = QtWidgets.QDialogButtonBox(FolderImportDialog)

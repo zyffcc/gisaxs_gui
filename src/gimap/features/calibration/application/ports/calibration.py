@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Optional, Protocol
+
+from src.gimap.shared.geometry import InstrumentProfile
 
 from ...domain import CalibrationRequest, CalibrationResult, DetectorImage
 
@@ -50,5 +52,19 @@ class GeometryParametersPort(Protocol):
     def save(self) -> None: ...
 
 
+class InstrumentProfilePort(Protocol):
+    def find(self, name: str) -> Optional[InstrumentProfile]: ...
+
+    def save(self, profile: InstrumentProfile) -> None: ...
+
+
 class DetectorCatalogPort(Protocol):
     def load(self) -> dict[str, dict[str, Any]]: ...
+
+
+class CalibrationInputFolderPort(Protocol):
+    """The folder Geometry Calibration last read an image from (kept between sessions)."""
+
+    def last_folder(self) -> str: ...
+
+    def remember(self, path: str | Path) -> None: ...

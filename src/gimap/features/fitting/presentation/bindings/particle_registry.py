@@ -56,17 +56,19 @@ class ParticleRegistryMixin:
         )
 
     def _collect_active_particles(self):
-        """No description."""
+        """The shapes of the components in use (lower case, as the model reads them) and their widgets.
+
+        By the selected entry of each shape box, not by its text: the interface language renames the
+        entries, and read from the Chinese text no shape is one the model knows and the renamed "None"
+        counts as a component."""
         active_shapes = []
         widget_order = []
         for widget_id in self._iter_particle_widget_ids():
-            combo_name = f"fitParticleShapeCombox_{widget_id}"
-            if not hasattr(self.ui, combo_name):
+            if not hasattr(self.ui, f"fitParticleShapeCombox_{widget_id}"):
                 continue
-            combobox = getattr(self.ui, combo_name)
-            current_text = combobox.currentText().strip() if combobox.currentText() else ""
-            if current_text and current_text.lower() != "none":
-                active_shapes.append(current_text.lower())
+            shape = self.get_particle_shape(widget_id)
+            if shape and shape.lower() != "none":
+                active_shapes.append(shape.lower())
                 widget_order.append(widget_id)
         return active_shapes, widget_order
 

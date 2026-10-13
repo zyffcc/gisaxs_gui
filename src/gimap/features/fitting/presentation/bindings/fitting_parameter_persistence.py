@@ -103,7 +103,7 @@ class FittingParameterPersistenceMixin:
         filepath, _ = QFileDialog.getSaveFileName(
             self.main_window or self.ui,
             "Save Fitting Parameters",
-            "config/fitting_parameters.json",
+            str(Path.home() / "fitting_parameters.json"),
             "JSON Files (*.json);;All Files (*)",
         )
         return self.save_fitting_parameters_to_file(filepath) if filepath else False
@@ -112,7 +112,7 @@ class FittingParameterPersistenceMixin:
         filepath, _ = QFileDialog.getOpenFileName(
             self.main_window or self.ui,
             "Load Fitting Parameters",
-            "config/",
+            str(Path.home()),
             "JSON Files (*.json);;All Files (*)",
         )
         return self.load_fitting_parameters_from_file(filepath) if filepath else False
@@ -162,7 +162,7 @@ class FittingParameterPersistenceMixin:
         import_particles_action = menu.addAction("Import Particle Parameters Only...")
         reload_action = menu.addAction("Reload Parameters from Config")
         menu.addSeparator()
-        ai_action = menu.addAction("Open AI Fitting Workspace...")
+        ai_action = menu.addAction("Fit Settings & Batch...")
         action = menu.exec_(global_pos)
         if action == save_action:
             self.save_fitting_parameters_dialog()
@@ -172,7 +172,7 @@ class FittingParameterPersistenceMixin:
             filepath, _ = QFileDialog.getSaveFileName(
                 self.main_window or self.ui,
                 "Export Particle Parameters",
-                "config/model_parameters_fitting.json",
+                str(Path.home() / "model_parameters_fitting.json"),
                 "JSON Files (*.json);;All Files (*)",
             )
             if filepath:
@@ -181,7 +181,7 @@ class FittingParameterPersistenceMixin:
             filepath, _ = QFileDialog.getOpenFileName(
                 self.main_window or self.ui,
                 "Import Particle Parameters",
-                "config/",
+                str(Path.home()),
                 "JSON Files (*.json);;All Files (*)",
             )
             if filepath:

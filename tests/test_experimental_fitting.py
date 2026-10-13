@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from src.gimap.features.fitting.application.workflow_v5 import validate_options
-from src.gimap.features.fitting.domain.cbf_observations import column_observations
+from src.gimap.features.analyze.domain import native_profile
 from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import (
     fit_candidates,
     forward,
@@ -12,14 +12,15 @@ from src.gimap.features.fitting.infrastructure.adapters.experimental_fit import 
 
 
 def test_native_columns_use_preprocessing_mask_and_partial_counts():
+    # Analyze's native detector columns are the observations the V5 fit receives.
     image = np.full((3, 30), 9.0)
     image[:, 13:18] = np.nan
     image[0, 1] = np.nan
-    qmesh = np.broadcast_to(np.arange(30), image.shape)
+    qmesh = np.broadcast_to(np.arange(30, dtype=float), image.shape)
     original = image.copy()
-    q, y, sigma, meta = column_observations(image, qmesh, (0, 2, 0, 29))
+    q, y, sigma, pixels = native_profile(image, np.isfinite(image), qmesh, axis=0)
     assert not set(range(13, 18)) & set(q)
-    assert len(q) == 25 and meta["invalid_columns"] == 5
+    assert len(q) == 25 and pixels[q == 1] == 2
     assert y[q == 1] == 9
     np.testing.assert_allclose(sigma[q == 1], np.sqrt(18) / 2)
     np.testing.assert_array_equal(image, original)
@@ -29,9 +30,7 @@ def test_zero_count_is_observation_and_selection_edge_is_not_hardware_gap():
     image = np.zeros((2, 20))
     qmesh = np.broadcast_to(np.arange(20), image.shape)
     selection = qmesh >= 4
-    q, y, sigma, _ = column_observations(
-        image, qmesh, (0, 1, 0, 19), selection_mask=selection
-    )
+    q, y, sigma, _ = native_profile(image, selection, qmesh.astype(float), axis=0)
     assert len(q) == 16 and q[0] == 4
     assert not y.any() and np.all(sigma == 0.5)
 

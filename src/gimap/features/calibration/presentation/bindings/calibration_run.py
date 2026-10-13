@@ -12,12 +12,15 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
 )
 
+from src.gimap.app.presentation.i18n import tr
+
 from ...application import (
     CalibrationCancelledError,
     CalibrationResult,
 )
 
 
+from ..pixel_coordinates import shown_center
 from ..workers import CalibrationWorker
 
 LOGGER = logging.getLogger(__name__)
@@ -40,7 +43,7 @@ class CalibrationRunMixin:
                 "subtract_background": self.background_check.isChecked(),
             }
         except ValueError as exc:
-            QMessageBox.warning(self, "Calibration Input", str(exc))
+            QMessageBox.warning(self, tr("Calibration Input"), tr(str(exc)))
             return
         self.job_status.set_state(
             "running",
@@ -71,10 +74,12 @@ class CalibrationRunMixin:
             self.cancel_button.setEnabled(False)
 
     def _calibration_progress(self, value: int, stage: str) -> None:
+        # The stage names of the engine stay English; JobStatus shows them in the interface language.
         self.job_status.set_state("running", stage, progress=value / 100.0)
 
     def _calibration_finished(self, result: CalibrationResult) -> None:
         self.result = result
+        self._remember_fitted_geometry()
         self.job_status.set_state(
             "succeeded",
             "Calibration complete. Review the selected candidate, then Apply.",
@@ -84,9 +89,10 @@ class CalibrationRunMixin:
         self._populate_candidates()
         self.candidate_table.selectRow(0)
         del candidate_blocker
+        # Manual mode starts only from 'Manual refine': the fitted values stay as they are.
+        self.manual_group.setChecked(False)
         self._show_candidate(result.selected_candidate)
         self._set_running(False)
-        self.manual_group.setChecked(True)
 
     def _calibration_failed(self, exc: Exception) -> None:
         if isinstance(exc, CalibrationCancelledError):
@@ -97,7 +103,8 @@ class CalibrationRunMixin:
                 "Calibration failed. Adjust the inputs and try again.",
                 progress=0.0,
             )
-            QMessageBox.warning(self, "Geometry Calibration", str(exc))
+            # The engine's reasons are English sentences without values: exact keys of the table.
+            QMessageBox.warning(self, tr("Geometry Calibration"), tr(str(exc)))
         self._set_running(False)
 
     def _cleanup_calibration(self) -> None:
@@ -113,13 +120,14 @@ class CalibrationRunMixin:
             return
         self.candidate_table.setRowCount(len(self.result.candidates))
         for row, candidate in enumerate(self.result.candidates):
+            center_x, center_y = shown_center(candidate)  # the pixels of Analyze, as everywhere in the window
             values = (
-                self.view_model.standard_display_name(candidate.standard_key),
+                tr(self.view_model.standard_display_name(candidate.standard_key)),
                 f"{candidate.distance_mm:.2f} mm",
-                f"{candidate.center_x_px:.1f}, {candidate.center_y_px:.1f}",
+                f"{center_x:.1f}, {center_y:.1f}",
                 str(candidate.matched_ring_count),
                 f"{candidate.rms_residual_px:.2f} px",
-                candidate.confidence,
+                tr(candidate.confidence),
             )
             for column, value in enumerate(values):
                 self.candidate_table.setItem(row, column, QTableWidgetItem(value))
@@ -130,5 +138,7 @@ class CalibrationRunMixin:
         rows = self.candidate_table.selectionModel().selectedRows()
         if not rows:
             return
+        # Manual values committed for the previous candidate do not stay on it.
+        self._restore_fitted_geometry()
         candidate = self.view_model.select_candidate(rows[0].row())
         self._show_candidate(candidate)

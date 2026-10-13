@@ -1,27 +1,23 @@
-"""Fitting 文件能力的 application ports。"""
+"""Application ports of the Fitting file capabilities."""
 
 from __future__ import annotations
 
 from typing import Protocol
 
+from pathlib import Path
+
 from ..models import (
+    ExportCurveFigureRequest,
     ExportFitResultRequest,
     ExportedFitResult,
     LoadCurveRequest,
-    LoadScatteringFileRequest,
     DiscoverInSituFramesRequest,
     InSituSourceFrame,
-    ScatteringFileData,
-    ScatteringSequenceInfo,
 )
 from ...domain import CurveData
 
 
-class ScatteringFileRepository(Protocol):
-    def load(self, request: LoadScatteringFileRequest) -> ScatteringFileData: ...
-
-    def inspect_sequence(self, path) -> ScatteringSequenceInfo: ...
-
+class InSituFrameRepository(Protocol):
     def discover_insitu_frames(
         self, request: DiscoverInSituFramesRequest
     ) -> tuple[InSituSourceFrame, ...]: ...
@@ -33,3 +29,7 @@ class CurveRepository(Protocol):
 
 class FitResultRepository(Protocol):
     def export(self, request: ExportFitResultRequest) -> ExportedFitResult: ...
+
+
+class CurveFigureWriter(Protocol):
+    def write(self, request: ExportCurveFigureRequest) -> Path: ...

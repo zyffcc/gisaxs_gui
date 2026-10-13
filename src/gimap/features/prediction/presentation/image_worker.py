@@ -6,6 +6,8 @@ from pathlib import Path
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+from src.gimap.app.presentation.i18n import tr, trf
+
 
 class PredictionImageLoader(QThread):
     image_loaded = pyqtSignal(object, str)
@@ -27,12 +29,12 @@ class PredictionImageLoader(QThread):
         if self._path is None:
             self.error_occurred.emit("No prediction image path was provided")
             return
-        self.progress_updated.emit(5, f"Loading {self._path.name}")
+        self.progress_updated.emit(5, trf("Loading {name}", name=self._path.name))
         loaded = self._view_model.load_stack(self._path, self._count)
         if loaded is None:
             self.error_occurred.emit(
                 self._view_model.state.error_message or "Prediction image loading failed"
             )
             return
-        self.progress_updated.emit(100, "Image loading completed")
+        self.progress_updated.emit(100, tr("Image loading completed"))
         self.image_loaded.emit(loaded.image, str(self._path))

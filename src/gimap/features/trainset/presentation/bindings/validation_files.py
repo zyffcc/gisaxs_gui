@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
 )
 
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.features.trainset.application import (
     ModelContractRequest,
 )
@@ -28,14 +29,14 @@ class ValidationFilesMixin:
             simulation_available=self.simulation_port.is_available(),
         )
         if valid:
-            self.page.validation_badge.setText("Configuration valid")
+            self.page.set_validation_state("Configuration valid", "ok")
             self.page.preview_gate_table.item(0, 1).setText("Ready")
-            text = "Configuration is valid."
+            text = tr("Configuration is valid.")
             if warnings:
-                text += "\n\nWarnings:\n" + "\n".join(f"• {item}" for item in warnings)
+                text += "\n\n" + tr("Warnings:") + "\n" + "\n".join(f"• {item}" for item in warnings)
             QMessageBox.information(self.window, "Validation", text)
         else:
-            self.page.validation_badge.setText("Validation failed")
+            self.page.set_validation_state("Validation failed", "error")
             QMessageBox.warning(
                 self.window, "Validation", "\n".join(f"• {item}" for item in errors)
             )
@@ -60,17 +61,22 @@ class ValidationFilesMixin:
                     self.trainset_view_model.state.error_message or "Model validation failed"
                 )
             if result.runtime_error is not None:
-                summary = (
-                    f"Static tensor contract\n\n{result.static_summary}\n\n"
-                    f"TensorFlow forward pass unavailable: {result.runtime_error}"
+                self.page.texts.set(
+                    self.page.model_summary,
+                    "Static tensor contract\n\n{summary}\n\nTensorFlow forward pass unavailable: {error}",
+                    setter="setPlainText",
+                    summary=result.static_summary,
+                    error=result.runtime_error,
                 )
             else:
-                summary = (
-                    f"Forward pass OK\n\n{result.static_summary}\n\n"
-                    f"Batch output: {result.output_shape}\n"
-                    f"Trainable weights: {result.trainable_weights:,}"
+                self.page.texts.set(
+                    self.page.model_summary,
+                    "Forward pass OK\n\n{summary}\n\nBatch output: {shape}\nTrainable weights: {weights:,}",
+                    setter="setPlainText",
+                    summary=result.static_summary,
+                    shape=result.output_shape,
+                    weights=result.trainable_weights,
                 )
-            self.page.model_summary.setPlainText(summary)
             self.page.preview_gate_table.item(2, 1).setText("Ready")
             self.page.set_step_state(2, "Contract ready")
         except Exception as exc:
@@ -78,74 +84,80 @@ class ValidationFilesMixin:
 
     def _save_project_dialog(self) -> None:
         config = self._collect_config()
-        default = self.project_root / f"{config['project']['name']}.yaml"
+        folder = self._start_folder("project", self.project_root)
+        default = Path(folder) / f"{config['project']['name']}.yaml"
         path, _ = QFileDialog.getSaveFileName(
-            self.window, "Save trainset project", str(default), "YAML (*.yaml *.yml);;JSON (*.json)"
+            self.window, tr("Save trainset project"), str(default), "YAML (*.yaml *.yml);;JSON (*.json)"
         )
         if path:
+            self._remember_folder("project", path)
             self.trainset_view_model.save_project(config, Path(path))
-            self.status_updated.emit(f"Saved trainset project: {path}")
+            self.status_updated.emit(trf("Saved trainset project: {path}", path=path))
 
     def _load_project_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self.window,
-            "Load trainset project",
-            str(self.project_root),
+            tr("Load trainset project"),
+            self._start_folder("project", self.project_root),
             "Project configuration (*.yaml *.yml *.json);;All files (*)",
         )
         if not path:
             return
+        self._remember_folder("project", path)
         try:
+            # set_parameters marks the loaded design not validated (not "changed since validation").
             self.set_parameters(self.trainset_view_model.load_project(Path(path)))
-            self.status_updated.emit(f"Loaded trainset project: {path}")
+            self.status_updated.emit(trf("Loaded trainset project: {path}", path=path))
         except Exception as exc:
             QMessageBox.critical(self.window, "Project load failed", str(exc))
 
-    def _choose_workspace(self) -> None:
-        path = QFileDialog.getExistingDirectory(
-            self.window, "Choose local trainset workspace", str(self.project_root)
-        )
+    def _start_folder(self, kind: str, fallback) -> str:
+        """Where a chooser opens: the folder it last ended in (user preferences), else ``fallback``."""
+        return self.trainset_view_model.last_folder(kind) or str(fallback or "")
+
+    def _remember_folder(self, kind: str, path) -> None:
+        self.trainset_view_model.remember_folder(kind, path)
+
+    def _choose_folder_into(self, field: str, kind: str, title: str, fallback) -> None:
+        """A folder chooser for one Local Run path field: opens at the field's folder or the last one used."""
+        current = self.page.fields[field].text().strip()
+        start = current if current and Path(current).is_dir() else self._start_folder(kind, fallback)
+        path = QFileDialog.getExistingDirectory(self.window, tr(title), start)
         if path:
-            self.page.fields["project.workspace"].setText(path)
+            self._remember_folder(kind, path)
+            self.page.fields[field].setText(path)
+
+    def _choose_workspace(self) -> None:
+        self._choose_folder_into(
+            "project.workspace", "workspace", "Choose local trainset workspace", self.project_root
+        )
 
     def _choose_dataset_folder(self) -> None:
-        current = self.page.fields["runtime.dataset_output_dir"].text().strip()
-        path = QFileDialog.getExistingDirectory(
-            self.window,
-            "Choose generated dataset folder",
-            current or str(self._workspace()),
+        self._choose_folder_into(
+            "runtime.dataset_output_dir", "dataset", "Choose generated dataset folder", self._workspace()
         )
-        if path:
-            self.page.fields["runtime.dataset_output_dir"].setText(path)
 
     def _choose_results_folder(self) -> None:
-        current = self.page.fields["runtime.results_output_dir"].text().strip()
-        path = QFileDialog.getExistingDirectory(
-            self.window,
-            "Choose training results folder",
-            current or str(self._workspace()),
+        self._choose_folder_into(
+            "runtime.results_output_dir", "results", "Choose training results folder", self._workspace()
         )
-        if path:
-            self.page.fields["runtime.results_output_dir"].setText(path)
 
     def _choose_cache_folder(self) -> None:
-        current = self.page.fields["simulation.grid_cache.directory"].text().strip()
-        path = QFileDialog.getExistingDirectory(
-            self.window,
-            "Choose BornAgain grid cache folder",
-            current or str(self._workspace()),
+        self._choose_folder_into(
+            "simulation.grid_cache.directory", "cache", "Choose BornAgain grid cache folder", self._workspace()
         )
-        if path:
-            self.page.fields["simulation.grid_cache.directory"].setText(path)
 
     def _choose_local_python(self) -> None:
+        current = self.page.fields["training.local_python"].text().strip()
+        start = str(Path(current).parent) if current else self._start_folder("python", Path(sys.executable).parent)
         selected, _ = QFileDialog.getOpenFileName(
             self.window,
-            "Choose local Python executable",
-            str(Path(sys.executable).parent),
+            tr("Choose local Python executable"),
+            start,
             "Python executable (python.exe python);;All files (*)",
         )
         if selected:
+            self._remember_folder("python", selected)
             self.page.fields["training.local_python"].setText(selected)
 
     def _workspace(self) -> Path:

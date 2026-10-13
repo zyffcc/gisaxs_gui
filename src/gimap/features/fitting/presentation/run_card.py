@@ -15,9 +15,10 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from src.gimap.app.presentation.theme import set_role
 from src.gimap.app.ports import UserPreferencesRepository
 from src.gimap.app.presentation.layout_primitives import BUTTON_HEIGHT, FORM_ROW_SPACING, normalize_button, set_expanding_x
-from src.gimap.app.presentation.responsive_layout import current_profile, scale_value
+from src.gimap.app.presentation.layout_metrics import LAYOUT
 
 from .ai_controls import build_ai_controls
 from .global_parameter_controls import build_global_parameter_controls
@@ -45,10 +46,10 @@ class FittingControlsCard(CardFrame):
         self.ui = ui
         self.preferences = preferences
         self.parameter_step_preferences = ParameterStepPreferences(preferences)
-        self.profile = profile or current_profile(ui.centralwidget)
-        group_spacing = scale_value(12, self.profile, 8)
-        group_margin = scale_value(10, self.profile, 8)
-        group_top = scale_value(18, self.profile, 14)
+        self.profile = profile or LAYOUT
+        group_spacing = 12
+        group_margin = 10
+        group_top = 18
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._managed_group_layouts = []
         self._managed_buttons = []
@@ -66,10 +67,7 @@ class FittingControlsCard(CardFrame):
         ):
             self._replace_global_value_spinbox(widget_name)
         containers = [
-            ui.fitCurrentDataCheckBox,
             ui.widget,
-            ui.fitImport1dFileButton,
-            ui.fitImport1dFileValue,
             ui.fitMethodWidget,
             ui.fitMethodWidget_2,
             ui.widget_8,
@@ -80,12 +78,9 @@ class FittingControlsCard(CardFrame):
             set_expanding_x(widget)
 
         controls = [
-            ui.fitCurrentDataCheckBox,
             ui.fitLogXCheckBox,
             ui.fitLogYCheckBox,
             ui.fitNormCheckBox,
-            ui.fitImport1dFileButton,
-            ui.fitImport1dFileValue,
             ui.fitMethodLabel,
             ui.fitMethodValue,
             ui.FittingAutoFittingButton,
@@ -108,7 +103,6 @@ class FittingControlsCard(CardFrame):
             widget.setMaximumWidth(16777215)
 
         ui.fitIntResLabel.setText("Intensity (Res.)")
-        ui.fitCurrentDataCheckBox.setText("Use current cut")
         ui.fitMethodLabel.setText("Method:")
         ui.fitKLabel.setText("k:")
         ui.fitBGLabel = QLabel("BG:", self)
@@ -150,7 +144,6 @@ class FittingControlsCard(CardFrame):
 
         self.fitExportPlotButton = QPushButton("Export Plot", self)
         self.fitExportPlotButton.setObjectName("fitExportPlotButton")
-        self.fitExportPlotButton.clicked.connect(ui.FittingExportButton.click)
 
         self._managed_secondary_action_buttons.append(ui.FittingAutoKButton)
 
@@ -165,7 +158,6 @@ class FittingControlsCard(CardFrame):
             self._managed_buttons.append(button)
 
         for input_widget in (
-            ui.fitImport1dFileValue,
             ui.fitMethodValue,
             ui.fitBGValue,
             ui.fitBGStep,
@@ -195,25 +187,6 @@ class FittingControlsCard(CardFrame):
             ui.fitNuResStep,
         ]
 
-        data_options_group = self._make_group("Display Options")
-        data_layout = QHBoxLayout(data_options_group)
-        self._configure_group_layout(data_layout, group_margin, group_top, group_spacing)
-        for checkbox in (
-            ui.fitCurrentDataCheckBox,
-            ui.fitLogXCheckBox,
-            ui.fitLogYCheckBox,
-            ui.fitNormCheckBox,
-        ):
-            data_layout.addWidget(checkbox)
-        data_layout.addStretch(1)
-        data_layout.addWidget(self.fitExportPlotButton)
-
-        external_group = self._make_group("External 1D Data")
-        external_layout = QHBoxLayout(external_group)
-        self._configure_group_layout(external_layout, group_margin, group_top, group_spacing)
-        external_layout.addWidget(ui.fitImport1dFileButton, 0)
-        external_layout.addWidget(ui.fitImport1dFileValue, 1)
-
         method_group = build_ai_controls(self, ui, group_margin, group_top, group_spacing)
         global_group = build_global_parameter_controls(
             self, ui, group_margin, group_top, group_spacing
@@ -226,7 +199,7 @@ class FittingControlsCard(CardFrame):
         ui.FittingGlobalSearchButton = QPushButton("Global Search", actions_group)
         ui.FittingGlobalSearchButton.setObjectName("FittingGlobalSearchButton")
         normalize_button(ui.FittingGlobalSearchButton)
-        ui.FittingGlobalSearchButton.setMinimumHeight(scale_value(34, self.profile, 30))
+        ui.FittingGlobalSearchButton.setMinimumHeight(34)
         ui.FittingGlobalSearchButton.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         ui.FittingGlobalSearchButton.setToolTip(
             "Explore broad parameter ranges, then locally refine the best candidates."
@@ -234,7 +207,7 @@ class FittingControlsCard(CardFrame):
         ui.FittingAutoRefineButton = QPushButton("Local Refine", actions_group)
         ui.FittingAutoRefineButton.setObjectName("FittingAutoRefineButton")
         normalize_button(ui.FittingAutoRefineButton)
-        ui.FittingAutoRefineButton.setMinimumHeight(scale_value(34, self.profile, 30))
+        ui.FittingAutoRefineButton.setMinimumHeight(34)
         ui.FittingAutoRefineButton.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         ui.FittingAutoRefineButton.setToolTip(
             "Polish the current parameters inside conservative local ranges."
@@ -253,9 +226,8 @@ class FittingControlsCard(CardFrame):
         manual_layout = QVBoxLayout(manual_page)
         manual_layout.setContentsMargins(8, 10, 8, 10)
         manual_layout.setSpacing(group_spacing)
-        manual_layout.addWidget(data_options_group)
-        manual_layout.addWidget(external_group)
         manual_layout.addWidget(actions_group)
+        manual_layout.addStretch(1)
 
         ai_page = QWidget(self)
         ai_page.setObjectName("fittingAiModePage")
@@ -268,9 +240,11 @@ class FittingControlsCard(CardFrame):
         self.mode_tabs.setObjectName("fittingModeTabs")
         self.mode_tabs.addTab(model_parameters_card, "Components")
         self.mode_tabs.addTab(global_group, "Global")
-        self.mode_tabs.addTab(manual_page, "Data & refine")
+        self.mode_tabs.addTab(manual_page, "Refine")
         self.mode_tabs.addTab(ai_page, "1D Predict")
         self.mode_tabs.setDocumentMode(True)
+        self.mode_tabs.tabBar().setExpanding(True)
+        self.mode_tabs.setUsesScrollButtons(False)
         self.mode_tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.mode_tabs.currentChanged.connect(
             lambda _index: QTimer.singleShot(0, self._sync_mode_tab_height)
@@ -327,34 +301,12 @@ class FittingControlsCard(CardFrame):
     def _make_group(self, title: str) -> QGroupBox:
         group = QGroupBox(title, self)
         group.setObjectName(title.replace(" ", "").replace("/", "") + "Group")
-        group.setStyleSheet(
-            "QGroupBox {"
-            "border: none;"
-            "margin-top: 10px;"
-            "padding-top: 10px;"
-            "background: transparent;"
-            "}"
-            "QGroupBox::title {"
-            "subcontrol-origin: margin;"
-            "left: 0;"
-            "padding: 0;"
-            "font-weight: 650;"
-            "}"
-        )
+        group.setProperty("fittingPlainGroup", True)
         group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return group
 
     def _style_info_label(self, label: QLabel) -> None:
-        label.setStyleSheet(
-            "QLabel {"
-            "background: #eff6ff;"
-            "border: 1px solid #bfdbfe;"
-            "border-radius: 6px;"
-            "color: #1d4ed8;"
-            "padding: 6px 8px;"
-            "line-height: 135%;"
-            "}"
-        )
+        set_role(label, "hint")
         label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def _create_step_reset_button(
@@ -397,9 +349,9 @@ class FittingControlsCard(CardFrame):
 
     def apply_responsive_profile(self, profile) -> None:
         self.profile = profile
-        group_spacing = scale_value(12, profile, 8)
-        group_margin = scale_value(10, profile, 8)
-        group_top = scale_value(18, profile, 14)
+        group_spacing = 12
+        group_margin = 10
+        group_top = 18
         self.setMaximumHeight(16777215)
 
         if hasattr(self, "_main_controls_layout"):
@@ -412,12 +364,12 @@ class FittingControlsCard(CardFrame):
             else:
                 layout.setSpacing(group_spacing)
 
-        button_width = scale_value(128, profile, 110)
-        input_height = BUTTON_HEIGHT + scale_value(4, profile, 4)
-        spinbox_width = scale_value(138, profile, 118)
-        step_width = scale_value(92, profile, 78)
-        secondary_action_width = scale_value(88, profile, 76)
-        label_width = scale_value(128, profile, 112)
+        button_width = 128
+        input_height = BUTTON_HEIGHT + 4
+        spinbox_width = 138
+        step_width = 92
+        secondary_action_width = 88
+        label_width = 128
 
         for button in self._managed_buttons:
             button.setMinimumHeight(input_height)
@@ -451,7 +403,7 @@ class FittingControlsCard(CardFrame):
 
         global_group = self.findChild(QGroupBox, "GlobalParametersGroup")
         if global_group is not None:
-            global_group.setMinimumHeight(scale_value(238, profile, 210))
+            global_group.setMinimumHeight(238)
             global_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._sync_mode_tab_height()
         self.setMinimumHeight(0)

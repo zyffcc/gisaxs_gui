@@ -8,6 +8,8 @@ from typing import Dict, Any
 
 from PyQt5.QtWidgets import QDialog, QButtonGroup
 
+from src.gimap.app.presentation.i18n import trf
+
 
 from .views import (
     ExportDialogView,
@@ -22,9 +24,9 @@ class ExportDialog(QDialog, ExportDialogView):
         self.setupUi(self)
         self.setModal(True)
         self.range_group = QButtonGroup(self)
-        self.all_radio.setText(f"All Results ({total_count} items)")
-        self.selected_radio.setText(f"Selected Results ({selected_count} items)")
-        self.current_radio.setText(f"Current Display ({current_count} items)")
+        self.all_radio.setText(trf("All Results ({count} items)", count=total_count))
+        self.selected_radio.setText(trf("Selected Results ({count} items)", count=selected_count))
+        self.current_radio.setText(trf("Current Display ({count} items)", count=current_count))
         self.range_group.addButton(self.all_radio, 0)
         self.range_group.addButton(self.selected_radio, 1)
         self.range_group.addButton(self.current_radio, 2)

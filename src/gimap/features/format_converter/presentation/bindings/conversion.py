@@ -7,6 +7,7 @@ import time
 
 from PyQt5.QtCore import QThread
 
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ..display_formatting import _duration
 from ..progress_dialog import ConversionProgressDialog
@@ -44,18 +45,28 @@ class ConversionMixin:
         total = max(1, total)
         self._progress_dialog.bar.setRange(0, total)
         self._progress_dialog.bar.setValue(completed)
-        self._progress_dialog.title.setText(f"Converting {source_name}")
-        self._progress_dialog.detail.setText(f"Frame {frame_index + 1} · {completed} / {total}")
+        frame = frame_index + 1
+        self._progress_dialog.title.setText(trf("Converting {name}", name=source_name))
+        self._progress_dialog.detail.setText(
+            trf("Frame {frame} · {done} / {total}", frame=frame, done=completed, total=total)
+        )
         self._progress_dialog.job_status.set_state(
             "running",
-            f"{source_name} · frame {frame_index + 1} · {completed} / {total}",
+            trf(
+                "{name} · frame {frame} · {done} / {total}",
+                name=source_name, frame=frame, done=completed, total=total,
+            ),
             progress=completed / total,
         )
         elapsed = time.time() - self._conversion_started_at
         remaining = (elapsed / completed * (total - completed)) if completed else 0
-        remaining_text = _duration(remaining) if completed else "calculating…"
+        remaining_text = _duration(remaining) if completed else tr("calculating…")
         self._progress_dialog.time_label.setText(
-            f"Elapsed: {_duration(elapsed)}    Remaining: approximately {remaining_text}"
+            trf(
+                "Elapsed: {elapsed}    Remaining: approximately {remaining}",
+                elapsed=_duration(elapsed),
+                remaining=remaining_text,
+            )
         )
 
     def _toggle_pause(self) -> None:
@@ -63,9 +74,9 @@ class ConversionMixin:
             return
         self._paused = not self._paused
         self._conversion_worker.set_paused(self._paused)
-        self._progress_dialog.pause_button.setText("Resume" if self._paused else "Pause")
+        self._progress_dialog.pause_button.setText(tr("Resume") if self._paused else tr("Pause"))
         if self._paused:
-            self._progress_dialog.title.setText("Conversion paused")
+            self._progress_dialog.title.setText(tr("Conversion paused"))
             self._progress_dialog.job_status.set_state(
                 "paused",
                 "Conversion paused",
@@ -84,7 +95,7 @@ class ConversionMixin:
         if self._conversion_worker is not None:
             self._conversion_worker.cancel()
         if self._progress_dialog is not None:
-            self._progress_dialog.title.setText("Cancelling after the current image…")
+            self._progress_dialog.title.setText(tr("Cancelling after the current image…"))
             self._progress_dialog.job_status.set_state(
                 "running",
                 "Cancelling after the current image…",
@@ -108,14 +119,38 @@ class ConversionMixin:
         self._conversion_thread = None
         self.close()
 
+    def reject(self) -> None:
+        """Esc closes through ``closeEvent``, which keeps the dialog alive for running threads.
+
+        QDialog's own reject() hides the dialog without a close event; with WA_DeleteOnClose a
+        running preview or conversion QThread would be deleted with it and end the application.
+        ``closeEvent`` does not call ``QDialog.closeEvent``, so this cannot recurse.
+        """
+        self.close()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # Shown again (the Tools menu reuses the hidden window) before an earlier preview read
+        # returned: the close that waited for that read no longer applies.
+        self._close_when_idle = False
+
+    def _close_after_preview(self) -> None:
+        """The preview read that a close waited for has returned (after ``_preview_cleanup``)."""
+        if self._close_when_idle:
+            self.close()
+
     def closeEvent(self, event) -> None:
         if self._conversion_thread is not None and self._conversion_thread.isRunning():
             event.ignore()
             return
         # A native file read cannot be killed safely. Keep this dialog alive until it returns.
         if self._preview_thread is not None and self._preview_thread.isRunning():
+            if not self._close_when_idle:
+                # Connected after _preview_cleanup, so the thread is gone when this runs.
+                self._preview_thread.finished.connect(self._close_after_preview)
+            self._close_when_idle = True
             self.hide()
-            self._preview_thread.finished.connect(self.close)
             event.ignore()
             return
+        self._close_when_idle = False
         event.accept()

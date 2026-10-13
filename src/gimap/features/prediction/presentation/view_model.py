@@ -55,6 +55,7 @@ class PredictionViewModel:
         export_jsonl=None,
         export_ascii=None,
         export_array=None,
+        export_record=None,
         sequence_rules: PredictionSequenceRules,
     ):
         self.context = context
@@ -76,7 +77,7 @@ class PredictionViewModel:
             sequence_rules=sequence_rules, on_error=self._set_file_error,
         )
         self.exports = PredictionExportViewModel(
-            jsonl=export_jsonl, ascii=export_ascii, array=export_array,
+            jsonl=export_jsonl, ascii=export_ascii, array=export_array, record=export_record,
             on_error=self._set_export_error,
         )
 

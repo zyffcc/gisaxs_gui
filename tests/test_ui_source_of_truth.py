@@ -12,22 +12,13 @@ SOURCE_ROOT = PROJECT_ROOT / "src" / "gimap"
 EXPECTED_VIEWS_BY_OWNER = {
     "app": {"main_window_view.py", "settings_dialog_view.py"},
     "calibration": {"geometry_calibration_dialog_view.py"},
-    "classification": {
-        "classification_apply_panel_view.py",
-        "classification_dataset_panel_view.py",
-        "classification_experiment_panel_view.py",
-        "classification_exploration_panel_view.py",
-        "classification_inspection_panel_view.py",
-        "classification_page_view.py",
-        "classification_preprocessing_panel_view.py",
-        "classification_results_panel_view.py",
-    },
+    "compare": {"compare_page_view.py"},
     "fitting": {
-        "detector_parameters_dialog_view.py",
+        "fit_page_view.py",
+        "fit_series_view.py",
+        "fit_steps_view.py",
         "fitting_page_view.py",
-        "fitting_workspace_view.py",
         "independent_fit_window_view.py",
-        "independent_image_window_view.py",
         "insitu_series_page_view.py",
     },
     "format_converter": {
@@ -51,17 +42,12 @@ EXPECTED_VIEWS_BY_OWNER = {
         "preview_page_view.py",
         "run_page_view.py",
     },
-    "waxs": {
-        "advanced_panel_view.py",
-        "batch_panel_view.py",
-        "configure_panel_view.py",
-        "integration_panel_view.py",
-        "page_view.py",
-        "preview_panel_view.py",
-        "roi_panel_view.py",
-        "toolbar_view.py",
-    },
     "xrr": {"xrr_series_dialog_view.py"},
+    "analyze": {
+        "analyze_page_view.py", "analyze_steps_view.py", "batch_export_view.py", "batch_progress_view.py",
+        "options_panel_view.py",
+        "regions_view.py", "series_view.py",
+    },
 }
 
 
@@ -142,8 +128,8 @@ def test_application_shell_view_contains_hosts_not_feature_controls() -> None:
         "trainsetBuildPage",
         "gisaxsPredictPageHost",
         "gisaxsFittingPageHost",
-        "classificationPage",
-        "waxsPageHost",
+        "comparePageHost",
+        "analyzePageHost",
     ):
         assert host in source
     assert "gisaxsPredictPredictButton" not in source

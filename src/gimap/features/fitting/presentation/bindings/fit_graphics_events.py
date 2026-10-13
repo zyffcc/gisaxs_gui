@@ -1,23 +1,23 @@
-"""Fit Graphics Events for fitting presentation."""
+"""The fitting curve canvas: scene set-up, resize refit and the independent fit window."""
 
 from __future__ import annotations
 
-import os
+import numpy as np
+from PyQt5.QtCore import QEvent, Qt, QTimer
+from PyQt5.QtWidgets import QGraphicsScene, QMessageBox
 
+from src.gimap.app.presentation.layout_metrics import move_window_to_cursor_screen
+from src.gimap.app.presentation.components import MplBoxZoom
 
-from PyQt5.QtCore import Qt, QTimer, QEvent
-
-from PyQt5.QtWidgets import (
-    QMessageBox,
-    QGraphicsScene,
+from ..binding_primitives import (
+    IndependentFitWindow,
+    _qobject_is_alive,
+    is_matplotlib_available,
 )
 
 
-from src.gimap.shared.file_paths import normalize_path
-
-
 class FitGraphicsEventsMixin:
-    """Own fit graphics events behavior."""
+    """Own the embedded fitting canvas and its larger independent window."""
 
     def _expand_right_card(self, card_attr: str) -> None:
         try:
@@ -79,42 +79,21 @@ class FitGraphicsEventsMixin:
             from matplotlib.figure import Figure
 
             scene.clear()
-            figure = Figure(figsize=(9.6, 7.2), dpi=80)
+            figure = Figure(figsize=(8.0, 5.0), dpi=90)
             canvas = FigureCanvasQTAgg(figure)
             figure.add_subplot(111)
             proxy = scene.addWidget(canvas)
             self._current_fit_figure = figure
             self._current_fit_canvas = canvas
+            self._curve_zoom = MplBoxZoom(canvas)  # drag a rectangle to zoom, double-click to reset
             self._curve_canvas_proxy = proxy
         figure = self._current_fit_figure
         return figure, canvas, figure.axes[0], proxy
 
     def eventFilter(self, watched, event):
-        """Refit preview canvases after users resize their splitter regions."""
+        """Refit the curve canvas after the user resizes its splitter region."""
         try:
-            preview_view = getattr(self.ui, "gisaxsInputGraphicsView", None)
-            preview_targets = (
-                preview_view,
-                preview_view.viewport() if preview_view is not None else None,
-            )
-            if watched in preview_targets and event.type() in (QEvent.DragEnter, QEvent.DragMove):
-                if self._detector_path_from_drop_event(event):
-                    event.acceptProposedAction()
-                    return True
-                event.ignore()
-                return True
-            if watched in preview_targets and event.type() == QEvent.Drop:
-                file_path = self._detector_path_from_drop_event(event)
-                if file_path:
-                    event.acceptProposedAction()
-                    self._apply_imported_gisaxs_file(file_path, show_image=True)
-                    return True
-                event.ignore()
-                return True
-            if event.type() == QEvent.Resize and watched in (
-                preview_view,
-                getattr(self.ui, "fitGraphicsView", None),
-            ):
+            if event.type() == QEvent.Resize and watched is getattr(self.ui, "fitGraphicsView", None):
                 if not self._preview_resize_refit_pending:
                     self._preview_resize_refit_pending = True
                     QTimer.singleShot(0, self._refit_resized_preview_canvases)
@@ -122,32 +101,12 @@ class FitGraphicsEventsMixin:
             pass
         return super().eventFilter(watched, event)
 
-    @staticmethod
-    def _detector_path_from_drop_event(event):
-        mime_data = event.mimeData()
-        if not mime_data.hasUrls():
-            return ""
-        supported = {".cbf", ".nxs", ".tif", ".tiff"}
-        for url in mime_data.urls():
-            file_path = normalize_path(url.toLocalFile())
-            if file_path and os.path.splitext(file_path)[1].lower() in supported:
-                return file_path
-        return ""
-
     def _refit_resized_preview_canvases(self):
         self._preview_resize_refit_pending = False
-        for view, item in (
-            (
-                getattr(self.ui, "gisaxsInputGraphicsView", None),
-                getattr(self, "_preview_proxy_widget", None),
-            ),
-            (
-                getattr(self.ui, "fitGraphicsView", None),
-                self._current_curve_proxy_item(),
-            ),
-        ):
-            if view is not None and item is not None:
-                self._fit_view_to_item(view, item, keep_aspect=True)
+        view = getattr(self.ui, "fitGraphicsView", None)
+        item = self._current_curve_proxy_item()
+        if view is not None and item is not None:
+            self._fit_view_to_item(view, item, keep_aspect=True)
 
     def _current_curve_proxy_item(self):
         scene = getattr(self, "_curve_graphics_scene", None)
@@ -163,20 +122,34 @@ class FitGraphicsEventsMixin:
         return self._current_curve_proxy_item()
 
     def _fit_view_to_item(self, graphics_view, item, keep_aspect=True):
-        """Fit the view to the given item bounds; disable scrollbars by sizing the scene to the item."""
+        """Size the plot canvas to the view, 1:1: the plot fills it and text keeps its size.
+
+        Scaling a fixed-size canvas into the view (``fitInView``) left a small plot
+        with tiny labels; resizing the canvas lets Matplotlib lay out the real size.
+        A view too small to hold a readable plot still gets the scaled canvas.
+        """
         try:
             scene = graphics_view.scene()
             if scene is None or item is None:
                 return
-            scene.setSceneRect(item.sceneBoundingRect())
-            # Always discard the transform inherited from the previous image.
-            # Otherwise a large canvas followed by a smaller one can retain a
-            # stale scale and leave the new preview tiny inside the viewport.
+            # Always discard the transform inherited from the previous canvas.
             graphics_view.resetTransform()
-            if keep_aspect:
-                graphics_view.fitInView(item, Qt.KeepAspectRatio)
+            canvas = item.widget() if hasattr(item, "widget") else None
+            viewport = graphics_view.viewport().size()
+            if canvas is not None and viewport.width() >= 200 and viewport.height() >= 150:
+                if canvas.size() != viewport:
+                    canvas.resize(viewport)
+                    figure = getattr(canvas, "figure", None)
+                    if figure is not None:
+                        try:
+                            figure.tight_layout()
+                        except Exception:
+                            pass
+                    canvas.draw_idle()
+                scene.setSceneRect(item.sceneBoundingRect())
             else:
-                graphics_view.fitInView(item)
+                scene.setSceneRect(item.sceneBoundingRect())
+                graphics_view.fitInView(item, Qt.KeepAspectRatio if keep_aspect else Qt.IgnoreAspectRatio)
             graphics_view.update()
         except Exception:
             pass
@@ -199,30 +172,109 @@ class FitGraphicsEventsMixin:
         except Exception as e:
             self.status_updated.emit(f"Failed to clear fit graphics view: {str(e)}")
 
-    def _start_fitting(self):
-        """No description."""
-        if not self.current_parameters.get("imported_gisaxs_file"):
-            QMessageBox.warning(
-                self.parent, "Warning", "Please import a GISAXS file before processing."
-            )
-            return
-
-        try:
-            self.status_updated.emit("Start Cut Fitting Processing...")
-            self.progress_updated.emit(0)
-
-            self._run_fitting_process()
-
-            self.progress_updated.emit(100)
-            self.status_updated.emit("Cut Fitting processing complete!")
-
-        except Exception as e:
-            QMessageBox.critical(self.parent, "Cut Fitting Error", f"Cut fitting failed:\n{str(e)}")
-
-    def _run_fitting_process(self):
-        """No description."""
-        pass
-
     def _reset_fitting(self):
         """No description."""
         self._set_default_parameters()
+
+    def _on_fit_graphics_view_double_click(self, event):
+        """No description."""
+        try:
+            if not is_matplotlib_available():
+                QMessageBox.warning(
+                    self.main_window,
+                    "Missing Library",
+                    "matplotlib library is required for independent window.\nPlease install it using: pip install matplotlib",
+                )
+                return
+
+            if self.q is None or self.I is None:
+                QMessageBox.information(
+                    self.main_window, "No Data", "No data available for display."
+                )
+                return
+            try:
+                q_snapshot = np.asarray(self.q, dtype=float).reshape(-1)
+                i_snapshot = np.asarray(self.I, dtype=float).reshape(-1)
+                n_snapshot = min(q_snapshot.size, i_snapshot.size)
+                if n_snapshot <= 0 or not np.any(
+                    np.isfinite(q_snapshot[:n_snapshot]) & np.isfinite(i_snapshot[:n_snapshot])
+                ):
+                    QMessageBox.information(
+                        self.main_window, "No Data", "No finite fitting plot data available."
+                    )
+                    return
+            except Exception:
+                QMessageBox.information(
+                    self.main_window, "No Data", "Fitting plot data is not ready yet."
+                )
+                return
+
+            if not _qobject_is_alive(self.independent_fit_window):
+                self.independent_fit_window = None
+
+            if self.independent_fit_window is None or not self.independent_fit_window.isVisible():
+                self.independent_fit_window = IndependentFitWindow(self.main_window)
+                self.independent_fit_window.setAttribute(Qt.WA_DeleteOnClose, True)
+                self.independent_fit_window.destroyed.connect(
+                    lambda _obj=None: setattr(self, "independent_fit_window", None)
+                )
+                self.independent_fit_window.status_updated.connect(self.status_updated.emit)
+                self.independent_fit_window.view_state_changed.connect(
+                    self._on_independent_curve_view_state_changed
+                )
+                if hasattr(self.independent_fit_window, "input_point_delete_requested"):
+                    self.independent_fit_window.input_point_delete_requested.connect(
+                        self._exclude_ai_input_point_from_plot
+                    )
+                try:
+                    self.independent_fit_window.set_curve_view_state(
+                        self._current_curve_view_state(sync_window=False)
+                    )
+                except Exception:
+                    pass
+
+                move_window_to_cursor_screen(self.independent_fit_window)
+                self.independent_fit_window.show()
+                self.independent_fit_window.raise_()
+                self.independent_fit_window.activateWindow()
+
+            mode = self.display_mode if hasattr(self, "display_mode") else "normal"
+            try:
+                if (
+                    hasattr(self, "_is_in_fitting_mode")
+                    and callable(self._is_in_fitting_mode)
+                    and self._is_in_fitting_mode()
+                ):
+                    mode = "fitting"
+            except Exception:
+                pass
+            try:
+                has_fit = bool(
+                    getattr(self, "has_fitting_data", False)
+                    and getattr(self, "I_fitting", None) is not None
+                )
+                if mode == "fitting" and not has_fit:
+                    mode = "normal"
+            except Exception:
+                pass
+
+            if mode == "fitting":
+                try:
+                    self._update_gui_fitting_display()
+                except Exception:
+                    pass
+                self._update_outside_window("fitting")
+            else:
+                self._update_outside_window(mode)
+
+            if hasattr(self.independent_fit_window, "canvas"):
+                self.independent_fit_window.canvas.setFocus()
+                self.independent_fit_window.canvas.draw_idle()
+
+            self.status_updated.emit(f"{mode.capitalize()} mode independent window updated")
+
+        except Exception as e:
+            self.status_updated.emit(f"Fit double-click error: {str(e)}")
+
+
+__all__ = ["FitGraphicsEventsMixin"]

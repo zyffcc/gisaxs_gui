@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from math import hypot, isfinite
 from typing import Any, Callable, Dict, Iterable, Mapping, Sequence
 
@@ -13,12 +13,16 @@ GEOMETRY_ALIASES = {
     "isotropic cylinder": "cylinder",
     "random cylinder": "cylinder",
     "vertical cylinder": "vertical_cylinder",
-    "vertical_cylinder": "vertical_cylinder",
+    "verticalcylinder": "vertical_cylinder",
 }
 
 
 def normalize_geometry(name: str) -> str:
-    key = str(name).strip().lower().replace("-", " ")
+    """The family a shape name means, however its words are joined and capitalised.
+
+    "random_cylinder" — how the quick fit, 1D Predict and Analyze name the manual Cylinder — is that
+    cylinder like "random cylinder" and "Random-Cylinder"; an unknown name comes back with underscores."""
+    key = str(name).strip().lower().replace("-", " ").replace("_", " ")
     return GEOMETRY_ALIASES.get(key, key.replace(" ", "_"))
 
 

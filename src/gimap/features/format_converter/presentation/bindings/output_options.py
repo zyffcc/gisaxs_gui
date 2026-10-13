@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
 )
 
 
+from src.gimap.app.presentation.i18n import tr, trf
+
 from ..display_formatting import _human_bytes
 
 
@@ -34,7 +36,7 @@ class OutputOptionsMixin:
 
     def _choose_destination(self) -> None:
         folder = QFileDialog.getExistingDirectory(
-            self, "Choose output folder", self.destination_edit.text()
+            self, tr("Choose output folder"), self.destination_edit.text()
         )
         if folder:
             self.destination_edit.setText(self.view_model.normalize_path(folder))
@@ -65,13 +67,17 @@ class OutputOptionsMixin:
         try:
             options = self._options()
             preview = self.view_model.output_preview(options)
-            self.naming_example.setText(f"Example: {preview.example}")
+            # A file name, or the view model's "Invalid naming template".
+            self.naming_example.setText(trf("Example: {example}", example=tr(preview.example)))
             self.output_summary.setText(
-                f"Estimated output: {preview.image_count:,} image(s) in "
-                f"{preview.file_count:,} file(s), approximately "
-                f"{_human_bytes(preview.estimated_bytes)}"
+                trf(
+                    "Estimated output: {images} image(s) in {files} file(s), approximately {size}",
+                    images=f"{preview.image_count:,}",
+                    files=f"{preview.file_count:,}",
+                    size=_human_bytes(preview.estimated_bytes),
+                )
             )
-            self.dtype_warning.setText(preview.dtype_warning)
+            self.dtype_warning.setText(tr(preview.dtype_warning))
         except Exception:
             self.output_summary.setText("")
             self.dtype_warning.setText("")
