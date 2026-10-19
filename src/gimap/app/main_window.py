@@ -435,6 +435,7 @@ class MainWindowComponents:
             (tr("In-situ series"), lambda: bool(getattr(fitting.series_page, "running", False))),
             # The Labs runtime starts after the window is shown: no runtime yet is an AttributeError, skipped.
             (tr("2D Prediction"), lambda: self.ui.runtime.prediction.prediction_running()),
+            (tr("SEM Particle Analysis"), lambda: self.ui.menus.sem_running()),
         )
         jobs = []
         for name, busy in checks:
@@ -526,6 +527,9 @@ class MainWindowComponents:
         # 2D Prediction first: main.py shuts the job runner down after this, and a worker still preprocessing
         # must not start a model process then (a batch ends after its file).
         self._stop_predictions()
+        menus = getattr(self.ui, "menus", None)
+        if menus is not None:
+            menus.shutdown_sem()
         try:
             language_changed().disconnect(self.refresh_language)
         except TypeError:  # not connected

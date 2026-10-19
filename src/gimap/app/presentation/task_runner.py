@@ -11,12 +11,20 @@ need cooperative cancellation pass a flag into ``fn``.
 from __future__ import annotations
 
 import logging
+import sys
 import time
 import traceback
 from typing import Any, Callable, Optional
 
 from PyQt5 import sip
 from PyQt5.QtCore import QCoreApplication, QObject, QRunnable, QThreadPool, pyqtSignal, pyqtSlot
+
+# The stack every Qt thread that computes asks for (``setStackSize``; 0 is the system's own size).
+# macOS gives a thread that is not the main one 512 KB; numpy.linalg.inv and solve — and with them Matplotlib
+# whenever a picture is saved — overflow that, and the process ends with a bus error no ``try`` can catch.
+# CPython asks for 16 MB for its own threads there. Elsewhere the system's size is kept (Linux 8 MB, Windows
+# 1 MB; 1 MB is enough for these calls), and Qt 5 on Windows would commit, not just reserve, what is asked for.
+WORKER_STACK_BYTES = 16 * 1024 * 1024 if sys.platform == "darwin" else 0
 
 
 class _Signals(QObject):
@@ -48,6 +56,7 @@ class TaskRunner(QObject):
     def __init__(self, parent: Optional[QObject] = None, *, max_threads: Optional[int] = None):
         super().__init__(parent)
         self._pool = QThreadPool(self)
+        self._pool.setStackSize(WORKER_STACK_BYTES)
         if max_threads is not None:
             self._pool.setMaxThreadCount(max(1, int(max_threads)))
         self._signals = _Signals(self)
@@ -138,4 +147,4 @@ def _call(callback: Callable, *values) -> None:
         logging.getLogger(__name__).debug("A task's result was dropped: %s", exc)
 
 
-__all__ = ["TaskRunner"]
+__all__ = ["TaskRunner", "WORKER_STACK_BYTES"]

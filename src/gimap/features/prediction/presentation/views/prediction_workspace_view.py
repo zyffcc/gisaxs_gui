@@ -197,11 +197,15 @@ class PredictionWorkspaceView(object):
         spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.predictionWorkspaceLayout.addItem(spacerItem1)
 
+        self.predictionSemCompareButton = QtWidgets.QPushButton(gisaxsPredictPageContents)
+        self.predictionSemCompareButton.setObjectName("predictionSemCompareButton")
         self.retranslateUi(gisaxsPredictPageContents)
         QtCore.QMetaObject.connectSlotsByName(gisaxsPredictPageContents)
 
     def retranslateUi(self, gisaxsPredictPageContents):
         _translate = QtCore.QCoreApplication.translate
+        self.predictionSemCompareButton.setText(_translate("PredictionWorkspace", "SEM comparison…"))
+        self.predictionSemCompareButton.setToolTip(_translate("PredictionWorkspace", "Extract particle sizes from SEM images or compare SEM data with a radius prediction"))
         self.predictionInputTitle.setText(_translate("PredictionWorkspace", "Input"))
         self.predictionInputDescription.setText(_translate("PredictionWorkspace", "Choose a single scattering file or a folder/range for multi-file prediction."))
         self.predictionConfigureTitle.setText(_translate("PredictionWorkspace", "Configure"))

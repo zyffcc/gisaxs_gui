@@ -15,6 +15,7 @@ from .zh_assistant_runtime import ASSISTANT_RUNTIME_ZH
 from .zh_labs import LABS_ZH
 from .zh_shell import SHELL_ZH
 from .zh_tools import TOOLS_ZH
+from .zh_sem import SEM_ZH
 
 ZH = {
     # -- menus --------------------------------------------------------------------------
@@ -549,6 +550,7 @@ ZH.update(SHELL_ZH)
 ZH.update(ASSISTANT_ZH)
 ZH.update(LABS_ZH)
 ZH.update(TOOLS_ZH)
+ZH.update(SEM_ZH)
 ZH.update(ANALYZE_RUNTIME_ZH)
 ZH.update(ASSISTANT_RUNTIME_ZH)
 

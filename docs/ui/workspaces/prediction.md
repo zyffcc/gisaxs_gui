@@ -150,3 +150,10 @@ tab 顺序及 `gisaxsPredictImageShowTabWidget` 均未拆开或替换。
 - [ ] Activity log 保留原进度、异常和完成消息；
 - [ ] Input export 在 input 加载后可用，Prediction export 只在结果完成后可用；
 - [ ] GISAXS Export 与 Predict-2D Export 使用原文件格式和内容。
+
+## SEM 粒径与预测对比
+
+预测结果区的 **SEM comparison…（SEM 对比…）** 可把当前半径分布带入 SEM 工具，选择 SEM 图像
+或粒径 CSV 后直接生成并导出对比图。独立的 **Tools → SEM Particle Analysis…** 也可在没有模型
+结果时提取、统计和导出 SEM 粒径。校准、分割审查、CSV 映射、归一化与来源记录见
+[SEM 粒径分析与预测对比](sem.md)。

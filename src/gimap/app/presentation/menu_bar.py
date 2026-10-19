@@ -63,6 +63,7 @@ class MenuCommands:
     format_converter: Command = None
     convert_current_file: Command = None
     xrr_extractor: Command = None
+    sem_analysis: Command = None
     ai_fitting_workspace: Command = None
     claude_assistant: Command = None
     settings: Command = None
@@ -261,6 +262,8 @@ class MainMenuBar(QObject):
                   tip="Open the converter with the file shown in the active workspace")
         self._add(menu, "xrr_extractor", "&XRR Series Extractor…", c.xrr_extractor,
                   shortcut="Ctrl+Shift+R", tip="Extract XRR intensity from NXS or CBF series")
+        self._add(menu, "sem_analysis", "&SEM Particle Analysis…", c.sem_analysis,
+                  tip="Extract particle sizes from SEM images or compare SEM data with a radius prediction")
         menu.addSeparator()
         self._add(menu, "ai_fitting_workspace", "1D &Predict — Fit Many Curves…", c.ai_fitting_workspace,
                   tip="1D Predict: a list of curve files fitted one after another, with their results")

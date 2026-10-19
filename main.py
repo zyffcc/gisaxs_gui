@@ -151,6 +151,11 @@ class MainWindow(QMainWindow, ApplicationWindowView):
         if not self._confirm_quit():
             event.ignore()
             return
+        shutdown_sem = getattr(getattr(self, "menus", None), "shutdown_sem", None)
+        if shutdown_sem is not None and shutdown_sem() is False:
+            show_toast(self, tr("SEM work is finishing. Close the window again after it stops."), level="warning")
+            event.ignore()
+            return
         self._closed = True
         try:
             if hasattr(self, "runtime"):

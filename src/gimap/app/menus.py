@@ -132,6 +132,7 @@ class ApplicationMenus:
             format_converter=lambda: self.open_format_converter(include_current=False),
             convert_current_file=lambda: self.open_format_converter(include_current=True),
             xrr_extractor=lambda: self.tools.show("xrr", _xrr_series_dialog),
+            sem_analysis=self.open_sem,
             ai_fitting_workspace=self.open_ai_fitting_workspace,
             claude_assistant=components.ask_ai,  # as Analyze's Ask AI: with the notes of the Results step
             settings=self.open_settings,
@@ -163,6 +164,28 @@ class ApplicationMenus:
             runtime.navigate(key)
         else:
             self.window.components.show_page(key)
+
+    def open_sem(self, prediction=None):
+        """Open independent SEM analysis, optionally with a copied radius prediction."""
+        from src.gimap.features.sem.bootstrap import create_sem_window
+
+        tool = self.tools.show("sem", create_sem_window)
+        if prediction is None:
+            tool.set_prediction(None)
+        else:
+            tool.set_prediction(
+                prediction["radius_nm"], prediction["probability"],
+                source=prediction.get("source", ""), metadata=prediction.get("metadata"),
+            )
+        return tool
+
+    def sem_running(self) -> bool:
+        tool = self.tools.get("sem")
+        return bool(tool is not None and tool.running())
+
+    def shutdown_sem(self) -> bool:
+        tool = self.tools.get("sem")
+        return True if tool is None else tool.shutdown()
 
     def _analyze_action(self, name: str) -> None:
         self.show_workspace("analyze")

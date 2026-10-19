@@ -314,6 +314,9 @@ class SetupStatusMixin:
             self._ui_updating = False
 
     def _setup_connections(self) -> None:
+        sem_button = getattr(self.ui, "predictionSemCompareButton", None)
+        if sem_button is not None:
+            sem_button.clicked.connect(self._on_sem_comparison_clicked)
         btn = getattr(self.ui, "gisaxsPredictChooseFolderButton", None)
         if btn:
             btn.clicked.connect(self._choose_gisaxs_folder)

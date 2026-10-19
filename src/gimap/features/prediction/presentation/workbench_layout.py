@@ -244,6 +244,8 @@ class PredictionWorkbenchLayout:
         self.ui.predict2dExportButton.setText("Export result...")
         self.plot_panel.add_toolbar_widget(self.ui.gisaxsImageExportButton)
         self.plot_panel.add_toolbar_widget(self.ui.predict2dExportButton)
+        self.plot_panel.add_toolbar_widget(self.workspace_ui.predictionSemCompareButton)
+        self.ui.predictionSemCompareButton = self.workspace_ui.predictionSemCompareButton
         self.ui.gisaxsPredictImageShowTabWidget.currentChanged.connect(
             self._sync_canvas_actions
         )

@@ -142,6 +142,9 @@ class ApplicationRuntime(QObject):
         )
         prediction.status_updated.connect(lambda text: self._page_says("predict", text))
         prediction.progress_updated.connect(self.progress_updated)
+        open_sem = getattr(getattr(self.ui, "menus", None), "open_sem", None)
+        if open_sem is not None:
+            prediction.sem_comparison_requested.connect(open_sem)
 
     def _page_says(self, key: str, text: str) -> None:
         """A Labs page's message reaches the shared status bar only while that page is shown."""

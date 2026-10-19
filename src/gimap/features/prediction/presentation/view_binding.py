@@ -51,12 +51,14 @@ from .bindings.prediction_execution import PredictionExecutionMixin
 from .bindings.multifile_results import MultifileResultsMixin
 from .bindings.widget_access import WidgetAccessMixin
 from .bindings.export_files import ExportFilesMixin
+from .bindings.sem_comparison import SemComparisonMixin
 from .workflow_components import PredictionDisclosure
 
 __all__ = ["PredictionViewBinding"]
 
 
 class PredictionViewBinding(
+    SemComparisonMixin,
     ExportFilesMixin,
     SetupStatusMixin,
     MultifileSetupMixin,
@@ -81,6 +83,8 @@ class PredictionViewBinding(
     parameters_changed = pyqtSignal(dict)
 
     prediction_completed = pyqtSignal(dict)
+
+    sem_comparison_requested = pyqtSignal(object)
 
     model_load_finished = pyqtSignal(object, str, str)
 

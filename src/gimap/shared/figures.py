@@ -21,12 +21,20 @@ FIGURE_FILE_FILTER = "PNG image (*.png);;TIFF image (*.tif);;SVG vector (*.svg);
 """Save-dialog filter for the formats :func:`save_figure` writes."""
 
 
-def publication_figure(width_cm: float = COLUMN_WIDTH_CM, height_cm: float = COLUMN_WIDTH_CM * 0.75):
-    """A detached figure (Agg canvas, constrained layout) of the given size in cm."""
+def publication_figure(width_cm: float = COLUMN_WIDTH_CM, height_cm: float = COLUMN_WIDTH_CM * 0.75, *,
+                       fixed_aspect: bool = False):
+    """A detached figure (Agg canvas, constrained layout) of the given size in cm.
+
+    ``fixed_aspect``: for an image drawn with square pixels (``aspect="equal"``) that does not fill the width
+    of the room the layout gives its axes. The constrained layout then places labels and colour bar for the
+    wrong box: a label cut off at the figure's edge, the picture off-centre. Matplotlib's “compressed” layout
+    places them for the box that is drawn; the figure keeps its size. It also makes a colour bar no longer
+    than that box, so an image much wider than tall is better left to the constrained layout.
+    """
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
-    figure = Figure(figsize=(width_cm * CM, height_cm * CM), constrained_layout=True)
+    figure = Figure(figsize=(width_cm * CM, height_cm * CM), layout="compressed" if fixed_aspect else "constrained")
     FigureCanvasAgg(figure)
     return figure
 
@@ -69,8 +77,11 @@ def break_at_gaps(x, y) -> tuple[np.ndarray, np.ndarray]:
 
 
 CJK_FONTS = ("Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "SimHei",
-             "PingFang SC", "WenQuanYi Zen Hei")
-"""Fonts with Chinese glyphs, in order of preference (Matplotlib's own font has none)."""
+             "PingFang SC", "Hiragino Sans GB", "PingFang HK", "Heiti TC", "Songti SC", "Arial Unicode MS",
+             "WenQuanYi Zen Hei")
+"""Fonts with Chinese glyphs, in order of preference (Matplotlib's own font has none). Matplotlib knows a
+font collection by its first face only: on macOS that is “PingFang HK” for PingFang, never “PingFang SC”,
+so the fonts every Mac has are named too (Hiragino Sans GB first: a Simplified Chinese design)."""
 
 
 def _has_wide_text(text: str) -> bool:

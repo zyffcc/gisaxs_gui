@@ -165,6 +165,9 @@ DATA_HEADERS = "gimapDataHeaders"
 """A table or tree with this property set has headers that are data (series, sample or parameter names):
 they are never translated, even when a name is also an interface word (“Background”, “Data”)."""
 
+DATA_VALUES = "gimapDataValues"
+"""A combo box with this property contains data identifiers, not interface choices."""
+
 
 def _headers(widget: QWidget, language: str) -> None:
     """The column (and row) titles of a table or a tree (not when they are data: ``DATA_HEADERS``)."""
@@ -206,7 +209,7 @@ def apply_to(root: QWidget, language: str) -> None:
             _spin_texts(widget, language)
         if isinstance(widget, (QLineEdit, QPlainTextEdit)):
             _swap(widget, "placeholder", widget.placeholderText, widget.setPlaceholderText, language)
-        if isinstance(widget, QComboBox):
+        if isinstance(widget, QComboBox) and not widget.property(DATA_VALUES):
             for index in range(widget.count()):
                 _swap(widget, f"item{index}", lambda index=index: widget.itemText(index),
                       lambda text, index=index: widget.setItemText(index, text), language)
@@ -261,6 +264,6 @@ def trf(template: str, **values) -> str:
 
 
 __all__ = [
-    "DATA_HEADERS", "DEFAULT_LANGUAGE", "LANGUAGES", "LANGUAGE_KEY", "apply_language", "apply_to", "current_language",
+    "DATA_HEADERS", "DATA_VALUES", "DEFAULT_LANGUAGE", "LANGUAGES", "LANGUAGE_KEY", "apply_language", "apply_to", "current_language",
     "language_changed", "normalized_language", "tr", "translate", "trf",
 ]

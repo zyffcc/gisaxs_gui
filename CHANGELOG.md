@@ -4,6 +4,18 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## Unreleased
 
+### SEM particle analysis
+
+- **Tools → SEM Particle Analysis** measures calibrated image instances or imports particle-size
+  CSVs independently of scattering prediction. **2D Prediction → SEM comparison** copies a radius
+  prediction into the same tool. A local StarDist model can separate touching particles; existing
+  integer labels and threshold/watershed remain available. StarDist runs in a cancellable local
+  subprocess, with no image upload or automatic model download. Optional dependencies are listed
+  in `requirements-sem-stardist.txt`; model weights stay outside the source repository.
+- Exports include particle radii and diameters, comparison plots, reusable instance-label TIFFs
+  and source/settings/model-hash records. Review outlines and the explicit image calibration
+  before interpreting size statistics; general pretrained nuclei models are not SEM-validated.
+
 ### Analyze
 
 - **Curves** has a **Log q** option alongside Log I. Plot selections keep their original

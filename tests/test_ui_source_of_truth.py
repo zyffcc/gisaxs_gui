@@ -44,6 +44,7 @@ EXPECTED_VIEWS_BY_OWNER = {
         "run_page_view.py",
     },
     "xrr": {"xrr_series_dialog_view.py"},
+    "sem": {"sem_window_view.py", "sem_instance_view.py"},
     "analyze": {
         "analyze_page_view.py", "analyze_steps_view.py", "batch_export_view.py", "batch_progress_view.py",
         "options_panel_view.py",

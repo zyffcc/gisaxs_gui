@@ -54,6 +54,9 @@ class PredictionResultsMixin:
         if not outputs:
             return
         self.prediction_results = outputs
+        capture = getattr(self, "_capture_sem_prediction", None)
+        if capture is not None:
+            capture(outputs)
         self._refresh_predict_readiness()
         # 1) If only scalar outputs, print to status and return
         scal = outputs.get("scalars") if isinstance(outputs, dict) else None
