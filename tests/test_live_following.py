@@ -55,7 +55,7 @@ def _nothing_remembered():
 
 
 _WRITER = """
-    import sys, time
+    import os, sys, time
     import h5py
     import numpy as np
     mode, period, frames, paths = sys.argv[1], float(sys.argv[2]), int(sys.argv[3]), sys.argv[4:]
@@ -64,7 +64,11 @@ _WRITER = """
     dataset = "/entry/data/data" if rings is not None else "/entry/instrument/detector/data"
     shape = rings.shape[1:] if rings is not None else (H, W)
     latest = "latest" if mode in ("swmr", "latest") else None
-    handles = [h5py.File(path, "w", libver=latest) for path in paths]
+    # The default format is followed because a writer's HDF5 lock does not stop a reader: on Linux / macOS it is
+    # advisory, and a detector server's lock does not reach a share. On Windows HDF5 locks the bytes themselves
+    # (nobody can read the file until it is closed), so there the writer writes without that lock.
+    unlocked = {"locking": False} if os.name == "nt" and mode in ("stack", "modules") else {}
+    handles = [h5py.File(path, "w", libver=latest, **unlocked) for path in paths]
     stacks = []
     for number, handle in enumerate(handles, start=1):
         stacks.append(handle.create_dataset(dataset, shape=(0,) + shape, maxshape=(None,) + shape,
@@ -530,7 +534,7 @@ def test_the_page_says_once_which_file_it_waits_for_and_lists_it_when_it_is_clos
 
 
 _KILLED = """
-    import os, sys, h5py
+    import os, signal, sys, h5py
     handle = h5py.File(sys.argv[1], "w", libver="latest")
     data = handle.create_dataset("/entry/instrument/detector/data", shape=(0, 24, 36), maxshape=(None, 24, 36),
                                  dtype="i4", chunks=(1, 24, 36))
@@ -540,7 +544,9 @@ _KILLED = """
         data.resize(index + 1, axis=0)
         data[index] = index
         handle.flush()
-    os._exit(1)
+    # the writer dies without closing the file, which keeps its mark "open for writing". Not os._exit: on Windows
+    # that still unloads HDF5, which then closes its files cleanly; a kill skips that on every platform.
+    os.kill(os.getpid(), getattr(signal, "SIGKILL", signal.SIGTERM))
 """
 
 

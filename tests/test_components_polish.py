@@ -539,7 +539,12 @@ def test_toasts_keep_off_the_progress_bar_and_cancel_of_the_band_and_off_its_sta
         assert undo.geometry().right() < controls.left() and error.geometry().right() < undo.geometry().left()
         text_end = _in(label, parent).left() + label.fontMetrics().horizontalAdvance(label.text())
         assert error.geometry().left() > text_end  # the job's own line stays readable: the older notice is shortened
-        assert error.label.text().endswith("…") and error.toolTip() == error.text()
+        # … when it has to: with Segoe UI (Windows) the whole notice fits between the line and Undo, with the wider
+        # DejaVu Sans it does not. Shortened, the whole text is its tooltip; whole, there is none
+        if error.label.text() == error.text():
+            assert error.toolTip() == "" and error.geometry().right() < undo.geometry().left()
+        else:
+            assert error.label.text().endswith("…") and error.toolTip() == error.text()
         assert error.text().startswith("Could not compare") and error.geometry().bottom() == undo.geometry().bottom()
         # A status line that takes the whole band: the error is not dropped, at its shortest over the line's end
         label.setText("Batch 3/8: " + "a_long_name_of_a_scan_" * 12 + "frame 4 of 8 …")

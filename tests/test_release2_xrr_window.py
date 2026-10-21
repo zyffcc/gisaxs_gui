@@ -328,10 +328,13 @@ def test_the_centre_of_the_last_calibration_is_the_centre_analyze_gets() -> None
 def test_a_stored_centre_between_two_steps_of_the_field_reads_as_analyze_reads_it(fitted) -> None:
     """A stored index can lie exactly between two values of a two-decimal field (x.xx5).
 
-    The XRR field rounds the number Analyze holds (index + 0.5), so it reads as Analyze's Beam centre ▸ Enter
-    Coordinates reads, digit for digit, and the extraction gets what the field shows, half a pixel lower. (The
-    former window rounded the index itself: on such a tie, and only there, its last digit could differ, 0.01 px.)
+    The XRR field rounds the number Analyze holds (index + 0.5), which Analyze's Beam centre ▸ Enter Coordinates
+    shows to four decimals, as a two-decimal Qt field rounds it, and the extraction gets what the field shows,
+    half a pixel lower. (The former window rounded the index itself: on such a tie, and only there, its last
+    digit could differ, 0.01 px.)
     """
+    from PyQt5.QtWidgets import QDoubleSpinBox
+
     from src.gimap.features.analyze.presentation.bindings.beam_center import CenterDialog
 
     _app()
@@ -341,9 +344,21 @@ def test_a_stored_centre_between_two_steps_of_the_field_reads_as_analyze_reads_i
     view_model = _view_model(calibration=SettingsXrrGeometryAdapter(settings).last_calibration())
     dialog = XrrSeriesDialog(view_model=view_model, app_context=object())
     try:
-        shown = (dialog.center_x_spin.text(), dialog.center_y_spin.text())
-        assert shown == (analyze.x_spin.text(), analyze.y_spin.text())
-        assert (dialog.center_x_spin.value(), dialog.center_y_spin.value()) == analyze.center()
+        # Analyze holds and shows the number itself (four decimals are enough for these).
+        held = (profile_geometry.beam_center_x_px, profile_geometry.beam_center_y_px)
+        assert analyze.center() == held
+        assert (analyze.x_spin.text(), analyze.y_spin.text()) == (f"{held[0]:.4f}", f"{held[1]:.4f}")
+        # The XRR field shows that number as a field of two decimals reads it, digit for digit.
+        two_decimals = QDoubleSpinBox()
+        two_decimals.setDecimals(2)
+        two_decimals.setRange(-1e6, 1e6)
+        expected = []
+        for value in analyze.center():
+            two_decimals.setValue(value)
+            expected.append((two_decimals.text(), two_decimals.value()))
+        two_decimals.deleteLater()
+        assert (dialog.center_x_spin.text(), dialog.center_y_spin.text()) == (expected[0][0], expected[1][0])
+        assert (dialog.center_x_spin.value(), dialog.center_y_spin.value()) == (expected[0][1], expected[1][1])
         geometry = dialog._geometry()
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == (
             round(dialog.center_x_spin.value() - 0.5, 2), round(dialog.center_y_spin.value() - 0.5, 2)
@@ -829,7 +844,7 @@ def test_the_public_agbh_calibration_reads_the_same_in_calibration_analyze_and_x
         assert page.tasks.wait(120)
         analysis = page.view_model.state.analysis.geometry
         assert (analysis.beam_center_x_px, analysis.beam_center_y_px) == saved
-        assert page.center_button.text() == f"Beam {saved[0]:.1f}, {saved[1]:.1f} px · profile"
+        assert page.center_button.text() == f"Beam {saved[0]:.4f}, {saved[1]:.4f} px · profile"
         assert (f"{analysis.beam_center_x_px:.2f}", f"{analysis.beam_center_y_px:.2f}") == shown
         # The settings other tools read still hold the calibration's own numbers.
         assert (

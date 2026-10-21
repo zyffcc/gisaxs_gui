@@ -387,7 +387,7 @@ def test_a_fit_input_from_a_folder_named_in_another_script_is_read_by_fitting_an
     assert pixels.tolist() == list(range(3, 15)) and observation == {"sample": "薄膜 θ"}
     loaded = load_xy_any(str(path))
     assert np.allclose(loaded.q, x) and np.allclose(loaded.I, 1.0 / x, rtol=1e-6)
-    assert np.loadtxt(path).shape == (12, 4)  # the “#” lines are comments for every program
+    assert np.loadtxt(path, encoding="utf-8").shape == (12, 4)  # the “#” lines are comments for every program
 
 
 def test_a_name_the_system_could_not_decode_does_not_end_the_export(tmp_path: Path) -> None:
@@ -422,7 +422,7 @@ def test_a_name_with_a_wide_or_no_break_space_keeps_the_columns_of_a_space_separ
     curve = Curve("radial", "I(q)", x, x * 2, np.ones(4), np.full(4, 10), "q\u00a0(Å⁻¹)", y_label="I\u3000(a.u.)")
     written = writer.write([curve], tmp_path, "run", {"source_file": "run_0001.tif", "frame_index": 0}, text_format="dat")
     assert written[0].read_text(encoding="utf-8").splitlines()[5] == "q_(1/A) I_(a.u.) sigma pixels"
-    assert np.loadtxt(written[0], skiprows=6).shape == (4, 4)
+    assert np.loadtxt(written[0], skiprows=6, encoding="utf-8").shape == (4, 4)
     cake = writer.write_map(np.arange(6.0).reshape(2, 3), [0.1, 0.2, 0.3], [10.0, 20.0], tmp_path / "cake.dat",
                             ("q\u00a0(Å⁻¹)", "χ\u3000(°)"), {})
     assert [len(line.split()) for line in cake.read_text(encoding="utf-8").splitlines()[4:]] == [4, 4, 4]
@@ -459,4 +459,4 @@ def test_the_source_line_is_the_path_of_the_file_exactly(tmp_path: Path) -> None
         # … and only there: the application's own texts keep their plain spelling
         assert all(line.isascii() for line in lines if not line.startswith("# source: ")), path.name
     assert "# curve: I(2theta) +/- sigma" in written[0].read_text(encoding="utf-8").splitlines()
-    assert np.loadtxt(written[2]).shape == (4, 4)  # the fit input is still four columns of numbers
+    assert np.loadtxt(written[2], encoding="utf-8").shape == (4, 4)  # UTF-8 as written, not the system code page

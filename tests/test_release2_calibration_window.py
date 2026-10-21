@@ -242,9 +242,12 @@ def test_analyze_shows_the_numbers_of_the_window_for_the_applied_profile(window,
         geometry = analysis.geometry
         assert (geometry.beam_center_x_px, geometry.beam_center_y_px) == saved
         assert geometry.distance_m == profile.geometry.distance_m
-        # The same digits on both screens: the window's table and Analyze's beam-centre button.
-        table = dialog.candidate_table.item(0, 2).text()
-        assert page.center_button.text() == f"Beam {table} px · profile"
+        # The same numbers on both screens. Analyze's beam-centre button shows four decimals (its centre step
+        # goes down to 0.0001 px); the window's table rounds the same numbers to one decimal.
+        button = page.center_button.text()
+        assert button == f"Beam {saved[0]:.4f}, {saved[1]:.4f} px · profile"
+        shown = _numbers(button.removeprefix("Beam ").removesuffix(" · profile"))
+        assert dialog.candidate_table.item(0, 2).text() == f"{shown[0]:.1f}, {shown[1]:.1f}"
         assert (dialog.result_center_x.text(), dialog.result_center_y.text()) == (
             f"{geometry.beam_center_x_px:.3f} px", f"{geometry.beam_center_y_px:.3f} px"
         )
@@ -287,7 +290,7 @@ def test_a_centre_typed_in_the_window_lands_on_that_pixel_in_analyze(window, yes
             page.add_paths([window.frame])
             assert page.tasks.wait(120)
             analysis = page.view_model.state.analysis
-            assert page.center_button.text() == "Beam 200.5, 300.5 px · profile"
+            assert page.center_button.text() == "Beam 200.5000, 300.5000 px · profile"
             # q = 0 at the centre of that pixel, and no other pixel is nearer to the direct beam.
             q = transmission_map(analysis.shape, analysis.geometry).q
             assert np.unravel_index(np.argmin(q), q.shape) == (row, column)

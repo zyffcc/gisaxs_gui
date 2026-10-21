@@ -183,7 +183,7 @@ Ask AI… 用同样的工具（GIWAXS 或 GISAXS 的结果选项随当前模式�
   Back to Profile Centre 放弃。
 - 本次会话设的中心只用于同一探测器尺寸（行 × 列）的帧；尺寸不同的帧回到配置的中心。尺寸随中心写入设置文件与项目
   （`beam_center_shape_px`）。
-- Geometry… 和 Enter Coordinates… 的窗口保持打开，不阻挡曲线操作。中心 x/y 显示四位小数，Centre step 设置上下按钮、
+- Geometry… 和 Enter Coordinates… 的窗口保持打开，不阻挡曲线操作。中心 x/y 显示四位小数（Beam centre 按钮和状态消息也是四位），Centre step 设置上下按钮、
   方向键和滚轮每次移动的像素步长（最小 0.0001 px，两个窗口共用并记住）。Apply Centre 应用本次会话的中心并刷新曲线，
   可反复调整和应用；Save Profile 保存全部几何参数，窗口仍保持打开。Close 保留已应用的中心，放弃尚未应用的输入。
   勾选 Live Preview 后，输入中心、上下按钮或滚轮调整会自动刷新曲线，步长仍由 Centre step 设置。

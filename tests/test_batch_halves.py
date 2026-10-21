@@ -448,7 +448,14 @@ def test_a_long_frame_name_is_shortened_in_its_middle_and_does_not_widen_the_dia
     label = dialog.output_files["fit_input"]
     assert "…" in label.text() and label.text().startswith("→ fit_input/jg_") and label.text().endswith("_fit_input.dat")
     assert label.toolTip() == f"→ fit_input/{stem}_fit_input.dat"
-    assert dialog.fit_curves_file.text().endswith("_model_fit.csv") and dialog.fit_curves_file.toolTip().endswith(f"{stem}_model_fit.csv")
+    # the model's file has the whole line: whether its name needs shortening depends on the font (Segoe UI on
+    # Windows is narrower than DejaVu Sans); either way it ends in the label, and a shortened name has the whole one
+    curves = dialog.fit_curves_file
+    assert curves.text().endswith("_model_fit.csv") and curves.fontMetrics().horizontalAdvance(curves.text()) <= curves.width()
+    if "…" in curves.text():
+        assert curves.toolTip() == f"→ fits/{stem}_model_fit.csv"
+    else:
+        assert curves.text() == f"→ fits/{stem}_model_fit.csv" and curves.toolTip() == ""
     note = dialog.halves_note
     assert note.width() <= dialog.options_scroll.viewport().width()  # the wrapped lines end inside the dialog
     short = _dialog()

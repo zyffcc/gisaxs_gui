@@ -83,7 +83,7 @@ def _damage(path: Path) -> str:
 
 
 _KILLED = """
-    import os, sys, h5py
+    import os, signal, sys, h5py
     path, mode = sys.argv[1], sys.argv[2]
     handle = h5py.File(path, "w", libver="latest")
     data = handle.create_dataset("/entry/instrument/detector/data", shape=(0, 20, 30), maxshape=(None, 20, 30),
@@ -96,7 +96,9 @@ _KILLED = """
         data.resize(index + 1, axis=0)
         data[index] = index
         data.flush() if mode == "swmr" else handle.flush()
-    os._exit(1)   # the writer dies: the file keeps its mark "open for writing"
+    # the writer dies without closing the file, which keeps its mark "open for writing". Not os._exit: on Windows
+    # that still unloads HDF5, which then closes its files cleanly; a kill skips that on every platform.
+    os.kill(os.getpid(), getattr(signal, "SIGKILL", signal.SIGTERM))
 """
 
 

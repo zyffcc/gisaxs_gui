@@ -78,12 +78,23 @@ def open_nexus(path: str | Path) -> h5py.File:
         return _unlocked(name)
     except OSError as error:
         text = str(error).lower()
+        if _held_by_writer(error, text):
+            raise BeingWritten(name) from error  # the writer is alive: it holds the lock
         if "already open for write" not in text and "unable to lock" not in text:
             raise
     try:
         return _unlocked(name, swmr=True)
     except OSError as error:
         raise (LeftUnfinished if left_alone(name) else BeingWritten)(name) from error
+
+
+def _held_by_writer(error: OSError, text: str) -> bool:
+    """Windows: a writer that has the file open (not in SWMR mode) holds a byte-range lock on it
+    (``LockFileEx``), so even an open without locking fails reading the superblock with errno 13
+    (ERROR_LOCK_VIOLATION). That is "being written", not "no permission": a file one may not open at all
+    fails before any read. POSIX locks are advisory and never fail a read, so this is Windows only."""
+    return (os.name == "nt" and isinstance(error, PermissionError)
+            and "file read failed" in text and "unable to lock" not in text)
 
 
 def _unlocked(name: str, **options: Any) -> h5py.File:

@@ -694,7 +694,7 @@ Trainset Build (Labs) keeps the conventions of the training data it was made for
 ### 4.5 The beam centre in Analyze
 
 The profile's beam centre is used unless you change it. The step **Geometry** shows it on the button
-**Beam centre** (`Beam x, y px · source`); its menu has:
+**Beam centre** (`Beam x, y px · source`, to four decimal places); its menu has:
 
 | Entry | What it does |
 |---|---|
@@ -834,6 +834,8 @@ written. Press **Watch** again to stop.
   while it grows: each look takes the frames it already held at the look before, so the newest frame,
   which may still be being written, waits for the next look. The Data step says *Still growing: frame N
   is the newest complete one*. A Series map or Batch Export started meanwhile takes only these frames.
+  A program on the same Windows PC that writes the file with HDF5's file locking locks it against
+  reading: such a file is listed as being written and read once it is closed.
 - With **Export ▾ ▸ Export New Frames While Watching** ticked, each complete new frame is exported
   once (next to the data, in `gimap_analysis/`; with **Sum**, only complete groups). A set of module
   files is exported once it is whole and has rested about 10 s; a module file missing is said in the

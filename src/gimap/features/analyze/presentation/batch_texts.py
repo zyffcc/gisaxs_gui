@@ -199,19 +199,27 @@ def short_folder(path) -> str:
     return "…/" + "/".join(parts[-2:]) if len(parts) > 3 else str(path)
 
 
+def _spellings(path) -> list[str]:
+    """The ways a message may spell ``path``: as the system does, and with / (the same on Linux and macOS)."""
+    return list(dict.fromkeys([str(path), Path(path).as_posix()]))
+
+
 def failure_reason(request, error, folder=None) -> tuple[str, str]:
     """``(why, file)`` of a frame that failed, for ``BatchRun.fail``: the reason without the folder of the data
     in it (the reader's own words end in the whole path) and without the file's name in front, which is said
     beside it. ``folder``: the batch's folder — a file of it that could not be written is named from there."""
     text = str(error)
     if folder is not None:
-        text = text.replace(str(folder) + os.sep, "").replace(str(folder), Path(folder).name)
+        for spelled in _spellings(folder):  # a reader may write a Windows path with / (C:/data/run)
+            text = text.replace(spelled + os.sep, "").replace(spelled + "/", "").replace(spelled, Path(folder).name)
     if request is None:
         return text, ""
     source = Path(request.path)
     for path in dict.fromkeys([source, *(Path(item[0]) for item in request.summed_frames)]):
-        text = text.replace(str(path), path.name)
-    text = text.replace(str(source.parent) + os.sep, "")
+        for spelled in _spellings(path):
+            text = text.replace(spelled, path.name)
+    for spelled in _spellings(source.parent):
+        text = text.replace(spelled + os.sep, "").replace(spelled + "/", "")
     return (text[len(source.name) + 1:] if text.startswith(source.name + " ") else text), source.name
 
 
