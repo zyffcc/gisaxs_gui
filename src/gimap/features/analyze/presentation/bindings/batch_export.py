@@ -1,10 +1,18 @@
 """Batch Export: every listed frame with the current settings, to a folder, in a few clicks.
 
-Open files (or a folder) → Batch Export… → Export. The dialog remembers the outputs, the curves and
-the folder of the last batch; a settings file (Load / Save Settings…) brings back a whole set-up —
+Open files (or a folder) → Batch Export… → Export. The dialog remembers the outputs, the curves, the
+halves a fit takes and the folder of the last batch; a settings file (Load / Save Settings…) brings back a whole set-up —
 geometry, masks, corrections, cut regions and export choices — for the next raw data. Running the
 batch (several frames at once, live in the Series tab, Pause and Stop) is ``bindings/batch_run.py``;
 the tables of every frame are written at the end, with a JSON record of the batch.
+
+What the dialog is told about the frames is gathered here (``_batch_frames``, ``_batch_folder``): sums as
+sums — the Sum N that Run Automatic Analysis set for its own result is switched off first, with a sentence —,
+a source whose files are still arriving or lack a part, where the cut of every frame is taken, and a folder
+that is not carried over from a batch of other data without saying so (“every n-th” is not carried at all).
+While the dialog is open, every frame shown tells it the cut again (``_batch_when_ready``); while the frame on
+screen is read again without the automatic sum, Export waits. Send Series to Fitting always writes into its
+own subfolder ``<name>_fitting``.
 """
 
 from __future__ import annotations
@@ -14,31 +22,48 @@ import math
 from pathlib import Path
 from typing import Callable, Optional
 
+from dataclasses import replace
+
 from PyQt5.QtCore import QSignalBlocker, QTimer
 from PyQt5.QtWidgets import QDialog, QFileDialog
 
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.components.detector_view import display_array, display_levels
 from src.gimap.app.presentation.components.levels import to_intensity
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import (
     AUTO,
     FIT_PEAKS,
-    FOLDERS,
     GISAXS,
     SCALE_SCREEN,
     BatchChoices,
-    export_stem,
-    peak_targets,
+    batch_cost,
     batch_stem,
+    chosen_curves,
+    fit_halves,
+    fit_input_curve,
+    frame_stem,
+    module_files,
+    parts_missing,
+    peak_targets,
     settings_from_record,
     settings_record,
+    source_name,
 )
 from ..batch_dialog import BatchExportDialog
+from ..batch_texts import made_of_text, try_failed_text
+from ..source_texts import warning_texts
 from ..texts import curve_title, message_text
 
 SETTINGS_FILTER = "GIMaP Analyze settings (*.json)"
+SUM_SWITCHED_OFF = "Sum {n} of the automatic analysis was switched off for the series (Data ▸ Sum N to sum again)."
+SOURCE_PART_MISSING = "{name}: a module file is missing or cannot be read yet — every frame lacks that part of the detector."
+SOURCE_ARRIVING = "{name} is still arriving: the batch takes the {frames} frames that are there now."
+SOURCES_SHOWN = 3
+"""The dialog names at most this many sources that are not whole."""
+CAKE_CELLS = 160_000
+"""The cells of an unwrapped χ–q map (for the size of its table, before one is made)."""
 
 
 class BatchExportMixin:
@@ -47,7 +72,9 @@ class BatchExportMixin:
     # -- the dialog --------------------------------------------------------------------
 
     def batch_export_dialog(self, *, for_fitting: bool = False, then: Optional[Callable[[Path], None]] = None) -> None:
-        requests = self.view_model.batch_requests()
+        model = self.view_model
+        notes = self._batch_own_sum()  # before the frames are counted: the automatic analysis' sum is not the person's
+        requests = model.batch_requests()
         if not requests:
             self._status(tr("Open files or a folder first."), "warning")
             return
@@ -57,23 +84,33 @@ class BatchExportMixin:
         if self._series_queue:
             self._status(tr("A series map is being built; Batch Export can start when it is done."), "warning")
             return
-        choices, destination, subfolder = self.view_model.batch_preferences()
-        if not destination:
-            destination = str(self.view_model.default_export_dir() or self._last_folder or Path.home())
-        if not choices.writes_anything:
-            choices = BatchChoices()
-        files = self.view_model.state.files
-        stem = batch_stem(files)
+        files = model.state.files
+        stem = batch_stem(files, model.describe(files[0]) if len(files) == 1 else None)
+        choices, destination, subfolder, beside, carried = self._batch_folder(stem)
+        subfolder = subfolder or for_fitting  # a send: always its own folder ``<name>_fitting``, beside any export
+        frames_text, sum_size, source_notes = self._batch_frames(requests)
+        analysis, first = model.state.analysis, requests[0]
+        targets = peak_targets(analysis) if analysis is not None else []
+        said, set_pin = getattr(model, "series_cut_text", None), getattr(model, "set_pin_series_cuts", None)
+        pinned = getattr(model, "pin_series_cuts", None)  # (one cut for every frame: the series map's choice)
         dialog = BatchExportDialog(
             frames=len(requests), files=len(files), stem=stem, settings_text=self.settings_summary(),
-            choices=choices, destination=Path(destination), subfolder=subfolder,
-            series=self.view_model.series_options, curve_options=self.batch_curve_options(),
-            gisaxs=self.view_model.is_gisaxs(self.view_model.state.analysis), for_fitting=for_fitting,
+            choices=choices, destination=destination, subfolder=subfolder,
+            series=model.series_options, curve_options=self.batch_curve_options(),
+            gisaxs=model.is_gisaxs(analysis), for_fitting=for_fitting,
             load_settings=self._load_settings_for_dialog, save_settings=lambda chosen: self.save_settings(choices=chosen),
-            frame_stem=export_stem(analysis) if (analysis := self.view_model.state.analysis) is not None else "",
-            fit_targets=[target.name for target in peak_targets(analysis)] if analysis is not None else [],
-            model_available=self.view_model.model_fitter is not None, try_fit=self.try_batch_fit,
-            speeds=self.batch_speed_options(len(requests)), screen_scale=self.batch_display_text(), parent=self,
+            frame_stem=frame_stem(first.path, model.describe(first.path), frame_index=first.frame_index,
+                                  frame_count=model.known_frame_count(first.path), frame_total=1 + len(first.summed_frames)),
+            fit_targets=[target.name for target in targets], fit_keys=[target.key for target in targets],
+            model_available=model.model_fitter is not None, try_fit=self.try_batch_fit,
+            speeds=self.batch_speed_options(len(requests)), screen_scale=self.batch_display_text(),
+            halves=model.fit_side,  # the halves of the Cuts step (both halves on |qy|: those of the last batch)
+            frames_text=frames_text, sum_size=sum_size, notes=[*notes, *source_notes],
+            cut_text=self._batch_cut_text if said is not None and self._batch_cut_text() else None,
+            pin_cuts=None if pinned is None else bool(pinned), set_pin_cuts=set_pin,
+            cost=self._batch_cost, beside=beside, carried=carried,
+            reading=self._batch_rereading(analysis),  # the sum switched off: the frame on screen is read again
+            parent=self,
         )
         self._batch_dialog = dialog
         try:
@@ -81,12 +118,126 @@ class BatchExportMixin:
         finally:
             self._batch_dialog = None
         if not accepted:
+            if set_pin is not None and pinned is not None and bool(model.pin_series_cuts) != bool(pinned):
+                set_pin(bool(pinned))  # the box was tried and the dialog cancelled: as it was
             return
         chosen, series = dialog.choices(), dialog.series()
-        if not for_fitting:
-            self.view_model.remember_batch(chosen, dialog.destination(), dialog.subfolder())
-        self.view_model.remember_series_options(series)
-        self.run_batch(dialog.target(), chosen, series=series, stem=stem, then=then)
+        if for_fitting:  # its one choice; what the last Batch Export wrote, and where, stays as it was
+            model.remember_halves(chosen.fit_halves)
+        else:
+            model.remember_batch(chosen, dialog.destination(), dialog.subfolder(),
+                                 data_folder=Path(files[0]).parent, data_name=stem)
+        model.remember_series_options(series)
+        self._batch_again = lambda: self.batch_export_dialog(for_fitting=for_fitting, then=then)  # another folder
+        self.run_batch(dialog.target(), chosen, series=series, stem=stem, then=then,
+                       replace_earlier=dialog.replaces_earlier())
+
+    def _batch_own_sum(self) -> list[str]:
+        """Run Automatic Analysis sums the last frames for its own result; a series is not to be exported in
+        such sums unasked: the sum is switched off, and the dialog says so."""
+        model = self.view_model
+        count = model.sum_count
+        if getattr(model, "sum_set_by", "user") != "automatic" or count <= 1:
+            return []
+        self.sum_spin.setValue(1)  # the frame on screen follows
+        if model.sum_count != 1:
+            model.set_sum_count(1)
+        again = getattr(self, "_options_changed", None)
+        if again is not None:  # also when the box showed 1 already: the frame on screen is read again without the sum
+            again()
+        note = trf(SUM_SWITCHED_OFF, n=count)
+        self._status(note, "warning")
+        return [note]
+
+    def _batch_rereading(self, analysis) -> bool:
+        """The frame on screen is a sum though no sum is set: it is being read again without it (the cut of every
+        frame of a series is that of the frame read again, not of the sum)."""
+        return analysis is not None and bool(analysis.summed_frames) and self.view_model.sum_count <= 1
+
+    def _batch_frames(self, requests) -> tuple[str, int, list[str]]:
+        """``(how the dialog says the frames, the N of a sum, notes about sources that are not whole)``."""
+        model = self.view_model
+        groups = getattr(model, "batch_groups", None)  # what each request sums (the series map's count)
+        sizes = [int(group.frames) for group in groups()] if groups is not None else [
+            1 + len(request.summed_frames) for request in requests]
+        files, size, text = model.state.files, model.sum_count, ""
+        if size > 1:
+            values = dict(groups=len(sizes), n=size, frames=sum(sizes))
+            short = [count for count in sizes if count < size]
+            if len(short) == 1:
+                text = trf("{groups} sums of {n} frames ({frames} frames; the last sum has only {k})", k=short[0], **values)
+            elif short:
+                text = trf("{groups} sums of {n} frames ({frames} frames; {short} sums at the end of a source hold fewer)",
+                           short=len(short), **values)
+            else:
+                text = trf("{groups} sums of {n} frames ({frames} frames)", **values)
+        elif len(files) == 1 and module_files(model.describe(files[0])) > 1:
+            text = trf("{frames} frames from 1 scan of {modules} module files", frames=len(requests),
+                       modules=module_files(model.describe(files[0])))
+        notes = []
+        settling = getattr(model, "settling", None)
+        for path in files:
+            layout = model.describe(path)
+            if layout is None:
+                continue
+            name = source_name(path, layout)
+            if parts_missing(layout):
+                notes.append(trf(SOURCE_PART_MISSING, name=name))
+            elif settling is not None and settling(path) is not None:
+                notes.append(trf(SOURCE_ARRIVING, name=name, frames=model.known_frame_count(path)))
+            elif not layout.complete:  # modules with different numbers of frames, a file its writer still holds
+                notes.extend(f"{name}: {warning}" for warning in warning_texts(layout, notes=False)[:1])
+        if len(notes) > SOURCES_SHOWN:
+            notes = notes[:SOURCES_SHOWN] + [trf("… and {n} more sources that are not whole", n=len(notes) - SOURCES_SHOWN)]
+        return text, size, notes
+
+    def _batch_folder(self, stem: str):
+        """``(choices, destination, subfolder, the folder next to the data, carried)`` for the dialog. The folder
+        of the last batch is offered again for the same data, and for other data only when it is no folder of
+        that batch's own data (a place for results) — then the dialog says that it was carried over. “Every
+        n-th” was chosen for one series: it is not carried to another."""
+        model = self.view_model
+        choices, destination, subfolder = model.batch_preferences()
+        if not choices.writes_anything:
+            choices = BatchChoices()
+        beside = model.default_export_dir()
+        data_folder = Path(model.state.files[0]).parent
+        origin, name = getattr(model, "batch_origin", lambda: ("", ""))()
+        same = bool(origin) and Path(origin) == data_folder and name == stem
+        carried = False
+        if destination and origin and not same:
+            choices = replace(choices, every=1)
+            if Path(origin) == Path(destination) or Path(origin) in Path(destination).parents:
+                destination = ""  # the folder next to the other data: these data get their own
+            else:
+                carried = True
+        if not destination:
+            destination = str(beside or self._last_folder or Path.home())
+        return choices, Path(destination), subfolder, beside, carried and Path(destination) != beside
+
+    def _batch_cut_text(self) -> str:
+        """Where the automatic cut of every frame of a series run is taken (the view model's sentence)."""
+        said = getattr(self.view_model, "series_cut_text", None)
+        if said is None:
+            return ""
+        template, values = said()
+        return trf(template, **values) if template else ""
+
+    def _batch_cost(self, choices: BatchChoices, frames: int) -> tuple[int, int, float]:
+        """``(bytes per frame, bytes in all, seconds)`` of a batch with ``choices``, roughly, from the frame on
+        screen (``application.batch_cost``)."""
+        analysis = self.view_model.state.analysis
+        points = fit_points = cells = 0
+        if analysis is not None and analysis.reduction is not None:
+            points = sum(int(curve.x.size) for curve in chosen_curves(analysis, choices.curves))
+            curve = fit_input_curve(analysis)
+            fit_points = int(curve.x.size) if curve is not None else 0
+            rsm = analysis.reduction.reciprocal_space_map
+            cells = int(rsm.image.size) if rsm is not None else 0
+        pixels = self._batch_pixels()
+        return batch_cost(choices, frames=frames, frame_pixels=pixels, curve_points=points, fit_points=fit_points,
+                          map_cells=cells or pixels // 4, cake_cells=CAKE_CELLS,
+                          at_once=self._batch_frames_at_once(choices.speed, frames))
 
     def batch_from_folder(self) -> None:
         """Choose a folder of raw frames; Batch Export opens once its first frame is analysed."""
@@ -94,19 +245,15 @@ class BatchExportMixin:
         if not folder:
             return
         self._remember(last_folder=folder)
-        before = len(self.view_model.state.files)
-        added = self.add_paths([folder], show_listed=False)
-        if not added and not before:
-            return
-        self._batch_pending = True
-        analysis = self.view_model.state.analysis
-        if not added and analysis is not None:
-            self._batch_when_ready(analysis)
-        else:
-            self._status(tr("Opening the first frame; Batch Export follows …"))
+        self.import_paths([folder], on_imported=lambda: setattr(self, "_batch_pending", True))
 
     def _batch_when_ready(self, analysis) -> None:
-        """After ``batch_from_folder``: open the dialog once a frame has a geometry (its curves are the batch's)."""
+        """A frame is shown. An open Batch Export dialog says the cut of every frame again (it is that of the frame
+        on screen) and lets Export go once the frame is read again without the automatic analysis' sum. After
+        ``batch_from_folder``: open the dialog once a frame has a geometry (its curves are the batch's)."""
+        dialog = getattr(self, "_batch_dialog", None)
+        if dialog is not None:
+            dialog.frame_shown(reading=self._batch_rereading(analysis))
         if not self._batch_pending:
             return
         if analysis.reduction is None:
@@ -171,7 +318,11 @@ class BatchExportMixin:
         self.batch_export_button.setProperty("gimapWanted", many)
         self.batch_export_button.setVisible(many)
         self.data_batch_button.setVisible(many)
-        self.data_batch_button.setText(tr("Batch Export {count} Frames…").format(count=frames) if many else tr("Batch Export…"))
+        size = self.view_model.sum_count
+        if many and size > 1:  # a Sum N is in force: the batch exports sums, and its entry says so
+            self.data_batch_button.setText(trf("Batch Export {count} Frames in Sums of {n}…", count=frames, n=size))
+        else:
+            self.data_batch_button.setText(tr("Batch Export {count} Frames…").format(count=frames) if many else tr("Batch Export…"))
         self.series_batch_button.setEnabled(many)
         if many and not was_shown and not getattr(self, "_batch_announced", False):
             self._batch_announced = True
@@ -348,8 +499,11 @@ class BatchExportMixin:
             return
         choices = BatchChoices(
             tables=False, per_frame=True, fit_input=True, detector_image=save_images, q_map_image=save_images,
+            fit_halves=fit_halves(self.view_model.fit_side),
         )
-        self.run_batch(Path(target), choices, series=series, stem=batch_stem(self.view_model.state.files), then=then)
+        files = self.view_model.state.files
+        stem = batch_stem(files, self.view_model.describe(files[0]) if len(files) == 1 else None)
+        self.run_batch(Path(target), choices, series=series, stem=stem, then=then)
 
     # -- trying a fit before the batch ---------------------------------------------------------
 
@@ -361,7 +515,7 @@ class BatchExportMixin:
             "batch-try-fit",
             lambda: self.view_model.try_fit(analysis, choices),
             on_done=lambda result: show(*fit_summary(result, choices)),
-            on_error=lambda message, _details: show(message, "warning"),
+            on_error=lambda message, _details: show(try_failed_text(message), "warning"),
         )
 
 
@@ -391,7 +545,8 @@ def fit_summary(result, choices: BatchChoices) -> tuple[str, str]:
         model=best.get("combination", ""), params="; ".join(part for part in parts if part),
         chi=f"{float(best.get('best_chi2_weighted', math.nan)):.3g}",
     )
-    return text, "ok"
+    made_of = made_of_text(best)  # the halves and the points it was fitted on
+    return (f"{text}\n{made_of}" if made_of else text), "ok"
 
 
 __all__ = ["BatchExportMixin", "SETTINGS_FILTER", "fit_summary"]

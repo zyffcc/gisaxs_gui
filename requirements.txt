@@ -8,6 +8,8 @@ BornAgain==24.1; platform_system != "Darwin"
 PyQt5>=5.15
 opencv-python>=4.8
 h5py>=3.9
+# Registers the bitshuffle / LZ4 filters with HDF5: Eiger and MAX IV NeXus files are compressed with them.
+hdf5plugin>=4
 fabio>=2023.4.0
 tensorflow-intel>=2.15,<=2.16; platform_system=="Windows"
 tensorflow>=2.15,<=2.16; platform_system!="Windows"

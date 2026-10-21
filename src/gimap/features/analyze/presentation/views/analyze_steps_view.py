@@ -17,10 +17,12 @@ from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListView,
     QListWidget,
     QMenu,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QToolButton,
@@ -93,6 +95,7 @@ class AnalyzeStepsView:
         divider.setFrameShape(QFrame.HLine)
         divider.setProperty("gimapDivider", True)
         layout.addWidget(divider)
+        layout.addWidget(self._frame_bar(panel))  # above every step: the frame shown of a multi-frame source
         self.step_stack = QStackedWidget(panel)
         self.step_stack.setObjectName("analyzeStepStack")
         self.step_pages: dict[str, QWidget] = {}
@@ -129,10 +132,53 @@ class AnalyzeStepsView:
 
     # -- 1 data ------------------------------------------------------------------------
 
+    def _frame_bar(self, panel: QWidget) -> QWidget:
+        """“Frame [4] of 12”: which frame of a source with several frames is shown. It stays visible on every
+        step (a mask or a cut is checked on other frames without going back to Data); hidden for one frame."""
+        self.frame_bar = QWidget(panel)
+        self.frame_bar.setObjectName("analyzeFrameBar")
+        row = QHBoxLayout(self.frame_bar)
+        row.setContentsMargins(4, 0, 6, 0)
+        row.setSpacing(6)
+        self.frame_label = muted("Frame", self.frame_bar)
+        self.frame_label.setWordWrap(False)
+        self.frame_spin = QSpinBox(self.frame_bar)
+        self.frame_spin.setObjectName("analyzeFrameSpin")
+        self.frame_spin.setMinimum(1)
+        self.frame_spin.setKeyboardTracking(False)
+        self.frame_spin.setMinimumWidth(72)
+        self.frame_spin.setToolTip("The frame shown (Page Up / Page Down show the previous / next one)")
+        self.frame_total_label = muted("", self.frame_bar)  # “of 12”
+        self.frame_total_label.setObjectName("analyzeFrameTotal")
+        self.frame_total_label.setWordWrap(False)
+        row.addWidget(self.frame_label)
+        row.addWidget(self.frame_spin)
+        row.addWidget(self.frame_total_label)
+        row.addStretch(1)
+        self.frame_bar.hide()
+        return self.frame_bar
+
     def _data_step(self, page: QWidget, layout: QVBoxLayout) -> None:
+        # A file name has no place to break: the sentence must never widen the step beyond its panel.
+        intro = layout.itemAt(1).widget()
+        intro.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        intro.setMinimumWidth(0)
+        # What the file shown consists of (NeXus / HDF5): files, frames, orientation; then what is wrong with it.
+        self.source_label = muted("", page)
+        self.source_label.setObjectName("analyzeSourceInfo")
+        self.source_warning_label = QLabel("", page)
+        self.source_warning_label.setObjectName("analyzeSourceWarning")
+        self.source_warning_label.setProperty("gimapRole", "warning")
+        self.source_warning_label.setWordWrap(True)
+        for label in (self.source_label, self.source_warning_label):
+            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            label.setMinimumWidth(0)
+            label.hide()
+            layout.addWidget(label)
         header = QHBoxLayout()
         header.setSpacing(4)
-        self.files_title = QLabel("Files", page)
+        self.files_title = QLabel("Frames", page)
         self.files_title.setProperty("gimapRole", "strong")
         self.watch_button = QToolButton(page)
         self.watch_button.setObjectName("analyzeWatchButton")
@@ -147,7 +193,8 @@ class AnalyzeStepsView:
         self.clear_button.setAutoRaise(True)
         self.clear_button.setToolTip(
             "Remove every file from the list. One file: select it and press Delete, or right-click it")
-        header.addWidget(self.files_title, 1)
+        layout.addWidget(self.files_title)
+        header.addStretch(1)
         header.addWidget(self.watch_button)
         header.addWidget(self.clear_button)
         layout.addLayout(header)
@@ -158,16 +205,34 @@ class AnalyzeStepsView:
         self.file_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.file_list.setMinimumHeight(120)
         self.file_list.setContextMenuPolicy(Qt.CustomContextMenu)  # Remove from List, Show in Folder, Copy Path
-        layout.addWidget(self.file_list, 1)
-        frame_row = QHBoxLayout()
-        self.frame_label = muted("Frame", page)
-        self.frame_spin = QSpinBox(page)
-        self.frame_spin.setObjectName("analyzeFrameSpin")
-        self.frame_spin.setMinimum(1)
-        self.frame_spin.setKeyboardTracking(False)
-        frame_row.addWidget(self.frame_label)
-        frame_row.addWidget(self.frame_spin, 1)
-        layout.addLayout(frame_row)
+        self.file_list.hide()  # canonical source selection; visible rows below are physical frames
+        self.frame_list = QListView(page)
+        self.frame_list.setObjectName("analyzeFrameList")
+        self.frame_list.setUniformItemSizes(True)
+        self.frame_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.frame_list.setTextElideMode(Qt.ElideRight)
+        self.frame_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.frame_list.setMinimumHeight(120)
+        self.frame_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        layout.addWidget(self.frame_list, 1)
+        self.frames_imported_label = QLabel("", page)
+        self.frames_imported_label.setProperty("gimapRole", "muted")
+        self.frames_imported_label.setWordWrap(True)
+        self.choose_frames_button = QPushButton(page)
+        self.choose_frames_button.setText("Choose Frames…")
+        self.choose_frames_button.setObjectName("analyzeChooseFrames")
+        layout.addWidget(self.frames_imported_label)
+        layout.addWidget(self.choose_frames_button)
+        importing = QHBoxLayout()
+        self.import_status_label = QLabel("", page)
+        self.import_status_label.setWordWrap(True)
+        self.import_status_label.hide()
+        self.import_cancel_button = QToolButton(page)
+        self.import_cancel_button.setText("Cancel Import")
+        self.import_cancel_button.hide()
+        importing.addWidget(self.import_status_label, 1)
+        importing.addWidget(self.import_cancel_button)
+        layout.addLayout(importing)
         self.data_batch_button = QPushButton("Batch Export…", page)
         self.data_batch_button.setObjectName("analyzeDataBatchButton")
         self.data_batch_button.setProperty("gimapRole", "accent")
@@ -194,7 +259,7 @@ class AnalyzeStepsView:
         layout.addWidget(self.profile_combo)
         card, self.summary_label = info_card(page)
         self.summary_label.setObjectName("analyzeGeometrySummary")
-        self.summary_label.setText("Open or drop detector files (CBF, NXS, TIFF, EDF) to start")
+        self.summary_label.setText("Open or drop detector files (CBF, NeXus/HDF5, TIFF, EDF) to start")
         layout.addWidget(card)
         self.find_geometry_button = QPushButton("Find Calibration Automatically", page)
         self.find_geometry_button.setObjectName("analyzeFindGeometryButton")

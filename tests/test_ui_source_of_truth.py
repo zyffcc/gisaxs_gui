@@ -15,6 +15,8 @@ EXPECTED_VIEWS_BY_OWNER = {
     "compare": {"compare_page_view.py"},
     "fitting": {
         "fit_page_view.py",
+        "fit_results_view.py",
+        "fit_step_view.py",
         "fit1d_settings_view.py",
         "fit_series_view.py",
         "fit_steps_view.py",
@@ -48,8 +50,8 @@ EXPECTED_VIEWS_BY_OWNER = {
     "analyze": {
         "analyze_page_view.py", "analyze_steps_view.py", "batch_export_view.py", "batch_progress_view.py",
         "options_panel_view.py",
-        "regions_view.py", "series_view.py",
-        "geometry_dialog_view.py", "center_dialog_view.py",
+        "regions_view.py", "series_view.py", "series_fit_view.py",
+        "geometry_dialog_view.py", "center_dialog_view.py", "frame_import_dialog_view.py",
     },
 }
 

@@ -68,7 +68,6 @@ COMPARE_ZH = {
     "The Series Map of Analyze": "分析页的序列热图",
     "The map built in Analyze ▸ Series (or use Send to Compare there)": "在 分析 ▸ 序列 中生成的热图（也可以在那里点“发送到比较”）",
     "Folder of Curves…": "曲线文件夹…",
-    "Every curve file of a folder (q, I columns), in counting order: one series": "一个文件夹里的全部曲线文件（q、I 两列），按编号顺序：作为一个序列",
     "Curve Files…": "曲线文件…",
     "Chosen curve files (q, I columns), in counting order: one series": "选中的曲线文件（q、I 两列），按编号顺序：作为一个序列",
     "Save the tables (CSV with a JSON record) or the plots": "保存表格（CSV 及 JSON 记录）或图",
@@ -152,6 +151,7 @@ COMPARE_ZH = {
     "At the start": "开始时",
     "Compare the series where they ended (the last frames) or where they began": "比较各序列结束时（最后几帧）或开始时的状态",
     "frame {n}": "第 {n} 帧",
+    "frames {first}–{last}": "第 {first}–{last} 帧",
     "shape": "形状",
     "{rows} frames × {points} points. Click or drag the horizontal band to pick a frame, drag the vertical band (and its edges) to pick a q window; Open shows the frame in Analyze.":
         "{rows} 帧 × {points} 个点。点击或拖动水平带选择一帧，拖动竖直带（及其边缘）选择 q 窗口；“打开”在分析页显示这一帧。",

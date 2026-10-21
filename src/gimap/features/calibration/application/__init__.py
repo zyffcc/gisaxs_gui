@@ -30,6 +30,7 @@ from .use_cases import (
     NormalizeCalibrationPath,
     RecordInstrumentProfile,
     RunCalibration,
+    frames_made_on,
 )
 
 __all__ = [
@@ -61,4 +62,5 @@ __all__ = [
     "NormalizeCalibrationPath",
     "RecordInstrumentProfile",
     "RunCalibration",
+    "frames_made_on",
 ]

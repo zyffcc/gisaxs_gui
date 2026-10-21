@@ -12,6 +12,7 @@ import numpy as np
 from PyQt5.QtCore import QObject, QThreadPool, QTimer, pyqtSignal
 
 
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 from src.gimap.features.trainset.application.ports import SimulationPort
 
 from .page import TrainsetBuildPage
@@ -96,6 +97,7 @@ class TrainsetViewBinding(
         self._pending_local_arguments = None
         self._local_paused = False
         self.thread_pool = QThreadPool.globalInstance()
+        self.thread_pool.setStackSize(WORKER_STACK_BYTES)  # previews and simulations call LAPACK
         self._initialized = False
         self._remote_refresh_running = False
         self._result_sync_started = False

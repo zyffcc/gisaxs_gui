@@ -11,6 +11,7 @@ from src.gimap.app.bootstrap import create_standalone_legacy_context
 from src.gimap.app.presentation import install_safe_wheel_behavior
 from src.gimap.app.presentation.assets import app_icon
 from src.gimap.app.presentation.i18n import language_changed, tr, trf
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 
 from ..application import (
     SpecularGeometry,
@@ -81,6 +82,7 @@ class XrrSeriesDialog(XrrFilesMixin, GeometrySourcesMixin, QDialog, XrrSeriesDia
 
     def _connect_signals(self) -> None:
         self.source_picker.browseRequested.connect(self._browse_source)
+        self.source_folder_button.clicked.connect(self._browse_folder)
         self.inspect_button.clicked.connect(self._inspect_series)
         self.run_button.clicked.connect(self._run_extraction)
         self.export_button.clicked.connect(self._export_curve)
@@ -148,6 +150,7 @@ class XrrSeriesDialog(XrrFilesMixin, GeometrySourcesMixin, QDialog, XrrSeriesDia
         self.inspect_button.setEnabled(False)
         self.series_summary.setText(tr("Reading first frame…"))
         self._inspect_thread = QThread(self)
+        self._inspect_thread.setStackSize(WORKER_STACK_BYTES)
         self._inspect_worker = XrrInspectWorker(self.view_model, spec)
         self._inspect_worker.moveToThread(self._inspect_thread)
         self._inspect_thread.started.connect(self._inspect_worker.run)
@@ -167,7 +170,7 @@ class XrrSeriesDialog(XrrFilesMixin, GeometrySourcesMixin, QDialog, XrrSeriesDia
         self._last_preview = frame.data
         self._last_preview_shape = tuple(frame.data.shape)
         self._last_roi_center = None
-        self.live_frame_label.setText(inspection.first_ref.label)
+        self._show_first_frame_label()
         self._redraw_detector()
 
     def _on_inspect_failed(self, message: str) -> None:
@@ -205,6 +208,7 @@ class XrrSeriesDialog(XrrFilesMixin, GeometrySourcesMixin, QDialog, XrrSeriesDia
         self.inspect_button.setEnabled(False)
         self.job_status.set_state("running", "Starting XRR extraction…", progress=0.0)
         self._extract_thread = QThread(self)
+        self._extract_thread.setStackSize(WORKER_STACK_BYTES)
         self._extract_worker = XrrExtractionWorker(self.view_model, request)
         self._extract_worker.moveToThread(self._extract_thread)
         self._extract_thread.started.connect(self._extract_worker.run)
@@ -241,9 +245,11 @@ class XrrSeriesDialog(XrrFilesMixin, GeometrySourcesMixin, QDialog, XrrSeriesDia
                 "cancelled", trf("Stopped after {count} point(s).", count=completed), progress=0.0
             )
         else:
-            self.job_status.set_state(
-                "succeeded", trf("Extracted {count} XRR point(s).", count=completed), progress=1.0
-            )
+            # What the reader said about the files (frames left out …) stays in sight after the run.
+            layout = getattr(result, "layout", None)
+            remarks = ["⚠ " + trf(template, **values) for template, values in (layout.warnings if layout else ())]
+            text = " ".join([trf("Extracted {count} XRR point(s).", count=completed), *remarks])
+            self.job_status.set_state("succeeded", text, progress=1.0)
         self._render_result(result)
 
     def _on_extraction_failed(self, message: str) -> None:

@@ -160,6 +160,8 @@ ASSISTANT_RUNTIME_ZH = {
     "The notes or the file name usually say which standard it is.": "笔记或文件名通常会说明是哪种标样。",
     "Beamtime notes or the logbook.": "实验笔记或记录本。",
     "Look at the horizontal cut: its halves should mirror each other.": "查看水平切线：它的两半应当互为镜像。",
+    "cut of the series (rows {rows})": "序列的切线（第 {rows} 行）",
+    "the cut of one frame, held for every frame": "某一帧的切线，用于每一帧",
     "No Yoneda band was found above the horizon; the horizontal cut sits just above it.":
         "在样品地平线上方没有找到 Yoneda 带；水平切线位于地平线正上方。",
     "Check αi (the horizon moves with it), or drag the yellow band on the image to the Yoneda row.":

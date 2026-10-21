@@ -92,6 +92,73 @@ def test_the_pipeline_finds_a_calibration_and_says_why_it_did_everything(tmp_pat
     ]
 
 
+@pytest.mark.parametrize("frames, first, count", [
+    (403, 394, 10), (50, 41, 10), (49, 41, 9), (10, 9, 2), (9, 9, 1), (4, 4, 1), (2, 2, 1),
+])
+def test_the_frames_summed_by_default_are_at_most_the_last_fifth_of_the_series(tmp_path: Path, frames, first, count) -> None:
+    """A short series is not summed whole and called its final state: frame 1 of ten is the start."""
+    catalog, workbench, _calibrator = setup(tmp_path, frames=frames)
+    report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4)).run()
+    assert report["ok"] and ("set_frame", first, count) in workbench.calls
+    assert report["frames"] == {"total": frames, "first": first, "summed": count}
+    made = decision(report, "frames")
+    assert made["why"].startswith(f"a series of {frames} frames (an in-situ run or a scan): ")
+    if count == 1:
+        assert made["decision"] == f"frame {first} of {frames}"
+        assert "the last frame shows the final state" in made["why"] and "not summed" in made["why"]
+        assert "sum_frames" in made["why"] and "--sum" in made["why"]  # how to sum, for a series that does not change
+    else:
+        assert made["decision"] == f"frames {first}–{frames} summed of {frames}"
+        assert "the last frames show the final state" in made["why"]
+    if 1 < count < 10:
+        assert "the last fifth" in made["why"]
+
+
+def test_a_block_from_the_start_that_covers_the_series_says_so(tmp_path: Path) -> None:
+    """``frame=1, sum_frames=10`` on nine frames is the whole series (what "compare with the start" asked
+    for before): the decision says so instead of only "as asked"; a start block without a count is the
+    first fifth, the mirror of the final state."""
+    catalog, workbench, _calibrator = setup(tmp_path, frames=9)
+    report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4, frame=1, sum_frames=10)).run()
+    assert ("set_frame", 1, 9) in workbench.calls
+    made = decision(report, "frames")
+    assert made["decision"] == "frames 1–9 summed of 9"
+    assert made["why"] == "as asked: all 9 frames are summed, so this is the whole series, not one state of it"
+
+    for frames, count in ((9, 1), (12, 2), (240, 10)):  # the start as the end is taken: the first fifth, at most ten
+        catalog, workbench, _calibrator = setup(tmp_path / str(frames), frames=frames)
+        report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4, frame=1)).run()
+        assert ("set_frame", 1, count) in workbench.calls and report["frames"]["summed"] == count
+
+
+def test_frames_that_were_asked_for_are_used_and_a_whole_series_is_not_called_its_end(tmp_path: Path) -> None:
+    catalog, workbench, _calibrator = setup(tmp_path, frames=10)
+    report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4, sum_frames=10)).run()
+    assert ("set_frame", 1, 10) in workbench.calls
+    why = decision(report, "frames")["why"]
+    assert why == "as asked: all 10 frames are summed, so this is the whole series, not its final state"
+
+    catalog, workbench, _calibrator = setup(tmp_path / "three", frames=10)
+    report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4, sum_frames=3)).run()
+    assert ("set_frame", 8, 3) in workbench.calls
+    assert decision(report, "frames")["why"] == "as asked: the last 3 of 10 frames are summed"
+
+    catalog, workbench, _calibrator = setup(tmp_path / "one", frames=10)
+    report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4, frame=2)).run()
+    assert ("set_frame", 2, 2) in workbench.calls  # a frame without a count: the default count from that frame
+    assert decision(report, "frames")["why"] == (
+        "the frame as asked; 2 frames are summed from it by default (sum_frames=1 or --sum 1: that frame alone)"
+    )
+    catalog, workbench, _calibrator = setup(tmp_path / "both", frames=10)
+    report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4, frame=2, sum_frames=1)).run()
+    assert ("set_frame", 2, 1) in workbench.calls and decision(report, "frames")["why"] == "as asked"
+
+    catalog, workbench, _calibrator = setup(tmp_path / "single", frames=1)
+    report = StandardPipeline(catalog, PipelineOptions(energy_kev=12.4)).run()
+    assert not any(step[0] == "set_frame" for step in workbench.calls)
+    assert not any(item["what"] == "frames" for item in report["decisions"])
+
+
 def test_the_pipeline_names_what_only_a_person_can_answer(tmp_path: Path) -> None:
     catalog, _workbench, calibrator = setup(tmp_path)
     stopped = StandardPipeline(catalog).run()

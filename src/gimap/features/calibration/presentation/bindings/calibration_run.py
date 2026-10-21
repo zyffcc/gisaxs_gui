@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 
 from ...application import (
     CalibrationCancelledError,
@@ -52,6 +53,7 @@ class CalibrationRunMixin:
         )
         self._set_running(True)
         self._cal_thread = QThread(self)
+        self._cal_thread.setStackSize(WORKER_STACK_BYTES)  # the ring fits call LAPACK
         self._cal_worker = CalibrationWorker(self.view_model, options)
         self._cal_worker.moveToThread(self._cal_thread)
         self._cal_thread.started.connect(self._cal_worker.run)

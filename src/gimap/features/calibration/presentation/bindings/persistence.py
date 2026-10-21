@@ -103,9 +103,15 @@ class PersistenceMixin:
             self.path_edit.setText(self.result.source_image)
             if self.image is not previous_image:
                 self._preview_cache.clear()
+                self._show_imported_frames()
             self.energy_spin.setValue(self.result.energy_kev)
             self.pixel_x_spin.setValue(self.result.pixel_size_x_m * 1e6)
             self.pixel_y_spin.setValue(self.result.pixel_size_y_m * 1e6)
+            # A new run fits the standard this calibration was made with: left on "Auto Detect" it could
+            # settle on another one than the calibration that was imported.
+            standard_index = self.standard_combo.findData(self.result.selected_candidate.standard_key)
+            if standard_index >= 0:
+                self.standard_combo.setCurrentIndex(standard_index)
             candidate_blocker = QSignalBlocker(self.candidate_table)
             self._populate_candidates()
             self.candidate_table.selectRow(0)
@@ -113,10 +119,11 @@ class PersistenceMixin:
             # Manual mode starts only from 'Manual refine'.
             self.manual_group.setChecked(False)
             self._show_candidate(self.result.selected_candidate)
-            self.stage_label.setText(
+            self._set_running(False)
+            # Which frames the image is; a calibration made on summed frames gets that sum read now.
+            self._read_imported_frames(
                 trf("Imported calibration from {name}", name=self.view_model.source_name(path))
             )
-            self._set_running(False)
         except Exception as exc:
             LOGGER.exception("Failed to import calibration")
             QMessageBox.warning(self, tr("Import Calibration"), tr(str(exc)))

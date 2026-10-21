@@ -10,7 +10,8 @@
   `app/presentation/stage_text.py`（界面文字）、`app/presentation/components/row_groups.py`（热图上的阶段条）
 - **Related tests**: `tests/test_series_stages.py`、`tests/test_series_stages_page.py`、`tests/test_compare.py`、
   `tests/test_fit_series.py::test_stages_and_odd_frames_steer_the_run`
-- **Last verified**: 2026-10-01（合成序列，以及本地的原位 GIWAXS 序列；本地数据和从中得到的数值不进仓库）
+- **Last verified**: 2026-10-14（读 Analyze 文件夹的几种曲线、阶段导出的横轴：对照代码）；2026-10-01（合成序列，以及本地的
+  原位 GIWAXS 序列；本地数据和从中得到的数值不进仓库）
 
 ## 为什么不是“分类”
 
@@ -41,6 +42,7 @@ Build Map（或填满热图的 Batch Export）结束后在后台计算（几百�
   比较的 q 范围、每个异常帧的原因；**Leave the odd frames out of Batch Export**；
 - 右下图 *Change along the series*：主成分 1 对帧，按阶段着色，异常帧为红 ×；
 - Export ▸ **Stages as Table…**：每帧的阶段、是否异常及原因、主成分得分、整体强度，旁边 JSON 记录（方法、各阶段、变化、异常帧）；
+  变化和异常帧的原因用热图自己的横轴（χ、qy 或 q）表述；阶段寻找失败时清掉旧的阶段，导出给出失败的原因；
 - **Send to Compare**：把这张热图加入 Compare。
 
 ## Fitting ▸ In-situ series
@@ -56,6 +58,10 @@ Build Map（或填满热图的 Batch Export）结束后在后台计算（几百�
   清空则恢复原名）、移除（Remove Selected 或 Delete 键）。名字很长时图、结果表和摘要只显示各序列不同的部分
   （`abc_xy_runA_10s_5hz_012_00001` 与 `abc_xy_runB_10s_5hz_020_00001` 显示为 `runA_012`、`runB_020`），
   Series 表、提示、CSV 与 JSON 保留完整的名字。没有序列时右侧是空状态说明；每次操作只有一个 toast。
+  Analyze 写的文件夹（Batch Export 文件夹、它的 `curves/`、`gimap_analysis/`）里有好几种曲线：读 README 与文件名分出各种
+  曲线（`compare/infrastructure/folders.py`），一种曲线是一个序列，有几种时问选哪一种（拟合用曲线叫 “the curve for Fitting
+  (…)”，不属于 Analyze 导出的文件叫 “other files”）；序列名为 “<样品或批次> · <曲线键>”（如 `radial`、`other`）。批次的帧表格
+  `<名称>_<曲线>_frames.*` 也能读（至少三行 x，每帧一列）。
   也可以把文件夹（每个文件夹一个序列）或曲线文件（合成一个序列）拖到页面上；其他文件（项目、探测器图像）交给主窗口按平常方式打开，
   混在一起拖入时说明哪些没有加入。同一个热图或文件夹不会重复加入。Remove All 立即清空，toast 上的 Undo 可把它们放回。
   所有表格都可以 Ctrl+C / 右键复制行（带列名）。
@@ -87,3 +93,5 @@ Build Map（或填满热图的 Batch Export）结束后在后台计算（几百�
 - [ ] Batch Export 勾选跳过异常帧后少导出相应帧；Stages as Table 写出 CSV + JSON；
 - [ ] Send to Compare 后切到 Compare，序列名可改，范围 / 只比形状 / 终态帧数改动后自动重算；
 - [ ] Compare 的表格、三张图、Save 菜单、项目保存与重开；浅色 / 深色、中文。
+- [ ] Add Series ▸ Folder of Curves… 选一个 Batch Export 文件夹：问选哪一种曲线（中文界面下全是中文），选后序列名为
+      “<批次> · <曲线键>”；选 `fit_input/` 文件夹直接成为一个序列。

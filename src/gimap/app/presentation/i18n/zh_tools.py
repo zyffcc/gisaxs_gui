@@ -98,9 +98,13 @@ TOOLS_ZH = {
     "Live frame": "实时帧",
     "XRR points": "XRR 数据点",
     "Series data": "序列数据",
-    "Choose one NXS module file or a CBF file/folder. NXS modules are stitched per frame.":
-        "选择一个 NXS 模块文件，或一个 CBF 文件 / 文件夹。NXS 模块会按帧拼接。",
-    "NXS module, CBF file, or CBF folder…": "NXS 模块、CBF 文件或 CBF 文件夹…",
+    "Choose one NXS / HDF5 file, a CBF file, or the folder of the series. Module files are stitched per frame; a file holding one frame stands for the series of files numbered like it.":
+        "选择一个 NXS / HDF5 文件、一个 CBF 文件，或序列所在的文件夹。模块文件按帧拼接；只含一帧的文件代表与它编号方式相同的一系列文件。",
+    "Folder…": "文件夹…",
+    "Choose a folder: the NXS / HDF5 files in it, or its CBF frames, are the series.":
+        "选择一个文件夹：其中的 NXS / HDF5 文件或 CBF 帧就是这个序列。",
+    "Select the folder of the series": "选择序列所在的文件夹",
+    "NXS / HDF5 file, CBF file, or folder…": "NXS / HDF5 文件、CBF 文件或文件夹…",
     "Auto detect": "自动识别",
     "NXS scan": "NXS 扫描",
     "CBF series": "CBF 序列",
@@ -413,6 +417,34 @@ TOOLS_ZH = {
     "Extracted frame {done} of {total}": "已提取第 {done} 帧，共 {total} 帧",
     "Stopped after {count} point(s).": "已停止，共提取 {count} 个点。",
     "Extracted {count} XRR point(s).": "已提取 {count} 个 XRR 数据点。",
+    # -- NeXus / HDF5 sources in the tool windows (2026-10-14) -----------------------------------------
+    # Geometry Calibration: which frame of a multi-frame image is calibrated.
+    "Frames:": "帧：",
+    "A single frame": "单帧",
+    "Sum of all frames": "全部帧求和",
+    "This file holds several frames. Calibrate on one of them, or on the sum of all (counts add; a pixel that is invalid in any frame stays invalid).":
+        "该文件包含多帧。可以在其中一帧上标定，也可以在全部帧的和上标定（计数相加；在任何一帧中无效的像素保持无效）。",
+    "of {count}": "/ 共 {count} 帧",
+    "frame {frame} of {count}": "第 {frame} 帧（共 {count} 帧）",
+    "{count} frames summed": "{count} 帧求和",
+    "frames {first}–{last} of {count} summed": "第 {first}–{last} 帧求和（共 {count} 帧）",
+    "Summing frames: {done} of {total}": "正在对帧求和：{done} / {total}",
+    "{imported}. The calibration was made on {count} frames summed from frame {frame} on: frame {frame} alone is shown.":
+        "{imported}。这次标定用的是从第 {frame} 帧起 {count} 帧的求和；现在只显示第 {frame} 帧。",
+    "Reading cancelled.": "已取消读取。",
+    # XRR Series Extractor: what the series that was found consists of.
+    "{files} files · 1 frame each": "{files} 个文件 · 每个 1 帧",
+    "{sets} sets of {modules} module files · 1 frame each": "{sets} 组模块文件（每组 {modules} 个）· 每组 1 帧",
+    "{files} files · {frames} frames in all": "{files} 个文件 · 共 {frames} 帧",
+    "{count} more files have a remark like these": "另有 {count} 个文件有类似的提示",
+    "{count} files numbered like the series are left out (another frame size, or not one frame): {names}. With angles from start and step, the frames after a file that is left out get the angle of their position":
+        "有 {count} 个编号方式与序列相同的文件未被采用（帧尺寸不同，或不是单帧）：{names}。角度按起点 + 步长计算时，未采用文件之后的各帧按它们在序列中的位置取角度",
+    "{name} · frame {frame}": "{name} · 第 {frame} 帧",
+    # Format Converter: inputs made of several files, every HDF5 suffix.
+    "{sources} inputs ({files} files), {frames} available image(s) / frame(s).":
+        "{sources} 个输入（共 {files} 个文件），共 {frames} 张可用图像 / 帧。",
+    "NeXus and HDF5 files (.nxs, .nx, .nx5, .h5, .hdf5, .hdf). A set of detector-module files is one input; the data files of a master are read through the master.":
+        "NeXus 和 HDF5 文件（.nxs、.nx、.nx5、.h5、.hdf5、.hdf）。一组探测器模块文件算作一个输入；主文件的数据文件通过主文件读取。",
     # -- Geometry Calibration: pixel coordinates (0.1.0 decisions) ---------------------------------
     "Direct-beam position in detector pixels, the same as in Analyze: pixel j spans [j, j+1] (the centre of the first pixel is 0.5), x from the left edge and y from the top edge.":
         "直射束在探测器上的像素位置，与分析页相同：第 j 个像素覆盖 [j, j+1]（第一个像素的中心是 0.5），x 从左边缘算起，y 从上边缘算起。",

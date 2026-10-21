@@ -36,6 +36,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from src.gimap.app.presentation.i18n import language_changed, tr, trf
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 from src.gimap.app.presentation.theme import set_role, theme_manager
 from src.gimap.app.jobs import JobRequest
 from src.gimap.integrations.jobs import LocalProcessJobRunner
@@ -70,6 +71,7 @@ class WorkflowJobThread(QThread):
 
     def __init__(self, payload, parent=None, runner=None):
         super().__init__(parent)
+        self.setStackSize(WORKER_STACK_BYTES)  # macOS: 512 KB is too little for numpy.linalg on a thread
         self.runner = runner or LocalProcessJobRunner()
         self.request = JobRequest(
             handler="src.gimap.features.fitting.infrastructure.adapters.workflow_v5:run_workflow_job",

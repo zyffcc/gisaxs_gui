@@ -319,6 +319,91 @@ def test_paths_the_person_names_are_read_and_searched_directly(tmp_path: Path) -
     assert f"file named by the user, readable and searchable: {given}" in message
 
 
+def test_a_standard_in_any_hdf5_file_is_an_image_gimap_can_fit(tmp_path: Path) -> None:
+    """Every NeXus / HDF5 suffix the shared reader reads is an image of a standard the assistant may fit
+    (an Eiger master ``LaB6_master.h5`` was "not an image GIMaP reads")."""
+    from src.gimap.features.assistant.application import READABLE_IMAGE_SUFFIXES
+    from src.gimap.features.assistant.domain.calibration_files import IMAGE_SUFFIXES
+    from src.gimap.shared.detector_io import HDF5_SUFFIXES
+
+    assert set(HDF5_SUFFIXES) <= set(READABLE_IMAGE_SUFFIXES) <= set(IMAGE_SUFFIXES)
+    assert {".cbf", ".tif", ".tiff"} <= set(READABLE_IMAGE_SUFFIXES)
+    for suffix in HDF5_SUFFIXES:
+        assert classify(f"raw/calib/LaB6_00001_master{suffix}") == "standard_image"
+    paths = beamtime(tmp_path)
+    calibrator = FakeCalibrator()
+    catalog = ToolCatalog(
+        CalibrationWorkbench(paths["frame"]), AnalysisGoals(goals=("peaks",), permission=PERMISSION_AUTO), RunResults(),
+        explorer=LocalFileExplorer(), calibrator=calibrator,
+    )
+    catalog.execute(call("get_status"))
+    standard = touch(paths["frame"].parent.parent / "calib" / "LaB6_00009_master.h5", "x")  # the fake never reads it
+    listed = payload(catalog.execute(call("find_calibration_files")))
+    record = next(item for item in listed["standard_images"] if item["path"] == str(standard))
+    assert record["gimap_can_fit"] is True
+    outcome = catalog.execute(call("calibrate_geometry", path=str(standard), standard="lab6", energy_kev=ENERGY_KEV))
+    assert not outcome.is_error and calibrator.calls[-1][:2] == ("LaB6_00009_master.h5", "lab6")
+
+
+def test_a_posix_path_with_spaces_is_offered_like_a_windows_one() -> None:
+    from src.gimap.features.assistant.domain import path_candidates
+
+    def offered(text: str) -> set[str]:
+        return {option for options in path_candidates(text) for option in options}
+
+    # A folder name with a space, followed by words in two languages: the whole path is one of the options.
+    assert "/data/my run 3/LaB6 cal.poni" in offered("The calibration is /data/my run 3/LaB6 cal.poni 是标样, see there.")
+    # Two paths in one line: each is offered, also the second one.
+    both = offered("calibration in /data/a/cal.poni and the frames in /data/b c/frame_0001.cbf")
+    assert {"/data/a/cal.poni", "/data/b c/frame_0001.cbf"} <= both
+    # A path without spaces is still its own first choice up to the next word.
+    assert "/data/a/cal.poni" in offered("see /data/a/cal.poni.")
+    # Not paths: a slash between words, and the host of an address.
+    assert offered("counts/pixel and/or km/h") == set()
+    assert not any(option.startswith("/example.org") for option in offered("see https://example.org/docs/page"))
+    # A Windows path is offered once, by the Windows rule.
+    assert [options[0] for options in path_candidates("in D:/data/calib/LaB6.cbf")] == ["D:/data/calib/LaB6.cbf"]
+
+
+def test_a_path_followed_by_a_long_line_is_still_offered(tmp_path: Path) -> None:
+    """Notes written on one line: the path, then a long sentence. The options are cut from the path's end,
+    not from the end of the line (where 160 cuts never reached the path)."""
+    import os
+
+    from src.gimap.features.assistant.domain import path_candidates
+
+    plain = tmp_path / "calib" / "lambda_synth.poni"
+    spaced = tmp_path / "my run" / "LaB6 cal.poni"
+    for path in (plain, spaced):
+        path.parent.mkdir()
+        path.write_text("Distance: 1.0", encoding="utf-8")
+    tails = ("这是一个很长的说明" * 25, " ".join(["word"] * 170), " ".join(["word"] * 100), "是标样。")
+    for tail in tails:
+        for path in (plain, spaced):
+            groups = path_candidates(f"{path} {tail}")
+            meant = [next((option for option in options if os.path.exists(option)), None) for options in groups]
+            assert meant[0] == str(path), (path.name, tail[:12])
+            assert len(groups[0]) <= 160 and groups[0] == sorted(groups[0], key=len, reverse=True)  # longest first
+    # The same for a Windows path, and the path is cut at the first white space as before.
+    options = path_candidates("D:\\data\\calib\\LaB6.cbf " + "这是一个很长的说明" * 25)[0]
+    assert "D:\\data\\calib\\LaB6.cbf" in options and len(options) <= 160
+    # A short line is offered whole first, exactly as before.
+    assert path_candidates("see /data/a/cal.poni 是标样") == [
+        ["/data/a/cal.poni 是标样", "/data/a/cal.poni 是标", "/data/a/cal.poni 是", "/data/a/cal.poni", "/data/a/cal"]
+    ]
+
+
+def test_a_path_named_twice_is_granted_once(tmp_path: Path) -> None:
+    paths = beamtime(tmp_path)
+    folder = (tmp_path / "other drive").resolve()
+    save_tiff(folder / "img_0005.tif", agbh_image())
+    notes = f"logs are in “{folder}”."  # found as a quotation and as a path
+    goals = AnalysisGoals(goals=("peaks",), permission=PERMISSION_CONFIRM, instructions=notes)
+    catalog = ToolCatalog(CalibrationWorkbench(paths["frame"]), goals, RunResults(), explorer=LocalFileExplorer())
+    catalog.execute(call("get_status"))
+    assert catalog.access_notes() == [f"folder named by the user, readable and searchable: {folder}"]
+
+
 class RankingCalibrator(FakeCalibrator):
     """Every standard fits, some much better than others."""
 

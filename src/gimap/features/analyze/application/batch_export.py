@@ -1,8 +1,8 @@
 """Batch export: every listed frame reduced with the same settings and written as the person chose.
 
 ``BatchChoices`` says what to write, and in which formats; ``output_names`` says, for each choice,
-the file (with its extension) it writes, so the dialog can show it and ``readme_text`` can list it in
-a ``README.txt`` next to the files. The files of one kind go into their own subfolder:
+the file (with its extension) it writes, so the dialog can show it and ``batch_report.readme_text`` can
+list it in a ``README.txt`` next to the files. The files of one kind go into their own subfolder:
 
 ====================  ==================================================  ===========================
 choice                file                                                what
@@ -21,11 +21,15 @@ fit (``batch_fit``)   ``<batch>_peak_fits.<txt>`` / ``_model_fits``       one ro
 ``<txt>`` is ``csv`` (comma), ``txt`` (tab) or ``dat`` (space); ``<img>`` ``png``, ``tif``, ``svg`` or
 ``pdf``; the frame format ``tiff``, ``edf``, ``npy`` or ``hdf5`` (``shared.detector_io.write_frame``,
 values as read: modules stitched, frames summed). Curve tables: frames of one geometry share their x
-exactly; otherwise every frame is interpolated linearly onto the first frame's x (never
-extrapolated) and the header says so, with the largest shift of a point.
+exactly; frames whose points are the same up to rounding (another cut row, other masked columns, another
+range) are matched point by point, nothing interpolated; only frames on really different grids are
+interpolated linearly onto a common one, never across a hole or beyond their range — and the header of the
+table says which of the three it was (``batch_tables.py``).
 
 ``curves`` names the curves to write (empty: every curve of the frame); ``every`` takes every n-th
-listed frame (1: all of them).
+listed frame (1: all of them). ``fit_halves`` is what a fit takes of the signed GISAXS cut — ``mean``,
+``positive`` or ``negative``, never both halves together: the particle-model fit of the batch uses it,
+and every fit input says it (the file itself keeps both halves, signed).
 """
 
 from __future__ import annotations
@@ -37,11 +41,14 @@ from typing import Any, Mapping, Optional, Sequence
 import numpy as np
 
 from src.gimap.shared.detector_io import frame_suffix, write_frame
+from src.gimap.shared.signed_cut import FIT_HALVES, fit_halves
 
 from ..domain import GISAXS, PROFILES, Curve
 from .batch_fit import FIT_MODEL, FIT_NONE, FIT_PEAKS, MODEL_COMPONENTS, STARTS
+from .batch_tables import common_x
+from .export_record import source_files
 from .models import FrameAnalysis
-from .ports import CurveWriter
+from .ports import CurveWriter, source_stem
 from .use_cases import SOFTWARE, ExportAnalysis, export_stem
 
 BATCH_TITLE = "GIMaP Analyze batch export"
@@ -66,7 +73,7 @@ _CHOICES = {
     "image_scale": (SCALE_AUTO, SCALE_SCREEN),
     "text_format": tuple(TEXT_FORMATS), "image_format": tuple(IMAGE_FORMATS), "frame_format": tuple(FRAME_FORMATS),
     "fit": (FIT_NONE, FIT_PEAKS, FIT_MODEL), "fit_profile": PROFILES, "fit_start": STARTS,
-    "fit_model": tuple(MODEL_COMPONENTS),
+    "fit_model": tuple(MODEL_COMPONENTS), "fit_halves": FIT_HALVES,
 }
 
 
@@ -89,6 +96,8 @@ class BatchChoices:
     fit_profile: str = "pseudo_voigt"
     fit_start: str = "previous"
     fit_model: str = "auto"
+    fit_halves: str = "mean"
+    """What a fit takes of the signed GISAXS cut (``FIT_HALVES``): the model fit, and the fit inputs say it."""
     fit_curves: bool = False
     speed: str = BALANCED
     image_scale: str = SCALE_AUTO
@@ -128,6 +137,8 @@ class BatchChoices:
             elif item.name == "every":
                 if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
                     values["every"] = value
+            elif item.name == "fit_halves":  # a display choice (both, both_abs) is no choice of a fit: the mean
+                values["fit_halves"] = fit_halves(value)
             elif item.name in _CHOICES:
                 if value in _CHOICES[item.name]:
                     values[item.name] = value
@@ -136,10 +147,15 @@ class BatchChoices:
         return cls(**values)
 
 
-def output_names(choices: BatchChoices, *, batch: str, frame: str, curve: str = "region1") -> dict[str, str]:
-    """The file each choice writes (relative to the batch folder), for the dialog and the README."""
+def output_names(choices: BatchChoices, *, batch: str, frame: str, curve: str = "region1",
+                 fit_key: Optional[str] = None) -> dict[str, str]:
+    """The file each choice writes (relative to the batch folder), for the dialog and the README.
+
+    ``fit_key``: the curve key of a fitted peak (its region) for the name of its fitted curve — ``curve`` when
+    not given; the particle model's is always ``<frame>_model_fit``."""
     text, image = choices.text_format, choices.image_format
     peaks_or_model = "peak_fits" if choices.fit != FIT_MODEL else "model_fits"
+    fitted = "model" if choices.fit == FIT_MODEL else (fit_key or curve)
     return {
         "tables": f"{batch}_{curve}_frames.{text}",
         "per_frame": f"{FOLDERS['per_frame']}/{frame}_{curve}.{text}",
@@ -151,49 +167,10 @@ def output_names(choices: BatchChoices, *, batch: str, frame: str, curve: str = 
         "frames": f"{FOLDERS['frames']}/{frame}{frame_suffix(choices.frame_format)}",
         "fit": f"{batch}_{peaks_or_model}.{text}",
         "fit_plot": f"{batch}_{peaks_or_model}.png",
-        "fit_curves": f"{FOLDERS['fit_curves']}/{frame}_{curve}_fit.{text}",
+        "fit_curves": f"{FOLDERS['fit_curves']}/{frame}_{fitted}_fit.{text}",
         "record": f"{batch}_batch.json",
         "readme": "README.txt",
     }
-
-
-_MEANING = {
-    "tables": "one table per curve: x in the first column, then one column per frame (mean intensity per pixel; "
-              "blank = no data)",
-    "per_frame": "one file per frame and curve: x, I, sigma (standard error) and the pixels in each point; "
-                 "a _analysis.json per frame records the settings",
-    "fit_input": "per frame: q (1/A), I, sigma, pixels — the curve Fitting reads (Fitting > In-situ series)",
-    "q_map": "per frame: the intensity on a regular q_par-qz grid (qy-qz for GISAXS); first row = x axis, "
-             "first column = qz",
-    "cake": "per frame: the intensity unwrapped onto chi (rows) and q (columns)",
-    "detector_image": "per frame: a picture of the detector image with a colour bar",
-    "q_map_image": "per frame: a picture of the q map with a colour bar",
-    "frames": "per frame: the detector data in another format, values as read (modules stitched, frames summed)",
-    "fit": "the fit of every frame, one row per frame (values, errors, reduced chi2, and a note when a fit failed)",
-    "fit_plot": "the fitted values against frame",
-    "fit_curves": "per frame and fitted curve: x, the data and the fit",
-    "record": "the choices, the frames, the frames that failed and the full settings of the first frame",
-}
-
-
-def readme_text(choices: BatchChoices, *, batch: str, frame: str, frames: int, curves: Sequence[tuple[str, str]],
-                started: str = "") -> str:
-    """What every file of the batch folder is (written as ``README.txt``)."""
-    names = output_names(choices, batch=batch, frame="<frame>", curve="<curve>")
-    chosen = [key for key in ("tables", "per_frame", "fit_input", "q_map", "cake", "detector_image",
-                              "q_map_image", "frames") if getattr(choices, key)]
-    if choices.fit != FIT_NONE:
-        chosen += ["fit", "fit_plot"] + (["fit_curves"] if choices.fit_curves else [])
-    chosen.append("record")
-    lines = [f"{BATCH_TITLE} — {batch}" + (f" — {started}" if started else ""), f"{frames} frames.", "",
-             "Files (<frame> is the name of each frame, <curve> the curve key):", ""]
-    width = max(len(names[key]) for key in chosen)
-    for key in chosen:
-        lines.append(f"{names[key]:<{width}}  {_MEANING[key]}")
-    if curves and (choices.tables or choices.per_frame):
-        lines += ["", "Curves:"] + [f"  {key}: {title}" for key, title in curves]
-    lines += ["", "Units: q in 1/A (Angstrom^-1), angles in degrees, intensity = mean counts per pixel.", ""]
-    return "\n".join(lines)
 
 
 def chosen_curves(analysis: FrameAnalysis, keys: Sequence[str] = ()) -> list[Curve]:
@@ -206,13 +183,15 @@ def chosen_curves(analysis: FrameAnalysis, keys: Sequence[str] = ()) -> list[Cur
     return [curve for key in keys if (curve := reduction.curve(key)) is not None and not curve.is_empty]
 
 
-def batch_stem(paths: Sequence[Path]) -> str:
-    """A name for a batch: the file for one file, else the folder the files are in."""
+def batch_stem(paths: Sequence[Path], source: Any = None) -> str:
+    """A name for a batch: the source for one listed source, else the folder the files are in. ``source``:
+    what the one path stands for (its ``NexusLayout``, or a frame's metadata) — a set of module files is
+    named by its scan, without the module number (``ports.source_stem``)."""
     paths = [Path(path) for path in paths]
     if not paths:
         return "batch"
     if len(paths) == 1:
-        return paths[0].stem
+        return source_stem(paths[0], source)
     parents = {path.parent for path in paths}
     return (paths[0].parent.name if len(parents) == 1 else "batch") or "batch"
 
@@ -239,7 +218,7 @@ def export_frame(
             ))
     if choices.fit_input:
         try:
-            written.append(export.fit_input(analysis, destination / FOLDERS["fit_input"]))
+            written.append(export.fit_input(analysis, destination / FOLDERS["fit_input"], halves=choices.fit_halves))
         except ValueError:
             pass  # a frame without a usable curve: nothing to fit
     if choices.q_map and analysis.reduction is not None and analysis.reduction.reciprocal_space_map is not None:
@@ -248,9 +227,16 @@ def export_frame(
         written.append(export.cake(analysis, cake, destination / FOLDERS["cake"] / f"{stem}_cake.{text}"))
     if choices.frames:
         data = analysis.raw_data if analysis.raw_data is not None else analysis.data
+        source = {"source_file": str(analysis.path), "frame_index": int(analysis.frame_index),
+                  "frame_count": int(analysis.frame_count)}
+        if analysis.summed_frames:
+            source["summed_frames"] = [{"file": str(path), "frame_index": int(index)} for path, index in analysis.summed_frames]
+        files = source_files(analysis.path, analysis.metadata)
+        if files:
+            source["source_files"] = files
         written.append(write_frame(
             destination / FOLDERS["frames"] / f"{stem}{frame_suffix(choices.frame_format)}", data,
-            choices.frame_format, {"source_file": str(analysis.path), "frame_index": int(analysis.frame_index)},
+            choices.frame_format, source,
         ))
     return written
 
@@ -267,7 +253,8 @@ def fit_curve_rows(analysis: FrameAnalysis, fits) -> list[tuple[str, list[str], 
 
 
 class CurveTables:
-    """The chosen curves of every frame, gathered for one table per curve (see the module docstring)."""
+    """The chosen curves of every frame, gathered for one table per curve (``batch_tables.common_x`` puts the
+    frames on one column of x: matched, never drawn across a hole; the header says how)."""
 
     def __init__(self) -> None:
         self._columns: dict[str, list[tuple[str, np.ndarray, np.ndarray]]] = {}
@@ -287,40 +274,19 @@ class CurveTables:
     def frames(self, key: str) -> int:
         return len(self._columns.get(key, ()))
 
-    def _values(self, key: str) -> tuple[np.ndarray, list[np.ndarray], Optional[float]]:
-        """``(x, one array per frame, largest shift)``; the shift is ``None`` when the grids agree."""
-        columns = self._columns[key]
-        x = columns[0][1]
-        exact = all(c_x.shape == x.shape and np.allclose(c_x, x, rtol=0, atol=1e-12) for _label, c_x, _y in columns)
-        if exact:
-            return x, [y for _label, _x, y in columns], None
-        values, shift = [], 0.0
-        for _label, c_x, c_y in columns:
-            order = np.argsort(c_x, kind="stable")
-            c_x, c_y = c_x[order], c_y[order]
-            values.append(np.interp(x, c_x, c_y, left=np.nan, right=np.nan) if c_x.size >= 2 else np.full(x.shape, np.nan))
-            if c_x.shape == x.shape:
-                shift = max(shift, float(np.nanmax(np.abs(c_x - np.sort(x)))) if c_x.size else 0.0)
-            else:
-                shift = float("inf")
-        return x, values, shift
-
-    def write(self, writer: CurveWriter, destination: Path, stem: str, text_format: str = "csv") -> list[Path]:
+    def write(self, writer: CurveWriter, destination: Path, stem: str, text_format: str = "csv",
+              notes: Sequence[str] = ()) -> list[Path]:
+        """One table per curve; ``notes``: further ``#`` lines of every table (frames that are missing, sums of
+        different sizes)."""
         written = []
         for key in self.keys:
             columns = self._columns[key]
             title, x_label = self._titles[key]
-            x, values, shift = self._values(key)
-            if shift is None:
-                grid = "x: exact (every frame has the same points)"
-            elif np.isfinite(shift):
-                grid = f"x: of the first frame; the others interpolated linearly onto it (largest shift {shift:.3g})"
-            else:
-                grid = "x: of the first frame; the others (other bins) interpolated linearly onto it, blank outside their range"
+            x, values, grid = common_x([(c_x, c_y) for _label, c_x, c_y in columns])
             comments = [
                 f"{BATCH_TITLE} ({SOFTWARE}): {title}",
                 f"one column per frame ({len(columns)} frames, in list order); mean intensity per pixel; blank = no data",
-                grid,
+                grid, *notes,
             ]
             header = [x_label, *(label for label, _x, _y in columns)]
             rows = [[float(value), *(float(column[index]) for column in values)] for index, value in enumerate(x)]
@@ -330,6 +296,6 @@ class CurveTables:
 
 
 __all__ = [
-    "BATCH_TITLE", "BatchChoices", "CurveTables", "FOLDERS", "FRAME_FORMATS", "IMAGE_FORMATS", "TEXT_FORMATS",
-    "batch_stem", "chosen_curves", "export_frame", "fit_curve_rows", "output_names", "readme_text",
+    "BATCH_TITLE", "BatchChoices", "CurveTables", "FIT_HALVES", "FOLDERS", "FRAME_FORMATS", "IMAGE_FORMATS",
+    "TEXT_FORMATS", "batch_stem", "chosen_curves", "export_frame", "fit_curve_rows", "fit_halves", "output_names",
 ]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from pathlib import Path
@@ -26,10 +27,14 @@ def test_curves_on_one_grid_are_stacked_as_they_are_and_others_interpolated() ->
     x = np.linspace(0.1, 1.0, 10)
     grid, image = stack_curves([(x, x * 1.0), (x, x * 2.0)])
     assert np.array_equal(grid, x) and image.shape == (2, 10) and image[1, 3] == pytest.approx(2 * x[3])
-    shorter = np.linspace(0.3, 0.8, 6)
+    shorter = np.linspace(0.3, 0.8, 6)  # the same points, fewer of them: each value stays where it was measured
     grid, image = stack_curves([(x, x), (shorter[::-1], shorter[::-1] * 3)])  # descending x is sorted first
-    assert grid[0] == pytest.approx(0.1) and grid[-1] == pytest.approx(1.0) and grid.size == 8
+    assert np.allclose(grid, x) and grid.size == 10
     assert np.isnan(image[1, 0]) and image[1, 4] == pytest.approx(3 * grid[4])  # never extrapolated
+    between = np.linspace(0.33, 0.83, 6)  # points between the other curve's: one even grid with their step
+    grid, image = stack_curves([(x, x), (between, between * 3)])
+    assert grid[0] == pytest.approx(0.1) and np.allclose(np.diff(grid), 0.1) and grid.size == 10
+    assert np.isnan(image[1, 0]) and image[1, 4] == pytest.approx(3 * grid[4]) and np.isnan(image[1, -1])
     series = series_map([(x, x), (x, 2 * x), (x, 3 * x)], ["a", "b", "c"], x_label="q (Å⁻¹)", curve="radial")
     assert series.rows == 3 and np.allclose(series.trace(0.5, 0.05), [0.5, 1.0, 1.5])
     assert np.allclose(series.profile(1), 2 * x)
@@ -68,6 +73,7 @@ def test_the_series_map_grows_frame_by_frame_and_its_rows_open_and_export(tmp_pa
         _wait(page, lambda: page._series_map is not None and page._series_map.rows == len(heights) and not page._series_queue)
         series = page._series_map
         assert series.labels[0] == "insitu_000.tif" and series.x_label.startswith("q")
+        assert series.numbers == (1, 2, 3, 4, 5, 6) and series.title == "I(q)" and series.view == "both"
         assert not page.series_map_view.isHidden() and page.series_empty.isHidden() and page.cancel_button.isHidden()
         # The vertical band starts where the series changes most, the ring: its intensity grows with the frame.
         low, high = page._series_q
@@ -79,15 +85,22 @@ def test_the_series_map_grows_frame_by_frame_and_its_rows_open_and_export(tmp_pa
         assert page.open_series_row() and page.file_list.currentRow() == 3
         written = page.export_series_csv(tmp_path / "map.csv")
         lines = written.read_text(encoding="ascii").splitlines()
-        assert lines[0].startswith("# GIMaP Analyze series map") and lines[1] == "# frame 1: insitu_000.tif"
+        assert lines[0].startswith("# GIMaP Analyze series map") and "# curve: radial - I(q)" in lines
+        assert f"# frame 1: {paths[0]}" in lines and f"# frame 6: {paths[5]}" in lines  # the file with its folder
+        assert "# series: insitu; 6 of 6 listed frames" in lines
         header = next(line for line in lines if not line.startswith("#"))
         assert header.startswith("frame \\ q") and sum(1 for line in lines if not line.startswith("#")) == len(heights) + 1
+        record = json.loads(written.with_suffix(".json").read_text(encoding="utf-8"))  # the settings, next to the table
+        assert record["curve"] == "radial" and record["settings"]["mode"] == "giwaxs" and len(record["rows"]) == 6
+        assert record["rows"][3]["file"] == str(paths[3]) and record["rows"][3]["frame"] == 4
         figure = page.export_series_figure(tmp_path / "map.png")
         assert figure is not None and figure.stat().st_size > 1000
         page.series_step_spin.setValue(2)  # every second frame: a quick look at a long series
         page.build_series_map()
         _wait(page, lambda: not page._series_queue and page.cancel_button.isHidden() and page._series_map is not None)
         assert page._series_map.labels == ("insitu_000.tif", "insitu_002.tif", "insitu_004.tif")
+        assert page._series_map.numbers == (1, 3, 5)  # the frames of the list, not the rows of the map
+        assert page.series_profile_plot.title_label.text().startswith("Frame ")
     finally:
         page.tasks.wait(30)
         page.dispose()

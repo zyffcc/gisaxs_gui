@@ -31,17 +31,20 @@ from ...application.single_fit import (
     Curve,
     evaluate,
     fit_scales,
+    left_out_points,
     model_from_dict,
     model_from_solution,
     model_to_dict,
-    point_key,
     residuals,
 )
 from ..views.fit_page_view import FitPageView
 from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
 from .fit1d import Fit1DPageMixin
+from .fit1d_review import Fit1DReviewMixin
+from .result_actions import ResultActionsMixin
 from .model_editor import FitModelEditor
+from .points import measured_series
 from .results import FitResultsMixin
 from .run import FitRunMixin
 from .session import FitSession, Solution, model_label
@@ -54,10 +57,12 @@ DATA_COLOR, OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#2563eb", "#94a3b8", "
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, Fit1DPageMixin):
+              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
+    seriesRequested = pyqtSignal(str, str)
+    """Every curve of a folder (folder, file pattern) in In-situ series, each fitted from this page's model."""
     """Open 1D Predict for a list of curves."""
 
     def __init__(self, view_model, *, quick_fit: Optional[Callable] = None, preferences=None,
@@ -88,6 +93,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.setup_fit1d()
         self.setup_run()
         self.setup_results()
+        self.setup_result_actions()
         self.setup_exclusion()
         self._restore()
         self._render_all()
@@ -95,6 +101,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
     def _connect(self) -> None:
         self.open_button.clicked.connect(self.open_curve_dialog)
         self.open_curve_step_button.clicked.connect(self.open_curve_dialog)
+        self.open_folder_step_button.clicked.connect(lambda: self.seriesRequested.emit("", ""))
         self.load_model_action.triggered.connect(self.load_model_dialog)
         self.undo_button.clicked.connect(self.undo)
         self.redo_button.clicked.connect(self.redo)
@@ -184,6 +191,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.redo_button.setEnabled(session.can_redo())
         self.fit_button.setEnabled(curve is not None and not self.fit_running())
         self.fit_step_button.setEnabled(curve is not None and not self.fit_running())
+        self._refresh_fit1d_action()
 
     # -- the curve ------------------------------------------------------------------------
 
@@ -206,7 +214,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=path.name, path=str(path), unit=unit)
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
-        if side is not None:
+        if side is not None and curve.signed:  # a curve with one side has no halves to choose from
             self.session.side = ANALYZE_SIDES.get(side, side if side in dict(SIDES) else "mean")
         data = self._data()
         if not self.session.edited and data is not None and data.q.size >= 3:
@@ -215,11 +223,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self._remember(folder=str(path.parent), curve={"path": str(path), "side": self.session.side, "unit": unit})
         self._render_all()
         self._log(tr("Opened {name}: {points} points").format(name=path.name, points=curve.q.size))
-        if not self.session.edited and self.quick_fit is not None:
-            self.method_buttons["shapes"].setChecked(True)  # a first curve: find the family first
-            self.show_step("fit")
-        else:
-            self.show_step("model")
+        self._curve_opened_step(getattr(loaded, "observation", None))  # fit1d first for a GISAXS cut (fit1d_review)
         self._status(lambda: tr("Opened {name}.").format(name=path.name), "ok")
         self.curveOpened.emit(str(path))
         return True
@@ -354,6 +358,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.side_combo.setCurrentIndex(max(0, self.side_combo.findData(session.side)))
         signed = curve is not None and curve.signed
         self.open_curve_step_button.setVisible(curve is None)  # afterwards: Open Curve… in the command bar
+        self.open_folder_step_button.setVisible(curve is None)  # afterwards: Results ▸ Fit Every Curve in This Folder…
         self.side_combo.setVisible(signed)
         self.side_label.setVisible(signed)
         self._fill_curve_card()
@@ -384,13 +389,12 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             "{name}\n{points} points, |q| {low}–{high} nm⁻¹ ({low_a}–{high_a} Å⁻¹); {fitted} in the fitting range."
         ).format(name=curve.name, points=full.q.size, low=f"{low:.4g}", high=f"{high:.4g}",
                  low_a=f"{low / NM_PER_A:.4g}", high_a=f"{high / NM_PER_A:.4g}", fitted=fitted))
-        self.sigma_note.setText(tr("σ from the file: the fit weights each point by 1/σ.") if curve.sigma is not None else
-                                tr("No σ in the file: every point gets the same relative weight (ln I is fitted)."))
-        if self.method() == "fit1d":
-            self.sigma_note.setText(tr("fit1d uses σ from the file with the selected systematic error floor.")
-                                    if curve.sigma is not None else tr(
-                                        "No σ in the file: fit1d assumes Poisson errors; the selected systematic "
-                                        "error floor is added in quadrature."))
+        self.sigma_note.setText("\n".join((  # both actions of the Fit step: Refine (and the others) and fit1d
+            tr("σ from the file: the fit weights each point by 1/σ.") if curve.sigma is not None else
+            tr("No σ in the file: every point gets the same relative weight (ln I is fitted)."),
+            tr("fit1d uses σ from the file with the selected systematic error floor.") if curve.sigma is not None
+            else tr("No σ in the file: fit1d assumes Poisson errors; the selected systematic error floor is added "
+                    "in quadrature."))))
         self.weighting_note.setText(self.sigma_note.text())
 
     def _redraw(self) -> None:
@@ -399,8 +403,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         curves, colors, markers = [], [], []
         if full is not None and full.q.size:
             inside = np.zeros(full.q.size, bool) if data is None else np.isin(full.q, data.q)
-            left_out = np.array([point_key(value) in session.excluded for value in full.q]) if session.excluded \
-                else np.zeros(full.q.size, bool)
+            left_out = left_out_points(full.q, session.excluded) if session.excluded \
+                else np.zeros(full.q.size, bool)  # as the fit takes the names (the nearest point, half a step)
             outside = ~inside & ~left_out
             if outside.any():
                 curves.append((tr("outside the range"), full.q[outside], full.intensity[outside]))
@@ -410,9 +414,9 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                 curves.append((tr("left out"), full.q[left_out], full.intensity[left_out]))
                 colors.append(LEFT_OUT_COLOR)
                 markers.append("x")
-            if data is not None and data.q.size:
-                curves.append((tr("measured"), data.q, data.intensity))
-                colors.append(DATA_COLOR)
+            for name, q, intensity, color in measured_series(session, data):  # both halves on |q|: two colours
+                curves.append((tr(name), q, intensity))
+                colors.append(color)
                 markers.append(True)
             q_model = np.geomspace(max(full.q.min(), 1e-6), full.q.max(), MODEL_POINTS)
             try:
@@ -505,9 +509,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             if model is not None and model != self.session.model:
                 self.session.model = model
                 self.session.edited = True  # the person's model of last time, not a starting guess
-        method = self._remembered("method")
-        if method in self.method_buttons:
-            self.method_buttons[method].setChecked(True)
+        self.set_method(self._remembered("method"), remember=False)
         self.show_ranges_check.setChecked(bool(self._remembered("show_ranges")))
         self.show_ranges_check.toggled.connect(lambda on: self._remember(show_ranges=bool(on)))
         last = self._remembered("curve")
@@ -545,8 +547,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                 self.session.edited = True
             except (ValueError, KeyError, TypeError) as exc:
                 notes.append(tr("the Fitting model could not be read: {reason}").format(reason=exc))
-        if data.get("method") in self.method_buttons:
-            self.method_buttons[data["method"]].setChecked(True)
+        self.set_method(data.get("method"))
         curve = data.get("curve") or {}
         if curve.get("path") and Path(curve["path"]).is_file():
             if self.open_curve(curve["path"], curve.get("side"), unit=curve.get("unit")):

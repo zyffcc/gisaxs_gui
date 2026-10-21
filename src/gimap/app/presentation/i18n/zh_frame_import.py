@@ -1,0 +1,31 @@
+"""Frame import choices and progress in Analyze."""
+FRAME_IMPORT_ZH = {
+    "Import": "导入",
+    "Remove Source from List": "从列表移除整个数据源",
+    "Import Frames": "导入帧",
+    "All Frames": "全部帧",
+    "Frame Range": "帧范围",
+    "Specific Frames": "指定帧",
+    "Keep Current Selection": "保留当前选择",
+    "Choose Frames…": "选择帧…",
+    "Cancel Import": "取消导入",
+    "Frame numbers": "帧号",
+    "Frames are listed without loading every image. Only the frame you open is read. Batch Export and Build Map process the imported frames when you start them.":
+        "导入只列出帧，打开哪一帧才读取哪一帧。开始批量导出或生成热图时，才处理已导入的帧。",
+    "{name} · {n} frames": "{name} · {n} 帧",
+    "Frame {frame} of {total}": "第 {frame} 帧，共 {total} 帧",
+    "{n} frames imported": "已导入 {n} 帧",
+    "{n} frames will be imported from {sources} sources.": "将从 {sources} 个源导入 {n} 帧。",
+    "Frame {n} is not imported. Use Choose Frames to add it.": "未导入第 {n} 帧。可通过“选择帧”添加。",
+    "Inspecting detector sources…": "正在检查探测器数据…",
+    "Inspecting source {n} of {total}: {name}": "正在检查第 {n} / {total} 个源：{name}",
+    "Frame import cancelled.": "已取消帧导入。",
+    "Frame import cancelled. Wait for the current task before changing imported frames.":
+        "已取消帧导入。请等待当前任务结束，再更改导入的帧。",
+    "Frame import failed: {error}": "帧导入失败：{error}",
+    "No detector frames were found.": "未找到探测器帧。",
+    "Wait for the current task before changing imported frames.": "请等待当前任务结束，再更改导入的帧。",
+    "The first frame must not be after the last frame.": "第一帧不能在最后一帧之后。",
+    "Enter frame numbers separated by commas, for example 1, 5, 20.": "请输入用逗号分隔的帧号，例如 1, 5, 20。",
+    "Every frame number must be within this source.": "每个帧号都必须在该源的范围内。",
+}

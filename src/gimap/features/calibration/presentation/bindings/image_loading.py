@@ -17,13 +17,16 @@ from PyQt5.QtWidgets import (
 
 from ...application import (
     AmbiguousImageDatasetError,
+    CalibrationCancelledError,
     DetectorImage,
 )
 
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 
 from ..workers import ImageLoaderWorker
+from .frame_choice import frames_text
 
 LOGGER = logging.getLogger(__name__)
 # What a file reader raises when the content is not what the suffix promises (a cut-off CBF gives
@@ -34,8 +37,8 @@ READER_TRIPPED = (
 )
 # Every format the shared detector loader reads; the standards in the repository are EDF/TIFF.
 CALIBRATION_IMAGE_FILTER = (
-    "Detector Images (*.nxs *.cbf *.tif *.tiff *.edf);;NXS (*.nxs);;CBF (*.cbf);;"
-    "TIFF (*.tif *.tiff);;EDF (*.edf)"
+    "Detector Images (*.nxs *.nx *.nx5 *.h5 *.hdf5 *.hdf *.cbf *.tif *.tiff *.edf);;"
+    "NeXus / HDF5 (*.nxs *.nx *.nx5 *.h5 *.hdf5 *.hdf);;CBF (*.cbf);;TIFF (*.tif *.tiff);;EDF (*.edf)"
 )
 
 
@@ -75,18 +78,33 @@ class ImageLoadingMixin:
         if path:
             self.load_image(self.view_model.normalize_path(path))
 
-    def load_image(self, path: str, dataset_path: Optional[str] = None) -> None:
+    def load_image(
+        self, path: str, dataset_path: Optional[str] = None, *, frame: int = 0, sum_frames: int = 1
+    ) -> None:
+        """Read ``path`` on a thread: its first frame, or frame ``frame`` (0-based), or the sum of
+        ``sum_frames`` frames from it on (the frame row of a multi-frame file asks for these)."""
         if self._load_thread is not None and self._load_thread.isRunning():
             return
         self.path_edit.setText(path)
         self.job_status.set_state("running", "Reading image...", progress=None)
         self._set_running(True)
+        self._loading_request = (path, dataset_path)
+        self._start_reader(
+            ImageLoaderWorker(path, self.view_model, dataset_path, frame=frame, sum_frames=sum_frames),
+            self._image_loaded,
+            lambda exc: self._image_failed(path, exc),
+        )
+
+    def _start_reader(self, worker, finished, failed) -> None:
+        """Run ``worker`` (an ``ImageLoaderWorker``) on the reader thread of the dialog."""
         self._load_thread = QThread(self)
-        self._load_worker = ImageLoaderWorker(path, self.view_model, dataset_path)
+        self._load_thread.setStackSize(WORKER_STACK_BYTES)
+        self._load_worker = worker
         self._load_worker.moveToThread(self._load_thread)
         self._load_thread.started.connect(self._load_worker.run)
-        self._load_worker.finished.connect(self._image_loaded)
-        self._load_worker.failed.connect(lambda exc: self._image_failed(path, exc))
+        self._load_worker.progress.connect(self._frames_read)
+        self._load_worker.finished.connect(finished)
+        self._load_worker.failed.connect(failed)
         self._load_worker.finished.connect(self._load_thread.quit)
         self._load_worker.failed.connect(self._load_thread.quit)
         self._load_thread.finished.connect(self._cleanup_loader)
@@ -94,6 +112,8 @@ class ImageLoadingMixin:
 
     def _image_loaded(self, image: DetectorImage) -> None:
         self.image = image
+        self._image_request, self._loading_request = self._loading_request, None
+        self._show_frame_choice(image)
         self._remember_folder(image.source_path)  # where Open… and Import… start next time
         self.result = None
         self._fitted_geometry = None
@@ -143,6 +163,9 @@ class ImageLoadingMixin:
             if auto_index >= 0:
                 self.standard_combo.setCurrentIndex(auto_index)
         notes = ""
+        frames = frames_text(image)  # "frame 1 of 12" / "12 frames summed"; '' for one frame
+        if frames:
+            notes += " | " + frames
         if image.metadata.get("energy_source"):
             notes += " | " + tr("energy from companion NXS")
         if len(detected_standards) > 1:
@@ -163,7 +186,7 @@ class ImageLoadingMixin:
         )
         self.preview_info_label.setText(
             f"{self.view_model.source_name(image.source_path)}  ·  "
-            f"{image.data.shape[1]} × {image.data.shape[0]} px"
+            f"{image.data.shape[1]} × {image.data.shape[0]} px" + (f"  ·  {frames}" if frames else "")
         )
         self.candidate_table.setRowCount(0)
         self._clear_result_labels()
@@ -212,6 +235,13 @@ class ImageLoadingMixin:
         self.detector_label.setText(model_name)
 
     def _image_failed(self, path: str, exc: Exception) -> None:
+        self._loading_request = None
+        if self.image is not None:  # the row names the image that is still shown
+            self._show_frame_choice(self.image)
+        if isinstance(exc, CalibrationCancelledError):  # a sum of frames stopped with Cancel
+            self.job_status.set_state("cancelled", "Reading cancelled.", progress=0.0)
+            self._set_running(False)
+            return
         self.job_status.set_state("failed", "Failed to load image.", progress=0.0)
         if isinstance(exc, AmbiguousImageDatasetError):
             from PyQt5.QtWidgets import QInputDialog

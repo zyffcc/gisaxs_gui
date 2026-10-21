@@ -5,6 +5,11 @@ strip with dashed boundaries and red arrows at odd frames on the map (“Stages�
 count (Auto or chosen) and the frames of every stage under the controls, and — folded — what changes
 between stages, the typical frame of each, and the odd frames with the reason. The odd frames can be left
 out of a Batch Export.
+
+Frames are named by their number on the map's frame axis (the frame in its file, or its place in the list),
+not by the row. A map of fewer than ``STAGES_LEAST_FRAMES`` frames has no stages, and says so. The stages
+compare every x of the map, or — Options ▸ Stages compare — only the x range the map shows, and then follow
+its zoom.
 """
 
 from __future__ import annotations
@@ -13,14 +18,26 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 from src.gimap.app.presentation.components import RowGroups, stage_color
 from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.stage_text import axis_symbol, change_text, odd_reason, stages_summary
 
 from ...application import change_curve, odd_frame_refs, stages_of
+from ...application.series_stages import STAGES_LEAST_FRAMES
+from ..series_texts import AXIS_LABELS, NO_STAGES, STAGES_NEED, STAGES_NEED_EXPORT
+from ..excluded_frames import ExcludedFrames
 from ..views.series_view import CHANGE_TITLE
+
+ZOOM_SETTLES_MS = 700
+"""The stages of “the x range shown” are found again this long after the map's view last moved."""
+
+
+def frame_number(series, row: int) -> int:
+    """The frame of a map row as its frame axis counts it (the row from 1 for a map that has no numbers)."""
+    number = getattr(series, "number", None)
+    return int(number(row)) if callable(number) else int(row) + 1
 
 
 class SeriesStagesMixin:
@@ -30,6 +47,16 @@ class SeriesStagesMixin:
         self._series_stages = None
         self._send_to_compare: Optional[Callable[[object, str], None]] = None
         self._stage_overlay = RowGroups(self.series_map_view)
+        self._stages_x_range = None
+        """The x range the stages shown were found in (``None``: every x of the map)."""
+        self._stages_failure: Optional[str] = None
+        """Why the last search found no stages (English, as the application says it), while that holds."""
+        self._stages_zoom_timer = QTimer(self)
+        self._stages_zoom_timer.setSingleShot(True)
+        self._stages_zoom_timer.setInterval(ZOOM_SETTLES_MS)
+        self._stages_zoom_timer.timeout.connect(self._stages_follow_zoom)
+        self.series_map_view.view_box.sigXRangeChanged.connect(lambda *_args: self._stages_view_moved())
+        self.series_stages_range_combo.activated.connect(lambda _index: self._find_stages())
         self.series_stages_combo.activated.connect(self._stages_count_chosen)
         self.series_export_stages_action.triggered.connect(lambda: self.export_series_stages())
         self.series_compare_button.clicked.connect(self.send_series_to_compare)
@@ -42,33 +69,78 @@ class SeriesStagesMixin:
 
     def _clear_stages(self) -> None:
         self._series_stages = None
+        self._stages_failure = None
         self._stage_overlay.clear()
         self.series_stages_row.hide()
         self.series_stages_details.hide()
         self.series_compare_button.hide()
         self._change_item_tip()
 
+    def _stages_wanted_range(self) -> Optional[tuple[float, float]]:
+        """The x range the stages are to compare: what the map shows (Options ▸ Stages compare), or all of it."""
+        if self.series_stages_range_combo.currentData() != "shown":
+            return None
+        low, high = self.series_map_view.view_box.viewRange()[0]
+        return (float(low), float(high))
+
+    def _stages_view_moved(self) -> None:
+        if self.series_stages_range_combo.currentData() == "shown" and self._series_map is not None:
+            self._stages_zoom_timer.start()  # once the zoom has come to rest
+
+    def _stages_follow_zoom(self) -> None:
+        """The map shows another x range: the stages of “the x range shown” are found in it."""
+        wanted = self._stages_wanted_range()
+        if wanted is None or self._series_map is None or self.batch_running():
+            return
+        before = self._stages_x_range
+        if before is None or not np.allclose(before, wanted, rtol=1e-3, atol=0.0):
+            self._find_stages()
+
     def _find_stages(self) -> None:
         series = self._series_map
         self.series_compare_button.setVisible(series is not None and self._send_to_compare is not None)
-        if series is None or series.rows < 3:
+        self.series_export_stages_action.setEnabled(False)  # until there are stages to write
+        if series is None or series.rows < 2:
             return
         self.series_stages_row.show()
+        if series.rows < STAGES_LEAST_FRAMES:  # too short for stages: said, with no empty box beside it
+            self._series_stages = None
+            self._stage_overlay.clear()
+            self.series_stages_combo.hide()
+            self.series_stages_details.hide()
+            self.series_stages_label.setText(trf(STAGES_NEED, n=STAGES_LEAST_FRAMES, rows=series.rows))
+            return
+        self.series_stages_combo.show()
+        self._stages_failure = None
         self.series_stages_label.setText(tr("Looking for stages and odd frames …"))
+        x_range = self._stages_wanted_range()
         self.tasks.submit(
-            "series-stages", lambda: stages_of(series),
-            on_done=lambda stages: self._stages_found(series, stages),
-            on_error=lambda message, _trace: self._stages_failed(series, message),
+            "series-stages", lambda: stages_of(series, x_range),
+            on_done=lambda stages: self._stages_found(series, stages, x_range),
+            on_error=lambda message, _trace: self._stages_failed(series, message, x_range),
         )
 
-    def _stages_failed(self, series, message: str) -> None:
-        if series is self._series_map:
-            self.series_stages_label.setText(tr("No stages: {reason}").format(reason=tr(message)))
+    def _stages_failed(self, series, message: str, x_range=None) -> None:
+        """No stages in this map (or in the x range it shows): nothing of stages found before stays — not on
+        the map, not in the details, not after a switch of the language (``_stages_language``)."""
+        if series is not self._series_map:
+            return
+        self._clear_stages()
+        self._stages_failure, self._stages_x_range = message, x_range
+        self.series_stages_row.show()
+        self.series_compare_button.setVisible(self._send_to_compare is not None)
+        self.series_stages_label.setText(trf(NO_STAGES, reason=tr(message)))
+        self.series_stages_label.setToolTip("")
+        self.series_changes_label.setText("")
+        if (self.series_trace_combo.currentData() or "") == "change":
+            self._series_redraw_trace()
 
-    def _stages_found(self, series, stages) -> None:
+    def _stages_found(self, series, stages, x_range=None) -> None:
         if series is not self._series_map:  # a newer map replaced it meanwhile
             return
-        self._series_stages = stages
+        self._series_stages, self._stages_failure = stages, None
+        self._stages_x_range = x_range
+        self.series_export_stages_action.setEnabled(True)
         self.series_stages_combo.blockSignals(True)
         self.series_stages_combo.clear()
         self.series_stages_combo.addItem(tr("Auto ({count})").format(count=stages.suggested), None)
@@ -93,11 +165,13 @@ class SeriesStagesMixin:
             return
         ranges = stages.ranges()
         typical = stages.stage_representatives()
-        tips = [tr("Stage {n}: frames {a}–{b}; typical frame {t}").format(n=i + 1, a=a + 1, b=b + 1, t=typical[i] + 1)
+        tips = [tr("Stage {n}: frames {a}–{b}; typical frame {t}").format(
+                    n=i + 1, a=frame_number(series, a), b=frame_number(series, b), t=frame_number(series, typical[i]))
                 for i, (a, b) in enumerate(ranges)]
-        self._stage_overlay.show(stages.edges, (float(series.x[0]), float(series.x[-1])),
-                                 odd_rows=[frame.row for frame in stages.odd], tips=tips)
-        self.series_stages_label.setText(stages_summary(stages))
+        # Over the picture of the map (its even grid begins and ends half a step beyond the first and last x).
+        extent = getattr(self, "_series_extent", None) or (float(series.x[0]), float(series.x[-1]))
+        self._stage_overlay.show(stages.edges, extent, odd_rows=[frame.row for frame in stages.odd], tips=tips)
+        self.series_stages_label.setText(stages_summary(stages, lambda row: str(frame_number(series, row))))
         self.series_stages_label.setToolTip("\n".join(tips))
         self.series_changes_label.setText(self._stages_text(series, stages))
         self.series_skip_odd_check.setVisible(bool(stages.odd))
@@ -109,8 +183,13 @@ class SeriesStagesMixin:
 
     def _stages_language(self) -> None:
         """The stages' sentences again in the interface language (after a language switch)."""
-        stages = self._series_stages
-        if stages is None or self._series_map is None:
+        stages, series = self._series_stages, self._series_map
+        if series is not None and series.rows < STAGES_LEAST_FRAMES and not self.series_stages_row.isHidden():
+            self.series_stages_label.setText(trf(STAGES_NEED, n=STAGES_LEAST_FRAMES, rows=series.rows))
+        failure = getattr(self, "_stages_failure", None)
+        if stages is None and series is not None and failure:  # what failed, in the new language
+            self.series_stages_label.setText(trf(NO_STAGES, reason=tr(failure)))
+        if stages is None or series is None:
             return
         if self.series_stages_combo.count() and self.series_stages_combo.itemData(0) is None:
             self.series_stages_combo.setItemText(0, trf("Auto ({count})", count=stages.suggested))
@@ -123,17 +202,19 @@ class SeriesStagesMixin:
         typical = stages.stage_representatives()
         for index, (first, last) in enumerate(stages.ranges()):
             lines.append(tr("Stage {n}: frames {a}–{b} (typical: frame {t})").format(
-                n=index + 1, a=first + 1, b=last + 1, t=typical[index] + 1))
+                n=index + 1, a=frame_number(series, first), b=frame_number(series, last),
+                t=frame_number(series, typical[index])))
         lines += [change_text(change, axis) for change in stages.stage_changes()]
         if stages.half_row is not None and stages.count > 1:
             lines.append(tr("Half of the change by frame {half}, 90 % by frame {ninety}.").format(
-                half=stages.half_row + 1, ninety="—" if stages.ninety_row is None else stages.ninety_row + 1))
+                half=frame_number(series, stages.half_row),
+                ninety="—" if stages.ninety_row is None else frame_number(series, stages.ninety_row)))
         span = f"{stages.q.min():.4g}–{stages.q.max():.4g}"
         lines.append(tr("Compared: the shape of log I over {span} ({points} points); the overall level separately.").format(
             span=span, points=stages.q.size))
         for frame in stages.odd:
             lines.append(tr("Odd frame {n} ({label}): {why}").format(
-                n=frame.row + 1, label=series.labels[frame.row], why=odd_reason(frame, axis)))
+                n=frame_number(series, frame.row), label=series.labels[frame.row], why=odd_reason(frame, axis)))
         if any(frame.narrow for frame in stages.odd):
             lines.append(trf("A difference near one {axis} in a few points is the detector: mask it in the Mask step.",
                              axis=axis))
@@ -141,14 +222,17 @@ class SeriesStagesMixin:
 
     def _draw_change_trace(self) -> bool:
         """The lower-right plot as “Change along the series”: the first component, one colour per stage."""
-        stages = self._series_stages
+        stages, series = self._series_stages, self._series_map
+        # The frames as the map's frame axis counts them (numbers, or seconds).
+        timed = series is not None and stages is not None and series.rows == stages.rows
+        frame_axis = self._series_axis_label(series) if timed else AXIS_LABELS["frame"]
         if stages is None:  # the plot's empty text says when it fills (``views/series_view.py``)
             self.series_trace_plot.set_title(CHANGE_TITLE)
-            self.series_trace_plot.set_labels("frame", "component 1")
+            self.series_trace_plot.set_labels(frame_axis, "component 1")
             self.series_trace_plot.set_curves([])
             return True
         values = change_curve(stages)
-        frames = np.arange(1, stages.rows + 1, dtype=float)
+        frames = self._series_axis_values(series) if timed else np.arange(1, stages.rows + 1, dtype=float)
         odd = stages.odd_rows
         curves, colors, markers = [], [], []
         for index, (first, last) in enumerate(stages.ranges(), start=1):
@@ -166,7 +250,9 @@ class SeriesStagesMixin:
         share = change_share(stages)
         self.series_trace_plot.set_title(CHANGE_TITLE)
         self.series_trace_plot.title_label.setToolTip(trf("Main component: {share:.0f} % of the change", share=share))
-        self.series_trace_plot.set_labels("frame", f"component 1 ({share:.0f} %)")
+        self.series_trace_plot.set_labels(frame_axis, f"component 1 ({share:.0f} %)")
+        if timed:
+            self._series_whole_frames(frames)
         self.series_trace_plot.set_curves(curves, colors, markers=markers)
         return True
 
@@ -183,6 +269,12 @@ class SeriesStagesMixin:
 
     def export_series_stages(self, path: Optional[Path] = None) -> Optional[Path]:
         series, stages = self._series_map, self._series_stages
+        if series is not None and series.rows < STAGES_LEAST_FRAMES:  # a short map never has stages
+            self._status(trf(STAGES_NEED_EXPORT, n=STAGES_LEAST_FRAMES, rows=series.rows), "warning")
+            return None
+        if series is not None and stages is None and self._stages_failure:  # why there are none
+            self._status(trf(NO_STAGES, reason=tr(self._stages_failure)), "warning")
+            return None
         if series is None or stages is None:
             self._status(tr("The stages are found once a map is built."), "warning")
             return None
@@ -204,8 +296,21 @@ class SeriesStagesMixin:
         odd = odd_frame_refs(self._series_map, self._series_stages)
         if not odd:
             return requests
-        kept = [request for request in requests
-                if (str(request.path).casefold(), int(request.frame_index)) not in odd]
+        indices = getattr(requests, "indices", None)
+        if indices is not None:
+            excluded = []
+            for path, frame_index in odd:
+                group = self.view_model.batch_group_index(path, frame_index)
+                if group is None or group not in indices:
+                    continue
+                index = indices.index(group)
+                request = requests[index]
+                if (str(request.path).casefold(), int(request.frame_index)) in odd:
+                    excluded.append(index)
+            kept = ExcludedFrames(requests, excluded)
+        else:
+            kept = [request for request in requests
+                    if (str(request.path).casefold(), int(request.frame_index)) not in odd]
         if len(kept) < len(requests):
             self._status(tr("{n} odd frames left out of the Batch Export (Series ▸ Stages).").format(
                 n=len(requests) - len(kept)))
@@ -253,4 +358,4 @@ def series_name(files: list) -> str:
     return name.strip("_-. ") or (files[0].parent.name if files else "series")
 
 
-__all__ = ["SeriesStagesMixin", "change_share", "series_name"]
+__all__ = ["SeriesStagesMixin", "ZOOM_SETTLES_MS", "change_share", "frame_number", "series_name"]

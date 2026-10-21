@@ -13,9 +13,9 @@ from pathlib import Path
 import numpy as np
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
+from PyQt5.QtWidgets import QFileDialog, QHeaderView, QTableWidgetItem
 
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application.single_fit import (
     INFO,
@@ -24,7 +24,8 @@ from ...application.single_fit import (
     model_to_dict,
     parameter_text,
 )
-from ..views.fit_steps_view import fit_to_rows
+from ..views.step_widgets import fit_to_rows
+from .fit1d_review import note_text
 from .session import path_name
 
 
@@ -149,6 +150,10 @@ def value_cells(key: str, value: float, error, free: bool) -> tuple[str, str]:
     return f"{number} {unit}".strip(), f"± {err}" if err else ("" if free else tr("fixed"))
 
 
+CORRELATED_SHOWN = 2
+MORE_PAIRS = "and {count} more (hover)"
+
+
 class FitResultsMixin:
     """Needs the page's widgets, ``session``, ``_status``, ``_log`` and ``_data``."""
 
@@ -177,8 +182,14 @@ class FitResultsMixin:
             chi=chi, value=f"{result.chi2_reduced:.3g}", points=result.points, free=result.free, state=state)
 
     def render_results(self) -> None:
-        if self._render_fit1d_results():
-            return
+        if not self._render_fit1d_results():
+            self._render_model_results()
+        self.render_result_actions()  # next steps, what the fit did by itself, the folds (result_actions.py)
+
+    def _render_model_results(self) -> None:
+        header = self.parameters_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)  # a long name is cut short (its tooltip has it whole)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.parameters_table.setHorizontalHeaderLabels(["", tr("value"), "±"])
         session = self.session
         result = session.result
@@ -189,19 +200,23 @@ class FitResultsMixin:
             self.quality_label.setText(tr("{count} solutions below; the best is in Model. Fit (Refine) gives its quality "
                                           "and the error of every value.").format(count=len(session.solutions)))
             self.warnings_label.setText("\n".join(search_note))
+            self.warnings_label.setToolTip("")
             stale = tr("Changed after the fit: Fit again") + " · " if old_search else ""
             self.step_intro["results"].setText(
                 stale + tr("{count} solutions to compare.").format(count=len(session.solutions)))
         elif result is None:
             self.quality_label.setText(tr("No fit yet: Fit shows here how good it is and the error of every value."))
             self.warnings_label.setText("")
+            self.warnings_label.setToolTip("")
             self.step_intro["results"].setText(tr("After a fit: its quality, the errors and the solutions to compare."))
         else:
             self.quality_label.setText(tr(
                 "{quality}\nlog RMSE {rmse} · {evaluations} evaluations · {seconds} s · {method}"
             ).format(quality=self._quality_text(result), rmse=f"{result.log_rmse:.3g}", evaluations=result.evaluations,
                      seconds=f"{result.seconds:.1f}", method=tr("Search the ranges") if result.method == "global" else tr("Refine")))
+            self._correlated_tip = ""
             self.warnings_label.setText("\n".join(self._warnings(result) + search_note))
+            self.warnings_label.setToolTip(self._correlated_tip)
             stale = "" if session.result_is_current() else tr("Changed after the fit: Fit again") + " · "
             self.step_intro["results"].setText(stale + self._quality_text(result) + ".")
         self._fill_parameters(result if session.result_is_current() else None)
@@ -214,14 +229,22 @@ class FitResultsMixin:
         if not self.session.result_selection_is_current():
             lines.append("⚠ " + tr("The fitting range or the left-out points changed after this fit: "
                                    "Fit again for its quality and errors."))
-        for path in result.at_bounds:
-            lines.append("⚠ " + tr("{name} stopped at a bound of its range: widen the range or fix it.").format(
-                name=self._path_name(path)))
+        notes = self._fit_notes if self._fit_notes and self._fit_notes.get("result") is result else None
+        if notes is not None:  # what the fit could not resolve by itself
+            lines.extend("⚠ " + note_text(note.to_dict(), self._path_name) for note in notes["remaining"])
+        else:
+            for path in result.at_bounds:
+                lines.append("⚠ " + tr("{name} stopped at a bound of its range: widen the range or fix it.").format(
+                    name=self._path_name(path)))
         if result.correlated:
-            pairs = "; ".join(f"{self._path_name(first)} ↔ {self._path_name(second)} ({rho:+.2f})"
-                              for first, second, rho in result.correlated)
+            pairs = [f"{self._path_name(first)} ↔ {self._path_name(second)} ({rho:+.2f})"
+                     for first, second, rho in result.correlated]
+            shown = "; ".join(pairs[:CORRELATED_SHOWN])
+            if len(pairs) > CORRELATED_SHOWN:  # the rest in the tooltip: a long list hides everything else
+                shown += " " + trf(MORE_PAIRS, count=len(pairs) - CORRELATED_SHOWN)
             lines.append("⚠ " + tr("Strongly correlated, so the data do not separate them (fix one, or read their "
-                                   "errors as a range): {pairs}.").format(pairs=pairs))
+                                   "errors as a range): {pairs}.").format(pairs=shown))
+            self._correlated_tip = "\n".join(pairs)
         if result.weighting == "sigma" and result.chi2_reduced > 3 and not result.stopped:
             lines.append("⚠ " + tr("χ²ᵣ well above 1: the model misses features of the curve, or σ is underestimated."))
         return lines
@@ -238,6 +261,8 @@ class FitResultsMixin:
             full = path_name(self.session.model, path, full=True)  # “1·Sphere R”, also when shown as “R”
             rows.append(((self._path_name(path), full), *value_cells(path[1], parameter.value, error, parameter.free)))
         self.parameters_table.setRowCount(len(rows))
+        self._row_paths = [path for path, parameter in self.session.model.parameters()
+                           if not (path[0] == "globals" and not parameter.free and parameter.value == 0)]
         for line, ((name, full), *cells) in enumerate(rows):
             self.parameters_table.setItem(line, 0, _item(name, full))
             for column, text in enumerate(cells, start=1):

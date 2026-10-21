@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 
+from .batch_preview import FitCurvePreview, FrameFitPreview, failed_preview, model_preview, peak_preview
+
 from src.gimap.shared.geometry import DetectorGeometry, InstrumentProfile, scattering_vectors
 
 from ..domain import (
@@ -63,7 +65,13 @@ from .batch_fit import (
     FIT_MODEL,
     FIT_NONE,
     FIT_PEAKS,
+    HALVES_WORDS,
     MODEL_COMPONENTS,
+    NO_CURVE,
+    NO_FITTER,
+    NO_INTENSITY,
+    NO_SOLUTION,
+    NUMBER_COLUMN,
     START_FIRST,
     START_FRESH,
     START_PREVIOUS,
@@ -75,6 +83,9 @@ from .batch_fit import (
     fit_model_curve,
     fit_peak_inputs,
     fit_peaks,
+    model_fit_curve,
+    model_fit_frame,
+    model_fit_record,
     model_row,
     peak_inputs,
     peak_row,
@@ -88,6 +99,7 @@ from .batch_job import (
     FrameJob,
     FrameOutcome,
     FrameTools,
+    batch_cost,
     frames_at_once,
     run_frame_job,
     write_frame_images,
@@ -96,6 +108,7 @@ from .batch_export import (
     BATCH_TITLE,
     SCALE_AUTO,
     SCALE_SCREEN,
+    FIT_HALVES,
     FOLDERS,
     FRAME_FORMATS,
     IMAGE_FORMATS,
@@ -106,9 +119,26 @@ from .batch_export import (
     chosen_curves,
     export_frame,
     fit_curve_rows,
+    fit_halves,
     output_names,
-    readme_text,
 )
+from .batch_folder import (
+    NO_PERMISSION,
+    NO_SUCH_PLACE,
+    NOT_A_FOLDER,
+    RECORD_FORMAT,
+    EarlierExport,
+    cannot_write,
+    earlier_export,
+    folder_name,
+    may_be_written,
+    new_subfolder,
+    other_records,
+    remove_export,
+)
+from .batch_report import BatchRun, batch_record, is_gisaxs, readme_text, written_kinds
+from .batch_tables import common_x
+from .export_record import frame_cuts, frame_name, frame_name_of, frame_stem, source_files
 from .cut_regions import (
     CUT_SET_FORMAT,
     PlaceRegions,
@@ -117,7 +147,17 @@ from .cut_regions import (
     regions_from_cut_set,
     regions_from_dicts,
 )
-from .ports import CurveWriter, FigureWriter, FrameSource, InstrumentProfileStore
+from .ports import (
+    CurveWriter,
+    FigureWriter,
+    FrameSource,
+    InstrumentProfileStore,
+    frame_label,
+    module_files,
+    parts_missing,
+    source_name,
+    source_stem,
+)
 from .series import CorrectSeriesFrame
 from .settings_file import SETTINGS_FORMAT, AnalyzeSettings, settings_from_record, settings_record
 from .series_map import SERIES_TITLE, build_series_map, export_series_map, export_series_track, row_label, series_row
@@ -167,17 +207,57 @@ def q_at_position(geometry: DetectorGeometry, x_px: float, y_px: float) -> dict[
 
 
 __all__ = [
+    "FitCurvePreview", "FrameFitPreview", "failed_preview", "model_preview", "peak_preview",
+    "BatchRun",
+    "EarlierExport",
+    "NOT_A_FOLDER",
+    "NO_PERMISSION",
+    "NO_SUCH_PLACE",
+    "NUMBER_COLUMN",
+    "RECORD_FORMAT",
+    "batch_cost",
+    "batch_record",
+    "cannot_write",
+    "common_x",
+    "earlier_export",
+    "folder_name",
+    "frame_cuts",
+    "frame_label",
+    "frame_name",
+    "frame_name_of",
+    "frame_stem",
+    "is_gisaxs",
+    "may_be_written",
+    "module_files",
+    "new_subfolder",
+    "other_records",
+    "parts_missing",
+    "remove_export",
+    "source_files",
+    "source_name",
+    "source_stem",
+    "written_kinds",
+    "FIT_HALVES",
     "FOLDERS",
     "FRAME_FORMATS",
     "IMAGE_FORMATS",
     "TEXT_FORMATS",
     "fit_curve_rows",
+    "fit_halves",
     "output_names",
     "readme_text",
     "FIT_MODEL",
     "FIT_NONE",
     "FIT_PEAKS",
+    "HALVES_WORDS",
     "MODEL_COMPONENTS",
+    "NO_CURVE",
+    "NO_FITTER",
+    "NO_INTENSITY",
+    "NO_SOLUTION",
+    "model_fit_curve",
+    "model_fit_frame",
+    "model_fit_record",
     "START_FIRST",
     "START_FRESH",
     "START_PREVIOUS",

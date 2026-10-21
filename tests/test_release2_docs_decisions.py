@@ -61,7 +61,11 @@ def _part(text: str, heading: str, level: str = "## ") -> str:
 
 def test_the_documents_say_how_to_update_a_source_checkout() -> None:
     command = r"powershell -ExecutionPolicy Bypass -File tools\update_source.ps1"
-    for path in (README, MANUAL, CHANGELOG):
+    manual = _flat(MANUAL)  # the user manual gives the command and points to README.md for the rest
+    assert command in manual and "`-DryRun`" in manual
+    assert "`README.md`, section *Updating a source checkout*" in manual
+    assert re.search(r"history of `main`[^.]*rewritten on that day", manual) and "do not run `git pull`" in manual
+    for path in (README, CHANGELOG):
         text = _flat(path)
         assert command in text, path.name
         for plain in ("git fetch origin", "git reset --hard origin/main"):
@@ -77,7 +81,7 @@ def test_the_documents_say_how_to_update_a_source_checkout() -> None:
         assert re.search(r"[Dd]o not merge or push (?:`my-work`|that branch)", after_reset), path.name
         assert re.search(r"history of `main`[^.]*rewritten on 2026-10-13", text), path.name
         assert "Do not merge" in text, path.name
-    for path in (README, MANUAL):
+    for path in (README,):
         text = _flat(path)
         # The first update that keeps everything: the script alone is taken out of origin, then it runs.
         assert "`git checkout origin/main -- tools/update_source.ps1`" in text, path.name
@@ -124,7 +128,7 @@ def test_the_update_script_does_what_the_documents_say() -> None:
             re.search(r"git stash pop\s+tries again and marks the conflicts in the files", script)),
     }
     assert all(said.values()), [what for what, true in said.items() if not true]
-    for path in (README, MANUAL):
+    for path in (README,):  # the manual points to README.md for the details of the script
         text = _flat(path)
         for words in ("`backup/<date>-<time>-<commit>`", "`git stash`", "`-DryRun`", "stops before it changes anything",
                       "how to go back to what you had", "how to delete the backup once things look right",
@@ -312,7 +316,7 @@ def test_the_documents_say_calibration_and_analyze_show_the_same_beam_centre() -
     tools = " ".join(_part(changelog, "### Tools", "### ").split())
     assert "same pixel coordinates as Analyze" in tools and "first pixel is at 0.5" in tools
 
-    section = " ".join(_part(_text(MANUAL), "## 9. Geometry Calibration Tool").split())
+    section = " ".join(_part(_text(MANUAL), "## 4. Geometry and calibration").split())
     for stale in ("in this window counts pixel centres from 0", "needs 0.5 px added", "Analyze counts from 0.5"):
         assert stale not in section, stale
     assert "same pixel coordinates as in Analyze" in section and "(0.5, 0.5)" in section
@@ -366,7 +370,7 @@ def test_the_documents_say_the_xrr_window_shows_the_pixels_of_analyze() -> None:
                  "keep their numbers (pixel centres counted from 0)"):
         assert said in fixed, said
 
-    section = " ".join(_part(_text(MANUAL), "## 11. XRR Series Extractor").split())
+    section = " ".join(_part(_text(MANUAL), "### 8.2 XRR Series Extractor", "### ").split())
     for stale in ("still counts pixel centres from 0", "subtract 0.5 px", "half a pixel to the right of and below the point"):
         assert stale not in section, stale
     for said in ("same pixel coordinates as in Analyze and Geometry Calibration", "(0.5, 0.5)",
@@ -444,13 +448,14 @@ def test_the_xrr_window_shows_what_the_documents_say() -> None:
 
 
 def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: Path) -> None:
-    """A made-up NeXus file whose header points at one marked pixel, read by the loader and by the window.
+    """A made-up NeXus file (not written by the Lambda server) whose header points at one marked pixel.
 
-    The loader turns the stored image (transpose and flip) and turns the header centre with it for Analyze:
-    that centre lies on the marked pixel. The XRR window takes the two header numbers as column and row of
-    the turned frame, marks them "from file" and lets them replace the centre of the last calibration: a
-    one-pixel ROI there reads another pixel. When the window turns the header centre too, this test fails:
-    remove the limitation from CHANGELOG.md, docs/User_Manual.md (section 11) and docs/ui/workspaces/xrr.md.
+    Since NeXus files are read by content, only files of the Lambda server are turned (transpose and flip) when
+    they are loaded; the documents say the limitation concerns those. A file of any other writer is read as
+    stored, so the XRR window, which takes the two header numbers as column and row of the frame it shows,
+    marks them "from file", lets them replace the centre of the last calibration, and reads the marked pixel.
+    When this fails, the reading of other NeXus files changed: check the limitation in CHANGELOG.md,
+    docs/User_Manual.md (section 8.2) and docs/ui/workspaces/xrr.md.
     """
     from types import SimpleNamespace
 
@@ -473,7 +478,7 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
     from src.gimap.shared.detector_io import load_detector_image
 
     limitations = " ".join(_part(_text(CHANGELOG), "### Known limitations", "### ").split())
-    section = " ".join(_part(_text(MANUAL), "## 11. XRR Series Extractor").split())
+    section = " ".join(_part(_text(MANUAL), "### 8.2 XRR Series Extractor", "### ").split())
     for text in (limitations, section):
         assert "without the turn (transpose and flip) the frame gets when it is loaded" in text
         assert "*from file*" in text and "replaces the centre of the last calibration" in text
@@ -492,11 +497,11 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
         detector.create_dataset("beam_center_x", data=along_fast)
         detector.create_dataset("beam_center_y", data=along_slow)
 
-    # Analyze: the header centre, turned as the frame is turned, lies on the marked pixel (at its corner).
+    # Analyze: a file not written by the Lambda server is read as stored; the header centre lies on the marked pixel.
     loaded = load_detector_image(path)
     frame = np.asarray(loaded.data)
     row, column = (int(index) for index in np.unravel_index(int(np.nanargmax(frame)), frame.shape))
-    assert frame.shape == (60, 40) and frame[row, column] == marked
+    assert frame.shape == (40, 60) and frame[row, column] == marked and (row, column) == (31, 12)
     header_x, header_y = loaded.metadata["header_beam_center"]
     assert abs(header_x - (column + 0.5)) <= 0.5 and abs(header_y - (row + 0.5)) <= 0.5
 
@@ -506,7 +511,7 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
                      "beam_center_x": 20.0, "beam_center_y": 25.0},
         "beam": {"energy_kev": 12.0},
         "system": {"geometry_calibration": {"source_image": "standard.cbf", "timestamp": "2026-10-13T08:00:00+00:00",
-                                            "image_shape": [60, 40], "detector": "made up"}},
+                                            "image_shape": [40, 60], "detector": "made up"}},
     }
     QApplication.instance() or QApplication([])
     context = AppContext(
@@ -528,11 +533,10 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
             "remove the limitation from CHANGELOG.md, docs/User_Manual.md (section 11) and "
             "docs/ui/workspaces/xrr.md"
         )
-        # "so the centre can lie away from the direct beam": a one-pixel ROI there reads another pixel, far away.
+        # Read as stored, the header's column and row are those of the frame shown: a one-pixel ROI reads the mark.
         geometry = window._geometry()
         read = extract_circular_roi(frame, None, geometry.beam_center_x_px, geometry.beam_center_y_px, 0, "sum")
-        assert read.valid_pixels == 1 and read.intensity != marked
-        assert abs(geometry.beam_center_x_px - column) > 10 and abs(geometry.beam_center_y_px - row) > 10
+        assert read.valid_pixels == 1 and read.intensity == marked
     finally:
         for name in ("_inspect_thread", "_extract_thread"):
             thread = getattr(window, name, None)
@@ -548,7 +552,7 @@ def test_the_nexus_header_limitation_of_the_xrr_window_is_still_true(tmp_path: P
 
 def test_the_auto_detect_limitation_is_in_the_documents() -> None:
     limitations = " ".join(_part(_text(CHANGELOG), "### Known limitations", "### ").split())
-    section = " ".join(_part(_text(MANUAL), "## 9. Geometry Calibration Tool").split())
+    section = " ".join(_part(_text(MANUAL), "## 4. Geometry and calibration").split())
     for text in (limitations, section):
         assert "Auto Detect" in text
         assert "Choose the standard yourself when you know it" in text
@@ -584,7 +588,7 @@ def test_the_names_the_manual_gives_select_a_standard() -> None:
     """Step 4 of the manual: one standard named in the path is selected, several give Auto Detect."""
     from src.gimap.features.calibration.domain import detect_standard_keys
 
-    section = _part(_text(MANUAL), "## 9. Geometry Calibration Tool")
+    section = _part(_text(MANUAL), "## 4. Geometry and calibration")
     for name, key in (("AgBh", "agbh"), ("LaB6", "lab6"), ("CeO2", "ceo2")):
         assert f"`{name}`" in section
         assert detect_standard_keys(f"calibration/{name}_00001.tif") == (key,)
@@ -626,7 +630,7 @@ def test_the_estimated_distance_is_filled_in_as_the_documents_say(tmp_path: Path
         UserStore,
     )
 
-    section = " ".join(_part(_text(MANUAL), "## 9. Geometry Calibration Tool").split())
+    section = " ".join(_part(_text(MANUAL), "## 4. Geometry and calibration").split())
     for said in ("It is never filled with a built-in value: on a new installation it stays on *Optional*",
                  "also when you had typed another value or cleared the field", "with neither, a value you typed stays",
                  "a NeXus file can; the distance in a CBF or EDF header is not used"):
@@ -793,7 +797,7 @@ def test_the_documents_say_what_each_network_does_with_a_changed_model_file(tmp_
     dialog = _text(ROOT / "src" / "gimap" / "features" / "fitting" / "presentation" / "workflow_v5_dialog.py")
     assert 'trf("Reason: {reason}", reason=r["fallback_reason"])' in dialog
 
-    section = " ".join(_part(_part(_text(MANUAL), "## 13. Troubleshooting"), "### 1D Predict Does Not Start", "### ").split())
+    section = " ".join(_part(_part(_text(MANUAL), "## 13. Troubleshooting"), "### 13.3 1D Predict Does Not Start", "### ").split())
     for said in ("tools\\update_source.ps1", "converted line endings", "`git status` does not show it",
                  "git checkout -- modules/Fitting_1D_Model/Workflow_v5", "also when there is nothing new to download"):
         assert said in section, said
@@ -958,9 +962,9 @@ def test_version_0_1_0_is_still_called_a_pre_release() -> None:
     assert "version is 0.1.0, a pre-release" in _text(README)
     assert re.search(r"^## 0\.1\.0 — \d{4}-\d{2}-\d{2} \(pre-release\)$", _text(CHANGELOG), flags=re.M)
     manual = _text(MANUAL)
-    assert "version 0.1.0, a pre-release" in _part(manual, "## 1. Introduction")
-    assert "**GIMaP 0.1.0** (pre-release)" in _part(manual, "## 15. Version and Contact")
-    assert "Version 0.1.0 is a pre-release" in _part(manual, "## 14. FAQ")
+    assert "version 0.1.0, a pre-release" in _part(manual, "# GIMaP User Manual")
+    assert "**GIMaP 0.1.0** (pre-release)" in _part(manual, "### 13.12 Version and Contact", "### ")
+    assert "Version 0.1.0 is a pre-release" in _part(manual, "### 13.11 FAQ", "### ")
     about = _text(ROOT / "src" / "gimap" / "app" / "presentation" / "menu_bar.py")
     assert "(Pre-release)" in about
     assert "0.1.0 is a pre-release" in _text(DEVELOPMENT)

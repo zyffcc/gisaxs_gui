@@ -142,8 +142,9 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
             "Choose the frame of a series (NeXus scans and in-situ runs have many: status shows "
             "'frames'): frame is 1-based, negative counts from the end (-1 = the last frame); sum "
             "sums that many consecutive frames from it for better statistics (1 = no summing), never "
-            "past the last frame. Final state of an in-situ run: frame -1 with sum 10 (the last ten); "
-            "start: frame 1. Sum when single frames are noisy.",
+            "past the last frame. Final state of an in-situ run: frame -1 with a sum of the last fifth of the "
+            "series, at most 10 (what the baseline takes); start: frame 1 with the same sum. Sum when single "
+            "frames are noisy.",
             _object({"frame": {"type": "integer"}, "sum": {"type": ["integer", "null"]}}, ("frame",)),
         ),
         ToolSpec(
@@ -183,7 +184,8 @@ def tool_specs(*, allow_images: bool) -> tuple[ToolSpec, ...]:
         ToolSpec(
             "set_halves",
             "GISAXS: which halves of I(qy) the curve for fitting uses: mean (averaged where both exist, the "
-            "longer half beyond), negative, positive, or both_abs (both kept on |qy|, two colours).",
+            "longer half beyond), negative, positive, or both_abs (both shown on |qy| in two colours to compare "
+            "them; a fit then takes the better-covered half, never both together).",
             _object({"side": {"type": "string", "enum": HALVES}}, ("side",)),
         ),
         ToolSpec(

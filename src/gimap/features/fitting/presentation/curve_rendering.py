@@ -247,7 +247,10 @@ def follow_plot_theme(owner, figure, canvas):
     return retheme
 
 
-CJK_FONTS = ("Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "SimHei", "PingFang SC", "WenQuanYi Zen Hei")
+CJK_FONTS = ("Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "SimHei", "PingFang SC", "Hiragino Sans GB",
+             "PingFang HK", "Heiti TC", "Songti SC", "Arial Unicode MS", "WenQuanYi Zen Hei")
+"""Matplotlib knows a font collection by its first face: on macOS “PingFang HK”, never “PingFang SC”, so the
+fonts every Mac has are named too (as ``shared/figures.CJK_FONTS``)."""
 
 
 def text_font_family() -> list:

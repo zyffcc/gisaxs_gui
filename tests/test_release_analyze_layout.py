@@ -280,7 +280,9 @@ def test_the_series_tab_scrolls_in_a_laptop_window_and_keeps_its_map_and_plots_u
         assert bar.maximum() == 0 and not bar.isVisible()
         assert content.height() == view.height() and content.width() == view.width()
         assert page.series_map_view.graphics.height() > SERIES_MAP_HEIGHT
-        assert not page.series_plots.stacked() and page.series_plots.height() >= SERIES_PLOTS_HEIGHT[0]
+        assert page.series_plots.stacked() and page.series_plots.height() >= 2 * SERIES_PLOTS_HEIGHT[1]
+        assert page.series_trace_plot.y() > page.series_profile_plot.y()
+        assert page.series_trace_plot.width() == page.series_profile_plot.width()
 
         # Back in the small window: the same sizes as before (the content does not keep the large window's).
         _size(host, page, 1072, 690)

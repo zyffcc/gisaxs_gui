@@ -54,7 +54,15 @@ class FakeFrames:
         return SimpleNamespace(data=data, mask=None, detector_name="Test", metadata={})
 
     def frame_count(self, path) -> int:
+        if Path(path).name in self.unreadable:
+            raise OSError(f"{Path(path).name} is being written")
         return len(self.frames[Path(path).name])
+
+    unreadable: frozenset = frozenset()
+    """Names of files that cannot be read now (their writer holds them)."""
+
+    def describe(self, path):
+        return None  # arrays in memory: no NeXus layout to describe
 
     def expand(self, paths):
         return [Path(path) for path in paths]
@@ -211,6 +219,78 @@ def test_batch_covers_every_frame_and_watching_waits_for_complete_groups(tmp_pat
     assert [(r.path.name, [p.name for p, _ in r.summed_frames]) for r in ready] == [("f0.cbf", ["f1.cbf"])]
     ready = model.watch_requests([tmp_path / "f3.cbf"])
     assert [(r.path.name, [p.name for p, _ in r.summed_frames]) for r in ready] == [("f2.cbf", ["f3.cbf"])]
+
+
+def test_the_frame_count_is_asked_again_and_a_failed_read_is_never_kept(tmp_path: Path) -> None:
+    frames = FakeFrames({"run.nxs": [_symmetric_frame()] * 6, "late.nxs": [_symmetric_frame()] * 4})
+    model = _view_model(frames)
+    run, late = tmp_path / "run.nxs", tmp_path / "late.nxs"
+    frames.unreadable = frozenset({"late.nxs"})  # held by its writer when it is listed
+    model.add_paths([run, late])
+    assert model.frame_count(run) == 6 and model.frame_count(late) == 1 and model.listed_frames() == 7
+    assert str(late).casefold() not in model._frame_counts  # one row for now, but no count was remembered
+    frames.unreadable = frozenset()
+    assert model.frame_count(late) == 4 and len(model.batch_requests()) == 10  # read as soon as it can be
+
+    frames.frames["run.nxs"] = [_symmetric_frame()] * 12  # the series grew inside its file
+    assert model.frame_count(run) == 12 and model.listed_frames() == 16
+    frames.unreadable = frozenset({"run.nxs"})  # its writer has it again: the last count read stays
+    assert model.frame_count(run) == 12 and model.known_frame_count(run) == 12 and model.listed_frames() == 16
+    assert [r.frame_index for r in model.batch_requests() if r.path == run] == list(range(12))
+
+
+def test_a_file_whose_count_fails_in_an_unforeseen_way_is_listed_as_one_frame(tmp_path: Path) -> None:
+    """Whatever a frame source raises for a file it cannot read, the listing goes on and the list stays whole."""
+
+    class Damaged(FakeFrames):
+        def frame_count(self, path) -> int:
+            if Path(path).name == "damaged.nxs":
+                raise RuntimeError("Link iteration failed (bad local heap signature)")
+            return super().frame_count(path)
+
+    frames = Damaged({"a.nxs": [_symmetric_frame()] * 3, "damaged.nxs": [_symmetric_frame()], "z.nxs": [_symmetric_frame()] * 2})
+    model = _view_model(frames)
+    added = model.add_paths([tmp_path / "a.nxs", tmp_path / "damaged.nxs", tmp_path / "z.nxs"])
+    assert [path.name for path in added] == ["a.nxs", "damaged.nxs", "z.nxs"] == [path.name for path in model.state.files]
+    assert model.listed_frames() == 6 and model.frame_count(tmp_path / "damaged.nxs") == 1
+    assert model.whole_frames(tmp_path / "damaged.nxs") == 0 and len(model.batch_requests()) == 6
+
+
+def test_a_frame_in_memory_is_read_again_only_when_its_file_changed(tmp_path: Path) -> None:
+    frames = FakeFrames({"a.cbf": [_symmetric_frame()]})
+    model = _view_model(frames)
+    path = tmp_path / "a.cbf"
+    path.write_bytes(b"one")
+    model.add_paths([path])
+    model.select(0)
+    model.accept(model.analyze(model.request()))
+    assert frames.loads == [("a.cbf", 0)] and not model.shown_changed()
+    model.accept(model.analyze(model.request()))
+    assert frames.loads == [("a.cbf", 0)]  # the file is as it was: the frame in memory is used
+    path.write_bytes(b"written again")
+    assert model.shown_changed()
+    model.accept(model.analyze(model.request()))
+    assert frames.loads == [("a.cbf", 0)] * 2 and not model.shown_changed()  # read again, once
+    model.accept(model.analyze(model.request()))
+    assert frames.loads == [("a.cbf", 0)] * 2
+
+
+def test_a_frame_kept_in_memory_does_not_bring_back_an_old_count(tmp_path: Path) -> None:
+    frames = FakeFrames({"run.nxs": [_symmetric_frame()] * 3})
+    model = _view_model(frames)
+    run = tmp_path / "run.nxs"
+    model.add_paths([run])
+    model.select(0)
+    first = model.analyze(model.request())
+    model.accept(first)
+    frames.frames["run.nxs"] = [_symmetric_frame()] * 8
+    loads = len(frames.loads)
+    again = model.analyze(model.request())  # the same frame: reused, with the count of when it was read
+    model.accept(again)
+    assert again.frame_count == 3 and len(frames.loads) == loads
+    # Accepting it asked the source: the totals that must not touch the disk know the eight frames already.
+    assert model.known_frame_count(run) == 8 and model.listed_frames() == 8 and model._frame_counts[str(run).casefold()] == 8
+    assert model.frame_count(run) == 8
 
 
 def test_gap_guard_is_remembered_and_survives_resetting_corrections() -> None:

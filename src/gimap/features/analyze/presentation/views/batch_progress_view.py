@@ -3,13 +3,15 @@
 While a batch runs: what is being reduced now, a bar, how many are done, the speed and the time
 left, the latest fit, **Pause** and **Stop**, and how many frames are reduced at once (it can be
 lowered while running). The frames done appear in the Series tab as they come (the map grows, the
-newest frame's curve is drawn below it). When it ends: a summary, **Open Folder** and **Close**.
+newest frame's curve is drawn below it). When it ends: a title that says how (done, stopped, frames
+failed), a summary, every frame that failed with its reason, what was written, **Open Folder** and **Close**.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -94,6 +96,13 @@ class BatchProgressPanel(QFrame):
         self.fit_label.setWordWrap(True)
         self.fit_label.hide()
         layout.addWidget(self.fit_label)
+        self.failed_label = QLabel("", self)  # at the end: the frames that failed, one line each with the reason
+        self.failed_label.setObjectName("batchPanelFailed")
+        self.failed_label.setProperty("gimapRole", "warning")
+        self.failed_label.setWordWrap(True)
+        self.failed_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.failed_label.hide()
+        layout.addWidget(self.failed_label)
         self.follow_check = QCheckBox("Show the newest frame", self)
         self.follow_check.setObjectName("batchPanelFollow")
         self.follow_check.setChecked(True)

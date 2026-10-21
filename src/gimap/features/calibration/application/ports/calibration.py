@@ -13,6 +13,8 @@ from ...domain import CalibrationRequest, CalibrationResult, DetectorImage
 
 ProgressCallback = Callable[[int, str], None]
 CancellationCheck = Callable[[], bool]
+FrameProgress = Callable[[int, int], None]
+"""``(frames read, frames to read)`` while the frames of a sum are read."""
 
 
 class CalibrationImagePort(Protocol):
@@ -20,7 +22,18 @@ class CalibrationImagePort(Protocol):
         self,
         path: str | Path,
         dataset_path: str | None = None,
-    ) -> DetectorImage: ...
+        *,
+        frame: int = 0,
+        sum_frames: int = 1,
+        progress: FrameProgress | None = None,
+        cancelled: CancellationCheck | None = None,
+    ) -> DetectorImage:
+        """Frame ``frame`` (0-based) of the file, or the sum of ``sum_frames`` frames from it on.
+
+        ``metadata`` says what was read: ``frame_index``, ``summed_frames`` and, for a sum,
+        ``summed_frame_indices``; ``frame_count`` is the number of frames the file holds.
+        """
+        ...
 
     def exists(self, path: str | Path) -> bool: ...
 

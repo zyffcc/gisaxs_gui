@@ -8,6 +8,7 @@ import time
 from PyQt5.QtCore import QThread
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 
 from ..display_formatting import _duration
 from ..progress_dialog import ConversionProgressDialog
@@ -21,6 +22,7 @@ class ConversionMixin:
         destination = self.view_model.normalize_path(options.destination)
         self._progress_dialog = ConversionProgressDialog(destination, self.parent())
         self._conversion_thread = QThread(self)
+        self._conversion_thread.setStackSize(WORKER_STACK_BYTES)
         self._conversion_worker = _ConversionWorker(options, self.view_model)
         self._conversion_worker.moveToThread(self._conversion_thread)
         self._conversion_thread.started.connect(self._conversion_worker.run)

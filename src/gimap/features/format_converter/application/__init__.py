@@ -19,6 +19,7 @@ from ..domain.rules import (
 from .use_cases import (
     ConvertFile,
     EstimateOutput,
+    GroupSources,
     InspectSource,
     LoadPreview,
     NormalizePath,
@@ -33,6 +34,7 @@ __all__ = [
     "ConversionResult",
     "ConvertFile",
     "EstimateOutput",
+    "GroupSources",
     "InspectSource",
     "InputSource",
     "LoadPreview",

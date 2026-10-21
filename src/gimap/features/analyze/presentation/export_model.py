@@ -22,6 +22,15 @@ from ..application import (
 EXPORT_FOLDER = "gimap_analysis"
 
 
+class ExportedFiles(list):
+    """Exported paths with an optional native Series row from the same reduction (no second read)."""
+
+    def __init__(self, paths: list[Path], *, live_key: str, live_row: Optional[tuple], live_error: str = ""):
+        super().__init__(paths)
+        self.live_key, self.live_row = live_key, live_row
+        self.live_error = live_error
+
+
 class ExportModelMixin:
     """Needs ``state``, ``_analyze_frame``, ``_export``, ``figures``, ``fit_side`` and ``request_for``."""
 
@@ -36,7 +45,7 @@ class ExportModelMixin:
         if analysis is None:
             raise ValueError("Open a frame first.")
         target = Path(destination) if destination is not None else self.default_export_dir()
-        return self._export(analysis, target)
+        return self._export(analysis, target, halves=self.fit_side)  # its curve for Fitting says the Cuts step's halves
 
     def export_q_map(self, path: Path) -> Path:
         analysis = self.state.analysis
@@ -78,7 +87,9 @@ class ExportModelMixin:
         analysis = self.state.analysis
         if analysis is None:
             raise ValueError("Open a frame first.")
-        return self._export.fit_input(analysis, self.default_export_dir())
+        # The halves of the Cuts step go with the file (mean / q > 0 / q < 0; “both halves on |qy|” is for looking
+        # and is not written): a folder of such files opens in Fitting ▸ In-situ series on them.
+        return self._export.fit_input(analysis, self.default_export_dir(), halves=self.fit_side)
 
     def analyze_and_export(
         self,
@@ -87,12 +98,15 @@ class ExportModelMixin:
         series=None,
         series_state: Optional[dict] = None,
         save_images: bool = False,
+        live_key: Optional[str] = None,
     ) -> list[Path]:
         """Batch helper: reduce one file with a fresh load and export it.
 
         ``series`` applies the reference-peak corrections of an in-situ run;
         ``series_state`` (one dict per batch) carries the first frame's
         normalisation factor to the following frames.
+        ``live_key`` adds its native curve row to a list-compatible ``ExportedFiles`` result, without
+        reducing twice. A frame without that curve still exports its other results, with ``live_error``.
         """
         info: dict = {}
         if series is None or series.is_identity:
@@ -104,9 +118,18 @@ class ExportModelMixin:
                 series_state.setdefault("factor", info["normalization_factor"])
         if analysis.reduction is None:
             raise ValueError(analysis.messages[0] if analysis.messages else "No geometry.")
-        written = self._export(analysis, Path(destination), {"series": info} if info else None)
+        written = self._export(analysis, Path(destination), {"series": info} if info else None, halves=self.fit_side)
         if save_images and self.figures is not None:
             written.extend(self._save_frame_images(analysis, Path(destination)))
+        if live_key is not None:
+            if live_key == "default":
+                live_key = "horizontal" if analysis.kind == "gisaxs" else "radial"
+            try:
+                x, intensity, label = series_row(analysis, live_key)
+            except ValueError as exc:
+                return ExportedFiles(written, live_key=live_key, live_row=None, live_error=str(exc))
+            return ExportedFiles(written, live_key=live_key, live_row=(
+                x, intensity, label, row_label(analysis), (Path(analysis.path), int(analysis.frame_index))))
         return written
 
     def _save_frame_images(
@@ -130,4 +153,4 @@ class ExportModelMixin:
         return self.figures.write_curves(curves, Path(path), **labels)
 
 
-__all__ = ["EXPORT_FOLDER", "ExportModelMixin"]
+__all__ = ["EXPORT_FOLDER", "ExportedFiles", "ExportModelMixin"]

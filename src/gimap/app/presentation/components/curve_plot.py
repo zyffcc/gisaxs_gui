@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Sequence
 
 import numpy as np
 from PyQt5 import sip
 from PyQt5.QtCore import QSize, Qt, pyqtSignal
 from PyQt5.QtGui import QColor
-from PyQt5.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QSizePolicy, QToolButton, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QCheckBox, QHBoxLayout, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 from src.gimap.shared.figures import break_at_gaps
 
@@ -19,122 +18,12 @@ from .box_zoom import tool_icon, zoom_button
 from .curve_plot_extras import (
     CompactHeader, CursorReadout, EmptyOverlay, PlotMenu, axis_symbol, curves_text, folded_label,
 )
+from .curve_plot_parts import (  # noqa: F401 - names other modules import from here
+    CURVE_COLORS, LEGEND_ALPHA, SIDE_TIPS, SIDES, Marker, _halves, _has_both_signs, _Title, legend_text,
+    readable_log_ticks, second_shade,
+)
 from .curve_plot_window import CurveWindow
 from .segmented import SegmentedControl
-
-CURVE_COLORS = ("#2563eb", "#f97316", "#16a34a", "#9333ea", "#dc2626", "#0891b2")
-LEGEND_ALPHA = 150
-"""Opacity of the legend's background: its text stays readable, the data under it still shows."""
-LOG_LABEL_SPACING_PX = 16.0
-"""Least distance between two labels of a log axis."""
-_MANTISSAS = ((1,), (1, 3), (1, 2, 5), tuple(range(1, 10)))  # sparse → dense
-
-
-def readable_log_ticks(min_val: float, max_val: float, size: float, std_ticks) -> list:
-    """Log-axis ticks (in log10 units) whose labels do not pile up.
-
-    pyqtgraph labels every mantissa 1…9 whenever the range spans few decades, which stacks
-    0.6, 0.7, 0.8, 0.9 on a short plot. Here the minor ticks are the densest of 1 / 1-3 / 1-2-5 /
-    1…9 per decade whose labels stay ``LOG_LABEL_SPACING_PX`` apart (denser only when fewer than
-    two would show).
-    """
-    ticks = [(spacing, values) for spacing, values in std_ticks if spacing >= 1.0]
-    if len(ticks) >= 3:
-        return ticks
-    per_decade = float(size) / max(float(max_val) - float(min_val), 1e-9)
-    first, last = int(np.floor(min_val)), int(np.ceil(max_val))
-
-    def inside(mantissas):
-        values = [decade + np.log10(m) for decade in range(first, last) for m in mantissas]
-        return [value for value in values if min_val < value < max_val]
-
-    fitting = [m for m in _MANTISSAS if np.diff(np.log10(list(m) + [10])).min() * per_decade >= LOG_LABEL_SPACING_PX]
-    choice = fitting[-1] if fitting else _MANTISSAS[0]
-    for mantissas in _MANTISSAS[_MANTISSAS.index(choice):]:
-        choice = mantissas
-        if len(inside(mantissas)) >= 2:
-            break
-    ticks.append((None, inside(choice)))
-    return ticks
-
-
-
-@dataclass(frozen=True)
-class Marker:
-    """A curve drawn as points of one symbol (``set_curves(markers=…)``): a pyqtgraph symbol (``"o"``, ``"s"``,
-    ``"x"`` …), its size in pixels, and ``hollow`` for an outline only (e.g. where a path starts)."""
-
-    symbol: str = "o"
-    size: float = 7.0
-    hollow: bool = False
-
-
-SIDES = (("±", "both"), ("+", "positive"), ("−", "negative"), ("|x|", "folded"))
-SIDE_TIPS = (
-    "Both halves, as measured",
-    "Only the positive half (x > 0)",
-    "Only the negative half (x < 0)",
-    "Both halves on |x|, the negative one dashed in a second shade: are they the same?",
-)
-
-
-class _Title(QLabel):
-    """The plot's title, shortened with “…” when the header is narrow; ``text()`` is the whole title."""
-
-    def __init__(self, text: str, parent: QWidget):
-        super().__init__(parent)
-        self._full = ""
-        self.setText(text)
-
-    def setText(self, text: str) -> None:  # noqa: N802 - Qt API
-        self._full = str(text)
-        self._refresh()
-
-    def text(self) -> str:
-        return self._full
-
-    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
-        super().resizeEvent(event)
-        self._refresh()
-
-    def _refresh(self) -> None:
-        super().setText(self.fontMetrics().elidedText(self._full, Qt.ElideRight, max(0, self.width())))
-
-
-def _has_both_signs(x) -> bool:
-    x = np.asarray(x, dtype=np.float64)
-    finite = x[np.isfinite(x)]
-    return finite.size > 1 and float(finite.min()) < 0 < float(finite.max())
-
-
-def _halves(name: str, x, y, side: str) -> list:
-    """``(name, x, y, half)`` of what to draw of one curve for the chosen half (display only).
-
-    ``half``: ``""`` as measured, ``"+"`` / ``"−"`` one half, ``"|+|"`` / ``"|−|"`` a half drawn on |x|
-    (the negative one mirrored: its x is −x, dashed and in a second shade)."""
-    x = np.asarray(x, dtype=np.float64)
-    y = np.asarray(y, dtype=np.float64)
-    if side == "both" or not _has_both_signs(x):
-        return [(name, x, y, "")]
-    positive, negative = x > 0, x < 0
-    if side == "positive":
-        return [(name, x[positive], y[positive], "+")]
-    if side == "negative":
-        return [(name, x[negative], y[negative], "−")]
-    order = np.argsort(-x[negative], kind="stable")  # the negative half mirrored, in increasing |x|
-    return [
-        (f"{name} (+)" if name else "", x[positive], y[positive], "|+|"),
-        (f"{name} (−)" if name else "", -x[negative][order], y[negative][order], "|−|"),
-    ]
-
-
-def second_shade(color) -> str:
-    """The colour of a folded negative half: the curve's own hue, darker on a light plot and lighter on a
-    dark one, so the two halves differ in colour as well as in dash (display only)."""
-    import pyqtgraph as pg
-
-    base = pg.mkColor(color)
-    return (base.lighter(150) if theme_manager().is_dark else base.darker(170)).name()
 
 
 class CurvePlot(QWidget):
@@ -148,6 +37,10 @@ class CurvePlot(QWidget):
     saveFigureRequested = pyqtSignal()
     saveDataRequested = pyqtSignal()
     """From the header's Save menu (``add_save_menu``)."""
+    curvesRedrawn = pyqtSignal()
+    """The plot drew the curves of the last ``set_curves`` again by itself — another theme, a log toggle, a
+    half chosen. What a caller added with ``add_extra`` is still there; a caller whose additions depend on
+    the scale (bars on a log axis) draws them again."""
 
     def __init__(
         self, title: str = "", parent: Optional[QWidget] = None, *, log_y: bool = True, log_x: Optional[bool] = None,
@@ -220,6 +113,8 @@ class CurvePlot(QWidget):
         self._window = CurveWindow(self)
         self.x_window = self._window.item
         self._items = []
+        self._extras: list = []
+        """Items a caller added to the curves shown (``add_extra``)."""
         self._source: list[tuple[str, np.ndarray, np.ndarray]] = []
         self._source_colors: Optional[list] = None
         self._source_markers: Optional[list] = None
@@ -326,10 +221,26 @@ class CurvePlot(QWidget):
             self._redraw()
 
     def _redraw(self) -> None:
-        """The curves of the last ``set_curves`` again, with their colours, markers and legend choice."""
-        self.set_curves(self._source, self._source_colors, markers=self._source_markers, legend=self._source_legend)
+        """The curves of the last ``set_curves`` again, with their colours, markers and legend choice; what a
+        caller added to them (``add_extra``) stays, and the caller is told (``curvesRedrawn``)."""
+        self._draw(self._source, self._source_colors, self._source_markers, self._source_legend)
+        self.curvesRedrawn.emit()
+
+    def add_extra(self, item):
+        """An item of the caller's that belongs to the curves shown — error bars, a guide —, already added to
+        ``plot``: it stays while the plot draws these curves again by itself, and goes with them at the next
+        ``set_curves`` or ``clear_curves``. Returns the item."""
+        self._extras.append(item)
+        return item
 
     def clear_curves(self) -> None:
+        """No curves, and nothing a caller added to them."""
+        for item in self._extras:
+            self.plot.removeItem(item)
+        self._extras.clear()
+        self._clear_items()
+
+    def _clear_items(self) -> None:
         for item in self._items:
             self.plot.removeItem(item)
         self._items.clear()
@@ -415,13 +326,19 @@ class CurvePlot(QWidget):
         ``True`` for dots, a pyqtgraph symbol (``"x"``, ``"s"`` …) or a ``Marker`` (symbol, size, hollow).
         ``legend``: per curve, ``False`` for no legend entry (a mark that belongs to a curve already in the
         legend: where a path starts, an odd frame); the curve keeps its name for Copy Data.
+
+        A name is shown in the legend whole and in the interface language (``legend_text``); a figure of the
+        plot (``plot_export.export_plot``) has it as given here, as its axis titles are.
         """
+        self.clear_curves()  # with what a caller added to the curves of before
+        self._draw(list(curves), colors, markers, legend)
+
+    def _draw(self, curves, colors, markers, legend) -> None:
         import pyqtgraph as pg
 
         from ..i18n import tr
 
-        curves = list(curves)
-        self.clear_curves()
+        self._clear_items()
         self._source = curves
         self._source_colors = None if colors is None else list(colors)
         self._source_markers = None if markers is None else list(markers)
@@ -454,7 +371,7 @@ class CurvePlot(QWidget):
                 x = np.where(x > 0, x, np.nan)
             marker = self._markers[self._origin[index]]
             listed = legend is None or self._origin[index] >= len(legend) or bool(legend[self._origin[index]])
-            entry = tr(name) if name and listed else None  # an empty name: no legend entry either (a guide)
+            entry = legend_text(tr(name)) if name and listed else None  # an empty name: no entry either (a guide)
             if marker:
                 keep = np.isfinite(x) & np.isfinite(y)
                 spec = marker if isinstance(marker, Marker) else Marker(marker if isinstance(marker, str) else "o",
@@ -464,15 +381,16 @@ class CurvePlot(QWidget):
                                       symbolPen=None if dot else pg.mkPen(self._colors[index], width=1.4),
                                       symbolBrush=pg.mkBrush(0, 0, 0, 0) if spec.hollow else self._colors[index],
                                       name=entry)
-                self._items.append(item)
-                continue
-            x, y = break_at_gaps(x, y)  # no line across bins without pixels
-            pen = pg.mkPen(self._colors[index], width=1.6, style=self._styles[index])
-            item = self.plot.plot(x, y, pen=pen, name=entry, connect="finite")
-            item.setCurveClickable(True, width=8)
-            origin = self._origin[index]
-            item.sigClicked.connect(lambda _item, *_args, origin=origin: self.curveClicked.emit(origin))
+            else:
+                x, y = break_at_gaps(x, y)  # no line across bins without pixels
+                pen = pg.mkPen(self._colors[index], width=1.6, style=self._styles[index])
+                item = self.plot.plot(x, y, pen=pen, name=entry, connect="finite")
+                item.setCurveClickable(True, width=8)
+                origin = self._origin[index]
+                item.sigClicked.connect(lambda _item, *_args, origin=origin: self.curveClicked.emit(origin))
             self._items.append(item)
+            if entry is not None and self.legend.items:  # what a figure of the plot says: the name as given
+                self.legend.items[-1][1].export_text = legend_text(name)
         self._style_legend()
         self.plot.enableAutoRange()
         if self.log_check.isChecked():
@@ -549,6 +467,7 @@ class CurvePlot(QWidget):
         except TypeError:
             pass
         self._items.clear()
+        self._extras.clear()
         self._curves = []
         self._colors = []
         self._shown_halves = []

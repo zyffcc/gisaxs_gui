@@ -83,7 +83,9 @@ def select_source_frame_indices(
     mode: str,
     **selection,
 ) -> list[int]:
-    if file_type != "NXS":
+    from .models import HDF5_TYPES
+
+    if file_type not in HDF5_TYPES:
         return [0]
     return select_frame_indices(frame_count, mode, **selection)
 
@@ -95,7 +97,7 @@ def visible_output_formats(
 ) -> dict[str, bool]:
     """Return the legacy format-button visibility policy as data."""
     source_types = set(input_types)
-    same_format = {"TIFF": "TIFF", "CBF": "CBF", "NXS": "HDF5"}
+    same_format = {"TIFF": "TIFF", "CBF": "CBF", "NXS": "HDF5", "HDF5": "HDF5"}
     visibility: dict[str, bool] = {}
     for output_format in ("TIFF", "CBF", "HDF5", "NumPy"):
         hidden = len(source_types) == 1 and any(

@@ -45,8 +45,10 @@ CALIBRATION_WORDS = ("calib", "kalib", "poni", "standard")
 CALIBRATION_TOKENS = ("cal", "std", "stds", "geometry", "geom", "setup")
 LOG_WORDS = ("log", "fio", "param", "meta", "setup", "info", "notes", "readme", "scan", "beamtime", "exp", "config")
 
-IMAGE_SUFFIXES = (".cbf", ".tif", ".tiff", ".nxs", ".h5", ".hdf5", ".edf")
-READABLE_IMAGE_SUFFIXES = (".cbf", ".tif", ".tiff", ".nxs")
+HDF5_IMAGE_SUFFIXES = (".nxs", ".nx", ".nx5", ".h5", ".hdf5", ".hdf")
+"""Every suffix of a NeXus / HDF5 file (the shared detector reader's list; no file access here)."""
+IMAGE_SUFFIXES = (".cbf", ".tif", ".tiff", *HDF5_IMAGE_SUFFIXES, ".edf")
+READABLE_IMAGE_SUFFIXES = (".cbf", ".tif", ".tiff", *HDF5_IMAGE_SUFFIXES)
 """Image formats GIMaP reads (and can calibrate from)."""
 TEXT_SUFFIXES = (".log", ".txt", ".fio", ".dat", ".json", ".ini", ".cfg", ".conf", ".yaml", ".yml", ".md", ".csv", ".xml", ".par", ".prm")
 
@@ -275,17 +277,26 @@ def private_path(path: str, base: Optional[str] = None) -> bool:
 
 _QUOTED = re.compile(r'"([^"\r\n]+)"|\'([^\'\r\n]+)\'|“([^”\r\n]+)”|‘([^’\r\n]+)’|「([^」\r\n]+)」|『([^』\r\n]+)』')
 _WINDOWS_PATH = re.compile(r'(?:[A-Za-z]:[\\/]|\\\\[^\\/\s]+[\\/])[^\r\n"<>|?*]*')
-_POSIX_PATH = re.compile(r'(?<![\w:])/(?:[^\s"<>|?*/]+/)+[^\s"<>|?*/]*')
+# Like a Windows path, a POSIX path may hold spaces and run into the words after it, so it is taken to the end
+# of its line (``path_candidates`` offers the shorter versions).  It starts at a slash that begins a folder
+# name and follows neither a word (and/or), a colon nor another slash (https://…); the look-ahead lets a
+# second path of the same line start a mention of its own.
+_POSIX_PATH = re.compile(r'(?<![\w:/])(?=(/[^\s"<>|?*/]+/[^\r\n"<>|?*]*))')
 _TRAILING = " \t.,;:!?)]}，。；：！？、）】」』"
+MAX_PATH_OPTIONS = 160
+"""Versions of one mention that are offered: the shortest ones. A mention with more places to cut is a
+path followed by a long sentence on its line, and the path ends near its start."""
 
 
 def path_candidates(text: str) -> list[list[str]]:
     """Paths a person may have written in free text, one list per mention, longest first.
 
-    A Windows path can contain spaces and run into the following words
-    (``D:\\data\\calib\\LaB6.cbf 是标样``), so each mention offers shorter
-    versions, cut at spaces and non-ASCII characters; the first that exists on
-    disk is the one meant.
+    A path can contain spaces and run into the following words
+    (``D:\\data\\calib\\LaB6.cbf 是标样``, ``/data/my run/LaB6.cbf 是标样``), so each
+    mention offers shorter versions, cut at spaces and non-ASCII characters; the
+    first that exists on disk is the one meant. The places to cut are counted from
+    the start of the mention (at most ``MAX_PATH_OPTIONS``): however long the line
+    goes on after a path, the path itself is among the options.
     """
     groups: list[list[str]] = []
     for match in _QUOTED.finditer(text or ""):
@@ -294,18 +305,20 @@ def path_candidates(text: str) -> list[list[str]]:
             groups.append([value.strip()])
     for pattern in (_WINDOWS_PATH, _POSIX_PATH):
         for match in pattern.finditer(text or ""):
-            raw = match.group(0).rstrip(_TRAILING)
+            raw = match.group(match.lastindex or 0).rstrip(_TRAILING)
             if len(raw) < 4:
                 continue
-            options = [raw]
-            for index in range(len(raw) - 1, 2, -1):
+            cuts: list[str] = []  # shortest first
+            for index in range(3, len(raw)):
                 if raw[index].isspace() or ord(raw[index]) > 127 or raw[index] in _TRAILING:
                     shorter = raw[:index].rstrip(_TRAILING)
-                    if len(shorter) >= 3 and shorter not in options:
-                        options.append(shorter)
-                if len(options) >= 160:
+                    if len(shorter) >= 3 and shorter not in cuts:
+                        cuts.append(shorter)
+                if len(cuts) >= MAX_PATH_OPTIONS:
                     break
-            groups.append(options)
+            else:  # every place to cut was taken: the whole mention is the first option
+                cuts.append(raw)
+            groups.append(cuts[::-1])
     unique: list[list[str]] = []
     seen: set[str] = set()
     for options in groups:

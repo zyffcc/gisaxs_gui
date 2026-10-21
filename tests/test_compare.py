@@ -508,3 +508,48 @@ def test_stage_marks_stand_out_on_any_colour() -> None:
     groups.clear()
     assert not groups.shown
     view.deleteLater()
+
+
+def test_a_result_table_fits_its_columns_with_the_header_qt_made() -> None:
+    """The header of a result table is made by Qt, not from Python: fitting the columns must not need a
+    protected call on it (PyQt refuses that: the page then stayed at “Comparing …” with empty plots)."""
+    from PyQt5.QtWidgets import QTableWidgetItem, QWidget
+
+    from src.gimap.features.compare.presentation.views.compare_page_view import (RESULT_COLUMNS, _table, fit_columns,
+                                                                                  two_lines)
+    from tests.test_assistant_gui import _app
+
+    _app()
+    parent = QWidget()
+    parent.resize(900, 300)
+    table = _table(RESULT_COLUMNS, parent, "fittedTable", fitted=True)
+    table.setGeometry(0, 0, 900, 200)
+    table.setRowCount(2)
+    for row, name in enumerate(("a_rather_long_sample_name_run_0001", "b")):
+        for column, text in enumerate((name, "1", "60", "0", "3", "12", "40")):
+            table.setItem(row, column, QTableWidgetItem(text))
+    parent.show()
+    _process()
+    header, last = table.horizontalHeader(), table.columnCount() - 1
+
+    def fitted(width: int) -> int:
+        table.resize(width, 200)
+        _process()
+        fit_columns(table)  # RuntimeError before the fix
+        _process()
+        return table.columnWidth(last)
+
+    def right_edge() -> int:
+        return table.columnViewportPosition(last) + table.columnWidth(last)
+
+    try:
+        wide = fitted(900)  # room for everything: titles on one line, the last column takes the rest
+        assert table.horizontalHeaderItem(last).text() == RESULT_COLUMNS[last]
+        assert right_edge() == table.viewport().width() and table.columnWidth(0) >= header.sectionSizeHint(0)
+        narrow = fitted(250)  # no room: the titles break, and the last column begins again from what it needs now
+        assert table.horizontalHeaderItem(last).text() == two_lines(RESULT_COLUMNS[last])
+        assert narrow < wide and narrow <= max(header.sectionSizeHint(last), table.sizeHintForColumn(last))
+        assert fitted(900) == wide and right_edge() == table.viewport().width()
+    finally:
+        parent.close()
+        parent.deleteLater()

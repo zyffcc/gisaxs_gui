@@ -23,14 +23,16 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 ```
 
 - NeXus 给任意一个模块文件即可（如 `_m01`）：同前缀的 `_m02`、`_m03` 等探测器模块会拼成一张图，帧在文件内部；
-  同一组模块只给一次。多个样品一次给全：同一批里尺寸相同的帧沿用前面从文件或标样图得到的标定。
+  给了同一组的几个或全部模块文件（glob 也行）也只分析一次。只有内容相符（同一数据集和模块尺寸、模块位置不同）的
+  文件才算一组；缺模块文件、模块帧数不同或文件还在写时，Needs attention 里有一条。一帧一个文件的序列默认逐个分析，
+  `--series` 才把给出的文件当作一个序列（按编号）。多个样品一次给全：同一批里尺寸相同的帧沿用前面从文件或标样图得到的标定。
 - 每个样品写一个 `<out>/<名字>/` 文件夹，包含：
   - `report.md`、`report.json`；
   - `radial.csv`、`in_plane.csv`、`out_of_plane.csv`、`azimuthal_last_ring.csv`；
   - `qmap.png`：q 图上画出分析过的环，白色是测到的，橙色是阴影，红色虚线是没测到的。
 
-  外加整批的 `summary.md` 和 `summary.json`。`<名字>` 是文件名去掉扩展名：不同文件夹里同名的帧会写进同一个文件夹，
-  互相覆盖而不报错。这种情况要分开跑，各用一个 `--out`。
+  外加整批的 `summary.md` 和 `summary.json`。`<名字>` 是文件名去掉扩展名（模块组为去掉 `_mNN` 的扫描名，`--series`
+  为编号前的名字加 `_series`）：不同文件夹里同名的帧会写进同一个文件夹，互相覆盖而不报错。这种情况要分开跑，各用一个 `--out`。
 - 耗时：给了 `.poni` 的单帧约 10 秒；要从标样图标定或读大的 NeXus 时，一帧几十秒到一分多钟；
   几个大面阵探测器的原位序列（每个几百帧）一起跑要几分钟。
 - 退出码：
@@ -47,7 +49,7 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 |---|---|---|---|
 | technique | GIMaP 应用几何后自动识别：探测器任一角超过 2θ = 20° 就是 GIWAXS，否则 GISAXS | 小探测器或长距离的 GIWAXS 会被认成 GISAXS | `--technique giwaxs` |
 | geometry | 依次尝试：`--calibration` → 笔记里点名的标定文件（完整路径；只写文件名时，取帧所在文件夹或笔记里点名的文件夹中同名的那个，不会为一个名字去搜索） → 已保存的仪器配置 → 在附近搜索（同目录及子目录、父目录和兄弟目录、往上两三层；2 个标定文件 + 3 张标样图） | 仪器配置只按探测器名和图像尺寸匹配，不管是哪次束线实验；搜索也可能挑到别的实验的标定，“quality: good” 只说明标定和它自己的标样一致。搜索在现成的标定文件之间只看修改时间离帧多近：整个文件夹是一次拷贝或下载来的时候，时间说明不了什么，这时要点名。搜索采用的标定在 Decisions 里另有一行 “calibration found by the search”：完整路径，以及从帧所在文件夹看它在哪里（只是说明，不会提问），转述结果前先看这一行；`.poni` 和 GIMaP 的 `.json` 直接采用，不再用标样核对 | `--calibration <文件>`、`--no-saved-profiles`、`--recalibrate` |
-| frames | 序列取最后 10 帧求和（终态） | 问题关心的是过程，或者开头 | `--frame N --sum K`（负数从末尾数；只给 `--frame` 时仍从该帧起求和 10 帧，单帧用 `--sum 1`） |
+| frames | 序列取最后五分之一的帧求和，至多 10 帧（终态）；不到 10 帧只取最后一帧 | 问题关心的是过程，或者开头 | `--frame N --sum K`（负数从末尾数；只给 `--frame` 时从该帧起求和同样的默认帧数，单帧用 `--sum 1`；求和块不会越过最后一帧，所以和覆盖整个序列时 Decisions 会写明它是整个序列而不是一个状态） |
 | rings | 面积最大的 3 个没有警告的峰算取向和尺寸 | 用户问的是别的环 | `--rings N`；指定某个 q 要用 `call` 或 MCP 的 `ring_orientation`、`crystallite_size` |
 | 能量 / αi / 像素 | 能量：选项 > 头文件 > 笔记（只认 “12.4 keV” 这种写法；波长要自己换算后传 `--energy-kev`）> 标定文件的波长（这时 Decisions 里没有 energy 一行，能量来源就是几何来源）。αi：选项 > 笔记 > 仪器配置（只在几何也取自仪器配置时），都没有时先用 0° 并提问。像素：选项 > 头文件 > 笔记。笔记里的值只有唯一时才取 | 笔记里有两个不同的值，或者有效值只在幻灯片、日志里 | `--energy-kev`、`--incidence-deg`、`--pixel-size-um` |
 | 标样 | `--standard` > 笔记里唯一点名的标样 > 文件名 > 所有标样拟合比较（笔记和文件名不一致时也比较） | 混合标样的写法：`LaB6+CeO2` 是混合，`LaB6, CeO2` 是两种 | `--standard` |
@@ -58,8 +60,9 @@ python tools/gimap_agent.py auto <图像> [<图像> ...] --notes "<用户笔记�
 ## 基线没看的地方：判断力最有用的地方
 
 - **峰只在径向 I(q) 上找。** 只出现在某个扇区的峰会漏掉：对 `in_plane`、`out_of_plane` 曲线也跑 `find_peaks`。
-- **只有终态。** 原位实验的意义在变化：`auto --frame 1 --sum 10 --out A` 加上默认的那次运行，再比较两份
-  `report.json`。GUI 的 “Compare with the Start of the Series” 用同一套规则：只比较可靠峰的有无和位置（appeared、
+- **只有终态。** 原位实验的意义在变化：`auto --frame 1 --sum K --out A`（K 取默认那次 Decisions 里 frames 的求和帧数，
+  开头和终态才可比）加上默认的那次运行，再比较两份 `report.json`。GUI 的 “Compare with the Start of the Series” 也取和终态
+  同样多的开头帧，比较规则相同：只比较可靠峰的有无和位置（appeared、
   disappeared、shifted、moved?；grew 是开始时弱、结束时可靠，faded 相反），不比较强度。对两份 report.json 可以直接调用
   `src.gimap.features.assistant.application.series_markdown(start, end)` 得到同一张表。
 - **本批所有样品都有的线**（≥ 2 个样品时 summary.md 的 “Lines at the same q”，±0.3 %，包括带提示的峰）可能来自衬底、

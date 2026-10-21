@@ -47,7 +47,10 @@ SENTENCES = (
     "then the {side} half alone to {q} Å⁻¹",
     "the {side} half",
     "{group} neighbouring points merged ({count} points for the fit)",
+    "{averaged} points averaged, {single} from one half alone ({inside} of them inside that range, where the other "
+    "half has no points)",  # gisaxs_cut.HOLES_SENTENCE, character for character
     # The points a GISAXS run asks a person to look at (application/gisaxs_procedure.py).
+    "cut of the series (rows {rows})",
     "{n} solutions of {families} particle families fit within {percent} of the best χ²: the curve alone does not "
     "decide the model.",
     "Solutions whose D agrees with the observed spacing: {solutions}. Choose the particle shape you expect and refine "

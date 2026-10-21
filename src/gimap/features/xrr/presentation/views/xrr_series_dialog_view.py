@@ -78,15 +78,24 @@ class XrrSeriesDialogView:
     def _build_input_section(self) -> None:
         self.input_section = ParameterSection(
             "Series data",
-            "Choose one NXS module file or a CBF file/folder. NXS modules are stitched per frame.",
+            "Choose one NXS / HDF5 file, a CBF file, or the folder of the series. Module files are stitched "
+            "per frame; a file holding one frame stands for the series of files numbered like it.",
             self.controls,
         )
         self.source_picker = FilePicker(
             self.input_section.content,
-            placeholder="NXS module, CBF file, or CBF folder…",
+            placeholder="NXS / HDF5 file, CBF file, or folder…",
         )
         self.source_picker.setObjectName("xrrSourcePicker")
         self.source_picker.clear_button.hide()
+        # Browse… asks for a file (for a CBF series: its folder); a folder of NeXus / HDF5 files is a
+        # series too, and the only way to name one whose files are not numbered at the end.
+        self.source_folder_button = QtWidgets.QPushButton("Folder…", self.source_picker)
+        self.source_folder_button.setObjectName("xrrSourceFolderButton")
+        self.source_folder_button.setToolTip(
+            "Choose a folder: the NXS / HDF5 files in it, or its CBF frames, are the series."
+        )
+        self.source_picker.layout().addWidget(self.source_folder_button)
         self.input_section.add_widget(self.source_picker)
         form = QtWidgets.QFormLayout()
         form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
@@ -296,7 +305,8 @@ class XrrSeriesDialogView:
 
     def _set_tab_order(self, dialog) -> None:
         dialog.setTabOrder(self.source_picker.path_edit, self.source_picker.browse_button)
-        dialog.setTabOrder(self.source_picker.browse_button, self.source_kind_combo)
+        dialog.setTabOrder(self.source_picker.browse_button, self.source_folder_button)
+        dialog.setTabOrder(self.source_folder_button, self.source_kind_combo)
         dialog.setTabOrder(self.source_kind_combo, self.pattern_edit)
         dialog.setTabOrder(self.pattern_edit, self.inspect_button)
         dialog.setTabOrder(self.inspect_button, self.angle_mode_combo)

@@ -71,7 +71,14 @@ class FolderImportDialogView:
         self.include_label.setText(_translate("FolderImportDialog", "Include:"))
         self.cbf.setText(_translate("FolderImportDialog", "CBF"))
         self.tiff.setText(_translate("FolderImportDialog", "TIFF"))
-        self.nxs.setText(_translate("FolderImportDialog", "NXS"))
+        self.nxs.setText(_translate("FolderImportDialog", "NXS / HDF5"))
+        self.nxs.setToolTip(
+            _translate(
+                "FolderImportDialog",
+                "NeXus and HDF5 files (.nxs, .nx, .nx5, .h5, .hdf5, .hdf). A set of detector-module files "
+                "is one input; the data files of a master are read through the master.",
+            )
+        )
         self.recursive.setToolTip(
             _translate(
                 "FolderImportDialog",

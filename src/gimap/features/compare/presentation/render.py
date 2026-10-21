@@ -150,6 +150,11 @@ class CompareRenderMixin:
         if row is None:
             return "—"
         label = labels[row] if row < len(labels) else str(row + 1)
+        frame = re.search(r" frames? (\d+)(?:[–-](\d+))? of \d+(?: \(\+\d+ summed\))?$", str(label))
+        if frame is not None:
+            if frame[2] is not None:
+                return tr("frames {first}–{last}").format(first=frame[1], last=frame[2])
+            return tr("frame {n}").format(n=frame[1])
         if " #" in label:
             return tr("frame {n}").format(n=label.rsplit(" #", 1)[1].split(" ")[0])
         stem = Path(label).stem

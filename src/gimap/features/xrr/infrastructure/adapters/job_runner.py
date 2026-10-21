@@ -7,6 +7,7 @@ from src.gimap.app.jobs import JobRequest
 from ...application import XrrExtractionProgress, XrrExtractionResult
 from ..serialization import (
     decode_preview,
+    layout_from_payload,
     point_from_payload,
     request_to_payload,
     result_from_payload,
@@ -36,6 +37,7 @@ class JobRunnerXrrExtractionAdapter:
                     point=point_from_payload(value.details["point"]),
                     preview=preview,
                     preview_shape=full_shape,
+                    layout=layout_from_payload(value.details.get("layout")),
                 )
             )
 

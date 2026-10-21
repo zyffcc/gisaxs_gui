@@ -13,12 +13,22 @@ from ..models import (
     XrrExtractionRequest,
     XrrExtractionResult,
     XrrFrameRef,
+    XrrSeriesLayout,
     XrrSeriesSpec,
 )
 
 
 class XrrSeriesRepository(Protocol):
     def discover(self, spec: XrrSeriesSpec) -> tuple[XrrFrameRef, ...]: ...
+
+    def describe(self, spec: XrrSeriesSpec) -> XrrSeriesLayout | None:
+        """What the frames of ``discover`` are stored in. Repositories made before this method lack it:
+        it is called through ``getattr(repository, "describe", None)``."""
+        ...
+
+    def series(self, spec: XrrSeriesSpec) -> tuple[tuple[XrrFrameRef, ...], XrrSeriesLayout | None]:
+        """``discover`` and ``describe`` from one look at the files. Optional like ``describe``."""
+        ...
 
     def load_frame(self, frame: XrrFrameRef) -> XrrDetectorFrame: ...
 

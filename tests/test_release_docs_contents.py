@@ -48,7 +48,7 @@ def test_the_documents_name_the_version_of_the_program() -> None:
     manual = _text(MANUAL)
     last = _section(manual, "Version and Contact")
     assert f"GIMaP {__version__}" in last and "CHANGELOG.md" in last
-    assert f"version {__version__}" in _section(manual, "## 1. Introduction")
+    assert f"version {__version__}" in _section(manual, "# GIMaP User Manual")
     assert "CHANGELOG.md" in _text(README)
 
 
@@ -62,12 +62,18 @@ def test_the_manual_numbers_its_sections_once_and_refers_to_sections_that_exist(
     assert numbers == list(range(1, len(numbers) + 1)), numbers
     for first, last in re.findall(r"[Ss]ections? (\d+)(?:[–-](\d+))?", manual):
         assert 1 <= int(first) <= int(last or first) <= len(numbers), (first, last)
-    # A tool named with its section points at the section of that name.
-    titles = {title.strip(): int(number) for number, title in headings}
+    # Subsections are numbered N.1, N.2 … under their chapter.
+    subsections = re.findall(r"^### (\d+)\.(\d+) (.+)$", manual, flags=re.M)
+    for chapter in set(numbers):
+        inside = [int(sub) for number, sub, _title in subsections if int(number) == chapter]
+        assert inside == list(range(1, len(inside) + 1)), (chapter, inside)
+    # A tool named with its section points at the section of that name (a chapter or a subsection).
+    titles = {title.strip(): f"{number}.{sub}" for number, sub, title in subsections}
+    titles.update({title.strip(): number for number, title in headings})
     for name in ("Geometry Calibration", "Format Converter", "XRR Series Extractor"):
-        section = next(number for title, number in titles.items() if title.startswith(name))
-        for found in re.findall(rf"{name}\s*\(section (\d+)\)", manual):
-            assert int(found) == section, (name, found)
+        section = next(number for title, number in titles.items() if name in title)
+        for found in re.findall(rf"{name}\s*\(section (\d+(?:\.\d+)?)\)", manual):
+            assert section == found or section.startswith(found + "."), (name, found)
     assert any(title.startswith("Format Converter") for title in titles)
 
 
@@ -213,8 +219,9 @@ def test_the_documents_say_where_the_manual_opens() -> None:
 
 
 def test_the_links_of_the_release_documents_resolve() -> None:
-    """Relative links point at files that exist; ``#section`` links at a heading of the same document."""
-    for path in (README, CHANGELOG, MANUAL):
+    """Relative links (and the screenshots of both manuals) point at files that exist; ``#section`` links at a
+    heading of the same document."""
+    for path in (README, CHANGELOG, MANUAL, MANUAL.with_name("User_Manual_zh.md")):
         text = _text(path)
         anchors = {
             re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
@@ -237,7 +244,7 @@ def test_statements_about_removed_things_are_gone() -> None:
         text = _text(path)
         assert not [phrase for phrase in stale if phrase in text], path.name
     manual = _text(MANUAL)
-    assert "## 10. Format Converter" in manual and "Remove from List" in manual and "Copy Table" in manual
+    assert "### 8.1 Format Converter" in manual and "Remove Source from List" in manual and "Copy Table" in manual
 
 
 V5 = "modules/Fitting_1D_Model/Workflow_v5"

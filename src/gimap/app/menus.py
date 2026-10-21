@@ -207,14 +207,16 @@ class ApplicationMenus:
         """(text, tip) of File ▸ Open Data as the File menu opens: it says what Ctrl+O does on this page."""
         if self._curve_page_shown():
             return tr("Open Curve…"), tr("Open a 1D curve (q, I, σ) — Analyze ▸ Send to Fitting opens its cut here")
-        return tr("&Open Data…"), tr("Open detector frames (CBF, NXS, TIFF, EDF) in Analyze")
+        return tr("&Open Data…"), tr("Open detector frames (CBF, NeXus/HDF5, TIFF, EDF) in Analyze")
 
-    def open_recent(self, path: str) -> None:
+    def open_recent(self, path: str) -> bool:
+        """Projects restore directly; detector sources start a cancellable background import."""
         if str(path).lower().endswith(PROJECT_SUFFIX):
-            self.open_project(path)
-            return
-        self.show_workspace("analyze")
-        self.window.components.analyze_page.add_paths([path])
+            return self.open_project(path)
+        accepted = bool(self.window.components.analyze_page.import_paths([path]))
+        if accepted:
+            self.show_workspace("analyze")
+        return accepted
 
     def recent_paths(self) -> list:
         """Recent projects first, then the recent data of Analyze."""
@@ -280,6 +282,8 @@ class ApplicationMenus:
                  trf("{name} could not be opened: {error}", name=Path(path).name, error=tr(reason)))
             return False
         components = self.window.components
+        if not self._series_results_may_go():
+            return False
         missing = project.missing(data, path)
         notes = project.apply(components, data, path)
         self._remember_project(path)
@@ -318,6 +322,15 @@ class ApplicationMenus:
             warn(self.window, tr("Open Project"),
                  trf("Stop {jobs} first, then open the project.", jobs=self.window.components.jobs_text(jobs)))
         return bool(jobs)
+
+    def _series_results_may_go(self) -> bool:
+        """A project replaces the In-situ series, and a project keeps no fits: frames fitted there and not saved
+        are asked about first, with the series page's own question (Save, Discard, Cancel). ``False``: they
+        stay — asked once the project could be read and before anything of it is applied, so a Cancel leaves
+        the window, the title and Recent as they were."""
+        series = getattr(self.window.components.fitting_workspace, "series_page", None)
+        ask = getattr(series, "_may_drop_results", None)  # the series page's contract
+        return True if ask is None else bool(ask())
 
     def _project_folder(self) -> Path:
         """Where Save Project As… suggests a project with no frame listed: the folder Analyze opened last, else

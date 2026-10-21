@@ -89,7 +89,7 @@ def test_refine_finds_the_values_with_errors_and_undo_brings_the_start_back(tmp_
     page.open_curve(_curve_file(tmp_path))
     start = page.session.model.with_values({(0, "R"): 5.3, (0, "D"): 44.0})
     page.set_model(start)
-    page.method_buttons["local"].setChecked(True)
+    page.set_method("local")
     page.run_fit()
     assert page.fit_running() and page.stop_button.isVisible()
     _wait(page)
@@ -268,7 +268,7 @@ def test_a_fit_goes_stale_when_the_range_or_the_left_out_points_change(tmp_path)
     page = _page()
     page.open_curve(_curve_file(tmp_path))
     page.set_range((0.2, 1.9))
-    page.method_buttons["local"].setChecked(True)
+    page.set_method("local")
     page.run_fit()
     _wait(page)
     assert page.session.result_is_current() and page.step_rail.state("fit") == "ok"
@@ -375,7 +375,7 @@ def test_a_fit_that_ends_after_another_curve_was_opened_is_not_kept(tmp_path) ->
     np.savetxt(second, np.column_stack([q, intensity * 7.0 + 50, sigma * 3]))  # another curve, the same q
     page = _page()
     page.open_curve(first)
-    page.method_buttons["global"].setChecked(True)
+    page.set_method("global")
     page.run_fit()
     assert page.fit_running()
     page.open_curve(second)  # Open Curve, Send to Fitting, a unit change … while the fit runs
@@ -486,4 +486,210 @@ def test_points_are_left_out_by_a_click_or_a_box_and_taken_back(tmp_path) -> Non
     assert len(record["points"]["left_out_q_nm^-1"]) == page.left_out()
     page.include_all()
     assert page._data().q.size == 240 and page.left_out() == 0
+    page.dispose()
+
+
+def test_the_methods_that_take_one_curve_go_over_to_the_mean_when_both_halves_are_chosen(tmp_path) -> None:
+    """Analyze sends a cut with both halves on |q| by default: Find the particle shape, the AI proposal and fit1d
+    take one measurement per |q|. The page goes over to the mean of the halves and says so — what it shows, the
+    points a result is of and the record of an export are then the points that were fitted. Refine and Search
+    fit both halves, as they did."""
+    from src.gimap.app.presentation.components.toast import visible_toasts
+    from src.gimap.features.fitting.application.single_fit import BOTH_USES_MEAN, prepare_curve, residuals
+
+    asked = []
+
+    def quick_fit(q, intensity, sigma, **_options):
+        asked.append(np.asarray(q, dtype=float))
+        return [_shape_solution(radius) for radius in (5.5, 6.0, 6.5)]
+
+    def said() -> int:
+        return len([line for line in page.log_view.toPlainText().splitlines() if line.endswith(BOTH_USES_MEAN)])
+
+    page = _page(quick_fit=quick_fit)
+    page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
+    assert page.session.side == "both" and page._data().q.size == 480 and page.recommended_method() == "fit1d"
+    page.set_method("shapes")  # a signed cut recommends fit1d; the shape search is chosen here
+    page.run_fit()
+    _wait(page)
+    assert len(asked) == 1 and np.allclose(asked[0], Q_NM / 10.0)  # one measurement per |q|: the 240 points of the mean
+    assert page.session.solutions and "The fit failed" not in page.log_view.toPlainText()
+    assert said() == 1 and any(toast.text() == BOTH_USES_MEAN for toast in visible_toasts(page.window()))
+    assert "Find the particle shape: 240 points" in page.log_view.toPlainText()
+    # The page is on the mean now, and shows it: the points drawn and the points the χ² is of are the fitted ones.
+    assert page.session.side == "mean" and page.side_combo.currentData() == "mean" and page._data().q.size == 240
+    assert page.session.solutions_are_current() and page.session.solutions_selection[0] == "mean"
+    shown = {str(item[0]): len(item[1]) for item in page.plot._source}
+    assert shown["measured"] == 240
+    mean = prepare_curve(page.session.curve, "mean")
+    best = page.session.solutions[0]
+    free = sum(1 for _path, parameter in best.model.parameters() if parameter.free)
+    on_the_page = residuals(best.model, page._data())
+    assert best.chi2 == pytest.approx(float(on_the_page @ on_the_page) / (240 - free))
+    # A record written now says the mean (the q < 0 half is 2 % higher: both halves would be other points).
+    assert page.export_data_dialog(tmp_path / "shape.csv")
+    record = json.loads((tmp_path / "shape.json").read_text(encoding="utf-8"))
+    assert record["points"]["side"] == record["points"]["halves_used"] == "mean" and record["points"]["count"] == 240
+    assert np.loadtxt(tmp_path / "shape.csv", delimiter=",", skiprows=1).shape[0] == 240
+
+    # The AI proposal and fit1d get the same points (their fitters are not run here).
+    given = {}
+    page._ai_solutions = lambda data, model: given.setdefault("ai", data) and []
+    page._start_fit1d = lambda data, model, selection, curve: (given.setdefault("fit1d", (data, selection)), page._finish())
+    for method in ("ai", "fit1d"):
+        page.set_side("both")
+        page.set_method(method)
+        page.set_range((0.3, 1.2))
+        assert page._data().q.size == 2 * int(((mean.q >= 0.3) & (mean.q <= 1.2)).sum())
+        page.run_fit(method)
+        _wait(page)
+        data = given[method][0] if method == "fit1d" else given[method]
+        assert np.all(np.diff(data.q) > 0) and data.q.min() >= 0.3 and data.q.max() <= 1.2
+        assert np.allclose(data.q, mean.q[(mean.q >= 0.3) & (mean.q <= 1.2)])
+        assert page.session.side == "mean" and np.array_equal(page._data().q, data.q)
+        page.set_range(None)
+    assert given["fit1d"][1][0] == "mean"  # the selection a fit1d result is of
+    assert said() == 3
+
+    # Refine fits both halves on |q|, and nothing is said about a mean.
+    page.set_side("both")
+    page.set_method("local")
+    page.run_fit()
+    _wait(page)
+    assert page.session.result is not None and page.session.result.points == 480 and page.session.side == "both"
+    assert said() == 3
+    # With one half or the mean chosen, the same methods take those points and have nothing to say.
+    page.set_side("negative")
+    page.set_method("shapes")
+    page.run_fit()
+    _wait(page)
+    assert len(asked) == 2 and asked[1].size == 240 and page.session.side == "negative"
+    assert said() == 3
+    page.dispose()
+
+
+def test_a_fit1d_result_of_a_cut_opened_on_both_halves_is_recorded_as_the_mean(tmp_path) -> None:
+    """fit1d on “Both halves on |q|” fitted the 240 points of the mean while the record of Save Data said side
+    “both” and the plot drew the 480 points of both halves under the model."""
+    from src.gimap.app.jobs import JobResult
+
+    class Runner:
+        """In place of the fit1d job: a result of its form for the points it was asked to fit."""
+
+        def run(self, request, on_progress):
+            payload = request.payload
+            q, intensity = payload["q"], payload["intensity"]
+            native = {
+                "summary": {"chi2_per_point": 1.0, "n_points": len(q), "status": "ok", "model": "general", "messages": []},
+                "curves": {"q_nm_inv": q, "intensity": intensity, "sigma": payload["sigma"], "model": intensity,
+                           "residual": [0.0] * len(q), "components": {}},
+                "table": [], "warnings": [], "settings": payload["options"],
+            }
+            return JobResult(request.job_id, "succeeded", value={"native": native, "mapping_row": {}})
+
+        def cancel(self, job_id):
+            return True
+
+    page = _page()
+    page.view_model.context.jobs = Runner()
+    try:
+        page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
+        assert page.session.side == "both" and page._data().q.size == 480
+        page.fit1d_composition.setCurrentIndex(page.fit1d_composition.findData("model"))
+        page.run_fit("fit1d")
+        _wait(page)
+        native = page.session.native_result
+        assert native is not None and native["summary"]["n_points"] == 240, page.status_label.text()
+        assert page.session.side == "mean" and page.side_combo.currentData() == "mean"
+        assert page.session.native_is_current() and page.session.native_selection[0] == "mean"
+        shown = {str(item[0]): len(item[1]) for item in page.plot._source}
+        assert shown["measured"] == 240  # the points under the fit1d curve are the ones it was fitted on
+        target = tmp_path / "fit1d.csv"
+        assert page.export_data_dialog(target) == target
+        record = json.loads(target.with_suffix(".json").read_text(encoding="utf-8"))
+        assert record["selection"]["side"] == "mean" and record["native_result"]["summary"]["n_points"] == 240
+        assert np.loadtxt(target, delimiter=",", skiprows=1).shape[0] == 240
+        # Back on both halves the result is of other points: it is stale, and is not saved as theirs.
+        page.set_side("both")
+        assert not page.session.native_is_current() and page.export_data_dialog(tmp_path / "stale.csv") is None
+    finally:
+        page.dispose()
+
+
+def test_the_sentence_about_both_halves_is_said_in_chinese(tmp_path) -> None:
+    from src.gimap.app.presentation.i18n import apply_language
+    from src.gimap.features.fitting.application.single_fit import BOTH_USES_MEAN
+
+    page = _page(quick_fit=lambda *args, **kwargs: [])
+    try:
+        apply_language("zh", [page])
+        page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
+        page.set_method("shapes")
+        page.run_fit()
+        said = [line for line in page.log_view.toPlainText().splitlines() if "两半取平均" in line]
+        assert said and BOTH_USES_MEAN not in page.log_view.toPlainText()
+        _wait(page)
+    finally:
+        apply_language("en", [page])
+        page.dispose()
+
+
+# -- the halves as the plot shows them, and points left out by their names ---------------------------------
+
+def test_both_halves_on_q_are_drawn_each_in_its_own_colour(tmp_path) -> None:
+    """Analyze's default sends “both halves on |qy| (two colours)”: here too the halves are told apart."""
+    from src.gimap.features.fitting.presentation.single.points import DATA_COLOR, SECOND_HALF_COLOR
+
+    page = _page()
+    page.open_curve(_curve_file(tmp_path, signed=True), "both_abs")
+    assert page.session.side == "both" and page._data().q.size == 480  # fitted together, as before
+    state = page.plot.figure_state()
+    names = [name for name, _x, _y in state["curves"]]
+    assert names[:2] == ["measured (+q)", "measured (−q)"] and "measured" not in names
+    assert state["colors"][:2] == [DATA_COLOR, SECOND_HALF_COLOR] and DATA_COLOR != SECOND_HALF_COLOR
+    positive, negative = state["curves"][0], state["curves"][1]
+    assert positive[1].size == negative[1].size == 240 and np.allclose(positive[1], negative[1])  # on the same |q|
+    assert np.median(negative[2] / positive[2]) == pytest.approx(1.02, abs=0.005)  # the q < 0 half of the file
+    page.set_range((0.5, 1.5))
+    state = page.plot.figure_state()
+    shown = {name: x for name, x, _y in state["curves"]}
+    assert shown["measured (+q)"].min() >= 0.5 and shown["measured (−q)"].max() <= 1.5
+    assert shown["measured (+q)"].size + shown["measured (−q)"].size == page._data().q.size
+    for side in ("mean", "positive", "negative"):  # one curve: one series, as before
+        page.set_side(side)
+        names = [name for name, _x, _y in page.plot.figure_state()["curves"]]
+        assert "measured" in names and not any(name.startswith("measured (") for name in names)
+    page.dispose()
+
+
+def test_a_half_sent_with_a_curve_of_one_side_is_not_kept_for_it(tmp_path) -> None:
+    """Analyze's Halves is “qy < 0 half” and an I(q) with one side is sent: there is no half to choose, and the
+    choice that stays hidden must not be handed on (to a series, to the record) as if it had been made."""
+    page = _page()
+    assert page.open_curve(_curve_file(tmp_path), "negative")
+    assert page.side_combo.isHidden() and page.session.side == "mean" and page._data().q.size == 240
+    assert page.project_state()["curve"]["side"] == "mean"
+    assert page.open_curve(_curve_file(tmp_path, signed=True, name="cut_fit_input.dat"), "negative")
+    assert not page.side_combo.isHidden() and page.session.side == "negative"  # a cut: as it was sent
+    page.dispose()
+
+
+def test_points_left_out_by_name_are_marked_and_counted_as_the_fit_takes_them(tmp_path) -> None:
+    """The names of left-out points are their |q| to nine digits; another frame of a series has the same
+    detector columns at a q that differs in the last digits. The fit leaves those points out (the nearest
+    within half a step): the plot and the count must say the same."""
+    from src.gimap.features.fitting.application.single_fit import point_key
+
+    page = _page()
+    page.open_curve(_curve_file(tmp_path))
+    points = page.session.all_points()
+    names = {point_key(points.q[index] * (1.0 + 2e-7)) for index in (50, 51, 52)}  # as named on another frame
+    assert not any(point_key(value) in names for value in points.q)  # no point has exactly these names
+    page.session.excluded = set(names)
+    page._exclusions_changed()
+    assert page._data().q.size == 237  # the fit leaves the three points out
+    state = page.plot.figure_state()
+    crossed = {name: x for name, x, _y in state["curves"]}["left out"]
+    assert crossed.size == 3 and np.allclose(sorted(crossed), points.q[[50, 51, 52]])
+    assert page.left_out() == 3 and page.excluded_label.text() == "Points left out of the fit: 3"
     page.dispose()

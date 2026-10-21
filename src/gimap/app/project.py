@@ -2,10 +2,11 @@
 
 ``<name>.gimap`` is JSON: the frames listed in Analyze with its whole set-up (mode, geometry, αi,
 masks and corrections, cuts), Single analysis (the curve, its halves, fitting range, left-out
-points, the model and the method), In-situ series (the folder of curves, the frames, how each
-starts) and Compare (its settings and series: curve files by path, maps from Analyze in
-``<name>.compare.npz`` next to the project). Paths are kept as they are; what is no longer there is
-reported when the project opens (``missing``, and the notes of ``apply``).
+points, the model and the method), In-situ series (the folder of curves, the frames, the halves of
+the cut every frame is fitted on, how each starts) and Compare (its settings and series: curve
+files by path, maps from Analyze in ``<name>.compare.npz`` next to the project). Paths are kept as
+they are; what is no longer there is reported when the project opens (``missing``, and the notes
+of ``apply``).
 
 Opening a project replaces what the window held: Analyze's frames, the curve of Single analysis, the
 In-situ series and Compare's series are those of the project — none when it names none — so a later
@@ -115,8 +116,8 @@ def _close_curve(page) -> None:
     else:
         session.curve = session.q_range = session.result = session.result_selection = None
         session.solutions, session.solutions_selection, session.excluded = [], None, set()
-    # The halves chosen for the curve that went are not those of the next one, nor of an In-situ series
-    # started without a curve (it takes them from here): the page's own start, unless the project says.
+    # The halves chosen for the curve that went are not those of the next one: the page's own start, unless
+    # the project says. (An In-situ series has its own halves, kept in the project: ``fitting.series.side``.)
     session.side = "mean"
     remember = getattr(page, "_remember", None)
     if remember is not None:
@@ -136,7 +137,7 @@ def _close_series(page) -> None:
     if close is not None:
         close()
         return
-    page.folder, page.paths, page.fits, page.queue = "", [], {}, []
+    page.folder, page.paths, page.fits, page.queue = "", [], {}, []  # (a page without ``close_series``)
     page._curves, page._preview_curves, page._selected, page._start_model = {}, {}, None, None
     page._previous = page._last_done = page._drawn_with = None
     page.folder_chip.setText(tr(NO_SERIES_FOLDER))

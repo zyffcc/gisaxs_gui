@@ -3,7 +3,8 @@
 ``ApplicationWindowView`` creates the shell widgets and the classic Fitting /
 Prediction controls; this module builds the remaining feature pages into the
 page stack and owns navigation between them.  Workspaces are addressed by the
-keys of ``NAVIGATION_ITEMS`` ("analyze", "fitting", ...).
+keys of ``NAVIGATION_ITEMS`` ("analyze", "fitting", ...).  What one workspace hands to another
+(Send to Fitting, Send to Compare, the Start page's series entry) is in ``handover.py``.
 """
 
 from __future__ import annotations
@@ -15,11 +16,14 @@ from pathlib import Path
 from PyQt5.QtCore import QCoreApplication, QEventLoop
 from PyQt5.QtWidgets import QVBoxLayout
 
+from .handover import SERIES_TASKS, HandoverMixin
+from .series_frames import SeriesFrames
 from .presentation.collapsible_card import (
     CardContentResizeHandle,
     CollapsibleCardFrame,
 )
 from .presentation.components import dismiss_toasts, show_toast
+from .presentation.components.toast import set_toast_inset
 from .presentation.i18n import DEFAULT_LANGUAGE, apply_to, current_language, language_changed, tr, translate
 from .presentation.layout_metrics import LAYOUT
 from .presentation.navigation import NAVIGATION_ITEMS, NavigationSidebar
@@ -31,6 +35,7 @@ from src.gimap.features.prediction.presentation import (
 )
 from src.gimap.features.trainset.presentation import TrainsetBuildPage
 from src.gimap.features.fitting.presentation import FittingWorkspace
+from src.gimap.shared.detector_io import DETECTOR_SUFFIXES
 
 SIDEBAR_COLLAPSED_KEY = "shell.sidebar_collapsed"
 STATUS_BAR_PAGES = ("predict", "trainset")
@@ -56,7 +61,7 @@ def _accepts(function, name: str) -> bool:
         for parameter in parameters)
 
 
-class MainWindowComponents:
+class MainWindowComponents(HandoverMixin):
     """Builds and owns the feature pages and the navigation sidebar."""
 
     def __init__(self, ui):
@@ -76,6 +81,7 @@ class MainWindowComponents:
             preferences=ui.app_context.preferences,
             view_model=self.fitting_view_model,
             quick_fit=create_quick_fit(),
+            frames=SeriesFrames(lambda: getattr(self.analyze_page, "view_model", None)),  # frames cut as in Analyze
         )
         self.predict_workspace = GisaxsPredictWorkspace(ui, LAYOUT)
         self.home_page = self._create_home_page()
@@ -88,12 +94,17 @@ class MainWindowComponents:
             "trainset": ui.trainsetBuildPage,
             "compare": self.compare_page,
         }
+        importing = getattr(self.analyze_page, "frameImportStarted", None)
+        if importing is not None:
+            importing.connect(self._frame_import_started)
         self.sidebar = NavigationSidebar(
             NAVIGATION_ITEMS,
             ui.centralwidget,
             collapsed=bool(self.preferences.get(SIDEBAR_COLLAPSED_KEY, False)),
         )
         ui.horizontalLayout.insertWidget(0, self.sidebar)
+        # Notices lie under the page, not over the sidebar, and keep off the progress bar and Cancel of its status line.
+        set_toast_inset(ui, self.sidebar.width, band=self._status_band)
         self._place_status_bar()
         self.sidebar.pageRequested.connect(self._page_requested)
         self.sidebar.collapsedChanged.connect(self._remember_sidebar)
@@ -128,11 +139,6 @@ class MainWindowComponents:
         self.ui.comparePage = page
         self.analyze_page.set_compare_target(self._send_series_to_compare)
         return page
-
-    def _send_series_to_compare(self, series_map, name: str) -> None:
-        """Analyze ▸ Series ▸ Send to Compare: the map joins the comparison, and Compare is shown."""
-        if self.compare_page.add_map(series_map, name) is not None:
-            self.show_page("compare")
 
     def _create_analyze_page(self):
         from src.gimap.features.analyze.bootstrap import create_analyze_view_model
@@ -175,8 +181,8 @@ class MainWindowComponents:
         if menus is not None:
             menus.open_recent(path)
             return
-        self.analyze_page.add_paths([path])
-        self._page_requested("analyze")
+        if self.analyze_page.import_paths([path]):
+            self._page_requested("analyze")
 
     def _create_guided_analysis(self):
         """The automatic analysis (no AI) lives in the Analyze workspace: Results step and tab."""
@@ -198,7 +204,7 @@ class MainWindowComponents:
         guided.started.connect(page.automatic_started)
         guided.progressed.connect(page.automatic_progress)
         guided.failed.connect(page.automatic_failed)
-        guided.refineRequested.connect(page.fit_current)
+        guided.refineRequested.connect(self._send_to_fitting)
         guided.solutionRequested.connect(self._show_fit_solution)
         guided.finished.connect(self._automatic_finished)
         forget = getattr(page, "forget_results", None)
@@ -253,26 +259,32 @@ class MainWindowComponents:
         return notes.toPlainText() if notes is not None else ""
 
     def _open_and_guide(self, open_dialog) -> None:
+        """Import start navigates immediately; synchronous legacy entry points keep their old fallback."""
         before = len(self.analyze_page.view_model.state.files)
-        open_dialog()
-        if len(self.analyze_page.view_model.state.files) != before:
+        accepted = open_dialog()
+        if accepted or len(self.analyze_page.view_model.state.files) != before:
             self._page_requested("analyze")
 
+    def _frame_import_started(self) -> None:
+        self._page_requested("analyze")
+        if getattr(self, "_series_import_requested", False):
+            self.analyze_page.show_right("series")
+
     def open_dropped(self, paths) -> bool:
-        """Files dropped on the window: a project opens as a project, frames and folders in Analyze."""
+        """Request a background frame import; True means accepted, without waiting for pixels to decode."""
         paths = [str(Path(path)) for path in paths]
         projects = [path for path in paths if path.lower().endswith(".gimap")]
         menus = getattr(self.ui, "menus", None)
         if projects and menus is not None:
             return bool(menus.open_project(projects[0]))
-        show_paths = getattr(self.analyze_page, "show_paths", None)  # Analyze's contract: True when a frame is shown
-        shown = bool(show_paths(paths)) if show_paths is not None else bool(self.analyze_page.add_paths(paths))
-        if shown:
+        sources = [path for path in paths if Path(path).suffix.lower() in DETECTOR_SUFFIXES or Path(path).is_dir()]
+        accepted = bool(sources) and bool(self.analyze_page.import_paths(sources))
+        if accepted:
             self._page_requested("analyze")
         elif self.current_page_key() != "analyze":  # Analyze says so in its own status line
-            show_toast(self.ui, tr("Nothing opened: drop detector frames (CBF, NXS, TIFF, EDF), "
+            show_toast(self.ui, tr("Nothing opened: drop detector frames (CBF, NeXus/HDF5, TIFF, EDF), "
                                    "a folder of them or a project (.gimap)"), level="warning")
-        return shown
+        return accepted
 
     def _task_requested(self, key: str) -> None:
         page = self.analyze_page
@@ -291,10 +303,12 @@ class MainWindowComponents:
             )
             if not page.view_model.state.files:
                 self._open_and_guide(page.open_files)
-        elif key == "series":
-            self._page_requested("analyze")
-            if not page.view_model.state.files:
-                self._open_and_guide(page.open_folder)
+        elif key in SERIES_TASKS:
+            self._series_import_requested = True
+            try:
+                self._open_series(key)
+            finally:
+                self._series_import_requested = False
         elif key == "calibrate":
             menus = getattr(self.ui, "menus", None)
             if menus is not None:
@@ -333,29 +347,6 @@ class MainWindowComponents:
             # One window per calibration (also when the frame could not be loaded): deleted now, or when a
             # thread it still waits for ends (never before exec_() returned: under its own event loop).
             dialog.dispose_when_idle()
-
-    def _send_curve_to_fitting(self, path, side: str = "both_abs") -> None:
-        """Load an Analyze curve into Fitting and show it ready to fit."""
-        runtime = getattr(self.ui, "runtime", None)
-        if runtime is None:
-            raise RuntimeError(tr("Fitting is still starting; try again in a moment."))
-        runtime.navigate("fitting")
-        if not self.fitting_workspace.open_curve(path, side):
-            raise RuntimeError(self.fitting_workspace.fit_page.status_label.text())
-
-    def _show_fit_solution(self, row: dict) -> None:
-        """Results ▸ Fit details ▸ Show in Fitting: the prepared curve in Fitting with that solution as its model."""
-        self.analyze_page.fit_current()
-        if self.current_page_key() == "fitting":
-            self.fitting_workspace.show_solution(row)
-
-    def _send_series_to_fitting(self, folder) -> None:
-        """Open Fitting ▸ In-situ series on the folder of curves Analyze just wrote."""
-        runtime = getattr(self.ui, "runtime", None)
-        if runtime is None:
-            raise RuntimeError(tr("Fitting is still starting; try again in a moment."))
-        runtime.navigate("fitting")
-        self.fitting_workspace.open_series(folder, "*_fit_input.dat")
 
     def _replace_page_host(self, host_name: str, page) -> int:
         stack = self.ui.mainWindowWidget
@@ -408,6 +399,10 @@ class MainWindowComponents:
             runtime.navigate(key)
         else:
             self.show_page(key)
+
+    def _status_band(self) -> list:
+        """What lies along the bottom of the window, under the notices: the page shown and the Labs status bar."""
+        return [self.ui.mainWindowWidget.currentWidget(), getattr(self.ui, "statusbar", None)]
 
     def _sync_sidebar(self, _index: int) -> None:
         key = self.current_page_key()

@@ -61,7 +61,7 @@ def test_the_series_controls_wrap_and_never_need_more_than_380_px() -> None:
     assert least < 0.7 * one_row
     if "Segoe UI" in QFontInfo(QApplication.font()).family():
         assert least <= SERIES_CONTROLS_WIDTH
-    # The frame and trace plots side by side when there is room, else one above the other: with a map shown,
+    # The frame and trace plots always stack: with a map shown,
     # the controls (not the plots, nor a running batch's panel) set the least width of the panel.
     for widget in (page.series_map_view, page.series_plots, page.batch_panel):
         widget.show()
@@ -86,9 +86,12 @@ def test_the_series_controls_wrap_and_never_need_more_than_380_px() -> None:
         assert geometry.left() >= 0 and geometry.right() < width, widget.objectName()
         assert geometry.width() >= widget.minimumSizeHint().width(), widget.objectName()
     assert page.series_build_button.y() > page.series_curve_combo.y()  # the actions on a row of their own
-    page.splitter.setSizes([sizes[0], 300, sum(sizes[1:]) - 300])  # a wide panel: the plots side by side
+    narrow = page.series_profile_plot.width()
+    page.splitter.setSizes([sizes[0], 300, sum(sizes[1:]) - 300])  # a wide panel enlarges both stacked plots
     _app().processEvents()
-    assert not plots.stacked() and page.series_trace_plot.y() == page.series_profile_plot.y()
+    assert plots.stacked() and page.series_trace_plot.y() > page.series_profile_plot.y()
+    assert page.series_profile_plot.width() > narrow
+    assert page.series_trace_plot.width() == page.series_profile_plot.width()
     # The combo may be narrower than a name: its list shows every name whole.
     page._refresh_series_curves(None)  # (no frame: an empty list)
     assert page.series_curve_combo.view().minimumWidth() == 0

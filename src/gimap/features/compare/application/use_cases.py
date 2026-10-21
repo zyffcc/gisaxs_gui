@@ -1,5 +1,10 @@
 """What the Compare page does: series from curve files or from Analyze's Series map, the comparison,
-and its tables with a JSON record."""
+and its tables with a JSON record.
+
+A folder is one series when it holds one kind of curve. A folder Analyze wrote — a Batch Export, its
+``curves`` folder, the exports of single frames — holds several (I(q), I(χ), every cut region): one of them
+is chosen (``kind``), read from its file per frame or, when the batch wrote only tables, from the table of
+that curve (``sources.py``)."""
 
 from __future__ import annotations
 
@@ -11,6 +16,17 @@ from typing import Callable, Optional, Protocol, Sequence
 import numpy as np
 
 from ..domain import COMPARE_ERRORS, Comparison, SeriesData, compare
+from .sources import (
+    KIND_IN_NAME,
+    NO_SUCH_KIND,
+    NO_TABLE,
+    NOT_NUMBERS,
+    SEVERAL_KINDS,
+    CurveKind,
+    FolderContent,
+    FolderReader,
+    chosen_kind,
+)
 
 CURVE_SUFFIXES = (".dat", ".txt", ".csv", ".xy", ".chi")
 PROGRESS_EVERY = 25
@@ -32,13 +48,18 @@ UNREAD_FILE = "{name} ({error})"
 """One file of ``TOO_FEW_READ`` (``{files}``: these joined with “; ”)."""
 DIFFERENT_FILE_AXES = "The files have different x axes: {axes}"
 TOO_FEW_IN_FOLDER = "Fewer than two curve files ({suffixes}) in {folder}."
-ERRORS = (TOO_FEW_FILES, TOO_FEW_READ, DIFFERENT_FILE_AXES, TOO_FEW_IN_FOLDER, *COMPARE_ERRORS)
+TOO_FEW_IN_TABLE = "The table {name} holds fewer than two frames."
+ERRORS = (TOO_FEW_FILES, TOO_FEW_READ, DIFFERENT_FILE_AXES, TOO_FEW_IN_FOLDER, TOO_FEW_IN_TABLE, SEVERAL_KINDS,
+          NO_SUCH_KIND, NO_TABLE, NOT_NUMBERS, *COMPARE_ERRORS)
 """Every error template of Compare's files and comparison (a template without values is an exact text)."""
 
 
 class CurveReader(Protocol):
     def read(self, path: Path) -> tuple[np.ndarray, np.ndarray, str]:
-        """``(x, intensity, x_label)`` of a curve file; q in Å⁻¹."""
+        """``(x, intensity, x_label)`` of a curve file; q in Å⁻¹, angles in degrees."""
+
+    def read_table(self, path: Path) -> tuple[np.ndarray, np.ndarray, tuple, str]:
+        """``(x, intensities (frames × points), frame labels, x_label)`` of a table with one column per frame."""
 
 
 class TableWriter(Protocol):
@@ -66,16 +87,18 @@ def curve_files(folder: Path, pattern: str = "*") -> list[Path]:
 
 
 class CompareService:
-    def __init__(self, reader: CurveReader, writer: TableWriter):
-        self.reader, self.writer = reader, writer
+    def __init__(self, reader: CurveReader, writer: TableWriter, folders: Optional[FolderReader] = None):
+        """``folders``: tells the kinds of curves in a folder apart; without it a folder is one kind."""
+        self.reader, self.writer, self.folders = reader, writer, folders
 
     # -- series ------------------------------------------------------------------------------
 
     def series_from_files(self, paths: Sequence[Path], name: Optional[str] = None, *,
-                          progress: Optional[Progress] = None) -> SeriesData:
+                          progress: Optional[Progress] = None, source: Optional[Path] = None) -> SeriesData:
         """One series from curve files (in counting order); frames on the first file's grid. ``progress(done,
         total)`` is called before the first file and then every ``PROGRESS_EVERY`` files: an in-situ folder of
-        a thousand curves takes seconds (longer the first time), and the caller can say how far it is."""
+        a thousand curves takes seconds (longer the first time), and the caller can say how far it is.
+        ``source``: where the series is from when that is not the folder of its files (the batch folder)."""
         paths = sorted((Path(path) for path in paths), key=natural_key)
         if len(paths) < 2:
             raise ValueError(TOO_FEW_FILES)
@@ -101,13 +124,48 @@ class CompareService:
             image[row, inside] = np.interp(grid[inside], x, y)
         folder = paths[0].parent
         return SeriesData(name or folder.name, grid, image, tuple(path.name for path, *_ in curves),
-                          x_label=curves[0][3], source=str(folder), paths=tuple(str(path) for path, *_ in curves))
+                          x_label=curves[0][3], source=str(source or folder), paths=tuple(str(path) for path, *_ in curves))
 
-    def series_from_folder(self, folder: Path, pattern: str = "*", *, progress: Optional[Progress] = None) -> SeriesData:
-        files = curve_files(Path(folder), pattern)
-        if len(files) < 2:
-            raise ValueError(TOO_FEW_IN_FOLDER.format(suffixes=", ".join(CURVE_SUFFIXES), folder=Path(folder).name))
-        return self.series_from_files(files, Path(folder).name, progress=progress)
+    def series_from_table(self, table: Path, name: Optional[str] = None, *, source: Optional[Path] = None) -> SeriesData:
+        """One series from a table with x in its first column and one column per frame (a Batch Export's
+        ``<batch>_<curve>_frames`` table): its columns are the frames, their headers the labels."""
+        table = Path(table)
+        x, image, labels, x_label = self.reader.read_table(table)
+        if image.shape[0] < 2:
+            raise ValueError(TOO_FEW_IN_TABLE.format(name=table.name))
+        order = np.argsort(x, kind="stable")
+        return SeriesData(name or table.stem, x[order], image[:, order], tuple(labels), x_label=x_label,
+                          source=str(source or table.parent))
+
+    def folder_content(self, folder: Path, pattern: str = "*") -> FolderContent:
+        """What a series from ``folder`` is called and the kinds of curves the folder holds (``sources.py``)."""
+        folder = Path(folder)
+        if self.folders is not None:
+            return self.folders.content(folder, pattern)
+        files = curve_files(folder, pattern)
+        return FolderContent(folder.name, (CurveKind("", files=tuple(files), frames=len(files)),) if files else ())
+
+    def folder_kinds(self, folder: Path, pattern: str = "*") -> list[CurveKind]:
+        return list(self.folder_content(folder, pattern).kinds)
+
+    def series_from_folder(self, folder: Path, pattern: str = "*", *, kind: Optional[str] = None,
+                           progress: Optional[Progress] = None) -> SeriesData:
+        """The series of ``folder``: its one kind of curve, or the kind named ``kind`` (``SeveralKinds`` when
+        there are several and none is named). A kind among several is named in the series' name."""
+        folder = Path(folder)
+        content = self.folder_content(folder, pattern)
+        too_few = TOO_FEW_IN_FOLDER.format(suffixes=", ".join(CURVE_SUFFIXES), folder=folder.name)
+        if not content.kinds:
+            raise ValueError(too_few)
+        chosen = chosen_kind(folder, content.kinds, kind)
+        name = content.name
+        if chosen.key and len(content.kinds) > 1:
+            name = KIND_IN_NAME.format(name=name, kind=chosen.key)
+        if len(chosen.files) >= 2:
+            return self.series_from_files(chosen.files, name, progress=progress, source=folder)
+        if chosen.table is not None:
+            return self.series_from_table(chosen.table, name, source=folder)
+        raise ValueError(too_few)
 
     @staticmethod
     def series_from_map(series_map, name: str) -> SeriesData:
@@ -182,4 +240,4 @@ class CompareService:
 
 
 __all__ = ["CURVE_SUFFIXES", "ERRORS", "CompareService", "CompareSettings", "CurveReader", "METHOD", "PROGRESS_EVERY",
-           "Progress", "TOO_FEW_READ", "TableWriter", "UNREAD_FILE", "curve_files", "natural_key"]
+           "Progress", "TOO_FEW_IN_TABLE", "TOO_FEW_READ", "TableWriter", "UNREAD_FILE", "curve_files", "natural_key"]

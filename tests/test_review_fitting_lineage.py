@@ -68,7 +68,7 @@ def test_results_warn_when_the_fit_no_longer_holds(tmp_path) -> None:
     page = _page()
     page.open_curve(_curve_file(tmp_path))
     page.set_model(page.session.model.with_values({(0, "R"): 5.5, (0, "D"): 42.0}))
-    page.method_buttons["local"].setChecked(True)
+    page.set_method("local")
     page.run_fit()
     _wait_fit(page)
     assert page.session.result_is_current() and page.step_rail.state("results") == "ok"

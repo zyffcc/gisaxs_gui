@@ -19,6 +19,7 @@ class ProjectMixin:
             "files": [str(path) for path in state.files],
             "current": int(self.file_list.currentRow()),
             "frame": int(getattr(state, "frame_index", 0) or 0),
+            "import_selections": self.view_model.export_import_selections(),
             "settings": settings_record(self.view_model.current_settings()),
         }
 
@@ -38,14 +39,20 @@ class ProjectMixin:
             except (ValueError, KeyError, TypeError) as exc:
                 notes.append(tr("the Analyze set-up could not be read: {reason}").format(reason=exc))
         if present:
-            self.add_paths(present)
+            self._import_applying = True
+            try:
+                self.add_paths(present)
+                notes += self.view_model.apply_import_selections(data.get("import_selections") or {})
+            finally:
+                self._import_applying = False
             current = int(data.get("current", 0) or 0)
-            if 0 <= current < self.file_list.count() and current != self.file_list.currentRow():
-                self.file_list.setCurrentRow(current)
+            current = min(max(0, current), len(self.view_model.state.files) - 1)
             frame = int(data.get("frame", 0) or 0)
-            if frame:
-                self.view_model.set_frame(frame)
-            self.run_analysis()
+            indices = self.view_model.selected_frame_indices(self.view_model.state.files[current])
+            if len(indices):
+                frame = frame if frame in indices else indices[0]
+                self.show_frame(current, frame)
+            self.refresh_frame_list()
         return notes
 
 

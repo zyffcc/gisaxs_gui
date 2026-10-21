@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -96,6 +97,8 @@ class SessionMemoryMixin:
         except (OSError, ValueError):
             return
         current = self.view_model.current_settings()
+        if last.pin_series_cuts is None:  # (written before the pin existed: using it would leave the pin as it is)
+            last = replace(last, pin_series_cuts=current.pin_series_cuts)
         if settings_record(last) == settings_record(current):
             return  # nothing would change
         summary = _setup_summary(last)

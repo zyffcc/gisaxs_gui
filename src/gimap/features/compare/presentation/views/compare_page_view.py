@@ -8,7 +8,7 @@ comparison). A status line closes the page.
 
 from __future__ import annotations
 
-from PyQt5.QtCore import QEvent, QObject, Qt
+from PyQt5.QtCore import QEvent, QMetaObject, QObject, Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -58,6 +58,8 @@ CHANGE_TIP = ("How far each series has changed, frame by frame, along the chosen
 PATHS_TIP = ("Each series through the first two main changes: ○ its first kept frame, ■ its last; odd frames are "
              "left out")
 PATHS_EMPTY = "A second main change is needed to draw the paths."
+FOLDER_TIP = ("The curve files of a folder (x and I columns), in counting order: one series. A folder Analyze wrote "
+              "(a Batch Export, its curves, gimap_analysis) holds several kinds of curves: you choose one")
 """The paths plot without paths: every series has one main change only."""
 
 
@@ -175,7 +177,9 @@ def fit_columns(table: QTableWidget, column: int = 0) -> None:
     # The stretched last column never gets narrower than it was when stretching began (Qt): begin again
     # from its width now, or a title that once needed one line would keep the table too wide.
     header.setStretchLastSection(False)
-    header.resizeSections()
+    # ``resizeSections()`` is a protected slot: PyQt refuses to call it on a header Qt made itself (“no access
+    # to protected functions … for objects not created from Python”), the meta-object system does not.
+    QMetaObject.invokeMethod(header, "resizeSections", Qt.DirectConnection)
     header.setStretchLastSection(True)
 
 
@@ -225,7 +229,7 @@ class ComparePageView:
         self.add_map_action = menu.addAction("The Series Map of Analyze")
         self.add_map_action.setToolTip("The map built in Analyze ▸ Series (or use Send to Compare there)")
         self.add_folder_action = menu.addAction("Folder of Curves…")
-        self.add_folder_action.setToolTip("Every curve file of a folder (q, I columns), in counting order: one series")
+        self.add_folder_action.setToolTip(FOLDER_TIP)
         self.add_files_action = menu.addAction("Curve Files…")
         self.add_files_action.setToolTip("Chosen curve files (q, I columns), in counting order: one series")
         self.add_button.setMenu(menu)
@@ -316,8 +320,9 @@ class ComparePageView:
         layout.addLayout(row)
         self.series_hint = _muted(
             "In Analyze, open a sample and build its map in the Series tab, then Send to Compare; repeat for every "
-            "sample. Curve files (q and I columns, e.g. a Batch Export) can be added as a folder too, or dropped on "
-            "this page.", parent)
+            "sample. A Batch Export folder of Analyze, or any folder of curve files (x and I columns), can be added "
+            "too, or dropped on this page: one kind of curve is one series, and a folder with several asks which.",
+            parent)
         layout.addWidget(self.series_hint)
 
     def _compare_step(self, parent: QWidget, layout: QVBoxLayout) -> None:
@@ -481,5 +486,6 @@ class ComparePageView:
         return frame
 
 
-__all__ = ["CHANGE_TIP", "COMPARE_STEPS", "ComparePageView", "GROUP_COLUMN", "PATHS_EMPTY", "PATHS_TIP", "RANGE_DECIMALS",
+__all__ = ["CHANGE_TIP", "COMPARE_STEPS", "ComparePageView", "FOLDER_TIP", "GROUP_COLUMN", "PATHS_EMPTY", "PATHS_TIP",
+           "RANGE_DECIMALS",
            "RANGE_LIMITS", "RESULT_COLUMNS", "X_AXES", "fit_columns", "fit_to_rows", "two_lines"]

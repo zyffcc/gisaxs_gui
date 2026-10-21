@@ -18,8 +18,8 @@ from PyQt5.QtWidgets import QFileDialog, QMenu, QShortcut, QSizePolicy
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application import GISAXS, FrameAnalysis, source_labels
-from ..texts import detector_text, message_text
+from ...application import GISAXS, FrameAnalysis, export_stem, source_labels
+from ..texts import message_text
 from .display import PLOT_SIDES, VIEW_DETECTOR, cut_lines
 from .results_state import RESULTS_INTRO
 
@@ -30,8 +30,10 @@ FILLED_COLOR = "#22d3ee"
 """Hot and dead pixels found in the frame (amber, circled so single pixels stay visible)."""
 
 
-CUT_SOURCES = {"yoneda": "Yoneda cut", "manual": "Cut set by hand", "horizon": "Cut above the horizon"}
-"""The Cuts step's detail: where the horizontal GISAXS cut is (``markers["horizontal_source"]``)."""
+CUT_SOURCES = {"yoneda": "Yoneda cut", "manual": "Cut set by hand", "horizon": "Cut above the horizon",
+               "series": "Cut of the series (the cut of one frame, held for every frame)"}
+"""The Cuts step's detail: where the horizontal GISAXS cut is (``markers["horizontal_source"]``; ``series``: a frame
+of a series run or opened from a map row, cut where the series is — ``use_cases.held_cut``)."""
 
 
 def _pixels(count: int, total: int) -> str:
@@ -104,12 +106,13 @@ class WorkspaceMixin:
         self._plot_keys: dict[str, list[str]] = {"top": [], "bottom": []}
         self.step_rail.stepChosen.connect(self._step_chosen)
         self.right_tabs.activated.connect(lambda index: self.show_right(self.right_tabs.itemData(index)))
-        self.previous_file_button.clicked.connect(lambda: self._step_file(-1))
-        self.next_file_button.clicked.connect(lambda: self._step_file(+1))
+        # ‹ ›, Page Up / Page Down: the previous / next frame of the series (``bindings/file_list.py``).
+        self.previous_file_button.clicked.connect(lambda: self._step_frame(-1))
+        self.next_file_button.clicked.connect(lambda: self._step_frame(+1))
         for keys, delta in (("PgUp", -1), ("PgDown", +1)):
             shortcut = QShortcut(QKeySequence(keys), self)
             shortcut.setContext(Qt.WidgetWithChildrenShortcut)
-            shortcut.activated.connect(lambda delta=delta: self._step_file(delta))
+            shortcut.activated.connect(lambda delta=delta: self._step_frame(delta))
         batch = QShortcut(QKeySequence("Ctrl+Shift+E"), self)
         batch.setContext(Qt.WidgetWithChildrenShortcut)
         batch.activated.connect(lambda: self.batch_export_dialog())
@@ -203,23 +206,7 @@ class WorkspaceMixin:
                 self.mode_combo.setCurrentIndex(index)
             self.view_model.set_mode(mode)
 
-    # -- files -----------------------------------------------------------------------
-
-    def _step_file(self, delta: int) -> None:
-        if self._frame_kept():  # the automatic analysis works on the frame shown
-            return
-        count = self.file_list.count()
-        if count:
-            row = min(max(0, self.file_list.currentRow() + int(delta)), count - 1)
-            self.file_list.setCurrentRow(row)
-
-    def _file_loading(self, path: Path) -> None:
-        """Immediately after a file is chosen: its name, and that it is being read."""
-        self.file_chip.setText(path.name)
-        self.file_chip.setToolTip(str(path))
-        self.file_meta.setText(tr("reading…"))
-        self._show_file_position()  # ‹ 3 / 40 ›: only with more than one file (``bindings/file_list.py``)
-        self.set_step_state("data", "busy", trf("Reading {name} …", name=path.name))
+    # -- files (the file shown and its frames: ``bindings/data_step.py``, ``bindings/file_list.py``) ------
 
     def _busy_changed(self, busy: bool) -> None:
         if busy:
@@ -237,12 +224,7 @@ class WorkspaceMixin:
 
     def _refresh_workspace(self, analysis: Optional[FrameAnalysis]) -> None:
         if analysis is None:
-            self._intro(
-                "data",
-                "Open or drop detector frames (CBF, NXS, TIFF, EDF) or a folder. A multi-module "
-                "NeXus series (…_m01.nxs … _m11.nxs) opens as one stitched frame.",
-            )
-            self.data_info_label.setText(tr("No file yet."))
+            self._data_empty()
             for key in ("geometry", "mask", "cuts", "results", "export"):
                 self.set_step_state(key, "pending")
             self.set_step_state("data", "pending")
@@ -266,53 +248,6 @@ class WorkspaceMixin:
         self._show_geometry_state(analysis)
         self._show_mask_state(analysis)
         self._show_cut_state(analysis)
-
-    def _show_data_info(self, analysis: FrameAnalysis, files: int) -> None:
-        """The command-bar meta, the Data step's detail, card and intro. The detector is the name the file gives
-        it (else the instrument profile it matched); without either, nothing is said of it."""
-        rows, columns = analysis.shape
-        shape = f"{rows}×{columns} px"
-        detector = detector_text(analysis)
-        frames, shown, total = analysis.frame_count, analysis.frame_index + 1, analysis.frame_total
-        meta = [part for part in (detector, shape) if part]  # a name and a size: the same in every language
-        if frames > 1:
-            meta.append(trf("frame {i} of {n}, sum of {total} frames", i=shown, n=frames, total=total)
-                        if analysis.summed_frames else trf("frame {i} of {n}", i=shown, n=frames))
-        meta = " · ".join(meta)
-        self.file_chip.setText(analysis.path.name)
-        self.file_chip.setToolTip(str(analysis.path))
-        self.file_meta.setText(meta)
-        self.set_step_state("data", "ok", meta)
-        metadata = analysis.metadata or {}
-        lines = [trf("Detector: {name}", name=analysis.detector_name)] if analysis.detector_name else []
-        geometry = analysis.geometry
-        pixel = geometry.pixel_size_x_m if geometry is not None else metadata.get("pixel_size_x_m")
-        lines.append(trf("Frame: {rows} × {columns} pixels, {size} µm pixels", rows=rows, columns=columns,
-                         size=f"{pixel * 1e6:g}") if pixel else
-                     trf("Frame: {rows} × {columns} pixels", rows=rows, columns=columns))
-        if frames <= 1:
-            lines.append(trf("Frames in the file: {n}", n=frames))
-        elif analysis.summed_frames:
-            lines.append(trf("Frames in the file: {n} (showing {i}, sum of {total} frames)", n=frames, i=shown, total=total))
-        else:
-            lines.append(trf("Frames in the file: {n} (showing {i})", n=frames, i=shown))
-        header = []
-        if metadata.get("energy_kev"):
-            header.append(f"{float(metadata['energy_kev']):g} keV")
-        if metadata.get("header_distance_m"):
-            header.append(trf("distance {value} mm", value=f"{float(metadata['header_distance_m']) * 1e3:g}"))
-        if metadata.get("exposure_time_s"):
-            header.append(trf("exposure {value} s", value=f"{float(metadata['exposure_time_s']):g}"))
-        if header:
-            lines.append(trf("File header: {items}", items=", ".join(header)))
-        lines.append(trf("Files listed: {n}", n=files))
-        self.data_info_label.setText("\n".join(lines))
-        values = dict(name=analysis.path.name, detector=detector, shape=shape, frames=frames)
-        if detector:
-            self._intro("data", "{name}: {detector}, {shape}, {frames} frames." if frames > 1 else
-                        "{name}: {detector}, {shape}.", **values)
-        else:
-            self._intro("data", "{name}: {shape}, {frames} frames." if frames > 1 else "{name}: {shape}.", **values)
 
     def _show_geometry_state(self, analysis: FrameAnalysis) -> None:
         geometry = analysis.geometry
@@ -524,7 +459,7 @@ class WorkspaceMixin:
             return
         folder = self.view_model.default_export_dir() or Path(self._last_folder or ".")
         path, _ = QFileDialog.getSaveFileName(
-            self, tr("Save q-Map Data"), str(folder / f"{analysis.path.stem}_qmap.csv"), "CSV table (*.csv)"
+            self, tr("Save q-Map Data"), str(folder / f"{export_stem(analysis)}_qmap.csv"), "CSV table (*.csv)"
         )
         if not path:
             return

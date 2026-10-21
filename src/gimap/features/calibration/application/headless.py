@@ -100,7 +100,8 @@ class HeadlessCalibration:
         return with_line_checks(summary, image)
 
     def read_result(self, path: str) -> dict:
-        imported = self.import_calibration(Path(path))
+        # Checked on the image it was made on: all the frames of a sum, not the first one alone.
+        imported = self.import_calibration(Path(path), summed=True)
         summary = describe_calibration(imported.result)
         return with_line_checks(summary, imported.image) if imported.image is not None else summary
 

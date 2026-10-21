@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PyQt5.QtCore import QCoreApplication, QEvent
-from PyQt5.QtWidgets import QApplication, QDialog, QPlainTextEdit
+from PyQt5.QtWidgets import QApplication, QDialog, QMessageBox, QPlainTextEdit
 
 from src.gimap.app import menus as menus_module
 from src.gimap.app import project
@@ -36,7 +36,9 @@ def _deleted() -> None:
 
 
 @pytest.fixture
-def window():
+def window(monkeypatch):
+    # A project opened over series results that were not saved asks first (Save / Discard / Cancel): Discard.
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *_args, **_kwargs: QMessageBox.Discard))
     shown = _window()
     yield shown
     shown.close()
@@ -60,6 +62,7 @@ def _work_of_another_sample(window, folder) -> None:
     components.compare_page.add_folder(folder)
     assert components.compare_page.series
     single.session.side = "positive"  # the half chosen for this sample's cut
+    series._halves_chosen, series._halves_origin = "negative", "chosen"  # … and the one chosen for its series
 
 
 def _nothing_of_before(window, chip: str) -> None:
@@ -68,7 +71,10 @@ def _nothing_of_before(window, chip: str) -> None:
     session = single.session
     assert session.curve is None and session.q_range is None and session.excluded == set()
     assert session.result is None and session.solutions == [] and not session.can_undo()
-    assert session.side == "mean"  # nor its halves: an In-situ series started now takes them from here
+    assert session.side == "mean"  # nor its halves: the next curve starts as the page does
+    # The In-situ series has its own halves: those of the series that went are not the next one's.
+    assert series._halves_chosen is None and series.series_side() == "mean" and series.halves_source() == "default"
+    assert series.side_combo.currentData() == "mean" and series.halves_note.isHidden()
     assert single.curve_chip.text().startswith("No curve yet") and single.status_label.text() == ""
     # ... and each page is where it starts: not on the Results of what went, no range of that curve in the fields
     assert single.step_rail.current() == "curve" and series.step_rail.current() == "curves"
@@ -80,7 +86,44 @@ def _nothing_of_before(window, chip: str) -> None:
     assert components.compare_page.series == []
     state = project.collect(components)  # what Save Project would write now
     assert state["fitting"]["single"]["curve"] is None and state["fitting"]["series"]["folder"] == ""
+    assert state["fitting"]["series"]["side"] == "mean"
     assert state["compare"]["series"] == []
+
+
+def test_a_project_keeps_the_halves_of_its_in_situ_series(window, tmp_path) -> None:
+    """The halves are the series' own (Curves ▸ Halves of the cut), not those of the curve in Single analysis:
+    a project brings them back also when that curve is no longer there."""
+    import numpy as np
+
+    from tests.test_fit_series import RADII, _cut
+
+    menus, components = window.menus, window.components
+    single, series = components.fitting_workspace.fit_page, components.fitting_workspace.series_page
+    folder = tmp_path / "gimap_analysis" / "fit_input"
+    folder.mkdir(parents=True)
+    for index, radius in enumerate(RADII):
+        np.savetxt(folder / f"cut_{index + 1:05d}_fit_input.dat", np.column_stack(_cut(radius, index, negative=1.3)))
+    curve = tmp_path / "representative_fit_input.dat"
+    curve.write_bytes((folder / "cut_00001_fit_input.dat").read_bytes())
+    assert single.open_curve(curve, "mean") and series.open_series(folder)
+    assert series.set_series_side("negative") and series.halves_source() == "chosen"
+    assert menus._write_project(tmp_path / "one half.gimap")
+    saved = json.loads(Path(menus.project_path).read_text(encoding="utf-8"))
+    assert saved["fitting"]["series"]["side"] == "negative" and saved["fitting"]["series"]["side_from"] == "chosen"
+    assert saved["fitting"]["single"]["curve"]["side"] == "mean"
+
+    empty = tmp_path / "empty.gimap"
+    empty.write_text(json.dumps({"format": "gimap-project", "version": 1, "analyze": {}}), encoding="utf-8")
+    assert menus.open_project(empty)
+    _settle()
+    assert series.paths == [] and series.series_side() == "mean"
+    curve.unlink()  # the curve Single analysis showed has moved
+    assert menus.open_project(Path(menus.project_path).with_name("one half.gimap"))
+    _settle()
+    assert single.session.curve is None and single.session.side == "mean"
+    assert len(series.paths) == 5 and series.series_side() == "negative" and series.halves_source() == "project"
+    assert series.side_combo.currentData() == "negative" and series.halves_note.text() == "as saved in the project"
+    assert "q < 0 half (as saved in the project)" in series.model_summary.text()
 
 
 def test_opening_a_project_closes_the_curve_and_the_series_of_before(window, tmp_path) -> None:

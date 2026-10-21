@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Optional
 
 from ..application import (
     AUTO,
@@ -25,6 +25,8 @@ from ..application import (
 )
 from .folder_watch import FolderWatch
 from .frames_model import FramesModelMixin
+from .series_model import SeriesModelMixin
+from .sources_model import SourcesModelMixin, source_stamp
 from .geometry_model import FIT_SIDE_KEY, HEADER_CENTER_KEY, SECTION, GeometryModelMixin
 from .batch_model import BatchModelMixin
 from .export_model import EXPORT_FOLDER, ExportModelMixin
@@ -59,7 +61,10 @@ class AnalyzeState:
         return self.center_shapes.get(tuple(float(value) for value in self.beam_center))
 
 
-class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, ExportModelMixin, BatchModelMixin):
+class AnalyzeViewModel(
+    GeometryModelMixin, OptionsModelMixin, SourcesModelMixin, FramesModelMixin, SeriesModelMixin, ExportModelMixin,
+    BatchModelMixin,
+):
     def __init__(
         self,
         *,
@@ -85,41 +90,11 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
         self.state = AnalyzeState(
             corrections=Corrections(gap_guard_px=self.stored_gap_guard(), bad_pixels=self.stored_bad_pixels())
         )
-        self.watch = FolderWatch(frames.expand, frames.settled_size)
-        self.already_listed: list[int] = []
-        """After ``add_paths``: list positions of the frames asked for that were listed already."""
+        self.watch = FolderWatch(frames.expand, frames.settled_size, source_stamp(frames))
         self._init_frames()
+        self._init_sources()
 
-    # -- files -------------------------------------------------------------------------
-
-    def add_paths(self, paths: Sequence[str | Path]) -> list[Path]:
-        """Add frames from files/folders; returns the newly added ones.
-
-        ``already_listed`` then holds the list positions of the frames among ``paths`` that were listed before.
-        """
-        known = {str(path).casefold(): index for index, path in enumerate(self.state.files)}
-        expanded = self._frames.expand(paths)
-        added = [path for path in expanded if str(path).casefold() not in known]
-        self.already_listed = [known[str(path).casefold()] for path in expanded if str(path).casefold() in known]
-        self.state.files.extend(added)
-        return added
-
-    def start_watch(self, folder: Path) -> None:
-        """Watch ``folder`` for frames written from now on (existing ones are listed too)."""
-        self.add_paths([folder])
-        self.reset_watch_groups()
-        self.watch.start(Path(folder), already_listed=self.state.files)
-
-    def stop_watch(self) -> None:
-        self.watch.stop()
-
-    def poll_watch(self) -> list[Path]:
-        """Append completely written new frames to the list and return them."""
-        ready = self.watch.poll()
-        known = {str(path).casefold() for path in self.state.files}
-        added = [path for path in ready if str(path).casefold() not in known]
-        self.state.files.extend(added)
-        return added
+    # -- files (listing and the folder watch: ``sources_model.py``) -------------------------
 
     def request_for(
         self, path: Path, frame_index: int = 0, *, summed: Optional[tuple] = None
@@ -144,7 +119,9 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
 
     def clear_files(self) -> None:
         self.state = replace(self.state, files=[], current_index=-1, frame_index=0, analysis=None)
+        self.forget_frame_halves()
         self._init_frames()
+        self._init_sources(keep_watch=self.watch.active)  # (a watched file that grows later comes back)
 
     def remove_file(self, index: int) -> Optional[Path]:
         """Take one file off the list; returns it (``None``: no such row). The file shown keeps its place in
@@ -155,7 +132,7 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
             return None
         index = int(index)
         removed = state.files.pop(index)
-        self._forget_frames(removed)
+        self._forget_source(removed)
         if index < state.current_index:
             state.current_index -= 1
         elif index == state.current_index:
@@ -170,6 +147,7 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
         if index != self.state.current_index:
             self.state.current_index = index
             self.state.frame_index = 0
+            self.forget_frame_halves()  # what an automatic analysis chose for the file before
         return True
 
     @property
@@ -214,10 +192,25 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
         """I(χ) of the most prominent ring again (found automatically)."""
         self.state.giwaxs = replace(self.state.giwaxs, chi_q_window=None)
 
+    def current_settings(self, export=None):
+        """The set-up in use (``batch_model``), with the pin of a series (``frames_model``): a settings file, a
+        project and the memory of the last session say whether every frame of a series is cut alike."""
+        settings = super().current_settings(export)
+        if settings.pin_series_cuts is None:
+            settings = replace(settings, pin_series_cuts=bool(self.pin_series_cuts))
+        return settings
+
+    def apply_settings(self, settings) -> list[str]:
+        """A loaded set-up (``batch_model``), with its pin of a series when it says one (``None``: as it is)."""
+        notes = super().apply_settings(settings)
+        self.set_pin_series_cuts(getattr(settings, "pin_series_cuts", None))
+        return notes
+
     def reset_cuts(self) -> None:
         """Back to the automatic cut positions (Yoneda, beam centre, strongest ring)."""
         self.state.gisaxs = GisaxsCutSettings()
         self.state.giwaxs = GiwaxsSettings()
+        self._opened_cut = None  # (found in the frame again, also for a frame opened from a Series map)
 
     # -- analysis ----------------------------------------------------------------------
 
@@ -225,11 +218,18 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
         path = self.current_path
         if path is None:
             return None
-        return self.request_for(path, self.state.frame_index)
+        return self._shown_request(self.request_for(path, self.state.frame_index))
 
     def analyze(self, request: AnalysisRequest) -> FrameAnalysis:
-        """Thread-safe: reuses the frame already in memory when it is the requested one."""
-        return self._analyze_frame(request, loaded=self.state.analysis)
+        """Thread-safe: reuses the frame already in memory when it is the requested one and its files are as
+        they were when it was read (a module file that arrived since, a file written again: read again)."""
+        stamp = self.files_stamp(request.path, request.summed_frames)
+        loaded = self.state.analysis
+        if loaded is not None and self._read_stamps.of(loaded, stamp) != stamp:
+            loaded = None
+        analysis = self._analyze_frame(request, loaded=loaded)
+        self._read_stamps.keep(analysis, stamp)
+        return analysis
 
     def source_masks(self, analysis: FrameAnalysis, keys) -> dict:
         """Thread-safe: the pixels behind each named curve (see ``AnalyzeFrame.source_masks``)."""
@@ -237,7 +237,10 @@ class AnalyzeViewModel(GeometryModelMixin, OptionsModelMixin, FramesModelMixin, 
 
     def accept(self, analysis: FrameAnalysis) -> None:
         self.state.analysis = analysis
+        if self._read_stamps.of(analysis) is None:  # not read by ``analyze``: its files as they are now
+            self._read_stamps.keep(analysis, self.files_stamp(analysis.path, analysis.summed_frames))
         self.remember_frame_count(analysis.path, analysis.frame_count)
+        self.frame_count(analysis.path)  # as it is now: a frame kept in memory knows the count of when it was read
 
     def forget_analysis(self) -> None:
         """No frame is held (the one asked for could not be analysed): nothing of the frame before is exported."""

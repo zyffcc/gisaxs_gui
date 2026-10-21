@@ -83,7 +83,8 @@ def gisaxs_sections(report: dict) -> list[str]:
     lines = ["## 切线 / Cuts", ""]
     # The pixels each cut uses, both ends included (as Analyze's Cuts card and the Results tab say them).
     rows, columns = cut_spans(cuts, (report.get("tables") or {}).get("status"))
-    source = {"yoneda": "at the Yoneda band", "horizon": "just above the horizon (no Yoneda band found)"}.get(
+    source = {"yoneda": "at the Yoneda band", "horizon": "just above the horizon (no Yoneda band found)",
+              "series": "at the cut of the series"}.get(
         cuts.get("horizontal_source"), "set by hand"
     )
     alpha = cuts.get("yoneda_alpha_f_deg")

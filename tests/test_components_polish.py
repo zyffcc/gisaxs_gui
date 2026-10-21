@@ -86,8 +86,19 @@ def _advance(toasts, ms: int) -> None:
     _settle(3)
 
 
-def test_a_short_toast_stays_on_one_line() -> None:
-    from src.gimap.app.presentation.components.toast import show_toast
+def _words(metrics, low: int, high: int) -> str:
+    """A sentence between ``low`` and ``high`` pixels wide in ``metrics``."""
+    text = "Could not read frame 12:"
+    while metrics.horizontalAdvance(text) < low:
+        text += " the file is truncated"
+    assert metrics.horizontalAdvance(text) < high
+    return text
+
+
+def test_a_short_toast_stays_on_one_line_and_a_long_one_while_the_row_takes_it() -> None:
+    """A notice two lines tall rose above the band of the status line, over the bottom axis of the plot there:
+    a long text stays on one line as long as the width of the row allows, and wraps only beyond it."""
+    from src.gimap.app.presentation.components.toast import MARGIN, show_toast
 
     _app()
     parent = _toast_parent()
@@ -96,10 +107,12 @@ def test_a_short_toast_stays_on_one_line() -> None:
     metrics = toast.label.fontMetrics()
     assert toast.label.width() >= metrics.horizontalAdvance(toast.text())
     assert toast.label.height() < 2 * metrics.lineSpacing()  # one line
-    long_text = "Could not read frame 12: " + "the file is truncated and its header names a detector GIMaP does not know; " * 2
-    wrapped = show_toast(parent, long_text, level="warning")
+    long = show_toast(parent, _words(metrics, 700, 1000), level="warning")  # (it wrapped beyond 600 px)
     _settle(3)
-    assert wrapped.label.width() <= 420 and wrapped.label.height() >= 2 * metrics.lineSpacing()
+    assert long.label.height() < 2 * metrics.lineSpacing() and long.label.width() >= metrics.horizontalAdvance(long.text())
+    longer = show_toast(parent, _words(metrics, 1400, 1800), level="error")
+    _settle(3)
+    assert longer.label.height() >= 2 * metrics.lineSpacing() and longer.width() <= parent.width() - 2 * MARGIN
     parent.close()
 
 
@@ -322,6 +335,261 @@ def test_an_empty_name_has_no_legend_entry() -> None:
     plot.set_side("folded")
     assert len(plot.legend.items) == 0 and plot.curve_count() == 2  # both halves, still no entry
     plot.dispose()
+
+
+def _legend_words(plot) -> list:
+    """The legend's entries as they are read on screen (plain text, whatever the markup)."""
+    return [label.item.toPlainText() for _sample, label in plot.legend.items]
+
+
+def test_a_legend_name_with_markup_characters_is_shown_whole() -> None:
+    """A legend entry is rich text: “measured (q < 0)” lost everything from the “<” on."""
+    from src.gimap.app.presentation.components import CurvePlot
+
+    _app()
+    plot = CurvePlot("")
+    x = np.linspace(0.1, 1.0, 20)
+    names = ["measured (q > 0)", "measured (q < 0)", "a & b <i>not italic</i>", "plain"]
+    plot.set_curves([(name, x, x * (index + 1)) for index, name in enumerate(names)])
+    try:
+        assert _legend_words(plot) == names
+        assert [name for name, _x, _y in plot.figure_state()["curves"]] == names  # (the names themselves unchanged)
+    finally:
+        plot.dispose()
+
+
+def test_an_exported_figure_has_its_legend_in_english_whatever_the_interface_language(tmp_path, monkeypatch) -> None:
+    """Axis titles are figure content and stay English; the legend beside them was Chinese in a Chinese interface."""
+    from src.gimap.app.presentation.components import CurvePlot, plot_export
+
+    _app()
+    _keys(monkeypatch, {"measured": "测量", "model": "模型"})
+    host, plot = _host(lambda parent: CurvePlot("", parent), 700, 420)
+    x = np.linspace(0.1, 1.0, 20)
+    try:
+        apply_language("zh")
+        plot.set_labels("q (Å⁻¹)", "I (counts)")
+        plot.set_curves([("measured", x, x), ("model", x, x * 2), ("q < 1", x, x * 3)])
+        shown = _legend_words(plot)
+        assert shown == [i18n.ZH["measured"], i18n.ZH["model"], "q < 1"]
+        written, write = [], plot_export._write
+        monkeypatch.setattr(plot_export, "_write", lambda item, path, width: (
+            written.append(_legend_words(plot)), write(item, path, width))[1])
+        path = plot_export.export_plot(plot, tmp_path / "figure.png")
+        assert path.is_file() and written == [["measured", "model", "q < 1"]]  # as the axes: not translated
+        assert _legend_words(plot) == shown  # … and on screen as before
+        monkeypatch.setattr(plot_export, "_write", lambda *_args: (_ for _ in ()).throw(OSError("disk full")))
+        with pytest.raises(OSError):
+            plot_export.export_plot(plot, tmp_path / "other.png")
+        assert _legend_words(plot) == shown  # also when the export failed
+    finally:
+        apply_language(DEFAULT_LANGUAGE)
+        plot.dispose()
+        host.close()
+
+
+def test_what_a_page_adds_to_the_curves_stays_when_the_plot_draws_them_again() -> None:
+    """A theme change draws the curves again; the ±1σ bars a page had added to them went with the old ones."""
+    import pyqtgraph as pg
+
+    from src.gimap.app.presentation.components import CurvePlot
+    from src.gimap.app.presentation.theme import apply_theme
+
+    _app()
+    plot = CurvePlot("")
+    x = np.linspace(1.0, 20.0, 20)
+    plot.set_curves([("R (nm)", x, x)], markers=[True])
+    bars = plot.add_extra(plot.plot.plot(np.repeat(x, 2), np.column_stack([x - 1, x + 1]).ravel(),
+                                         pen=pg.mkPen("#2563eb"), connect="pairs"))
+    redrawn = []
+    plot.curvesRedrawn.connect(lambda: redrawn.append(plot.curve_count()))
+    try:
+        apply_theme("dark", 9.0)
+        assert bars in plot.plot.listDataItems() and redrawn == [1]  # the page is told, and its bars are there
+        plot.log_check.setChecked(False)
+        assert bars in plot.plot.listDataItems() and len(redrawn) == 2
+        plot.set_curves([("R (nm)", x, 2 * x)], markers=[True])  # other curves: what belonged to the old ones goes
+        assert bars not in plot.plot.listDataItems() and len(redrawn) == 2
+        again = plot.add_extra(plot.plot.plot(x, x, pen=pg.mkPen("#f97316")))
+        plot.clear_curves()
+        assert again not in plot.plot.listDataItems()
+    finally:
+        apply_theme("light", 9.0)
+        plot.dispose()
+
+
+def test_toasts_sit_side_by_side_in_the_bottom_band_under_the_plots() -> None:
+    """Two notices stacked upwards covered the frame axis and the legend of the plot at the bottom right."""
+    from src.gimap.app.presentation.components.toast import (
+        BOTTOM_MARGIN, MARGIN, SPACING, set_toast_inset, show_toast, visible_toasts)
+
+    _app()
+    parent = _toast_parent()
+    try:
+        first = show_toast(parent, "Series done: 300 frames fitted, 0 failed.", level="ok")
+        second = show_toast(parent, "Saved series_fit.csv and its record.", level="ok", action=("Open Folder", lambda: None))
+        _settle(3)
+        a, b = first.geometry(), second.geometry()
+        assert b.right() == parent.width() - MARGIN - 1 and b.bottom() == parent.height() - BOTTOM_MARGIN - 1
+        assert a.bottom() == b.bottom() and a.right() == b.left() - SPACING - 1  # the older one to its left
+        band = 40  # the status line of a page and the space around it: no plot reaches into it
+        assert max(first.height(), second.height()) <= band, (first.height(), second.height())
+        # The row keeps off what stands at the left of the window (a sidebar) …
+        set_toast_inset(parent, lambda: parent.width() - first.width() - second.width() - 2 * MARGIN - SPACING)
+        _settle(3)
+        assert visible_toasts(parent) == [first, second] and first.x() == parent.width() - second.width() - first.width() - MARGIN - SPACING
+        # … and when it is full the oldest plain confirmation goes to make room (its page's status line said it)
+        set_toast_inset(parent, lambda: parent.width() - first.width() - second.width())
+        _settle(3)
+        assert visible_toasts(parent) == [second] and second.geometry().right() == parent.width() - MARGIN - 1
+        # A warning and a notice with a button are shortened rather than put in a row above (over the bottom
+        # axis of the plot there), their whole text in the tooltip; the newest is whole, in the corner. When not
+        # even that makes room, the oldest goes
+        set_toast_inset(parent, 0)
+        warning = show_toast(parent, "Frame 12 could not be read: the file is truncated and its header names no detector.",
+                             level="warning")
+        third = show_toast(parent, "Exported 6 curves to cuts_A.", level="ok", action=("Open Folder", lambda: None))
+        parent.resize(third.width() + SPACING + warning.shortest() + 40 + 2 * MARGIN, 400)
+        _settle(3)
+        assert visible_toasts(parent) == [warning, third]
+        w, t = warning.geometry(), third.geometry()
+        assert w.bottom() == t.bottom() == parent.height() - BOTTOM_MARGIN - 1  # one row
+        assert t.right() == parent.width() - MARGIN - 1 and w.right() == t.left() - SPACING - 1 and w.left() >= MARGIN
+        assert third.label.text() == third.text() and warning.toolTip() == warning.text() != warning.label.text()
+        assert warning.label.text().endswith("…")
+        # An error is shortened too, but it never goes …
+        first_error = show_toast(parent, "Could not read frame 13: the file is truncated.", level="error")
+        newest = show_toast(parent, "Exported 2 curves to cuts_B.", level="ok", action=("Open Folder", lambda: None))
+        parent.resize(newest.width() + SPACING + first_error.shortest() + 30 + 2 * MARGIN, 400)
+        _settle(3)
+        assert visible_toasts(parent) == [first_error, newest] and first_error.label.text().endswith("…")
+        assert first_error.geometry().bottom() == newest.geometry().bottom()
+        # … only an error that has no room in the row at all starts a row above
+        second_error = show_toast(parent, "Could not read frame 14.", level="error")
+        parent.resize(second_error.width() + 2 * MARGIN + 20, 400)
+        _settle(3)
+        assert visible_toasts(parent) == [first_error, second_error]
+        one, two = first_error.geometry(), second_error.geometry()
+        assert two.bottom() == parent.height() - BOTTOM_MARGIN - 1 and one.bottom() == two.top() - SPACING - 1
+    finally:
+        parent.close()
+
+
+def _band_parent(status: str):
+    """A window whose page ends in a status line: its text, a progress bar and Cancel (both hidden)."""
+    from PyQt5.QtWidgets import QHBoxLayout, QProgressBar, QSizePolicy, QToolButton
+
+    parent = QWidget()
+    parent.resize(1280, 800)
+    outer = QVBoxLayout(parent)
+    outer.setContentsMargins(0, 0, 0, 0)
+    page = QWidget(parent)
+    outer.addWidget(page)
+    column = QVBoxLayout(page)
+    column.setContentsMargins(12, 12, 12, 6)
+    column.addWidget(QWidget(page), 1)  # (the plots)
+    row = QHBoxLayout()
+    label, bar, cancel = QLabel(status, page), QProgressBar(page), QToolButton(page)
+    label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)  # (a long line is cut, as on a page)
+    bar.setMaximumWidth(220)
+    cancel.setText("Cancel")
+    row.addWidget(label, 1)
+    row.addWidget(bar)
+    row.addWidget(cancel)
+    column.addLayout(row)
+    bar.hide()
+    cancel.hide()
+    parent.show()
+    _settle(3)
+    return parent, page, label, bar, cancel
+
+
+def _look() -> None:
+    """Long enough for the notices to look at the band again."""
+    from src.gimap.app.presentation.components.toast import LOOK_MS
+
+    QTest.qWait(2 * LOOK_MS)
+    _settle(3)
+
+
+def _in(widget, parent):
+    from PyQt5.QtCore import QRect
+
+    return QRect(widget.mapTo(parent, QPoint(0, 0)), widget.size())
+
+
+def test_toasts_keep_off_the_progress_bar_and_cancel_of_the_band_and_off_its_status_text() -> None:
+    """A notice in the band of the status line hid Analyze's progress bar and Cancel while a batch ran, and the
+    batch's own line under it."""
+    from src.gimap.app.presentation.components.toast import MARGIN, set_toast_inset, show_toast, visible_toasts
+
+    _app()
+    parent, page, label, bar, cancel = _band_parent("Batch 0/8: mapi_insitu_scan0042.nxs frame 1 of 8 …")
+    set_toast_inset(parent, 0, band=lambda: [page])
+    try:
+        error = show_toast(parent, "Could not compare: The series have different x axes: qy (Å⁻¹), qz (Å⁻¹)", level="error")
+        undo = show_toast(parent, "Removed 2 series.", level="info", action=("Undo", lambda: None))
+        _settle(3)
+        assert undo.geometry().right() == parent.width() - MARGIN - 1  # nothing at the right end of the band
+        bar.show()
+        cancel.show()  # a job starts after the notices: they move off its controls
+        _look()
+        controls = _in(bar, parent).united(_in(cancel, parent))
+        assert not any(toast.geometry().intersects(controls) for toast in (error, undo))
+        assert undo.geometry().right() < controls.left() and error.geometry().right() < undo.geometry().left()
+        text_end = _in(label, parent).left() + label.fontMetrics().horizontalAdvance(label.text())
+        assert error.geometry().left() > text_end  # the job's own line stays readable: the older notice is shortened
+        assert error.label.text().endswith("…") and error.toolTip() == error.text()
+        assert error.text().startswith("Could not compare") and error.geometry().bottom() == undo.geometry().bottom()
+        # A status line that takes the whole band: the error is not dropped, at its shortest over the line's end
+        label.setText("Batch 3/8: " + "a_long_name_of_a_scan_" * 12 + "frame 4 of 8 …")
+        _look()
+        assert parent.width() == 1280 and visible_toasts(parent) == [error, undo]
+        assert error.geometry().bottom() == undo.geometry().bottom() and error.label.text().endswith("…")
+        assert not any(toast.geometry().intersects(controls) for toast in (error, undo))
+        # The job ends: the corner again, and the whole text
+        bar.hide()
+        cancel.hide()
+        label.setText("Exported 8 frames.")
+        _look()
+        assert undo.geometry().right() == parent.width() - MARGIN - 1 and error.label.text() == error.text()
+        assert error.toolTip() == ""
+        # A status line that says what the newest notice says is no loss: the older ones may lie over it
+        undo.close()
+        said = "Exported 8 frames to cuts_A: the tables, the records and the map of every frame."
+        label.setText(said)
+        other = show_toast(parent, "Saved the map as map_A.csv.", level="ok", action=("Open Folder", lambda: None))
+        _look()
+        assert error.label.text().endswith("…")  # the line says something else than the newest notice: kept readable
+        other.close()
+        newest = show_toast(parent, said, level="ok")
+        _look()
+        assert visible_toasts(parent) == [error, newest] and error.label.text() == error.text()
+    finally:
+        parent.close()
+
+
+def test_a_page_that_shows_its_own_notices_keeps_them_off_its_cancel_and_off_the_windows() -> None:
+    """Analyze shows some notices itself (Export, the end of a batch): they lay over its own Cancel, and under
+    the window's notices in the same corner."""
+    from src.gimap.app.presentation.components.toast import show_toast, visible_toasts
+
+    _app()
+    parent, page, label, bar, cancel = _band_parent("Batch 0/8: run_0042.nxs frame 1 of 8 …")
+    bar.show()
+    cancel.show()
+    try:
+        own = show_toast(page, "Could not write the table: the disk is full.", level="error")
+        _look()
+        controls = _in(bar, parent).united(_in(cancel, parent))
+        assert not _in(own, parent).intersects(controls)
+        window_notice = show_toast(parent, "Removed 2 series.", level="info", action=("Undo", lambda: None))
+        _look()
+        assert visible_toasts(page) == [own] and visible_toasts(parent) == [window_notice]
+        assert not window_notice.geometry().intersects(_in(own, parent))  # side by side, the first one in the corner
+        assert not window_notice.geometry().intersects(controls) and window_notice.geometry().bottom() == _in(own, parent).bottom()
+    finally:
+        parent.close()
 
 
 def test_the_window_band_takes_a_colour() -> None:

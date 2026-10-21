@@ -17,6 +17,7 @@ import numpy as np
 from PyQt5.QtWidgets import QLabel, QDialog
 
 from src.gimap.app.presentation.i18n import current_language, tr, trf
+from src.gimap.shared.figures import CJK_FONTS
 
 
 from .views import (
@@ -33,7 +34,8 @@ if TYPE_CHECKING:
     from .results_widget import MultiFilePredictResultsWidget
 
 ALL_PARAMETERS = "__all__"
-_CJK_FONTS = ("Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "SimHei", "PingFang SC", "WenQuanYi Zen Hei")
+# The list every exported figure uses: it also names the fonts a Mac has as Matplotlib lists them ("PingFang HK").
+_CJK_FONTS = CJK_FONTS
 
 
 def figure_font() -> Dict[str, Any]:

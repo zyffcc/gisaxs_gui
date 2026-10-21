@@ -12,7 +12,7 @@ from tests.test_wave2b_fitting_series_list import _close
 def _fitted_page(tmp_path):
     page = _page()
     page.open_curve(_curve_file(tmp_path))
-    page.method_buttons["local"].setChecked(True)
+    page.set_method("local")
     page.run_fit()
     _wait(page)
     assert page.session.result_is_current()

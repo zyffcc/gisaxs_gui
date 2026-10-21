@@ -26,6 +26,7 @@ from ..application import (
     commit_manual_refinement,
     detect_standard_keys,
     manual_ring_distance,
+    frames_made_on,
     preview_manual_candidate,
     profile_change_is_significant,
     select_calibration_candidate,
@@ -111,9 +112,11 @@ class CalibrationViewModel:
         self,
         path: str | Path,
         dataset_path: str | None = None,
+        **frames,
     ) -> DetectorImage:
+        """``frames``: ``frame`` (0-based), ``sum_frames``, ``progress``, ``cancelled`` of ``LoadCalibrationImage``."""
         normalized_path = self._normalize_path(path)
-        self.image = self._load_image(normalized_path, dataset_path)
+        self.image = self._load_image(normalized_path, dataset_path, **frames)
         self.state.last_image_path = normalized_path
         self.result = None
         return self.image
@@ -228,3 +231,16 @@ class CalibrationViewModel:
             self.image = imported.image
             self.state.last_image_path = imported.result.source_image
         return imported.result
+
+    def imported_frames(self) -> tuple[int, int]:
+        """``(first frame (0-based), frames summed)`` the result in hand was made on, by its record."""
+        return frames_made_on(self.result) if self.result is not None else (0, 1)
+
+    def read_imported_sum(self, progress=None, cancelled=None) -> DetectorImage:
+        """The summed frames the imported result was made on. Reads every one of them: call it from a
+        worker thread. Changes nothing here (the dialog takes the image when it has arrived)."""
+        if self.result is None:
+            raise ValueError("No calibration result is available.")
+        return self._import_calibration.source_image(
+            self.result, summed=True, progress=progress, cancelled=cancelled
+        )

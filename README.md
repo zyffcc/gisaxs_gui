@@ -6,13 +6,16 @@ GIMaP (Grazing-Incidence Mapping Package) is a desktop application for GISAXS/GI
 
 GIMaP provides a single desktop interface for working with grazing-incidence scattering data. **Analyze** reduces GISAXS and GIWAXS detector frames to curves (exact q, instrument profiles, in-situ series); **Fitting** fits those curves with particle models, one curve or a whole series; **Compare** sets runs or samples side by side; the **Labs** pages hold trained-model prediction and trainset generation.
 
-The application entry point is `main.py`. The user manual is [docs/User_Manual.md](docs/User_Manual.md); **Help ▸ User Manual** (`F1`) opens it from the program, in your browser.
+The application entry point is `main.py`. The user manual is [docs/User_Manual.md](docs/User_Manual.md), in Chinese [docs/User_Manual_zh.md](docs/User_Manual_zh.md); **Help ▸ User Manual** (`F1`) opens the edition of the interface language from the program, in your browser.
 
 ## Key Features
 
-- **Analyze** (GISAXS and GIWAXS): open CBF, TIFF, EDF or NeXus frames or a whole folder (multi-module
-  series are stitched) and get the reduced curves without further clicks. A step rail leads through
-  Data → Geometry → Mask & corrections → Cuts → Results → Export; every step shows its state.
+- **Analyze** (GISAXS and GIWAXS): open CBF, TIFF, EDF or NeXus/HDF5 frames (`.nxs`, `.nx`, `.nx5`,
+  `.h5`, `.hdf5`, `.hdf`) or a whole folder and get the reduced curves without further clicks. Files
+  that belong together are one source — the module files of a P03 Lambda detector are stitched, a
+  master is read with its data files — and every frame of a multi-frame file is a frame of the series.
+  A step rail leads through Data → Geometry → Mask & corrections → Cuts → Results → Export; every
+  step shows its state.
   - Geometry from a calibrant (AgBh, LaB₆, CeO₂ …) or entered once and kept as the instrument profile
     of the detector; exact q (Å⁻¹), beam centre = direct beam.
   - Masks (detector gaps, mask files, drawn shapes, value limits, isolated hot/dead pixels removed per
@@ -30,7 +33,9 @@ The application entry point is `main.py`. The user manual is [docs/User_Manual.m
       cut, the halves (averaged when they agree, otherwise the usable one, with the reason), the
       in-plane distance 2π/q* and a numerical model fit (spheres, vertical and random cylinders with
       size spread and distance).
-  - **Series**: heat maps and peak tables of in-situ series.
+  - **Series**: heat maps and peak tables of in-situ series, drawn at the true q (or χ), with the frame axis
+    in frame numbers (or time); every frame is cut where the frame on screen is, unless you have the
+    cut found again in every frame.
   - **Batch Export**: from raw frames to a folder in a few clicks — curves, fit input, q maps, cake and
     detector images, converted frames (TIFF, EDF, NPY, HDF5), optional peak fitting of every frame
     (start from the previous frame, the first frame or fresh), CSV/TXT/DAT and PNG/TIFF/SVG/PDF, a
@@ -53,7 +58,7 @@ The application entry point is `main.py`. The user manual is [docs/User_Manual.m
 - **Drag and drop**: detector frames, folders and `.gimap` projects can be dropped anywhere on the
   window; curve files on the Fitting page; folders or files of curves on the Compare page.
 - **Tools** (Tools menu): **Geometry Calibration** (beam centre and detector distance from an image
-  of a standard), **Format Converter** (NXS, CBF and TIFF frames to TIFF, CBF, HDF5 or NumPy;
+  of a standard), **Format Converter** (NeXus/HDF5, CBF and TIFF frames to TIFF, CBF, HDF5 or NumPy;
   **Convert Current File…**), **XRR Series Extractor** (an XRR curve from a detector angle series),
   **1D Predict — Fit Many Curves…** and **Settings**.
 - **Process with AI** (optional): an AI (Claude, DeepSeek, Qwen, OpenAI or a local model) runs the
@@ -201,7 +206,7 @@ file, which is the model a new user of Fitting starts with. (With other edits in
 stash: `git stash pop`, then `git checkout HEAD -- config/model_parameters.json` to put the
 file of the new version back, then `git stash drop`.)
 
-The history of `main` was rewritten on 2026-10-13. A clone last updated before that day can hold
+The history of `main` was rewritten on 2026-10-13 (and once more on 2026-10-21, after the removed commits had been merged back from an old clone; `tests/test_release_history.py` now fails on a branch that holds them). A clone last updated before that day can hold
 commits that are no longer on GitHub: `git pull` then stops with an error, or tries to merge the
 old history with the new one. Do not merge, and do not push from such a clone; move it to the new
 `main` as described above (or clone again).
@@ -250,7 +255,8 @@ large or too small, use **View ▸ Font Size**.
 
 1. In **Analyze**, **Send to Fitting** opens the horizontal cut in **Fitting** (its menu chooses the
    halves: both on |qy|, their mean, or one side); **Send Series to Fitting…** exports every frame
-   and opens **Fitting ▸ In-situ series**.
+   into a folder `<name>_fitting/` and opens **Fitting ▸ In-situ series**, which fits every frame on
+   the mean of both halves or on one half (**Halves of the cut**), never on both together.
 2. Fitting has four steps: **Curve → Model → Fit → Results**. A first curve opens on **Fit** with
    **Find the particle shape (no AI)**: sphere, random cylinder and vertical cylinder are fitted
    numerically from several starts and the solutions are listed.
@@ -342,6 +348,10 @@ python tools/gimap_agent.py auto <frame> [<frame> ...] --notes "<your notes>" --
   decision and its reason, the curves as CSV and the q map, plus a `summary.md` for the batch.
 - Nothing is written next to the data: results go to `--out` (without it, to
   `assistant_runs/cli/` in the user data folder).
+- A series is analysed in its final state: the last fifth of its frames summed, at most 10 (below
+  ten frames the last frame alone); `--frame` and `--sum` choose other frames. The module files of
+  one detector are analysed once, however many of them are given; `--series` takes files that hold
+  one frame each as one series.
 - Exit codes: `0` everything analysed and nothing open; `2` at least one frame has a question
   under *Needs attention* (a missing value, a judgement such as the GISAXS model, or no geometry);
   `1` at least one frame failed (`1` wins over `2`).
@@ -355,7 +365,7 @@ lists every option.
 
 ## Documentation
 
-- [docs/User_Manual.md](docs/User_Manual.md) — the user manual (**Help ▸ User Manual**, `F1`, opens it in your browser).
+- [docs/User_Manual.md](docs/User_Manual.md) — the user manual; [docs/User_Manual_zh.md](docs/User_Manual_zh.md) — the same in Chinese (**Help ▸ User Manual**, `F1`, opens the edition of the interface language in your browser).
 - [CHANGELOG.md](CHANGELOG.md) — what changed in each version, and the known limitations.
 - [docs/agents/](docs/agents/) — the playbooks for the command line and for agents.
 - [docs/development.md](docs/development.md), [docs/architecture/](docs/architecture/) and
@@ -395,6 +405,7 @@ Dependencies are listed in `requirements.txt`:
 - PyQt5>=5.15
 - opencv-python>=4.8
 - h5py>=3.9
+- hdf5plugin>=4 (reads NeXus/HDF5 frames compressed with bitshuffle or LZ4, as Eiger detectors write them)
 - fabio>=2023.4.0
 - tensorflow-intel>=2.15,<=2.16; platform_system=="Windows"
 - tensorflow>=2.15,<=2.16; platform_system!="Windows"

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from ...domain.engine import (
     CalibrationCancelled as LegacyCalibrationCancelled,
@@ -13,7 +16,10 @@ from ...domain.engine import (
 )
 from src.gimap.shared.detector_io import (
     AmbiguousDatasetError as LegacyAmbiguousDatasetError,
+    is_hdf5,
     load_detector_image,
+    open_nexus,
+    select_nxs_dataset,
 )
 from src.gimap.app import SettingsRepository
 from src.gimap.shared.file_paths import normalize_path
@@ -22,22 +28,67 @@ from ...application.errors import (
     AmbiguousImageDatasetError,
     CalibrationCancelledError,
 )
-from ...application.ports import CancellationCheck, ProgressCallback
+from ...application.ports import CancellationCheck, FrameProgress, ProgressCallback
 from ...domain import CalibrationRequest, CalibrationResult, DetectorImage
 
 
 class LocalCalibrationImageAdapter:
-    """通过现有共享 detector loader 读取 CBF / NXS。"""
+    """通过现有共享 detector loader 读取 CBF / NeXus / HDF5 / TIFF / EDF。
+
+    ``ask_dataset``: a file with several equally plausible image datasets (two scans in one file) raises
+    ``AmbiguousImageDatasetError`` so that the dialog asks which one is the standard. Without it (no one
+    to ask: the assistant) the dataset every other reader shows is read, and ``metadata["layout_warnings"]``
+    says that there are others.
+    """
+
+    def __init__(self, ask_dataset: bool = True):
+        self.ask_dataset = ask_dataset
 
     def load(
         self,
         path: str | Path,
         dataset_path: str | None = None,
+        *,
+        frame: int = 0,
+        sum_frames: int = 1,
+        progress: FrameProgress | None = None,
+        cancelled: CancellationCheck | None = None,
     ) -> DetectorImage:
+        if dataset_path is None and self.ask_dataset and is_hdf5(path):
+            self._ask_when_ambiguous(path)
+        first = max(0, int(frame))
+        image = load_detector_image(path, frame_idx=first, dataset_path=dataset_path)
+        total = max(1, int(image.metadata.get("frame_count") or 1))
+        last = min(total, first + max(1, int(sum_frames))) - 1
+        metadata = {**image.metadata, "frame_index": first, "summed_frames": last - first + 1}
+        if last == first:
+            return replace(image, metadata=metadata)
+        # Photon counts add. A pixel without a value in any frame has none in the sum (NaN, and masked).
+        data = np.array(image.data, dtype=np.float64)
+        mask = None if image.mask is None else np.array(image.mask, dtype=bool)
+        if progress is not None:
+            progress(1, last - first + 1)
+        for index in range(first + 1, last + 1):
+            if cancelled is not None and cancelled():
+                raise CalibrationCancelledError("Reading cancelled.")
+            other = load_detector_image(path, frame_idx=index, dataset_path=dataset_path)
+            data += other.data
+            if other.mask is not None:
+                mask = np.array(other.mask, dtype=bool) if mask is None else mask | np.asarray(other.mask, dtype=bool)
+            if progress is not None:
+                progress(index - first + 1, last - first + 1)
+        metadata["summed_frame_indices"] = [first, last]
+        return replace(image, data=data.astype(np.float32), mask=mask, metadata=metadata)
+
+    @staticmethod
+    def _ask_when_ambiguous(path: str | Path) -> None:
         try:
-            return load_detector_image(path, dataset_path=dataset_path)
+            with open_nexus(path) as handle:
+                select_nxs_dataset(handle)
         except LegacyAmbiguousDatasetError as exc:
             raise AmbiguousImageDatasetError(exc.paths) from exc
+        except Exception:  # noqa: BLE001 - a file that cannot be read: reading it says why
+            return
 
     def exists(self, path: str | Path) -> bool:
         return Path(path).is_file()

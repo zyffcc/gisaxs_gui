@@ -83,6 +83,8 @@ class GisaxsProcedureMixin:
                 "incidence_deg",
                 "Check αi (the horizon moves with it), or drag the yellow band on the image to the Yoneda row.",
             )
+        elif source == "series":
+            self._decide("horizontal cut", f"cut of the series ({where})", "the cut of one frame, held for every frame")
         else:
             self._decide("horizontal cut", f"set by hand ({where})", "kept as chosen")
 

@@ -3,38 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import cv2
-import h5py
 import numpy as np
 
-
-def _largest_2d_hdf5_dataset(handle: h5py.File) -> np.ndarray:
-    candidates: List[tuple[int, str]] = []
-
-    def visitor(name: str, obj: Any) -> None:
-        if isinstance(obj, h5py.Dataset) and obj.ndim >= 2:
-            candidates.append((int(np.prod(obj.shape[-2:])), name))
-
-    handle.visititems(visitor)
-    if not candidates:
-        raise ValueError("No 2D dataset was found in the HDF5/Nexus file.")
-    _, name = max(candidates)
-    data = np.asarray(handle[name])
-    while data.ndim > 2:
-        data = data[0]
-    return data
+SHARED_READER_SUFFIXES = frozenset({".cbf", ".nxs", ".nx", ".nx5", ".h5", ".hdf5", ".hdf"})
+"""Read by the shared detector loader, like everywhere else in GIMaP (every NeXus / HDF5 suffix)."""
 
 
 def load_scattering_image(path: str | Path) -> np.ndarray:
+    """The first frame of a detector file as a float32 image (masked pixels are NaN for NeXus / HDF5)."""
     source = Path(path)
     suffix = source.suffix.lower()
-    if suffix in {".nxs", ".cbf"}:
+    if suffix in SHARED_READER_SUFFIXES:
         # Reuse the same loader as GISAXS Image Input/calibration.  In
         # particular, P03 NXS modules require stitching, a canvas transpose and
         # one vertical flip; bypassing that path made the TrainSet ROI disagree
-        # with the image users selected elsewhere in the GUI.
+        # with the image users selected elsewhere in the GUI.  It also picks the
+        # image dataset of an HDF5 file (never a pixel mask or a flat field) and
+        # reads one frame of a stack, not the stack.
         from src.gimap.shared.detector_io import load_detector_image
 
         data = np.asarray(load_detector_image(source).data)
@@ -43,9 +31,6 @@ def load_scattering_image(path: str | Path) -> np.ndarray:
     elif suffix == ".npz":
         archive = np.load(source)
         data = np.asarray(archive[archive.files[0]])
-    elif suffix in {".h5", ".hdf5"}:
-        with h5py.File(source, "r") as handle:
-            data = _largest_2d_hdf5_dataset(handle)
     elif suffix == ".edf":
         import fabio
 

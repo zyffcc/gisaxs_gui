@@ -14,11 +14,15 @@ import h5py
 import numpy as np
 
 from src.gimap.shared.detector_io import (
-    _dataset_candidates,
+    HDF5_SUFFIXES,
+    NexusLayout,
+    cached_layout,
+    group_sources,
     load_detector_image,
-    select_nxs_dataset,
+    scan_stem,
     write_frame,
 )
+from src.gimap.shared.detector_io.nexus_layout import DATASET_NOT_FOUND
 from src.gimap.shared.file_paths import normalize_path
 
 from ...application.ports import ProgressCallback
@@ -30,6 +34,8 @@ from ...domain.models import (
     InputSource,
 )
 from ...domain.rules import build_jobs, convert_dtype
+
+NO_IMAGE = "{name} holds no detector image."
 
 
 def _json_safe(value: Any) -> Any:
@@ -48,6 +54,16 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
+def discard_failed_output(path: Path, was_there: bool) -> None:
+    """A writer that fails after opening its file leaves an empty one: it looks like a frame and cannot be
+    read. Remove what the failed write created; a file that was there before goes only if it is now empty."""
+    try:
+        if path.is_file() and (not was_there or path.stat().st_size == 0):
+            path.unlink()
+    except OSError:
+        pass
+
+
 class LocalSourceRepository:
     """读取并检查本地 detector image sources。"""
 
@@ -62,41 +78,48 @@ class LocalSourceRepository:
         if not source_path.is_file():
             raise FileNotFoundError(str(source_path))
         source = InputSource(path=str(source_path), file_type=SUPPORTED_SUFFIXES[suffix])
-        if suffix != ".nxs":
+        if not source.is_hdf5:
             return source
-
-        with h5py.File(str(source_path), "r") as handle:
-            ranked_candidates = _dataset_candidates(handle)
-            candidates = [dataset_path for _score, dataset_path in ranked_candidates]
-            try:
-                recommended = select_nxs_dataset(handle)
-            except ValueError:
-                if not candidates:
-                    raise
-                recommended = candidates[0]
-            source.dataset_paths = [recommended] + [
-                candidate for candidate in candidates if candidate != recommended
-            ]
-            source.dataset_path = recommended
-            dataset = handle[recommended]
-            source.dataset_shape = tuple(int(value) for value in dataset.shape)
-            source.frame_count = int(dataset.shape[0]) if dataset.ndim == 3 else 1
-            source.selected_frames = list(range(source.frame_count))
+        # One inspection for every reader: what the source consists of, its image dataset and its frames.
+        layout = cached_layout(source_path)
+        if layout.kind == "no_image":
+            raise ValueError(NO_IMAGE.format(name=source_path.name))
+        source.dataset_paths = [layout.dataset, *layout.alternatives]
+        self._describe(source, layout)
         return source
 
+    @staticmethod
+    def _describe(source: InputSource, layout: NexusLayout) -> None:
+        """Fill ``source`` from the layout: any module file stands for its set (``path`` is the first one)."""
+        if layout.kind == "module_set":
+            source.path = str(layout.path)
+        source.scan_name = scan_stem(layout)  # a set of module files: its scan, without the module number
+        source.dataset_path = layout.dataset
+        lead = tuple(layout.lead_shape) if len(layout.lead_shape) > 1 else (
+            (int(layout.frames),) if layout.lead_shape or layout.frames != 1 else ()
+        )
+        source.dataset_shape = tuple(int(value) for value in (*lead, *layout.frame_shape))
+        source.frame_count = int(layout.frames)
+        source.selected_frames = list(range(source.frame_count))
+        source.layout = layout.kind
+        source.members = [str(member) for member in layout.members]
+        source.summary = layout.summary()
+        source.warnings = list(layout.warnings)
+        source.stored_dtype = layout.dtype
+
     def select_dataset(self, source: InputSource, dataset_path: str) -> None:
-        if source.file_type != "NXS":
+        if not source.is_hdf5:
             return
-        with h5py.File(source.path, "r") as handle:
-            if dataset_path not in handle:
-                raise ValueError(f"Dataset does not exist: {dataset_path}")
-            dataset = handle[dataset_path]
-            if dataset.ndim not in (2, 3) or not np.issubdtype(dataset.dtype, np.number):
-                raise ValueError("The selected dataset is not a readable 2D/3D numeric image dataset.")
-            source.dataset_path = dataset_path
-            source.dataset_shape = tuple(int(value) for value in dataset.shape)
-            source.frame_count = int(dataset.shape[0]) if dataset.ndim == 3 else 1
-            source.selected_frames = list(range(source.frame_count))
+        layout = cached_layout(source.path, dataset_path)  # raises for a dataset that holds no frames
+        if layout.kind == "no_image" or any(template == DATASET_NOT_FOUND for template, _values in layout.warnings):
+            raise ValueError(f"Dataset does not exist: {dataset_path}")
+        self._describe(source, layout)
+
+    def group_paths(self, paths: list[str | Path]) -> list[str]:
+        """One path per source of the files a person chose: the module files of a set become its first
+        file, a master and its data files the master. A file without a detector image stays (adding it
+        says why it cannot be an input)."""
+        return [str(path) for path in group_sources(list(paths), keep_without_image=True)]
 
     def scan_folder(
         self,
@@ -116,13 +139,16 @@ class LocalSourceRepository:
         if include_tiff:
             suffixes.update((".tif", ".tiff"))
         if include_nxs:
-            suffixes.add(".nxs")
+            suffixes.update(HDF5_SUFFIXES)
         iterator = root.rglob("*") if recursive else root.glob("*")
-        return sorted(
+        found = sorted(
             str(candidate)
             for candidate in iterator
             if candidate.is_file() and candidate.suffix.lower() in suffixes
         )
+        # A set of module files is one input, the data files of a master are not inputs, and an HDF5 file
+        # without a detector image (results, model weights) is not listed.
+        return [str(path) for path in group_sources(found)]
 
     def estimate_output(
         self,
@@ -135,12 +161,14 @@ class LocalSourceRepository:
         total = 0
         for source in selected:
             if source.dataset_shape:
+                # The stored size of one frame; a stitched frame holds every module of the set.
                 pixels = math.prod(source.dataset_shape[-2:])
+                if source.layout == "module_set":
+                    pixels *= max(1, len(source.members))
                 bytes_per_pixel = 4
                 try:
-                    with h5py.File(source.path, "r") as handle:
-                        bytes_per_pixel = int(handle[source.dataset_path].dtype.itemsize)
-                except Exception:
+                    bytes_per_pixel = int(np.dtype(source.stored_dtype).itemsize) if source.stored_dtype else 4
+                except TypeError:
                     pass
                 total += pixels * bytes_per_pixel * len(source.selected_frames)
             else:
@@ -294,7 +322,15 @@ class LocalConversionExecutor:
         formats = {"NumPy": "npy", "HDF5": "hdf5", "TIFF": "tiff", "CBF": "cbf", "EDF": "edf"}
         if options.output_format not in formats:
             raise ValueError(f"Unsupported output format: {options.output_format}")
-        write_frame(path, data, formats[options.output_format], metadata if options.preserve_metadata else None)
+        fmt = formats[options.output_format]
+        kept = metadata if options.preserve_metadata else None
+        was_there = path.exists()
+        try:
+            # (The shared writer keeps the record of a CBF or EDF frame as ASCII JSON: it reads back exactly.)
+            write_frame(path, data, fmt, kept)
+        except Exception:
+            discard_failed_output(path, was_there)
+            raise
 
     @staticmethod
     def _write_container_frame(

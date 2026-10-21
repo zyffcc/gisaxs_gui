@@ -14,6 +14,7 @@ from ..application import (
     XrrExtractionResult,
     XrrExtractionSettings,
     XrrPoint,
+    XrrSeriesLayout,
     XrrSeriesSpec,
 )
 from ..domain import SpecularGeometry
@@ -47,13 +48,42 @@ def point_from_payload(payload: dict) -> XrrPoint:
     return XrrPoint(**payload)
 
 
+def layout_to_payload(layout: XrrSeriesLayout | None) -> dict | None:
+    """What a series is stored in, as plain data (templates and their values, file names)."""
+    if layout is None:
+        return None
+    return {
+        "files": int(layout.files),
+        "frames": int(layout.frames),
+        "summary": [layout.summary[0], dict(layout.summary[1])],
+        "warnings": [[template, dict(values)] for template, values in layout.warnings],
+        "members": [str(member) for member in layout.members],
+    }
+
+
+def layout_from_payload(payload: dict | None) -> XrrSeriesLayout | None:
+    if not payload:
+        return None
+    return XrrSeriesLayout(
+        files=int(payload["files"]),
+        frames=int(payload["frames"]),
+        summary=(payload["summary"][0], dict(payload["summary"][1])),
+        warnings=tuple((template, dict(values)) for template, values in payload.get("warnings", ())),
+        members=tuple(payload.get("members", ())),
+    )
+
+
 def result_to_payload(result: XrrExtractionResult) -> dict:
-    return {"points": [point_to_payload(point) for point in result.points]}
+    return {
+        "points": [point_to_payload(point) for point in result.points],
+        "layout": layout_to_payload(result.layout),
+    }
 
 
 def result_from_payload(payload: dict) -> XrrExtractionResult:
     return XrrExtractionResult(
-        tuple(point_from_payload(value) for value in payload.get("points", ()))
+        tuple(point_from_payload(value) for value in payload.get("points", ())),
+        layout_from_payload(payload.get("layout")),
     )
 
 
@@ -79,6 +109,8 @@ def decode_preview(payload: dict) -> tuple[np.ndarray, tuple[int, int]]:
 __all__ = [
     "decode_preview",
     "encode_preview",
+    "layout_from_payload",
+    "layout_to_payload",
     "point_from_payload",
     "point_to_payload",
     "request_from_payload",

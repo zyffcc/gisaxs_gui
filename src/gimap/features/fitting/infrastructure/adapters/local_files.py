@@ -11,6 +11,7 @@ import numpy as np
 from .scattering_curve_files import load_xy_any
 
 from ...application.models import (
+    CURVE_NOT_FOUND,
     CURVE_SUFFIXES,
     DEFAULT_CURVE_PATTERN,
     ExportFitResultRequest,
@@ -34,18 +35,15 @@ class LocalInSituFrameRepository:
             raise FileNotFoundError(f"In-situ source folder was not found: {root}")
         pattern = request.pattern.strip() or DEFAULT_CURVE_PATTERN
         iterator = root.rglob(pattern) if request.recursive else root.glob(pattern)
-        paths = sorted(
-            (
-                path.resolve()
-                for path in iterator
-                if path.is_file() and path.suffix.lower() in CURVE_SUFFIXES
-            ),
+        # Ordered by the place in the folder: a file may be a link to one that lies elsewhere.
+        found = sorted(
+            (path for path in iterator if path.is_file() and path.suffix.lower() in CURVE_SUFFIXES),
             key=lambda path: tuple(
                 int(value) if value.isdigit() else value.casefold()
                 for value in re.split(r"(\d+)", str(path.relative_to(root)))
             ),
         )
-        return tuple(InSituSourceFrame(path=path) for path in paths)
+        return tuple(InSituSourceFrame(path=path.resolve()) for path in found)
 
 
 ANALYZE_FIT_INPUT_MARKER = "# GIMaP Analyze fit input"
@@ -86,7 +84,7 @@ class LocalCurveRepository:
     def load(self, request: LoadCurveRequest) -> CurveData:
         source = Path(request.path).expanduser().resolve()
         if not source.exists():
-            raise FileNotFoundError(f"Curve file was not found: {source}")
+            raise FileNotFoundError(CURVE_NOT_FOUND.format(path=source))
         if source.suffix.lower() not in CURVE_SUFFIXES:
             # Also Analyze's .csv tables: their columns differ by table (I(χ), q maps, Fitting's own
             # “data and fit” with two q columns), so reading one as q, I, σ could fit the wrong axis.

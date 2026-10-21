@@ -4,6 +4,14 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ## Unreleased
 
+### User manual
+
+- The manual is rewritten along the work: a quick start on the public data in the repository, then
+  installation, the window, geometry and calibration, Analyze, Fitting, Compare, the tool windows
+  (including SEM Particle Analysis), the AI assistant, Labs, a table of every output file, the known
+  limitations in one chapter, and troubleshooting. It has screenshots and a Chinese edition,
+  `docs/User_Manual_zh.md`; **Help ▸ User Manual** (`F1`) opens the edition of the interface language.
+
 ### SEM particle analysis
 
 - **Tools → SEM Particle Analysis** measures calibrated image instances or imports particle-size
@@ -52,6 +60,120 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   the row says which parameters have another equally good solution, sit at a bound or are not
   pinned down. Selecting a fit1d row keeps its original v2 curve and components visible while
   copying a manual starting model. Without the kit the method says where to put the folder.
+
+### NeXus / HDF5 files
+
+- Every NeXus/HDF5 suffix is read: `.nxs`, `.nx`, `.nx5`, `.h5`, `.hdf5`, `.hdf`, and every frame of
+  a file. The content decides what a source is, a file name only proposes: one frame per file, a whole
+  series in one file, one file per detector module (P03 Lambda 9M: `…_m01.nxs` … `…_m11.nxs` are a
+  set only when they hold the same dataset and module shape at different module positions; they are
+  stitched), or a master with its data files (Eiger). A folder lists each source once.
+- Analyze's Data step says what a source is (“11 module files · 240 frames · stitched”), how its
+  frames are oriented, and what is left out: a module file that is missing or holds fewer frames
+  (the frames every module has are used), a data file that is missing, other image datasets in the
+  file. Asking for a frame beyond the end is an error, never the last frame instead.
+- **Orientation of non-Lambda files changed.** Files written by the Lambda server (P03) are read as
+  before: the modules stitched by their translations, then transposed and flipped. Every other
+  NeXus/HDF5 image is now read as stored, row 0 on top, like the CBF or TIFF of the same detector;
+  before it was transposed and flipped as well. A geometry or a mask made on such a file before no
+  longer fits it: check it (a square frame still matches its old instrument profile by size). GIMaP's
+  own HDF5 frame exports read back unchanged; they now mark `/entry/data` as NXdata with `signal="data"`.
+- Header values are read in their units: an exposure in ms (as the Lambda files store it) becomes
+  seconds, energies in eV or keV, lengths in mm, cm or m; a value in a unit GIMaP does not know is
+  left out rather than guessed. In unsigned integer data the largest value of the type means “no
+  data” and is left out.
+- Files compressed with bitshuffle or LZ4 need `hdf5plugin`, now in `requirements.txt`. A file
+  still being written is read as far as it is and read again when it changes; a file another
+  program holds is said so; a file left open by a writer that ended says how to read it
+  (`h5clear -s` on a copy).
+
+### Analyze: series
+
+- A frame bar (“Frame [4] of 12”) above the steps for a source of several frames.
+- **One cut for the whole series.** While the cut is automatic, every frame of a Series map, a Batch
+  Export, a Send Series to Fitting and a watched folder's export is cut where the frame on screen is
+  (GISAXS: the Yoneda rows and the beam-centre column; GIWAXS: the ring of I(χ)). *Find the cut again
+  in every frame* (Series ▸ Options, and the Batch Export dialog) turns this off. The sum that Run
+  Automatic Analysis sets is no longer used for series work.
+- **Series map**: drawn at the true x, without bridging gaps (the exports keep the measured x); the
+  frame axis counts real frame numbers from 1 (the frame in its file for one multi-frame file) or
+  time (time stamps, or frame × exposure); a frame range under *Options*; for the GISAXS horizontal
+  cut a choice of halves (± / + / − / |x| / mean); a title that says the curve, the frames and the
+  cut; **Wide**. Exports are named `<series>_<curve>[_<halves>]_…` with a JSON record of the
+  settings; the frame picked is saved under the name Batch Export gives that frame.
+- **Watch** follows a source that grows: a file or a set of module files written frame by frame is
+  listed at once, and each look (every 2 s) takes the frames it already held at the look before. A
+  set of module files is exported once it has rested about 10 s. F5 and the watch read a frame again
+  when its files changed; a master and its data files are one row; a source taken off the list comes
+  back when it grows.
+
+### Batch Export and Send Series to Fitting
+
+- File names keep the 0-based frame index (`_frame0003`); headers, labels and titles say the frame
+  from 1 (“frame 4 of 12”). A set of module files is named by its scan, without `_m01`. Every curve
+  file says in `#` lines which frame, which sum and which files it comes from.
+- The dialog checks the folder before anything is reduced, names the cut every frame gets (and waits
+  while the frame on screen is read again without the automatic analysis' sum), and asks before it
+  writes over an earlier export of the same data: **Replace**, **Keep Both in a New Subfolder** or
+  **Cancel**. Enter answers Replace only when this export writes again every kind of file Replace
+  would remove; otherwise Keep Both, and the question names what Replace would remove.
+- GISAXS: **Halves of the cut** — the mean of both halves, the q > 0 half or the q < 0 half — for the
+  model fit; the curve for Fitting still holds both halves and names the choice. The model table has
+  the columns `halves` and `points`; a frame without counts or without points on the chosen half is
+  listed with its reason, and a batch whose model fits failed no longer ends as a success.
+- **Send Series to Fitting** writes into a folder of its own, `<name>_fitting/`, beside any Batch
+  Export of the same data.
+- Tables of all frames: frames whose points differ only slightly are matched row by row; grids that
+  really differ are interpolated, never across a gap. `<name>_batch.json` lists every file written,
+  the cut of every frame and every failed frame with its reason.
+
+### Fitting: the halves of the cut
+
+- **In-situ series** has its own **Halves of the cut**: the mean of both halves, the q > 0 half or
+  the q < 0 half — never both together. It starts on what Analyze sent the curves with, else on the
+  halves of Single analysis, else on the mean, and says where its value comes from. A frame without
+  points on the chosen half fails with “No points on the q > 0 half” (or q < 0); it is never fitted on
+  the other half instead.
+- Its results table has one row per frame with **Points** and **Halves**; the saved table adds
+  `points` and `halves_used`, and the JSON record (`gimap_series_fit_v2`) the halves and where they
+  came from, every frame's state and reason, and the poor fits (χ²ᵣ above 10).
+- A second Start, other curves or opening a project ask before results that are not saved are
+  dropped (**Save**, **Discard**, **Cancel**).
+- **Single analysis** keeps its four choices. *Find the particle shape*, *AI proposal* and *fit1d*
+  cannot fit both halves on |q|: they switch to the mean of both halves and say so. A mean never
+  interpolates across a gap of the other half. *Find the particle shape* and the model fit of Batch
+  Export take a cut of any length (more than 1000 points are merged).
+- A GIWAXS I(q) sent to Fitting gets a note: Fitting's models are particle form factors, not peaks.
+
+### Command line and tool windows
+
+- **Format Converter** reads every NeXus/HDF5 suffix and lists a set of module files once, stitched
+  and named by its scan; the metadata in a CBF header is written as ASCII JSON.
+- **XRR Series Extractor**: **Folder…** chooses the folder of a series; a series of NeXus files that
+  hold one frame each is read; the JSON record lists every file read (`source_layout`).
+- **Geometry Calibration**: a multi-frame file is calibrated on one frame or on the sum of all
+  frames; importing a calibration made on summed frames reads that sum and selects its standard.
+- `tools/gimap_agent.py auto`: a set of module files is analysed once, in a folder named by its scan;
+  `--series` takes files that hold one frame each as one series; a source with a part missing is an
+  open item of its report. The default sum of a series is now the last fifth of its frames, at most
+  10, and the last frame alone below ten frames (was: the last 10 frames).
+
+### Exported text
+
+- Text files are UTF-8 without a byte-order mark. GIMaP's own symbols are written in ASCII (`1/A`,
+  `deg`, `2theta`, `alpha_i`, `sigma`, `+/-`); file and frame names and paths are kept as they are.
+  A script should read them with `encoding="utf-8"`.
+
+### Fixed
+
+- macOS: Batch Export with pictures ended the program (worker threads now have a 16 MB stack).
+- Send to Compare opened a Compare page that stayed at “Comparing …”.
+- Fitting ▸ In-situ series: refilling the results table of a long series froze the window.
+- Peak fits with a Gaussian or Lorentzian profile no longer fit η (it is exactly 0 or 1): they
+  converge, with tens of model evaluations instead of thousands.
+- Saved pictures of square or tall frames no longer cut off the y-axis label; the colour bar is as
+  tall as the frame.
+- Trainset's `.h5` reference image is the detector image, not its pixel mask.
 
 ## 0.1.0 — 2026-10-13 (pre-release)
 

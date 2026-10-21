@@ -21,18 +21,55 @@ LOGGER = logging.getLogger(__name__)
 class ImageLoaderWorker(QObject):
     finished = pyqtSignal(object)
     failed = pyqtSignal(object)
+    progress = pyqtSignal(int, int)
+    """Frames read, frames to read: only while the frames of a sum are read."""
 
-    def __init__(self, path: str, view_model, dataset_path: Optional[str] = None):
+    def __init__(
+        self, path: str, view_model, dataset_path: Optional[str] = None, *, frame: int = 0, sum_frames: int = 1
+    ):
         super().__init__()
         self.path = path
         self.view_model = view_model
         self.dataset_path = dataset_path
+        self.frame = int(frame)
+        self.sum_frames = int(sum_frames)
+        self.cancel_requested = False
+
+    def cancel(self) -> None:
+        """Stop a sum before its next frame (one frame is read in one piece)."""
+        self.cancel_requested = True
+
+    def run(self) -> None:
+        frames = {}
+        if self.frame or self.sum_frames > 1:
+            frames = {
+                "frame": self.frame, "sum_frames": self.sum_frames,
+                "progress": self.progress.emit, "cancelled": lambda: self.cancel_requested,
+            }
+        try:
+            self.finished.emit(self.view_model.load_image(self.path, self.dataset_path, **frames))
+        except Exception as exc:
+            if not isinstance(exc, CalibrationCancelledError):
+                LOGGER.exception("Failed to load calibration image")
+            self.failed.emit(exc)
+
+
+class ImportedSumWorker(ImageLoaderWorker):
+    """Reads the summed frames an imported calibration was made on; the imported result is kept."""
+
+    def __init__(self, view_model):
+        super().__init__("", view_model)
 
     def run(self) -> None:
         try:
-            self.finished.emit(self.view_model.load_image(self.path, self.dataset_path))
+            self.finished.emit(
+                self.view_model.read_imported_sum(
+                    progress=self.progress.emit, cancelled=lambda: self.cancel_requested
+                )
+            )
         except Exception as exc:
-            LOGGER.exception("Failed to load calibration image")
+            if not isinstance(exc, CalibrationCancelledError):
+                LOGGER.exception("Failed to read the frames of the imported calibration")
             self.failed.emit(exc)
 
 

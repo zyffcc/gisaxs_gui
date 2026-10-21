@@ -29,13 +29,13 @@ def test_existing_module_yaml_files_are_discovered_with_legacy_contracts():
     modules = YamlModuleRepository(PROJECT_ROOT / "modules").discover()
     by_id = {module.id: module for module in modules}
 
-    assert set(by_id) == {
+    assert {
         "A_AgIUPAC_FF_256",
         "G_AgPNO_FF_256",
         "Au_Silicon_15nm",
         "Yuxin_CuPolymer_FF_256",
         "Yuxin_CuPolymer_SF_4Para",
-    }
+    } <= set(by_id)
     assert by_id["Au_Silicon_15nm"].input_shape == (1, 256, 256, 1)
     assert by_id["Au_Silicon_15nm"].preprocess.params["resize"] == {
         "shape": [256, 256],

@@ -105,24 +105,64 @@ def _listed(tmp_path: Path, count: int):
 # -- a frame that cannot be read (R32) ----------------------------------------------------------------------------
 
 
-def _read_errors(tmp_path: Path, monkeypatch) -> list[tuple[str, str]]:
-    """``(sentence, the reader's own words in it)`` of every branch of ``readable_read_error``."""
+def _read_errors(tmp_path: Path, monkeypatch) -> list[tuple[str, dict]]:
+    """``(sentence, the values in it)`` of every branch of ``readable_read_error``: the file's name, the reader's
+    own words (``error``), and for the NeXus / HDF5 reader's own sentences (``nexus_layout.ERROR_TEMPLATES``)
+    what they name. The errors are raised by the reader itself wherever a small file can make it do so."""
+    import h5py
+    import numpy as np
+
+    from src.gimap.shared.detector_io import BeingWritten, LeftUnfinished, load_detector_image
+
     frame = tmp_path / "frame_00012.cbf"
     frame.write_bytes(b"x" * 64)
     nexus = tmp_path / "scan_00007_m01.nxs"
-    nexus.write_bytes(b"x" * 64)
+    with h5py.File(nexus, "w") as handle:
+        handle.create_dataset("entry/instrument/detector/data", data=np.zeros((12, 16, 24), dtype=np.int32))
+        handle.create_dataset("entry/instrument/detector/description", data=np.bytes_("Lambda"))
+        handle.create_group("entry/notes")
+    growing = tmp_path / "growing_00008.nxs"
+    with h5py.File(growing, "w") as handle:
+        handle.create_dataset("entry/instrument/detector/data", shape=(0, 16, 24), maxshape=(None, 16, 24), dtype="i4")
+    weights = tmp_path / "weights.h5"
+    with h5py.File(weights, "w") as handle:
+        handle.attrs["keras_version"] = "2.11.0"
+        handle.create_dataset("model_weights/dense/kernel:0", data=np.zeros((64, 32), dtype=np.float32))
+    damaged = tmp_path / "damaged_00009.nxs"
+    damaged.write_bytes(b"x" * 64)
     empty = tmp_path / "empty_frame.tif"
     empty.write_bytes(b"")
+
+    def raised(path: Path, **options) -> BaseException:
+        """What the reader itself raises for ``path``."""
+        try:
+            load_detector_image(path, **options)
+        except Exception as exc:  # noqa: BLE001 - the error is what is wanted
+            return exc
+        raise AssertionError(f"{path.name} was read")
+
+    description = "/entry/instrument/detector/description"
     found = [
-        (readable_read_error(tmp_path / "moved_away.tif", FileNotFoundError("gone")), ""),
-        (readable_read_error(empty, ValueError("no data")), ""),
-        (readable_read_error(frame, PermissionError(13, "Permission denied")), ""),
-        (readable_read_error(nexus, IndexError("frame 40 of 12")), "frame 40 of 12"),
-        (readable_read_error(frame, OSError("cannot identify image file: could not identify the format")), ""),
-        (readable_read_error(nexus, OSError("Unable to open file (truncated file)")), ""),
+        (readable_read_error(tmp_path / "moved_away.tif", FileNotFoundError("gone")), {"name": "moved_away.tif"}),
+        (readable_read_error(empty, ValueError("no data")), {"name": "empty_frame.tif"}),
+        (readable_read_error(nexus, BeingWritten(nexus)), {"name": nexus.name}),
+        (readable_read_error(nexus, LeftUnfinished(nexus)), {"name": nexus.name}),
+        (readable_read_error(weights, raised(weights)), {"name": "weights.h5"}),
+        (readable_read_error(nexus, raised(nexus, dataset_path=description)),
+         {"dataset": description, "shape": "()", "dtype": "|S6"}),
+        (readable_read_error(nexus, raised(nexus, dataset_path="/entry/notes")), {"dataset": "/entry/notes"}),
+        (readable_read_error(frame, PermissionError(13, "Permission denied")), {"name": frame.name}),
+        (readable_read_error(growing, raised(growing)), {"name": growing.name}),
+        (readable_read_error(nexus, raised(nexus, frame_idx=39)), {"name": nexus.name, "error": "frame 40 of 12"}),
+        (readable_read_error(frame, OSError("cannot identify image file: could not identify the format")),
+         {"name": frame.name}),
+        (readable_read_error(nexus, OSError("Can't synchronously read data (required filter 'bitshuffle' is not "
+                                            "registered)")), {"name": nexus.name}),
+        (readable_read_error(damaged, raised(damaged)), {"name": damaged.name}),
         (readable_read_error(frame, AttributeError("'NoneType' object has no attribute 'find'")),
-         "AttributeError: 'NoneType' object has no attribute 'find'"),
-        (readable_read_error(frame, RuntimeError("the reader gave up")), "RuntimeError: the reader gave up"),
+         {"name": frame.name, "error": "AttributeError: 'NoneType' object has no attribute 'find'"}),
+        (readable_read_error(frame, RuntimeError("the reader gave up")),
+         {"name": frame.name, "error": "RuntimeError: the reader gave up"}),
     ]
     locked = tmp_path / "locked_frame.tif"
     locked.write_bytes(b"x" * 64)
@@ -134,7 +174,7 @@ def _read_errors(tmp_path: Path, monkeypatch) -> list[tuple[str, str]]:
         return real_stat(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", stat)
-    found.append((readable_read_error(locked, ValueError("x")), "Access is denied"))
+    found.append((readable_read_error(locked, ValueError("x")), {"name": locked.name, "error": "Access is denied"}))
     monkeypatch.setattr(Path, "stat", real_stat)
     return found
 
@@ -145,21 +185,29 @@ def _template_of(sentence: str):
 
 def test_every_reason_a_frame_cannot_be_read_has_its_template(tmp_path: Path, monkeypatch) -> None:
     """The sentences are made in the infrastructure and recognised in the presentation: the two lists agree."""
+    from src.gimap.shared.detector_io.nexus_layout import ERROR_TEMPLATES, FRAME_BEYOND
+
     sentences = _read_errors(tmp_path, monkeypatch)
-    matched = [_template_of(sentence) for sentence, _error in sentences]
-    assert None not in matched, [sentence for (sentence, _e), found in zip(sentences, matched) if found is None]
+    matched = [_template_of(sentence) for sentence, _values in sentences]
+    assert None not in matched, [sentence for (sentence, _v), found in zip(sentences, matched) if found is None]
     assert sorted(matched) == sorted(READ_ERRORS)  # each sentence its own template, every template used
-    for sentence, _error in sentences:
-        assert message_text(sentence) == sentence  # English: as it came
+    for (sentence, values), template in zip(sentences, matched):
+        assert message_text(sentence) == sentence == template.format(**values)  # English: as it came
+    # The NeXus / HDF5 reader's own sentences reach the page as they are (the frame it lacks: inside “fewer frames”).
+    assert set(ERROR_TEMPLATES) - {FRAME_BEYOND} <= set(READ_ERRORS)
+    assert texts.FEWER_FRAMES.format(name="x.nxs", error=FRAME_BEYOND.format(frame=40, frames=12)) in [
+        sentence.replace("scan_00007_m01.nxs", "x.nxs") for sentence, _values in sentences]
 
 
 def test_the_reason_is_said_in_the_interface_language_with_its_names_kept(tmp_path: Path, monkeypatch, chinese) -> None:
-    for sentence, error in _read_errors(tmp_path, monkeypatch):
+    for sentence, values in _read_errors(tmp_path, monkeypatch):
         template = _template_of(sentence)
-        name = sentence.split(" ")[0]
         shown = message_text(sentence)
-        assert shown != sentence and shown == ZH[template].format(name=name, error=error), sentence
-        assert name in shown and (not error or error in shown)  # the file and the reader's own words stay
+        said = dict(values)
+        if said.get("error") == "frame 40 of 12":  # the reader's own words for the frame, in Chinese too
+            said["error"] = "第 40 帧，共 12 帧"
+        assert shown != sentence and shown == i18n.ZH[template].format(**said), sentence
+        assert all(value in shown for value in said.values())  # the file and the reader's own words stay
     assert message_text(MASK_SHAPE.format(name="mask_a.edf", mask_shape="619×487", shape="1043×981")) == (
         "掩膜 mask_a.edf 的大小是 619×487；这一帧是 1043×981。")
 
@@ -371,12 +419,16 @@ def test_the_panel_of_a_batch_that_ended_follows_the_language(tmp_path: Path, ch
         panel = page.batch_panel
         assert not panel.isHidden() and panel.title_label.text() == "Batch Export done"
         english = panel.now_label.text()
-        assert english.startswith("3 frames in 0:") and english.endswith(f"→ {target}")
+        # (The folder as the batch panel names it: whole, or by its last names with the whole path in the tooltip.)
+        from src.gimap.features.analyze.presentation import batch_texts
+
+        folder = getattr(batch_texts, "short_folder", str)(target)
+        assert english.startswith("3 frames in 0:") and english.endswith(f"→ {folder}")
 
         apply_language("zh", [page])
         page.refresh_language()
         assert panel.title_label.text() == "批量导出完成"
-        assert panel.now_label.text().startswith("3 帧，用时 0:") and panel.now_label.text().endswith(f"→ {target}")
+        assert panel.now_label.text().startswith("3 帧，用时 0:") and panel.now_label.text().endswith(f"→ {folder}")
         assert not panel.open_button.isHidden() and panel.pause_button.isHidden()
 
         apply_language("en", [page])

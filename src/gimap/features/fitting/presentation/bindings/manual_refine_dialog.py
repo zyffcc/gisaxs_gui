@@ -10,6 +10,8 @@ import numpy as np
 
 from PyQt5.QtCore import Qt, QThread
 
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
+
 from PyQt5.QtWidgets import (
     QMessageBox,
     QVBoxLayout,
@@ -555,6 +557,7 @@ class ManualRefineDialogMixin:
                     refine_state["worker"] = worker
                     refine_state["bridge"] = bridge
                     set_running_state(True, "Running")
+                    thread.setStackSize(WORKER_STACK_BYTES)  # macOS: 512 KB is too little for numpy.linalg
                     thread.start()
                 except Exception as exc:
                     result_label.setText(f"{action_name} failed: {exc}")

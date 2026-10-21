@@ -15,6 +15,14 @@ from .zh_assistant_runtime import ASSISTANT_RUNTIME_ZH
 from .zh_labs import LABS_ZH
 from .zh_shell import SHELL_ZH
 from .zh_tools import TOOLS_ZH
+from .zh_nexus import NEXUS_ZH
+from .zh_series import SERIES_ZH
+from .zh_fit_series import FIT_SERIES_ZH
+from .zh_fit1d import FIT1D_ZH
+from .zh_series_map import SERIES_MAP_ZH
+from .zh_handover import HANDOVER_ZH
+from .zh_series_results import SERIES_RESULTS_ZH
+from .zh_frame_import import FRAME_IMPORT_ZH
 from .zh_sem import SEM_ZH
 
 ZH = {
@@ -69,7 +77,6 @@ ZH = {
     "Grazing-incidence scattering, step by step: open your data, say what you want to know, and every result comes with how it was found.":
         "掠入射散射，一步一步来：打开数据，说出你想知道什么，每个结果都附带它是怎么得到的。",
     "Drag detector images or a folder here": "把探测器图像或文件夹拖到这里",
-    "CBF, TIFF, EDF, NeXus (multi-module series are stitched automatically)": "CBF、TIFF、EDF、NeXus（多模块序列自动拼接）",
     "Open Files…": "打开文件…",
     "Open Folder…": "打开文件夹…",
     "What do you want to know?": "你想知道什么？",
@@ -117,10 +124,7 @@ ZH = {
     "Series": "序列",
     "Ready": "就绪",
     "Cancel": "取消",
-    "Open or drop detector files (CBF, NXS, TIFF, EDF) to start": "打开或拖入探测器文件（CBF、NXS、TIFF、EDF）开始",
     "No data yet — open or drop detector frames": "还没有数据——打开或拖入探测器帧",
-    "Open or drop detector frames (CBF, NXS, TIFF, EDF) or a folder. A multi-module NeXus series (…_m01.nxs … _m11.nxs) opens as one stitched frame.":
-        "打开或拖入探测器帧（CBF、NXS、TIFF、EDF）或文件夹。多模块 NeXus 序列（…_m01.nxs … _m11.nxs）会拼成一帧打开。",
     "Open a detector frame": "打开一帧探测器图像",
     "Move over the full detector to inspect x, y and intensity": "在整个探测器上移动鼠标查看 x、y 和强度",
     # -- Analyze steps ------------------------------------------------------------------
@@ -550,8 +554,16 @@ ZH.update(SHELL_ZH)
 ZH.update(ASSISTANT_ZH)
 ZH.update(LABS_ZH)
 ZH.update(TOOLS_ZH)
-ZH.update(SEM_ZH)
 ZH.update(ANALYZE_RUNTIME_ZH)
 ZH.update(ASSISTANT_RUNTIME_ZH)
+ZH.update(NEXUS_ZH)
+ZH.update(SERIES_ZH)
+ZH.update(FIT_SERIES_ZH)
+ZH.update(FIT1D_ZH)
+ZH.update(SERIES_MAP_ZH)
+ZH.update(HANDOVER_ZH)
+ZH.update(SERIES_RESULTS_ZH)
+ZH.update(FRAME_IMPORT_ZH)
+ZH.update(SEM_ZH)
 
 __all__ = ["ZH"]

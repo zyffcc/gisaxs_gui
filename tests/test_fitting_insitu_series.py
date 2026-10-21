@@ -76,7 +76,7 @@ def _plain_recipe(binding):
     )
 
 
-def test_a_frame_opened_in_single_analysis_keeps_the_settings_of_the_series(tmp_path: Path) -> None:
+def test_a_frame_opened_in_single_analysis_keeps_the_settings_of_the_series(tmp_path: Path, monkeypatch) -> None:
     """Open Frame in Single Analysis: the frame's model, on the points the series fitted, so that the
     next Start reads the same halves, range and left-out points."""
     from types import SimpleNamespace
@@ -85,9 +85,12 @@ def test_a_frame_opened_in_single_analysis_keeps_the_settings_of_the_series(tmp_
 
     from src.gimap.features.fitting.application.single_fit import point_key
     from src.gimap.features.fitting.presentation.workspace import FittingWorkspace
-    from tests.test_fit_series import RADII, _model, _pages, _series
+    from PyQt5.QtWidgets import QMessageBox
+
+    from tests.test_fit_series import RADII, _answer, _model, _pages, _series
     from tests.test_fit_series import _wait as _wait_series
 
+    _answer(monkeypatch, QMessageBox.Discard)  # the second Start: the first run was not saved
     single, series = _pages()
     folder = _series(tmp_path, RADII[:3])
     single.open_curve(folder / "run_00001_fit_input.dat")

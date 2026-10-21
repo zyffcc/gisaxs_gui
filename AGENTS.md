@@ -10,6 +10,7 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - **Compare**：多个序列或样品的阶段、异常帧、谁和谁相像。
 - **Labs**：2D Prediction、Trainset Build。
 - **Tools 菜单**：Geometry Calibration、Format Converter（含 Convert Current File）、XRR Series Extractor、
+  SEM Particle Analysis（SEM 图像粒径分析；2D Prediction 结果区的 SEM comparison… 也打开它）、
   1D Predict — Fit Many Curves（机器学习一维拟合，调用研究代码）、Process with AI、Settings。
 - 入口 `main.py`；开发解释器 `D:\conda\envs\GUI\python.exe`。
 
@@ -20,6 +21,8 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - 不 commit、push、stash、reset，不 checkout 文件；
   - 不写 index：改名用普通 `mv`，不用 `git mv`。
   - `main` 的历史在 2026-10-13 改写过。在那之前克隆的仓库里不要 `git pull`、merge 或 push：那会把旧历史带回 GitHub。
+    2026-10-21 另一台电脑把旧提交合并回来并推送过，当天又清了一次；`tests/test_release_history.py` 发现分支里有
+    这些旧提交时会失败——那时不要推送，按 `tools/update_source.ps1` 接续，自己的改动用 cherry-pick 或文件带过去。
     更新脚本留下的 `backup/…` 分支和那时自己建的分支带着旧历史，同样不要 merge 或 push。
     更新源码用 `tools/update_source.ps1`（见 `README.md` 的 “Updating a source checkout”），也要用户要求才做。
 - **用户数据只读，而且常常未发表**（如 `E:\ExpData`）。
@@ -47,7 +50,7 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - `bootstrap.py`。
 
   现有功能：analyze、fitting、compare、assistant（自动分析与 AI）、calibration、format_converter、xrr、
-  prediction、trainset。
+  sem、prediction、trainset。
 - **组合根**在 `src/gimap/app/`：`main_window.py`、`menus.py`、`runtime.py`、`bootstrap.py`、`headless_assistant.py`。
   功能之间不互相导入，需要组合时由组合根注入。例如：
   - Fitting 的快速物理拟合经 `create_quick_fit()` 交给 assistant；
@@ -57,6 +60,12 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - `src/gimap/shared/`：探测器读取、几何、`series_stages`（阶段与异常帧）、`figures`；
   - `src/gimap/integrations/`：用户数据（UserStore）、任务、BornAgain、TensorFlow；
   - `utils/ML_Fitting_1D_GISAXS/`：研究代码，GUI 只按路径用子进程调用它。
+  - **不在仓库里的可选运行时**，都在可取消的子进程里运行，主程序不导入它们：
+    - fit1d 工具包：`utils/gisaxs1d_gui_kit/`（git 忽略）或环境变量 `GISAXS1D_KIT_HOME`；
+    - SEM 的 StarDist：单独的 Python 环境（`requirements-sem-stardist.txt`，`GIMAP_SEM_STARDIST_HOME`），
+      模型权重放在仓库外，不联网下载。
+
+    没有这些时，相关功能要说清缺什么、放在哪里，其他功能照常可用；测试不能依赖它们存在。
 - **测试强制的规则。** 理由：模块要能读完、能审查，各层要能单独替换。
   - 每个 `src` 模块 ≤ 600 行，每个功能的 `view_model.py` ≤ 300 行。好几个模块已接近上限，
     加代码前先按职责拆分，不要为了凑行数切碎。
@@ -74,6 +83,8 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
 - **惯用写法**：静态布局放在 `presentation/views/*_view.py`，行为写成 mixin（Analyze 在 `bindings/`）。照着相邻代码写。
 - **文档**：`docs/architecture/overview.md`、`scientific-data-flow.md`、`dependency-rules.md`；
   各工作区的调用链、文件和测试见 `docs/ui/workspaces/<名称>.md`。
+- **用户手册**：英文 `docs/User_Manual.md`、中文 `docs/User_Manual_zh.md`，截图在 `docs/manual_images/en|zh/`
+  （两份同名）。Help ▸ User Manual（F1）按界面语言打开对应的一份，没有中文版时退回英文。
 
 ## 科学数据契约
 
@@ -87,10 +98,16 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     - XRR 的提取内部、导出的 CSV / JSON 记录也仍按像素中心从 0 数（小 0.5 px，记录里用 `center_convention` 写明），
       窗口在 `xrr/presentation/pixel_coordinates.py` 里换算。
     - 设置里的 `detector.beam_center_x / _y`（最近一次 Apply 的标定）同样是从 0 数的那一套。
+  - SEM 的 ROI 用原图像素边界坐标 `(left, top, right, bottom)`，第 0 行在上，同一套约定。
   - 例外：Trainset 故意沿用生成训练数据时的约定（`shared/geometry/legacy_conventions.py`，q 用 nm⁻¹）。
     改它是科学上的决定（见 `docs/architecture/geometry.md`），未经用户同意不要统一。
 - **存储值**：读取器保留存储值（`metadata["stored_dtype"]`）。整数计数探测器的负值是缝隙码；浮点帧（已扣暗场或背景）的
   负值是数据（`valid_pixels(..., negatives_valid=True)`）。
+- **NeXus / HDF5**（`shared/detector_io/nexus_*.py`）：先看内容，文件名只作提议。一个源可以是单帧、一个文件装整个序列、
+  每个探测器模块一个文件（P03 Lambda 9M，按模块位置拼接）或 master 加数据文件，每一帧都读。方向：Lambda 服务器写的文件
+  照旧做 P03 变换（按模块平移拼接、整体转置、上下翻转；模块的存储方向需要时先转置模块）；其他 NeXus / HDF5 图像按存储
+  原样读（第 0 行在上）。
+  实际做了什么写在 `metadata["transformations"]`。
 - **坏像素**：每帧自动排除以下几类，不会整行整列去掉；数量写进导出元数据 `bad_pixels_left_out`：
   - 孤立的热像素；
   - 死像素（只在计数探测器上判断）；
@@ -99,6 +116,8 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   代码在 `analyze/domain/bad_pixels.py`；可以在 Mask 步骤或设置 `analyze.bad_pixels` 里关掉。
 - **来源与记录**：每条曲线都能在图上显示来源（Sources）。曲线导出旁边写 `<stem>_analysis.json`（设置、几何、校正）；
   q 图、cake 的 CSV 和 `_fit_input.dat` 把来源写在 `#` 头行里。新增一种数据导出时，至少要带上来源和设置。
+- **SEM 标尺**：nm/像素只来自用户明确给出的数值或已知标尺长度，不从图中文字、倍率或 DPI 猜；
+  没有标尺就不提取。导出记录写明来源、标尺、ROI、方法和模型文件的 SHA-256。
 - **强度校正**：GIWAXS 强度校正（立体角、偏振、薄膜吸收）默认关闭。开启时 I / factor、q 不变，光子计数的方差按
   value / factor 传递；公式和参数写进 JSON（`analyze/domain/intensity.py`）。
 - **导出的图要用浅色配色**：
@@ -131,6 +150,19 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - application / domain 的消息保持英文，因为导出记录和 AI 助手要读它们；presentation 在显示时翻译。
     带数值的消息：application 提供模板，presentation 反查模板后用 `trf`，参见 `compare/presentation/errors.py` 和
     `analyze/presentation/texts.py`。
+
+## 每次更新都要检查手册
+
+改了用户看得见或要做的事，就要检查两份手册是否还对，并在同一次改动里改好。包括：
+界面文字和按钮名、操作步骤、默认值、导出的文件和位置、文件格式、依赖和安装、已知限制、新增或删掉的功能。
+
+- 中英两份一起改，内容保持一致；中文版里的界面名用 `i18n/zh_*.py` 里实际显示的译文，第一次出现时括号注英文。
+- 窗口明显变了，就重拍对应的截图（中英各一张，同名），按上面“测试之外的截图脚本”的做法，只用公开数据或合成图。
+- 已知限制写进手册的“已知限制”一章和 `CHANGELOG.md`；修好了就从两处删掉。
+- `tests/test_release_docs_contents.py`、`tests/test_release2_docs_decisions.py` 把手册里的一些说法和代码绑在一起；
+  行为改了，这些测试会失败并说出要改哪一句。改手册，不要为了让测试通过而改回行为。
+- 最后的报告里写明检查了手册的哪些章节；不需要改时也写一句“手册已核对，无需改动”。
+- 纯内部的改动（重构、测试、性能，用户看不出区别）不用改手册，但仍要确认确实看不出区别。
 
 ## 测试与检查
 
@@ -180,7 +212,7 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
     - `.poni` 和 `.json` 直接采用，不再核对。
 
     有把握时直接给 `--calibration`；怀疑时加 `--no-saved-profiles` 或 `--recalibrate`。
-  - **帧**：序列默认取最后 10 帧求和（改用 `--frame N --sum K`）。
+  - **帧**：序列默认取最后五分之一的帧求和，至多 10 帧；不到 10 帧时只取最后一帧（改用 `--frame N --sum K`）。
   - **环**（GIWAXS）：只分析面积最大的 3 个没有警告的峰（改用 `--rings N`）。
   - **αi**：没有时先用 0°，并提问（补 `--incidence-deg`）。
 - **退出码**：

@@ -1,200 +1,59 @@
-"""CBF/NXS/TIFF detector image loading adapter."""
+"""CBF / NeXus / HDF5 / TIFF / EDF detector image loading adapter."""
 
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
-import h5py
 import numpy as np
 
-from .radiation import energy_to_wavelength
 from .metadata import extract_cbf_metadata, extract_edf_metadata, extract_nxs_metadata
 from .models import DetectorImage
+from .nexus_datasets import (  # noqa: F401  (re-exported: the dataset choosers import them from here)
+    DEFAULT_DATASET_PATH,
+    AmbiguousDatasetError,
+    _dataset_candidates,
+    select_nxs_dataset,
+)
+from .nexus_files import NO_IMAGE
+from .nexus_layout import HDF5_SUFFIXES, cached_layout, is_hdf5, open_nexus
+from .nexus_reading import NXS_REJECT_MASK_BITS, nxs_invalid_pixel_mask, read_nexus_frame  # noqa: F401
 
 
-DEFAULT_DATASET_PATH = "/entry/instrument/detector/data"
-DEFAULT_MASK_PATH = "/entry/instrument/detector/pixel_mask"
-DEFAULT_TRANSLATION_PATH = "/entry/instrument/detector/translation/distance"
-
-# NeXus NXdetector pixel masks are bit fields, not boolean arrays.  Reject the
-# bits with an explicitly defined invalid/unwanted meaning: gap (0), dead (1),
-# under/over responding (2/3), noisy (4), problematic cluster (6), and the
-# experiment user mask (8).  Undefined lower bits such as bit 10 and upper tag
-# bits such as bit 31 (virtual/interpolated pixel) must not erase valid data.
-NXS_REJECT_MASK_BITS = np.uint32(0x0000015F)
-
-
-def nxs_invalid_pixel_mask(raw_mask: Any) -> np.ndarray:
-    """Convert a NeXus bit-field pixel mask into the application's invalid mask."""
-    values = np.asarray(raw_mask, dtype=np.uint32)
-    return (values & NXS_REJECT_MASK_BITS) != 0
-
-
-class AmbiguousDatasetError(ValueError):
-    def __init__(self, paths: list[str]):
-        self.paths = paths
-        super().__init__("Multiple detector image datasets are plausible: " + ", ".join(paths))
-
-
-def _as_scalar(value: Any) -> Any:
-    arr = np.asarray(value)
-    if arr.size == 0:
-        return None
-    value = arr.reshape(-1)[0]
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return value.item() if hasattr(value, "item") else value
-
-
-def _dataset_candidates(handle: h5py.File) -> list[tuple[int, str]]:
-    candidates: list[tuple[int, str]] = []
-
-    def visit(name: str, obj: Any) -> None:
-        if not isinstance(obj, h5py.Dataset) or obj.ndim not in (2, 3):
-            return
-        if not np.issubdtype(obj.dtype, np.number) or min(obj.shape[-2:]) < 32:
-            return
-        lower = name.lower()
-        score = int(np.prod(obj.shape[-2:]) > 100_000)
-        score += 20 if "/instrument/detector/data" in lower else 0
-        score += 8 if lower.endswith("/data") else 0
-        score += 4 if "detector" in lower else 0
-        score -= 10 if any(token in lower for token in ("mask", "flatfield", "variance", "error")) else 0
-        candidates.append((score, "/" + name.lstrip("/")))
-
-    handle.visititems(visit)
-    return sorted(candidates, key=lambda item: (-item[0], item[1]))
-
-
-def select_nxs_dataset(handle: h5py.File, dataset_path: Optional[str] = None) -> str:
-    if dataset_path and dataset_path in handle:
-        return dataset_path
-    if DEFAULT_DATASET_PATH in handle:
-        return DEFAULT_DATASET_PATH
-    candidates = _dataset_candidates(handle)
-    if not candidates:
-        raise ValueError("No usable detector image dataset was found in this NXS file.")
-    best_score = candidates[0][0]
-    best = [path for score, path in candidates if score == best_score]
-    if len(best) > 1:
-        raise AmbiguousDatasetError(best)
-    return best[0]
+DETECTOR_SUFFIXES = (".cbf", ".tif", ".tiff", ".edf") + HDF5_SUFFIXES
 
 
 def detect_nxs_frame_count(file_path: str | Path, dataset_path: Optional[str] = None) -> int:
+    """Frames of the NeXus / HDF5 source ``file_path`` belongs to (1 for every other format).
+
+    For a module set that is the number of frames every module holds.
+    """
     path = Path(file_path)
-    if path.suffix.lower() != ".nxs":
+    if not is_hdf5(path):
         return 1
-    with h5py.File(str(path), "r") as handle:
-        selected = select_nxs_dataset(handle, dataset_path)
-        dataset = handle[selected]
-        return int(dataset.shape[0]) if dataset.ndim == 3 else 1
+    layout = cached_layout(path, dataset_path)
+    if layout.kind == "no_image":
+        raise ValueError(NO_IMAGE.format(name=path.name))
+    return int(layout.frames)
 
 
 def nxs_series_paths(path: str | Path) -> list[Path]:
-    """Return all P03 module files belonging to the selected NXS source."""
+    """Return all P03 module files belonging to the selected NXS source.
+
+    The files are a set only when their content says so (``nexus_layout``); a file that cannot be
+    read now stands alone.
+    """
     path = Path(path)
-    match = re.search(r"_m(\d+)\.nxs$", path.name, re.IGNORECASE)
-    separator = "_"
-    if match is None:
-        match = re.search(r"m(\d+)\.nxs$", path.name, re.IGNORECASE)
-        separator = ""
-    if match is None:
+    if not is_hdf5(path):
         return [path]
-    prefix = path.name[: match.start()]
-    series: list[tuple[int, Path]] = []
-    for sibling in path.parent.glob(f"{prefix}{separator}m*.nxs"):
-        number = re.search(r"m(\d+)\.nxs$", sibling.name, re.IGNORECASE)
-        if number:
-            series.append((int(number.group(1)), sibling))
-    return [item[1] for item in sorted(series)] or [path]
-
-
-def _read_nxs(path: Path, frame_idx: int, dataset_path: Optional[str]) -> DetectorImage:
-    paths = nxs_series_paths(path)
-    with h5py.File(str(paths[0]), "r") as handle:
-        selected = select_nxs_dataset(handle, dataset_path)
-        dataset = handle[selected]
-        module_x, module_y = map(int, dataset.shape[-2:])
-        metadata = extract_nxs_metadata(handle)
-
-    modules: list[dict[str, Any]] = []
-    for module_path in paths:
-        with h5py.File(str(module_path), "r") as handle:
-            if selected not in handle:
-                raise ValueError(f"Detector dataset {selected} is missing in {module_path.name}.")
-            dataset = handle[selected]
-            if dataset.ndim == 3:
-                safe_frame = max(0, min(int(frame_idx), int(dataset.shape[0]) - 1))
-                image = dataset[safe_frame].astype(np.float32)
-            else:
-                safe_frame = 0
-                image = dataset[()].astype(np.float32)
-            mask = None
-            if DEFAULT_MASK_PATH in handle:
-                mask_data = handle[DEFAULT_MASK_PATH]
-                if mask_data.ndim == 3:
-                    raw_mask = mask_data[min(safe_frame, mask_data.shape[0] - 1)]
-                    mask = nxs_invalid_pixel_mask(raw_mask)
-                elif mask_data.ndim == 2:
-                    mask = nxs_invalid_pixel_mask(mask_data[()])
-            translation = handle[DEFAULT_TRANSLATION_PATH][()] if DEFAULT_TRANSLATION_PATH in handle else (0, 0)
-            flat_translation = np.asarray(translation).reshape(-1)
-            tx = int(flat_translation[1]) if flat_translation.size > 1 else 0
-            ty = int(flat_translation[0]) if flat_translation.size > 0 else 0
-
-        if image.shape == (module_y, module_x):
-            image = image.T
-            mask = mask.T if mask is not None else None
-        elif image.shape != (module_x, module_y):
-            raise ValueError(f"{module_path.name}: unexpected module shape {image.shape}.")
-        if mask is not None:
-            image[mask] = np.nan
-        modules.append({"image": image, "mask": mask, "tx": tx, "ty": ty})
-
-    min_tx = min(item["tx"] for item in modules)
-    min_ty = min(item["ty"] for item in modules)
-    shift_x, shift_y = max(0, -min_tx), max(0, -min_ty)
-    width_x = max(module_x + item["tx"] + shift_x for item in modules)
-    width_y = max(module_y + item["ty"] + shift_y for item in modules)
-    grid = np.full((width_x, width_y), np.nan, dtype=np.float32)
-    invalid = np.ones((width_x, width_y), dtype=bool)
-    for item in modules:
-        x0, y0 = item["tx"] + shift_x, item["ty"] + shift_y
-        region = np.s_[x0 : x0 + module_x, y0 : y0 + module_y]
-        grid[region] = item["image"]
-        invalid[region] = ~np.isfinite(item["image"]) | (item["mask"] if item["mask"] is not None else False)
-
-    # This is the exact transpose + vertical flip used by the embedded GIWAXS page.
-    data = np.flipud(grid.T).astype(np.float32, copy=False)
-    final_mask = np.flipud(invalid.T)
-    # A header beam centre follows the same transpose + flip: the first stored
-    # axis becomes the columns, the last one the rows counted from the bottom.
-    # Stitched multi-module series have no single header frame, so none.
-    raw_center = metadata.get("header_beam_center_px")
-    if raw_center is not None and len(paths) == 1:
-        fast, slow = raw_center
-        metadata["header_beam_center"] = (float(slow), float(data.shape[0]) - float(fast))
-    metadata.update({
-        "format": "nxs",
-        "dataset_path": selected,
-        "frame_index": int(frame_idx),
-        "module_files": [str(item) for item in paths],
-        "transformations": ["module transpose when required", "stitched using P03 translations", "canvas transpose", "vertical flip"],
-        "mask_semantics": (
-            "True is invalid; rejects NeXus-defined bits 0, 1, 2, 3, 4, 6, and 8; "
-            "preserves undefined/tag bits including 10 and virtual-pixel bit 31"
-        ),
-        "pixel_mask_reject_bits": "0x0000015F",
-    })
-    if metadata["wavelength_angstrom"] is None and metadata["energy_kev"]:
-        metadata["wavelength_angstrom"] = energy_to_wavelength(metadata["energy_kev"])
-    return DetectorImage(data=data, mask=final_mask, source_path=path, metadata=metadata, **{key: metadata[key] for key in (
-        "detector_name", "pixel_size_x_m", "pixel_size_y_m", "energy_kev", "wavelength_angstrom", "distance_m", "beam_center_x_px", "beam_center_y_px"
-    )})
+    try:
+        layout = cached_layout(path)
+    except Exception:  # noqa: BLE001 - listing never fails on an unreadable file; reading it says why
+        return [path]
+    if layout.kind != "module_set":
+        return [path]
+    return [path.parent / member.name for member in layout.members]  # in the folder as the caller named it
 
 
 def _read_cbf(path: Path) -> DetectorImage:
@@ -225,7 +84,7 @@ def _read_cbf(path: Path) -> DetectorImage:
         )
         for companion in companion_paths:
             try:
-                with h5py.File(str(companion), "r") as handle:
+                with open_nexus(companion) as handle:
                     companion_metadata = extract_nxs_metadata(handle)
                 if companion_metadata.get("energy_kev"):
                     metadata["energy_kev"] = companion_metadata["energy_kev"]
@@ -317,15 +176,15 @@ def load_detector_image(
     if not source.exists():
         raise FileNotFoundError(f"Calibration image was not found: {source}")
     suffix = source.suffix.lower()
-    if suffix == ".nxs":
-        return _read_nxs(source, frame_idx, dataset_path)
+    if suffix in HDF5_SUFFIXES:
+        return read_nexus_frame(cached_layout(source, dataset_path), frame_idx, source_path=source)
     if suffix == ".cbf":
         return _read_cbf(source)
     if suffix in {".tif", ".tiff"}:
         return _read_tiff(source)
     if suffix == ".edf":
         return _read_edf(source)
-    raise ValueError(f"Unsupported detector image {source.name}: use CBF, NXS, TIFF or EDF.")
+    raise ValueError(f"Unsupported detector image {source.name}: use CBF, NeXus/HDF5, TIFF or EDF.")
 
 
 def dump_metadata(image: DetectorImage) -> str:

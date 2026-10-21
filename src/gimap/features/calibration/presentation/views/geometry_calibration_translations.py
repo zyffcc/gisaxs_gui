@@ -24,6 +24,16 @@ class GeometryCalibrationTranslations:
             _translate("GeometryCalibrationDialog", "Paste a path or use Open…")
         )
         self.open_button.setText(_translate("GeometryCalibrationDialog", "Open…"))
+        self.framesLabel.setText(_translate("GeometryCalibrationDialog", "Frames:"))
+        self.frame_mode_combo.setItemText(0, _translate("GeometryCalibrationDialog", "A single frame"))
+        self.frame_mode_combo.setItemText(1, _translate("GeometryCalibrationDialog", "Sum of all frames"))
+        self.frames_row.setToolTip(
+            _translate(
+                "GeometryCalibrationDialog",
+                "This file holds several frames. Calibrate on one of them, or on the sum of all "
+                "(counts add; a pixel that is invalid in any frame stays invalid).",
+            )
+        )
         self.calibration_input_group.setTitle(_translate("GeometryCalibrationDialog", "Experiment"))
         self.energyLabel.setText(_translate("GeometryCalibrationDialog", "Energy:"))
         self.energy_spin.setSuffix(_translate("GeometryCalibrationDialog", " keV"))

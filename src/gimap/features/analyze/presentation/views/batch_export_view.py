@@ -5,6 +5,15 @@ scrolling area, four groups — **Data** (numbers: tables, per-frame curves, the
 **Pictures**, **Converted detector frames** (the raw data in another format) and **Fitting**
 (optional: peaks of the ring regions or a particle model, with its starting values and a trial on
 the frame on screen) — each option with the file it writes next to it; at the bottom the folder.
+Above Fitting, for GISAXS, **Curve for Fitting**: the halves of the signed cut a fit takes (the mean of
+both, or one — for the particle model here and for Fitting); in Send Series to Fitting it is the one
+group shown, with what is written.
+
+At the top, under the frames, a line for what must be known about them before anything is written (a sum
+that was switched off, a source that is still arriving) and **Cuts**: where the automatic cut of every frame
+is taken, with the box that has it found again in each frame. At the bottom, under the folder: where the
+files go, what the folder holds already, and **Summary** — how many frames, which curves, which cut and
+halves, roughly how big and how long — right above the button that starts it.
 Behaviour: ``batch_dialog.py``.
 """
 
@@ -60,10 +69,12 @@ STARTS = (
     ("first", "The first frame's result, for every frame", "The same start everywhere: frames do not depend on each other"),
     ("fresh", "Found anew in each frame", "Every frame on its own, the start taken from its own data"),
 )
+HALVES = (("mean", "Mean of both halves"), ("positive", "q > 0 half"), ("negative", "q < 0 half"))
+"""What a fit takes of the signed GISAXS cut. Both halves together are not among them: a fit takes one curve."""
 
 
-CURVE_LIST_HEIGHT = 130
-"""The most height (px) the list of curves takes; fewer rows: just their height."""
+CURVE_LIST_HEIGHT = 100
+"""The most height (px) the list of curves takes (four rows; more scroll); fewer rows: just their height."""
 SCREEN_SHARE = 0.9
 """The dialog opens as tall as its content, at most this share of the screen's free height."""
 
@@ -71,6 +82,14 @@ SCREEN_SHARE = 0.9
 ROW_SPACING = 6
 """The gap (px) between the controls of a row nested in a grid: such a row takes no spacing from the grid
 (Qt gives it the style's, here 0 px: “Every[1]frame”), so each row sets its own."""
+FILE_MARGIN = 96
+"""What the dialog's width holds beside an option and its file name (px): the margins of the dialog, of the
+scrolling area with its bar and of the group, and the gap between the two. A name longer than the rest is
+shortened in its middle (``batch_dialog.py``) — else it would push every group out of the dialog."""
+FILE_MIN_WIDTH = 160
+"""A file name beside its option is never shortened below this width (px)."""
+LINE_MARGIN = 120
+"""The same for a file name on a line of its own in the indented details of Fitting."""
 
 
 def _row() -> QHBoxLayout:
@@ -117,6 +136,12 @@ class BatchExportView:
         font.setBold(True)
         self.frames_label.setFont(font)
         layout.addWidget(self.frames_label)
+        self.notes_label = QLabel("", self)  # what must be known about the frames before they are exported
+        self.notes_label.setObjectName("batchNotes")
+        self.notes_label.setWordWrap(True)
+        self.notes_label.setProperty("gimapRole", "warning")
+        self.notes_label.hide()
+        layout.addWidget(self.notes_label)
         top = QGridLayout()
         top.setHorizontalSpacing(10)
         top.addWidget(QLabel("Frames", self), 0, 0, Qt.AlignRight)
@@ -143,7 +168,22 @@ class BatchExportView:
         settings.addWidget(self.load_settings_button)
         settings.addWidget(self.save_settings_button)
         top.addLayout(settings, 1, 1)
-        top.addWidget(QLabel("Speed", self), 2, 0, Qt.AlignRight)
+        self.cut_caption = QLabel("Cuts", self)
+        top.addWidget(self.cut_caption, 2, 0, Qt.AlignRight | Qt.AlignTop)
+        cuts = _row()
+        self.cut_label = _muted("", self)
+        self.cut_label.setObjectName("batchCutLabel")
+        self.pin_check = QCheckBox("Find the cut again in every frame", self)
+        self.pin_check.setObjectName("batchFindCutAgain")
+        self.pin_check.setToolTip(
+            "Off: every frame is cut where the frame on screen is cut, so the curves of a series can be compared "
+            "point by point. On: the cut is looked for in each frame on its own (it may sit on other rows in a "
+            "weak frame); the record of the batch has the cut of every frame either way."
+        )
+        cuts.addWidget(self.cut_label, 1)
+        cuts.addWidget(self.pin_check)
+        top.addLayout(cuts, 2, 1)
+        top.addWidget(QLabel("Speed", self), 3, 0, Qt.AlignRight)
         speed = _row()
         self.speed_combo = QComboBox(self)
         self.speed_combo.setObjectName("batchSpeed")
@@ -153,7 +193,7 @@ class BatchExportView:
         )
         speed.addWidget(self.speed_combo)
         speed.addStretch(1)
-        top.addLayout(speed, 2, 1)
+        top.addLayout(speed, 3, 1)
         top.setColumnStretch(1, 1)
         layout.addLayout(top)
 
@@ -217,6 +257,30 @@ class BatchExportView:
         converted.addLayout(self._format_row("Format", self.frame_format_combo, self.frames_group), 0, 0, 1, 2)
         self._output_row(converted, 1, FRAME_OUTPUT, self.frames_group)
         body_layout.addWidget(self.frames_group)
+        # the curve for Fitting: which halves of the signed cut a fit takes (GISAXS); Send Series: what is written
+        self.halves_group, halves = self._group("Curve for Fitting", body)
+        self.sent_label = _muted("", self.halves_group)
+        self.sent_label.setObjectName("batchSentToFitting")
+        self.sent_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        halves.addWidget(self.sent_label, 0, 0)
+        halves_row = _row()
+        self.halves_caption = QLabel("Halves of the cut", self.halves_group)
+        self.halves_combo = QComboBox(self.halves_group)
+        self.halves_combo.setObjectName("batchHalves")
+        for key, text in HALVES:
+            self.halves_combo.addItem(text, key)
+        self.halves_combo.setToolTip(
+            "A fit takes one curve on |qy|: the mean of the two halves of the horizontal cut, or one half — "
+            "never both halves together. Fitting ▸ In-situ series starts with this choice."
+        )
+        halves_row.addWidget(self.halves_caption)
+        halves_row.addWidget(self.halves_combo)
+        halves_row.addStretch(1)
+        halves.addLayout(halves_row, 1, 0)
+        self.halves_note = _muted("", self.halves_group)
+        self.halves_note.setObjectName("batchHalvesNote")
+        halves.addWidget(self.halves_note, 2, 0)
+        body_layout.addWidget(self.halves_group)
         # fitting
         self.fit_group, fitting = self._group("Fitting (optional)", body)
         choice = QHBoxLayout()
@@ -285,6 +349,7 @@ class BatchExportView:
         details.addWidget(self.fit_try_label, 6, 1)
         self.fit_file_label = _file_label(self.fit_details)
         self.fit_file_label.setObjectName("batchFitFile")
+        self.fit_file_label.setWordWrap(True)  # a sentence with two file names: on two lines when they are long
         details.addWidget(self.fit_file_label, 7, 0, 1, 2)
         details.setColumnStretch(1, 1)
         fitting.addWidget(self.fit_details, 1, 0, 1, 2)
@@ -345,8 +410,12 @@ class BatchExportView:
         self.destination_edit = QLineEdit(self)
         self.destination_edit.setObjectName("batchDestination")
         self.browse_button = QPushButton("Browse…", self)
+        self.beside_button = QPushButton("Next to the Data", self)
+        self.beside_button.setObjectName("batchBesideData")
+        self.beside_button.setToolTip("Save into the folder gimap_analysis next to the data files")
         row.addWidget(self.destination_edit, 1)
         row.addWidget(self.browse_button)
+        row.addWidget(self.beside_button)
         bottom.addLayout(row, 0, 1)
         self.subfolder_check = QCheckBox("", self)
         self.subfolder_check.setObjectName("batchSubfolder")
@@ -355,12 +424,28 @@ class BatchExportView:
         self.target_label.setObjectName("batchTarget")
         self.target_label.setWordWrap(False)
         bottom.addWidget(self.target_label, 2, 1)
+        self.folder_note = QLabel("", self)  # what the folder holds already; a folder carried over from other data
+        self.folder_note.setObjectName("batchFolderNote")
+        self.folder_note.setWordWrap(True)
+        self.folder_note.setProperty("gimapRole", "warning")
+        self.folder_note.hide()
+        bottom.addWidget(self.folder_note, 3, 1)
+        self.summary_caption = QLabel("Summary", self)
+        bottom.addWidget(self.summary_caption, 4, 0, Qt.AlignRight | Qt.AlignTop)
+        self.summary_label = _muted("", self)  # how many frames, which curves, which cut, how big, how long
+        self.summary_label.setObjectName("batchSummary")
+        self.summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        bottom.addWidget(self.summary_label, 4, 1)
         bottom.setColumnStretch(1, 1)
         layout.addLayout(bottom)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel, self)
-        self.export_button = self.buttons.addButton("Export", QDialogButtonBox.AcceptRole)
+        # The role before the button box takes the button: a role set afterwards is not drawn until the style
+        # is applied again, and the one action of the dialog looked like Cancel.
+        self.export_button = QPushButton("Export", self)
         self.export_button.setObjectName("batchExportButton")
         self.export_button.setProperty("gimapRole", "primary")
+        self.buttons.addButton(self.export_button, QDialogButtonBox.AcceptRole)
+        self.export_button.setDefault(True)
         layout.addWidget(self.buttons)
 
     def _group(self, title: str, parent: QWidget) -> tuple[QGroupBox, QGridLayout]:
@@ -392,6 +477,6 @@ class BatchExportView:
 
 
 __all__ = [
-    "BatchExportView", "CURVE_LIST_HEIGHT", "DATA_OUTPUTS", "FRAME_OUTPUT", "MODELS", "OUTPUTS", "PEAK_SHAPES",
-    "PICTURE_OUTPUTS", "SCREEN_SHARE", "STARTS",
+    "BatchExportView", "CURVE_LIST_HEIGHT", "DATA_OUTPUTS", "FILE_MARGIN", "FILE_MIN_WIDTH", "FRAME_OUTPUT", "HALVES",
+    "LINE_MARGIN", "MODELS", "OUTPUTS", "PEAK_SHAPES", "PICTURE_OUTPUTS", "SCREEN_SHARE", "STARTS",
 ]

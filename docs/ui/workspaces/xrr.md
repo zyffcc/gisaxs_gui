@@ -8,9 +8,11 @@
   [`pixel_coordinates.py`](../../../src/gimap/features/xrr/presentation/pixel_coordinates.py)（窗口里的像素坐标）
 - **Related tests**:
   [`tests/test_xrr_presentation.py`](../../../tests/test_xrr_presentation.py)、
+  [`tests/test_xrr_nexus_series.py`](../../../tests/test_xrr_nexus_series.py)、
+  [`tests/test_xrr_series_record.py`](../../../tests/test_xrr_series_record.py)、
   [`tests/test_release2_xrr_window.py`](../../../tests/test_release2_xrr_window.py)（窗口里的像素坐标）、
   [`tests/test_ui_source_of_truth.py`](../../../tests/test_ui_source_of_truth.py)
-- **Last verified**: 2026-10-13
+- **Last verified**: 2026-10-14（数据来源与记录一节对照代码；像素坐标一节 2026-10-13；其余沿用 2026-08-25）
 
 ## 当前状态
 
@@ -30,6 +32,14 @@ Load first frame 不会覆盖你输入或点选的值：文件中的值与输入
 导出：默认文件名 `<源文件夹>/<源文件名>_xrr.csv`；旁边写同名 `.json` 记录（序列、θ 起点与步长或 NXS 数据集、实际用到的
 距离 / 能量 / 波长 / 像素 / 中心 / 方向及各自来源、ROI 半径与聚合方式、列的含义、qz 与 ROI 中心的公式）；完成后 toast 可打开文件夹。
 qz 的计算不变。可以把 NXS / CBF 文件或 CBF 文件夹拖进窗口（自动设置数据类型并载入第一帧）；Browse… 从当前序列或上次的文件夹开始。
+
+数据来源（2026-10-14，`infrastructure/adapters/detector_series.py`，经共用的 NeXus 读取器）：Browse… 选一个 NeXus / HDF5
+文件（任何 HDF5 后缀）或 CBF 文件，旁边的 **Folder…** 选序列所在的文件夹（其中的 NeXus / HDF5 文件逐个读，或其中符合
+pattern 的 CBF）；所选文件读不了时数据类型自动换成能读的。一组模块文件每帧拼成一张；一个文件有多帧时每帧一个点；一个文件
+只有一帧时，同一文件夹里编号相同方式的单帧文件（同后缀、同帧尺寸）就是这个序列，编号像序列但对不上的文件（帧尺寸不同、
+不是一帧）被列出并排除（按起点和步长给角度时，排除的文件之后的帧按位置取角度）。模块帧数不同时只用每个模块都有的帧，
+并说明。导出的 `.json` 记录多了 `source_layout`：组成的说明、源和帧的个数、读到的每个文件、读取器的警告；运行结束的状态行
+在 “Extracted N XRR point(s).” 之后附上这些警告。
 
 窗口顶部有标题；图跟随浅色 / 深色主题（保存的图用浅色）。Esc 关闭窗口，提取运行中会先询问；
 界面文字（按钮、空状态、下拉项）有中文；表头中的量（`Theta (°)`、`ROI x`）、数值、单位、文件名与
@@ -76,7 +86,7 @@ Pick、预览图的坐标轴和像素位置、十字和 ROI 圆、结果表的 R
 
 | 用户任务 | View object | 行为 |
 | --- | --- | --- |
-| 选择 NXS module 或 CBF file/folder | `source_picker` | QFileDialog 位于 dialog；实际 discover/load 经 application port |
+| 选择 NeXus / HDF5 文件、CBF 文件或序列文件夹 | `source_picker`（其中的 Browse…）、`source_folder_button`（Folder…） | QFileDialog 位于 dialog；实际 discover/load 经 application port |
 | 指定 source type 与 CBF glob | `source_kind_combo`、`pattern_edit` | Auto/NXS/CBF；CBF 使用自然排序 |
 | 读取首帧 | `inspect_button` | QThread 中加载一帧，回填可用 metadata 和 detector preview |
 | 指定样品角序列 | `angle_mode_combo`、`theta_start_spin`、`theta_step_spin`、`angle_dataset_edit` | 线性序列或 NXS motor dataset |
@@ -95,6 +105,8 @@ Alt/Option 时才会改变数值。
 
 - [ ] Tools 菜单和 `Ctrl+Shift+R` 只打开一个 modeless XRR window，主 workspace 不跳转；
 - [ ] 选择任一 `_mN.nxs` 后显示正确 frame count，每个 frame 只形成一个拼接 detector image；
+- [ ] Folder… 选一个单帧 NeXus 文件的文件夹：每个文件一个点；编号相同但帧尺寸不同的文件被列出并排除；导出的 JSON 有
+      `source_layout`，列出读到的每个文件；
 - [ ] CBF folder/pattern 使用自然排序并且每个 CBF 形成一个 point；
 - [ ] Linear 与 NXS motor dataset 两种 theta source 的值和单位正确；
 - [ ] Load first frame 回填有效 energy、distance、pixel size、beam center metadata；缺失 center 时使用图像中心

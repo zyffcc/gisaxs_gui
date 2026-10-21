@@ -34,7 +34,10 @@ from .pipeline_rows import ring_row as _ring_row
 from .tools import ToolCatalog, clean, results_payload
 
 SERIES_SUM = 10
-"""Frames summed for the state of a series: the last ten show the final state of an in-situ run."""
+"""Frames summed for the state of a series at most: the last ten show the final state of an in-situ run."""
+SERIES_FRACTION = 5
+"""A default sum never covers more than the last fifth of a series: a short series is not summed whole and
+called its final state (of ten frames the last two are summed, of fewer than ten the last one alone)."""
 TECHNIQUES = ("gisaxs", "giwaxs")
 FORCED = "forced: the technique was given (--technique, technique=)"
 DETECTED = "detected: GIMaP's Auto detection classified the frame once the geometry was applied"
@@ -47,6 +50,36 @@ SWITCHED = (
     "the automatic detection chose otherwise; this is the GIWAXS procedure (choose GISAXS in Analyze, "
     "or --technique gisaxs, for the GISAXS one)"
 )
+
+
+def default_sum(total: int) -> int:
+    """Frames summed by default for the final state of a series of ``total`` frames."""
+    return max(1, min(SERIES_SUM, int(total) // SERIES_FRACTION))
+
+
+def frames_reason(total: int, count: int, *, asked_frame: bool, asked_sum: bool) -> str:
+    """Why ``count`` frames of a series of ``total`` are analysed: what was asked for, else what the last
+    frames of a series of this length are (the ``frames`` decision of a report)."""
+    if asked_frame:
+        if asked_sum and count >= total > 1:  # a block is moved to end at the last frame: it is all frames
+            return f"as asked: all {total} frames are summed, so this is the whole series, not one state of it"
+        return "as asked" if asked_sum or count == 1 else (
+            f"the frame as asked; {count} frames are summed from it by default (sum_frames=1 or --sum 1: "
+            "that frame alone)"
+        )
+    if asked_sum:
+        return (
+            f"as asked: all {total} frames are summed, so this is the whole series, not its final state"
+            if count >= total else f"as asked: the last {count} of {total} frames are summed"
+        )
+    series = f"a series of {total} frames (an in-situ run or a scan): "
+    if count == 1:
+        return series + (
+            "the last frame shows the final state; it is not summed with earlier frames, which may show "
+            "earlier states (sum_frames=N or --sum N sums the last N); frame 1 shows the start"
+        )
+    short = "" if count == SERIES_SUM else " (the last fifth of the series, so that earlier states are not mixed in)"
+    return series + f"the last frames show the final state, summed for statistics{short}; frame 1 shows the start"
 
 
 @dataclass(frozen=True)
@@ -65,6 +98,7 @@ class PipelineOptions:
     frame: Optional[int] = None
     """1-based frame of a series, negative from the end; None: the last frames (the final state)."""
     sum_frames: Optional[int] = None
+    """Frames summed from ``frame`` on; None: ``default_sum`` (the last fifth of the series, at most ten)."""
     rings: int = 3
     """How many of the strongest reliable peaks get an orientation distribution and a size."""
     ring_q: Optional[float] = None
@@ -310,13 +344,12 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
         if total <= 1:
             return
         frame = -1 if self.options.frame is None else int(self.options.frame)
-        count = self.options.sum_frames or min(SERIES_SUM, total)
+        count = self.options.sum_frames or default_sum(total)
         if self._call("set_frame", {"frame": frame, "sum": count}) is None:
             return
-        why = (
-            f"a series of {total} frames (an in-situ run or a scan): the last frames show the final state, "
-            "summed for statistics; frame 1 shows the start"
-            if self.options.frame is None else "as asked"
+        why = frames_reason(
+            total, min(int(count), total),
+            asked_frame=self.options.frame is not None, asked_sum=bool(self.options.sum_frames),
         )
         self._decide("frames", self._run.steps[-1]["summary"], why)
 
@@ -379,4 +412,5 @@ class StandardPipeline(GeometryStepsMixin, GisaxsProcedureMixin):
         }
 
 
-__all__ = ["PipelineOptions", "SERIES_SUM", "StandardPipeline", "compact_report"]
+__all__ = ["PipelineOptions", "SERIES_FRACTION", "SERIES_SUM", "StandardPipeline", "compact_report", "default_sum",
+           "frames_reason"]

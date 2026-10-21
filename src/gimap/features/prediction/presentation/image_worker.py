@@ -7,6 +7,7 @@ from pathlib import Path
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 
 
 class PredictionImageLoader(QThread):
@@ -16,6 +17,7 @@ class PredictionImageLoader(QThread):
 
     def __init__(self, view_model, parent=None):
         super().__init__(parent)
+        self.setStackSize(WORKER_STACK_BYTES)
         self._view_model = view_model
         self._path = None
         self._count = 1

@@ -47,8 +47,8 @@ def create_calibration_view_model(app_context: AppContext) -> CalibrationViewMod
 
 
 def create_headless_calibration() -> HeadlessCalibration:
-    """Calibration for another component (the assistant): fit or read, never save."""
-    images = LocalCalibrationImageAdapter()
+    """Calibration for another component (the assistant): fit or read, never save, never ask."""
+    images = LocalCalibrationImageAdapter(ask_dataset=False)
     return HeadlessCalibration(
         load_image=LoadCalibrationImage(images),
         run_calibration=RunCalibration(LegacyCalibrationRunnerAdapter()),

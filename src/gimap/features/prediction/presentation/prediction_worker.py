@@ -11,6 +11,8 @@ from pathlib import Path
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
+
 STOPPED_TEXT = "Prediction stopped before the model process started."
 
 
@@ -22,6 +24,7 @@ class PredictionWorker(QThread):
 
     def __init__(self, view_model, image, typed_module, model_path, run_id: int, parent=None):
         super().__init__(parent)
+        self.setStackSize(WORKER_STACK_BYTES)  # module preprocessing is numpy on this thread
         self._view_model = view_model
         self._image = image
         self._module = typed_module

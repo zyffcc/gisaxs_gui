@@ -19,9 +19,11 @@ from PyQt5.QtCore import QSignalBlocker
 
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.detector_io.nexus_modules import MODULES_FEWER
 
 from ...application import AUTO, GISAXS, GIWAXS, MODES
 from ..texts import message_text
+from .data_step import SENTENCE
 from .display import NOT_ANALYSED_TEXT
 
 MODE_NAMES = {AUTO: "Auto", GISAXS: "GISAXS", GIWAXS: "GIWAXS"}
@@ -100,8 +102,17 @@ class FrameChecksMixin:
     # -- messages of a frame -----------------------------------------------------------------
 
     def _frame_messages(self, analysis) -> list[str]:
-        """The frame's messages (English in ``analysis.messages``) in the interface language (``texts.py``)."""
-        return [message_text(message) for message in analysis.messages]
+        """What is left out of the frame's source or may be wrong with it (a module file missing, modules with
+        different numbers of frames, a file still written: ``bindings/data_step.py``), why the folder watch
+        does not export it yet (``bindings/batch_watch.py``), then the frame's own messages (English in
+        ``analysis.messages``) in the interface language (``texts.py``). The source comes first: a frame
+        without a module has another size, which is why no instrument profile fits it. While the watch says
+        that a set waits for module files, the reader's remark that the other scans have more is left out:
+        the line would say it twice (the Data step shows it all the same)."""
+        notes = self._watch_notes(analysis.path)
+        source = self._source_warnings(analysis.path, without=(MODULES_FEWER,) if notes else ())
+        source += [trf(SENTENCE, text=note) for note in notes]
+        return source + [message_text(message) for message in analysis.messages]
 
     # -- a frame that could not be analysed -------------------------------------------------------
 
@@ -124,6 +135,8 @@ class FrameChecksMixin:
         self.set_step_state("data", "error", shown)
         if forgotten:  # the card described the frame before
             self.data_info_label.setText(shown)
+            path = self.view_model.current_path  # what is known of the file asked for (its files, its warnings)
+            self._show_source(self.view_model.describe(path) if path is not None else None, path)
 
     def _forget_frame_shown(self) -> bool:
         """The frame asked for could not be analysed. Unless it is the frame held (a setting that cannot be

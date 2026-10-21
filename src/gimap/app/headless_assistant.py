@@ -34,13 +34,14 @@ from ..features.assistant.application import (
     ToolCall,
     ToolCatalog,
     ToolOutcome,
-    batch_markdown,
     fit_curve_table,
     fit_solutions_csv,
     pipeline_markdown,
     ring_overlays,
     tool_specs,
 )
+from ..features.assistant.application.pipeline import compact_report, frames_reason
+from .headless_sources import GivenSource, batch_summary, describe_source, given_note, given_sources, series_block, series_name
 
 LOAD_TIMEOUT_S = 900.0
 """Reading a large NeXus series (a few GB) can take minutes."""
@@ -106,11 +107,15 @@ class HeadlessCatalog(ToolCatalog):
     """The assistant's tools without a window: the baseline follows Auto unless a technique is given, and
     ``export_results`` writes under the output folder and says where."""
 
-    def __init__(self, *args, output: OutputFolder, load_error: Optional[str] = None, **kwargs):
+    def __init__(
+        self, *args, output: OutputFolder, load_error: Optional[str] = None, source: Optional[GivenSource] = None, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.output = output
         self.load_error = load_error
         """Why Analyze could not read the frame when it was opened (``None``: it was read)."""
+        self.source = source
+        """What the file opened stands for (a set of module files, a master with data files …)."""
 
     def unreadable(self, status: Optional[dict]) -> bool:
         """The frame was not read: Analyze reported an error and shows no frame of it."""
@@ -128,7 +133,17 @@ class HeadlessCatalog(ToolCatalog):
     def _tool_run_standard_pipeline(self, **arguments) -> ToolOutcome:
         if arguments.get("technique") is None:
             arguments["follow_detection"] = True  # the technique Auto detects once the geometry is applied
-        return super()._tool_run_standard_pipeline(**arguments)
+        outcome = super()._tool_run_standard_pipeline(**arguments)
+        report = self.results.pipeline
+        if outcome.is_error or report is None or self.source is None:
+            return outcome
+        describe_source(report, self.source)  # what the source consists of; a missing part is an open point
+        attention = report.get("needs_attention") or []
+        summary = (
+            f"baseline {'done' if report.get('ok') else 'stopped'}: {len(report.get('steps') or [])} steps"
+            + (f", {len(attention)} open question(s)" if attention else "")
+        )
+        return self._ok(compact_report(report), summary)
 
     def _tool_export_results(self, include_tables: bool) -> ToolOutcome:
         outcome = super()._tool_export_results(include_tables)
@@ -175,6 +190,8 @@ class HeadlessSession:
     """Where this session writes (reports, ``export_results``)."""
     calibration: Optional[dict] = None
     """The calibration the last pipeline run used (full precision)."""
+    source: Optional[GivenSource] = None
+    """What the file opened stands for; a pipeline report says so (``describe_source``)."""
     _calls: int = field(default=0, repr=False)
 
     def call(self, name: str, arguments: Optional[dict] = None) -> ToolOutcome:
@@ -190,6 +207,8 @@ class HeadlessSession:
         pipeline = StandardPipeline(self.catalog, options, progress)
         report = pipeline.run()
         self.calibration = pipeline.calibration
+        if self.source is not None:
+            describe_source(report, self.source)
         return report
 
     def unreadable(self) -> Optional[str]:
@@ -220,9 +239,14 @@ def open_headless_session(
     load_timeout_s: float = LOAD_TIMEOUT_S,
     out_dir: Optional[str | Path] = None,
     kind: str = "cli",
+    also: tuple = (),
+    source: Optional[GivenSource] = None,
 ) -> HeadlessSession:
     """Open ``frame`` offscreen; tools may read calibration material around it (read-only). Files go to
-    ``out_dir`` (else ``default_output_folder(kind)/<frame stem>``, made only when something is written)."""
+    ``out_dir`` (else ``default_output_folder(kind)/<frame stem>``, made only when something is written).
+    ``also``: files listed after it (the following files of a series stored as one frame per file, which
+    Analyze sums with it when frames are summed). ``source``: what ``frame`` stands for when several files
+    of it were given (else found here)."""
     _application()
     from ..features.analyze.bootstrap import create_analyze_view_model
     from ..features.analyze.presentation.page import AnalyzePage
@@ -253,11 +277,13 @@ def open_headless_session(
         failures.append(str(message))
 
     page.analysisFailed.connect(failed)
-    page.add_paths([str(path)])
+    page.add_paths([str(path), *(str(other) for other in also)])
     page.tasks.wait(load_timeout_s)
     page.analysisFailed.disconnect(failed)
     results = RunResults()
-    output = OutputFolder(Path(out_dir) if out_dir else None, kind, path.stem)
+    if source is None:
+        source = next(iter(given_sources([str(path)])), None)
+    output = OutputFolder(Path(out_dir) if out_dir else None, kind, source.stem if source is not None else path.stem)
     catalog = HeadlessCatalog(
         _headless_workbench(page, output),
         AnalysisGoals(goals=tuple(GOALS), permission=PERMISSION_AUTO, instructions=notes),
@@ -269,8 +295,9 @@ def open_headless_session(
         store=_headless_store(output),
         output=output,
         load_error=failures[-1] if failures else None,
+        source=source,
     )
-    return HeadlessSession(page, catalog, results, notes=notes, output=output)
+    return HeadlessSession(page, catalog, results, notes=notes, output=output, source=source)
 
 
 def write_outputs(session: HeadlessSession, report: dict, folder: Path) -> list[Path]:
@@ -326,27 +353,40 @@ def analyse_frames(
     progress: Callable[[str], None] = lambda _text: None,
     saved_profiles: bool = True,
     data_dir: Optional[Path] = None,
+    series: bool = False,
 ) -> list[dict]:
-    """The standard pipeline on each frame (files in ``out/<frame stem>/``); later frames of the same detector
-    reuse the first calibration; without a technique each frame gets the procedure Auto detects for it."""
+    """The standard pipeline on each source the files stand for (files in ``out/<source name>/``): the module
+    files of one detector are one stitched series, analysed once however many of them were given. Later
+    sources of the same detector reuse the first calibration; without a technique each gets the procedure
+    Auto detects for it. ``series``: the files are ONE series stored as one frame per file, analysed like
+    the frames of a multi-frame file (one report)."""
     reports: list[dict] = []
     calibration: Optional[dict] = None
-    for frame in frames:
+    sources = given_sources(frames)
+    if series:
+        reports.append(_analyse_series(sources, options, out, progress, saved_profiles, data_dir))
+        sources = []
+    for source in sources:
+        frame = source.path
         progress(f"== {frame}")
+        if given_note(source):  # the files of one source, or one file named more than once
+            progress(f"   {given_note(source)}")
         try:
             session = open_headless_session(
                 frame, notes=options.notes, saved_profiles=saved_profiles, data_dir=data_dir,
-                out_dir=out / Path(frame).stem,
+                out_dir=out / source.stem, source=source,
             )
         except Exception as exc:  # one unreadable frame must not stop the batch
             reports.append({"ok": False, "frame": str(frame), "error": str(exc) or type(exc).__name__, "needs_attention": []})
+            if len(source.given) > 1:
+                reports[-1]["given"] = list(source.given)
             continue
         try:
             shape = (session.call("get_status").data or {}).get("shape")
             frame_options = options
             if calibration is not None and options.calibration is None and list(calibration.get("shape") or []) == list(shape or []):
                 frame_options = dataclasses.replace(options, geometry=calibration)
-            report = session.run_pipeline(frame_options, progress)
+            report = session.run_pipeline(frame_options, progress)  # it says what the source consists of
             if session.unreadable():  # a file GIMaP cannot read failed (exit 1); there is nothing to answer
                 report["failed"] = session.unreadable()
             calibration = session.calibration or calibration
@@ -355,13 +395,58 @@ def analyse_frames(
         finally:
             session.close()
     out.mkdir(parents=True, exist_ok=True)
-    (out / "summary.md").write_text(batch_markdown(reports), encoding="utf-8")
+    (out / "summary.md").write_text(batch_summary(reports), encoding="utf-8")
     (out / "summary.json").write_text(
         json.dumps([{key: value for key, value in report.items() if key != "tables"} for report in reports],
                    indent=1, ensure_ascii=False, default=str),
         encoding="utf-8",
     )
     return reports
+
+
+def _analyse_series(sources, options: PipelineOptions, out: Path, progress, saved_profiles: bool, data_dir) -> dict:
+    """One report for files that are one series stored as one frame per file: the block ``--frame`` /
+    ``--sum`` choose by position (default: the last files) is listed in Analyze and summed there."""
+    try:
+        ordered, first, count = series_block(sources, options.frame, options.sum_frames)
+    except ValueError as exc:
+        frame = sources[0].path if sources else ""
+        return {"ok": False, "frame": str(frame), "error": str(exc), "needs_attention": []}
+    block = ordered[first - 1:first - 1 + count]
+    names = f"{Path(block[0].path).name} … {Path(block[-1].path).name}" if count > 1 else Path(block[0].path).name
+    progress(f"== {len(ordered)} files as one series ({Path(ordered[0].path).name} … {Path(ordered[-1].path).name})")
+    try:
+        session = open_headless_session(
+            block[0].path, notes=options.notes, saved_profiles=saved_profiles, data_dir=data_dir,
+            out_dir=out / series_name(ordered), also=tuple(source.path for source in block[1:]),
+        )
+    except Exception as exc:  # noqa: BLE001 - reported like any file that cannot be opened
+        return {"ok": False, "frame": str(block[0].path), "error": str(exc) or type(exc).__name__, "needs_attention": []}
+    try:
+        summed = 1
+        if count > 1:  # Analyze adds the following listed files of the same kind
+            summed = int(session.catalog.workbench.set_frame(1, count).get("summed_frames") or 1)
+        report = session.run_pipeline(dataclasses.replace(options, frame=None, sum_frames=None), progress)
+        if session.unreadable():
+            report["failed"] = session.unreadable()
+        report["frames"] = {"total": len(ordered), "first": first, "summed": summed}
+        report["series"] = {
+            "files": [source.path for source in ordered], "summed_files": [source.path for source in block[:summed]],
+        }
+        span = f"files {first}–{first + summed - 1} summed" if summed > 1 else f"file {first}"
+        why = frames_reason(
+            len(ordered), summed, asked_frame=options.frame is not None, asked_sum=bool(options.sum_frames),
+        )
+        report.setdefault("decisions", []).insert(0, {"what": "frames", "decision": f"{span} of {len(ordered)} ({names})", "why": why})
+        if summed != count:
+            report.setdefault("needs_attention", []).append({
+                "item": "frames", "why": f"{count} files were to be summed, Analyze summed {summed}.", "option": None,
+                "hint": "The files must be of one detector and hold one frame each.",
+            })
+        report["outputs"] = [str(path) for path in write_outputs(session, report, session.output.resolve())]
+        return report
+    finally:
+        session.close()
 
 
 # -- MCP over stdio -----------------------------------------------------------------------

@@ -1,6 +1,7 @@
 # Development setup
 
-- **Last verified**: 2026-10-06 (Windows 11, Python 3.10.18, pytest 9.1, ruff 0.16)
+- **Last verified**: 2026-10-06 (Windows 11, Python 3.10.18, pytest 9.1, ruff 0.16); the macOS section
+  2026-10-14 (macOS 14.6, Python 3.10.20, PyQt 5.15.11)
 
 GIMaP currently supports Python 3.10 and 3.11. Python 3.10 is the safest common
 choice for TensorFlow 2.15 and BornAgain 24.1 compatibility.
@@ -125,6 +126,18 @@ python -m pytest tests/test_architecture_dependencies.py tests/test_ui_source_of
 run its own `GIMAP_HOME`, loads Arial, Segoe UI and Microsoft YaHei (offscreen Qt on
 Windows has no font database), and applies the light theme at 9 pt.
 
+### macOS
+
+- A thread other than the main one gets a 512 KB stack on macOS; `numpy.linalg.inv` / `solve` or a
+  Matplotlib figure save on it ends the whole process (bus error), not a test. `TaskRunner` asks for
+  `WORKER_STACK_BYTES` (`src/gimap/app/presentation/task_runner.py`: 16 MB on macOS, the system's own size
+  elsewhere). Any other `QThread` or `QThreadPool` that computes calls `setStackSize(WORKER_STACK_BYTES)`
+  before it starts; `tests/test_task_runner_stack.py` and `tests/test_tool_threads_stack.py` check this.
+- Do not set `OPENBLAS_NUM_THREADS` or `OMP_NUM_THREADS` to make a run pass: single-threaded BLAS hides
+  that crash. Under heavy parallel load the timing tests can fail; run fewer test processes at once.
+- `tests/test_levels.py::test_a_compact_bar_is_slim_and_its_handles_still_set_the_limits` fails with the
+  macOS system font (the compact bar is wider than its 60 px bound); it is a font metric, not a regression.
+
 ### Screenshots
 
 Tests are already themed and have fonts. A standalone screenshot script has to do
@@ -147,6 +160,10 @@ Update `EXPECTED_VIEWS_BY_OWNER` in `tests/test_ui_source_of_truth.py` whenever 
 View is added, removed, or renamed. See `docs/architecture/dependency-rules.md` for
 every rule the tests enforce (600 lines per module, 300 per `view_model.py`, imports).
 
+Never call `resizeSections()` on a header Qt created (a protected slot: PyQt 5.15.11 raises); use
+`QMetaObject.invokeMethod(header, "resizeSections", Qt.DirectConnection)`, as
+`compare/presentation/views/compare_page_view.py` does.
+
 ## pyqtgraph
 
 `requirements.txt` pins `pyqtgraph>=0.13.7,<0.15`. It draws the detector images
@@ -165,7 +182,7 @@ QT_QPA_PLATFORM=offscreen python -m pytest tests/test_display_artist_reuse.py te
 - The version is written once, in `src/gimap/shared/version.py` (`__version__`). The About box and the
   export records that name the software read it from there.
 - Every version gets an entry in `CHANGELOG.md`: what a user gets, and the known limitations. The first
-  paragraph of `README.md` and sections 1 and 15 of `docs/User_Manual.md` name the version too.
+  paragraph of `README.md` and the preface and section 13.12 of `docs/User_Manual.md` (and `docs/User_Manual_zh.md`) name the version too.
 - The portable Windows version is built with `tools/build_portable_release.ps1`: it packs a Conda
   environment with `conda-pack` together with the application files. When the ZIP is larger than one
   GitHub asset may be, the script also writes the part files and

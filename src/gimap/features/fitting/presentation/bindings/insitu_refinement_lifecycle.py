@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 from PyQt5.QtCore import QThread, QTimer
 
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
+
 from ..binding_primitives import (
     ManualAutoRefineWorker,
     _scientific_commands,
@@ -52,6 +54,7 @@ class InsituRefinementLifecycleMixin:
         self._insitu_workflow_refine_thread = thread
         self._insitu_workflow_refine_worker = worker
         self._log_insitu_workflow("Auto Refine started")
+        thread.setStackSize(WORKER_STACK_BYTES)  # macOS: 512 KB is too little for numpy.linalg on a thread
         thread.start()
 
     def _insitu_auto_refine_selected_params(self, setup):

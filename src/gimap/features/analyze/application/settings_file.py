@@ -4,8 +4,9 @@ A settings file is JSON (``{"format": "gimap-analyze-settings", "version": 1, �
 mode, the instrument profile (its name and its geometry, so the file also works on another
 computer), αi, a beam-centre override, frame summing, the corrections (gap guard, hot/dead
 pixels, masks drawn or loaded, mirror filling, valid range, background), the GIWAXS cuts (band
-widths, bins, x axis, ring window, custom sector, q box, cut regions), the GISAXS cut positions
-and, optionally, the batch-export choices. Paths are stored as they are; a mask or background
+widths, bins, x axis, ring window, custom sector, q box, cut regions), the GISAXS cut positions,
+whether a series is cut where the frame on screen is (``pin_series_cuts``) and, optionally, the
+batch-export choices. Paths are stored as they are; a mask or background
 file that no longer exists is reported when the file is loaded.
 """
 
@@ -49,6 +50,9 @@ class AnalyzeSettings:
     gisaxs: GisaxsCutSettings = field(default_factory=GisaxsCutSettings)
     export: Optional[dict] = None
     """Batch-export choices (``BatchChoices.to_dict``), when saved with them."""
+    pin_series_cuts: Optional[bool] = None
+    """One cut for every frame of a series (``False``: the cut is found again in every frame); ``None``: not said
+    (a file written before the pin existed) — loading it leaves the pin in force as it is."""
 
 
 def _pair(value) -> Optional[tuple[float, float]]:
@@ -121,6 +125,8 @@ def settings_record(settings: AnalyzeSettings) -> dict[str, Any]:
             "vertical_half_width_px": gisaxs.vertical_half_width_px,
         },
     }
+    if settings.pin_series_cuts is not None:  # (a set-up that does not know the pin says nothing of it)
+        record["pin_series_cuts"] = bool(settings.pin_series_cuts)
     if settings.export is not None:
         record["export"] = dict(settings.export)
     return record
@@ -190,6 +196,7 @@ def settings_from_record(record: Any) -> AnalyzeSettings:
             giwaxs=giwaxs,
             gisaxs=gisaxs,
             export=dict(export) if isinstance(export, Mapping) else None,
+            pin_series_cuts=None if record.get("pin_series_cuts") is None else bool(record["pin_series_cuts"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f"The settings file is not valid: {exc}") from exc

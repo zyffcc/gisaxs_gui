@@ -6,30 +6,28 @@ drawn below), a vertical band a q window (its intensity against frame is drawn b
 both can be dragged. Behaviour lives in ``bindings/series.py``.
 
 The tab stays narrow (about 380 px), so a map does not squeeze the image beside it: the controls take two
-rows (the buttons wrap further), and the two plots under the map stand one above the other when the panel
-has no room for them side by side. The map's picture and the plots keep a least height; in a window too short
+rows (the buttons wrap further), and the two plots under the map always stand one above the other, each
+using the full panel width. The map's picture and the plots keep a least height; in a window too short
 for them (a laptop screen) the tab scrolls instead of squeezing them to strips (``SeriesScroll``).
+
+Every line above the map counts in such a window. What the map is (``series_title_label``) and the stages
+stand above it; the how-to sentence takes one line while a map is shown (``HintLabel``); what is read or set
+now and then is folded below the plots, where opening it moves neither the map nor the plots: the options of
+a series run (``series_options``) and what changes between the stages. “Wide” gives the tab the room of the
+image beside it; both curves grow across that width while keeping their vertical order.
 """
 
 from __future__ import annotations
 
-from PyQt5.QtCore import QEvent, QSize, Qt
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QAbstractSpinBox,
-    QBoxLayout,
     QCheckBox,
     QComboBox,
-    QFrame,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QMenu,
     QPushButton,
-    QScrollArea,
     QSpinBox,
-    QStyle,
-    QStyleOptionComboBox,
-    QStylePainter,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -37,33 +35,52 @@ from PyQt5.QtWidgets import (
 
 from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, DetectorView, EmptyState, FlowLayout
 
+from .series_widgets import HintLabel, SeriesScroll, ShrinkingCombo, SideBySide, Snug, StackedPlots
+from .series_fit_view import SeriesFitView
+
 TRACE_ITEMS = (
     ("Mean intensity", "intensity"),
     ("Peak position", "position"),
-    ("Peak FWHM", "fwhm"),
+    ("Peak width (2.355 σ)", "fwhm"),
     ("Peak area", "area"),
     ("Peak height", "height"),
     ("Change along the series", "change"),
 )
 CHANGE_EMPTY = "Change along the series: once the stages are found"
 """The trace plot as “Change along the series” before the stages are found."""
-CHANGE_FEW = "Change along the series: needs a map of three frames or more"
-"""… and with a map of two frames, where no stages are looked for."""
+CHANGE_FEW = "Change along the series: needs a map of five frames or more"
+"""… and with a map of fewer frames than stages are looked for in."""
+VIEW_ITEMS = (("±", "both"), ("+", "positive"), ("−", "negative"), ("|x|", "folded"), ("mean", "mean"))
+"""The halves of a signed cut the map stacks (``domain/series_map.VIEWS``), as ``CurvePlot`` writes them."""
+VIEW_TIPS = (
+    "Both halves, on the signed axis (as measured)",
+    "Only the half with x > 0",
+    "Only the half with x < 0, on |x|",
+    "Both halves on |x|: every measured point of the two",
+    "The mean of both halves on |x|; where one half has no points (a detector gap), the other half alone",
+)
+AXIS_ITEMS = (("Frame number", "frame"), ("Time (s)", "time"))
+"""What the frame axis of the map and the traces count in."""
+STAGES_RANGE_ITEMS = (("The whole x axis", "all"), ("The x range shown in the map", "shown"))
+EACH_CUT_TEXT = "Find the cut again in every frame"
+EACH_CUT_TIP = (
+    "Off (the usual way): every frame of a Series map, a Batch Export and a watched folder is cut where the frame "
+    "on screen is — the Yoneda rows of a GISAXS frame, the ring of I(χ) of a GIWAXS frame — so a row differs from "
+    "the next by the sample, not by where it was cut. On: the cut is found in each frame anew."
+)
 CHANGE_TITLE = "Change along the series"
 """The trace plot's short title as “Change along the series”; the share of the change is in its y label."""
 TRACE_LEGEND_OFFSET = (-10, -10)
 TRACE_COMBO_CHARACTERS = 6
-"""The least width of the trace combo, in characters: with it, the frame and trace plots stand side by side from
-a right panel of about 480 px (a 1366 px window) instead of 550."""
+"""The least width of the trace combo, in characters, so the header remains usable in a narrow panel."""
 SERIES_CONTROLS_WIDTH = 380
 """The Series controls need no more than this (px), so a map does not squeeze the image beside it."""
 SERIES_MAP_HEIGHT = 170
 """The least height (px) of the map's picture (the image with its axes, under the toolbar): about 110 px of
 image. In a window too short for it the tab scrolls instead of squeezing the map to a strip."""
 SERIES_PLOTS_HEIGHT = (180, 200)
-"""The least height (px) of the frame and trace plots side by side, and of each when one is above the other
-(a narrow panel, where the header takes two lines): about 100 px of plot area, so the legend of the stages
-(three entries) fits. With these and ``SERIES_MAP_HEIGHT`` a 1536 × 816 window still shows the tab whole."""
+"""The legacy responsive-pair heights; Series uses the second value for each vertically stacked plot.
+The picture and curves keep readable heights and scroll when the window is shorter."""
 SERIES_EMPTY_TITLE = "One frame"
 SERIES_EMPTY_TEXT = (
     "List several files, open a folder, or open a multi-frame NeXus series: Build Map then shows the chosen "
@@ -75,154 +92,14 @@ SERIES_WAITING_TEXT = (
     "as it goes."
 )
 """The card of the Series tab while several frames are listed and no map is built (``bindings/series.py``)."""
+SERIES_EMPTY_ACTION = "Open Folder…"
+SERIES_WAITING_ACTION = "Build Map"
+"""What the card offers: the frames of a folder while one frame is listed, the map once several are."""
+SECTION_MARGINS = (8, 3, 8, 3)
+"""The folded sections of the tab are slim: every line above the fold counts."""
 
 
-class ShrinkingCombo(QComboBox):
-    """A combo as wide as its longest item while there is room, down to ``least_characters`` when there is not
-    (``minimumSizeHint``), its text then shortened with “…”; its list shows the items whole."""
-
-    def __init__(self, parent: QWidget, *, least_characters: int):
-        super().__init__(parent)
-        self._least_characters = int(least_characters)
-
-    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt API
-        full = super().minimumSizeHint()
-        option = QStyleOptionComboBox()
-        self.initStyleOption(option)
-        text = QSize(self._least_characters * self.fontMetrics().horizontalAdvance("x"), full.height())
-        least = self.style().sizeFromContents(QStyle.CT_ComboBox, option, text, self)
-        return QSize(min(full.width(), least.width()), full.height())
-
-    def paintEvent(self, _event) -> None:  # noqa: N802 - Qt API
-        painter = QStylePainter(self)
-        option = QStyleOptionComboBox()
-        self.initStyleOption(option)
-        field = self.style().subControlRect(QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, self)
-        option.currentText = self.fontMetrics().elidedText(option.currentText, Qt.ElideRight, max(0, field.width()))
-        painter.drawComplexControl(QStyle.CC_ComboBox, option)
-        painter.drawControl(QStyle.CE_ComboBoxLabel, option)
-
-
-class SideBySide(QWidget):
-    """Two widgets side by side while both get their least width, else one above the other, so a narrow panel
-    keeps both whole (the frame and trace plots of the Series tab). Its least width is the wider one's."""
-
-    def __init__(self, first: QWidget, second: QWidget, parent: QWidget, *, spacing: int = 6,
-                 least_height: tuple[int, int] = (0, 0)):
-        super().__init__(parent)
-        self._pair = (first, second)
-        self._least_height = tuple(int(value) for value in least_height)
-        """``(side by side, each when one is above the other)``: the least heights (px)."""
-        self._box = QBoxLayout(QBoxLayout.LeftToRight, self)
-        self._box.setContentsMargins(0, 0, 0, 0)
-        self._box.setSpacing(spacing)
-        self._box.setSizeConstraint(QLayout.SetNoConstraint)  # the least width is ``minimumSizeHint``'s
-        for widget in self._pair:
-            self._box.addWidget(widget, 1)
-        self._keep_least_height()
-
-    def _keep_least_height(self) -> None:
-        """The least height as the widget's own minimum: a layout that sizes by height-for-width (the Series tab,
-        with its wrapping sentence) asks the box inside for its least height and would give the pair less."""
-        self.setMinimumHeight(self.minimumSizeHint().height())
-
-    def stacked(self) -> bool:
-        return self._box.direction() == QBoxLayout.TopToBottom
-
-    def side_by_side_width(self) -> int:
-        return sum(widget.minimumSizeHint().width() for widget in self._pair) + self._box.spacing()
-
-    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt API
-        hints = [widget.minimumSizeHint() for widget in self._pair]
-        side_by_side, stacked = self._least_height
-        if self.stacked():
-            height = sum(max(hint.height(), stacked) for hint in hints) + self._box.spacing()
-        else:
-            height = max(side_by_side, *(hint.height() for hint in hints))
-        return QSize(max(hint.width() for hint in hints), height)
-
-    def sizeHint(self) -> QSize:  # noqa: N802 - Qt API
-        """As tall as side by side, also when one is above the other: the map above keeps its share of the
-        height, and the two plots share theirs."""
-        hints = [widget.sizeHint() for widget in self._pair]
-        width = sum(hint.width() for hint in hints) + self._box.spacing()
-        return QSize(width, max(self.minimumSizeHint().height(), *(hint.height() for hint in hints)))
-
-    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
-        super().resizeEvent(event)
-        stacked = event.size().width() < self.side_by_side_width()
-        if stacked != self.stacked():
-            self._box.setDirection(QBoxLayout.TopToBottom if stacked else QBoxLayout.LeftToRight)
-            self._keep_least_height()
-            self.updateGeometry()
-
-
-class SeriesScroll(QScrollArea):
-    """The Series tab in a scroll area that changes nothing while the tab fits: its content is then exactly as
-    tall as the view, laid out as without a scroll area. Only when the view is shorter than the content's least
-    height (a laptop window: the map and the plots keep ``SERIES_MAP_HEIGHT`` / ``SERIES_PLOTS_HEIGHT``) does
-    the content keep that height and scroll. The content is always as wide as the view, so there is never a
-    horizontal bar, and the tab's least width is the content's (plus the vertical bar's).
-
-    Not ``setWidgetResizable(True)``: Qt then gives the content its preferred height, which with the plots
-    (their size hints follow their last size) grows after the window has been large."""
-
-    def __init__(self, parent: QWidget):
-        super().__init__(parent)
-        self.setFrameShape(QFrame.NoFrame)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setWidgetResizable(False)
-
-    def setWidget(self, widget: QWidget) -> None:  # noqa: N802 - Qt API
-        super().setWidget(widget)
-        widget.installEventFilter(self)
-        for control in (*widget.findChildren(QComboBox), *widget.findChildren(QAbstractSpinBox)):
-            control.installEventFilter(self)  # the wheel over them scrolls the tab (``eventFilter``)
-        self._fit()
-
-    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt API
-        hint, content = super().minimumSizeHint(), self.widget()
-        if content is None:
-            return hint
-        return QSize(content.minimumSizeHint().width() + self.verticalScrollBar().sizeHint().width(), hint.height())
-
-    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API (also when the vertical bar comes or goes)
-        super().resizeEvent(event)
-        self._fit()
-
-    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
-        if watched is self.widget():
-            if event.type() == QEvent.LayoutRequest:
-                self.updateGeometry()  # the least width may have changed
-                self._fit()  # a part was shown or hidden, a sentence changed: another least height
-        # Scrolling the tab with the pointer over a combo or a spin box must not change it (the number of stages,
-        # every n-th frame): the wheel changes a control only once it was clicked, else it scrolls the tab.
-        # Only those controls: Qt also filters the scroll bars' own events through here, and passing their
-        # wheel on to ``wheelEvent`` (which sends it to the bar) would never end.
-        elif (event.type() == QEvent.Wheel and isinstance(watched, (QComboBox, QAbstractSpinBox))
-              and not watched.hasFocus() and self.verticalScrollBar().maximum() > 0):
-            self.wheelEvent(event)
-            return True
-        return super().eventFilter(watched, event)  # (the scroll area follows its content's size there)
-
-    def least_height(self, width: int) -> int:
-        """The least height of the content laid out ``width`` px wide."""
-        layout = self.widget().layout()
-        if layout is None:
-            return self.widget().minimumSizeHint().height()
-        return layout.minimumHeightForWidth(width) if layout.hasHeightForWidth() else layout.minimumSize().height()
-
-    def _fit(self) -> None:
-        content = self.widget()
-        if content is None:
-            return
-        view = self.viewport().size()
-        size = QSize(view.width(), max(view.height(), self.least_height(view.width())))
-        if content.size() != size:
-            content.resize(size)
-
-
-class SeriesView:
+class SeriesView(SeriesFitView):
     """Adds the Series tab widgets to ``host`` (a vertical layout on ``parent``)."""
 
     def setup_series_panel(self, parent: QWidget, host: QVBoxLayout) -> None:
@@ -263,10 +140,14 @@ class SeriesView:
         self.series_export_stages_action.setToolTip(
             "CSV: every frame's stage, whether it is odd and why, and its place along the main changes; a JSON record next to it")
         menu.addSeparator()
-        self.series_export_profile_action = menu.addAction("Selected Frame's Curve…")
-        self.series_export_trace_action = menu.addAction("Intensity against Frame…")
+        self.series_export_profile_action = menu.addAction("Selected Frame's Curve as Figure…")
+        self.series_export_profile_data_action = menu.addAction("Selected Frame's Curve as Table…")
+        self.series_export_trace_action = menu.addAction("Trace as Figure…")
+        self.series_export_trace_data_action = menu.addAction("Trace as Table…")
+        self.series_export_trace_data_action.setToolTip("CSV: the value of the trace plot for every frame")
         self.series_export_track_action = menu.addAction("Peak Table of Every Frame…")
-        self.series_export_track_action.setToolTip("CSV: frame, file, peak position, FWHM, area and height in the q window")
+        self.series_export_track_action.setToolTip(
+            "CSV: frame, file, and the peak in the x window — centroid position, moment width (2.355 σ), area and height")
         self.series_export_button.setMenu(menu)
         self.series_export_button.setToolTip("Save the map, a frame's curve, a trace or the peak table (once a map is built)")
         self.series_export_button.hide()  # shown once there is a map to export
@@ -295,15 +176,50 @@ class SeriesView:
         self.series_compare_button.hide()  # shown once there is a map
         actions.addWidget(self.series_compare_button)
         actions.addWidget(self.series_batch_button)
+        self.series_wide_button = QToolButton(parent)
+        self.series_wide_button.setObjectName("analyzeSeriesWide")
+        self.series_wide_button.setText("Wide")
+        self.series_wide_button.setCheckable(True)
+        self.series_wide_button.setToolTip(
+            "More room for this tab: the image beside it shrinks to its least width. The map and the plots below "
+            "it fill the tab width and stay vertically stacked. Click again for the image.")
+        self.series_wide_button.hide()  # shown once there is a map
         self.series_controls.hide()  # shown once several frames are listed
         host.addWidget(self.series_controls)
-        self.series_info_label = QLabel("", parent)
+        self.series_info_label = HintLabel(parent)
         self.series_info_label.setObjectName("analyzeSeriesInfo")
         self.series_info_label.setProperty("gimapRole", "muted")
-        self.series_info_label.setWordWrap(True)
-        host.addWidget(self.series_info_label)
+        # The halves of a signed cut the map stacks (shown for a signed cut only), beside the sentence.
+        self.series_view_combo = QComboBox(parent)
+        self.series_view_combo.setObjectName("analyzeSeriesHalves")
+        for (text, key), tip in zip(VIEW_ITEMS, VIEW_TIPS):
+            self.series_view_combo.addItem(text, key)
+            self.series_view_combo.setItemData(self.series_view_combo.count() - 1, tip, Qt.ToolTipRole)
+        self.series_view_combo.setToolTip(
+            "The halves of the signed cut this map stacks: ± both as measured, + or − one half, |x| both on |x|, or "
+            "their mean. The stages, the traces and the exports follow it.")
+        self.series_view_combo.hide()
+        info = QHBoxLayout()  # the sentence, and — beside its one line while a map is shown — the halves and “Wide”
+        info.setSpacing(6)
+        info.addWidget(self.series_info_label, 1)
+        info.addWidget(self.series_view_combo, 0, Qt.AlignTop)
+        info.addWidget(self.series_wide_button, 0, Qt.AlignTop)
+        host.addLayout(info)
+        # What the map shown is: its curve and halves, its frames, the cut of the series (``bindings/series_display.py``).
+        self.series_title_label = QLabel("", parent)
+        self.series_title_label.setObjectName("analyzeSeriesTitle")
+        self.series_title_label.setWordWrap(True)
+        self.series_title_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.series_title_label.hide()
+        host.addWidget(self.series_title_label)
+        self.series_stale_label = QLabel("", parent)  # the map was built with another curve or other settings
+        self.series_stale_label.setObjectName("analyzeSeriesStale")
+        self.series_stale_label.setProperty("gimapRole", "warning")
+        self.series_stale_label.setWordWrap(True)
+        self.series_stale_label.hide()
+        host.addWidget(self.series_stale_label)
         self._setup_stages(parent, host)
-        self.series_empty = EmptyState(SERIES_EMPTY_TITLE, SERIES_EMPTY_TEXT, parent)
+        self.series_empty = EmptyState(SERIES_EMPTY_TITLE, SERIES_EMPTY_TEXT, parent, action_text=SERIES_EMPTY_ACTION)
         host.addWidget(self.series_empty)
         self.series_map_view = DetectorView(parent)
         self.series_map_view.setObjectName("analyzeSeriesMap")
@@ -312,7 +228,9 @@ class SeriesView:
         # panel); a tab too short for it scrolls (``SeriesScroll``).
         self.series_map_view.graphics.setMinimumHeight(SERIES_MAP_HEIGHT)
         self.series_map_view.hide()
-        host.addWidget(self.series_map_view, 3)
+        # … and asks for no more than that as its least, however tall it last was (``Snug``).
+        view = self.series_map_view
+        host.addWidget(Snug(view, parent, lambda width: view.layout().minimumHeightForWidth(width)), 3)
         self.series_profile_plot = CurvePlot("", parent)
         self.series_profile_plot.setObjectName("analyzeSeriesProfile")
         self.series_open_button = QPushButton("Open", parent)
@@ -332,17 +250,91 @@ class SeriesView:
         popup = self.series_trace_combo.view()  # narrower than an item: its list still shows them whole
         popup.setMinimumWidth(popup.sizeHintForColumn(0) + 2 * popup.frameWidth() + 24)
         self.series_trace_combo.setToolTip(
-            "In the q window of the vertical band, for every frame: the mean intensity, or the peak found there "
-            "(centroid position, FWHM, area and height above a straight background)"
+            "In the x window of the vertical band, for every frame: the mean intensity, or the peak found there "
+            "above a straight background — its centroid, its moment width (2.355 × the standard deviation inside "
+            "the window: the FWHM of a Gaussian peak, larger for a wider window), its area and its height. "
+            "A fitted FWHM with its error: Batch Export ▸ Fit ▸ Peaks."
         )
         self.series_trace_plot.header_layout.insertWidget(0, self.series_trace_combo)
-        # The frame's curve and the trace side by side, or one above the other in a narrow panel.
-        self.series_plots = SideBySide(self.series_profile_plot, self.series_trace_plot, parent,
+        # Both curves use the full width, including after Wide or a window resize.
+        self.series_plots = StackedPlots(self.series_profile_plot, self.series_trace_plot, parent,
                                        least_height=SERIES_PLOTS_HEIGHT)
         self.series_plots.hide()
-        host.addWidget(self.series_plots, 2)
+        host.addWidget(Snug(self.series_plots, parent), 2)
+        self.setup_series_fit_results(parent, host)
+        self._setup_series_options(parent, host)
+        host.addWidget(self.series_stages_details)
         self.series_stretch_index = host.count()
         host.addStretch(1)
+
+    def _setup_series_options(self, parent: QWidget, host: QVBoxLayout) -> None:
+        """Folded under the plots: which frames a map takes, where they are cut, what its axes count in."""
+        section = AdvancedSection(
+            "Options: frames, cut, axes",
+            "Which frames Build Map takes and where they are cut; what the frame axis counts in; what the stages "
+            "compare. The cut holds for a Batch Export and a watched folder too.",
+            parent,
+        )
+        section.setObjectName("analyzeSeriesOptions")
+        section.layout().setContentsMargins(*SECTION_MARGINS)
+        self.series_options = section
+        frames = QHBoxLayout()
+        frames.setSpacing(6)
+        self.series_first_spin = QSpinBox(section)
+        self.series_first_spin.setObjectName("analyzeSeriesFirst")
+        self.series_first_spin.setRange(1, 10_000_000)
+        self.series_first_spin.setToolTip("The first frame of the list a map takes (the frames before it are left out)")
+        self.series_last_spin = QSpinBox(section)
+        self.series_last_spin.setObjectName("analyzeSeriesLast")
+        self.series_last_spin.setRange(0, 10_000_000)
+        self.series_last_spin.setSpecialValueText("the last")
+        self.series_last_spin.setToolTip("The last frame a map takes; at its least value: the last frame listed")
+        for widget in (QLabel("Frames", section), self.series_first_spin, QLabel("to", section), self.series_last_spin):
+            frames.addWidget(widget)
+        frames.addStretch(1)
+        section.add_layout(frames)
+        self.series_each_cut_check = QCheckBox(EACH_CUT_TEXT, section)
+        self.series_each_cut_check.setObjectName("analyzeSeriesEachCut")
+        self.series_each_cut_check.setToolTip(EACH_CUT_TIP)
+        section.add_widget(self.series_each_cut_check)
+        self.series_axis_combo = QComboBox(section)
+        self.series_axis_combo.setObjectName("analyzeSeriesAxis")
+        for text, key in AXIS_ITEMS:
+            self.series_axis_combo.addItem(text, key)
+        self.series_axis_combo.setToolTip(
+            "What the frame axis of the map and of the traces counts in: the number of the frame (in its file, "
+            "or in the list), or the time since the first row when the frames carry one")
+        self.series_stages_range_combo = QComboBox(section)
+        self.series_stages_range_combo.setObjectName("analyzeSeriesStagesRange")
+        for text, key in STAGES_RANGE_ITEMS:
+            self.series_stages_range_combo.addItem(text, key)
+        self.series_stages_range_combo.setToolTip(
+            "What the stages and odd frames are found in: every x of the map, or only the x range the map shows "
+            "(zoom the map: the stages follow)")
+        for caption, combo in (("Frame axis", self.series_axis_combo), ("Stages compare", self.series_stages_range_combo)):
+            row = QHBoxLayout()  # a row each: the tab stays as narrow as its controls
+            row.setSpacing(6)
+            combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(12)
+            row.addWidget(QLabel(caption, section))
+            row.addWidget(combo, 1)
+            section.add_layout(row)
+        self.series_follow_check = QCheckBox("Show the picked frame's image", section)
+        self.series_follow_check.setObjectName("analyzeSeriesFollow")
+        self.series_follow_check.setToolTip(
+            "Picking a row of the map also shows that frame in Analyze (its image and curves); a large frame takes "
+            "a moment to read. Off: Open shows it.")
+        section.add_widget(self.series_follow_check)
+        self.series_watch_follow_check = QCheckBox("Show the newest frame", section)
+        self.series_watch_follow_check.setObjectName("analyzeSeriesWatchFollow")
+        self.series_watch_follow_check.setChecked(True)
+        self.series_watch_follow_check.setToolTip(
+            "In the Series tab, the curve below the map follows the newest frame done; click a row of the "
+            "map to look at another one")
+        self.series_watch_follow_check.hide()
+        section.add_widget(self.series_watch_follow_check)
+        section.hide()  # shown once several frames are listed
+        host.addWidget(section)
 
     def _setup_stages(self, parent: QWidget, host: QVBoxLayout) -> None:
         """Under the controls: how many stages, where they are; folded: what changes and the odd frames."""
@@ -375,29 +367,26 @@ class SeriesView:
             parent,
         )
         section.setObjectName("analyzeSeriesStagesDetails")
-        self.series_stages_details = section
-        scroll = QScrollArea(section)  # a long list of odd frames must not squeeze the map
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.setMaximumHeight(170)
-        self.series_changes_label = QLabel("", scroll)
+        section.layout().setContentsMargins(*SECTION_MARGINS)
+        self.series_stages_details = section  # added under the plots: opening it moves neither map nor plots
+        self.series_changes_label = QLabel("", section)  # as long as it is: the tab scrolls, nothing inside it does
         self.series_changes_label.setObjectName("analyzeSeriesChanges")
         self.series_changes_label.setWordWrap(True)
         self.series_changes_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.series_changes_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        scroll.setWidget(self.series_changes_label)
-        section.add_widget(scroll)
+        section.add_widget(self.series_changes_label)
         self.series_skip_odd_check = QCheckBox("Leave the odd frames out of Batch Export", section)
         self.series_skip_odd_check.setObjectName("analyzeSeriesSkipOdd")
         self.series_skip_odd_check.setToolTip(
             "A Batch Export of this list then skips the frames marked odd here (the map keeps them)")
         section.add_widget(self.series_skip_odd_check)
         section.hide()
-        host.addWidget(section)
 
 
 __all__ = [
-    "CHANGE_EMPTY", "CHANGE_FEW", "CHANGE_TITLE", "SERIES_CONTROLS_WIDTH", "SERIES_EMPTY_TEXT", "SERIES_EMPTY_TITLE",
-    "SERIES_MAP_HEIGHT", "SERIES_PLOTS_HEIGHT", "SERIES_WAITING_TEXT", "SERIES_WAITING_TITLE", "SeriesScroll",
-    "SeriesView", "ShrinkingCombo", "SideBySide", "TRACE_COMBO_CHARACTERS", "TRACE_LEGEND_OFFSET",
+    "AXIS_ITEMS", "CHANGE_EMPTY", "CHANGE_FEW", "CHANGE_TITLE", "EACH_CUT_TEXT", "EACH_CUT_TIP", "HintLabel",
+    "SERIES_CONTROLS_WIDTH", "SERIES_EMPTY_ACTION", "SERIES_EMPTY_TEXT", "SERIES_EMPTY_TITLE", "SERIES_MAP_HEIGHT",
+    "SERIES_PLOTS_HEIGHT", "SERIES_WAITING_ACTION", "SERIES_WAITING_TEXT", "SERIES_WAITING_TITLE",
+    "STAGES_RANGE_ITEMS", "SeriesScroll", "SeriesView", "ShrinkingCombo", "SideBySide", "Snug",
+    "TRACE_COMBO_CHARACTERS", "TRACE_LEGEND_OFFSET", "VIEW_ITEMS", "VIEW_TIPS",
 ]

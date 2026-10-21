@@ -4,7 +4,7 @@
 >
 > **Scope**：生产代码的 feature ownership、分层职责和依赖方向
 >
-> **Last verified**：2026-09-28（全文）；2026-10-06（assistant 一行、Feature 边界、文件大小）
+> **Last verified**：2026-09-28（全文）；2026-10-06（assistant 一行、Feature 边界、文件大小）；2026-10-14（shared scientific kernel 一段）
 
 ## 架构风格
 
@@ -254,9 +254,12 @@ Prediction ─┐
 Fitting ────┘
 ```
 
-当前的 shared scientific kernel：`shared/detector_io`（CBF/NXS/TIFF 读取与元数据）、
+当前的 shared scientific kernel：`shared/detector_io`（CBF / NeXus·HDF5 / TIFF / EDF 读取、写出与元数据；NeXus / HDF5
+的源由 `nexus_layout.inspect_nexus` 一次判断——单帧、整个序列、模块组、master 加数据文件——Analyze、Format Converter、
+Calibration、XRR、Trainset 与 `gimap_agent` 共用，见 [`scientific-data-flow.md`](scientific-data-flow.md)）、
 `shared/geometry`（探测器几何、像素 → q 映射、仪器配置，约定见
-[`geometry.md`](geometry.md)）和 `shared/series_stages`（一组曲线的异常帧、主成分与分段：
+[`geometry.md`](geometry.md)）、`shared/signed_cut.py`（带符号 GISAXS 切线的两半：平均、选一半、合并长曲线；
+Fitting 的单条与序列、快速物理拟合、Analyze 的 Batch Export 和自动分析共用，纯 NumPy）和 `shared/series_stages`（一组曲线的异常帧、主成分与分段：
 Analyze 的 Series、Fitting 的 In-situ series 与 Compare 三处共用，纯 NumPy）。
 
 `shared/` 不是默认放置位置。只有至少两个 feature 已经稳定需要同一项领域能力，且其

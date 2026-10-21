@@ -132,18 +132,33 @@ def fit_peak(
     p0 = [guess["center"], guess["fwhm"], max(guess["area"], 1e-12), guess["eta"], guess["b0"], guess["b1"]]
     lower = [x[0], 0.5 * step, 0.0, 0.0, -np.inf, -np.inf]
     upper = [x[-1], 2.0 * span, np.inf, 1.0, np.inf, np.inf]
+    x_scale = [step, step, max(guess["area"], 1e-12), 1.0, scale, scale / max(span, 1e-12)]
     fixed_eta = {GAUSSIAN: 0.0, LORENTZIAN: 1.0}.get(profile)
-    if fixed_eta is not None:  # the mixing is not a parameter of the pure shapes
-        p0[3], lower[3], upper[3] = fixed_eta, fixed_eta - 1e-9, fixed_eta + 1e-9
+    # The mixing is not a parameter of the pure shapes: they are fitted with five parameters. (η kept as a
+    # sixth, boxed into ±1e-9, stalled the bounded least squares: thousands of evaluations for a good peak,
+    # and “did not converge” where there is none.)
+    free = [index for index in range(6) if index != 3 or fixed_eta is None]
+
+    def fitted_model(xs, *values):
+        if fixed_eta is not None:
+            values = (*values[:3], fixed_eta, *values[3:])
+        return model(xs, *values)
+
+    def pick(values):
+        return [values[index] for index in free]
+
     try:
-        popt, pcov = curve_fit(model, x, y, p0=p0, sigma=s, absolute_sigma=True, bounds=(lower, upper), maxfev=20000,
-                               x_scale=[step, step, max(guess["area"], 1e-12), 1.0, scale, scale / max(span, 1e-12)])
+        popt, pcov = curve_fit(fitted_model, x, y, p0=pick(p0), sigma=s, absolute_sigma=True,
+                               bounds=(pick(lower), pick(upper)), maxfev=20000, x_scale=pick(x_scale))
     except (RuntimeError, ValueError) as exc:
         return PeakFit(False, f"the fit did not converge ({exc})", profile, points=int(x.size))
+    variances = np.clip(np.diag(pcov), 0.0, None)
+    if fixed_eta is not None:  # back to the six values: η is the shape's, without an error
+        popt, variances = np.insert(popt, 3, fixed_eta), np.insert(variances, 3, 0.0)
     fitted = model(x, *popt)
-    dof = max(1, x.size - (5 if fixed_eta is not None else 6))
+    dof = max(1, x.size - len(free))
     chi2_red = float(np.sum(((y - fitted) / s) ** 2) / dof)
-    errors = np.sqrt(np.clip(np.diag(pcov), 0.0, None)) * math.sqrt(max(1.0, chi2_red))
+    errors = np.sqrt(variances) * math.sqrt(max(1.0, chi2_red))
     center, fwhm, area, eta, b0, b1 = (float(value) for value in popt)
     height = float(area * shape(np.array([center]), center, fwhm, eta, profile)[0])
     message = ""

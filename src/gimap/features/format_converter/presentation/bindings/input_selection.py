@@ -23,6 +23,26 @@ from ..folder_import_dialog import FolderImportDialog
 from ..display_formatting import INPUT_FILTER
 
 UNSUPPORTED_CURRENT = "{name} is not an NXS, CBF or TIFF file: the converter cannot read it."
+# Under the list: every input is one file, or some consist of several (module files, a master with data files).
+INPUTS_NOTE = "{files} source file(s), {frames} available image(s) / frame(s)."
+INPUTS_OF_FILES_NOTE = "{sources} inputs ({files} files), {frames} available image(s) / frame(s)."
+SEVERAL_FILES = ("module_set", "chunked_master")
+"""Layouts whose one input consists of several files: the list says so under the input."""
+
+
+def source_lines(source) -> list[str]:
+    """What a NeXus / HDF5 input holds, in the interface language: dataset, shape, frames; for an input
+    made of several files what it consists of; then what the reader had to say about it."""
+    shape = " × ".join(str(value) for value in source.dataset_shape) or tr("Unknown")
+    lines = [
+        trf("Dataset: {path}", path=source.dataset_path),
+        trf("Shape: {shape}", shape=shape),
+        trf("Frames: 1–{count}", count=source.frame_count),
+    ]
+    if source.summary is not None and source.layout in SEVERAL_FILES:
+        lines.append(trf(source.summary[0], **source.summary[1]))
+    lines += ["⚠ " + trf(template, **values) for template, values in source.warnings]
+    return lines
 
 
 class InputSelectionMixin:
@@ -137,28 +157,27 @@ class InputSelectionMixin:
                 )
             )
             root.setData(0, Qt.UserRole, index)
-            root.setToolTip(0, source.path)
+            # Every file of the input: the module files of a set, a master and its data files.
+            root.setToolTip(0, "\n".join(source.members) if len(source.members) > 1 else source.path)
             self.input_tree.addTopLevelItem(root)
-            if source.file_type == "NXS":
-                shape = " × ".join(str(value) for value in source.dataset_shape) or tr("Unknown")
-                for text in (
-                    trf("Dataset: {path}", path=source.dataset_path),
-                    trf("Shape: {shape}", shape=shape),
-                    trf("Frames: 1–{count}", count=source.frame_count),
-                ):
-                    root.addChild(QTreeWidgetItem((text, "", "", "", "")))
+            if source.is_hdf5:
+                for text in source_lines(source):
+                    child = QTreeWidgetItem((text, "", "", "", ""))
+                    child.setToolTip(0, text)
+                    root.addChild(child)
+                    child.setFirstColumnSpanned(True)  # a line of text, not a row of the table: the whole width
                 root.setExpanded(True)
         total_frames = sum(source.frame_count for source in self.sources)
+        files = sum(max(1, len(source.members)) for source in self.sources)
         set_role(self.input_note, "muted")
-        self.input_note.setText(
-            trf(
-                "{files} source file(s), {frames} available image(s) / frame(s).",
-                files=len(self.sources),
-                frames=f"{total_frames:,}",
+        if not self.sources:
+            self.input_note.setText(tr("No input files yet."))
+        elif files == len(self.sources):
+            self.input_note.setText(trf(INPUTS_NOTE, files=files, frames=f"{total_frames:,}"))
+        else:
+            self.input_note.setText(
+                trf(INPUTS_OF_FILES_NOTE, sources=len(self.sources), files=files, frames=f"{total_frames:,}")
             )
-            if self.sources
-            else tr("No input files yet.")
-        )
 
     def _input_current_changed(self, item: QTreeWidgetItem | None) -> None:
         while item is not None and item.parent() is not None:
@@ -167,7 +186,7 @@ class InputSelectionMixin:
         source = (
             self.sources[index] if isinstance(index, int) and index < len(self.sources) else None
         )
-        show = bool(source and source.file_type == "NXS" and len(source.dataset_paths) > 1)
+        show = bool(source and source.is_hdf5 and len(source.dataset_paths) > 1)
         self.dataset_label.setVisible(show)
         self.dataset_combo.setVisible(show)
         self.dataset_note.setVisible(show)
@@ -200,7 +219,7 @@ class InputSelectionMixin:
             use.setData(Qt.UserRole, row)
             self.selection_table.setItem(row, 0, use)
             name = QTableWidgetItem(source.name)
-            name.setToolTip(source.path)
+            name.setToolTip("\n".join(source.members) if len(source.members) > 1 else source.path)
             self.selection_table.setItem(row, 1, name)
             self.selection_table.setItem(row, 2, QTableWidgetItem(source.file_type))
             self.selection_table.setItem(row, 3, QTableWidgetItem(str(source.frame_count)))

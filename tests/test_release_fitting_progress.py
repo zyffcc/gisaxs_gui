@@ -199,7 +199,7 @@ def test_a_long_start_is_seen_to_be_at_work(tmp_path, monkeypatch) -> None:
 
     del seen[:]
     monkeypatch.setattr(run, "HEARTBEAT", 3600.0)  # … but not more often than this: only the start itself
-    page.method_buttons["shapes"].setChecked(True)
+    page.set_method("shapes")
     page.run_fit()
     _wait(page)
     assert seen == [(100, 50, 50, name, name)]
@@ -230,7 +230,7 @@ def test_a_fit_of_the_engine_counts_on_the_bar(tmp_path) -> None:
     page = _page()
     page.open_curve(_curve_file(tmp_path))
     page.set_model(page.session.model.with_values({(0, "R"): 5.3, (0, "D"): 44.0}))
-    page.method_buttons["global"].setChecked(True)
+    page.set_method("global")
     seen: list[tuple] = []
     page._progress.changed.connect(lambda *_args: seen.append(
         (page.fit_progress.maximum(), page.fit_progress.value(), page.fit_progress_text.text())))
@@ -313,7 +313,7 @@ def test_stop_during_the_shape_search_is_said_as_a_stop_not_as_a_failure(tmp_pat
     page.run_fit()
     _wait(page)
     assert page.status_label.text() == "The fit failed: the fitter broke"
-    page.method_buttons["global"].setChecked(True)  # a fit of the engine keeps its best values when stopped
+    page.set_method("global")  # a fit of the engine keeps its best values when stopped
     page.run_fit()
     _until_said(page)
     page.stop_fit()

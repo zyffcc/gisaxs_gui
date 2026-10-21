@@ -13,6 +13,7 @@ import re
 from typing import Callable, Optional
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.shared.detector_io.nexus_layout import ERROR_TEMPLATES, FRAME_BEYOND, LEFT_UNFINISHED
 
 from ..application import RECTANGLE
 from ..application.geometry_resolution import CENTER_NOT_USED, CENTER_NOT_USED_HEADER
@@ -32,13 +33,18 @@ REGION_CHI_EMPTY = "Region {name}: the χ range is empty."
 """A region set by hand that holds nothing (``domain/regions.py``; the name comes quoted)."""
 MASK_SHAPE = "The mask {name} is {mask_shape}; the frame is {shape}."
 """A mask image of another detector size (``application/frame_preprocessing.py``)."""
+FEWER_FRAMES = "{name} has fewer frames than asked for ({error})."
+"""``error`` is the reader's “frame 40 of 12” (``nexus_layout.FRAME_BEYOND``), said in the interface language too."""
 READ_ERRORS = (
     "{name} is not there any more (moved or deleted).",
     "{name} cannot be opened: {error}.",
     "{name} is empty (0 bytes) — it may still be being written, or the copy failed.",
+    *(template for template in ERROR_TEMPLATES if template != FRAME_BEYOND),
     "{name} cannot be read: no permission (is it open in another program?).",
-    "{name} has fewer frames than asked for ({error}).",
+    "{name} holds no frames yet.",
+    FEWER_FRAMES,
     "{name} is not a detector image GIMaP can read (CBF, TIFF, EDF or NeXus).",
+    "{name} is compressed with a filter this installation cannot read: install the Python package hdf5plugin.",
     "{name} looks damaged or incomplete (the NeXus/HDF5 file could not be opened) — if it is still being written, "
     "try again later.",
     "{name} could not be read: the file looks damaged, incomplete or of another kind ({error}).",
@@ -46,7 +52,9 @@ READ_ERRORS = (
 )
 """Why a frame could not be read (``infrastructure/adapters/frames.py`` ``readable_read_error``, written out
 here: presentation does not import infrastructure; a test keeps the two alike). The file name and the reader's
-own words (``error``) stay as they are; the sentence before the last-resort one, so each finds its own."""
+own words (``error``) stay as they are; the sentence before the last-resort one, so each finds its own. The
+NeXus / HDF5 reader's own sentences (``nexus_layout.ERROR_TEMPLATES``: a file its writer holds or left unfinished,
+a file without a detector image, a dataset that holds no frames) come as they are."""
 
 
 def curve_title(title: str) -> str:
@@ -58,6 +66,12 @@ def curve_title(title: str) -> str:
 
 def _same(text: str) -> str:
     return text
+
+
+def _frame_beyond(text: str) -> str:
+    """“frame 40 of 12” as the reader says it, in the interface language (anything else: as it came)."""
+    found = _FRAME_BEYOND.fullmatch(text)
+    return trf(FRAME_BEYOND, **found.groupdict()) if found is not None else text
 
 
 TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
@@ -74,7 +88,7 @@ TEMPLATES: tuple[tuple[str, dict[str, Callable[[str], str]]], ...] = (
     (REGION_Q_EMPTY, {}),
     (REGION_CHI_EMPTY, {}),
     (MASK_SHAPE, {}),
-    *((template, {}) for template in READ_ERRORS),
+    *((template, {"error": _frame_beyond} if template == FEWER_FRAMES else {}) for template in READ_ERRORS),
 )
 """English templates of the messages made elsewhere, with what to do with each value (default: keep it)."""
 
@@ -85,6 +99,8 @@ def _pattern(template: str) -> re.Pattern:
     return re.compile(pattern, re.DOTALL)
 
 
+_FRAME_BEYOND = _pattern(FRAME_BEYOND)
+_LEFT_UNFINISHED = _pattern(LEFT_UNFINISHED)
 _PATTERNS = tuple((template, _pattern(template), values) for template, values in TEMPLATES)
 
 
@@ -100,6 +116,12 @@ def message_text(message: str) -> str:
             values = {name: convert.get(name, _same)(value) for name, value in found.groupdict().items()}
             return trf(template, **values)
     return message
+
+
+def left_unfinished(message: str) -> bool:
+    """``message`` is the reader's sentence for a file its writer left open and never closed: nothing to wait
+    for, something to act on (the sentence says how)."""
+    return _LEFT_UNFINISHED.fullmatch(str(message)) is not None
 
 
 def mask_text(shape) -> str:
@@ -126,5 +148,5 @@ def detector_text(analysis) -> Optional[str]:
 __all__ = [
     "BACKGROUND_MISSING", "EMPTY_CUT", "EMPTY_SECTOR", "MASK_FILE_MISSING", "MASK_SHAPE", "NO_PROFILE", "PROFILE_ADDED",
     "PROFILE_MISSING", "PROFILE_SHAPE", "READ_ERRORS", "REGION_CHI_EMPTY", "REGION_Q_EMPTY", "TEMPLATES", "curve_title",
-    "detector_text", "mask_text", "message_text",
+    "detector_text", "left_unfinished", "mask_text", "message_text",
 ]

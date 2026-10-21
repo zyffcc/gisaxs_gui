@@ -35,6 +35,17 @@ class SelectDataset:
 
 
 @dataclass(frozen=True)
+class GroupSources:
+    """The files a person chose, one path per source (a repository without grouping: as they are)."""
+
+    repository: SourceRepositoryPort
+
+    def __call__(self, paths: list[str | Path]) -> list[str]:
+        group = getattr(self.repository, "group_paths", None)
+        return [str(path) for path in paths] if group is None else group(list(paths))
+
+
+@dataclass(frozen=True)
 class ScanFolder:
     repository: SourceRepositoryPort
 

@@ -7,7 +7,12 @@ The usual call is one command:
 
 It runs the procedure of the technique GIMaP's Auto detection gives each frame once its
 geometry is applied (GIWAXS: peaks, orientation, sizes; GISAXS: Yoneda cut, halves,
-spacing, fit); --technique giwaxs|gisaxs forces one.  The notes are the person's own
+spacing, fit); --technique giwaxs|gisaxs forces one.  Each FRAME file is analysed on
+its own, except that the module files of one detector (..._m01.nxs ... ..._m11.nxs) are
+one stitched series, analysed once however many of them are given (a glob is fine),
+and that --series takes the files given as one series stored as one frame per file.
+A source with a part missing (a module file, a data file) is an open item of its
+report.  The notes are the person's own
 words: αi, the energy (keV) and the pixel size (µm) are read when the notes give exactly
 one value, a calibration file they name (.poni, GIMaP .json, an image of a standard) is
 tried before the search, and the calibrant (AgBH, LaB6, CeO2, LaB6+CeO2) is used when
@@ -86,7 +91,8 @@ def _outcome_data(outcome) -> dict:
 
 def command_auto(arguments) -> int:
     from src.gimap.app.headless_assistant import analyse_frames, default_output_folder
-    from src.gimap.features.assistant.application import PipelineOptions, batch_markdown
+    from src.gimap.app.headless_sources import batch_summary
+    from src.gimap.features.assistant.application import PipelineOptions
 
     options = PipelineOptions(
         calibration=arguments.calibration, standard=arguments.standard, energy_kev=arguments.energy_kev,
@@ -97,8 +103,11 @@ def command_auto(arguments) -> int:
     )
     out = Path(arguments.out) if arguments.out else default_output_folder()
     progress = (lambda _text: None) if arguments.quiet else (lambda text: print(text, file=sys.stderr, flush=True))
-    reports = analyse_frames(arguments.frames, options, out, progress=progress, saved_profiles=not arguments.no_saved_profiles)
-    print(batch_markdown(reports))
+    reports = analyse_frames(
+        arguments.frames, options, out, progress=progress, saved_profiles=not arguments.no_saved_profiles,
+        series=arguments.series,
+    )
+    print(batch_summary(reports))
     for report in reports:
         folder = Path(report["outputs"][0]).parent if report.get("outputs") else None
         if folder is not None:
@@ -201,7 +210,11 @@ def parser() -> argparse.ArgumentParser:
         "auto", parents=[common], help="the standard analysis (GIWAXS or GISAXS, as Auto detects) of one or more frames",
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    auto.add_argument("frames", nargs="+", help="detector images (for a NeXus series: any one module file, e.g. *_m01.nxs)")
+    auto.add_argument(
+        "frames", nargs="+",
+        help="detector images, each analysed on its own. The module files of one detector (*_m01.nxs … *_m11.nxs) "
+             "are one stitched series: give any or all of them (a glob), it is analysed once",
+    )
     auto.add_argument(
         "--calibration",
         help="a .poni, GIMaP calibration .json or image of a standard: tried first, then files the notes name, "
@@ -219,7 +232,15 @@ def parser() -> argparse.ArgumentParser:
         help="detector pixel size in µm: used even when the image header gives another (Decisions names both)",
     )
     auto.add_argument("--frame", type=int, help="frame of a series (1-based, -1 = last; default: the last frames)")
-    auto.add_argument("--sum", type=int, help="frames summed (default 10 for a series)")
+    auto.add_argument(
+        "--sum", type=int,
+        help="frames summed (default for a series: the last fifth of its frames, at most 10; 1 below ten frames)",
+    )
+    auto.add_argument(
+        "--series", action="store_true",
+        help="the files are ONE series stored as one frame per file (taken in the order of their numbers): "
+             "one report on its final state, like a multi-frame file -- --frame and --sum choose files by position",
+    )
     auto.add_argument("--rings", type=int, default=3, help="strongest reliable peaks analysed for orientation and size")
     auto.add_argument("--recalibrate", action="store_true", help="calibrate even when a saved profile exists")
     auto.add_argument(

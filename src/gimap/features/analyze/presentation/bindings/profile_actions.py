@@ -1,4 +1,7 @@
-"""Instrument-profile choices, geometry entry and remembered preferences for Analyze."""
+"""Instrument-profile choices, geometry entry and remembered preferences for Analyze.
+
+``FitHandoverMixin`` (Send to Fitting with a folder of its own when the data folder takes no file) is part of
+the page through this mixin."""
 
 from __future__ import annotations
 
@@ -12,10 +15,11 @@ from src.gimap.app.presentation.i18n import tr, trf
 from ..geometry_dialog import GeometryDialog, geometry_defaults
 from ..preferences import AnalyzePreferences, load_preferences, save_preferences
 from ..views.analyze_page_view import AUTO_PROFILE_TEXT
+from .fit_handover import FitHandoverMixin
 from .geometry_editor import GeometryEditorMixin
 
 
-class ProfileActionsMixin(GeometryEditorMixin):
+class ProfileActionsMixin(GeometryEditorMixin, FitHandoverMixin):
     """Own the Instrument combo, the no-geometry banner actions and preferences."""
 
     def _refresh_profiles(self) -> None:

@@ -215,7 +215,9 @@ def test_stop_keeps_what_is_done_and_writes_the_tables(page, tmp_path: Path) -> 
     done = len(page._batch_run.frames)
     assert 1 <= done < 6
     assert len(_rows(tmp_path / "stopped" / "run_09_radial_frames.csv")[0]) == done + 1  # x and the frames done
-    assert f"Exported {done}/{done}" in page.status_text()
+    # a stopped batch is no success: the line says that it was stopped and how far it got (it said “Exported 3/3”)
+    assert page.status_text().startswith(f"Stopped: {done} of 6 frames exported to ") and page.status_level() == "warning"
+    assert f"({6 - done} not started)" in page.status_text()
     assert page.batch_panel.title_label.text() == "Batch Export stopped"
 
 

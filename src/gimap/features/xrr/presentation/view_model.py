@@ -46,6 +46,7 @@ class XrrViewModel:
         self._input_folders = input_folders
         self.state = XrrViewState()
         self._progress_points = []
+        self._progress_layout = None
 
     def inspect(self, spec: XrrSeriesSpec) -> XrrSeriesInspection:
         self.state.error_message = ""
@@ -62,19 +63,23 @@ class XrrViewModel:
         self.state.running = True
         self.state.request = request
         self._progress_points = []
+        self._progress_layout = None  # what the series is stored in: the first progress says it
 
         def report(progress: XrrExtractionProgress) -> None:
             self._progress_points.append(progress.point)
-            self.state.result = XrrExtractionResult(tuple(self._progress_points))
+            self._progress_layout = progress.layout or self._progress_layout
+            self.state.result = XrrExtractionResult(tuple(self._progress_points), self._progress_layout)
             if on_progress is not None:
                 on_progress(progress)
 
         try:
             result = self._run_extraction.execute(request, on_progress=report)
             if result.points:
+                if result.layout is None and self._progress_layout is not None:
+                    result = XrrExtractionResult(result.points, self._progress_layout)
                 self.state.result = result
-            elif self._progress_points:
-                result = XrrExtractionResult(tuple(self._progress_points))
+            elif self._progress_points:  # stopped: the runner returns nothing
+                result = XrrExtractionResult(tuple(self._progress_points), self._progress_layout)
                 self.state.result = result
             return result
         except Exception as exc:

@@ -57,11 +57,15 @@ def _horizontal_where(reduction, *, short: bool) -> str:
         return tr(template).format(alpha=f"{yoneda.alpha_f_deg:.3f}")
     if source == "manual":
         return tr("set by hand")
+    if source == "series":  # the cut of one frame, held for every frame of a series (``use_cases.held_cut``)
+        return tr("cut of the series" if short else "the cut of the series")
     return tr("above the horizon" if short else "just above the horizon (no Yoneda band found)")
 
 
 def cut_lines(analysis: FrameAnalysis) -> list[str]:
-    """Where the two GISAXS cuts are, in detector pixels taken from the curves themselves (both ends included)."""
+    """Where the two GISAXS cuts are, in detector pixels taken from the curves themselves (both ends included). A
+    vertical cut away from the beam centre is the person's, or the series' when the frame was cut at the cut of a
+    series (``markers["series_cut"]``)."""
     reduction = analysis.reduction
     if reduction is None or reduction.kind != GISAXS:
         return []
@@ -74,8 +78,10 @@ def cut_lines(analysis: FrameAnalysis) -> list[str]:
         geometry = analysis.geometry
         centre = vertical.region.get("center_column")
         on_beam = geometry is not None and centre is not None and abs(float(centre) - geometry.beam_center_x_px) < 0.01
+        held = (reduction.markers.get("series_cut") or {}).get("vertical_columns") is not None
         template = (
             "Vertical cut I(qz) over columns {columns} (the beam centre)." if on_beam
+            else "Vertical cut I(qz) over columns {columns} (the cut of the series)." if held
             else "Vertical cut I(qz) over columns {columns} (set by hand)."
         )
         lines.append(tr(template).format(columns=pixel_range(*vertical.region["columns"])))

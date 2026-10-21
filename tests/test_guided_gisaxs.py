@@ -394,3 +394,28 @@ def test_a_solution_opens_in_fitting_with_its_parameters(galaxi_run) -> None:
     assert sphere.parameters["sigma_diameter"] == pytest.approx(53.4 * 0.4)
     assert set(converted.global_parameters) == {"background", "sigma_res", "nu_res", "int_res", "k_value"}
     assert candidate_row({"solutions": fit["solutions"]}, 0) is None  # an older report without the points
+
+
+def test_the_halves_the_analysis_chooses_are_for_its_frame_not_the_stored_choice(galaxi_run) -> None:
+    """The automatic analysis sets the halves through ``AnalyzeAutomation.set_halves``. What it chooses for one
+    sample (a half in the shadow) used to be written to the settings, and was the hand-over of the next sample
+    and the next session."""
+    _app()
+    session, _report = galaxi_run
+    page = session.page
+    model = page.view_model
+    stored = model._read_setting("analyze", "fit_side", "both_abs")
+    shown = model.fit_side
+    other = "negative" if shown != "negative" else "positive"
+    done = []
+    try:
+        page.automation().set_halves(other, lambda ok, text: done.append((ok, text)))
+        assert done == [(True, f"halves: {other}")] and model.fit_side == other
+        assert page.halves_combo.currentData() == other  # the Cuts step shows the halves of this frame
+        assert model._read_setting("analyze", "fit_side", "both_abs") == stored  # … and the stored choice is as it was
+        model.forget_frame_halves()  # another file, or Clear
+        assert model.fit_side == (stored if stored in ("both_abs", "mean", "negative", "positive") else "both_abs")
+    finally:
+        model.set_fit_side(shown, remember=False)
+        page._sync_fit_side()
+        page._sync_halves()

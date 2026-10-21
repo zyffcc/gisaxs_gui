@@ -1,6 +1,8 @@
-"""The Fit step: one button, four methods, progress and Stop (the work runs in the background).
+"""The Fit step: one method (Predict parameters with fit1d — ``fit1d.py`` — or one of four others), one button,
+progress and Stop (the work runs in the background).
 
-* Refine the current values / Search the ranges, then refine — the fitting engine on the model;
+* Refine the current values / Search the ranges, then refine — the fitting engine on the model, then the values
+  at an edge of their range resolved and refined again (``fit_resolving``, when the box is ticked);
 * Find the particle shape (no AI) — the quick physical fit (sphere, random and vertical cylinder
   from several starts, injected by the composition root); its solutions go to Results, the best
   into Model;
@@ -23,19 +25,30 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from typing import Optional
+
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, Qt, pyqtSignal
 
 from src.gimap.app.presentation.i18n import tr, trf
 
 from ...application import CandidateGenerationRequest
-from ...application.single_fit import FAMILIES, NM_PER_A, PROGRESS_LINE, fit, model_from_solution, residuals
+from ...application.single_fit import (
+    BOTH_USES_MEAN,
+    FAMILIES,
+    NM_PER_A,
+    ONE_CURVE_METHODS,
+    PROGRESS_LINE,
+    fit_resolving,
+    model_from_solution,
+    residuals,
+)
 from ...application.workflow_v5 import bundled_workflow, default_options
 from .session import Solution
 
 FAMILY_IDS = {"sphere": 1, "cylinder": 2, "vertical_cylinder": 3}
 METHOD_NAMES = {"local": "Refine", "global": "Search the ranges", "shapes": "Find the particle shape",
-                "ai": "AI proposal", "fit1d": "fit1d"}
+                "ai": "AI proposal", "fit1d": "Predict parameters (fit1d)"}
 START, START_OF = "Trying start {n} of {total}", "Trying start {n} of {total}: {model}"
 """One start of the shape search (each family is tried from several starting sizes)."""
 EVALUATED = "{line} — {evaluations} evaluations"
@@ -85,24 +98,43 @@ class FitRunMixin:
         self._stop_event = threading.Event()
         self._running = None
         self._progress_shown = None
-        self.fit_button.clicked.connect(self.run_fit)
-        self.fit_step_button.clicked.connect(self.run_fit)
+        self._fit_notes = None
+        """What the last Refine / Search did by itself and what is still at an edge (``fit_resolving``)."""
+        self.fit_button.clicked.connect(lambda: self.run_fit())
+        self.fit_step_button.clicked.connect(lambda: self.run_fit())
         self.stop_button.clicked.connect(self.stop_fit)
         self.stop_step_button.clicked.connect(self.stop_fit)
-        self.method_group.buttonToggled.connect(lambda _button, _on: self._method_chosen())
-        self.method_buttons["shapes"].setEnabled(self.quick_fit is not None)
+        self.method_combo.currentIndexChanged.connect(lambda _index: self._method_chosen())
+        resolve = self._remembered("resolve_edges")
+        self.resolve_edges_check.setChecked(True if resolve is None else bool(resolve))
+        self.resolve_edges_check.toggled.connect(lambda on: self._remember(resolve_edges=bool(on)))
         self._method_chosen(remember=False)
 
     def method(self) -> str:
-        return next((key for key, button in self.method_buttons.items() if button.isChecked()), "local")
+        return self.method_combo.currentData() or "local"
+
+    def set_method(self, method, *, remember: bool = True) -> None:
+        """Choose ``method`` (a key of ``METHOD_NAMES``) in the Fit step; anything else leaves the choice as it is."""
+        index = self.method_combo.findData(method)
+        if index < 0:
+            return
+        if index == self.method_combo.currentIndex():
+            self._method_chosen(remember=remember)
+            return
+        self.method_combo.blockSignals(True)
+        self.method_combo.setCurrentIndex(index)
+        self.method_combo.blockSignals(False)
+        self._method_chosen(remember=remember)
 
     def _method_chosen(self, *, remember=True) -> None:
         method = self.method()
         self.families_row.setVisible(method == "shapes")
-        self.fit1d_settings_panel.setVisible(method == "fit1d")
+        self.fit1d_row.setVisible(method == "fit1d")
         self.fit_step_button.setText(tr(METHOD_NAMES[method]))
-        self.fit_step_button.setToolTip(self.method_buttons[method].toolTip())
+        self.fit_step_button.setToolTip(tr(self.method_combo.itemData(self.method_combo.currentIndex(), Qt.ToolTipRole)
+                                           or ""))
         self._fill_curve_card()
+        self._refresh_fit1d_action()
         if remember:
             self._remember(method=method)
 
@@ -111,25 +143,34 @@ class FitRunMixin:
 
     # -- run ------------------------------------------------------------------------------
 
-    def run_fit(self) -> None:
+    def run_fit(self, method: Optional[str] = None) -> None:
+        """``method``: one of ``METHOD_NAMES`` (fit1d has its own button); the one chosen in the Fit step if None."""
         if self.fit_running():
             return
         data = self._data()
         if self.session.curve is None:
             self._status(tr("Open a curve first."), "warning")
             return
-        if data is None or data.q.size < 3:
-            self._status(tr("Too few points in the fitting range: widen it in the Curve step."), "warning")
-            return
-        method = self.method()
+        method = method or self.method()
+        if method not in METHOD_NAMES:
+            method = self.method()
         if method == "shapes" and self.quick_fit is None:
             self._status(tr("Finding the particle shape is not available here: choose another method."), "warning")
             return
         if method in ("local", "global") and not self.session.model.components:
             self._status(tr("Add a particle in Model, or use Find the particle shape."), "warning")
             return
+        if method in ONE_CURVE_METHODS and self.session.side == "both" and self.session.curve.signed:
+            # These methods take one measurement per |q|. The page goes over to the mean of the halves and says
+            # so: what it shows, the points a result is of and the record of an export are the fitted points.
+            self.set_side("mean")
+            data = self._data()
+            self._status(lambda: tr(BOTH_USES_MEAN), "warning")
+        if data is None or data.q.size < 3:
+            self._status(tr("Too few points in the fitting range: widen it in the Curve step."), "warning")
+            return
         self._stop_event.clear()
-        self._running = method
+        self._running = self._last_method = method
         self._busy(True)
         budget = self.budget_spin.value() or None
         model = self.session.model
@@ -140,9 +181,12 @@ class FitRunMixin:
             method=tr(METHOD_NAMES[method]), points=data.q.size,
             free=sum(1 for _path, parameter in model.parameters() if parameter.free)))
         if method in ("local", "global"):
-            job = lambda: fit(model, data, method=method, max_evaluations=budget,  # noqa: E731
-                              progress=self._progress.changed.emit, stop=self._stop_event.is_set)
-            self.tasks.submit("fit", job, on_done=lambda result: self._fitted(result, selection, curve), on_error=failed)
+            resolve = self.resolve_edges_check.isChecked()
+            job = lambda: fit_resolving(model, data, method=method, max_evaluations=budget,  # noqa: E731
+                                        progress=self._progress.changed.emit, stop=self._stop_event.is_set,
+                                        resolve=resolve)
+            self.tasks.submit("fit", job, on_done=lambda done: self._fitted(*done, selection=selection, curve=curve),
+                              on_error=failed)
         elif method == "shapes":
             families, edited = self.families_combo.currentData(), self.session.edited  # read here, not in the worker
             self.tasks.submit("fit", lambda: self._find_shapes(data, model, families, edited),
@@ -239,10 +283,11 @@ class FitRunMixin:
         else:
             self._status(lambda: tr("The fit failed: {reason}").format(reason=message), "error")
 
-    def _fitted(self, result, selection=None, curve=None) -> None:
+    def _fitted(self, result, actions=(), remaining=(), *, selection=None, curve=None) -> None:
         if self._of_another_curve(curve):
             return
         self._finish()
+        self._fit_notes = dict(result=result, actions=list(actions), remaining=list(remaining))
         self.session.result = result
         self.session.native_result = None
         self.session.result_selection = self.session.selection() if selection is None else selection
@@ -271,7 +316,7 @@ class FitRunMixin:
         best = solutions[0]
         self.session.result = None
         self.set_model(best.model)
-        self.method_buttons["local"].setChecked(True)  # next: refine the chosen solution here
+        self.set_method("local")  # next: refine the chosen solution here
         self._status(lambda: tr("{count} solutions; the best, {model} (χ²ᵣ {chi2}), is in Model. Fit again to refine "
                                 "it, or choose another in Results.").format(count=len(solutions), model=best.label,
                                                                          chi2=f"{best.chi2:.3g}"), "ok")

@@ -13,6 +13,15 @@
 * **Control** — *Pause* starts no new frames; *Stop* drops the frames not started and waits for
   those being reduced (the panel says so — a frame cannot be interrupted); fewer frames at once can
   be chosen while running. What is written stays; the tables are written for the frames done.
+* **Before the first frame** — the folder is tried (a file is made in it and taken away): a folder that
+  takes no file is said at once, with the way to another one, not after an hour of reduction. An earlier
+  export of the same data in it is replaced when that was chosen (``run_batch(replace_earlier=True)``),
+  else kept and named in the record. If the folder stops taking files while the batch runs (disk full),
+  the batch ends there.
+* **The end** — a batch that was stopped, or had frames that failed, is not a success: status line, notice,
+  panel, ``README.txt`` and the record say what happened and how far it got (``batch_texts.py``).
+
+The panel is ``bindings/batch_panel.py``, the live map ``bindings/batch_live.py``.
 """
 
 from __future__ import annotations
@@ -22,38 +31,33 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from typing import Callable, Optional
 
-from PyQt5.QtCore import QSignalBlocker, QTimer, QUrl
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import QSignalBlocker, QTimer
 
+from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 
-from ...application import BALANCED, FAST, FOLDERS, GENTLE, GISAXS, BatchChoices, frames_at_once
+from ...application import (
+    BALANCED,
+    FAST,
+    GENTLE,
+    BatchChoices,
+    cannot_write,
+    earlier_export,
+    frames_at_once,
+    remove_export,
+    source_name,
+)
+from ..batch_texts import failure_reason, short_folder
+from ..pending_frames import LazyBatchNumbers, PendingFrames
+from .batch_finish import BatchFinishMixin
+from .batch_live import LIVE_CURVE, REDRAW_S, BatchLiveMixin
+from .batch_panel import TEXT_S, BatchPanelMixin, eta_text
 
 POLL_MS = 100
-REDRAW_S = 1.0
-"""The live map is redrawn at most this often."""
-TEXT_S = 0.4
 DEFAULT_PIXELS = 4_000_000
-LIVE_CURVE = {GISAXS: "horizontal"}
 
 
-def eta_text(seconds: float) -> str:
-    if seconds < 90:
-        return tr("about {n} s left").format(n=max(1, int(round(seconds))))
-    return tr("about {n} min left").format(n=int(round(seconds / 60.0)))
-
-
-def _clock(seconds: float) -> str:
-    seconds = int(seconds)
-    return f"{seconds // 60}:{seconds % 60:02d}" if seconds < 3600 else f"{seconds // 3600}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
-
-
-def _frame_name(request) -> str:
-    frame = f" #{request.frame_index + 1}" if request.frame_index else ""
-    return f"{request.path.name}{frame}"
-
-
-class BatchRunMixin:
+class BatchRunMixin(BatchPanelMixin, BatchLiveMixin, BatchFinishMixin):
     """Needs ``view_model``, ``tasks``, ``batch_panel``, the Series tab and the status widgets."""
 
     def _connect_batch_run(self) -> None:
@@ -65,6 +69,7 @@ class BatchRunMixin:
         self._batch_ready: dict = {}
         self._batch_live = False
         self._batch_folding = False
+        self._batch_finishing = False
         self._batch_map_only = False
         self._batch_run = None
         panel = self.batch_panel
@@ -79,7 +84,7 @@ class BatchRunMixin:
     # -- how fast ------------------------------------------------------------------------
 
     def batch_running(self) -> bool:
-        return bool(self._batch) or bool(self._batch_inflight) or self._batch_timer.isActive()
+        return bool(self._batch) or bool(self._batch_inflight) or self._batch_timer.isActive() or self._batch_finishing
 
     def batch_kind(self) -> str:
         """What the batch is (meaningful while ``batch_running()``): ``series_map`` (Series ▸ Build Map, nothing
@@ -92,6 +97,13 @@ class BatchRunMixin:
             return DEFAULT_PIXELS
         rows, columns = analysis.shape
         return max(1, int(rows) * int(columns))
+
+    def _batch_frames_at_once(self, speed: str, frames: int) -> int:
+        """How many frames a batch of ``frames`` would reduce at once with ``speed`` on this computer."""
+        if self.view_model.frame_workers is None:
+            return 1
+        cores, free = self.view_model.resources()
+        return frames_at_once(speed, cores=cores, free_bytes=free, frame_pixels=self._batch_pixels(), frames=int(frames))
 
     def batch_speed_options(self, frames: int) -> list[tuple[str, str]]:
         """``(speed, text)`` for the Batch Export dialog, with the frames at once this computer allows."""
@@ -113,24 +125,46 @@ class BatchRunMixin:
 
     def run_batch(self, target: Path, choices: BatchChoices, *, series=None, stem: str = "batch",
                   then: Optional[Callable[[Path], None]] = None, map_only: bool = False,
-                  live_key: Optional[str] = None) -> None:
-        """Every listed frame (every n-th) with ``choices``; ``map_only``: nothing written, the Series map only."""
-        requests = self.view_model.batch_requests()[:: max(1, int(choices.every))]
+                  live_key: Optional[str] = None, replace_earlier: bool = False) -> None:
+        """Every listed frame (every n-th) with ``choices``; ``map_only``: nothing written, the Series map only.
+        ``replace_earlier``: an earlier export of the same data in ``target`` is taken away first (its files as
+        its record lists them, and the curves for Fitting when this batch writes some); else it stays, and the
+        record of this batch says that the folder held one."""
+        listed = self.view_model.batch_requests()
+        requests = listed[:: max(1, int(choices.every))]
         if not map_only:
             requests = self._without_odd_frames(requests)
         if not requests or self.batch_running():
             return
+        earlier = None
         if not map_only:
-            try:
-                Path(target).mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
-                self._status(tr("Cannot write to {folder}: {error}").format(folder=target, error=exc.strerror or exc), "error")
+            error = cannot_write(Path(target))  # before the first frame: a folder that takes no file is said now
+            if error is not None:
+                self._batch_cannot_write(Path(target), error)
                 return
+            earlier = earlier_export(Path(target), stem, fit_inputs=choices.fit_input)
+            if earlier is not None and replace_earlier:
+                try:
+                    removed = remove_export(earlier)
+                except OSError as exc:
+                    self._status(trf("The earlier export in {folder} could not be removed: {error}",
+                                     folder=Path(target).name, error=exc.strerror or exc), "error")
+                    return
+                earlier = {"action": "replaced", "when": earlier.when, "removed": removed, "complete": earlier.complete,
+                           "record": earlier.record.name if earlier.record is not None else ""}
+            elif earlier is not None:
+                earlier = {"action": "kept", "when": earlier.when,
+                           "record": earlier.record.name if earlier.record is not None else ""}
         self._batch_map_only = bool(map_only)
         live_key = live_key or self._batch_live_key()
-        self._batch_run = self.view_model.start_batch(Path(target), choices, stem, series, live_key=live_key)
-        self._batch_run.display = self.batch_display(choices)
-        self._batch = list(enumerate(requests))
+        self._batch_run = run = self.view_model.start_batch(Path(target), choices, stem, series, live_key=live_key)
+        run.display = self.batch_display(choices)
+        run.requested, run.earlier = len(requests), earlier or {}
+        self._series_fit_start(run)
+        if not map_only:
+            self._batch_describe(run)
+        self._batch = PendingFrames(requests)
+        self._batch_numbers = LazyBatchNumbers(requests, self.view_model.frame_numbers())
         self._batch_total = len(requests)
         self._batch_then = then
         self._batch_started = time.monotonic()
@@ -168,18 +202,56 @@ class BatchRunMixin:
         self._batch_fill()
         self._batch_panel_update(force=True)
 
+    def _batch_cannot_write(self, target: Path, error: str) -> None:
+        """The folder of a batch takes no file: one sentence (the folder by its last names: the line is one line),
+        and the dialog again to choose another one."""
+        text = trf("Cannot write to {folder}: {error}", folder=short_folder(target), error=error)
+        self._status(text, "error")
+        again = getattr(self, "_batch_again", None)
+        show_toast(self, text, level="error", action=(tr("Choose Another Folder…"), again) if again is not None else None)
+
+    def _batch_describe(self, run) -> None:
+        """What the record of the batch says of its set-up: the cut held for every frame (the view model says
+        it when it holds one) and every listed source that consists of several files."""
+        model = self.view_model
+        held, said = getattr(model, "series_cut", None), getattr(model, "series_cut_text", None)
+        try:
+            run.series_cut = held() if held is not None else None
+            if said is not None:
+                template, values = said()
+                run.series_cut_text = str(template).format(**values)
+        except Exception:  # noqa: BLE001 - a sentence for the record, never a reason not to export
+            run.series_cut, run.series_cut_text = None, ""
+        for path in model.state.files:
+            layout = model.describe(path)
+            if layout is not None and (len(layout.members) > 1 or layout.warnings):
+                run.sources.append({
+                    "name": source_name(path, layout), "summary": layout.summary_text(), "frames": int(layout.frames),
+                    "files": [member.name for member in layout.members], "complete": bool(layout.complete),
+                    "warnings": list(layout.warning_texts()),
+                })
+
     def cancel_batch(self) -> None:
         """Stop: the frames not started are dropped; those being reduced finish (their files stay)."""
         if not self.batch_running():
             return
+        if self._batch_finishing:
+            return  # the finished frames' tables and record are being saved
+        run = self._batch_run
+        dropped = self._batch.names(self._frame_name) if isinstance(self._batch, PendingFrames) else [
+            self._frame_name(request) for _index, request in self._batch]
         self._batch_total -= len(self._batch)
         self._batch = []
         self._batch_stopping = True
-        for index, (_request, future) in list(self._batch_inflight.items()):
+        for index, (request, future) in list(self._batch_inflight.items()):
             if future is not None and future.cancel():  # still waiting in line
                 self._batch_inflight.pop(index)
                 self._batch_total -= 1
                 self._batch_ready[index] = ("skipped", "")
+                dropped.extend([self._frame_name(request)])
+        if run is not None and dropped:  # the record says that it was stopped, and which frames are missing
+            run.stopped = True
+            run.not_started = dropped
         self.batch_panel.stop_button.setEnabled(False)
         self.batch_panel.pause_button.setEnabled(False)
         self._batch_fold_next()
@@ -220,7 +292,7 @@ class BatchRunMixin:
             ):
                 break  # the first frame gives the normalisation factor of the others
             index, request = self._batch.pop(0)
-            job = self.view_model.frame_job(index, request, self._batch_run)
+            job = self.view_model.frame_job(index, request, self._batch_run, self._batch_numbers.get(index))
             if workers is not None:
                 try:
                     self._batch_inflight[index] = (request, workers.submit(job))
@@ -268,6 +340,8 @@ class BatchRunMixin:
                 self._batch_inflight.pop(index)
                 self._batch_total -= 1
                 self._batch_ready[index] = ("skipped", "")
+                self._batch_run.stopped = True
+                self._batch_run.not_started.extend([self._frame_name(request)])
                 continue
             try:
                 outcome = future.result()
@@ -289,13 +363,29 @@ class BatchRunMixin:
     def _batch_arrived(self, index: int, outcome, error: str = "") -> None:
         entry = self._batch_inflight.pop(index, None)
         if outcome is None:
-            name = _frame_name(entry[0]) if entry else f"frame {index + 1}"
-            self._batch_ready[index] = ("failed", f"{name} ({error})")
+            request = entry[0] if entry else None
+            name = self._frame_name(request) if request is not None else f"frame {index + 1}"
+            folder = self._batch_run.destination if self._batch_run is not None else None
+            reason, file = failure_reason(request, error, folder)
+            ref = (Path(request.path), request.frame_index) if request is not None else (Path(file or "."), 0)
+            self._batch_ready[index] = ("failed", name, reason, file, self._batch_numbers.get(index), ref)
+            self._batch_folder_lost()
         else:
             self._batch_ready[index] = outcome
         self._batch_fold_next()
         self._batch_fill()
         self._batch_check_done()
+
+    def _batch_folder_lost(self) -> None:
+        """A frame failed: when the folder takes no file any more (disk full, a drive that went away), every
+        further frame would fail the same way after being reduced — the batch ends here and says why."""
+        run = self._batch_run
+        if run is None or self._batch_map_only or run.write_error or self._batch_stopping:
+            return
+        error = cannot_write(run.destination)
+        if error is not None:
+            run.write_error = error
+            self.cancel_batch()
 
     def _batch_fold_next(self) -> None:
         """Fold the outcomes that are next in frame order (fits off the GUI thread, one at a time)."""
@@ -306,7 +396,9 @@ class BatchRunMixin:
             self._batch_next_fold += 1
             if isinstance(item, tuple):
                 if item[0] == "failed":
-                    run.failures.append(item[1])
+                    run.fail(*item[1:4])
+                    self.view_model.failed_batch_preview(run, item[1], item[4], item[5], item[2])
+                    self._series_fit_changed()
                 continue
             if run.fit_table is None:
                 self.view_model.fold_outcome(run, item)
@@ -320,6 +412,7 @@ class BatchRunMixin:
             )
 
     def _batch_folded(self, outcome, *, later: bool = False) -> None:
+        self._series_fit_changed()
         if self._batch_live and outcome.live_row is not None:
             self._series_rows.append(outcome.live_row)
         if later:
@@ -329,7 +422,10 @@ class BatchRunMixin:
             self._batch_check_done()
 
     def _batch_fold_failed(self, outcome, message: str) -> None:
-        self._batch_run.failures.append(f"{outcome.label} ({message})")
+        self._batch_run.fail(outcome.label, message)
+        ref = (Path(outcome.metadata.get("source_file") or "."), outcome.metadata.get("frame_index", 0))
+        self.view_model.failed_batch_preview(self._batch_run, outcome.label, outcome.number, ref, message)
+        self._series_fit_changed()
         self._batch_folding = False
         self._batch_fold_next()
         self._batch_fill()
@@ -342,244 +438,4 @@ class BatchRunMixin:
             return
         self._finish_batch()
 
-    def _finish_batch(self) -> None:
-        self._batch_timer.stop()
-        if self._batch_workers is not None:
-            self._batch_workers.shutdown(wait=False)
-            self._batch_workers = None
-        run = self._batch_run
-        destination = run.destination
-        done = len(run.frames)
-        if done and not self._batch_map_only:
-            try:
-                self.view_model.finish_batch(run)
-            except (OSError, ValueError) as exc:
-                run.failures.append(f"tables ({exc})")
-        self.batch_button.setEnabled(True)
-        self.export_all_button.setEnabled(True)
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.setVisible(self.tasks.is_busy())
-        self.cancel_button.hide()
-        seconds = time.monotonic() - self._batch_started
-        live = self._batch_live
-        if self._batch_map_only:
-            self._batch_live = False
-            self._series_finished(list(run.failures))
-            self._batch_panel_finish(done, seconds, live=False)
-            self._batch_map_only = False
-            if done and not run.failures and not self._batch_stopping:
-                self.batch_panel.hide()  # the map says it (with a toast and the status line): its room goes to the map
-            return
-        level = "warning" if run.failures else "ok"
-        values = dict(done=done, total=self._batch_total, folder=destination, seconds=f"{seconds:.0f}")
-        text = (trf("Exported {done}/{total} frames to {folder} in {seconds} s; failed: {names}",
-                    names=", ".join(run.failures[:5]), **values) if run.failures else
-                trf("Exported {done}/{total} frames to {folder} in {seconds} s", **values))
-        if level == "ok":
-            self.notify_written(text, destination)
-        else:
-            self._status(text, level)
-        self._batch_live_finish()
-        self._batch_panel_finish(done, seconds, live=live)
-        then, self._batch_then = self._batch_then, None
-        if then is not None and done:
-            try:
-                then(destination / FOLDERS["fit_input"] if run.choices.fit_input else destination)
-            except (RuntimeError, ValueError, OSError) as exc:
-                self._status(trf("Could not open the series in Fitting: {error}", error=exc), "error")
-
-    # -- the panel -----------------------------------------------------------------------
-
-    def _batch_panel_title(self) -> None:
-        panel, run = self.batch_panel, self._batch_run
-        if self._batch_map_only:
-            panel.title_label.setText(tr("Series map: {curve}").format(curve=self._series_curve_name()))
-            panel.title_label.setToolTip("")
-        else:
-            panel.title_label.setText(tr("Batch Export → {folder}").format(folder=run.destination.name))
-            panel.title_label.setToolTip(str(run.destination))
-
-    def _batch_language(self) -> None:
-        """After a switch of the interface language: the panel of the batch running, or of the one that ended."""
-        ended = getattr(self, "_batch_ended", None)
-        if self.batch_running() and self._batch_run is not None:
-            self._batch_panel_title()
-            self._batch_panel_update(force=True)
-        elif ended is not None and self._batch_run is ended[0] and not self.batch_panel.isHidden():
-            self._batch_panel_finish(*ended[1:3], live=ended[3], map_only=ended[4])
-
-    def _batch_panel_start(self) -> None:
-        panel, run = self.batch_panel, self._batch_run
-        self._batch_panel_title()
-        with QSignalBlocker(panel.at_once_combo):
-            panel.at_once_combo.clear()
-            for count in range(1, self._batch_capacity + 1):
-                panel.at_once_combo.addItem(
-                    tr("1 frame at a time") if count == 1 else tr("{n} frames at once").format(n=count), count)
-            panel.at_once_combo.setCurrentIndex(self._batch_capacity - 1)
-        panel.at_once_combo.setVisible(self._batch_capacity > 1)
-        with QSignalBlocker(panel.pause_button):
-            panel.pause_button.setChecked(False)
-        panel.pause_button.setText(tr("Pause"))
-        for button in (panel.pause_button, panel.stop_button):
-            button.setEnabled(True)
-            button.show()
-        panel.open_button.hide()
-        panel.close_button.hide()
-        panel.fit_label.setVisible(False)
-        panel.fit_label.setText("")
-        panel.detail_label.show()
-        panel.follow_check.setVisible(bool(run.live_key) and self._batch_total > 1)
-        panel.bar.setRange(0, max(1, self._batch_total))
-        panel.bar.setValue(0)
-        panel.show()
-
-    def _batch_panel_update(self, *, force: bool = False) -> None:
-        run = self._batch_run
-        if run is None or not self._batch_timer.isActive():
-            return
-        now = time.monotonic()
-        if not force and now - self._batch_text_time < TEXT_S:
-            return
-        self._batch_text_time = now
-        panel = self.batch_panel
-        done = len(run.frames) + len(run.failures)
-        total = max(self._batch_total, done)
-        elapsed = now - self._batch_started
-        panel.bar.setRange(0, max(1, total))
-        panel.bar.setValue(done)
-        self.progress_bar.setRange(0, max(1, total))
-        self.progress_bar.setValue(done)
-        panel.elapsed_label.setText(_clock(elapsed))
-        running = sorted(self._batch_inflight)
-        per_frame = elapsed / done if done else None
-        if self._batch_stopping:
-            wait = f" ({tr('a frame takes about {s} s').format(s=f'{per_frame * self._batch_at_once:.0f}')})" if per_frame else ""
-            now_text = tr("Stopping — waiting for the {n} frame(s) being reduced").format(n=len(running)) + wait + " …"
-        elif self._batch_paused:
-            now_text = (tr("Paused — the {n} frame(s) being reduced finish first").format(n=len(running))
-                        if running else tr("Paused."))
-        elif len(running) == 1:
-            index = running[0]
-            now_text = tr("Frame {i} of {total}: {name}").format(
-                i=index + 1, total=total, name=_frame_name(self._batch_inflight[index][0]))
-        elif running:
-            now_text = tr("Frames {first}–{last} of {total} ({n} at once): {name} …").format(
-                first=running[0] + 1, last=running[-1] + 1, total=total, n=min(len(running), self._batch_at_once),
-                name=_frame_name(self._batch_inflight[running[0]][0]))
-        else:
-            now_text = tr("Writing …")
-        panel.now_label.setText(now_text)
-        parts = [tr("{done} of {total} done").format(done=done, total=total)]
-        if run.failures:
-            parts.append(tr("{n} failed").format(n=len(run.failures)))
-        if per_frame is not None:
-            parts.append(tr("{s} s per frame").format(s=f"{per_frame:.1f}"))
-            if total > done and not self._batch_paused:
-                parts.append(eta_text(per_frame * (total - done)))
-        if self._batch_note:
-            parts.append(self._batch_note)
-        panel.detail_label.setText(" · ".join(parts))
-        if run.last_fit:
-            panel.fit_label.show()
-            panel.fit_label.setText(tr("Latest fit ({frame}): {fit}").format(frame=run.frames[-1] if run.frames else "", fit=run.last_fit))
-        name = _frame_name(self._batch_inflight[running[0]][0]) if running else ""
-        text = trf("Batch {done}/{total}: {name} …", done=done, total=total, name=name) if name else             trf("Batch {done}/{total}", done=done, total=total)
-        if per_frame is not None and total > done:
-            text += "  " + eta_text(per_frame * (total - done))
-        self._status(text)
-
-    def _batch_panel_finish(self, done: int, seconds: float, *, live: bool = False,
-                            map_only: Optional[bool] = None) -> None:
-        panel, run = self.batch_panel, self._batch_run
-        stopped = self._batch_stopping
-        map_only = self._batch_map_only if map_only is None else map_only
-        self._batch_ended = (run, done, seconds, live, map_only)  # said again after a language switch
-        if map_only:
-            panel.title_label.setText(tr("Series map stopped") if stopped else tr("Series map done"))
-            text = tr("{done} frames in {time}").format(done=done, time=_clock(seconds))
-        else:
-            panel.title_label.setText(tr("Batch Export stopped") if stopped else tr("Batch Export done"))
-            text = tr("{done} frames in {time} → {folder}").format(done=done, time=_clock(seconds), folder=run.destination)
-        if run.failures:
-            text += "; " + tr("{n} failed: {names}").format(n=len(run.failures), names=", ".join(run.failures[:3]))
-        panel.now_label.setText(text)
-        panel.detail_label.setText(
-            tr("The map of every frame is in the Series tab (Export ▸ Map as CSV Table…).") if live else "")
-        panel.detail_label.setVisible(live)
-        panel.fit_label.setVisible(bool(run.last_fit))
-        panel.bar.setRange(0, max(1, done))
-        panel.bar.setValue(done)
-        panel.elapsed_label.setText(_clock(seconds))
-        for widget in (panel.pause_button, panel.stop_button, panel.at_once_combo, panel.follow_check):
-            widget.hide()
-        panel.open_button.setVisible(not map_only)
-        panel.close_button.show()
-
-    def _batch_open_folder(self) -> None:
-        if self._batch_run is not None:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._batch_run.destination)))
-
-    # -- live in the Series tab ------------------------------------------------------------
-
-    def _batch_live_key(self) -> Optional[str]:
-        analysis = self.view_model.state.analysis
-        reduction = analysis.reduction if analysis is not None else None
-        keys = [curve.key for curve in (reduction.curves if reduction is not None else ()) if not curve.is_empty]
-        current = self.series_curve_combo.currentData()
-        if current in keys:
-            return current
-        wanted = LIVE_CURVE.get(getattr(analysis, "kind", None), "radial")
-        return wanted if wanted in keys else (keys[0] if keys else None)
-
-    def _batch_live_start(self, key: Optional[str]) -> None:
-        self._batch_live = bool(key) and (self._batch_total > 1 or self._batch_map_only)
-        if not self._batch_live:
-            return
-        self._series_rows, self._series_failures = [], []
-        self._series_keep_curve(key)  # the key and the name the map goes by (``bindings/series.py``)
-        self._series_map = None
-        self._clear_stages()
-        self._series_row = 0
-        self._batch_last_draw, self._batch_rows_drawn = 0.0, 0
-        index = self.series_curve_combo.findData(key)
-        if index >= 0:
-            with QSignalBlocker(self.series_curve_combo):
-                self.series_curve_combo.setCurrentIndex(index)
-        with QSignalBlocker(self.batch_panel.follow_check):
-            self.batch_panel.follow_check.setChecked(True)
-        if self._batch_map_only:
-            self._series_say("Reducing {n} frames: each appears here as soon as it is done.", n=self._batch_total)
-        else:
-            self._series_say("Batch Export: every frame appears here as soon as it is done.")
-        self.show_right("series")
-
-    def _batch_live_redraw(self, *, force: bool = False) -> None:
-        if not self._batch_live or not self._series_rows:
-            return
-        if not force and len(self._series_rows) == self._batch_rows_drawn:
-            return
-        now = time.monotonic()
-        if not force and now - self._batch_last_draw < REDRAW_S:
-            return
-        self._batch_last_draw, self._batch_rows_drawn = now, len(self._series_rows)
-        follow = self.batch_panel.follow_check.isChecked()
-        if follow:
-            self._series_row = len(self._series_rows) - 1
-        had_map = self._series_map is not None
-        self._show_series_map(keep_view=not follow and had_map, keep_q=had_map)
-
-    def _batch_unfollow(self) -> None:
-        if self._batch_live and self.batch_running() and self.batch_panel.follow_check.isChecked():
-            with QSignalBlocker(self.batch_panel.follow_check):
-                self.batch_panel.follow_check.setChecked(False)
-
-    def _batch_live_finish(self) -> None:
-        if self._batch_live:
-            self._batch_live_redraw(force=True)
-            self._find_stages()
-        self._batch_live = False
-        self.series_build_button.setEnabled(self.series_curve_combo.count() > 0)
-
-
-__all__ = ["BatchRunMixin", "eta_text"]
+__all__ = ["BatchRunMixin", "LIVE_CURVE", "POLL_MS", "REDRAW_S", "TEXT_S", "eta_text"]

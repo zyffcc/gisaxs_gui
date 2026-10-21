@@ -50,6 +50,9 @@ class AnalysisRequest:
     beam_center_shape: Optional[tuple] = None
     """``(rows, columns)`` of the frame ``beam_center`` was set on: it is used only on frames of that
     shape (another detector gets its header or profile centre). ``None``: on every frame."""
+    series_cut: Optional[dict] = field(default=None, hash=False)
+    """The cut of a series this frame is cut at (the view model's ``series_cut()``: the automatic cut of one frame,
+    held for every frame of a series run); the reduction's record then says so (``held_cut``). ``None``: its own."""
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:

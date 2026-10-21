@@ -37,6 +37,9 @@ UNSUPPORTED_CURVE = ("Fitting reads .dat and .txt curves (q, I, σ). For a cut f
                      "open its _fit_input.dat file.")
 """Why a file of another kind (Analyze's .csv tables among them) is not opened as a curve. One fixed sentence —
 the page names the file and says it in the interface language."""
+CURVE_NOT_FOUND = "Curve file was not found: {path}"
+"""A curve that is not there (any more) when it is read. A form: the page says it in the interface language,
+the path as it is."""
 DEFAULT_CURVE_PATTERN = "*_fit_input.dat"
 
 

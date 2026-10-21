@@ -17,7 +17,7 @@ from PyQt5.QtGui import QDesktopServices, QKeySequence, QTextDocument
 from PyQt5.QtWidgets import QAction, QActionGroup, QApplication, QMainWindow, QMenu, QMessageBox, QWidget
 
 from .assets import app_colored_logo_pixmap, app_icon
-from .i18n import LANGUAGES, tr
+from .i18n import LANGUAGES, current_language, tr
 from .layout_metrics import available_geometry
 from .navigation import NavigationItem
 from .recent_items import recent_label
@@ -27,6 +27,8 @@ from src.gimap.shared.version import APP_NAME, __version__
 APP_VERSION = __version__  # written once, in shared/version.py
 GITHUB_URL = "https://github.com/zyffcc/gisaxs_gui"
 USER_MANUAL = Path(__file__).resolve().parents[4] / "docs" / "User_Manual.md"
+USER_MANUAL_ZH = USER_MANUAL.with_name("User_Manual_zh.md")
+"""The Chinese edition: Help ▸ User Manual opens it when the interface is in Chinese."""
 
 Command = Optional[Callable[[], object]]
 
@@ -130,7 +132,7 @@ class MainMenuBar(QObject):
     def _build_file(self) -> None:
         c, menu = self.commands, self.file_menu
         self._add(menu, "open_files", "&Open Data…", c.open_files,
-                  shortcut=QKeySequence.Open, tip="Open detector frames (CBF, NXS, TIFF, EDF) in Analyze")
+                  shortcut=QKeySequence.Open, tip="Open detector frames (CBF, NeXus/HDF5, TIFF, EDF) in Analyze")
         if c.open_files is not None and c.open_files_label is not None:
             menu.aboutToShow.connect(self._sync_open_files)
         self._add(menu, "open_folder", "Open &Folder…", c.open_folder,
@@ -436,20 +438,33 @@ class ToolWindows(QObject):
         return False
 
 
+def manual_for_language(language: str) -> Path:
+    """The edition of the manual for an interface language: Chinese when there is one, else English."""
+    return USER_MANUAL_ZH if language == "zh" and USER_MANUAL_ZH.is_file() else USER_MANUAL
+
+
 def open_user_manual(parent: QWidget | None = None) -> None:
-    """Render the Markdown manual to HTML and open it in the default browser."""
-    if not USER_MANUAL.is_file():
+    """Render the Markdown manual to HTML and open it in the default browser.
+
+    The page is written to the temporary folder; ``<base>`` points at ``docs/`` so that the screenshots,
+    linked as ``manual_images/...`` in the manual, are found there."""
+    manual = manual_for_language(current_language())
+    if not manual.is_file():
         QMessageBox.warning(parent, tr("User Manual"),
-                            tr("The user manual was not found:\n{path}").format(path=USER_MANUAL))
+                            tr("The user manual was not found:\n{path}").format(path=manual))
         return
     document = QTextDocument()
-    document.setMarkdown(USER_MANUAL.read_text(encoding="utf-8"))
-    html_path = Path(tempfile.gettempdir()) / "GIMaP_User_Manual.html"
+    document.setMarkdown(manual.read_text(encoding="utf-8"))
+    html_path = Path(tempfile.gettempdir()) / f"GIMaP_{manual.stem}.html"
+    base = QUrl.fromLocalFile(str(manual.parent) + "/").toString()
     html_path.write_text(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>GIMaP User Manual</title>"
+        f"<base href=\"{base}\">"
         "<style>body{max-width:980px;margin:32px auto;padding:0 24px;line-height:1.58;"
-        "font-family:'Segoe UI',sans-serif;color:#1f2933}code,pre{background:#f4f6f8;"
-        "border-radius:4px}pre{padding:12px;overflow-x:auto}a{color:#0b63ce}</style>"
+        "font-family:'Segoe UI','Microsoft YaHei',sans-serif;color:#1f2933}code,pre{background:#f4f6f8;"
+        "border-radius:4px}pre{padding:12px;overflow-x:auto}a{color:#0b63ce}"
+        "img{max-width:100%;height:auto;border:1px solid #d9dee4;border-radius:6px}"
+        "table{border-collapse:collapse}td,th{border:1px solid #d9dee4;padding:4px 8px}</style>"
         f"</head><body>{document.toHtml()}</body></html>",
         encoding="utf-8",
     )
@@ -486,6 +501,7 @@ __all__ = [
     "TOOL_GEOMETRY_KEY",
     "ToolWindows",
     "clamp_to_screen",
+    "manual_for_language",
     "open_user_manual",
     "show_about",
 ]

@@ -5,6 +5,10 @@ images (or open them), pick a task card — crystals and orientation (GIWAXS),
 nanostructure (GISAXS), an in-situ or batch series, detector calibration — or
 describe the data and the question for the AI.  The page only emits requests;
 the main window decides which workspace opens.
+
+A series is a folder of frames or one file that holds them all: its card opens a folder, and has both ways
+in as links (``TASK_LINKS``); either ends in Analyze on the Series tab. A link always asks for its folder
+or files; the card does so only while Analyze lists no frame.
 """
 
 from __future__ import annotations
@@ -39,6 +43,15 @@ TASKS = (
     ("calibrate", "Calibrate the detector", "Calibration",
      "Distance and beam centre from an image of a standard (AgBh, LaB6, CeO2, LaB6 + CeO2)."),
 )
+TASK_LINKS = {
+    "series": (
+        ("series_folder", "Open Folder…", "The frames of a folder: one file per frame, or the module files of one scan"),
+        ("series_files", "Open Files…", "Chosen frames — or one NeXus / HDF5 file that holds the whole series"),
+    ),
+}
+"""Ways into a task beside a click on its card: ``(the request, the link's text, its tooltip)``. A link has
+a request of its own, never the card's: its “…” promises a dialog every time, while the card may lead
+straight to what is open already."""
 MAX_WIDTH = 1040
 
 
@@ -56,11 +69,12 @@ def _label(text: str, parent: QWidget, *, role: str = "", size: float = 0.0, bol
 
 
 class TaskCard(QFrame):
-    """A clickable card (``card`` look of the theme, ``homeTask`` for its hover state)."""
+    """A clickable card (``card`` look of the theme, ``homeTask`` for its hover state). ``links``: ways in
+    under its text, each a link that asks for its own request (``clicked`` with that key)."""
 
     clicked = pyqtSignal(str)
 
-    def __init__(self, key: str, title: str, tag: str, text: str, parent: Optional[QWidget] = None):
+    def __init__(self, key: str, title: str, tag: str, text: str, parent: Optional[QWidget] = None, *, links=()):
         super().__init__(parent)
         self.key = key
         self.setObjectName(f"homeTask_{key}")
@@ -75,6 +89,23 @@ class TaskCard(QFrame):
         layout.addWidget(_label(tag, self, role="muted"))
         layout.addWidget(_label(title, self, size=1.15, bold=True))
         layout.addWidget(_label(text, self, role="muted"))
+        self.link_buttons: list[QPushButton] = []
+        if links:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 2, 0, 0)
+            row.setSpacing(14)
+            for request, link_text, tip in links:
+                button = QPushButton(link_text, self)
+                button.setObjectName(f"homeTaskLink_{request}")
+                button.setFlat(True)
+                button.setCursor(Qt.PointingHandCursor)
+                button.setToolTip(tip)
+                set_role(button, "link")
+                button.clicked.connect(lambda _checked=False, request=request: self.clicked.emit(request))
+                row.addWidget(button)
+                self.link_buttons.append(button)
+            row.addStretch(1)
+            layout.addLayout(row)
         layout.addStretch(1)
 
     def mouseReleaseEvent(self, event) -> None:
@@ -162,7 +193,8 @@ class HomePage(QWidget):
         drop.setContentsMargins(20, 18, 20, 18)
         for text, role, size, bold in (
             ("Drag detector images or a folder here", "", 1.2, True),
-            ("CBF, TIFF, EDF, NeXus (multi-module series are stitched automatically)", "muted", 0.0, False),
+            ("CBF, TIFF, EDF, NeXus / HDF5 — one file per frame, or a whole series in one file; the module files of a "
+             "scan are stitched", "muted", 0.0, False),
         ):
             label = _label(text, self.drop_zone, role=role, size=size, bold=bold)
             label.setAlignment(Qt.AlignHCenter)  # centred text in a full-width label: nothing is clipped
@@ -171,7 +203,7 @@ class HomePage(QWidget):
         buttons.addStretch(1)
         self.open_button = QPushButton("Open Files…", self.drop_zone)
         self.open_button.setObjectName("homeOpenButton")
-        self.open_button.setToolTip("Detector frames (CBF, NXS, TIFF, EDF), opened in Analyze — Ctrl+O")
+        self.open_button.setToolTip("Detector frames (CBF, NeXus/HDF5, TIFF, EDF), opened in Analyze — Ctrl+O")
         self.folder_button = QPushButton("Open Folder…", self.drop_zone)
         self.folder_button.setToolTip("Every detector frame of a folder, opened in Analyze")
         self.batch_button = QPushButton("Batch Export…", self.drop_zone)
@@ -207,7 +239,7 @@ class HomePage(QWidget):
         grid.setSpacing(12)
         self.cards: dict[str, TaskCard] = {}
         for index, (key, title, tag, text) in enumerate(TASKS):
-            card = TaskCard(key, title, tag, text, column_host)
+            card = TaskCard(key, title, tag, text, column_host, links=TASK_LINKS.get(key, ()))
             card.clicked.connect(self.taskRequested)
             grid.addWidget(card, index // 2, index % 2)
             self.cards[key] = card
@@ -279,4 +311,4 @@ class HomePage(QWidget):
         self.askRequested.emit(self.ask_edit.text().strip())
 
 
-__all__ = ["HomePage", "TASKS", "TaskCard"]
+__all__ = ["HomePage", "TASKS", "TASK_LINKS", "TaskCard"]

@@ -153,3 +153,30 @@ def test_v5_batch_reader_accepts_the_pixels_column(tmp_path: Path) -> None:
 
     q, intensity, sigma = read_curve(_fit_input(tmp_path, OBSERVATION))
     assert q.size == 20 and sigma == pytest.approx(np.full(20, 0.9))
+
+
+def test_the_halves_of_a_fit_travel_in_the_observation_and_leave_the_counting_contract_alone(tmp_path: Path) -> None:
+    """Analyze names what a fit is to take of the signed cut (``"halves"``: mean / positive / negative) in the
+    ``# observation:`` record; the rows stay every point of both halves. Fitting ▸ In-situ series starts from the
+    key; the V5 counting contract reads its own keys and is not disturbed by one more."""
+    observation = {**OBSERVATION, "halves": "negative"}
+    path = _fit_input(tmp_path, observation)
+    curve = LocalCurveRepository().load(LoadCurveRequest(path=path, q_source_unit="angstrom"))
+    assert curve.observation == observation and curve.observation["halves"] == "negative"
+    table = np.loadtxt(path)
+    assert table.shape == (20, 4) and (table[:, 0] < 0).sum() == (table[:, 0] > 0).sum() == 10  # both halves, signed
+    data = {"q": curve.q, "I": curve.intensity, "err": curve.error, "pixels": curve.pixels,
+            "observation": curve.observation, "q_source_unit": "angstrom"}
+    owner = SimpleNamespace()
+    native = WorkflowV5BindingMixin._native_curve_input(owner, data, {"relative_noise": 0.1, "absolute_noise": 0.0})
+    assert native is not None and owner._workflow_observation_metadata["source"] == "native_cbf_columns"
+    assert "halves" not in owner._workflow_observation_metadata  # a choice of the fit, not of the counting
+
+    from src.gimap.features.analyze.application import fit_input_observation
+    from src.gimap.features.analyze.domain import Corrections
+
+    frame = SimpleNamespace(kind="gisaxs", corrections=Corrections(gap_guard_px=3), path=Path("frame.cbf"), metadata={},
+                            intensity_scale=None, frame_total=1)
+    assert fit_input_observation(frame) == OBSERVATION  # nothing chosen: no key, Fitting decides
+    assert fit_input_observation(frame, "negative") == observation
+    assert fit_input_observation(frame, "both_abs") == OBSERVATION  # the display choice is no choice of a fit

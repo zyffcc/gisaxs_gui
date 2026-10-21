@@ -3,7 +3,8 @@
 The record holds every setting that determines qz and the ROI position (series and θ, energy,
 distance, pixel size, beam centre, direction), the ROI radius and aggregation, where each geometry
 value came from, and the formulas. Values are the ones the extraction used, in the units named by
-their keys.
+their keys. ``source_layout`` says what the series was stored in: every file that was read and what
+the reader said about them (frames left out of a set of module files of unequal length …).
 
 Positions on the detector (the beam centre here, the ROI centres in the CSV) are the extraction's own
 numbers, pixel-centre indices, as in every earlier export; ``center_convention`` names that convention and
@@ -80,6 +81,17 @@ def xrr_export_record(
     }
     if points:
         record["theta_deg"] = {"first": points[0].theta_deg, "last": points[-1].theta_deg}
+    layout = getattr(request.result, "layout", None)  # a result without its stored layout (made before it was kept)
+    if layout is not None:
+        # What the series was stored in when it was extracted. ``frames`` is what the reader could use:
+        # with module files of unequal length that is fewer than the scan has, and ``warnings`` says so.
+        record["source_layout"] = {
+            "summary": layout.summary_text(),
+            "sources": layout.files,
+            "frames": layout.frames,
+            "files": list(layout.members),
+            "warnings": list(layout.warning_texts()),
+        }
     settings = request.settings
     if settings is not None:
         series, geometry, extraction = settings.series, settings.geometry, settings.extraction

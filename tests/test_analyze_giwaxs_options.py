@@ -53,6 +53,9 @@ class FakeFrames:
     def frame_count(self, path) -> int:
         return 1
 
+    def describe(self, path):
+        return None  # an array in memory: no NeXus layout
+
 
 def test_subtract_background_scales_and_joins_the_valid_pixels() -> None:
     frame, background = _frame(10.0), _frame(2.0)

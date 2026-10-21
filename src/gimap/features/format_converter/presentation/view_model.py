@@ -16,6 +16,7 @@ from ..application import (
     ConversionResult,
     ConvertFile,
     EstimateOutput,
+    GroupSources,
     InspectSource,
     InputSource,
     LoadPreview,
@@ -64,6 +65,7 @@ class FormatConverterViewModel:
         )
         self.sources: list[InputSource] = []
         self._inspect_source = InspectSource(repository)
+        self._group_sources = GroupSources(repository)
         self._normalize_path = NormalizePath(repository)
         self._select_dataset = SelectDataset(repository)
         self._scan_folder = ScanFolder(repository)
@@ -75,9 +77,8 @@ class FormatConverterViewModel:
         existing = {os.path.normcase(source.path) for source in self.sources}
         added = 0
         errors: list[str] = []
-        for raw_path in paths:
-            if not raw_path:
-                continue
+        # The module files of one set, or a master with its data files, are one input however many were chosen.
+        for raw_path in self._group_sources([path for path in paths if path]):
             try:
                 normalized_path = self._normalize_path(raw_path)
                 source = self._inspect_source(normalized_path)
@@ -204,7 +205,8 @@ class FormatConverterViewModel:
         image_count, estimated_bytes = self.estimate_output(options)
         type_counts: dict[str, int] = {}
         for source in selected_sources:
-            type_counts[source.file_type] = type_counts.get(source.file_type, 0) + 1
+            files = max(1, len(source.members))  # a module set, a master with its data files: several
+            type_counts[source.file_type] = type_counts.get(source.file_type, 0) + files
         input_summary = ", ".join(
             f"{count} {kind} file(s)"
             for kind, count in sorted(type_counts.items())

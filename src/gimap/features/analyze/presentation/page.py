@@ -17,8 +17,10 @@ from ..application import GISAXS, FrameAnalysis
 from .bindings.batch_export import BatchExportMixin
 from .bindings.batch_watch import BatchWatchMixin
 from .bindings.beam_center import BeamCenterMixin
+from .bindings.data_step import NOTHING_FOUND, DataStepMixin
 from .bindings.display import VIEW_CAKE, DisplayMixin, cake_title
 from .bindings.file_list import FileListMixin
+from .bindings.frame_import import FrameImportMixin
 from .bindings.frame_checks import FrameChecksMixin
 from .bindings.incidence import IncidenceMixin
 from .bindings.options import OptionsMixin
@@ -35,10 +37,15 @@ from .bindings.batch_run import BatchRunMixin
 from .bindings.session_memory import SessionMemoryMixin
 from .bindings.undo import UndoMixin
 from .bindings.workspace import WorkspaceMixin
+from .source_texts import FILE_FILTER, FORMATS
 from .view_model import AnalyzeViewModel
-from .views.analyze_page_view import FILE_FILTER, FIT_SIDE_ITEMS, NO_FRAME_TEXT, AnalyzePageView
+from .views.analyze_page_view import FIT_SIDE_ITEMS, NO_FRAME_TEXT, AnalyzePageView
 WATCH_INTERVAL_MS = 2000
 STATUS_LEVELS = ("info", "ok", "warning", "error")
+FIT_TIP_GIWAXS = ("Open the I(q) in Fitting (q in Å⁻¹). Fitting's models are particle form factors for the horizontal "
+                  "cut of a GISAXS frame: the peaks of a GIWAXS frame are fitted in Batch Export ▸ Peaks of the ring "
+                  "regions.")
+"""The tooltip of Send to Fitting on a GIWAXS frame (it has no halves to choose)."""
 
 
 class AnalyzePage(
@@ -47,7 +54,9 @@ class AnalyzePage(
     IncidenceMixin,
     ResultsStateMixin,
     WorkspaceMixin,
+    DataStepMixin,
     FileListMixin,
+    FrameImportMixin,
     RegionsMixin,
     RegionPickMixin,
     MaskToolsMixin,
@@ -69,6 +78,7 @@ class AnalyzePage(
     """Open → geometry → reduction → curves, with every step visible and adjustable."""
 
     analysisShown = pyqtSignal(object)
+    frameImportStarted = pyqtSignal()
     analysisFailed = pyqtSignal(str)
     filesCleared = pyqtSignal()
     """Emitted at the end of ``clear_files`` (the list is empty, nothing is shown)."""
@@ -111,7 +121,7 @@ class AnalyzePage(
         self._lower_profile = "azimuthal"
         self._watch_timer = QTimer(self)
         self._watch_timer.setInterval(WATCH_INTERVAL_MS)
-        self._watch_timer.timeout.connect(self.poll_watch)
+        self._watch_timer.timeout.connect(self._watch_tick)  # looks on its own thread (``bindings/batch_watch.py``)
         self.setup_ui(self)
         self.setAcceptDrops(True)
         self.calibrate_button.setEnabled(calibrate is not None)
@@ -141,6 +151,7 @@ class AnalyzePage(
         self._connect_masks()
         self._connect_incidence()
         self._connect_file_list()
+        self._connect_frame_import()
 
     # -- wiring ------------------------------------------------------------------------
 
@@ -216,7 +227,7 @@ class AnalyzePage(
         )
         if paths:
             self._remember(last_folder=str(Path(paths[0]).parent))
-            self.add_paths(paths)
+            self.import_paths(paths)
 
     def open_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
@@ -224,7 +235,7 @@ class AnalyzePage(
         )
         if folder:
             self._remember(last_folder=folder)
-            self.add_paths([folder])
+            self.import_paths([folder])
 
     def add_paths(self, paths, *, show_listed: bool = True) -> list[Path]:
         """List the frames of ``paths`` and show the first new one; returns the new ones only (folder
@@ -233,8 +244,10 @@ class AnalyzePage(
         ``show_listed=False`` leaves the frame and the step on screen as they are. While the automatic
         analysis works, new frames are only listed: it keeps the frame it works on."""
         added = self.view_model.add_paths(paths)
+        self._rows_regrouped()  # listed files that are one source now (a master arrived, a first module)
         if not added:
             listed = self.view_model.already_listed
+            self._rows_listed_again(listed)  # (a source may have grown or been completed since it was listed)
             if listed and show_listed:
                 if self.file_list.currentRow() not in listed and self._frame_kept():
                     return added  # the automatic analysis works on the frame shown
@@ -243,7 +256,7 @@ class AnalyzePage(
                     self.file_list.setCurrentRow(listed[0])
                 self._status(tr("Already open — showing it"), "info")
             elif not listed:
-                self._status(tr("No new detector frames (CBF, NXS, TIFF, EDF) found."), "warning")
+                self._status(trf(NOTHING_FOUND, formats=FORMATS), "warning")
             return added
         self._append_list_items(added)  # a Series map of the earlier list says so (``_series_list_grew``)
         if self._automatic_busy:  # listed, shown once the automatic analysis has ended
@@ -256,6 +269,7 @@ class AnalyzePage(
         self.file_list.setCurrentRow(first_new)
         self.refresh_batch_entry()
         self.remember_recent(paths)
+        self._say_found_below(paths, added)  # a scan folder whose frames are one level down
         return added
 
     def show_paths(self, paths) -> bool:
@@ -267,6 +281,7 @@ class AnalyzePage(
     def clear_files(self) -> None:
         """No frames any more (Analyze ▸ Clear, and before a project opens): every view as before the first
         file. An automatic analysis still working stops and its results are dropped with its files."""
+        self.cancel_frame_import(silent=True)
         self._close_geometry_editors()
         self._cancel_center_refinement()
         self._center_analysis_pending = False
@@ -278,7 +293,7 @@ class AnalyzePage(
             self.file_list.clear()
         self._failed = None
         self._empty_views(NO_FRAME_TEXT)
-        self.summary_label.setText(tr("Open or drop detector files (CBF, NXS, TIFF, EDF) to start"))
+        self.summary_label.setText(tr("Open or drop detector files (CBF, NeXus/HDF5, TIFF, EDF) to start"))
         self.file_chip.setText(tr("No data yet — open or drop detector frames"))
         self.file_chip.setToolTip("")
         self.file_meta.setText("")
@@ -287,6 +302,7 @@ class AnalyzePage(
         self._update_center_control()  # no frame: "Beam centre", disabled
         self._forget_incidence()  # nor the αi of the frame before
         self.fit_button.setEnabled(False)  # nothing to send to Fitting
+        self._sync_fit_side()  # (nor a GIWAXS I(q) to say anything about)
         self._reset_series()
         if not self.batch_running():  # the panel of a batch or map that ended: it was about the files cleared
             self.batch_panel.hide()
@@ -307,20 +323,25 @@ class AnalyzePage(
     def dropEvent(self, event) -> None:
         paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
         if paths:
-            self.add_paths(paths)
+            self.import_paths(paths)
             event.acceptProposedAction()
 
     def _file_selected(self, row: int) -> None:
         # Every way to show another file ends here (the list, PgUp/PgDown, folder watching, opening files).
-        if row != self.view_model.state.current_index and self._frame_kept():
+        if self._import_applying or (row != self.view_model.state.current_index and self._frame_kept()):
             return
         if self.view_model.select(row):
             path = self.view_model.current_path
+            indices = self.view_model.selected_frame_indices(path) if path is not None else ()
+            if len(indices):
+                self.view_model.set_frame(indices[0])
             if path is not None:
                 self._file_loading(path)
             self.run_analysis()
 
     def _frame_changed(self, value: int) -> None:
+        if not self._frame_is_available(int(value) - 1):
+            return
         if int(value) - 1 != self.view_model.state.frame_index and self._frame_kept():
             return
         self.view_model.set_frame(int(value) - 1)
@@ -329,6 +350,8 @@ class AnalyzePage(
     # -- analysis ------------------------------------------------------------------------
 
     def run_analysis(self) -> None:
+        if self._import_applying:
+            return
         self._invalidate_geometry_editors()
         self._cancel_center_refinement()
         self._observe_setup()
@@ -339,7 +362,7 @@ class AnalyzePage(
         self._update_center_control()
         self._started_at = time.perf_counter()
         self._failed = None  # what failed before is no longer what is asked for
-        self._status(trf("Analysing {name} …", name=request.path.name))
+        self._status(trf("Analysing {name} …", name=self.source_name(request.path)))
         self.tasks.submit(
             "analyze",
             lambda: self.view_model.analyze(request),
@@ -376,6 +399,7 @@ class AnalyzePage(
             self._show_curves(analysis)
         if analysis.kind == GISAXS and (previous is None or previous.kind != GISAXS):
             self._show_halves_on_plot()  # a GISAXS frame starts with the halves chosen for Fitting
+        self._sync_fit_side()  # (Send to Fitting's tooltip: a GISAXS cut or a GIWAXS I(q))
         self._update_center_control()
         self._sync_options(analysis.kind)
         self.fit_button.setEnabled(
@@ -395,6 +419,14 @@ class AnalyzePage(
             self._offer_last_setup()
         self._batch_when_ready(analysis)
 
+    def _analysis_failed(self, message: str, details: str) -> None:
+        """The frame asked for could not be analysed (``FrameChecksMixin._analysis_failed`` says why). An open
+        Batch Export dialog that waits for the frame on screen to be read again stops waiting: it names the cut of
+        the frame still shown, and Export can go."""
+        super()._analysis_failed(message, details)
+        if self._batch_dialog is not None:
+            self._batch_dialog.frame_shown(reading=False)
+
     def _analysis_status(self, analysis: FrameAnalysis, elapsed: float) -> tuple[str, str]:
         """``(text, level)`` of the status line for ``analysis`` on screen: a mode that disagrees with the frame,
         what the frame says, or its curves and the time they took."""
@@ -407,7 +439,7 @@ class AnalyzePage(
         if messages:
             return " · ".join(messages), "warning"
         curves = sum(not curve.is_empty for curve in analysis.reduction.curves)
-        name = analysis.path.name
+        name = self.source_name(analysis.path)
         if analysis.summed_frames:
             name += f" ({trf('sum of {n} frames', n=analysis.frame_total)})"
         return trf("{name}: {curves} curves in {seconds} s", name=name, curves=curves, seconds=f"{elapsed:.1f}"), "ok"
@@ -429,7 +461,7 @@ class AnalyzePage(
         self.incidence_spin.updateGeometry()  # “αi from profile” is as wide as the new language writes it
         self._sync_fit_side()  # Send to Fitting's tooltip names the half chosen
         self._refresh_mask_list()  # the drawn masks are described in words
-        self._show_file_position()  # “3 / 40” and its tooltip
+        self._file_list_language()  # the rows (“· 12 frames”), “3 / 40” and its tooltip
         self.refresh_batch_entry()  # “Batch Export 40 Frames…” (its first-time note is said once only)
         self._refresh_undo_buttons()  # “Undo: mode (Ctrl+Z)”
         self._batch_language()
@@ -478,16 +510,6 @@ class AnalyzePage(
         self._update_center_control()
         self._refresh_overlay()
 
-    def _update_frame_controls(self, analysis: Optional[FrameAnalysis]) -> None:
-        count = analysis.frame_count if analysis is not None else 1
-        visible = count > 1
-        self.frame_label.setVisible(visible)
-        self.frame_spin.setVisible(visible)
-        if analysis is not None:
-            with QSignalBlocker(self.frame_spin):
-                self.frame_spin.setMaximum(count)
-                self.frame_spin.setValue(analysis.frame_index + 1)
-
     def _horizontal_band_moved(self, low: float, high: float) -> None:
         self.view_model.set_horizontal_band(low, high)
         self.run_analysis()
@@ -509,9 +531,15 @@ class AnalyzePage(
         self.run_analysis()
 
     def _sync_fit_side(self) -> None:
+        """The halves menu of Send to Fitting, and its tooltip: what is sent — on a GIWAXS frame, also what Fitting
+        fits it with and where its peaks are fitted instead."""
         side = self.view_model.fit_side
         for key, action in self.fit_side_actions.items():
             action.setChecked(key == side)
+        analysis = self.view_model.state.analysis
+        if analysis is not None and analysis.reduction is not None and analysis.kind != GISAXS:
+            self.fit_button.setToolTip(tr(FIT_TIP_GIWAXS))
+            return
         half = dict(FIT_SIDE_ITEMS).get(side, "")
         shown = tr(half)  # the menu's words; lower-case inside the English sentence
         self.fit_button.setToolTip(trf(
@@ -525,6 +553,7 @@ class AnalyzePage(
 
     def dispose(self) -> None:
         """Stop background work and release the pyqtgraph views (call before deletion)."""
+        self._dispose_frame_import()
         self._close_geometry_editors()
         self._cancel_center_refinement()
         self.save_last_setup()
@@ -536,10 +565,11 @@ class AnalyzePage(
         self.tasks.cancel("cake")
         self.shape_layer.cancel_drawing()
         self.shutdown_batch()
+        self._reset_series_fit()
         self._dispose_undo()
         self._dispose_file_list()
         for view in (self.detector_view, self.top_plot, self.bottom_plot, self.series_map_view,
-                     self.series_profile_plot, self.series_trace_plot):
+                     self.series_profile_plot, self.series_trace_plot, self.series_fit_plot, self.series_fit_trend_plot):
             view.dispose()
 
     # -- status ------------------------------------------------------------------------

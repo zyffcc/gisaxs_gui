@@ -237,10 +237,77 @@ class TrainsetWorkspaceTests(unittest.TestCase):
                 handle.create_dataset("/entry/instrument/detector/pixel_mask", data=np.zeros_like(source, dtype=np.uint8))
                 handle.create_dataset("/entry/instrument/detector/x_pixel_size", data=[75e-6])
                 handle.create_dataset("/entry/instrument/detector/y_pixel_size", data=[75e-6])
+                # A P03 Lambda module (it has a module position): shown transposed and flipped, as in Analyze.
+                handle.create_dataset("/entry/instrument/detector/translation/distance", data=[0.0, 0.0, 0.0])
 
             loaded = load_scattering_image(path)
 
             np.testing.assert_array_equal(loaded, np.flipud(source[0].T))
+
+    def test_h5_reference_is_the_detector_image_not_its_pixel_mask(self) -> None:
+        """An .h5 goes through the shared reader: the image dataset is read, never the mask next to it."""
+        rng = np.random.default_rng(3)
+        with tempfile.TemporaryDirectory() as folder:
+            stack = rng.poisson(40, (12, 40, 96)).astype(np.uint32)
+            path = Path(folder) / "stack.h5"
+            with h5py.File(path, "w") as handle:
+                handle.create_dataset("/entry/instrument/detector/data", data=stack)
+                # As large as a frame and later in the alphabet: the old loader took it for the image.
+                handle.create_dataset("/entry/instrument/detector/pixel_mask", data=np.zeros((1, 40, 96), np.uint32))
+            np.testing.assert_array_equal(load_scattering_image(path), stack[0].astype(np.float32))
+
+            master = Path(folder) / "run_master.h5"  # Eiger style: numbered data, mask and flat field
+            counts = rng.poisson(5, (6, 64, 64)).astype(np.uint32) + 1
+            with h5py.File(master, "w") as handle:
+                handle.create_dataset("entry/data/data_000001", data=counts)
+                handle.create_dataset("entry/instrument/detector/detectorSpecific/pixel_mask", data=np.zeros((64, 64), np.uint32))
+                handle.create_dataset("entry/instrument/detector/detectorSpecific/flatfield", data=np.ones((64, 64), np.float32))
+            np.testing.assert_array_equal(load_scattering_image(master), counts[0].astype(np.float32))
+
+    def test_h5_and_nxs_of_the_same_file_give_the_same_image(self) -> None:
+        from src.gimap.features.trainset.infrastructure.adapters.detector_images import SHARED_READER_SUFFIXES
+        from src.gimap.shared.detector_io import HDF5_SUFFIXES
+
+        self.assertEqual(set(SHARED_READER_SUFFIXES), {".cbf", *HDF5_SUFFIXES})
+        with tempfile.TemporaryDirectory() as folder:
+            source = np.arange(3 * 40 * 48, dtype=np.float32).reshape(3, 40, 48)
+            images = []
+            for name in ("module.nxs", "module.h5", "module.hdf5"):
+                with h5py.File(Path(folder) / name, "w") as handle:
+                    handle.create_dataset("/entry/instrument/detector/data", data=source)
+                    handle.create_dataset("/entry/instrument/detector/translation/distance", data=[0.0, 0.0, 0.0])
+                images.append(load_scattering_image(Path(folder) / name))
+            np.testing.assert_array_equal(images[0], np.flipud(source[0].T))  # the P03 Lambda view
+            np.testing.assert_array_equal(images[1], images[0])
+            np.testing.assert_array_equal(images[2], images[0])
+
+    def test_h5_reference_reads_one_frame_not_the_whole_stack(self) -> None:
+        import tracemalloc
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "long.h5"
+            frame = np.arange(256 * 256, dtype=np.uint32).reshape(256, 256)
+            with h5py.File(path, "w") as handle:
+                data = handle.create_dataset("entry/data/data", shape=(64, 256, 256), dtype=np.uint32, chunks=(1, 256, 256))
+                for index in range(64):
+                    data[index] = frame + index
+            tracemalloc.start()
+            try:
+                image = load_scattering_image(path)
+                _current, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+            np.testing.assert_array_equal(image, frame.astype(np.float32))
+            stack_bytes = 64 * frame.nbytes
+            self.assertLess(peak, stack_bytes / 8)  # a few copies of one frame, not 64 frames
+
+    def test_an_h5_without_a_detector_image_says_so(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "table.h5"
+            with h5py.File(path, "w") as handle:
+                handle.create_dataset("results/values", data=np.arange(12.0))
+            with self.assertRaisesRegex(ValueError, "table.h5 holds no detector image"):
+                load_scattering_image(path)
 
 
     def test_reference_demo_exercises_dataset_contract(self) -> None:

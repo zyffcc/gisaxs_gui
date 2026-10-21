@@ -29,8 +29,6 @@ SHELL_ZH = {
     "Trainset Build\nSimulate training sets": "训练集构建\n模拟训练集",
     "Opened the project {name}": "已打开项目 {name}",
     "Saved the project {name}": "已保存项目 {name}",
-    "Nothing opened: drop detector frames (CBF, NXS, TIFF, EDF), a folder of them or a project (.gimap)":
-        "没有打开任何内容：请拖入探测器帧（CBF、NXS、TIFF、EDF）、包含它们的文件夹或项目（.gimap）",
     "Analyze mode: {mode} — choose Auto in the bar above to let GIMaP decide":
         "分析模式：{mode}——在上方栏中选择“自动”，让 GIMaP 自行判断",
     "AI analysis": "AI 分析",

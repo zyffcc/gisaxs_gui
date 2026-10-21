@@ -1,7 +1,7 @@
 """The Compare page: several series side by side (layout in ``views/compare_page_view.py``).
 
 Series come from Analyze (its Series map: Send to Compare there, or Add ▸ The Series Map of Analyze) or
-from curve files. Every change — a series added, removed or renamed, the q range, shape only, the end
+from curve files (a folder, a Batch Export of Analyze, chosen files: ``series_input``). Every change — a series added, removed or renamed, the q range, shape only, the end
 frames — compares again in the background (a second or two); the steps say where things stand.
 One user action gives one notice: adding a series (or opening a project) toasts when its comparison is
 ready; a change of the settings only updates the status line and the steps. Errors and written files
@@ -19,15 +19,15 @@ from typing import Callable, Optional
 import numpy as np
 from PyQt5.QtCore import QEvent, QPoint, QSignalBlocker, Qt, QTimer
 from PyQt5.QtGui import QKeySequence
-from PyQt5.QtWidgets import QFileDialog, QShortcut, QTableWidgetItem, QWidget
+from PyQt5.QtWidgets import QShortcut, QTableWidgetItem, QWidget
 
-from src.gimap.app.presentation.components import show_toast
+from src.gimap.app.presentation.components import Toast, show_toast, visible_toasts
 from src.gimap.app.presentation.i18n import tr
 from src.gimap.app.presentation.stage_text import axis_symbol
 from src.gimap.app.presentation.task_runner import TaskRunner
 from src.gimap.app.presentation.theme import theme_manager
 
-from ..application import CURVE_SUFFIXES, CompareService, CompareSettings, SeriesData
+from ..application import CompareService, CompareSettings, SeriesData
 from .errors import error_text
 from .render import CompareRenderMixin
 from .series_input import CompareInputMixin, same_series
@@ -186,24 +186,6 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
             return None
         return self.add_map(*found)
 
-    def add_folder(self, folder=None) -> Optional[SeriesData]:
-        folder = folder or QFileDialog.getExistingDirectory(self, tr("Folder of Curve Files"), self._remembered("folder") or "")
-        if not folder:
-            return None
-        self._remember(folder=str(folder))
-        data = self._read(lambda progress: self.service.series_from_folder(Path(folder), progress=progress))
-        return self.add_series(data) if data is not None else None
-
-    def add_files(self, paths=None) -> Optional[SeriesData]:
-        if paths is None:
-            filters = tr("Curve files") + " (" + " ".join(f"*{suffix}" for suffix in CURVE_SUFFIXES) + ")"
-            paths, _ = QFileDialog.getOpenFileNames(self, tr("Curve Files of One Series"), self._remembered("folder") or "", filters)
-        if not paths:
-            return None
-        self._remember(folder=str(Path(paths[0]).parent))
-        data = self._read(lambda progress: self.service.series_from_files([Path(path) for path in paths], progress=progress))
-        return self.add_series(data) if data is not None else None
-
     def remove_selected(self) -> None:
         """Remove Selected (or the Delete key in the Series table)."""
         rows = sorted({index.row() for index in self.series_table.selectedIndexes()}, reverse=True)
@@ -330,6 +312,7 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
             self.refresh()
             return
         self.comparison, self._compared, self._failure = comparison, list(series), None
+        self._close_error_notice()  # “Could not compare …” was about series that are compared now
         low, high = _outward(comparison.compared.min(), comparison.compared.max())
         self._show_range(low, high, limits=_outward(np.nanmin(comparison.q), np.nanmax(comparison.q)))
         self.refresh()
@@ -453,9 +436,19 @@ class ComparePage(CompareRenderMixin, CompareInputMixin, QWidget, ComparePageVie
             toast = level in ("warning", "error")
         if toast and self.window().isVisible():
             if action is None:
-                show_toast(self.window(), text, level=level)
+                shown = show_toast(self.window(), text, level=level)
             else:
-                show_toast(self.window(), text, level=level, action=action)
+                shown = show_toast(self.window(), text, level=level, action=action)
+            if level == "error":
+                self._error_notice = shown
+
+    _error_notice = None
+    """The notice of the last error (it stays until it is closed, or until a comparison succeeds)."""
+
+    def _close_error_notice(self) -> None:
+        notice, self._error_notice = self._error_notice, None
+        if isinstance(notice, Toast) and notice in visible_toasts(self.window()):
+            notice.close()
 
     def _remembered(self, key: str):
         stored = self.preferences.get(PREFERENCES_KEY, {}) if self.preferences is not None else {}

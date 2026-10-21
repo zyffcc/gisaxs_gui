@@ -27,6 +27,7 @@ from .views import GeometryCalibrationDialogView
 from .workers import CalibrationWorker, ImageLoaderWorker
 
 from .bindings.form_setup import FormSetupMixin
+from .bindings.frame_choice import FrameChoiceMixin
 from .bindings.image_loading import ImageLoadingMixin
 from .bindings.input_files import CalibrationFilesMixin
 from .bindings.calibration_run import CalibrationRunMixin
@@ -38,6 +39,7 @@ __all__ = ["CalibrationWorker", "GeometryCalibrationDialog", "ImageLoaderWorker"
 
 
 class GeometryCalibrationDialog(
+    FrameChoiceMixin,
     FormSetupMixin,
     ImageLoadingMixin,
     CalibrationFilesMixin,
@@ -104,4 +106,5 @@ class GeometryCalibrationDialog(
         self._bind_form()
         self._apply_dialog_style()
         self._connect_signals()
+        self._bind_frame_choice()
         self._set_running(False)

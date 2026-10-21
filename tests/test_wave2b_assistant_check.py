@@ -103,6 +103,29 @@ def test_the_halves_reason_of_the_domain_is_translated_by_its_form(zh) -> None:
     assert not re.search(r"[A-Za-z]{4,}", parts(note).replace("qy", "")), parts(note)
 
 
+def test_the_note_of_a_mean_with_a_hole_or_offset_halves_is_translated_whole(zh) -> None:
+    """The part that counts the points of a mean is a form too (``gisaxs_cut.HOLES_SENTENCE``): real cuts have
+    detector gaps, so without it their note stayed half English in the Results tab."""
+    from src.gimap.features.assistant.domain.gisaxs_cut import HOLES_SENTENCE
+
+    assert HOLES_SENTENCE in SENTENCES  # character for character: the form the note is written in
+    q = np.linspace(-0.2, 0.2, 401)
+    intensity = 100 * np.exp(-np.abs(q) / 0.05) + 5
+    pixels = np.full(q.shape, 10.0)
+    pixels[101:150] = 0  # a detector gap in the qy < 0 half
+    hole = fit_curve(q, intensity, np.sqrt(intensity), pixels, "mean")[3]
+    assert "49 from one half alone (49 of them inside that range" in hole
+    # The qy < 0 half begins later than the other (a beam stop that is not centred).
+    q = np.concatenate([np.linspace(-0.2, -0.05, 151), np.linspace(0.002, 0.2, 199)])
+    intensity = 100 * np.exp(-np.abs(q) / 0.05) + 5
+    offset = fit_curve(q, intensity, np.sqrt(intensity), np.full(q.shape, 10.0), "mean")[3]
+    assert "48 from one half alone" in offset
+    for note, single in ((hole, 49), (offset, 48)):
+        shown = parts(note)
+        assert not re.search(r"[A-Za-z]{4,}", shown.replace("qy", "")), shown
+        assert "151" in shown and str(single) in shown  # the counts as written
+
+
 def test_every_sentence_form_is_still_written_so_by_the_analysis() -> None:
     """A form whose wording changed in the domain or application would silently stay English: each fixed
     piece of every template must still be in what the code writes (f-strings joined as Python joins them)."""

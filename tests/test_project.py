@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 from src.gimap.features.fitting.application.single_fit import FitModel, new_component
 from tests.test_assistant_gui import _app
@@ -183,6 +183,8 @@ def test_a_project_does_not_open_while_a_series_runs(tmp_path, monkeypatch) -> N
             time.sleep(0.02)
     assert not series.running
     monkeypatch.undo()
+    # Frames fitted before the stop were not saved: a project asks about them first (here: Discard).
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *_args, **_kwargs: QMessageBox.Discard))
     assert menus.open_project(other) and menus.project_path == str(other)  # with the series done it opens
     window.close()
 

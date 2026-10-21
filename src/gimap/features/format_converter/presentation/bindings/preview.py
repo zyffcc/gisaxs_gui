@@ -13,6 +13,7 @@ from PyQt5.QtCore import QThread
 from PyQt5.QtGui import QPixmap
 
 from src.gimap.app.presentation.i18n import tr, trf
+from src.gimap.app.presentation.task_runner import WORKER_STACK_BYTES
 
 from ..display_formatting import _array_pixmap
 from ..workers import _PreviewWorker
@@ -68,6 +69,7 @@ class PreviewMixin:
             return
         self._pending_preview_source = None
         self._preview_thread = QThread(self)
+        self._preview_thread.setStackSize(WORKER_STACK_BYTES)
         self._preview_worker = _PreviewWorker(request_id, source, self.view_model)
         self._preview_worker.moveToThread(self._preview_thread)
         self._preview_thread.started.connect(self._preview_worker.run)

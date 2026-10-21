@@ -9,7 +9,13 @@ from typing import Any
 from .rules import compact_frame_summary
 
 
-SUPPORTED_SUFFIXES = {".nxs": "NXS", ".cbf": "CBF", ".tif": "TIFF", ".tiff": "TIFF"}
+SUPPORTED_SUFFIXES = {
+    ".nxs": "NXS", ".nx": "NXS", ".nx5": "NXS", ".h5": "HDF5", ".hdf5": "HDF5", ".hdf": "HDF5",
+    ".cbf": "CBF", ".tif": "TIFF", ".tiff": "TIFF",
+}
+HDF5_TYPES = frozenset({"NXS", "HDF5"})
+"""Input types read by the NeXus / HDF5 reader: they may hold many frames, several image datasets, and
+consist of several files (a set of detector-module files, a master with its data files)."""
 OUTPUT_SUFFIXES = {"TIFF": ".tif", "CBF": ".cbf", "HDF5": ".h5", "NumPy": ".npy"}
 
 
@@ -25,14 +31,30 @@ class InputSource:
     included: bool = True
     status: str = "Ready"
     error: str = ""
+    # What a NeXus / HDF5 source consists of (filled in by the inspection; empty for other formats).
+    layout: str = ""
+    """``single_frame`` | ``stack`` | ``module_set`` | ``chunked_master``."""
+    members: list[str] = field(default_factory=list)
+    """Every file of the source: the module files of a set, a master and its data files, else the file."""
+    summary: tuple[str, dict] | None = None
+    """``(template, values)``, e.g. ``("{modules} module files · {frames} frames · stitched", {...})``."""
+    warnings: list[tuple[str, dict]] = field(default_factory=list)
+    """``(template, values)`` sentences of the reader (a module file missing, unequal frame counts …)."""
+    stored_dtype: str = ""
+    scan_name: str = ""
+    """What a set of module files is called: the scan, without the module number (``path`` is its first file)."""
+
+    @property
+    def is_hdf5(self) -> bool:
+        return self.file_type in HDF5_TYPES
 
     @property
     def name(self) -> str:
-        return Path(self.path).name
+        return self.scan_name or Path(self.path).name
 
     @property
     def stem(self) -> str:
-        return Path(self.path).stem
+        return self.scan_name or Path(self.path).stem
 
     @property
     def selection_summary(self) -> str:

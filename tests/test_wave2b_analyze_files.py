@@ -164,8 +164,8 @@ def test_the_menu_of_a_file_and_a_right_press_that_shows_nothing_new(tmp_path: P
     # A right press on another file does not show it (no analysis); a left click does.
     page.show_step("data")
     _app().processEvents()
-    viewport = page.file_list.viewport()
-    centre = page.file_list.visualRect(page.file_list.model().index(2, 0)).center()
+    viewport = page.frame_list.viewport()
+    centre = page.frame_list.visualRect(page.frame_list.model().index(2, 0)).center()
     QTest.mousePress(viewport, Qt.RightButton, Qt.NoModifier, centre)
     QTest.mouseRelease(viewport, Qt.RightButton, Qt.NoModifier, centre)
     _done(page)
@@ -177,8 +177,8 @@ def test_the_menu_of_a_file_and_a_right_press_that_shows_nothing_new(tmp_path: P
     assert _names(page) == ["film_0.tif", "film_1.tif"] and page.view_model.state.analysis.path.name == "film_0.tif"
 
     # Delete on the list removes the file selected.
-    page.file_list.setFocus()
-    QTest.keyClick(page.file_list, Qt.Key_Delete)
+    page.frame_list.setFocus()
+    QTest.keyClick(page.frame_list, Qt.Key_Delete)
     _done(page)
     assert _names(page) == ["film_1.tif"] and page.view_model.state.analysis.path.name == "film_1.tif"
     _close(page)

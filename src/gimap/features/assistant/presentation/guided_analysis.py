@@ -28,7 +28,6 @@ from PyQt5.QtWidgets import QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 from ..application import (
     GOALS,
     PERMISSION_AUTO,
-    SERIES_SUM,
     AnalysisGoals,
     PipelineOptions,
     RunResults,
@@ -263,12 +262,14 @@ class GuidedAnalysis(GuidedFramesMixin, QObject):
         self._launch(options, self._finished, GEOMETRY_MESSAGE)
 
     def compare_start(self) -> None:
-        """The start of the series (frames 1–10) with the same settings, then Analyze back at the end."""
+        """The start of the series (as many frames as the end shows: of a short series its first frame alone,
+        never a sum that reaches into the end) with the same settings, then Analyze back at the end."""
         if self._busy() or self.report is None:
             return
         end = self.report.get("frames") or {}
-        options = dataclasses.replace(self.options(), frame=1, sum_frames=SERIES_SUM)
-        restore = {"frame": -1, "sum": int(end.get("summed") or SERIES_SUM)}
+        count = int(end.get("summed") or 1)
+        options = dataclasses.replace(self.options(), frame=1, sum_frames=count)
+        restore = {"frame": -1, "sum": count}
         self._launch(options, self._compared, START_MESSAGE, restore=restore)
 
     def _launch(self, options: PipelineOptions, on_finished, message: str, *, restore: Optional[dict] = None) -> None:

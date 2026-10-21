@@ -34,6 +34,36 @@ def floating(metadata: Optional[Mapping[str, Any]]) -> bool:
     return str((metadata or {}).get("stored_dtype", "")).startswith("float")
 
 
+class FrameSum:
+    """Frames summed one after the other, as ``domain.sum_frames`` sums a list of them: a pixel is valid only
+    where every frame is, an invalid pixel adds nothing, and the sum is NaN where it is not valid. Only the
+    running total is kept, so a sum of many frames needs the memory of one."""
+
+    def __init__(self) -> None:
+        self._total: Optional[np.ndarray] = None
+        self._valid: Optional[np.ndarray] = None
+
+    def add(self, data: np.ndarray, valid: np.ndarray) -> None:
+        data, valid = np.asarray(data), np.asarray(valid, dtype=bool)
+        if self._total is None:
+            self._total, self._valid = np.where(valid, data, 0.0).astype(np.float64), valid.copy()
+            return
+        if data.shape != self._total.shape:
+            raise ValueError(
+                f"Cannot sum a {data.shape[0]}×{data.shape[1]} frame with "
+                f"{self._total.shape[0]}×{self._total.shape[1]} frames."
+            )
+        self._valid &= valid
+        self._total += np.where(valid, data, 0.0)
+
+    def result(self) -> tuple[np.ndarray, np.ndarray]:
+        if self._total is None:
+            raise ValueError("No frames to sum.")
+        summed = self._total.astype(np.float32)
+        summed[~self._valid] = np.nan
+        return summed, self._valid
+
+
 class FramePreprocessingMixin:
     """Needs ``frames`` (a ``FrameSource``); call ``_init_preprocessing()`` in ``__init__``."""
 
@@ -169,4 +199,4 @@ class FramePreprocessingMixin:
                 common["intensity_scale"] = (1.0 / factor).astype(np.float32)
 
 
-__all__ = ["FramePreprocessingMixin", "floating"]
+__all__ = ["FramePreprocessingMixin", "FrameSum", "floating"]

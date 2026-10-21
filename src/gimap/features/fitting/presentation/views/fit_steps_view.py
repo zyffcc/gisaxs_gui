@@ -6,112 +6,32 @@ it stands (``step_intro[key]``, filled by the page), the controls used most, and
 
 from __future__ import annotations
 
-from PyQt5.QtCore import QEvent, QObject, Qt
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QAbstractItemView,
-    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
-    QPlainTextEdit,
-    QProgressBar,
     QPushButton,
-    QRadioButton,
     QScrollArea,
-    QSpinBox,
     QStackedWidget,
-    QTableWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from src.gimap.app.presentation.components import AdvancedSection, FlowLayout, StepRail
-from src.gimap.app.presentation.components.table_copy import enable_table_copy
+from src.gimap.app.presentation.components import AdvancedSection, StepRail
 
 from ..layout_primitives import ScientificDoubleSpinBox
-from .fit1d_settings_view import setup_fit1d_settings
+from .fit_results_view import build_results_step
+from .fit_step_view import METHODS, QUICK_FAMILIES, build_fit_step
+from .step_widgets import fit_to_rows, info_card, muted, read_only_table
 
 STEPS = (("curve", "Curve"), ("model", "Model"), ("fit", "Fit"), ("results", "Results"))
-STEP_INTROS = {"fit": "Choose a method; the button below runs it (Ctrl+Return)."}
+STEP_INTROS = {"fit": "Choose a method and press Fit; values that stop at an edge of their range are dealt with by the "
+                      "fit."}
 """The intro of a step whose sentence does not change (the others are written by the page)."""
-METHODS = (
-    ("local", "Refine the current values",
-     "Least squares from the values in Model: fast; finds the nearest good fit."),
-    ("global", "Search the ranges, then refine",
-     "Tries values across the min–max range of every free parameter first; slower, for a poor start."),
-    ("shapes", "Find the particle shape (no AI)",
-     "Fits sphere, random cylinder and vertical cylinder from several starts and lists the solutions."),
-    ("ai", "AI proposal (1D Predict)",
-     "The V5 model proposes compositions and parameters, then corrects them numerically."),
-    ("fit1d", "fit1d (network + physical fit)",
-     "Fits 1–4 Sphere / Vertical cylinder populations given in Model, with the current v2 networks."),
-)
-QUICK_FAMILIES = (("Try every family", "auto"), ("The families in Model", "model"))
-
-
-def muted(text: str, parent: QWidget) -> QLabel:
-    label = QLabel(text, parent)
-    label.setWordWrap(True)
-    label.setProperty("gimapRole", "muted")
-    return label
-
-
-def info_card(parent: QWidget) -> tuple[QFrame, QLabel]:
-    card = QFrame(parent)
-    card.setProperty("gimapInfoCard", True)
-    layout = QVBoxLayout(card)
-    layout.setContentsMargins(10, 8, 10, 8)
-    label = QLabel("", card)
-    label.setWordWrap(True)
-    label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-    layout.addWidget(label)
-    return card, label
-
-
-def read_only_table(columns, parent: QWidget, name: str,
-                    selection=QAbstractItemView.SingleSelection) -> QTableWidget:
-    """Rows selected whole; Ctrl+C and the right button copy them with the column names (``enable_table_copy``).
-    ``SingleSelection`` where the current row drives something (“Use This Solution”), else ``ExtendedSelection``."""
-    table = QTableWidget(0, len(columns), parent)
-    table.setObjectName(name)
-    table.setHorizontalHeaderLabels(list(columns))
-    table.verticalHeader().hide()
-    table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-    table.setSelectionBehavior(QAbstractItemView.SelectRows)
-    table.setSelectionMode(selection)
-    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-    table.horizontalHeader().setStretchLastSection(True)
-    enable_table_copy(table)
-    return table
-
-
-class _KeepToRows(QObject):
-    """Sizes the table again once it is shown or restyled (its header's height is known only then)."""
-
-    def eventFilter(self, watched, event):  # noqa: N802 - Qt API
-        if event.type() in (QEvent.Show, QEvent.StyleChange, QEvent.FontChange):
-            fit_to_rows(watched)
-        return False
-
-
-def fit_to_rows(table: QTableWidget) -> None:
-    """As tall as its header and rows, with no scroll bar of its own: the step's page scrolls instead.
-    Call again after the rows change."""
-    if not table.property("gimapFitToRows"):
-        table.setProperty("gimapFitToRows", True)
-        table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        table._gimap_keep_to_rows = _KeepToRows(table)
-        table.installEventFilter(table._gimap_keep_to_rows)
-    header = table.horizontalHeader()
-    top = header.height() if header.isVisible() and header.height() > 0 else header.sizeHint().height()
-    scroll = table.horizontalScrollBar()
-    bottom = scroll.sizeHint().height() if table.horizontalScrollBarPolicy() != Qt.ScrollBarAlwaysOff \
-        and scroll.isVisible() else 0
-    table.setFixedHeight(top + table.verticalHeader().length() + bottom + 2 * table.frameWidth())
 
 
 class FitStepsView:
@@ -172,7 +92,17 @@ class FitStepsView:
         self.open_curve_step_button.setToolTip(
             "A 1D curve: columns q, I and optionally σ (.dat, .txt). Analyze ▸ Send to Fitting opens its cut here."
         )
-        layout.addWidget(self.open_curve_step_button, 0, Qt.AlignLeft)
+        self.open_folder_step_button = QPushButton("Fit a Folder of Curves…", page)
+        self.open_folder_step_button.setObjectName("fitOpenFolderStep")
+        self.open_folder_step_button.setToolTip(
+            "In-situ series: every curve of a folder (a series, or many samples), each fitted with the model of this "
+            "page — fit one curve here first, or let each curve be predicted")
+        opening = QHBoxLayout()
+        opening.setSpacing(6)
+        opening.addWidget(self.open_curve_step_button)
+        opening.addWidget(self.open_folder_step_button)
+        opening.addStretch(1)
+        layout.addLayout(opening)
 
         self.side_label = QLabel("Halves of the cut", page)
         self.side_label.setProperty("gimapRole", "strong")
@@ -263,129 +193,13 @@ class FitStepsView:
             "particle shape tries every family.", page,
         ))
 
-    # -- 3 fit -------------------------------------------------------------------------
+    # -- 3 fit and 4 results (``fit_step_view``, ``fit_results_view``) ------------------------------------
 
     def _fit_step(self, page: QWidget, layout: QVBoxLayout) -> None:
-        self.method_group = QButtonGroup(page)
-        self.method_buttons: dict[str, QRadioButton] = {}
-        for index, (key, title, description) in enumerate(METHODS):
-            button = QRadioButton(title, page)
-            button.setObjectName(f"fitMethod_{key}")
-            button.setToolTip(description)
-            self.method_group.addButton(button, index)
-            self.method_buttons[key] = button
-            layout.addWidget(button)
-            text = muted(description, page)
-            text.setContentsMargins(22, 0, 0, 2)
-            layout.addWidget(text)
-        self.method_buttons["local"].setChecked(True)
-        self.families_row = QWidget(page)
-        families = QHBoxLayout(self.families_row)
-        families.setContentsMargins(22, 0, 0, 0)
-        families.addWidget(QLabel("Families", self.families_row))
-        self.families_combo = QComboBox(self.families_row)
-        self.families_combo.setObjectName("fitShapeFamilies")
-        for text, value in QUICK_FAMILIES:
-            self.families_combo.addItem(text, value)
-        families.addWidget(self.families_combo, 1)
-        layout.addWidget(self.families_row)
-        setup_fit1d_settings(self, page, layout)
-
-        self.fit_step_button = QPushButton("Fit", page)
-        self.fit_step_button.setObjectName("fitRunStep")
-        self.fit_step_button.setProperty("gimapPrimaryAction", True)
-        self.fit_step_button.setMinimumHeight(34)
-        layout.addWidget(self.fit_step_button)
-        self.fit_progress = QProgressBar(page)
-        self.fit_progress.setObjectName("fitProgress")
-        self.fit_progress.setRange(0, 100)
-        self.fit_progress.hide()
-        self.fit_progress_text = muted("", page)
-        self.stop_step_button = QPushButton("Stop", page)
-        self.stop_step_button.setObjectName("fitStopStep")
-        self.stop_step_button.setProperty("gimapDangerAction", True)
-        self.stop_step_button.setToolTip("Stop the fit; the best values so far are kept")
-        self.stop_step_button.hide()
-        layout.addWidget(self.fit_progress)
-        layout.addWidget(self.fit_progress_text)
-        layout.addWidget(self.stop_step_button, 0, Qt.AlignLeft)
-        self.weighting_note = muted("", page)
-        layout.addWidget(self.weighting_note)
-
-        advanced = AdvancedSection("Advanced", "", page)
-        advanced.setObjectName("fitAdvanced")
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Evaluations at most", advanced))
-        self.budget_spin = QSpinBox(advanced)
-        self.budget_spin.setObjectName("fitBudget")
-        self.budget_spin.setRange(0, 1_000_000)
-        self.budget_spin.setSingleStep(500)
-        self.budget_spin.setSpecialValueText("automatic")
-        self.budget_spin.setToolTip("How many model evaluations a fit may use (automatic: by the method and free parameters)")
-        row.addWidget(self.budget_spin, 1)
-        advanced.add_layout(row)
-        self.batch_button = QPushButton("Fit Many Curves…", advanced)
-        self.batch_button.setObjectName("fitManyCurves")
-        self.batch_button.setToolTip("1D Predict: a list of curve files fitted one after another, with their results")
-        advanced.add_widget(self.batch_button)
-        layout.addWidget(advanced)
-
-    # -- 4 results ---------------------------------------------------------------------
+        build_fit_step(self, page, layout)
 
     def _results_step(self, page: QWidget, layout: QVBoxLayout) -> None:
-        self.quality_card, self.quality_label = info_card(page)
-        self.quality_card.setObjectName("fitQualityCard")
-        layout.addWidget(self.quality_card)
-        self.warnings_label = QLabel("", page)
-        self.warnings_label.setObjectName("fitWarnings")
-        self.warnings_label.setWordWrap(True)
-        self.warnings_label.setProperty("gimapRole", "warning")
-        layout.addWidget(self.warnings_label)
-        self.parameters_table = read_only_table(("", "value", "±"), page, "fitParametersTable",
-                                                QAbstractItemView.ExtendedSelection)
-        header = self.parameters_table.horizontalHeader()
-        header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QHeaderView.Stretch)  # a long name is cut short (its tooltip has it whole)
-        self.parameters_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        fit_to_rows(self.parameters_table)  # every row shown: only the page scrolls
-        layout.addWidget(self.parameters_table)
-
-        self.solutions_title = QLabel("Solutions", page)
-        self.solutions_title.setProperty("gimapRole", "strong")
-        layout.addWidget(self.solutions_title)
-        # One row at a time: “Use This Solution” takes the current one.
-        self.solutions_table = read_only_table(("#", "model", "R (nm)", "D (nm)", "χ²"), page, "fitSolutionsTable")
-        self.solutions_table.setMinimumHeight(120)
-        layout.addWidget(self.solutions_table)
-        self.use_solution_button = QPushButton("Use This Solution", page)
-        self.use_solution_button.setObjectName("fitUseSolution")
-        self.use_solution_button.setToolTip("Put the selected solution into Model (Undo brings the previous model back)")
-        layout.addWidget(self.use_solution_button, 0, Qt.AlignLeft)
-
-        exports = FlowLayout()
-        self.export_data_step_button = QPushButton("Save Data and Fit…", page)
-        self.export_data_step_button.setObjectName("fitExportData")
-        self.export_data_step_button.setToolTip(
-            "CSV: q, I, σ, the model, the residuals and each term; a JSON record of the model and the fit next to it"
-        )
-        self.export_plot_step_button = QPushButton("Save Plot…", page)
-        self.export_plot_step_button.setObjectName("fitExportPlot")
-        self.export_plot_step_button.setToolTip("The plot as shown: PNG (image) or SVG (vector)")
-        self.save_model_button = QPushButton("Save Model…", page)
-        self.save_model_button.setObjectName("fitSaveModel")
-        self.save_model_button.setToolTip("The model (values, fit/fixed, ranges) as JSON, to load for another curve")
-        for button in (self.export_data_step_button, self.export_plot_step_button, self.save_model_button):
-            exports.addWidget(button)
-        layout.addLayout(exports)
-
-        log = AdvancedSection("Run Log", "", page)
-        log.setObjectName("fitLogSection")
-        self.log_view = QPlainTextEdit(log)
-        self.log_view.setObjectName("fitLog")
-        self.log_view.setReadOnly(True)
-        self.log_view.setMinimumHeight(140)
-        log.add_widget(self.log_view)
-        layout.addWidget(log)
+        build_results_step(self, page, layout)
 
 
 __all__ = ["FitStepsView", "METHODS", "QUICK_FAMILIES", "STEPS", "STEP_INTROS", "fit_to_rows", "info_card", "muted",

@@ -8,147 +8,16 @@ from typing import Any, Optional
 import h5py
 import numpy as np
 
+from .nexus_metadata import extract_nexus_metadata, nxs_header_beam_center_px  # noqa: F401  (re-exported)
 from .radiation import energy_to_wavelength
 
 
-def _scalar(value: Any) -> Any:
-    arr = np.asarray(value)
-    if arr.size == 0:
-        return None
-    result = arr.reshape(-1)[0]
-    if isinstance(result, bytes):
-        return result.decode("utf-8", errors="replace")
-    return result.item() if hasattr(result, "item") else result
-
-
-def _optional(handle: h5py.File, paths: tuple[str, ...]) -> Any:
-    for path in paths:
-        if path in handle:
-            try:
-                return _scalar(handle[path][()])
-            except Exception:
-                continue
-    return None
-
-
-def _metric(handle: h5py.File, path: str) -> Optional[float]:
-    if path not in handle:
-        return None
-    dataset = handle[path]
-    value = float(_scalar(dataset[()]))
-    units = str(_scalar(dataset.attrs.get("units", "")) or "").lower().replace("µ", "u")
-    if units in {"mm", "millimeter", "millimetre"}:
-        value *= 1e-3
-    elif units in {"um", "micrometer", "micrometre"}:
-        value *= 1e-6
-    elif units in {"nm", "nanometer", "nanometre"}:
-        value *= 1e-9
-    return value
-
-
-_LENGTH_TO_METRE = {"m": 1.0, "mm": 1e-3, "um": 1e-6, "micrometer": 1e-6, "micrometre": 1e-6}
-
-
-def _header_pixels(handle: h5py.File, paths: tuple[str, ...], pixel_size_path: str) -> Optional[float]:
-    """A header position in pixels; lengths are divided by the pixel size."""
-    for path in paths:
-        if path not in handle:
-            continue
-        dataset = handle[path]
-        try:
-            value = float(_scalar(dataset[()]))
-        except Exception:
-            continue
-        if not np.isfinite(value):
-            return None
-        units = str(_scalar(dataset.attrs.get("units", "")) or "").lower().replace("µ", "u")
-        if units in {"", "pixel", "pixels", "px"}:
-            return value
-        scale = _LENGTH_TO_METRE.get(units)
-        size = _metric(handle, pixel_size_path)
-        if scale is None or not size:
-            return None
-        return value * scale / size
-    return None
-
-
-def nxs_header_beam_center_px(handle: h5py.File) -> Optional[tuple[float, float]]:
-    """NeXus ``beam_center_x``/``_y`` in pixels of the stored image.
-
-    NeXus puts the fast (x) axis last in the dataset, so the pair is
-    ``(along the last axis, along the first axis)``.
-    """
-    fast = _header_pixels(
-        handle,
-        ("/entry/instrument/detector/beam_center_x", "/entry/instrument/detector/beam_center_x_pixel"),
-        "/entry/instrument/detector/x_pixel_size",
-    )
-    slow = _header_pixels(
-        handle,
-        ("/entry/instrument/detector/beam_center_y", "/entry/instrument/detector/beam_center_y_pixel"),
-        "/entry/instrument/detector/y_pixel_size",
-    )
-    return (fast, slow) if fast is not None and slow is not None else None
-
-
 def extract_nxs_metadata(handle: h5py.File) -> dict[str, Any]:
-    energy = _optional(handle, (
-        "/entry/instrument/detector/collection/beam_energy",
-        "/entry/instrument/beam/incident_energy",
-        "/entry/instrument/monochromator/energy",
-        "/entry/beam/incident_energy",
-    ))
-    energy_kev = float(energy) if energy is not None else None
-    if energy_kev is not None and energy_kev > 100.0:
-        energy_kev /= 1000.0
-    wavelength = _optional(handle, (
-        "/entry/instrument/beam/incident_wavelength",
-        "/entry/beam/incident_wavelength",
-        "/entry/instrument/monochromator/wavelength",
-    ))
-    wavelength_a = float(wavelength) if wavelength is not None else None
-    if wavelength_a is not None and wavelength_a < 1e-6:
-        wavelength_a *= 1e10
-    if wavelength_a is None and energy_kev:
-        wavelength_a = energy_to_wavelength(energy_kev)
-    detector_name = _optional(handle, (
-        "/entry/instrument/detector/description",
-        "/entry/instrument/detector/local_name",
-        "/entry/instrument/detector/type",
-    ))
-    center_x = _optional(handle, (
-        "/entry/instrument/detector/beam_center_x",
-        "/entry/instrument/detector/beam_center_x_pixel",
-    ))
-    center_y = _optional(handle, (
-        "/entry/instrument/detector/beam_center_y",
-        "/entry/instrument/detector/beam_center_y_pixel",
-    ))
-    exposure_time = _optional(handle, (
-        "/entry/instrument/detector/count_time",
-        "/entry/instrument/detector/frame_time",
-        "/entry/instrument/detector/exposure_time",
-        "/entry/instrument/detector/collection/count_time",
-    ))
-    timestamp = _optional(handle, (
-        "/entry/start_time",
-        "/entry/instrument/detector/timestamp",
-        "/entry/instrument/detector/collection/date",
-    ))
-    return {
-        "energy_kev": energy_kev,
-        "wavelength_angstrom": wavelength_a,
-        "detector_name": str(detector_name) if detector_name is not None else None,
-        "pixel_size_x_m": _metric(handle, "/entry/instrument/detector/x_pixel_size"),
-        "pixel_size_y_m": _metric(handle, "/entry/instrument/detector/y_pixel_size"),
-        # Do not confuse P03 module-translation vectors with sample distance.
-        "distance_m": _metric(handle, "/entry/instrument/detector/distance"),
-        "beam_center_x_px": float(center_x) if center_x is not None else None,
-        "beam_center_y_px": float(center_y) if center_y is not None else None,
-        "header_beam_center_px": nxs_header_beam_center_px(handle),
-        "exposure_time_s": float(exposure_time) if exposure_time is not None else None,
-        "timestamp": str(timestamp) if timestamp is not None else None,
-    }
+    """Header values of a NeXus file whose detector is at ``/entry/instrument/detector``.
+
+    The reader itself uses ``extract_nexus_metadata`` with the detector group of the image dataset.
+    """
+    return extract_nexus_metadata(handle)
 
 
 _CBF_NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"

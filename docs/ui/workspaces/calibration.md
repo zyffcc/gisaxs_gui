@@ -9,11 +9,13 @@
   [`tests/test_calibration_presentation.py`](../../../tests/test_calibration_presentation.py)、
   [`tests/test_calibration_feature.py`](../../../tests/test_calibration_feature.py)、
   [`tests/test_calibration.py`](../../../tests/test_calibration.py)、
+  [`tests/test_calibration_frames.py`](../../../tests/test_calibration_frames.py)、
+  [`tests/test_calibration_import_sum.py`](../../../tests/test_calibration_import_sum.py)、
   [`tests/test_release2_calibration_window.py`](../../../tests/test_release2_calibration_window.py)（窗口里的像素坐标）、
   [`tests/test_release2_calibration_edges.py`](../../../tests/test_release2_calibration_edges.py)（图像边缘、中心在探测器外）、
   [`tests/test_release2_calibration_files.py`](../../../tests/test_release2_calibration_files.py)（导出文件的格式）、
   [`tests/test_release2_calibration_estimate.py`](../../../tests/test_release2_calibration_estimate.py)（Estimated distance 填什么）
-- **Last verified**: 2026-10-13
+- **Last verified**: 2026-10-14（图像格式、多帧与导入一节对照代码；光束中心坐标、已知限制和 Estimated distance 三节 2026-10-13；其余沿用 2026-08-18）
 
 ## 当前状态
 
@@ -46,7 +48,17 @@ Qt signals、`QFileDialog` 和 `QMessageBox` 留在 dialog。路径规范化
 - Esc 关闭窗口；运行中按 Esc 会先询问，重新打开的窗口不会自己关闭。从 Analyze 打开的标定窗口关闭后释放。
 - Apply 只出一个 toast（中心、距离，以及“已保存为仪器配置 …，分析会自动使用”），不再另弹消息框；覆盖已有配置前仍会询问。
   Apply 同时记下标定图像的尺寸与探测器（XRR 据此判断能否沿用）。Export 后的 toast 可打开文件夹；toast 显示在右侧，不挡按钮。
-- 可以拖入探测器图像（.nxs / .cbf / .tif / .edf，载入）或导出的 .json（导入）；Open… / Import… 从当前图像或上次的文件夹开始。
+- 可以拖入探测器图像（NeXus / HDF5、.cbf / .tif / .edf，载入）或导出的 .json（导入）；Open… / Import… 从当前图像或上次的文件夹开始。
+
+多帧图像与导入（2026-10-14，`bindings/frame_choice.py`、`application/use_cases.py`）：
+
+- 图像经共用的 NeXus 读取器读（任何 HDF5 后缀；模块组拼接；方向与 Analyze 相同）。几个同样可能的图像数据集时询问
+  用哪一个（`ask_dataset=True`；无窗口的自动标定不问，取排第一的）。
+- 多帧文件出现 **Frames:** 一行：*A single frame*（帧号从 1 数，“of N”）或 *Sum of all frames*（在读取线程上逐帧相加，
+  显示 “Summing frames: i of N”，可取消；float64 相加，返回 float32；任何一帧无效的像素为无效）。单帧文件不显示这一行。
+  标定记录的 `metadata.loader` 写出所用的帧（`frame_index`、`summed_frames`）。
+- Import 一份标定：在 Standard 中选上它的标样；它是在几帧之和上做的时，先立即显示第一帧，再在读取线程上读同样的和，
+  读完后这一行为 *Sum of all frames*；中途停止时保留第一帧，并说明标定是在哪些帧的和上做的（`NOT_THE_SUM`）。
 
 ## 光束中心用哪套坐标（2026-10-13）
 
@@ -128,7 +140,9 @@ Auto Detect 时引擎用所有已知标样去试，再按环的匹配打分。�
 
 ## 手动验收清单
 
-- [ ] Open（NXS / CBF / TIFF / EDF）、粘贴路径和 ambiguous NXS dataset 选择正常；
+- [ ] Open（NXS / HDF5 / CBF / TIFF / EDF）、粘贴路径和 ambiguous NXS dataset 选择正常；
+- [ ] 多帧文件出现 Frames 一行：换帧号显示该帧；Sum of all frames 显示进度并可取消；导出的 JSON 写出所用的帧；
+- [ ] Import 一份在几帧之和上做的标定：先显示第一帧，随后变为 Sum of all frames，Standard 选上该标定的标样；
 - [ ] energy、standard、estimated distance、range 和 detector defaults 与配置契约一致；
 - [ ] 无 pixel metadata 或选择 Custom detector 时 Advanced 自动展开；
 - [ ] Advanced 折叠/展开不改变 pixel、distance bounds 或 overlay toggles；

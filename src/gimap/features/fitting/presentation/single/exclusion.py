@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import QGraphicsRectItem
 
 from src.gimap.app.presentation.i18n import tr
 
-from ...application.single_fit import point_key
+from ...application.single_fit import left_out_points, point_key
 
 PICK_RADIUS = 0.03
 """A click takes the nearest point within this fraction of the plot (both axes as shown)."""
@@ -112,11 +112,11 @@ class FitExclusionMixin:
             self._exclusions_changed()
 
     def left_out(self) -> int:
-        """How many points of the halves chosen are left out."""
+        """How many points of the halves chosen are left out (as the fit takes the names: ``left_out_points``)."""
         points = self.session.all_points()
         if points is None or not self.session.excluded:
             return 0
-        return int(sum(point_key(value) in self.session.excluded for value in points.q))
+        return int(np.count_nonzero(left_out_points(points.q, self.session.excluded)))
 
     def _exclusions_changed(self) -> None:
         self._remember_curve()

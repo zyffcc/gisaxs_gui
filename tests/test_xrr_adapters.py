@@ -32,6 +32,10 @@ def test_nxs_module_group_becomes_one_frame_sequence_with_motor_angles(tmp_path)
                 data=np.radians([0.1, 0.2, 0.3]),
             )
             angle.attrs["units"] = "rad"
+            # Module files are one set only when each carries its own module position.
+            handle.create_dataset(
+                "/entry/instrument/detector/translation/distance", data=[0.0, 36.0 * (module - 1), 0.0]
+            )
     refs = LocalXrrSeriesRepository().discover(
         XrrSeriesSpec(
             tmp_path / "scan_m2.nxs",

@@ -131,6 +131,7 @@ class AiJobExecutionMixin:
         )
 
         thread = QThread(self.main_window or self.ui)
+        thread.setStackSize(16 * 1024 * 1024)  # macOS gives 512 KB, too little for numpy.linalg (see task_runner.WORKER_STACK_BYTES)
         worker = AiCandidateWorker(
             self.fitting_view_model,
             request,

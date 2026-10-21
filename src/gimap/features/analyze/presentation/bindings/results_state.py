@@ -204,7 +204,7 @@ class ResultsStateMixin:
     def _keep_frame(self, keep: bool) -> None:
         """While a run works on the frame shown, the controls that show another frame are disabled. Watch
         stays: it only lists new frames (``_frame_kept`` keeps the one shown), and it must stay stoppable."""
-        for widget in (self.file_list, self.frame_spin, self.open_files_button, self.clear_button):
+        for widget in (self.file_list, self.frame_list, self.frame_spin, self.open_files_button, self.clear_button):
             widget.setEnabled(not keep)
         self.open_folder_action.setEnabled(not keep)
         row, count = self.file_list.currentRow(), self.file_list.count()

@@ -30,6 +30,8 @@ def _write_nxs(path: Path) -> None:
     with h5py.File(path, "w") as handle:
         data = np.arange(2 * 8 * 6, dtype=np.uint16).reshape(2, 8, 6)
         handle.create_dataset("/entry/instrument/detector/data", data=data)
+        # A P03 Lambda module: only a file with a module position gets the P03 view (transpose, flip).
+        handle.create_dataset("/entry/instrument/detector/translation/distance", data=[0.0, 0.0, 0.0])
 
 
 def test_convert_file_succeeds_without_qapplication(tmp_path: Path) -> None:

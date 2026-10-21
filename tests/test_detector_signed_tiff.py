@@ -38,3 +38,42 @@ def test_signed_tiff_preserves_values_orientation_and_negative_observations(tmp_
     assert loaded.metadata["reader"] in {"pillow", "fabio"}
     assert loaded.metadata["transformations"] == []
     source.unlink()  # Scientific fallback must release its handle on Windows.
+
+
+def _nexus_frame(path, values):
+    import h5py
+
+    with h5py.File(path, "w") as handle:
+        handle.create_dataset("/entry/instrument/detector/data", data=values[None])
+    return path
+
+
+def test_float_nexus_frames_keep_their_negative_values_as_data(tmp_path):
+    """A dark- or background-subtracted NeXus frame: the reader says it is float, so Analyze keeps the negatives."""
+    from src.gimap.features.analyze.application.frame_preprocessing import floating
+    from src.gimap.features.analyze.domain import valid_pixels
+
+    values = np.full((16, 24), 0.5, dtype=np.float32)
+    values[:4, :] = -0.25    # noise below zero after the subtraction: 96 measured pixels
+    values[8:10, :] = np.nan  # the detector gap: 48 pixels without data
+    loaded = load_detector_image(_nexus_frame(tmp_path / "subtracted.nxs", values))
+
+    assert loaded.metadata["stored_dtype"] == "float32" and floating(loaded.metadata)
+    np.testing.assert_array_equal(loaded.data, values)  # values and orientation as stored
+    assert int(loaded.mask.sum()) == 48 and loaded.metadata["transformations"] == []
+    valid = valid_pixels(loaded.data, loaded.mask, negatives_valid=floating(loaded.metadata))
+    assert int(valid.sum()) == values.size - 48 and valid[:4, :].all()
+
+
+def test_integer_nexus_frames_still_lose_their_negative_gap_codes(tmp_path):
+    from src.gimap.features.analyze.application.frame_preprocessing import floating
+    from src.gimap.features.analyze.domain import valid_pixels
+
+    values = np.full((16, 24), 7, dtype=np.int32)
+    values[8:10, :] = -1  # a counting detector's gap code
+    loaded = load_detector_image(_nexus_frame(tmp_path / "counts.nxs", values))
+
+    assert loaded.metadata["stored_dtype"] == "int32" and not floating(loaded.metadata)
+    np.testing.assert_array_equal(loaded.data, values)  # the reader keeps the stored values
+    valid = valid_pixels(loaded.data, loaded.mask, negatives_valid=floating(loaded.metadata))
+    assert not valid[8:10, :].any() and int(valid.sum()) == values.size - 48

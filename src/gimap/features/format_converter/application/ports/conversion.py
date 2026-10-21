@@ -21,6 +21,11 @@ class SourceRepositoryPort(Protocol):
 
     def select_dataset(self, source: InputSource, dataset_path: str) -> None: ...
 
+    def group_paths(self, paths: list[str | Path]) -> list[str]:
+        """One path per source, in the order given: the files of one source (the module files of a set,
+        a master and its data files) become the file that stands for it."""
+        ...
+
     def scan_folder(
         self,
         folder: str | Path,

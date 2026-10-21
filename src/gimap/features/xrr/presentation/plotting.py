@@ -8,6 +8,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Circle
 
 from src.gimap.app.presentation.theme.figures import restyle_figure, theme_figure
+from src.gimap.shared.figures import cjk_fallback
 
 from .pixel_coordinates import image_extent, image_limits
 
@@ -97,6 +98,9 @@ class XrrPlotPresenter:
         axis.set_ylabel("Detector y (pixel)")
         axis.set_title(title)
         axis.legend(loc="upper right")
+        # The title names the frame in the interface language and holds the file's name: Matplotlib's
+        # own font has no Chinese glyphs (empty boxes), so such a title gets a font that has them.
+        cjk_fallback(self.live_figure)
         restyle_figure(self.live_figure)
         self._live_panel.show_plot()
         self.live_canvas.draw_idle()

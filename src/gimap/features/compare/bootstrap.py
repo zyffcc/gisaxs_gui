@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from .application import CompareService
-from .infrastructure import CsvTableWriter, TextCurveReader
+from .infrastructure import AnalyzeFolders, CsvTableWriter, TextCurveReader
 
 
 def create_compare_service() -> CompareService:
-    return CompareService(TextCurveReader(), CsvTableWriter())
+    reader = TextCurveReader()
+    return CompareService(reader, CsvTableWriter(), AnalyzeFolders(reader))
 
 
 __all__ = ["create_compare_service"]

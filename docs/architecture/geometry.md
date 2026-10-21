@@ -4,7 +4,7 @@
 >
 > **Scope**：像素 → q 的唯一实现、坐标约定、各页面历史约定与已知偏差
 >
-> **Last verified**：2026-09-28
+> **Last verified**：2026-09-28；NeXus 的方向与头中心：2026-10-14（对照 `shared/detector_io/nexus_reading.py`）
 
 像素到 q 的换算现在只有一份实现：`src/gimap/shared/geometry`。Analyze（GISAXS 与 GIWAXS，
 包括原 WAXS 页面与原 Cut & Fitting 探测器部分的全部功能）直接使用下面的规范约定和精确公式；
@@ -103,7 +103,7 @@ CBF 头里的 `Wavelength`、`Detector_distance`、`Beam_xy` 只有在线站把�
 | `header_wavelength_angstrom` | 波长，Å；头中必须带明确单位（A、Å、angstrom 或 nm），无单位或未知单位为 `None` |
 | `header_distance_m` | 样品–探测器距离，m；单位 m 或 mm，其他为 `None` |
 | `header_beam_xy_px` | `(x, y)`，按文件原样，文件自身的像素坐标 |
-| `header_beam_center` | 换算到规范坐标的头中心（CBF：`Beam_xy` 原样，按像素角为原点；单模块 NeXus：按加载时的转置与翻转换算；多模块拼接：无） |
+| `header_beam_center` | 换算到规范坐标的头中心（CBF：`Beam_xy` 原样，按像素角为原点；单个 Lambda 模块文件：按 P03 的转置与翻转换算；其他 NeXus / HDF5：按存储原样取（列, 行）；多模块拼接：无） |
 
 这些值**不覆盖**主字段（`energy_kev`、`wavelength_angstrom`、`distance_m`、
 `beam_center_x_px/y_px`）：主字段决定伴随 NXS 能量查找是否触发，也是标定的中心种子。
@@ -121,6 +121,14 @@ Analyze 只在 设置 ▸ Analyze ▸ “Use the beam centre written in the file
 - 读取匹配：Analyze 按探测器名（前缀匹配，忽略大小写与多余空格）和帧尺寸挑选配置；尺寸不同的
   配置不会被自动选中。也可以在 Analyze 顶栏手动指定配置、输入几何；旧版 Cut & Fitting 保存过
   几何时，提示条的 Use Previous Geometry… 可把它（行号从底部数，“上下翻转”时不换算）保存为配置。
+
+## NeXus / HDF5 图像的方向（2026-10-14）
+
+读取器返回的帧都是规范方向（第 0 行在上）。Lambda 服务器写的文件（模块组；或探测器组有 `translation/distance`、
+形如 `1556X516` 的 `layout`、`description` / `type` / `local_name` 含 “lambda”）照旧做 P03 变换：按平移拼接模块
+（模块的存储方向由 `layout` / 平移判断，需要时先转置），再整体转置、上下翻转。其余 NeXus / HDF5 图像按存储原样读，
+与同一探测器的 CBF / TIFF 一致；此前它们也被转置和翻转，所以在旧方向下为这类文件做的仪器配置和掩膜不再适用
+（正方形的帧仍按尺寸匹配到旧配置，要检查）。做了哪些变换写在 `metadata["transformations"]`。
 
 ## 已决定（2026-09-28）
 

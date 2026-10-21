@@ -330,7 +330,7 @@ class AnalyzeAutomation:
             page.frame_spin.setMaximum(max(count, page.frame_spin.maximum()))
             page.frame_spin.setValue(number)
         self._set(page.sum_spin, max(1, int(sum_count)))
-        page.view_model.set_sum_count(int(sum_count))
+        page.view_model.set_sum_count(int(sum_count), by="automatic")  # not the person's Sum N: series runs say so
         page.view_model.set_frame(number - 1)
         self.reanalyse(done)
 
@@ -383,7 +383,7 @@ class AnalyzeAutomation:
             done(False, f"Unknown halves {side!r}.")
             return
         page.show_step("cuts")
-        page.view_model.set_fit_side(side)
+        page.view_model.set_fit_side(side, remember=False)  # for this file: not the stored choice of the next sample
         page._sync_fit_side()
         page._sync_halves()
         done(True, f"halves: {side}")

@@ -8,8 +8,10 @@
 - **Related tests**:
   [`tests/test_format_converter_presentation.py`](../../../tests/test_format_converter_presentation.py)、
   [`tests/test_format_converter_feature.py`](../../../tests/test_format_converter_feature.py)、
+  [`tests/test_format_converter_nexus.py`](../../../tests/test_format_converter_nexus.py)、
+  [`tests/test_format_converter_headers.py`](../../../tests/test_format_converter_headers.py)、
   [`tests/test_ui_workspace_layouts.py`](../../../tests/test_ui_workspace_layouts.py)
-- **Last verified**: 2026-08-18
+- **Last verified**: 2026-10-14（输入格式、模块组与文件头一节对照代码；其余沿用 2026-08-18）
 
 ## 当前状态
 
@@ -37,13 +39,21 @@ PyQt Dialog → FormatConverterViewModel → application use cases → ports
 
 使用上的要点（2026-10-06）：帧选择模式按英文键保存在下拉项的数据里，中文界面下选择同样生效；
 源列表各列按内容定宽、文件名列伸展，长路径中间省略（完整路径在提示里）；Add files 的过滤器先列出转换器能读的
-全部格式（NXS、CBF、TIFF），再逐个列出。EDF 不是转换器的输入：EDF 帧用 Analyze ▸ Batch Export ▸
+全部格式（NeXus / HDF5：`.nxs`、`.nx`、`.nx5`、`.h5`、`.hdf5`、`.hdf`；CBF；TIFF），再逐个列出。EDF 不是转换器的输入：EDF 帧用 Analyze ▸ Batch Export ▸
 Converted detector frames 转成 TIFF、EDF、NumPy 或 HDF5。Esc 关闭窗口，转换运行中会先询问。
 
 输出位置默认是第一个输入所在文件夹下的 `converted`（随输入变化，直到你自己选了位置）；上次的输出格式会恢复；
 Add files / Add folder 从上次的文件夹开始。可以把文件或文件夹拖进窗口。预览：单帧的源只显示一张缩略图（多帧显示首 / 中 / 末），
 统计（尺寸、类型、最小 / 最大、NaN、负值、可能饱和的像素）在缩略图上方；缩略图仅用于显示，取 log(1 + 值) 与 viridis 色图，
 统计仍是存储的原始值。
+
+NeXus / HDF5 输入（2026-10-14）：经共用的读取器（`shared/detector_io`，`cached_layout`）检查和读取，规则与 Analyze 相同
+（见 [analyze.md](analyze.md) 的 Data 步骤一节）。一组模块文件只列一次（Add folder 经 `group_sources`；Add files 选了
+几个模块文件也合成一个），读出的是拼接后的帧，输出按扫描名命名（不带 `_mNN`）；master 和它的数据文件是一个输入。
+输入下面写出数据集、形状、帧数，几个文件组成的输入还写出它的组成，以及读取器的说明（缺模块文件、帧数不同等，前面带 ⚠）。
+方向与 Analyze 相同：Lambda 文件做 P03 变换，其他按存储原样。不含探测器图像的 HDF5 文件不能作为输入，并说明原因。
+写 CBF、EDF、TIFF 时文件头里的元数据是 ASCII JSON（`\uXXXX` 转义，`json.loads` 可原样读回）；文件名不是 ASCII 的 CBF
+先用 ASCII 名写再改名；写失败不留下空文件（`shared/detector_io/writing.py`）。
 
 ## 控件映射
 
@@ -67,6 +77,9 @@ Python 控件属性对应 Python View 中清晰可见的 objectName。该 dialog
 
 - [ ] Add files、Add folder、Use currently opened file 均可添加输入；
 - [ ] NXS 多 dataset 选择仍能更新 frame/shape；
+- [ ] Add folder 选 `TestSAXSdata/lmbdp03/`：只列一个输入（扫描名），下面写出 “11 module files · 1 frame · stitched”；转成 TIFF
+      后的帧与 Analyze 显示的方向相同；`.h5` / `.hdf5` 文件可以加入；
+- [ ] 转成 CBF 且保留元数据时，文件头的 `GIMaP_metadata` 是 ASCII JSON；源文件夹名含非 ASCII 字符时也能写出并读回；
 - [ ] Select all/none、filter、sort、remove 正常；
 - [ ] 展开 Advanced 后 All、Current、Range、Custom、Every N 结果与原来一致；
 - [ ] First/Middle/Last preview 的方向、dtype 和统计信息正确；

@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gimap.app.presentation.components import CurvePlot, DetectorView, EmptyState, SegmentedControl, ShapeLayer
+from src.gimap.shared.detector_io import DETECTOR_SUFFIXES
 
 from .analyze_steps_view import FIT_SIDE_ITEMS, STEPS, AnalyzeStepsView
 from .batch_progress_view import BatchProgressPanel
@@ -39,7 +40,8 @@ from .regions_view import RegionsView
 from .series_view import SeriesScroll, SeriesView
 
 AUTO_PROFILE_TEXT = "Automatic (match detector)"
-FILE_FILTER = "Detector frames (*.cbf *.nxs *.tif *.tiff *.edf);;All files (*)"
+FILE_FILTER = f"Detector frames ({' '.join('*' + suffix for suffix in DETECTOR_SUFFIXES)});;All files (*)"
+"""A dialog that takes one detector frame (the background frame): every suffix the reader accepts."""
 MODE_ITEMS = (("Auto", "auto"), ("GISAXS", "gisaxs"), ("GIWAXS", "giwaxs"))
 VIEW_ITEMS = ("Detector", "q map", "Cake")
 VIEW_DETECTOR, VIEW_Q_MAP, VIEW_CAKE = range(3)
@@ -148,7 +150,7 @@ class AnalyzePageView(AnalyzeStepsView, OptionsPanelView, RegionsView, SeriesVie
         self.open_files_button.setText("Open…")
         self.open_files_button.setPopupMode(QToolButton.MenuButtonPopup)
         self.open_files_button.setToolTip(
-            "Open detector frames (CBF, NXS, TIFF, EDF) — Ctrl+O. You can also drop files or folders here."
+            "Open detector frames (CBF, NeXus/HDF5, TIFF, EDF) — Ctrl+O. You can also drop files or folders here."
         )
         open_menu = QMenu(self.open_files_button)
         self.open_folder_action = QAction("Open Folder…", page)

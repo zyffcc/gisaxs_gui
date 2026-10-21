@@ -73,10 +73,29 @@ class CalibrationTests(unittest.TestCase):
                 handle.create_dataset("/entry/instrument/detector/pixel_mask", data=np.zeros_like(source, dtype=np.uint8))
                 handle.create_dataset("/entry/instrument/detector/x_pixel_size", data=[75e-6])
                 handle.create_dataset("/entry/instrument/detector/y_pixel_size", data=[75e-6])
+                # A Lambda module file: the server writes where the module sits.
+                handle.create_dataset("/entry/instrument/detector/translation/distance", data=[0.0, 0.0, 0.0])
             detector = load_detector_image(path)
             expected = np.flipud(source[0].T)
             np.testing.assert_array_equal(detector.data, expected)
             self.assertAlmostEqual(detector.pixel_size_x_m, 75e-6)
+
+    def test_nxs_without_module_position_is_read_as_stored(self):
+        """A plain (N, H, W) NeXus stack is not a Lambda file: row 0 stays on top, like CBF and TIFF."""
+        with tempfile.TemporaryDirectory() as folder:
+            source = np.arange(2 * 24, dtype=np.float32).reshape(2, 4, 6)
+            for name in ("plain.nxs", "plain.h5"):
+                path = Path(folder) / name
+                with h5py.File(path, "w") as handle:
+                    handle.create_dataset("/entry/instrument/detector/data", data=source)
+                    handle.create_dataset("/entry/instrument/detector/x_pixel_size", data=[75e-6])
+                detector = load_detector_image(path, frame_idx=1)
+                np.testing.assert_array_equal(detector.data, source[1])
+                self.assertEqual(detector.metadata["transformations"], [])
+                self.assertEqual(detector.metadata["orientation"], "as_stored")
+                self.assertEqual(detect_nxs_frame_count(path), 2)
+            with self.assertRaises(IndexError):
+                load_detector_image(path, frame_idx=2)
 
     def test_nxs_module_series_and_frames_use_shared_loader(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -151,6 +170,8 @@ class CalibrationTests(unittest.TestCase):
             with h5py.File(path, "w") as handle:
                 handle.create_dataset("/entry/instrument/detector/data", data=source)
                 handle.create_dataset("/entry/instrument/detector/pixel_mask", data=mask)
+                # The module position makes it a Lambda file (shown with the P03 transpose + flip).
+                handle.create_dataset("/entry/instrument/detector/translation/distance", data=[0.0, 0.0, 0.0])
             detector = load_detector_image(path)
             expected = np.flipud(source[0].T)
             expected_mask = np.flipud(invalid.T)

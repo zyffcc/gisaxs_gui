@@ -10,7 +10,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage, QPixmap
 
 INPUT_FILTER = (
-    "Detector images (*.nxs *.cbf *.tif *.tiff);;NXS (*.nxs);;CBF (*.cbf);;TIFF (*.tif *.tiff)"
+    "Detector images (*.nxs *.nx *.nx5 *.h5 *.hdf5 *.hdf *.cbf *.tif *.tiff);;"
+    "NeXus / HDF5 (*.nxs *.nx *.nx5 *.h5 *.hdf5 *.hdf);;CBF (*.cbf);;TIFF (*.tif *.tiff)"
 )
 
 

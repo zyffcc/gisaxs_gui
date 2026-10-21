@@ -117,16 +117,31 @@ class GeometryModelMixin:
 
     # -- fitting hand-over ------------------------------------------------------------
 
+    _frame_halves: Optional[str] = None
+    """The halves chosen for the file shown only (``set_fit_side(remember=False)``)."""
+
     @property
     def fit_side(self) -> str:
-        side = self._read_setting(SECTION, FIT_SIDE_KEY, BOTH)
+        side = self._frame_halves or self._read_setting(SECTION, FIT_SIDE_KEY, BOTH)
         return side if side in FIT_SIDES else BOTH
 
-    def set_fit_side(self, side: str) -> None:
-        if side not in FIT_SIDES or self.settings is None:
+    def set_fit_side(self, side: str, *, remember: bool = True) -> None:
+        """The halves of I(qy) shown and handed to Fitting. ``remember=False``: for the file shown only — what
+        the automatic analysis chooses for one sample (a half in the shadow) is not the stored choice of the
+        next sample and the next session; it ends with another file or Clear (``forget_frame_halves``)."""
+        if side not in FIT_SIDES:
+            return
+        if not remember:
+            self._frame_halves = side
+            return
+        self._frame_halves = None
+        if self.settings is None:
             return
         self.settings.set(SECTION, FIT_SIDE_KEY, side)
         self.settings.save()
+
+    def forget_frame_halves(self) -> None:
+        self._frame_halves = None
 
     # -- profiles ----------------------------------------------------------------------
 

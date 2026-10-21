@@ -1,6 +1,7 @@
 """Compare: series from curve files or Analyze's Series map, the comparison, tables and records."""
 
 from ..domain import END_FRAMES, Comparison, SeriesData, SeriesResult
+from .sources import CurveKind, FolderContent, FolderReader, SeveralKinds
 from .use_cases import (
     CURVE_SUFFIXES,
     ERRORS,
@@ -19,6 +20,6 @@ from .use_cases import (
 
 __all__ = [
     "CURVE_SUFFIXES", "END_FRAMES", "ERRORS", "METHOD", "PROGRESS_EVERY", "TOO_FEW_READ", "UNREAD_FILE",
-    "CompareService", "CompareSettings", "Comparison", "CurveReader", "Progress", "SeriesData", "SeriesResult",
-    "TableWriter", "curve_files", "natural_key",
+    "CompareService", "CompareSettings", "Comparison", "CurveKind", "CurveReader", "FolderContent", "FolderReader",
+    "Progress", "SeriesData", "SeriesResult", "SeveralKinds", "TableWriter", "curve_files", "natural_key",
 ]

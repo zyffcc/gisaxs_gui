@@ -46,7 +46,7 @@ from ..domain import (
 )
 from .models import PERMISSION_CONFIRM, ToolInputError, ToolOutcome
 
-IMAGE_ENDINGS = (".cbf", ".tif", ".tiff", ".nxs", ".h5", ".hdf5", ".edf")
+IMAGE_ENDINGS = (".cbf", ".tif", ".tiff", ".nxs", ".nx", ".nx5", ".h5", ".hdf5", ".hdf", ".edf")
 
 
 def file_key(path: str) -> str:
@@ -87,7 +87,8 @@ class CalibrationToolsMixin:
                 for candidate in options:
                     kind = self.explorer.kind(candidate)
                     if kind is not None:
-                        self._grant(candidate, kind)  # the person named it: trusted
+                        if not any(file_key(item["path"]) == file_key(candidate) for item in self._user_paths):
+                            self._grant(candidate, kind)  # the person named it: trusted
                         break
 
     def _grant(self, path: str, kind: str) -> None:

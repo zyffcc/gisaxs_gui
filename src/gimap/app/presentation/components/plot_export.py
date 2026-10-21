@@ -3,7 +3,10 @@
 ``export_plot(plot, path)`` takes a ``CurvePlot`` (or a pyqtgraph ``PlotItem`` / ``PlotWidget``). A figure goes
 on white paper and slides, so a plot shown on the dark theme is exported with the light theme's plot colours:
 its background, axes, ticks, axis labels, title and legend are restyled for the moment of the export and put
-back afterwards (also when the export fails). The curves keep their colours. ``OSError`` when nothing was
+back afterwards (also when the export fails). The curves keep their colours. A figure is not translated:
+its axis titles are written as they are, and a legend entry that knows its own words for a figure
+(``export_text``, as ``CurvePlot`` gives every entry: the curve's name as it was given, not in the interface
+language) is exported with those and shown as before afterwards. ``OSError`` when nothing was
 written — a folder that is not there, no permission, a plot of size 0 — so a caller never says “Saved” then.
 """
 
@@ -62,15 +65,16 @@ def _light_palette(item, view, legend) -> Callable[[], None]:
         undo.append(lambda: title.setText(title.text, color=color))
     if legend is not None:
         brush, frame, label_color = legend.brush(), legend.pen(), legend.labelTextColor()
-        colors = [(label, label.opts.get("color")) for _sample, label in legend.items]
+        colors = [(label, label.opts.get("color"), label.text) for _sample, label in legend.items]
         if legend.items:  # an empty legend stays invisible
             fill = QColor(background)
             fill.setAlpha(LEGEND_ALPHA)
             legend.setBrush(fill)
             legend.setPen(pg.mkPen(grid))
         legend.setLabelTextColor(foreground)
-        for label, _color in colors:
-            label.setText(label.text, color=foreground)  # setLabelTextColor alone does not redraw a label
+        for label, _color, text in colors:  # (setLabelTextColor alone does not redraw a label)
+            label.setText(getattr(label, "export_text", text), color=foreground)
+        legend.updateSize()  # other words: another width
 
         def restore_legend() -> None:
             legend.setBrush(brush)
@@ -79,8 +83,9 @@ def _light_palette(item, view, legend) -> Callable[[], None]:
                 legend.opts["labelTextColor"] = None
             else:
                 legend.setLabelTextColor(label_color)
-            for label, color in colors:
-                label.setText(label.text, color=color)
+            for label, color, text in colors:
+                label.setText(text, color=color)
+            legend.updateSize()
 
         undo.append(restore_legend)
 

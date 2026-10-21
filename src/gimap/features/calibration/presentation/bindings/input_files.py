@@ -11,7 +11,7 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr
 
 # What the shared detector loader reads (the Open… filter), and an exported calibration.
-IMAGE_SUFFIXES = (".nxs", ".cbf", ".tif", ".tiff", ".edf")
+IMAGE_SUFFIXES = (".nxs", ".nx", ".nx5", ".h5", ".hdf5", ".hdf", ".cbf", ".tif", ".tiff", ".edf")
 CALIBRATION_SUFFIX = ".json"
 
 

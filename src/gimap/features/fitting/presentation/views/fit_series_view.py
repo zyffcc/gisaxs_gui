@@ -15,8 +15,10 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
+    QListView,
     QListWidget,
     QMenu,
     QPlainTextEdit,
@@ -33,13 +35,20 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, StepRail
+from src.gimap.app.presentation.components import AdvancedSection, CurvePlot, FlowLayout, StepRail
 
 from .fit_steps_view import info_card, muted, read_only_table
 
 SERIES_STEPS = (("curves", "Curves"), ("start", "Start"), ("results", "Results"))
 TREND_EMPTY = "The trend of the chosen value appears here after Start"
 """Shown over the trend plot while it has no points."""
+FRAME_EMPTY = "The selected frame and its fit appear here."
+"""Shown over the frame plot while it has no points (the page says why a frame cannot be drawn)."""
+FOLDER_HINT = "The folder of the curves, e.g. the gimap_analysis/fit_input folder Analyze writes"
+NO_FOLDER = "No folder yet — choose one, or Send Series to Fitting in Analyze"
+"""What the bar says with no folder."""
+RESULTS_WIDTH = 560
+"""The steps panel is at least this wide while the Results step is shown (the table of every frame)."""
 
 
 class FitSeriesView:
@@ -81,8 +90,8 @@ class FitSeriesView:
         row.setSpacing(6)
         self.folder_button = QPushButton("Choose Folder…", bar)
         self.folder_button.setObjectName("fitSeriesFolderButton")
-        self.folder_button.setToolTip("The folder of the curves, e.g. the gimap_analysis folder Analyze writes")
-        self.folder_chip = QLabel("No folder yet — choose one, or Send Series to Fitting in Analyze", bar)
+        self.folder_button.setToolTip(FOLDER_HINT)
+        self.folder_chip = QLabel(NO_FOLDER, bar)
         self.folder_chip.setObjectName("fitCurveChip")
         self.folder_chip.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.folder_chip.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -170,12 +179,35 @@ class FitSeriesView:
         row.addWidget(QLabel("Files", page))
         self.pattern_edit = QLineEdit("*_fit_input.dat", page)
         self.pattern_edit.setObjectName("fitSeriesPattern")
-        self.pattern_edit.setToolTip("Which files of the folder are curves (* stands for any text)")
+        self.pattern_edit.setToolTip("Which files of the folder are curves (* stands for any text), or detector frames "
+                                     "(*.cbf, *.tif, *.edf, *.nxs …): each frame is then cut as Analyze cuts it")
         row.addWidget(self.pattern_edit, 1)
         layout.addLayout(row)
+        # Detector frames: how they are cut (Analyze's set-up when they were listed) and taking it again.
+        self.frames_card, self.frames_label = info_card(page)
+        self.frames_card.setObjectName("fitSeriesFramesCard")
+        self.frames_label.setObjectName("fitSeriesFramesSetup")
+        self.frames_card.hide()
+        layout.addWidget(self.frames_card)
+        self.take_setup_button = QPushButton("Take Analyze's Set-up", page)
+        self.take_setup_button.setObjectName("fitSeriesTakeSetup")
+        self.take_setup_button.setToolTip(
+            "Cut the frames with Analyze's set-up as it is now (geometry, masks and corrections, the cut, Sum N, the "
+            "halves sent to Fitting). Set it up on one frame of the series in Analyze first.")
+        self.take_setup_button.hide()
+        layout.addWidget(self.take_setup_button, 0, Qt.AlignLeft)
         self.subfolders_check = QCheckBox("Also in subfolders", page)
         self.subfolders_check.setObjectName("fitSeriesSubfolders")
-        layout.addWidget(self.subfolders_check)
+        self.watch_check = QCheckBox("Watch for new curves", page)
+        self.watch_check.setObjectName("fitSeriesWatch")
+        self.watch_check.setToolTip(
+            "While the series runs, fit curves that appear in the folder (e.g. written by Analyze during a "
+            "measurement). Can be switched while the series runs."
+        )
+        which = FlowLayout(spacing=14)  # side by side where there is room: the list of frames keeps the height
+        which.addWidget(self.subfolders_check)
+        which.addWidget(self.watch_check)
+        layout.addLayout(which)
         frames = QHBoxLayout()
         self.first_spin = QSpinBox(page)
         self.last_spin = QSpinBox(page)
@@ -198,12 +230,19 @@ class FitSeriesView:
         frames.addWidget(every)
         frames.addWidget(self.every_spin, 1)
         layout.addLayout(frames)
-        self.watch_check = QCheckBox("Watch for new curves", page)
-        self.watch_check.setObjectName("fitSeriesWatch")
-        self.watch_check.setToolTip(
-            "While the series runs, fit curves that appear in the folder (e.g. written by Analyze during a measurement)"
-        )
-        layout.addWidget(self.watch_check)
+        halves = QHBoxLayout()
+        self.side_label = QLabel("Halves of the cut", page)
+        self.side_combo = QComboBox(page)  # filled by the page (``single/series_halves.py``)
+        self.side_combo.setObjectName("fitSeriesHalves")
+        self.side_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.side_combo.setMinimumContentsLength(12)
+        halves.addWidget(self.side_label)
+        halves.addWidget(self.side_combo, 1)
+        layout.addLayout(halves)
+        self.halves_note = muted("", page)
+        self.halves_note.setObjectName("fitSeriesHalvesNote")
+        self.halves_note.hide()  # shown when there is something to say: where the choice comes from
+        layout.addWidget(self.halves_note)
         self.stages_label = muted("", page)
         self.stages_label.setObjectName("fitSeriesStages")
         layout.addWidget(self.stages_label)
@@ -216,19 +255,29 @@ class FitSeriesView:
         layout.addWidget(self.skip_odd_check)
         self.frame_list = QListWidget(page)
         self.frame_list.setObjectName("fitSeriesFrames")
-        self.frame_list.setMinimumHeight(180)
+        self.frame_list.setMinimumHeight(150)
+        self.frame_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # a long line wraps: nothing is cut
+        self.frame_list.setTextElideMode(Qt.ElideNone)
+        self.frame_list.setWordWrap(True)
+        self.frame_list.setResizeMode(QListView.Adjust)
+        self.frame_list.setToolTip("Select a frame to see it and its fit on the right.")  # (the first one is shown)
         layout.addWidget(self.frame_list, 1)
-        layout.addWidget(muted("Select a frame to see it and its fit on the right.", page))
 
     def _series_start_step(self, page: QWidget, layout: QVBoxLayout) -> None:
         self.model_card, self.model_summary = info_card(page)
         self.model_card.setObjectName("fitSeriesModelCard")
         layout.addWidget(self.model_card)
+        self.setup_note = QLabel("", page)  # the model was never set up: said before Start
+        self.setup_note.setObjectName("fitSeriesSetupNote")
+        self.setup_note.setProperty("gimapRole", "warning")
+        self.setup_note.setWordWrap(True)
+        self.setup_note.hide()
+        layout.addWidget(self.setup_note)
         self.edit_model_button = QPushButton("Edit in Single Analysis", page)
         self.edit_model_button.setObjectName("fitSeriesEditModel")
         self.edit_model_button.setToolTip(
-            "The series uses the model, halves, fitting range and left-out points of Single analysis: set them "
-            "there on one representative curve"
+            "The series uses the model, fitting range and left-out points of Single analysis: set them there on "
+            "one representative curve"
         )
         layout.addWidget(self.edit_model_button, 0, Qt.AlignLeft)
         title = QLabel("Each frame starts from", page)
@@ -259,10 +308,23 @@ class FitSeriesView:
         self.method_global = QRadioButton("Search the ranges, then refine (slow)", page)
         self.method_global.setObjectName("fitSeriesSearch")
         self.method_global.setToolTip("For frames that change a lot from one to the next")
-        for index, button in enumerate((self.method_local, self.method_global)):
+        self.method_fit1d = QRadioButton("Predict each frame (fit1d)", page)
+        self.method_fit1d.setObjectName("fitSeriesPredict")
+        self.method_fit1d.setToolTip(
+            "fit1d on every frame with the particles, fixed values and ranges of Single analysis' model and the "
+            "settings of its Fit step; values at an edge are resolved as there")
+        for index, button in enumerate((self.method_local, self.method_global, self.method_fit1d)):
             self.method_group.addButton(button, index)
             layout.addWidget(button)
         self.method_local.setChecked(True)
+        self.follow_check = QCheckBox("Prefer the solution that continues the previous frame", page)
+        self.follow_check.setObjectName("fitSeriesFollow")
+        self.follow_check.setToolTip(
+            "When a frame has solutions that fit equally well, keep the one closest to the previous frame (the "
+            "smoothest series); a clearly better other solution is still taken, and said")
+        self.follow_check.setChecked(True)
+        self.follow_check.setContentsMargins(22, 0, 0, 0)
+        layout.addWidget(self.follow_check)
         layout.addStretch(1)
 
     def _series_results_step(self, page: QWidget, layout: QVBoxLayout) -> None:
@@ -272,6 +334,13 @@ class FitSeriesView:
                                              QAbstractItemView.ExtendedSelection)  # rows to copy; the current one is shown
         self.results_table.setProperty("gimapDataHeaders", True)  # parameter names with units
         self.results_table.setMinimumHeight(200)
+        # Columns as wide as their text, set by the page when rows arrive: a header that sizes itself to the
+        # contents measures every cell again at each new cell (minutes for a few hundred frames).
+        header = self.results_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(False)
+        self.results_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.results_table.setWordWrap(False)
         layout.addWidget(self.results_table, 1)
         self.to_single_button = QPushButton("Open Frame in Single Analysis", page)
         self.to_single_button.setObjectName("fitSeriesToSingle")
@@ -297,19 +366,38 @@ class FitSeriesView:
         self.frame_plot = CurvePlot("", panel, log_y=True, log_x=False)
         self.frame_plot.setObjectName("fitSeriesFramePlot")
         self.frame_plot.set_labels("|q| (nm⁻¹)", "Intensity")
-        self.frame_plot.set_empty_text("The selected frame and its fit appear here.")
-        layout.addWidget(self.frame_plot, 3)
+        self.frame_plot.set_empty_text(FRAME_EMPTY)
+        self.frame_plot.x_window.setMovable(False)  # the fitting range is shown here, set in Single analysis
+        self.frame_note = QLabel("", panel)  # what the frame is fitted on, or why it cannot be
+        self.frame_note.setObjectName("fitSeriesFrameNote")
+        self.frame_note.setProperty("gimapRole", "muted")
+        self.frame_note.setWordWrap(True)  # a narrow plot: a second line, nothing cut
+        self.frame_note.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.frame_note)
         self.trend_plot = CurvePlot("", panel, log_y=False, log_x=None)
         self.trend_plot.setObjectName("fitSeriesTrendPlot")
         self.trend_plot.set_labels("frame", "")
         self.trend_plot.set_empty_text(TREND_EMPTY)
+        self.trend_plot.log_check.setText("Log scale")  # of a value or χ²ᵣ, not of an intensity
+        self.trend_plot.log_check.setToolTip("Logarithmic axis of the value")
         self.trend_combo = QComboBox(self.trend_plot)
         self.trend_combo.setObjectName("fitSeriesTrendParameter")
         self.trend_combo.setToolTip("Which parameter to follow through the series")
         self.trend_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.trend_plot.header_layout.insertWidget(0, self.trend_combo)
-        layout.addWidget(self.trend_plot, 2)
+        # A splitter, not a box: a plot whose title has gone onto its own row (a narrow panel) asks a box for
+        # the height it happens to have and then never gives it back — the trend ends as a strip under it.
+        self.plot_splitter = QSplitter(Qt.Vertical, panel)
+        self.plot_splitter.setObjectName("fitSeriesPlotSplitter")
+        self.plot_splitter.setHandleWidth(8)
+        self.plot_splitter.setChildrenCollapsible(False)
+        self.plot_splitter.addWidget(self.frame_plot)
+        self.plot_splitter.addWidget(self.trend_plot)
+        self.plot_splitter.setStretchFactor(0, 3)
+        self.plot_splitter.setStretchFactor(1, 2)
+        self.plot_splitter.setSizes([360, 240])
+        layout.addWidget(self.plot_splitter, 1)
         return panel
 
 
-__all__ = ["FitSeriesView", "SERIES_STEPS", "TREND_EMPTY"]
+__all__ = ["FOLDER_HINT", "FRAME_EMPTY", "FitSeriesView", "NO_FOLDER", "RESULTS_WIDTH", "SERIES_STEPS", "TREND_EMPTY"]

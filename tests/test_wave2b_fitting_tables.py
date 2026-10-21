@@ -25,7 +25,8 @@ def test_the_tables_copy_their_rows_and_the_solutions_keep_one_current_row(tmp_p
     table = page.parameters_table
     assert table.selectionMode() == QAbstractItemView.ExtendedSelection
     assert page.solutions_table.selectionMode() == QAbstractItemView.SingleSelection  # “Use This Solution”
-    assert [action.text() for action in table.actions()] == ["Copy Rows", "Copy Table"]
+    named = [action.text() for action in table.actions() if not action.isSeparator()]
+    assert named == ["Copy Rows", "Copy Table", "Fix", "Let It Fit", "Range…"]  # copy, then what Results can do
     assert page.solutions_table.actions() and table.contextMenuPolicy() == Qt.ActionsContextMenu
     whole = _ctrl_c(table)  # nothing selected: the whole table
     lines = whole.splitlines()
@@ -100,5 +101,6 @@ def test_the_series_table_copies_and_its_headers_are_short_with_the_full_name_on
 
 def test_the_fit_step_says_what_to_do() -> None:
     page = _page()
-    assert page.step_intro["fit"].text() == "Choose a method; the button below runs it (Ctrl+Return)."
+    assert page.step_intro["fit"].text() == ("Choose a method and press Fit; values that stop at an edge of their "
+                                             "range are dealt with by the fit.")
     _close(page)

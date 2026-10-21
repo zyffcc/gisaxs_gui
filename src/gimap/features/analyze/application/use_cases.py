@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, is_dataclass
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -20,15 +20,13 @@ from ..domain import (
     GIWAXS,
     CakeMap,
     Corrections,
-    Curve,
     GiwaxsMaps,
+    Reduction,
     SymmetryCenter,
     cake_map,
     classify_measurement,
     curve_source_mask,
-    describe_intensity_corrections,
     has_intensity_corrections,
-    sum_frames,
     symmetric_center_x,
     giwaxs_maps,
     gisaxs_maps,
@@ -38,11 +36,18 @@ from ..domain import (
     valid_pixels,
 )
 from .models import AUTO, AnalysisRequest, FrameAnalysis
-from .frame_preprocessing import FramePreprocessingMixin, floating
+from .export_record import (  # noqa: F401 - the record of an export; these names are imported from here
+    SOFTWARE,
+    _plain,
+    analysis_metadata,
+    export_stem,
+    fit_input_curve,
+    fit_input_metadata as _fit_input_metadata,
+    fit_input_observation,
+)
+from .frame_preprocessing import FramePreprocessingMixin, FrameSum, floating
 from .geometry_resolution import ResolveGeometry, center_not_used_message
 from .ports import CurveWriter, FrameSource, InstrumentProfileStore
-
-SOFTWARE = "GIMaP Analyze 1"
 
 
 class AnalyzeFrame(FramePreprocessingMixin):
@@ -78,12 +83,14 @@ class AnalyzeFrame(FramePreprocessingMixin):
             summed_frames=request.summed_frames,
         )
         if request.summed_frames:
-            frames = [(data, valid)]
+            total = FrameSum()  # one frame in memory at a time: Sum 40 of a 15 Mpx detector held 3 GB as a list
+            total.add(data, valid)
             for path, index in request.summed_frames:
                 extra = self.frames.load(path, index)
                 extra_data = np.asarray(extra.data, dtype=np.float32)
-                frames.append((extra_data, valid_pixels(extra_data, extra.mask, negatives_valid=floating(extra.metadata))))
-            data, valid = sum_frames(frames)
+                total.add(extra_data, valid_pixels(extra_data, extra.mask, negatives_valid=floating(extra.metadata)))
+                del extra, extra_data
+            data, valid = total.result()
         return data, valid, common
 
     def _giwaxs_maps(self, shape: tuple[int, int], geometry: DetectorGeometry) -> GiwaxsMaps:
@@ -212,6 +219,7 @@ class AnalyzeFrame(FramePreprocessingMixin):
                 with_map=request.with_map, counts=scale if scale is not None else counting,
             )
         messages.extend(reduction.warnings)
+        reduction = held_cut(reduction, request.series_cut)
         return FrameAnalysis(
             **common,
             resolution=resolution,
@@ -220,65 +228,6 @@ class AnalyzeFrame(FramePreprocessingMixin):
             messages=tuple(messages),
             detected_kind=detected,
         )
-
-
-def _plain(value: Any) -> Any:
-    """JSON-friendly copy of markers (dataclasses, tuples, numpy scalars)."""
-    if is_dataclass(value):
-        return _plain(asdict(value))
-    if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    return value
-
-
-def analysis_metadata(analysis: FrameAnalysis) -> dict[str, Any]:
-    """Provenance written next to exported curves."""
-    reduction = analysis.reduction
-    profile = analysis.resolution.profile
-    return {
-        "software": SOFTWARE,
-        "source_file": str(analysis.path),
-        "frame_index": analysis.frame_index,
-        "frame_count": analysis.frame_count,
-        "summed_frames": [
-            {"file": str(path), "frame_index": index} for path, index in analysis.summed_frames
-        ],
-        "detector_name": analysis.detector_name,
-        "frame_shape": list(analysis.shape),
-        "measurement": analysis.kind,
-        "geometry": _plain(analysis.geometry) if analysis.geometry is not None else None,
-        "geometry_convention": (
-            "canonical pixel-corner frame, row 0 at top, beam centre = direct beam; "
-            "exact grazing-incidence q, Å⁻¹"
-        ),
-        "instrument_profile": (
-            {"name": profile.name, "source": profile.source, "updated_at": profile.updated_at}
-            if profile is not None
-            else None
-        ),
-        "corrections": _plain(analysis.corrections),
-        "intensity_corrections": (
-            describe_intensity_corrections(analysis.corrections) if analysis.kind == GIWAXS else None
-        ),
-        "bad_pixels_left_out": None if analysis.bad_pixels is None else {
-            "hot": analysis.bad_pixels.hot_count, "dead": analysis.bad_pixels.dead_count,
-            "defective_line_pixels": analysis.bad_pixels.line_count,
-        },
-        "drawn_mask_pixels": None if analysis.drawn_mask is None else int(analysis.drawn_mask.sum()),
-        "pixels_filled_from_mirror": None if analysis.filled_pixels is None else int(analysis.filled_pixels.sum()),
-        "markers": _plain(reduction.markers) if reduction is not None else {},
-        "curves": [
-            {"key": curve.key, "title": curve.title, "x_label": curve.x_label, "region": _plain(curve.region)}
-            for curve in (reduction.curves if reduction is not None else ())
-        ],
-        "messages": list(analysis.messages),
-    }
 
 
 def header_beam_center(
@@ -301,70 +250,41 @@ def header_beam_center(
     return x, y
 
 
-def fit_input_curve(analysis: FrameAnalysis) -> Optional[Curve]:
-    """The curve handed to Fitting.
-
-    GISAXS: the whole horizontal cut with signed qy — Fitting's q view shows
-    the halves apart on |qy|, averages them or keeps one (fitting models are
-    functions of |q|).  GIWAXS: the full I(q).  ``None`` when there is
-    nothing to fit.
-    """
-    reduction = analysis.reduction
-    if reduction is None:
+def _band(values) -> Optional[tuple[float, float]]:
+    try:
+        low, high = (float(value) for value in values)
+    except (TypeError, ValueError):
         return None
-    if analysis.kind == GISAXS:
-        curve = reduction.curve("horizontal")
-        if curve is None or curve.is_empty:
-            return None
-        return Curve(
-            "fit_input", curve.title, curve.x, curve.intensity, curve.sigma, curve.pixels,
-            curve.x_label, curve.y_label, dict(curve.region),
-        )
-    curve = reduction.curve("radial")
-    if curve is None or curve.is_empty:
-        return None
-    return Curve(
-        "fit_input", curve.title, curve.x, curve.intensity, curve.sigma, curve.pixels,
-        curve.x_label, curve.y_label, dict(curve.region),
-    )
+    return low, high
 
 
-def fit_input_observation(analysis: FrameAnalysis) -> dict[str, Any]:
-    """How the fit-input points were measured, for Fitting's counting-statistics contract.
-
-    GISAXS cuts are native detector columns (one point per column, mean counts
-    per pixel, Poisson σ); background subtraction, a floating-point
-    (dark-subtracted) frame and mirror filling break the counting model — σ then
-    comes from the scatter of the pixels —, a valid range acts as a threshold,
-    and summed frames are recorded.
-    """
-    corrections = analysis.corrections
-    return {
-        "source": "native_detector_columns" if analysis.kind == GISAXS else "radial_bins",
-        "file_format": analysis.path.suffix.lower().lstrip("."),
-        "intensity_unit": "counts_per_pixel",
-        "counting_model_valid": (
-            corrections.background_path is None and not corrections.mirror_fill and not floating(analysis.metadata)
-            and analysis.intensity_scale is None
-            and not (analysis.kind == GIWAXS and has_intensity_corrections(corrections))
-        ),
-        "threshold_enabled": corrections.minimum is not None or corrections.maximum is not None,
-        "gap_guard_px": int(corrections.gap_guard_px),
-        "summed_frames": analysis.frame_total,
-    }
-
-
-def _fit_input_metadata(analysis: FrameAnalysis, metadata: Mapping[str, Any]) -> dict[str, Any]:
-    return {**metadata, "observation": fit_input_observation(analysis)}
-
-
-def export_stem(analysis: FrameAnalysis) -> str:
-    stem = analysis.path.stem
-    if analysis.frame_count > 1:
-        stem += f"_frame{analysis.frame_index:04d}"
-    if analysis.summed_frames:
-        stem += f"_sum{analysis.frame_total}"
-    return stem
+def held_cut(reduction: Reduction, series_cut: Optional[Mapping[str, Any]]) -> Reduction:
+    """``reduction`` of a frame cut at the cut of a series (``AnalysisRequest.series_cut``), with markers that say
+    so: ``series_cut`` — ``{"frame": (path, index), …}`` and those of ``horizontal_rows``, ``vertical_columns`` or
+    ``chi_q_window`` the frame was cut at — and ``horizontal_source`` ``series`` where the reduction alone says
+    ``manual`` (it calls any row it is given “manual”). A cut the person set is not the series' (``with_cut``
+    leaves it) and stays as it is; so does a reduction that took nothing from the series."""
+    if not series_cut or reduction is None:
+        return reduction
+    markers, held = dict(reduction.markers or {}), {}
+    technique = series_cut.get("technique")
+    if reduction.kind == GISAXS and technique == GISAXS:
+        for name, band in (("horizontal_rows", "horizontal_band"), ("vertical_columns", "vertical_band")):
+            pinned, used = _band(series_cut.get(name)), _band(markers.get(band))
+            # (the same centre: the width of a band stays that of the frame's request)
+            if pinned is not None and used is not None and abs(sum(pinned) - sum(used)) < 1e-6:
+                held[name] = pinned
+        if "horizontal_rows" in held and markers.get("horizontal_source") == "manual":
+            markers["horizontal_source"] = "series"
+    elif reduction.kind == GIWAXS and technique == GIWAXS:
+        pinned, used = _band(series_cut.get("chi_q_window")), _band(markers.get("chi_q_window"))
+        if pinned is not None and used is not None and np.allclose(sorted(pinned), sorted(used)):
+            held["chi_q_window"] = pinned
+    if not held:
+        return reduction
+    frame = series_cut.get("frame")
+    markers["series_cut"] = {"frame": (str(frame[0]), int(frame[1])) if frame else None, **held}
+    return replace(reduction, markers=markers)
 
 
 def refine_center_by_symmetry(analysis: FrameAnalysis, *, cancelled=None) -> SymmetryCenter:
@@ -414,14 +334,14 @@ class ExportAnalysis:
         metadata = {**analysis_metadata(analysis), "title": "GIMaP Analyze cake: mean intensity on a chi-q grid, blank = no pixel"}
         return self.writer.write_map(cake.image, q_axis, chi_axis, Path(path), ("q (Å⁻¹)", "χ (°)"), metadata)
 
-    def fit_input(self, analysis: FrameAnalysis, destination: Path) -> Path:
-        """Write the Fitting input as ``<stem>_fit_input.dat`` (q in Å⁻¹)."""
+    def fit_input(self, analysis: FrameAnalysis, destination: Path, halves: Optional[str] = None) -> Path:
+        """Write the Fitting input as ``<stem>_fit_input.dat`` (q in Å⁻¹; ``halves``: ``fit_input_observation``)."""
         curve = fit_input_curve(analysis)
         if curve is None:
             raise ValueError("Nothing to fit: this frame has no usable curve.")
         path = Path(destination) / f"{export_stem(analysis)}_fit_input.dat"
         return self.writer.write_xy(
-            curve, path, _fit_input_metadata(analysis, analysis_metadata(analysis))
+            curve, path, _fit_input_metadata(analysis, analysis_metadata(analysis), halves)
         )
 
     def __call__(
@@ -429,8 +349,11 @@ class ExportAnalysis:
         analysis: FrameAnalysis,
         destination: Path,
         extra_metadata: Optional[Mapping[str, Any]] = None,
+        *,
+        halves: Optional[str] = None,
     ) -> list[Path]:
-        """Every curve as CSV plus the JSON record, and the Fitting input when there is one."""
+        """Every curve as CSV plus the JSON record, and the Fitting input when there is one (``halves``: what a
+        fit is to take of a GISAXS cut, written with it — ``fit_input_observation``)."""
         if analysis.reduction is None:
             raise ValueError("Nothing to export: this frame has no geometry yet.")
         curves = [curve for curve in analysis.reduction.curves if not curve.is_empty]
@@ -444,7 +367,7 @@ class ExportAnalysis:
         if fit_curve is not None:
             path = Path(destination) / f"{export_stem(analysis)}_fit_input.dat"
             written.append(
-                self.writer.write_xy(fit_curve, path, _fit_input_metadata(analysis, metadata))
+                self.writer.write_xy(fit_curve, path, _fit_input_metadata(analysis, metadata, halves))
             )
         return written
 
@@ -537,5 +460,6 @@ __all__ = [
     "fit_input_observation",
     "geometry_from_fitting_settings",
     "header_beam_center",
+    "held_cut",
     "refine_center_by_symmetry",
 ]

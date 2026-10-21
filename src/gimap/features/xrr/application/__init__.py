@@ -13,6 +13,7 @@ from .models import (
     XrrFrameRef,
     XrrPoint,
     XrrSeriesInspection,
+    XrrSeriesLayout,
     XrrSeriesSpec,
 )
 from .use_cases import (
@@ -42,6 +43,7 @@ __all__ = [
     "XrrFrameRef",
     "XrrPoint",
     "XrrSeriesInspection",
+    "XrrSeriesLayout",
     "XrrSeriesSpec",
     "default_export_path",
     "record_path_for",

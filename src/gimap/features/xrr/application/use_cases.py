@@ -28,18 +28,30 @@ from .ports import (
 )
 
 
+def frames_and_layout(repository: XrrSeriesRepository, spec: XrrSeriesSpec):
+    """The frames of a series and what they are stored in (``None``: the repository does not say), from
+    ONE look at the files when the repository offers ``series`` — the two then describe the same files."""
+    series = getattr(repository, "series", None)
+    if callable(series):
+        return series(spec)
+    frames = repository.discover(spec)
+    describe = getattr(repository, "describe", None)
+    return frames, (describe(spec) if callable(describe) and frames else None)
+
+
 class InspectXrrSeries:
     def __init__(self, repository: XrrSeriesRepository):
         self._repository = repository
 
     def execute(self, spec: XrrSeriesSpec) -> XrrSeriesInspection:
-        frames = self._repository.discover(spec)
+        frames, layout = frames_and_layout(self._repository, spec)
         if not frames:
             raise ValueError("No detector frames were found for the selected XRR series.")
         return XrrSeriesInspection(
             frame_count=len(frames),
             first_ref=frames[0],
             first_frame=self._repository.load_frame(frames[0]),
+            layout=layout,
         )
 
 
@@ -56,7 +68,9 @@ class ExtractXrrSeries:
         on_progress: Callable[[XrrExtractionProgress], None] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
     ) -> XrrExtractionResult:
-        frames = self._repository.discover(request.series)
+        # What the frames are stored in goes with the points: the export record says which files were
+        # read and which frames the reader left out.
+        frames, layout = frames_and_layout(self._repository, request.series)
         if not frames:
             raise ValueError("No detector frames were found for the selected XRR series.")
         points: list[XrrPoint] = []
@@ -97,9 +111,10 @@ class ExtractXrrSeries:
                         point=point,
                         preview=detector.data,
                         preview_shape=tuple(int(value) for value in detector.data.shape),
+                        layout=layout,
                     )
                 )
-        return XrrExtractionResult(tuple(points))
+        return XrrExtractionResult(tuple(points), layout)
 
     @staticmethod
     def _theta_for(spec: XrrSeriesSpec, ref) -> float:

@@ -11,13 +11,49 @@ from PyQt5.QtWidgets import QFileDialog
 from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr, trf
 
-SERIES_FILTER = "Detector data (*.nxs *.cbf);;NXS (*.nxs);;CBF (*.cbf)"
-SERIES_SUFFIXES = (".nxs", ".cbf")
+HDF5_SERIES_SUFFIXES = (".nxs", ".nx", ".nx5", ".h5", ".hdf5", ".hdf")
+SERIES_FILTER = (
+    "Detector data (*.nxs *.nx *.nx5 *.h5 *.hdf5 *.hdf *.cbf);;"
+    "NeXus / HDF5 (*.nxs *.nx *.nx5 *.h5 *.hdf5 *.hdf);;CBF (*.cbf)"
+)
+SERIES_SUFFIXES = (*HDF5_SERIES_SUFFIXES, ".cbf")
 SOURCE_KIND_AUTO, SOURCE_KIND_NXS, SOURCE_KIND_CBF = 0, 1, 2
 
 
+def _holds(folder: Path, suffixes: tuple[str, ...]) -> bool:
+    try:
+        return any(path.suffix.casefold() in suffixes for path in folder.iterdir())
+    except OSError:
+        return False
+
+
+def _holds_nexus_files(folder: Path) -> bool:
+    """A folder that can be an NXS series: it holds NeXus / HDF5 files (one frame per file, or several)."""
+    return _holds(folder, HDF5_SERIES_SUFFIXES)
+
+
+def fitting_kind(location: Path, kind: int) -> int:
+    """The source type for ``location``: ``kind`` when that type can read it, else one that can.
+
+    A folder without NeXus / HDF5 files is no NXS series, and a folder without a CBF frame but with
+    NeXus / HDF5 files is no CBF series (Auto reads its NeXus files); a file decides by its suffix.
+    """
+    if location.is_dir():
+        if kind == SOURCE_KIND_NXS and not _holds_nexus_files(location):
+            return SOURCE_KIND_CBF
+        if kind == SOURCE_KIND_CBF and not _holds(location, (".cbf",)) and _holds_nexus_files(location):
+            return SOURCE_KIND_AUTO
+        return kind
+    suffix = location.suffix.casefold()
+    if suffix in HDF5_SERIES_SUFFIXES and kind == SOURCE_KIND_CBF:
+        return SOURCE_KIND_NXS
+    if suffix == ".cbf" and kind == SOURCE_KIND_NXS:
+        return SOURCE_KIND_AUTO
+    return kind
+
+
 def dropped_series(mime) -> str:
-    """The first dropped NXS or CBF file, or folder ('' when there is none)."""
+    """The first dropped NeXus / HDF5 or CBF file, or folder ('' when there is none)."""
     if mime is None or not mime.hasUrls():
         return ""
     for url in mime.urls():
@@ -54,9 +90,26 @@ class XrrFilesMixin:
             path = QFileDialog.getExistingDirectory(self, tr("Select CBF series folder"), start)
         else:
             path, _ = QFileDialog.getOpenFileName(self, tr("Select detector series"), start, SERIES_FILTER)
-        if path:
-            self.source_picker.set_path(path)
-            self._remember_folder(path)
+        self._choose_source(path)
+
+    def _browse_folder(self) -> None:
+        """A folder as the series, whatever the source type: its NeXus / HDF5 files or its CBF frames."""
+        self._choose_source(
+            QFileDialog.getExistingDirectory(self, tr("Select the folder of the series"), self._start_folder())
+        )
+
+    def _choose_source(self, path: str) -> None:
+        """Take what a file dialog returned ('' when it was cancelled) with a source type that reads it."""
+        if not path:
+            return
+        self._fit_source_kind(Path(path))
+        self.source_picker.set_path(path)
+        self._remember_folder(path)
+
+    def _fit_source_kind(self, location: Path) -> None:
+        kind = self.source_kind_combo.currentIndex()
+        if fitting_kind(location, kind) != kind:
+            self.source_kind_combo.setCurrentIndex(fitting_kind(location, kind))
 
     def _busy(self) -> bool:
         return self._thread_running(self._inspect_thread) or self._thread_running(self._extract_thread)
@@ -78,13 +131,7 @@ class XrrFilesMixin:
     def use_series(self, path: str) -> None:
         """A dropped series: as if chosen with Browse…, and its first frame is loaded at once."""
         location = Path(path)
-        kind = self.source_kind_combo.currentIndex()
-        if location.is_dir() and kind == SOURCE_KIND_NXS:
-            self.source_kind_combo.setCurrentIndex(SOURCE_KIND_CBF)
-        elif location.suffix.casefold() == ".nxs" and kind == SOURCE_KIND_CBF:
-            self.source_kind_combo.setCurrentIndex(SOURCE_KIND_NXS)
-        elif location.suffix.casefold() == ".cbf" and kind == SOURCE_KIND_NXS:
-            self.source_kind_combo.setCurrentIndex(SOURCE_KIND_AUTO)
+        self._fit_source_kind(location)
         self.source_picker.set_path(str(location))
         self._remember_folder(location)
         self._inspect_series()
@@ -130,4 +177,4 @@ class XrrFilesMixin:
         )
 
 
-__all__ = ["XrrFilesMixin", "dropped_series"]
+__all__ = ["XrrFilesMixin", "dropped_series", "fitting_kind"]

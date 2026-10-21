@@ -74,6 +74,14 @@ SUMMARY_LINES = (
 )
 
 
+def frame_label(ref) -> str:
+    """What a frame of the series is called, in the interface language: its source (a set of module files:
+    the scan), and the frame within it when the source holds several."""
+    name = getattr(ref, "name", "") or ref.path.name
+    numbered = ref.frame_index or getattr(ref, "frames_in_file", 1) > 1
+    return trf("{name} · frame {frame}", name=name, frame=ref.frame_index + 1) if numbered else name
+
+
 def _number(value) -> float | None:
     try:
         number = float(value)
@@ -274,19 +282,28 @@ class GeometrySourcesMixin:
         self._inspection_summary = (
             {
                 "count": inspection.frame_count,
-                "name": inspection.first_ref.label,
+                "first": inspection.first_ref,  # named when the text is composed (the interface language)
                 "width": shape[1],
                 "height": shape[0],
             },
             dict(self._geometry_sources),
             {kind: list(values) for kind, values in notes.items()},
+            getattr(inspection, "layout", None),
         )
         self._compose_inspection_summary()
 
     def _compose_inspection_summary(self) -> None:
-        header_values, sources, notes = self._inspection_summary
+        header_values, sources, notes, layout = self._inspection_summary
+        header_values = {**header_values, "name": frame_label(header_values["first"])}
+        del header_values["first"]
         header = trf("{count} frame(s) · first: {name} · shape {width} × {height}", **header_values)
-        self.series_summary.setText("\n".join([header, *self._source_lines(sources, notes)]))
+        # Which kind of series was found (one file with all frames, module files, one frame per file …)
+        # and what the reader had to say about its files.
+        stored = [] if layout is None else [
+            trf(layout.summary[0], **layout.summary[1]),
+            *("⚠ " + trf(template, **values) for template, values in layout.warnings),
+        ]
+        self.series_summary.setText("\n".join([header, *stored, *self._source_lines(sources, notes)]))
 
     def _refresh_geometry_texts(self, *_args) -> None:
         for key, *_rest in GEOMETRY_FIELDS:
@@ -302,6 +319,15 @@ class GeometrySourcesMixin:
         self.geometry_note.setVisible(self._calibration is not None)
         if self._inspection_summary is not None:
             self._compose_inspection_summary()
+            self._show_first_frame_label()
+            redraw = getattr(self, "_redraw_detector", None)
+            if callable(redraw):  # the title over the preview is this caption
+                redraw()
+
+    def _show_first_frame_label(self) -> None:
+        """The caption of the preview while it shows the first frame of the inspected series."""
+        if getattr(self, "_last_roi_center", None) is None and self._inspection_summary is not None:
+            self.live_frame_label.setText(frame_label(self._inspection_summary[0]["first"]))
 
 
-__all__ = ["GEOMETRY_FIELDS", "GeometrySourcesMixin"]
+__all__ = ["GEOMETRY_FIELDS", "GeometrySourcesMixin", "frame_label"]
