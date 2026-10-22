@@ -8,7 +8,7 @@
 #
 # The first run downloads uv (a small Python installer from GitHub, the pinned version below, checked
 # against its published SHA-256), Python 3.10 and the packages of requirements.txt into the folder
-# .gimap\ of this checkout: a few GB, 5-20 minutes depending on the connection. Later runs start GIMaP
+# .gimap\ of this checkout: about 2 GB, 3-20 minutes depending on the connection. Later runs start GIMaP
 # at once. The packages of requirements-sputter.txt (PyTorch, CPU) are added once the Sputter toolkit
 # (research code, not part of the repository) has been copied to utils\sputter_toolkit. When a
 # requirements file changed (after an update) the missing packages are added before the start.
@@ -118,9 +118,9 @@ try {
         $Uv = Get-Uv
         if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
             Say "First start: setting up Python $PythonVersion and the packages GIMaP needs."
-            Say "This downloads a few GB and takes 5-20 minutes; later starts are immediate."
+            Say "This installs about 2 GB and takes 3-20 minutes; later starts are immediate."
             Invoke-Uv $Uv @("python", "install", $PythonVersion) "Python $PythonVersion could not be installed"
-            Invoke-Uv $Uv @("venv", $EnvDir, "--python", $PythonVersion) "the environment could not be created"
+            Invoke-Uv $Uv @("venv", "--quiet", $EnvDir, "--python", $PythonVersion) "the environment could not be created"
         }
         else {
             Say "The requirements changed (an update, or the Sputter toolkit was added): adding the missing packages ..."

@@ -225,7 +225,7 @@ Releases page of GIMaP; otherwise run GIMaP from source (section 2.2).
 clone of the repository, or of a ZIP of it (**Code ▸ Download ZIP** on GitHub, extracted to a short
 path that you may write to). The first start sets up a private environment in the folder `.gimap`:
 it downloads uv (a small Python installer, pinned version, checked against its SHA-256), Python 3.10
-and the packages of `requirements.txt` (a few GB, 5-20 minutes), then opens GIMaP. Later starts are
+and the packages of `requirements.txt` (about 2 GB, 3-20 minutes), then opens GIMaP. Later starts are
 immediate. Nothing outside the folder is changed; deleting `.gimap` removes the environment. The
 Sputter workspace needs its model toolkit, research code that is not part of the repository: copy the
 toolkit folder you were given to `utils\sputter_toolkit` in the GIMaP folder. The next start adds

@@ -199,7 +199,7 @@ GIWAXS 的标定（见 1.1 节），并把它存成了这个探测器的配置�
 **Windows 上最简单的方法（不需要懂 Python）。** 在仓库的克隆文件夹，或者仓库 ZIP 解压出的文件夹
 （GitHub 上 **Code ▸ Download ZIP**，解压到路径较短、可写的位置）里，双击 `Start_GIMaP.bat`。第一次启动会在
 文件夹里的 `.gimap` 中建立一个专用环境：下载 uv（一个小的 Python 安装工具，固定版本，并核对 SHA-256）、
-Python 3.10 以及 `requirements.txt` 里的包（共几 GB，5–20 分钟），然后打开 GIMaP。以后的启动是即时的。
+Python 3.10 以及 `requirements.txt` 里的包（约 2 GB，3–20 分钟），然后打开 GIMaP。以后的启动是即时的。
 文件夹以外的东西都不会被改动；删掉 `.gimap` 就去掉了这个环境。溅射（Sputter）工作区还需要它的模型工具包，
 这是研究代码，不在仓库里：把拿到的工具包文件夹复制到 GIMaP 文件夹里的 `utils\sputter_toolkit`，下次启动时
 会为它装上 PyTorch（`requirements-sputter.txt`），其他都不用设置。

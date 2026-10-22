@@ -105,7 +105,7 @@ For a clone of the repository (`git clone https://github.com/zyffcc/gisaxs_gui.g
 
 1. Double-click `Start_GIMaP.bat` in the folder. The first start sets up a private environment in
    `.gimap\` inside the folder: it downloads uv (a small Python installer, pinned version, checked
-   against its SHA-256), Python 3.10 and the packages of `requirements.txt` - a few GB, 5-20
+   against its SHA-256), Python 3.10 and the packages of `requirements.txt` - about 2 GB, 3-20
    minutes. Then GIMaP opens. Later starts are immediate.
 2. To update a clone, double-click `Update_GIMaP.bat` (it runs `tools/update_source.ps1`, which needs
    Git); the next `Start_GIMaP.bat` adds new packages first when the update needs any.
