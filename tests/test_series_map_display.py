@@ -241,7 +241,7 @@ def _rows(count: int, *, step: int = 1, frames: int = 12, summed: int = 1, expos
 
 def test_the_frame_axis_counts_the_frames_of_the_file_from_one() -> None:
     rows = _rows(4, step=3)  # every third frame of a 12-frame file
-    numbers = {("/d/scan_m01.nxs", index): index + 1 for index in range(12)}
+    numbers = {(str(Path("/d/scan_m01.nxs")), index): index + 1 for index in range(12)}  # paths as the system writes them
     series = build_series_map(rows, "radial", numbers=numbers)
     assert series.numbers == (1, 4, 7, 10) and series.number(2) == 7
     assert [fact.frame_index for fact in series.facts] == [0, 3, 6, 9] and series.facts[0].frame_count == 12
@@ -778,7 +778,7 @@ def test_a_row_of_a_set_of_module_files_is_named_by_its_scan() -> None:
         return SimpleNamespace(**{**values, **more})
 
     label = row_label(frame())
-    assert label == "scan_00007 frame 4 of 12" and label.name == "scan_00007" and label.source == "/data/scan_00007_m01.nxs"
+    assert label == "scan_00007 frame 4 of 12" and label.name == "scan_00007" and label.source == str(Path("/data/scan_00007_m01.nxs"))
     assert (label.frame_index, label.frame_count, label.summed, label.exposure_s) == (3, 12, 1, 0.998)
     summed = row_label(frame(frame_index=10, summed_frames=((Path("/data/scan_00007_m01.nxs"), 11),)))
     assert summed == "scan_00007 frame 11 of 12 (+1 summed)" and summed.summed == 2

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import sys
 import os
 import tempfile
@@ -10,9 +11,49 @@ import pytest
 
 
 def pytest_configure(config) -> None:
-    """Never touch the real user data folder: every test run gets its own."""
+    """Never touch the real user data folder: every test run gets its own.
+
+    Garbage is collected between tests only (``pytest_runtest_teardown``): an automatic collection in the middle
+    of a paint deleted Qt objects of earlier tests and crashed the suite with an access violation (as main.py
+    collects on a timer for the same reason)."""
     del config
     os.environ["GIMAP_HOME"] = tempfile.mkdtemp(prefix="gimap-test-home-")
+    gc.disable()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item, nextitem):
+    """After the test's own fixtures are torn down (they may close or dispose their dialogs themselves)."""
+    del item, nextitem
+    yield
+    _delete_closed_dialogs()
+    gc.collect()
+
+
+def _delete_closed_dialogs() -> None:
+    """Dialogs and tool windows a test closed are deleted by Qt (``deleteLater``) before the collection: a closed
+    Geometry Calibration window left to the collector crashed the suite when the collector destroyed it."""
+    if "PyQt5.QtWidgets" not in sys.modules:
+        return
+    from PyQt5.QtCore import QCoreApplication, QEvent
+    from PyQt5.QtWidgets import QApplication, QDialog
+
+    app = QApplication.instance()
+    if app is None:
+        return
+    closed = [widget for widget in app.topLevelWidgets()
+              if isinstance(widget, QDialog) and widget.parent() is None and not widget.isVisible()]
+    if not closed:
+        return
+    pyqtgraph = sys.modules.get("pyqtgraph")
+    if pyqtgraph is not None:  # embedded pyqtgraph views before their window (see _release_qt_widgets)
+        for widget in list(app.allWidgets()):
+            if isinstance(widget, pyqtgraph.GraphicsView) and _inside(widget, closed):
+                widget.deleteLater()
+    for widget in closed:
+        widget.deleteLater()
+    del closed
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 @pytest.fixture(scope="session", autouse=True)

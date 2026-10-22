@@ -7,6 +7,7 @@ must never be needed by the standalone SEM tool.
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 import time
 from pathlib import Path
@@ -80,7 +81,7 @@ def test_standalone_image_pipeline_exports_science_and_source_without_model(tmp_
     records = list(output.glob("*.json"))
     assert records, "SEM exports must include a machine-readable source/settings record"
     record_text = "\n".join(path.read_text(encoding="utf-8") for path in records)
-    assert str(source.resolve()) in record_text
+    assert json.dumps(str(source.resolve())) in record_text  # as JSON writes it (a Windows path escapes its \)
     assert hashlib.sha256(original_bytes).hexdigest() in record_text
     assert "nm_per_pixel" in record_text and "radius_definition" in record_text
     assert "prediction_included" in record_text and "sem_radius_scale" in record_text

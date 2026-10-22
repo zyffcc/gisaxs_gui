@@ -157,8 +157,11 @@ class _Following:
         return len(self.handed)
 
     def rest(self, looks: int = 4) -> None:
+        """A few more looks, ``LOOK_S`` apart as the timer's looks are (two looks a moment apart saw a frame the
+        SWMR writer had announced but not yet written as resting, on a busy machine)."""
         for _look in range(looks):
             self.look()
+            time.sleep(LOOK_S)
 
 
 # -- the watch itself --------------------------------------------------------------------------------------------------

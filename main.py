@@ -215,6 +215,11 @@ def main():
     app.setWindowIcon(app_icon())
     if sys.platform.startswith("win"):
         app.setFont(QFont("Segoe UI"))
+    # Python's collector may run in the middle of a paint and delete Qt objects of windows closed before:
+    # an access violation after a long session. Collect on a timer in the GUI thread instead (pyqtgraph's way).
+    from pyqtgraph.util.garbage_collector import GarbageCollector
+
+    app._gimap_garbage_collector = GarbageCollector(interval=1.0)
     app_context = create_app_context()
     # A bug in one handler must not close the application: log it, show it, go on.
     from src.gimap.app.error_guard import ErrorGuard
