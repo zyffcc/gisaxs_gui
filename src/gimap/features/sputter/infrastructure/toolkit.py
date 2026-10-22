@@ -1,8 +1,14 @@
-"""Run the external sputter toolkit (its own Python with PyTorch) as a subprocess.
+"""Run the sputter toolkit (a Python with PyTorch) as a subprocess.
 
 The toolkit folder holds ``scripts/sputter_struct_v1.py``, the ``sputtergisaxs``
 package, ``configs/`` and ``experts/polymer`` + ``experts/TS``. Progress comes
 back as ``SPUTTER_PROGRESS`` lines on stdout; Cancel terminates the process.
+
+The toolkit is research code that is not part of the repository. Defaults
+when nothing is chosen on the page: ``$GIMAP_SPUTTER_TOOLKIT``, else the
+git-ignored folder ``utils/sputter_toolkit`` of the program; and
+``$GIMAP_SPUTTER_PYTHON``, else this GIMaP's own Python when it has PyTorch
+(Start_GIMaP.bat adds PyTorch to a source folder once the toolkit is there).
 """
 
 from __future__ import annotations
@@ -16,6 +22,26 @@ from typing import Callable, Optional
 from ..application import AnalyzeRequest
 
 ENTRY = Path("scripts") / "sputter_struct_v1.py"
+# Where the toolkit is copied in the program folder (git-ignored, like utils/gisaxs1d_gui_kit).
+LOCAL_TOOLKIT = Path(__file__).resolve().parents[5] / "utils" / "sputter_toolkit"
+
+
+def default_folder() -> str:
+    """The toolkit copied to ``utils/sputter_toolkit``, when it is there."""
+    return str(LOCAL_TOOLKIT) if (LOCAL_TOOLKIT / ENTRY).is_file() else ""
+
+
+def default_python() -> str:
+    """This GIMaP's own Python when it can run the model (PyTorch installed); console variant for pipes."""
+    import importlib.util
+    try:
+        if importlib.util.find_spec("torch") is None:
+            return ""
+    except (ImportError, ValueError):
+        return ""
+    exe = Path(sys.executable)
+    console = exe.with_name("python.exe") if exe.name.lower() == "pythonw.exe" else exe
+    return str(console if console.is_file() else exe)
 
 
 class ToolkitNotConfigured(RuntimeError):
@@ -30,13 +56,18 @@ class SubprocessToolkit:
 
     def _resolve(self) -> tuple[str, Path]:
         python, folder = self.settings()
-        python = python or os.environ.get("GIMAP_SPUTTER_PYTHON", "")
-        folder = folder or os.environ.get("GIMAP_SPUTTER_TOOLKIT", "")
-        if not python or not Path(python).is_file():
-            raise ToolkitNotConfigured("Choose the Python executable of the sputter toolkit (an environment with "
-                                       "PyTorch, NumPy, SciPy, fabio and Matplotlib).")
+        python = python or os.environ.get("GIMAP_SPUTTER_PYTHON", "") or default_python()
+        folder = folder or os.environ.get("GIMAP_SPUTTER_TOOLKIT", "") or default_folder()
         if not folder or not (Path(folder) / ENTRY).is_file():
-            raise ToolkitNotConfigured(f"Choose the sputter toolkit folder (it contains {ENTRY.as_posix()}).")
+            raise ToolkitNotConfigured(
+                f"The sputter toolkit was not found. It is research code that is not part of GIMaP: copy its folder "
+                f"(with {ENTRY.as_posix()}, sputtergisaxs/ and experts/) to {LOCAL_TOOLKIT}, or choose it under "
+                f"Toolkit > Folder.")
+        if not python or not Path(python).is_file():
+            raise ToolkitNotConfigured(
+                "This GIMaP's Python has no PyTorch. In a source folder, start GIMaP again with Start_GIMaP.bat once "
+                "the toolkit is in utils/sputter_toolkit: it adds PyTorch. Or choose under Toolkit > Python a Python "
+                "with PyTorch, NumPy, SciPy, fabio and Matplotlib.")
         return python, Path(folder)
 
     def _run(self, args: list[str], on_line: Callable[[str], None], should_stop: Callable[[], bool]) -> list[str]:
@@ -93,4 +124,4 @@ class SubprocessToolkit:
         return Path(out_folder) / "structure.csv"
 
 
-__all__ = ["SubprocessToolkit", "ToolkitNotConfigured", "ENTRY"]
+__all__ = ["ENTRY", "LOCAL_TOOLKIT", "SubprocessToolkit", "ToolkitNotConfigured", "default_folder", "default_python"]

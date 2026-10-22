@@ -1,0 +1,6 @@
+# The Sputter workspace's model toolkit (external research code, copied to utils/sputter_toolkit):
+# PyTorch on the CPU and X-ray optical constants. Start_GIMaP.bat (tools/setup_source_env.ps1) adds these
+# to a source folder's environment once the toolkit is in utils/sputter_toolkit. The Windows wheels of
+# torch on PyPI are CPU builds; a CUDA build only matters for physical refinement.
+torch>=2.2,<2.7
+xraydb>=4.5

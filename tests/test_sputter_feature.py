@@ -72,7 +72,10 @@ def test_request_problems_are_explained(tmp_path):
     assert ok.problems() == []
 
 
-def test_toolkit_process_streams_progress_and_reports_errors(tmp_path):
+def test_toolkit_process_streams_progress_and_reports_errors(tmp_path, monkeypatch):
+    from src.gimap.features.sputter.infrastructure import toolkit as toolkit_module
+    monkeypatch.setattr(toolkit_module, "default_python", lambda: "")
+    monkeypatch.setattr(toolkit_module, "default_folder", lambda: "")
     (tmp_path / "scripts").mkdir()
     script = tmp_path / "scripts" / "sputter_struct_v1.py"
     script.write_text("import sys\nprint('SPUTTER_PROGRESS\\tintake\\t0.5\\thalf', flush=True)\n"
@@ -209,3 +212,53 @@ def test_learned_selector_variant_shows_its_test(qt_application, tmp_path):
     text = page.report.toPlainText()
     assert "Learned selector" in text and "R: not passed" in text and "D: passed" in text and "28%" in text
     page.close(); page.deleteLater()
+
+
+def test_the_toolkit_comes_from_its_local_folder_or_its_absence_is_explained(tmp_path, monkeypatch):
+    import importlib.util
+    from src.gimap.features.sputter.infrastructure import toolkit as toolkit_module
+
+    # Research code outside the repository: its default place is a git-ignored folder of the program.
+    root = Path(__file__).resolve().parents[1]
+    assert toolkit_module.LOCAL_TOOLKIT == root / "utils" / "sputter_toolkit"
+    assert "utils/sputter_toolkit/" in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    for name in ("GIMAP_SPUTTER_PYTHON", "GIMAP_SPUTTER_TOOLKIT"):
+        monkeypatch.delenv(name, raising=False)
+    kit = tmp_path / "sputter_toolkit"
+    monkeypatch.setattr(toolkit_module, "LOCAL_TOOLKIT", kit)
+    runner = SubprocessToolkit(lambda: ("", ""))
+    assert toolkit_module.default_folder() == ""
+    with pytest.raises(ToolkitNotConfigured, match="not part of GIMaP") as missing:
+        runner._resolve()
+    assert str(kit) in str(missing.value)
+
+    (kit / "scripts").mkdir(parents=True)
+    (kit / toolkit_module.ENTRY).write_text("", encoding="utf-8")
+    assert toolkit_module.default_folder() == str(kit)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: None)
+    assert toolkit_module.default_python() == ""
+    with pytest.raises(ToolkitNotConfigured, match="Start_GIMaP.bat"):
+        runner._resolve()
+    # With PyTorch, GIMaP's own interpreter runs the model: the console python.exe, whose output can be read.
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: object())
+    chosen = toolkit_module.default_python()
+    assert Path(chosen).is_file() and Path(chosen).name.lower() != "pythonw.exe"
+    assert runner._resolve() == (chosen, kit)
+
+
+def test_start_script_sets_up_a_source_folder_without_python_knowledge():
+    from pathlib import Path as _Path
+    root = _Path(__file__).resolve().parents[1]
+    bat = (root / "Start_GIMaP.bat").read_text(encoding="ascii")
+    source = bat.index("setup_source_env.ps1"); portable_error = bat.index("Portable Python was not found")
+    assert source < portable_error and 'if not exist "%PYTHON_EXE%" if exist "%~dp0main.py"' in bat
+    setup = (root / "tools" / "setup_source_env.ps1").read_bytes()
+    assert all(byte < 128 for byte in setup)
+    text = setup.decode("ascii")
+    assert '$UvVersion = "' in text and "Get-FileHash -Algorithm SHA256" in text and ".sha256" in text
+    assert "requirements-sputter.txt" in text and (root / "requirements-sputter.txt").is_file()
+    # PyTorch is added only when the external toolkit has been copied in.
+    assert "utils\\sputter_toolkit\\scripts\\sputter_struct_v1.py" in text
+    assert ".gimap/" in (root / ".gitignore").read_text(encoding="utf-8")
+    update = (root / "Update_GIMaP.bat").read_text(encoding="ascii")
+    assert "update_source.ps1" in update

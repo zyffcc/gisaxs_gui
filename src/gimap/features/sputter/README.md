@@ -5,9 +5,12 @@ polymer, window by window, and how far each value can be trusted.
 
 - **Open Results Folder…** shows a toolkit result folder (`structure.csv`, `structure_summary.json`).
 - **Analyze a Scan** runs the external *sputter toolkit* (`sputter_struct_v1`) on a folder of CBF frames: exact
-  0.5 s count windows (0.1 s for the first 5 s), direct features, polymer/TS networks. The toolkit runs in its own
-  Python with PyTorch (chosen under **Toolkit**), so GIMaP needs no PyTorch; progress arrives as
-  `SPUTTER_PROGRESS` lines, Stop terminates the process and finished steps are reused.
+  0.5 s count windows (0.1 s for the first 5 s), direct features, polymer/TS networks. The toolkit is research code
+  that is not part of the repository: the folder chosen under **Toolkit**, else `$GIMAP_SPUTTER_TOOLKIT`, else the
+  git-ignored `utils/sputter_toolkit`. It runs in a Python with PyTorch: the one chosen under **Toolkit**, else
+  `$GIMAP_SPUTTER_PYTHON`, else GIMaP's own when it has PyTorch (`Start_GIMaP.bat` adds `requirements-sputter.txt`
+  to a source folder once the toolkit is in `utils/sputter_toolkit`). Progress arrives as `SPUTTER_PROGRESS` lines,
+  Stop terminates the process and finished steps are reused.
 - **Add Refined Windows…** merges physical-refinement results (one JSON per window, e.g. computed on a GPU
   cluster with `scripts/refine_polymer_review_v1.py` of the toolkit).
 

@@ -74,6 +74,8 @@ def code():
                 continue  # research records and caches: not part of the program, nor of a release
             if parts[:2] == ("utils", "gisaxs1d_gui_kit"):
                 continue  # frozen external kit; required host dependencies are EXTERNAL_RUNTIME above
+            if parts[:2] == ("utils", "sputter_toolkit"):
+                continue  # external Sputter toolkit, run as a subprocess; its packages: requirements-sputter.txt
             if path.relative_to(ROOT).as_posix() in ISOLATED_RUNTIMES:
                 continue  # checked against its own runtime manifest below
             if parts[0] != "src":

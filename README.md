@@ -98,6 +98,24 @@ fitting model parameters are kept outside the program folder, in `%APPDATA%\GIMa
 keeps them. Version 0.0.2 kept its settings inside its own program folder: they are not carried
 over, and 0.1.0 starts with the defaults.
 
+### Windows: a source folder with one double-click (no Python needed)
+
+For a clone of the repository (`git clone https://github.com/zyffcc/gisaxs_gui.git`) or a ZIP of it
+(**Code ▸ Download ZIP**, extracted to a short path that you may write to):
+
+1. Double-click `Start_GIMaP.bat` in the folder. The first start sets up a private environment in
+   `.gimap\` inside the folder: it downloads uv (a small Python installer, pinned version, checked
+   against its SHA-256), Python 3.10 and the packages of `requirements.txt` - a few GB, 5-20
+   minutes. Then GIMaP opens. Later starts are immediate.
+2. To update a clone, double-click `Update_GIMaP.bat` (it runs `tools/update_source.ps1`, which needs
+   Git); the next `Start_GIMaP.bat` adds new packages first when the update needs any.
+
+Nothing outside the folder is changed; delete `.gimap\` to remove the environment. The Sputter
+workspace needs its model toolkit, research code that is not part of the repository: copy the toolkit
+folder you were given to `utils\sputter_toolkit`, and the next `Start_GIMaP.bat` adds PyTorch for it
+(`requirements-sputter.txt`); nothing else needs setting up. In a portable folder (with `runtime\`)
+`Start_GIMaP.bat` behaves as before.
+
 ### Running from Source
 
 Recommended source environment: Windows with Python 3.10 or 3.11.

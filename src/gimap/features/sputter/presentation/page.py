@@ -151,10 +151,12 @@ class SputterPage(QWidget):
         col.addWidget(scan)
 
         tool = QGroupBox("Toolkit", left); tf = QFormLayout(tool)
-        self.python_field = _PathField("python.exe with PyTorch", folder=False, filter_="Python (python*.exe python*);;All files (*)")
-        self.toolkit_field = _PathField("folder of sputter_struct_v1", folder=True)
-        note = QLabel("The model runs in its own Python (PyTorch, NumPy, SciPy, fabio, Matplotlib), so GIMaP itself needs "
-                      "no PyTorch. Reading the frames takes most of the time.")
+        self.python_field = _PathField("default: this GIMaP's Python (needs PyTorch)", folder=False,
+                                       filter_="Python (python*.exe python*);;All files (*)")
+        self.toolkit_field = _PathField("default: utils/sputter_toolkit in the GIMaP folder", folder=True)
+        note = QLabel("The toolkit is research code, not part of GIMaP. Copy it to utils/sputter_toolkit and leave both "
+                      "empty: Start_GIMaP.bat adds PyTorch to GIMaP's own Python at the next start. Result folders "
+                      "open without it. Reading the frames takes most of the time.")
         note.setWordWrap(True)
         tf.addRow("Python", self.python_field); tf.addRow("Folder", self.toolkit_field); tf.addRow(note)
         col.addWidget(tool)

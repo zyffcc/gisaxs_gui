@@ -221,7 +221,17 @@ Releases page of GIMaP; otherwise run GIMaP from source (section 2.2).
 
 ### 2.2 Running from source
 
-Install Python 3.10 or 3.11, then in the folder of the checkout:
+**The simple way on Windows (no Python needed).** Double-click `Start_GIMaP.bat` in the folder of a
+clone of the repository, or of a ZIP of it (**Code ▸ Download ZIP** on GitHub, extracted to a short
+path that you may write to). The first start sets up a private environment in the folder `.gimap`:
+it downloads uv (a small Python installer, pinned version, checked against its SHA-256), Python 3.10
+and the packages of `requirements.txt` (a few GB, 5-20 minutes), then opens GIMaP. Later starts are
+immediate. Nothing outside the folder is changed; deleting `.gimap` removes the environment. The
+Sputter workspace needs its model toolkit, research code that is not part of the repository: copy the
+toolkit folder you were given to `utils\sputter_toolkit` in the GIMaP folder. The next start adds
+PyTorch for it (`requirements-sputter.txt`); nothing else needs setting up.
+
+**By hand.** Install Python 3.10 or 3.11, then in the folder of the checkout:
 
 ```powershell
 python -m venv .venv
@@ -240,6 +250,10 @@ conda activate GUI
 python -m pip install -r requirements.txt
 python main.py
 ```
+
+The Sputter workspace runs its toolkit with PyTorch: copy the toolkit folder to
+`utils/sputter_toolkit` and run `python -m pip install -r requirements-sputter.txt` in the same
+environment.
 
 The trained weights of 1D Predict are in the Git repository (about 56 MB), so a checkout runs
 everything, including 1D Predict (chapter 6). On macOS, BornAgain is installed separately: `README.md`
@@ -262,7 +276,7 @@ TensorFlow runs on the CPU; a GPU set-up is not configured.
 **Portable version.** Run the installer of the new version in the same way. It extracts into its own
 folder; start the new `Start_GIMaP.bat` and delete the old folder when you no longer need it.
 
-**Source checkout.** In the folder of the checkout, run:
+**Source checkout.** Double-click `Update_GIMaP.bat` in the folder (it needs Git), or run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\update_source.ps1

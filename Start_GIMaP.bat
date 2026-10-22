@@ -8,6 +8,17 @@ set "PYTHON_EXE=%~dp0runtime\pythonw.exe"
 set "CONDA_UNPACK=%~dp0runtime\Scripts\conda-unpack.exe"
 set "FIRST_RUN_MARKER=%~dp0runtime\.gimap_unpacked"
 
+if not exist "%PYTHON_EXE%" if exist "%~dp0main.py" if exist "%~dp0tools\setup_source_env.ps1" (
+    rem A source folder (git clone or ZIP of the repository): set up its own environment once, then start.
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\setup_source_env.ps1"
+    if errorlevel 1 (
+        echo.
+        pause
+        exit /b 1
+    )
+    exit /b 0
+)
+
 if not exist "%PYTHON_EXE%" (
     echo [GIMaP] Portable Python was not found:
     echo %PYTHON_EXE%
