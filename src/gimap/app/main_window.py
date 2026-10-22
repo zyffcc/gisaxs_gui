@@ -143,14 +143,11 @@ class MainWindowComponents(HandoverMixin):
         return page
 
     def _create_sputter_page(self):
-        """Sputter: size and spacing of an in-situ sputter series with their reliability (model in an external toolkit)."""
+        """Sputter: size, spacing and metal thickness of an in-situ sputter series (model bundled with GIMaP)."""
         from src.gimap.features.sputter.bootstrap import create_sputter_service
         from src.gimap.features.sputter.presentation.page import SputterPage
 
-        holder = {}
-        service = create_sputter_service(lambda: holder["page"].toolkit_settings())
-        page = SputterPage(service, task_runner=self.task_runner, preferences=self.preferences)
-        holder["page"] = page
+        page = SputterPage(create_sputter_service(), task_runner=self.task_runner, preferences=self.preferences)
         self.ui.mainWindowWidget.addWidget(page)
         self.ui.sputterPage = page
         return page
@@ -446,6 +443,7 @@ class MainWindowComponents(HandoverMixin):
             # The Labs runtime starts after the window is shown: no runtime yet is an AttributeError, skipped.
             (tr("2D Prediction"), lambda: self.ui.runtime.prediction.prediction_running()),
             (tr("SEM Particle Analysis"), lambda: self.ui.menus.sem_running()),
+            (tr("Sputter prediction"), lambda: self.sputter_page.running()),
         )
         jobs = []
         for name, busy in checks:
@@ -498,7 +496,8 @@ class MainWindowComponents(HandoverMixin):
         workspace = self.fitting_workspace
         runtime = getattr(self.ui, "runtime", None)
         tools = getattr(getattr(self.ui, "menus", None), "tools", None)
-        candidates = (self.home_page, self.analyze_page, getattr(self, "guided", None), self.compare_page, workspace,
+        candidates = (self.home_page, self.analyze_page, getattr(self, "guided", None), self.compare_page,
+                      getattr(self, "sputter_page", None), workspace,
                       getattr(workspace, "fit_page", None), getattr(workspace, "series_page", None),
                       self._labs_page(getattr(runtime, "prediction", None), self.predict_workspace),
                       self._labs_page(getattr(runtime, "trainset", None), self.trainset_page),
@@ -547,8 +546,9 @@ class MainWindowComponents(HandoverMixin):
         if self._assistant is not None:
             self._assistant.shutdown()
         self._stop_automatic_analysis()
-        # A Single fit and an In-situ series: stop, wait (2 s at most) for their threads, release the plots.
-        for page in (self.fitting_workspace.fit_page, self.fitting_workspace.series_page):
+        # A Single fit and an In-situ series: stop, wait (2 s at most) for their threads, release the plots;
+        # Sputter: its model's (or pip's) whole process tree is ended.
+        for page in (self.fitting_workspace.fit_page, self.fitting_workspace.series_page, self.sputter_page):
             try:
                 page.dispose()
             except (AttributeError, RuntimeError):  # not built here, or its widgets are already gone

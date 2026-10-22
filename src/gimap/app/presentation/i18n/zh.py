@@ -24,6 +24,8 @@ from .zh_handover import HANDOVER_ZH
 from .zh_series_results import SERIES_RESULTS_ZH
 from .zh_frame_import import FRAME_IMPORT_ZH
 from .zh_sem import SEM_ZH
+from .zh_sputter import SPUTTER_ZH
+from .zh_sputter_report import SPUTTER_REPORT_ZH
 
 ZH = {
     # -- menus --------------------------------------------------------------------------
@@ -565,5 +567,7 @@ ZH.update(HANDOVER_ZH)
 ZH.update(SERIES_RESULTS_ZH)
 ZH.update(FRAME_IMPORT_ZH)
 ZH.update(SEM_ZH)
+ZH.update(SPUTTER_ZH)
+ZH.update(SPUTTER_REPORT_ZH)
 
 __all__ = ["ZH"]

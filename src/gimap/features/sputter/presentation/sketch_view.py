@@ -2,13 +2,16 @@
 
 Side view (flat-based hemispheres on the polymer) and top view (arrangement and
 coverage) on one nm ruler shared by the whole series, so growth is visible when
-the time slider moves. Unreliable quantities (burial depth, TS metal fraction)
-are drawn only when asked and are marked as such.
+the time slider moves. Film windows are drawn as a continuous film (with the
+texture of the TS length L when there is one); no particles are drawn on a
+film — a film with particles on it is not modelled — and its thickness is not
+determined. Unreliable quantities (burial depth) are drawn only when asked and
+are marked as such. A Cu series says on the picture (and on the saved image and
+storyboard) that it was read with the Ag model. Texts are in the interface language.
 """
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import Optional
 
@@ -16,10 +19,15 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QCheckBox, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QSlider,
                              QVBoxLayout, QWidget)
 
+from src.gimap.app.presentation.i18n import tr
+from src.gimap.shared.figures import cjk_fallback
+
 from ..application import Sketcher, StructureResult, series_extent, smoothed_rows, storyboard_indices, window_sketch
+from .texts import message_text, stage_name, text
 
 METAL_COLOURS = {"Ag": ("#b8c0c8", "#5f6b76"), "Au": ("#e3b23c", "#8a6512"), "Cu": ("#d08a5c", "#7a4220")}
 POLYMER = "#f3e3c3"; POLYMER_EDGE = "#c9a86a"; SUBSTRATE = "#9aa0a8"
+CU_NOTE = "Cu: approximated with the Ag model, for reference only."
 
 
 def _nice_bar(width: float) -> float:
@@ -31,21 +39,27 @@ def _nice_bar(width: float) -> float:
 
 def _describe(s) -> str:
     t = "–" if s.time_s is None else f"{s.time_s:.1f} s"
+    stage = stage_name(s.stage)
     if s.kind == "film":
-        f = f"{100 * s.metal_fraction:.0f}%" if s.metal_fraction else "–"
-        return (f"<b>t = {t}</b> · {s.stage or 'late'} · continuous film (TS model): characteristic length "
-                f"<b>L = {s.L:.3g} nm</b> · metal fraction {f} <i>(conditional, unreliable)</i>")
+        if s.L:
+            return text("<b>t = {time}</b> · {stage} · continuous film: characteristic length <b>L = {L} nm</b> · "
+                        "thickness not determined", time=t, stage=stage, L=f"{s.L:.3g}")
+        return text("<b>t = {time}</b> · {stage} · continuous film · thickness not determined", time=t, stage=stage)
     if s.kind != "islands":
-        return f"<b>t = {t}</b> · {'; '.join(s.notes) or 'no size estimate in this window'}"
+        notes = "; ".join(message_text(note) for note in s.notes) or tr("no size estimate in this window")
+        return text("<b>t = {time}</b> · {notes}", time=t, notes=notes)
     err = f"±{100 * s.R_error:.0f}%" if s.R_error else ""
-    spacing = f"{s.spacing:.3g} nm ({s.spacing_source})"
-    cov = f" · coverage ≈ {100 * s.coverage:.0f}% <i>(model-derived)</i>" if s.coverage is not None else ""
-    disorder = f"{s.disorder:.2f}" + ("" if s.disorder_measured else " (assumed)")
-    text = (f"<b>t = {t}</b> · {s.stage or ''} · <b>R = {s.R:.3g} nm</b> {err} (grade {s.R_grade or '?'}) · "
-            f"spacing <b>{spacing}</b> · size spread σ = {s.sigma:.2f} · spacing disorder {disorder}{cov}")
+    spacing = f"{s.spacing:.3g} nm ({message_text(s.spacing_source)})"
+    cov = text(" · coverage ≈ {coverage}% <i>(model-derived)</i>", coverage=f"{100 * s.coverage:.0f}") \
+        if s.coverage is not None else ""
+    disorder = f"{s.disorder:.2f}" + ("" if s.disorder_measured else " " + tr("(assumed)"))
+    words = text("<b>t = {time}</b> · {stage} · <b>R = {R} nm</b> {error} (grade {grade}) · spacing <b>{spacing}</b> · "
+                 "size spread σ = {sigma} · spacing disorder {disorder}{coverage}", time=t, stage=stage,
+                 R=f"{s.R:.3g}", error=err, grade=s.R_grade or "?", spacing=spacing, sigma=f"{s.sigma:.2f}",
+                 disorder=disorder, coverage=cov)
     if s.notes:
-        text += "<br><i>" + "; ".join(s.notes) + "</i>"
-    return text
+        words += "<br><i>" + "; ".join(message_text(note) for note in s.notes) + "</i>"
+    return words
 
 
 def draw_window(ax_side, ax_top, s, width: float, height: float, metal: str, *, show_burial: bool,
@@ -72,29 +86,34 @@ def draw_window(ax_side, ax_top, s, width: float, height: float, metal: str, *, 
         ax_side.add_patch(Rectangle((0, -poly_depth), side_w, poly_depth, facecolor=POLYMER, edgecolor=POLYMER_EDGE,
                                     lw=.6, alpha=.78 if show_burial and s.burial else 1., zorder=3 if show_burial else 1))
         if show_burial and s.burial:
-            ax_side.text(side_w * .99, -poly_depth * .5, f"burial {s.burial:.2g} nm\n(unreliable)", ha="right", va="center",
-                         fontsize=6.5, color="#7a4b00", zorder=4)
-    elif s.kind == "film":
+            ax_side.text(side_w * .99, -poly_depth * .5, text("burial {depth} nm\n(unreliable)", depth=f"{s.burial:.2g}"),
+                         ha="right", va="center", fontsize=6.5, color="#7a4b00", zorder=4)
+    elif s.kind == "film":  # a continuous film; nothing is drawn on it (a film with particles is not modelled)
         ax_side.add_patch(Rectangle((0, -poly_depth), side_w, poly_depth, facecolor=POLYMER, edgecolor=POLYMER_EDGE, lw=.6))
         field = sketcher.film_field(s, width, n=160)
+        thick = .45 * height
         if field:
-            row = field[len(field) // 2]; n = len(row); dx = width / n; thick = .45 * height
+            row = field[len(field) // 2]; n = len(row); dx = width / n
             for i, metal_here in enumerate(row):
                 x = i * dx
                 if metal_here and x < side_w:
                     ax_side.add_patch(Rectangle((x, 0), dx, thick, facecolor=fill, edgecolor="none"))
+        else:
+            ax_side.add_patch(Rectangle((0, 0), side_w, thick, facecolor=fill, edgecolor=edge, lw=.6))
+        ax_side.text(side_w * .99, thick * 1.15, tr("thickness not determined"), ha="right", va="bottom",
+                     fontsize=6.5, color="#7a4b00")
     else:
         ax_side.add_patch(Rectangle((0, -poly_depth), side_w, poly_depth, facecolor=POLYMER, edgecolor=POLYMER_EDGE, lw=.6))
-        ax_side.text(side_w / 2, height * .4, "no size estimate", ha="center", va="center", fontsize=8, color=fg)
+        ax_side.text(side_w / 2, height * .4, tr("no size estimate"), ha="center", va="center", fontsize=8, color=fg)
     ax_side.set_xlim(0, side_w); ax_side.set_ylim(-poly_depth - .18 * height, height)
     ax_side.set_aspect("equal", adjustable="box")
     if not compact:  # the storyboard's top view carries the same ruler
         bar = _nice_bar(side_w)
         ax_side.plot([side_w * .03, side_w * .03 + bar], [height * .88] * 2, color=fg, lw=2)
         ax_side.text(side_w * .03 + bar / 2, height * .93, f"{bar:g} nm", ha="center", va="bottom", fontsize=6.5, color=fg)
-        ax_side.set_title("side view (cut)", fontsize=8, color=fg, loc="left")
-        ax_side.text(side_w * .99, -poly_depth * .9 - .18 * height * .5, "polymer (thickness not to scale)", ha="right",
-                     va="center", fontsize=6, color="#5a4520")
+        ax_side.set_title(tr("side view (cut)"), fontsize=8, color=fg, loc="left")
+        ax_side.text(side_w * .99, -poly_depth * .9 - .18 * height * .5, tr("polymer (thickness not to scale)"),
+                     ha="right", va="center", fontsize=6, color="#5a4520")
     # -- top view ------------------------------------------------------------
     ax_top.add_patch(Rectangle((0, 0), width, width, facecolor=POLYMER, edgecolor=POLYMER_EDGE, lw=.6))
     if s.kind == "islands":
@@ -105,7 +124,7 @@ def draw_window(ax_side, ax_top, s, width: float, height: float, metal: str, *, 
         ax_top.add_collection(PatchCollection(circles, facecolor=fill, edgecolor=edge, linewidth=.4,
                                               linestyle=":" if unknown else "-", alpha=.55 if unknown else 1., zorder=2))
         if unknown:
-            ax_top.text(width / 2, width / 2, "spacing not measured\n(illustration)", ha="center", va="center",
+            ax_top.text(width / 2, width / 2, tr("spacing not measured\n(illustration)"), ha="center", va="center",
                         fontsize=7, color="#7a4b00", bbox=dict(facecolor="white", alpha=.7, lw=0))
     elif s.kind == "film":
         field = sketcher.film_field(s, width, n=160)
@@ -113,13 +132,17 @@ def draw_window(ax_side, ax_top, s, width: float, height: float, metal: str, *, 
             from matplotlib.colors import ListedColormap
             ax_top.imshow([[1 if v else 0 for v in row] for row in field], extent=(0, width, 0, width), origin="lower",
                           cmap=ListedColormap([POLYMER, fill]), vmin=0, vmax=1, interpolation="nearest", zorder=2)
+        else:
+            ax_top.add_patch(Rectangle((0, 0), width, width, facecolor=fill, edgecolor=edge, lw=.6, zorder=2))
+            ax_top.text(width / 2, width / 2, tr("continuous film"), ha="center", va="center", fontsize=7,
+                        color="#3a3a3a", bbox=dict(facecolor="white", alpha=.7, lw=0), zorder=3)
     ax_top.set_xlim(0, width); ax_top.set_ylim(0, width); ax_top.set_aspect("equal", adjustable="box")
     bar = _nice_bar(width)
     ax_top.plot([width * .04, width * .04 + bar], [width * .05] * 2, color="black", lw=2.5, zorder=5)
     ax_top.text(width * .04 + bar / 2, width * .075, f"{bar:g} nm", ha="center", va="bottom", fontsize=6.5, color="black",
                 bbox=dict(facecolor="white", alpha=.6, lw=0, pad=1), zorder=5)
     if not compact:
-        ax_top.set_title("top view", fontsize=8, color=fg, loc="left")
+        ax_top.set_title(tr("top view"), fontsize=8, color=fg, loc="left")
 
 
 class SketchView(QWidget):
@@ -152,10 +175,11 @@ class SketchView(QWidget):
             self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             lay.addWidget(self.canvas, 1)
         except Exception as exc:  # matplotlib missing
-            lay.addWidget(QLabel(f"Drawing is unavailable: {exc}"))
-        note = QLabel("Sketch of the fitted model, not an image: flat-based hemispheres (h = R) with the measured mean "
-                      "size and size spread; spacing from the model D only where it agrees with the peak, otherwise "
-                      "2π/q*. Burial depth and film details are not reliable.")
+            lay.addWidget(QLabel(text("Drawing is unavailable: {error}", error=exc)))
+        note = QLabel("Sketch of the fitted model, not an image: flat-based hemispheres (h = R) with the estimated "
+                      "mean size and size spread; spacing from the model D only where it agrees with the peak, otherwise "
+                      "2π/q*. Films are drawn without particles (a film with particles is not modelled) and their "
+                      "thickness is not determined. Burial depth is not reliable.")
         note.setWordWrap(True); note.setStyleSheet("color: gray; font-size: 10px;")
         lay.addWidget(note)
         self.slider.valueChanged.connect(lambda _: self.redraw())
@@ -169,6 +193,11 @@ class SketchView(QWidget):
     def set_result(self, result: StructureResult) -> None:
         self.result = result
         self._rebuild(keep_position=False)
+
+    def refresh_language(self) -> None:
+        """The description and the drawing's words in the new interface language."""
+        if self.result is not None:
+            self.redraw()
 
     def _rebuild(self, keep_position: bool = True) -> None:
         if self.result is None:
@@ -192,7 +221,7 @@ class SketchView(QWidget):
     def redraw(self) -> None:
         s = self.current()
         if s is None:
-            self.info.setText("No window with a size estimate."); self.time_label.setText("–")
+            self.info.setText(tr("No window with a size estimate.")); self.time_label.setText("–")
             if self.canvas is not None:
                 self.figure.clear(); self.canvas.draw_idle()
             return
@@ -206,13 +235,16 @@ class SketchView(QWidget):
         side, top = self.figure.add_subplot(grid[0]), self.figure.add_subplot(grid[1])
         draw_window(side, top, s, self.width_nm, self.height_nm, self.result.metal or "Ag", show_burial=self.burial.isChecked(),
                     sketcher=self.sketcher, fg=fg)
+        if self.result.metal == "Cu":  # on the picture, so a saved image says it too
+            self.figure.suptitle(tr(CU_NOTE), fontsize=8, color="#b35900", fontweight="bold")
+        cjk_fallback(self.figure)
         self.canvas.draw_idle()
 
     def _save_image(self):
         if self.canvas is None or self.result is None:
             return
         s = self.current(); stamp = "" if s is None or s.time_s is None else f"_{s.time_s:.1f}s"
-        path, _ = QFileDialog.getSaveFileName(self, "Save Sketch", str(self.result.folder / f"sketch{stamp}.png"),
+        path, _ = QFileDialog.getSaveFileName(self, tr("Save Sketch"), str(self.result.folder / f"sketch{stamp}.png"),
                                               "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)")
         if path:
             self.figure.savefig(path, dpi=200, facecolor="white")
@@ -220,7 +252,7 @@ class SketchView(QWidget):
     def _save_storyboard(self):
         if self.result is None:
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save Storyboard", str(self.result.folder / "storyboard.png"),
+        path, _ = QFileDialog.getSaveFileName(self, tr("Save Storyboard"), str(self.result.folder / "storyboard.png"),
                                               "PNG (*.png);;PDF (*.pdf);;SVG (*.svg)")
         if path:
             save_storyboard(self.result, Path(path), show_burial=self.burial.isChecked(), sketcher=self.sketcher,
@@ -235,6 +267,14 @@ def sketches_of(result: StructureResult, *, smooth: bool) -> list:
 def save_storyboard(result: StructureResult, path: Path, *, count: int = 6, show_burial: bool = False,
                     sketcher: Optional[Sketcher] = None, smooth: bool = True) -> list:
     """Side and top views of ``count`` windows on a logarithmic time grid, one ruler; returns the chosen row indices."""
+    fig, picks = storyboard_figure(result, count=count, show_burial=show_burial, sketcher=sketcher, smooth=smooth)
+    fig.savefig(str(path), dpi=200, facecolor="white")
+    return picks
+
+
+def storyboard_figure(result: StructureResult, *, count: int = 6, show_burial: bool = False,
+                      sketcher: Optional[Sketcher] = None, smooth: bool = True):
+    """The storyboard as a Matplotlib figure, and the chosen row indices."""
     from matplotlib.figure import Figure
     from matplotlib.backends.backend_agg import FigureCanvasAgg
 
@@ -253,20 +293,26 @@ def save_storyboard(result: StructureResult, path: Path, *, count: int = 6, show
                     compact=True)
         if s.kind == "islands":
             spacing = "?" if s.spacing_source == "not measured" else f"{s.spacing:.3g}"
-            label = f"t = {s.time_s:.3g} s · islands\nR = {s.R:.2g} nm ({s.R_grade}) · spacing {spacing} nm"
+            label = text("t = {time} s · {stage}\nR = {R} nm ({grade}) · spacing {spacing} nm", time=f"{s.time_s:.3g}",
+                         stage=stage_name(s.stage) or tr("islands"), R=f"{s.R:.2g}", grade=s.R_grade, spacing=spacing)
             if s.coverage is not None and s.coverage > .9:
-                label += "\n(R and spacing inconsistent)"
+                label += "\n" + tr("(R and spacing inconsistent)")
+        elif s.L:
+            label = text("t = {time} s · film\nL = {L} nm", time=f"{s.time_s:.3g}", L=f"{s.L:.3g}")
         else:
-            label = f"t = {s.time_s:.3g} s · film (TS)\nL = {s.L:.3g} nm"
+            label = text("t = {time} s · film", time=f"{s.time_s:.3g}")
         side.set_title(label, fontsize=6.5)
-    fig.suptitle(f"{result.folder.name}: sketch of the fitted structure (hemispheres h = R; spacing from consistent D "
-                 f"or 2π/q*; burial {'shown, unreliable' if show_burial else 'not shown'})", fontsize=7)
-    fig.supxlabel("Model labels (islands / film) follow observation rules; a switch back is not a morphology reversal. "
-                  "Spacing '?' = no resolved peak (illustration). Times on a logarithmic grid"
-                  + ("; values are medians of ±5 neighbouring windows." if smooth else "; single-window values."),
+    title = text("{name}: sketch of the fitted structure (hemispheres h = R; spacing from consistent D or 2π/q*; "
+                 "burial {burial})", name=result.folder.name, burial=tr("shown, unreliable") if show_burial else tr("not shown"))
+    if result.metal == "Cu":
+        title += "\n" + tr(CU_NOTE)
+    fig.suptitle(title, fontsize=7)
+    fig.supxlabel(tr("Films are drawn without particles (not modelled) and their thickness is not determined. Spacing "
+                     "'?' = no resolved peak (illustration). Times on a logarithmic grid") + "; "
+                  + (tr("values are medians of ±5 neighbouring windows.") if smooth else tr("single-window values.")),
                   fontsize=6, color="#555555")
-    fig.savefig(str(path), dpi=200, facecolor="white")
-    return picks
+    cjk_fallback(fig)
+    return fig, picks
 
 
-__all__ = ["SketchView", "draw_window", "save_storyboard"]
+__all__ = ["CU_NOTE", "SketchView", "draw_window", "save_storyboard", "storyboard_figure"]

@@ -1,17 +1,25 @@
 """Size/structure table of an in-situ sputter series and what each value is worth.
 
-Pure Python (no Qt): rows come from the toolkit's ``structure.csv`` and
-``structure_summary.json``. Grades: A = converged physical refinement with a
+Pure Python (no Qt): rows come from the toolkit's ``structure*.csv`` and
+``structure*_summary.json``. Grades: A = converged physical refinement with a
 unique solution, B = converged refinement with an equally good alternative,
-C = network estimate only. Typical errors are simulation-based (see summary
-``reliability``); they describe the hemisphere-equivalent model, not a proof
-that the sample has this shape.
+C = network estimate only, P = network estimate on the physical path (one
+stage path through time, no switching of the source from window to window).
+Typical errors are simulation-based (see summary ``reliability``); they
+describe the hemisphere-equivalent model, not a proof that the sample has this
+shape.
+
+The reliability report is written from English templates; ``text(template,
+**values)`` gives each sentence (the interface fills the translated template,
+the default fills the English one), so the report reads the same in both
+languages and the values stay as they are.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable, Optional
 import math
 
 GRADES = {
@@ -21,6 +29,7 @@ GRADES = {
     "S": "time-consistent, data-supported",
     "T": "time-consistent, constraint-driven",
     "L": "learned selector",
+    "P": "network estimate, physical path",
 }
 NUMERIC = {
     "time_s", "q_star_nm_inv", "D_corr_nm", "network_R_nm", "network_D_nm", "network_mode1_probability",
@@ -31,7 +40,10 @@ NUMERIC = {
     "TS_metal_fraction_conditional", "TS_film_thickness_nm_conditional", "sequence_data_cost_nats",
     "sequence_component_weight", "unconstrained_R_nm", "unconstrained_D_nm", "selector_probability",
     "network_top_R_nm", "network_top_D_nm",
+    # the physical path (structure_physical.csv)
+    "R_trend_nm", "D_trend_nm", "t_eq_nm", "t_eq_lo_nm", "t_eq_hi_nm", "nominal_thickness_nm",
 }
+FLAGS = {"film", "path_changed"}
 
 
 def number(value):
@@ -43,14 +55,35 @@ def number(value):
     return x if math.isfinite(x) else None
 
 
+def flag(value) -> Optional[bool]:
+    """``true`` / ``false`` of the toolkit's tables (also 1/0, yes/no); None when empty."""
+    if isinstance(value, bool) or value is None:
+        return value
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes"):
+        return True
+    if text in ("false", "0", "no"):
+        return False
+    return None
+
+
 def parse_row(raw: dict) -> dict:
     row = {}
     for key, value in raw.items():
         if key in NUMERIC:
             row[key] = number(value)
+        elif key in FLAGS:
+            row[key] = flag(value)
         else:
             row[key] = None if value in ("", "None") else value
     return row
+
+
+def is_film(row: dict) -> bool:
+    """A film window: on the physical path its ``film`` flag, otherwise the per-window TS model."""
+    if row.get("film") is not None:
+        return bool(row["film"])
+    return (row.get("module_path") or row.get("module")) == "TS_layer"
 
 
 @dataclass
@@ -67,7 +100,9 @@ class StructureResult:
     folder: Path
     rows: list
     summary: dict
-    variant: str = "window"   # "window": per-window choice; "sequence": time-consistent path
+    variant: str = "window"   # "physical", "window", "selected" or "sequence"
+    scan_folder: Optional[Path] = None
+    """The scan the result was predicted from (``gimap_request.json``), None when the folder does not say."""
 
     @property
     def metal(self) -> str:
@@ -82,12 +117,19 @@ class StructureResult:
             s.low.append(r.get(f"{name}_lo_nm") or r[f"{name}_nm"]); s.high.append(r.get(f"{name}_hi_nm") or r[f"{name}_nm"])
         return s
 
-    def direct_spacing(self) -> Series:
+    def column(self, key: str, *, low: str = "", high: str = "") -> Series:
+        """One numeric column over time (windows without a value are left out)."""
         s = Series()
         for r in self.rows:
-            if r.get("D_corr_nm") is not None and r.get("time_s") is not None:
-                s.time.append(r["time_s"]); s.value.append(r["D_corr_nm"])
+            if r.get(key) is None or r.get("time_s") is None:
+                continue
+            s.time.append(r["time_s"]); s.value.append(r[key])
+            s.low.append(r.get(low) if low and r.get(low) is not None else r[key])
+            s.high.append(r.get(high) if high and r.get(high) is not None else r[key])
         return s
+
+    def direct_spacing(self) -> Series:
+        return self.column("D_corr_nm")
 
     def inconsistent_spacing(self) -> Series:
         """D values whose ratio to the direct 2π/q* lies outside the simulated 90% range."""
@@ -99,31 +141,65 @@ class StructureResult:
         return s
 
     def ts_length(self) -> Series:
-        s = Series()
+        return self.column("L_TS_nm")
+
+    def film_spans(self) -> list:
+        """(first, last) time of each run of consecutive film windows."""
+        spans, start, last = [], None, None
         for r in self.rows:
-            if r.get("L_TS_nm") is not None and r.get("time_s") is not None:
-                s.time.append(r["time_s"]); s.value.append(r["L_TS_nm"])
-        return s
+            t = r.get("time_s")
+            if t is None:
+                continue
+            if is_film(r):
+                start = t if start is None else start
+                last = t
+            elif start is not None:
+                spans.append((start, last)); start = None
+        if start is not None:
+            spans.append((start, last))
+        return spans
+
+    def has(self, key: str) -> bool:
+        return any(r.get(key) is not None for r in self.rows)
 
     def counts(self, name: str) -> dict:
         grades = [r.get(f"{name}_grade") for r in self.rows]
         return {g: grades.count(g) for g in GRADES} | {"missing": sum(g is None for g in grades)}
 
 
+Text = Callable[..., str]
+
+
+def english(template: str, **values) -> str:
+    return template.format(**values)
+
+
+def as_is(sentence: str) -> str:
+    return sentence
+
+
+READ_POINTS = ("<b>How to read this.</b> In the trend each window's value is a faint point and the line is their "
+               "smoothed trend; the points are not error bars. The typical error of each value (simulation-based, "
+               "about a 68% band) is in the Windows table.")
+READ_ERROR_BARS = ("<b>How to read this.</b> Error bars in the trend are the simulation-based typical error of the "
+                   "value's source (about a 68% band).")
+READ_COMMON = ("About 10–20% of values carry a larger error (P90 ≈ 50–65%) because another structure fits the counts "
+               "equally well; grade B marks windows where such an alternative was found. Trends are more reliable "
+               "than absolute values: two windows whose true R differ by 20% are put in the right order in about "
+               "92–96% of simulated cases. The window-to-window scatter is measured on your data from neighbouring "
+               "windows with independent photons.")
+
+
 def _pct(x) -> str:
     return "–" if x is None else f"{100 * x:.0f}%"
 
 
-def reliability_report(result: StructureResult) -> str:
-    """Plain HTML: how much each value can be trusted, from simulation and from the data itself."""
-    s = result.summary; rel = (s.get("reliability") or {}).get("parameters", {})
-    metal = "Ag" if result.metal == "Cu" else (result.metal or "Ag")
-    lines = [f"<h3>{result.folder.name}: how reliable are the sizes?</h3>"]
-    lines.append(f"<p>{len(result.rows)} time windows; {s.get('TS_windows', 0)} late windows use the TS film model "
-                 "(characteristic length L instead of island R/D).</p>")
-    lines.append("<table border='1' cellspacing='0' cellpadding='4'>"
-                 "<tr><th>Value</th><th>Windows with a value</th><th>By grade</th><th>Typical error of these values</th>"
-                 "<th>Order of two windows correct (≥1.2×)</th><th>Window-to-window scatter (data)</th></tr>")
+def _grades_table(result: StructureResult, text: Text) -> list:
+    s = result.summary
+    lines = ["<table border='1' cellspacing='0' cellpadding='4'><tr>"
+             + "".join(f"<th>{text(h)}</th>" for h in (
+                 "Value", "Windows with a value", "By grade", "Typical error of these values",
+                 "Order of two windows correct (≥1.2×)", "Window-to-window scatter (data)")) + "</tr>"]
     for name, label in (("R", "R, equivalent hemisphere radius"), ("D", "D, centre-to-centre spacing")):
         c = result.counts(name)
         by_grade = " · ".join(f"{g} {c[g]}" for g in GRADES if c[g]) or "–"
@@ -136,75 +212,55 @@ def reliability_report(result: StructureResult) -> str:
             typical = f"±{_pct(errors[0])} – ±{_pct(errors[-1])}"
         order = _pct(orders[len(orders) // 2]) if orders else "–"
         scatter = (s.get(name) or {}).get("window_to_window_scatter")
-        lines.append(f"<tr><td>{label}</td><td>{sum(c[g] for g in GRADES)}</td><td>{by_grade}</td><td>{typical}</td>"
-                     f"<td>{order}</td><td>{_pct(scatter)}</td></tr>")
+        lines.append(f"<tr><td>{text(label)}</td><td>{sum(c[g] for g in GRADES)}</td><td>{by_grade}</td>"
+                     f"<td>{typical}</td><td>{order}</td><td>{_pct(scatter)}</td></tr>")
     lines.append("</table>")
-    lines.append("<p>Grades: " + "; ".join(f"<b>{g}</b> {text}" for g, text in GRADES.items()) + ".</p>")
-    seq = s.get("sequence")
-    if result.variant == "sequence" and seq:
-        cR = result.counts("R")
-        first = seq.get("first_film_time_s")
-        lines.append(
-            f"<p><b>Time-consistent path.</b> All network explanations of every window were considered and one path "
-            f"through time was chosen with registered physical rules (sizes and spacing do not shrink quickly; a film does "
-            f"not revert to islands; D should agree with 2π/q*). {seq.get('changed_from_unconstrained', 0)} of "
-            f"{len(result.rows)} windows changed from the per-window choice. Grade <b>S</b> ({cR['S']} R values): the data "
-            f"support the chosen explanation (within 2 nats of the best). Grade <b>T</b> ({cR['T']} R values): the rules "
-            f"imposed it against the data — read these as the story, not as a measurement. Film from "
-            f"{'%.1f s' % first if first is not None else 'never'} on this path; when the observation-rule labels switch "
-            f"back and forth, this time is uncertain. The path can only choose among the network's explanations: where none "
-            f"fits (e.g. a steep drop that every explanation shows) the drop stays.</p>"
-            f"<p><b>Exploratory — not more accurate.</b> In the registered test on 900 simulated growth windows this path "
-            f"was <i>not</i> more accurate than the per-window choice (R wrong by &gt;30%: 26% vs 28% of windows; median R "
-            f"error 16% vs 15%; D unchanged), and it erased a real 25% dip of R in 93% of the dip windows. Use it to see "
-            f"one consistent picture, not as a more reliable measurement. The correct explanation was among the network's "
-            f"candidates in about 92% of windows; a better way of choosing it is being developed.</p>")
-    sel = s.get("selector")
-    if result.variant == "selected" and sel is not None:
-        test = sel.get("test") or {}
-        lines.append("<p><b>Learned selector.</b> For every window the network offers four explanations (mixture "
-                     "components); a model trained on simulated growth series picks one from their network weights, the "
-                     "agreement of D with 2π/q* and how well each agrees with the explanations of the three windows before "
-                     f"and after. {sel.get('low_confidence', 0)} windows have a selection probability below 0.5.</p>")
-        rows = []
-        for key, label in (("R", "R"), ("D", "D (peak windows)")):
-            b = test.get(key) or {}
-            top, chosen = b.get("top") or {}, b.get("sel") or {}
-            if top and chosen:
-                rows.append(f"<tr><td>{label}</td><td>{_pct(top.get('wrong_branch_frac'))} / {_pct(top.get('median_rel_error'))}</td>"
-                            f"<td>{_pct(chosen.get('wrong_branch_frac'))} / {_pct(chosen.get('median_rel_error'))}</td>"
-                            f"<td>{_pct((b.get('oracle') or {}).get('wrong_branch_frac'))}</td></tr>")
-        if rows:
-            parts = []
-            for key in ("R", "D"):
-                b = test.get(key) or {}
-                if "pass" in b:
-                    parts.append(f"{key}: {'passed' if b['pass'] else '<b>not passed</b>'}")
-            verdict = "; ".join(parts) or ("passed" if test.get("passed") else "<b>not passed</b>")
-            lines.append("<table border='1' cellspacing='0' cellpadding='4'><tr><th>Independent simulated TEST</th>"
-                         "<th>Network top: wrong &gt;30% / median error</th><th>Selector: wrong &gt;30% / median error</th>"
-                         "<th>Best possible (oracle)</th></tr>" + "".join(rows) + "</table>")
-            lines.append(f"<p>Registered test (wrong-branch share cut by at least 30% and median error not larger): {verdict}. "
-                         "The selector is therefore offered as an option, not as the default, unless both pass. Its typical "
-                         "errors in the trend come from that test. On real scans compare its D with 2π/q* (red circles).</p>")
+    return lines
+
+
+def reliability_report(result: StructureResult, text: Optional[Text] = None,
+                       note: Optional[Callable[[str], str]] = None) -> str:
+    """Plain HTML: how much each value can be trusted, from simulation and from the data itself. ``text`` fills
+    a template of this module, ``note`` gives a sentence of the toolkit itself (both in the interface language)."""
+    from .physical import physical_paragraphs
+    from .variants import selector_paragraphs, sequence_paragraphs
+
+    text = text or english
+    note = note or as_is
+    s = result.summary; rel = (s.get("reliability") or {}).get("parameters", {})
+    lines = [f"<h3>{text('{name}: how reliable are the sizes?', name=result.folder.name)}</h3>"]
+    lines.append("<p>" + text("{windows} time windows; {film} late windows use the TS film model (characteristic "
+                              "length L instead of island R/D).", windows=len(result.rows),
+                              film=s.get("TS_windows", 0)) + "</p>")
+    lines += _grades_table(result, text)
+    lines.append("<p>" + text("Grades:") + " " + "; ".join(f"<b>{g}</b> {text(t)}" for g, t in GRADES.items()) + ".</p>")
+    if result.variant == "physical":
+        lines += physical_paragraphs(result, text, note)
+    if result.variant == "sequence":
+        lines += sequence_paragraphs(result, text)
+    if result.variant == "selected":
+        lines += selector_paragraphs(result, text)
     d = s.get("D") or {}
     if d.get("checked_against_direct"):
         band = (rel.get("D_over_direct") or {}).get("band_90", [0.59, 1.75])
-        lines.append(f"<p><b>Check against the data.</b> {d.get('outside_direct_band', 0)} of {d['checked_against_direct']} D "
-                     f"values differ from the direct 2π/q* by more than the simulated 90% range (D/(2π/q*) outside "
-                     f"{band[0]:.2f}–{band[1]:.2f}); they are circled in red and should not be used.</p>")
-    lines.append("<p><b>How to read this.</b> Error bars in the trend are the simulation-based typical error of the "
-                 "value's source (about a 68% band). About 10–20% of values carry a larger error (P90 ≈ 50–65%) because "
-                 "another structure fits the counts equally well; grade B marks windows where such an alternative was "
-                 "found. Trends are more reliable than absolute values: two windows whose true R differ by 20% are put in "
-                 "the right order in about 92–96% of simulated cases. The window-to-window scatter is measured on your "
-                 "data from neighbouring windows with independent photons.</p>")
-    lines.append("<p><b>Model conditions.</b> R is the base radius of a flat-based hemisphere (height h = R). Real "
-                 "clusters may be taller (h/R between 1 and 2); absolute R depends on this condition, trends much less. "
-                 "D is given only where a correlation peak is resolved; × marks the direct value 2π/q*. Burial depth and "
-                 "polymer thickness are not reliable (order accuracy 52–80%) and are only listed as conditional values. "
-                 "Cu is approximated by the Ag model.</p>")
+        lines.append("<p>" + text(
+            "<b>Check against the data.</b> {outside} of {checked} D values differ from the direct 2π/q* by more than "
+            "the simulated 90% range (D/(2π/q*) outside {low}–{high}); they are circled in red and should not be used.",
+            outside=d.get("outside_direct_band", 0), checked=d["checked_against_direct"], low=f"{band[0]:.2f}",
+            high=f"{band[1]:.2f}") + "</p>")
+    lines.append("<p>" + text(READ_POINTS if result.variant == "physical" else READ_ERROR_BARS) + " "
+                 + text(READ_COMMON) + "</p>")
+    lines.append("<p>" + text(
+        "<b>Model conditions.</b> R is the base radius of a flat-based hemisphere (height h = R). Real clusters may "
+        "be taller (h/R between 1 and 2); absolute R depends on this condition, trends much less. D is given only "
+        "where a correlation peak is resolved; × marks the direct value 2π/q*. Burial depth and polymer thickness are "
+        "not reliable (order accuracy 52–80%) and are only listed as conditional values.") + "</p>")
+    if result.metal == "Cu":
+        lines.append("<p><b>" + text("Cu: approximated with the Ag model, for reference only.") + "</b> " + text(
+            "The networks were trained for Ag and Au; a Cu series is read with the Ag model, so its sizes are a "
+            "reference, not a measurement.") + "</p>")
     return "\n".join(lines)
 
 
-__all__ = ["GRADES", "Series", "StructureResult", "parse_row", "reliability_report", "number"]
+__all__ = ["FLAGS", "GRADES", "READ_COMMON", "READ_ERROR_BARS", "READ_POINTS", "Series", "StructureResult", "as_is",
+           "english", "flag", "is_film", "number", "parse_row", "reliability_report"]

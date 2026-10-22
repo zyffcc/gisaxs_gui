@@ -52,6 +52,12 @@ The application entry point is `main.py`. The user manual is [docs/User_Manual.m
   (stages), which frames do not belong (odd frames: a detector glitch, a shutter) and what changes between
   stages; Compare puts several runs or samples side by side — how fast each changed, where each ended,
   which are alike.
+- **Sputter**: choose the folder of an in-situ sputter scan (CBF frames of Ag or Au on a polymer; Cu is
+  approximated with the Ag model, for reference only) and press **Predict**: the model bundled with GIMaP gives the particle size R and the spacing D of every
+  time window along one physical path of stages (islands, coalescence, film), the island-volume
+  equivalent metal thickness (and the nominal thickness when a deposition rate is given), the film
+  onset, the period of a sample rotation, and how far each value can be trusted. The first Predict
+  installs PyTorch into GIMaP's Python (about 1.2 GB, needs the internet).
 - **Projects** (`.gimap`): **File ▸ Save Project** keeps a sample as it was left — the frames and
   set-up of Analyze, the curve and model of Fitting, the In-situ series and the Compare series (data
   are referenced by path, not copied); **Open Project…**, **Open Recent** or a drop reopens it.
@@ -110,11 +116,11 @@ For a clone of the repository (`git clone https://github.com/zyffcc/gisaxs_gui.g
 2. To update a clone, double-click `Update_GIMaP.bat` (it runs `tools/update_source.ps1`, which needs
    Git); the next `Start_GIMaP.bat` adds new packages first when the update needs any.
 
-Nothing outside the folder is changed; delete `.gimap\` to remove the environment. The Sputter
-workspace needs its model toolkit, research code that is not part of the repository: copy the toolkit
-folder you were given to `utils\sputter_toolkit`, and the next `Start_GIMaP.bat` adds PyTorch for it
-(`requirements-sputter.txt`); nothing else needs setting up. In a portable folder (with `runtime\`)
-`Start_GIMaP.bat` behaves as before.
+Nothing outside the folder is changed; delete `.gimap\` to remove the environment. The model of the
+Sputter workspace is part of GIMaP (`utils\sputter_toolkit`); the PyTorch it needs
+(`requirements-sputter.txt`, about 1.2 GB) is set up by `Start_GIMaP.bat`, or installed into the
+environment on the first **Predict** when it is missing (pip's cache then stays in `.gimap\` too).
+In a portable folder (with `runtime\`) `Start_GIMaP.bat` behaves as before.
 
 ### Running from Source
 
@@ -149,7 +155,10 @@ python main.py
 ```
 
 The trained weights of 1D Predict are in the Git repository (about 56 MB), so a checkout runs
-everything, including [1D Predict](#1d-predict-experimental-neural-fitting).
+everything, including [1D Predict](#1d-predict-experimental-neural-fitting). The Sputter workspace's
+model is in the repository too (`utils/sputter_toolkit`); it runs on PyTorch (CPU), which its first
+**Predict** installs into the Python GIMaP runs in (`python -m pip install -r requirements-sputter.txt`,
+the installed NumPy kept, never `--user`). To install it beforehand, run that command yourself.
 
 #### Updating a source checkout
 
@@ -431,6 +440,9 @@ Dependencies are listed in `requirements.txt`:
 - anthropic>=1.8 and openai>=1.40 (optional: Process with AI; GIMaP runs without them)
 - psutil>=5.9 (optional: Batch Export reads the physical cores and the free memory with it to
   choose how many frames to reduce at once; without it GIMaP asks the operating system)
+
+The Sputter workspace's model needs PyTorch (CPU): `requirements-sputter.txt`, installed on its first
+**Predict** (or by `Start_GIMaP.bat` in a source folder).
 
 
 ## Feedback and Contact

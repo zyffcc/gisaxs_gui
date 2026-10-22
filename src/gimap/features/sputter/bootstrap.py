@@ -1,16 +1,26 @@
-"""Compose Sputter: the service with the toolkit process and the result reader."""
+"""Compose Sputter: the service with the bundled toolkit, PyTorch's installer, the scan header and the reader."""
 
 from __future__ import annotations
 
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Optional
+
+from src.gimap.integrations.state.user_store import user_data_dir
 
 from .application import SputterService
-from .infrastructure import StructureFolderReader, SubprocessToolkit
+from .infrastructure import BundledToolkit, CbfHeaderInspector, PipInstaller, StructureFolderReader
 
 
-def create_sputter_service(settings: Callable[[], tuple[str, str]]) -> SputterService:
-    """``settings()`` gives (toolkit Python executable, toolkit folder), read when a run starts."""
-    return SputterService(SubprocessToolkit(settings), StructureFolderReader())
+def default_results_root() -> Path:
+    """``<user data folder>/sputter``: one folder per scan and request."""
+    return user_data_dir() / "sputter"
 
 
-__all__ = ["create_sputter_service"]
+def create_sputter_service(*, runner=None, installer=None, inspector=None, reader=None,
+                           results_root: Optional[Callable[[], Path]] = None) -> SputterService:
+    """The real adapters unless others are given (tests give fakes)."""
+    return SputterService(runner or BundledToolkit(), reader or StructureFolderReader(), installer or PipInstaller(),
+                          inspector or CbfHeaderInspector(), results_root or default_results_root)
+
+
+__all__ = ["create_sputter_service", "default_results_root"]

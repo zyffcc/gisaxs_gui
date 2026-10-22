@@ -24,6 +24,17 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   and source/settings/model-hash records. Review outlines and the explicit image calibration
   before interpreting size statistics; general pretrained nuclei models are not SEM-validated.
 
+### Sputter
+
+- The **Sputter** workspace predicts an in-situ sputter series from its scan folder: choose the folder, check
+  the geometry (each value says where it comes from: this folder's last values, a geometry preset of the
+  beamtime, the file header, or the values used last — please check), press **Predict**. The model is part of
+  GIMaP and runs in GIMaP's own Python; the first Predict installs PyTorch there (about 1.2 GB). The default
+  explanation is a physical path of stages through time with the network's sizes in every island window, so
+  values no longer flip between sources from window to window. The metal thickness is given where it can be
+  stated: the island-volume equivalent t_eq and, from a deposition rate, the nominal thickness. A sample
+  rotation is recognised and named. Cu is accepted and labelled as approximated with the Ag model.
+
 ### Analyze
 
 - **Curves** has a **Log q** option alongside Log I. Plot selections keep their original
@@ -454,6 +465,13 @@ These were found while 0.1.0 was checked; they matter to those who ran a develop
   version, the program folder); they are not removed automatically.
 - Windows is the platform GIMaP is developed and tested on. TensorFlow runs on the CPU; a GPU
   set-up is not configured.
+- **Sputter does not determine the thickness of a continuous film**, and a film with particles on it
+  is not modelled. Read the island-volume equivalent t_eq (island windows, conditional) and the nominal
+  thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section.
+- **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au): Cu results are for
+  reference only.
+- **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on
+  the CPU. Without internet, install it by hand (manual, section 13.7).
 
 ### Updating from 0.0.2
 

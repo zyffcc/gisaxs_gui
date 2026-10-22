@@ -200,9 +200,9 @@ GIWAXS 的标定（见 1.1 节），并把它存成了这个探测器的配置�
 （GitHub 上 **Code ▸ Download ZIP**，解压到路径较短、可写的位置）里，双击 `Start_GIMaP.bat`。第一次启动会在
 文件夹里的 `.gimap` 中建立一个专用环境：下载 uv（一个小的 Python 安装工具，固定版本，并核对 SHA-256）、
 Python 3.10 以及 `requirements.txt` 里的包（约 2 GB，3–20 分钟），然后打开 GIMaP。以后的启动是即时的。
-文件夹以外的东西都不会被改动；删掉 `.gimap` 就去掉了这个环境。溅射（Sputter）工作区还需要它的模型工具包，
-这是研究代码，不在仓库里：把拿到的工具包文件夹复制到 GIMaP 文件夹里的 `utils\sputter_toolkit`，下次启动时
-会为它装上 PyTorch（`requirements-sputter.txt`），其他都不用设置。
+文件夹以外的东西都不会被改动；删掉 `.gimap` 就去掉了这个环境。溅射（Sputter）工作区的模型是 GIMaP 的一部分
+（`utils\sputter_toolkit`）；它需要的 PyTorch（`requirements-sputter.txt`，约 1.2 GB）由 `Start_GIMaP.bat` 装好，
+缺少时在第一次**预测**（Predict）时安装（7.4 节）。
 
 **手动方式。** 安装 Python 3.10 或 3.11，然后在源码文件夹里运行：
 
@@ -224,8 +224,8 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-溅射（Sputter）工作区用 PyTorch 运行它的工具包：把工具包文件夹复制到 `utils/sputter_toolkit`，并在同一个
-环境里运行 `python -m pip install -r requirements-sputter.txt`。
+溅射（Sputter）工作区的模型在仓库里（`utils/sputter_toolkit`），在 PyTorch（CPU）上运行：第一次**预测**时会把
+PyTorch 装进 GIMaP 所用的 Python。想事先装好，就在同一个环境里运行 `python -m pip install -r requirements-sputter.txt`。
 
 一维预测训练好的权重在 Git 仓库里（约 56 MB），所以源码版本什么都能运行，包括一维预测（第 6 章）。
 在 macOS 上，BornAgain 要单独安装：方法见 `README.md`。
@@ -239,6 +239,7 @@ python main.py
 | AI 账号或本地模型 | **问 AI…**（Ask AI…）、**工具 ▸ 用 AI 处理…**（Tools ▸ Process with AI…） | Python 包已在 `requirements.txt` 里；在**工具 ▸ 设置… ▸ AI 助手**（Tools ▸ Settings… ▸ Assistant）里设置 AI（第 9 章） |
 | fit1d 工具包（`gisaxs1d_gui_kit`） | 拟合页的**预测参数（fit1d）**（Predict parameters (fit1d)，也用于原位序列的每一帧）和一维预测中的方法 *fit1d* | 放在 `utils/gisaxs1d_gui_kit`，或用环境变量 `GISAXS1D_KIT_HOME` 指定它的文件夹（第 6 章） |
 | StarDist | **工具 ▸ SEM 粒径分析…**（Tools ▸ SEM Particle Analysis…）里分开相互接触的颗粒 | 单独的 Python 环境，装 `requirements-sem-stardist.txt`，再加一个本地模型文件夹（第 8 章） |
+| PyTorch（CPU） | 溅射工作区的**预测**（Predict） | 第一次预测时装进 GIMaP 的 Python（约 1.2 GB，需要联网），或由 `Start_GIMaP.bat` 安装；手动安装用 `python -m pip install -r requirements-sputter.txt`（7.4 节） |
 
 TensorFlow 在 CPU 上运行；GPU 环境没有配置。
 
@@ -415,6 +416,8 @@ GIMaP 在 Windows 上开发和测试。1280 × 720 的屏幕就够用（窗口�
 - **上次的设置**：分析过一帧之后关闭 GIMaP 时，分析页的设置（模式、配置、掩膜、校正、切线区域……）保存在
   用户数据文件夹的 `last_analyze_setup.json` 里。下次会话打开第一帧时，一条通知提供**使用**（Use It）。
   不经询问绝不会套用，因为新的束线时可能需要别的设置。
+- **溅射**：每个扫描文件夹上次预测时的值（几何、金属、聚合物、掩膜、时间窗、沉积速率和 t0）、上次使用的值（掩膜和样品
+  滚转角不会带到别的文件夹）、几何预设，以及上次显示的结果（下次启动时再打开）；PyTorch 每次启动都重新检查。
 - 窗口的大小和位置、主题、字号和语言在下次启动时恢复。
 
 ### 3.10 出错时
@@ -1532,7 +1535,8 @@ Yoneda 切线上的球按 |q| = √(q∥² + qz²) 计算，竖直圆柱按 q∥
 - 序列在哪里转向（阶段），变得多快；
 - 哪些测量或样品彼此相像。
 
-它们都用分析页约化出的曲线，几何、掩膜和切线都相同。它们取代 0.0.2 版的 Classification 页。
+它们都用分析页约化出的曲线，几何、掩膜和切线都相同。它们取代 0.0.2 版的 Classification 页。7.4 节介绍溅射（Sputter）
+工作区，它用训练好的模型跟踪原位溅射序列的阶段。
 
 ### 7.1 阶段与异常帧
 
@@ -1626,6 +1630,71 @@ Yoneda 切线上的球按 |q| = √(q∥² + qz²) 计算，竖直圆柱按 q∥
 - **比较范围要避开伪影和阴影区。** 在全 q 范围比较时，一个序列可能因为尖峰或阴影显得离群。把 **q 范围**收窄到干净的部分后，
   结束时的差别可能小得多。
 - **两张表都要看。** 除了**结束时**，也看**开始时**的差别：序列的差别可能在起点，而不在终点。
+
+### 7.4 溅射：溅射序列的尺寸、间距和厚度
+
+**溅射**（Sputter）工作区（侧栏）用随 GIMaP 提供的训练模型（`utils/sputter_toolkit`）读取原位溅射序列——金属溅射到
+聚合物上时的 CBF 帧。它逐个时间窗给出颗粒尺寸 R（平底半球的底面半径，h = R）、分辨出关联峰时的中心间距 D、生长阶段、
+能说出的金属厚度，以及每个值有多可信。
+
+**三步预测。**
+
+1. **数据 ▸ 选择…**（Data ▸ Choose…）：一个扫描的文件夹——它的 CBF 帧所在的文件夹，或只有一个子文件夹存放帧的扫描文件夹
+   （`p2m/`）。页面读取第一帧的文件头（几 kB，不读像素），用一行说明有多少帧、探测器和序列号、像素尺寸、曝光和时间。
+2. **样品与几何**（Sample and geometry）：核对填好的值。每个值旁边写着它的来源：
+   - *来自文件头*（from the file header）或*来自该扫描的 NeXus 文件*：X 射线能量，取自文件头的 `Wavelength` 行或同一扫描
+     NeXus 文件的 `beam_energy`——请核对。平场文件名里的 `E<eV>` 是探测器的标定能量，不一定是光束的能量：它只写在字段旁边
+     （*平场文件名写着 E = … keV*），从不填入；
+   - *沿用这个文件夹上次的值*（as last used for this folder）：这个文件夹上次预测时的值（文件头的能量不同时写在旁边）；
+   - *来自预设 <名称>*（from preset）：与这个扫描相符的、你保存的几何预设（见下）；
+   - *上次使用的值——请核对*（last used — please check）：上次任何文件夹预测时的值——样品滚转角和掩膜除外，它们属于一套
+     实验装置；
+   - *文件中没有——请填写*（not in the files — please enter）：没有已知的值。PILATUS 的文件头里既没有距离也没有入射角；
+   - *文件中没有：假定为 0——请核对*（not in the files: 0 assumed — please check）：这个文件夹和预设都没有给出样品滚转角时。
+
+   光束中心留空时由帧估计；给出的光束中心使用分析页的像素坐标（4.4 节）。**金属**（Metal）：Ag、Au，或 Cu——用 Ag 模型
+   近似，仅供参考（网络是为 Ag 和 Au 训练的）。
+3. **预测**（Predict）。第一次会先把 PyTorch 装进 GIMaP 自己的 Python（*第 1/2 步*，约 1.2 GB，需要联网；进度条跟随下载）。
+   然后读帧（进度条跟随已读的帧数）、把计数合并成时间窗（0.5 s；前 5 s 为 0.1 s）、运行模型（*第 2/2 步*）。**取消**（Cancel）
+   立即停止，读帧的进程也一起停止；安装在 pip 开始写入软件包之前都可以停止。**详情**（Details）显示 pip 和模型的消息。损坏的帧
+   被略去并计数。刚选的文件夹的文件头还在读取时按下预测，预测会在表单按它填好之后开始；没有 CBF 帧的文件夹会被拒绝。
+
+任务状态下面的一行写着运行模型的 Python，以及 PyTorch 是否已就绪。
+
+**把几何存为预设…**（Save Geometry as Preset…）为这台探测器（序列号）和这个平场在一段日期内（一次束线时间；默认是扫描
+前后各一周）的每个扫描保存页面上的几何：这样的扫描就按预设填写。各文件夹的值和预设保存在 GIMaP 的设置里（3.9 节）。
+
+**更多选项**（More options）：聚合物、样品滚转角、探测器掩膜（`.npy`；只取这个文件夹上次预测时的掩膜）、时间窗、
+**沉积速率（nm/s）**和**沉积开始 t0（s）**
+（都可选）、**结果保存在**（Save results in）、**打开结果文件夹…**（Open Results Folder…）、**加入精修时间窗…**（Add Refined
+Windows…，在别处算好的物理精修时间窗）和**解释**（Explanation）。
+
+**结果。** 每个请求有自己的文件夹：用户数据文件夹里的 `sputter/<扫描>-<代码>`（或在**结果保存在**里）；代码由扫描和分析依赖的
+每个值以及模型的版本得出。相同的请求重用它的文件夹——停止过的运行从停下的地方继续——换了几何、或 GIMaP 换了模型，就用
+新的文件夹（第 11 章）。
+
+- **物理路径**（Physical path）是默认的解释：随时间只走一条阶段路径——成核前、岛、聚并、膜——膜不会退回成岛。每个岛时间窗
+  的 R 和 D 都是网络估计（等级 **P**），所以数值不会在相邻时间窗之间在精修值和网络值之间跳来跳去；精修值保留在“时间窗”表中。
+  文件夹里有时，**解释**还提供逐窗选择（等级 A、B、C）、学习选择器（L）和时间一致路径（S、T）。
+- **尺寸趋势**（Size Trend）：每个时间窗的 R 和 D 画成淡色点，平滑后的趋势画成线；× 标出直接值 2π/q*，红圈标出与它不一致
+  的 D。**金属厚度**（Metal thickness）一栏把岛体积等效厚度 t_eq 画成一条带——按六角排列的半球计算的可见岛中的金属；
+  有条件的值，误差约 2–3 倍——给了沉积速率时再画名义厚度 速率 × (t − t0)。膜时间窗加阴影：*膜：厚度未确定*。路径的成膜起点
+  和它的区间也标出。
+- 预测按钮下的结果行给出时间窗数、成膜起点，以及强度被样品旋转调制时的周期（路径和趋势线对它取平均）。
+- **时间窗**（Windows）：每个时间窗的阶段（规则给出的和路径上的）、数值、等级、典型误差、t_eq、名义厚度和说明；`Ctrl+C` 复制行。
+- **可靠性**（Reliability）：各等级的含义、模拟得到的典型误差、物理路径的假设、用它之前和之后的来回变化、旋转周期，以及
+  厚度值的含义。
+- **结构示意**（Structure Sketch）：某个时间窗拟合模型的示意图（侧视和俯视，整个序列用同一把标尺）；膜时间窗画成不带颗粒的
+  连续膜。Cu 的结果在示意图、保存的图像和分镜图上都写明是用 Ag 模型读取的。
+- 运行之后修改**沉积速率**或 **t0**，只重写所显示结果的物理路径文件，不会重新读帧。如果显示的结果属于**数据**里所选扫描以外的
+  另一个扫描，这些值留给所选扫描的下一次**预测**。
+
+**下结论之前。**
+
+- 连续膜的厚度无法确定：在模拟中模型的估计等于它的先验。页面改为给出 t_eq（只在岛时间窗）和名义厚度；膜上带颗粒的模型正在
+  计划中。
+- 膜上带颗粒的情形没有建模：有分辨出的峰时这样的时间窗算作岛，没有峰时膜模型把颗粒吸收进去。
+- R 的绝对值依赖半球条件（h = R）；趋势比单个值可靠。
 
 ## 8. 工具窗口
 
@@ -2060,6 +2129,8 @@ GIMaP 从不改动你的数据文件。分析的导出默认写到**数据旁边
 | **工具 ▸ 一维预测——拟合多条曲线…**，以及拟合的 *AI 建议（一维预测）* | 一个运行文件夹：`request.json`、`batch_summary.json` …，每条曲线一个子文件夹，含 `solutions.json`、`fitting_curves.csv` … | 启动 GIMaP 时所在文件夹下的 `AI_Fitting_Output/v5_<日期>_<时间>_<微秒>/`（便携版：程序文件夹）；不会自动删除 | `request.json` |
 | 比较 ▸ **保存 ▸ 每个序列的表… / 每一帧的结果表…** | `compare_series.csv` / `compare_frames.csv` + `.json` | 第一个从文件添加的序列所在文件夹，否则上次添加序列的文件夹 | `#` 头行和 JSON |
 | 比较 ▸ **变化图… / 路径图… / 终态图…** | `compare_*.png` 或 `.svg` | 同上 | 无 |
+| 溅射 ▸ **预测** | 每个扫描和请求一个文件夹：`structure_physical.csv` + `structure_physical_summary.json`（物理路径）、`structure.csv` + `structure_summary.json`（逐窗）、模型的 `intake/` 和 `binned/` | 用户数据文件夹：`sputter/<扫描>-<代码>/`（或**更多选项 ▸ 结果保存在**）；相同的请求重用它的文件夹 | `gimap_request.json`（请求、Python、PyTorch 版本） |
+| 溅射 ▸ 结构示意 ▸ **保存图像… / 保存分镜图…** | PNG、PDF 或 SVG | 结果文件夹 | 无 |
 | XRR 序列提取 ▸ **导出 CSV…** | `<source>_xrr.csv` + `.json` | 源文件旁边；CBF 文件夹则在文件夹里 | JSON（决定 qz 的每个值及其来源；`center_convention`；`source_layout` 列出读到的每个文件） |
 | 格式转换 | 转换后的帧，默认 `<source>_<6 位帧号>.<ext>`（或一个 `converted_images.h5`） | 第一个输入旁边的 `converted/` | `conversion_report.json`、`conversion_metadata.json`（或每帧一个 JSON） |
 | SEM 粒径分析 ▸ **导出 SEM 结果…** | 8.3 节列出的文件 | 你选的文件夹里新建的 `SEM_analysis_<日期>_<时间>/`；从不覆盖 | `sem_analysis.json`；CSV 的 `#` 头行 |
@@ -2106,6 +2177,9 @@ ASCII——`1/A`、`deg`、`2theta`、`alpha_i`、`chi`、`sigma`、`+/-`——�
 | 会话中途切换界面语言后，少数文字保持原来的语言（例如一次已完成的自动分析的结果行）。 | 重新运行分析，或重启。 |
 | 批量导出进行中退出 GIMaP，已完成帧的文件会保留，但批量表、`README.txt` 和批量的 JSON 记录不会写出。 | 用 **停止**（Stop）结束批量导出：它会写出这些文件。 |
 | 一维预测把运行文件夹写到启动 GIMaP 时所在的文件夹，不会自动删除。 | 自己删除旧的 `AI_Fitting_Output/v5_…` 文件夹。 |
+| **溅射工作区不能确定连续膜的厚度**，膜上带颗粒的情形也没有建模（7.4 节）。 | 读岛体积等效厚度 t_eq（岛时间窗，有条件）和由沉积速率得到的名义厚度；与 XRR、石英晶体微天平或截面对照。 |
+| **溅射工作区用 Ag 模型读取 Cu**（网络是为 Ag 和 Au 训练的）。 | Cu 的结果仅供参考。 |
+| **溅射工作区第一次预测时下载 PyTorch**（约 1.2 GB，需要联网）；模型在 CPU 上运行。 | 没有网络时手动安装 PyTorch（13.7 节）。 |
 | GIMaP 在 Windows 上开发和测试。TensorFlow 在 CPU 上运行；没有配置 GPU。 | — |
 
 ## 13. 故障排除、常见问题、版本与联系
@@ -2155,8 +2229,24 @@ Claude API：`pip install anthropic`、密钥、**测试连接**（Test Connecti
 
 ### 13.7 TensorFlow / PyTorch 不可用，或缺少依赖
 
-`requirements.txt` 要求 TensorFlow 2.15–2.16（Windows 上为 `tensorflow-intel`）；测试过的版本是 2.15.1。PyTorch 不是依赖：需要其他框架的模块，
-要安装那个框架并有相应的载入代码。缺少软件包时，激活正确的 Python 环境，运行 `pip install -r requirements.txt`。
+`requirements.txt` 要求 TensorFlow 2.15–2.16（Windows 上为 `tensorflow-intel`）；测试过的版本是 2.15.1。缺少软件包时，
+激活正确的 Python 环境，运行 `pip install -r requirements.txt`。
+
+只有溅射工作区需要 PyTorch：第一次**预测**时把它装进 GIMaP 所用的 Python（`requirements-sputter.txt`，保留已安装的 NumPy）。
+安装失败时，任务状态会说明原因，并给出可以手动运行的命令：
+
+- 连不上 pypi.org（代理、SSL、防火墙）：联网，或设置代理（`HTTPS_PROXY`）；
+- 没有写入这个环境的权限：从你能写入的文件夹启动 GIMaP（`Start_GIMaP.bat`），或以管理员身份安装。GIMaP 从不装到用户自己的
+  site-packages：模型不使用它们；
+- 磁盘已满：需要约 1.5 GB；
+- 找不到适合这个 Python 的 PyTorch：用 `Start_GIMaP.bat` 启动 GIMaP，它会配置 Python 3.10；
+- 没有 pip：GIMaP 先用 `ensurepip` 补上；
+- PyTorch 已安装但无法加载：在 Windows 上安装 Microsoft Visual C++ 可再发行组件，或在原处重新安装 PyTorch
+  （`python -m pip install --force-reinstall --no-deps -r requirements-sputter.txt`）。如果 GIMaP 在 pip 写入软件包时被关闭，
+  下一次**预测**会自己这样做。
+
+手动安装：用**预测**按钮下面写着的 Python 运行 `python -m pip install -r requirements-sputter.txt`。环境变量
+`GIMAP_SPUTTER_NO_INSTALL=1` 关闭自动安装。
 
 ### 13.8 Windows 对安装程序发出警告
 

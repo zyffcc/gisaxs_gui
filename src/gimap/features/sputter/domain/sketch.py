@@ -4,9 +4,15 @@ Islands: flat-based hemispheres (h = R) with a lognormal number size
 distribution (number mean R, width sigma), centre-to-centre spacing from the
 model D only when it agrees with the direct peak, otherwise the direct
 2π/q*; without a resolved peak the spacing is not measured and the sketch
-says so. Late TS windows: a continuous film whose lateral structure has the
-characteristic length L. Burial depth, polymer thickness and TS metal
-fraction/thickness are unreliable; they are drawn only on request and marked.
+says so. Film windows (the TS model, or the film part of the physical path):
+a continuous film, with the lateral texture of the characteristic length L
+when there is one; no particles are drawn on a film (a film with particles is
+not modelled) and its thickness is not determined. Burial depth, polymer
+thickness and TS metal fraction/thickness are unreliable; they are drawn only
+on request and marked.
+
+Notes and spacing sources are made from the English templates below (values
+filled in as text), so the interface can say them in its language.
 
 The random numbers (positions, sizes, film texture) are fixed per sketcher,
 so moving through time changes only the measured values, not the dice.
@@ -19,9 +25,27 @@ import math
 import random
 from typing import Optional
 
+from .structure import is_film
+
 DEFAULT_DISORDER = 0.25     # relative spacing disorder drawn when no refined value exists (illustration)
 UNKNOWN_SPACING_FACTOR = 4.0  # islands drawn 4R apart when no spacing is measured (illustration only)
 OVERLAP_COVERAGE = 0.9        # above this projected coverage the drawn islands overlap: R/spacing inconsistent
+
+NOTE_TS = "late window: continuous-film (TS) model; L is a characteristic length, not an island spacing"
+NOTE_FILM = "film window of the physical path: a continuous film; its thickness is not determined"
+NOTE_NO_SIZE = "no size estimate"
+NOTE_DISAGREES = "model D {D} nm disagrees with the peak; spacing drawn from 2π/q*"
+NOTE_NO_PEAK = "no resolved peak: spacing not measured, islands drawn 4R apart for illustration only"
+NOTE_OVERLAP = ("islands would overlap at this R and spacing (coverage {coverage}% > {limit}%): R or the spacing is "
+                "not reliable here")
+NOTE_MEDIAN = "median of {count} neighbouring windows of the same model"
+SOURCE_MODEL_D = "model D (grade {grade})"
+SOURCE_DIRECT = "direct 2π/q*"
+SOURCE_UNKNOWN = "not measured"
+SOURCE_TS = "TS length L"
+TEMPLATES = (NOTE_TS, NOTE_FILM, NOTE_NO_SIZE, NOTE_DISAGREES, NOTE_NO_PEAK, NOTE_OVERLAP, NOTE_MEDIAN, SOURCE_MODEL_D,
+             SOURCE_DIRECT, SOURCE_UNKNOWN, SOURCE_TS)
+"""Every note and spacing source a sketch is made of (the interface translates them)."""
 
 
 @dataclass
@@ -53,38 +77,45 @@ class WindowSketch:
         return min(1.0, math.pi * mean_r2 * 2.0 / (math.sqrt(3.0) * self.spacing ** 2))
 
 
+def _model(row: dict) -> str:
+    """The model of a window: on the physical path the path's module, else the per-window one."""
+    return row.get("module_path") or row.get("module") or ""
+
+
 def window_sketch(row: dict) -> WindowSketch:
     """Pick the values to draw for one structure-table row (same rules as the reliability tab)."""
-    t = row.get("time_s"); module = row.get("module") or ""
-    if module == "TS_layer" and row.get("L_TS_nm"):
-        s = WindowSketch(t, "film", L=row["L_TS_nm"], metal_fraction=row.get("TS_metal_fraction_conditional"),
-                         film_thickness=row.get("TS_film_thickness_nm_conditional"), stage=row.get("stage") or "")
-        s.spacing, s.spacing_source = row["L_TS_nm"], "TS length L"
-        s.notes.append("late window: continuous-film (TS) model; L is a characteristic length, not an island spacing")
+    t = row.get("time_s")
+    if is_film(row):
+        s = WindowSketch(t, "film", L=row.get("L_TS_nm"), metal_fraction=row.get("TS_metal_fraction_conditional"),
+                         film_thickness=row.get("TS_film_thickness_nm_conditional"),
+                         stage=row.get("stage_path") or row.get("stage") or "")
+        if s.L:
+            s.spacing, s.spacing_source = s.L, SOURCE_TS
+        s.notes.append(NOTE_FILM if row.get("film") is not None else NOTE_TS)
         return s
     R = row.get("R_nm")
+    stage = row.get("stage_path") or row.get("stage") or ""
     if not R:
-        return WindowSketch(t, "none", stage=row.get("stage") or "", notes=[row.get("R_reason") or "no size estimate"])
+        return WindowSketch(t, "none", stage=stage, notes=[row.get("R_reason") or NOTE_NO_SIZE])
     s = WindowSketch(t, "islands", R=R, R_grade=row.get("R_grade"), R_error=row.get("R_typical_rel_error"),
                      sigma=float(row.get("sigma_log") or 0.0), burial=row.get("burial_nm_conditional"),
-                     thickness=row.get("thickness_nm_conditional"), stage=row.get("stage") or "")
+                     thickness=row.get("thickness_nm_conditional"), stage=stage)
     if row.get("spacing_disorder"):
         s.disorder, s.disorder_measured = float(row["spacing_disorder"]), True
     D, check, direct = row.get("D_nm"), row.get("D_direct_check"), row.get("D_corr_nm")
     if D and check == "consistent":
-        s.spacing, s.spacing_source = D, f"model D (grade {row.get('D_grade') or '?'})"
+        s.spacing, s.spacing_source = D, SOURCE_MODEL_D.format(grade=row.get("D_grade") or "?")
     elif direct:
-        s.spacing, s.spacing_source = direct, "direct 2π/q*"
+        s.spacing, s.spacing_source = direct, SOURCE_DIRECT
         if D:
-            s.notes.append(f"model D {D:.3g} nm disagrees with the peak; spacing drawn from 2π/q*")
+            s.notes.append(NOTE_DISAGREES.format(D=f"{D:.3g}"))
     else:
-        s.spacing, s.spacing_source = UNKNOWN_SPACING_FACTOR * R, "not measured"
-        s.notes.append("no resolved peak: spacing not measured, islands drawn 4R apart for illustration only")
+        s.spacing, s.spacing_source = UNKNOWN_SPACING_FACTOR * R, SOURCE_UNKNOWN
+        s.notes.append(NOTE_NO_PEAK)
     if s.coverage is not None and s.coverage > OVERLAP_COVERAGE:
-        s.notes.append(f"islands would overlap at this R and spacing (coverage {100 * s.coverage:.0f}% > "
-                       f"{100 * OVERLAP_COVERAGE:.0f}%): R or the spacing is not reliable here")
+        s.notes.append(NOTE_OVERLAP.format(coverage=f"{100 * s.coverage:.0f}", limit=f"{100 * OVERLAP_COVERAGE:.0f}"))
     if row.get("smoothed_windows"):
-        s.notes.append(f"median of {row['smoothed_windows']} neighbouring windows of the same model")
+        s.notes.append(NOTE_MEDIAN.format(count=row["smoothed_windows"]))
     return s
 
 
@@ -105,7 +136,7 @@ def smoothed_rows(rows: list, half: int = 5) -> list:
     """
     out = []
     for i, r in enumerate(rows):
-        same = [x for x in rows[max(0, i - half):i + half + 1] if x.get("module") == r.get("module")]
+        same = [x for x in rows[max(0, i - half):i + half + 1] if _model(x) == _model(r)]
         nr = dict(r)
         for key in SMOOTHED_KEYS:
             values = [x[key] for x in same if x.get(key) is not None]
@@ -184,7 +215,7 @@ class Sketcher:
         for j in range(n):
             y = (j + .5) * width / n
             values.append([sum(math.cos(kx * (i + .5) * width / n + ky * y + p) for kx, ky, p in waves) for i in range(n)])
-        frac = s.metal_fraction if s.metal_fraction and 0.05 <= s.metal_fraction <= .95 else .6
+        frac = .6  # the TS metal fraction is not determined (its estimate equals the prior): a fixed share
         flat = sorted(v for row in values for v in row)
         cut = flat[int((1 - frac) * (len(flat) - 1))]
         return [[v >= cut for v in row] for row in values]
@@ -220,5 +251,5 @@ def storyboard_indices(sketches: list, count: int = 6) -> list:
     return sorted(picks, key=lambda i: sketches[i].time_s)
 
 
-__all__ = ["Particle", "Sketcher", "WindowSketch", "series_extent", "smoothed_rows", "storyboard_indices",
+__all__ = ["Particle", "Sketcher", "TEMPLATES", "WindowSketch", "series_extent", "smoothed_rows", "storyboard_indices",
            "window_sketch"]

@@ -227,9 +227,9 @@ path that you may write to). The first start sets up a private environment in th
 it downloads uv (a small Python installer, pinned version, checked against its SHA-256), Python 3.10
 and the packages of `requirements.txt` (about 2 GB, 3-20 minutes), then opens GIMaP. Later starts are
 immediate. Nothing outside the folder is changed; deleting `.gimap` removes the environment. The
-Sputter workspace needs its model toolkit, research code that is not part of the repository: copy the
-toolkit folder you were given to `utils\sputter_toolkit` in the GIMaP folder. The next start adds
-PyTorch for it (`requirements-sputter.txt`); nothing else needs setting up.
+model of the Sputter workspace is part of GIMaP (`utils\sputter_toolkit`); the PyTorch it needs
+(`requirements-sputter.txt`, about 1.2 GB) is set up by `Start_GIMaP.bat`, or installed on the first
+**Predict** when it is missing (section 7.4).
 
 **By hand.** Install Python 3.10 or 3.11, then in the folder of the checkout:
 
@@ -251,9 +251,9 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
-The Sputter workspace runs its toolkit with PyTorch: copy the toolkit folder to
-`utils/sputter_toolkit` and run `python -m pip install -r requirements-sputter.txt` in the same
-environment.
+The Sputter workspace's model is in the repository (`utils/sputter_toolkit`) and runs on PyTorch (CPU): its
+first **Predict** installs PyTorch into the Python GIMaP runs in. To install it beforehand, run
+`python -m pip install -r requirements-sputter.txt` in the same environment.
 
 The trained weights of 1D Predict are in the Git repository (about 56 MB), so a checkout runs
 everything, including 1D Predict (chapter 6). On macOS, BornAgain is installed separately: `README.md`
@@ -268,6 +268,7 @@ GIMaP runs without these. Each is needed only for the function named.
 | An AI account or a local model | **Ask AI…**, **Tools ▸ Process with AI…** | The Python packages come with `requirements.txt`; set up the AI in **Tools ▸ Settings… ▸ Assistant** (chapter 9) |
 | The fit1d kit (`gisaxs1d_gui_kit`) | **Predict parameters (fit1d)** in Fitting (also for every frame of an In-situ series) and the method *fit1d* in 1D Predict | Put it in `utils/gisaxs1d_gui_kit`, or name its folder in the environment variable `GISAXS1D_KIT_HOME` (chapter 6) |
 | StarDist | Separating touching particles in **Tools ▸ SEM Particle Analysis…** | A separate Python environment with `requirements-sem-stardist.txt`, and a local model folder (chapter 8) |
+| PyTorch (CPU) | **Predict** in the Sputter workspace | Installed into GIMaP's Python on the first Predict (about 1.2 GB, needs the internet) or by `Start_GIMaP.bat`; by hand `python -m pip install -r requirements-sputter.txt` (section 7.4) |
 
 TensorFlow runs on the CPU; a GPU set-up is not configured.
 
@@ -465,6 +466,10 @@ or dropping a `.gimap` file on the window opens it.
   masks, corrections, cut regions …) is kept in `last_analyze_setup.json` in the user data folder.
   With the first frame of the next session a note offers **Use It**. It is never applied without
   asking, since a new beamtime may need other settings.
+- **Sputter**: the values of each scan folder's last Predict (geometry, metal, polymer, mask, time window,
+  deposition rate and t0), the values used last (another folder does not take over the mask or the sample roll),
+  the geometry presets and the result shown last (opened again at the next start); PyTorch is looked for afresh
+  at every start.
 - The window size and position, the theme, the font size and the language are restored at the next
   start.
 
@@ -1870,7 +1875,8 @@ Stages and Compare answer what a series of scattering frames needs, without labe
 - which runs or samples are alike.
 
 Everything uses Analyze's curves, with the same geometry, masks and cuts. They replace the Classification page of
-version 0.0.2.
+version 0.0.2. Section 7.4 describes the Sputter workspace, which follows the stages of an in-situ sputter series
+with a trained model.
 
 ### 7.1 Stages and odd frames
 
@@ -1992,6 +1998,95 @@ every sample. Two or more series are compared with each other; one alone is desc
   difference at the end may be much smaller.
 - **Look at both tables.** Check the differences **At the start** as well as **At the end**: series may differ
   where they began rather than where they ended.
+
+### 7.4 Sputter: size, spacing and thickness of a sputter series
+
+The **Sputter** workspace (sidebar) reads an in-situ sputter series — CBF frames of a metal sputtered on a
+polymer — with a trained model that is part of GIMaP (`utils/sputter_toolkit`). Window by window it gives the
+particle size R (the base radius of a flat-based hemisphere, h = R), the centre-to-centre spacing D where a
+correlation peak is resolved, the stage of the growth, the metal thickness that can be stated, and how far each
+value can be trusted.
+
+**Predict in three steps.**
+
+1. **Data ▸ Choose…**: the folder of one scan — the folder of its CBF frames, or the scan folder whose one
+   subfolder holds them (`p2m/`). The page reads the header of the first frame (a few kB, no pixels) and says in
+   one line how many frames there are, the detector and its serial number, the pixel size, the exposure and the
+   time.
+2. **Sample and geometry**: check what is filled in. Beside each value the page says where it comes from:
+   - *from the file header* or *from the scan's NeXus file*: the X-ray energy, from a `Wavelength` line of the
+     header or the `beam_energy` of a NeXus file of the same scan — check it. The `E<eV>` in the flat-field file
+     name is the detector's calibration energy, not necessarily the beam's: it is only named beside the field
+     (*the flat-field file name says E = … keV*), never filled in;
+   - *as last used for this folder*: the values of this folder's last Predict (a different energy of the header
+     is named beside it);
+   - *from preset <name>*: a geometry preset you saved that matches the scan (below);
+   - *last used — please check*: the values of the last Predict of any folder — not the sample roll or the mask,
+     which belong to one set-up;
+   - *not in the files — please enter*: nothing is known. A PILATUS header holds neither the distance nor the
+     incidence angle;
+   - *not in the files: 0 assumed — please check*: the sample roll, when neither this folder nor a preset gives
+     one.
+
+   An empty beam centre is estimated from the frames; a beam centre you give is in the pixel coordinates of
+   Analyze (section 4.4). **Metal**: Ag, Au, or Cu — approximated with the Ag model, for reference only (the
+   networks were trained for Ag and Au).
+3. **Predict**. The first time, PyTorch is installed into GIMaP's own Python (*Step 1 of 2*, about 1.2 GB, needs
+   the internet; the bar follows the download). Then the frames are read (the bar follows the frames read),
+   summed into time windows (0.5 s; 0.1 s in the first 5 s) and the model runs (*Step 2 of 2*). **Cancel** stops
+   at once, together with the processes that read the frames; the installation can be stopped until pip starts
+   writing the packages. **Details** shows the messages of pip and of the model. Damaged frames are left out and
+   counted. Pressed while the header of a newly chosen folder is still read, Predict starts once the form is filled
+   from it; a folder without CBF frames is refused.
+
+The line under the job status names the Python that runs the model and whether PyTorch is ready.
+
+**Save Geometry as Preset…** keeps the geometry on the page for every scan of this detector (serial number) and
+flat field taken in a range of days (one beamtime; it starts a week either side of the scan): such scans are then
+filled in from the preset. The values of each folder and the presets are kept in GIMaP's settings (section 3.9).
+
+**More options**: the polymer, the sample roll, a detector mask (`.npy`; taken only from this folder's last
+Predict), the time window, the **Deposition rate (nm/s)** and the **Start of deposition t0 (s)** (both optional),
+**Save results in**, **Open Results Folder…**, **Add Refined Windows…** (physical-refinement windows computed
+elsewhere) and **Explanation**.
+
+**Results.** Each request gets its own folder, `sputter/<scan>-<code>` in the user data folder (or in **Save
+results in**); the code is made from the scan, every value the analysis depends on and the version of the
+model. The same request reuses its folder — a stopped run goes on where it stopped — and another geometry, or a
+GIMaP with another model, gets a new one (section 11).
+
+- **The physical path** is the default explanation: one path of stages through time — pre-nucleation, islands,
+  coalescence, film — in which a film does not revert to islands. R and D are the network estimate in every
+  island window (grade **P**), so a value does not jump between a refined and a network source from window to
+  window; refined values stay in the Windows table. **Explanation** also offers the per-window choice (grades A,
+  B, C), the learned selector (L) and the time-consistent path (S, T) when the folder holds them.
+- **Size Trend**: each window's R and D as faint points and the smoothed trend as a line; × marks the direct
+  2π/q*, a red circle a D that disagrees with it. The **Metal thickness** panel shows the island-volume equivalent
+  thickness t_eq as a band — the metal in the visible islands, for hemispheres on a hexagonal arrangement; a
+  conditional value, uncertain by about a factor 2–3 — and, when a deposition rate is given, the nominal thickness
+  rate × (t − t0). Film windows are shaded: *film: thickness not determined*. The film onset of the path is marked
+  with its interval.
+- The result line under Predict gives the windows, the film onset and, when the intensity is modulated by a
+  sample rotation, its period (the path and the trend lines average over it).
+- **Windows**: every window with its stage (by the rule and on the path), the values, grades and typical errors,
+  t_eq, the nominal thickness and the notes; `Ctrl+C` copies rows.
+- **Reliability**: what the grades mean, the typical errors from simulation, the physical path's assumptions,
+  the back-and-forth changes before and after it, the rotation period and what the thickness values mean.
+- **Structure Sketch**: a picture of the fitted model of one window (side and top view, one ruler for the
+  series); film windows are drawn as a continuous film, without particles. A Cu result says on the picture, the
+  saved image and the storyboard that it was read with the Ag model.
+- A new **Deposition rate** or **t0** after a run rewrites only the physical files of the result shown: no frame
+  is read again. When that result is of another scan than the one under **Data**, the values are kept for that
+  scan's next **Predict** instead.
+
+**Before you conclude.**
+
+- The thickness of a continuous film is not determined: in simulation the model's estimate equals its prior. The
+  page gives t_eq (island windows only) and the nominal thickness instead; a model of a film with particles on it
+  is planned.
+- A film with particles on it is not modelled: with a resolved peak such a window counts as islands, without one
+  the film model takes the particles in.
+- Absolute R depends on the hemisphere condition (h = R); trends are more reliable than single values.
 
 ## 8. Tool windows
 
@@ -2542,6 +2637,8 @@ folder is `%APPDATA%\GIMaP` on Windows (or the folder in `GIMAP_HOME`; **Help �
 | **Tools ▸ 1D Predict — Fit Many Curves…**, and Fitting's *AI proposal (1D Predict)* | a run folder: `request.json`, `batch_summary.json` …, a subfolder per curve with `solutions.json`, `fitting_curves.csv` … | `AI_Fitting_Output/v5_<date>_<time>_<µs>/` in the folder GIMaP was started from (portable version: the program folder); never removed automatically | `request.json` |
 | Compare ▸ **Save ▸ Table of Every Series… / Table of Every Frame…** | `compare_series.csv` / `compare_frames.csv` + `.json` | the folder of the first series added from files, else the folder a series was last added from | `#` header lines and the JSON |
 | Compare ▸ **Change Plot… / Paths Plot… / End States Plot…** | `compare_*.png` or `.svg` | as above | none |
+| Sputter ▸ **Predict** | a folder per scan and request: `structure_physical.csv` + `structure_physical_summary.json` (the physical path), `structure.csv` + `structure_summary.json` (per window), the model's `intake/` and `binned/` | user data folder: `sputter/<scan>-<code>/` (or **More options ▸ Save results in**); the same request reuses its folder | `gimap_request.json` (the request, the Python, PyTorch's version) |
+| Sputter ▸ Structure Sketch ▸ **Save Image… / Save Storyboard…** | PNG, PDF or SVG | the result folder | none |
 | XRR Series Extractor ▸ **Export CSV…** | `<source>_xrr.csv` + `.json` | next to the source file; for a CBF folder inside it | the JSON (every value that determines qz and its origin; `center_convention`; `source_layout` with every file read) |
 | Format Converter | converted frames, by default `<source>_<frame, 6 digits>.<ext>` (or one `converted_images.h5`) | `converted/` next to the first input | `conversion_report.json`, `conversion_metadata.json` (or one JSON per frame) |
 | SEM Particle Analysis ▸ **Export SEM results…** | the files of section 8.3 | a new `SEM_analysis_<date>_<time>/` in the folder you choose; never overwrites | `sem_analysis.json`; `#` header line in the CSVs |
@@ -2592,6 +2689,9 @@ Version 0.1.0 is a pre-release. These limitations are known; each comes with wha
 | After the interface language is switched in a session, a few texts keep the old language (e.g. the outcome line of a finished automatic analysis). | Run the analysis again, or restart. |
 | Quitting GIMaP during a Batch Export keeps the files of the frames done, but the batch tables, `README.txt` and the batch's JSON record are not written. | End a batch with **Stop**: it writes them. |
 | 1D Predict writes its run folders into the folder GIMaP was started from; they are not removed. | Delete old `AI_Fitting_Output/v5_…` folders yourself. |
+| **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 7.4). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
+| **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
+| **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 13.7). |
 | Windows is the platform GIMaP is developed and tested on. TensorFlow runs on the CPU; a GPU set-up is not configured. | — |
 
 ## 13. Troubleshooting, FAQ, version and contact
@@ -2659,9 +2759,26 @@ Other providers: `pip install openai`, a key, a model that supports tool calling
 ### 13.7 TensorFlow / PyTorch not available, or a dependency is missing
 
 `requirements.txt` asks for TensorFlow 2.15–2.16 (`tensorflow-intel` on Windows); 2.15.1 is the tested
-version. PyTorch is not a dependency: a module that needs another framework needs that framework and its
-loader code. For a missing package, activate the right Python environment and run
+version. For a missing package, activate the right Python environment and run
 `pip install -r requirements.txt`.
+
+PyTorch is needed by the Sputter workspace only: its first **Predict** installs it into the Python GIMaP runs
+in (`requirements-sputter.txt`, keeping the installed NumPy). When that fails, the job status says why and gives
+the command to run by hand:
+
+- no connection to pypi.org (proxy, SSL, firewall): connect, or set the proxy (`HTTPS_PROXY`);
+- no permission to write into the environment: start GIMaP from a folder you can write to (`Start_GIMaP.bat`), or
+  install as an administrator. GIMaP never installs into the user's own site-packages: the model does not use
+  them;
+- the disk is full: about 1.5 GB is needed;
+- no PyTorch for this Python: start GIMaP with `Start_GIMaP.bat`, which sets up Python 3.10;
+- no pip: GIMaP first adds it with `ensurepip`;
+- PyTorch is installed but does not load: on Windows install the Microsoft Visual C++ Redistributable, or install
+  PyTorch again over it (`python -m pip install --force-reinstall --no-deps -r requirements-sputter.txt`). When
+  GIMaP was closed while pip wrote the packages, the next **Predict** does that itself.
+
+By hand: `python -m pip install -r requirements-sputter.txt` with the Python named under **Predict**. The
+environment variable `GIMAP_SPUTTER_NO_INSTALL=1` switches the automatic installation off.
 
 ### 13.8 Windows warns about the installer
 

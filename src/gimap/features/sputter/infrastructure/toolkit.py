@@ -1,127 +1,164 @@
-"""Run the sputter toolkit (a Python with PyTorch) as a subprocess.
+"""Run the Sputter model bundled with GIMaP (``utils/sputter_toolkit``) in GIMaP's own Python.
 
-The toolkit folder holds ``scripts/sputter_struct_v1.py``, the ``sputtergisaxs``
-package, ``configs/`` and ``experts/polymer`` + ``experts/TS``. Progress comes
-back as ``SPUTTER_PROGRESS`` lines on stdout; Cancel terminates the process.
+The toolkit folder holds ``scripts/sputter_struct_v1.py``, the ``sputtergisaxs`` package, ``configs/``,
+``experts/polymer`` and ``experts/TS``. It runs as a subprocess of the console ``python.exe`` of the
+environment GIMaP runs in (PyTorch is installed there on the first Predict), with ``PYTHONNOUSERSITE=1``.
+Progress comes back on stdout (``SPUTTER_PROGRESS``, ``INTAKE_PLAN``, ``INTAKE_CHUNK``, ``INTAKE_EXCLUDED``);
+Stop ends the whole process tree. ``GIMAP_SPUTTER_TOOLKIT`` points at another copy of the toolkit
+(development only).
 
-The toolkit is research code that is not part of the repository. Defaults
-when nothing is chosen on the page: ``$GIMAP_SPUTTER_TOOLKIT``, else the
-git-ignored folder ``utils/sputter_toolkit`` of the program; and
-``$GIMAP_SPUTTER_PYTHON``, else this GIMaP's own Python when it has PyTorch
-(Start_GIMaP.bat adds PyTorch to a source folder once the toolkit is there).
+Beam centre: the page takes it in GIMaP's pixel coordinates (as Analyze shows it); the toolkit counts
+0-based pixel centres, so the values are converted here (``shared/geometry/conventions.py``).
+
+``model_id`` names the model's version (the SHA-256 of its ``MANIFEST.json``): it is part of the results
+folder's code, so a GIMaP with another model never reuses the networks' outputs of an older one.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
-import subprocess
-import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..application import AnalyzeRequest
+from src.gimap.shared.geometry.conventions import index_center_from_canonical
+
+from ..application import STOPPED, AnalyzeRequest, EnvironmentStatus, Stopped, ToolkitFailed
+from .process import child_environment, console_python, run_streaming
 
 ENTRY = Path("scripts") / "sputter_struct_v1.py"
-# Where the toolkit is copied in the program folder (git-ignored, like utils/gisaxs1d_gui_kit).
+REQUIRED = (ENTRY, Path("sputtergisaxs"), Path("experts") / "polymer", Path("experts") / "TS")
 LOCAL_TOOLKIT = Path(__file__).resolve().parents[5] / "utils" / "sputter_toolkit"
+OVERRIDE = "GIMAP_SPUTTER_TOOLKIT"
+REQUEST_FILE = "gimap_request.json"
+NOISE = ("FutureWarning", "UserWarning")
 
 
-def default_folder() -> str:
-    """The toolkit copied to ``utils/sputter_toolkit``, when it is there."""
-    return str(LOCAL_TOOLKIT) if (LOCAL_TOOLKIT / ENTRY).is_file() else ""
+def toolkit_home() -> Path:
+    override = os.environ.get(OVERRIDE, "").strip()
+    return Path(override) if override else LOCAL_TOOLKIT
 
 
-def default_python() -> str:
-    """This GIMaP's own Python when it can run the model (PyTorch installed); console variant for pipes."""
-    import importlib.util
-    try:
-        if importlib.util.find_spec("torch") is None:
-            return ""
-    except (ImportError, ValueError):
-        return ""
-    exe = Path(sys.executable)
-    console = exe.with_name("python.exe") if exe.name.lower() == "pythonw.exe" else exe
-    return str(console if console.is_file() else exe)
+def default_workers() -> int:
+    return max(1, min(8, (os.cpu_count() or 2) - 1))
 
 
-class ToolkitNotConfigured(RuntimeError):
-    pass
+def _number(value: float) -> str:
+    return repr(float(value))
 
 
-class SubprocessToolkit:
-    """``settings()`` returns (python executable, toolkit folder); both are chosen on the Sputter page."""
+def _fingerprint(home: Path) -> str:
+    """Without a ``MANIFEST.json`` (a development copy): the names, sizes and times of the model's files."""
+    digest = hashlib.sha256()
+    for part in ("scripts", "sputtergisaxs", "experts", "configs"):
+        folder = home / part
+        for path in sorted(folder.rglob("*")) if folder.is_dir() else []:
+            if path.is_file() and "__pycache__" not in path.parts:
+                stat = path.stat()
+                digest.update(f"{path.relative_to(home).as_posix()}|{stat.st_size}|{stat.st_mtime_ns}\n".encode())
+    return "unversioned-" + digest.hexdigest()
 
-    def __init__(self, settings: Callable[[], tuple[str, str]]):
-        self.settings = settings
 
-    def _resolve(self) -> tuple[str, Path]:
-        python, folder = self.settings()
-        python = python or os.environ.get("GIMAP_SPUTTER_PYTHON", "") or default_python()
-        folder = folder or os.environ.get("GIMAP_SPUTTER_TOOLKIT", "") or default_folder()
-        if not folder or not (Path(folder) / ENTRY).is_file():
-            raise ToolkitNotConfigured(
-                f"The sputter toolkit was not found. It is research code that is not part of GIMaP: copy its folder "
-                f"(with {ENTRY.as_posix()}, sputtergisaxs/ and experts/) to {LOCAL_TOOLKIT}, or choose it under "
-                f"Toolkit > Folder.")
-        if not python or not Path(python).is_file():
-            raise ToolkitNotConfigured(
-                "This GIMaP's Python has no PyTorch. In a source folder, start GIMaP again with Start_GIMaP.bat once "
-                "the toolkit is in utils/sputter_toolkit: it adds PyTorch. Or choose under Toolkit > Python a Python "
-                "with PyTorch, NumPy, SciPy, fabio and Matplotlib.")
-        return python, Path(folder)
+class BundledToolkit:
+    def __init__(self, home: Optional[Path] = None, python: Optional[str] = None, *, run=run_streaming):
+        self._home, self.python, self._run_process = home, python or console_python(), run
 
-    def _run(self, args: list[str], on_line: Callable[[str], None], should_stop: Callable[[], bool]) -> list[str]:
-        python, folder = self._resolve()
-        env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONNOUSERSITE="1")
-        env.pop("PYTHONPATH", None)
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-        process = subprocess.Popen([python, "-u", str(folder / ENTRY), *args], cwd=str(folder), stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", env=env,
-                                   creationflags=flags)
-        tail: list[str] = []
-        assert process.stdout is not None
-        for line in process.stdout:
-            line = line.rstrip("\r\n")
-            if not line or "FutureWarning" in line or line.lstrip().startswith("warnings.warn"):
-                continue
-            tail = (tail + [line])[-40:]
+    @property
+    def home(self) -> Path:
+        return Path(self._home) if self._home is not None else toolkit_home()
+
+    def problem(self) -> str:
+        """"" when the toolkit is complete, else the folder (missing or incomplete)."""
+        home = self.home
+        return "" if all((home / part).exists() for part in REQUIRED) else str(home)
+
+    def model_id(self) -> str:
+        """The model's version: the SHA-256 of its ``MANIFEST.json`` (else a fingerprint of its files)."""
+        try:
+            return hashlib.sha256((self.home / "MANIFEST.json").read_bytes()).hexdigest()
+        except OSError:
+            return _fingerprint(self.home)
+
+    def _run(self, args: list[str], on_line: Callable[[str], None], should_stop: Callable[[], object]) -> None:
+        home = self.home
+
+        def keep(line: str) -> None:
+            if any(word in line for word in NOISE) or line.lstrip().startswith("warnings.warn"):
+                return
             on_line(line)
-            if should_stop():
-                process.terminate()
-                break
-        code = process.wait()
-        if should_stop():
-            raise RuntimeError("Stopped. Finished steps are kept in the output folder and are reused on the next run.")
-        if code != 0:
-            raise RuntimeError("The sputter toolkit stopped with an error:\n" + "\n".join(tail[-12:]))
-        return tail
 
-    def analyze(self, request: AnalyzeRequest, on_line: Callable[[str], None], should_stop: Callable[[], bool]) -> Path:
-        _, folder = self._resolve()
-        args = ["analyze", "--input", str(request.scan_folder), "--out", str(request.out_folder),
-                "--sdd-mm", repr(float(request.sdd_mm)), "--alpha-i-deg", repr(float(request.alpha_i_deg)),
+        outcome = self._run_process([self.python, "-u", str(home / ENTRY), *args], on_line=keep,
+                                    should_stop=should_stop, env=child_environment(), cwd=str(home))
+        if outcome.stopped:
+            raise Stopped(STOPPED)
+        if outcome.code != 0:
+            raise ToolkitFailed(outcome.code, "\n".join(outcome.tail[-15:]))
+
+    def _record(self, request: AnalyzeRequest, out: Path, environment: Optional[EnvironmentStatus]) -> None:
+        manifest = self.home / "MANIFEST.json"
+        model = self.model_id()
+        record = {
+            "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "scan_folder": str(request.scan_folder),
+            "request": request.analysis_values() | {"rate_nm_s": request.rate_nm_s, "t0_s": request.t0_s,
+                                                    "beam_centre_convention": "GIMaP pixel coordinates (corners)"},
+            "digest": request.digest(model),
+            "model_id": model,
+            "toolkit": str(self.home),
+            "toolkit_manifest_sha256": model if manifest.is_file() else None,
+            "python": self.python,
+            "torch": environment.torch_version if environment else None,
+            "numpy": environment.numpy_version if environment else None,
+            "device": "cpu", "workers": default_workers(),
+        }
+        out.mkdir(parents=True, exist_ok=True)
+        (out / REQUEST_FILE).write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
+
+    def analyze(self, request: AnalyzeRequest, out_folder: Path, on_line: Callable[[str], None],
+                should_stop: Callable[[], object], environment: Optional[EnvironmentStatus] = None) -> Path:
+        home, out = self.home, Path(out_folder)
+        self._record(request, out, environment)
+        args = ["analyze", "--input", str(request.scan_folder), "--out", str(out),
+                "--sdd-mm", _number(request.sdd_mm), "--alpha-i-deg", _number(request.alpha_i_deg),
                 "--metal", request.metal, "--polymer-type", request.polymer_type or "polymer",
-                "--sample-roll-deg", repr(float(request.sample_roll_deg)), "--bin-seconds", repr(float(request.bin_seconds)),
-                "--device", request.device, "--workers", str(int(request.workers)),
-                "--polymer-expert", str(folder / "experts" / "polymer"), "--ts-expert", str(folder / "experts" / "TS")]
-        args += ["--energy-ev", repr(float(request.energy_ev))] if request.energy_ev is not None else \
-            ["--wavelength-nm", repr(float(request.wavelength_nm))]
+                "--sample-roll-deg", _number(request.sample_roll_deg), "--bin-seconds", _number(request.bin_seconds),
+                "--device", "cpu", "--workers", str(default_workers()),
+                "--polymer-expert", str(home / "experts" / "polymer"), "--ts-expert", str(home / "experts" / "TS")]
+        args += ["--energy-ev", _number(request.energy_ev)] if request.energy_ev is not None else \
+            ["--wavelength-nm", _number(request.wavelength_nm)]
         if request.beam_col is not None and request.beam_row is not None:
-            args += ["--beam-col", repr(float(request.beam_col)), "--beam-row", repr(float(request.beam_row))]
+            col, row = index_center_from_canonical(request.beam_col, request.beam_row)
+            args += ["--beam-col", _number(col), "--beam-row", _number(row)]
         if request.mask_file:
             args += ["--mask", str(request.mask_file)]
         if request.refined_folder:
             args += ["--refined", str(request.refined_folder)]
+        args += self._thickness_args(request.rate_nm_s, request.t0_s)
         self._run(args, on_line, should_stop)
-        return Path(request.out_folder) / "structure.csv"
+        return out / "structure.csv"
 
-    def table(self, binned_folder: Path, out_folder: Path, metal: str, refined_folder: Optional[Path],
+    @staticmethod
+    def _thickness_args(rate_nm_s: Optional[float], t0_s: Optional[float]) -> list[str]:
+        args = ["--rate-nm-s", _number(rate_nm_s)] if rate_nm_s is not None else []
+        return args + (["--t0-s", _number(t0_s)] if t0_s is not None else [])
+
+    def table(self, out_folder: Path, metal: str, refined_folder: Optional[Path],
               on_line: Callable[[str], None]) -> Path:
-        args = ["table", "--binned", str(binned_folder), "--out", str(out_folder), "--metal", metal]
+        out = Path(out_folder)
+        args = ["table", "--binned", str(out / "binned"), "--out", str(out), "--metal", metal]
         if refined_folder:
             args += ["--refined", str(refined_folder)]
         self._run(args, on_line, lambda: False)
-        return Path(out_folder) / "structure.csv"
+        return out / "structure.csv"
+
+    def physical(self, out_folder: Path, rate_nm_s: Optional[float], t0_s: Optional[float],
+                 on_line: Callable[[str], None]) -> Path:
+        out = Path(out_folder)
+        self._run(["physical", "--folder", str(out), *self._thickness_args(rate_nm_s, t0_s)], on_line, lambda: False)
+        return out / "structure_physical.csv"
 
 
-__all__ = ["ENTRY", "LOCAL_TOOLKIT", "SubprocessToolkit", "ToolkitNotConfigured", "default_folder", "default_python"]
+__all__ = ["BundledToolkit", "ENTRY", "LOCAL_TOOLKIT", "OVERRIDE", "REQUEST_FILE", "default_workers",
+           "toolkit_home"]
