@@ -9,6 +9,7 @@
 | `analyze` | 主工作区 Analyze | 打开帧 → 几何 → 掩膜与校正 → 切线 → 结果 → 导出；Series 热图、批量导出 |
 | `fitting` | 主工作区 Fitting；Tools ▸ 1D Predict — Fit Many Curves… | 一维模型拟合：Single（一条曲线）与 In-situ series；快速物理拟合 `create_quick_fit()` 也供其他功能注入 |
 | `compare` | 主工作区 Compare | 多个序列并排：奇异帧、阶段、变化快慢、哪些相似 |
+| `sputter` | 主工作区 Sputter | 原位溅射序列的颗粒尺寸 R 与间距 D（逐时间窗）及每个值的可靠度、结构示意图；模型在外部 sputter 工具包（自带 PyTorch 的 Python）中运行 |
 | `assistant` | Analyze 的 Run Automatic Analysis（无需 AI）；Tools ▸ Process with AI…、Analyze 的 Ask AI… | 标准流程（GIWAXS 与 GISAXS）和 AI 对话；`tools/gimap_agent.py` 的无界面版本 |
 | `calibration` | Tools ▸ Geometry Calibration… | 用标样（AgBh、LaB6…）标定束流中心与探测器距离；无界面标定也注入自动分析 |
 | `format_converter` | Tools ▸ Format Converter…、Convert Current File… | 探测器图像的格式转换：读 NXS、CBF、TIFF，写 TIFF、CBF、HDF5 或 NumPy |

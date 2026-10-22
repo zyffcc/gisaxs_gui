@@ -1,0 +1,1 @@
+"""Sputter workspace page."""

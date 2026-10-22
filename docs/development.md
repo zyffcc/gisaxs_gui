@@ -76,9 +76,9 @@ a summary with one line per step (result, time, pytest's counts) comes at the en
 | Research tests | `python -m pytest utils/ML_Fitting_1D_GISAXS/tests --continue-on-collection-errors` | reported only; skipped on Windows by default |
 
 - The **offscreen smoke** starts and closes the real main window with in-memory
-  settings, session and preferences. It requires 6 pages (Start, Analyze, Fitting,
-  Compare, 2D Prediction, Trainset Build), the Fitting, Prediction and Trainset
-  bindings, and the Compare page, and prints `Offscreen startup OK: pages=6, …`.
+  settings, session and preferences. It requires 7 pages (Start, Analyze, Fitting,
+  Compare, Sputter, 2D Prediction, Trainset Build), the Fitting, Prediction and Trainset
+  bindings, and the Compare and Sputter pages, and prints `Offscreen startup OK: pages=7, …`.
 - **Ruff** selects only `E9`, `F63`, `F7` and `F82`: syntax errors, invalid
   comparisons and control flow, and undefined names. A pass says nothing about style.
   Do not run a broad formatter; it would rewrite many files.

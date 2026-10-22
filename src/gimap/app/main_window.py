@@ -72,6 +72,7 @@ class MainWindowComponents(HandoverMixin):
         self.trainset_page = self._create_trainset_page()
         self.analyze_page = self._create_analyze_page()
         self.compare_page = self._create_compare_page()
+        self.sputter_page = self._create_sputter_page()
         from src.gimap.features.fitting.bootstrap import create_fitting_view_model, create_quick_fit
 
         self.fitting_view_model = create_fitting_view_model(ui.app_context)
@@ -93,6 +94,7 @@ class MainWindowComponents(HandoverMixin):
             "predict": ui.gisaxsPredictPage,
             "trainset": ui.trainsetBuildPage,
             "compare": self.compare_page,
+            "sputter": self.sputter_page,
         }
         importing = getattr(self.analyze_page, "frameImportStarted", None)
         if importing is not None:
@@ -138,6 +140,19 @@ class MainWindowComponents(HandoverMixin):
         self._replace_page_host("comparePageHost", page)
         self.ui.comparePage = page
         self.analyze_page.set_compare_target(self._send_series_to_compare)
+        return page
+
+    def _create_sputter_page(self):
+        """Sputter: size and spacing of an in-situ sputter series with their reliability (model in an external toolkit)."""
+        from src.gimap.features.sputter.bootstrap import create_sputter_service
+        from src.gimap.features.sputter.presentation.page import SputterPage
+
+        holder = {}
+        service = create_sputter_service(lambda: holder["page"].toolkit_settings())
+        page = SputterPage(service, task_runner=self.task_runner, preferences=self.preferences)
+        holder["page"] = page
+        self.ui.mainWindowWidget.addWidget(page)
+        self.ui.sputterPage = page
         return page
 
     def _create_analyze_page(self):

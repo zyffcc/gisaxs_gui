@@ -388,7 +388,7 @@ python tools/check.py
 ```
 
 This runs the test suite (about 14 minutes), an offscreen start-and-close check of the real main
-window with its six pages, and the deliberately narrow Ruff baseline, without formatting unrelated
+window with its seven pages, and the deliberately narrow Ruff baseline, without formatting unrelated
 code. Configuration is in `pyproject.toml`; details are in
 [docs/development.md](docs/development.md).
 

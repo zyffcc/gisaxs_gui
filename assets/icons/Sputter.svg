@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254">
+  <!-- Sputter: atoms arriving on a film, islands growing on the substrate. -->
+  <g fill="none" stroke="#ffb84d" stroke-width="64" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="120" y1="1060" x2="1134" y2="1060"/>
+    <path d="M200,1060 A110,110 0 0 1 420,1060"/>
+    <path d="M520,1060 A160,160 0 0 1 840,1060"/>
+    <path d="M920,1060 A90,90 0 0 1 1100,1060"/>
+    <line x1="330" y1="180" x2="400" y2="520" stroke-dasharray="70 70"/>
+    <line x1="680" y1="140" x2="680" y2="560" stroke-dasharray="70 70"/>
+    <line x1="1010" y1="180" x2="950" y2="560" stroke-dasharray="70 70"/>
+  </g>
+</svg>
