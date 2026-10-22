@@ -9,9 +9,9 @@
 # The first run downloads uv (a small Python installer from GitHub, the pinned version below, checked
 # against its published SHA-256), Python 3.10 and the packages of requirements.txt into the folder
 # .gimap\ of this checkout: about 2 GB, 3-20 minutes depending on the connection. Later runs start GIMaP
-# at once. The packages of requirements-sputter.txt (PyTorch, CPU) are added once the Sputter toolkit
-# (research code, not part of the repository) has been copied to utils\sputter_toolkit. When a
-# requirements file changed (after an update) the missing packages are added before the start.
+# at once. The packages of requirements-sputter.txt (PyTorch, CPU) are added too, for the Sputter toolkit
+# (research code bundled in utils\sputter_toolkit). When a requirements file changed (after an update)
+# the missing packages are added before the start.
 # Nothing outside this folder is changed (settings live in %APPDATA%\GIMaP as always). Delete .gimap\
 # to remove the environment completely.
 #
@@ -42,7 +42,7 @@ $UvAsset = "uv-x86_64-pc-windows-msvc.zip"
 $UvUrl = "https://github.com/astral-sh/uv/releases/download/$UvVersion/$UvAsset"
 $PythonVersion = "3.10"
 $RequirementNames = @("requirements.txt")
-# The Sputter workspace's model runs in this environment once its toolkit has been copied in.
+# The Sputter workspace's bundled toolkit runs in this environment (skipped if its folder was removed).
 $SputterEntry = Join-Path $Root "utils\sputter_toolkit\scripts\sputter_struct_v1.py"
 if (Test-Path -LiteralPath $SputterEntry -PathType Leaf) { $RequirementNames += "requirements-sputter.txt" }
 

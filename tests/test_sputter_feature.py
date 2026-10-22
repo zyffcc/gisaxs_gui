@@ -218,10 +218,10 @@ def test_the_toolkit_comes_from_its_local_folder_or_its_absence_is_explained(tmp
     import importlib.util
     from src.gimap.features.sputter.infrastructure import toolkit as toolkit_module
 
-    # Research code outside the repository: its default place is a git-ignored folder of the program.
+    # The research code is bundled with the program (tracked by git, not ignored) in this folder.
     root = Path(__file__).resolve().parents[1]
     assert toolkit_module.LOCAL_TOOLKIT == root / "utils" / "sputter_toolkit"
-    assert "utils/sputter_toolkit/" in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "utils/sputter_toolkit/" not in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
     for name in ("GIMAP_SPUTTER_PYTHON", "GIMAP_SPUTTER_TOOLKIT"):
         monkeypatch.delenv(name, raising=False)
     kit = tmp_path / "sputter_toolkit"

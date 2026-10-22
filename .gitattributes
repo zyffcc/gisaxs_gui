@@ -4,3 +4,8 @@
 # CRLF and others with LF, so git must hand out exactly those bytes on every computer:
 # no line-ending conversion in this folder.
 modules/Fitting_1D_Model/Workflow_v5/** -text
+# The bundled Sputter toolkit (utils/sputter_toolkit) is checked file by file against its MANIFEST.json
+# (sha256 of the bytes), and the network checkpoints are bound to the exact bytes of five of its source
+# files. Its text files end their lines with LF; with core.autocrlf a checkout would turn them into CRLF:
+# no line-ending conversion in this folder.
+utils/sputter_toolkit/** -text

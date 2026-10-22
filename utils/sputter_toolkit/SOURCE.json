@@ -1,0 +1,131 @@
+{
+ "source": "delivered sputter_struct_v1 toolkit (research code, packaged with its two network checkpoints)",
+ "source_commit": "19d775bc",
+ "bundled": "Import closure of scripts/sputter_struct_v1.py for analyze, table, select, sequence and physical: 38 modules of sputtergisaxs/ (including the 9-module chain scenario_ts needs for TS windows) plus the new sputter_physical.py; experts/{polymer,TS}/model/best.pt and policy.json; configs/sputter_struct_reliability_v1.json and configs/sputter_selector_v1.json.",
+ "not_bundled": [
+  "examples/ (private scans)",
+  "configs/ other than the two above, scan manifest",
+  "assets/ detector mask",
+  "scripts/refine_polymer_review_v1.py (GPU physical refinement) and the simulation-test scripts",
+  "all other sputtergisaxs modules (not imported by the subcommands)"
+ ],
+ "unresolved_local_imports": "linecut_v3.analyze_frame/analyze_scan, polymer_dev_v0.infer/refinement_task/run, prediction (reference_changes), stage5_input.model_input import modules that are not bundled; none of them is called by the subcommands.",
+ "checkpoints": {
+  "experts/polymer/model/best.pt": "9bd3549abfb037092957805aed8d3f5e41422afa03ca22bfa92f6aeb76a7947b",
+  "experts/TS/model/best.pt": "201c3321d6a93d5bad19f3556510d8eb465b64607f3232820707553668fbaa8d"
+ },
+ "checkpoints_unchanged": true,
+ "original_policy_sha256": {
+  "experts/polymer/policy.json": "938069fefc48b58940692065c67f1a5d69c5374f2b034e74e1d50b2f12372ce9",
+  "experts/TS/policy.json": "362f09a6c763b23a274dfeee96971f57b4aa43e7bacad9c053197fc71eca0ff9"
+ },
+ "policy_transform_sha256": {
+  "experts/polymer/policy.json": "150069e26b81c3185d1b81cb18b2402669395811bbe8dc2066a7ad95734c7d9e",
+  "experts/TS/policy.json": "ffa7caa64cd9c40e4943a964c2b5b8c4c39be599f13db74c2bee4af6ca612fa6"
+ },
+ "network_bound_sources_unchanged": [
+  "sputtergisaxs/neural_refine_posterior.py",
+  "sputtergisaxs/neural_refine_training.py",
+  "sputtergisaxs/neural_refine_chart.py",
+  "sputtergisaxs/v2_posterior.py",
+  "sputtergisaxs/neural_refine_input.py"
+ ],
+ "upstream_sha256_of_patched_files": {
+  "configs/sputter_selector_v1.json": "8cf39b11458c1ec2bb1777805c975296d10c2071dd9b98d77860809f264c2fe9",
+  "configs/sputter_struct_reliability_v1.json": "3e8918e08ebf30a2facc7815367d3d6984d4cc0298071fd9422d122ed1e48336",
+  "experts/polymer/policy.json": "938069fefc48b58940692065c67f1a5d69c5374f2b034e74e1d50b2f12372ce9",
+  "experts/TS/policy.json": "362f09a6c763b23a274dfeee96971f57b4aa43e7bacad9c053197fc71eca0ff9",
+  "README.md": "79e28e9b6ec1557bbccaa39b8d44e85aae74606064d59b858d21599b78997029",
+  "requirements.txt": "569ef3dffeb2c6d5bbaefc4c674dbcde87dfa9d238dfaa3105b8d8ec564fe62a",
+  "scripts/sputter_struct_v1.py": "c7d5572f0b483b9666f7507681d1fd73d38b3bdabe659297bab6683500f9bd4a",
+  "sputtergisaxs/cbfio.py": "ed06fe4b790ae6ac738ad1d240906480469b48c2cd8249715345eb5f86ef3eb8",
+  "sputtergisaxs/neural_refine_infer.py": "7ebfd7db782a3c10522fd0e694e2ac26b8171862b990b472557973dd1119707e",
+  "sputtergisaxs/polymer_dev_intake.py": "1bdc45af7828c3aa2a857dcf526ee19df9151cd625acae5008fb06e5eff2387d",
+  "sputtergisaxs/polymer_dev_v0.py": "97be8b6d6e6ef36ac4b09d866a6aadc5d02c0f765bf1c2aacc49d8acb990c403",
+  "sputtergisaxs/polymer_review_data.py": "7dbaddd39ee42fba8922c3c92911fde66603edb542b2323c84f60aeb874075bc",
+  "sputtergisaxs/polymer_review_infer.py": "0e33a139786f4d80c66c5e5409e88895a75dda35527f683b96efdcf9ef8a99a2",
+  "sputtergisaxs/sputter_sequence.py": "8589efa0e88946eafc80b84a6deec3a061ff9e2a956c5b82e7e30e632c4ca768",
+  "sputtergisaxs/sputter_struct.py": "5d892e74d8298354ac7ba6d07a5cb574460ce31faa8f1285362c74aad6e9c8d0"
+ },
+ "local_patches": [
+  {
+   "files": [
+    "experts/polymer/policy.json",
+    "experts/TS/policy.json",
+    "sputtergisaxs/neural_refine_infer.py"
+   ],
+   "change": "policy.json reduced to the keys that define the network input (module, horizontal, vertical, direct_features, normalization, highq_only, common_signal_indices) plus D_window_ratio=null; NRExpert checks policy_transform_sha() of the shipped file against the value expected for the original policy SHA-256 the checkpoint records (check_policy), instead of the SHA-256 of the whole file.",
+   "reason": "The original policy files carried training-run paths, dataset names and domain statistics of private data; the network input transform is unchanged (same transform hash)."
+  },
+  {
+   "files": [
+    "sputtergisaxs/cbfio.py",
+    "sputtergisaxs/polymer_dev_intake.py",
+    "sputtergisaxs/polymer_review_data.py",
+    "sputtergisaxs/polymer_dev_v0.py",
+    "sputtergisaxs/sputter_struct.py"
+   ],
+   "change": "Damaged CBF frames: CBFDamagedError, a header-only payload check before decoding (the header is read up to the binary marker, any length), shape checks in the fallback decoder; the intake leaves such a frame out explicitly (excluded_frames.json, analysed_frames / excluded_frames / frame_denominator in run.json, INTAKE_EXCLUDED progress line), readers accept the analysed count; INTAKE_PLAN <chunks> <frames> before the chunks.",
+   "reason": "A truncated frame crashed the whole intake (numpy broadcast error in the fallback decoder)."
+  },
+  {
+   "files": [
+    "sputtergisaxs/polymer_dev_intake.py"
+   ],
+   "change": "The fixed detector support window is written as offsets from the beam centre (SUPPORT_ROWS_FROM_BEAM, SUPPORT_COLS_FROM_BEAM); the per-run difference-from-reference-centre metadata and dataset labels in metadata strings were removed.",
+   "reason": "No instrument values of private data in public code; results unchanged except possibly a 1-pixel difference of the window edge when a beam coordinate falls exactly on a half pixel."
+  },
+  {
+   "files": [
+    "sputtergisaxs/polymer_review_infer.py",
+    "sputtergisaxs/sputter_struct.py"
+   ],
+   "change": "Both networks run on every window; binned/frames_alt.csv holds the modes of the network the stage rule did not choose (infer_alternate adds it to an older folder). frames.csv is unchanged.",
+   "reason": "The physical path can assign a window to the other network and must use that network's values."
+  },
+  {
+   "files": [
+    "sputtergisaxs/sputter_sequence.py",
+    "scripts/sputter_struct_v1.py"
+   ],
+   "change": "Windows with stage_unresolved (or no stage) cast no rule vote (rule_module returns None); the sequence summary names the protocol 'sputter_sequence_v1+unresolved_neutral (amendment not re-scored in simulation)' and the docstring and the help of the sequence command say so.",
+   "reason": "They voted for the island network and suppressed the film on the time-consistent path (seen on real scans); the amended path was not re-scored in the protocol's simulation test."
+  },
+  {
+   "files": [
+    "sputtergisaxs/sputter_physical.py",
+    "sputtergisaxs/sputter_struct.py",
+    "scripts/sputter_struct_v1.py"
+   ],
+   "change": "New physical path: monotone stage path (unresolved windows imputed and marked stage_imputed, windows with < 1000 counts left without stage or values), one network per window, island values only where the path stage is islands, local log-linear (Theil-Sen) R/D trends, intensity modulation (rotation) period from the shortest repeated autocorrelation maximum, island-volume equivalent thickness, nominal thickness from a deposition rate, TS onset with its interval and the 'no TS' alternative, reversal counts per window and on the trends; structure_physical.csv and structure_physical_summary.json written by analyze and table, new subcommand physical, options --rate-nm-s and --t0-s.",
+   "reason": "Results must not switch back and forth between windows; thickness substitutes with honest scope."
+  },
+  {
+   "files": [
+    "sputtergisaxs/sputter_struct.py"
+   ],
+   "change": "The Cu note reads 'Cu approximated with the Ag model, for reference only (errors not validated)'.",
+   "reason": "Clear labelling of the Cu approximation."
+  },
+  {
+   "files": [
+    "configs/sputter_struct_reliability_v1.json",
+    "configs/sputter_selector_v1.json",
+    "scripts/sputter_struct_v1.py",
+    "sputtergisaxs/sputter_struct.py",
+    "sputtergisaxs/polymer_dev_v0.py",
+    "sputtergisaxs/polymer_review_data.py"
+   ],
+   "change": "Dataset labels, private paths, computer names and example geometry values of private data removed from configs, docstrings and help texts (reliability source and Cu condition, selector training-set path).",
+   "reason": "Nothing committed to the public repository names user data."
+  },
+  {
+   "files": [
+    "requirements.txt",
+    "README.md"
+   ],
+   "change": "numpy>=1.24,<3 and torch>=2.3 (first PyTorch built for NumPy 2); xraydb optional. README rewritten for the bundle, without the example scans.",
+   "reason": "NumPy 2 verified; xraydb is not used by the subcommands; the examples are private data."
+  }
+ ]
+}

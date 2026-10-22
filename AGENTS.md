@@ -60,6 +60,12 @@ GIMaP 是掠入射 X 射线散射（GISAXS、GIWAXS）的 PyQt5 桌面分析软�
   - `src/gimap/shared/`：探测器读取、几何、`series_stages`（阶段与异常帧）、`figures`；
   - `src/gimap/integrations/`：用户数据（UserStore）、任务、BornAgain、TensorFlow；
   - `utils/ML_Fitting_1D_GISAXS/`：研究代码，GUI 只按路径用子进程调用它。
+  - `utils/sputter_toolkit/`：Sputter 工作区的研究代码（含两个网络权重），随仓库提供，也只按路径用子进程调用
+    （`scripts/sputter_struct_v1.py`），主程序不导入它。它要 PyTorch：`requirements-sputter.txt`，源码目录启动时
+    自动装上。每个文件按 `MANIFEST.json` 的 SHA-256 校验（`.gitattributes` 对这个文件夹关掉换行转换）；
+    网络权重绑定了其中五个源文件，那五个一个字节都不能改。改动记在 `SOURCE.json` 的 `local_patches`，
+    改完运行 `python verify.py --write`，`tests/test_sputter_toolkit_bundle.py` 检查字节和私有名称；
+    私有名称从被 git 忽略的 `docs/agents/eval/local/private_tokens.txt`（每行一个）读取，名称本身不写进提交的文件。
   - **不在仓库里的可选运行时**，都在可取消的子进程里运行，主程序不导入它们：
     - fit1d 工具包：`utils/gisaxs1d_gui_kit/`（git 忽略）或环境变量 `GISAXS1D_KIT_HOME`；
     - SEM 的 StarDist：单独的 Python 环境（`requirements-sem-stardist.txt`，`GIMAP_SEM_STARDIST_HOME`），

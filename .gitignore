@@ -213,8 +213,6 @@ docs/agents/eval/local/
 
 # Optional external fit1d kit (1D Predict method fit1d); installed locally, not part of the repository
 utils/gisaxs1d_gui_kit/
-# Optional external Sputter toolkit (Sputter workspace); copied in locally, not part of the repository
-utils/sputter_toolkit/
 
 # Local prediction replay bundle: private weights and experimental examples
 /modules/Au_PhotonScience_Replay/

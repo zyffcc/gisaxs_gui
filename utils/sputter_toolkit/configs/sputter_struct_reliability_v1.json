@@ -1,0 +1,124 @@
+{
+  "version": "sputter_struct_reliability_v1",
+  "source": "simulation scoring of protocol polymer_refine_convergence_r1 (200 new independent polymer_embed families, 100 Ag + 100 Au, exposure x10 = one 0.5 s window)",
+  "scope": "Exploratory numbers computed after the r1 simulation was scored; not a pre-registered test. Within the hemisphere (h=R) polymer_embed model. Network numbers use all 200 families; refined numbers use converged cases where the parameter was identified (about 73%). typical_rel_scatter = exp(1.4826*MAD(log est/true))-1 (about a 68% band); P90 shows the wrong-branch tail.",
+  "parameters": {
+    "R": {
+      "Ag": {
+        "network": {
+          "median_rel_error": 0.188,
+          "P90_rel_error": 0.634,
+          "typical_rel_scatter": 0.307,
+          "median_bias": -0.039,
+          "rank_correlation": 0.927,
+          "order_accuracy_1p2x": 0.92
+        },
+        "refined": {
+          "median_rel_error": 0.102,
+          "P90_rel_error": 0.67,
+          "typical_rel_scatter": 0.157,
+          "median_bias": -0.001,
+          "rank_correlation": 0.937,
+          "order_accuracy_1p2x": 0.935
+        }
+      },
+      "Au": {
+        "network": {
+          "median_rel_error": 0.157,
+          "P90_rel_error": 0.634,
+          "typical_rel_scatter": 0.256,
+          "median_bias": 0.002,
+          "rank_correlation": 0.92,
+          "order_accuracy_1p2x": 0.924
+        },
+        "refined": {
+          "median_rel_error": 0.077,
+          "P90_rel_error": 0.496,
+          "typical_rel_scatter": 0.101,
+          "median_bias": 0.02,
+          "rank_correlation": 0.968,
+          "order_accuracy_1p2x": 0.963
+        }
+      }
+    },
+    "D": {
+      "Ag": {
+        "network": {
+          "median_rel_error": 0.155,
+          "P90_rel_error": 0.635,
+          "typical_rel_scatter": 0.26,
+          "median_bias": 0.005,
+          "rank_correlation": 0.894,
+          "order_accuracy_1p2x": 0.902
+        },
+        "refined": {
+          "median_rel_error": 0.078,
+          "P90_rel_error": 0.629,
+          "typical_rel_scatter": 0.119,
+          "median_bias": -0.001,
+          "rank_correlation": 0.905,
+          "order_accuracy_1p2x": 0.918
+        }
+      },
+      "Au": {
+        "network": {
+          "median_rel_error": 0.15,
+          "P90_rel_error": 0.627,
+          "typical_rel_scatter": 0.24,
+          "median_bias": -0.005,
+          "rank_correlation": 0.905,
+          "order_accuracy_1p2x": 0.905
+        },
+        "refined": {
+          "median_rel_error": 0.035,
+          "P90_rel_error": 0.627,
+          "typical_rel_scatter": 0.052,
+          "median_bias": 0.0,
+          "rank_correlation": 0.845,
+          "order_accuracy_1p2x": 0.89
+        }
+      }
+    },
+    "burial": {
+      "verdict": "unreliable: refined rank correlation 0.56/0.60, order accuracy 0.72/0.73, median error 57%/53%; conditional value only"
+    },
+    "thickness": {
+      "verdict": "not determined: rank correlation 0.08/0.13, order accuracy 0.52/0.57 (coin flip); conditional value only"
+    },
+    "TS_L": {
+      "verdict": "TS spectral length L (not island D): development CAL only, Ag median 0.92% / P90 7.98% (CAL also used for early stopping; no independent test)"
+    },
+    "D_over_direct": {
+      "definition": "true D divided by the direct observation 2*pi/q* in the same simulated window (124 of 200 r1 families had a resolved peak)",
+      "truth_quantiles": {
+        "5": 0.587,
+        "10": 0.648,
+        "25": 0.812,
+        "50": 1.0,
+        "75": 1.04,
+        "90": 1.401,
+        "95": 1.75
+      },
+      "network_quantiles": {
+        "5": 0.655,
+        "10": 0.685,
+        "25": 0.831,
+        "50": 0.983,
+        "75": 1.054,
+        "90": 1.212,
+        "95": 1.458
+      },
+      "band_90": [
+        0.587,
+        1.75
+      ],
+      "use": "A D value whose ratio to 2*pi/q* lies outside band_90 is flagged: in simulation only 10% of true D values lie outside it."
+    }
+  },
+  "conditions": [
+    "R is the base radius of an equivalent hemisphere (h=R, flat base). Real Ag/Au clusters on polymer are often truncated spheres with h/R between 1 and 2; absolute R depends on this shape condition, trends much less.",
+    "D is reported only for windows with a resolved correlation peak; D_corr=2*pi/q* is the direct observation.",
+    "Cu is approximated by the Ag model; its numbers are not validated.",
+    "Count compatibility does not certify a structure: about 25% of converged simulated cases had D error >30% with the same fit quality."
+  ]
+}
