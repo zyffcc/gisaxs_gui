@@ -11,15 +11,15 @@ computer sluggish:
   are in memory (the caller limits this; ``frames_at_once`` sizes the pool to the free memory).
 
 A spawned process imports the program's main module again. ``main.py`` imports the whole GUI (and
-BornAgain); while a job is submitted, ``__main__`` is therefore pointed at the empty
-``worker_main`` module, and a worker starts with only what a frame needs.
+PyQt5); while a job is submitted, ``__main__`` is therefore pointed at the empty ``worker_main``
+module (``integrations.jobs.light_main``, shared with the job runner), and a worker starts with only
+what a frame needs.
 
 ``system_resources()`` → ``(physical cores, free memory in bytes or None)``.
 """
 
 from __future__ import annotations
 
-import importlib.machinery
 import multiprocessing
 import os
 import sys
@@ -27,9 +27,9 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import contextmanager
 from typing import Optional, Sequence
 
+from src.gimap.integrations.jobs.light_main import light_main
 from src.gimap.shared.geometry.instrument_profile import InstrumentProfile, best_profile
 
-WORKER_MAIN = "src.gimap.features.analyze.infrastructure.worker_main"
 SINGLE_THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS")
 
 _TOOLS = None
@@ -93,20 +93,6 @@ def _run_job(job):
 
 
 @contextmanager
-def _light_main():
-    """While workers are spawned: their ``__main__`` is ``worker_main``, not the GUI's ``main.py``."""
-    main = sys.modules.get("__main__")
-    replace_it = main is not None and getattr(main, "__spec__", None) is None and getattr(main, "__file__", None)
-    if replace_it:
-        main.__spec__ = importlib.machinery.ModuleSpec(WORKER_MAIN, None)
-    try:
-        yield
-    finally:
-        if replace_it:
-            main.__spec__ = None
-
-
-@contextmanager
 def _single_threaded_libraries():
     """Workers inherit the environment when they start: one thread each for BLAS/OpenMP."""
     saved = {name: os.environ.get(name) for name in SINGLE_THREAD_VARIABLES}
@@ -132,7 +118,7 @@ class ProcessFrameWorkers:
         )
 
     def submit(self, job) -> Future:
-        with _light_main(), _single_threaded_libraries():
+        with light_main(), _single_threaded_libraries():
             return self._executor.submit(_run_job, job)
 
     def shutdown(self, *, wait: bool = False) -> None:
@@ -173,4 +159,4 @@ def system_resources() -> tuple[int, Optional[int]]:
         return max(1, cores // 2), None
 
 
-__all__ = ["ProcessFrameWorkers", "WORKER_MAIN", "system_resources"]
+__all__ = ["ProcessFrameWorkers", "system_resources"]

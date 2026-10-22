@@ -12,6 +12,7 @@ from typing import Any
 
 from ...app.jobs import JobError, JobProgress, JobRequest, JobResult, ProgressObserver
 from ...app.jobs.models import ensure_serializable
+from .light_main import light_main
 
 
 def _resolve_handler(handler_path: str):
@@ -77,7 +78,10 @@ def _worker_main(request_data, messages, cancelled) -> None:
 
 
 class LocalProcessJobRunner:
-    """每个 job 使用独立 spawned process，隔离 native runtime crash。"""
+    """每个 job 使用独立 spawned process，隔离 native runtime crash。
+
+    The worker starts under ``light_main()``: it does not run the GUI's ``main.py`` (PyQt5) again.
+    """
 
     def __init__(self, poll_interval_seconds: float = 0.02):
         self.poll_interval_seconds = max(0.005, float(poll_interval_seconds))
@@ -104,7 +108,8 @@ class LocalProcessJobRunner:
 
         started = time.monotonic()
         result: JobResult | None = None
-        process.start()
+        with light_main():
+            process.start()
         try:
             while result is None:
                 elapsed = time.monotonic() - started

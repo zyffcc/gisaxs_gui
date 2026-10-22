@@ -12,8 +12,6 @@ from src.gimap.integrations.state.user_store import (
     user_data_dir,
 )
 
-from .model_parameters_store import ModelParametersManager
-
 TEMPLATE_PATH = PROJECT_ROOT / "config" / MODEL_PARAMETERS_FILE
 """Shipped defaults; the user's copy lives in the user data folder."""
 
@@ -31,6 +29,10 @@ def default_model_parameters_path() -> Path:
 
 class FittingModelParametersAdapter:
     def __init__(self, config_path: str | Path | None = None):
+        # Imported here: the store is a QObject, and Fitting's job workers import this package
+        # (PyQt5 must stay out of worker processes; see integrations/jobs/light_main.py).
+        from .model_parameters_store import ModelParametersManager
+
         path = Path(config_path) if config_path is not None else default_model_parameters_path()
         self._manager = ModelParametersManager(str(path))
 

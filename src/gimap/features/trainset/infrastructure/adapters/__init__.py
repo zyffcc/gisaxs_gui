@@ -1,4 +1,8 @@
-"""Trainset adapter exports。"""
+"""Trainset adapter exports。
+
+``QtTrainsetLocalProcessAdapter`` (a QObject) is imported from ``qt_local_process`` itself: the
+model-contract job worker imports this package, and PyQt5 must stay out of worker processes.
+"""
 
 from .keras_modeling import (
     build_keras_model,
@@ -11,7 +15,6 @@ from .legacy_generation import LegacyDatasetGenerationAdapter
 from .project_config import LocalTrainsetConfigRepository
 from .preview import TrainsetPreviewAdapter
 from .job_packages import PortableTrainsetJobPackageAdapter
-from .qt_local_process import QtTrainsetLocalProcessAdapter
 from .model_registration import LocalTrainsetModelRegistrationAdapter
 from .remote_jobs import (
     LocalTrainsetMetricsRepository,
@@ -31,7 +34,6 @@ __all__ = [
     "LocalTrainsetConfigRepository",
     "TrainsetPreviewAdapter",
     "PortableTrainsetJobPackageAdapter",
-    "QtTrainsetLocalProcessAdapter",
     "LocalTrainsetModelRegistrationAdapter",
     "LocalTrainsetMetricsRepository",
     "SlurmTrainsetRemoteJobAdapter",

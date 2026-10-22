@@ -25,13 +25,13 @@ from .infrastructure.adapters import (
     TrainsetPreviewAdapter,
     LocalTrainsetConfigRepository,
     PortableTrainsetJobPackageAdapter,
-    QtTrainsetLocalProcessAdapter,
     LocalTrainsetModelRegistrationAdapter,
     LocalTrainsetMetricsRepository,
     SlurmTrainsetRemoteJobAdapter,
     TrainsetDesignAdapter,
     TrainsetConfigurationAdapter,
 )
+from .infrastructure.adapters.qt_local_process import QtTrainsetLocalProcessAdapter
 from .presentation.view_model import TrainsetViewModel
 
 

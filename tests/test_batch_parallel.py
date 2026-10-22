@@ -92,22 +92,31 @@ def test_worker_processes_give_the_same_outcome_as_the_application(frames_folder
     assert len(list((tmp_path / "workers" / "curves").glob("*.csv"))) == len(list((tmp_path / "here" / "curves").glob("*.csv")))
 
 
-def test_workers_do_not_rerun_the_main_script() -> None:
+def test_workers_do_not_rerun_the_main_script(monkeypatch) -> None:
+    """Workers start while ``__main__`` is the empty worker module (the job runner's helper and lock)."""
     import types
 
-    from src.gimap.features.analyze.infrastructure.frame_workers import WORKER_MAIN, _light_main
+    from src.gimap.features.analyze.infrastructure import frame_workers
+    from src.gimap.integrations.jobs.light_main import WORKER_MAIN
+
+    seen = []
+
+    class Executor:  # ProcessPoolExecutor starts its worker processes inside submit()
+        def submit(self, function, *args):
+            seen.append(getattr(sys.modules["__main__"].__spec__, "name", None))
+            return Future()
 
     fake = types.ModuleType("__main__")
     fake.__file__ = "main.py"
     fake.__spec__ = None
-    saved = sys.modules["__main__"]
-    sys.modules["__main__"] = fake
-    try:
-        with _light_main():
-            assert fake.__spec__.name == WORKER_MAIN
-        assert fake.__spec__ is None
-    finally:
-        sys.modules["__main__"] = saved
+    monkeypatch.setitem(sys.modules, "__main__", fake)
+    workers = frame_workers.ProcessFrameWorkers.__new__(frame_workers.ProcessFrameWorkers)
+    workers._executor = Executor()
+
+    workers.submit(object())
+
+    assert seen == [WORKER_MAIN]
+    assert fake.__spec__ is None
 
 
 # -- the page: order, Stop, Pause, a worker lost, the live map ---------------------------------------
