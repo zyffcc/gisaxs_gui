@@ -41,8 +41,22 @@ def toolkit_home() -> Path:
     return Path(override) if override else LOCAL_TOOLKIT
 
 
+WORKER_BYTES = 0.4e9
+"""Memory of one frame-reading process of the toolkit (about 0.3 GB measured, with a margin)."""
+KEPT_FREE_BYTES = 1.0e9
+
+
 def default_workers() -> int:
-    return max(1, min(8, (os.cpu_count() or 2) - 1))
+    """Frame-reading processes: one per core (at most 8, one core left free) and no more than the free memory
+    holds, so a busy computer reads more slowly instead of running out of memory."""
+    by_cores = max(1, min(8, (os.cpu_count() or 2) - 1))
+    try:
+        import psutil
+
+        available = float(psutil.virtual_memory().available)
+    except Exception:  # psutil missing or unreadable: cores only
+        return by_cores
+    return max(1, min(by_cores, int((available - KEPT_FREE_BYTES) // WORKER_BYTES)))
 
 
 def _number(value: float) -> str:

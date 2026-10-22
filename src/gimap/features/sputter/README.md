@@ -8,7 +8,7 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   NumPy pinned, `--no-user`, `ensurepip` when pip is missing, pip's cache in `.gimap` for a source folder, progress
   from pip's lines, failures classified with the command to run by hand; `GIMAP_SPUTTER_NO_INSTALL=1` switches it
   off) → run the toolkit bundled in `utils/sputter_toolkit` (`BundledToolkit`, `scripts/sputter_struct_v1.py
-  analyze`, CPU, workers = max(1, min(8, cores − 1)); `GIMAP_SPUTTER_TOOLKIT` points at another copy for
+  analyze`, CPU, workers = max(1, min(8, cores − 1, (free memory − 1 GB) / 0.4 GB)); `GIMAP_SPUTTER_TOOLKIT` points at another copy for
   development) → read the result. Progress: `SPUTTER_PROGRESS`, `INTAKE_PLAN`, `INTAKE_CHUNK`, `INTAKE_EXCLUDED`
   (`ProgressTracker`). Stop ends the whole process tree (`process.run_streaming`: polled every 0.2 s, `taskkill /T
   /F` on Windows); closing the window stops pip even while it writes.

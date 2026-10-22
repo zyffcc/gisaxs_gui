@@ -622,3 +622,21 @@ def test_start_script_sets_up_a_source_folder_without_python_knowledge():
     assert ".gimap/" in (root / ".gitignore").read_text(encoding="utf-8")
     update = (root / "Update_GIMaP.bat").read_text(encoding="ascii")
     assert "update_source.ps1" in update
+
+
+def test_the_frame_readers_fit_into_the_free_memory(monkeypatch):
+    import types
+    from src.gimap.features.sputter.infrastructure import toolkit as toolkit_module
+
+    monkeypatch.setattr(toolkit_module.os, "cpu_count", lambda: 20)
+    def memory(available):
+        fake = types.SimpleNamespace(virtual_memory=lambda: types.SimpleNamespace(available=available))
+        monkeypatch.setitem(sys.modules, "psutil", fake)
+    memory(64e9)
+    assert toolkit_module.default_workers() == 8  # cores decide
+    memory(2.3e9)
+    assert toolkit_module.default_workers() == 3  # (2.3 - 1.0) GB / 0.4 GB
+    memory(0.5e9)
+    assert toolkit_module.default_workers() == 1  # always at least one
+    monkeypatch.setitem(sys.modules, "psutil", None)  # not installed: cores only
+    assert toolkit_module.default_workers() == 8
