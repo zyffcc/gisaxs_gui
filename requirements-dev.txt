@@ -2,3 +2,6 @@
 
 pytest>=8,<10
 ruff>=0.12,<1
+# The OpenAI adapter test fakes the HTTP traffic with httpx; openai and anthropic no longer install it
+# (they use httpx2).
+httpx>=0.27
