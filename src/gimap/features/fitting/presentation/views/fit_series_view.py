@@ -230,6 +230,10 @@ class FitSeriesView:
         frames.addWidget(every)
         frames.addWidget(self.every_spin, 1)
         layout.addLayout(frames)
+        self.units_note = muted("", page)
+        self.units_note.setObjectName("fitSeriesUnitsNote")
+        self.units_note.hide()  # shown once curves are listed: the unit of q each is read in, and why
+        layout.addWidget(self.units_note)
         halves = QHBoxLayout()
         self.side_label = QLabel("Halves of the cut", page)
         self.side_combo = QComboBox(page)  # filled by the page (``single/series_halves.py``)

@@ -26,6 +26,11 @@ class InSituFrameRepository(Protocol):
 class CurveRepository(Protocol):
     def load(self, request: LoadCurveRequest) -> CurveData: ...
 
+    def stated_q_unit(self, path: Path) -> str | None:
+        """The unit of q the file's header states (``"angstrom"`` / ``"nm"``), ``None`` when it states none;
+        ``OSError`` / ``ValueError`` when it cannot be read or states both."""
+        ...
+
 
 class FitResultRepository(Protocol):
     def export(self, request: ExportFitResultRequest) -> ExportedFitResult: ...

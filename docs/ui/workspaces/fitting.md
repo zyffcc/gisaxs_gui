@@ -58,7 +58,14 @@ Fitting
   （另一半的缺口、另一半到头之后）用这一半原样，不跨缺口插值。Find the particle shape、AI proposal、fit1d 只能拟合一条曲线：
   选着 Both halves on |q| 时 Fit 先把下拉换成平均，并说 “Both halves on |q| cannot be fitted by this method: the mean of
   both halves is used.”；Refine 与 Search 照旧拟合两半；
-  拟合范围（nm⁻¹，或拖动图上的橙色区域；Whole Curve）；折叠的 *File* 里选文件的 q 单位。
+  拟合范围（nm⁻¹，或拖动图上的橙色区域；Whole Curve）；折叠的 *File* 里是 *q unit of files without one in their header*：
+  文件头写明 q 单位的文件按写明的单位读（Analyze 的 `_fit_input.dat`：1/A），这个设置只用于没写明的文件，原位序列也用它
+  （规则 `application/curve_units.q_unit_read`，在 `LoadCurve` 里执行；页面部分在 `single/curve_unit.py`）。Curve 卡片最后一行
+  “q read in Å⁻¹: stated in the file / not stated in the file: the setting for files without one”；改设置只重开没写明单位的曲线；
+  同时写明两种单位的文件打不开（“Could not open …: The header states q both in 1/A and in 1/nm; …”）。拟合记录的 `curve` 有
+  `q_unit_of_file`、`q_unit_from`；项目存 `curve.unit`（读取用的单位）和 `unit_setting`。旧项目：没写明单位的文件按存的单位打开，
+  与以前相同；文件头写明了别的单位时按文件头读，项目的提示里说明（`SAVED_OTHER`）。测试
+  `tests/test_release3_curve_units.py`。
   **排除点**：图上方的 Exclude 打开后，点一个点把它排除在拟合之外（再点一次恢复），或拖一个框排除
   框里的点；排除的点画成红色 ×，Curve 步骤写出“Points left out of the fit: N”和 Include All。
   排除按 q 记住（随曲线、项目保存），拟合记录里写 `left_out_q_nm^-1`。
@@ -200,6 +207,13 @@ Fitting
 - `Fit ▸ Options ▸ 1D Predict Batch Window…`（菜单 Tools ▸ 1D Predict — Fit Many Curves…）打开 1D Predict 窗口：
   Add curves…（若干曲线文件）、Use current cut、Parameters…（方法、组分、q 单位与两半）、Fit curve、Cancel、
   Open results。每次运行写到启动 GIMaP 的文件夹下的 `AI_Fitting_Output/v5_<日期>_<时间>/`。
+  - **q 的单位**：文件头写明单位的文件按写明的单位读（Analyze 的 `_fit_input.dat` 首行 `(q in 1/A)`、
+    `# columns: qy (1/A) …`）；设置 *q unit of files without one in their header* 只用于没写明的文件。识别在
+    `infrastructure/adapters/curve_units.py`（`LocalCurveRepository.stated_q_unit` → `LoadCurve.stated_q_unit` →
+    `FittingViewModel.stated_q_unit`，由 `workflow_v5_binding` 交给窗口），规则 `application/curve_units.q_unit_read`（经
+    `workflow_v5.q_unit_of_file`，与 Single analysis、原位序列同一条）由窗口（`presentation/workflow_v5_units.py`：按钮下一行、表格的 Curve / side 列）和 job（`run_workflow_job`）共用；
+    `request.json`、`fitting_run_summary.json` 的 `q_units`，`batch_summary.json` 与候选行的 `q_unit_read` / `q_unit_from`
+    记下每条曲线按什么单位读。同时写明两种单位的文件不拟合。测试 `tests/test_release3_predict_units.py`。
 
 ## In-situ series
 
@@ -219,6 +233,10 @@ Fitting
   数字，自然顺序）；Watch for new curves：运行中每 2 秒看一次文件夹，大小和时间两次相同的新文件才拿来拟合，读过之后
   又变了的文件重新排队，文件夹读不了时等它回来（“The folder of the curves cannot be read: waiting for it …”）。
   列表里每帧前面标 ✓ / ✗ / ·。
+- **q 的单位**（Curves 步骤，`single/series_units.py`）：每个文件按文件头写明的单位读，没写明的按 Single analysis 的
+  *q unit of files without one in their header*（Start 时的值，整次运行不变）。Curves 步骤按单位和来源数出列出的曲线
+  （“2 curves: q in Å⁻¹, as their header states” / “… no unit in their header (Single analysis ▸ Curve ▸ File)”），并点名
+  同时写明两种单位的文件——它们不拟合，帧写出原因。探测器帧按 Å⁻¹ 切，不写这一行。
 - **Halves of the cut**（Curves 步骤，`single/series_halves.py`）：每帧只拟合一条曲线——Mean of both halves / q > 0 half /
   q < 0 half（`SERIES_SIDES`），从不两半一起。值的来源依次是（`series_fit.series_side`）：这个序列里自己选的（或项目里存的）
   → 列出的第一个拟合输入 `# observation:` 里的 `"halves"`（Analyze 写的）→ Single analysis 的两半（不是 Both halves on
@@ -251,8 +269,8 @@ Fitting
   “sampleA · <子文件夹>”）。GIWAXS 的 I(q) 序列跑完后，页面上方的提示回来并说有几帧是差的拟合。
 - **Save ▾**：Table of Every Frame…（CSV：frame、file、chi2_reduced、log_rmse、converged、points、halves_used、每个值与
   `_error`）旁边写同名 `.json` 记录（`"schema": "gimap_series_fit_v2"`：起始模型、`settings.side` 与 `side_from`、范围、
-  排除的点、方法、`q_unit_of_files`、各状态的帧数、失败的帧与原因、`poor_fit`（χ²ᵣ > 10 的帧）、`per_frame` 每帧的
-  状态、原因、点数、所用的两半，以及 `listing`：帧范围、阶段、Watch 加进来的帧 `added_by_watch`）；
+  排除的点、方法、`q_unit_of_files`（Start 时没写明单位的文件所用的设置）、各状态的帧数、失败的帧与原因、`poor_fit`
+  （χ²ᵣ > 10 的帧）、`per_frame` 每帧的状态、原因、点数、所用的两半、`q_unit` 与 `q_unit_from`，以及 `listing`：帧范围、阶段、Watch 加进来的帧 `added_by_watch`）；
   Trend Plot…、Selected Frame's Plot…（PNG / SVG）。
 - **未保存的结果**：有拟合到底、还没保存的帧时，再次 Start、列出别的曲线或打开项目之前都会问
   “The results of the last run are not saved. Save the table of every frame first?”（Save / Discard / Cancel；

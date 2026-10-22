@@ -476,9 +476,11 @@ def test_a_frame_without_the_chosen_half_fails_and_is_not_fitted_on_the_other() 
     assert record["settings"]["side"] == "positive" and record["frames"] == 5 and record["counts"]["failed"] == 1
     assert record["failed"] == [{"frame": 3, "file": "run_00003.dat", "why": "No points on the q > 0 half"}]
     assert record["per_frame"][2] == {"frame": 3, "file": "run_00003.dat", "state": "failed", "reason": "No points on the q > 0 half",
-                                      "points": 0, "halves_used": "", "averaged": 0, "left_out": 0, "weighting": ""}
+                                      "points": 0, "halves_used": "", "averaged": 0, "left_out": 0, "weighting": "",
+                                      "q_unit": "angstrom", "q_unit_from": ""}  # (a curve made here: nobody said)
     assert record["per_frame"][0] == {"frame": 1, "file": "run_00001.dat", "state": "ok", "reason": "", "points": 200,
-                                      "halves_used": "positive", "averaged": 0, "left_out": 0, "weighting": "sigma"}
+                                      "halves_used": "positive", "averaged": 0, "left_out": 0, "weighting": "sigma",
+                                      "q_unit": "angstrom", "q_unit_from": ""}
     assert json.loads(json.dumps(record)) == record
     from datetime import datetime
 

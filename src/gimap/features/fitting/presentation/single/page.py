@@ -38,6 +38,7 @@ from ...application.single_fit import (
     residuals,
 )
 from ..views.fit_page_view import FitPageView
+from .curve_unit import SETTING_KEY, CurveUnitMixin
 from .drops import CurveDropMixin, SplitterMemoryMixin
 from .exclusion import FitExclusionMixin
 from .fit1d import Fit1DPageMixin
@@ -57,7 +58,7 @@ DATA_COLOR, OUTSIDE_COLOR, MODEL_COLOR, LEFT_OUT_COLOR = "#2563eb", "#94a3b8", "
 
 
 class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunMixin, FitResultsMixin,
-              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin):
+              FitExclusionMixin, Fit1DPageMixin, Fit1DReviewMixin, ResultActionsMixin, CurveUnitMixin):
     curveOpened = pyqtSignal(str)
     """The file of the curve now on the page (In-situ series takes its set-up from it)."""
     batchRequested = pyqtSignal()
@@ -95,6 +96,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.setup_results()
         self.setup_result_actions()
         self.setup_exclusion()
+        self.setup_curve_unit()  # the unit of q of files without one in their header (curve_unit.py)
         self._restore()
         self._render_all()
 
@@ -110,7 +112,6 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.range_min_spin.valueChanged.connect(lambda _value: self._range_typed())
         self.range_max_spin.valueChanged.connect(lambda _value: self._range_typed())
         self.whole_range_button.clicked.connect(lambda: self.set_range(None))
-        self.unit_combo.activated.connect(lambda _index: self._reload_with_unit())
         self.plot.windowChanged.connect(self._band_dragged)
         self.plot.log_x_check.toggled.connect(self._log_x_toggled)
         self.plot.log_check.toggled.connect(lambda _on: self._redraw())
@@ -202,16 +203,17 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             self.open_curve(path)
 
     def open_curve(self, path, side: Optional[str] = None, *, unit: Optional[str] = None) -> bool:
-        """Load a curve file (Analyze's cuts: q in Å⁻¹, signed); ``side`` as Analyze names it."""
+        """Load a curve file (Analyze's cuts: q in Å⁻¹, signed); ``side`` as Analyze names it. Its q is read in the
+        unit its header states, else in ``unit`` (the one it was saved with) or the setting (``curve_unit.py``)."""
         path = Path(path)
-        unit = unit or self.unit_combo.currentData() or "angstrom"
-        outcome = self.view_model.load_curve(LoadCurveRequest(path, unit))
+        outcome = self.view_model.load_curve(LoadCurveRequest(path, unit or self.unit_setting()))
         if outcome.error is not None:
             self._status(lambda: tr("Could not open {name}: {reason}").format(name=path.name,
                                                                               reason=tr(outcome.error.message)), "error")
             return False
         loaded = outcome.value
-        curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=path.name, path=str(path), unit=unit)
+        curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=path.name, path=str(path),
+                                  unit=loaded.q_source_unit, unit_from=getattr(loaded, "q_unit_from", ""))
         self._halt_fit()  # a fit of the curve before stops; what it brings back is not kept (run.py)
         self.session.set_curve(curve)
         if side is not None and curve.signed:  # a curve with one side has no halves to choose from
@@ -219,19 +221,16 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         data = self._data()
         if not self.session.edited and data is not None and data.q.size >= 3:
             self.session.model = fit_scales(self.session.model, data)  # the starting model at the curve's level
-        self.unit_combo.setCurrentIndex(max(0, self.unit_combo.findData(unit)))
-        self._remember(folder=str(path.parent), curve={"path": str(path), "side": self.session.side, "unit": unit})
+        self._follow_saved_unit()
+        self._remember(folder=str(path.parent), curve={"path": str(path), "side": self.session.side,
+                                                       "unit": curve.source_unit})
         self._render_all()
         self._log(tr("Opened {name}: {points} points").format(name=path.name, points=curve.q.size))
         self._curve_opened_step(getattr(loaded, "observation", None))  # fit1d first for a GISAXS cut (fit1d_review)
-        self._status(lambda: tr("Opened {name}.").format(name=path.name), "ok")
+        note = self._saved_unit_note(unit)  # a header that states another unit than the one saved
+        self._status(note or (lambda: tr("Opened {name}.").format(name=path.name)), "warning" if note else "ok")
         self.curveOpened.emit(str(path))
         return True
-
-    def _reload_with_unit(self) -> None:
-        curve = self.session.curve
-        if curve is not None and curve.path and self.unit_combo.currentData() != curve.source_unit:
-            self.open_curve(curve.path, self.session.side, unit=self.unit_combo.currentData())
 
     def set_side(self, side: str) -> None:
         self.session.side = side
@@ -388,7 +387,8 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
         self.curve_info.setText(tr(
             "{name}\n{points} points, |q| {low}–{high} nm⁻¹ ({low_a}–{high_a} Å⁻¹); {fitted} in the fitting range."
         ).format(name=curve.name, points=full.q.size, low=f"{low:.4g}", high=f"{high:.4g}",
-                 low_a=f"{low / NM_PER_A:.4g}", high_a=f"{high / NM_PER_A:.4g}", fitted=fitted))
+                 low_a=f"{low / NM_PER_A:.4g}", high_a=f"{high / NM_PER_A:.4g}", fitted=fitted)
+            + "".join(f"\n{line}" for line in [self._unit_line()] if line))  # where its unit of q came from
         self.sigma_note.setText("\n".join((  # both actions of the Fit step: Refine (and the others) and fit1d
             tr("σ from the file: the fit weights each point by 1/σ.") if curve.sigma is not None else
             tr("No σ in the file: every point gets the same relative weight (ln I is fitted)."),
@@ -536,7 +536,7 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
                 "path": curve.path, "unit": curve.source_unit, "side": session.side,
                 "q_range": None if session.q_range is None else list(session.q_range),
                 "excluded": sorted(session.excluded)},
-            "model": model_to_dict(session.model), "method": self.method(),
+            "model": model_to_dict(session.model), "method": self.method(), SETTING_KEY: self.unit_setting(),
         }
 
     def apply_project_state(self, data: dict) -> list[str]:
@@ -548,9 +548,11 @@ class FitPage(CurveDropMixin, SplitterMemoryMixin, QWidget, FitPageView, FitRunM
             except (ValueError, KeyError, TypeError) as exc:
                 notes.append(tr("the Fitting model could not be read: {reason}").format(reason=exc))
         self.set_method(data.get("method"))
+        self.set_unit_setting(data.get(SETTING_KEY))  # (an older project has none: its curve's unit is used)
         curve = data.get("curve") or {}
         if curve.get("path") and Path(curve["path"]).is_file():
             if self.open_curve(curve["path"], curve.get("side"), unit=curve.get("unit")):
+                notes += [note() for note in [self._saved_unit_note(curve.get("unit"))] if note]
                 self.session.excluded = {float(value) for value in curve.get("excluded") or ()}
                 if curve.get("q_range"):
                     self.set_range(curve["q_range"], record=False)

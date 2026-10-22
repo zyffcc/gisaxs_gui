@@ -54,17 +54,17 @@ class FitSeriesPreviewMixin:
         return self.running or self._start_model is not None
 
     def _preview_unit(self) -> str:
-        """The unit of q the files are read in: the run's once started, else Single analysis's."""
+        """The unit of q of the files whose header states none: the run's once started, else Single analysis'
+        setting (a file whose header states one is read in that one: ``application.curve_units``)."""
         if self._started():
             return self._unit
-        curve = self.single.session.curve
-        return curve.source_unit if curve is not None else "angstrom"
+        return self.single.unit_setting()
 
     def _keep_preview_curves(self, curves) -> None:
         """Curves read elsewhere (the stage search), for drawing their frames without reading them again."""
         for curve in curves:
             if curve is not None and curve.path:
-                self._preview_curves[(curve.path, curve.source_unit)] = curve  # as read (the unit of q in the file)
+                self._preview_curves[(curve.path, curve.source_unit)] = curve  # read in this unit: so is it with it
 
     def _preview_curve(self, index: int) -> Optional[Curve]:
         path = self.paths[index]
@@ -84,7 +84,7 @@ class FitSeriesPreviewMixin:
             value = outcome.value
             self._note_curve(index, value.q, value.observation)  # two halves? sent with which? (series_halves.py)
             curve = Curve.from_arrays(value.q, value.intensity, value.error, name=Path(path).name, path=path,
-                                      unit=value.q_source_unit)
+                                      unit=value.q_source_unit, unit_from=value.q_unit_from)
             self._preview_curves[key] = curve
         return curve
 

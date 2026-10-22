@@ -46,6 +46,7 @@ COMPARE_ZH = {
     "Half of the change by frame {half}, 90 % by frame {ninety}.": "到第 {half} 帧完成一半的变化，到第 {ninety} 帧完成 90 %。",
     "Odd frame {n} ({label}): {why}": "异常帧 {n}（{label}）：{why}",
     "{n} odd frames left out of the Batch Export (Series ▸ Stages).": "批量导出跳过了 {n} 个异常帧（序列 ▸ 阶段）。",
+    "1 odd frame left out of the Batch Export (Series ▸ Stages).": "批量导出跳过了 1 个异常帧（序列 ▸ 阶段）。",
     "stage {n}": "阶段 {n}",
     "Could not export the stages: {error}": "无法导出阶段：{error}",
     # -- Fitting ▸ In-situ series -------------------------------------------------------------------
@@ -57,6 +58,7 @@ COMPARE_ZH = {
     "Odd frame (left out of the stages)": "异常帧（不参与分阶段）",
     "odd frames: {frames}": "异常帧：{frames}",
     "{n} odd frames left out.": "跳过了 {n} 个异常帧。",
+    "1 odd frame left out.": "跳过了 1 个异常帧。",
     "{name}, stage {n}": "{name}，阶段 {n}",
     "Stage {n}": "阶段 {n}",
     "odd": "异常",
@@ -139,6 +141,7 @@ COMPARE_ZH = {
     "Groups by the end state: {groups}": "按终态分组：{groups}",
     "{name} differs most from the others (end states {low:.0f}–{high:.0f} % apart).": "{name} 与其他序列差别最大（终态相差 {low:.0f}–{high:.0f} %）。",
     "{n} odd frames left out (Odd frames and stages, below).": "排除了 {n} 个异常帧（见下方“异常帧和阶段”）。",
+    "1 odd frame left out (Odd frames and stages, below).": "排除了 1 个异常帧（见下方“异常帧和阶段”）。",
     "Could not save: {error}": "无法保存：{error}",
     "{name}: {count} stages ({ranges})": "{name}：{count} 个阶段（{ranges}）",
     "{name}: one stage": "{name}：一个阶段",

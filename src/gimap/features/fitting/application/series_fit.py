@@ -95,6 +95,10 @@ class FrameFit:
     """What was done to parameters that stopped at an edge (English sentences, ``domain.fit_edges``)."""
     native: Optional[dict] = None
     """``fit1d``: the kit's own result of the frame (its v2 curve, errors, bounds, whether it followed the previous)."""
+    q_unit: str = ""
+    """The unit the q of the frame's file was read in (``angstrom`` / ``nm``), and where it came from
+    (``curve_units``: stated in the file, the setting for files without one, a cut frame); empty: not read."""
+    q_unit_from: str = ""
 
     @property
     def ok(self) -> bool:
@@ -138,7 +142,14 @@ def prepare_frame(curve: Curve, settings: SeriesSettings) -> PreparedCurve:
 def fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: SeriesSettings,
               stop: Optional[Callable[[], bool]] = None, predict: Optional[Callable] = None) -> FrameFit:
     """The fit of one frame (``prepare_frame``). ``fit1d``: ``predict(data, start) -> value`` runs fit1d's job on
-    the frame's points (the page knows the job runner and the previous frame)."""
+    the frame's points (the page knows the job runner and the previous frame). The frame keeps the unit its q was
+    read in (``FrameFit.q_unit``)."""
+    frame = _fit_frame(index, path, curve, start, settings, stop, predict)
+    return replace(frame, q_unit=curve.source_unit, q_unit_from=curve.unit_from)
+
+
+def _fit_frame(index: int, path: str, curve: Curve, start: FitModel, settings: SeriesSettings,
+               stop: Optional[Callable[[], bool]], predict: Optional[Callable]) -> FrameFit:
     try:
         prepared = prepare_frame(curve, settings)
     except ValueError as exc:  # no points on the chosen half
@@ -331,8 +342,9 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
     """What is written next to the table: the start model, how the series was fitted and, for every frame,
     what became of it and on which points.
 
-    ``q_unit``: the unit the q of the files was read in (``angstrom`` / ``nm``; the values of the record
-    are in nm⁻¹); ``saved``: the time written into the record (now, when not given); ``side_from``: where
+    ``q_unit``: the unit of q of the files whose header states none, the setting at Start (``angstrom`` / ``nm``;
+    detector frames: ``angstrom``, as cut) — every frame says the unit it was read in and where that came from
+    (``per_frame``: ``q_unit``, ``q_unit_from``); the values of the record are in nm⁻¹; ``saved``: the time written into the record (now, when not given); ``side_from``: where
     the halves of the series came from (the person's own choice, the fit inputs, Single analysis …);
     ``listing``: which curves of the folder were fitted (first, last, every n-th, the frames left out …),
     written as it is given. Files are named as in the table (``file_name``)."""
@@ -355,6 +367,7 @@ def series_record(model: FitModel, settings: SeriesSettings, folder: str, patter
         "per_frame": [{"frame": frame.index + 1, "file": file_name(frame.path, folder), "state": frame.state,
                        "reason": frame.reason, "points": frame.points, "halves_used": frame.halves_used,
                        "averaged": frame.averaged, "left_out": frame.left_out,
+                       "q_unit": frame.q_unit, "q_unit_from": frame.q_unit_from,
                        "weighting": frame.result.weighting if frame.result is not None else "",
                        **({"resolved": list(frame.resolved)} if frame.resolved else {}),
                        **({"followed_previous": bool((frame.native.get("fit1d_follow") or {}).get("followed"))}

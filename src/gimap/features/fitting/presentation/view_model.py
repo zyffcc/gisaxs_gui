@@ -136,6 +136,10 @@ class FittingViewModel(FittingWorkflowViewModelMixin):
         )
         return outcome
 
+    def stated_q_unit(self, path) -> str | None:
+        """The unit of q a curve file states in its header: ``"angstrom"``, ``"nm"`` or ``None``."""
+        return self._load_curve.stated_q_unit(path)
+
     def export_fit_result(self, request: ExportFitResultRequest):
         outcome = self._export_fit_result.execute(request)
         if outcome.error is not None:

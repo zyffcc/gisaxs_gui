@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
+from .curve_units import q_unit_read
 from .errors import FileOperationError
 from .models import (
     ExportCurveFigureRequest,
@@ -18,7 +20,7 @@ from .models import (
 )
 from .ports import CurveFigureWriter, CurveRepository, FitResultRepository, InSituFrameRepository
 from .ports import FittingModelPort
-from ..domain import ManualFitRequest, ManualFitResult, q_values_for_model
+from ..domain import CurveData, ManualFitRequest, ManualFitResult, q_values_for_model
 
 
 def _structured_file_error(path: Path, operation: str, exc: Exception) -> FileOperationError:
@@ -53,14 +55,28 @@ class DiscoverInSituFrames:
 
 
 class LoadCurve:
+    """A curve file, its q read in the unit its header states, else in ``request.q_source_unit`` — the setting for
+    files without one (``curve_units.q_unit_read``, the rule of all of Fitting). A header that states both units is
+    an error (``invalid_data``): the file is not opened."""
+
     def __init__(self, repository: CurveRepository):
         self._repository = repository
 
     def execute(self, request: LoadCurveRequest) -> CurveOperationResult:
         try:
-            return CurveOperationResult(value=self._repository.load(request))
+            unit, origin = q_unit_read(getattr(self._repository, "stated_q_unit", None), request.path,
+                                       request.q_source_unit)
+            curve = self._repository.load(request if unit == request.q_source_unit
+                                          else replace(request, q_source_unit=unit))
+            if isinstance(curve, CurveData):
+                curve = replace(curve, q_source_unit=unit, q_unit_from=origin)
+            return CurveOperationResult(value=curve)
         except Exception as exc:
             return CurveOperationResult(error=_structured_file_error(request.path, "read", exc))
+
+    def stated_q_unit(self, path) -> str | None:
+        """The unit of q a curve file states in its header (``CurveRepository.stated_q_unit``)."""
+        return self._repository.stated_q_unit(Path(path))
 
 
 class ExportFitResult:

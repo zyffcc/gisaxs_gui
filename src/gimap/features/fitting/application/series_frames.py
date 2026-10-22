@@ -15,6 +15,7 @@ from typing import Callable
 from src.gimap.shared.detector_io.loading import DETECTOR_SUFFIXES
 
 from ..domain import CurveData
+from .curve_units import FROM_FRAME
 from .models import CurveOperationResult, InSituSourceFrame
 from .use_cases import _structured_file_error
 
@@ -54,7 +55,8 @@ def frame_curve(cut: Callable, recipe, token: str, summed=()) -> CurveOperationR
         values = cut(recipe, token, summed)
         return CurveOperationResult(value=CurveData(
             q=values["q"], intensity=values["intensity"], error=values.get("sigma"), q_source_unit="angstrom",
-            source_path=token, pixels=values.get("pixels"), observation=dict(values.get("observation") or {})))
+            source_path=token, pixels=values.get("pixels"), observation=dict(values.get("observation") or {}),
+            q_unit_from=FROM_FRAME))
     except Exception as exc:  # noqa: BLE001 - every failure of a frame is said with the frame, the series goes on
         return CurveOperationResult(error=_structured_file_error(frame_path(token), "read", exc))
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .curve_units import file_q_unit
 from .scattering_curve_files import load_xy_any
 
 from ...application.models import (
@@ -102,6 +103,13 @@ class LocalCurveRepository:
             pixels=pixels,
             observation=observation,
         )
+
+    def stated_q_unit(self, path) -> str | None:
+        """The unit of q the file's header states (``curve_units``): ``"angstrom"``, ``"nm"`` or ``None``."""
+        source = Path(path).expanduser()
+        if not source.exists():
+            raise FileNotFoundError(CURVE_NOT_FOUND.format(path=source.resolve()))  # as ``load`` says it
+        return file_q_unit(source)
 
 
 class LocalFitResultRepository:

@@ -224,7 +224,8 @@ class Fit1DPageMixin:
         curve = self.session.curve
         record = dict(backend="fit1d_physics_v2", native_result=native,
                       curve=None if curve is None else dict(name=curve.name, path=curve.path,
-                                                           q_unit_of_file=curve.source_unit),
+                                                           q_unit_of_file=curve.source_unit,
+                                                           q_unit_from=curve.unit_from),
                       selection=dict(side=self.session.side, q_range_nm_inv=self.session.q_range,
                                      excluded_q_nm_inv=sorted(self.session.excluded)))
         return names, table, record

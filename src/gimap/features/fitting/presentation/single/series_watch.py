@@ -109,7 +109,8 @@ class FitSeriesWatchMixin:
             for index in again:
                 self._read_stamps.pop(index, None)
                 self._curves.pop(index, None)
-                self._preview_curves.pop((self.paths[index], self._unit), None)
+                for key in [key for key in self._preview_curves if key[0] == self.paths[index]]:
+                    self._preview_curves.pop(key)  # in whichever unit it was read
                 self.queue.append(index)
             self._log(trf("{count} curves changed after they were read: fitted again.", count=len(again)))
         if new or again:

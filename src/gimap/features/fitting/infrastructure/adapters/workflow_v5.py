@@ -14,7 +14,8 @@ from pathlib import Path
 import numpy as np
 
 
-from ...application.workflow_v5 import bundled_workflow, validate_options
+from ...application.workflow_v5 import FROM_REQUEST, bundled_workflow, q_unit_of_file, validate_options
+from .curve_units import file_q_unit
 
 
 def read_curve(path: Path):
@@ -285,14 +286,30 @@ def write_side(output, item, result, artifact, raw):
     return rows
 
 
+def curve_units(sources, options) -> list[dict]:
+    """The unit every curve's q is read in, before any is read (``application.workflow_v5.q_unit_of_file``: a file
+    in the unit its header states, else the option ``q_unit``; the current cut in nm⁻¹, as Fitting sends it)."""
+    units = []
+    for source in sources:
+        if source is None:
+            units.append(dict(file="Current curve", q_unit_read=options["q_unit"], q_unit_from=FROM_REQUEST))
+        else:
+            units.append(dict(file=Path(source).name, source=source, **q_unit_of_file(file_q_unit, source, options)))
+    return units
+
+
 def run_workflow_job(payload, report, is_cancelled):
-    """One isolated process for a full text batch, with per-file durable results."""
+    """One isolated process for a full text batch, with per-file durable results. ``request.json`` and
+    ``fitting_run_summary.json`` name the unit every curve's q was read in (``q_units``), as do the file's record
+    in ``batch_summary.json`` and its candidates (``q_unit_read``, ``q_unit_from``)."""
     started = time.perf_counter()
     options = validate_options(payload.get("options", {}))
     output = Path(payload["output_dir"])
     output.mkdir(parents=True, exist_ok=True)
+    sources = payload.get("files") or [None]
+    units = curve_units(sources, options)
     (output / "request.json").write_text(
-        json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8"
+        json.dumps({**payload, "q_units": units}, indent=2, allow_nan=False), encoding="utf-8"
     )
     experimental = options["method"] == "experimental"
     stable = options["method"] == "stable"
@@ -307,7 +324,6 @@ def run_workflow_job(payload, report, is_cancelled):
         engine, kit = None, load_kit()  # a missing kit stops the job here, with where to put it
     else:
         engine = None if experimental else WorkflowEngine(payload.get("model_path"))
-    sources = payload.get("files") or [None]
     records, all_rows = [], []
     for index, source in enumerate(sources):
         if is_cancelled():
@@ -315,13 +331,17 @@ def run_workflow_job(payload, report, is_cancelled):
         tick = time.perf_counter()
         name = Path(source).name if source else "Current curve"
         directory = output / f"{index + 1:04d}_{Path(name).stem}"
+        unit = {key: units[index][key] for key in ("q_unit_read", "q_unit_from")}
         try:
+            if units[index].get("error"):
+                raise ValueError(units[index]["error"])
+            file_options = {**options, "q_unit": unit["q_unit_read"]}  # what every record of this curve says
             q, y, sigma = (
                 read_curve(Path(source))
                 if source
                 else (payload["q"], payload["intensity"], payload.get("sigma"))
             )
-            sides = prepare_sides(q, y, sigma, options)
+            sides = prepare_sides(q, y, sigma, file_options)
             metadata = payload.get("observation_metadata", {}) if source is None else {}
             counts = None
             if metadata.get("source") == "native_cbf_columns" and "valid_pixel_counts" in metadata:
@@ -338,18 +358,20 @@ def run_workflow_job(payload, report, is_cancelled):
             rows = []
             for item in sides:
                 if stable:
-                    rows.extend(engine.fit_and_write(directory / item["side"],item,options,report,is_cancelled))
+                    rows.extend(engine.fit_and_write(directory / item["side"],item,file_options,report,is_cancelled))
                 elif experimental:
                     from .experimental_fit import fit_and_write
 
-                    rows.extend(fit_and_write(directory / item["side"], item, options, report, is_cancelled))
+                    rows.extend(fit_and_write(directory / item["side"], item, file_options, report, is_cancelled))
                 elif fit1d:
-                    rows.extend(fit1d_and_write(directory / item["side"], item, options, report, is_cancelled, kit))
+                    rows.extend(fit1d_and_write(directory / item["side"], item, file_options, report, is_cancelled,
+                                                kit))
                 else:
-                    result, artifact, raw = engine.fit_side(item, options, report, is_cancelled)
+                    result, artifact, raw = engine.fit_side(item, file_options, report, is_cancelled)
                     rows.extend(write_side(directory / item["side"], item, result, artifact, raw))
             for row in rows:
                 row["file"] = name
+                row.update(unit)
                 row["file_seconds"] = time.perf_counter() - tick
                 row["curve_logrmse_target"] = None
                 row["curve_quality_passed"] = None
@@ -367,6 +389,7 @@ def run_workflow_job(payload, report, is_cancelled):
                     seconds=time.perf_counter() - tick,
                     output_dir=str(directory),
                     candidates=len(rows),
+                    **unit,
                 )
             )
         except Exception as exc:
@@ -379,6 +402,7 @@ def run_workflow_job(payload, report, is_cancelled):
                     status="failed",
                     error=str(exc),
                     seconds=time.perf_counter() - tick,
+                    **unit,
                 )
             )
         (output / "batch_summary.json").write_text(json.dumps(records, indent=2), encoding="utf-8")
@@ -392,6 +416,7 @@ def run_workflow_job(payload, report, is_cancelled):
         configured_candidates=len(all_rows),
         best_log_rmse=all_rows[0]["best_log_rmse"] if all_rows else None,
         exit_code=0 if all_rows else 1,
+        q_units=units,
     )
     (output / "fitting_run_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"

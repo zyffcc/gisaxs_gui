@@ -312,8 +312,9 @@ class SeriesStagesMixin:
             kept = [request for request in requests
                     if (str(request.path).casefold(), int(request.frame_index)) not in odd]
         if len(kept) < len(requests):
-            self._status(tr("{n} odd frames left out of the Batch Export (Series ▸ Stages).").format(
-                n=len(requests) - len(kept)))
+            left_out = len(requests) - len(kept)
+            self._status(trf("1 odd frame left out of the Batch Export (Series ▸ Stages)." if left_out == 1
+                             else "{n} odd frames left out of the Batch Export (Series ▸ Stages).", n=left_out))
         return kept
 
     def current_series(self):

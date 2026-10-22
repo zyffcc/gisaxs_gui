@@ -31,6 +31,9 @@ class CurveData:
     """Detector pixels averaged into each point (GIMaP Analyze fit inputs)."""
     observation: dict = field(default_factory=dict)
     """How the points were measured (GIMaP Analyze ``# observation:`` record)."""
+    q_unit_from: str = ""
+    """Where ``q_source_unit`` came from (``application.curve_units``: stated in the file, the setting for files
+    without one, a cut detector frame); empty when nobody said."""
 
     def __post_init__(self) -> None:
         q = _one_dimensional(self.q, "q")

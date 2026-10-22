@@ -161,8 +161,7 @@ class FitSeriesStagesMixin:
             return
         paths = [self.paths[index] for index in listed]
         settings = self._stage_settings()
-        curve = self.single.session.curve
-        unit = curve.source_unit if curve is not None else "angstrom"
+        unit = self._preview_unit()  # of files whose header states none
         load = self.load_series_curve  # (a detector frame is cut as in Analyze)
 
         def work():
@@ -175,7 +174,7 @@ class FitSeriesStagesMixin:
                     continue
                 value = outcome.value
                 curves.append(Curve.from_arrays(value.q, value.intensity, value.error, name=Path(path).name, path=path,
-                                                unit=value.q_source_unit))
+                                                unit=value.q_source_unit, unit_from=value.q_unit_from))
                 read.append((listed[row], value.q, value.observation))
             try:
                 return stages_of_curves(curves, settings, unreadable), "", curves, unreadable, read
@@ -325,7 +324,8 @@ class FitSeriesStagesMixin:
             return listed
         kept = [index for index in listed if not self.is_odd_frame(index)]
         if len(kept) < len(listed):
-            self._log(tr("{n} odd frames left out.").format(n=len(listed) - len(kept)))
+            left_out = len(listed) - len(kept)
+            self._log(trf("1 odd frame left out." if left_out == 1 else "{n} odd frames left out.", n=left_out))
         return kept
 
     def _new_stage(self, index: int) -> bool:

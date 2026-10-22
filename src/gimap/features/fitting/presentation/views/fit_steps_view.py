@@ -153,13 +153,17 @@ class FitStepsView:
         more = AdvancedSection("File", "", page)
         more.setObjectName("fitCurveMore")
         unit_row = QHBoxLayout()
-        unit_row.addWidget(QLabel("q in the file", more))
+        unit_label = QLabel("q unit of files without one in their header", more)
+        unit_label.setWordWrap(True)  # a narrow steps panel: the label wraps, the units stay readable
+        unit_row.addWidget(unit_label, 1)
         self.unit_combo = QComboBox(more)
         self.unit_combo.setObjectName("fitFileUnit")
         self.unit_combo.addItem("Å⁻¹", "angstrom")
         self.unit_combo.addItem("nm⁻¹", "nm")
-        self.unit_combo.setToolTip("Curves from Analyze are in Å⁻¹; other files may be in nm⁻¹")
-        unit_row.addWidget(self.unit_combo, 1)
+        self.unit_combo.setToolTip(
+            "A file whose header states the unit of q is read in that unit, whatever is set here: Analyze's "
+            "_fit_input.dat files state 1/A. This unit is for files that state none, here and in In-situ series.")
+        unit_row.addWidget(self.unit_combo)
         more.add_layout(unit_row)
         self.sigma_note = muted("", more)
         more.add_widget(self.sigma_note)

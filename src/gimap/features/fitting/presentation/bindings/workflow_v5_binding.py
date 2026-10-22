@@ -65,6 +65,7 @@ class WorkflowV5BindingMixin:
                 self._workflow_options(),
                 self.main_window,
                 runner=self.fitting_view_model.context.jobs,
+                stated_q_unit=self.fitting_view_model.stated_q_unit,  # the unit of q each file's header states
             )
             dialog.settings_changed.connect(self._save_workflow_options)
             dialog.candidate_selected.connect(self.show_workflow_candidate)

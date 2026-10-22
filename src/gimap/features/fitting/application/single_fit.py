@@ -88,13 +88,16 @@ class Curve:
     name: str
     path: str = ""
     source_unit: str = "angstrom"
+    unit_from: str = ""
+    """Where ``source_unit`` came from (``curve_units``: stated in the file, the setting for files without one …)."""
 
     @property
     def signed(self) -> bool:
         return bool(np.any(self.q < 0) and np.any(self.q > 0))
 
     @classmethod
-    def from_arrays(cls, q, intensity, sigma=None, *, name: str, path: str = "", unit: str = "angstrom") -> "Curve":
+    def from_arrays(cls, q, intensity, sigma=None, *, name: str, path: str = "", unit: str = "angstrom",
+                    unit_from: str = "") -> "Curve":
         factor = NM_PER_A if unit == "angstrom" else 1.0
         q = np.asarray(q, dtype=float).reshape(-1) * factor
         intensity = np.asarray(intensity, dtype=float).reshape(-1)
@@ -102,7 +105,7 @@ class Curve:
         if sigma is not None and (sigma.shape != q.shape or not np.any(np.isfinite(sigma) & (sigma > 0))):
             sigma = None
         keep = np.isfinite(q) & np.isfinite(intensity)
-        return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit)
+        return cls(q[keep], intensity[keep], None if sigma is None else sigma[keep], name, path, unit, unit_from)
 
 
 def _half(curve: Curve, positive: bool):
@@ -256,7 +259,8 @@ def fit_record(model: FitModel, data: FitData, curve: Optional[Curve], *, side: 
     record = {
         "model": model_to_dict(model),
         "equation": "I(q) = BG + k * [sum_i Int_i * P_i(q) * S_i(q; D_i, sigma_D_i/D_i) + A / (1 + (|q|/w)^nu)]",
-        "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit},
+        "curve": None if curve is None else {"name": curve.name, "path": curve.path, "q_unit_of_file": curve.source_unit,
+                                             "q_unit_from": curve.unit_from},
         "points": {"side": side, "q_range_nm^-1": None if q_range is None else [float(v) for v in q_range],
                    "count": int(data.q.size), "weighting": data.weighting,
                    # what the points are (a curve with one half only is that half, whatever ``side`` says)

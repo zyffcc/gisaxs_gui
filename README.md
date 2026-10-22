@@ -282,7 +282,7 @@ measured points. It is experimental: take its solutions as starts to refine and 
 - **Many curves**: **Tools ▸ 1D Predict — Fit Many Curves…** (also Fitting ▸ Fit ▸ Advanced ▸
   **Fit Many Curves…**): **Add curves…** or **Use current cut**, **Parameters…** (the fit method —
   *General V5 (experimental)*, *Single RC specialist (experimental)* or *Physical fit (numerical)*,
-  which uses no network — the particle families, the q unit of the files and the halves), **Fit
+  which uses no network — the particle families, the q unit of files that state none in their header and the halves), **Fit
   curve**, **Cancel**, **Open results**.
 - **Output**: every run writes a new folder `AI_Fitting_Output/v5_<date>_<time>/` in the folder
   GIMaP was started from (for the portable version: the program folder): `request.json`,

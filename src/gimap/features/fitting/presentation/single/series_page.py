@@ -43,6 +43,7 @@ from .series_preview import FitSeriesPreviewMixin
 from .series_results import UNTOUCHED, FitSeriesResultsMixin
 from .series_stages import NO_STAGES_AT_START, FitSeriesStagesMixin
 from .series_text import FIGURE_SPACE, ONE_HALF, STATE_MARK
+from .series_units import FitSeriesUnitsMixin
 from .series_watch import WATCH_MS, FitSeriesWatchMixin, file_stamp
 from .session import model_label
 
@@ -61,7 +62,7 @@ not said like a success (said at the level of a warning)."""
 
 
 class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin, FitSeriesStagesMixin, FitSeriesFit1DMixin,
-                    FitSeriesFramesMixin,
+                    FitSeriesFramesMixin, FitSeriesUnitsMixin,
                     FitSeriesPreviewMixin, FitSeriesHalvesMixin, FitSeriesResultsMixin, FitSeriesWatchMixin, QWidget,
                     FitSeriesView):
     editModelRequested = pyqtSignal()
@@ -87,7 +88,8 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         self._start_model = None
         self._settings = SeriesSettings()
         self._unit = "angstrom"
-        """The unit of q in the files, as Single analysis read its curve at Start (fixed for the run)."""
+        """The unit of q of the files whose header states none: Single analysis' setting at Start, fixed for the run
+        (``series_units.py``; detector frames are cut in Å⁻¹)."""
         self._previous: Optional[FrameFit] = None
         self._status_text = None
         """Makes the status line again in another interface language (``refresh_language``)."""
@@ -149,6 +151,7 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         listed = self._listed()
         self.refresh_frames_card()
         self._show_halves()
+        self._show_units()
         self._schedule_stages()
         if not self.paths:
             self.step_rail.set_state("curves", "pending", tr("Choose the folder of the curves"))
@@ -254,8 +257,7 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
             resolve_edges=self.single.resolve_edges_check.isChecked(),  # as in Single analysis' Fit step
             follow=self.follow_check.isChecked(), fit1d={**self.single.fit1d_settings(), "fit1d_composition": "model"})
         self._side_from, self._untouched_start = self.halves_source(), not session.edited
-        curve = session.curve  # the unit too is read once: another curve opened meanwhile changes nothing
-        self._unit = "angstrom" if self.frames_mode() or curve is None else curve.source_unit  # frames: cut in Å⁻¹
+        self._unit = "angstrom" if self.frames_mode() else self.single.unit_setting()  # for files without a unit
         self._start_model = model
         self._run_listing = self._listing_record(listed)
         self.fits, self.queue, self._previous, self._curves = {}, list(listed), None, {}
@@ -310,7 +312,7 @@ class FitSeriesPage(FolderDropMixin, SplitterMemoryMixin, FitSeriesListingMixin,
         loaded = outcome.value
         self._note_curve(index, loaded.q, loaded.observation)
         curve = Curve.from_arrays(loaded.q, loaded.intensity, loaded.error, name=Path(path).name, path=path,
-                                  unit=loaded.q_source_unit)
+                                  unit=loaded.q_source_unit, unit_from=loaded.q_unit_from)
         new_stage = self._new_stage(index)
         start = next_start(self._previous, self._start_model, self._settings, new_stage=new_stage)
         settings, stop = self._settings, self._stop.is_set

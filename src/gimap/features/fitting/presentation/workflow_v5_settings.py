@@ -22,9 +22,10 @@ from PyQt5.QtWidgets import (
 from src.gimap.app.presentation.i18n import tr
 
 from ..application.workflow_v5 import validate_options
+from .workflow_v5_units import UNIT_LABEL, UNIT_TIP
 
 Q_UNITS = (("nm⁻¹", "nm^-1"), ("Å⁻¹", "A^-1"))
-"""(shown, option value) of the unit of q in text files."""
+"""(shown, option value) of the unit of q in text files that state none in their header (``workflow_v5_units``)."""
 Q_SIDES = (("Each half separately", "both"), ("q > 0 half", "positive"), ("q < 0 half", "negative"))
 """(shown, option value) of the halves of q fitted."""
 COMPONENTS = ("Auto / unused", "Sphere", "Random cylinder", "Vertical cylinder")
@@ -96,6 +97,7 @@ class WorkflowV5SettingsMixin:
             self.component_boxes.append(combo)
         left.addRow("Complete composition", row)
         self.unit = _choices(Q_UNITS, self._options["q_unit"])
+        self.unit.setToolTip(UNIT_TIP)
         self.side = _choices(Q_SIDES, self._options["side"])
         self.numerical = QCheckBox("General V5: improve fit with four numerical steps")
         self.numerical.setChecked(self._options["numerical"])
@@ -115,7 +117,7 @@ class WorkflowV5SettingsMixin:
             "(Sphere / Vertical cylinder)."
         )
         left.addRow("Fit method", self.method)
-        left.addRow("Text-file q unit", self.unit)
+        left.addRow(UNIT_LABEL, self.unit)
         left.addRow("q sides", self.side)
         left.addRow(self.amplitude_calibration)
         left.addRow(self.numerical)

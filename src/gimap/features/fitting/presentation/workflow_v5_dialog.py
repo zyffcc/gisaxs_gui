@@ -4,7 +4,9 @@ The window is in the interface language: its static texts are translated by the 
 is shown, and what it writes at run time — the status line, the input line, the table's headers,
 tooltips and stage names, the placeholders and the figure's placeholder — goes through ``tr`` and is
 made again after a switch of the language (``_say``, ``_retranslate``). The prediction settings and the
-options they give are in ``workflow_v5_settings.py``; their values never depend on the language.
+options they give are in ``workflow_v5_settings.py``; their values never depend on the language. Which
+unit of q each curve file is read in — the one its header states, else the setting — is said under the
+buttons and in the table (``workflow_v5_units.py``).
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ from src.gimap.integrations.jobs import LocalProcessJobRunner
 from ..application.workflow_v5 import validate_options, bundled_workflow
 from .curve_rendering import follow_plot_theme, text_font_family, theme_figure
 from .workflow_v5_settings import WorkflowV5SettingsMixin
+from .workflow_v5_units import WorkflowV5UnitsMixin
 
 HEADERS = ("Curve / side", "#", "Components", "logRMSE", "RMS/σ", "Stage")
 HEADER_TIPS = {
@@ -89,13 +92,15 @@ class WorkflowJobThread(QThread):
         self.runner.cancel(self.request.job_id)
 
 
-class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
+class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin, WorkflowV5UnitsMixin):
     settings_changed = pyqtSignal(dict)
     candidate_selected = pyqtSignal(dict)
 
     def __init__(
-        self, current_curve=None, options=None, parent=None, runner=None, settings_only=False
+        self, current_curve=None, options=None, parent=None, runner=None, settings_only=False, stated_q_unit=None
     ):
+        """``stated_q_unit``: the unit of q a file's header states (``FittingViewModel.stated_q_unit``), so that
+        the window lists the unit each added file is read in; without it the window says the rule."""
         super().__init__(parent)
         self.setWindowTitle("1D Predict · fit curves & batch")
         self.setObjectName("workflowV5Dialog")
@@ -110,6 +115,9 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
         if parent is not None:
             parent.installEventFilter(self)
         self.files = []
+        self.stated_q_unit = stated_q_unit
+        self._stated = {}
+        """The unit each listed file states (``_read_units``)."""
         self.rows = []
         self.job = None
         self.output_dir = None
@@ -152,6 +160,7 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
         self.input_label.setWordWrap(True)
         root.addWidget(self.input_label)
         self.settings_panel = self._build_settings()
+        self.unit.currentIndexChanged.connect(lambda _index: self._show_files())  # files without a unit follow it
         root.addWidget(self.settings_panel)
         self._follow_language()
         if settings_only:
@@ -285,10 +294,19 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
         if files:
             self.files = files
             self._folder = str(Path(files[0]).parent)
-            names = ", ".join(Path(f).name for f in files[:5])
-            self._say(self.input_label, lambda: trf("{count} file(s): {names}", count=len(files), names=names))
+            self._read_units()
+            self._show_files()
             self._say(self.run_button, (lambda: trf("Fit {count} files", count=len(files))) if len(files) > 1
                       else (lambda: tr("Fit curve")))
+
+    def _show_files(self) -> None:
+        """The line under the buttons: the files, and the unit of q each is read in."""
+        if not self.files:
+            return
+        files = self.files
+        names = ", ".join(Path(f).name for f in files[:5])
+        self._say(self.input_label, lambda: "\n".join(
+            [trf("{count} file(s): {names}", count=len(files), names=names), *self._units_lines()]))
 
     def _use_current(self):
         self.files = []
@@ -438,9 +456,12 @@ class WorkflowV5Dialog(QDialog, WorkflowV5SettingsMixin):
                 f"{r['signed_weighted_rms']:.3f}",
                 tr(STAGE_LABELS.get(stage, stage)),
             ]
+            after_name, unit_tip = self._row_unit(r)
+            values[0] += after_name
             for j, v in enumerate(values):
                 self.table.setItem(i, j, QTableWidgetItem(str(v)))
-            self.table.item(i, 0).setToolTip(f"{r.get('file', '')} / {r['side']}")
+            self.table.item(i, 0).setToolTip("\n".join(
+                filter(None, [f"{r.get('file', '')} / {r['side']}", unit_tip])))
             self.table.item(i, 2).setToolTip(r["combination"])
             stage_detail = [trf("Stage: {stage}", stage=stage)]
             if r.get("fallback_reason"):

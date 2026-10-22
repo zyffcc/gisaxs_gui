@@ -4,10 +4,30 @@ import os
 from pathlib import Path
 import numpy as np
 
+from .curve_units import FROM_FILE, FROM_REQUEST, FROM_SETTING, q_unit_read  # noqa: F401 - the origins, also from here
+
 FIT1D_SHAPES = {1: "sphere", 3: "vc"}
 """Component id → the shape name of the fit1d kit. It has no random cylinder (2)."""
 FIT1D_POLICIES = ("fast", "auto", "robust")
 FIT1D_MODES = ("gisaxs", "saxs")
+
+STATED_UNITS = {"angstrom": "A^-1", "nm": "nm^-1"}
+"""A unit of q as Fitting names it (``CurveData.q_source_unit``) → the value of the option ``q_unit``."""
+_SETTING_UNITS = {option: unit for unit, option in STATED_UNITS.items()}
+
+
+def q_unit_of_file(stated_unit, path, options: dict) -> dict:
+    """How 1D Predict reads the q of the curve file ``path``: Fitting's rule (``curve_units.q_unit_read``: the unit its
+    header states, else the option ``q_unit``, the setting for files without one). ``stated_unit`` reads the header
+    (``CurveRepository.stated_q_unit``). ``{"q_unit_read": "A^-1" | "nm^-1", "q_unit_from": FROM_FILE |
+    FROM_SETTING}``, or ``{"q_unit_read": None, "q_unit_from": None, "error": why}`` when the header cannot be read or
+    states both units: such a file is not fitted. The window shows it before a run, the job follows it and records
+    it."""
+    try:
+        unit, origin = q_unit_read(stated_unit, path, _SETTING_UNITS[options["q_unit"]])
+    except (OSError, ValueError) as exc:
+        return dict(q_unit_read=None, q_unit_from=None, error=str(exc) or type(exc).__name__)
+    return dict(q_unit_read=STATED_UNITS[unit], q_unit_from=origin)
 
 
 def bundled_workflow() -> Path:

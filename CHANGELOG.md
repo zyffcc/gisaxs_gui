@@ -166,6 +166,24 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
 
 ### Fixed
 
+- **Odd frames** (Analyze ▸ Series, Fitting ▸ In-situ series, Compare): a frame that differs from its
+  neighbours in only a few points — such as a few hot detector columns in one frame — is now marked odd
+  ("probably the detector"), even when it is too small to show over the whole curve. Before, such a frame
+  could become a stage of its own and enter Compare's end state. Two or three such frames in a row, or two at
+  either end of a series, are each found; real changes of the sample, however sudden, are still not odd.
+- **Single analysis** and **In-situ series** read a curve file in the unit of q its header states, as 1D
+  Predict does. The setting under **Curve ▸ File** is now **q unit of files without one in their header** and
+  applies only to those files; In-situ series takes it at Start (before, it read every file in the unit of
+  Single analysis' curve). The Curve step says the unit and where it came from, and the In-situ Curves step
+  counts the curves by unit. A file whose header states both units is neither opened nor fitted. The fit's
+  record (`curve.q_unit_from`), the series record (`per_frame.q_unit`, `q_unit_from`) and projects
+  (`unit_setting`) name it. A project saved before opens with the unit it saved, unless the file's header
+  states another one: the stated unit is then used, and the project's notes say so.
+- **1D Predict** reads a curve file in the unit of q its header states. Analyze's `_fit_input.dat` (q in Å⁻¹)
+  used to be read in the window's unit setting, nm⁻¹ by default, so q was ten times too small. The setting is
+  now **q unit of files without one in their header**; the window lists each file's unit before the run and in
+  the table, `request.json` and `fitting_run_summary.json` record it (`q_units`), and a file whose header
+  states both units is not fitted.
 - macOS: Batch Export with pictures ended the program (worker threads now have a 16 MB stack).
 - Send to Compare opened a Compare page that stayed at “Comparing …”.
 - Fitting ▸ In-situ series: refilling the results table of a long series froze the window.

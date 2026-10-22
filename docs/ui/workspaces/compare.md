@@ -8,9 +8,9 @@
   `analyze/application/series_stages.py` + `analyze/presentation/bindings/series_stages.py`、
   `fitting/application/series_fit.py`（`stages_of_curves`、`next_start`）+ `fitting/presentation/single/series_stages.py`、
   `app/presentation/stage_text.py`（界面文字）、`app/presentation/components/row_groups.py`（热图上的阶段条）
-- **Related tests**: `tests/test_series_stages.py`、`tests/test_series_stages_page.py`、`tests/test_compare.py`、
-  `tests/test_fit_series.py::test_stages_and_odd_frames_steer_the_run`
-- **Last verified**: 2026-10-14（读 Analyze 文件夹的几种曲线、阶段导出的横轴：对照代码）；2026-10-01（合成序列，以及本地的
+- **Related tests**: `tests/test_series_stages.py`、`tests/test_release3_odd_frames.py`、`tests/test_series_stages_page.py`、
+  `tests/test_compare.py`、`tests/test_fit_series.py::test_stages_and_odd_frames_steer_the_run`
+- **Last verified**: 2026-10-22（合成 GISAXS 原位序列中一帧的热列：异常帧的尖峰量，对照代码）；2026-10-14（读 Analyze 文件夹的几种曲线、阶段导出的横轴：对照代码）；2026-10-01（合成序列，以及本地的
   原位 GIWAXS 序列；本地数据和从中得到的数值不进仓库）
 
 ## 为什么不是“分类”
@@ -22,9 +22,19 @@
 ## 方法（`shared/series_stages`）
 
 1. **可比较的曲线**：log10 I，只用（几乎）每帧都有数据的 q 点；默认去掉每帧的平均水平（只比形状），整体强度单独保存。
-2. **异常帧先找**：一帧与它之前的 3 帧和之后的 3 帧都不一致（两侧中较近的一侧的距离），且超过该处帧间变化的 5 倍、
-   超过典型帧间变化的 5 倍。差别集中在约 1 % 的点上 → “多半是探测器”（建议在 Mask 步骤遮掉）。不先排除的话，
-   一个异常帧会自己成为一个主成分，还会被切成一个假的阶段。
+2. **异常帧先找**：一帧与它之前的 3 帧和之后的 3 帧（各取中位数）都不一致，且远超过该处帧间的变化。两种量，满足一种即可：
+   - 整条曲线（RMS，两侧中较近的一侧）：超过该处帧间变化的 5 倍、超过典型帧间变化的 5 倍；
+   - 尖峰：在差别最大的约 1 % 的点上（至少 3 点），与两侧的差别**方向相同**，并超过这些点在该处帧间变化的 8 倍。
+     只看整条曲线时尖峰被稀释：1 % 的点上亮 25 倍的热列（log10 差 1.4）整条曲线的 RMS 只有约 0.14，在噪声较大的序列里
+     不到一步帧间变化的 4 倍，以前因此漏掉，还被切成了一个阶段。“方向相同”把样品的真实变化排除在外：持续的变化与前后
+     两侧的差别方向相反，突变与其中一侧一致。纯噪声在这些点上可达约 3.5 倍（高斯与低计数泊松、5–3200 帧实测），
+     所以阈值取 8；10 倍的尖峰才让整条曲线移动约一步帧间变化。
+
+   差别集中在约 1 % 的点上 → “多半是探测器”（建议在 Mask 步骤遮掉）。异常帧不再充当邻居：去掉已找到的异常帧再看它们的
+   邻居（最多 3 遍），所以连续两三帧的伪影、序列一端的两帧都能找到（以前只标出中间或最外的一帧）；连续四帧以上
+   （序列两端三帧以上）一样的是一个状态。序列两端只有一侧可比：开头或末尾一两帧里的变化分不出是样品还是伪影，
+   照旧标为异常帧并写出原因。
+   不先排除的话，一个异常帧会自己成为一个主成分，还会被切成一个假的阶段，并进入终态（最后 10 帧的平均）。
 3. **主成分**：其余帧的 PCA（解释 95 % 方差，最多 10 个），所有帧投影；每个成分的正负号定为“从开始到结束上升”。
 4. **阶段**：主成分得分按帧序做最优的分段直线拟合（动态规划，每段至少 5 帧，超过 1500 帧时按块平均）。
    每多一段，至少要多解释一段时剩余变化的 5 %，并且多于噪声能解释的（BIC 式惩罚，噪声取自二阶差分）。

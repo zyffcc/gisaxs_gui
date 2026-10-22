@@ -21,8 +21,10 @@ STAGES_LEAST_FRAMES = SHORTEST
 
 METHOD = (
     "log10 I compared in shape (each frame's mean removed) on the x range nearly every frame covers; odd frames: "
-    "a frame matching neither the frames before nor after it (by far more than the series moves per frame there; "
-    "a difference in ~1 % of the points: the detector); main components of the other frames; stages: optimal "
+    "a frame matching neither the 3 frames before nor the 3 after it, by far more than the series moves per frame "
+    "there — over the whole curve (> 5×), or in the 1 % of the points where it differs most from both sides in the "
+    "same direction (> 8×: a spike); a difference in ~1 % of the points: the detector; odd frames do not count as "
+    "neighbours; main components of the other frames; stages: optimal "
     "piecewise-straight segmentation of their scores in frame order, a stage added while it explains ≥ 5 % of "
     "the one-stage residual and more than noise would."
 )

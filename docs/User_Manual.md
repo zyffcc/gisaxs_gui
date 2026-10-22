@@ -1180,7 +1180,9 @@ shows one curve of every frame as an intensity map against frame and q.
 
 *Drag the horizontal band to pick a frame and the vertical band to pick a q window. The line above the map
 names the curve, the frames and the cut held for every frame; the box beside it (±) chooses the halves of the
-cut, and the frame axis counts from 1.*
+cut, and the frame axis counts from 1. Here a synthetic run of 40 frames: “3 stages: frames 1–17, 18–24, 25–40 ·
+1 odd frame”. The odd frame is frame 34, where a few detector columns are hot (the short bright mark near
+qy 0.05 Å⁻¹); the red arrow beside the map marks it, and it does not make a stage of its own.*
 
 1. Choose the **Curve** (GISAXS: the horizontal cut by default; GIWAXS: I(q); every region's I(q)
    and I(χ) are in the list). Set **every n frame** for a first look at a long series.
@@ -1448,7 +1450,11 @@ Fitting reads `.dat` and `.txt` text curves:
 
 - Analyze's curve files, `<name>_fit_input.dat`, have four columns — q (Å⁻¹), intensity, σ and the number of
   detector pixels averaged — and a header recording where the curve came from.
-- Any other `.dat` / `.txt` file with columns `q I [σ]` opens too. Set the unit of its q under **Curve ▸ File**.
+- Any other `.dat` / `.txt` file with columns `q I [σ]` opens too. A file whose header states the unit of q is read
+  in that unit — `q in <unit>` in a `#` line, or the name of the first column (`q (1/A)`, `q_nm^-1`,
+  `# columns: qy (1/A) …`, `# q [1/nm]  I`); Analyze's curve files state Å⁻¹. For a file that states none, set
+  **Curve ▸ File ▸ q unit of files without one in their header** (Å⁻¹ by default). A file whose header states both
+  Å⁻¹ and nm⁻¹ is not opened: *The header states q both in 1/A and in 1/nm; correct it to one unit.*
 
 Fitting does not read `.csv` files, also not the CSV curves that Analyze exports. Use **Send to Fitting** in
 Analyze, or open the `_fit_input.dat` written next to the CSV. A `.csv` dropped on Fitting is refused with
@@ -1499,15 +1505,21 @@ The page is laid out like Analyze: the steps on the left, each saying where it s
 
 **1. Curve**
 
-- The file, its points, its q range in nm⁻¹ and Å⁻¹, and whether σ is in the file. The fit weights each point by
-  1/σ; without σ every point gets the same relative weight.
+- The file, its points, its q range in nm⁻¹ and Å⁻¹, the unit its q was read in and where that came from (*q read in
+  Å⁻¹: stated in the file*, or *… not stated in the file: the setting for files without one*), and whether σ is in
+  the file. The fit weights each point by 1/σ; without σ every point gets the same relative weight.
 - **Halves of the cut**, for a cut through the beam (q < 0 and q > 0): **Mean of both halves** (averaged where
   both halves were measured; across a gap of one half, and beyond its end, the other half alone — never
   interpolated), **Both halves on |q|**, **q > 0 half** or **q < 0 half**. *Predict parameters*, *Find the
   particle shape* and the *AI proposal* take one curve: on **Both halves on |q|** they switch the box to the mean
   and say so; *Refine* and *Search* fit both halves.
 - **Fitting range** in nm⁻¹, or drag the orange band; **Whole Curve** fits every point.
-- Under *File* (folded): **q in the file** — Å⁻¹ for Analyze's curves; other files may be in nm⁻¹.
+- Under *File* (folded): **q unit of files without one in their header** — Å⁻¹ by default; the In-situ series uses
+  it too. A file whose header states its unit (Analyze's curves: Å⁻¹) is read in that unit, whatever is set here.
+  Changing the setting opens a curve without a unit again in the new unit; for a curve that states one, the status
+  line says why nothing changes. A project and the last session keep the unit a curve was read in and this
+  setting. A curve saved before opens as it did, unless its header states another unit than the one saved: it is
+  then read in the stated unit, and the status line (for a project, its notes) says so.
 - **Leaving points out**: switch on **Exclude** above the plot, then click a point to leave it out of the fit
   (click again to take it back), or drag a box around several. They are drawn as red ×, the Curve step says how
   many, and **Include All** takes them back. The left-out points are kept with the curve (and in a project) and
@@ -1683,7 +1695,9 @@ only, no TensorFlow and no V5 files. Without the kit, the method fails with a me
 
 ![The 1D Predict window](manual_images/en/13_1d_predict.png)
 
-*The candidates of every curve on the left (with their Stage); the selected candidate's fit and parameters on the right.*
+*The candidates of every curve on the left (with their Stage); the selected candidate's fit and parameters on the right.
+The second line under the buttons, “q in Å⁻¹, as their header states: …”, says how the three Analyze curve files
+(`_fit_input.dat`) are read, with no unit set by hand; **Curve / side** repeats it after each name (“· Å⁻¹”).*
 
 **1D Predict** is the experimental neural model (Workflow V5). It proposes compositions and parameters for a curve
 and corrects each proposal numerically against the measured points. Take its solutions as starts to check and
@@ -1698,13 +1712,17 @@ refine, not as results.
 **In the window**
 
 1. **Add curves…** lists text curve files (`q I [σ]`; `.dat`, `.txt`, also comma-separated `.csv`). **Use current
-   cut** takes the curve open in Fitting instead.
+   cut** takes the curve open in Fitting instead. The line under the buttons says in which unit of q each file is
+   read: the unit its header states or, for a file whose header states none, the setting **q unit of files without
+   one in their header**. A file whose header states both Å⁻¹ and nm⁻¹ is not fitted and is named there.
 2. **Parameters…** sets:
    - **Fit method**: *General V5 (experimental)* (default), *Single RC specialist (experimental)*,
      *Physical fit (numerical)*, which uses no network, or *fit1d (network + physical fit)* (section 6.4).
    - **Complete composition**: the particle families when you know them.
-   - **Text-file q unit**: nm⁻¹ by default. Set Å⁻¹ for Analyze's `_fit_input.dat` files. **Use current cut**
-     is converted automatically.
+   - **q unit of files without one in their header**: nm⁻¹ by default. A file whose header states its unit of q is
+     read in that unit, whatever is set here; Analyze's `_fit_input.dat` files state Å⁻¹ and need no setting. A
+     header states the unit with `q in <unit>` in a `#` line or in the name of the first column (`q (1/A)`,
+     `q_nm^-1`, `# columns: qy (1/A) …`, `# q [1/nm]  I`). **Use current cut** is converted automatically.
    - **q sides**: *Each half separately*, *q > 0 half* or *q < 0 half*.
    - For fit1d: its search (**Fast** by default in this window), curve type, network, qz and systematic error.
 
@@ -1712,7 +1730,8 @@ refine, not as results.
 3. **Fit curve** (**Fit N files** when several are listed) starts, **Cancel** stops (finished files stay saved),
    **Open results** opens the run folder.
 4. The table lists the candidates of every curve and half: **Curve / side** (the file and + or −), **#**,
-   **Components** (S sphere, RC random cylinder, VC vertical cylinder), **logRMSE**, **RMS/σ** and **Stage**.
+   **Components** (S sphere, RC random cylinder, VC vertical cylinder), **logRMSE**, **RMS/σ** and **Stage**; for a
+   file, **Curve / side** also gives the unit its q was read in (hover to see where it comes from).
    Select one to see, in the tabs on the right, its **Fit plot**, its **Parameters and units** and the **Batch log**.
 
 The **Stage** says what produced a candidate. For *Single RC specialist* it is *Neural model*, *Model + amplitude*
@@ -1730,7 +1749,10 @@ point.
 was started from (for the portable version: the program folder). It holds `request.json`, `batch_summary.json`,
 `top20_candidates.json`, `fitting_run_summary.json` and, for every curve and half, `solutions.json` (parameters,
 units, the stage that ran and why), `display.npz` and `fitting_curves.csv` (*General V5* also writes
-`candidates.npz`). The folders are not removed automatically. Fits you save yourself (**Save**) go where you choose.
+`candidates.npz`). `request.json` and `fitting_run_summary.json` list the unit each curve's q was read in
+(`q_units`); each file's entry in `batch_summary.json` and its candidates in `top20_candidates.json` carry it as
+`q_unit_read` and `q_unit_from`. The folders are not removed automatically. Fits you save yourself (**Save**) go
+where you choose.
 
 **Model files.** The model and its trained weights are in `modules/Fitting_1D_Model/Workflow_v5/`, both in the
 portable version and in the Git repository, so 1D Predict runs from a source checkout too. Each network checks its
@@ -1765,6 +1787,11 @@ Every curve of a folder, fitted with the model of Single analysis. The command b
   The JSON record keeps Analyze's settings.
 - The curves are listed in counting order of their names (`frame_2` before `frame_10`) and numbered 1, 2, 3 … in
   that order. **Frames**: first – last of these numbers, and **Every** n-th.
+- **The unit of q**: every curve file is read in the unit its header states, else in Single analysis' **q unit of
+  files without one in their header** (its value at Start, kept for the run). The step counts the listed curves by
+  unit and where it came from — *2 curves: q in Å⁻¹, as their header states*; *1 curves: q in nm⁻¹, no unit in
+  their header (Single analysis ▸ Curve ▸ File)* — and names a file whose header states both units: it is not
+  fitted, and its frame says why. Detector frames are cut in Å⁻¹.
 - **Watch for new curves**: while the series runs, the folder is looked at every 2 s and curves written into it
   (for example by Analyze during a measurement) are fitted too. A new file is taken once its size and time are the
   same at two looks; a file changed after it was read is fitted again; a folder that cannot be read is waited for.
@@ -1809,7 +1836,8 @@ Every curve of a folder, fitted with the model of Single analysis. The command b
 - **Open Frame in Single Analysis** takes a frame and its fitted model back to Single analysis to look closer.
 - **Save ▸ Table of Every Frame…** writes a CSV (frame, file, χ²ᵣ, log RMSE, converged, points, halves used, every
   value and its error) with a JSON record next to it: the start model, the halves and where they came from, range,
-  left-out points, method, every frame's state and reason, the poor fits (χ²ᵣ above 10) and which curves or frames
+  left-out points, method, every frame's state, reason and the unit its q was read in (`q_unit`, `q_unit_from`;
+  `q_unit_of_files` is the setting for files without one), the poor fits (χ²ᵣ above 10) and which curves or frames
   were listed. **Trend Plot…** and **Selected Frame's Plot…** save the figures.
 - Before results that are not saved are dropped — a second Start, other curves, a project opened — GIMaP asks:
   **Save**, **Discard** or **Cancel**.
@@ -1837,7 +1865,12 @@ version 0.0.2.
 1. The curves are compared as log I, on the q points (almost) every frame has. By default each frame's mean level
    is removed, so only the shape counts.
 2. Odd frames first: a frame that matches neither the 3 frames before nor the 3 after it, by far more than the
-   change from frame to frame. Left in, one such frame would become a component of its own and a false stage.
+   change from frame to frame — over the whole curve, or only in a few points (about 1 %) where it differs from
+   both sides in the same direction, such as a few hot detector columns in one frame. A real change of the sample
+   is not odd: after a sudden change a frame matches the frames that follow, and in a steady change it lies
+   between the frames before and after. Two or three such frames in a row (two at the start or end of the series)
+   are each found. Left in, one such frame would become a component of its own and a false stage, and would enter
+   the end state in Compare.
 3. The main components of the other frames.
 4. Stages: the components are cut into straight pieces in frame order (at least 5 frames per stage, at most 8
    stages). A stage is added only while it explains at least 5 % of the remaining change and more than noise
@@ -1849,8 +1882,12 @@ version 0.0.2.
 - A stage describes the series; it is not a phase by itself. A smooth change is also cut where its pace bends.
   What grows or falls between stages (relative to the rest of the curve) says whether the structure changed.
 - Each odd frame comes with its reason. A difference near one q in a few points is most likely the detector:
-  mask it in Analyze's **Mask & corrections** step and build the map again. A real sudden change of the sample
-  (a peak that disappears in one frame) is also marked odd; its reason says at which q and by how much.
+  mask it in Analyze's **Mask & corrections** step and build the map again. A real event of the sample that lasts
+  only one to three frames (a crystallite that flashes in one frame) is also marked odd; its reason says at which
+  q and by how much. A change that persists is not odd.
+- At the start or end of a series there are frames on one side only, so a change in the first or last one or two
+  frames cannot be told from an artefact: it is marked odd with its reason. A watched series whose newest frame
+  shows something new is judged again as more frames arrive.
 
 **Where they appear**
 
@@ -1871,7 +1908,9 @@ version 0.0.2.
 ![The Compare page](manual_images/en/14_compare.png)
 
 *Three steps on the left, here with the Results step open; on the right how far each series has changed, their paths
-and their end states.*
+and their end states. Two synthetic runs of 40 frames, 3 stages each: A has one odd frame (frame 34, × on the change
+plot), left out of its end state, so A's end-state curve has no spike from its hot columns near qy 0.05 Å⁻¹. A and B:
+end states 13 % apart (8 % at the start).*
 
 Typical use: open one sample in Analyze, build its map in the Series tab, press **Send to Compare**; repeat for
 every sample. Two or more series are compared with each other; one alone is described.

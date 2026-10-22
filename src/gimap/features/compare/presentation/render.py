@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 from src.gimap.app.presentation.components import text_color
 from src.gimap.app.presentation.components.curve_plot import CURVE_COLORS, Marker
 from src.gimap.app.presentation.components.plot_export import export_plot
-from src.gimap.app.presentation.i18n import tr
+from src.gimap.app.presentation.i18n import tr, trf
 from src.gimap.app.presentation.stage_text import axis_symbol, change_text, odd_reason
 
 from ..application import METHOD
@@ -177,7 +177,8 @@ class CompareRenderMixin:
         lines.append(tr("The first main change carries {share:.0f} % of all the change between frames.").format(share=share))
         odd = sum(len(result.odd) for result in comparison.results)
         if odd:
-            lines.append(tr("{n} odd frames left out (Odd frames and stages, below).").format(n=odd))
+            lines.append(trf("1 odd frame left out (Odd frames and stages, below)." if odd == 1
+                             else "{n} odd frames left out (Odd frames and stages, below).", n=odd))
         return "\n".join(lines)
 
     def _group_lines(self, names: list[str]) -> list[str]:

@@ -38,7 +38,7 @@ ZH_ENTRIES = {
     "Auto / unused": "自动 / 不用",
     "Complete composition": "完整组成",
     "Fit method": "拟合方法",
-    "Text-file q unit": "文本文件的 q 单位",
+    "q unit of files without one in their header": "文件头未注明时的 q 单位",
     "q sides": "q 的两侧",
     "Each half separately": "两半分别拟合",
     "General V5: improve fit with four numerical steps": "通用 V5：再用四个数值步骤改进拟合",
@@ -272,7 +272,8 @@ def test_add_curves_opens_where_the_last_curves_were(tmp_path, monkeypatch) -> N
     dialog._choose_files()
     dialog._choose_files()
     assert starts == ["", str(tmp_path)]
-    assert dialog.run_button.text() == "Fit 2 files" and dialog.input_label.text() == "2 file(s): a.dat, b.dat"
+    assert dialog.run_button.text() == "Fit 2 files"
+    assert dialog.input_label.text().splitlines()[0] == "2 file(s): a.dat, b.dat"  # then the unit of q of each
     dialog._use_current()
     assert dialog.run_button.text() == "Fit curve" and dialog.files == []
     _close(dialog)

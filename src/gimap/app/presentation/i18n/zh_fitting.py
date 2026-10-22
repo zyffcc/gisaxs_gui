@@ -50,8 +50,10 @@ FITTING_ZH = {
     "Or drag the orange band on the plot. Only the points inside it are fitted.":
         "也可以在图上拖动橙色区域。只拟合区域内的点。",
     "File": "文件",
-    "q in the file": "文件里的 q",
-    "Curves from Analyze are in Å⁻¹; other files may be in nm⁻¹": "分析输出的曲线用 Å⁻¹；其他文件可能用 nm⁻¹",
+    "A file whose header states the unit of q is read in that unit, whatever is set here: Analyze's _fit_input.dat "
+    "files state 1/A. This unit is for files that state none, here and in In-situ series.":
+        "文件头注明了 q 单位的文件按注明的单位读取，不管这里怎么设：分析写出的 _fit_input.dat 注明 1/A。"
+        "这里的单位只用于没有注明单位的文件，在这里和原位序列里都是。",
     "No curve yet.": "还没有曲线。",
     "{name}\n{points} points, |q| {low}–{high} nm⁻¹ ({low_a}–{high_a} Å⁻¹); {fitted} in the fitting range.":
         "{name}\n{points} 个点，|q| {low}–{high} nm⁻¹（{low_a}–{high_a} Å⁻¹）；拟合范围内 {fitted} 个。",
@@ -230,7 +232,7 @@ FITTING_ZH = {
     "Auto / unused": "自动 / 不用",
     "Complete composition": "完整组成",
     "Fit method": "拟合方法",
-    "Text-file q unit": "文本文件的 q 单位",
+    "q unit of files without one in their header": "文件头未注明时的 q 单位",
     "q sides": "q 的两侧",
     "Each half separately": "两半分别拟合",
     "General V5: improve fit with four numerical steps": "通用 V5：再用四个数值步骤改进拟合",
@@ -362,6 +364,32 @@ FITTING_ZH = {
     "at_bound": "触边界",
     "inactive": "无贡献",
     "derived": "派生量",
+    # -- 1D Predict: the unit of q of each file (2026-10-22) -----------------------------------------
+    "A file whose header states the unit of q is read in that unit, whatever is set here: Analyze's _fit_input.dat "
+    "files state 1/A. This unit is for files that state none. Use current cut is converted by itself.":
+        "文件头注明了 q 单位的文件按注明的单位读取，不管这里怎么设：分析写出的 _fit_input.dat 注明 1/A。"
+        "这里的单位只用于没有注明单位的文件。“使用当前切线”自动换算。",
+    "q in {unit}, as their header states: {names}": "q 按文件头注明的 {unit}：{names}",
+    "q in {unit}, no unit in their header (Parameters…): {names}": "q 按 {unit}，文件头未注明单位（参数…）：{names}",
+    "Not fitted, the unit of q cannot be read: {name} — {reason}": "不拟合，读不出 q 的单位：{name}——{reason}",
+    "q in the unit a file's header states, else in {unit} (Parameters…).":
+        "q 按文件头注明的单位读取；未注明的按 {unit}（参数…）。",
+    "q read in {unit}: {origin}": "q 按 {unit} 读取：{origin}",
+    "stated in the file": "文件中注明",
+    "not stated in the file: the setting for files without one": "文件中未注明：用“文件头未注明时的 q 单位”的设置",
+    "the current curve, sent in this unit": "当前曲线，按此单位传入",
+    "cut from a detector frame as Analyze cuts it": "按分析的方式从探测器帧切出",
+    "{name} states q in {unit} in its header: the setting is for files without one.":
+        "{name} 的文件头注明 q 的单位是 {unit}：这个设置只用于没有注明单位的文件。",
+    "{name} states q in {stated} in its header: read in {stated}, not in {saved} as saved before.":
+        "{name} 的文件头注明 q 的单位是 {stated}：按 {stated} 读取，而不是之前保存的 {saved}。",
+    "{count} curves: q in {unit}, as their header states": "{count} 条曲线：q 按文件头注明的 {unit}",
+    "{count} curves: q in {unit}, no unit in their header (Single analysis ▸ Curve ▸ File)":
+        "{count} 条曲线：q 按 {unit}，文件头未注明单位（单条分析 ▸ 曲线 ▸ 文件）",
+    "{count} curves are not fitted, the unit of q cannot be read: {name} — {reason}":
+        "{count} 条曲线不拟合，读不出 q 的单位：{name}——{reason}",
+    "The header states q both in 1/A and in 1/nm; correct it to one unit.":
+        "文件头同时注明了 q 的单位 1/A 和 1/nm；请改成只注明一种单位。",
 }
 
 __all__ = ["FITTING_ZH"]
