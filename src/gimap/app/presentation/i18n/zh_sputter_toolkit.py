@@ -78,10 +78,10 @@ SPUTTER_TOOLKIT_ZH = {
         'TS 膜时间窗：不报告厚度和金属分数（不可辨识）；L_TS_nm 是横向纹理长度，不是岛间距。',
     'Cu approximated with the Ag model, for reference only (errors not validated).':
         'Cu 用 Ag 模型近似，仅供参考（误差未经验证）。',
-    '{count} windows with an unresolved rule stage carry the stage of the neighbouring resolved window '
-    '(stage_imputed=true; stage_path_counts_imputed).':
-        '{count} 个规则阶段未分辨的时间窗沿用相邻已分辨时间窗的阶段（stage_imputed=true；sta'
-        'ge_path_counts_imputed）。',
+    '{count} windows with an unresolved rule stage, or without a vote because the beam may be off the sample, '
+    'carry the stage of the neighbouring resolved window (stage_imputed=true; stage_path_counts_imputed).':
+        '{count} 个规则阶段未分辨、或因光斑可能移出样品而不参与投票的时间窗沿用相邻已分辨时间窗的阶段'
+        '（stage_imputed=true；stage_path_counts_imputed）。',
     '{count} windows with fewer than {counts} counts have no stage and no values.':
         '{count} 个计数少于 {counts} 的时间窗没有阶段，也没有数值。',
     'TS onset not established: no TS window at all disagrees with {no_ts} resolved windows, within {slack} '
@@ -99,18 +99,24 @@ SPUTTER_TOOLKIT_ZH = {
     'which may be one full back-and-forth cycle of the sample stage (one dip at each end of its travel).':
         '强度每 {period} s 出现一次深浅不一的下凹；图样要到 {repeat} s 后才完全重复，这可能是样品台'
         '来回平移一个完整周期的时间（行程两端各一次下凹）。',
-    '{count} windows with an intensity below {limit}% of the level within one modulation period on both sides: '
-    'the beam is probably partly or fully off the sample while the stage is translated (beam_off_sample=true). '
-    'They keep their values but cast no stage vote and are left out of the R/D trends and the zig-zag counts.':
-        '{count} 个时间窗的强度低于前后各一个调制周期内水平的 {limit}%：样品台平移时光斑可能部分或'
-        '完全移出了样品（beam_off_sample=true）。它们保留各自的数值，但不参与阶段投票，也不计入 R/D '
-        '趋势和锯齿计数。',
-    '{count} windows with an intensity below {limit}% of the level within {span} s on both sides, without a '
-    'periodic modulation: the beam was probably off the sample or interrupted (beam_off_sample=true). They keep '
-    'their values but cast no stage vote and are left out of the R/D trends and the zig-zag counts.':
-        '{count} 个时间窗的强度低于前后各 {span} s 内水平的 {limit}%，且没有周期性调制：光斑可能移出'
-        '了样品或光束中断（beam_off_sample=true）。它们保留各自的数值，但不参与阶段投票，也不计入 R/D '
-        '趋势和锯齿计数。',
+    '{count} windows in intensity dips: {core} below {limit}% of the level within one modulation period on both '
+    'sides and their neighbours in the same dip below {release}%. The beam is probably partly or fully off the '
+    'sample while the stage is translated (beam_off_sample=true). They keep their values but cast no stage vote '
+    'and are left out of the R/D trends, the reversal counts (the R/D zig-zags are counted between them), the '
+    'mass continuity and the literature method.':
+        '{count} 个时间窗处在强度下凹中：{core} 个低于前后各一个调制周期内水平的 {limit}%，其余是同一下凹里'
+        '紧挨着它们、仍低于 {release}% 的时间窗。样品台平移时光斑可能部分或完全移出了样品（beam_off_sample=true）。'
+        '它们保留各自的数值，但不参与阶段投票，也不计入 R/D 趋势、来回变化的计数（R/D 锯齿在它们之间分段计数）、'
+        '质量连续性和文献方法。',
+    '{count} windows in intensity dips without a periodic modulation: {core} below {limit}% of the level within '
+    '{span} s on both sides and their neighbours in the same dip below {release}%. The beam was probably off the '
+    'sample or interrupted (beam_off_sample=true). They keep their values but cast no stage vote and are left out '
+    'of the R/D trends, the reversal counts (the R/D zig-zags are counted between them), the mass continuity and '
+    'the literature method.':
+        '{count} 个时间窗处在没有周期性调制的强度下凹中：{core} 个低于前后各 {span} s 内水平的 {limit}%，其余是'
+        '同一下凹里紧挨着它们、仍低于 {release}% 的时间窗。光斑可能移出了样品或光束中断（beam_off_sample=true）。'
+        '它们保留各自的数值，但不参与阶段投票，也不计入 R/D 趋势、来回变化的计数（R/D 锯齿在它们之间分段计数）、'
+        '质量连续性和文献方法。',
     'intensity {percent}% of the level within one modulation period ({period} s) before and after (below '
     '{limit}%): the beam is probably partly or fully off the sample (stage translation)':
         '强度为前后各一个调制周期（{period} s）内水平的 {percent}%（低于 {limit}%）：光斑可能部分或完全'
@@ -120,6 +126,16 @@ SPUTTER_TOOLKIT_ZH = {
     'this window, unlike most other windows':
         '强度为前后各一个调制周期（{period} s）内水平的 {percent}%（低于 {limit}%）：光斑可能部分或完全'
         '移出样品（样品台平移）；这个时间窗没有 Yoneda 峰脊，而其他大多数时间窗有',
+    'intensity {percent}% of the level within one modulation period ({period} s) before and after, next to a '
+    'window below {limit}% in the same dip (below {release}%): the beam is probably partly off the sample (stage '
+    'translation)':
+        '强度为前后各一个调制周期（{period} s）内水平的 {percent}%，紧挨着同一下凹里低于 {limit}% 的时间窗'
+        '（低于 {release}%）：光斑可能部分移出样品（样品台平移）',
+    'intensity {percent}% of the level within one modulation period ({period} s) before and after, next to a '
+    'window below {limit}% in the same dip (below {release}%): the beam is probably partly off the sample (stage '
+    'translation); no Yoneda ridge in this window, unlike most other windows':
+        '强度为前后各一个调制周期（{period} s）内水平的 {percent}%，紧挨着同一下凹里低于 {limit}% 的时间窗'
+        '（低于 {release}%）：光斑可能部分移出样品（样品台平移）；这个时间窗没有 Yoneda 峰脊，而其他大多数时间窗有',
     'intensity {percent}% of the level within {span} s before and after, without a periodic modulation (below '
     '{limit}%): the beam was probably off the sample or interrupted':
         '强度为前后各 {span} s 内水平的 {percent}%，没有周期性调制（低于 {limit}%）：光斑可能移出样品，或'
@@ -129,6 +145,16 @@ SPUTTER_TOOLKIT_ZH = {
     'most other windows':
         '强度为前后各 {span} s 内水平的 {percent}%，没有周期性调制（低于 {limit}%）：光斑可能移出样品，或'
         '光束中断；这个时间窗没有 Yoneda 峰脊，而其他大多数时间窗有',
+    'intensity {percent}% of the level within {span} s before and after, without a periodic modulation, next to a '
+    'window below {limit}% in the same dip (below {release}%): the beam was probably partly off the sample or '
+    'interrupted':
+        '强度为前后各 {span} s 内水平的 {percent}%，没有周期性调制，紧挨着同一下凹里低于 {limit}% 的时间窗'
+        '（低于 {release}%）：光斑可能部分移出样品，或光束中断',
+    'intensity {percent}% of the level within {span} s before and after, without a periodic modulation, next to a '
+    'window below {limit}% in the same dip (below {release}%): the beam was probably partly off the sample or '
+    'interrupted; no Yoneda ridge in this window, unlike most other windows':
+        '强度为前后各 {span} s 内水平的 {percent}%，没有周期性调制，紧挨着同一下凹里低于 {limit}% 的时间窗'
+        '（低于 {release}%）：光斑可能部分移出样品，或光束中断；这个时间窗没有 Yoneda 峰脊，而其他大多数时间窗有',
     'The smoothing span ({span} s) covers the whole island phase ({start}-{end} s): R_trend_nm / D_trend_nm '
     'are one log-linear fit over it; the per-window R_nm / D_nm (grade P) show more.':
         '平滑宽度（{span} s）覆盖了整个岛阶段（{start}-{end} s）：R_trend_nm / D_t'
@@ -166,8 +192,8 @@ SPUTTER_TOOLKIT_ZH = {
         '峰比之前的峰高出 2 倍以上，超出自 t0 以来可能的生长：是跳变，不是生长；不使用',
     'peak after a long stretch without a peak: another structure, not used':
         '长时间无峰之后出现的峰：另一种结构，不使用',
-    'the beam may be off the sample in this window (intensity dip of the stage translation): peak not used':
-        '这个时间窗光斑可能移出样品（样品台平移造成的强度下凹）：峰不使用',
+    'the beam may be off the sample in this window (an intensity dip, see beam_off_reason): peak not used':
+        '这个时间窗光斑可能移出样品（强度下凹，见 beam_off_reason）：峰不使用',
     'after the percolation of the literature method: D = 2*pi/q* kept, R not given (film)':
         '文献方法的渗流之后：保留 D = 2*pi/q*，不给 R（膜）',
     'no deposition rate: only D is given':
@@ -380,10 +406,10 @@ SPUTTER_TOOLKIT_ZH = {
         'Cu：文献方法不需要网络，但 TS 起点和网络的检验用的是 Ag 模型。',
     '{count} peak windows probably belong to the host (median D {D} nm) and are not used.':
         '{count} 个有峰时间窗可能来自宿主聚合物（中位 D {D} nm），未使用。',
-    '{count} peak windows where the beam may be off the sample (beam_off_sample: an intensity dip of the stage '
-    'translation) are not used for the trend of D.':
-        '{count} 个光斑可能移出样品的有峰时间窗（beam_off_sample：样品台平移造成的强度下凹）不用于 D 的'
-        '趋势。',
+    '{count} peak windows where the beam may be off the sample (beam_off_sample: an intensity dip) are not used '
+    'for the trend of D; the checks of the network leave out every such window.':
+        '{count} 个光斑可能移出样品的有峰时间窗（beam_off_sample：强度下凹）不用于 D 的趋势；对网络的检验'
+        '不使用任何这样的时间窗。',
     'Polymer type not given: the band of all polymers is used for {metal}.':
         '没有给出聚合物种类：{metal} 用所有聚合物的区间。',
     'No published percolation data for {polymer}: the band of {host} is used.':

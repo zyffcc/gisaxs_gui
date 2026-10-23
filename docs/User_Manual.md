@@ -2074,26 +2074,31 @@ GIMaP with another model, gets a new one (section 11).
   time axis keeps to the windows). Without a rate the end is still marked. Film windows are shaded: *film: thickness not determined*. The film onset of the path is
   marked with its interval. With a deposition rate the top axis also gives the nominal thickness δ = rate × (t − t0),
   with ticks only up to the end of the deposition. Windows where the beam may be off the sample (below) are hollow
-  grey points, *beam may be off the sample (stage translation)*, on R, D and t_eq: the faint points, the trend lines
-  and the t_eq line leave them out. With the literature method, which does not use their peak, the hollow point on
-  the D panel is their 2π/q*.
+  grey points, *beam may be off the sample (stage translation)* (without a modulation *beam may be off the sample or
+  interrupted*), on R, D, the TS length L and t_eq: the faint points, the trend lines and the t_eq line leave them
+  out. With the literature method, which does not use their peak, the hollow point on the D panel is their 2π/q*.
 - The result line under Predict gives the windows, the film onset (with the literature method: its percolation)
   and, when the intensity is modulated periodically, the *intensity modulation period (sample stage translation?)*.
   During the deposition the sample stage is translated back and forth so that the beam does not damage one spot;
   near the ends of its travel the beam footprint (millimetres long at grazing incidence) can reach the sample edge
   or leave the sample, and the intensity dips once or twice per cycle. The data alone do not prove the source, so
   the page asks rather than asserts. The path and the trend lines average over the modulation. When windows look as
-  if the beam left the sample, the line counts them: *beam may be off the sample in … windows (stage translation)*.
-- **Beam off the sample.** A window is flagged when its intensity is below half of its level within one modulation
+  if the beam left the sample, the line counts them: *beam may be off the sample in … windows (stage translation)*
+  (without a modulation: *beam may be off the sample or interrupted in … windows*).
+- **Beam off the sample.** A dip is flagged when its intensity falls below half of its level within one modulation
   period before and after (the level is the 90% quantile of the neighbouring windows on each side, the lower of the
   two, so a steady rise or fall during the growth is never a dip): more than half of the scattering is missing, as
-  when more than half of the footprint has left the sample. Without a periodic modulation only an extreme dip is
-  flagged — below 20% of the level within 10 s on each side (the beam was probably off the sample or interrupted); a
-  single moderate dip is not attributed to the stage. The first and last windows, without enough neighbours on both
-  sides, are not judged. When the Yoneda ridge is missing in such a window but found in most others, its reason says
-  so. These windows keep their values in the Windows table, but they cast no stage vote, and the trend lines, the
-  back-and-forth counts and the literature method's trend of D leave them out (the literature method marks their
-  peak *beam may be off the sample* and does not use it).
+  when more than half of the footprint has left the sample. The whole dip is flagged, not only its bottom: the
+  windows next to it that stay below 80% of their level go with it, since the footprint leaves the sample and comes
+  back over several windows. Without a periodic modulation only an extreme dip is flagged — below 20% of the level
+  within 10 s on each side, with its sides (the beam was probably off the sample or interrupted); a single moderate
+  dip is not attributed to the stage. The first and last windows, without enough neighbours on both sides, are not
+  judged. When the Yoneda ridge is missing in such a window but found in most others, its reason says so. These
+  windows keep their values in the Windows table, but they cast no stage vote (the path carries the stage of their
+  neighbours), and the trend lines, the back-and-forth counts (the R and D zig-zags are counted between them), the
+  mass check at the film onset and the literature method's trend of D and checks of the network leave them out (the
+  literature method marks their peak *beam may be off the sample* and does not use it). The Structure Sketch draws
+  such a window with its own values and says so; its storyboard and its medians leave it out.
 - **Windows**: every window with its stage (by the rule and on the path), the values, grades and typical errors,
   t_eq, the nominal thickness, *Beam may be off the sample* (the reason as its tooltip and in *Beam note*) and the
   notes; `Ctrl+C` copies rows.
@@ -2782,7 +2787,7 @@ Version 0.1.0 is a pre-release. These limitations are known; each comes with wha
 | 1D Predict writes its run folders into the folder GIMaP was started from; they are not removed. | Delete old `AI_Fitting_Output/v5_…` folders yourself. |
 | **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 7.4). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
 | **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
-| **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the level of the neighbouring windows within one modulation period, or below 20% within 10 s without a modulation; section 7.4). The stage position and the range of its translation are not read: a shallower or slower drift off the sample is not flagged, a dip with another cause (a drop of the beam, the shutter) is flagged alike, and the first and last windows are not judged. | Compare the flagged windows with the stage log of the beamtime when you have it; their values stay in the Windows table. |
+| **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the level of the neighbouring windows within one modulation period, or below 20% within 10 s without a modulation, with its sides down to 80%; section 7.4). The stage position and the range of its translation are not read: a dip that never falls below half of the level is not flagged, however long, nor is a slower drift off the sample; a dip with another cause (a drop of the beam, the shutter) is flagged alike, and the first and last windows are not judged. When the footprint reaches the sample edge, edge scattering or streaks can raise the intensity in the analysed region instead of lowering it: such windows are not flagged. | Compare the flagged windows with the stage log of the beamtime when you have it; their values stay in the Windows table. |
 | **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** (GISAXS measures none of them) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — takes the deposition end as exact, and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). Without a deposition end the deposition is taken to last to the end of the scan. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 7.4). | Give the rate at the sample position, and t0 and the deposition end when you know them; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
 | **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 13.7). |
 | Windows is the platform GIMaP is developed and tested on. TensorFlow runs on the CPU; a GPU set-up is not configured. | — |

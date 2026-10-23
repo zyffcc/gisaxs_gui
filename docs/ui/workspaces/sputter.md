@@ -46,8 +46,10 @@
    `literature.status == "ok"` 时紧跟其后，作为对网络的核对，从不作为默认；然后 `window` → `selected` → `sequence`）→
    `show_result`：结果行（成膜起点或文献方法
    的渗流、“强度调制周期（可能来自样品台平移）”——读 `modulation_period_s`，旧结果读 `rotation_period_s`（`modulation_period`）——、
-   光斑可能移出样品的时间窗数（`beam_off_count`）、Cu 说明）、`TrendPlot`（物理路径和文献方法：淡色逐窗点 + 趋势线，
-   `beam_off_sample` 的时间窗画成空心灰点“beam may be off the sample (stage translation)”，淡色点、t_eq 线不含它们，文献方法下
+   光斑可能移出样品的时间窗数（`beam_off_count`；`beam_off_record` 的 `rule` 为 `extreme_dip_only`、即没有调制时说
+   “or interrupted”，1 个时用单数）、Cu 说明）、`TrendPlot`（物理路径和文献方法：淡色逐窗点 + 趋势线，
+   `beam_off_sample` 的时间窗在 R、D、TS 长度 L 和 t_eq 上画成空心灰点“beam may be off the sample (stage translation)”
+   （没有调制时为“beam may be off the sample or interrupted”），淡色点、t_eq 线不含它们，文献方法下
    D 栏用它们的 2π/q*；有速率时上轴给
    δ，给出沉积结束时间时刻度只到 rate × (t_end − t0)，结束在第一个时间窗之前时不画 δ 轴；金属厚度栏：t_eq 带、名义厚度线（沉积
    结束后为平台，结束时间落在各时间窗之间时画竖线，在最后一个之后或第一个之前时只写进图例，时间轴不被拉长）、
@@ -56,7 +58,8 @@
    下面是检验表、注意事项和参考文献）、时间窗表（只列有值的列；“Beam may be off the sample”列的悬停提示是原因，“Beam note”列是
    `beam_off_reason`）、
    可靠性报告（领域层按英文模板写，界面用 `texts.text` 翻译；工具包自己的句子用 `texts.note_text` 按
-   `toolkit_texts.TOOLKIT_TEMPLATES` 匹配后翻译）、结构示意（膜时间窗画连续膜，不画颗粒）。
+   `toolkit_texts.TOOLKIT_TEMPLATES` 匹配后翻译）、结构示意（膜时间窗画连续膜，不画颗粒；`beam_off_sample` 的时间窗
+   按自己的数值画并加说明，`smoothed_rows` 的中位数和 `storyboard_indices` 不用它们）。
 
 ## 文献方法（`domain/literature.py`、`presentation/literature_tab.py`）
 

@@ -7,8 +7,9 @@ Explanation, with the per-window choice and the exploratory ones); the Literatur
 published growth. A result knows the scan it was predicted from (``gimap_request.json``); the deposition fields
 (rate, t0, end) say what it was drawn with only while that scan is the one in the picker (a result of unknown scan:
 until another folder is chosen). Windows where the beam may be off the sample (the toolkit's ``beam_off_sample``: an
-intensity dip of the back-and-forth stage translation) are counted in the line under Predict and have a column of
-their own in the Windows table.
+intensity dip of the back-and-forth stage translation; without a modulation only an extreme dip, where the beam may
+also have been interrupted, and the line says so) are counted in the line under Predict and have a column of their
+own in the Windows table.
 """
 
 from __future__ import annotations
@@ -20,8 +21,8 @@ from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import (GRADES, StructureResult, beam_off_count, folder_key, modulation_period, onset_of,
-                           percolation_short, reliability_report)
+from ..application import (GRADES, StructureResult, beam_off_count, beam_off_record, folder_key, modulation_period,
+                           onset_of, percolation_short, reliability_report)
 from .texts import message_text, note_text, stage_name, text
 
 CHOICES = {"physical": "Physical path (network)", "literature": "Literature method (mass balance)",
@@ -226,8 +227,12 @@ class SputterResultsMixin:
             parts.append(text("intensity modulation period ≈ {period} s (sample stage translation?)",
                               period=f"{period:.3g}"))
         off = beam_off_count(result)
-        if off:
-            parts.append(text("beam may be off the sample in {count} windows (stage translation)", count=off))
+        if off and beam_off_record(result.summary).get("rule") != "extreme_dip_only":
+            parts.append(tr("beam may be off the sample in 1 window (stage translation)") if off == 1 else
+                         text("beam may be off the sample in {count} windows (stage translation)", count=off))
+        elif off:  # without a modulation only extreme dips are flagged: the beam may also have been interrupted
+            parts.append(tr("beam may be off the sample or interrupted in 1 window") if off == 1 else
+                         text("beam may be off the sample or interrupted in {count} windows", count=off))
         line = " · ".join(parts)
         if result.metal == "Cu":
             line += "<br><b>" + tr("Cu: approximated with the Ag model, for reference only.") + "</b>"

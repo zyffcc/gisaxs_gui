@@ -9,10 +9,12 @@ island-volume equivalent thickness t_eq, the nominal thickness rate·(t − t0) 
 the film onset with its interval and the period of a periodic intensity modulation (probably the back-and-forth
 translation of the sample stage during the deposition, which keeps the beam from damaging one spot: near the ends of
 its travel the beam can reach the sample edge or leave the sample). Windows whose intensity dips far below that of
-their neighbours are flagged ``beam_off_sample`` (the beam is probably partly or fully off the sample): they keep their
-values, but cast no stage vote and are left out of the trend lines, the back-and-forth counts and the literature
-method's trend of D. The summary's ``modulation_period_s`` is the neutral name of ``rotation_period_s`` (results of
-older toolkits have only the latter).
+their neighbours are flagged ``beam_off_sample`` (the beam is probably partly or fully off the sample), a whole dip
+at a time: its deepest windows and the windows next to them that are still well below the level. They keep their
+values, but cast no stage vote and are left out of the trend lines, the back-and-forth counts, the mass check at the
+film onset and the literature method (its trend of D and its checks of the network). The summary's
+``modulation_period_s`` is the neutral name of ``rotation_period_s`` (results of older toolkits have only the
+latter).
 Written from English templates (``text``) like the rest of the reliability report; the toolkit's own notes go
 through ``note`` (the interface gives the sentences it knows in its language, the others as they are).
 """
@@ -34,18 +36,22 @@ MODULATION = ("The intensity is modulated with a period of about {period} s (aut
               "from damaging one spot; near the ends of its travel the beam can reach the sample edge or leave the "
               "sample). A single window shorter than this period sees part of one modulation cycle; the physical path "
               "and the trend lines average over it.")
-BEAM_OFF = ("<b>Beam off the sample.</b> In {count} of {windows} windows the intensity is below {limit}% of its level "
-            "within one modulation period before and after: the beam has probably moved partly or fully off the sample "
-            "while the stage was translated. These windows keep their values in the Windows table (column Beam may be "
-            "off the sample, with the reason) and are drawn as hollow grey points in Size Trend, but they cast no stage "
-            "vote and are left out of the trend lines, the back-and-forth counts and the literature method's trend "
-            "of D.")
+BEAM_OFF = ("<b>Beam off the sample.</b> In {count} of {windows} windows the beam has probably moved partly or fully "
+            "off the sample while the stage was translated: {core} of them have an intensity below {limit}% of its "
+            "level within one modulation period before and after, the others lie next to them in the same dip, still "
+            "below {release}%. These windows keep their values in the Windows table (column Beam may be off the "
+            "sample, with the reason) and are drawn as hollow grey points in Size Trend, but they cast no stage vote "
+            "(the path carries the stage of their neighbours) and are left out of the trend lines, the back-and-forth "
+            "counts, the mass check at the film onset and the literature method (its trend of D and its checks of "
+            "the network).")
 BEAM_OFF_EXTREME = ("<b>Beam off the sample.</b> No periodic intensity modulation was found, so only extreme dips are "
-                    "flagged: in {count} of {windows} windows the intensity is below {limit}% of its level within "
-                    "{span} s before and after (the beam was probably off the sample or interrupted). These windows keep "
-                    "their values in the Windows table and are drawn as hollow grey points in Size Trend, but they cast "
-                    "no stage vote and are left out of the trend lines, the back-and-forth counts and the literature "
-                    "method's trend of D.")
+                    "flagged: in {count} of {windows} windows the beam was probably off the sample or interrupted. "
+                    "{core} of them have an intensity below {limit}% of its level within {span} s before and after, the "
+                    "others lie next to them in the same dip, still below {release}%. These windows keep their values "
+                    "in the Windows table and are drawn as hollow grey points in Size Trend, but they cast no stage vote "
+                    "(the path carries the stage of their neighbours) and are left out of the trend lines, the "
+                    "back-and-forth counts, the mass check at the film onset and the literature method (its trend of "
+                    "D and its checks of the network).")
 BEAM_ON = ("No window has an intensity below {limit}% of its level within one modulation period before and after: "
            "nothing suggests that the beam left the sample.")
 BEAM_ON_EXTREME = ("No window has an intensity below {limit}% of its level within {span} s before and after; without a "
@@ -107,15 +113,17 @@ def _beam_off(result, text) -> list:
     record = beam_off_record(result.summary)
     if not record:
         return []
+    count, modulated = beam_off_count(result), record.get("rule") == "modulation"
     try:
         limit = f"{100 * float(record.get('limit_fraction')):g}"
+        release = f"{100 * float(record.get('release_fraction', record.get('limit_fraction'))):g}"
         span = f"{float(record.get('span_s')):.3g}"
+        core = int(record.get("core_windows", count))
     except (TypeError, ValueError):
         return []
-    count, modulated = beam_off_count(result), record.get("rule") == "modulation"
     if count:
         return ["<p>" + text(BEAM_OFF if modulated else BEAM_OFF_EXTREME, count=count, windows=len(result.rows),
-                             limit=limit, span=span) + "</p>"]
+                             core=core, limit=limit, release=release, span=span) + "</p>"]
     return ["<p>" + text(BEAM_ON if modulated else BEAM_ON_EXTREME, limit=limit, span=span) + "</p>"]
 
 

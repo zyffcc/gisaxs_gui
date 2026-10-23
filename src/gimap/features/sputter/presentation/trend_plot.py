@@ -6,7 +6,8 @@ with its simulation-based error bar, coloured by grade. The Metal thickness pane
 equivalent thickness t_eq as a band (conditional: hemispheres h = R on a hexagonal arrangement), the nominal
 thickness rate·(t − t0) when a deposition rate is given, and shades the film windows: there the thickness is
 not determined. Windows where the beam may be off the sample (the toolkit's ``beam_off_sample``: an intensity dip of
-the back-and-forth stage translation) are drawn as hollow grey points, apart from the faint points and the t_eq line:
+the back-and-forth stage translation, or without a modulation an extreme dip: off the sample or interrupted) are drawn
+as hollow grey points on every panel (R, D, the TS length L and t_eq), apart from the faint points and the t_eq line:
 the trends leave them out. The film onset of the physical path is marked with its interval on every panel. When the end of the
 deposition t_end is given (the shutter is closed by hand; a scan can go on after it) the nominal thickness stays at
 rate·(t_end − t0) after it (a plateau) and t_end is marked on the thickness panel — when it falls within the
@@ -30,8 +31,8 @@ from PyQt5.QtWidgets import QLabel, QSizePolicy
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, StructureResult, deposition_end, onset_of,
-                           percolation_errors, percolation_last_time)
+from ..application import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, StructureResult, beam_off_record,
+                           deposition_end, onset_of, percolation_errors, percolation_last_time)
 from .texts import text
 
 COLORS = {"A": "#1f5fa8", "B": "#7fa3d6", "C": "#d07a10", "S": "#2a8a3e", "T": "#c0392b", "L": "#6a3d9a",
@@ -50,6 +51,8 @@ DEPOSITION_END = "deposition ended {time} s"
 ENDED_AFTER = "deposition ended {time} s, after the last window"
 ENDED_BEFORE = "deposition ended {time} s, before the first window"
 BEAM_OFF_LABEL = "beam may be off the sample (stage translation)"
+BEAM_OFF_INTERRUPTED = "beam may be off the sample or interrupted"
+"""The label without a periodic modulation (only extreme dips are flagged then: the cause may also be the beam)."""
 SMOOTHED = ("physical", "literature")
 
 
@@ -114,18 +117,22 @@ class TrendPlot:
         onset_label = "percolation {time} s (literature method)" if kind == "percolation" else "film onset {time} s"
         times = [r.get("time_s") for r in result.rows if r.get("time_s") is not None]
         ended = deposition_end(result.summary)
+        off_label = tr(BEAM_OFF_INTERRUPTED if beam_off_record(result.summary).get("rule") == "extreme_dip_only"
+                       else BEAM_OFF_LABEL)
         for ax, (name, label, title) in zip(axes, panels):
             for low, high in spans:
                 ax.axvspan(low, high, color=FILM_SHADE, alpha=.13, lw=0, zorder=0)
-            if name == "L":
-                ts = result.ts_length()
-                ax.plot(ts.time, ts.value, "o", ms=2.5, color="#5a8a2a", label=tr("TS length L (network)"))
+            if name == "L":  # film windows: those where the beam may be off the sample apart, like on R and D
+                ts = result.column("L_TS_nm", where=_on_sample)
+                if ts.time:
+                    ax.plot(ts.time, ts.value, "o", ms=2.5, color="#5a8a2a", label=tr("TS length L (network)"))
+                _beam_off_points(ax, result.column("L_TS_nm", where=_beam_off), off_label)
             elif name == "thickness" and result.variant == "literature":
                 self._delta_only(ax, result, spans)
             elif name == "thickness":
-                self._thickness(ax, result, spans)
+                self._thickness(ax, result, spans, off_label)
             elif physical:
-                self._physical(ax, result, name)
+                self._physical(ax, result, name, off_label)
             else:
                 self._graded(ax, result, name)
             if name == "thickness" and ended is not None:  # the nominal thickness stays constant after it
@@ -173,7 +180,7 @@ class TrendPlot:
                    hatch="//" if high is None else None, label=label if first else None)
 
     @staticmethod
-    def _physical(ax, result: StructureResult, name: str) -> None:
+    def _physical(ax, result: StructureResult, name: str, off_label: str) -> None:
         points = result.column(f"{name}_nm", where=_on_sample)
         grade = LITERATURE_GRADE if result.variant == "literature" else "P"
         if points.time:
@@ -182,7 +189,7 @@ class TrendPlot:
         # The literature method uses no peak of such a window: its 2π/q* stands for it on the D panel.
         off = result.column("D_corr_nm" if result.variant == "literature" and name == "D" else f"{name}_nm",
                             where=_beam_off)
-        _beam_off_points(ax, off)
+        _beam_off_points(ax, off, off_label)
         trend = result.column(f"{name}_trend_nm")
         if trend.time:
             ax.plot(trend.time, trend.value, "-", lw=1.7, color=TREND_COLORS[name], label=tr("trend (smoothed)"))
@@ -217,7 +224,7 @@ class TrendPlot:
             _direct(ax, result)
 
     @staticmethod
-    def _thickness(ax, result: StructureResult, spans: list) -> None:
+    def _thickness(ax, result: StructureResult, spans: list, off_label: str) -> None:
         times = [r.get("time_s") for r in result.rows]
         nan = float("nan")
 
@@ -227,7 +234,7 @@ class TrendPlot:
         teq, low, high = values("t_eq_nm"), values("t_eq_lo_nm"), values("t_eq_hi_nm")
         off = [_beam_off(r) for r in result.rows]  # drawn on their own, apart from the line and its band
         teq, low, high = ([nan if o else v for v, o in zip(column, off)] for column in (teq, low, high))
-        _beam_off_points(ax, result.column("t_eq_nm", where=_beam_off))
+        _beam_off_points(ax, result.column("t_eq_nm", where=_beam_off), off_label)
         if any(not math.isnan(v) for v in teq):
             band_low = [lo if not math.isnan(lo) else v for lo, v in zip(low, teq)]
             band_high = [hi if not math.isnan(hi) else v for hi, v in zip(high, teq)]
@@ -256,11 +263,10 @@ def _on_sample(row: dict) -> bool:
     return row.get("beam_off_sample") is not True
 
 
-def _beam_off_points(ax, points) -> None:
+def _beam_off_points(ax, points, label: str) -> None:
     """Windows where the beam may be off the sample: hollow grey points (their values stay in the table)."""
     if points.time:
-        ax.plot(points.time, points.value, "o", ms=4.2, mfc="none", mec=BEAM_OFF_COLOR, mew=.9, lw=0,
-                label=tr(BEAM_OFF_LABEL))
+        ax.plot(points.time, points.value, "o", ms=4.2, mfc="none", mec=BEAM_OFF_COLOR, mew=.9, lw=0, label=label)
 
 
 def _direct(ax, result: StructureResult) -> None:
@@ -325,9 +331,9 @@ def _positive(ax) -> bool:
     return bool(ax.collections)
 
 
-TEMPLATES = (AFTER_PERCOLATION, BEAM_OFF_LABEL, BY_CONSTRUCTION, DEPOSITION_END, ENDED_AFTER, ENDED_BEFORE,
+TEMPLATES = (AFTER_PERCOLATION, BEAM_OFF_INTERRUPTED, BEAM_OFF_LABEL, BY_CONSTRUCTION, DEPOSITION_END, ENDED_AFTER, ENDED_BEFORE,
              INTERVAL_LABEL, UNDETERMINED_LABEL)
 """Texts the trend says from a name (the interface translates them)."""
 
-__all__ = ["AFTER_PERCOLATION", "BEAM_OFF_LABEL", "BY_CONSTRUCTION", "COLORS", "DEPOSITION_END", "ENDED_AFTER",
+__all__ = ["AFTER_PERCOLATION", "BEAM_OFF_INTERRUPTED", "BEAM_OFF_LABEL", "BY_CONSTRUCTION", "COLORS", "DEPOSITION_END", "ENDED_AFTER",
            "ENDED_BEFORE", "TEMPLATES", "TrendPlot", "thickness_axis"]

@@ -14,6 +14,11 @@ on request and marked.
 Notes and spacing sources are made from the English templates below (values
 filled in as text), so the interface can say them in its language.
 
+A window where the beam may be off the sample (the toolkit's
+``beam_off_sample``) is drawn with its own values and says so; it is left out
+of the medians of its neighbours and of the storyboard (unless no other window
+can be drawn).
+
 The random numbers (positions, sizes, film texture) are fixed per sketcher,
 so moving through time changes only the measured values, not the dice.
 """
@@ -39,12 +44,13 @@ NOTE_NO_PEAK = "no resolved peak: spacing not measured, islands drawn 4R apart f
 NOTE_OVERLAP = ("islands would overlap at this R and spacing (coverage {coverage}% > {limit}%): R or the spacing is "
                 "not reliable here")
 NOTE_MEDIAN = "median of {count} neighbouring windows of the same model"
+NOTE_BEAM_OFF = "the beam may be off the sample in this window: its values are not representative of the film"
 SOURCE_MODEL_D = "model D (grade {grade})"
 SOURCE_DIRECT = "direct 2π/q*"
 SOURCE_UNKNOWN = "not measured"
 SOURCE_TS = "TS length L"
-TEMPLATES = (NOTE_TS, NOTE_FILM, NOTE_NO_SIZE, NOTE_DISAGREES, NOTE_NO_PEAK, NOTE_OVERLAP, NOTE_MEDIAN, SOURCE_MODEL_D,
-             SOURCE_DIRECT, SOURCE_UNKNOWN, SOURCE_TS)
+TEMPLATES = (NOTE_TS, NOTE_FILM, NOTE_NO_SIZE, NOTE_DISAGREES, NOTE_NO_PEAK, NOTE_OVERLAP, NOTE_MEDIAN, NOTE_BEAM_OFF,
+             SOURCE_MODEL_D, SOURCE_DIRECT, SOURCE_UNKNOWN, SOURCE_TS)
 """Every note and spacing source a sketch is made of (the interface translates them)."""
 
 
@@ -67,6 +73,7 @@ class WindowSketch:
     film_thickness: Optional[float] = None
     stage: str = ""
     notes: list = field(default_factory=list)
+    beam_off: bool = False         # the beam may be off the sample in this window (toolkit: beam_off_sample)
 
     @property
     def coverage(self) -> Optional[float]:
@@ -82,8 +89,20 @@ def _model(row: dict) -> str:
     return row.get("module_path") or row.get("module") or ""
 
 
+def _off(row: dict) -> bool:
+    return row.get("beam_off_sample") is True
+
+
 def window_sketch(row: dict) -> WindowSketch:
     """Pick the values to draw for one structure-table row (same rules as the reliability tab)."""
+    s = _window_sketch(row)
+    if _off(row):
+        s.beam_off = True
+        s.notes.append(NOTE_BEAM_OFF)
+    return s
+
+
+def _window_sketch(row: dict) -> WindowSketch:
     t = row.get("time_s")
     if is_film(row):
         s = WindowSketch(t, "film", L=row.get("L_TS_nm"), metal_fraction=row.get("TS_metal_fraction_conditional"),
@@ -133,10 +152,15 @@ def smoothed_rows(rows: list, half: int = 5) -> list:
 
     Only values present in the centre window are replaced; a model D is
     replaced by the median of neighbouring D that passed the peak check.
+    Windows where the beam may be off the sample are left out of the medians
+    and keep their own values (a median of other windows would hide them).
     """
     out = []
     for i, r in enumerate(rows):
-        same = [x for x in rows[max(0, i - half):i + half + 1] if _model(x) == _model(r)]
+        if _off(r):
+            out.append(dict(r))
+            continue
+        same = [x for x in rows[max(0, i - half):i + half + 1] if _model(x) == _model(r) and not _off(x)]
         nr = dict(r)
         for key in SMOOTHED_KEYS:
             values = [x[key] for x in same if x.get(key) is not None]
@@ -234,9 +258,11 @@ def storyboard_indices(sketches: list, count: int = 6) -> list:
     """Times spread on a logarithmic axis (growth is fastest early), among drawable windows.
 
     A nearby window whose spacing was measured (peak or TS length) is preferred
-    over an illustrative one.
+    over an illustrative one; windows where the beam may be off the sample are
+    not picked while another window can be drawn.
     """
-    usable = [i for i, s in enumerate(sketches) if s.kind != "none" and s.time_s is not None and s.time_s > 0]
+    drawable = [i for i, s in enumerate(sketches) if s.kind != "none" and s.time_s is not None and s.time_s > 0]
+    usable = [i for i in drawable if not sketches[i].beam_off] or drawable
     if not usable:
         return []
     t1 = sketches[usable[-1]].time_s

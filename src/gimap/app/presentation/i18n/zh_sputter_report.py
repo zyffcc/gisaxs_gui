@@ -73,22 +73,28 @@ SPUTTER_REPORT_ZH = {
         "强度以约 {period} s 的周期调制（自相关峰 {acf}，{cycles} 个周期），可能来自沉积时样品台的来回平移（平移是为了"
         "不让光束一直损伤同一处；在行程两端，光斑可能到达样品边缘或移出样品）。短于这个周期的单个时间窗只看到一个调制周期"
         "的一部分；物理路径和趋势线对它取平均。",
-    "<b>Beam off the sample.</b> In {count} of {windows} windows the intensity is below {limit}% of its level within "
-    "one modulation period before and after: the beam has probably moved partly or fully off the sample while the "
-    "stage was translated. These windows keep their values in the Windows table (column Beam may be off the sample, "
-    "with the reason) and are drawn as hollow grey points in Size Trend, but they cast no stage vote and are left out "
-    "of the trend lines, the back-and-forth counts and the literature method's trend of D.":
-        "<b>光斑移出样品。</b>{windows} 个时间窗中有 {count} 个的强度低于其前后各一个调制周期内水平的 {limit}%：样品台平移时，"
-        "光斑可能部分或完全移出了样品。这些时间窗在时间窗表中保留各自的数值（“光斑可能移出样品”一列，附原因），在尺寸趋势中"
-        "画成空心灰点，但不参与阶段投票，也不计入趋势线、来回变化的计数和文献方法的 D 趋势。",
+    "<b>Beam off the sample.</b> In {count} of {windows} windows the beam has probably moved partly or fully off the "
+    "sample while the stage was translated: {core} of them have an intensity below {limit}% of its level within one "
+    "modulation period before and after, the others lie next to them in the same dip, still below {release}%. These "
+    "windows keep their values in the Windows table (column Beam may be off the sample, with the reason) and are drawn "
+    "as hollow grey points in Size Trend, but they cast no stage vote (the path carries the stage of their neighbours) "
+    "and are left out of the trend lines, the back-and-forth counts, the mass check at the film onset and the "
+    "literature method (its trend of D and its checks of the network).":
+        "<b>光斑移出样品。</b>{windows} 个时间窗中有 {count} 个在样品台平移时光斑可能部分或完全移出了样品：其中 {core} 个的"
+        "强度低于其前后各一个调制周期内水平的 {limit}%，其余的在同一个下凹里紧挨着它们，强度仍低于 {release}%。这些时间窗在"
+        "时间窗表中保留各自的数值（“光斑可能移出样品”一列，附原因），在尺寸趋势中画成空心灰点，但不参与阶段投票（路径沿用"
+        "相邻时间窗的阶段），也不计入趋势线、来回变化的计数、成膜起点的质量核对和文献方法（D 的趋势和对网络的检验）。",
     "<b>Beam off the sample.</b> No periodic intensity modulation was found, so only extreme dips are flagged: in "
-    "{count} of {windows} windows the intensity is below {limit}% of its level within {span} s before and after (the "
-    "beam was probably off the sample or interrupted). These windows keep their values in the Windows table and are "
-    "drawn as hollow grey points in Size Trend, but they cast no stage vote and are left out of the trend lines, the "
-    "back-and-forth counts and the literature method's trend of D.":
-        "<b>光斑移出样品。</b>没有发现周期性的强度调制，所以只标出极深的下凹：{windows} 个时间窗中有 {count} 个的强度低于其"
-        "前后各 {span} s 内水平的 {limit}%（光斑可能移出了样品，或光束中断）。这些时间窗在时间窗表中保留各自的数值，在尺寸"
-        "趋势中画成空心灰点，但不参与阶段投票，也不计入趋势线、来回变化的计数和文献方法的 D 趋势。",
+    "{count} of {windows} windows the beam was probably off the sample or interrupted. {core} of them have an "
+    "intensity below {limit}% of its level within {span} s before and after, the others lie next to them in the same "
+    "dip, still below {release}%. These windows keep their values in the Windows table and are drawn as hollow grey "
+    "points in Size Trend, but they cast no stage vote (the path carries the stage of their neighbours) and are left "
+    "out of the trend lines, the back-and-forth counts, the mass check at the film onset and the literature method "
+    "(its trend of D and its checks of the network).":
+        "<b>光斑移出样品。</b>没有发现周期性的强度调制，所以只标出极深的下凹：{windows} 个时间窗中有 {count} 个光斑可能移出了"
+        "样品，或光束中断。其中 {core} 个的强度低于其前后各 {span} s 内水平的 {limit}%，其余的在同一个下凹里紧挨着它们，强度"
+        "仍低于 {release}%。这些时间窗在时间窗表中保留各自的数值，在尺寸趋势中画成空心灰点，但不参与阶段投票（路径沿用相邻"
+        "时间窗的阶段），也不计入趋势线、来回变化的计数、成膜起点的质量核对和文献方法（D 的趋势和对网络的检验）。",
     "No window has an intensity below {limit}% of its level within one modulation period before and after: nothing "
     "suggests that the beam left the sample.":
         "没有一个时间窗的强度低于其前后各一个调制周期内水平的 {limit}%：没有迹象表明光斑移出了样品。",

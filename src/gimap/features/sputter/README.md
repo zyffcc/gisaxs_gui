@@ -33,8 +33,10 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   period — `modulation_period_s`, `rotation_period_s` in older results, called *intensity modulation period (sample
   stage translation?)*: the stage is translated back and forth during the deposition — and the windows where the beam
   may be off the sample, `beam_off_sample` / `beam_off_reason` from the toolkit's `sputter_offsample.py`: counted in
-  the result line and the report, hollow grey points in Size Trend, a column of the Windows table; they keep their
-  values but are left out of the stage votes, the trends, the back-and-forth counts and the literature D trend), `literature` (second, when a deposition rate gives it values: a check of the network, never the default —
+  the result line and the report (without a modulation: "or interrupted"), hollow grey points in Size Trend (R, D,
+  L, t_eq), a column of the Windows table; a whole dip is flagged, its core below 50 % of the level and the sides
+  below 80 %; they keep their values but are left out of the stage votes, the trends, the back-and-forth counts, the
+  mass check at the film onset, the literature D trend and network checks, and the sketch's medians and storyboard), `literature` (second, when a deposition rate gives it values: a check of the network, never the default —
   R_lit/D_lit of `structure_physical.csv` as R/D, grade Lit, film after its percolation (D = 2π/q* goes on, R is not
   given), a percolation interval with the rate and t0 errors and a *not determined* state; `domain/literature.py`),
   `window`, `selected`, `sequence`. A new deposition rate, t0 or deposition end calls the toolkit's `physical` command

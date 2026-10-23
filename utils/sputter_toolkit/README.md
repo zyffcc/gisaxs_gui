@@ -64,7 +64,8 @@ The physical path reads the whole series once:
   (pool-adjacent-violators with block medians). Windows whose stage is unresolved cast no vote and take the
   value of the previous resolved window (`stage_imputed` = true; `stage_path_counts_imputed` counts them).
   Windows with fewer than 1000 counts (shutter closed, beam off) get no stage and no values. Windows where the
-  beam may be off the sample (below) cast no vote either and take the path value of their neighbours. Path stage `film`
+  beam may be off the sample (below) cast no vote either and take the path value of their neighbours
+  (`stage_imputed` = true as well). Path stage `film`
   is the rule's coalescence-or-film candidate: a connected film is not proven; `film` = true marks every window
   on the TS network (coalescence or film). `film_onset_s` is the first window on the path that the toolkit
   routes to the TS network; `film_onset_interval_s` spans every onset that disagrees with at most two more
@@ -78,7 +79,9 @@ The physical path reads the whole series once:
   are not biased at the ends of the island phase. Windows where the beam may be off the sample are left out of
   the fit (the trend is still evaluated at them). `reversals.after` counts zig-zags of the per-window values on
   the path, `reversals.after_trend` those of the trend lines; every count (before and after) leaves out the
-  windows where the beam may be off the sample.
+  windows where the beam may be off the sample. The stages and modules on either side of such a window are
+  joined; the R/D sequences break there (the zig-zags are counted within the stretches between them), since
+  joining values from both sides of a dip would make steps of their own.
 - **Intensity modulation**: during the deposition the sample stage is translated back and forth, so that the beam
   does not damage one spot; near the ends of its travel the grazing-incidence footprint can reach the sample edge
   or leave the sample, and the intensity dips once or twice per cycle (the data alone do not prove the source).
@@ -92,18 +95,25 @@ The physical path reads the whole series once:
 - **Beam off the sample** (`sputter_offsample.py`, from the data only): the on-sample level of a window is the 90 %
   quantile of ln(`intensity_rate`) over the other windows with data within one modulation period before it, and
   the same after it; the lower side counts, so a steady rise or fall of the intensity during the growth is never a
-  dip and a step that stays is none either. With a detected modulation a window below 50 % of its level is flagged
-  (`beam_off_sample` = true, `beam_off_reason` gives the ratio): more than half of the scattering is missing, as
-  when more than half of the footprint has left the sample. Without a modulation only an extreme dip is flagged,
-  below 20 % of the level within 10 s on each side (no sample seen, or the beam interrupted); a single moderate dip
-  is not attributed to the stage. A window needs 3 windows with data on each side (the first and last windows are
-  not judged); windows with < 1000 counts are neither judged nor used for a level. `binned/frames.csv` holds no
-  Yoneda or specular intensity, but the Yoneda ridge position: a flagged window without a ridge, while the ridge is
-  found in >= 50 % of the other windows, says so in its reason (corroboration, it does not decide). The constants
-  and their reasons are in `OFF_SAMPLE`. These windows keep their values in the table, but cast no stage vote and
-  are left out of the R/D trends, the reversal counts and the literature method's trend of D; the summary's
-  `beam_off_sample` records the rule, the counts and the lowest ratio, and a note says how many there are. The
-  stage position (and the range of its translation) is not read.
+  dip and a step that stays is none either. With a detected modulation a window below 50 % of its level is the
+  core of a dip: more than half of the scattering is missing, as when more than half of the footprint has left the
+  sample. The whole dip is flagged (`beam_off_sample` = true, `beam_off_reason` gives the ratio), not only its
+  bottom: from each core the flag goes on to the contiguous windows on both sides while they stay below 80 % of
+  their level, since the footprint leaves the sample and comes back over several windows and their sizes are
+  biased too. Without a modulation only an extreme dip has a core, below 20 % of the level within 10 s on each side
+  (no sample seen, or the beam interrupted), and its sides are extended in the same way; a single moderate dip is
+  not attributed to the stage. A window needs 3 windows with data on each side (the first and last windows are not
+  judged, and they end a dip); windows with < 1000 counts are neither judged nor used for a level. `binned/frames.csv`
+  holds no Yoneda or specular intensity, but the Yoneda ridge position: a flagged window without a ridge, while the
+  ridge is found in >= 50 % of the other windows, says so in its reason (corroboration, it does not decide). The
+  constants and their reasons are in `OFF_SAMPLE`. These windows keep their values in the table, but cast no stage
+  vote and are left out of the R/D trends, the reversal counts, the mass continuity and the literature method (its
+  trend of D and its checks of the network and the TS film); the summary's `beam_off_sample` records the rule, the
+  counts (`windows`, `core_windows`), the lowest ratio and `sensitivity` (how many windows a core limit or release
+  level 0.1 lower or higher would flag), and a note says how many there are. Known limits: a dip that never reaches
+  the core limit is not flagged, however long; a window where the footprint reaches the sample edge can show more
+  intensity in the analysed region (edge scattering, streaks), not less, and is not flagged either; the stage
+  position (and the range of its translation) is not read.
 - **Thickness substitutes** (GISAXS does not measure the metal thickness here):
   - `t_eq_nm` = (2/3)·π·R³·exp(3σ²) / ((√3/2)·D²): island-volume equivalent thickness of the *visible*
     particles, conditional on flat-based hemispheres (h=R) on a hexagonal lattice; not the deposited amount.

@@ -644,10 +644,13 @@ def test_windows_off_the_sample_keep_their_values_but_no_vote_trend_or_zigzag(ki
     assert all(rows[i]["beam_off_reason"].endswith("; no Yoneda ridge in this window, unlike most other windows")
                for i in off)
     assert all(row["beam_off_reason"] == "" for row in rows if row["beam_off_sample"] == "false")
-    # Kept in the table with its values; no stage vote: the path stays islands and it is not a disagreeing window.
+    # Kept in the table with its values; no stage vote: the path stays islands (carried, so marked imputed) and it is
+    # not a disagreeing window.
     window = rows[19]
     assert window["stage"] == "coalescence_or_film_candidate" and window["stage_path"] == "islands"
     assert window["path_changed"] == "true" and float(window["R_nm"]) == pytest.approx(2 * (2.0 + 0.05 * 19))
+    assert all(rows[i]["stage_imputed"] == "true" for i in off if rows[i]["stage_path"])
+    assert summary["stage_imputed_windows"] == sum(row["stage_imputed"] == "true" for row in rows)
     votes = ["" if i in off else (row["stage"] if i else "") for i, row in enumerate(rows)]  # window 0: no data
     assert summary["film_onset_no_TS_disagreeing_windows"] == int(physical.onset_disagreements(votes)[-1])
     # Left out of the trend (which is still evaluated there) and of every back-and-forth count.
@@ -660,8 +663,97 @@ def test_windows_off_the_sample_keep_their_values_but_no_vote_trend_or_zigzag(ki
     assert all(rows[i]["lit_reason"] == literature.REASON["beam_off"] for i in peaks)
     assert literature.NOTE_BEAM_OFF.format(count=len(peaks)) in summary["literature"]["notes"]
     assert summary["literature"]["windows"]["beam_off"] == len(peaks)
-    assert physical.NOTE_OFF_SAMPLE.format(count=len(off), limit="50") in summary["notes"]
+    # The dips are steep here (one window each): every flag is a core.
+    assert summary["beam_off_sample"]["core_windows"] == len(off)
+    assert physical.NOTE_OFF_SAMPLE.format(count=len(off), core=len(off), limit="50", release="80") in summary["notes"]
     assert "left out of every count" in summary["reversals"]["definition"]
+    # The mass continuity is a median over island windows on the sample only.
+    onset = next(i for i, row in enumerate(rows) if row["module_path"] == "TS_layer")
+    idx = [i for i in range(onset) if rows[i]["t_eq_nm"] and rows[i]["beam_off_sample"] == "false"][-5:]
+    continuity = summary["thickness"]["mass_continuity"]
+    assert continuity["windows"] == len(idx) and "beam may be off the sample are left out" in continuity["scope"]
+    assert continuity["t_eq_nm"] == pytest.approx(float(np.median([float(rows[i]["t_eq_nm"]) for i in idx])))
+
+
+def _sloped(*, period: float | None = 12.0, seconds: float = 180.0, seed: int = 4):
+    """Invented intensity of a stage translated back and forth whose footprint leaves the sample gradually: 0.5 s
+    windows, a slow rise, 3 % noise and, once per period, a dip with sloped sides (0.7, 0.6 of the level), a core
+    (0.3, 0.3) and the sides again. Returns times, rates, nominal seconds, the dip mask and the core mask."""
+    rng = np.random.default_rng(seed)
+    times = np.arange(0.25, seconds, 0.5)
+    profile = {0: 0.7, 1: 0.6, 2: 0.3, 3: 0.3, 4: 0.6, 5: 0.7}
+    phase = np.round(((times % period) - period / 2) / 0.5).astype(int) if period else np.full(times.size, -1)
+    depth = np.array([profile.get(int(k), 1.0) for k in phase])
+    rates = 3000.0 * (1.0 + times / 60.0) * np.exp(rng.normal(0.0, 0.03, times.size)) * depth
+    return list(times), list(rates), list(np.full(times.size, 0.5)), depth < 1.0, depth < 0.5
+
+
+def test_a_dip_is_flagged_whole_with_its_sloped_sides(kit):
+    physical = importlib.import_module("sputtergisaxs.sputter_physical")
+    off = importlib.import_module("sputtergisaxs.sputter_offsample")
+    assert off.OFF_SAMPLE["release"] == 0.8
+    times, rates, nominal, dip, core = _sloped()
+    period, _record = physical.modulation_period(times, rates, nominal)
+    assert period == pytest.approx(12.0, rel=0.03)
+    flags, reasons, record = off.beam_off_sample(times, rates, period)
+    judged = np.array([period <= t <= times[-1] - period for t in times])
+    # The sides (0.6-0.7 of the level) are flagged with the core, not only the bottom of the dip.
+    assert np.array_equal(np.array(flags)[judged], dip[judged]) and dip[judged].sum() > 2 * core[judged].sum() > 30
+    assert record["core_windows"] < record["windows"] and record["release_fraction"] == 0.8
+    side = next(i for i in range(len(times)) if judged[i] and dip[i] and not core[i])
+    assert re.fullmatch(r"intensity \d+% of the level within one modulation period \(12 s\) before and after, next to "
+                        r"a window below 50% in the same dip \(below 80%\): the beam is probably partly off the "
+                        r"sample \(stage translation\)", reasons[side]), reasons[side]
+    # Sensitivity: the windows another core limit or release level would flag.
+    moved = {(entry["limit_fraction"], entry["release_fraction"]): entry["windows"] for entry in record["sensitivity"]}
+    assert set(moved) == {(0.4, 0.8), (0.6, 0.8), (0.5, 0.7), (0.5, 0.9)}
+    assert moved[(0.4, 0.8)] == record["windows"]  # the cores (0.3) are below 0.4 as well
+    assert moved[(0.5, 0.7)] <= record["windows"] <= moved[(0.5, 0.9)]
+    # Leaving the dip out breaks the R sequence there: the zig-zags do not rise (R biased low in the dip, as a partly
+    # illuminated sample may give).
+    R = [2.0 + 0.01 * t for t in times]
+    biased = [r * (0.6 if c else 0.8 if d else 1.0) for r, d, c in zip(R, dip, core)]
+    assert physical.zigzags(biased) > 0 and physical.zigzags(biased, flags) == 0
+    noisy = [r * math.exp(0.15 * math.sin(7.3 * i)) for i, r in enumerate(biased)]  # deterministic scatter
+    assert physical.zigzags(noisy, flags) <= physical.zigzags(noisy)
+    # A steady series, a fast rise and a step down that stays still give no flag.
+    times, rates, nominal, _dip, _core = _sloped(period=None)
+    assert not any(off.beam_off_sample(times, rates, None)[0])
+    rise = [r * (3.0 if t > 60.0 else 1.0) for t, r in zip(times, rates)]
+    fall = [r * (0.3 if t > 60.0 else 1.0) for t, r in zip(times, rates)]
+    assert not any(off.beam_off_sample(times, rise, 12.0)[0]) and not any(off.beam_off_sample(times, fall, 12.0)[0])
+
+
+def test_an_extreme_dip_without_a_modulation_takes_its_sides_too(kit):
+    off = importlib.import_module("sputtergisaxs.sputter_offsample")
+    times, rates, _nominal, _dip, _core = _sloped(period=None)
+    k = 150
+    dipped = list(rates)
+    for j, depth in ((k - 1, 0.6), (k, 0.1), (k + 1, 0.7), (k + 2, 0.9)):
+        dipped[j] *= depth
+    flags, reasons, record = off.beam_off_sample(times, dipped, None)
+    assert [i for i, flag in enumerate(flags) if flag] == [k - 1, k, k + 1]
+    assert record["windows"] == 3 and record["core_windows"] == 1 and record["rule"] == "extreme_dip_only"
+    assert re.fullmatch(r"intensity \d+% of the level within 10 s before and after, without a periodic modulation, "
+                        r"next to a window below 20% in the same dip \(below 80%\): the beam was probably partly off "
+                        r"the sample or interrupted", reasons[k + 1]), reasons[k + 1]
+    # Sides without a core are no dip.
+    shallow = list(rates); shallow[k] *= 0.6
+    assert not any(off.beam_off_sample(times, shallow, None)[0])
+
+
+def test_the_checks_of_the_network_leave_out_windows_off_the_sample(kit):
+    lit = importlib.import_module("sputtergisaxs.sputter_literature")
+    cfg = lit.load_config()
+    n = 20
+    delta = np.linspace(1.5, 6.0, n)
+    flagged = [i % 4 == 0 for i in range(n)]
+    columns = [dict(two_R_over_D_net=5.0 if f else 0.6, coverage_net=5.0 if f else 0.3, eta_net=9.0 if f else 0.5)
+               for f in flagged]
+    rows = [dict(kind="islands", beam_off=f) for f in flagged]
+    size, mass = lit._network_checks(cfg, columns, rows, delta, True, 1.5)
+    assert size["values"]["windows"] == mass["values"]["windows"] == n - sum(flagged)
+    assert size["values"]["median"] == pytest.approx(0.6) and mass["values"]["median"] == pytest.approx(0.5)
 
 
 def test_the_onset_interval_also_weighs_no_ts_at_all(kit):

@@ -42,9 +42,13 @@ def _describe(s) -> str:
     stage = stage_name(s.stage)
     if s.kind == "film":
         if s.L:
-            return text("<b>t = {time}</b> · {stage} · continuous film: characteristic length <b>L = {L} nm</b> · "
-                        "thickness not determined", time=t, stage=stage, L=f"{s.L:.3g}")
-        return text("<b>t = {time}</b> · {stage} · continuous film · thickness not determined", time=t, stage=stage)
+            words = text("<b>t = {time}</b> · {stage} · continuous film: characteristic length <b>L = {L} nm</b> · "
+                         "thickness not determined", time=t, stage=stage, L=f"{s.L:.3g}")
+        else:
+            words = text("<b>t = {time}</b> · {stage} · continuous film · thickness not determined", time=t, stage=stage)
+        if s.beam_off:  # window_sketch adds that note last
+            words += "<br><i>" + note_text(s.notes[-1]) + "</i>"
+        return words
     if s.kind != "islands":
         notes = "; ".join(note_text(note) for note in s.notes) or tr("no size estimate in this window")
         return text("<b>t = {time}</b> · {notes}", time=t, notes=notes)

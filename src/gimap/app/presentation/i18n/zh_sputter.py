@@ -227,6 +227,10 @@ SPUTTER_ZH = {
         "强度调制周期 ≈ {period} s（可能来自样品台平移）",
     "beam may be off the sample in {count} windows (stage translation)":
         "{count} 个时间窗光斑可能移出样品（样品台平移）",
+    "beam may be off the sample in 1 window (stage translation)": "1 个时间窗光斑可能移出样品（样品台平移）",
+    "beam may be off the sample or interrupted in {count} windows": "{count} 个时间窗光斑可能移出样品或光束中断",
+    "beam may be off the sample or interrupted in 1 window": "1 个时间窗光斑可能移出样品或光束中断",
+    "beam may be off the sample or interrupted": "光斑可能移出样品或光束中断",
     "Beam may be off the sample": "光斑可能移出样品",
     "Beam note": "光斑说明",
     "beam may be off the sample (stage translation)": "光斑可能移出样品（样品台平移）",
@@ -352,6 +356,8 @@ SPUTTER_ZH = {
     "islands would overlap at this R and spacing (coverage {coverage}% > {limit}%): R or the spacing is not reliable "
     "here": "按这个 R 和间距岛会重叠（覆盖率 {coverage}% > {limit}%）：这里的 R 或间距不可靠",
     "median of {count} neighbouring windows of the same model": "同一模型 {count} 个相邻时间窗的中位数",
+    "the beam may be off the sample in this window: its values are not representative of the film":
+        "这个时间窗光斑可能移出样品：它的数值不能代表薄膜",
     "model D (grade {grade})": "模型 D（等级 {grade}）",
     "direct 2π/q*": "直接 2π/q*",
     "not measured": "未测得",

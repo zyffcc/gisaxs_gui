@@ -47,8 +47,9 @@ TOOLKIT_TEMPLATES = (
     ('TS film windows: no thickness or metal fraction is reported (not identifiable); L_TS_nm is the '
      'lateral texture length, not an island spacing.'),
     'Cu approximated with the Ag model, for reference only (errors not validated).',
-    ('{count} windows with an unresolved rule stage carry the stage of the neighbouring resolved window '
-     '(stage_imputed=true; stage_path_counts_imputed).'),
+    ('{count} windows with an unresolved rule stage, or without a vote because the beam may be off the '
+     'sample, carry the stage of the neighbouring resolved window (stage_imputed=true; '
+     'stage_path_counts_imputed).'),
     '{count} windows with fewer than {counts} counts have no stage and no values.',
     ('TS onset not established: no TS window at all disagrees with {no_ts} resolved windows, within '
      '{slack} of the {best} at the chosen onset ({onset} s); the series may stay in the island phase.'),
@@ -61,24 +62,39 @@ TOOLKIT_TEMPLATES = (
      'its travel).'),
     ('The smoothing span ({span} s) covers the whole island phase ({start}-{end} s): R_trend_nm / '
      'D_trend_nm are one log-linear fit over it; the per-window R_nm / D_nm (grade P) show more.'),
-    ('{count} windows with an intensity below {limit}% of the level within one modulation period on '
-     'both sides: the beam is probably partly or fully off the sample while the stage is translated '
-     '(beam_off_sample=true). They keep their values but cast no stage vote and are left out of the R/D '
-     'trends and the zig-zag counts.'),
-    ('{count} windows with an intensity below {limit}% of the level within {span} s on both sides, '
-     'without a periodic modulation: the beam was probably off the sample or interrupted '
-     '(beam_off_sample=true). They keep their values but cast no stage vote and are left out of the R/D '
-     'trends and the zig-zag counts.'),
+    ('{count} windows in intensity dips: {core} below {limit}% of the level within one modulation period '
+     'on both sides and their neighbours in the same dip below {release}%. The beam is probably partly or '
+     'fully off the sample while the stage is translated (beam_off_sample=true). They keep their values '
+     'but cast no stage vote and are left out of the R/D trends, the reversal counts (the R/D zig-zags '
+     'are counted between them), the mass continuity and the literature method.'),
+    ('{count} windows in intensity dips without a periodic modulation: {core} below {limit}% of the level '
+     'within {span} s on both sides and their neighbours in the same dip below {release}%. The beam was '
+     'probably off the sample or interrupted (beam_off_sample=true). They keep their values but cast no '
+     'stage vote and are left out of the R/D trends, the reversal counts (the R/D zig-zags are counted '
+     'between them), the mass continuity and the literature method.'),
     ('intensity {percent}% of the level within one modulation period ({period} s) before and after '
      '(below {limit}%): the beam is probably partly or fully off the sample (stage translation)'),
     ('intensity {percent}% of the level within one modulation period ({period} s) before and after '
      '(below {limit}%): the beam is probably partly or fully off the sample (stage translation); no '
      'Yoneda ridge in this window, unlike most other windows'),
+    ('intensity {percent}% of the level within one modulation period ({period} s) before and after, next '
+     'to a window below {limit}% in the same dip (below {release}%): the beam is probably partly off the '
+     'sample (stage translation)'),
+    ('intensity {percent}% of the level within one modulation period ({period} s) before and after, next '
+     'to a window below {limit}% in the same dip (below {release}%): the beam is probably partly off the '
+     'sample (stage translation); no Yoneda ridge in this window, unlike most other windows'),
     ('intensity {percent}% of the level within {span} s before and after, without a periodic '
      'modulation (below {limit}%): the beam was probably off the sample or interrupted'),
     ('intensity {percent}% of the level within {span} s before and after, without a periodic '
      'modulation (below {limit}%): the beam was probably off the sample or interrupted; no Yoneda ridge '
      'in this window, unlike most other windows'),
+    ('intensity {percent}% of the level within {span} s before and after, without a periodic '
+     'modulation, next to a window below {limit}% in the same dip (below {release}%): the beam was '
+     'probably partly off the sample or interrupted'),
+    ('intensity {percent}% of the level within {span} s before and after, without a periodic '
+     'modulation, next to a window below {limit}% in the same dip (below {release}%): the beam was '
+     'probably partly off the sample or interrupted; no Yoneda ridge in this window, unlike most other '
+     'windows'),
     ('needs a deposition rate: the literature method computes R from the nominal thickness delta = '
      'rate*(t - t0); without it only the monotony of D is tested (in time)'),
     'fewer than {minimum} windows with a resolved peak of the metal: no literature-method values',
@@ -96,7 +112,7 @@ TOOLKIT_TEMPLATES = (
     ('peak more than a factor 2 above the preceding peaks, beyond any growth since t0: a jump, not '
      'growth; not used'),
     'peak after a long stretch without a peak: another structure, not used',
-    ('the beam may be off the sample in this window (intensity dip of the stage translation): peak not '
+    ('the beam may be off the sample in this window (an intensity dip, see beam_off_reason): peak not '
      'used'),
     'after the percolation of the literature method: D = 2*pi/q* kept, R not given (film)',
     'no deposition rate: only D is given',
@@ -214,8 +230,8 @@ TOOLKIT_TEMPLATES = (
     ('Cu: the literature method needs no network, but the TS onset and the network checks use the Ag '
      'model.'),
     '{count} peak windows probably belong to the host (median D {D} nm) and are not used.',
-    ('{count} peak windows where the beam may be off the sample (beam_off_sample: an intensity dip of '
-     'the stage translation) are not used for the trend of D.'),
+    ('{count} peak windows where the beam may be off the sample (beam_off_sample: an intensity dip) are '
+     'not used for the trend of D; the checks of the network leave out every such window.'),
     'Polymer type not given: the band of all polymers is used for {metal}.',
     'No published percolation data for {polymer}: the band of {host} is used.',
     'The band of {host} includes published values for {polymer}.',

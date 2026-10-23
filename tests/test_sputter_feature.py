@@ -98,7 +98,7 @@ def test_windows_off_the_sample_are_counted_and_the_modulation_is_the_stage_tran
     assert [r["beam_off_sample"] for r in result.rows] == [False, False, True, False]
     assert beam_off_count(result) == 1 and modulation_period(result.summary) == 7.0
     html = reliability_report(result)
-    assert BEAM_OFF.format(count=1, windows=4, limit="50", span="7") in html
+    assert BEAM_OFF.format(count=1, windows=4, core=1, limit="50", release="80", span="7") in html
     assert MODULATION.format(period="7", acf="0.42", cycles=9) in html and "rotation" not in html
     # None flagged: the report says that nothing suggests it; an older result says nothing about it.
     result = reader.read(beam_off_folder(tmp_path / "none", flagged=False), "physical")
@@ -112,6 +112,31 @@ def test_windows_off_the_sample_are_counted_and_the_modulation_is_the_stage_tran
 
     flagged = reader.read(beam_off_folder(tmp_path / "lit"), "physical")
     assert [r["beam_off_sample"] for r in literature_rows(flagged.rows, flagged.summary)] == [False, False, True, False]
+    # A whole dip (its core and a neighbour); without a modulation the report says the beam may also have been
+    # interrupted.
+    from src.gimap.features.sputter.domain.physical import BEAM_OFF_EXTREME
+
+    dip = reader.read(beam_off_folder(tmp_path / "dip", film=True), "physical")
+    assert BEAM_OFF.format(count=2, windows=4, core=1, limit="50", release="80", span="7") in reliability_report(dip)
+    extreme = reader.read(beam_off_folder(tmp_path / "extreme", modulated=False), "physical")
+    assert modulation_period(extreme.summary) is None
+    assert BEAM_OFF_EXTREME.format(count=1, windows=4, core=1, limit="20", release="80", span="10") in         reliability_report(extreme)
+
+
+def test_the_sketch_does_not_stand_a_window_off_the_sample_for_the_film():
+    from src.gimap.features.sputter.domain.sketch import NOTE_BEAM_OFF, smoothed_rows, storyboard_indices, window_sketch
+
+    rows = [dict(time_s=1.0 + i, module_path="polymer_embed", R_nm=2.0 + 0.1 * i, R_grade="P", sigma_log=0.2,
+                 beam_off_sample=False) for i in range(8)]
+    rows[3].update(R_nm=0.5, beam_off_sample=True)  # an invented dip: R far too small
+    smoothed = smoothed_rows(rows, half=2)
+    assert smoothed[3]["R_nm"] == 0.5 and "smoothed_windows" not in smoothed[3]  # its own value, said as such
+    assert smoothed[2]["R_nm"] == pytest.approx(2.15) and smoothed[2]["smoothed_windows"] == 4  # 0.5 left out
+    sketches = [window_sketch(r) for r in smoothed]
+    assert sketches[3].beam_off and sketches[3].notes[-1] == NOTE_BEAM_OFF and not sketches[2].beam_off
+    assert 3 not in storyboard_indices(sketches, 8)
+    alone = [window_sketch(rows[3])]
+    assert storyboard_indices(alone, 2) == [0]  # nothing else to draw: it is still shown, with its note
 
 
 def test_the_physical_path_stays_the_default_and_a_rate_offers_the_literature_method_as_its_check(tmp_path):

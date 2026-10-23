@@ -14,7 +14,8 @@ writes one physical reading of the whole series:
   the path value of the previous resolved window (of the next one at the start)
   and are marked stage_imputed. Windows with almost no counts (shutter closed,
   beam off) get no stage and no values. Windows where the beam is probably
-  partly or fully off the sample (beam_off_sample, below) cast no vote either.
+  partly or fully off the sample (beam_off_sample, below) cast no vote either:
+  they carry the path value of their neighbours and are marked stage_imputed.
   Path stage 'film' is the rule's coalescence-or-film candidate: a connected
   film is not proven.
 - module path: TS_layer for the path stages the toolkit routes to the TS
@@ -34,12 +35,15 @@ writes one physical reading of the whole series:
   the sample: the intensity dips once or twice per cycle. The summary keeps the
   key rotation_period_s (and rotation_detection) for older readers;
   modulation_period_s and modulation_detection are the neutral aliases.
-- beam off the sample (sputter_offsample): windows whose intensity drops below
+- beam off the sample (sputter_offsample): a dip whose intensity drops below
   half of the level within one modulation period on both sides (without a
-  modulation: below a fifth within 10 s) are flagged beam_off_sample with a
-  beam_off_reason. They keep their values in the table but cast no stage vote
-  and are left out of the R/D trends, the reversal (zig-zag) counts and the
-  literature method's trend of D.
+  modulation: below a fifth within 10 s) is flagged beam_off_sample with a
+  beam_off_reason, together with the windows next to it that stay below 80 %
+  of their level (the whole dip, not only its bottom). They keep their values
+  in the table but cast no stage vote and are left out of the R/D trends, the
+  reversal counts (a flagged window breaks the R/D zig-zag sequences: its
+  neighbours are not joined), the mass continuity and the literature method's
+  trend of D and its checks of the network.
 - thickness substitutes: the island-volume equivalent thickness t_eq of the
   visible particles (flat-based hemispheres h=R on a hexagonal lattice) and,
   when a deposition rate is given, the nominal thickness
@@ -130,8 +134,9 @@ NOTE_GRADE_P = ('R_nm / D_nm are network estimates in every window whose path st
 NOTE_TS_FILM = ('TS film windows: no thickness or metal fraction is reported (not identifiable); L_TS_nm is the lateral '
                 'texture length, not an island spacing.')
 NOTE_CU = 'Cu approximated with the Ag model, for reference only (errors not validated).'
-NOTE_IMPUTED = ('{count} windows with an unresolved rule stage carry the stage of the neighbouring resolved window '
-                '(stage_imputed=true; stage_path_counts_imputed).')
+NOTE_IMPUTED = ('{count} windows with an unresolved rule stage, or without a vote because the beam may be off the '
+                'sample, carry the stage of the neighbouring resolved window (stage_imputed=true; '
+                'stage_path_counts_imputed).')
 NOTE_NO_DATA = '{count} windows with fewer than {counts} counts have no stage and no values.'
 NOTE_NOT_ESTABLISHED = ('TS onset not established: no TS window at all disagrees with {no_ts} resolved windows, within {slack} '
                         'of the {best} at the chosen onset ({onset} s); the series may stay in the island phase.')
@@ -141,14 +146,16 @@ NOTE_NO_FILM = ('The path reaches coalescence but never the film stage: film_ons
                 '(coalescence) windows, not of a continuous film.')
 NOTE_DIPS = ('The intensity dips every {period} s with unequal depths; the pattern repeats exactly after {repeat} s, which '
              'may be one full back-and-forth cycle of the sample stage (one dip at each end of its travel).')
-NOTE_OFF_SAMPLE = ('{count} windows with an intensity below {limit}% of the level within one modulation period on both '
-                   'sides: the beam is probably partly or fully off the sample while the stage is translated '
-                   '(beam_off_sample=true). They keep their values but cast no stage vote and are left out of the R/D '
-                   'trends and the zig-zag counts.')
-NOTE_OFF_EXTREME = ('{count} windows with an intensity below {limit}% of the level within {span} s on both sides, without '
-                    'a periodic modulation: the beam was probably off the sample or interrupted (beam_off_sample=true). '
-                    'They keep their values but cast no stage vote and are left out of the R/D trends and the zig-zag '
-                    'counts.')
+NOTE_OFF_SAMPLE = ('{count} windows in intensity dips: {core} below {limit}% of the level within one modulation period on '
+                   'both sides and their neighbours in the same dip below {release}%. The beam is probably partly or '
+                   'fully off the sample while the stage is translated (beam_off_sample=true). They keep their values '
+                   'but cast no stage vote and are left out of the R/D trends, the reversal counts (the R/D zig-zags '
+                   'are counted between them), the mass continuity and the literature method.')
+NOTE_OFF_EXTREME = ('{count} windows in intensity dips without a periodic modulation: {core} below {limit}% of the level '
+                    'within {span} s on both sides and their neighbours in the same dip below {release}%. The beam was '
+                    'probably off the sample or interrupted (beam_off_sample=true). They keep their values but cast no '
+                    'stage vote and are left out of the R/D trends, the reversal counts (the R/D zig-zags are counted '
+                    'between them), the mass continuity and the literature method.')
 NOTE_SPAN = ('The smoothing span ({span} s) covers the whole island phase ({start}-{end} s): R_trend_nm / D_trend_nm are '
              'one log-linear fit over it; the per-window R_nm / D_nm (grade P) show more.')
 NOTE_TEMPLATES = (T_EQ_NOTE, NOMINAL_NOTE, NOMINAL_NOTE + T0_ASSUMED_NOTE, NO_RATE_NOTE, T_END_NOTE,
@@ -368,8 +375,21 @@ def t_eq(R, D, sigma=None):
 
 
 # ----------------------------------------------------------------- reversals --
-def zigzags(values):
-    """Steps |d ln x| > ln 1.2 reversed to within 20 % of the earlier value within the next 1-3 values."""
+def zigzags(values, breaks=None):
+    """Steps |d ln x| > ln 1.2 reversed to within 20 % of the earlier value within the next 1-3 values.
+
+    Windows without a value are skipped (their neighbours are joined). A window with breaks[i] true ends the sequence
+    instead: the counts of the stretches between such windows are added, so leaving a window out never joins values
+    from both sides of it (growth across the gap, or the flanks of a dip, would make new steps).
+    """
+    if breaks is not None:
+        total, stretch = 0, []
+        for value, stop in zip(values, breaks):
+            if stop:
+                total += zigzags(stretch); stretch = []
+            else:
+                stretch.append(value)
+        return total + zigzags(stretch)
     v = np.log([x for x in values if x is not None and x > 0])
     count = 0
     d = np.diff(v)
@@ -513,7 +533,7 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                                                    yoneda=[_num(f.get('Yoneda_deg')) for f in frame_rows])
     votes = ['' if o else s for s, o in zip(stages, off)]
     path = [None if nd else o for o, nd in zip(stage_path(votes), no_data)]
-    imputed = [o is not None and STAGE_ORDINAL.get(s) is None for o, s in zip(path, stages)]
+    imputed = [o is not None and STAGE_ORDINAL.get(s) is None for o, s in zip(path, votes)]  # carried, not voted
     rule_module = [r.get('module') or '' for r in srt]
     module_path = [('' if nd else rule_module[i]) if o is None else ('TS_layer' if is_late(o) else 'polymer_embed')
                    for i, (o, nd) in enumerate(zip(path, no_data))]
@@ -593,28 +613,29 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
     continuity = None
     if rate_nm_s is not None:
         stop = onset if onset is not None else n
-        idx = [i for i in range(stop) if out[i]['t_eq_nm'] is not None][-5:]
+        idx = [i for i in range(stop) if out[i]['t_eq_nm'] is not None and not off[i]][-5:]
         if idx:
             teq = float(np.median([out[i]['t_eq_nm'] for i in idx]))
             nominal = float(np.median([out[i]['nominal_thickness_nm'] for i in idx]))
             continuity = dict(time_s=float(np.median([t[i] for i in idx])), t_eq_nm=teq, nominal_nm=nominal,
                               ratio=teq / nominal if nominal > 0 else None, windows=len(idx),
                               scope=('median over the last 5 island windows with t_eq before the TS onset' if onset is not None
-                                     else 'median over the last 5 island windows with t_eq (no TS onset on the path)'))
+                                     else 'median over the last 5 island windows with t_eq (no TS onset on the path)')
+                              + '; windows where the beam may be off the sample are left out')
     # Back-and-forth counts over the same windows before and after: the windows off the sample are left out of all.
-    on = [not o for o in off]
-
+    # The stages and modules on either side of such a window are joined (a category has no level a dip could bias);
+    # the R/D sequences break there (zigzags(..., off): values from both sides of a dip are not joined).
     def kept(values):
-        return [v if keep else None for v, keep in zip(values, on)]
+        return [None if o else v for v, o in zip(values, off)]
 
     before = dict(stage=stage_reversals(kept([STAGE_ORDINAL.get(s) for s in rule_stages])),
                   module_revert=module_reverts(kept(rule_module)),
-                  R_zigzag=zigzags(kept([_num(r.get('R_nm')) for r in srt])),
-                  D_zigzag=zigzags(kept([_num(r.get('D_nm')) for r in srt])))
+                  R_zigzag=zigzags([_num(r.get('R_nm')) for r in srt], off),
+                  D_zigzag=zigzags([_num(r.get('D_nm')) for r in srt], off))
     after = dict(stage=stage_reversals(kept(path)), module_revert=module_reverts(kept(module_path)),
-                 R_zigzag=zigzags(kept([row['R_nm'] for row in out])), D_zigzag=zigzags(kept([row['D_nm'] for row in out])))
-    after_trend = dict(R_zigzag=zigzags(kept([row['R_trend_nm'] for row in out])),
-                       D_zigzag=zigzags(kept([row['D_trend_nm'] for row in out])))
+                 R_zigzag=zigzags([row['R_nm'] for row in out], off), D_zigzag=zigzags([row['D_nm'] for row in out], off))
+    after_trend = dict(R_zigzag=zigzags([row['R_trend_nm'] for row in out], off),
+                       D_zigzag=zigzags([row['D_trend_nm'] for row in out], off))
     path_counts = {name: sum(1 for o in path if o == j) for j, name in enumerate(PATH_STAGES)}
     imputed_counts = {name: sum(1 for o, m in zip(path, imputed) if m and o == j) for j, name in enumerate(PATH_STAGES)}
     extras = dict(onset_extras,
@@ -631,7 +652,9 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                                    'after_trend: the smoothed R_trend_nm/D_trend_nm. stage: A->B->A excursions among '
                                    'resolved stages; module_revert: TS_layer -> polymer_embed changes; R/D zig-zag: a '
                                    'step |d ln x| > ln 1.2 reversed to within 20 % within the next 1-3 values. Windows '
-                                   'where the beam may be off the sample (beam_off_sample) are left out of every count')),
+                                   'where the beam may be off the sample (beam_off_sample) are left out of every count: '
+                                   'the stages and modules on either side of them are joined, the R/D zig-zags are '
+                                   'counted within the stretches between them')),
         thickness=dict(rate_nm_s=rate_nm_s, t0_s=t0_s if t0_s is not None else (0. if rate_nm_s is not None else None),
                        t0_assumed=rate_nm_s is not None and t0_s is None,
                        t_eq_note=T_EQ_NOTE, t_eq_band_factor=factor,
@@ -649,10 +672,10 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
     if extras['no_data_windows']:
         extras['notes'].append(NOTE_NO_DATA.format(count=extras['no_data_windows'], counts=f'{NO_DATA_COUNTS:g}'))
     if off_record['windows']:
-        limit = f"{100 * off_record['limit_fraction']:g}"
-        extras['notes'].append(NOTE_OFF_SAMPLE.format(count=off_record['windows'], limit=limit) if period is not None
-                               else NOTE_OFF_EXTREME.format(count=off_record['windows'], limit=limit,
-                                                            span=f"{off_record['span_s']:g}"))
+        fields = dict(count=off_record['windows'], core=off_record['core_windows'],
+                      limit=f"{100 * off_record['limit_fraction']:g}", release=f"{100 * off_record['release_fraction']:g}")
+        extras['notes'].append(NOTE_OFF_SAMPLE.format(**fields) if period is not None
+                               else NOTE_OFF_EXTREME.format(span=f"{off_record['span_s']:g}", **fields))
     extras['notes'] += _onset_notes(extras, path_counts)
     if detection.get('full_repeat_s'):
         extras['notes'].append(NOTE_DIPS.format(period=f'{period:g}', repeat=f"{detection['full_repeat_s']:g}"))

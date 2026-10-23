@@ -755,7 +755,7 @@ def test_windows_off_the_sample_are_hollow_grey_points_counted_and_listed(tmp_pa
     page.open_results(beam_off_folder(tmp_path / "res"))
     line = page.result_label.text()
     assert "intensity modulation period ≈ 7 s (sample stage translation?)" in line
-    assert "beam may be off the sample in 1 windows (stage translation)" in line
+    assert "beam may be off the sample in 1 window (stage translation)" in line and "1 windows" not in line
     headers = [page.table.horizontalHeaderItem(i).text() for i in range(page.table.columnCount())]
     column = headers.index("Beam may be off the sample")
     assert [page.table.item(row, column).text() for row in range(4)] == ["", "", "yes", ""]
@@ -788,6 +788,44 @@ def test_windows_off_the_sample_are_hollow_grey_points_counted_and_listed(tmp_pa
     _close(page)
 
 
+def test_a_film_window_off_the_sample_is_a_hollow_grey_point_on_the_ts_length(tmp_path):
+    from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
+    from tests.sputter_fixtures import beam_off_folder
+
+    page = _page(tmp_path)
+    page.open_results(beam_off_folder(tmp_path / "res", film=True))  # the dip reaches the film window at 2.0 s
+    assert "beam may be off the sample in 2 windows (stage translation)" in page.result_label.text()
+    label = "beam may be off the sample (stage translation)"
+    length = next(ax for ax in page.trend.figure.axes if ax.get_ylabel() == "L (nm)")
+    hollow = [line for line in length.get_lines() if line.get_label() == label]
+    assert len(hollow) == 1 and hollow[0].get_markerfacecolor() == "none"
+    assert list(hollow[0].get_xdata()) == [2.0] and list(hollow[0].get_ydata()) == [40.0]
+    assert not [line for line in length.get_lines() if line.get_label() == "TS length L (network)"]  # no other L
+    from src.gimap.features.sputter.application import window_sketch
+    from src.gimap.features.sputter.presentation.sketch_view import _describe
+
+    film = next(r for r in page.result.rows if r.get("L_TS_nm") == 40.0)  # the sketch says so under the film too
+    assert "the beam may be off the sample in this window" in _describe(window_sketch(film))
+    _close(page)
+    # Without a modulation only extreme dips are flagged: the line and the legend say the beam may be interrupted.
+    page = _page(tmp_path)
+    page.open_results(beam_off_folder(tmp_path / "extreme", modulated=False))
+    line = page.result_label.text()
+    assert "beam may be off the sample or interrupted in 1 window" in line and "stage translation" not in line
+    labels = [t.get_text() for t in page.trend.figure.axes[0].get_legend().get_texts()]
+    assert "beam may be off the sample or interrupted" in labels
+    try:
+        apply_language("zh", roots=(page,))
+        page.refresh_language()
+        assert "1 个时间窗光斑可能移出样品或光束中断" in page.result_label.text()
+        labels = [t.get_text() for t in page.trend.figure.axes[0].get_legend().get_texts()]
+        assert "光斑可能移出样品或光束中断" in labels
+    finally:
+        apply_language(DEFAULT_LANGUAGE, roots=(page,))
+        page.refresh_language()
+    _close(page)
+
+
 def test_the_literature_method_leaves_out_the_peak_of_a_window_off_the_sample(tmp_path):
     from tests.sputter_fixtures import BEAM_OFF_REASON, LITERATURE_ROWS, LITERATURE_SUMMARY, literature_folder
 
@@ -795,7 +833,7 @@ def test_the_literature_method_leaves_out_the_peak_of_a_window_off_the_sample(tm
     rows = [dict(r, beam_off_sample="false") for r in LITERATURE_ROWS]
     rows[2].update(beam_off_sample="true", beam_off_reason=BEAM_OFF_REASON, lit_status="beam_off", D_lit_nm="",
                    R_lit_nm="", two_R_over_D_lit="", coverage_lit="",
-                   lit_reason="the beam may be off the sample in this window (intensity dip of the stage translation): "
+                   lit_reason="the beam may be off the sample in this window (an intensity dip, see beam_off_reason): "
                               "peak not used")
     write_table(folder, "structure_physical", rows, LITERATURE_SUMMARY)
     page = _page(tmp_path)
