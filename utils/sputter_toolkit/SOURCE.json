@@ -145,7 +145,7 @@
     "scripts/sputter_struct_v1.py",
     "README.md"
    ],
-   "change": "Optional end of the deposition, --t-end-s for analyze, table and physical: nominal_thickness_nm = rate*clip(t - t0, 0, t_end - t0), and the literature method uses the same delta = rate*(min(t, t_end) - t0) (constant after t_end; jumps, the percolation, its interval and the TS-onset check in the deposition time min(t, t_end)); t_end must be after t0. The summary records t_end_s and t_end_given (thickness and literature) with a note from new templates (T_END_NOTE, T_END_ASSUMED_NOTE, NOTE_T_END). The literature summary no longer writes default_ready (GIMaP shows the physical path first and offers the literature method as a check).",
+   "change": "Optional end of the deposition, --t-end-s for analyze, table and physical: nominal_thickness_nm = rate*clip(t - t0, 0, t_end - t0), and the literature method uses the same delta = rate*(min(t, t_end) - t0) (constant after t_end; jumps, the percolation, its interval and the TS-onset check in the deposition time min(t, t_end)); t_end must be after t0. The summary records t_end_s and t_end_given (thickness and literature) with a note from new templates (T_END_NOTE, T_END_ASSUMED_NOTE, NOTE_T_END; NOTE_T_END_AFTER when no window comes after t_end). The command line refuses a rate that is not positive or a t_end not after t0 before any frame is read (analyze, table, physical). The literature summary no longer writes default_ready (GIMaP shows the physical path first and offers the literature method as a check).",
    "reason": "The shutter is closed by hand: a scan can go on after the deposition (e.g. half of the scan), and rate*(t - t0) would keep growing there."
   }
  ]

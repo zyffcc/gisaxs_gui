@@ -90,7 +90,8 @@ The physical path reads the whole series once:
     not measured by GISAXS. Without `--t0-s`, t0 = 0 s (the first frame) is an assumption and the summary says so.
     The shutter is closed by hand and a scan can go on after the deposition: `--t-end-s` gives its end t_end, after
     which the nominal thickness stays at rate·(t_end − t0); without it the deposition lasts to the end of the scan.
-    The summary's `thickness` records `t_end_s`, `t_end_given` and a `t_end_note` that says which.
+    The summary's `thickness` records `t_end_s`, `t_end_given` and a `t_end_note` that says which. A rate that is not
+    positive, or a `--t-end-s` not after `--t0-s` (default 0), is refused before any frame is read.
     `mass_continuity` compares both just before the TS onset.
   - Film windows: the TS film thickness and metal fraction are not identifiable (in simulation the network's
     posterior equals its prior), so `film_thickness_status` says so and no number is given; `L_TS_nm` is the
@@ -107,7 +108,8 @@ its island meaning once a network forms). With `--rate-nm-s` every window gets t
 
 - `delta_nm` = rate·(min(t, t_end) − t0) (t0 = 0 s, the first frame, when not given: an assumption, said in the
   notes). With `--t-end-s` δ stays at rate·(t_end − t0) in the windows after the deposition ended, and the method
-  uses that δ there (a note says so); the summary records `t_end_s` and `t_end_given`.
+  uses that δ there (a note says so, or that the deposition ended after the last window); the summary records
+  `t_end_s` and `t_end_given`.
 - `D_lit_nm` = 2π/q* only where a resolved peak exists. `lit_status` marks peaks that are not used: `host_peak`
   (before the deposition starts, more than a factor 2 above every published D(δ) at that δ, or a jump or outlier
   at the host's spacing), `outlier` (more than a factor 2 from the trend of D, or a jump: more than a factor 2 above

@@ -54,7 +54,10 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   closed by hand and a scan can go on after the deposition. After the end the nominal thickness stays at
   rate × (t_end − t0) — a plateau in the Metal thickness panel, with the end marked — and the literature method
   uses that constant δ in the later windows (its notes say so). Changing it rewrites only the physical files. Left
-  empty, the deposition lasts to the end of the scan, as before, and the notes say that no end was given.
+  empty, the deposition lasts to the end of the scan, as before, and the notes say that no end was given. An end
+  after the last window (or before the first) is named in the legend and leaves the time axis on the windows.
+  Without a rate a new t0 or end is also applied and remembered. A rate that is not positive or an end not after t0
+  is refused, also by **Add Refined Windows…**, and the toolkit's command line refuses them before reading frames.
 
 ### Analyze
 

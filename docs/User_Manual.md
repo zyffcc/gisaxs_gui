@@ -2070,7 +2070,8 @@ GIMaP with another model, gets a new one (section 11).
   thickness t_eq as a band — the metal in the visible islands, for hemispheres on a hexagonal arrangement; a
   conditional value, uncertain by about a factor 2–3 — and, when a deposition rate is given, the nominal thickness
   rate × (t − t0); after the **Deposition end** it stays at rate × (t_end − t0), a plateau, and the end is marked
-  (*deposition ended … s*). Film windows are shaded: *film: thickness not determined*. The film onset of the path is
+  (*deposition ended … s*; an end after the last window, or before the first, is only named in the legend, and the
+  time axis keeps to the windows). Without a rate the end is still marked. Film windows are shaded: *film: thickness not determined*. The film onset of the path is
   marked with its interval. With a deposition rate the top axis also gives the nominal thickness δ = rate × (t − t0),
   with ticks only up to the end of the deposition.
 - The result line under Predict gives the windows, the film onset (with the literature method: its percolation)
@@ -2086,8 +2087,9 @@ GIMaP with another model, gets a new one (section 11).
 - **Structure Sketch**: a picture of the fitted model of one window (side and top view, one ruler for the
   series); film windows are drawn as a continuous film, without particles. A Cu result says on the picture, the
   saved image and the storyboard that it was read with the Ag model.
-- A new **Deposition rate**, **t0** or **Deposition end** after a run rewrites only the physical files of the result
-  shown: no frame is read again. When that result is of another scan than the one under **Data**, the values are
+- A new **Deposition rate**, **t0** or **Deposition end** after a run (also without a rate) rewrites only the
+  physical files of the result shown: no frame is read again. A rate that is not positive, or an end not after t0,
+  is refused, also by **Add Refined Windows…**. When that result is of another scan than the one under **Data**, the values are
   kept for that scan's next **Predict** instead. The explanation shown stays; taking the rate away returns from the
   literature method (it needs a rate) to the physical path.
 
@@ -2102,8 +2104,8 @@ path:
 
 - δ = rate × (t − t0). Without **t0** the first frame is taken as the start of the deposition (an assumption, said
   in the notes): δ is then an upper bound if the deposition started at or after the first frame. After the
-  **Deposition end** δ stays at rate × (t_end − t0): the windows after it use that δ (the notes say how many), and
-  the **Literature** tab draws them at that δ.
+  **Deposition end** δ stays at rate × (t_end − t0): the windows after it use that δ (the notes say how many, or
+  that the deposition ended after the last window), and the **Literature** tab draws them at that δ.
 - D is 2π/q* only in windows with a resolved peak. Peaks that probably belong to the polymer (a peak before the
   deposition starts, a peak more than twice every published D at that δ, a jump or outlier at the polymer's
   spacing), peaks more than a factor 2 from the trend of D, jumps of more than a factor 2 above the preceding peaks

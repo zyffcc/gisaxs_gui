@@ -608,6 +608,24 @@ def test_the_nominal_thickness_stops_growing_at_the_end_of_the_deposition(kit, t
             physical.write_physical(tmp_path, rate_nm_s=0.05, t0_s=t0, t_end_s=t_end)
 
 
+def test_the_command_line_refuses_a_wrong_rate_or_end_before_reading_frames(tmp_path):
+    script = KIT_DIR / "scripts" / "sputter_struct_v1.py"
+    analyze = [sys.executable, "-B", str(script), "analyze", "--input", str(tmp_path / "no_scan"), "--out",
+               str(tmp_path / "out"), "--energy-ev", "9000", "--sdd-mm", "1000", "--alpha-i-deg", "0.3", "--metal",
+               "Ag", "--polymer-expert", str(tmp_path / "p"), "--ts-expert", str(tmp_path / "t")]
+    physical = [sys.executable, "-B", str(script), "physical", "--folder", str(tmp_path / "out")]
+    table = [sys.executable, "-B", str(script), "table", "--binned", str(tmp_path / "binned"), "--out",
+             str(tmp_path / "out"), "--metal", "Ag"]
+    for command, extra, words in ((analyze, ["--t0-s", "5", "--t-end-s", "5"], "--t-end-s must be after"),
+                                  (analyze, ["--t-end-s", "-1"], "--t-end-s must be after"),
+                                  (analyze, ["--rate-nm-s", "0"], "--rate-nm-s must be positive"),
+                                  (physical, ["--rate-nm-s", "0.1", "--t0-s", "3", "--t-end-s", "2"], "must be after"),
+                                  (table, ["--rate-nm-s", "-0.1"], "must be positive")):
+        done = subprocess.run(command + extra, capture_output=True, text=True, timeout=120)
+        assert done.returncode == 2 and words in done.stderr, done.stderr  # argparse's usage error, nothing read
+    assert not (tmp_path / "out").exists()
+
+
 # ----------------------------------------------------------------------- the literature method --
 def _growth(*, rate=0.1, seconds=200.0, a=8.0, b=0.6, noise=0.05, seed=4, host=None, film_from=None):
     """An invented series of literature-method inputs: D = a*delta^b with log-normal noise, every second window a
@@ -733,6 +751,17 @@ def test_after_the_end_of_the_deposition_delta_stays_and_the_method_uses_it():
     assert used and all(c["R_lit_nm"] == pytest.approx((5.0 * c["D_lit_nm"] ** 2 / lit.HEX) ** (1 / 3)) for c in used)
     with pytest.raises(ValueError, match="after its start"):
         lit.literature_table(times, rows, metal="Ag", rate_nm_s=0.1, t0_s=10.0, t_end_s=5.0)
+
+
+def test_an_end_after_the_last_window_changes_no_delta_and_says_so():
+    lit = _literature()
+    times, rows = _growth()
+    free = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0, period=5.0)
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0,
+                                            period=5.0, t_end_s=500.0)
+    assert [c["delta_nm"] for c in columns] == pytest.approx([c["delta_nm"] for c in free[0]])
+    assert lit.NOTE_T_END_AFTER.format(t_end="500") in summary["notes"]
+    assert not any("windows after it" in note for note in summary["notes"])  # not "in the 0 windows after it"
 
 
 def test_a_percolation_that_hinges_on_the_rate_is_not_determined():

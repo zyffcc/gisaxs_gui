@@ -260,6 +260,8 @@ SPUTTER_ZH = {
     "t_eq: island-volume equivalent (conditional)": "t_eq：岛体积等效（有条件）",
     "nominal: rate × (t − t0)": "名义：速率 × (t − t0)",
     "deposition ended {time} s": "沉积结束 {time} s",
+    "deposition ended {time} s, after the last window": "沉积结束 {time} s，在最后一个时间窗之后",
+    "deposition ended {time} s, before the first window": "沉积结束 {time} s，在第一个时间窗之前",
     "film: thickness not determined": "膜：厚度未确定",
     "No thickness value in this result.": "这个结果里没有厚度值。",
     "film onset {time} s": "成膜起点 {time} s",

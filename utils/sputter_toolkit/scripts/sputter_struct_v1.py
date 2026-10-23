@@ -45,6 +45,16 @@ def _thickness_args(parser, polymer=True):
                             '(default 2 without --t0-s, 0.5 with it)')
 
 
+def _check_thickness(parser, args):
+    """A rate that is not positive, or an end of the deposition not after its start, is refused before any frame is
+    read (write_physical refuses them too, but analyze only gets there after the whole analysis)."""
+    rate, t0, t_end = (getattr(args, key, None) for key in ('rate_nm_s', 't0_s', 't_end_s'))
+    if rate is not None and not rate > 0:
+        parser.error('--rate-nm-s must be positive')
+    if t_end is not None and not t_end > (t0 if t0 is not None else 0.):
+        parser.error('--t-end-s must be after the start of the deposition --t0-s (default 0)')
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='cmd', required=True)
@@ -79,6 +89,8 @@ def main():
     t.add_argument('--metal', choices=('Ag', 'Au', 'Cu'), required=True); t.add_argument('--refined', type=Path)
     _thickness_args(t)
     args = p.parse_args()
+    if args.cmd in ('analyze', 'physical', 'table'):
+        _check_thickness({'analyze': a, 'physical': y, 'table': t}[args.cmd], args)
     from sputtergisaxs.sputter_struct import analyze_scan, write_structure, say
     if args.cmd == 'analyze':
         energy = args.energy_ev if args.energy_ev else 1239.841984 / args.wavelength_nm

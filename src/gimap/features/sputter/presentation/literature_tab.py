@@ -49,9 +49,11 @@ INTERVAL = "68% interval (scatter, rate ±{rate_error}%, t0 ±{t0_error} s)"
 UNDETERMINED = "percolation not determined: from δ = {low} nm or later"
 T0_ASSUMED = " (assumed: the first frame)"
 T_END = " · deposition ended at t_end = {t_end} s: later windows stay at δ = {delta} nm"
+T_END_AFTER = (" · deposition ended at t_end = {t_end} s, after the last window: δ = rate × (t − t0) in every "
+               "window")
 UNKNOWN_POLYMER = "a polymer of unknown type"
 TEMPLATES = (EMPTY, OTHER_VARIANT, OLD_RESULT, NEEDS_RATE, HEADER, INTERVAL, UNDETERMINED, T0_ASSUMED, T_END,
-             UNKNOWN_POLYMER)
+             T_END_AFTER, UNKNOWN_POLYMER)
 """Texts the tab says from a name (the interface translates them)."""
 
 
@@ -163,7 +165,11 @@ class LiteratureTab(QWidget):
             words += tr(T0_ASSUMED)
         rate, t0, t_end = _num(lit.get("rate_nm_s")), _num(lit.get("t0_s")) or 0.0, _num(lit.get("t_end_s"))
         if rate is not None and t_end is not None:
-            words += text(T_END, t_end=_fmt(t_end), delta=_fmt(rate * (t_end - t0)))
+            times = [r.get("time_s") for r in self.result.rows if r.get("time_s") is not None]
+            if times and max(times) <= t_end:  # no window after it (as the toolkit counts them)
+                words += text(T_END_AFTER, t_end=_fmt(t_end))
+            else:
+                words += text(T_END, t_end=_fmt(t_end), delta=_fmt(rate * (t_end - t0)))
         sentence = percolation_sentence(self.result.summary, text)
         return words + ("<br>" + sentence if sentence else "")
 

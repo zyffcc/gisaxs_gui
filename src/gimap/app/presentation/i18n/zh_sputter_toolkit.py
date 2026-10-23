@@ -332,6 +332,9 @@ SPUTTER_TOOLKIT_ZH = {
     'the {count} windows after it, and the literature method uses this delta there.':
         '沉积在 t_end = {t_end} s 结束（已给出）：此后的 {count} 个时间窗中 delta = 速率*(t_end - t0) = {delta} nm '
         '保持不变，文献方法在这些时间窗中使用这个 delta。',
+    'The deposition ended at t_end = {t_end} s (given), after the last window: delta = rate*(t - t0) in every '
+    'window.':
+        '沉积在 t_end = {t_end} s 结束（已给出），在最后一个时间窗之后：每个时间窗中 delta = 速率*(t - t0)。',
     'D = 2*pi/q* can be off by more than 40% for D > 10 nm once coalescence starts (Hod17).':
         'D = 2*pi/q* 在聚并开始后、D > 10 nm 时误差可超过 40%（Hod17）。',
     'The condensation (sticking) coefficient of these metals on these polymers is not known; the literature '

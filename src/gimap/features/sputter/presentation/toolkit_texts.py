@@ -183,6 +183,8 @@ TOOLKIT_TEMPLATES = (
      'or after the first frame, and each 1 s of error in t0 shifts delta by {rate} nm.'),
     ('The deposition ended at t_end = {t_end} s (given): delta = rate*(t_end - t0) = {delta} nm stays '
      'constant in the {count} windows after it, and the literature method uses this delta there.'),
+    ('The deposition ended at t_end = {t_end} s (given), after the last window: delta = rate*(t - t0) in '
+     'every window.'),
     'D = 2*pi/q* can be off by more than 40% for D > 10 nm once coalescence starts (Hod17).',
     ('The condensation (sticking) coefficient of these metals on these polymers is not known; the '
      'literature method assumes that all deposited metal stays on the surface.'),

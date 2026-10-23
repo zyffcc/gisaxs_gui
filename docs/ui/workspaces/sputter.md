@@ -37,14 +37,17 @@
 4. **改沉积速率、t0 或沉积结束时间**（已有结果时）：只在显示的结果属于所选扫描时（`StructureResult.scan_folder` 读自
    `gimap_request.json`；不知道扫描的结果属于打开它时所选的文件夹）`rebuild_physical` → 工具包
    `physical --folder OUT [--rate-nm-s] [--t0-s] [--t-end-s]`，不读帧；否则这些值留给所选扫描的下一次预测。比较的是数值
-   （`thickness_values`：有速率没有 t0 时 t0 = 0；没有速率时 t0 和结束时间都不触发重写），结束时间不晚于 t0 时提示错误
+   （`thickness_values`：有速率没有 t0 时 t0 = 0；没有速率时 t0 和结束时间也比较——摘要照样记录它们，结束时间也在尺寸趋势里标出——
+   改了就重写，字段和文件夹记忆始终与结果一致），结束时间不晚于 t0 时提示错误
    （`deposition_end_ok`），重写期间按下的“预测”排在它之后。显示的解释不变（传当前的 `variant`；去掉速率后文献方法不再提供，
-   `SputterService.open` 退回 `physical`）。**加入精修时间窗…**：`table` 再 `physical`。
+   `SputterService.open` 退回 `physical`）。**加入精修时间窗…**：先按同样的规则检查字段（`_thickness_refused`），再 `table`
+   和 `physical`。
 5. **结果**：`StructureFolderReader.available`（`physical` 始终第一，是默认解释；`literature` 在摘要
    `literature.status == "ok"` 时紧跟其后，作为对网络的核对，从不作为默认；然后 `window` → `selected` → `sequence`）→
    `show_result`：结果行（成膜起点或文献方法
    的渗流、“强度调制周期（可能是样品旋转）”、Cu 说明）、`TrendPlot`（物理路径和文献方法：淡色逐窗点 + 趋势线；有速率时上轴给
-   δ，给出沉积结束时间时刻度只到 rate × (t_end − t0)；金属厚度栏：t_eq 带、名义厚度线（沉积结束后为平台，并标出结束时间）、
+   δ，给出沉积结束时间时刻度只到 rate × (t_end − t0)，结束在第一个时间窗之前时不画 δ 轴；金属厚度栏：t_eq 带、名义厚度线（沉积
+   结束后为平台，结束时间落在各时间窗之间时画竖线，在最后一个之后或第一个之前时只写进图例，时间轴不被拉长）、
    膜时间窗阴影和“film: thickness not determined”，文献方法下只画 δ；成膜起点或渗流及区间）、
    `LiteratureTab`（δ 上四幅图：D 与已发表 D(δ)、2R/D、覆盖率、η；下面是检验表、注意事项和参考文献）、时间窗表（只列有值的列）、
    可靠性报告（领域层按英文模板写，界面用 `texts.text` 翻译；工具包自己的句子用 `texts.note_text` 按
@@ -67,7 +70,9 @@
 - 沉积结束时间 t_end（挡板手动关闭，扫描可以在沉积结束后继续）：工具包的 `nominal_thickness_nm` = rate·clip(t − t0, 0,
   t_end − t0)，文献方法用同一个 δ（t_end 之后不变；跳变、渗流及其区间、TS 起点的 δ 都按沉积时间 min(t, t_end) 计算），摘要的
   `thickness` 和 `literature` 记 `t_end_s`、`t_end_given`，`thickness.t_end_note` 说明给出或未给出。`domain/physical.deposition_end`
-  读它；可靠性页的名义厚度句子在给出时说明平台；“文献对照”页标题写明之后的时间窗停留在哪个 δ，TS 起点的 δ 也截在 t_end。
+  读它；可靠性页的名义厚度句子在给出时说明平台；“文献对照”页标题写明之后的时间窗停留在哪个 δ（结束在最后一个时间窗之后时
+  改说每个时间窗都是 rate × (t − t0)，工具包的说明用 `NOTE_T_END_AFTER`），TS 起点的 δ 也截在 t_end。工具包命令行在读帧之前
+  拒绝不是正数的速率和不在 t0 之后的结束时间（`_check_thickness`）。
 - 文献方法的 R 按构造与文献一致；页面和手册都这样说明，独立检验是 D(δ)、渗流与已发表区间、网络的 2R/D（覆盖率由它决定，
   算一项）和质量守恒。
 - 可靠性页的工具包说明用 `note=note_text` 翻译（带数值的句子也按模板匹配）。上方的 δ 轴是子坐标轴：

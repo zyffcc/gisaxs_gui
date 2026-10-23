@@ -56,13 +56,16 @@ D_OUTSIDE = "outside the simulated 90% range"
 
 
 def thickness_values(rate, t0, t_end) -> tuple:
-    """What the physical files depend on: (rate, t0, end of the deposition), t0 = 0 when a rate is given without
-    one, the end None when it is not given (the end of the scan), nothing without a rate (t0 and the end alone change
-    nothing)."""
+    """What the physical files record, as the toolkit writes it: (rate, t0, end of the deposition), t0 = 0 when a rate
+    is given without one, None when it is not given (the end: the deposition lasts to the end of the scan). Without a
+    rate t0 and the end are recorded too (the end is marked in Size Trend): a change of them rewrites the files, so the
+    fields and the folder's memory always say what the result was drawn with."""
+    def number(value):
+        return None if value is None else float(value)
+
     try:
-        if rate is None:
-            return None, None, None
-        return float(rate), float(t0 or 0.0), None if t_end is None else float(t_end)
+        t0 = number(t0)
+        return number(rate), (t0 or 0.0) if rate is not None else t0, number(t_end)
     except (TypeError, ValueError):
         return None, None, None
 

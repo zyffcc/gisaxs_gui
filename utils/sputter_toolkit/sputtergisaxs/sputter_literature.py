@@ -189,6 +189,8 @@ NOTE_T0 = ('t0 not given: assumed 0 s (the first frame); delta is an upper bound
            'after the first frame, and each 1 s of error in t0 shifts delta by {rate} nm.')
 NOTE_T_END = ('The deposition ended at t_end = {t_end} s (given): delta = rate*(t_end - t0) = {delta} nm stays constant '
               'in the {count} windows after it, and the literature method uses this delta there.')
+NOTE_T_END_AFTER = ('The deposition ended at t_end = {t_end} s (given), after the last window: delta = rate*(t - t0) '
+                    'in every window.')
 NOTE_D_PEAK = 'D = 2*pi/q* can be off by more than 40% for D > 10 nm once coalescence starts (Hod17).'
 NOTE_STICKING = ('The condensation (sticking) coefficient of these metals on these polymers is not known; the '
                  'literature method assumes that all deposited metal stays on the surface.')
@@ -206,8 +208,8 @@ TEMPLATES = (NEEDS_RATE, TOO_FEW, METHOD, *REASON.values(), *TITLE.values(), M_N
              N_SHAPE_ALSO, M_TS, M_TS_NONE_SLACK, M_TS_NONE, N_TS_MEANING, N_TS_NOT_EST, M_NET_SIZE, M_NET_FEW, E_NET,
              N_NET_INDEPENDENT, N_COVERAGE, N_NET_ONE_BAND, M_ETA, E_ETA, N_ETA_LOW, N_ETA_HIGH, N_ETA_SHARED, M_FILM,
              M_FILM_FEW, M_FILM_NOT_ID, E_FILM, N_FILM, NOTE_CONSTRUCTION, NOTE_SHAPE, NOTE_RATE, NOTE_T0,
-             NOTE_T_END, NOTE_D_PEAK, NOTE_STICKING, NOTE_CHAMBER, NOTE_CU, NOTE_HOST_PEAKS, HOST_UNKNOWN, HOST_NO_DATA,
-             HOST_INCLUDED)
+             NOTE_T_END, NOTE_T_END_AFTER, NOTE_D_PEAK, NOTE_STICKING, NOTE_CHAMBER, NOTE_CU, NOTE_HOST_PEAKS,
+             HOST_UNKNOWN, HOST_NO_DATA, HOST_INCLUDED)
 """Every sentence this module writes into the summary and the table (filled with str.format)."""
 OXIDES = {'si', 'sio2', 'siox', 'sio', 'silicon', 'tio2', 'al2o3', 'oxide', 'glass', 'quartz', 'a-c', 'ito', 'sapphire'}
 UNKNOWN_POLYMER = {'', 'polymer', 'unknown', 'none'}
@@ -881,9 +883,12 @@ def _summary(cfg, columns, rows, status, t, delta, D, trend, span, fit_idx, host
                                       t0_error=fmt(perc['t0_error_s'])))
         if t0_s is None:
             notes.append(NOTE_T0.format(rate=fmt(rate)))
-        if t_end_s is not None:
+        after = int(np.sum(t > t_end_s)) if t_end_s is not None else 0
+        if t_end_s is not None and after == 0:  # the scan ended first: delta grows in every window
+            notes.append(NOTE_T_END_AFTER.format(t_end=fmt(t_end_s)))
+        elif t_end_s is not None:
             notes.append(NOTE_T_END.format(t_end=fmt(t_end_s), delta=fmt(rate * (t_end_s - (t0_s or 0.))),
-                                           count=int(np.sum(t > t_end_s))))
+                                           count=after))
     notes += [NOTE_D_PEAK, NOTE_STICKING, NOTE_CHAMBER]
     if host_note:
         notes.append(host_note)

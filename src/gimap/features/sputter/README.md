@@ -34,13 +34,15 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   R_lit/D_lit of `structure_physical.csv` as R/D, grade Lit, film after its percolation (D = 2π/q* goes on, R is not
   given), a percolation interval with the rate and t0 errors and a *not determined* state; `domain/literature.py`),
   `window`, `selected`, `sequence`. A new deposition rate, t0 or deposition end calls the toolkit's `physical` command
-  only and keeps the explanation shown (without a rate the literature method gives way to the physical path);
-  **Add Refined Windows…** calls `table` then `physical`.
+  only and keeps the explanation shown (without a rate the literature method gives way to the physical path); t0 and
+  the end are compared also without a rate (`thickness_values`: the summary records them). **Add Refined Windows…**
+  refuses the fields a change of them refuses, then calls `table` then `physical`.
 - **Deposition end** (More options, optional, remembered per folder like the rate and t0; `AnalyzeRequest.t_end_s`,
   `--t-end-s`, not part of the results folder's code): the shutter is closed by hand, so a scan can go on after the
   deposition; the toolkit keeps the nominal thickness (and the literature method's δ) at rate·(t_end − t0) after it.
-  Size Trend draws the plateau, marks the end and puts no δ tick beyond it; the summary records `t_end_s` and
-  `t_end_given` (`deposition_end`).
+  Size Trend draws the plateau, marks the end (an end outside the windows only in the legend: the time axis keeps to
+  the windows) and puts no δ tick beyond it; the summary records `t_end_s` and `t_end_given` (`deposition_end`). The
+  toolkit's command line refuses a rate that is not positive or an end not after t0 before reading any frame.
 - **Literature** tab (`presentation/literature_tab.py`): D, 2R/D, coverage and η = t_eq/δ over δ against the
   published values the toolkit copies into the summary, the checks with verdicts and references, the caveats.
   Without a rate it says how to give one. The toolkit's sentences are translated by matching them against

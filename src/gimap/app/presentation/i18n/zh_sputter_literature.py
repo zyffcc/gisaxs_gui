@@ -62,6 +62,8 @@ SPUTTER_LITERATURE_ZH = {
     " (assumed: the first frame)": "（假定：第一帧）",
     " · deposition ended at t_end = {t_end} s: later windows stay at δ = {delta} nm":
         " · 沉积在 t_end = {t_end} s 结束：之后的时间窗停留在 δ = {delta} nm",
+    " · deposition ended at t_end = {t_end} s, after the last window: δ = rate × (t − t0) in every window":
+        " · 沉积在 t_end = {t_end} s 结束，在最后一个时间窗之后：每个时间窗中 δ = 速率 × (t − t0)",
     "a polymer of unknown type": "种类未知的聚合物",
     "D = 2π/q* (literature method)": "D = 2π/q*（文献方法）",
     "trend of D (non-decreasing)": "D 的趋势（非减）",

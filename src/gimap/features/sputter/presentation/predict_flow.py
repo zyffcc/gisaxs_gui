@@ -8,9 +8,10 @@ model's last lines under Details.
 
 Predict uses the values of the folder in the picker: pressed while that folder's header is still read, it
 starts once the form is filled from it; a folder whose header says it has no frames is refused. A new
-deposition rate, t0 or end of the deposition rewrites only the physical files of the result shown
-(``rebuild_physical``: no frame is read again) — when that result is of the scan in the picker; otherwise the
-fields are what the next Predict uses. The explanation shown stays; when the rate is taken away the literature
+deposition rate, t0 or end of the deposition (also without a rate: the files record them) rewrites only the physical
+files of the result shown (``rebuild_physical``: no frame is read again) — when that result is of the scan in the
+picker; otherwise the fields are what the next Predict uses. Add Refined Windows… refuses the same values a change of
+the fields refuses. The explanation shown stays; when the rate is taken away the literature
 method (it needs one) gives way to the default, the physical path. Predict pressed while those files are rewritten
 follows them.
 """
@@ -287,11 +288,7 @@ class SputterPredictMixin:
         if result is None or self._busy is not None:
             return
         values = self._values()
-        if values["rate"] is not None and values["rate"] <= 0:
-            self._notify(tr("The deposition rate must be positive (or empty)."), error=True)
-            return
-        if not deposition_end_ok(values["t0"], values["t_end"]):
-            self._notify(tr("The end of the deposition must be after its start t0 (or empty)."), error=True)
+        if self._thickness_refused(values):
             return
         wanted = thickness_values(values["rate"], values["t0"], values["t_end"])
         if wanted == self._drawn:
@@ -311,16 +308,31 @@ class SputterPredictMixin:
             folder, values["rate"], values["t0"], emit, variant, t_end_s=values["t_end"])), on_done=self._finished,
             on_error=lambda message, details: self._finished(Failure(message, details)))
 
+    def _thickness_refused(self, values: dict) -> bool:
+        """A rate that is not positive or an end of the deposition not after t0: said, and nothing is rewritten."""
+        if values["rate"] is not None and values["rate"] <= 0:
+            self._notify(tr("The deposition rate must be positive (or empty)."), error=True)
+            return True
+        if not deposition_end_ok(values["t0"], values["t_end"]):
+            self._notify(tr("The end of the deposition must be after its start t0 (or empty)."), error=True)
+            return True
+        return False
+
     def _choose_refined(self) -> None:
+        """Merge refined windows: the tables and the physical files are rewritten with the deposition fields (those
+        the result was drawn with when it is of another scan); fields the toolkit would refuse are refused first."""
         if self.result is None or self._busy is not None:
+            return
+        for_picker, values = self._result_is_for_picker(), self._values()
+        if for_picker and self._thickness_refused(values):
             return
         refined = QFileDialog.getExistingDirectory(self, tr("Folder of Refined Window Files"), str(self.result.folder))
         if not refined:
             return
-        result, values = self.result, self._values()
+        result = self.result
         metal = result.metal or values["metal"]
         variant = self.choice_box.currentData()
-        rate, t0, t_end = (values["rate"], values["t0"], values["t_end"]) if self._result_is_for_picker() else \
+        rate, t0, t_end = (values["rate"], values["t0"], values["t_end"]) if for_picker else \
             (self._drawn if self._drawn is not None else (None, None, None))
         self._set_busy("merge")
         self._tracker = None

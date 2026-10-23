@@ -492,6 +492,97 @@ def test_the_end_of_the_deposition_draws_a_plateau_and_belongs_to_its_scan(tmp_p
     _close(page)
 
 
+def test_an_end_outside_the_windows_keeps_the_time_axis_on_them(tmp_path):
+    runner = FakeRunner(literature=True)
+    page = _page(tmp_path, runner=runner)
+    folder = result_folder(tmp_path / "res", physical=True)  # invented windows at 0.5–2.0 s, rate 0.2 nm/s
+    page.open_results(folder)
+    figure = page.trend.figure
+    page.trend.canvas.draw()
+    before = figure.axes[-1].get_xlim()
+
+    def legend():
+        return [t.get_text() for t in figure.axes[-1].get_legend().get_texts()]
+
+    # Long after the scan: named in the legend, no line that would stretch the shared time axis (and the δ axis).
+    page.t_end.setText("500")
+    page.t_end.editingFinished.emit()
+    _settle(lambda: not page.running())
+    assert runner.calls[-1] == ("physical", folder, 0.2, 0.0, 500.0)
+    page.trend.canvas.draw()
+    assert figure.axes[-1].get_xlim() == pytest.approx(before)
+    assert "deposition ended 500.0 s, after the last window" in legend()
+    assert figure.axes[0].child_axes[0].get_xlim() == pytest.approx((0.2 * before[0], 0.2 * before[1]))
+    assert "deposition ended at t_end = 500 s, after the last window" in page.literature.message.text()
+    # Before the first window: δ is the same in every window, so there is no δ axis.
+    page.t_end.setText("0.2")
+    page.t_end.editingFinished.emit()
+    _settle(lambda: not page.running())
+    page.trend.canvas.draw()
+    assert figure.axes[-1].get_xlim() == pytest.approx(before)
+    assert "deposition ended 0.2 s, before the first window" in legend()
+    assert figure.axes[0].child_axes == []
+    _close(page)
+
+
+def test_without_a_rate_a_new_end_of_the_deposition_is_applied_and_remembered(tmp_path):
+    from src.gimap.features.sputter.application import folder_key
+
+    preferences = InMemoryUserPreferencesRepository()
+    runner = FakeRunner()
+    page = _page(tmp_path, runner=runner, installer=FakeInstaller(ready=True), preferences=preferences)
+    scan = scan_folder(tmp_path)
+    _fill(page, scan)
+    page.t_end.setText("1.2")
+    page.predict()
+    _settle(lambda: not page.running())
+    assert page.rate.text() == "" and page.result.summary["thickness"]["t_end_s"] == 1.2
+
+    def legend():
+        return [t.get_text() for t in page.trend.figure.axes[-1].get_legend().get_texts()]
+
+    assert "deposition ended 1.2 s" in legend()  # marked without a rate too
+    page.t_end.setText("")
+    page.t_end.editingFinished.emit()
+    _settle(lambda: not page.running())
+    assert runner.calls[-1] == ("physical", page.result.folder, None, None, None)
+    assert page.result.summary["thickness"]["t_end_s"] is None
+    assert not any(words.startswith("deposition ended") for words in legend())
+    assert preferences.get("sputter_page")["folders"][folder_key(scan)]["t_end"] is None
+    page.show_result(page.result)  # shown again (another explanation, a language switch): the field stays empty
+    assert page.t_end.text() == ""
+    _close(page)
+
+
+def test_add_refined_windows_refuses_the_fields_a_change_of_them_refuses(tmp_path, monkeypatch):
+    from PyQt5.QtWidgets import QFileDialog
+
+    runner = FakeRunner()
+    page = _page(tmp_path, runner=runner)
+    folder = result_folder(tmp_path / "res", physical=True)
+    page.open_results(folder)
+    asked, notes = [], []
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        lambda *_a, **_k: asked.append(True) or str(tmp_path / "refined"))
+    monkeypatch.setattr(page, "_notify", lambda message, error=False: notes.append((message, error)))
+    for rate, t0, t_end in (("0.2", "2", "1.7"), ("-1", "0", "")):  # an end before t0; a negative rate
+        page.rate.setText(rate)
+        page.t0.setText(t0)
+        page.t_end.setText(t_end)
+        page.merge_button.click()
+        assert not page.running()
+    assert runner.calls == [] and asked == []
+    assert [error for _message, error in notes] == [True, True]
+    page.t0.setText("0")
+    page.rate.setText("0.2")
+    page.t_end.setText("1.7")
+    page.merge_button.click()
+    _settle(lambda: not page.running())
+    assert [call[0] for call in runner.calls] == ["table", "physical"]
+    assert runner.calls[-1] == ("physical", folder, 0.2, 0.0, 1.7)
+    _close(page)
+
+
 def test_refined_windows_rebuild_the_tables_and_the_physical_files(tmp_path, monkeypatch):
     from PyQt5.QtWidgets import QFileDialog
 

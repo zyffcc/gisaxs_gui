@@ -7,14 +7,17 @@ equivalent thickness t_eq as a band (conditional: hemispheres h = R on a hexagon
 thickness rate·(t − t0) when a deposition rate is given, and shades the film windows: there the thickness is
 not determined. The film onset of the physical path is marked with its interval on every panel. When the end of the
 deposition t_end is given (the shutter is closed by hand; a scan can go on after it) the nominal thickness stays at
-rate·(t_end − t0) after it (a plateau) and t_end is marked on the thickness panel.
+rate·(t_end − t0) after it (a plateau) and t_end is marked on the thickness panel — when it falls within the
+windows; an end after the last window (or before the first) is only named in the legend, and the time axis keeps to
+the windows.
 
 The literature explanation draws R and D of the literature method the same way (grade Lit: R from the nominal
 thickness δ and 2π/q* by mass balance); its thickness panel shows δ only (the islands hold it by construction), the
 windows after its percolation are shaded (D = 2π/q* goes on, R is not given) and the percolation is marked with its
 interval (the scatter of the windows and the errors of the rate and t0). A percolation that is not determined is
 shaded from the earliest time it may come at to the end of the peak phase it was looked for in. With a deposition
-rate the top axis also gives δ = rate × (t − t0), with ticks only up to the end of the deposition (δ stays there).
+rate the top axis also gives δ = rate × (t − t0), with ticks only up to the end of the deposition (δ stays there;
+no δ axis when the deposition ended before the first window: δ is the same in every window).
 """
 
 from __future__ import annotations
@@ -40,6 +43,8 @@ INTERVAL_LABEL = "68% interval of the percolation (scatter, rate ±{rate_error}%
 UNDETERMINED_LABEL = "percolation not determined: from {time} s or later"
 BY_CONSTRUCTION = "literature method: the islands hold δ by construction"
 DEPOSITION_END = "deposition ended {time} s"
+ENDED_AFTER = "deposition ended {time} s, after the last window"
+ENDED_BEFORE = "deposition ended {time} s, before the first window"
 SMOOTHED = ("physical", "literature")
 
 
@@ -119,8 +124,7 @@ class TrendPlot:
             else:
                 self._graded(ax, result, name)
             if name == "thickness" and ended is not None:  # the nominal thickness stays constant after it
-                ax.axvline(ended, color=TREND_COLORS["nominal"], lw=1, ls="-.",
-                           label=text(DEPOSITION_END, time=f"{ended:.1f}"))
+                _deposition_end(ax, ended, times)
             first = name == panels[0][0]
             if interval is not None and times:
                 end = (percolation_last_time(result.summary) if kind == "percolation" else None) or max(times)
@@ -140,7 +144,7 @@ class TrendPlot:
                 legend.get_frame().set_alpha(.7)
         axes[-1].set_xlabel(tr("time (s)"))
         axis = thickness_axis(result)
-        if axis is not None:
+        if axis is not None and not (axis[2] is not None and times and axis[2] < min(times)):
             rate, t0, t_end = axis
             top = axes[0].secondary_xaxis("top", functions=(lambda t: rate * (t - t0), lambda d: d / rate + t0))
             if t_end is not None:  # δ stays at rate × (t_end − t0) after the deposition ended
@@ -242,6 +246,17 @@ def _direct(ax, result: StructureResult) -> None:
         ax.plot(direct.time, direct.value, "x", ms=3, color="0.5", label=tr("2π/q* (direct)"))
 
 
+def _deposition_end(ax, ended: float, times: list) -> None:
+    """The end of the deposition: a line where it falls within the windows; outside them only a legend entry (a line
+    there would stretch the shared time axis, e.g. to an end long after the scan, and squeeze the windows)."""
+    style = dict(color=TREND_COLORS["nominal"], lw=1, ls="-.")
+    time = f"{ended:.1f}"
+    if times and min(times) <= ended <= max(times):
+        ax.axvline(ended, label=text(DEPOSITION_END, time=time), **style)
+    else:
+        ax.plot([], [], label=text(ENDED_BEFORE if times and ended < min(times) else ENDED_AFTER, time=time), **style)
+
+
 def _ticks_up_to(axis, limit: float) -> None:
     """Ticks of the top δ axis only up to ``limit``, the thickness at the end of the deposition: the axis goes on
     linearly in time, but no more metal was deposited after it."""
@@ -283,8 +298,9 @@ def _positive(ax) -> bool:
     return bool(ax.collections)
 
 
-TEMPLATES = (AFTER_PERCOLATION, BY_CONSTRUCTION, DEPOSITION_END, INTERVAL_LABEL, UNDETERMINED_LABEL)
+TEMPLATES = (AFTER_PERCOLATION, BY_CONSTRUCTION, DEPOSITION_END, ENDED_AFTER, ENDED_BEFORE, INTERVAL_LABEL,
+             UNDETERMINED_LABEL)
 """Texts the trend says from a name (the interface translates them)."""
 
-__all__ = ["AFTER_PERCOLATION", "BY_CONSTRUCTION", "COLORS", "DEPOSITION_END", "TEMPLATES", "TrendPlot",
-           "thickness_axis"]
+__all__ = ["AFTER_PERCOLATION", "BY_CONSTRUCTION", "COLORS", "DEPOSITION_END", "ENDED_AFTER", "ENDED_BEFORE",
+           "TEMPLATES", "TrendPlot", "thickness_axis"]
