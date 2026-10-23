@@ -6,8 +6,13 @@
 no switching between refined and network values from window to window), smoothed trend lines, the
 island-volume equivalent thickness t_eq, the nominal thickness rate·(t − t0) when a deposition rate is given
 (constant after the end of the deposition t_end when it is given: the shutter is closed by hand),
-the film onset with its interval and the period of a periodic intensity modulation (possibly a sample rotation:
-the data do not tell its source).
+the film onset with its interval and the period of a periodic intensity modulation (probably the back-and-forth
+translation of the sample stage during the deposition, which keeps the beam from damaging one spot: near the ends of
+its travel the beam can reach the sample edge or leave the sample). Windows whose intensity dips far below that of
+their neighbours are flagged ``beam_off_sample`` (the beam is probably partly or fully off the sample): they keep their
+values, but cast no stage vote and are left out of the trend lines, the back-and-forth counts and the literature
+method's trend of D. The summary's ``modulation_period_s`` is the neutral name of ``rotation_period_s`` (results of
+older toolkits have only the latter).
 Written from English templates (``text``) like the rest of the reliability report; the toolkit's own notes go
 through ``note`` (the interface gives the sentences it knows in its language, the others as they are).
 """
@@ -24,6 +29,27 @@ NOMINAL = ("Nominal thickness = rate × (t − t0) with rate {rate} nm/s and t0 
            "is measured.")
 NOMINAL_ENDED = ("Nominal thickness = rate × (t − t0) with rate {rate} nm/s and t0 = {t0} s until the deposition ended "
                  "at t_end = {t_end} s, then constant at {thickness} nm: what was deposited, not what is measured.")
+MODULATION = ("The intensity is modulated with a period of about {period} s (autocorrelation peak {acf}, {cycles} cycles), "
+              "probably by the back-and-forth translation of the sample stage during the deposition (it keeps the beam "
+              "from damaging one spot; near the ends of its travel the beam can reach the sample edge or leave the "
+              "sample). A single window shorter than this period sees part of one modulation cycle; the physical path "
+              "and the trend lines average over it.")
+BEAM_OFF = ("<b>Beam off the sample.</b> In {count} of {windows} windows the intensity is below {limit}% of its level "
+            "within one modulation period before and after: the beam has probably moved partly or fully off the sample "
+            "while the stage was translated. These windows keep their values in the Windows table (column Beam may be "
+            "off the sample, with the reason) and are drawn as hollow grey points in Size Trend, but they cast no stage "
+            "vote and are left out of the trend lines, the back-and-forth counts and the literature method's trend "
+            "of D.")
+BEAM_OFF_EXTREME = ("<b>Beam off the sample.</b> No periodic intensity modulation was found, so only extreme dips are "
+                    "flagged: in {count} of {windows} windows the intensity is below {limit}% of its level within "
+                    "{span} s before and after (the beam was probably off the sample or interrupted). These windows keep "
+                    "their values in the Windows table and are drawn as hollow grey points in Size Trend, but they cast "
+                    "no stage vote and are left out of the trend lines, the back-and-forth counts and the literature "
+                    "method's trend of D.")
+BEAM_ON = ("No window has an intensity below {limit}% of its level within one modulation period before and after: "
+           "nothing suggests that the beam left the sample.")
+BEAM_ON_EXTREME = ("No window has an intensity below {limit}% of its level within {span} s before and after; without a "
+                   "periodic modulation smaller dips are not flagged.")
 
 
 def _seconds(value: Optional[float]) -> str:
@@ -55,12 +81,42 @@ def deposition_end(summary: dict) -> Optional[float]:
         return None
 
 
-def rotation_period(summary: dict) -> Optional[float]:
+def modulation_period(summary: dict) -> Optional[float]:
+    """The period (s) of the intensity modulation: ``modulation_period_s``, or ``rotation_period_s`` of a result of an
+    older toolkit (the same value under the name it had)."""
     try:
-        value = summary.get("rotation_period_s")
+        value = summary.get("modulation_period_s", summary.get("rotation_period_s"))
         return None if value is None else float(value)
     except (TypeError, ValueError):
         return None
+
+
+def beam_off_record(summary: dict) -> dict:
+    """The toolkit's record of the windows where the beam may be off the sample ({} for an older result)."""
+    record = summary.get("beam_off_sample")
+    return record if isinstance(record, dict) else {}
+
+
+def beam_off_count(result) -> int:
+    """How many windows of a result may have the beam off the sample (``beam_off_sample`` = true)."""
+    return sum(1 for r in result.rows if r.get("beam_off_sample") is True)
+
+
+def _beam_off(result, text) -> list:
+    """What the toolkit flagged as beam off the sample (nothing for a result of an older toolkit)."""
+    record = beam_off_record(result.summary)
+    if not record:
+        return []
+    try:
+        limit = f"{100 * float(record.get('limit_fraction')):g}"
+        span = f"{float(record.get('span_s')):.3g}"
+    except (TypeError, ValueError):
+        return []
+    count, modulated = beam_off_count(result), record.get("rule") == "modulation"
+    if count:
+        return ["<p>" + text(BEAM_OFF if modulated else BEAM_OFF_EXTREME, count=count, windows=len(result.rows),
+                             limit=limit, span=span) + "</p>"]
+    return ["<p>" + text(BEAM_ON if modulated else BEAM_ON_EXTREME, limit=limit, span=span) + "</p>"]
 
 
 def _reversal_table(reversals: dict, text) -> list:
@@ -131,18 +187,15 @@ def physical_paragraphs(result, text, note=lambda sentence: sentence) -> list:
     if reversals:
         lines.append("<p>" + text("Back-and-forth changes before (per-window rule) and after the physical path:") + "</p>")
         lines += _reversal_table(reversals, text)
-    period = rotation_period(summary)
-    detection = summary.get("rotation_detection") or {}
+    period = modulation_period(summary)
+    detection = summary.get("modulation_detection") or summary.get("rotation_detection") or {}
     if period is not None:
         acf, cycles = detection.get("acf_peak"), detection.get("cycles")
-        lines.append("<p>" + text(
-            "The intensity is modulated with a period of about {period} s (autocorrelation peak {acf}, {cycles} "
-            "cycles), possibly by a sample rotation: the data do not tell the source. A single window shorter than "
-            "this period sees part of one modulation cycle; the physical path and the trend lines average over it.",
-            period=f"{period:.3g}", acf="–" if acf is None else f"{float(acf):.2f}",
-            cycles="–" if cycles is None else cycles) + "</p>")
+        lines.append("<p>" + text(MODULATION, period=f"{period:.3g}", acf="–" if acf is None else f"{float(acf):.2f}",
+                                  cycles="–" if cycles is None else cycles) + "</p>")
     else:
         lines.append("<p>" + text("No periodic intensity modulation was found.") + "</p>")
+    lines += _beam_off(result, text)
     lines += _thickness(summary, text, note)
     notes = [words for words in (summary.get("notes") or []) if isinstance(words, str) and words]
     if notes:
@@ -151,5 +204,9 @@ def physical_paragraphs(result, text, note=lambda sentence: sentence) -> list:
     return lines
 
 
-__all__ = ["FILM_NOT_DETERMINED", "NOMINAL", "NOMINAL_ENDED", "REVERSAL_ROWS", "deposition_end", "film_onset",
-           "physical_paragraphs", "rotation_period"]
+TEMPLATES = (NOMINAL, NOMINAL_ENDED, MODULATION, BEAM_OFF, BEAM_OFF_EXTREME, BEAM_ON, BEAM_ON_EXTREME)
+"""Sentences the report says from a name (the interface translates them)."""
+
+__all__ = ["BEAM_OFF", "BEAM_OFF_EXTREME", "BEAM_ON", "BEAM_ON_EXTREME", "FILM_NOT_DETERMINED", "MODULATION",
+           "NOMINAL", "NOMINAL_ENDED", "REVERSAL_ROWS", "TEMPLATES", "beam_off_count", "beam_off_record",
+           "deposition_end", "film_onset", "modulation_period", "physical_paragraphs"]

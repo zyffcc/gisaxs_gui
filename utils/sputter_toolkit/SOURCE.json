@@ -1,7 +1,7 @@
 {
  "source": "delivered sputter_struct_v1 toolkit (research code, packaged with its two network checkpoints)",
  "source_commit": "19d775bc",
- "bundled": "Import closure of scripts/sputter_struct_v1.py for analyze, table, select, sequence and physical: 38 modules of sputtergisaxs/ (including the 9-module chain scenario_ts needs for TS windows) plus the new sputter_physical.py and sputter_literature.py; experts/{polymer,TS}/model/best.pt and policy.json; configs/sputter_struct_reliability_v1.json, configs/sputter_selector_v1.json and the new configs/literature_reference_v1.json.",
+ "bundled": "Import closure of scripts/sputter_struct_v1.py for analyze, table, select, sequence and physical: 38 modules of sputtergisaxs/ (including the 9-module chain scenario_ts needs for TS windows) plus the new sputter_physical.py, sputter_offsample.py and sputter_literature.py; experts/{polymer,TS}/model/best.pt and policy.json; configs/sputter_struct_reliability_v1.json, configs/sputter_selector_v1.json and the new configs/literature_reference_v1.json.",
  "not_bundled": [
   "examples/ (private scans)",
   "configs/ other than the three above, scan manifest",
@@ -147,6 +147,16 @@
    ],
    "change": "Optional end of the deposition, --t-end-s for analyze, table and physical: nominal_thickness_nm = rate*clip(t - t0, 0, t_end - t0), and the literature method uses the same delta = rate*(min(t, t_end) - t0) (constant after t_end; jumps, the percolation, its interval and the TS-onset check in the deposition time min(t, t_end)); t_end must be after t0. The summary records t_end_s and t_end_given (thickness and literature) with a note from new templates (T_END_NOTE, T_END_ASSUMED_NOTE, NOTE_T_END; NOTE_T_END_AFTER when no window comes after t_end). The command line refuses a rate that is not positive or a t_end not after t0 before any frame is read (analyze, table, physical). The literature summary no longer writes default_ready (GIMaP shows the physical path first and offers the literature method as a check).",
    "reason": "The shutter is closed by hand: a scan can go on after the deposition (e.g. half of the scan), and rate*(t - t0) would keep growing there."
+  },
+  {
+   "files": [
+    "sputtergisaxs/sputter_offsample.py",
+    "sputtergisaxs/sputter_physical.py",
+    "sputtergisaxs/sputter_literature.py",
+    "README.md"
+   ],
+   "change": "The intensity modulation is described as the back-and-forth translation of the sample stage during the deposition (against beam damage; near the ends of its travel the footprint can reach the sample edge or leave the sample), not a rotation: ROTATION_MEANING, NOTE_DIPS (one full back-and-forth cycle) and the docstrings; the summary keeps rotation_period_s / rotation_detection and adds the neutral aliases modulation_period_s / modulation_detection (modulation_period = rotation_period). New module sputter_offsample.py: a window whose intensity_rate is below 50 % of its on-sample level (the 90 % quantile of the windows with data within one modulation period before it and within one after it, the lower side) is flagged when a modulation is detected; without one only below 20 % within 10 s on each side; 3 windows with data needed on each side; a missing Yoneda ridge (found in >= 50 % of the other windows) is recorded as corroboration (constants OFF_SAMPLE). structure_physical.csv gets beam_off_sample and beam_off_reason; the summary beam_off_sample (rule, counts, lowest ratio) and beam_off_sample_windows, and a note (NOTE_OFF_SAMPLE / NOTE_OFF_EXTREME). These windows keep their values but cast no stage vote (also not in the TS-onset disagreements), are left out of the R/D trend fits (the trend is evaluated at them: rolling_log_trend(at=...)) and of every reversal count (before, after, after_trend); the literature method marks their peaks lit_status beam_off, leaves them out of the trend of D and says how many (NOTE_BEAM_OFF). New templates are listed in NOTE_TEMPLATES and sputter_literature.TEMPLATES.",
+   "reason": "User fact: the sample stage is translated back and forth during the deposition to avoid beam damage, so the beam can move onto the sample edge or off the sample; such windows are not representative of the film and must not steer the stage path, the trends or the literature D trend."
   }
  ]
 }

@@ -24,7 +24,8 @@ from src.gimap.features.sputter.application import (AnalyzeRequest, InstallError
                                                     reliability_report, remember, results_folder, scan_label)
 from src.gimap.features.sputter.infrastructure import (BundledToolkit, CbfHeaderInspector, PipInstaller, PipReader,
                                                        StructureFolderReader, classify_failure, run_streaming)
-from tests.sputter_fixtures import (PHYSICAL_ROWS, cbf_header, literature_folder, result_folder, scan_folder)
+from tests.sputter_fixtures import (PHYSICAL_ROWS, beam_off_folder, cbf_header, literature_folder, result_folder,
+                                    scan_folder)
 
 
 @pytest.fixture(autouse=True)
@@ -86,6 +87,31 @@ def test_the_report_says_when_the_deposition_ended(tmp_path):
     summary_file.write_text(json.dumps(summary), encoding="utf-8")
     result = StructureFolderReader().read(folder, "physical")
     assert deposition_end(result.summary) is None and "until the deposition ended" not in reliability_report(result)
+
+
+def test_windows_off_the_sample_are_counted_and_the_modulation_is_the_stage_translation(tmp_path):
+    from src.gimap.features.sputter.application import beam_off_count, modulation_period
+    from src.gimap.features.sputter.domain.physical import BEAM_OFF, BEAM_ON, MODULATION
+
+    reader = StructureFolderReader()
+    result = reader.read(beam_off_folder(tmp_path / "off"), "physical")
+    assert [r["beam_off_sample"] for r in result.rows] == [False, False, True, False]
+    assert beam_off_count(result) == 1 and modulation_period(result.summary) == 7.0
+    html = reliability_report(result)
+    assert BEAM_OFF.format(count=1, windows=4, limit="50", span="7") in html
+    assert MODULATION.format(period="7", acf="0.42", cycles=9) in html and "rotation" not in html
+    # None flagged: the report says that nothing suggests it; an older result says nothing about it.
+    result = reader.read(beam_off_folder(tmp_path / "none", flagged=False), "physical")
+    assert beam_off_count(result) == 0 and BEAM_ON.format(limit="50") in reliability_report(result)
+    old = reader.read(result_folder(tmp_path / "old", physical=True), "physical")
+    assert modulation_period(old.summary) == 7.0  # rotation_period_s of an older toolkit
+    assert beam_off_count(old) == 0 and "Beam off the sample" not in reliability_report(old)
+    assert "nothing suggests" not in reliability_report(old)
+    # The literature explanation keeps the flag of every window.
+    from src.gimap.features.sputter.domain import literature_rows
+
+    flagged = reader.read(beam_off_folder(tmp_path / "lit"), "physical")
+    assert [r["beam_off_sample"] for r in literature_rows(flagged.rows, flagged.summary)] == [False, False, True, False]
 
 
 def test_the_physical_path_stays_the_default_and_a_rate_offers_the_literature_method_as_its_check(tmp_path):

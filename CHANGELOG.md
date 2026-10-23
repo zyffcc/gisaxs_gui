@@ -46,8 +46,16 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   network's mass balance over δ against published values (Au/PS, Ag/PS, Ag/PMMA, Cu/graphene; thresholds by metal
   and host, each with its citation and DOI) and lists checks — consistent, inconsistent or not testable — with
   their references. The literature-method R agrees with the literature by construction; the page says so.
-- The period of a periodic intensity modulation is called *intensity modulation period (sample rotation?)*: the
-  data do not tell its source. The model's own notes and reasons are shown in the interface language.
+- The period of a periodic intensity modulation is called *intensity modulation period (sample stage
+  translation?)*: the sample stage is translated back and forth during the deposition (against beam damage), and
+  near the ends of its travel the beam can reach the sample edge or leave the sample; the data alone do not prove
+  the source. The toolkit's summary names it `modulation_period_s` (`rotation_period_s` stays for older readers).
+- Windows where the beam may be off the sample are flagged from the intensity alone: below half of the level within
+  one modulation period before and after (without a modulation only a dip below 20% within 10 s on each side). They
+  keep their values in the Windows table (column *Beam may be off the sample*, with the reason), are drawn as hollow
+  grey points in Size Trend and counted in the result line and the Reliability report, but they cast no stage vote
+  and are left out of the trend lines, the back-and-forth counts and the literature method's trend of D.
+- The model's own notes and reasons are shown in the interface language.
 - A new deposition rate keeps the explanation shown; taking it away returns from the literature method to the
   physical path.
 - **More options ▸ Deposition end (s)** (optional, remembered per scan folder like the rate and t0): the shutter is
@@ -500,6 +508,10 @@ These were found while 0.1.0 was checked; they matter to those who ran a develop
   percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given), engineering
   choices the page does not change (the toolkit's `physical` command does), and leaves out the systematic error
   of 2π/q*. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used.
+- **Sputter flags windows where the beam may be off the sample from the intensity alone** (a dip below half of the
+  neighbouring level within one modulation period, or below 20% within 10 s without a modulation). The stage
+  position and the range of its translation are not read: a shallower or slower drift off the sample is not
+  flagged, a dip with another cause is flagged alike, and the first and last windows are not judged.
 
 ### Updating from 0.0.2
 

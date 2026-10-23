@@ -13,8 +13,10 @@ writes one physical reading of the whole series:
   disagree with it). Windows with an unresolved stage cast no vote; they take
   the path value of the previous resolved window (of the next one at the start)
   and are marked stage_imputed. Windows with almost no counts (shutter closed,
-  beam off) get no stage and no values. Path stage 'film' is the rule's
-  coalescence-or-film candidate: a connected film is not proven.
+  beam off) get no stage and no values. Windows where the beam is probably
+  partly or fully off the sample (beam_off_sample, below) cast no vote either.
+  Path stage 'film' is the rule's coalescence-or-film candidate: a connected
+  film is not proven.
 - module path: TS_layer for the path stages the toolkit routes to the TS
   network (the LATE set), else polymer_embed. Every value comes from the network
   of the path module, also where the per-window rule chose the other one.
@@ -24,10 +26,20 @@ writes one physical reading of the whole series:
   (Theil-Sen) of ln R / ln D against time over the island windows within a
   centred span of max(modulation period, 2.5 s), evaluated at the window, so it
   follows growth also when the span is long and is not biased at the ends.
-- intensity modulation period: autocorrelation of the detrended log intensity
-  (a rotating sample, for example, modulates the scattered intensity periodically); the
-  shortest maximum whose double lag is also a maximum, so that two unequal
-  dips per turn give the dip spacing in every scan.
+- intensity modulation period: autocorrelation of the detrended log intensity;
+  the shortest maximum whose double lag is also a maximum, so that two unequal
+  dips per repeat give the dip spacing in every scan. The sample stage is
+  translated back and forth during the deposition (against beam damage), and
+  near the ends of its travel the footprint can reach the sample edge or leave
+  the sample: the intensity dips once or twice per cycle. The summary keeps the
+  key rotation_period_s (and rotation_detection) for older readers;
+  modulation_period_s and modulation_detection are the neutral aliases.
+- beam off the sample (sputter_offsample): windows whose intensity drops below
+  half of the level within one modulation period on both sides (without a
+  modulation: below a fifth within 10 s) are flagged beam_off_sample with a
+  beam_off_reason. They keep their values in the table but cast no stage vote
+  and are left out of the R/D trends, the reversal (zig-zag) counts and the
+  literature method's trend of D.
 - thickness substitutes: the island-volume equivalent thickness t_eq of the
   visible particles (flat-based hemispheres h=R on a hexagonal lattice) and,
   when a deposition rate is given, the nominal thickness
@@ -55,6 +67,7 @@ import numpy as np
 
 from .sputter_sequence import LATE
 from .sputter_literature import LIT_COLUMNS, literature_table
+from .sputter_offsample import TEMPLATES as OFF_TEMPLATES, beam_off_sample
 
 STAGE_ORDINAL = {'pre_nucleation_candidate': 0, 'separate_islands_candidate': 1, 'coalescence_candidate': 2,
                  'coalescence_or_film_candidate': 3, 'continuous_film_candidate': 3}
@@ -75,9 +88,11 @@ ROTATION_METHOD = ('autocorrelation of ln(intensity_rate) on the uniform (0.5 s)
                    'centred 60 s local linear fit; local maxima >= 0.1 at lags 2-60 s; the period is the shortest maximum '
                    'whose double lag is also a maximum, with >= 0.3 at one of the two (>= 0.3 on its own when the '
                    'double lag is beyond 60 s; else the first maximum >= 0.3), with >= 3 full cycles in the series')
-ROTATION_MEANING = ('period of the intensity modulation (the spacing of its dips), for example from a sample rotation '
-                    '(the data do not tell the source); when the pattern repeats exactly only after twice this period '
-                    '(two unequal dips, full_repeat_s), one turn of the sample may take full_repeat_s')
+ROTATION_MEANING = ('period of the intensity modulation (the spacing of its dips), probably from the back-and-forth '
+                    'translation of the sample stage during the deposition (against beam damage; near the ends of its '
+                    'travel the footprint can reach the sample edge or leave the sample); the data alone do not prove '
+                    'the source. When the pattern repeats exactly only after twice this period (two unequal dips, '
+                    'full_repeat_s), one full back-and-forth cycle of the stage may take full_repeat_s')
 FILM_STATUS = ("not determined by GISAXS: the TS film thickness and metal fraction are not identifiable "
                "(in simulation the network's posterior equals its prior); see L_TS_nm for the lateral texture length")
 T_EQ_NOTE = ('t_eq = (2/3)*pi*R^3*exp(3*sigma^2) / ((sqrt(3)/2)*D^2): island-volume equivalent thickness of the '
@@ -125,17 +140,27 @@ NOTE_LATE_ONSET = ('No TS onset on the path, but onsets from {start} s disagree 
 NOTE_NO_FILM = ('The path reaches coalescence but never the film stage: film_onset_s is the onset of TS-network '
                 '(coalescence) windows, not of a continuous film.')
 NOTE_DIPS = ('The intensity dips every {period} s with unequal depths; the pattern repeats exactly after {repeat} s, which '
-             'may be one turn of the sample.')
+             'may be one full back-and-forth cycle of the sample stage (one dip at each end of its travel).')
+NOTE_OFF_SAMPLE = ('{count} windows with an intensity below {limit}% of the level within one modulation period on both '
+                   'sides: the beam is probably partly or fully off the sample while the stage is translated '
+                   '(beam_off_sample=true). They keep their values but cast no stage vote and are left out of the R/D '
+                   'trends and the zig-zag counts.')
+NOTE_OFF_EXTREME = ('{count} windows with an intensity below {limit}% of the level within {span} s on both sides, without '
+                    'a periodic modulation: the beam was probably off the sample or interrupted (beam_off_sample=true). '
+                    'They keep their values but cast no stage vote and are left out of the R/D trends and the zig-zag '
+                    'counts.')
 NOTE_SPAN = ('The smoothing span ({span} s) covers the whole island phase ({start}-{end} s): R_trend_nm / D_trend_nm are '
              'one log-linear fit over it; the per-window R_nm / D_nm (grade P) show more.')
 NOTE_TEMPLATES = (T_EQ_NOTE, NOMINAL_NOTE, NOMINAL_NOTE + T0_ASSUMED_NOTE, NO_RATE_NOTE, T_END_NOTE,
                   T_END_ASSUMED_NOTE, FILM_STATUS, ONSET_MEANING, ALT_MISSING, FILM_REASON, PRE_REASON, UNSTAGED_REASON,
                   NO_DATA_REASON, NO_PEAK_REASON, NO_ESTIMATE, D_OUTSIDE, NOTE_MONOTONE, NOTE_FILM_STAGE, NOTE_TREND, NOTE_GRADE_P, NOTE_TS_FILM, NOTE_CU, NOTE_IMPUTED,
-                  NOTE_NO_DATA, NOTE_NOT_ESTABLISHED, NOTE_LATE_ONSET, NOTE_NO_FILM, NOTE_DIPS, NOTE_SPAN)
+                  NOTE_NO_DATA, NOTE_NOT_ESTABLISHED, NOTE_LATE_ONSET, NOTE_NO_FILM, NOTE_DIPS, NOTE_SPAN,
+                  NOTE_OFF_SAMPLE, NOTE_OFF_EXTREME, *OFF_TEMPLATES)
 """Every note and reason this module writes (filled with str.format; the literature texts are in
 sputter_literature.TEMPLATES)."""
 NEW_COLUMNS = ('stage_path', 'module_path', 'film', 'path_changed', 'R_trend_nm', 'D_trend_nm', 't_eq_nm', 't_eq_lo_nm',
-               't_eq_hi_nm', 'nominal_thickness_nm', 'film_thickness_status', 'stage_imputed') + LIT_COLUMNS
+               't_eq_hi_nm', 'nominal_thickness_nm', 'film_thickness_status', 'stage_imputed', 'beam_off_sample',
+               'beam_off_reason') + LIT_COLUMNS
 
 
 def _num(v):
@@ -200,7 +225,7 @@ def onset_disagreements(stages):
     return before_film + after_island
 
 
-# ----------------------------------------------------------------- rotation --
+# ------------------------------------------------ intensity modulation period --
 def local_linear_trend(y, half):
     """Least-squares line through the finite values of y within +-half samples, evaluated at each sample.
 
@@ -298,11 +323,18 @@ def rotation_period(times, rates, nominal_seconds, cfg=ROTATION):
     return None, record
 
 
+modulation_period = rotation_period
+"""The neutral name: the modulation comes from the back-and-forth stage translation (rotation_period stays for
+older callers)."""
+
+
 # ------------------------------------------------------------------ smoothing --
-def rolling_log_trend(times, values, span, min_points=MIN_TREND_POINTS):
+def rolling_log_trend(times, values, span, min_points=MIN_TREND_POINTS, at=None):
     """Local log-linear trend: Theil-Sen fit of ln(value) vs time over windows within +-span/2, at each window.
 
-    Windows without a value stay None. With fewer than min_points values in the span the local median is used.
+    Windows without a value stay None, unless at[i] is true: the trend is then evaluated at their time from the
+    values around them (a window left out of the fit still lies on the trend line; None when no value is within
+    the span). With fewer than min_points values in the span the local median is used.
     """
     out = [None] * len(values)
     pts = sorted((t, i, math.log(v)) for i, (t, v) in enumerate(zip(times, values))
@@ -310,8 +342,13 @@ def rolling_log_trend(times, values, span, min_points=MIN_TREND_POINTS):
     if not pts:
         return out
     ts = np.array([p[0] for p in pts]); ls = np.array([p[2] for p in pts])
-    lo = np.searchsorted(ts, ts - span / 2, side='left'); hi = np.searchsorted(ts, ts + span / 2, side='right')
-    for (t0, i, _), a, b in zip(pts, lo, hi):
+    have = {i for _, i, _ in pts}
+    extra = [(times[i], i) for i in range(len(values))
+             if at is not None and at[i] and i not in have and times[i] is not None]
+    for t0, i in [(t, i) for t, i, _ in pts] + extra:
+        a = int(np.searchsorted(ts, t0 - span / 2, side='left')); b = int(np.searchsorted(ts, t0 + span / 2, side='right'))
+        if b <= a:
+            continue
         tt, yy = ts[a:b] - t0, ls[a:b]
         if b - a >= min_points and tt[-1] > tt[0]:
             dt = np.subtract.outer(tt, tt); dy = np.subtract.outer(yy, yy)
@@ -468,7 +505,14 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                for f in frame_rows]
     rule_stages = [r.get('stage') or '' for r in srt]
     stages = ['' if nd else s for s, nd in zip(rule_stages, no_data)]
-    path = [None if nd else o for o, nd in zip(stage_path(stages), no_data)]
+    # The intensity modulation (the back-and-forth stage translation) and the windows where the beam is probably
+    # partly or fully off the sample: they keep their values but cast no stage vote.
+    rates = [_num(f.get('intensity_rate')) for f in frame_rows]
+    period, detection = rotation_period(t, rates, [_num(f.get('nominal_bin_seconds')) for f in frame_rows])
+    off, off_reasons, off_record = beam_off_sample(t, rates, period, no_data=no_data,
+                                                   yoneda=[_num(f.get('Yoneda_deg')) for f in frame_rows])
+    votes = ['' if o else s for s, o in zip(stages, off)]
+    path = [None if nd else o for o, nd in zip(stage_path(votes), no_data)]
     imputed = [o is not None and STAGE_ORDINAL.get(s) is None for o, s in zip(path, stages)]
     rule_module = [r.get('module') or '' for r in srt]
     module_path = [('' if nd else rule_module[i]) if o is None else ('TS_layer' if is_late(o) else 'polymer_embed')
@@ -486,7 +530,8 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
         peak = r.get('feature_status') in PEAK
         island_module = module_path[i] == 'polymer_embed'
         row = dict(stage_path=PATH_STAGES[o] if o is not None else '', module_path=module_path[i],
-                   film=module_path[i] == 'TS_layer', stage_imputed=imputed[i],
+                   film=module_path[i] == 'TS_layer', stage_imputed=imputed[i], beam_off_sample=off[i],
+                   beam_off_reason=off_reasons[i],
                    path_changed=(not no_data[i]) and (module_path[i] != rule_module[i]
                                                       or (rule_o is not None and o is not None and rule_o != o)))
         values = _size_values(kind, net, peak, errR, errD)
@@ -511,12 +556,13 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
         row['film_thickness_status'] = FILM_STATUS if kind == 'film' else ''
         out.append(row)
         film_net.append((net['film_thickness'], net['metal_fraction']) if net and kind == 'film' else (None, None))
-    # Modulation (rotation) period and smoothed sizes.
-    period, detection = rotation_period(t, [_num(f.get('intensity_rate')) for f in frame_rows],
-                                        [_num(f.get('nominal_bin_seconds')) for f in frame_rows])
+    # Smoothed sizes over the modulation period, without the windows off the sample (the trend is evaluated there too).
     span = max(period or 0., MIN_SPAN_S)
     for name in ('R', 'D'):
-        trend = rolling_log_trend(t, [row[f'{name}_nm'] if k == 'islands' else None for row, k in zip(out, kinds)], span)
+        trend = rolling_log_trend(t, [row[f'{name}_nm'] if k == 'islands' and not o else None
+                                      for row, k, o in zip(out, kinds, off)], span,
+                                  at=[k == 'islands' and o and row[f'{name}_nm'] is not None
+                                      for row, k, o in zip(out, kinds, off)])
         for row, value in zip(out, trend):
             row[f'{name}_trend_nm'] = value
     # Thickness substitutes.
@@ -531,12 +577,12 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
         row['nominal_thickness_nm'] = (rate_nm_s * min(max(0., ti - t0), deposited)
                                        if rate_nm_s is not None and ti is not None else None)
     # TS onset and its interval.
-    onset, onset_extras = _onset(module_path, stages, t, n)
+    onset, onset_extras = _onset(module_path, votes, t, n)
     # The literature method and the comparison with published growth.
     lit_rows = [dict(D_corr_nm=_num(r.get('D_corr_nm')), feature_status=r.get('feature_status'), no_data=nd, kind=k,
                      R_nm=row['R_nm'], D_nm=row['D_nm'], t_eq_nm=row['t_eq_nm'], module_path=row['module_path'],
-                     film_thickness=film[0], metal_fraction=film[1])
-                for r, nd, k, row, film in zip(srt, no_data, kinds, out, film_net)]
+                     film_thickness=film[0], metal_fraction=film[1], beam_off=o)
+                for r, nd, k, row, film, o in zip(srt, no_data, kinds, out, film_net, off)]
     columns, literature = literature_table(t, lit_rows, metal=metal, polymer=polymer_type or polymer_of(frames),
                                            rate_nm_s=rate_nm_s, t0_s=t0_s, onset=onset_extras, period=period,
                                            teq_factor=factor, rate_error=rate_error, t0_error_s=t0_error_s,
@@ -555,15 +601,26 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                               ratio=teq / nominal if nominal > 0 else None, windows=len(idx),
                               scope=('median over the last 5 island windows with t_eq before the TS onset' if onset is not None
                                      else 'median over the last 5 island windows with t_eq (no TS onset on the path)'))
-    before = dict(stage=stage_reversals([STAGE_ORDINAL.get(s) for s in rule_stages]), module_revert=module_reverts(rule_module),
-                  R_zigzag=zigzags([_num(r.get('R_nm')) for r in srt]), D_zigzag=zigzags([_num(r.get('D_nm')) for r in srt]))
-    after = dict(stage=stage_reversals(path), module_revert=module_reverts(module_path),
-                 R_zigzag=zigzags([row['R_nm'] for row in out]), D_zigzag=zigzags([row['D_nm'] for row in out]))
-    after_trend = dict(R_zigzag=zigzags([row['R_trend_nm'] for row in out]), D_zigzag=zigzags([row['D_trend_nm'] for row in out]))
+    # Back-and-forth counts over the same windows before and after: the windows off the sample are left out of all.
+    on = [not o for o in off]
+
+    def kept(values):
+        return [v if keep else None for v, keep in zip(values, on)]
+
+    before = dict(stage=stage_reversals(kept([STAGE_ORDINAL.get(s) for s in rule_stages])),
+                  module_revert=module_reverts(kept(rule_module)),
+                  R_zigzag=zigzags(kept([_num(r.get('R_nm')) for r in srt])),
+                  D_zigzag=zigzags(kept([_num(r.get('D_nm')) for r in srt])))
+    after = dict(stage=stage_reversals(kept(path)), module_revert=module_reverts(kept(module_path)),
+                 R_zigzag=zigzags(kept([row['R_nm'] for row in out])), D_zigzag=zigzags(kept([row['D_nm'] for row in out])))
+    after_trend = dict(R_zigzag=zigzags(kept([row['R_trend_nm'] for row in out])),
+                       D_zigzag=zigzags(kept([row['D_trend_nm'] for row in out])))
     path_counts = {name: sum(1 for o in path if o == j) for j, name in enumerate(PATH_STAGES)}
     imputed_counts = {name: sum(1 for o, m in zip(path, imputed) if m and o == j) for j, name in enumerate(PATH_STAGES)}
     extras = dict(onset_extras,
         rotation_period_s=period, rotation_detection=detection, smoothing_span_s=span,
+        modulation_period_s=period, modulation_detection=detection,
+        beam_off_sample=off_record, beam_off_sample_windows=sum(off),
         stage_path_counts=path_counts, stage_path_counts_imputed=imputed_counts,
         stage_imputed_windows=sum(imputed), no_data_windows=sum(no_data),
         path_changed_windows=sum(bool(row['path_changed']) for row in out),
@@ -573,7 +630,8 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                                    'physical path (stage_path, module_path) and its per-window R_nm/D_nm (grade P); '
                                    'after_trend: the smoothed R_trend_nm/D_trend_nm. stage: A->B->A excursions among '
                                    'resolved stages; module_revert: TS_layer -> polymer_embed changes; R/D zig-zag: a '
-                                   'step |d ln x| > ln 1.2 reversed to within 20 % within the next 1-3 values')),
+                                   'step |d ln x| > ln 1.2 reversed to within 20 % within the next 1-3 values. Windows '
+                                   'where the beam may be off the sample (beam_off_sample) are left out of every count')),
         thickness=dict(rate_nm_s=rate_nm_s, t0_s=t0_s if t0_s is not None else (0. if rate_nm_s is not None else None),
                        t0_assumed=rate_nm_s is not None and t0_s is None,
                        t_eq_note=T_EQ_NOTE, t_eq_band_factor=factor,
@@ -590,6 +648,11 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
         extras['notes'].append(NOTE_IMPUTED.format(count=extras['stage_imputed_windows']))
     if extras['no_data_windows']:
         extras['notes'].append(NOTE_NO_DATA.format(count=extras['no_data_windows'], counts=f'{NO_DATA_COUNTS:g}'))
+    if off_record['windows']:
+        limit = f"{100 * off_record['limit_fraction']:g}"
+        extras['notes'].append(NOTE_OFF_SAMPLE.format(count=off_record['windows'], limit=limit) if period is not None
+                               else NOTE_OFF_EXTREME.format(count=off_record['windows'], limit=limit,
+                                                            span=f"{off_record['span_s']:g}"))
     extras['notes'] += _onset_notes(extras, path_counts)
     if detection.get('full_repeat_s'):
         extras['notes'].append(NOTE_DIPS.format(period=f'{period:g}', repeat=f"{detection['full_repeat_s']:g}"))

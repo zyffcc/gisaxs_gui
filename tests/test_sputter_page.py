@@ -81,7 +81,8 @@ def test_predict_installs_pytorch_then_predicts_and_shows_the_physical_path(tmp_
     assert page.result.variant == "physical" and page.choice_box.currentData() == "physical"
     assert page.result.folder == runner.calls[0][2] and page.result.folder.parent == tmp_path / "results"
     assert "PyTorch 9.9.9: ready" in page.environment_label.text() and page.predict_button.isEnabled()
-    assert "intensity modulation period ≈ 7 s (sample rotation?)" in page.result_label.text() and "film from 2.0 s" in page.result_label.text()
+    assert "intensity modulation period ≈ 7 s (sample stage translation?)" in page.result_label.text()
+    assert "film from 2.0 s" in page.result_label.text() and "beam may be off" not in page.result_label.text()
     log = page.log.toPlainText()
     assert "Downloading torch: 100%" in log and "a plain line of the model" in log and "INTAKE_EXCLUDED" in log
     assert max(seen) > 0  # the bar moved while the frames were read
@@ -682,7 +683,7 @@ def test_the_page_speaks_chinese_after_a_switch(tmp_path):
                        and not re.fullmatch(r"[\w.\-]+", w.text())})  # names (folder, scan) are data
         assert kept == []  # every fixed text of the page has its Chinese
         assert page.predict_button.text() == "预测" and "物理路径" in page.report.toPlainText()
-        assert "强度调制周期" in page.result_label.text() and "可能是样品旋转" in page.result_label.text()
+        assert "强度调制周期 ≈ 7 s（可能来自样品台平移）" in page.result_label.text()
         assert page.source_labels["sdd"].text() == "文件中没有——请填写"
         assert page.tabs.tabText(page.tabs.indexOf(page.literature)) == "文献对照"
         assert page.trend.figure.axes[-1].get_ylabel() == "金属厚度（nm）"
@@ -722,7 +723,7 @@ def test_every_text_of_the_page_is_in_the_chinese_table():
             elif isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value not in ZH \
                     and re.findall(r"[^\W\d_]{2,}", re.sub(r"<[^>]+>|\{\w+\}", "", arg.value)):
                 problems.append(f"{path.name}:{line} {arg.value!r}")
-    from src.gimap.features.sputter.domain.physical import NOMINAL, NOMINAL_ENDED
+    from src.gimap.features.sputter.domain.physical import TEMPLATES as PHYSICAL_TEMPLATES
     from src.gimap.features.sputter.domain.structure import READ_COMMON, READ_ERROR_BARS, READ_POINTS
     from src.gimap.features.sputter.presentation.predict_flow import OTHER_SCAN, WAITING_FOR_HEADER
     from src.gimap.features.sputter.application import GRADES, LITERATURE_TEMPLATES
@@ -732,7 +733,7 @@ def test_every_text_of_the_page_is_in_the_chinese_table():
     from src.gimap.features.sputter.presentation.texts import TOOLKIT_TEMPLATES
     from src.gimap.features.sputter.presentation.trend_plot import TEMPLATES as TREND_TEMPLATES
 
-    held = (READ_COMMON, READ_ERROR_BARS, READ_POINTS, NOMINAL, NOMINAL_ENDED, OTHER_SCAN, WAITING_FOR_HEADER, D_OUTSIDE,
+    held = (READ_COMMON, READ_ERROR_BARS, READ_POINTS, *PHYSICAL_TEMPLATES, OTHER_SCAN, WAITING_FOR_HEADER, D_OUTSIDE,
             CU_NOTE,
             *D_CHECKS.values(), *LIT_STATUS.values(), *CHOICES.values(), *GRADES.values(), *LITERATURE_TEMPLATES,
             *TAB_TEMPLATES, *TOOLKIT_TEMPLATES, *TREND_TEMPLATES, "Literature",
@@ -741,6 +742,74 @@ def test_every_text_of_the_page_is_in_the_chinese_table():
         if template not in ZH:
             problems.append(f"template {template!r}")
     assert problems == []
+
+
+# -- windows where the beam may be off the sample ----------------------------------------------------------
+
+
+def test_windows_off_the_sample_are_hollow_grey_points_counted_and_listed(tmp_path):
+    from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
+    from tests.sputter_fixtures import BEAM_OFF_REASON, beam_off_folder
+
+    page = _page(tmp_path)
+    page.open_results(beam_off_folder(tmp_path / "res"))
+    line = page.result_label.text()
+    assert "intensity modulation period ≈ 7 s (sample stage translation?)" in line
+    assert "beam may be off the sample in 1 windows (stage translation)" in line
+    headers = [page.table.horizontalHeaderItem(i).text() for i in range(page.table.columnCount())]
+    column = headers.index("Beam may be off the sample")
+    assert [page.table.item(row, column).text() for row in range(4)] == ["", "", "yes", ""]
+    assert page.table.item(2, column).toolTip() == BEAM_OFF_REASON and "Beam note" in headers
+    # Size Trend: the window is a hollow grey point on R, D and t_eq, and the faint points and the t_eq line leave it out.
+    label = "beam may be off the sample (stage translation)"
+    for ax, value in zip(page.trend.figure.axes[:2], (2.6, 9.6)):
+        hollow = [line for line in ax.get_lines() if line.get_label() == label]
+        assert len(hollow) == 1 and hollow[0].get_markerfacecolor() == "none"
+        assert list(hollow[0].get_xdata()) == [1.5] and list(hollow[0].get_ydata()) == [value]
+        faint = next(line for line in ax.get_lines() if line.get_label().startswith("P: "))
+        assert 1.5 not in list(faint.get_xdata())
+    thickness = page.trend.figure.axes[-1]
+    assert [list(line.get_xdata()) for line in thickness.get_lines() if line.get_label() == label] == [[1.5]]
+    teq = next(line for line in thickness.get_lines() if line.get_label().startswith("t_eq"))
+    assert str(list(teq.get_ydata())[2]) == "nan"
+    assert "Beam off the sample." in page.report.toPlainText()
+    try:
+        apply_language("zh", roots=(page,))
+        page.refresh_language()
+        assert "1 个时间窗光斑可能移出样品（样品台平移）" in page.result_label.text()
+        headers = [page.table.horizontalHeaderItem(i).text() for i in range(page.table.columnCount())]
+        cell = page.table.item(2, headers.index("光斑可能移出样品"))
+        assert cell.text() == "是" and cell.toolTip().startswith("强度为前后各一个调制周期（7 s）内水平的 28%")
+        labels = [t.get_text() for t in page.trend.figure.axes[0].get_legend().get_texts()]
+        assert "光斑可能移出样品（样品台平移）" in labels and "光斑移出样品。" in page.report.toPlainText()
+    finally:
+        apply_language(DEFAULT_LANGUAGE, roots=(page,))
+        page.refresh_language()
+    _close(page)
+
+
+def test_the_literature_method_leaves_out_the_peak_of_a_window_off_the_sample(tmp_path):
+    from tests.sputter_fixtures import BEAM_OFF_REASON, LITERATURE_ROWS, LITERATURE_SUMMARY, literature_folder
+
+    folder = literature_folder(tmp_path / "res")
+    rows = [dict(r, beam_off_sample="false") for r in LITERATURE_ROWS]
+    rows[2].update(beam_off_sample="true", beam_off_reason=BEAM_OFF_REASON, lit_status="beam_off", D_lit_nm="",
+                   R_lit_nm="", two_R_over_D_lit="", coverage_lit="",
+                   lit_reason="the beam may be off the sample in this window (intensity dip of the stage translation): "
+                              "peak not used")
+    write_table(folder, "structure_physical", rows, LITERATURE_SUMMARY)
+    page = _page(tmp_path)
+    page.open_results(folder, "literature")
+    assert page.result.variant == "literature"
+    headers = [page.table.horizontalHeaderItem(i).text() for i in range(page.table.columnCount())]
+    assert page.table.item(2, headers.index("Literature method")).text() == "beam may be off the sample"
+    # Its 2π/q* stands for it on the D panel (the method gives it no D), as a hollow grey point.
+    hollow = [line for line in page.trend.figure.axes[1].get_lines()
+              if line.get_label() == "beam may be off the sample (stage translation)"]
+    assert len(hollow) == 1 and list(hollow[0].get_ydata()) == [9.9]
+    labels = [t.get_text() for t in page.literature.figure.axes[0].get_legend().get_texts()]
+    assert "peaks not used (host, outlier, late, beam off the sample)" in labels
+    _close(page)
 
 
 # -- the literature method ---------------------------------------------------------------------------------

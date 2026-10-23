@@ -144,6 +144,27 @@ def literature_folder(folder: Path, *, rate: bool = True) -> Path:
     return folder
 
 
+BEAM_OFF_REASON = ("intensity 28% of the level within one modulation period (7 s) before and after (below 50%): the "
+                   "beam is probably partly or fully off the sample (stage translation)")
+BEAM_OFF_RECORD = dict(windows=1, evaluated=4, not_evaluated=0, rule="modulation", limit_fraction=0.5, span_s=7.0,
+                       quantile=0.9, min_side_windows=3, yoneda_missing=0, yoneda_found_share=None, lowest_ratio=0.28,
+                       method="invented method", meaning="invented meaning", scope="invented scope")
+
+
+def beam_off_folder(folder: Path, *, flagged: bool = True) -> Path:
+    """A physical result as the toolkit writes it after a stage translation: the window at 1.5 s dips (the beam may
+    be off the sample), and the summary names the modulation by its neutral key (with the old one beside it)."""
+    write_table(folder, "structure", ROWS, SUMMARY)
+    rows = [dict(r, beam_off_sample="false", beam_off_reason="") for r in PHYSICAL_ROWS]
+    if flagged:
+        rows[2].update(beam_off_sample="true", beam_off_reason=BEAM_OFF_REASON)
+    record = dict(BEAM_OFF_RECORD, windows=int(flagged))
+    summary = dict(PHYSICAL_SUMMARY, modulation_period_s=7.0, modulation_detection=PHYSICAL_SUMMARY["rotation_detection"],
+                   beam_off_sample=record, beam_off_sample_windows=int(flagged))
+    write_table(folder, "structure_physical", rows, summary)
+    return folder
+
+
 def nominal_rows(rows: list, rate, t0, t_end) -> list:
     """``rows`` with the nominal thickness as the toolkit writes it, rate × clip(t − t0, 0, t_end − t0) (as they are
     without a rate)."""

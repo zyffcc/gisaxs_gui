@@ -33,6 +33,7 @@ SPUTTER_LITERATURE_ZH = {
     "no peak": "无峰",
     "no data": "无数据",
     "before deposition": "沉积开始前",
+    "beam may be off the sample": "光斑可能移出样品",
     # -- the trend ---------------------------------------------------------------------------------------------
     "after percolation: D = 2π/q* goes on, R is not given (film)": "渗流之后：D = 2π/q* 继续给出，不给 R（膜）",
     "68% interval of the percolation (scatter, rate ±{rate_error}%, t0 ±{t0_error} s)":
@@ -67,7 +68,7 @@ SPUTTER_LITERATURE_ZH = {
     "a polymer of unknown type": "种类未知的聚合物",
     "D = 2π/q* (literature method)": "D = 2π/q*（文献方法）",
     "trend of D (non-decreasing)": "D 的趋势（非减）",
-    "peaks not used (host, outlier, late)": "未使用的峰（宿主、离群、晚出现）",
+    "peaks not used (host, outlier, late, beam off the sample)": "未使用的峰（宿主、离群、晚出现、光斑移出样品）",
     "68% interval (scatter, rate ±{rate_error}%, t0 ±{t0_error} s)": "68% 区间（离散、速率 ±{rate_error}%、t0 ±{t0_error} s）",
     "percolation not determined: from δ = {low} nm or later": "渗流无法确定：在 δ = {low} nm 或更晚",
     "D of the network": "网络的 D",

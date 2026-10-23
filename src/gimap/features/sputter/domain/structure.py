@@ -49,7 +49,7 @@ NUMERIC = {
     "delta_nm", "D_lit_nm", "D_lit_trend_nm", "R_lit_nm", "R_lit_trend_nm", "two_R_over_D_lit", "two_R_over_D_lit_trend",
     "coverage_lit", "two_R_over_D_net", "coverage_net", "eta_net",
 }
-FLAGS = {"film", "path_changed"}
+FLAGS = {"film", "path_changed", "beam_off_sample"}
 
 
 def number(value):
@@ -123,11 +123,11 @@ class StructureResult:
             s.low.append(r.get(f"{name}_lo_nm") or r[f"{name}_nm"]); s.high.append(r.get(f"{name}_hi_nm") or r[f"{name}_nm"])
         return s
 
-    def column(self, key: str, *, low: str = "", high: str = "") -> Series:
-        """One numeric column over time (windows without a value are left out)."""
+    def column(self, key: str, *, low: str = "", high: str = "", where: Optional[Callable[[dict], bool]] = None) -> Series:
+        """One numeric column over time (windows without a value, or not ``where(row)``, are left out)."""
         s = Series()
         for r in self.rows:
-            if r.get(key) is None or r.get("time_s") is None:
+            if r.get(key) is None or r.get("time_s") is None or (where is not None and not where(r)):
                 continue
             s.time.append(r["time_s"]); s.value.append(r[key])
             s.low.append(r.get(low) if low and r.get(low) is not None else r[key])

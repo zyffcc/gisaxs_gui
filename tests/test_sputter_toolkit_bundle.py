@@ -370,8 +370,9 @@ def _modulated(period: float | None, *, seconds: float = 240.0, seed: int = 5, e
     return list(times), list(level * np.exp(rng.normal(0.0, 0.05, times.size))), list(nominal)
 
 
-def test_the_rotation_period_comes_from_the_intensity_modulation(kit):
+def test_the_modulation_period_comes_from_the_intensity_modulation(kit):
     physical = importlib.import_module("sputtergisaxs.sputter_physical")
+    assert physical.modulation_period is physical.rotation_period  # the neutral name of the same search
     for period in (7.0, 22.0):
         found, record = physical.rotation_period(*_modulated(period))
         assert found == pytest.approx(period, rel=0.03), record
@@ -386,6 +387,71 @@ def test_the_rotation_period_comes_from_the_intensity_modulation(kit):
     assert found is None and record["reason"]
     found, record = physical.rotation_period(*_modulated(55.0, seconds=120.0))
     assert found is None  # fewer than three cycles
+
+
+def _translated(*, period: float | None = 12.0, dip_s: float = 1.5, depth: float = 0.3, seconds: float = 180.0,
+                seed: int = 9):
+    """Invented intensity of a stage translated back and forth: 0.5 s windows (0.1 s in the first 5 s), a slow rise,
+    5 % noise and, with a period, a dip to ``depth`` of the level lasting ``dip_s`` once per period (the footprint
+    leaves the sample at one end of the travel). Returns times, rates, nominal seconds and the dip mask."""
+    rng = np.random.default_rng(seed)
+    times = np.r_[np.arange(0.05, 5.0, 0.1), np.arange(5.25, seconds, 0.5)]
+    nominal = np.where(times < 5.0, 0.1, 0.5)
+    dip = np.zeros(times.size, bool) if not period else (times % period >= period / 2) & (times % period < period / 2 + dip_s)
+    rates = 3000.0 * (1.0 + times / 60.0) * np.exp(rng.normal(0.0, 0.05, times.size)) * np.where(dip, depth, 1.0)
+    return list(times), list(rates), list(nominal), dip
+
+
+def test_windows_off_the_sample_are_the_dips_of_the_stage_translation(kit):
+    physical = importlib.import_module("sputtergisaxs.sputter_physical")
+    off = importlib.import_module("sputtergisaxs.sputter_offsample")
+    # The thresholds are named constants (their reasons are in the module).
+    assert (off.OFF_SAMPLE["fraction"], off.OFF_SAMPLE["extreme_fraction"], off.OFF_SAMPLE["quantile"]) == (.5, .2, .9)
+    times, rates, nominal, dip = _translated()
+    period, _record = physical.modulation_period(times, rates, nominal)
+    assert period == pytest.approx(12.0, rel=0.03)
+    flags, reasons, record = off.beam_off_sample(times, rates, period)
+    judged = np.array([t >= 5.0 + period and t <= times[-1] - period for t in times])  # both sides hold a period
+    assert np.array_equal(np.array(flags)[judged], dip[judged]) and dip[judged].sum() >= 30
+    assert record["rule"] == "modulation" and record["windows"] == sum(flags) and record["limit_fraction"] == 0.5
+    first = reasons[flags.index(True)]
+    assert re.fullmatch(r"intensity \d+% of the level within one modulation period \(12 s\) before and after \(below "
+                        r"50%\): the beam is probably partly or fully off the sample \(stage translation\)", first), first
+    assert all(reason == "" for reason, flag in zip(reasons, flags) if not flag)
+    # A milder modulation (the dips keep more than half the scattering) and a steady series are not off the sample.
+    times, rates, nominal, _dip = _translated(depth=0.6)
+    assert not any(off.beam_off_sample(times, rates, physical.modulation_period(times, rates, nominal)[0])[0])
+    times, rates, nominal, _dip = _translated(period=None)
+    assert physical.modulation_period(times, rates, nominal)[0] is None
+    flags, _reasons, record = off.beam_off_sample(times, rates, None)
+    assert not any(flags) and record["rule"] == "extreme_dip_only" and record["evaluated"] > 300
+
+
+def test_without_a_modulation_only_an_extreme_single_dip_is_off_the_sample(kit):
+    off = importlib.import_module("sputtergisaxs.sputter_offsample")
+    times, rates, _nominal, _dip = _translated(period=None)
+    k = 150
+    moderate = list(rates); moderate[k] *= 0.4
+    assert not any(off.beam_off_sample(times, moderate, None)[0])  # a single moderate transient: not the stage
+    assert off.beam_off_sample(times, moderate, 12.0)[0][k]  # with a modulation the same dip is
+    extreme = list(rates); extreme[k] *= 0.1
+    flags, reasons, record = off.beam_off_sample(times, extreme, None)
+    assert [i for i, flag in enumerate(flags) if flag] == [k] and record["windows"] == 1
+    assert re.fullmatch(r"intensity \d+% of the level within 10 s before and after, without a periodic modulation "
+                        r"\(below 20%\): the beam was probably off the sample or interrupted", reasons[k]), reasons[k]
+    # A fast rise, a step down that stays and windows without data are no dips; the ends cannot be judged.
+    rise = [r * (3.0 if t > 60.0 else 1.0) for t, r in zip(times, rates)]
+    fall = [r * (0.3 if t > 60.0 else 1.0) for t, r in zip(times, rates)]
+    assert not any(off.beam_off_sample(times, rise, 12.0)[0]) and not any(off.beam_off_sample(times, fall, 12.0)[0])
+    no_data = [i == k for i in range(len(times))]
+    flags, _reasons, record = off.beam_off_sample(times, extreme, None, no_data=no_data)
+    assert not any(flags) and record["not_evaluated"] >= 6
+    # The Yoneda ridge corroborates (it does not decide): missing in the dip, found in most other windows.
+    yoneda = [None if i == k else 0.2 for i in range(len(times))]
+    flags, reasons, record = off.beam_off_sample(times, extreme, None, yoneda=yoneda)
+    assert reasons[k].endswith(off.OFF_YONEDA) and record["yoneda_missing"] == 1
+    flags, reasons, record = off.beam_off_sample(times, extreme, None, yoneda=[None] * len(times))
+    assert not reasons[k].endswith(off.OFF_YONEDA) and record["yoneda_missing"] == 0
 
 
 def test_the_trend_follows_growth_even_when_the_span_is_longer_than_the_island_phase(kit):
@@ -535,6 +601,67 @@ def test_without_the_other_network_the_physical_table_says_what_is_missing(kit, 
     physical.write_physical(tmp_path, rate_nm_s=0.05)
     thickness = json.loads((tmp_path / "structure_physical_summary.json").read_text(encoding="utf-8"))["thickness"]
     assert thickness["t0_s"] == 0.0 and thickness["t0_assumed"] is True and "t0 not given" in thickness["nominal_note"]
+
+
+def _with_stage_translation(folder: Path, edits: dict) -> list[int]:
+    """The invented series with a dip to 30 % every 4 s (a stage translated back and forth: the beam leaves the
+    sample at one end) and no Yoneda ridge in the dips; ``edits`` change single windows of both network tables.
+    Returns the indices of the dip windows."""
+    dips = []
+    for name in ("frames.csv", "frames_alt.csv"):
+        path = folder / "binned" / name
+        rows = _read(path)
+        for i, row in enumerate(rows):
+            dip = float(row["time_s"]) % 4.0 == 2.5
+            dips += [i] if dip and name == "frames.csv" else []
+            row.update(intensity_rate=str((1000.0 + 20 * i) * (0.3 if dip else 1.0)), Yoneda_deg="" if dip else "0.21")
+            row.update({key: value for key, value in edits.get(i, {}).items() if key in row})
+        with path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+    return dips
+
+
+def test_windows_off_the_sample_keep_their_values_but_no_vote_trend_or_zigzag(kit, tmp_path):
+    struct = importlib.import_module("sputtergisaxs.sputter_struct")
+    physical = importlib.import_module("sputtergisaxs.sputter_physical")
+    literature = importlib.import_module("sputtergisaxs.sputter_literature")
+    _invented_series(tmp_path)
+    # An island window in a dip with a film-like rule stage and a network R twice the trend (as a dip may give).
+    dips = _with_stage_translation(tmp_path, {19: dict(stage="coalescence_or_film_candidate",
+                                                       mode1_R_number_mean_nm=str(2 * (2.0 + 0.05 * 19)))})
+    struct.write_structure(tmp_path / "binned", tmp_path, metal="Ag")
+    physical.write_physical(tmp_path, rate_nm_s=0.05, t0_s=4.0)
+    rows = _read(tmp_path / "structure_physical.csv")
+    summary = json.loads((tmp_path / "structure_physical_summary.json").read_text(encoding="utf-8"))
+    assert summary["modulation_period_s"] == summary["rotation_period_s"] == pytest.approx(4.0, rel=0.03)
+    assert summary["modulation_detection"] == summary["rotation_detection"]
+    off = [i for i, row in enumerate(rows) if row["beam_off_sample"] == "true"]
+    assert off and set(off) <= set(dips) and 19 in off  # the first and the last dip cannot be judged
+    assert summary["beam_off_sample_windows"] == summary["beam_off_sample"]["windows"] == len(off)
+    assert summary["beam_off_sample"]["yoneda_missing"] == len(off)
+    assert all(rows[i]["beam_off_reason"].endswith("; no Yoneda ridge in this window, unlike most other windows")
+               for i in off)
+    assert all(row["beam_off_reason"] == "" for row in rows if row["beam_off_sample"] == "false")
+    # Kept in the table with its values; no stage vote: the path stays islands and it is not a disagreeing window.
+    window = rows[19]
+    assert window["stage"] == "coalescence_or_film_candidate" and window["stage_path"] == "islands"
+    assert window["path_changed"] == "true" and float(window["R_nm"]) == pytest.approx(2 * (2.0 + 0.05 * 19))
+    votes = ["" if i in off else (row["stage"] if i else "") for i, row in enumerate(rows)]  # window 0: no data
+    assert summary["film_onset_no_TS_disagreeing_windows"] == int(physical.onset_disagreements(votes)[-1])
+    # Left out of the trend (which is still evaluated there) and of every back-and-forth count.
+    assert float(window["R_trend_nm"]) == pytest.approx(2.0 + 0.05 * 19, rel=0.03)
+    assert summary["reversals"]["after"]["R_zigzag"] == summary["reversals"]["before"]["R_zigzag"] == 0
+    assert physical.zigzags([float(row["R_nm"]) for row in rows if row["R_nm"]]) > 0  # it would count one
+    # The literature method does not use its peak for the trend of D, and says so.
+    peaks = [i for i in off if rows[i]["feature_status"] == "bilateral"]
+    assert peaks and all(rows[i]["lit_status"] == "beam_off" and rows[i]["D_lit_nm"] == "" for i in peaks)
+    assert all(rows[i]["lit_reason"] == literature.REASON["beam_off"] for i in peaks)
+    assert literature.NOTE_BEAM_OFF.format(count=len(peaks)) in summary["literature"]["notes"]
+    assert summary["literature"]["windows"]["beam_off"] == len(peaks)
+    assert physical.NOTE_OFF_SAMPLE.format(count=len(off), limit="50") in summary["notes"]
+    assert "left out of every count" in summary["reversals"]["definition"]
 
 
 def test_the_onset_interval_also_weighs_no_ts_at_all(kit):

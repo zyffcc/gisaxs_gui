@@ -1,7 +1,8 @@
 """Literature tab: the series against published growth, over the nominal thickness δ (nm).
 
 Four panels over δ = rate × (t − t0): (1) D — the literature method's D = 2π/q* per window (faint; crosses after
-its percolation) and its trend, peaks it does not use (host, outliers and jumps, late peaks) as open circles, the
+its percolation) and its trend, peaks it does not use (host, outliers and jumps, late peaks, windows where the beam
+may be off the sample) as open circles, the
 network's D and the published D(δ) curves of the metal, labelled with their citation keys; (2) 2R/D of both
 methods with the published range and the percolation line 2R = D; (3) the coverage of both with the published
 values; (4) the network's mass balance η = t_eq/δ. The published percolation band of the metal and host and the
@@ -213,9 +214,11 @@ class LiteratureTab(QWidget):
             ax.plot(x, y, "x", ms=3, color=LIT_COLOUR, alpha=.6, lw=0, label=tr("2π/q* after the percolation"))
         x, y = _points(rows, "D_lit_trend_nm")
         ax.plot(x, y, "-", lw=1.6, color=LIT_COLOUR, label=tr("trend of D (non-decreasing)"))
-        x, y = _points(rows, "D_corr_nm", when=lambda r: r.get("lit_status") in ("host_peak", "outlier", "late_peak"))
+        x, y = _points(rows, "D_corr_nm",
+                       when=lambda r: r.get("lit_status") in ("host_peak", "outlier", "late_peak", "beam_off"))
         if x:
-            ax.plot(x, y, "o", ms=4, mfc="none", mec=NOT_USED, mew=.7, lw=0, label=tr("peaks not used (host, outlier, late)"))
+            ax.plot(x, y, "o", ms=4, mfc="none", mec=NOT_USED, mew=.7, lw=0,
+                    label=tr("peaks not used (host, outlier, late, beam off the sample)"))
         x, y = _points(rows, "network_D_nm")
         if x:
             ax.plot(x, y, ".", ms=2.5, alpha=.45, color=NET_COLOUR, lw=0, label=tr("D of the network"))

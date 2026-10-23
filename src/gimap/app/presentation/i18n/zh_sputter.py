@@ -223,7 +223,13 @@ SPUTTER_ZH = {
     "film from {onset} s": "从 {onset} s 起成膜",
     " ({low}–{high} s)": "（{low}–{high} s）",
     "no film window": "没有膜时间窗",
-    "intensity modulation period ≈ {period} s (sample rotation?)": "强度调制周期 ≈ {period} s（可能是样品旋转）",
+    "intensity modulation period ≈ {period} s (sample stage translation?)":
+        "强度调制周期 ≈ {period} s（可能来自样品台平移）",
+    "beam may be off the sample in {count} windows (stage translation)":
+        "{count} 个时间窗光斑可能移出样品（样品台平移）",
+    "Beam may be off the sample": "光斑可能移出样品",
+    "Beam note": "光斑说明",
+    "beam may be off the sample (stage translation)": "光斑可能移出样品（样品台平移）",
     "Cu: approximated with the Ag model, for reference only.": "Cu：用 Ag 模型近似，仅供参考。",
     "Stage (rule)": "阶段（规则）",
     "Stage (path)": "阶段（路径）",

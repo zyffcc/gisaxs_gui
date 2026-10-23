@@ -20,6 +20,8 @@ structure_physical.csv when a deposition rate is given:
   the preceding peaks, beyond any growth since t0 (D cannot grow faster than delta), is a jump: host_peak when it
   sits at the host spacing, else outlier. A peak more than a factor 2 from the trend (outlier) or after a long
   stretch without a peak (late_peak) is not used either; the late peaks are compared with the end of the trend.
+  A peak of a window where the beam may be off the sample (the physical path's beam_off_sample: an intensity dip of
+  the back-and-forth stage translation) is not used either (lit_status beam_off; a note says how many).
 - D_lit_trend_nm: non-decreasing L1 fit (pool-adjacent-violators with block medians) of ln D_lit in time.
 - R_lit_nm = (delta*D_lit^2/2.418)^(1/3), two_R_over_D_lit, coverage_lit, and their trend values.
 - percolation: the first delta after nucleation where the trend of 2R/D reaches 1. Its 68 % interval holds the scatter of the
@@ -86,6 +88,7 @@ REASON = dict(
     jump=('peak more than a factor 2 above the preceding peaks, beyond any growth since t0: a jump, not growth; '
           'not used'),
     late_peak='peak after a long stretch without a peak: another structure, not used',
+    beam_off='the beam may be off the sample in this window (intensity dip of the stage translation): peak not used',
     after_percolation='after the percolation of the literature method: D = 2*pi/q* kept, R not given (film)',
     no_rate='no deposition rate: only D is given',
     islands='')
@@ -198,6 +201,8 @@ NOTE_CHAMBER = ('Published thresholds come from other chambers and rates; the ra
                 'chi 0.07-0.17) is weaker than differences between chambers.')
 NOTE_CU = 'Cu: the literature method needs no network, but the TS onset and the network checks use the Ag model.'
 NOTE_HOST_PEAKS = '{count} peak windows probably belong to the host (median D {D} nm) and are not used.'
+NOTE_BEAM_OFF = ('{count} peak windows where the beam may be off the sample (beam_off_sample: an intensity dip of the '
+                 'stage translation) are not used for the trend of D.')
 HOST_UNKNOWN = 'Polymer type not given: the band of all polymers is used for {metal}.'
 HOST_NO_DATA = 'No published percolation data for {polymer}: the band of {host} is used.'
 HOST_INCLUDED = 'The band of {host} includes published values for {polymer}.'
@@ -209,7 +214,7 @@ TEMPLATES = (NEEDS_RATE, TOO_FEW, METHOD, *REASON.values(), *TITLE.values(), M_N
              N_NET_INDEPENDENT, N_COVERAGE, N_NET_ONE_BAND, M_ETA, E_ETA, N_ETA_LOW, N_ETA_HIGH, N_ETA_SHARED, M_FILM,
              M_FILM_FEW, M_FILM_NOT_ID, E_FILM, N_FILM, NOTE_CONSTRUCTION, NOTE_SHAPE, NOTE_RATE, NOTE_T0,
              NOTE_T_END, NOTE_T_END_AFTER, NOTE_D_PEAK, NOTE_STICKING, NOTE_CHAMBER, NOTE_CU, NOTE_HOST_PEAKS,
-             HOST_UNKNOWN, HOST_NO_DATA, HOST_INCLUDED)
+             NOTE_BEAM_OFF, HOST_UNKNOWN, HOST_NO_DATA, HOST_INCLUDED)
 """Every sentence this module writes into the summary and the table (filled with str.format)."""
 OXIDES = {'si', 'sio2', 'siox', 'sio', 'silicon', 'tio2', 'al2o3', 'oxide', 'glass', 'quartz', 'a-c', 'ito', 'sapphire'}
 UNKNOWN_POLYMER = {'', 'polymer', 'unknown', 'none'}
@@ -484,7 +489,8 @@ def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=N
 
     rows: one dict per window with D_corr_nm, feature_status, no_data (bool), kind ('islands', 'film',
     'pre_nucleation', 'no_data', ...), R_nm, D_nm, t_eq_nm (physical path), film_thickness / metal_fraction
-    (TS network, film windows) and module_path. onset: the TS-onset part of the physical summary. rate_error
+    (TS network, film windows), module_path and beam_off (bool: the beam may be off the sample; its peak is not
+    used). onset: the TS-onset part of the physical summary. rate_error
     (relative) and t0_error_s widen the percolation interval (defaults in the config's 'uncertainty': a t0 that
     is not given, and so assumed at the first frame, gets the larger error).
     film_identifiable: the TS film thickness is a measurement (it is not with the current network: the film
@@ -517,6 +523,8 @@ def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=N
             status[i] = 'host_before' if np.isfinite(D[i]) else 'before_deposition'
         elif np.isfinite(D[i]) and status[i] == 'no_peak':
             status[i] = 'islands'
+        if status[i] == 'islands' and rows[i].get('beam_off'):  # an intensity dip of the stage translation
+            status[i] = 'beam_off'
     curves = cfg['D_curves']
     if has_rate:
         factor = cfg.get('host_peak_factor', 2.)
@@ -894,6 +902,9 @@ def _summary(cfg, columns, rows, status, t, delta, D, trend, span, fit_idx, host
         notes.append(host_note)
     if host:
         notes.append(NOTE_HOST_PEAKS.format(count=len(host), D=fmt(D_host if D_host else float(np.nanmedian(D[host])))))
+    off = sum(1 for s in status if s == 'beam_off')
+    if off:
+        notes.append(NOTE_BEAM_OFF.format(count=off))
     if metal == 'Cu':
         notes.append(NOTE_CU)
     used = set(refs) | {r for c in checks for r in c['references']} | {'Sch15', 'Bulut24', 'GenTh23', 'Hod17', 'Jam19',

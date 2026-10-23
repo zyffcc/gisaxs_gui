@@ -50,8 +50,8 @@ the windows count only the frames read. No pixel is invented.
 | File | Content |
 |---|---|
 | `structure.csv` | one row per window: the per-window reading (rule stage, the network it routes to, R/D from converged refinement when merged, else the network) |
-| `structure_physical.csv` | the physical path: every column of `structure.csv`, plus `stage_path`, `module_path`, `film`, `path_changed`, `R_trend_nm`, `D_trend_nm`, `t_eq_nm`, `t_eq_lo_nm`, `t_eq_hi_nm`, `nominal_thickness_nm`, `film_thickness_status`, `stage_imputed`, and the literature method: `delta_nm`, `D_lit_nm`, `D_lit_trend_nm`, `R_lit_nm`, `R_lit_trend_nm`, `two_R_over_D_lit`, `two_R_over_D_lit_trend`, `coverage_lit`, `two_R_over_D_net`, `coverage_net`, `eta_net`, `lit_status`, `lit_reason` |
-| `structure_summary.json`, `structure_physical_summary.json` | counts, window-to-window scatter, reliability numbers; the physical one also the TS onset, intensity modulation period, reversal counts before/after, the thickness notes and `literature` (the literature method's percolation and its checks against published growth) |
+| `structure_physical.csv` | the physical path: every column of `structure.csv`, plus `stage_path`, `module_path`, `film`, `path_changed`, `R_trend_nm`, `D_trend_nm`, `t_eq_nm`, `t_eq_lo_nm`, `t_eq_hi_nm`, `nominal_thickness_nm`, `film_thickness_status`, `stage_imputed`, `beam_off_sample`, `beam_off_reason`, and the literature method: `delta_nm`, `D_lit_nm`, `D_lit_trend_nm`, `R_lit_nm`, `R_lit_trend_nm`, `two_R_over_D_lit`, `two_R_over_D_lit_trend`, `coverage_lit`, `two_R_over_D_net`, `coverage_net`, `eta_net`, `lit_status`, `lit_reason` |
+| `structure_summary.json`, `structure_physical_summary.json` | counts, window-to-window scatter, reliability numbers; the physical one also the TS onset, intensity modulation period (`modulation_period_s`, also under its older key `rotation_period_s`), the windows where the beam may be off the sample (`beam_off_sample`, `beam_off_sample_windows`), reversal counts before/after, the thickness notes and `literature` (the literature method's percolation and its checks against published growth) |
 | `binned/frames.csv`, `binned/frames_alt.csv` | all network modes per window, from the routed network and from the other one |
 | `structure_selected.csv`, `structure_sequence.csv` | learned selector and time-consistent Viterbi path (exploratory, see below) |
 
@@ -63,7 +63,8 @@ The physical path reads the whole series once:
 - **Stage**: the rule stages on the scale pre_nucleation < islands < coalescence < film, fitted non-decreasing
   (pool-adjacent-violators with block medians). Windows whose stage is unresolved cast no vote and take the
   value of the previous resolved window (`stage_imputed` = true; `stage_path_counts_imputed` counts them).
-  Windows with fewer than 1000 counts (shutter closed, beam off) get no stage and no values. Path stage `film`
+  Windows with fewer than 1000 counts (shutter closed, beam off) get no stage and no values. Windows where the
+  beam may be off the sample (below) cast no vote either and take the path value of their neighbours. Path stage `film`
   is the rule's coalescence-or-film candidate: a connected film is not proven; `film` = true marks every window
   on the TS network (coalescence or film). `film_onset_s` is the first window on the path that the toolkit
   routes to the TS network; `film_onset_interval_s` spans every onset that disagrees with at most two more
@@ -74,14 +75,35 @@ The physical path reads the whole series once:
   the island network; pre-nucleation windows have none. Refined values stay in `refined_R_nm`/`refined_D_nm`.
   `R_trend_nm`/`D_trend_nm` are a local log-linear (Theil-Sen) fit of ln R / ln D against time over the island
   windows in a centred span of max(modulation period, 2.5 s), evaluated at each window: they follow growth and
-  are not biased at the ends of the island phase. `reversals.after` counts zig-zags of the per-window values on
-  the path, `reversals.after_trend` those of the trend lines.
-- **Intensity modulation**: a rotating sample (or another periodic change of the set-up) modulates the intensity. `rotation_period_s` is the period of that modulation
-  (the spacing of its dips): from the autocorrelation of the detrended log intensity (0.5 s windows after 5 s,
-  60 s local linear trend), the shortest maximum (>= 0.1) at 2-60 s lag whose double lag is also a maximum,
-  with >= 0.3 at one of the two and at least 3 full cycles. When the double lag is clearly stronger, the dips
-  have unequal depths and the pattern repeats exactly only after `full_repeat_s`, which may be one turn of the
-  sample. `rotation_detection` lists all maxima and the strongest periodogram line as a cross-check.
+  are not biased at the ends of the island phase. Windows where the beam may be off the sample are left out of
+  the fit (the trend is still evaluated at them). `reversals.after` counts zig-zags of the per-window values on
+  the path, `reversals.after_trend` those of the trend lines; every count (before and after) leaves out the
+  windows where the beam may be off the sample.
+- **Intensity modulation**: during the deposition the sample stage is translated back and forth, so that the beam
+  does not damage one spot; near the ends of its travel the grazing-incidence footprint can reach the sample edge
+  or leave the sample, and the intensity dips once or twice per cycle (the data alone do not prove the source).
+  `modulation_period_s` is the period of that modulation (the spacing of its dips; the same value stays under the
+  older key `rotation_period_s`, and `modulation_detection` = `rotation_detection`): from the autocorrelation of
+  the detrended log intensity (0.5 s windows after 5 s, 60 s local linear trend), the shortest maximum (>= 0.1) at
+  2-60 s lag whose double lag is also a maximum, with >= 0.3 at one of the two and at least 3 full cycles. When the
+  double lag is clearly stronger, the dips have unequal depths and the pattern repeats exactly only after
+  `full_repeat_s`, which may be one full back-and-forth cycle of the stage (one dip at each end of its travel).
+  The detection record lists all maxima and the strongest periodogram line as a cross-check.
+- **Beam off the sample** (`sputter_offsample.py`, from the data only): the on-sample level of a window is the 90 %
+  quantile of ln(`intensity_rate`) over the other windows with data within one modulation period before it, and
+  the same after it; the lower side counts, so a steady rise or fall of the intensity during the growth is never a
+  dip and a step that stays is none either. With a detected modulation a window below 50 % of its level is flagged
+  (`beam_off_sample` = true, `beam_off_reason` gives the ratio): more than half of the scattering is missing, as
+  when more than half of the footprint has left the sample. Without a modulation only an extreme dip is flagged,
+  below 20 % of the level within 10 s on each side (no sample seen, or the beam interrupted); a single moderate dip
+  is not attributed to the stage. A window needs 3 windows with data on each side (the first and last windows are
+  not judged); windows with < 1000 counts are neither judged nor used for a level. `binned/frames.csv` holds no
+  Yoneda or specular intensity, but the Yoneda ridge position: a flagged window without a ridge, while the ridge is
+  found in >= 50 % of the other windows, says so in its reason (corroboration, it does not decide). The constants
+  and their reasons are in `OFF_SAMPLE`. These windows keep their values in the table, but cast no stage vote and
+  are left out of the R/D trends, the reversal counts and the literature method's trend of D; the summary's
+  `beam_off_sample` records the rule, the counts and the lowest ratio, and a note says how many there are. The
+  stage position (and the range of its translation) is not read.
 - **Thickness substitutes** (GISAXS does not measure the metal thickness here):
   - `t_eq_nm` = (2/3)·π·R³·exp(3σ²) / ((√3/2)·D²): island-volume equivalent thickness of the *visible*
     particles, conditional on flat-based hemispheres (h=R) on a hexagonal lattice; not the deposited amount.
@@ -114,8 +136,9 @@ its island meaning once a network forms). With `--rate-nm-s` every window gets t
   (before the deposition starts, more than a factor 2 above every published D(δ) at that δ, or a jump or outlier
   at the host's spacing), `outlier` (more than a factor 2 from the trend of D, or a jump: more than a factor 2 above
   the median of the five preceding peaks beyond the growth δ allows since t0, which a non-decreasing fit would
-  otherwise absorb) and `late_peak` (after a stretch of at least max(20 s, two modulation periods) without a peak;
-  the D check compares their median with the end of the trend). `D_lit_trend_nm` is the non-decreasing L1 fit of
+  otherwise absorb), `late_peak` (after a stretch of at least max(20 s, two modulation periods) without a peak;
+  the D check compares their median with the end of the trend) and `beam_off` (the window's beam may be off the
+  sample; a note counts them). `D_lit_trend_nm` is the non-decreasing L1 fit of
   the used peaks in time.
 - `R_lit_nm` = (δ·D²/2.418)^(1/3), `two_R_over_D_lit`, `coverage_lit` and their trend values; the network's own
   `two_R_over_D_net`, `coverage_net` (from `R_nm`, `D_nm`) and `eta_net` = `t_eq_nm`/δ (the share of the nominal
@@ -176,7 +199,7 @@ windows made elsewhere.
 ## Files
 
 `scripts/sputter_struct_v1.py` (entry), `sputtergisaxs/` (the import closure of the five subcommands;
-`sputter_struct.py` pipeline and table, `sputter_physical.py` physical path, `sputter_literature.py` literature
-method), `experts/{polymer,TS}` (checkpoints and input policies), `configs/` (reliability numbers, selector model,
+`sputter_struct.py` pipeline and table, `sputter_physical.py` physical path, `sputter_offsample.py` windows where
+the beam may be off the sample, `sputter_literature.py` literature method), `experts/{polymer,TS}` (checkpoints and input policies), `configs/` (reliability numbers, selector model,
 published reference values), `MANIFEST.json`,
 `verify.py`, `SOURCE.json`, `requirements.txt`.

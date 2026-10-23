@@ -57,9 +57,28 @@ TOOLKIT_TEMPLATES = (
     ('The path reaches coalescence but never the film stage: film_onset_s is the onset of TS-network '
      '(coalescence) windows, not of a continuous film.'),
     ('The intensity dips every {period} s with unequal depths; the pattern repeats exactly after '
-     '{repeat} s, which may be one turn of the sample.'),
+     '{repeat} s, which may be one full back-and-forth cycle of the sample stage (one dip at each end of '
+     'its travel).'),
     ('The smoothing span ({span} s) covers the whole island phase ({start}-{end} s): R_trend_nm / '
      'D_trend_nm are one log-linear fit over it; the per-window R_nm / D_nm (grade P) show more.'),
+    ('{count} windows with an intensity below {limit}% of the level within one modulation period on '
+     'both sides: the beam is probably partly or fully off the sample while the stage is translated '
+     '(beam_off_sample=true). They keep their values but cast no stage vote and are left out of the R/D '
+     'trends and the zig-zag counts.'),
+    ('{count} windows with an intensity below {limit}% of the level within {span} s on both sides, '
+     'without a periodic modulation: the beam was probably off the sample or interrupted '
+     '(beam_off_sample=true). They keep their values but cast no stage vote and are left out of the R/D '
+     'trends and the zig-zag counts.'),
+    ('intensity {percent}% of the level within one modulation period ({period} s) before and after '
+     '(below {limit}%): the beam is probably partly or fully off the sample (stage translation)'),
+    ('intensity {percent}% of the level within one modulation period ({period} s) before and after '
+     '(below {limit}%): the beam is probably partly or fully off the sample (stage translation); no '
+     'Yoneda ridge in this window, unlike most other windows'),
+    ('intensity {percent}% of the level within {span} s before and after, without a periodic '
+     'modulation (below {limit}%): the beam was probably off the sample or interrupted'),
+    ('intensity {percent}% of the level within {span} s before and after, without a periodic '
+     'modulation (below {limit}%): the beam was probably off the sample or interrupted; no Yoneda ridge '
+     'in this window, unlike most other windows'),
     ('needs a deposition rate: the literature method computes R from the nominal thickness delta = '
      'rate*(t - t0); without it only the monotony of D is tested (in time)'),
     'fewer than {minimum} windows with a resolved peak of the metal: no literature-method values',
@@ -77,6 +96,8 @@ TOOLKIT_TEMPLATES = (
     ('peak more than a factor 2 above the preceding peaks, beyond any growth since t0: a jump, not '
      'growth; not used'),
     'peak after a long stretch without a peak: another structure, not used',
+    ('the beam may be off the sample in this window (intensity dip of the stage translation): peak not '
+     'used'),
     'after the percolation of the literature method: D = 2*pi/q* kept, R not given (film)',
     'no deposition rate: only D is given',
     'D (= 2*pi/q*) does not decrease with delta',
@@ -193,6 +214,8 @@ TOOLKIT_TEMPLATES = (
     ('Cu: the literature method needs no network, but the TS onset and the network checks use the Ag '
      'model.'),
     '{count} peak windows probably belong to the host (median D {D} nm) and are not used.',
+    ('{count} peak windows where the beam may be off the sample (beam_off_sample: an intensity dip of '
+     'the stage translation) are not used for the trend of D.'),
     'Polymer type not given: the band of all polymers is used for {metal}.',
     'No published percolation data for {polymer}: the band of {host} is used.',
     'The band of {host} includes published values for {polymer}.',

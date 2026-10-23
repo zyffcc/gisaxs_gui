@@ -6,7 +6,9 @@ path. The literature method is a check of it, offered second when a deposition r
 Explanation, with the per-window choice and the exploratory ones); the Literature tab compares the series with
 published growth. A result knows the scan it was predicted from (``gimap_request.json``); the deposition fields
 (rate, t0, end) say what it was drawn with only while that scan is the one in the picker (a result of unknown scan:
-until another folder is chosen).
+until another folder is chosen). Windows where the beam may be off the sample (the toolkit's ``beam_off_sample``: an
+intensity dip of the back-and-forth stage translation) are counted in the line under Predict and have a column of
+their own in the Windows table.
 """
 
 from __future__ import annotations
@@ -18,8 +20,8 @@ from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import (GRADES, StructureResult, folder_key, onset_of, percolation_short, reliability_report,
-                           rotation_period)
+from ..application import (GRADES, StructureResult, beam_off_count, folder_key, modulation_period, onset_of,
+                           percolation_short, reliability_report)
 from .texts import message_text, note_text, stage_name, text
 
 CHOICES = {"physical": "Physical path (network)", "literature": "Literature method (mass balance)",
@@ -29,7 +31,8 @@ THICKNESS_VARIANTS = ("physical", "literature")
 """The explanations drawn from ``structure_physical*``: the deposition fields say what they were drawn with."""
 TABLE_COLUMNS = (
     ("time_s", "Time (s)"), ("stage", "Stage (rule)"), ("stage_path", "Stage (path)"), ("module", "Model"),
-    ("module_path", "Model (path)"), ("R_nm", "R (nm)"), ("R_grade", "R grade"),
+    ("module_path", "Model (path)"), ("beam_off_sample", "Beam may be off the sample"), ("R_nm", "R (nm)"),
+    ("R_grade", "R grade"),
     ("R_typical_rel_error", "R typ. error"), ("R_trend_nm", "R trend (nm)"), ("D_nm", "D (nm)"),
     ("D_grade", "D grade"), ("D_typical_rel_error", "D typ. error"), ("D_trend_nm", "D trend (nm)"),
     ("D_corr_nm", "2π/q* (nm)"), ("D_over_direct", "D ÷ 2π/q*"), ("D_direct_check", "D check"),
@@ -42,14 +45,15 @@ TABLE_COLUMNS = (
     ("path_changed", "Changed by the path"), ("sequence_status", "Path"),
     ("sequence_data_cost_nats", "Data cost (nats)"), ("selector_probability", "Selector P"),
     ("selector_choice", "Component"), ("R_reason", "R note"), ("D_reason", "D note"), ("lit_reason", "Literature note"),
+    ("beam_off_reason", "Beam note"),
 )
 LITERATURE_HIDDEN = {"R_lit_nm", "D_lit_nm", "D_direct_check", "D_over_direct"}
 """Columns the literature explanation shows as R and D already (or that do not apply to it)."""
 LIT_STATUS = {"islands": "islands", "after_percolation": "after percolation", "host_peak": "host peak",
               "outlier": "outlier", "late_peak": "late peak", "no_peak": "no peak", "no_data": "no data",
-              "before_deposition": "before deposition"}
+              "before_deposition": "before deposition", "beam_off": "beam may be off the sample"}
 """The toolkit's ``lit_status`` words as the page says them."""
-REASONS = ("R_reason", "D_reason", "lit_reason")
+REASONS = ("R_reason", "D_reason", "lit_reason", "beam_off_reason")
 D_CHECKS = {"consistent": "consistent"}
 """The toolkit's words of the D check the page says in its language (any other: outside the simulated range)."""
 D_OUTSIDE = "outside the simulated 90% range"
@@ -76,6 +80,8 @@ def _cell(row: dict, key: str) -> tuple[str, str]:
         low, high = row.get("t_eq_lo_nm"), row.get("t_eq_hi_nm")
         return (f"{low:.3g}–{high:.3g}" if low is not None and high is not None else ""), ""
     value = row.get(key)
+    if key == "beam_off_sample" and value:  # the reason (the toolkit's words) as its tooltip
+        return tr("yes"), note_text(row.get("beam_off_reason") or "")
     if isinstance(value, bool):
         return (tr("yes") if value else ""), ""
     if isinstance(value, float):
@@ -215,9 +221,13 @@ class SputterResultsMixin:
         else:
             parts.append(text("refined A+B: R {R}, D {D}", R=counts_R["A"] + counts_R["B"],
                               D=counts_D["A"] + counts_D["B"]))
-        period = rotation_period(result.summary)
+        period = modulation_period(result.summary)
         if period is not None:
-            parts.append(text("intensity modulation period ≈ {period} s (sample rotation?)", period=f"{period:.3g}"))
+            parts.append(text("intensity modulation period ≈ {period} s (sample stage translation?)",
+                              period=f"{period:.3g}"))
+        off = beam_off_count(result)
+        if off:
+            parts.append(text("beam may be off the sample in {count} windows (stage translation)", count=off))
         line = " · ".join(parts)
         if result.metal == "Cu":
             line += "<br><b>" + tr("Cu: approximated with the Ag model, for reference only.") + "</b>"
