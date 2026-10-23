@@ -24,8 +24,8 @@ writes one physical reading of the whole series:
   (Theil-Sen) of ln R / ln D against time over the island windows within a
   centred span of max(modulation period, 2.5 s), evaluated at the window, so it
   follows growth also when the span is long and is not biased at the ends.
-- modulation (rotation) period: autocorrelation of the detrended log intensity
-  (a rotating sample modulates the scattered intensity periodically); the
+- intensity modulation period: autocorrelation of the detrended log intensity
+  (a rotating sample, for example, modulates the scattered intensity periodically); the
   shortest maximum whose double lag is also a maximum, so that two unequal
   dips per turn give the dip spacing in every scan.
 - thickness substitutes: the island-volume equivalent thickness t_eq of the
@@ -33,6 +33,13 @@ writes one physical reading of the whole series:
   when a deposition rate is given, the nominal thickness rate*(t - t0). The TS
   film thickness is not identifiable (in simulation the posterior equals the
   prior), so film windows say so instead of giving a number.
+- the literature method (sputter_literature): R from the nominal thickness and
+  D = 2*pi/q* by mass balance, its percolation (with an interval over the noise
+  and the errors of the rate and t0), and checks against published growth
+  (summary key 'literature', columns LIT_COLUMNS).
+
+Every note is made from the templates below (NOTE_TEMPLATES, plain {field}),
+so a program that shows them can translate each one.
 
 Example:
     from sputtergisaxs.sputter_physical import write_physical
@@ -44,6 +51,7 @@ import csv, json, math
 import numpy as np
 
 from .sputter_sequence import LATE
+from .sputter_literature import LIT_COLUMNS, literature_table
 
 STAGE_ORDINAL = {'pre_nucleation_candidate': 0, 'separate_islands_candidate': 1, 'coalescence_candidate': 2,
                  'coalescence_or_film_candidate': 3, 'continuous_film_candidate': 3}
@@ -64,9 +72,9 @@ ROTATION_METHOD = ('autocorrelation of ln(intensity_rate) on the uniform (0.5 s)
                    'centred 60 s local linear fit; local maxima >= 0.1 at lags 2-60 s; the period is the shortest maximum '
                    'whose double lag is also a maximum, with >= 0.3 at one of the two (>= 0.3 on its own when the '
                    'double lag is beyond 60 s; else the first maximum >= 0.3), with >= 3 full cycles in the series')
-ROTATION_MEANING = ('period of the intensity modulation (the spacing of its dips) that the sample rotation causes; '
-                    'when the pattern repeats exactly only after twice this period (two unequal dips, full_repeat_s), '
-                    'one turn of the sample may take full_repeat_s')
+ROTATION_MEANING = ('period of the intensity modulation (the spacing of its dips), for example from a sample rotation '
+                    '(the data do not tell the source); when the pattern repeats exactly only after twice this period '
+                    '(two unequal dips, full_repeat_s), one turn of the sample may take full_repeat_s')
 FILM_STATUS = ("not determined by GISAXS: the TS film thickness and metal fraction are not identifiable "
                "(in simulation the network's posterior equals its prior); see L_TS_nm for the lateral texture length")
 T_EQ_NOTE = ('t_eq = (2/3)*pi*R^3*exp(3*sigma^2) / ((sqrt(3)/2)*D^2): island-volume equivalent thickness of the '
@@ -76,7 +84,7 @@ T_EQ_NOTE = ('t_eq = (2/3)*pi*R^3*exp(3*sigma^2) / ((sqrt(3)/2)*D^2): island-vol
 NOMINAL_NOTE = ('nominal deposited thickness = rate * (t - t0) from the given deposition rate (e.g. QCM); not '
                 'measured by GISAXS.')
 T0_ASSUMED_NOTE = (' t0 not given: assumed 0 s = the first frame; the start of the deposition is not known from the '
-                   'data (each 1 s of error in t0 shifts the nominal thickness by {rate:g} nm).')
+                   'data (each 1 s of error in t0 shifts the nominal thickness by {rate} nm).')
 NO_RATE_NOTE = 'no deposition rate given: nominal thickness not computed'
 ONSET_MEANING = ('first window of the TS-network part of the path (rule stage coalescence or coalescence-or-film '
                  'candidate); a connected film is not proven')
@@ -86,8 +94,41 @@ FILM_REASON = 'film-type (TS layer) window on the physical path: island R/D not 
 PRE_REASON = 'pre-nucleation on the physical path: no island estimate'
 UNSTAGED_REASON = 'no window of the series has a resolved stage: no island estimate'
 NO_DATA_REASON = f'fewer than {NO_DATA_COUNTS:g} counts in the window (shutter closed or beam off): no stage, no values'
+NO_PEAK_REASON = 'no resolved peak: D not reported'
+NO_ESTIMATE = 'no estimate'
+D_OUTSIDE = 'outside simulated 90% range of D/(2pi/q*)'
+NOTE_MONOTONE = ('Model assumption: during deposition the TS onset is monotone (no return from film to islands); the stage '
+                 'path is the non-decreasing L1 fit of the rule stages, and unresolved windows cast no vote.')
+NOTE_FILM_STAGE = ("stage_path 'film' is the rule's coalescence-or-film candidate (a connected film is not proven); film=true "
+                   'marks every window on the TS network (coalescence or film).')
+NOTE_TREND = ('R_trend_nm / D_trend_nm: local log-linear (Theil-Sen) fit of ln R / ln D over the island windows in a '
+              'centred span of {span} s (max of the modulation period and 2.5 s), evaluated at each window.')
+NOTE_GRADE_P = ('R_nm / D_nm are network estimates in every window whose path stage is islands (grade P); refined values '
+                'stay in refined_R_nm / refined_D_nm. Pre-nucleation windows have no island values.')
+NOTE_TS_FILM = ('TS film windows: no thickness or metal fraction is reported (not identifiable); L_TS_nm is the lateral '
+                'texture length, not an island spacing.')
+NOTE_CU = 'Cu approximated with the Ag model, for reference only (errors not validated).'
+NOTE_IMPUTED = ('{count} windows with an unresolved rule stage carry the stage of the neighbouring resolved window '
+                '(stage_imputed=true; stage_path_counts_imputed).')
+NOTE_NO_DATA = '{count} windows with fewer than {counts} counts have no stage and no values.'
+NOTE_NOT_ESTABLISHED = ('TS onset not established: no TS window at all disagrees with {no_ts} resolved windows, within {slack} '
+                        'of the {best} at the chosen onset ({onset} s); the series may stay in the island phase.')
+NOTE_LATE_ONSET = ('No TS onset on the path, but onsets from {start} s disagree with at most {most} resolved windows: a late '
+                   'TS onset is not excluded.')
+NOTE_NO_FILM = ('The path reaches coalescence but never the film stage: film_onset_s is the onset of TS-network '
+                '(coalescence) windows, not of a continuous film.')
+NOTE_DIPS = ('The intensity dips every {period} s with unequal depths; the pattern repeats exactly after {repeat} s, which '
+             'may be one turn of the sample.')
+NOTE_SPAN = ('The smoothing span ({span} s) covers the whole island phase ({start}-{end} s): R_trend_nm / D_trend_nm are '
+             'one log-linear fit over it; the per-window R_nm / D_nm (grade P) show more.')
+NOTE_TEMPLATES = (T_EQ_NOTE, NOMINAL_NOTE, NOMINAL_NOTE + T0_ASSUMED_NOTE, NO_RATE_NOTE, FILM_STATUS, ONSET_MEANING,
+                  ALT_MISSING, FILM_REASON, PRE_REASON, UNSTAGED_REASON, NO_DATA_REASON, NO_PEAK_REASON, NO_ESTIMATE,
+                  D_OUTSIDE, NOTE_MONOTONE, NOTE_FILM_STAGE, NOTE_TREND, NOTE_GRADE_P, NOTE_TS_FILM, NOTE_CU, NOTE_IMPUTED,
+                  NOTE_NO_DATA, NOTE_NOT_ESTABLISHED, NOTE_LATE_ONSET, NOTE_NO_FILM, NOTE_DIPS, NOTE_SPAN)
+"""Every note and reason this module writes (filled with str.format; the literature texts are in
+sputter_literature.TEMPLATES)."""
 NEW_COLUMNS = ('stage_path', 'module_path', 'film', 'path_changed', 'R_trend_nm', 'D_trend_nm', 't_eq_nm', 't_eq_lo_nm',
-               't_eq_hi_nm', 'nominal_thickness_nm', 'film_thickness_status', 'stage_imputed')
+               't_eq_hi_nm', 'nominal_thickness_nm', 'film_thickness_status', 'stage_imputed') + LIT_COLUMNS
 
 
 def _num(v):
@@ -324,7 +365,8 @@ def _network(fr):
     return dict(R=_num(fr.get('mode1_R_number_mean_nm')), D=_num(fr.get('mode1_D_nm')),
                 sigma=_num(fr.get('mode1_radius_sigma_log')), burial=_num(fr.get('mode1_burial_base_depth_nm')),
                 thickness=_num(fr.get('mode1_polymer_thickness_nm')), L=_num(fr.get('mode1_spectral_domain_nm')),
-                probability=_num(fr.get('mode1_probability')))
+                probability=_num(fr.get('mode1_probability')), film_thickness=_num(fr.get('mode1_film_thickness_nm')),
+                metal_fraction=_num(fr.get('mode1_metal_fraction')))
 
 
 def _kind(no_data, module, ordinal):
@@ -345,9 +387,9 @@ def _size_values(kind, net, peak, errR, errD):
         elif net is None:
             reason = ALT_MISSING
         elif name == 'D' and not peak:
-            reason = 'no resolved peak: D not reported'
+            reason = NO_PEAK_REASON
         else:
-            value = net[name]; reason = '' if value is not None else 'no estimate'
+            value = net[name]; reason = '' if value is not None else NO_ESTIMATE
         e = err['typical_rel_scatter']; has = value is not None
         values.update({f'{name}_nm': value, f'{name}_source': 'network' if has else None,
                        f'{name}_grade': 'P' if has else None, f'{name}_reason': reason,
@@ -379,22 +421,26 @@ def _onset(module_path, stages, t, n):
 def _onset_notes(extras, path_counts):
     notes, onset, interval = [], extras['film_onset_s'], extras['film_onset_interval_s']
     if onset is not None and extras['film_onset_no_TS_within_slack']:
-        notes.append(f"TS onset not established: no TS window at all disagrees with "
-                     f"{extras['film_onset_no_TS_disagreeing_windows']} resolved windows, within {ONSET_SLACK} of the "
-                     f"{extras['film_onset_min_disagreeing_windows']} at the chosen onset ({onset:.1f} s); the series may "
-                     'stay in the island phase.')
+        notes.append(NOTE_NOT_ESTABLISHED.format(no_ts=extras['film_onset_no_TS_disagreeing_windows'], slack=ONSET_SLACK,
+                                                 best=extras['film_onset_min_disagreeing_windows'], onset=f'{onset:.1f}'))
     if onset is None and interval is not None:
-        notes.append(f'No TS onset on the path, but onsets from {interval[0]:.1f} s disagree with at most '
-                     f"{extras['film_onset_min_disagreeing_windows'] + ONSET_SLACK} resolved windows: a late TS onset "
-                     'is not excluded.')
+        notes.append(NOTE_LATE_ONSET.format(start=f'{interval[0]:.1f}',
+                                            most=extras['film_onset_min_disagreeing_windows'] + ONSET_SLACK))
     if onset is not None and not path_counts.get('film'):
-        notes.append('The path reaches coalescence but never the film stage: film_onset_s is the onset of TS-network '
-                     '(coalescence) windows, not of a continuous film.')
+        notes.append(NOTE_NO_FILM)
     return notes
 
 
-def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, reliability=None):
-    """(rows of new column values per structure row, summary extras) for one series."""
+def polymer_of(frames):
+    """The polymer named in the analysis (system_note 'metal/polymer' of binned/frames.csv), or None."""
+    note = next((fr.get('system_note') for fr in frames if fr.get('system_note')), '') or ''
+    return (note.split('/', 1)[1].strip() or None) if '/' in note else None
+
+
+def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, reliability=None, polymer_type=None,
+                   rate_error=None, t0_error_s=None):
+    """(rows of new column values per structure row, summary extras) for one series. rate_error (relative) and
+    t0_error_s: errors of the rate and t0 in the literature method's percolation interval (default: the config's)."""
     if reliability is None:
         from .sputter_struct import reliability as load
         reliability = load()
@@ -420,7 +466,7 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                    for i, (o, nd) in enumerate(zip(path, no_data))]
     errR = rel['R'][model_metal]['network']; errD = rel['D'][model_metal]['network']
     band = rel.get('D_over_direct', {}).get('band_90', [0.587, 1.75])
-    out, kinds = [], []
+    out, kinds, film_net = [], [], []
     for i, r in enumerate(srt):
         fr = frame_rows[i]
         o = path[i]; rule_o = STAGE_ORDINAL.get(stages[i])
@@ -439,7 +485,7 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
         if values['D_nm'] is not None and D_corr:
             ratio = values['D_nm'] / D_corr
             values['D_over_direct'] = ratio
-            values['D_direct_check'] = 'consistent' if band[0] <= ratio <= band[1] else 'outside simulated 90% range of D/(2pi/q*)'
+            values['D_direct_check'] = 'consistent' if band[0] <= ratio <= band[1] else D_OUTSIDE
         else:
             values['D_over_direct'] = values['D_direct_check'] = None
         shape = net if kind == 'islands' else None
@@ -455,6 +501,7 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
         row.update(values)
         row['film_thickness_status'] = FILM_STATUS if kind == 'film' else ''
         out.append(row)
+        film_net.append((net['film_thickness'], net['metal_fraction']) if net and kind == 'film' else (None, None))
     # Modulation (rotation) period and smoothed sizes.
     period, detection = rotation_period(t, [_num(f.get('intensity_rate')) for f in frame_rows],
                                         [_num(f.get('nominal_bin_seconds')) for f in frame_rows])
@@ -474,6 +521,16 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
         row['nominal_thickness_nm'] = rate_nm_s * max(0., ti - t0) if rate_nm_s is not None and ti is not None else None
     # TS onset and its interval.
     onset, onset_extras = _onset(module_path, stages, t, n)
+    # The literature method and the comparison with published growth.
+    lit_rows = [dict(D_corr_nm=_num(r.get('D_corr_nm')), feature_status=r.get('feature_status'), no_data=nd, kind=k,
+                     R_nm=row['R_nm'], D_nm=row['D_nm'], t_eq_nm=row['t_eq_nm'], module_path=row['module_path'],
+                     film_thickness=film[0], metal_fraction=film[1])
+                for r, nd, k, row, film in zip(srt, no_data, kinds, out, film_net)]
+    columns, literature = literature_table(t, lit_rows, metal=metal, polymer=polymer_type or polymer_of(frames),
+                                           rate_nm_s=rate_nm_s, t0_s=t0_s, onset=onset_extras, period=period,
+                                           teq_factor=factor, rate_error=rate_error, t0_error_s=t0_error_s)
+    for row, values in zip(out, columns):
+        row.update(values)
     # Mass continuity between islands and the nominal thickness.
     continuity = None
     if rate_nm_s is not None:
@@ -509,36 +566,22 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                        t0_assumed=rate_nm_s is not None and t0_s is None,
                        t_eq_note=T_EQ_NOTE, t_eq_band_factor=factor,
                        nominal_note=(NO_RATE_NOTE if rate_nm_s is None else
-                                     NOMINAL_NOTE + (T0_ASSUMED_NOTE.format(rate=rate_nm_s) if t0_s is None else '')),
+                                     NOMINAL_NOTE + (T0_ASSUMED_NOTE.format(rate=f'{rate_nm_s:g}') if t0_s is None else '')),
                        film_thickness_note=FILM_STATUS, mass_continuity=continuity),
-        notes=[
-            'Model assumption: during deposition the TS onset is monotone (no return from film to islands); the stage '
-            'path is the non-decreasing L1 fit of the rule stages, and unresolved windows cast no vote.',
-            "stage_path 'film' is the rule's coalescence-or-film candidate (a connected film is not proven); film=true "
-            'marks every window on the TS network (coalescence or film).',
-            f'R_trend_nm / D_trend_nm: local log-linear (Theil-Sen) fit of ln R / ln D over the island windows in a '
-            f'centred span of {span:g} s (max of the modulation period and 2.5 s), evaluated at each window.',
-            'R_nm / D_nm are network estimates in every window whose path stage is islands (grade P); refined values '
-            'stay in refined_R_nm / refined_D_nm. Pre-nucleation windows have no island values.',
-            'TS film windows: no thickness or metal fraction is reported (not identifiable); L_TS_nm is the lateral '
-            'texture length, not an island spacing.',
-        ] + (['Cu approximated with the Ag model, for reference only (errors not validated).'] if metal == 'Cu' else []))
+        notes=[NOTE_MONOTONE, NOTE_FILM_STAGE, NOTE_TREND.format(span=f'{span:g}'), NOTE_GRADE_P, NOTE_TS_FILM]
+        + ([NOTE_CU] if metal == 'Cu' else []),
+        literature=literature)
     if extras['stage_imputed_windows']:
-        extras['notes'].append(f"{extras['stage_imputed_windows']} windows with an unresolved rule stage carry the stage of "
-                               'the neighbouring resolved window (stage_imputed=true; stage_path_counts_imputed).')
+        extras['notes'].append(NOTE_IMPUTED.format(count=extras['stage_imputed_windows']))
     if extras['no_data_windows']:
-        extras['notes'].append(f"{extras['no_data_windows']} windows with fewer than {NO_DATA_COUNTS:g} counts have no "
-                               'stage and no values.')
+        extras['notes'].append(NOTE_NO_DATA.format(count=extras['no_data_windows'], counts=f'{NO_DATA_COUNTS:g}'))
     extras['notes'] += _onset_notes(extras, path_counts)
     if detection.get('full_repeat_s'):
-        extras['notes'].append(f"The intensity dips every {period:g} s with unequal depths; the pattern repeats exactly "
-                               f"after {detection['full_repeat_s']:g} s, which may be one turn of the sample.")
+        extras['notes'].append(NOTE_DIPS.format(period=f'{period:g}', repeat=f"{detection['full_repeat_s']:g}"))
     island_t = [ti for row, ti, k in zip(out, t, kinds) if k == 'islands' and row['R_nm'] is not None and ti is not None]
     extras['island_phase_s'] = [island_t[0], island_t[-1]] if island_t else None
     if island_t and span >= island_t[-1] - island_t[0]:
-        extras['notes'].append(
-            f'The smoothing span ({span:g} s) covers the whole island phase ({island_t[0]:.1f}-{island_t[-1]:.1f} s): '
-            'R_trend_nm / D_trend_nm are one log-linear fit over it; the per-window R_nm / D_nm (grade P) show more.')
+        extras['notes'].append(NOTE_SPAN.format(span=f'{span:g}', start=f'{island_t[0]:.1f}', end=f'{island_t[-1]:.1f}'))
     rows = [None] * n
     for k, i in enumerate(order):
         rows[i] = out[k]
@@ -553,8 +596,13 @@ def _cell(v):
     return v
 
 
-def write_physical(out, *, binned=None, rate_nm_s=None, t0_s=None):
-    """structure_physical.csv and structure_physical_summary.json from OUT/structure.csv (no frame reading)."""
+def write_physical(out, *, binned=None, rate_nm_s=None, t0_s=None, polymer_type=None, rate_error=None,
+                   t0_error_s=None):
+    """structure_physical.csv and structure_physical_summary.json from OUT/structure.csv (no frame reading).
+
+    polymer_type names the host for the literature band (default: the polymer named in binned/frames.csv);
+    rate_error (relative) and t0_error_s widen the literature percolation interval (default: the config's).
+    """
     from .sputter_struct import summary, reliability
     out = Path(out); binned = Path(binned) if binned is not None else out / 'binned'
     if rate_nm_s is not None and not rate_nm_s > 0:
@@ -563,7 +611,8 @@ def write_physical(out, *, binned=None, rate_nm_s=None, t0_s=None):
     frames = _read_csv(binned / 'frames.csv')
     alternate = _read_csv(binned / 'frames_alt.csv') if (binned / 'frames_alt.csv').exists() else None
     rel = reliability()
-    new, extras = physical_table(structure, frames, alternate, rate_nm_s=rate_nm_s, t0_s=t0_s, reliability=rel)
+    new, extras = physical_table(structure, frames, alternate, rate_nm_s=rate_nm_s, t0_s=t0_s, reliability=rel,
+                                 polymer_type=polymer_type, rate_error=rate_error, t0_error_s=t0_error_s)
     base = list(structure[0].keys()) if structure else []
     keys = base + [k for k in NEW_COLUMNS if k not in base]
     rows = []

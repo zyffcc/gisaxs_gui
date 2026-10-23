@@ -23,8 +23,8 @@ python scripts/sputter_struct_v1.py analyze --input SCAN_FOLDER --out OUT --ener
     --alpha-i-deg 0.4 --metal Ag --polymer-expert experts/polymer --ts-expert experts/TS \
     [--beam-col C --beam-row R] [--sample-roll-deg 0] [--mask MASK.npy] [--workers 4] \
     [--rate-nm-s RATE --t0-s T0]
-python scripts/sputter_struct_v1.py physical --folder OUT [--rate-nm-s RATE] [--t0-s T0]
-python scripts/sputter_struct_v1.py table --binned OUT/binned --out OUT --metal Ag [--refined REFINED/windows]
+python scripts/sputter_struct_v1.py physical --folder OUT [--rate-nm-s RATE] [--t0-s T0] [--polymer-type PS] \n    [--rate-error 0.1] [--t0-error 2]
+python scripts/sputter_struct_v1.py table --binned OUT/binned --out OUT --metal Ag [--refined REFINED/windows]     [--rate-nm-s RATE] [--t0-s T0] [--polymer-type PS]
 python scripts/sputter_struct_v1.py select|sequence --binned OUT/binned --out OUT --metal Ag \
     --polymer-expert experts/polymer --ts-expert experts/TS
 ```
@@ -48,8 +48,8 @@ the windows count only the frames read. No pixel is invented.
 | File | Content |
 |---|---|
 | `structure.csv` | one row per window: the per-window reading (rule stage, the network it routes to, R/D from converged refinement when merged, else the network) |
-| `structure_physical.csv` | the physical path: every column of `structure.csv`, plus `stage_path`, `module_path`, `film`, `path_changed`, `R_trend_nm`, `D_trend_nm`, `t_eq_nm`, `t_eq_lo_nm`, `t_eq_hi_nm`, `nominal_thickness_nm`, `film_thickness_status`, `stage_imputed` |
-| `structure_summary.json`, `structure_physical_summary.json` | counts, window-to-window scatter, reliability numbers; the physical one also the TS onset, modulation (rotation) period, reversal counts before/after and the thickness notes |
+| `structure_physical.csv` | the physical path: every column of `structure.csv`, plus `stage_path`, `module_path`, `film`, `path_changed`, `R_trend_nm`, `D_trend_nm`, `t_eq_nm`, `t_eq_lo_nm`, `t_eq_hi_nm`, `nominal_thickness_nm`, `film_thickness_status`, `stage_imputed`, and the literature method: `delta_nm`, `D_lit_nm`, `D_lit_trend_nm`, `R_lit_nm`, `R_lit_trend_nm`, `two_R_over_D_lit`, `two_R_over_D_lit_trend`, `coverage_lit`, `two_R_over_D_net`, `coverage_net`, `eta_net`, `lit_status`, `lit_reason` |
+| `structure_summary.json`, `structure_physical_summary.json` | counts, window-to-window scatter, reliability numbers; the physical one also the TS onset, intensity modulation period, reversal counts before/after, the thickness notes and `literature` (the literature method's percolation and its checks against published growth) |
 | `binned/frames.csv`, `binned/frames_alt.csv` | all network modes per window, from the routed network and from the other one |
 | `structure_selected.csv`, `structure_sequence.csv` | learned selector and time-consistent Viterbi path (exploratory, see below) |
 
@@ -74,7 +74,7 @@ The physical path reads the whole series once:
   windows in a centred span of max(modulation period, 2.5 s), evaluated at each window: they follow growth and
   are not biased at the ends of the island phase. `reversals.after` counts zig-zags of the per-window values on
   the path, `reversals.after_trend` those of the trend lines.
-- **Rotation**: a rotating sample modulates the intensity. `rotation_period_s` is the period of that modulation
+- **Intensity modulation**: a rotating sample (or another periodic change of the set-up) modulates the intensity. `rotation_period_s` is the period of that modulation
   (the spacing of its dips): from the autocorrelation of the detrended log intensity (0.5 s windows after 5 s,
   60 s local linear trend), the shortest maximum (>= 0.1) at 2-60 s lag whose double lag is also a maximum,
   with >= 0.3 at one of the two and at least 3 full cycles. When the double lag is clearly stronger, the dips
@@ -90,6 +90,55 @@ The physical path reads the whole series once:
   - Film windows: the TS film thickness and metal fraction are not identifiable (in simulation the network's
     posterior equals its prior), so `film_thickness_status` says so and no number is given; `L_TS_nm` is the
     lateral texture length, not an island spacing.
+
+### The literature method (`sputter_literature.py`, summary key `literature`)
+
+The P03 in-situ GISAXS studies (Schwartzkopf 2015, Bulut 2024, Gensch 2019/2021) do not fit R: they take the
+nominal thickness δ (a QCM rate times the time) and the spacing D = 2π/q* of the direct peak, and compute R by
+mass balance for flat-based hemispheres on a hexagonal lattice: δ = (2/3)πR³/((√3/2)D²) = 2.418·R³/D², coverage
+θ = (2π/√3)(R/D)²; percolation is the first δ where 2R = D. Those studies go on reporting D, R and 2R/D after it;
+this tool keeps D = 2π/q* after the percolation but gives no R (molecular dynamics, Abraham 2016, finds that R loses
+its island meaning once a network forms). With `--rate-nm-s` every window gets the same:
+
+- `delta_nm` = rate·(t − t0) (t0 = 0 s, the first frame, when not given: an assumption, said in the notes).
+- `D_lit_nm` = 2π/q* only where a resolved peak exists. `lit_status` marks peaks that are not used: `host_peak`
+  (before the deposition starts, more than a factor 2 above every published D(δ) at that δ, or a jump or outlier
+  at the host's spacing), `outlier` (more than a factor 2 from the trend of D, or a jump: more than a factor 2 above
+  the median of the five preceding peaks beyond the growth δ allows since t0, which a non-decreasing fit would
+  otherwise absorb) and `late_peak` (after a stretch of at least max(20 s, two modulation periods) without a peak;
+  the D check compares their median with the end of the trend). `D_lit_trend_nm` is the non-decreasing L1 fit of
+  the used peaks in time.
+- `R_lit_nm` = (δ·D²/2.418)^(1/3), `two_R_over_D_lit`, `coverage_lit` and their trend values; the network's own
+  `two_R_over_D_net`, `coverage_net` (from `R_nm`, `D_nm`) and `eta_net` = `t_eq_nm`/δ (the share of the nominal
+  metal in the islands the network sees).
+- Percolation: the first δ after nucleation (δ > 0.4 nm) where the trend of 2R/D reaches 1. Its 68 % interval holds
+  the windows' scatter (a moving-block bootstrap) and the errors of the rate and t0: the lower end with a higher
+  rate and an earlier t0, the upper end with a lower rate and a later t0 (`--rate-error`, default 10 %;
+  `--t0-error`, default 2 s when t0 is assumed at the first frame and 0.5 s when it is given; engineering choices).
+  A systematic error of 2π/q* is not in it. `state`: `reached`, `first_window` (at or above 1 from the first
+  window: an upper bound), `not_determined` (2R/D may reach 1 within these errors but need not; the δ range where
+  the trend is within 5 % of 1 is given) or `not_reached` (not even with the higher rate and the earlier t0: a lower
+  bound). After a percolation `R_lit_nm` is empty and `D_lit_nm` (2π/q*) stays (`after_percolation`).
+- Checks (`checks`: `id`, `title`, `verdict` = consistent / inconsistent / not testable, `measured`, `expected`,
+  `references`, `note`): D does not decrease with δ after nucleation; the percolation δ and the TS onset of the
+  physical path against the published band of the metal and host class (`--polymer-type`, by default the polymer of
+  the analysis; an unknown polymer uses all polymers of the metal and says so); the network's 2R/D (with the
+  coverage, which follows from it: one check) and mass balance against published ranges; the TS film thickness
+  against δ (not testable while the network's film thickness is not identifiable). Each published threshold counts
+  with its printed ±, or ±10 % when none is printed, so that a class of one value is not a band of zero width. For
+  Cu the percolation is compared with f = H/R = 1 and with the published f = 2.75; when the two disagree the
+  comparison is not decided.
+- The literature-method R agrees with the literature by construction (same mass balance); the independent tests are
+  the shape of D(δ), the percolation δ against the band, and the network's 2R/D and mass balance (which share the
+  network R and D).
+- Without a rate only the monotony of D (in time) is tested; the rest says it needs a deposition rate.
+
+Published values (percolation thresholds by metal and host, 2R/D and coverage ranges, D(δ) curves of Au/PS,
+Ag/PS, Ag/PMMA and Cu/graphene, the rate dependence δc ∝ F^−χ with χ = 0.07–0.17) are in
+`configs/literature_reference_v1.json`, each with its citation key, DOI and provenance (text or table, read from a
+figure, calculated, from a review, abstract only). Thresholds from other chambers differ by more than the rate
+effect, so the bands are a comparison, not a prediction. All sentences come from templates
+(`sputter_literature.TEMPLATES`, `sputter_physical.NOTE_TEMPLATES`) so a program can translate them.
 
 ## How reliable the values are
 
@@ -118,6 +167,7 @@ windows made elsewhere.
 ## Files
 
 `scripts/sputter_struct_v1.py` (entry), `sputtergisaxs/` (the import closure of the five subcommands;
-`sputter_struct.py` pipeline and table, `sputter_physical.py` physical path), `experts/{polymer,TS}`
-(checkpoints and input policies), `configs/` (reliability numbers, selector model), `MANIFEST.json`,
+`sputter_struct.py` pipeline and table, `sputter_physical.py` physical path, `sputter_literature.py` literature
+method), `experts/{polymer,TS}` (checkpoints and input policies), `configs/` (reliability numbers, selector model,
+published reference values), `MANIFEST.json`,
 `verify.py`, `SOURCE.json`, `requirements.txt`.

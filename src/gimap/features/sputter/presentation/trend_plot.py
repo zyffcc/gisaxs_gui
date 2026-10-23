@@ -6,6 +6,13 @@ with its simulation-based error bar, coloured by grade. The Metal thickness pane
 equivalent thickness t_eq as a band (conditional: hemispheres h = R on a hexagonal arrangement), the nominal
 thickness rate·(t − t0) when a deposition rate is given, and shades the film windows: there the thickness is
 not determined. The film onset of the physical path is marked with its interval on every panel.
+
+The literature explanation draws R and D of the literature method the same way (grade Lit: R from the nominal
+thickness δ and 2π/q* by mass balance); its thickness panel shows δ only (the islands hold it by construction), the
+windows after its percolation are shaded (D = 2π/q* goes on, R is not given) and the percolation is marked with its
+interval (the scatter of the windows and the errors of the rate and t0). A percolation that is not determined is
+shaded from the earliest time it may come at to the end of the peak phase it was looked for in. With a deposition
+rate the top axis also gives δ = rate × (t − t0).
 """
 
 from __future__ import annotations
@@ -16,15 +23,34 @@ from PyQt5.QtWidgets import QLabel, QSizePolicy
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import FILM_NOT_DETERMINED, GRADES, StructureResult, film_onset
+from ..application import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, StructureResult, onset_of, percolation_errors,
+                           percolation_last_time)
 from .texts import text
 
 COLORS = {"A": "#1f5fa8", "B": "#7fa3d6", "C": "#d07a10", "S": "#2a8a3e", "T": "#c0392b", "L": "#6a3d9a",
-          "P": "#159a9c"}
+          "P": "#159a9c", LITERATURE_GRADE: "#b0651c"}
 """Grade colours: readable on the light and the dark plot background."""
 TREND_COLORS = {"R": "#0b5d8a", "D": "#8e3b8e", "teq": "#b8860b", "nominal": "#7f7f7f"}
 FILM_SHADE = "#8c8c8c"
 ONSET_COLOR = "#d62728"
+AFTER_PERCOLATION = "after percolation: D = 2π/q* goes on, R is not given (film)"
+INTERVAL_LABEL = "68% interval of the percolation (scatter, rate ±{rate_error}%, t0 ±{t0_error} s)"
+UNDETERMINED_LABEL = "percolation not determined: from {time} s or later"
+BY_CONSTRUCTION = "literature method: the islands hold δ by construction"
+SMOOTHED = ("physical", "literature")
+
+
+def thickness_axis(result):
+    """(rate, t0) of the nominal thickness δ = rate·(t − t0) of a result, or None without a rate."""
+    thickness = result.summary.get("thickness") if result is not None else None
+    if not isinstance(thickness, dict) or result.variant not in SMOOTHED:
+        return None
+    try:
+        rate = float(thickness.get("rate_nm_s"))
+        t0 = float(thickness.get("t0_s") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return (rate, t0) if rate > 0 else None
 
 
 class TrendPlot:
@@ -60,7 +86,7 @@ class TrendPlot:
 
     # -- panels -----------------------------------------------------------------------------------------
     def _panels(self, fig, result: StructureResult, log_scale: bool) -> None:
-        physical = result.variant == "physical"
+        physical = result.variant in SMOOTHED
         panels = [("R", "R (nm)", tr("R, equivalent hemisphere radius")),
                   ("D", "D (nm)", tr("D, centre-to-centre spacing (peak windows)"))]
         if result.ts_length().time:
@@ -70,24 +96,30 @@ class TrendPlot:
         axes = fig.subplots(len(panels), 1, sharex=True)
         axes = list(axes) if len(panels) > 1 else [axes]
         spans = _padded(result.film_spans(), [r.get("time_s") for r in result.rows])
-        onset, interval = film_onset(result.summary)
+        onset, interval, kind = onset_of(result)
+        onset_label = "percolation {time} s (literature method)" if kind == "percolation" else "film onset {time} s"
+        times = [r.get("time_s") for r in result.rows if r.get("time_s") is not None]
         for ax, (name, label, title) in zip(axes, panels):
             for low, high in spans:
                 ax.axvspan(low, high, color=FILM_SHADE, alpha=.13, lw=0, zorder=0)
             if name == "L":
                 ts = result.ts_length()
                 ax.plot(ts.time, ts.value, "o", ms=2.5, color="#5a8a2a", label=tr("TS length L (network)"))
+            elif name == "thickness" and result.variant == "literature":
+                self._delta_only(ax, result, spans)
             elif name == "thickness":
                 self._thickness(ax, result, spans)
             elif physical:
                 self._physical(ax, result, name)
             else:
                 self._graded(ax, result, name)
+            first = name == panels[0][0]
+            if interval is not None and times:
+                end = (percolation_last_time(result.summary) if kind == "percolation" else None) or max(times)
+                self._interval(ax, result, interval, onset, end, kind, first)
             if onset is not None:
-                if interval is not None:
-                    ax.axvspan(interval[0], interval[1], color=ONSET_COLOR, alpha=.08, lw=0, zorder=0)
                 ax.axvline(onset, color=ONSET_COLOR, lw=1, ls=":",
-                           label=text("film onset {time} s", time=f"{onset:.1f}") if name == panels[0][0] else None)
+                           label=text(onset_label, time=f"{onset:.1f}") if first else None)
             if log_scale and _positive(ax):
                 ax.set_yscale("log")
                 _plain_ticks(ax)
@@ -99,13 +131,35 @@ class TrendPlot:
             if legend is not None:
                 legend.get_frame().set_alpha(.7)
         axes[-1].set_xlabel(tr("time (s)"))
+        axis = thickness_axis(result)
+        if axis is not None:
+            rate, t0 = axis
+            top = axes[0].secondary_xaxis("top", functions=(lambda t: rate * (t - t0), lambda d: d / rate + t0))
+            top.set_xlabel(tr("δ, nominal thickness (nm)"), fontsize=8)
+            top.tick_params(labelsize=7)
+
+    @staticmethod
+    def _interval(ax, result: StructureResult, interval: tuple, onset, end: float, kind: str, first: bool) -> None:
+        """The onset's interval; an open end runs to ``end`` (a percolation that is not determined has no onset,
+        only the earliest time it may come at: it is hatched to the end of the peak phase)."""
+        low, high = interval
+        if kind != "percolation":
+            ax.axvspan(low, high if high is not None else end, color=ONSET_COLOR, alpha=.08, lw=0, zorder=0)
+            return
+        if onset is None:
+            label = text(UNDETERMINED_LABEL, time=f"{low:.1f}")
+        else:
+            label = text(INTERVAL_LABEL, **percolation_errors(result.summary))
+        ax.axvspan(low, high if high is not None else end, color=ONSET_COLOR, alpha=.08, lw=0, zorder=0,
+                   hatch="//" if high is None else None, label=label if first else None)
 
     @staticmethod
     def _physical(ax, result: StructureResult, name: str) -> None:
         points = result.column(f"{name}_nm")
+        grade = LITERATURE_GRADE if result.variant == "literature" else "P"
         if points.time:
-            ax.plot(points.time, points.value, "o", ms=2.6, alpha=.3, color=COLORS["P"], lw=0,
-                    label=text("{grade}: {meaning}", grade="P", meaning=tr(GRADES["P"])))
+            ax.plot(points.time, points.value, "o", ms=2.6, alpha=.3, color=COLORS[grade], lw=0,
+                    label=text("{grade}: {meaning}", grade=grade, meaning=tr(GRADES[grade])))
         trend = result.column(f"{name}_trend_nm")
         if trend.time:
             ax.plot(trend.time, trend.value, "-", lw=1.7, color=TREND_COLORS[name], label=tr("trend (smoothed)"))
@@ -113,8 +167,22 @@ class TrendPlot:
             _direct(ax, result)
 
     @staticmethod
+    def _delta_only(ax, result: StructureResult, spans: list) -> None:
+        """The literature explanation's thickness panel: only δ (the islands hold it by construction)."""
+        nominal = result.column("nominal_thickness_nm")
+        if nominal.time:
+            ax.plot(nominal.time, nominal.value, "--", lw=1.3, color=TREND_COLORS["nominal"],
+                    label=tr("nominal: rate × (t − t0)"))
+        ax.text(.02, .92, tr(BY_CONSTRUCTION), transform=ax.transAxes, ha="left", va="top", fontsize=7.5,
+                color="#555555", bbox=dict(facecolor="white", alpha=.65, lw=0))
+        if spans:
+            low_t, high_t = spans[0]
+            ax.text((low_t + high_t) / 2, .5, tr(AFTER_PERCOLATION), transform=ax.get_xaxis_transform(),
+                    ha="center", va="center", fontsize=7.5, color="#555555", bbox=dict(facecolor="white", alpha=.65, lw=0))
+
+    @staticmethod
     def _graded(ax, result: StructureResult, name: str) -> None:
-        for grade in ("C", "B", "A", "S", "T", "L", "P"):
+        for grade in ("C", "B", "A", "S", "T", "L", "P", LITERATURE_GRADE):
             s = result.series(name, grade)
             if not s.time:
                 continue
@@ -191,4 +259,7 @@ def _positive(ax) -> bool:
     return bool(ax.collections)
 
 
-__all__ = ["COLORS", "TrendPlot"]
+TEMPLATES = (AFTER_PERCOLATION, BY_CONSTRUCTION, INTERVAL_LABEL, UNDETERMINED_LABEL)
+"""Texts the trend says from a name (the interface translates them)."""
+
+__all__ = ["AFTER_PERCOLATION", "BY_CONSTRUCTION", "COLORS", "TEMPLATES", "TrendPlot", "thickness_axis"]

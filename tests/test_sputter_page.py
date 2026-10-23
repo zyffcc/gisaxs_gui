@@ -81,7 +81,7 @@ def test_predict_installs_pytorch_then_predicts_and_shows_the_physical_path(tmp_
     assert page.result.variant == "physical" and page.choice_box.currentData() == "physical"
     assert page.result.folder == runner.calls[0][2] and page.result.folder.parent == tmp_path / "results"
     assert "PyTorch 9.9.9: ready" in page.environment_label.text() and page.predict_button.isEnabled()
-    assert "rotation period ≈ 7 s" in page.result_label.text() and "film from 2.0 s" in page.result_label.text()
+    assert "intensity modulation period ≈ 7 s (sample rotation?)" in page.result_label.text() and "film from 2.0 s" in page.result_label.text()
     log = page.log.toPlainText()
     assert "Downloading torch: 100%" in log and "a plain line of the model" in log and "INTAKE_EXCLUDED" in log
     assert max(seen) > 0  # the bar moved while the frames were read
@@ -419,7 +419,8 @@ def test_a_results_folder_opens_on_the_physical_path_with_its_thickness(tmp_path
     assert labels[-1] == "Metal thickness (nm)" and len(labels) == 4  # R, D, TS length, thickness
     texts = [t.get_text() for t in page.trend.figure.axes[-1].texts]
     assert "film: thickness not determined" in texts
-    assert "Physical path (default)" in page.report.toPlainText()
+    assert "Physical path of the network" in page.report.toPlainText()
+    assert "made before the literature method existed" in page.literature.message.text()
     page.choice_box.setCurrentIndex(page.choice_box.findData("window"))
     assert page.result.variant == "window" and page.table.item(1, 0).text() == "0.6"
     _close(page)
@@ -540,7 +541,9 @@ def test_the_page_speaks_chinese_after_a_switch(tmp_path):
                        and not re.fullmatch(r"[\w.\-]+", w.text())})  # names (folder, scan) are data
         assert kept == []  # every fixed text of the page has its Chinese
         assert page.predict_button.text() == "预测" and "物理路径" in page.report.toPlainText()
-        assert "旋转周期" in page.result_label.text() and page.source_labels["sdd"].text() == "文件中没有——请填写"
+        assert "强度调制周期" in page.result_label.text() and "可能是样品旋转" in page.result_label.text()
+        assert page.source_labels["sdd"].text() == "文件中没有——请填写"
+        assert page.tabs.tabText(page.tabs.indexOf(page.literature)) == "文献对照"
         assert page.trend.figure.axes[-1].get_ylabel() == "金属厚度（nm）"
         headers = [page.table.horizontalHeaderItem(i).text() for i in range(page.table.columnCount())]
         stages = [page.table.item(row, headers.index("阶段（路径）")).text() for row in range(page.table.rowCount())]
@@ -580,15 +583,159 @@ def test_every_text_of_the_page_is_in_the_chinese_table():
                 problems.append(f"{path.name}:{line} {arg.value!r}")
     from src.gimap.features.sputter.domain.structure import READ_COMMON, READ_ERROR_BARS, READ_POINTS
     from src.gimap.features.sputter.presentation.predict_flow import OTHER_SCAN, WAITING_FOR_HEADER
-    from src.gimap.features.sputter.presentation.results_panel import D_CHECKS, D_OUTSIDE
+    from src.gimap.features.sputter.application import GRADES, LITERATURE_TEMPLATES
+    from src.gimap.features.sputter.presentation.literature_tab import TEMPLATES as TAB_TEMPLATES
+    from src.gimap.features.sputter.presentation.results_panel import CHOICES, D_CHECKS, D_OUTSIDE, LIT_STATUS
     from src.gimap.features.sputter.presentation.sketch_view import CU_NOTE
+    from src.gimap.features.sputter.presentation.texts import TOOLKIT_TEMPLATES
+    from src.gimap.features.sputter.presentation.trend_plot import TEMPLATES as TREND_TEMPLATES
 
     held = (READ_COMMON, READ_ERROR_BARS, READ_POINTS, OTHER_SCAN, WAITING_FOR_HEADER, D_OUTSIDE, CU_NOTE,
-            *D_CHECKS.values())  # texts the page translates from a name, not from a literal
+            *D_CHECKS.values(), *LIT_STATUS.values(), *CHOICES.values(), *GRADES.values(), *LITERATURE_TEMPLATES,
+            *TAB_TEMPLATES, *TOOLKIT_TEMPLATES, *TREND_TEMPLATES, "Literature",
+            "percolation {time} s (literature method)", "film onset {time} s")  # translated from a name
     for template in (*TEMPLATES, *LABEL_TEMPLATES, *STAGE_NAMES.values(), *held):
         if template not in ZH:
             problems.append(f"template {template!r}")
     assert problems == []
+
+
+# -- the literature method ---------------------------------------------------------------------------------
+
+
+def test_with_a_rate_the_literature_method_is_shown_first_and_compared_with_published_growth(tmp_path):
+    from tests.sputter_fixtures import literature_folder
+
+    page = _page(tmp_path)
+    page.open_results(literature_folder(tmp_path / "res"))
+    assert page.result.variant == "literature"
+    assert [page.choice_box.itemText(i) for i in range(page.choice_box.count())] == [
+        "Literature method (mass balance)", "Physical path (network)", "Per window (network / refined)"]
+    assert "percolation (literature method) at δ = 0.35 nm, t = 1.75 s" in page.result_label.text()
+    # Size Trend: the method's R and D, δ on the top axis, only δ in the thickness panel, the percolation marked.
+    axes = page.trend.figure.axes
+    assert [ax.get_ylabel() for ax in axes] == ["R (nm)", "D (nm)", "Metal thickness (nm)"]
+    assert axes[0].child_axes and axes[0].child_axes[0].get_xlabel() == "δ, nominal thickness (nm)"
+    legend = [t.get_text() for t in axes[0].get_legend().get_texts()]
+    assert "Lit: literature method (mass balance)" in legend and "percolation 1.8 s (literature method)" in legend
+    assert "68% interval of the percolation (scatter, rate ±10%, t0 ±2 s)" in legend
+    assert any("by construction" in t.get_text() for t in axes[-1].texts)
+    headers = [page.table.horizontalHeaderItem(i).text() for i in range(page.table.columnCount())]
+    assert "Literature method" in headers and "D literature (nm)" not in headers and "D check" not in headers
+    assert page.table.item(1, headers.index("R grade")).text() == "Lit"
+    assert page.table.item(3, headers.index("Literature method")).text() == "after percolation"
+    # The Literature tab: four panels over δ with the published curves, the checks with their verdicts.
+    tab = page.literature
+    assert page.tabs.tabText(page.tabs.indexOf(tab)) == "Literature" and len(tab.figure.axes) == 4
+    assert all(ax.get_xscale() == "log" for ax in tab.figure.axes)
+    labels = [t.get_text() for t in tab.figure.axes[0].get_legend().get_texts()]
+    assert "Gen19 Ag/PS RF" in labels and "published percolation, Ag/polymers" in labels
+    assert "Ag on PS" in tab.message.text() and "4.7–13.5 nm" in tab.message.text() and "first frame" in tab.message.text()
+    report = tab.report.toPlainText()
+    for words in ("× inconsistent", "✓ consistent", "Earlier than every published value", "Gen19", "f^(-1/3)",
+                  "δ = 0.35 nm at t = 1.75 s", "the rate ±10% and t0 ±2 s"):
+        assert words in report, words
+    labels = [t.get_text() for t in tab.figure.axes[0].get_legend().get_texts()]
+    assert "68% interval (scatter, rate ±10%, t0 ±2 s)" in labels and "2π/q* after the percolation" in labels
+    # The physical path stays one choice away; its tab shows the same comparison.
+    page.choice_box.setCurrentIndex(page.choice_box.findData("physical"))
+    assert page.result.variant == "physical" and len(tab.figure.axes) == 4
+    page.choice_box.setCurrentIndex(page.choice_box.findData("window"))
+    assert tab.figure.axes == [] and "More options ▸ Explanation" in tab.message.text()
+    _close(page)
+
+
+def test_the_nominal_thickness_axis_follows_the_dark_theme(tmp_path):
+    from src.gimap.app.presentation.theme import apply_theme
+    from tests.sputter_fixtures import literature_folder
+
+    page = _page(tmp_path)
+    page.open_results(literature_folder(tmp_path / "res"))
+    try:
+        apply_theme("dark", 9.0)
+        page._theme_changed()
+        bottom = page.trend.figure.axes[-1]
+        top = page.trend.figure.axes[0].child_axes[0]
+        assert top.xaxis.label.get_color() == bottom.xaxis.label.get_color() != "black"
+        assert top.spines["top"].get_edgecolor() == bottom.spines["bottom"].get_edgecolor()
+        assert top.xaxis.get_ticklabels()[0].get_color() == bottom.xaxis.get_ticklabels()[0].get_color()
+    finally:
+        apply_theme("light", 9.0)
+        _close(page)
+
+
+def test_a_percolation_that_is_not_determined_is_shaded_from_its_earliest_time(tmp_path):
+    import json
+
+    from tests.sputter_fixtures import literature_folder
+
+    folder = literature_folder(tmp_path / "res")
+    summary_file = folder / "structure_physical_summary.json"
+    summary = json.loads(summary_file.read_text(encoding="utf-8"))
+    summary["literature"]["percolation"].update(state="not_determined", delta_nm=None, time_s=None, reached=False,
+                                                interval_delta_nm=[0.25, None], interval_time_s=[1.25, None],
+                                                last_time_s=1.5)
+    summary_file.write_text(json.dumps(summary), encoding="utf-8")
+    page = _page(tmp_path)
+    page.open_results(folder)
+    assert "percolation (literature method) not determined: from δ = 0.25 nm or later" in page.result_label.text()
+    legend = [t.get_text() for t in page.trend.figure.axes[0].get_legend().get_texts()]
+    assert "percolation not determined: from 1.2 s or later" in legend
+    shade = [patch for patch in page.trend.figure.axes[0].patches if patch.get_hatch() == "//"]
+    assert shade and shade[0].get_x() == pytest.approx(1.25)
+    assert shade[0].get_x() + shade[0].get_width() == pytest.approx(1.5)  # to the end of the peak phase
+    assert "Percolation not determined" in page.literature.message.text()
+    _close(page)
+
+
+def test_without_a_rate_the_literature_tab_says_how_to_give_one_and_a_rate_makes_it_the_default(tmp_path):
+    from tests.sputter_fixtures import literature_folder
+
+    runner = FakeRunner(literature=True)
+    page = _page(tmp_path, runner=runner)
+    folder = literature_folder(tmp_path / "res", rate=False)
+    page.open_results(folder)
+    assert page.result.variant == "physical" and page.choice_box.findData("literature") == -1
+    message = page.literature.message.text()
+    assert "needs the deposition rate" in message and "More options ▸ Deposition rate (nm/s)" in message
+    assert page.literature.figure.axes == [] and "not testable" in page.literature.report.toPlainText()
+    page.rate.setText("0.2")
+    page.rate.editingFinished.emit()
+    _settle(lambda: not page.running())
+    assert runner.calls == [("physical", folder, 0.2, None)] and page.result.variant == "literature"
+    assert len(page.literature.figure.axes) == 4
+    page.rate.setText("")
+    page.rate.editingFinished.emit()
+    _settle(lambda: not page.running())
+    assert page.result.variant == "physical" and "needs the deposition rate" in page.literature.message.text()
+    _close(page)
+
+
+def test_the_literature_tab_speaks_chinese(tmp_path):
+    from src.gimap.app.presentation.i18n import DEFAULT_LANGUAGE, apply_language
+    from tests.sputter_fixtures import literature_folder
+
+    page = _page(tmp_path)
+    page.show()
+    page.open_results(literature_folder(tmp_path / "res"))
+    try:
+        apply_language("zh", roots=(page,))
+        page.refresh_language()
+        report = page.literature.report.toPlainText()
+        assert "不一致" in report and "δ = 0.35 nm，t = 1.75 s（68% 区间 0.32-0.38 nm，含噪声、速率 ±10% 和 t0 ±2 s）" in report
+        assert "早于该区间内所有已发表数值" in report and "参考文献" in report
+        assert "PS 上的 Ag" in page.literature.message.text()
+        assert page.choice_box.itemText(0) == "文献方法（质量守恒）"
+        assert "文献方法（质量守恒）" in page.report.toPlainText()
+        # The Reliability tab says the toolkit's notes with numbers in Chinese too, with δ.
+        reliability = page.report.toPlainText()
+        assert "δ = 速率*(t - t0)，速率取给定的 0.2 nm/s" in reliability and "given rate" not in reliability
+        labels = [t.get_text() for t in page.literature.figure.axes[0].get_legend().get_texts()]
+        assert "D = 2π/q*（文献方法）" in labels
+    finally:
+        apply_language(DEFAULT_LANGUAGE, roots=(page,))
+        page.refresh_language()
+    _close(page)
 
 
 # -- the main window -----------------------------------------------------------------------------------------

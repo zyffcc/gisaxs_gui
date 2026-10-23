@@ -32,8 +32,21 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   GIMaP and runs in GIMaP's own Python; the first Predict installs PyTorch there (about 1.2 GB). The default
   explanation is a physical path of stages through time with the network's sizes in every island window, so
   values no longer flip between sources from window to window. The metal thickness is given where it can be
-  stated: the island-volume equivalent t_eq and, from a deposition rate, the nominal thickness. A sample
-  rotation is recognised and named. Cu is accepted and labelled as approximated with the Ag model.
+  stated: the island-volume equivalent t_eq and, from a deposition rate, the nominal thickness. The period of a
+  periodic intensity modulation is found (see below). Cu is accepted and labelled as approximated with the Ag
+  model.
+- With a deposition rate, the default explanation is the **literature method (mass balance)** of the P03 in-situ
+  GISAXS studies: D = 2π/q* of the direct peak, R from the nominal thickness δ = rate × (t − t0) by mass balance
+  for hemispheres (grade Lit), and the percolation where 2R/D reaches 1. Its interval holds the scatter of the
+  windows and the errors of the rate (±10%) and t0 (±2 s, ±0.5 s when given); when 2R/D may reach 1 within them
+  but need not, the percolation is *not determined*. After it D = 2π/q* goes on and R is not given. Peaks that
+  probably belong to the polymer, jumps and outliers are marked and left out; late peaks after a gap are compared
+  with the trend of D. The new **Literature** tab plots D, 2R/D, coverage and the
+  network's mass balance over δ against published values (Au/PS, Ag/PS, Ag/PMMA, Cu/graphene; thresholds by metal
+  and host, each with its citation and DOI) and lists checks — consistent, inconsistent or not testable — with
+  their references. The literature-method R agrees with the literature by construction; the page says so.
+- The period of a periodic intensity modulation is called *intensity modulation period (sample rotation?)*: the
+  data do not tell its source. The model's own notes and reasons are shown in the interface language.
 
 ### Analyze
 
@@ -472,6 +485,10 @@ These were found while 0.1.0 was checked; they matter to those who ran a develop
   reference only.
 - **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on
   the CPU. Without internet, install it by hand (manual, section 13.7).
+- **Sputter's literature method rests on the deposition rate and t0 you give** and on D = 2π/q*. The
+  percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given), engineering
+  choices the page does not change (the toolkit's `physical` command does), and leaves out the systematic error
+  of 2π/q*. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used.
 
 ### Updating from 0.0.2
 

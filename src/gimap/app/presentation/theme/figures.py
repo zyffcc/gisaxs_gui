@@ -57,6 +57,12 @@ def apply_figure_colors(figure, *, background: str, foreground: str, grid: str) 
                 text.set_color(foreground)
         for text in axes.texts:
             _recolor_free_text(text, foreground)
+        for child in getattr(axes, "child_axes", ()):  # a secondary axis (a second scale on top) is not in figure.axes
+            for spine in child.spines.values():
+                spine.set_edgecolor(foreground)
+            child.tick_params(which="both", colors=foreground)
+            child.xaxis.label.set_color(foreground)
+            child.yaxis.label.set_color(foreground)
         legend = axes.get_legend()
         if legend is not None:
             legend.get_frame().set_facecolor(background)

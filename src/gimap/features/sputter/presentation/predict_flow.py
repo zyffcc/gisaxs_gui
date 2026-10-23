@@ -10,7 +10,8 @@ Predict uses the values of the folder in the picker: pressed while that folder's
 starts once the form is filled from it; a folder whose header says it has no frames is refused. A new
 deposition rate or t0 rewrites only the physical files of the result shown (``rebuild_physical``: no frame is
 read again) — when that result is of the scan in the picker; otherwise the fields are what the next Predict
-uses. Predict pressed while those files are rewritten follows them.
+uses. A rate given where there was none (or taken away) shows the default explanation afterwards: the
+literature method needs a rate. Predict pressed while those files are rewritten follows them.
 """
 
 from __future__ import annotations
@@ -291,7 +292,10 @@ class SputterPredictMixin:
         if not self._result_is_for_picker():
             self._status("idle", [(OTHER_SCAN, {})], 0.0)
             return
-        folder, variant = result.folder, self.choice_box.currentData() or "physical"
+        folder, variant = result.folder, self.choice_box.currentData()
+        if variant in (None, "physical", "literature") and (self._drawn is None or self._drawn[0] is None
+                                                            or values["rate"] is None):
+            variant = None  # a rate given or taken away: the default explanation (the literature method needs one)
         self._remember_thickness(result.scan_folder, values["rate"], values["t0"])
         self._rebuild_values = wanted
         self._set_busy("physical")

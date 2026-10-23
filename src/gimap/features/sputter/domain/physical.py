@@ -5,7 +5,8 @@
 → film; a film does not revert to islands), the network estimate of R and D in every island window (grade P;
 no switching between refined and network values from window to window), smoothed trend lines, the
 island-volume equivalent thickness t_eq, the nominal thickness rate·(t − t0) when a deposition rate is given,
-the film onset with its interval and the period of a periodic intensity modulation (sample rotation).
+the film onset with its interval and the period of a periodic intensity modulation (possibly a sample rotation:
+the data do not tell its source).
 Written from English templates (``text``) like the rest of the reliability report; the toolkit's own notes go
 through ``note`` (the interface gives the sentences it knows in its language, the others as they are).
 """
@@ -95,7 +96,7 @@ def physical_paragraphs(result, text, note=lambda sentence: sentence) -> list:
     summary = result.summary
     changed = sum(1 for r in result.rows if r.get("path_changed"))
     lines = ["<p>" + text(
-        "<b>Physical path (default).</b> One path of stages through time — pre-nucleation, islands, coalescence, "
+        "<b>Physical path of the network.</b> One path of stages through time — pre-nucleation, islands, coalescence, "
         "film — in which a film does not revert to islands. R and D are the network estimate in every island window "
         "(grade P): the source does not switch between refined and network values from window to window (refined "
         "values stay in the Windows table). The trend lines are smoothed over neighbouring island windows. {changed} "
@@ -118,11 +119,12 @@ def physical_paragraphs(result, text, note=lambda sentence: sentence) -> list:
         acf, cycles = detection.get("acf_peak"), detection.get("cycles")
         lines.append("<p>" + text(
             "The intensity is modulated with a period of about {period} s (autocorrelation peak {acf}, {cycles} "
-            "cycles): sample rotation. A single window shorter than this period sees part of a turn; the physical "
-            "path and the trend lines average over it.", period=f"{period:.3g}",
-            acf="–" if acf is None else f"{float(acf):.2f}", cycles="–" if cycles is None else cycles) + "</p>")
+            "cycles), possibly by a sample rotation: the data do not tell the source. A single window shorter than "
+            "this period sees part of one modulation cycle; the physical path and the trend lines average over it.",
+            period=f"{period:.3g}", acf="–" if acf is None else f"{float(acf):.2f}",
+            cycles="–" if cycles is None else cycles) + "</p>")
     else:
-        lines.append("<p>" + text("No periodic intensity modulation (sample rotation) was found.") + "</p>")
+        lines.append("<p>" + text("No periodic intensity modulation was found.") + "</p>")
     lines += _thickness(summary, text, note)
     notes = [words for words in (summary.get("notes") or []) if isinstance(words, str) and words]
     if notes:

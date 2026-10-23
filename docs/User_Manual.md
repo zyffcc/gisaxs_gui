@@ -2055,29 +2055,84 @@ results in**); the code is made from the scan, every value the analysis depends 
 model. The same request reuses its folder — a stopped run goes on where it stopped — and another geometry, or a
 GIMaP with another model, gets a new one (section 11).
 
-- **The physical path** is the default explanation: one path of stages through time — pre-nucleation, islands,
-  coalescence, film — in which a film does not revert to islands. R and D are the network estimate in every
-  island window (grade **P**), so a value does not jump between a refined and a network source from window to
-  window; refined values stay in the Windows table. **Explanation** also offers the per-window choice (grades A,
-  B, C), the learned selector (L) and the time-consistent path (S, T) when the folder holds them.
+- **The literature method (mass balance)** is the default explanation once a deposition rate is given and enough
+  windows show the metal's correlation peak (see *The literature method* below). Without a rate the default is
+  **the physical path (network)**: one path of stages through time — pre-nucleation, islands, coalescence, film —
+  in which a film does not revert to islands. R and D are the network estimate in every island window (grade
+  **P**), so a value does not jump between a refined and a network source from window to window; refined values
+  stay in the Windows table. **Explanation** also offers the per-window choice (grades A, B, C), the learned
+  selector (L) and the time-consistent path (S, T) when the folder holds them.
 - **Size Trend**: each window's R and D as faint points and the smoothed trend as a line; × marks the direct
   2π/q*, a red circle a D that disagrees with it. The **Metal thickness** panel shows the island-volume equivalent
   thickness t_eq as a band — the metal in the visible islands, for hemispheres on a hexagonal arrangement; a
   conditional value, uncertain by about a factor 2–3 — and, when a deposition rate is given, the nominal thickness
   rate × (t − t0). Film windows are shaded: *film: thickness not determined*. The film onset of the path is marked
-  with its interval.
-- The result line under Predict gives the windows, the film onset and, when the intensity is modulated by a
-  sample rotation, its period (the path and the trend lines average over it).
+  with its interval. With a deposition rate the top axis also gives the nominal thickness δ = rate × (t − t0).
+- The result line under Predict gives the windows, the film onset (with the literature method: its percolation)
+  and, when the intensity is modulated periodically, the *intensity modulation period (sample rotation?)*: often a
+  rotating sample, but the data do not tell the source, so the page does not assert it. The path and the trend
+  lines average over it.
 - **Windows**: every window with its stage (by the rule and on the path), the values, grades and typical errors,
   t_eq, the nominal thickness and the notes; `Ctrl+C` copies rows.
+- **Literature**: the series against published growth, over δ (below).
 - **Reliability**: what the grades mean, the typical errors from simulation, the physical path's assumptions,
-  the back-and-forth changes before and after it, the rotation period and what the thickness values mean.
+  the back-and-forth changes before and after it, the intensity modulation period and what the thickness values
+  mean; with the literature method also its definition, the percolation and how many checks agree.
 - **Structure Sketch**: a picture of the fitted model of one window (side and top view, one ruler for the
   series); film windows are drawn as a continuous film, without particles. A Cu result says on the picture, the
   saved image and the storyboard that it was read with the Ag model.
 - A new **Deposition rate** or **t0** after a run rewrites only the physical files of the result shown: no frame
   is read again. When that result is of another scan than the one under **Data**, the values are kept for that
-  scan's next **Predict** instead.
+  scan's next **Predict** instead. A rate given where there was none shows the default explanation afterwards
+  (the literature method), and taking it away goes back to the physical path.
+
+**The literature method.** The in-situ GISAXS studies of sputter growth at P03 (Schwartzkopf 2015, Bulut 2024,
+Gensch 2019/2021) do not fit R. They take the nominal thickness δ from a deposition rate (a quartz balance) and the
+spacing D = 2π/q* of the direct correlation peak, and compute R by mass balance for flat-based hemispheres (h = R)
+on a hexagonal lattice: δ = 2.418·R³/D², coverage θ = (2π/√3)(R/D)². Percolation is the first δ where 2R = D.
+Those studies go on reporting D, R and 2R/D after it; the page keeps D = 2π/q* after the percolation but gives no R
+there — its own choice, after molecular dynamics (Abraham 2016) that finds R loses its island meaning once a network
+forms. With a deposition rate the page does what the studies do (grade **Lit**):
+
+- δ = rate × (t − t0). Without **t0** the first frame is taken as the start of the deposition (an assumption, said
+  in the notes): δ is then an upper bound if the deposition started at or after the first frame.
+- D is 2π/q* only in windows with a resolved peak. Peaks that probably belong to the polymer (a peak before the
+  deposition starts, a peak more than twice every published D at that δ, a jump or outlier at the polymer's
+  spacing), peaks more than a factor 2 from the trend of D, jumps of more than a factor 2 above the preceding peaks
+  (more than the growth since t0 allows) and peaks after a long stretch without one are marked in the Windows table
+  (*Literature method*: host peak, outlier, late peak) and not used. The trend of D never decreases. The D check
+  counts every peak not used and compares the late peaks with the end of the trend, so a drop of D after a gap is
+  seen.
+- The percolation is the first δ after nucleation (δ > 0.4 nm) where the trend of 2R/D reaches 1. Its 68% interval
+  holds the scatter of the windows and the errors of the rate and t0: the lower end with the rate 10% higher and t0
+  2 s earlier, the upper end the other way round (±0.5 s instead of ±2 s when **t0** is given). These errors are
+  engineering choices; the page does not change them (the toolkit's `physical` command does, with `--rate-error`
+  and `--t0-error`). A systematic error of 2π/q* is not in the interval. When 2R/D may reach 1 within these errors
+  but need not — its trend stays close to 1 — the percolation is *not determined*: the page says from which δ it
+  may come, gives R throughout, and **Size Trend** hatches the interval to the end of the peak phase. When the peak is
+  lost before 2R/D reaches 1, even with the higher rate and the earlier t0, only a lower bound is given. After a
+  percolation the windows count as film: D = 2π/q* goes on, R is not given.
+- This R agrees with the literature **by construction** — it is the same mass balance. The independent tests are the
+  shape of D(δ), the percolation δ against the published thresholds, and the network's own 2R/D (the coverage
+  follows from it, so the two are one check) and mass balance (which shares the network's R and D).
+
+**Literature** tab: four panels over δ (logarithmic): D (2π/q* per window, its trend, the peaks not used, the
+network's D and the published D(δ) of the metal — Au/PS from Bulut 2024 and Schwartzkopf 2015, Ag/PS and Ag/PMMA
+from Gensch 2019/2021, Cu/graphene from Hodas 2017 — each labelled with its citation key); 2R/D of the literature
+method and of the network with the published range and the line 2R = D; the coverage of both with the published
+values; and η = t_eq/δ, the share of the nominal metal in the islands the network sees (1 by construction in the
+literature; values below 0.5 are flagged, an engineering choice). The published percolation band of the metal and
+host is shaded; the percolation of the literature method with its interval (hatched when it is not determined)
+and the TS onset of the network's path are marked. Below, each check says *consistent*, *inconsistent* or *not
+testable*, what was measured, what the literature reports and its references (with DOI): D does not decrease with
+δ after nucleation; the percolation δ and the TS onset against the published band; the network's 2R/D with its
+coverage, and its mass balance; the TS film thickness against δ (not testable while the model cannot determine the
+film thickness). Each published threshold counts with its printed ± (±10% where none is printed), so a class with
+one published value — Au on Si — is a band, not a single number. For Cu the percolation is compared with
+hemispheres (f = 1) and with the published f = 2.75; when the two give different verdicts the comparison is not
+decided. The host class comes from **Polymer** (an unknown polymer uses the band of all polymers of the metal and
+says so; PNO, PSBMA and PEO have no published data). Without a deposition rate the tab says how to give one (**More options
+▸ Deposition rate (nm/s)**); only the monotony of D is tested then.
 
 **Before you conclude.**
 
@@ -2086,7 +2141,14 @@ GIMaP with another model, gets a new one (section 11).
   is planned.
 - A film with particles on it is not modelled: with a resolved peak such a window counts as islands, without one
   the film model takes the particles in.
-- Absolute R depends on the hemisphere condition (h = R); trends are more reliable than single values.
+- Absolute R depends on the hemisphere condition (h = R); trends are more reliable than single values. In the
+  literature method R scales as f^(−1/3) with the shape factor f = H/R: the literature reports flatter Ag on oxides
+  and f ≈ 2.75 for Cu on PS-b-PEO.
+- The literature comparison depends on the deposition rate (GISAXS does not measure it; a QCM rate at another
+  position must be scaled to the sample), on t0, on the sticking of the metal on the polymer (not known for these
+  polymers; the literature assumes 1) and on D = 2π/q*, which can be off by more than 40% for D > 10 nm once
+  coalescence starts. Published thresholds come from other chambers and rates: the rate dependence (δc ∝ F^−χ,
+  χ ≈ 0.07–0.17) is weaker than the differences between chambers, so a band is a comparison, not a prediction.
 
 ## 8. Tool windows
 
@@ -2691,6 +2753,7 @@ Version 0.1.0 is a pre-release. These limitations are known; each comes with wha
 | 1D Predict writes its run folders into the folder GIMaP was started from; they are not removed. | Delete old `AI_Fitting_Output/v5_…` folders yourself. |
 | **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 7.4). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
 | **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
+| **Sputter's literature method rests on the deposition rate and t0 you give** (GISAXS measures neither) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 7.4). | Give the rate at the sample position and t0 when you know it; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
 | **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 13.7). |
 | Windows is the platform GIMaP is developed and tested on. TensorFlow runs on the CPU; a GPU set-up is not configured. | — |
 

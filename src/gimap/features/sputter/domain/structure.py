@@ -4,7 +4,9 @@ Pure Python (no Qt): rows come from the toolkit's ``structure*.csv`` and
 ``structure*_summary.json``. Grades: A = converged physical refinement with a
 unique solution, B = converged refinement with an equally good alternative,
 C = network estimate only, P = network estimate on the physical path (one
-stage path through time, no switching of the source from window to window).
+stage path through time, no switching of the source from window to window),
+Lit = the literature method (R from the nominal thickness and D = 2π/q* by mass
+balance, as in the P03 in-situ GISAXS studies; ``literature.py``).
 Typical errors are simulation-based (see summary ``reliability``); they
 describe the hemisphere-equivalent model, not a proof that the sample has this
 shape.
@@ -30,6 +32,7 @@ GRADES = {
     "T": "time-consistent, constraint-driven",
     "L": "learned selector",
     "P": "network estimate, physical path",
+    "Lit": "literature method (mass balance)",
 }
 NUMERIC = {
     "time_s", "q_star_nm_inv", "D_corr_nm", "network_R_nm", "network_D_nm", "network_mode1_probability",
@@ -42,6 +45,9 @@ NUMERIC = {
     "network_top_R_nm", "network_top_D_nm",
     # the physical path (structure_physical.csv)
     "R_trend_nm", "D_trend_nm", "t_eq_nm", "t_eq_lo_nm", "t_eq_hi_nm", "nominal_thickness_nm",
+    # the literature method (same file)
+    "delta_nm", "D_lit_nm", "D_lit_trend_nm", "R_lit_nm", "R_lit_trend_nm", "two_R_over_D_lit", "two_R_over_D_lit_trend",
+    "coverage_lit", "two_R_over_D_net", "coverage_net", "eta_net",
 }
 FLAGS = {"film", "path_changed"}
 
@@ -100,7 +106,7 @@ class StructureResult:
     folder: Path
     rows: list
     summary: dict
-    variant: str = "window"   # "physical", "window", "selected" or "sequence"
+    variant: str = "window"   # "literature", "physical", "window", "selected" or "sequence"
     scan_folder: Optional[Path] = None
     """The scan the result was predicted from (``gimap_request.json``), None when the folder does not say."""
 
@@ -222,6 +228,7 @@ def reliability_report(result: StructureResult, text: Optional[Text] = None,
                        note: Optional[Callable[[str], str]] = None) -> str:
     """Plain HTML: how much each value can be trusted, from simulation and from the data itself. ``text`` fills
     a template of this module, ``note`` gives a sentence of the toolkit itself (both in the interface language)."""
+    from .literature import literature_paragraphs
     from .physical import physical_paragraphs
     from .variants import selector_paragraphs, sequence_paragraphs
 
@@ -234,7 +241,9 @@ def reliability_report(result: StructureResult, text: Optional[Text] = None,
                               film=s.get("TS_windows", 0)) + "</p>")
     lines += _grades_table(result, text)
     lines.append("<p>" + text("Grades:") + " " + "; ".join(f"<b>{g}</b> {text(t)}" for g, t in GRADES.items()) + ".</p>")
-    if result.variant == "physical":
+    if result.variant == "literature":
+        lines += literature_paragraphs(result, text, note)
+    if result.variant in ("physical", "literature"):
         lines += physical_paragraphs(result, text, note)
     if result.variant == "sequence":
         lines += sequence_paragraphs(result, text)
@@ -248,7 +257,7 @@ def reliability_report(result: StructureResult, text: Optional[Text] = None,
             "the simulated 90% range (D/(2π/q*) outside {low}–{high}); they are circled in red and should not be used.",
             outside=d.get("outside_direct_band", 0), checked=d["checked_against_direct"], low=f"{band[0]:.2f}",
             high=f"{band[1]:.2f}") + "</p>")
-    lines.append("<p>" + text(READ_POINTS if result.variant == "physical" else READ_ERROR_BARS) + " "
+    lines.append("<p>" + text(READ_POINTS if result.variant in ("physical", "literature") else READ_ERROR_BARS) + " "
                  + text(READ_COMMON) + "</p>")
     lines.append("<p>" + text(
         "<b>Model conditions.</b> R is the base radius of a flat-based hemisphere (height h = R). Real clusters may "

@@ -1,0 +1,201 @@
+{
+ "version": "literature_reference_v1",
+ "purpose": "Published values the literature method of sputtergisaxs/sputter_literature.py compares a series with. Every value names its source (key into references) and how it was obtained (provenance). Values marked unavailable in the literature review were left out, not estimated.",
+ "provenance": {
+  "T": "read from the text or a table of the source",
+  "F": "read by eye from a figure of the source (about 5-10 % uncertain)",
+  "C": "calculated from published values",
+  "R": "from a review or another paper citing the source (original not read)",
+  "S": "from the abstract or a search snippet only"
+ },
+ "geometry": {
+  "model": "flat-based hemispheres (h = R) on a hexagonal lattice of spacing D",
+  "delta": "delta = (2/3)*pi*R^3 / ((sqrt(3)/2)*D^2) = 2.418*R^3/D^2",
+  "coverage": "theta = (2*pi/sqrt(3))*(R/D)^2",
+  "percolation": "2R = D (theta = 0.907, delta = 0.605*R)",
+  "D": "D = 2*pi/q* of the in-plane correlation peak",
+  "references": ["Sch15", "Bulut24", "GenTh23"],
+  "provenance": "T"
+ },
+ "references": {
+  "Abr16": {"citation": "Abraham J.W., Strunskus T., Faupel F., Bonitz M., J. Appl. Phys. 119, 185301 (2016)", "doi": "10.1063/1.4948375"},
+  "Aste96": {"citation": "Aste T., Phys. Rev. E 53, 2571 (1996)", "doi": "10.1103/PhysRevE.53.2571"},
+  "Bulut24": {"citation": "Bulut Y. et al., Langmuir 40, 22591 (2024)", "doi": "10.1021/acs.langmuir.4c02344"},
+  "Colin20": {"citation": "Colin J. et al., Nanomaterials 10, 2225 (2020)", "doi": "10.3390/nano10112225"},
+  "Dend20": {"citation": "Dendooven J. et al., Phys. Chem. Chem. Phys. 22, 24917 (2020)", "doi": "10.1039/d0cp03563g"},
+  "Gen19": {"citation": "Gensch M. et al., ACS Appl. Mater. Interfaces 11, 29416 (2019)", "doi": "10.1021/acsami.9b08594"},
+  "Gen21": {"citation": "Gensch M. et al., ACS Appl. Nano Mater. 4, 4245 (2021)", "doi": "10.1021/acsanm.1c00829"},
+  "GenTh23": {"citation": "Gensch M., PhD thesis, Technical University of Munich (2023)", "doi": null, "url": "https://mediatum.ub.tum.de/doc/1690709/1690709.pdf"},
+  "Gra13": {"citation": "Grachev S.Y. et al., J. Phys. D: Appl. Phys. 46, 375305 (2013)", "doi": "10.1088/0022-3727/46/37/375305"},
+  "Hod17": {"citation": "Hodas M. et al., Phys. Rev. B 95, 035424 (2017)", "doi": "10.1103/PhysRevB.95.035424"},
+  "Jam19": {"citation": "Jamnig A. et al., Sci. Rep. 9, 6640 (2019)", "doi": "10.1038/s41598-019-43107-8"},
+  "Jeffers": {"citation": "Jeffers G., Dubson M.A., Duxbury P.M., J. Appl. Phys. 75, 5016 (1994)", "doi": "10.1063/1.355742"},
+  "Kaune09": {"citation": "Kaune G. et al., ACS Appl. Mater. Interfaces 1, 353 (2009)", "doi": "10.1021/am8000727"},
+  "Liang22": {"citation": "Liang S., Schwartzkopf M., Roth S.V., Mueller-Buschbaum P., Nanoscale Adv. 4, 2533 (2022)", "doi": "10.1039/d2na00127f"},
+  "Nittler12": {"citation": "Nittler L., Delcorte A., Bertrand P., Migeon H.-N., Surf. Interface Anal. 44, 1072 (2012)", "doi": "10.1002/sia.4866"},
+  "Quint00": {"citation": "Quintanilla J., Torquato S., Ziff R.M., J. Phys. A 33, L399 (2000)", "doi": "10.1088/0305-4470/33/42/104"},
+  "Ruff11": {"citation": "Ruffino F. et al., Appl. Phys. A 103, 939 (2011)", "doi": "10.1007/s00339-011-6413-1"},
+  "Sch13": {"citation": "Schwartzkopf M. et al., Nanoscale 5, 5053 (2013)", "doi": "10.1039/c3nr34216f"},
+  "Sch15": {"citation": "Schwartzkopf M. et al., ACS Appl. Mater. Interfaces 7, 13547 (2015)", "doi": "10.1021/acsami.5b02901"},
+  "Sch17": {"citation": "Schwartzkopf M. et al., ACS Appl. Mater. Interfaces 9, 5629 (2017)", "doi": "10.1021/acsami.6b15172"},
+  "Sch21": {"citation": "Schwartzkopf M. et al., Nanoscale Horiz. 6, 132 (2021)", "doi": "10.1039/d0nh00538j"},
+  "Schap21": {"citation": "Schaper S.J. et al., Nanoscale 13, 10555 (2021)", "doi": "10.1039/d1nr01480c"},
+  "Schu21": {"citation": "Schuster C. et al., Nanomaterials 11, 589 (2021)", "doi": "10.3390/nano11030589"},
+  "Thran99": {"citation": "Thran A., Kiene M., Zaporojtchenko V., Faupel F., Phys. Rev. Lett. 82, 1903 (1999)", "doi": "10.1103/PhysRevLett.82.1903"},
+  "Yu15": {"citation": "Yu S. et al., J. Phys. Chem. C 119, 4406 (2015)", "doi": "10.1021/jp512675w"}
+ },
+ "percolation": {
+  "Au/PS": [
+   {"system": "Au on PS, RF sputtering", "delta_c_nm": 5.2, "plus_minus_nm": 0.3, "method": "GISAXS (2R = D)", "rate_nm_s": 0.0082, "ref": "Sch15", "provenance": "T"},
+   {"system": "Au on PS, dcMS", "delta_c_nm": 3.9, "plus_minus_nm": 0.5, "method": "GISAXS (2R = D)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PS, dcMS", "delta_c_nm": 2.6, "plus_minus_nm": 0.1, "method": "electrical (four-point probe)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PS, HiPIMS", "delta_c_nm": 3.0, "plus_minus_nm": 0.7, "method": "GISAXS (2R = D)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PS, HiPIMS", "delta_c_nm": 2.6, "plus_minus_nm": 0.1, "method": "electrical (four-point probe)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PS, rate series", "delta_c_nm": 6.3, "method": "GISAXS (2R = D)", "rate_nm_s": 0.041, "ref": "Sch17", "via": "Liang22", "provenance": "R", "note": "the review prints the rates without a unit; nm/s inferred"},
+   {"system": "Au on PS, rate series", "delta_c_nm": 5.3, "method": "GISAXS (2R = D)", "rate_nm_s": 0.201, "ref": "Sch17", "via": "Liang22", "provenance": "R", "note": "the review prints the rates without a unit; nm/s inferred"},
+   {"system": "Au on PS, rate series", "delta_c_nm": 4.2, "method": "GISAXS (2R = D)", "rate_nm_s": 0.366, "ref": "Sch17", "via": "Liang22", "provenance": "R", "note": "the review prints the rates without a unit; nm/s inferred"},
+   {"system": "Au on PS, rate series", "delta_c_nm": 3.7, "method": "GISAXS (2R = D)", "rate_nm_s": 0.73, "ref": "Sch17", "via": "Liang22", "provenance": "R", "note": "the review prints the rates without a unit; nm/s inferred"},
+   {"system": "Au on PS, rate series", "delta_c_nm": 3.4, "method": "GISAXS (2R = D)", "rate_nm_s": 1.51, "ref": "Sch17", "via": "Liang22", "provenance": "R", "note": "the review prints the rates without a unit; nm/s inferred"},
+   {"system": "Au on PS", "delta_c_nm": 3.5, "method": "GISAXS", "rate_nm_s": 1.52, "ref": "Sch21", "provenance": "R"}
+  ],
+  "Au/other polymers": [
+   {"system": "Au on P4VP, dcMS", "delta_c_nm": 4.0, "plus_minus_nm": 0.5, "method": "GISAXS (2R = D)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on P4VP, dcMS", "delta_c_nm": 2.8, "plus_minus_nm": 0.1, "method": "electrical (four-point probe)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on P4VP, HiPIMS", "delta_c_nm": 2.4, "plus_minus_nm": 0.3, "method": "GISAXS (2R = D)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on P4VP, HiPIMS", "delta_c_nm": 2.7, "plus_minus_nm": 0.1, "method": "electrical (four-point probe)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PSS, dcMS (f = 1)", "delta_c_nm": 7.0, "plus_minus_nm": 1.0, "method": "GISAXS (2R = D)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PSS, dcMS (f = 0.9)", "delta_c_nm": 3.9, "plus_minus_nm": 1.0, "method": "GISAXS (2R = D)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PSS, HiPIMS (f = 1)", "delta_c_nm": 4.7, "plus_minus_nm": 0.6, "method": "GISAXS (2R = D)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PSS, HiPIMS (f = 0.9)", "delta_c_nm": 2.6, "plus_minus_nm": 0.6, "method": "GISAXS (2R = D)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PSS, dcMS", "delta_c_nm": 2.9, "plus_minus_nm": 0.1, "method": "electrical (four-point probe)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on PSS, HiPIMS", "delta_c_nm": 2.6, "plus_minus_nm": 0.1, "method": "electrical (four-point probe)", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T"},
+   {"system": "Au on phenolic/epoxy resin", "delta_c_nm": 6.2, "plus_minus_nm": 0.1, "method": "electrical", "rate_nm_s": 0.07, "ref": "Schu21", "provenance": "T", "note": "rate 0.06-0.08 nm/s"}
+  ],
+  "Au/Si": [
+   {"system": "Au on SiOx, DC sputtering", "delta_c_nm": 5.5, "method": "GISAXS", "rate_nm_s": 0.21, "ref": "Sch13", "via": "Liang22", "provenance": "R"}
+  ],
+  "Ag/polymers": [
+   {"system": "Ag on PS, RF sputtering", "delta_c_nm": 11.2, "plus_minus_nm": 0.5, "method": "GISAXS (2R = D)", "rate_nm_s": 0.007, "ref": "Gen19", "provenance": "T"},
+   {"system": "Ag on PS, RF sputtering", "delta_c_nm": 11.6, "plus_minus_nm": 0.4, "method": "electrical (insulator-metal transition)", "rate_nm_s": 0.007, "ref": "Gen19", "provenance": "T"},
+   {"system": "Ag on PMMA, RF sputtering", "delta_c_nm": 10.5, "plus_minus_nm": 0.5, "method": "GISAXS (2R = D)", "rate_nm_s": 0.007, "ref": "Gen19", "provenance": "T"},
+   {"system": "Ag on PMMA, RF sputtering", "delta_c_nm": 10.6, "plus_minus_nm": 0.5, "method": "electrical (insulator-metal transition)", "rate_nm_s": 0.007, "ref": "Gen19", "provenance": "T"},
+   {"system": "Ag on PS-b-PMMA, RF sputtering", "delta_c_nm": 13.0, "plus_minus_nm": 0.5, "method": "GISAXS (2R = D)", "rate_nm_s": 0.007, "ref": "Gen19", "provenance": "T"},
+   {"system": "Ag on PS-b-PMMA, RF sputtering", "delta_c_nm": 12.7, "plus_minus_nm": 0.4, "method": "electrical (insulator-metal transition)", "rate_nm_s": 0.007, "ref": "Gen19", "provenance": "T"},
+   {"system": "Ag on PMMA, DC sputtering", "delta_c_nm": 9.9, "plus_minus_nm": 0.5, "method": "GISAXS (2R = D)", "rate_nm_s": 0.066, "ref": "Gen21", "provenance": "T"},
+   {"system": "Ag on PMMA, DC sputtering", "delta_c_nm": 10.5, "plus_minus_nm": 0.5, "method": "electrical (insulator-metal transition)", "rate_nm_s": 0.066, "ref": "Gen21", "provenance": "T"},
+   {"system": "Ag on P3HT, DC sputtering (cylinder model)", "delta_c_nm": 7.8, "plus_minus_nm": 1.0, "method": "GISAXS (2R = D)", "rate_nm_s": 0.066, "ref": "Gen21", "provenance": "T"},
+   {"system": "Ag on P3HT, DC sputtering", "delta_c_nm": 8.3, "plus_minus_nm": 0.6, "method": "electrical (insulator-metal transition)", "rate_nm_s": 0.066, "ref": "Gen21", "provenance": "T"},
+   {"system": "Ag on PMMA-b-P3HT, DC sputtering", "delta_c_nm": 10.2, "plus_minus_nm": 0.5, "method": "GISAXS (2R = D)", "rate_nm_s": 0.066, "ref": "Gen21", "provenance": "T"},
+   {"system": "Ag on PMMA-b-P3HT, DC sputtering", "delta_c_nm": 10.8, "plus_minus_nm": 0.6, "method": "electrical (insulator-metal transition)", "rate_nm_s": 0.066, "ref": "Gen21", "provenance": "T"},
+   {"system": "Ag on epoxy resin", "delta_c_nm": 4.8, "plus_minus_nm": 0.1, "method": "electrical", "rate_nm_s": 0.07, "ref": "Schu21", "provenance": "T", "note": "rate 0.06-0.08 nm/s"},
+   {"system": "Ag on Alq3", "delta_c_nm": 5.0, "plus_minus_nm": 0.1, "method": "not read", "rate_nm_s": null, "ref": "Yu15", "provenance": "S"}
+  ],
+  "Ag/oxides": [
+   {"system": "Ag on SiO2, DC sputtering", "delta_c_nm": 5.9, "plus_minus_nm": 0.1, "method": "electrical (four-point probe)", "rate_nm_s": 0.06, "ref": "Colin20", "provenance": "T"},
+   {"system": "Ag on amorphous carbon, DC sputtering", "delta_c_nm": 4.7, "method": "electrical (sheet resistance)", "rate_nm_s": 0.236, "ref": "Jam19", "provenance": "F", "note": "20 monolayers read from a figure, 1 ML = 0.2359 nm"},
+   {"system": "Ag on amorphous carbon, DC sputtering", "delta_c_nm": 6.4, "method": "electrical (sheet resistance)", "rate_nm_s": 0.033, "ref": "Jam19", "provenance": "F"},
+   {"system": "Ag on amorphous carbon, DC sputtering", "delta_c_nm": 4.0, "method": "electrical (sheet resistance)", "rate_nm_s": 1.27, "ref": "Jam19", "provenance": "F"}
+  ],
+  "Cu/polymers": [
+   {"system": "Cu on PS-b-PEO, DC sputtering", "delta_c_nm": 5.75, "method": "GISAXS", "rate_nm_s": null, "ref": "Schap21", "provenance": "S"},
+   {"system": "Cu on epoxy resin", "delta_c_nm": 2.5, "plus_minus_nm": 0.2, "method": "electrical", "rate_nm_s": 0.07, "ref": "Schu21", "provenance": "T", "note": "rate 0.06-0.08 nm/s"}
+  ],
+  "Cu/oxides": [
+   {"system": "Cu on SiO2, DC sputtering", "delta_c_nm": 2.6, "method": "electrical (four-point probe)", "rate_nm_s": 0.06, "ref": "Colin20", "provenance": "T"},
+   {"system": "Cu on amorphous carbon, DC sputtering", "delta_c_nm": null, "range_nm": [1.8, 2.6], "method": "0.3 x continuous-film thickness 5.8-8.6 nm", "rate_nm_s": null, "ref": "Jam19", "provenance": "C", "note": "rates 0.017-0.52 nm/s"}
+  ]
+ },
+ "rate_dependence": {
+  "law": "delta_c proportional to F^-chi (F: deposition rate), room temperature",
+  "chi_range": [0.07, 0.17],
+  "values": [
+   {"metal": "Ag", "quantity": "percolation", "chi": 0.11, "ref": "Jam19", "provenance": "T"},
+   {"metal": "Ag", "quantity": "continuous film", "chi": 0.14, "ref": "Jam19", "provenance": "T"},
+   {"metal": "Cu", "quantity": "percolation", "chi": [0.07, 0.08], "ref": "Jam19", "provenance": "T"},
+   {"metal": "Cu", "quantity": "continuous film", "chi": 0.10, "ref": "Jam19", "provenance": "T"},
+   {"metal": "Au", "quantity": "percolation", "chi": 0.17, "ref": "Sch17", "provenance": "C"}
+  ],
+  "caveat": "The rate dependence is weak, and chambers differ by more: Sch15 (RF, 0.49 nm/min) and Sch17 (about 1.5 nm/s) both used 100 W. A band scaled to another rate is an indication, not a prediction."
+ },
+ "two_R_over_D": [
+  {"regime": "after nucleation (delta about 0.5 nm)", "metal": "Au", "range": [0.6, 0.8], "kind": "mass balance", "refs": ["Sch15"], "provenance": "C/F"},
+  {"regime": "islands and coalescence", "metal": "Au", "range": [0.8, 0.95], "kind": "mass balance", "refs": ["Bulut24"], "provenance": "C"},
+  {"regime": "islands and coalescence", "metal": "Ag", "range": [0.66, 0.95], "kind": "mass balance", "refs": ["GenTh23"], "provenance": "F"},
+  {"regime": "percolation", "metal": null, "range": [1.0, 1.0], "kind": "definition", "refs": ["Sch15", "Bulut24", "Gen19"], "provenance": "T"},
+  {"regime": "after percolation", "metal": "Au", "range": [1.1, 1.3], "kind": "mass balance", "refs": ["Sch15", "Bulut24"], "provenance": "F"},
+  {"regime": "earliest stage (delta < 0.75 nm), Ag on Al2O3", "metal": "Ag", "range": [0.26, 0.26], "kind": "independent measurement", "refs": ["Gra13"], "provenance": "C"},
+  {"regime": "isolated clusters, Cu on graphene (evaporated)", "metal": "Cu", "range": [0.55, 0.7], "kind": "independent measurement", "refs": ["Hod17"], "provenance": "C/F"}
+ ],
+ "two_R_over_D_test_from_1nm": {
+  "range": [0.55, 1.0],
+  "basis": "islands and coalescence in mass-balance studies (Au 0.8-0.95, Ag 0.66-0.95), independent measurements after nucleation (Cu on graphene 0.55-0.7); 1 = percolation",
+  "refs": ["Bulut24", "GenTh23", "Hod17"]
+ },
+ "coverage": [
+  {"condition": "earliest stage, Ag on Al2O3", "delta_nm": [0.0, 0.75], "range": [0.06, 0.06], "refs": ["Gra13"], "provenance": "C"},
+  {"condition": "delta = 1 nm", "delta_nm": [1.0, 1.0], "range": [0.5, 0.65], "refs": ["Sch13", "Abr16", "Bulut24"], "provenance": "R/T/C"},
+  {"condition": "Ag on SiO2, delta = 3 nm (SEM)", "delta_nm": [3.0, 3.0], "range": [0.58, 0.58], "refs": ["Colin20"], "provenance": "T"},
+  {"condition": "Au on polymers, delta = 4 nm (FESEM)", "delta_nm": [4.0, 4.0], "range": [0.76, 0.96], "refs": ["Bulut24"], "provenance": "T"}
+ ],
+ "coverage_at_percolation": {
+  "range": [0.56, 0.9],
+  "values": [
+   {"what": "penetrable discs", "value": 0.676, "ref": "Quint00", "provenance": "S"},
+   {"what": "breath figures, steady state", "value": 0.55, "ref": "Aste96", "provenance": "T"},
+   {"what": "Pb on SiO2", "value": 0.8, "ref": "Jeffers", "provenance": "S"},
+   {"what": "Au on PS / Au on PMMA (Vincent model)", "value": [0.61, 0.56], "ref": "Ruff11", "provenance": "S"},
+   {"what": "hemispheres on a hexagonal lattice at 2R = D", "value": 0.907, "ref": "Sch15", "provenance": "C"}
+  ]
+ },
+ "coverage_test_from_1nm": {
+  "range": [0.5, 0.96],
+  "basis": "coverage measured or derived at delta >= 1 nm: 0.5-0.65 at 1 nm, 0.58 at 3 nm (Ag on SiO2), 0.76-0.96 at 4 nm (Au on polymers)",
+  "refs": ["Sch13", "Abr16", "Bulut24", "Colin20"]
+ },
+ "mass_balance": {
+  "literature": "In the literature R is computed from the nominal thickness and D by this mass balance, so the island-volume thickness equals the nominal thickness by construction.",
+  "refs": ["Sch15", "Bulut24", "GenTh23"],
+  "notes": [
+   {"text": "Embedding in glassy polymers holds about 0.6-6 % of the deposit (at most about 0.5 nm equivalent).", "refs": ["Sch15", "Kaune09"], "provenance": "T/C"},
+   {"text": "Sticking close to 1 relative to the nominal flux was measured for sputtered Ag on Al2O3 (optical thickness linear in time).", "refs": ["Gra13"], "provenance": "T"},
+   {"text": "Condensation coefficients of evaporated metals on polymers can be far below 1 (Ag: about 1 on polyimide, 0.002 on Teflon AF; Au on several polymers: far below 1).", "refs": ["Thran99", "Nittler12"], "provenance": "S"},
+   {"text": "No measured sticking or condensation coefficient was found for sputtered metals on PS, PEO, PNO or PSBMA.", "refs": [], "provenance": "-"}
+  ],
+  "warning_threshold": 0.5,
+  "warning_threshold_note": "engineering choice, not a literature value"
+ },
+ "shape": {
+  "Au": {"f": 1.0, "note": "contact angle 75-92 degrees: close to hemispheres", "refs": ["Sch15"], "provenance": "T"},
+  "Ag": {"f": null, "note": "sputtered Ag on oxides flattens (contact angle 120 to 40 degrees)", "refs": ["Gra13"], "provenance": "T"},
+  "Cu": {"f": 2.75, "note": "H/R = 2.75 for Cu on PS-b-PEO", "refs": ["Schap21"], "via": "Bulut24", "provenance": "R"}
+ },
+ "D_from_peak": [
+  {"text": "D = 2*pi/q_max is off by more than 40 % for D > 10 nm once coalescence starts (paracrystal disorder).", "refs": ["Hod17"], "provenance": "T"},
+  {"text": "2*pi/q_max underestimates the loading in an ALD comparison with XRF.", "refs": ["Dend20"], "provenance": "S"},
+  {"text": "R and D lose their island meaning once a network forms (delta above about 2 nm in molecular dynamics of Au on PS).", "refs": ["Abr16"], "provenance": "T"}
+ ],
+ "nucleation_delta_nm": 0.4,
+ "nucleation_refs": ["Bulut24", "GenTh23", "Sch21", "Abr16"],
+ "band_tolerance": {
+  "relative": 0.1,
+  "note": "engineering choice: a published threshold printed without a +- counts as +-10 % of itself; the printed +- of comparable thresholds is 4-23 % (Sch15 5.2+-0.3, Bulut24 3.9+-0.5, 3.0+-0.7 and 2.6+-0.1 nm)",
+  "refs": ["Sch15", "Bulut24"]
+ },
+ "uncertainty": {
+  "rate_relative": 0.1,
+  "t0_s": 2.0,
+  "t0_given_s": 0.5,
+  "note": "engineering choice, defaults of the percolation interval: a deposition rate known to +-10 % (for example a QCM reading times a tooling factor not calibrated on the sample); a start of the deposition known to +-2 s when it is not given and the first frame is assumed (for example a shutter opened by hand), to +-0.5 s (one window) when it is given; set with --rate-error and --t0-error"
+ },
+ "host_peak_factor": 2.0,
+ "host_peak_factor_note": "engineering choice: a peak more than this factor above every literature D(delta) at its delta is not taken as the metal's",
+ "D_curves": [
+  {"id": "Bulut24_PS_dcMS", "metal": "Au", "host": "PS", "label": "Au/PS dcMS", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T", "note": "Table 2; the point at 8 nm is read from a figure", "points": [[1.0, 5.2], [2.0, 8.2], [3.0, 11.7], [4.0, 13.8], [6.0, 16.3], [8.0, 18.5]]},
+  {"id": "Bulut24_PS_HiPIMS", "metal": "Au", "host": "PS", "label": "Au/PS HiPIMS", "rate_nm_s": 0.294, "ref": "Bulut24", "provenance": "T", "note": "Table 2", "points": [[1.0, 4.8], [2.0, 7.1], [3.0, 9.9], [4.0, 12.4], [6.0, 14.4], [8.0, 15.8]]},
+  {"id": "Sch15_PS", "metal": "Au", "host": "PS", "label": "Au/PS RF", "rate_nm_s": 0.0082, "ref": "Sch15", "provenance": "F", "note": "Fig. 3a; asymptote 2*pi/q0 = 18.8 nm of the published fit", "points": [[0.2, 2.5], [1.0, 5.0], [1.9, 7.5], [2.9, 12.0], [5.2, 17.3], [8.3, 19.0]]},
+  {"id": "Gen19_PS", "metal": "Ag", "host": "PS", "label": "Ag/PS RF", "rate_nm_s": 0.007, "ref": "Gen19", "provenance": "F", "note": "in situ, thesis Fig. B.2 (GenTh23)", "points": [[1.0, 11.3], [2.0, 18.0], [5.0, 27.0], [10.0, 33.0], [20.0, 36.0]]},
+  {"id": "Gen19_PMMA", "metal": "Ag", "host": "PMMA", "label": "Ag/PMMA RF", "rate_nm_s": 0.007, "ref": "Gen19", "provenance": "F", "note": "in situ, thesis Fig. B.2 (GenTh23)", "points": [[1.2, 6.3], [2.2, 9.9], [3.2, 14.3], [4.4, 18.9], [5.6, 23.4], [7.6, 29.6], [11.0, 35.4], [19.8, 42.8]]},
+  {"id": "Gen21_PMMA", "metal": "Ag", "host": "PMMA", "label": "Ag/PMMA DC", "rate_nm_s": 0.066, "ref": "Gen21", "provenance": "F", "note": "thesis Fig. 6.20c (GenTh23)", "points": [[1.0, 7.0], [2.0, 13.0], [4.0, 22.0], [6.0, 26.0], [10.0, 32.0], [12.0, 35.0]]},
+  {"id": "Hod17_graphene", "metal": "Cu", "host": "graphene", "label": "Cu/graphene (evaporated, 150 C)", "rate_nm_s": 0.0125, "ref": "Hod17", "provenance": "F", "note": "Fig. 4; the peak appears at about 2 nm. Paracrystal-model distance (DWBA), not 2*pi/q_max; evaporated at 150 C", "points": [[2.3, 8.0], [4.0, 12.5], [6.0, 16.0], [8.8, 20.0], [12.0, 22.0]]}
+ ]
+}

@@ -4,8 +4,8 @@ Left, from the top: the title; Data (the scan folder and one line about it); Sam
 X-rays, distance, incidence, beam centre, each with where its value comes from); the Predict button with its
 job status and the log under Details; a line about the model's Python and PyTorch; the result in one line;
 More options (collapsed): polymer, sample roll, mask, time window, deposition rate and t0, the results folder,
-Open Results Folder…, Add Refined Windows… and the explanation shown. Right: Size Trend, Structure Sketch,
-Windows and Reliability.
+Open Results Folder…, Add Refined Windows… and the explanation shown. Right: Size Trend, Literature (added by the
+page), Structure Sketch, Windows and Reliability.
 """
 
 from __future__ import annotations
@@ -28,8 +28,10 @@ TITLE = ("<b>Sputter series</b><br>Particle size R and spacing D over time, the 
          "stated (island-volume equivalent; nominal, from a deposition rate), and how far each value can be trusted.")
 RESULT_EMPTY = "No result yet: choose a scan folder and press Predict."
 REPORT_EMPTY = ("<p>Choose a scan folder and press Predict, or open a results folder (More options). Each R and D "
-                "value gets a grade: <b>P</b> network estimate on the physical path (the default), <b>A</b> refined "
-                "(unique), <b>B</b> refined (an equally good alternative exists), <b>C</b> network estimate only.</p>")
+                "value gets a grade: <b>Lit</b> literature method (R from the nominal thickness and 2π/q*; the default "
+                "with a deposition rate), <b>P</b> network estimate on the physical path (the default without a rate), "
+                "<b>A</b> refined (unique), <b>B</b> refined (an equally good alternative exists), <b>C</b> network "
+                "estimate only.</p>")
 
 
 def _number_edit(parent: QWidget, placeholder: str = "") -> QLineEdit:
@@ -191,8 +193,8 @@ class SputterPageView:
         self.bin_seconds.setValue(0.5)
         self.rate = _number_edit(section, "optional")
         self.rate.setToolTip("Deposition rate (for example from a quartz balance): the nominal thickness "
-                             "rate × (t − t0) is drawn with the metal thickness. Changing it later does not read the "
-                             "frames again.")
+                             "rate × (t − t0) is drawn with the metal thickness, and the literature method and the "
+                             "Literature tab use it. Changing it later does not read the frames again.")
         self.t0 = _number_edit(section, "optional")
         self.t0.setToolTip("Time (s) of the scan at which the deposition started (the nominal thickness is 0 there).")
         self.results_picker = FilePicker(section, placeholder="", browse_text="…")
@@ -216,8 +218,10 @@ class SputterPageView:
         self.choice_box.setEnabled(False)
         self.choice_box.setToolTip(
             "Which explanation of the windows is shown.\n"
-            "Physical path (default): one path of stages through time, network sizes in every island window, no "
-            "switching between sources (grade P).\n"
+            "Literature method (the default with a deposition rate): R from the nominal thickness and D = 2π/q* by mass "
+            "balance, as in the P03 in-situ GISAXS studies (grade Lit).\n"
+            "Physical path (network; the default without a rate): one path of stages through time, network sizes in "
+            "every island window, no switching between sources (grade P).\n"
             "Per window: highest network weight, or the converged refinement (grades A/B/C).\n"
             "Learned selector: trained on simulated growth series (grade L; its tested accuracy is on the Reliability "
             "tab).\n"

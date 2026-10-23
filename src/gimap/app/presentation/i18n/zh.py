@@ -26,6 +26,8 @@ from .zh_frame_import import FRAME_IMPORT_ZH
 from .zh_sem import SEM_ZH
 from .zh_sputter import SPUTTER_ZH
 from .zh_sputter_report import SPUTTER_REPORT_ZH
+from .zh_sputter_literature import SPUTTER_LITERATURE_ZH
+from .zh_sputter_toolkit import SPUTTER_TOOLKIT_ZH
 
 ZH = {
     # -- menus --------------------------------------------------------------------------
@@ -569,5 +571,7 @@ ZH.update(FRAME_IMPORT_ZH)
 ZH.update(SEM_ZH)
 ZH.update(SPUTTER_ZH)
 ZH.update(SPUTTER_REPORT_ZH)
+ZH.update(SPUTTER_LITERATURE_ZH)
+ZH.update(SPUTTER_TOOLKIT_ZH)
 
 __all__ = ["ZH"]

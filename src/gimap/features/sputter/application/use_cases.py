@@ -22,7 +22,7 @@ from .environment import EnvironmentInstaller, EnvironmentStatus, InstallError, 
 from .scan import ScanInfo
 
 METALS = ("Ag", "Au", "Cu")
-VARIANTS = ("physical", "window", "selected", "sequence")
+VARIANTS = ("literature", "physical", "window", "selected", "sequence")
 PROBLEMS = (
     "Choose the scan folder that holds the CBF frames.",
     "Give the photon energy or the wavelength.",
@@ -171,8 +171,10 @@ class SputterService:
 
     # -- reading --------------------------------------------------------------------------------------
     def open(self, folder: Path, variant: Optional[str] = None) -> StructureResult:
-        """``physical`` (default when present): one stage path, network sizes; ``window``: per-window choice;
-        ``selected``: learned selector; ``sequence``: time-consistent path (exploratory)."""
+        """The default when ``variant`` is None or absent: ``literature`` (R from the nominal thickness and
+        2π/q*, when a deposition rate was given and enough windows show the metal's peak), else ``physical`` (one
+        stage path, network sizes); also ``window`` (per-window choice), ``selected`` (learned selector) and
+        ``sequence`` (time-consistent path, exploratory)."""
         folder = Path(folder)
         available = self.reader.available(folder)
         if not available:
@@ -246,10 +248,11 @@ class SputterService:
 
     def rebuild_physical(self, folder: Path, rate_nm_s: Optional[float], t0_s: Optional[float],
                          on_line: Callable[[str], None], variant: Optional[str] = None) -> StructureResult:
-        """New deposition rate or t0: only the physical files are written again (no frame is read)."""
+        """New deposition rate or t0: only the physical files are written again (no frame is read). ``variant``
+        None opens the default explanation (the literature method once a rate makes it possible)."""
         folder = Path(folder)
         self.runner.physical(folder, rate_nm_s, t0_s, on_line)
-        return self.open(folder, variant or "physical")
+        return self.open(folder, variant)
 
 
 __all__ = ["AnalyzeRequest", "METALS", "NO_TABLE", "PROBLEMS", "PredictStep", "ResultReader", "STEP_ANALYZE", "STEP_ANALYZE_ONLY",

@@ -1,8 +1,9 @@
 """Showing a result: the explanation chosen, the line under Predict, the trend, the table, the report and the
 sketch (a mixin of ``SputterPage``).
 
-The physical path (``structure_physical.csv``) is shown when the folder has it; the other explanations stay
-one choice away (More options ▸ Explanation). A result knows the scan it was predicted from
+The default explanation is the folder's first (``StructureFolderReader.available``): the literature method when a
+deposition rate makes it possible, else the physical path; the others stay one choice away (More options ▸
+Explanation). The Literature tab compares the series with published growth. A result knows the scan it was predicted from
 (``gimap_request.json``); the deposition-rate fields say what it was drawn with only while that scan is the
 one in the picker (a result of unknown scan: until another folder is chosen).
 """
@@ -16,11 +17,15 @@ from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import GRADES, StructureResult, film_onset, folder_key, reliability_report, rotation_period
-from .texts import message_text, stage_name, text
+from ..application import (GRADES, StructureResult, folder_key, onset_of, percolation_short, reliability_report,
+                           rotation_period)
+from .texts import message_text, note_text, stage_name, text
 
-CHOICES = {"physical": "Physical path (default)", "window": "Per window (network / refined)",
-           "selected": "Learned selector", "sequence": "Time-consistent path (exploratory)"}
+CHOICES = {"literature": "Literature method (mass balance)", "physical": "Physical path (network)",
+           "window": "Per window (network / refined)", "selected": "Learned selector",
+           "sequence": "Time-consistent path (exploratory)"}
+THICKNESS_VARIANTS = ("physical", "literature")
+"""The explanations drawn from ``structure_physical*``: the deposition-rate fields say what they were drawn with."""
 TABLE_COLUMNS = (
     ("time_s", "Time (s)"), ("stage", "Stage (rule)"), ("stage_path", "Stage (path)"), ("module", "Model"),
     ("module_path", "Model (path)"), ("R_nm", "R (nm)"), ("R_grade", "R grade"),
@@ -28,12 +33,22 @@ TABLE_COLUMNS = (
     ("D_grade", "D grade"), ("D_typical_rel_error", "D typ. error"), ("D_trend_nm", "D trend (nm)"),
     ("D_corr_nm", "2π/q* (nm)"), ("D_over_direct", "D ÷ 2π/q*"), ("D_direct_check", "D check"),
     ("t_eq_nm", "t_eq (nm)"), ("t_eq_range", "t_eq range (nm)"), ("nominal_thickness_nm", "Nominal thickness (nm)"),
+    ("lit_status", "Literature method"), ("R_lit_nm", "R literature (nm)"), ("D_lit_nm", "D literature (nm)"),
+    ("two_R_over_D_lit", "2R/D literature"), ("coverage_lit", "Coverage literature"),
+    ("two_R_over_D_net", "2R/D network"), ("coverage_net", "Coverage network"), ("eta_net", "η network"),
     ("film_thickness_status", "Film thickness"), ("L_TS_nm", "TS length L (nm)"), ("refined_R_nm", "Refined R (nm)"),
     ("refined_D_nm", "Refined D (nm)"), ("refine_status", "Refinement"), ("coequal_alternatives", "Alternatives"),
     ("path_changed", "Changed by the path"), ("sequence_status", "Path"),
     ("sequence_data_cost_nats", "Data cost (nats)"), ("selector_probability", "Selector P"),
-    ("selector_choice", "Component"), ("R_reason", "R note"), ("D_reason", "D note"),
+    ("selector_choice", "Component"), ("R_reason", "R note"), ("D_reason", "D note"), ("lit_reason", "Literature note"),
 )
+LITERATURE_HIDDEN = {"R_lit_nm", "D_lit_nm", "D_direct_check", "D_over_direct"}
+"""Columns the literature explanation shows as R and D already (or that do not apply to it)."""
+LIT_STATUS = {"islands": "islands", "after_percolation": "after percolation", "host_peak": "host peak",
+              "outlier": "outlier", "late_peak": "late peak", "no_peak": "no peak", "no_data": "no data",
+              "before_deposition": "before deposition"}
+"""The toolkit's ``lit_status`` words as the page says them."""
+REASONS = ("R_reason", "D_reason", "lit_reason")
 D_CHECKS = {"consistent": "consistent"}
 """The toolkit's words of the D check the page says in its language (any other: outside the simulated range)."""
 D_OUTSIDE = "outside the simulated 90% range"
@@ -65,6 +80,10 @@ def _cell(row: dict, key: str) -> tuple[str, str]:
         return stage_name(value), value
     if key == "film_thickness_status":
         return tr("not determined"), value
+    if key == "lit_status":
+        return (tr(LIT_STATUS[value]) if value in LIT_STATUS else value), value
+    if key in REASONS:
+        return note_text(value), value
     if key == "D_direct_check":
         return tr(D_CHECKS.get(value, D_OUTSIDE)), value
     return value, ""
@@ -75,6 +94,8 @@ def table_columns(result: StructureResult) -> list:
     def present(key):
         if key == "t_eq_range":
             return result.has("t_eq_lo_nm")
+        if result.variant == "literature" and key in LITERATURE_HIDDEN:
+            return False
         return result.has(key)
     return [(key, label) for key, label in TABLE_COLUMNS if key == "time_s" or present(key)]
 
@@ -94,15 +115,14 @@ class SputterResultsMixin:
     def open_results(self, folder: Path, variant: Optional[str] = None, *, quiet: bool = False) -> None:
         try:
             available = self.service.variants(folder)
-            wanted = variant or "physical"
-            self._fill_choices(available, wanted)
+            self._fill_choices(available, variant)
             self.show_result(self.service.open(folder, self.choice_box.currentData()))
             self._remember_result(Path(folder))
         except (OSError, ValueError) as exc:
             if not quiet:
                 self._notify(message_text(exc), error=True)
 
-    def _fill_choices(self, available: list, wanted: str) -> None:
+    def _fill_choices(self, available: list, wanted: Optional[str]) -> None:
         self.choice_box.blockSignals(True)
         self.choice_box.clear()
         for key in available:
@@ -135,7 +155,7 @@ class SputterResultsMixin:
         """The rate and t0 fields say what the result shown was drawn with (when it is the picker's scan)."""
         result = self.result
         thickness = result.summary.get("thickness") if result is not None else None
-        if result is None or result.variant != "physical" or not isinstance(thickness, dict) \
+        if result is None or result.variant not in THICKNESS_VARIANTS or not isinstance(thickness, dict) \
                 or not self._result_is_for_picker():
             return
         for field, key in ((self.rate, "rate_nm_s"), (self.t0, "t0_s")):
@@ -151,7 +171,7 @@ class SputterResultsMixin:
         elif new_folder:  # a result of unknown scan belongs to the folder chosen when it was opened
             self._result_owner = self._picker_key()
         thickness = result.summary.get("thickness")
-        if result.variant == "physical" and isinstance(thickness, dict):
+        if result.variant in THICKNESS_VARIANTS and isinstance(thickness, dict):
             self._drawn = thickness_pair(thickness.get("rate_nm_s"), thickness.get("t0_s"))
         elif new_folder:
             self._drawn = None
@@ -161,8 +181,9 @@ class SputterResultsMixin:
         self._show_result_line()
         self._draw_trend()
         self._fill_table()
-        self.report.setHtml(reliability_report(result, text, note=tr))
+        self.report.setHtml(reliability_report(result, text, note=note_text))
         self.sketch.set_result(result)
+        self.literature.set_result(result)
 
     def _draw_trend(self) -> None:
         self.trend.draw(self.result, log_scale=self.log_scale.isChecked())
@@ -175,8 +196,10 @@ class SputterResultsMixin:
         parts = [f"<b>{result.folder.name}</b> ({result.metal or '?'})",
                  text("{windows} windows · R in {R} · D in {D}", windows=len(result.rows),
                       R=sum(counts_R[g] for g in GRADES), D=sum(counts_D[g] for g in GRADES))]
-        onset, interval = film_onset(result.summary)
-        if result.variant == "physical":
+        onset, interval, _kind = onset_of(result)
+        if result.variant == "literature":
+            parts.append(percolation_short(result.summary, text) or tr("no percolation found"))
+        elif result.variant == "physical":
             if onset is not None:
                 parts.append(text("film from {onset} s", onset=f"{onset:.1f}") + (
                     text(" ({low}–{high} s)", low=f"{interval[0]:.1f}", high=f"{interval[1]:.1f}") if interval else ""))
@@ -187,7 +210,7 @@ class SputterResultsMixin:
                               D=counts_D["A"] + counts_D["B"]))
         period = rotation_period(result.summary)
         if period is not None:
-            parts.append(text("rotation period ≈ {period} s", period=f"{period:.3g}"))
+            parts.append(text("intensity modulation period ≈ {period} s (sample rotation?)", period=f"{period:.3g}"))
         line = " · ".join(parts)
         if result.metal == "Cu":
             line += "<br><b>" + tr("Cu: approximated with the Ag model, for reference only.") + "</b>"

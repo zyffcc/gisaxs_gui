@@ -1,10 +1,10 @@
 {
  "source": "delivered sputter_struct_v1 toolkit (research code, packaged with its two network checkpoints)",
  "source_commit": "19d775bc",
- "bundled": "Import closure of scripts/sputter_struct_v1.py for analyze, table, select, sequence and physical: 38 modules of sputtergisaxs/ (including the 9-module chain scenario_ts needs for TS windows) plus the new sputter_physical.py; experts/{polymer,TS}/model/best.pt and policy.json; configs/sputter_struct_reliability_v1.json and configs/sputter_selector_v1.json.",
+ "bundled": "Import closure of scripts/sputter_struct_v1.py for analyze, table, select, sequence and physical: 38 modules of sputtergisaxs/ (including the 9-module chain scenario_ts needs for TS windows) plus the new sputter_physical.py and sputter_literature.py; experts/{polymer,TS}/model/best.pt and policy.json; configs/sputter_struct_reliability_v1.json, configs/sputter_selector_v1.json and the new configs/literature_reference_v1.json.",
  "not_bundled": [
   "examples/ (private scans)",
-  "configs/ other than the two above, scan manifest",
+  "configs/ other than the three above, scan manifest",
   "assets/ detector mask",
   "scripts/refine_polymer_review_v1.py (GPU physical refinement) and the simulation-test scripts",
   "all other sputtergisaxs modules (not imported by the subcommands)"
@@ -126,6 +126,16 @@
    ],
    "change": "numpy>=1.24,<3 and torch>=2.3 (first PyTorch built for NumPy 2); xraydb optional. README rewritten for the bundle, without the example scans.",
    "reason": "NumPy 2 verified; xraydb is not used by the subcommands; the examples are private data."
+  },
+  {
+   "files": [
+    "sputtergisaxs/sputter_literature.py",
+    "configs/literature_reference_v1.json",
+    "sputtergisaxs/sputter_physical.py",
+    "scripts/sputter_struct_v1.py"
+   ],
+   "change": "Literature method and comparison with published growth, called by the physical builder (analyze, table, physical) when a deposition rate is given: delta_nm = rate*(t - t0); D_lit_nm = 2*pi/q* of the direct peak (host peaks, jumps, outliers and late peaks marked in lit_status and not used; the late peaks compared with the end of the trend); D_lit_trend_nm (non-decreasing L1 fit); R_lit_nm = (delta*D^2/2.418)^(1/3), two_R_over_D_lit, coverage_lit and their trends; the network's two_R_over_D_net, coverage_net and eta_net = t_eq/delta; percolation where the trend of 2R/D reaches 1 after nucleation, with a 68 % interval over a moving-block bootstrap and the errors of the rate and t0 (--rate-error, --t0-error; state reached / first_window / not_determined / not_reached), after which R_lit is not given and D_lit (2*pi/q*) stays; checks (D monotone, percolation and TS onset against the published band of the metal and host with each value's printed or a 10 % tolerance, for Cu also with f = 2.75, network 2R/D with its coverage, network mass balance, TS film thickness: not testable while not identifiable) in structure_physical_summary.json under 'literature'. Published values with citation, DOI and provenance in configs/literature_reference_v1.json. The notes of sputter_physical are made from named templates (NOTE_TEMPLATES; same wording, numbers formatted before filling); the TS network's film thickness and metal fraction reach the film-thickness check; --polymer-type for physical and table (default: the polymer named in binned/frames.csv).",
+   "reason": "Results comparable with the published P03 analyses (same definitions), an honest comparison with published growth, and notes a program can translate."
   }
  ]
 }

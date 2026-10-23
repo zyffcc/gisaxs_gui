@@ -3,8 +3,9 @@ far to trust them.
 
 The user chooses the scan folder and presses Predict; the model bundled with GIMaP runs in GIMaP's own
 Python (PyTorch is installed there on the first Predict). Left: Data, Sample and geometry, Predict with its
-job status, the model's environment, the result line and More options. Right: Size Trend (the physical path:
-faint per-window points and the trend lines; the metal thickness), Structure Sketch, Windows and Reliability.
+job status, the model's environment, the result line and More options. Right: Size Trend (faint per-window points
+and the trend lines; the metal thickness), Literature (the series against published growth over the nominal
+thickness), Structure Sketch, Windows and Reliability.
 The layout is in ``views/sputter_page_view.py``; the folder and the form in ``geometry.py``, Predict in
 ``predict_flow.py``, showing a result in ``results_panel.py``.
 """
@@ -23,6 +24,7 @@ from src.gimap.app.presentation.theme.engine import theme_manager
 
 from ..application import DOWNLOAD_SIZE, SputterService
 from .geometry import INSPECT_KEY, SputterGeometryMixin
+from .literature_tab import LiteratureTab
 from .predict_flow import PREDICT_KEY, SputterPredictMixin
 from .results_panel import SputterResultsMixin
 from .sketch_view import SketchView
@@ -66,6 +68,8 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         self._status_parts = ("idle", [("Ready", {})], 0.0, True)
         self.trend = TrendPlot(self.trend_layout)
         self.sketch = SketchView()
+        self.literature = LiteratureTab()
+        self.tabs.addTab(self.literature, "Literature")
         self.tabs.addTab(self.sketch, "Structure Sketch")
         self.tabs.addTab(self.table, "Windows")
         self.tabs.addTab(self.report, "Reliability")
@@ -123,6 +127,7 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
     def _theme_changed(self, *_args) -> None:
         """The plots in the colours of the new theme (data colours stay)."""
         self._draw_trend()
+        self.literature.redraw()
         if self.result is not None:
             self.sketch.redraw()
 
@@ -134,6 +139,8 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         self._show_environment()
         self.refresh_results_language()
         self.sketch.refresh_language()
+        if self.result is None:
+            self.literature.refresh_language()
 
     def dispose(self) -> None:
         SputterPredictMixin.dispose(self)

@@ -27,17 +27,25 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   each field says its source. Predict waits for the header of the folder in the picker and refuses a folder
   without frames. A new deposition rate redraws the result shown only when it is of the picker's scan. The beam centre is
   entered in GIMaP's pixel coordinates and converted to the toolkit's pixel-centre indices in `toolkit.py`.
-- **Explanations** (`StructureFolderReader`): `physical` (default: `structure_physical.csv` — one stage path, network
-  R/D in every island window, grade P, trends, t_eq, nominal thickness, film onset, rotation period), `window`,
-  `selected`, `sequence`. A new deposition rate or t0 calls the toolkit's `physical` command only; **Add Refined
-  Windows…** calls `table` then `physical`.
+- **Explanations** (`StructureFolderReader`): `literature` (default with a deposition rate when the summary's
+  `literature.default_ready`: R_lit/D_lit of `structure_physical.csv` as R/D, grade Lit, film after its percolation
+  (D = 2π/q* goes on, R is not given), a percolation interval with the rate and t0 errors and a *not determined*
+  state; `domain/literature.py`), `physical` (default otherwise: one stage path, network R/D in every island window, grade
+  P, trends, t_eq, nominal thickness, film onset, intensity modulation period), `window`, `selected`, `sequence`. A
+  new deposition rate or t0 calls the toolkit's `physical` command only (a rate given or taken away opens the default
+  explanation); **Add Refined Windows…** calls `table` then `physical`.
+- **Literature** tab (`presentation/literature_tab.py`): D, 2R/D, coverage and η = t_eq/δ over δ against the
+  published values the toolkit copies into the summary, the checks with verdicts and references, the caveats.
+  Without a rate it says how to give one. The toolkit's sentences are translated by matching them against
+  `presentation/toolkit_texts.py` (`texts.note_text`; a test keeps the copy equal to the bundled toolkit).
 - Film windows: the thickness is not determined (the model's estimate equals its prior); the sketch draws a
   continuous film without particles. Cu is read with the Ag model and labelled “for reference only”.
 
-Layers: `domain` (rows, series, reliability report from translatable templates, sketch), `application`
+Layers: `domain` (rows, series, reliability report from translatable templates, literature method, sketch), `application`
 (`SputterService`, `AnalyzeRequest`, progress, environment and scan ports), `infrastructure` (`BundledToolkit`,
 `PipInstaller` + `pip_output`, `process`, `CbfHeaderInspector`, `StructureFolderReader`), `presentation`
 (`SputterPage` = `views/sputter_page_view.py` + `geometry.py`, `predict_flow.py`, `results_panel.py`,
-`trend_plot.py`, `sketch_view.py`, `texts.py`, `preset_dialog.py`), `bootstrap.py`. Chinese texts:
-`app/presentation/i18n/zh_sputter.py`, `zh_sputter_report.py`. Tests: `tests/test_sputter_feature.py`,
+`trend_plot.py`, `literature_tab.py`, `sketch_view.py`, `texts.py`, `toolkit_texts.py`, `preset_dialog.py`),
+`bootstrap.py`. Chinese texts: `app/presentation/i18n/zh_sputter.py`, `zh_sputter_report.py`,
+`zh_sputter_literature.py`, `zh_sputter_toolkit.py`. Tests: `tests/test_sputter_feature.py`,
 `tests/test_sputter_page.py` (fakes in `tests/sputter_fixtures.py`). Page: `docs/ui/workspaces/sputter.md`.

@@ -48,8 +48,10 @@ SPUTTER_ZH = {
     "Start of deposition t0 (s)": "沉积开始 t0（s）",
     "optional": "可选填",
     "Deposition rate (for example from a quartz balance): the nominal thickness rate × (t − t0) is drawn with the "
-    "metal thickness. Changing it later does not read the frames again.":
-        "沉积速率（例如来自石英晶体微天平）：名义厚度 速率 × (t − t0) 画在金属厚度图里。之后修改它不会重新读帧。",
+    "metal thickness, and the literature method and the Literature tab use it. Changing it later does not read the "
+    "frames again.":
+        "沉积速率（例如来自石英晶体微天平）：名义厚度 速率 × (t − t0) 画在金属厚度图里，文献方法和“文献对照”页也用它。"
+        "之后修改它不会重新读帧。",
     "Time (s) of the scan at which the deposition started (the nominal thickness is 0 there).":
         "扫描中沉积开始的时间（s）（名义厚度在此为 0）。",
     "Save results in": "结果保存在",
@@ -60,15 +62,20 @@ SPUTTER_ZH = {
     "Merge physical-refinement windows (one JSON per window, e.g. from the cluster) into the current result.":
         "把物理精修的时间窗（每窗一个 JSON，例如来自集群）合并进当前结果。",
     "Explanation": "解释",
-    "Which explanation of the windows is shown.\nPhysical path (default): one path of stages through time, network "
-    "sizes in every island window, no switching between sources (grade P).\nPer window: highest network weight, or the "
+    "Which explanation of the windows is shown.\nLiterature method (the default with a deposition rate): R from the "
+    "nominal thickness and D = 2π/q* by mass balance, as in the P03 in-situ GISAXS studies (grade Lit).\nPhysical path "
+    "(network; the default without a rate): one path of stages through time, network sizes in every island window, no "
+    "switching between sources (grade P).\nPer window: highest network weight, or the "
     "converged refinement (grades A/B/C).\nLearned selector: trained on simulated growth series (grade L; its tested "
     "accuracy is on the Reliability tab).\nTime-consistent path (exploratory): registered physical rules; not more "
     "accurate in simulation (grades S/T).":
-        "显示时间窗的哪一种解释。\n物理路径（默认）：随时间只走一条阶段路径，每个岛时间窗都用网络尺寸，不在来源之间切换（等级 P）。\n"
+        "显示时间窗的哪一种解释。\n文献方法（有沉积速率时的默认）：与 P03 原位 GISAXS 研究相同，由名义厚度和 D = 2π/q* 按质量守恒"
+        "算出 R（等级 Lit）。\n物理路径（网络；没有速率时的默认）：随时间只走一条阶段路径，每个岛时间窗都用网络尺寸，不在来源之间切换"
+        "（等级 P）。\n"
         "逐窗：网络权重最高的解，或收敛的精修（等级 A/B/C）。\n学习选择器：在模拟生长序列上训练（等级 L；测试准确率见“可靠性”页）。\n"
         "时间一致路径（探索性）：按登记的物理规则；在模拟中并不更准（等级 S/T）。",
-    "Physical path (default)": "物理路径（默认）",
+    "Physical path (network)": "物理路径（网络）",
+    "Literature method (mass balance)": "文献方法（质量守恒）",
     "Per window (network / refined)": "逐窗（网络 / 精修）",
     "Learned selector": "学习选择器",
     "Time-consistent path (exploratory)": "时间一致路径（探索性）",
@@ -78,10 +85,12 @@ SPUTTER_ZH = {
     "Windows": "时间窗",
     "Reliability": "可靠性",
     "<p>Choose a scan folder and press Predict, or open a results folder (More options). Each R and D value gets a "
-    "grade: <b>P</b> network estimate on the physical path (the default), <b>A</b> refined (unique), <b>B</b> refined "
-    "(an equally good alternative exists), <b>C</b> network estimate only.</p>":
-        "<p>选择扫描文件夹并按“预测”，或打开一个结果文件夹（更多选项）。每个 R 和 D 值都有等级：<b>P</b> 物理路径上的网络估计（默认），"
-        "<b>A</b> 精修（唯一），<b>B</b> 精修（存在同样好的另一解），<b>C</b> 仅网络估计。</p>",
+    "grade: <b>Lit</b> literature method (R from the nominal thickness and 2π/q*; the default with a deposition rate), "
+    "<b>P</b> network estimate on the physical path (the default without a rate), <b>A</b> refined (unique), <b>B</b> "
+    "refined (an equally good alternative exists), <b>C</b> network estimate only.</p>":
+        "<p>选择扫描文件夹并按“预测”，或打开一个结果文件夹（更多选项）。每个 R 和 D 值都有等级：<b>Lit</b> 文献方法（由名义厚度和 "
+        "2π/q* 算出 R；有沉积速率时的默认），<b>P</b> 物理路径上的网络估计（没有速率时的默认），<b>A</b> 精修（唯一），<b>B</b> 精修"
+        "（存在同样好的另一解），<b>C</b> 仅网络估计。</p>",
     # -- the folder, the sources of the values ------------------------------------------------------------------
     "Choose the Scan Folder": "选择扫描文件夹",
     "Reading the header of the first frame…": "正在读取第一帧的文件头…",
@@ -207,7 +216,7 @@ SPUTTER_ZH = {
     "film from {onset} s": "从 {onset} s 起成膜",
     " ({low}–{high} s)": "（{low}–{high} s）",
     "no film window": "没有膜时间窗",
-    "rotation period ≈ {period} s": "旋转周期 ≈ {period} s",
+    "intensity modulation period ≈ {period} s (sample rotation?)": "强度调制周期 ≈ {period} s（可能是样品旋转）",
     "Cu: approximated with the Ag model, for reference only.": "Cu：用 Ag 模型近似，仅供参考。",
     "Stage (rule)": "阶段（规则）",
     "Stage (path)": "阶段（路径）",

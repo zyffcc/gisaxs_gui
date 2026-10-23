@@ -572,6 +572,304 @@ def test_the_physical_command_rebuilds_the_files(tmp_path):
     assert summary["thickness"]["rate_nm_s"] == 0.1 and summary["metal"] == "Au"
 
 
+# ----------------------------------------------------------------------- the literature method --
+def _growth(*, rate=0.1, seconds=200.0, a=8.0, b=0.6, noise=0.05, seed=4, host=None, film_from=None):
+    """An invented series of literature-method inputs: D = a*delta^b with log-normal noise, every second window a
+    resolved peak. With 2R/D = 2*(delta/(2.418*D))^(1/3), 2R/D reaches 1 at delta = (a/3.3085)^(1/(1-b))."""
+    rng = np.random.default_rng(seed)
+    times = list(np.arange(0.25, seconds, 0.5))
+    rows = []
+    for i, time in enumerate(times):
+        delta = rate * time
+        peak = i % 2 == 0
+        D = a * delta ** b * math.exp(rng.normal(0.0, noise))
+        if host is not None and delta < host[0]:
+            D = host[1]
+        film = film_from is not None and time >= film_from
+        rows.append(dict(D_corr_nm=D if peak else None, feature_status="bilateral" if peak else "no_peak", no_data=False,
+                         kind="film" if film else "islands", R_nm=None if film else 0.2 * D, D_nm=None if film else D,
+                         t_eq_nm=None if film else 0.02 * delta, module_path="TS_layer" if film else "polymer_embed",
+                         film_thickness=9.0 if film else None, metal_fraction=0.5 if film else None))
+    return times, rows
+
+
+def _literature():
+    sys.path.insert(0, str(KIT_DIR))
+    try:
+        return importlib.import_module("sputtergisaxs.sputter_literature")
+    finally:
+        sys.path.remove(str(KIT_DIR))
+
+
+def test_the_literature_method_uses_the_published_mass_balance():
+    lit = _literature()
+    assert lit.HEX == pytest.approx(2.418, abs=5e-4)  # (2/3)*pi / (sqrt(3)/2)
+    D = 12.0
+    for delta in (0.3, 1.0, 4.0):
+        R = (delta * D ** 2 / lit.HEX) ** (1 / 3)
+        assert (2 / 3) * math.pi * R ** 3 / ((math.sqrt(3) / 2) * D ** 2) == pytest.approx(delta)
+        assert lit.ratio(delta, D) == pytest.approx(2 * R / D)
+    assert lit.ratio(0.30225 * D, D) == pytest.approx(1.0, abs=1e-4)  # percolation: 2R = D at delta = 0.302*D
+    times, rows = _growth()
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0)
+    row = next(c for c in columns if c["R_lit_nm"] is not None and c["delta_nm"] > 2)
+    assert row["R_lit_nm"] == pytest.approx((row["delta_nm"] * row["D_lit_nm"] ** 2 / lit.HEX) ** (1 / 3))
+    assert row["two_R_over_D_lit"] == pytest.approx(2 * row["R_lit_nm"] / row["D_lit_nm"])
+    assert row["coverage_lit"] == pytest.approx((2 * math.pi / math.sqrt(3)) * (row["R_lit_nm"] / row["D_lit_nm"]) ** 2)
+    assert row["two_R_over_D_net"] == pytest.approx(0.4) and row["coverage_net"] == pytest.approx(0.907 * 0.16, rel=1e-3)
+    assert row["eta_net"] == pytest.approx(0.02)
+    trend = [c["D_lit_trend_nm"] for c in columns if c["D_lit_trend_nm"] is not None]
+    assert trend and all(a <= b for a, b in zip(trend, trend[1:]))  # monotone in delta
+
+
+def test_the_literature_percolation_is_found_with_its_interval():
+    lit = _literature()
+    truth = (8.0 / 3.3085) ** (1 / 0.4)  # 9.09 nm
+    times, rows = _growth()
+    noise = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0, period=5.0,
+                                 rate_error=0.0, t0_error_s=0.0)[1]["percolation"]
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0, period=5.0)
+    perc = summary["percolation"]
+    assert perc["state"] == "reached" and perc["reached"] and perc["delta_nm"] == pytest.approx(truth, rel=0.08)
+    assert noise["delta_nm"] == perc["delta_nm"]
+    low, high = noise["interval_delta_nm"]
+    assert low <= perc["delta_nm"] <= high and high - low < 0.1 * truth  # the scatter of the windows alone
+    # With the rate known to 10 % and the given t0 to 0.5 s, delta_c = 0.302*D(t_c) moves with the crossing time.
+    assert (perc["rate_error"], perc["t0_error_s"]) == (0.1, 0.5)
+    low, high = perc["interval_delta_nm"]
+    assert low < 0.92 * truth and high > 1.08 * truth and high - low < 0.6 * truth
+    assert perc["time_s"] == pytest.approx(perc["delta_nm"] / 0.1)
+    after = [(c, r) for t, c, r in zip(times, columns, rows) if t > perc["time_s"]]
+    assert after and all(c["R_lit_nm"] is None and c["R_lit_trend_nm"] is None for c, _r in after)
+    assert all(c["lit_status"] == "after_percolation" and c["lit_reason"] == lit.REASON["after_percolation"]
+               and c["D_lit_nm"] == pytest.approx(r["D_corr_nm"]) for c, r in after if r["D_corr_nm"])
+    before = [c for t, c in zip(times, columns) if t < perc["time_s"] and c["D_lit_nm"] is not None]
+    assert before and all(c["two_R_over_D_lit"] < 1.2 for c in before)
+    check = {c["id"]: c for c in summary["checks"]}
+    assert set(check) == {"D_monotone", "percolation", "TS_onset", "network_two_R_over_D", "network_mass_balance",
+                          "TS_film_thickness"}
+    assert check["percolation"]["verdict"] == "consistent"  # 9.1 nm lies in the Ag/polymers band (4.7-13.5 nm)
+    assert check["percolation"]["measured"].endswith("with the noise, the rate ±10% and t0 ±0.5 s)")
+    assert check["D_monotone"]["verdict"] == "consistent"
+    # 2R/D 0.4 and the coverage that follows from it (0.145) are one check, outside both published ranges
+    network = check["network_two_R_over_D"]
+    assert network["verdict"] == "inconsistent"
+    assert network["values"]["coverage_median"] == pytest.approx(0.907 * 0.16, rel=1e-3)
+    assert check["network_mass_balance"]["verdict"] == "inconsistent"  # 2 % of the nominal metal
+    assert summary["status"] == "ok" and summary["default_ready"] is True
+    for c in summary["checks"]:
+        assert set(c) >= {"id", "title", "verdict", "measured", "expected", "references", "note"}
+        assert c["verdict"] in ("consistent", "inconsistent", "not testable")
+        assert all(ref in summary["references"] for ref in c["references"]), c["id"]
+    # A series that stays below 2R/D = 1 while its peak is resolved, also with the rate 10 % higher and t0 2 s
+    # earlier, gives only a lower bound.
+    times, rows = _growth(seconds=40.0)
+    _columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1)
+    perc = summary["percolation"]
+    assert perc["state"] == "not_reached" and perc["bound"] == "lower" and not perc["reached"]
+    assert perc["t0_error_s"] == 2.0  # t0 assumed at the first frame
+    assert {c["id"]: c for c in summary["checks"]}["percolation"]["verdict"] == "not testable"  # 4 nm: inside the band
+
+
+def test_a_percolation_that_hinges_on_the_rate_is_not_determined():
+    lit = _literature()
+    # D = 3.41*delta keeps 2R/D at 0.99: a 0.5 % higher rate would make it cross.
+    times, rows = _growth(a=3.41, b=1.0, noise=0.02, seconds=120.0)
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0)
+    perc = summary["percolation"]
+    assert perc["state"] == "not_determined" and perc["delta_nm"] is None and not perc["reached"]
+    low, high = perc["interval_delta_nm"]
+    assert low is not None and low < 2.0 and high is None
+    near = perc["near_one_delta_nm"]
+    assert near[0] < 1.0 and near[1] > 10.0  # within 5 % of 1 over the whole peak phase
+    assert all(c["lit_status"] != "after_percolation" for c in columns)  # no film: R throughout
+    assert all(c["R_lit_nm"] is not None for c, r in zip(columns, rows) if r["D_corr_nm"] and c["delta_nm"] > 0)
+    check = {c["id"]: c for c in summary["checks"]}["percolation"]
+    assert check["verdict"] == "not testable" and check["measured"].startswith("not determined: within the noise")
+    assert any(n.startswith("The trend of 2R/D stays within 5% of 1") for n in check["notes"])
+
+
+def test_a_peak_of_the_host_is_marked_and_not_used():
+    lit = _literature()
+    times, rows = _growth(host=(0.8, 40.0))  # a 40 nm peak before 0.8 nm of metal: far above any published D
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1)
+    early = [c for t, c, r in zip(times, columns, rows) if 0.1 * t < 0.8 and r["D_corr_nm"]]
+    assert early and all(c["lit_status"] == "host_peak" and c["D_lit_nm"] is None for c in early)
+    assert all(c["lit_reason"] == lit.REASON["host_peak"] for c in early)
+    assert summary["host_peak_D_nm"] == pytest.approx(40.0)
+    assert any(note.startswith(lit.NOTE_HOST_PEAKS.split("{")[0]) for note in summary["notes"])
+    assert {c["id"]: c for c in summary["checks"]}["D_monotone"]["verdict"] == "consistent"
+    # A peak before the start of the deposition (t0) belongs to the host as well.
+    times, rows = _growth()
+    columns, _summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=10.0)
+    before = [c for t, c, r in zip(times, columns, rows) if t < 10.0 and r["D_corr_nm"]]
+    assert before and all(c["lit_status"] == "host_peak" and c["lit_reason"] == lit.REASON["host_before"] for c in before)
+    assert all(c["delta_nm"] < 0 for c in before)
+    # A late return of the host spacing jumps above the preceding peaks; a non-decreasing fit would absorb it.
+    times, rows = _growth(host=(0.8, 60.0), seconds=80.0)
+    for t, row in zip(times, rows):
+        if row["D_corr_nm"] and t >= 75.0:
+            row["D_corr_nm"] = 60.0  # 2.3 times the metal's 27 nm
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1)
+    late = [c for t, c, r in zip(times, columns, rows) if t >= 75.0 and r["D_corr_nm"]]
+    assert late and all(c["lit_status"] == "host_peak" and c["lit_reason"] == lit.REASON["host_match"]
+                        and c["D_lit_nm"] is None for c in late)
+    assert max(c["D_lit_trend_nm"] for c in columns if c["D_lit_trend_nm"]) < 35.0
+    times = np.array([20., 21., 22., 23., 24., 25.])  # 2.4 times the preceding peaks, 1.1 times their delta
+    assert lit.jumps(times, np.array([5., 5., 5., 5., 12., 5.]), range(6), 0.) == [4]
+    assert lit.jumps(np.array([1., 2., 3., 4., 20.]), np.array([5., 5., 5., 5., 12.]), range(5), 0.) == []  # growth
+
+
+def test_late_peaks_keep_their_status_and_are_compared_with_the_trend():
+    lit = _literature()
+    times, rows = _growth(a=6.4, seconds=130.0)  # percolation at 5.2 nm, t = 52 s
+    for t, row in zip(times, rows):
+        if 75.0 <= t < 100.0:
+            row.update(D_corr_nm=None, feature_status="no_peak")  # 25 s without a peak
+        elif t >= 100.0 and row["D_corr_nm"]:
+            row["D_corr_nm"] *= 0.5  # D drops after the gap
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0)
+    assert summary["percolation"]["state"] == "reached" and summary["percolation"]["time_s"] < 60.0
+    late = [c for t, c, r in zip(times, columns, rows) if t >= 100.0 and r["D_corr_nm"]]
+    assert late and all(c["lit_status"] == "late_peak" and c["D_lit_nm"] is None for c in late)
+    check = {c["id"]: c for c in summary["checks"]}["D_monotone"]
+    assert check["values"]["not_used"] == len(late) and check["values"]["late_peaks"]["count"] == len(late)
+    assert check["values"]["late_peaks"]["ratio"] < 0.8  # half of D, which had grown by a third since the gap
+    assert lit.N_MONO_NOT_USED.format(count=len(late)) in check["notes"]
+    assert any(n.startswith(f"{len(late)} peak windows after a stretch without a peak") for n in check["notes"])
+
+
+def test_a_falling_spacing_is_inconsistent_with_the_literature():
+    lit = _literature()
+    times, rows = _growth(seconds=80.0)
+    for t, row in zip(times, rows):
+        if row["D_corr_nm"] and t > 40.0:
+            row["D_corr_nm"] *= 0.55  # a drop of 45 % half-way
+    _columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1)
+    check = {c["id"]: c for c in summary["checks"]}["D_monotone"]
+    assert check["verdict"] == "inconsistent" and check["values"]["drop_fraction"] > 0.3
+
+
+def test_without_a_rate_the_literature_block_says_it_needs_one():
+    lit = _literature()
+    times, rows = _growth(film_from=150.0)
+    columns, summary = lit.literature_table(times, rows, metal="Au", polymer=None)
+    assert summary["status"] == "needs_rate" and summary["message"] == lit.NEEDS_RATE
+    assert summary["percolation"] is None and summary["default_ready"] is False
+    assert all(c["R_lit_nm"] is None and c["delta_nm"] is None and c["eta_net"] is None for c in columns)
+    assert any(c["D_lit_nm"] is not None for c in columns)  # 2*pi/q* is still the spacing
+    checks = {c["id"]: c for c in summary["checks"]}
+    assert checks["D_monotone"]["verdict"] == "consistent"  # D against time needs no rate
+    for name in ("percolation", "TS_onset", "network_two_R_over_D", "network_mass_balance", "TS_film_thickness"):
+        assert checks[name]["verdict"] == "not testable" and checks[name]["measured"] == lit.M_NEEDS_RATE, name
+    assert summary["host_class"] == "Au/polymers" and "Polymer type not given" in summary["host_note"]
+
+
+def test_the_film_thickness_check_waits_for_an_identifiable_film():
+    lit = _literature()
+    times, rows = _growth(film_from=100.0)
+    onset = dict(film_onset_s=100.25, film_onset_interval_s=[95.0, 105.0])
+    _columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, onset=onset)
+    checks = {c["id"]: c for c in summary["checks"]}
+    film = checks["TS_film_thickness"]
+    # The network's film thickness is its prior: no verdict and no number from it.
+    assert film["verdict"] == "not testable" and film["measured"] == lit.M_FILM_NOT_ID and film["notes"] == [lit.N_FILM]
+    assert not any(ch.isdigit() for ch in film["measured"] + film["note"])
+    assert checks["TS_onset"]["verdict"] == "consistent"  # 10.0 nm (9.5-10.5): inside 4.7-13.5 nm
+    # A film model that measures the thickness would be held to the published slope near 1.
+    _columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, onset=onset,
+                                             film_identifiable=True)
+    film = {c["id"]: c for c in summary["checks"]}["TS_film_thickness"]
+    assert film["verdict"] == "inconsistent" and film["values"]["slope"] == 0
+
+
+def test_the_host_class_and_its_published_band():
+    lit = _literature()
+    config = lit.load_config()
+    assert lit.host_class("Au", "PS", config)[:2] == ("Au/PS", ["Au/PS"])
+    assert lit.host_class("Au", "polymer", config)[1] == ["Au/PS", "Au/other polymers"]
+    assert lit.host_class("Cu", "SiO2", config)[0] == "Cu/oxides"
+    label, keys, note = lit.host_class("Ag", "PMMA", config)
+    assert label == "Ag/polymers" and note.startswith("The band of Ag/polymers includes")
+    assert lit.host_class("Ag", "Invented-brush", config)[2].startswith("No published percolation data for Invented-brush")
+    _entries, low, high, scaled_low, scaled_high = lit.band(["Ag/polymers"], config, rate_nm_s=0.2)
+    assert (low, high) == (4.7, 13.5)  # 4.8 +- 0.1 (Schu21) to 13.0 +- 0.5 nm (Gen19): the printed +-
+    assert scaled_low < 4.8 and scaled_high < 13.0  # faster deposition: earlier
+    entries, low, high, _scaled_low, _scaled_high = lit.band(["Au/Si"], config)
+    assert len(entries) == 1 and (low, high) == pytest.approx((4.95, 6.05))  # one value printed without +-: 10 %
+
+
+def test_one_published_value_is_a_band_with_a_tolerance():
+    lit = _literature()
+    rate = 0.1
+    for crossing, verdict in ((5.2, "consistent"), (5.8, "consistent"), (3.0, "inconsistent")):
+        a = 3.3085 * crossing ** 0.4  # 2R/D reaches 1 at delta = crossing
+        times, rows = _growth(a=a, noise=0.02, seconds=1.4 * crossing / rate)
+        _columns, summary = lit.literature_table(times, rows, metal="Au", polymer="Si", rate_nm_s=rate, t0_s=0.0)
+        check = {c["id"]: c for c in summary["checks"]}["percolation"]
+        assert summary["percolation"]["delta_nm"] == pytest.approx(crossing, rel=0.1)
+        assert check["verdict"] == verdict, (crossing, check["measured"])
+        assert lit.N_ONE_VALUE.format(tol="10") in check["notes"]
+        assert check["expected"].startswith("percolation at delta = 4.95-6.05 nm for Au/Si (published values: 1, 1 of")
+    assert lit.N_EARLIER in check["notes"]
+
+
+def test_for_cu_the_percolation_is_also_compared_with_the_published_shape():
+    lit = _literature()
+    a = 3.3085 * 1.5 ** 0.4  # f = 1: 2R/D reaches 1 at 1.5 nm, before the Cu/polymers band (2.3-6.3 nm)
+    times, rows = _growth(a=a, noise=0.02, seconds=220.0)  # f = 2.75: at 1.5*2.75^2.5 = 18.8 nm, after it
+    _columns, summary = lit.literature_table(times, rows, metal="Cu", polymer="PEO", rate_nm_s=0.1, t0_s=0.0)
+    check = {c["id"]: c for c in summary["checks"]}["percolation"]
+    assert check["values"]["shape"]["f"] == 2.75 and check["values"]["shape"]["verdict"] == "inconsistent"
+    assert check["values"]["shape"]["delta_nm"] == pytest.approx(18.8, rel=0.1)
+    assert check["verdict"] == "inconsistent" and lit.N_SHAPE_OPPOSITE.format(f="2.75") in check["notes"]
+    assert lit.N_EARLIER not in check["notes"] and lit.N_LATER not in check["notes"]
+
+
+def test_the_literature_reference_names_a_source_for_every_value():
+    config = json.loads((KIT_DIR / "configs" / "literature_reference_v1.json").read_text(encoding="utf-8"))
+    refs, provenance = config["references"], set(config["provenance"])
+    for key, entry in refs.items():
+        assert entry["citation"] and (entry.get("doi") or entry.get("url")), key
+        assert entry.get("doi") is None or entry["doi"].startswith("10."), key
+    for host, entries in config["percolation"].items():
+        assert entries, host
+        for e in entries:
+            assert e["ref"] in refs and e["provenance"] in provenance and (e.get("delta_c_nm") or e.get("range_nm")), e
+            assert e.get("via") is None or e["via"] in refs
+    for curve in config["D_curves"]:
+        assert curve["ref"] in refs and curve["provenance"] in provenance and curve["metal"] in ("Ag", "Au", "Cu")
+        x, y = zip(*curve["points"])
+        assert list(x) == sorted(x) and all(a <= b for a, b in zip(y, y[1:])), curve["id"]
+    for band in config["two_R_over_D"] + config["coverage"]:
+        assert all(ref in refs for ref in band["refs"])
+    lo, hi = config["rate_dependence"]["chi_range"]
+    assert 0 < lo < hi < 0.3 and config["rate_dependence"]["caveat"]
+
+
+def test_every_literature_sentence_comes_from_a_template(kit, tmp_path):
+    struct = importlib.import_module("sputtergisaxs.sputter_struct")
+    physical = importlib.import_module("sputtergisaxs.sputter_physical")
+    lit = importlib.import_module("sputtergisaxs.sputter_literature")
+    _invented_series(tmp_path)
+    struct.write_structure(tmp_path / "binned", tmp_path, metal="Ag")
+    physical.write_physical(tmp_path, rate_nm_s=0.5, polymer_type="PS")
+    summary = json.loads((tmp_path / "structure_physical_summary.json").read_text(encoding="utf-8"))
+    rows = _read(tmp_path / "structure_physical.csv")
+    block = summary["literature"]
+    assert block["polymer"] == "PS" and block["rate_nm_s"] == 0.5 and set(lit.LIT_COLUMNS) <= set(rows[0])
+    templates = [re.compile(re.sub(r"\\\{(\w+)\\\}", r"(?P<\1>.+?)", re.escape(t)), re.DOTALL)
+                 for t in (*lit.TEMPLATES, *physical.NOTE_TEMPLATES)]
+    sentences = [block["message"], block["method"], block["host_note"], *block["notes"], *summary["notes"]]
+    for check in block["checks"]:
+        sentences += [check["title"], check["measured"], check["expected"], *check["notes"]]
+    sentences += [row["lit_reason"] for row in rows] + [summary["thickness"][key] for key in
+                                                         ("t_eq_note", "nominal_note", "film_thickness_note")]
+    sentences += [row[key] for row in rows for key in ("R_reason", "D_reason", "film_thickness_status")]
+    loose = sorted({s for s in sentences if s and not any(p.fullmatch(s) for p in templates)})
+    assert loose == []
+
+
 # ------------------------------------------------------------------------- the networks --
 def test_the_shipped_policies_load_with_their_checkpoints(kit):
     pytest.importorskip("torch")

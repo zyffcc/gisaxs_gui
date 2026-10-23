@@ -72,6 +72,77 @@ def result_folder(folder: Path, *, physical: bool = False) -> Path:
     return folder
 
 
+# -- the literature method (invented values, written as the toolkit writes them with a deposition rate) -----------
+_LIT = [
+    dict(delta_nm="0.1", lit_status="no_peak", lit_reason="no resolved peak: D and R not given"),
+    dict(delta_nm="0.2", D_lit_nm="8.7", D_lit_trend_nm="8.7", R_lit_nm="1.84", R_lit_trend_nm="1.84",
+         two_R_over_D_lit="0.42", two_R_over_D_lit_trend="0.42", coverage_lit="0.16", two_R_over_D_net="0.53",
+         coverage_net="0.26", eta_net="1.5", lit_status="islands", lit_reason=""),
+    dict(delta_nm="0.3", D_lit_nm="9.9", D_lit_trend_nm="9.9", R_lit_nm="2.3", R_lit_trend_nm="2.3",
+         two_R_over_D_lit="0.46", two_R_over_D_lit_trend="0.46", coverage_lit="0.19", two_R_over_D_net="0.54",
+         coverage_net="0.27", eta_net="1.2", lit_status="islands", lit_reason=""),
+    dict(delta_nm="0.4", D_corr_nm="10.4", D_lit_nm="10.4", D_lit_trend_nm="9.9", two_R_over_D_lit_trend="1.02",
+         lit_status="after_percolation",
+         lit_reason="after the percolation of the literature method: D = 2*pi/q* kept, R not given (film)"),
+]
+LITERATURE_ROWS = [dict(row, **lit) for row, lit in zip(PHYSICAL_ROWS, _LIT)]
+LITERATURE = dict(
+    status="ok", default_ready=True, island_windows=2, message="", metal="Ag", polymer="PS", host_class="Ag/polymers",
+    host_note="The band of Ag/polymers includes published values for PS.", rate_nm_s=0.2, t0_s=0.0, t0_assumed=True,
+    percolation=dict(state="reached", delta_nm=0.35, time_s=1.75, interval_delta_nm=[0.32, 0.38],
+                     interval_time_s=[1.6, 1.9], reached=True, bound=None, max_two_R_over_D_trend=1.02,
+                     last_delta_nm=0.4, last_time_s=2.0, rate_error=0.1, t0_error_s=2.0),
+    band=dict(host_class="Ag/polymers", low_nm=4.7, high_nm=13.5, rate_scaled_nm=[3.9, 10.2], tolerance=0.1,
+              entries=[]),
+    reference_curves=[dict(id="Gen19_PS", metal="Ag", host="PS", label="Ag/PS RF", ref="Gen19",
+                           points=[[1.0, 11.3], [2.0, 18.0], [5.0, 27.0]])],
+    two_R_over_D_bands=[dict(regime="islands and coalescence", metal="Ag", range=[0.66, 0.95], kind="mass balance",
+                             refs=["GenTh23"])],
+    coverage_bands=[dict(condition="delta = 1 nm", delta_nm=[1.0, 1.0], range=[0.5, 0.65], refs=["Bulut24"])],
+    coverage_at_percolation=dict(range=[0.56, 0.9]), eta_warning=0.5,
+    checks=[
+        dict(id="D_monotone", title="D (= 2*pi/q*) does not decrease with delta", verdict="consistent",
+             measured="Spearman rho = 1 over 2 windows; no drop of the binned median D beyond the scatter (largest 0%)",
+             expected="D grows or stays with delta after nucleation (delta > 0.4 nm); only during nucleation a slight "
+                      "decrease is reported", references=["Gen19"], note="", notes=[]),
+        dict(id="percolation", title="Percolation by the literature method against the published band",
+             verdict="inconsistent",
+             measured="delta = 0.35 nm at t = 1.75 s (68% interval 0.32-0.38 nm with the noise, the rate ±10% and "
+                      "t0 ±2 s)",
+             expected="percolation at delta = 4.7-13.5 nm for Ag/polymers (published values: 14, 7 of them by GISAXS; "
+                      "each with its printed ± or ±10%)",
+             references=["Gen19"], notes=["Earlier than every published value of this band."]),
+        dict(id="network_two_R_over_D", title="Network 2R/D and coverage against the literature",
+             verdict="not testable", measured="fewer than 5 island windows with network R and D at delta >= 1 nm",
+             expected="", references=["Bulut24"], notes=[]),
+    ],
+    notes=["R scales as f^(-1/3) with the shape factor f = H/R (here f = 1): the literature reports flatter Ag on "
+           "oxides and f = 2.75 for Cu on PS-b-PEO.",
+           "delta = rate*(t - t0) with the given rate (0.2 nm/s), e.g. from a QCM; GISAXS does not measure it. The "
+           "percolation interval allows the rate ±10% and t0 ±2 s."],
+    references={"Gen19": dict(citation="Gensch M. et al., ACS Appl. Mater. Interfaces 11, 29416 (2019)",
+                              doi="10.1021/acsami.9b08594")})
+LITERATURE_SUMMARY = dict(PHYSICAL_SUMMARY, literature=LITERATURE)
+NEEDS_RATE = dict(status="needs_rate", default_ready=False, island_windows=0,
+                  message="needs a deposition rate: the literature method computes R from the nominal thickness delta = "
+                          "rate*(t - t0); without it only the monotony of D is tested (in time)",
+                  checks=[dict(id="percolation", title="Percolation by the literature method against the published band",
+                               verdict="not testable", measured="needs a deposition rate", expected="",
+                               references=[], notes=[])], notes=[], references={})
+
+
+def literature_folder(folder: Path, *, rate: bool = True) -> Path:
+    """A result folder whose physical files carry the literature method (with a rate) or say it needs one."""
+    write_table(folder, "structure", ROWS, SUMMARY)
+    if rate:
+        write_table(folder, "structure_physical", LITERATURE_ROWS, LITERATURE_SUMMARY)
+    else:
+        thickness = dict(PHYSICAL_SUMMARY["thickness"], rate_nm_s=None, t0_s=None)
+        write_table(folder, "structure_physical", PHYSICAL_ROWS,
+                    dict(PHYSICAL_SUMMARY, thickness=thickness, literature=NEEDS_RATE))
+    return folder
+
+
 def scan_folder(root: Path, name: str = "zz_invented_scan_00001", frames: int = 3) -> Path:
     """A folder of invented mini-CBF frames (a text header and a few bytes; no real data)."""
     folder = root / name
@@ -138,8 +209,9 @@ class FakeInstaller:
 class FakeRunner:
     """Writes an invented result (with the physical files) and reports progress like the toolkit."""
 
-    def __init__(self, *, missing: str = "", wait_for_stop: bool = False, metal: str = "Ag"):
+    def __init__(self, *, missing: str = "", wait_for_stop: bool = False, metal: str = "Ag", literature: bool = False):
         self.missing, self.wait_for_stop, self.metal = missing, wait_for_stop, metal
+        self.literature = literature  # write the literature method as the toolkit does (with a rate)
         self.model = "invented-model-1"
         self.calls = []
 
@@ -184,7 +256,11 @@ class FakeRunner:
         self.calls.append(("physical", Path(out_folder), rate_nm_s, t0_s))
         t0 = t0_s if t0_s is not None else (0. if rate_nm_s is not None else None)  # as the toolkit writes it
         summary = dict(PHYSICAL_SUMMARY, thickness=dict(PHYSICAL_SUMMARY["thickness"], rate_nm_s=rate_nm_s, t0_s=t0))
-        write_table(Path(out_folder), "structure_physical", PHYSICAL_ROWS, summary)
+        rows = PHYSICAL_ROWS
+        if self.literature:
+            summary["literature"] = dict(LITERATURE, rate_nm_s=rate_nm_s) if rate_nm_s is not None else NEEDS_RATE
+            rows = LITERATURE_ROWS if rate_nm_s is not None else PHYSICAL_ROWS
+        write_table(Path(out_folder), "structure_physical", rows, summary)
         return Path(out_folder) / "structure_physical.csv"
 
 

@@ -24,7 +24,7 @@ from src.gimap.features.sputter.application import (AnalyzeRequest, InstallError
                                                     reliability_report, remember, results_folder, scan_label)
 from src.gimap.features.sputter.infrastructure import (BundledToolkit, CbfHeaderInspector, PipInstaller, PipReader,
                                                        StructureFolderReader, classify_failure, run_streaming)
-from tests.sputter_fixtures import (PHYSICAL_ROWS, cbf_header, result_folder, scan_folder)
+from tests.sputter_fixtures import (PHYSICAL_ROWS, cbf_header, literature_folder, result_folder, scan_folder)
 
 
 @pytest.fixture(autouse=True)
@@ -39,7 +39,7 @@ def test_reader_parses_numbers_and_reasons(tmp_path):
     result = StructureFolderReader().read(result_folder(tmp_path), "window")
     assert [r["time_s"] for r in result.rows] == [0.05, 0.6, 1.1]
     assert result.rows[0]["D_nm"] is None and "no resolved peak" in result.rows[0]["D_reason"]
-    assert result.counts("R") == {"A": 1, "B": 0, "C": 1, "S": 0, "T": 0, "L": 0, "P": 0, "missing": 1}
+    assert result.counts("R") == {"A": 1, "B": 0, "C": 1, "S": 0, "T": 0, "L": 0, "P": 0, "Lit": 0, "missing": 1}
     assert result.series("D", "A").value == [9.0] and result.ts_length().value == [12.0]
     html = reliability_report(result)
     assert "±16%" in html and "±31%" in html and "flat-based hemisphere" in html and "Ag model" not in html
@@ -61,10 +61,128 @@ def test_the_physical_path_is_read_first_with_its_flags_and_thickness(tmp_path):
     assert result.column("nominal_thickness_nm").value == [0.1, 0.2, 0.3, 0.4]
     assert result.film_spans() == [(2.0, 2.0)] and result.column("R_trend_nm").value == [1.9, 2.3, 2.5]
     html = reliability_report(result)
-    for words in ("Physical path (default)", "1 of 4 windows differ", "Film from 2.0 s on this path (onset between "
+    for words in ("Physical path of the network", "1 of 4 windows differ", "Film from 2.0 s on this path (onset between "
                   "1.5 and 2.5 s)", "about 7 s", "Stage steps back", "island-volume equivalent",
                   "rate 0.2 nm/s", "not determined", "ratio 0.9", "an invented note of the model"):
         assert words in html, words
+
+
+def test_the_literature_method_is_the_default_once_a_rate_makes_it_possible(tmp_path):
+    reader = StructureFolderReader()
+    folder = literature_folder(tmp_path / "lit")
+    assert reader.available(folder) == ["literature", "physical", "window"]
+    result = reader.read(folder, "literature")
+    assert [r["R_nm"] for r in result.rows] == [None, 1.84, 2.3, None]
+    assert [r["R_grade"] for r in result.rows] == [None, "Lit", "Lit", None] and result.counts("D")["Lit"] == 3
+    assert [r["film"] for r in result.rows] == [False, False, False, True]  # after the percolation
+    assert result.rows[3]["D_nm"] == 10.4  # 2π/q* stays the spacing after the percolation; R is not given
+    assert result.rows[0]["R_reason"] == "no resolved peak: D and R not given"
+    assert result.rows[1]["R_typical_rel_error"] is None and result.rows[1]["R_lo_nm"] is None
+    assert result.rows[1]["sigma_log"] is None and result.rows[3]["L_TS_nm"] is None  # no network shape values
+    assert result.column("R_trend_nm").value == [1.84, 2.3] and result.column("delta_nm").value == [0.1, 0.2, 0.3, 0.4]
+    html = reliability_report(result)
+    for words in ("Literature method (mass balance)", "by construction", "Percolation (2R/D = 1) at δ = 0.35 nm, t = "
+                  "1.75 s (68% interval 0.32–0.38 nm from the scatter of the windows, the rate ±10% and t0 ±2 s",
+                  "1 consistent, 1 inconsistent, 1 not testable",
+                  "Physical path of the network", "<b>Lit</b> literature method (mass balance)"):
+        assert words in html, words
+    # The physical path stays one choice away and keeps the network's values.
+    physical = reader.read(folder, "physical")
+    assert physical.counts("R")["P"] == 3 and physical.rows[1]["R_lit_nm"] == 1.84
+    # Without a rate the literature method is not offered; with too few windows it is offered, not as the default.
+    assert reader.available(literature_folder(tmp_path / "none", rate=False)) == ["physical", "window"]
+    few = literature_folder(tmp_path / "few")
+    summary = __import__("json").loads((few / "structure_physical_summary.json").read_text(encoding="utf-8"))
+    summary["literature"]["default_ready"] = False
+    (few / "structure_physical_summary.json").write_text(__import__("json").dumps(summary), encoding="utf-8")
+    assert reader.available(few) == ["physical", "literature", "window"]
+
+
+def test_the_checks_and_the_references_are_written_for_the_tab(tmp_path):
+    from src.gimap.features.sputter.application import checks_html, onset_of, percolation
+
+    result = StructureFolderReader().read(literature_folder(tmp_path), "literature")
+    assert percolation(result.summary) == (1.75, (1.6, 1.9)) and onset_of(result) == (1.75, (1.6, 1.9), "percolation")
+    html = checks_html(result.summary, lambda template, **values: template.format(**values))
+    for words in ("✓ consistent", "× inconsistent", "– not testable", "Earlier than every published value",
+                  "https://doi.org/10.1021/acsami.9b08594", "Gen19", "Caveats and notes", "f^(-1/3)"):
+        assert words in html, words
+    physical = StructureFolderReader().read(tmp_path, "physical")
+    assert onset_of(physical) == (2.0, (1.5, 2.5), "film")
+
+
+def test_a_percolation_that_is_not_determined_has_no_time_and_an_open_interval():
+    from src.gimap.features.sputter.application import percolation, percolation_sentence, percolation_short
+    from src.gimap.features.sputter.domain import literature_rows
+
+    english = lambda template, **values: template.format(**values)  # noqa: E731
+    perc = dict(state="not_determined", delta_nm=None, time_s=None, interval_delta_nm=[1.8, None],
+                interval_time_s=[9.8, None], last_delta_nm=9.4, rate_error=0.1, t0_error_s=2.0)
+    summary = {"literature": {"percolation": perc}}
+    assert percolation(summary) == (None, (9.8, None))
+    assert percolation_short(summary, english) == "percolation (literature method) not determined: from δ = 1.8 nm or later"
+    assert percolation_sentence(summary, english).startswith(
+        "Percolation not determined: within the scatter of the windows, the rate ±10% and t0 ±2 s, 2R/D reaches 1 "
+        "from δ = 1.8 nm, or not before the peak is lost at δ = 9.4 nm.")
+    rows = [dict(time_s=t, lit_status=status) for t, status in ((5.0, "islands"), (12.0, "no_peak"))]
+    assert [r["film"] for r in literature_rows(rows, summary)] == [False, False]  # no percolation: no film
+    # A reached percolation makes every later window film, also one without a peak or with a peak not used.
+    reached = {"literature": {"percolation": dict(perc, state="reached", delta_nm=4.0, time_s=8.0,
+                                                  interval_delta_nm=[3.5, 4.6], interval_time_s=[7.0, 9.1])}}
+    rows = [dict(time_s=t, lit_status=status) for t, status in
+            ((5.0, "islands"), (9.0, "after_percolation"), (9.5, "no_peak"), (10.0, "late_peak"), (11.0, "no_data"))]
+    assert [r["film"] for r in literature_rows(rows, reached)] == [False, True, True, True, False]
+    # A result written before the toolkit named the state: an open interval was a percolation not determined.
+    old = {"literature": {"percolation": dict(delta_nm=4.0, time_s=8.0, interval_delta_nm=[3.5, None],
+                                              interval_time_s=[7.0, None], bound=None)}}
+    assert percolation(old) == (None, (7.0, None))
+
+
+def test_a_corrupt_summary_is_reported_when_the_result_is_read(tmp_path):
+    folder = literature_folder(tmp_path / "lit")
+    (folder / "structure_physical_summary.json").write_text("{not json", encoding="utf-8")
+    reader = StructureFolderReader()
+    assert reader.available(folder) == ["physical", "window"]  # the literature method is not offered
+    with pytest.raises(ValueError):
+        reader.read(folder, "physical")
+
+
+def test_every_sentence_of_the_toolkit_can_be_said_in_chinese():
+    """The page's copy of the toolkit's templates follows the bundled toolkit, and each one is in the table."""
+    import importlib
+
+    from src.gimap.app.presentation.i18n import apply_language, current_language
+    from src.gimap.app.presentation.i18n.zh import ZH
+    from src.gimap.features.sputter.presentation.texts import TOOLKIT_TEMPLATES, note_text
+
+    kit = Path(__file__).resolve().parents[1] / "utils" / "sputter_toolkit"
+    sys.path.insert(0, str(kit))
+    try:
+        physical = importlib.import_module("sputtergisaxs.sputter_physical")
+        literature = importlib.import_module("sputtergisaxs.sputter_literature")
+        bundled = [t for t in dict.fromkeys([*physical.NOTE_TEMPLATES, *literature.TEMPLATES]) if t]
+    finally:
+        sys.path.remove(str(kit))
+        for name in [name for name in sys.modules if name == "sputtergisaxs" or name.startswith("sputtergisaxs.")]:
+            del sys.modules[name]
+    assert list(TOOLKIT_TEMPLATES) == bundled
+    assert [t for t in TOOLKIT_TEMPLATES if t not in ZH] == []
+    for template in TOOLKIT_TEMPLATES:
+        fields = re.findall(r"\{(\w+)\}", template)
+        assert sorted(fields) == sorted(re.findall(r"\{(\w+)\}", ZH[template])), template
+    sentence = "delta = 3.21 nm at t = 16.5 s (68% interval 3.1-3.3 nm with the noise, the rate ±10% and t0 ±2 s)"
+    english = "δ = 3.21 nm at t = 16.5 s (68% interval 3.1-3.3 nm with the noise, the rate ±10% and t0 ±2 s)"
+    before = current_language()
+    try:
+        apply_language("zh", roots=())
+        # ASCII symbols as symbols
+        assert note_text(sentence) == "δ = 3.21 nm，t = 16.5 s（68% 区间 3.1-3.3 nm，含噪声、速率 ±10% 和 t0 ±2 s）"
+        assert note_text("no estimate") == "没有估计" and note_text("an invented sentence") == "an invented sentence"
+    finally:
+        apply_language(before, roots=())
+    assert note_text(sentence) == english
+    assert note_text("Network mass balance eta = t_eq/delta") == "Network mass balance η = t_eq/δ"
+    assert note_text("fewer than 5 TS windows over at least 2 nm of delta") ==         "fewer than 5 TS windows over at least 2 nm of δ"
 
 
 def test_a_cu_result_says_it_is_read_with_the_ag_model(tmp_path):

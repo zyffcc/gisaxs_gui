@@ -23,7 +23,7 @@ from src.gimap.app.presentation.i18n import tr
 from src.gimap.shared.figures import cjk_fallback
 
 from ..application import Sketcher, StructureResult, series_extent, smoothed_rows, storyboard_indices, window_sketch
-from .texts import message_text, stage_name, text
+from .texts import message_text, note_text, stage_name, text
 
 METAL_COLOURS = {"Ag": ("#b8c0c8", "#5f6b76"), "Au": ("#e3b23c", "#8a6512"), "Cu": ("#d08a5c", "#7a4220")}
 POLYMER = "#f3e3c3"; POLYMER_EDGE = "#c9a86a"; SUBSTRATE = "#9aa0a8"
@@ -46,7 +46,7 @@ def _describe(s) -> str:
                         "thickness not determined", time=t, stage=stage, L=f"{s.L:.3g}")
         return text("<b>t = {time}</b> · {stage} · continuous film · thickness not determined", time=t, stage=stage)
     if s.kind != "islands":
-        notes = "; ".join(message_text(note) for note in s.notes) or tr("no size estimate in this window")
+        notes = "; ".join(note_text(note) for note in s.notes) or tr("no size estimate in this window")
         return text("<b>t = {time}</b> · {notes}", time=t, notes=notes)
     err = f"±{100 * s.R_error:.0f}%" if s.R_error else ""
     spacing = f"{s.spacing:.3g} nm ({message_text(s.spacing_source)})"
@@ -58,7 +58,7 @@ def _describe(s) -> str:
                  R=f"{s.R:.3g}", error=err, grade=s.R_grade or "?", spacing=spacing, sigma=f"{s.sigma:.2f}",
                  disorder=disorder, coverage=cov)
     if s.notes:
-        words += "<br><i>" + "; ".join(message_text(note) for note in s.notes) + "</i>"
+        words += "<br><i>" + "; ".join(note_text(note) for note in s.notes) + "</i>"
     return words
 
 
