@@ -48,6 +48,14 @@ if (Test-Path -LiteralPath $SputterEntry -PathType Leaf) { $RequirementNames += 
 
 function Say([string]$Text) { Write-Host "[GIMaP] $Text" }
 
+function Step([int]$Number, [int]$Total, [string]$Text) {
+    # An overall progress bar at the top of the window; uv draws its own bars for each download below.
+    $ProgressPreference = "Continue"
+    Write-Progress -Activity "Setting up GIMaP" -Status "Step $Number of ${Total}: $Text" `
+        -PercentComplete ([int](100 * ($Number - 1) / $Total))
+    Say "Step $Number of ${Total}: $Text"
+}
+
 function Fail([string]$Text) {
     Write-Host ""
     Write-Host "[GIMaP] SETUP FAILED: $Text"
@@ -115,16 +123,23 @@ try {
     $Wanted = Get-RequirementsStamp
     $Have = if (Test-Path -LiteralPath $StampFile) { (Get-Content -LiteralPath $StampFile -Raw).Trim() } else { "" }
     if (-not (Test-Path -LiteralPath $PythonWExe -PathType Leaf) -or $Have -ne $Wanted.Trim()) {
-        $Uv = Get-Uv
-        if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+        $Fresh = -not (Test-Path -LiteralPath $PythonExe -PathType Leaf)
+        $Total = if ($Fresh) { 3 } else { 2 }
+        if ($Fresh) {
             Say "First start: setting up Python $PythonVersion and the packages GIMaP needs."
             Say "This installs about 2 GB and takes 3-20 minutes; later starts are immediate."
+        }
+        Step 1 $Total "the installer (uv)"
+        $Uv = Get-Uv
+        if ($Fresh) {
+            Step 2 $Total "Python $PythonVersion"
             Invoke-Uv $Uv @("python", "install", $PythonVersion) "Python $PythonVersion could not be installed"
             Invoke-Uv $Uv @("venv", "--quiet", $EnvDir, "--python", $PythonVersion) "the environment could not be created"
         }
         else {
             Say "The requirements changed (an update, or the Sputter toolkit was added): adding the missing packages ..."
         }
+        Step $Total $Total "the packages (each download shows its own progress bar)"
         $InstallArgs = @("pip", "install", "--python", $PythonExe)
         foreach ($Name in $RequirementNames) {
             $Path = Join-Path $Root $Name
@@ -136,6 +151,7 @@ try {
         if (Test-Path -LiteralPath $env:UV_CACHE_DIR) {
             Remove-Item -LiteralPath $env:UV_CACHE_DIR -Recurse -Force -ErrorAction SilentlyContinue
         }
+        $ProgressPreference = "Continue"; Write-Progress -Activity "Setting up GIMaP" -Completed
         Say "The environment is ready: $EnvDir"
     }
 
