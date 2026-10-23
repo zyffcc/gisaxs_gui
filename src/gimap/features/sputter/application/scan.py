@@ -33,8 +33,8 @@ beam centre (column and row), sample roll."""
 GROUP_KEYS = {"xray": ("energy_kind", "energy"), "sdd": ("sdd",), "alpha": ("alpha",),
               "beam": ("beam_col", "beam_row"), "roll": ("roll",)}
 SAMPLE_KEYS = ("metal", "polymer", "mask", "window")
-FOLDER_ONLY_KEYS = ("rate", "t0")
-"""Kept for the folder only: a deposition rate belongs to one scan."""
+FOLDER_ONLY_KEYS = ("rate", "t0", "t_end")
+"""Kept for the folder only: a deposition rate, its start and its end belong to one scan."""
 FOLDER_SAMPLE_KEYS = ("mask",)
 """Taken from this folder's values only (a detector mask belongs to one set-up), never from the last used."""
 MAX_FOLDERS = 300

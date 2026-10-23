@@ -8,10 +8,11 @@ model's last lines under Details.
 
 Predict uses the values of the folder in the picker: pressed while that folder's header is still read, it
 starts once the form is filled from it; a folder whose header says it has no frames is refused. A new
-deposition rate or t0 rewrites only the physical files of the result shown (``rebuild_physical``: no frame is
-read again) — when that result is of the scan in the picker; otherwise the fields are what the next Predict
-uses. A rate given where there was none (or taken away) shows the default explanation afterwards: the
-literature method needs a rate. Predict pressed while those files are rewritten follows them.
+deposition rate, t0 or end of the deposition rewrites only the physical files of the result shown
+(``rebuild_physical``: no frame is read again) — when that result is of the scan in the picker; otherwise the
+fields are what the next Predict uses. The explanation shown stays; when the rate is taken away the literature
+method (it needs one) gives way to the default, the physical path. Predict pressed while those files are rewritten
+follows them.
 """
 
 from __future__ import annotations
@@ -29,16 +30,17 @@ from src.gimap.app.presentation.components import show_toast
 from src.gimap.app.presentation.i18n import tr
 
 from ..application import (DOWNLOAD_SIZE, EXCLUDED_FRAMES, INSTALL_STEP, STEP_CHECK, STOP_NOW, InstallError,
-                           InstallProgress, PredictStep, ProgressTracker, Stopped, StructureResult, ToolkitFailed)
-from .results_panel import thickness_pair
+                           InstallProgress, PredictStep, ProgressTracker, Stopped, StructureResult, ToolkitFailed,
+                           deposition_end_ok)
+from .results_panel import thickness_values
 from .texts import install_text, message_text, text
 
 PREDICT_KEY = "sputter_predict"
 STOPPING = "Stopping…"
 STOPPING_LATER = "Stopping once pip has written the packages…"
 WAITING_FOR_HEADER = "Predict starts once the header of the first frame is read…"
-OTHER_SCAN = ("The result shown is of another scan: the deposition rate and t0 are kept for the next Predict of the "
-              "chosen folder.")
+OTHER_SCAN = ("The result shown is of another scan: the deposition rate, t0 and end are kept for the next Predict "
+              "of the chosen folder.")
 
 
 @dataclass(frozen=True)
@@ -89,7 +91,7 @@ class SputterPredictMixin:
         self.job_status.cancelRequested.connect(self.stop)
         self.job_status.detailsRequested.connect(lambda: self.log.setVisible(not self.log.isVisible()))
         self.eventReceived.connect(self._on_event)
-        for field in (self.rate, self.t0):
+        for field in (self.rate, self.t0, self.t_end):
             field.editingFinished.connect(self._thickness_changed)
             field.textEdited.connect(self._thickness_typed_now)
         self.merge_button.clicked.connect(self._choose_refined)
@@ -247,7 +249,8 @@ class SputterPredictMixin:
             parts.append((EXCLUDED_FRAMES, {"count": excluded}))
         self._status("succeeded", parts, 1.0)
         # a rate typed while the model ran is not lost (only what was typed, compared as numbers)
-        typed = (self.rate.text(), self.t0.text()) if busy == "predict" and self._thickness_typed else None
+        fields = (self.rate, self.t0, self.t_end)
+        typed = tuple(field.text() for field in fields) if busy == "predict" and self._thickness_typed else None
         self._thickness_typed = False
         self.show_result(outcome)
         if busy == "physical" and self._rebuild_values is not None:
@@ -257,9 +260,9 @@ class SputterPredictMixin:
         show_toast(self, text("The structure of {name} is ready.", name=folder.name), level="success",
                    action=(tr("Open Folder"), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))))
         if typed is not None and self._result_is_for_picker() and \
-                thickness_pair(_float(typed[0]), _float(typed[1])) != self._drawn:
-            self.rate.setText(typed[0])
-            self.t0.setText(typed[1])
+                thickness_values(*(_float(words) for words in typed)) != self._drawn:
+            for field, words in zip(fields, typed):
+                field.setText(words)
             self._thickness_changed()
 
     def _failed(self, failure: Failure) -> None:
@@ -277,8 +280,9 @@ class SputterPredictMixin:
             self._thickness_typed = True
 
     def _thickness_changed(self) -> None:
-        """A rate or t0 other than the one the result shown was drawn with: rewrite its physical files (fast)
-        and show them — when it is the result of the scan in the picker."""
+        """A rate, t0 or end of the deposition other than the one the result shown was drawn with: rewrite its
+        physical files (fast) and show them — when it is the result of the scan in the picker. The explanation shown
+        stays (the service opens the physical path when the literature method lost its rate)."""
         result = self.result
         if result is None or self._busy is not None:
             return
@@ -286,17 +290,17 @@ class SputterPredictMixin:
         if values["rate"] is not None and values["rate"] <= 0:
             self._notify(tr("The deposition rate must be positive (or empty)."), error=True)
             return
-        wanted = thickness_pair(values["rate"], values["t0"])
+        if not deposition_end_ok(values["t0"], values["t_end"]):
+            self._notify(tr("The end of the deposition must be after its start t0 (or empty)."), error=True)
+            return
+        wanted = thickness_values(values["rate"], values["t0"], values["t_end"])
         if wanted == self._drawn:
             return
         if not self._result_is_for_picker():
             self._status("idle", [(OTHER_SCAN, {})], 0.0)
             return
         folder, variant = result.folder, self.choice_box.currentData()
-        if variant in (None, "physical", "literature") and (self._drawn is None or self._drawn[0] is None
-                                                            or values["rate"] is None):
-            variant = None  # a rate given or taken away: the default explanation (the literature method needs one)
-        self._remember_thickness(result.scan_folder, values["rate"], values["t0"])
+        self._remember_thickness(result.scan_folder, values["rate"], values["t0"], values["t_end"])
         self._rebuild_values = wanted
         self._set_busy("physical")
         self._tracker = None
@@ -304,7 +308,7 @@ class SputterPredictMixin:
                      cancel=False)
         service, emit = self.service, self.eventReceived.emit
         self.tasks.submit(PREDICT_KEY, lambda: guarded(lambda: service.rebuild_physical(
-            folder, values["rate"], values["t0"], emit, variant)), on_done=self._finished,
+            folder, values["rate"], values["t0"], emit, variant, t_end_s=values["t_end"])), on_done=self._finished,
             on_error=lambda message, details: self._finished(Failure(message, details)))
 
     def _choose_refined(self) -> None:
@@ -316,15 +320,15 @@ class SputterPredictMixin:
         result, values = self.result, self._values()
         metal = result.metal or values["metal"]
         variant = self.choice_box.currentData()
-        rate, t0 = (values["rate"], values["t0"]) if self._result_is_for_picker() else \
-            (self._drawn if self._drawn is not None else (None, None))
+        rate, t0, t_end = (values["rate"], values["t0"], values["t_end"]) if self._result_is_for_picker() else \
+            (self._drawn if self._drawn is not None else (None, None, None))
         self._set_busy("merge")
         self._tracker = None
         self._rebuild_values = None
         self._status("running", [("Merging the refined windows…", {})], None, cancel=False)
         service, emit = self.service, self.eventReceived.emit
         self.tasks.submit(PREDICT_KEY, lambda: guarded(lambda: service.merge_refined(
-            result.folder, Path(refined), metal, emit, rate, t0, variant)),
+            result.folder, Path(refined), metal, emit, rate, t0, variant, t_end_s=t_end)),
             on_done=self._finished, on_error=lambda message, details: self._finished(Failure(message, details)))
 
 

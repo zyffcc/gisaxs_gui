@@ -564,12 +564,48 @@ def test_the_physical_command_rebuilds_the_files(tmp_path):
                             "--out", str(tmp_path), "--metal", "Au"], capture_output=True, text=True, timeout=300)
     assert table.returncode == 0, table.stderr
     (tmp_path / "structure_physical.csv").unlink()
-    done = subprocess.run([sys.executable, "-B", str(script), "physical", "--folder", str(tmp_path), "--rate-nm-s", "0.1"],
-                          capture_output=True, text=True, timeout=300)
+    done = subprocess.run([sys.executable, "-B", str(script), "physical", "--folder", str(tmp_path), "--rate-nm-s", "0.1",
+                           "--t-end-s", "12.5"], capture_output=True, text=True, timeout=300)
     assert done.returncode == 0, done.stderr
     assert done.stdout.startswith("SPUTTER_PROGRESS\tdone\t1.000\t")
     summary = json.loads((tmp_path / "structure_physical_summary.json").read_text(encoding="utf-8"))
     assert summary["thickness"]["rate_nm_s"] == 0.1 and summary["metal"] == "Au"
+    assert summary["thickness"]["t_end_s"] == 12.5 and summary["literature"]["t_end_s"] == 12.5
+    rows = _read(tmp_path / "structure_physical.csv")
+    assert max(float(row["nominal_thickness_nm"]) for row in rows) == pytest.approx(1.25)
+
+
+def test_the_nominal_thickness_stops_growing_at_the_end_of_the_deposition(kit, tmp_path):
+    struct = importlib.import_module("sputtergisaxs.sputter_struct")
+    physical = importlib.import_module("sputtergisaxs.sputter_physical")
+    _invented_series(tmp_path)
+    struct.write_structure(tmp_path / "binned", tmp_path, metal="Ag")
+    physical.write_physical(tmp_path, rate_nm_s=0.05, t0_s=4.0, t_end_s=17.0)
+    rows = _read(tmp_path / "structure_physical.csv")
+    assert any(float(row["time_s"]) > 17.0 for row in rows)  # the scan goes on after the deposition
+    for row in rows:
+        time = float(row["time_s"])
+        assert float(row["nominal_thickness_nm"]) == pytest.approx(0.05 * min(max(0.0, time - 4.0), 13.0))
+        assert float(row["delta_nm"]) == pytest.approx(0.05 * (min(time, 17.0) - 4.0))  # the literature method too
+    summary = json.loads((tmp_path / "structure_physical_summary.json").read_text(encoding="utf-8"))
+    thickness, block = summary["thickness"], summary["literature"]
+    assert thickness["t_end_s"] == 17.0 and thickness["t_end_given"] is True
+    assert thickness["t_end_note"] == physical.T_END_NOTE.format(t_end="17", thickness="0.65")
+    assert block["t_end_s"] == 17.0 and block["t_end_given"] is True
+    after = sum(float(row["time_s"]) > 17.0 for row in rows)
+    lit = importlib.import_module("sputtergisaxs.sputter_literature")
+    assert lit.NOTE_T_END.format(t_end="17", delta="0.65", count=after) in block["notes"]
+    # Without an end the deposition lasts to the end of the scan, and the summary says that it was not given.
+    physical.write_physical(tmp_path, rate_nm_s=0.05, t0_s=4.0)
+    summary = json.loads((tmp_path / "structure_physical_summary.json").read_text(encoding="utf-8"))
+    assert summary["thickness"]["t_end_s"] is None and summary["thickness"]["t_end_given"] is False
+    assert summary["thickness"]["t_end_note"] == physical.T_END_ASSUMED_NOTE
+    assert summary["literature"]["t_end_given"] is False
+    assert not any(note.startswith("The deposition ended") for note in summary["literature"]["notes"])
+    # The end comes after the start (t0 = 0 s when it is not given).
+    for t0, t_end in ((4.0, 4.0), (4.0, 3.0), (None, -1.0)):
+        with pytest.raises(ValueError, match="after its start"):
+            physical.write_physical(tmp_path, rate_nm_s=0.05, t0_s=t0, t_end_s=t_end)
 
 
 # ----------------------------------------------------------------------- the literature method --
@@ -656,7 +692,7 @@ def test_the_literature_percolation_is_found_with_its_interval():
     assert network["verdict"] == "inconsistent"
     assert network["values"]["coverage_median"] == pytest.approx(0.907 * 0.16, rel=1e-3)
     assert check["network_mass_balance"]["verdict"] == "inconsistent"  # 2 % of the nominal metal
-    assert summary["status"] == "ok" and summary["default_ready"] is True
+    assert summary["status"] == "ok" and summary["t_end_s"] is None and summary["t_end_given"] is False
     for c in summary["checks"]:
         assert set(c) >= {"id", "title", "verdict", "measured", "expected", "references", "note"}
         assert c["verdict"] in ("consistent", "inconsistent", "not testable")
@@ -669,6 +705,34 @@ def test_the_literature_percolation_is_found_with_its_interval():
     assert perc["state"] == "not_reached" and perc["bound"] == "lower" and not perc["reached"]
     assert perc["t0_error_s"] == 2.0  # t0 assumed at the first frame
     assert {c["id"]: c for c in summary["checks"]}["percolation"]["verdict"] == "not testable"  # 4 nm: inside the band
+
+
+def test_after_the_end_of_the_deposition_delta_stays_and_the_method_uses_it():
+    lit = _literature()
+    times, rows = _growth()
+    free = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0, period=5.0)[1]
+    onset = dict(film_onset_s=180.25, film_onset_interval_s=[175.0, 185.0])
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0,
+                                            period=5.0, t_end_s=150.0, onset=onset)
+    assert [c["delta_nm"] for c in columns] == pytest.approx([0.1 * min(t, 150.0) for t in times])
+    perc = summary["percolation"]  # reached before the end: as without one
+    assert perc["state"] == "reached" and perc["delta_nm"] == pytest.approx(free["percolation"]["delta_nm"])
+    assert summary["t_end_s"] == 150.0 and summary["t_end_given"] is True
+    after = sum(t > 150.0 for t in times)
+    assert lit.NOTE_T_END.format(t_end="150", delta="15", count=after) in summary["notes"]
+    check = {c["id"]: c for c in summary["checks"]}["TS_onset"]
+    assert check["values"]["delta_nm"] == pytest.approx(15.0)  # an onset after the end is at the delta of the end
+    # The deposition ended before 2R/D reached 1: delta stays, D grows on, so 2R/D falls and never reaches 1.
+    columns, summary = lit.literature_table(times, rows, metal="Ag", polymer="PS", rate_nm_s=0.1, t0_s=0.0,
+                                            period=5.0, t_end_s=50.0)
+    perc = summary["percolation"]
+    assert perc["state"] == "not_reached" and perc["last_delta_nm"] == pytest.approx(5.0)
+    late = [c for t, c in zip(times, columns) if t > 50.0]
+    assert all(c["delta_nm"] == pytest.approx(5.0) for c in late)
+    used = [c for c in late if c["R_lit_nm"] is not None]
+    assert used and all(c["R_lit_nm"] == pytest.approx((5.0 * c["D_lit_nm"] ** 2 / lit.HEX) ** (1 / 3)) for c in used)
+    with pytest.raises(ValueError, match="after its start"):
+        lit.literature_table(times, rows, metal="Ag", rate_nm_s=0.1, t0_s=10.0, t_end_s=5.0)
 
 
 def test_a_percolation_that_hinges_on_the_rate_is_not_determined():
@@ -755,7 +819,7 @@ def test_without_a_rate_the_literature_block_says_it_needs_one():
     times, rows = _growth(film_from=150.0)
     columns, summary = lit.literature_table(times, rows, metal="Au", polymer=None)
     assert summary["status"] == "needs_rate" and summary["message"] == lit.NEEDS_RATE
-    assert summary["percolation"] is None and summary["default_ready"] is False
+    assert summary["percolation"] is None
     assert all(c["R_lit_nm"] is None and c["delta_nm"] is None and c["eta_net"] is None for c in columns)
     assert any(c["D_lit_nm"] is not None for c in columns)  # 2*pi/q* is still the spacing
     checks = {c["id"]: c for c in summary["checks"]}
@@ -853,19 +917,23 @@ def test_every_literature_sentence_comes_from_a_template(kit, tmp_path):
     lit = importlib.import_module("sputtergisaxs.sputter_literature")
     _invented_series(tmp_path)
     struct.write_structure(tmp_path / "binned", tmp_path, metal="Ag")
-    physical.write_physical(tmp_path, rate_nm_s=0.5, polymer_type="PS")
-    summary = json.loads((tmp_path / "structure_physical_summary.json").read_text(encoding="utf-8"))
-    rows = _read(tmp_path / "structure_physical.csv")
-    block = summary["literature"]
-    assert block["polymer"] == "PS" and block["rate_nm_s"] == 0.5 and set(lit.LIT_COLUMNS) <= set(rows[0])
     templates = [re.compile(re.sub(r"\\\{(\w+)\\\}", r"(?P<\1>.+?)", re.escape(t)), re.DOTALL)
                  for t in (*lit.TEMPLATES, *physical.NOTE_TEMPLATES)]
-    sentences = [block["message"], block["method"], block["host_note"], *block["notes"], *summary["notes"]]
-    for check in block["checks"]:
-        sentences += [check["title"], check["measured"], check["expected"], *check["notes"]]
-    sentences += [row["lit_reason"] for row in rows] + [summary["thickness"][key] for key in
-                                                         ("t_eq_note", "nominal_note", "film_thickness_note")]
-    sentences += [row[key] for row in rows for key in ("R_reason", "D_reason", "film_thickness_status")]
+    sentences = []
+    for t_end in (None, 21.5):  # with and without the end of the deposition
+        physical.write_physical(tmp_path, rate_nm_s=0.5, polymer_type="PS", t_end_s=t_end)
+        summary = json.loads((tmp_path / "structure_physical_summary.json").read_text(encoding="utf-8"))
+        rows = _read(tmp_path / "structure_physical.csv")
+        block = summary["literature"]
+        assert block["polymer"] == "PS" and block["rate_nm_s"] == 0.5 and set(lit.LIT_COLUMNS) <= set(rows[0])
+        sentences += [block["message"], block["method"], block["host_note"], *block["notes"], *summary["notes"]]
+        for check in block["checks"]:
+            sentences += [check["title"], check["measured"], check["expected"], *check["notes"]]
+        sentences += [row["lit_reason"] for row in rows] + [summary["thickness"][key] for key in
+                                                             ("t_eq_note", "nominal_note", "t_end_note",
+                                                              "film_thickness_note")]
+        sentences += [row[key] for row in rows for key in ("R_reason", "D_reason", "film_thickness_status")]
+    assert any(s.startswith("The deposition ended at t_end = 21.5 s") for s in sentences)
     loose = sorted({s for s in sentences if s and not any(p.fullmatch(s) for p in templates)})
     assert loose == []
 

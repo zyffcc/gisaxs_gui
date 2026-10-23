@@ -4,18 +4,19 @@ analyze  a scan folder of CBF frames -> OUT/structure.csv, structure_summary.jso
          and the physical path OUT/structure_physical.csv, structure_physical_summary.json
     python scripts/sputter_struct_v1.py analyze --input SCAN_FOLDER --out OUT --energy-ev 12000 --sdd-mm 2500 \
         --alpha-i-deg 0.4 --metal Ag --polymer-expert EXPERTS/polymer --ts-expert EXPERTS/TS [--beam-col C --beam-row R] [--mask MASK.npy]
-        [--rate-nm-s RATE --t0-s T0]   (deposition rate, e.g. from a QCM, for the nominal thickness rate*(t-t0))
+        [--rate-nm-s RATE --t0-s T0 --t-end-s T_END]   (deposition rate, e.g. from a QCM, for the nominal thickness
+        rate*(t-t0); after the end of the deposition t_end it stays at rate*(t_end-t0))
 physical rebuild only the physical-path files of an analysed folder (fast, no frames read); with a rate also the
          literature method and its comparison with published growth (summary key 'literature')
-    python scripts/sputter_struct_v1.py physical --folder OUT [--rate-nm-s RATE] [--t0-s T0] [--polymer-type PS]
-        [--rate-error 0.1] [--t0-error 2]   (errors of the rate and t0 in the percolation interval)
+    python scripts/sputter_struct_v1.py physical --folder OUT [--rate-nm-s RATE] [--t0-s T0] [--t-end-s T_END]
+        [--polymer-type PS] [--rate-error 0.1] [--t0-error 2]   (errors of the rate and t0 in the percolation interval)
 sequence time-consistent path (all network components, physical transition costs) -> OUT/structure_sequence.csv
     python scripts/sputter_struct_v1.py sequence --binned OUT/binned --out OUT --metal Ag --polymer-expert EXPERTS/polymer --ts-expert EXPERTS/TS
 select   learned selector (trained/tested on simulated growth series; D passed its test, R did not) -> OUT/structure_selected.csv
     python scripts/sputter_struct_v1.py select --binned OUT/binned --out OUT --metal Ag --polymer-expert EXPERTS/polymer --ts-expert EXPERTS/TS
 table    rebuild the structure table (and the physical-path files) from an existing binned folder, optionally merging refined windows
-    python scripts/sputter_struct_v1.py table --binned OUT/binned --out OUT --metal Ag [--refined REFINED/windows] [--rate-nm-s RATE] [--t0-s T0] [--polymer-type PS]
-        [--rate-error 0.1] [--t0-error 2]
+    python scripts/sputter_struct_v1.py table --binned OUT/binned --out OUT --metal Ag [--refined REFINED/windows] [--rate-nm-s RATE] [--t0-s T0]
+        [--t-end-s T_END] [--polymer-type PS] [--rate-error 0.1] [--t0-error 2]
 Progress lines start with SPUTTER_PROGRESS (stage, fraction, message) for the GIMaP Sputter page; reading frames also
 prints INTAKE_PLAN <chunks> <frames>, INTAKE_CHUNK <name> <index> <frames> <seconds> and, for each damaged frame that
 is left out, INTAKE_EXCLUDED <frame> <reason>.
@@ -33,6 +34,9 @@ def _thickness_args(parser, polymer=True):
     parser.add_argument('--rate-nm-s', type=float, help='deposition rate in nm/s (e.g. QCM) for the nominal thickness '
                         'and the literature method')
     parser.add_argument('--t0-s', type=float, help='time (s) at which deposition started, for the nominal thickness (default 0)')
+    parser.add_argument('--t-end-s', type=float, help='time (s) at which deposition ended (the shutter is closed by hand; '
+                        'a scan can go on after it): the nominal thickness and delta stay at rate*(t_end - t0) after it '
+                        '(default: the end of the scan)')
     if polymer:
         parser.add_argument('--polymer-type', help='host for the literature band (default: the polymer of the analysis)')
         parser.add_argument('--rate-error', type=float, help='relative error of the rate in the literature percolation '
@@ -82,11 +86,12 @@ def main():
                      polymer_expert=args.polymer_expert, ts_expert=args.ts_expert, beam_col=args.beam_col, beam_row=args.beam_row,
                      sample_roll_deg=args.sample_roll_deg, mask=args.mask, bin_seconds=args.bin_seconds, workers=args.workers,
                      device=args.device, polymer_type=args.polymer_type, refined_dir=args.refined, progress=lambda s: print(s, flush=True),
-                     rate_nm_s=args.rate_nm_s, t0_s=args.t0_s)
+                     rate_nm_s=args.rate_nm_s, t0_s=args.t0_s, t_end_s=args.t_end_s)
     elif args.cmd == 'physical':
         from sputtergisaxs.sputter_physical import write_physical
         path = write_physical(args.folder, binned=args.binned, rate_nm_s=args.rate_nm_s, t0_s=args.t0_s,
-                              polymer_type=args.polymer_type, rate_error=args.rate_error, t0_error_s=args.t0_error)
+                              polymer_type=args.polymer_type, rate_error=args.rate_error, t0_error_s=args.t0_error,
+                              t_end_s=args.t_end_s)
         say(lambda s: print(s, flush=True), 'done', 1., str(path))
     elif args.cmd == 'select':
         from sputtergisaxs.sputter_selector import selector_table
@@ -105,7 +110,7 @@ def main():
         path = write_structure(args.binned, args.out, metal=args.metal, refined_dir=args.refined)
         from sputtergisaxs.sputter_physical import write_physical
         write_physical(args.out, binned=args.binned, rate_nm_s=args.rate_nm_s, t0_s=args.t0_s, polymer_type=args.polymer_type,
-                       rate_error=args.rate_error, t0_error_s=args.t0_error)
+                       rate_error=args.rate_error, t0_error_s=args.t0_error, t_end_s=args.t_end_s)
         say(lambda s: print(s, flush=True), 'done', 1., str(path))
 
 

@@ -22,9 +22,11 @@ and PyTorch 2.3 or later work. GIMaP adds PyTorch to its environment when it is 
 python scripts/sputter_struct_v1.py analyze --input SCAN_FOLDER --out OUT --energy-ev 12000 --sdd-mm 2500 \
     --alpha-i-deg 0.4 --metal Ag --polymer-expert experts/polymer --ts-expert experts/TS \
     [--beam-col C --beam-row R] [--sample-roll-deg 0] [--mask MASK.npy] [--workers 4] \
-    [--rate-nm-s RATE --t0-s T0]
-python scripts/sputter_struct_v1.py physical --folder OUT [--rate-nm-s RATE] [--t0-s T0] [--polymer-type PS] \n    [--rate-error 0.1] [--t0-error 2]
-python scripts/sputter_struct_v1.py table --binned OUT/binned --out OUT --metal Ag [--refined REFINED/windows]     [--rate-nm-s RATE] [--t0-s T0] [--polymer-type PS]
+    [--rate-nm-s RATE --t0-s T0 --t-end-s T_END]
+python scripts/sputter_struct_v1.py physical --folder OUT [--rate-nm-s RATE] [--t0-s T0] [--t-end-s T_END] \
+    [--polymer-type PS] [--rate-error 0.1] [--t0-error 2]
+python scripts/sputter_struct_v1.py table --binned OUT/binned --out OUT --metal Ag [--refined REFINED/windows] \
+    [--rate-nm-s RATE] [--t0-s T0] [--t-end-s T_END] [--polymer-type PS]
 python scripts/sputter_struct_v1.py select|sequence --binned OUT/binned --out OUT --metal Ag \
     --polymer-expert experts/polymer --ts-expert experts/TS
 ```
@@ -84,8 +86,11 @@ The physical path reads the whole series once:
   - `t_eq_nm` = (2/3)·π·R³·exp(3σ²) / ((√3/2)·D²): island-volume equivalent thickness of the *visible*
     particles, conditional on flat-based hemispheres (h=R) on a hexagonal lattice; not the deposited amount.
     The band divides and multiplies by exp(√(9·eR² + 4·eD²)), eR and eD = ln(1 + typical relative error).
-  - `nominal_thickness_nm` = rate·(t − t0) when a deposition rate is given (e.g. from a QCM); not measured by
-    GISAXS. Without `--t0-s`, t0 = 0 s (the first frame) is an assumption and the summary says so.
+  - `nominal_thickness_nm` = rate·clip(t − t0, 0, t_end − t0) when a deposition rate is given (e.g. from a QCM);
+    not measured by GISAXS. Without `--t0-s`, t0 = 0 s (the first frame) is an assumption and the summary says so.
+    The shutter is closed by hand and a scan can go on after the deposition: `--t-end-s` gives its end t_end, after
+    which the nominal thickness stays at rate·(t_end − t0); without it the deposition lasts to the end of the scan.
+    The summary's `thickness` records `t_end_s`, `t_end_given` and a `t_end_note` that says which.
     `mass_continuity` compares both just before the TS onset.
   - Film windows: the TS film thickness and metal fraction are not identifiable (in simulation the network's
     posterior equals its prior), so `film_thickness_status` says so and no number is given; `L_TS_nm` is the
@@ -100,7 +105,9 @@ mass balance for flat-based hemispheres on a hexagonal lattice: δ = (2/3)πR³/
 this tool keeps D = 2π/q* after the percolation but gives no R (molecular dynamics, Abraham 2016, finds that R loses
 its island meaning once a network forms). With `--rate-nm-s` every window gets the same:
 
-- `delta_nm` = rate·(t − t0) (t0 = 0 s, the first frame, when not given: an assumption, said in the notes).
+- `delta_nm` = rate·(min(t, t_end) − t0) (t0 = 0 s, the first frame, when not given: an assumption, said in the
+  notes). With `--t-end-s` δ stays at rate·(t_end − t0) in the windows after the deposition ended, and the method
+  uses that δ there (a note says so); the summary records `t_end_s` and `t_end_given`.
 - `D_lit_nm` = 2π/q* only where a resolved peak exists. `lit_status` marks peaks that are not used: `host_peak`
   (before the deposition starts, more than a factor 2 above every published D(δ) at that δ, or a jump or outlier
   at the host's spacing), `outlier` (more than a factor 2 from the trend of D, or a jump: more than a factor 2 above

@@ -78,6 +78,10 @@ SPUTTER_REPORT_ZH = {
         "膜时间窗中不给出。",
     "Nominal thickness = rate × (t − t0) with rate {rate} nm/s and t0 = {t0} s: what was deposited, not what is "
     "measured.": "名义厚度 = 速率 × (t − t0)，速率 {rate} nm/s，t0 = {t0} s：这是沉积的量，不是测得的量。",
+    "Nominal thickness = rate × (t − t0) with rate {rate} nm/s and t0 = {t0} s until the deposition ended at "
+    "t_end = {t_end} s, then constant at {thickness} nm: what was deposited, not what is measured.":
+        "名义厚度 = 速率 × (t − t0)，速率 {rate} nm/s，t0 = {t0} s，直到沉积在 t_end = {t_end} s 结束，之后保持在 "
+        "{thickness} nm：这是沉积的量，不是测得的量。",
     "Give the deposition rate (More options) to draw the nominal thickness rate × (t − t0).":
         "给出沉积速率（更多选项）即可画出名义厚度 速率 × (t − t0)。",
     "In film windows the thickness is not determined: the current model cannot measure the thickness of a continuous "

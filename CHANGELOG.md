@@ -30,14 +30,15 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   the geometry (each value says where it comes from: this folder's last values, a geometry preset of the
   beamtime, the file header, or the values used last — please check), press **Predict**. The model is part of
   GIMaP and runs in GIMaP's own Python; the first Predict installs PyTorch there (about 1.2 GB). The default
-  explanation is a physical path of stages through time with the network's sizes in every island window, so
-  values no longer flip between sources from window to window. The metal thickness is given where it can be
-  stated: the island-volume equivalent t_eq and, from a deposition rate, the nominal thickness. The period of a
-  periodic intensity modulation is found (see below). Cu is accepted and labelled as approximated with the Ag
-  model.
-- With a deposition rate, the default explanation is the **literature method (mass balance)** of the P03 in-situ
-  GISAXS studies: D = 2π/q* of the direct peak, R from the nominal thickness δ = rate × (t − t0) by mass balance
-  for hemispheres (grade Lit), and the percolation where 2R/D reaches 1. Its interval holds the scatter of the
+  explanation — always, also with a deposition rate: the page's method is the model — is a physical path of
+  stages through time with the network's sizes in every island window, so values no longer flip between sources
+  from window to window. The metal thickness is given where it can be stated: the island-volume equivalent t_eq
+  and, from a deposition rate, the nominal thickness. The period of a periodic intensity modulation is found (see
+  below). Cu is accepted and labelled as approximated with the Ag model.
+- With a deposition rate, **Explanation** offers second, as a check of the network and never as the default, the
+  **literature method (mass balance)** of the P03 in-situ GISAXS studies: D = 2π/q* of the direct peak, R from
+  the nominal thickness δ = rate × (t − t0) by mass balance for hemispheres (grade Lit), and the percolation where
+  2R/D reaches 1. Its interval holds the scatter of the
   windows and the errors of the rate (±10%) and t0 (±2 s, ±0.5 s when given); when 2R/D may reach 1 within them
   but need not, the percolation is *not determined*. After it D = 2π/q* goes on and R is not given. Peaks that
   probably belong to the polymer, jumps and outliers are marked and left out; late peaks after a gap are compared
@@ -47,6 +48,13 @@ What changes for someone who uses GIMaP, version by version. Developer notes are
   their references. The literature-method R agrees with the literature by construction; the page says so.
 - The period of a periodic intensity modulation is called *intensity modulation period (sample rotation?)*: the
   data do not tell its source. The model's own notes and reasons are shown in the interface language.
+- A new deposition rate keeps the explanation shown; taking it away returns from the literature method to the
+  physical path.
+- **More options ▸ Deposition end (s)** (optional, remembered per scan folder like the rate and t0): the shutter is
+  closed by hand and a scan can go on after the deposition. After the end the nominal thickness stays at
+  rate × (t_end − t0) — a plateau in the Metal thickness panel, with the end marked — and the literature method
+  uses that constant δ in the later windows (its notes say so). Changing it rewrites only the physical files. Left
+  empty, the deposition lasts to the end of the scan, as before, and the notes say that no end was given.
 
 ### Analyze
 

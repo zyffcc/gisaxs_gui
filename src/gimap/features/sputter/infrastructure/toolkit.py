@@ -117,6 +117,7 @@ class BundledToolkit:
             "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "scan_folder": str(request.scan_folder),
             "request": request.analysis_values() | {"rate_nm_s": request.rate_nm_s, "t0_s": request.t0_s,
+                                                    "t_end_s": request.t_end_s,
                                                     "beam_centre_convention": "GIMaP pixel coordinates (corners)"},
             "digest": request.digest(model),
             "model_id": model,
@@ -149,14 +150,16 @@ class BundledToolkit:
             args += ["--mask", str(request.mask_file)]
         if request.refined_folder:
             args += ["--refined", str(request.refined_folder)]
-        args += self._thickness_args(request.rate_nm_s, request.t0_s)
+        args += self._thickness_args(request.rate_nm_s, request.t0_s, request.t_end_s)
         self._run(args, on_line, should_stop)
         return out / "structure.csv"
 
     @staticmethod
-    def _thickness_args(rate_nm_s: Optional[float], t0_s: Optional[float]) -> list[str]:
+    def _thickness_args(rate_nm_s: Optional[float], t0_s: Optional[float], t_end_s: Optional[float]) -> list[str]:
+        """The deposition rate, its start t0 and its end (the nominal thickness stays constant after it)."""
         args = ["--rate-nm-s", _number(rate_nm_s)] if rate_nm_s is not None else []
-        return args + (["--t0-s", _number(t0_s)] if t0_s is not None else [])
+        args += ["--t0-s", _number(t0_s)] if t0_s is not None else []
+        return args + (["--t-end-s", _number(t_end_s)] if t_end_s is not None else [])
 
     def table(self, out_folder: Path, metal: str, refined_folder: Optional[Path],
               on_line: Callable[[str], None]) -> Path:
@@ -168,9 +171,10 @@ class BundledToolkit:
         return out / "structure.csv"
 
     def physical(self, out_folder: Path, rate_nm_s: Optional[float], t0_s: Optional[float],
-                 on_line: Callable[[str], None]) -> Path:
+                 on_line: Callable[[str], None], *, t_end_s: Optional[float] = None) -> Path:
         out = Path(out_folder)
-        self._run(["physical", "--folder", str(out), *self._thickness_args(rate_nm_s, t0_s)], on_line, lambda: False)
+        self._run(["physical", "--folder", str(out), *self._thickness_args(rate_nm_s, t0_s, t_end_s)], on_line,
+                  lambda: False)
         return out / "structure_physical.csv"
 
 

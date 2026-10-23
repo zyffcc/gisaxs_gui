@@ -46,14 +46,20 @@ SPUTTER_ZH = {
     "Time window (s)": "时间窗（s）",
     "Deposition rate (nm/s)": "沉积速率（nm/s）",
     "Start of deposition t0 (s)": "沉积开始 t0（s）",
+    "Deposition end (s)": "沉积结束（s）",
     "optional": "可选填",
+    "end of the scan": "扫描结束时",
     "Deposition rate (for example from a quartz balance): the nominal thickness rate × (t − t0) is drawn with the "
-    "metal thickness, and the literature method and the Literature tab use it. Changing it later does not read the "
-    "frames again.":
-        "沉积速率（例如来自石英晶体微天平）：名义厚度 速率 × (t − t0) 画在金属厚度图里，文献方法和“文献对照”页也用它。"
-        "之后修改它不会重新读帧。",
+    "metal thickness, and the literature method (a check of the network) and the Literature tab use it. Changing it "
+    "later does not read the frames again.":
+        "沉积速率（例如来自石英晶体微天平）：名义厚度 速率 × (t − t0) 画在金属厚度图里，文献方法（对网络的核对）和“文献对照”页"
+        "也用它。之后修改它不会重新读帧。",
     "Time (s) of the scan at which the deposition started (the nominal thickness is 0 there).":
         "扫描中沉积开始的时间（s）（名义厚度在此为 0）。",
+    "Time (s) of the scan at which the deposition ended (the shutter was closed): the nominal thickness stays at "
+    "rate × (t_end − t0) after it, also in the literature method. Empty: the deposition lasts to the end of the scan.":
+        "扫描中沉积结束（挡板关上）的时间（s）：此后名义厚度保持在 速率 × (t_end − t0)，文献方法中也是如此。留空：沉积持续到"
+        "扫描结束。",
     "Save results in": "结果保存在",
     "Each scan and geometry gets its own folder in here; the same request reuses it.":
         "每个扫描和几何在这里有自己的文件夹；相同的请求会重用它。",
@@ -62,16 +68,16 @@ SPUTTER_ZH = {
     "Merge physical-refinement windows (one JSON per window, e.g. from the cluster) into the current result.":
         "把物理精修的时间窗（每窗一个 JSON，例如来自集群）合并进当前结果。",
     "Explanation": "解释",
-    "Which explanation of the windows is shown.\nLiterature method (the default with a deposition rate): R from the "
-    "nominal thickness and D = 2π/q* by mass balance, as in the P03 in-situ GISAXS studies (grade Lit).\nPhysical path "
-    "(network; the default without a rate): one path of stages through time, network sizes in every island window, no "
-    "switching between sources (grade P).\nPer window: highest network weight, or the "
+    "Which explanation of the windows is shown.\nPhysical path (network; the default): one path of stages through "
+    "time, network sizes in every island window, no switching between sources (grade P).\nLiterature method (a check "
+    "of the network; needs a deposition rate): R from the nominal thickness and D = 2π/q* by mass balance, as in the "
+    "P03 in-situ GISAXS studies (grade Lit).\nPer window: highest network weight, or the "
     "converged refinement (grades A/B/C).\nLearned selector: trained on simulated growth series (grade L; its tested "
     "accuracy is on the Reliability tab).\nTime-consistent path (exploratory): registered physical rules; not more "
     "accurate in simulation (grades S/T).":
-        "显示时间窗的哪一种解释。\n文献方法（有沉积速率时的默认）：与 P03 原位 GISAXS 研究相同，由名义厚度和 D = 2π/q* 按质量守恒"
-        "算出 R（等级 Lit）。\n物理路径（网络；没有速率时的默认）：随时间只走一条阶段路径，每个岛时间窗都用网络尺寸，不在来源之间切换"
-        "（等级 P）。\n"
+        "显示时间窗的哪一种解释。\n物理路径（网络；默认）：随时间只走一条阶段路径，每个岛时间窗都用网络尺寸，不在来源之间切换"
+        "（等级 P）。\n文献方法（对网络的核对；需要沉积速率）：与 P03 原位 GISAXS 研究相同，由名义厚度和 D = 2π/q* 按质量守恒"
+        "算出 R（等级 Lit）。\n"
         "逐窗：网络权重最高的解，或收敛的精修（等级 A/B/C）。\n学习选择器：在模拟生长序列上训练（等级 L；测试准确率见“可靠性”页）。\n"
         "时间一致路径（探索性）：按登记的物理规则；在模拟中并不更准（等级 S/T）。",
     "Physical path (network)": "物理路径（网络）",
@@ -85,12 +91,12 @@ SPUTTER_ZH = {
     "Windows": "时间窗",
     "Reliability": "可靠性",
     "<p>Choose a scan folder and press Predict, or open a results folder (More options). Each R and D value gets a "
-    "grade: <b>Lit</b> literature method (R from the nominal thickness and 2π/q*; the default with a deposition rate), "
-    "<b>P</b> network estimate on the physical path (the default without a rate), <b>A</b> refined (unique), <b>B</b> "
-    "refined (an equally good alternative exists), <b>C</b> network estimate only.</p>":
-        "<p>选择扫描文件夹并按“预测”，或打开一个结果文件夹（更多选项）。每个 R 和 D 值都有等级：<b>Lit</b> 文献方法（由名义厚度和 "
-        "2π/q* 算出 R；有沉积速率时的默认），<b>P</b> 物理路径上的网络估计（没有速率时的默认），<b>A</b> 精修（唯一），<b>B</b> 精修"
-        "（存在同样好的另一解），<b>C</b> 仅网络估计。</p>",
+    "grade: <b>P</b> network estimate on the physical path (the default), <b>Lit</b> literature method (R from the "
+    "nominal thickness and 2π/q*; a check of the network that needs a deposition rate), <b>A</b> refined (unique), "
+    "<b>B</b> refined (an equally good alternative exists), <b>C</b> network estimate only.</p>":
+        "<p>选择扫描文件夹并按“预测”，或打开一个结果文件夹（更多选项）。每个 R 和 D 值都有等级：<b>P</b> 物理路径上的网络估计"
+        "（默认），<b>Lit</b> 文献方法（由名义厚度和 2π/q* 算出 R；对网络的核对，需要沉积速率），<b>A</b> 精修（唯一），<b>B</b> "
+        "精修（存在同样好的另一解），<b>C</b> 仅网络估计。</p>",
     # -- the folder, the sources of the values ------------------------------------------------------------------
     "Choose the Scan Folder": "选择扫描文件夹",
     "Reading the header of the first frame…": "正在读取第一帧的文件头…",
@@ -114,8 +120,9 @@ SPUTTER_ZH = {
     "the flat-field file name says E = {energy} keV: the detector's calibration energy, not necessarily the beam's":
         "平场文件名写着 E = {energy} keV：这是探测器的标定能量，不一定是光束的能量",
     "Predict starts once the header of the first frame is read…": "读完第一帧的文件头后开始预测…",
-    "The result shown is of another scan: the deposition rate and t0 are kept for the next Predict of the chosen "
-    "folder.": "显示的结果属于另一个扫描：沉积速率和 t0 留给所选文件夹的下一次预测。",
+    "The result shown is of another scan: the deposition rate, t0 and end are kept for the next Predict of the "
+    "chosen folder.": "显示的结果属于另一个扫描：沉积速率、t0 和沉积结束时间留给所选文件夹的下一次预测。",
+    "The end of the deposition must be after its start t0 (or empty).": "沉积结束时间必须晚于开始时间 t0（或留空）。",
     "Choose a scan folder whose frames name the detector's serial number first: a preset is found again by the "
     "serial number, the flat field and the date.": "请先选择一个帧里写有探测器序列号的扫描文件夹：预设按序列号、平场和日期找回。",
     "Geometry preset {name} saved: scans of this detector from {start} to {end} are filled in from it.":
@@ -252,6 +259,7 @@ SPUTTER_ZH = {
     "trend (smoothed)": "趋势（平滑）",
     "t_eq: island-volume equivalent (conditional)": "t_eq：岛体积等效（有条件）",
     "nominal: rate × (t − t0)": "名义：速率 × (t − t0)",
+    "deposition ended {time} s": "沉积结束 {time} s",
     "film: thickness not determined": "膜：厚度未确定",
     "No thickness value in this result.": "这个结果里没有厚度值。",
     "film onset {time} s": "成膜起点 {time} s",

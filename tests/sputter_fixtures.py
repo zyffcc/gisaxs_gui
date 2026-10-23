@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from pathlib import Path
 
 from src.gimap.features.sputter.application import EnvironmentStatus, InstallError, InstallProgress, ScanInfo, Stopped
@@ -87,7 +88,7 @@ _LIT = [
 ]
 LITERATURE_ROWS = [dict(row, **lit) for row, lit in zip(PHYSICAL_ROWS, _LIT)]
 LITERATURE = dict(
-    status="ok", default_ready=True, island_windows=2, message="", metal="Ag", polymer="PS", host_class="Ag/polymers",
+    status="ok", island_windows=2, message="", metal="Ag", polymer="PS", host_class="Ag/polymers",
     host_note="The band of Ag/polymers includes published values for PS.", rate_nm_s=0.2, t0_s=0.0, t0_assumed=True,
     percolation=dict(state="reached", delta_nm=0.35, time_s=1.75, interval_delta_nm=[0.32, 0.38],
                      interval_time_s=[1.6, 1.9], reached=True, bound=None, max_two_R_over_D_trend=1.02,
@@ -123,7 +124,7 @@ LITERATURE = dict(
     references={"Gen19": dict(citation="Gensch M. et al., ACS Appl. Mater. Interfaces 11, 29416 (2019)",
                               doi="10.1021/acsami.9b08594")})
 LITERATURE_SUMMARY = dict(PHYSICAL_SUMMARY, literature=LITERATURE)
-NEEDS_RATE = dict(status="needs_rate", default_ready=False, island_windows=0,
+NEEDS_RATE = dict(status="needs_rate", island_windows=0,
                   message="needs a deposition rate: the literature method computes R from the nominal thickness delta = "
                           "rate*(t - t0); without it only the monotony of D is tested (in time)",
                   checks=[dict(id="percolation", title="Percolation by the literature method against the published band",
@@ -141,6 +142,17 @@ def literature_folder(folder: Path, *, rate: bool = True) -> Path:
         write_table(folder, "structure_physical", PHYSICAL_ROWS,
                     dict(PHYSICAL_SUMMARY, thickness=thickness, literature=NEEDS_RATE))
     return folder
+
+
+def nominal_rows(rows: list, rate, t0, t_end) -> list:
+    """``rows`` with the nominal thickness as the toolkit writes it, rate × clip(t − t0, 0, t_end − t0) (as they are
+    without a rate)."""
+    if rate is None:
+        return rows
+    start = t0 or 0.0
+    stop = math.inf if t_end is None else t_end - start
+    return [dict(r, nominal_thickness_nm=f"{round(rate * min(max(0.0, float(r['time_s']) - start), stop), 6):g}")
+            for r in rows]
 
 
 def scan_folder(root: Path, name: str = "zz_invented_scan_00001", frames: int = 3) -> Path:
@@ -239,8 +251,9 @@ class FakeRunner:
         result_folder(Path(out_folder), physical=True)
         rate = request.rate_nm_s
         t0 = request.t0_s if request.t0_s is not None else (0. if rate is not None else None)
-        thickness = dict(PHYSICAL_SUMMARY["thickness"], rate_nm_s=rate, t0_s=t0)
-        rows = [dict(r, metal=self.metal) for r in PHYSICAL_ROWS]
+        thickness = dict(PHYSICAL_SUMMARY["thickness"], rate_nm_s=rate, t0_s=t0, t_end_s=request.t_end_s,
+                         t_end_given=request.t_end_s is not None)
+        rows = nominal_rows([dict(r, metal=self.metal) for r in PHYSICAL_ROWS], rate, t0, request.t_end_s)
         write_table(Path(out_folder), "structure_physical", rows, dict(PHYSICAL_SUMMARY, metal=self.metal,
                                                                         thickness=thickness))
         record = {"scan_folder": str(request.scan_folder), "request": {"scan_folder": str(request.scan_folder)}}
@@ -252,15 +265,17 @@ class FakeRunner:
         self.calls.append(("table", Path(out_folder), metal, refined_folder))
         return Path(out_folder) / "structure.csv"
 
-    def physical(self, out_folder, rate_nm_s, t0_s, on_line):
-        self.calls.append(("physical", Path(out_folder), rate_nm_s, t0_s))
+    def physical(self, out_folder, rate_nm_s, t0_s, on_line, *, t_end_s=None):
+        self.calls.append(("physical", Path(out_folder), rate_nm_s, t0_s, t_end_s))
         t0 = t0_s if t0_s is not None else (0. if rate_nm_s is not None else None)  # as the toolkit writes it
-        summary = dict(PHYSICAL_SUMMARY, thickness=dict(PHYSICAL_SUMMARY["thickness"], rate_nm_s=rate_nm_s, t0_s=t0))
+        summary = dict(PHYSICAL_SUMMARY, thickness=dict(PHYSICAL_SUMMARY["thickness"], rate_nm_s=rate_nm_s, t0_s=t0,
+                                                        t_end_s=t_end_s, t_end_given=t_end_s is not None))
         rows = PHYSICAL_ROWS
         if self.literature:
-            summary["literature"] = dict(LITERATURE, rate_nm_s=rate_nm_s) if rate_nm_s is not None else NEEDS_RATE
+            summary["literature"] = (dict(LITERATURE, rate_nm_s=rate_nm_s, t_end_s=t_end_s) if rate_nm_s is not None
+                                     else NEEDS_RATE)
             rows = LITERATURE_ROWS if rate_nm_s is not None else PHYSICAL_ROWS
-        write_table(Path(out_folder), "structure_physical", rows, summary)
+        write_table(Path(out_folder), "structure_physical", nominal_rows(rows, rate_nm_s, t0, t_end_s), summary)
         return Path(out_folder) / "structure_physical.csv"
 
 

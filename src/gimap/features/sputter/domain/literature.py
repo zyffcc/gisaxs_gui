@@ -5,11 +5,14 @@ The toolkit writes it with a deposition rate into ``structure_physical.csv`` (``
 ``structure_physical_summary.json`` (``literature``: the percolation, the published band, reference curves and the
 checks). As in the P03 in-situ GISAXS studies, R is not fitted: it follows from the nominal thickness δ and the
 spacing D = 2π/q* of the direct peak by mass balance for hemispheres (h = R) on a hexagonal lattice,
-δ = 2.418·R³/D². It agrees with the literature by construction; the independent tests are D(δ), the percolation δ
-against the published band and the network's coverage and mass balance.
+δ = 2.418·R³/D². δ = rate × (t − t0) up to the end of the deposition t_end when it is given, constant after it. It
+agrees with the literature by construction; the independent tests are D(δ), the percolation δ against the published
+band and the network's coverage and mass balance.
 
-The ``literature`` explanation shows these values as R and D (grade ``Lit``); after the percolation the windows
-count as film: D = 2π/q* stays, R is not given. That is this page's choice (molecular dynamics, Abr16, finds that R
+The page's method is the network: its physical path is always the default explanation. The ``literature``
+explanation is a check of it, offered second (and in the Literature tab), never the default. It shows these values
+as R and D (grade ``Lit``); after the percolation the windows count as film: D = 2π/q* stays, R is not given. That
+is this page's choice (molecular dynamics, Abr16, finds that R
 loses its island meaning once a network forms); the P03 studies go on reporting R and 2R/D after it. The
 percolation's interval holds the scatter of the windows and the errors of the rate and t0 (the toolkit's
 ``rate_error`` and ``t0_error_s``); when 2R/D may reach 1 within them but need not, the percolation is not
@@ -30,9 +33,10 @@ LITERATURE_COLUMNS = {"R_nm": "R_lit_nm", "D_nm": "D_lit_nm", "R_trend_nm": "R_l
 NOT_LITERATURE = ("film", "L_TS_nm", "burial_nm_conditional", "thickness_nm_conditional", "sigma_log", "spacing_disorder",
                   "D_over_direct", "D_direct_check")
 METHOD_PARAGRAPH = (
-    "<b>Literature method (mass balance).</b> As in the P03 in-situ GISAXS studies, R is not fitted: it follows from "
-    "the nominal thickness δ = rate × (t − t0) and the spacing D = 2π/q* of the direct peak by mass balance for "
-    "hemispheres (h = R) on a hexagonal lattice, δ = 2.418·R³/D² (grade <b>Lit</b>). It agrees with the literature by "
+    "<b>Literature method (mass balance), a check of the network.</b> As in the P03 in-situ GISAXS studies, R is not "
+    "fitted: it follows from the nominal thickness δ = rate × (t − t0) (constant after the end of the deposition) and "
+    "the spacing D = 2π/q* of the direct peak by mass balance for hemispheres (h = R) on a hexagonal lattice, "
+    "δ = 2.418·R³/D² (grade <b>Lit</b>). It agrees with the literature by "
     "construction; the Literature tab shows the independent tests (D against δ, the percolation against the published "
     "band, the network's 2R/D and mass balance). The simulation-based typical errors do not apply: D = 2π/q* can "
     "be off by more than 40% for D &gt; 10 nm once coalescence starts, and R follows D as D^(2/3) and the rate as "
@@ -67,13 +71,9 @@ def block(summary: dict) -> dict:
 
 
 def literature_available(summary: dict) -> bool:
-    """The literature method has values (a rate was given and enough windows show the metal's peak)."""
+    """The literature method has values (a rate was given and enough windows show the metal's peak): it is offered
+    as a check of the network, after the physical path."""
     return block(summary).get("status") == "ok"
-
-
-def literature_default(summary: dict) -> bool:
-    """The literature method is the default explanation: a rate was given and it has enough island windows."""
-    return literature_available(summary) and block(summary).get("default_ready") is True
 
 
 def _float(value) -> Optional[float]:
@@ -269,6 +269,6 @@ TEMPLATES = (METHOD_PARAGRAPH, PERCOLATION_AT, PERCOLATION_UNDETERMINED, PERCOLA
 """The texts this module writes (the interface translates them)."""
 
 __all__ = ["LITERATURE_GRADE", "TEMPLATES", "VERDICT_COLOURS", "VERDICT_MARKS", "block", "checks_html",
-           "literature_available", "literature_default", "literature_paragraphs", "literature_rows", "onset_of",
+           "literature_available", "literature_paragraphs", "literature_rows", "onset_of",
            "percolation", "percolation_errors", "percolation_last_time", "percolation_sentence", "percolation_short",
            "percolation_state", "verdict_counts"]

@@ -11,6 +11,9 @@ after it; this tool keeps D = 2*pi/q* after the percolation but gives no R there
 finds that R loses its island meaning once a network forms). This module works per window of
 structure_physical.csv when a deposition rate is given:
 
+- delta = rate*(min(t, t_end) - t0): the shutter is closed by hand and a scan can go on after the deposition, so
+  with a given end of the deposition t_end, delta stays at rate*(t_end - t0) in the windows after it and the method
+  uses that delta there (the notes say so). Without t_end the deposition lasts to the end of the scan.
 - D_lit_nm = 2*pi/q* (D_corr_nm) only where a resolved peak exists. Peaks that probably belong to the host
   are marked (lit_status host_peak) and not used: a peak before the deposition starts, a peak more than
   host_peak_factor above every literature D(delta) at its delta. A peak more than a factor 2 above the median of
@@ -184,6 +187,8 @@ NOTE_RATE = ('delta = rate*(t - t0) with the given rate ({rate} nm/s), e.g. from
              'The percolation interval allows the rate ±{rate_error}% and t0 ±{t0_error} s.')
 NOTE_T0 = ('t0 not given: assumed 0 s (the first frame); delta is an upper bound if the deposition started at or '
            'after the first frame, and each 1 s of error in t0 shifts delta by {rate} nm.')
+NOTE_T_END = ('The deposition ended at t_end = {t_end} s (given): delta = rate*(t_end - t0) = {delta} nm stays constant '
+              'in the {count} windows after it, and the literature method uses this delta there.')
 NOTE_D_PEAK = 'D = 2*pi/q* can be off by more than 40% for D > 10 nm once coalescence starts (Hod17).'
 NOTE_STICKING = ('The condensation (sticking) coefficient of these metals on these polymers is not known; the '
                  'literature method assumes that all deposited metal stays on the surface.')
@@ -201,7 +206,7 @@ TEMPLATES = (NEEDS_RATE, TOO_FEW, METHOD, *REASON.values(), *TITLE.values(), M_N
              N_SHAPE_ALSO, M_TS, M_TS_NONE_SLACK, M_TS_NONE, N_TS_MEANING, N_TS_NOT_EST, M_NET_SIZE, M_NET_FEW, E_NET,
              N_NET_INDEPENDENT, N_COVERAGE, N_NET_ONE_BAND, M_ETA, E_ETA, N_ETA_LOW, N_ETA_HIGH, N_ETA_SHARED, M_FILM,
              M_FILM_FEW, M_FILM_NOT_ID, E_FILM, N_FILM, NOTE_CONSTRUCTION, NOTE_SHAPE, NOTE_RATE, NOTE_T0,
-             NOTE_D_PEAK, NOTE_STICKING, NOTE_CHAMBER, NOTE_CU, NOTE_HOST_PEAKS, HOST_UNKNOWN, HOST_NO_DATA,
+             NOTE_T_END, NOTE_D_PEAK, NOTE_STICKING, NOTE_CHAMBER, NOTE_CU, NOTE_HOST_PEAKS, HOST_UNKNOWN, HOST_NO_DATA,
              HOST_INCLUDED)
 """Every sentence this module writes into the summary and the table (filled with str.format)."""
 OXIDES = {'si', 'sio2', 'siox', 'sio', 'silicon', 'tio2', 'al2o3', 'oxide', 'glass', 'quartz', 'a-c', 'ito', 'sapphire'}
@@ -346,7 +351,8 @@ def bootstrap_trends(t_fit, e, fit, t_span, block, rng, n=BOOTSTRAP):
 
 def jumps(t, D, idx, t0):
     """Peaks (of idx, in time order) more than a factor 2 above the median of the preceding kept peaks, beyond the
-    growth delta allows since t0 (D grows at most as fast as delta in every published D(delta))."""
+    growth delta allows since t0 (D grows at most as fast as delta in every published D(delta)). t: the deposition
+    times, min(t, t_end)."""
     kept, out = [], []
     for i in idx:
         if len(kept) >= 3:
@@ -427,6 +433,8 @@ def _crossing_at(t_sp, trend_sp, rate, t0, f=1., start=0.):
 def percolation_estimate(t_sp, trend_sp, boots, rate, t0, rate_error, t0_error, f=1., start=0.):
     """The percolation with its 68 % interval over the noise (boots) and the rate and t0 errors.
 
+    t_sp are the deposition times of the windows, min(t, t_end): delta = rate*(t_sp - t0) stays constant after the
+    end of the deposition (the trends trend_sp and boots are taken at the windows' own times).
     The crossing comes earliest with a higher rate and an earlier t0 (every delta larger) and latest with a lower
     rate and a later t0; the lower end is the 16 % quantile of the resampled crossings at the first setting, the
     upper end the 84 % quantile at the second (infinite when 2R/D does not reach 1 in more resamples). Only windows
@@ -468,7 +476,8 @@ def percolation_estimate(t_sp, trend_sp, boots, rate, t0, rate_error, t0_error, 
 
 # ------------------------------------------------------------------------------------------- the table --
 def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=None, onset=None, period=None,
-                     teq_factor=None, config=None, seed=0, rate_error=None, t0_error_s=None, film_identifiable=False):
+                     teq_factor=None, config=None, seed=0, rate_error=None, t0_error_s=None, film_identifiable=False,
+                     t_end_s=None):
     """(columns per window, summary) of the literature method for one series sorted by time.
 
     rows: one dict per window with D_corr_nm, feature_status, no_data (bool), kind ('islands', 'film',
@@ -477,7 +486,8 @@ def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=N
     (relative) and t0_error_s widen the percolation interval (defaults in the config's 'uncertainty': a t0 that
     is not given, and so assumed at the first frame, gets the larger error).
     film_identifiable: the TS film thickness is a measurement (it is not with the current network: the film
-    check is then not testable).
+    check is then not testable). t_end_s: the end of the deposition (s); delta stays at rate*(t_end - t0) after it
+    (None: the deposition lasts to the end of the scan).
     """
     cfg = config or load_config()
     n = len(rows)
@@ -492,7 +502,10 @@ def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=N
     t0_error_s = float(t0_error_s)
     if not 0. <= rate_error < 1. or t0_error_s < 0.:
         raise ValueError('rate error must be in [0, 1) and t0 error >= 0 s')
-    delta = rate_nm_s * (t - t0) if has_rate else np.full(n, np.nan)
+    if t_end_s is not None and not t_end_s > t0:
+        raise ValueError('the end of the deposition t_end must be after its start t0 (s)')
+    t_dep = np.minimum(t, t_end_s) if t_end_s is not None else t  # deposition time: delta stays after t_end
+    delta = rate_nm_s * (t_dep - t0) if has_rate else np.full(n, np.nan)
     D = np.array([r.get('D_corr_nm') if (r.get('D_corr_nm') and r.get('feature_status') in PEAK and not r.get('no_data'))
                   else np.nan for r in rows], float)
     status = ['no_data' if r.get('no_data') else 'no_peak' for r in rows]
@@ -527,7 +540,7 @@ def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=N
         return 'host_match' if (D_host and abs(math.log(D[i] / D_host)) <= HOST_MATCH) else other
 
     # jumps far above the preceding peaks (an isotonic fit would absorb them), then peaks far from the trend
-    for i in jumps(t, D, [i for i in range(n) if status[i] == 'islands'], t0):
+    for i in jumps(t_dep, D, [i for i in range(n) if status[i] == 'islands'], t0):
         status[i] = host_or(i, 'jump')
     fit_idx = [i for i in range(n) if status[i] == 'islands']
     t_fit = fit = None
@@ -563,7 +576,8 @@ def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=N
         residual = local_scatter(np.log(D[fit_idx]), max(2, block // 2))
         boots = bootstrap_trends(t_fit, residual, fit, t_sp, block, np.random.default_rng(seed))
         start = cfg.get('nucleation_delta_nm', .4)
-        est = percolation_estimate(t_sp, trend_sp, boots, rate_nm_s, t0, rate_error, t0_error_s, start=start)
+        t_dep_sp = t_dep[idx_span]
+        est = percolation_estimate(t_dep_sp, trend_sp, boots, rate_nm_s, t0, rate_error, t0_error_s, start=start)
         positive = delta[idx_span] > start
         perc.update(state=est['state'], nominal_delta_nm=est['delta_nm'], max_two_R_over_D_trend=est['max_ratio'],
                     near_one_delta_nm=est['near_one_delta_nm'],
@@ -579,8 +593,8 @@ def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=N
             perc.update(interval_delta_nm=[est['low_nm'], est['high_nm']], interval_time_s=[est['low_s'], est['high_s']])
         f = (cfg['shape'].get(model) or {}).get('f')
         if model == 'Cu' and f:
-            shape = dict(f=f, **percolation_estimate(t_sp, trend_sp, boots, rate_nm_s, t0, rate_error, t0_error_s,
-                                                     f=f, start=start))
+            shape = dict(f=f, **percolation_estimate(t_dep_sp, trend_sp, boots, rate_nm_s, t0, rate_error,
+                                                     t0_error_s, f=f, start=start))
     # per-window values
     for i in range(n):
         c = columns[i]
@@ -614,7 +628,8 @@ def literature_table(times, rows, *, metal, polymer=None, rate_nm_s=None, t0_s=N
         c['lit_status'] = shown
         c['lit_reason'] = REASON.get(key, '')
     summary = _summary(cfg, columns, rows, status, t, delta, D, trend, span, fit_idx, host, D_host, perc, shape,
-                       has_rate, rate_nm_s, t0_s, model, metal, polymer, onset, teq_factor, enough, film_identifiable)
+                       has_rate, rate_nm_s, t0_s, model, metal, polymer, onset, teq_factor, enough, film_identifiable,
+                       t_end_s)
     return columns, summary
 
 
@@ -741,11 +756,12 @@ def _percolation_check(perc, shape, label, refs, entries, blo, bhi, expected, ho
     return _check('percolation', verdict, measured, expected, refs, notes + [shape_note, why], **values)
 
 
-def _onset_check(onset, rate, t0, last_delta, label, refs, blo, bhi, expected):
+def _onset_check(onset, rate, t0, last_delta, label, refs, blo, bhi, expected, t_end=None):
     onset = onset or {}
     when, interval = onset.get('film_onset_s'), onset.get('film_onset_interval_s')
     notes = [N_TS_MEANING]
-    to_delta = lambda s: rate * max(0., s - t0)  # noqa: E731
+    stop = math.inf if t_end is None else t_end
+    to_delta = lambda s: rate * max(0., min(s, stop) - t0)  # noqa: E731
     if when is not None:
         d = to_delta(when)
         lo, hi = (to_delta(interval[0]), to_delta(interval[1])) if interval else (d, d)
@@ -835,7 +851,7 @@ def _film_check(rows, delta, has_rate, identifiable):
 
 
 def _summary(cfg, columns, rows, status, t, delta, D, trend, span, fit_idx, host, D_host, perc, shape, has_rate, rate,
-             t0_s, model, metal, polymer, onset, teq_factor, enough, film_identifiable):
+             t0_s, model, metal, polymer, onset, teq_factor, enough, film_identifiable, t_end_s=None):
     label, keys, host_note = host_class(metal, polymer, cfg)
     entries, blo, bhi, s_lo, s_hi = band(keys, cfg, rate if has_rate else None)
     tol = tolerance(cfg)
@@ -852,7 +868,7 @@ def _summary(cfg, columns, rows, status, t, delta, D, trend, span, fit_idx, host
         checks.append(_percolation_check(perc, shape, label, refs, entries, blo, bhi, expected, host_note, shape_note,
                                          tol))
         last = float(np.nanmax(delta)) if np.isfinite(delta).any() else None
-        checks.append(_onset_check(onset, rate, t0_s or 0., last, label, refs, blo, bhi, expected))
+        checks.append(_onset_check(onset, rate, t0_s or 0., last, label, refs, blo, bhi, expected, t_end_s))
     else:
         checks.append(_check('percolation', 'not testable', M_NEEDS_RATE, expected, refs, [host_note]))
         checks.append(_check('TS_onset', 'not testable', M_NEEDS_RATE, expected, refs, [N_TS_MEANING]))
@@ -865,6 +881,9 @@ def _summary(cfg, columns, rows, status, t, delta, D, trend, span, fit_idx, host
                                       t0_error=fmt(perc['t0_error_s'])))
         if t0_s is None:
             notes.append(NOTE_T0.format(rate=fmt(rate)))
+        if t_end_s is not None:
+            notes.append(NOTE_T_END.format(t_end=fmt(t_end_s), delta=fmt(rate * (t_end_s - (t0_s or 0.))),
+                                           count=int(np.sum(t > t_end_s))))
     notes += [NOTE_D_PEAK, NOTE_STICKING, NOTE_CHAMBER]
     if host_note:
         notes.append(host_note)
@@ -882,11 +901,11 @@ def _summary(cfg, columns, rows, status, t, delta, D, trend, span, fit_idx, host
     island_windows = sum(1 for c in columns if c['R_lit_nm'] is not None)
     return dict(
         status=status_word, island_windows=island_windows,
-        default_ready=status_word == 'ok' and island_windows >= MIN_WINDOWS,
         message=NEEDS_RATE if not has_rate else ('' if enough else TOO_FEW.format(minimum=MIN_WINDOWS)),
         method=METHOD, metal=metal, polymer=polymer or None, host_class=label, host_note=host_note,
         rate_nm_s=rate if has_rate else None, t0_s=t0_s if t0_s is not None else (0. if has_rate else None),
-        t0_assumed=has_rate and t0_s is None, windows=dict(used=len(fit_idx), **counts),
+        t0_assumed=has_rate and t0_s is None, t_end_s=t_end_s, t_end_given=t_end_s is not None,
+        windows=dict(used=len(fit_idx), **counts),
         peak_phase_s=[fit_t[0], fit_t[-1]] if fit_t else None, host_peak_D_nm=D_host,
         percolation=perc if has_rate else None,
         band=dict(host_class=label, classes=keys, low_nm=blo, high_nm=bhi, rate_scaled_nm=[s_lo, s_hi] if s_lo else None,

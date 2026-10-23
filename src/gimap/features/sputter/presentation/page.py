@@ -62,9 +62,9 @@ class SputterPage(SputterGeometryMixin, SputterPredictMixin, SputterResultsMixin
         self._inspecting = False          # the header of the chosen folder is being read
         self._predict_queued = False      # Predict pressed while the header was read or the files rewritten
         self._result_owner = ""           # folder_key of the scan the result shown belongs to
-        self._drawn: Optional[tuple] = None   # (rate, t0) the result's physical files were drawn with
+        self._drawn: Optional[tuple] = None   # (rate, t0, end) the result's physical files were drawn with
         self._rebuild_values: Optional[tuple] = None
-        self._thickness_typed = False     # the rate or t0 was typed while the model ran
+        self._thickness_typed = False     # the rate, t0 or end was typed while the model ran
         self._status_parts = ("idle", [("Ready", {})], 0.0, True)
         self.trend = TrendPlot(self.trend_layout)
         self.sketch = SketchView()

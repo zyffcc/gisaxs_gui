@@ -1,11 +1,12 @@
 """Showing a result: the explanation chosen, the line under Predict, the trend, the table, the report and the
 sketch (a mixin of ``SputterPage``).
 
-The default explanation is the folder's first (``StructureFolderReader.available``): the literature method when a
-deposition rate makes it possible, else the physical path; the others stay one choice away (More options ▸
-Explanation). The Literature tab compares the series with published growth. A result knows the scan it was predicted from
-(``gimap_request.json``); the deposition-rate fields say what it was drawn with only while that scan is the
-one in the picker (a result of unknown scan: until another folder is chosen).
+The default explanation is the folder's first (``StructureFolderReader.available``): always the network's physical
+path. The literature method is a check of it, offered second when a deposition rate makes it possible (More options ▸
+Explanation, with the per-window choice and the exploratory ones); the Literature tab compares the series with
+published growth. A result knows the scan it was predicted from (``gimap_request.json``); the deposition fields
+(rate, t0, end) say what it was drawn with only while that scan is the one in the picker (a result of unknown scan:
+until another folder is chosen).
 """
 
 from __future__ import annotations
@@ -21,11 +22,11 @@ from ..application import (GRADES, StructureResult, folder_key, onset_of, percol
                            rotation_period)
 from .texts import message_text, note_text, stage_name, text
 
-CHOICES = {"literature": "Literature method (mass balance)", "physical": "Physical path (network)",
+CHOICES = {"physical": "Physical path (network)", "literature": "Literature method (mass balance)",
            "window": "Per window (network / refined)", "selected": "Learned selector",
            "sequence": "Time-consistent path (exploratory)"}
 THICKNESS_VARIANTS = ("physical", "literature")
-"""The explanations drawn from ``structure_physical*``: the deposition-rate fields say what they were drawn with."""
+"""The explanations drawn from ``structure_physical*``: the deposition fields say what they were drawn with."""
 TABLE_COLUMNS = (
     ("time_s", "Time (s)"), ("stage", "Stage (rule)"), ("stage_path", "Stage (path)"), ("module", "Model"),
     ("module_path", "Model (path)"), ("R_nm", "R (nm)"), ("R_grade", "R grade"),
@@ -54,13 +55,16 @@ D_CHECKS = {"consistent": "consistent"}
 D_OUTSIDE = "outside the simulated 90% range"
 
 
-def thickness_pair(rate, t0) -> tuple:
-    """What the physical files depend on: (rate, t0), t0 = 0 when a rate is given without one, nothing without
-    a rate (t0 alone changes nothing)."""
+def thickness_values(rate, t0, t_end) -> tuple:
+    """What the physical files depend on: (rate, t0, end of the deposition), t0 = 0 when a rate is given without
+    one, the end None when it is not given (the end of the scan), nothing without a rate (t0 and the end alone change
+    nothing)."""
     try:
-        return (None, None) if rate is None else (float(rate), float(t0 or 0.0))
+        if rate is None:
+            return None, None, None
+        return float(rate), float(t0 or 0.0), None if t_end is None else float(t_end)
     except (TypeError, ValueError):
-        return None, None
+        return None, None, None
 
 
 def _cell(row: dict, key: str) -> tuple[str, str]:
@@ -152,13 +156,13 @@ class SputterResultsMixin:
         return not picker or picker == self._result_owner
 
     def _show_thickness_fields(self) -> None:
-        """The rate and t0 fields say what the result shown was drawn with (when it is the picker's scan)."""
+        """The rate, t0 and end fields say what the result shown was drawn with (when it is the picker's scan)."""
         result = self.result
         thickness = result.summary.get("thickness") if result is not None else None
         if result is None or result.variant not in THICKNESS_VARIANTS or not isinstance(thickness, dict) \
                 or not self._result_is_for_picker():
             return
-        for field, key in ((self.rate, "rate_nm_s"), (self.t0, "t0_s")):
+        for field, key in ((self.rate, "rate_nm_s"), (self.t0, "t0_s"), (self.t_end, "t_end_s")):
             value = thickness.get(key)
             field.setText("" if value is None else f"{float(value):.6g}")
 
@@ -172,7 +176,7 @@ class SputterResultsMixin:
             self._result_owner = self._picker_key()
         thickness = result.summary.get("thickness")
         if result.variant in THICKNESS_VARIANTS and isinstance(thickness, dict):
-            self._drawn = thickness_pair(thickness.get("rate_nm_s"), thickness.get("t0_s"))
+            self._drawn = thickness_values(thickness.get("rate_nm_s"), thickness.get("t0_s"), thickness.get("t_end_s"))
         elif new_folder:
             self._drawn = None
         self.merge_button.setEnabled(self._busy is None)
@@ -242,4 +246,4 @@ class SputterResultsMixin:
             self.show_result(self.result)
 
 
-__all__ = ["CHOICES", "SputterResultsMixin", "TABLE_COLUMNS", "table_columns", "thickness_pair"]
+__all__ = ["CHOICES", "SputterResultsMixin", "TABLE_COLUMNS", "table_columns", "thickness_values"]

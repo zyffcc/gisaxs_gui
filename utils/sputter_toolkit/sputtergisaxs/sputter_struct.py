@@ -45,11 +45,13 @@ def _num(v):
 # ----------------------------------------------------------------- analysis --
 def analyze_scan(input_path, out, *, energy_ev, sdd_mm, alpha_i_deg, metal, polymer_expert, ts_expert,
                  beam_col=None, beam_row=None, sample_roll_deg=0., mask=None, bin_seconds=.5, workers=4,
-                 device='cpu', polymer_type='polymer', refined_dir=None, progress=None, rate_nm_s=None, t0_s=None):
+                 device='cpu', polymer_type='polymer', refined_dir=None, progress=None, rate_nm_s=None, t0_s=None,
+                 t_end_s=None):
     """Run the whole chain for one scan folder; returns the structure.csv path.
 
     Also writes structure_physical.csv / structure_physical_summary.json (see
-    sputter_physical); rate_nm_s and t0_s give the nominal deposited thickness.
+    sputter_physical); rate_nm_s, t0_s and t_end_s (the end of the deposition)
+    give the nominal deposited thickness.
     """
     from .polymer_dev_intake import prepare
     from .polymer_review_data import intake_rows, bin_ids, aggregate, measure_groups
@@ -88,7 +90,7 @@ def analyze_scan(input_path, out, *, energy_ev, sdd_mm, alpha_i_deg, metal, poly
     say(progress, 'network', 1., 'network done')
     csv_path = write_structure(binned, out, metal=metal, refined_dir=refined_dir)
     from .sputter_physical import write_physical
-    write_physical(out, binned=binned, rate_nm_s=rate_nm_s, t0_s=t0_s)
+    write_physical(out, binned=binned, rate_nm_s=rate_nm_s, t0_s=t0_s, t_end_s=t_end_s)
     say(progress, 'done', 1., f'{csv_path} ({time.monotonic() - t0:.0f} s)')
     return csv_path
 

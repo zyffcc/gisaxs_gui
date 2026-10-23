@@ -18,6 +18,10 @@ TOOLKIT_TEMPLATES = (
      'measured by GISAXS. t0 not given: assumed 0 s = the first frame; the start of the deposition is '
      'not known from the data (each 1 s of error in t0 shifts the nominal thickness by {rate} nm).'),
     'no deposition rate given: nominal thickness not computed',
+    ('deposition ended at t_end = {t_end} s (given): after it the nominal thickness stays at rate * (t_end - '
+     't0) = {thickness} nm.'),
+    ('t_end not given: the deposition is assumed to last to the end of the scan (the shutter is closed by '
+     'hand, and a scan can go on after it).'),
     ('not determined by GISAXS: the TS film thickness and metal fraction are not identifiable (in '
      "simulation the network's posterior equals its prior); see L_TS_nm for the lateral texture length"),
     ('first window of the TS-network part of the path (rule stage coalescence or coalescence-or-film '
@@ -177,6 +181,8 @@ TOOLKIT_TEMPLATES = (
      'it. The percolation interval allows the rate ±{rate_error}% and t0 ±{t0_error} s.'),
     ('t0 not given: assumed 0 s (the first frame); delta is an upper bound if the deposition started at '
      'or after the first frame, and each 1 s of error in t0 shifts delta by {rate} nm.'),
+    ('The deposition ended at t_end = {t_end} s (given): delta = rate*(t_end - t0) = {delta} nm stays '
+     'constant in the {count} windows after it, and the literature method uses this delta there.'),
     'D = 2*pi/q* can be off by more than 40% for D > 10 nm once coalescence starts (Hod17).',
     ('The condensation (sticking) coefficient of these metals on these polymers is not known; the '
      'literature method assumes that all deposited metal stays on the surface.'),

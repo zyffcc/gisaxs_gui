@@ -203,6 +203,7 @@ class SputterGeometryMixin:
         if "rate" in values:
             self.rate.setText(_shown(values.get("rate")))
             self.t0.setText(_shown(values.get("t0")))
+            self.t_end.setText(_shown(values.get("t_end")))
 
     def _entered(self, group: str) -> None:
         self._edited.add(group)
@@ -225,7 +226,8 @@ class SputterGeometryMixin:
                 "beam_col": _float(self.beam_col.text()), "beam_row": _float(self.beam_row.text()),
                 "roll": _float(self.roll.text()) or 0.0, "metal": self.metal.currentData(),
                 "polymer": self.polymer.currentText().strip() or "polymer", "mask": self.mask_picker.path(),
-                "window": self.bin_seconds.value(), "rate": _float(self.rate.text()), "t0": _float(self.t0.text())}
+                "window": self.bin_seconds.value(), "rate": _float(self.rate.text()), "t0": _float(self.t0.text()),
+                "t_end": _float(self.t_end.text())}
 
     def _request(self) -> AnalyzeRequest:
         v = self._values()
@@ -237,7 +239,8 @@ class SputterGeometryMixin:
             metal=v["metal"], energy_ev=energy * 1000. if is_energy and energy is not None else None,
             wavelength_nm=None if is_energy else energy, polymer_type=v["polymer"], beam_col=v["beam_col"],
             beam_row=v["beam_row"], sample_roll_deg=v["roll"], mask_file=Path(v["mask"]) if v["mask"] else None,
-            bin_seconds=v["window"], rate_nm_s=v["rate"], t0_s=v["t0"], results_root=Path(root) if root else None)
+            bin_seconds=v["window"], rate_nm_s=v["rate"], t0_s=v["t0"], t_end_s=v["t_end"],
+            results_root=Path(root) if root else None)
 
     def _remember(self, request: AnalyzeRequest) -> None:
         stored = remember(self._memory(), request.scan_folder, self._values())
@@ -248,12 +251,14 @@ class SputterGeometryMixin:
             stored.pop(old, None)
         self._store(stored)
 
-    def _remember_thickness(self, scan: Optional[Path], rate: Optional[float], t0: Optional[float]) -> None:
-        """A new deposition rate and t0 belong to the scan of the result they were applied to (when it is known)."""
+    def _remember_thickness(self, scan: Optional[Path], rate: Optional[float], t0: Optional[float],
+                            t_end: Optional[float]) -> None:
+        """A new deposition rate, t0 and end of the deposition belong to the scan of the result they were applied to
+        (when it is known)."""
         stored = self._memory()
         folders = dict(stored.get("folders") or {})
         if scan and folder_key(scan) in folders:
-            folders[folder_key(scan)] = dict(folders[folder_key(scan)], rate=rate, t0=t0)
+            folders[folder_key(scan)] = dict(folders[folder_key(scan)], rate=rate, t0=t0, t_end=t_end)
             stored["folders"] = folders
             self._store(stored)
 

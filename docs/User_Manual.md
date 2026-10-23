@@ -467,7 +467,7 @@ or dropping a `.gimap` file on the window opens it.
   With the first frame of the next session a note offers **Use It**. It is never applied without
   asking, since a new beamtime may need other settings.
 - **Sputter**: the values of each scan folder's last Predict (geometry, metal, polymer, mask, time window,
-  deposition rate and t0), the values used last (another folder does not take over the mask or the sample roll),
+  deposition rate, t0 and deposition end), the values used last (another folder does not take over the mask or the sample roll),
   the geometry presets and the result shown last (opened again at the next start); PyTorch is looked for afresh
   at every start.
 - The window size and position, the theme, the font size and the language are restored at the next
@@ -2046,28 +2046,33 @@ flat field taken in a range of days (one beamtime; it starts a week either side 
 filled in from the preset. The values of each folder and the presets are kept in GIMaP's settings (section 3.9).
 
 **More options**: the polymer, the sample roll, a detector mask (`.npy`; taken only from this folder's last
-Predict), the time window, the **Deposition rate (nm/s)** and the **Start of deposition t0 (s)** (both optional),
-**Save results in**, **Open Results Folder…**, **Add Refined Windows…** (physical-refinement windows computed
-elsewhere) and **Explanation**.
+Predict), the time window, the **Deposition rate (nm/s)**, the **Start of deposition t0 (s)** and the **Deposition
+end (s)** (all optional), **Save results in**, **Open Results Folder…**, **Add Refined Windows…** (physical-refinement
+windows computed elsewhere) and **Explanation**. The shutter is closed by hand, and a scan can go on after the
+deposition: give the time the deposition ended, and the nominal thickness stays at rate × (t_end − t0) after it.
+Empty, the deposition lasts to the end of the scan (the notes say so).
 
 **Results.** Each request gets its own folder, `sputter/<scan>-<code>` in the user data folder (or in **Save
 results in**); the code is made from the scan, every value the analysis depends on and the version of the
 model. The same request reuses its folder — a stopped run goes on where it stopped — and another geometry, or a
 GIMaP with another model, gets a new one (section 11).
 
-- **The literature method (mass balance)** is the default explanation once a deposition rate is given and enough
-  windows show the metal's correlation peak (see *The literature method* below). Without a rate the default is
-  **the physical path (network)**: one path of stages through time — pre-nucleation, islands, coalescence, film —
-  in which a film does not revert to islands. R and D are the network estimate in every island window (grade
-  **P**), so a value does not jump between a refined and a network source from window to window; refined values
-  stay in the Windows table. **Explanation** also offers the per-window choice (grades A, B, C), the learned
-  selector (L) and the time-consistent path (S, T) when the folder holds them.
+- The default explanation is always the model's own method, **the physical path (network)**: one path of stages
+  through time — pre-nucleation, islands, coalescence, film — in which a film does not revert to islands. R and D
+  are the network estimate in every island window (grade **P**), so a value does not jump between a refined and a
+  network source from window to window; refined values stay in the Windows table. Once a deposition rate is given
+  and enough windows show the metal's correlation peak, **Explanation** offers **the literature method (mass
+  balance)** second: a check of the network, never the default (see *The literature method* below). It also offers
+  the per-window choice (grades A, B, C), the learned selector (L) and the time-consistent path (S, T) when the
+  folder holds them.
 - **Size Trend**: each window's R and D as faint points and the smoothed trend as a line; × marks the direct
   2π/q*, a red circle a D that disagrees with it. The **Metal thickness** panel shows the island-volume equivalent
   thickness t_eq as a band — the metal in the visible islands, for hemispheres on a hexagonal arrangement; a
   conditional value, uncertain by about a factor 2–3 — and, when a deposition rate is given, the nominal thickness
-  rate × (t − t0). Film windows are shaded: *film: thickness not determined*. The film onset of the path is marked
-  with its interval. With a deposition rate the top axis also gives the nominal thickness δ = rate × (t − t0).
+  rate × (t − t0); after the **Deposition end** it stays at rate × (t_end − t0), a plateau, and the end is marked
+  (*deposition ended … s*). Film windows are shaded: *film: thickness not determined*. The film onset of the path is
+  marked with its interval. With a deposition rate the top axis also gives the nominal thickness δ = rate × (t − t0),
+  with ticks only up to the end of the deposition.
 - The result line under Predict gives the windows, the film onset (with the literature method: its percolation)
   and, when the intensity is modulated periodically, the *intensity modulation period (sample rotation?)*: often a
   rotating sample, but the data do not tell the source, so the page does not assert it. The path and the trend
@@ -2081,10 +2086,10 @@ GIMaP with another model, gets a new one (section 11).
 - **Structure Sketch**: a picture of the fitted model of one window (side and top view, one ruler for the
   series); film windows are drawn as a continuous film, without particles. A Cu result says on the picture, the
   saved image and the storyboard that it was read with the Ag model.
-- A new **Deposition rate** or **t0** after a run rewrites only the physical files of the result shown: no frame
-  is read again. When that result is of another scan than the one under **Data**, the values are kept for that
-  scan's next **Predict** instead. A rate given where there was none shows the default explanation afterwards
-  (the literature method), and taking it away goes back to the physical path.
+- A new **Deposition rate**, **t0** or **Deposition end** after a run rewrites only the physical files of the result
+  shown: no frame is read again. When that result is of another scan than the one under **Data**, the values are
+  kept for that scan's next **Predict** instead. The explanation shown stays; taking the rate away returns from the
+  literature method (it needs a rate) to the physical path.
 
 **The literature method.** The in-situ GISAXS studies of sputter growth at P03 (Schwartzkopf 2015, Bulut 2024,
 Gensch 2019/2021) do not fit R. They take the nominal thickness δ from a deposition rate (a quartz balance) and the
@@ -2092,10 +2097,13 @@ spacing D = 2π/q* of the direct correlation peak, and compute R by mass balance
 on a hexagonal lattice: δ = 2.418·R³/D², coverage θ = (2π/√3)(R/D)². Percolation is the first δ where 2R = D.
 Those studies go on reporting D, R and 2R/D after it; the page keeps D = 2π/q* after the percolation but gives no R
 there — its own choice, after molecular dynamics (Abraham 2016) that finds R loses its island meaning once a network
-forms. With a deposition rate the page does what the studies do (grade **Lit**):
+forms. With a deposition rate the page does what the studies do (grade **Lit**), as a check of the network's physical
+path:
 
 - δ = rate × (t − t0). Without **t0** the first frame is taken as the start of the deposition (an assumption, said
-  in the notes): δ is then an upper bound if the deposition started at or after the first frame.
+  in the notes): δ is then an upper bound if the deposition started at or after the first frame. After the
+  **Deposition end** δ stays at rate × (t_end − t0): the windows after it use that δ (the notes say how many), and
+  the **Literature** tab draws them at that δ.
 - D is 2π/q* only in windows with a resolved peak. Peaks that probably belong to the polymer (a peak before the
   deposition starts, a peak more than twice every published D at that δ, a jump or outlier at the polymer's
   spacing), peaks more than a factor 2 from the trend of D, jumps of more than a factor 2 above the preceding peaks
@@ -2753,7 +2761,7 @@ Version 0.1.0 is a pre-release. These limitations are known; each comes with wha
 | 1D Predict writes its run folders into the folder GIMaP was started from; they are not removed. | Delete old `AI_Fitting_Output/v5_…` folders yourself. |
 | **Sputter does not determine the thickness of a continuous film**, and a film with particles on it is not modelled (section 7.4). | Read the island-volume equivalent t_eq (island windows, conditional) and the nominal thickness from a deposition rate; compare with XRR, a quartz balance or a cross-section. |
 | **Sputter reads Cu with the Ag model** (the networks were trained for Ag and Au). | Use Cu results for reference only. |
-| **Sputter's literature method rests on the deposition rate and t0 you give** (GISAXS measures neither) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 7.4). | Give the rate at the sample position and t0 when you know it; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
+| **Sputter's literature method rests on the deposition rate, t0 and deposition end you give** (GISAXS measures none of them) and on D = 2π/q*. Its percolation interval assumes the rate within ±10% and t0 within ±2 s (±0.5 s when t0 is given) — engineering choices the page does not change — takes the deposition end as exact, and leaves out the systematic error of 2π/q* (more than 40% for D > 10 nm once coalescence starts). Without a deposition end the deposition is taken to last to the end of the scan. PNO, PSBMA and PEO have no published percolation data: the band of all polymers of the metal is used (section 7.4). | Give the rate at the sample position, and t0 and the deposition end when you know them; for other errors run the toolkit's `physical` command with `--rate-error` and `--t0-error`. Read a *not determined* percolation as not determined, and compare with other chambers' thresholds as a comparison, not a prediction. |
 | **Sputter's first Predict downloads PyTorch** (about 1.2 GB, needs the internet); the model runs on the CPU. | Without internet, install PyTorch by hand (section 13.7). |
 | Windows is the platform GIMaP is developed and tested on. TensorFlow runs on the CPU; a GPU set-up is not configured. | — |
 

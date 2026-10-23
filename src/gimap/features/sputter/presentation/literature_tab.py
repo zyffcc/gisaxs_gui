@@ -7,7 +7,9 @@ methods with the published range and the percolation line 2R = D; (3) the covera
 values; (4) the network's mass balance η = t_eq/δ. The published percolation band of the metal and host and the
 literature-method percolation with its interval (the scatter of the windows and the errors of the rate and t0) are
 marked on every panel; a percolation that is not determined is hatched from the earliest δ it may come at to the
-end of the peak phase. The TS onset of the network's path is marked too. Below: the checks with their verdicts
+end of the peak phase. The TS onset of the network's path is marked too. After the end of the deposition t_end (when
+it is given) δ stays at rate × (t_end − t0): later windows are drawn at that δ, and the header says so. The method is a
+check of the network's physical path (the page's default explanation). Below: the checks with their verdicts
 and references, the caveats and the references with their DOI. Without a deposition rate the tab says how to
 enter one. Texts are in the interface language (``refresh_language``); the page redraws on a theme switch.
 """
@@ -34,8 +36,8 @@ PERC_COLOUR = "#d62728"
 ONSET_COLOUR = "#6a3d9a"
 CURVE_COLOURS = ("#1f5fa8", "#7f7f7f", "#c49a00", "#8e3b8e", "#3a7d44", "#5a6f8c", "#a05050")
 EMPTY = "Predict a scan or open a results folder: its comparison with published growth appears here."
-OTHER_VARIANT = ("The comparison with the literature uses the physical files: choose Literature method or Physical "
-                 "path under More options ▸ Explanation.")
+OTHER_VARIANT = ("The comparison with the literature uses the physical files: choose Physical path or Literature "
+                 "method under More options ▸ Explanation.")
 OLD_RESULT = ("This result was made before the literature method existed: enter the deposition rate again under More "
               "options (or press Predict) to add it.")
 NEEDS_RATE = ("The literature method needs the deposition rate (for example from a quartz balance): enter it under More "
@@ -46,8 +48,10 @@ HEADER = ("<b>{metal} on {polymer}</b> · published percolation band of {host}: 
 INTERVAL = "68% interval (scatter, rate ±{rate_error}%, t0 ±{t0_error} s)"
 UNDETERMINED = "percolation not determined: from δ = {low} nm or later"
 T0_ASSUMED = " (assumed: the first frame)"
+T_END = " · deposition ended at t_end = {t_end} s: later windows stay at δ = {delta} nm"
 UNKNOWN_POLYMER = "a polymer of unknown type"
-TEMPLATES = (EMPTY, OTHER_VARIANT, OLD_RESULT, NEEDS_RATE, HEADER, INTERVAL, UNDETERMINED, T0_ASSUMED, UNKNOWN_POLYMER)
+TEMPLATES = (EMPTY, OTHER_VARIANT, OLD_RESULT, NEEDS_RATE, HEADER, INTERVAL, UNDETERMINED, T0_ASSUMED, T_END,
+             UNKNOWN_POLYMER)
 """Texts the tab says from a name (the interface translates them)."""
 
 
@@ -157,6 +161,9 @@ class LiteratureTab(QWidget):
                      high=_fmt(band.get("high_nm")), rate=_fmt(lit.get("rate_nm_s")), t0=_fmt(lit.get("t0_s")))
         if lit.get("t0_assumed"):
             words += tr(T0_ASSUMED)
+        rate, t0, t_end = _num(lit.get("rate_nm_s")), _num(lit.get("t0_s")) or 0.0, _num(lit.get("t_end_s"))
+        if rate is not None and t_end is not None:
+            words += text(T_END, t_end=_fmt(t_end), delta=_fmt(rate * (t_end - t0)))
         sentence = percolation_sentence(self.result.summary, text)
         return words + ("<br>" + sentence if sentence else "")
 
@@ -292,12 +299,12 @@ class LiteratureTab(QWidget):
         if at is not None:
             ax.axvline(at, color=PERC_COLOUR, lw=1, ls="--",
                        label=text("percolation (literature method) δ = {delta} nm", delta=_fmt(at)) if first else None)
-        rate, t0 = _num(lit.get("rate_nm_s")), _num(lit.get("t0_s")) or 0.0
+        rate, t0, t_end = _num(lit.get("rate_nm_s")), _num(lit.get("t0_s")) or 0.0, _num(lit.get("t_end_s"))
         onset, _interval = film_onset(result.summary)
         if rate and onset is not None and onset > t0:
-            ax.axvline(rate * (onset - t0), color=ONSET_COLOUR, lw=1, ls=":",
-                       label=text("TS onset of the network path δ = {delta} nm", delta=_fmt(rate * (onset - t0)))
-                       if first else None)
+            delta = rate * ((onset if t_end is None else min(onset, t_end)) - t0)  # δ stays after the deposition
+            ax.axvline(delta, color=ONSET_COLOUR, lw=1, ls=":",
+                       label=text("TS onset of the network path δ = {delta} nm", delta=_fmt(delta)) if first else None)
 
 
 __all__ = ["LiteratureTab", "TEMPLATES"]

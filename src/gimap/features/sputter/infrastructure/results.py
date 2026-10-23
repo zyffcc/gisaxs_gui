@@ -1,8 +1,8 @@
 """Read a toolkit result folder: ``structure*.csv`` and ``structure*_summary.json``.
 
-``literature`` and ``physical`` both come from ``structure_physical.csv``: the literature method (R from the
-nominal thickness and 2π/q*) is offered when the summary says it has values (a deposition rate was given), and is
-the default explanation when it also has enough island windows; otherwise ``physical`` comes first. The scan a
+``physical`` and ``literature`` both come from ``structure_physical.csv``. The network's physical path is always
+the default explanation (first); the literature method (R from the nominal thickness and 2π/q*) is a check of it,
+offered second when the summary says it has values (a deposition rate was given), never the default. The scan a
 result was predicted from is read from ``gimap_request.json`` (written by GIMaP before the model runs).
 """
 
@@ -15,11 +15,11 @@ from pathlib import Path
 from typing import Optional
 
 from ..application import NO_TABLE, StructureResult
-from ..domain import literature_available, literature_default, literature_rows, parse_row
+from ..domain import literature_available, literature_rows, parse_row
 from .toolkit import REQUEST_FILE
 
-VARIANTS = {"literature": ("structure_physical.csv", "structure_physical_summary.json"),
-            "physical": ("structure_physical.csv", "structure_physical_summary.json"),
+VARIANTS = {"physical": ("structure_physical.csv", "structure_physical_summary.json"),
+            "literature": ("structure_physical.csv", "structure_physical_summary.json"),
             "window": ("structure.csv", "structure_summary.json"),
             "selected": ("structure_selected.csv", "structure_selected_summary.json"),
             "sequence": ("structure_sequence.csv", "structure_sequence_summary.json")}
@@ -36,13 +36,13 @@ def _summary(path: Path) -> dict:
 
 class StructureFolderReader:
     def available(self, folder: Path) -> list[str]:
-        """Variants present in a result folder, in display order (the default first)."""
+        """Variants present in a result folder, in display order: the physical path (the default), the literature
+        method right after it when it has values (a check of the network), then the per-window choice, the learned
+        selector and the time-consistent path."""
         folder = Path(folder)
         present = [v for v, (table, _) in VARIANTS.items() if v != "literature" and (folder / table).is_file()]
-        if "physical" in present:
-            summary = _summary(folder / VARIANTS["physical"][1])
-            if literature_available(summary):
-                present.insert(0 if literature_default(summary) else 1, "literature")
+        if "physical" in present and literature_available(_summary(folder / VARIANTS["physical"][1])):
+            present.insert(present.index("physical") + 1, "literature")
         return present
 
     def read(self, folder: Path, variant: str = "physical") -> StructureResult:

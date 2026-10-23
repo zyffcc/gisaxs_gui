@@ -25,6 +25,12 @@ SPUTTER_TOOLKIT_ZH = {
         '} nm）。',
     'no deposition rate given: nominal thickness not computed':
         '没有给出沉积速率：未计算名义厚度',
+    'deposition ended at t_end = {t_end} s (given): after it the nominal thickness stays at rate * (t_end - t0) '
+    '= {thickness} nm.':
+        '沉积在 t_end = {t_end} s 结束（已给出）：此后名义厚度保持在 速率 * (t_end - t0) = {thickness} nm。',
+    't_end not given: the deposition is assumed to last to the end of the scan (the shutter is closed by hand, '
+    'and a scan can go on after it).':
+        '没有给出 t_end：假定沉积持续到扫描结束（挡板是手动关闭的，扫描可以在沉积结束后继续）。',
     'not determined by GISAXS: the TS film thickness and metal fraction are not identifiable (in simulation '
     "the network's posterior equals its prior); see L_TS_nm for the lateral texture length":
         'GISAXS 无法确定：TS 膜厚和金属分数不可辨识（在模拟中网络的后验等于先验）；横向纹理长度见 L_TS_n'
@@ -322,6 +328,10 @@ SPUTTER_TOOLKIT_ZH = {
     'after the first frame, and each 1 s of error in t0 shifts delta by {rate} nm.':
         '没有给出 t0：假定为 0 s（第一帧）；若沉积在第一帧或之后才开始，delta 是上限；t0 每差 1 s，d'
         'elta 差 {rate} nm。',
+    'The deposition ended at t_end = {t_end} s (given): delta = rate*(t_end - t0) = {delta} nm stays constant in '
+    'the {count} windows after it, and the literature method uses this delta there.':
+        '沉积在 t_end = {t_end} s 结束（已给出）：此后的 {count} 个时间窗中 delta = 速率*(t_end - t0) = {delta} nm '
+        '保持不变，文献方法在这些时间窗中使用这个 delta。',
     'D = 2*pi/q* can be off by more than 40% for D > 10 nm once coalescence starts (Hod17).':
         'D = 2*pi/q* 在聚并开始后、D > 10 nm 时误差可超过 40%（Hod17）。',
     'The condensation (sticking) coefficient of these metals on these polymers is not known; the literature '

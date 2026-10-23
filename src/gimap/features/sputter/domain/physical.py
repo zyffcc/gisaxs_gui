@@ -4,7 +4,8 @@
 ``table`` and ``physical`` commands) hold one stage path through time (pre-nucleation → islands → coalescence
 → film; a film does not revert to islands), the network estimate of R and D in every island window (grade P;
 no switching between refined and network values from window to window), smoothed trend lines, the
-island-volume equivalent thickness t_eq, the nominal thickness rate·(t − t0) when a deposition rate is given,
+island-volume equivalent thickness t_eq, the nominal thickness rate·(t − t0) when a deposition rate is given
+(constant after the end of the deposition t_end when it is given: the shutter is closed by hand),
 the film onset with its interval and the period of a periodic intensity modulation (possibly a sample rotation:
 the data do not tell its source).
 Written from English templates (``text``) like the rest of the reliability report; the toolkit's own notes go
@@ -19,6 +20,10 @@ from typing import Optional
 REVERSAL_ROWS = (("stage", "Stage steps back"), ("module_revert", "Film → islands"),
                  ("R_zigzag", "R zig-zags"), ("D_zigzag", "D zig-zags"))
 FILM_NOT_DETERMINED = "film: thickness not determined"
+NOMINAL = ("Nominal thickness = rate × (t − t0) with rate {rate} nm/s and t0 = {t0} s: what was deposited, not what "
+           "is measured.")
+NOMINAL_ENDED = ("Nominal thickness = rate × (t − t0) with rate {rate} nm/s and t0 = {t0} s until the deposition ended "
+                 "at t_end = {t_end} s, then constant at {thickness} nm: what was deposited, not what is measured.")
 
 
 def _seconds(value: Optional[float]) -> str:
@@ -38,6 +43,16 @@ def film_onset(summary: dict) -> tuple[Optional[float], Optional[tuple[float, fl
     except (TypeError, ValueError, IndexError):
         interval = None
     return onset, interval
+
+
+def deposition_end(summary: dict) -> Optional[float]:
+    """The end of the deposition t_end (s) the physical files were drawn with (None: not given, the deposition
+    lasts to the end of the scan)."""
+    try:
+        value = (summary.get("thickness") or {}).get("t_end_s")
+        return None if value is None else float(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 def rotation_period(summary: dict) -> Optional[float]:
@@ -66,10 +81,13 @@ def _thickness(summary: dict, text, note) -> list:
         "of about a factor 2–3, and it is not given in film windows.") + "</p>"]
     rate = thickness.get("rate_nm_s")
     if rate is not None:
-        t0 = thickness.get("t0_s")
-        lines.append("<p>" + text(
-            "Nominal thickness = rate × (t − t0) with rate {rate} nm/s and t0 = {t0} s: what was deposited, not what "
-            "is measured.", rate=f"{float(rate):.4g}", t0=_seconds(None if t0 is None else float(t0))) + "</p>")
+        t0 = None if thickness.get("t0_s") is None else float(thickness["t0_s"])
+        t_end = deposition_end(summary)
+        if t_end is None:
+            lines.append("<p>" + text(NOMINAL, rate=f"{float(rate):.4g}", t0=_seconds(t0)) + "</p>")
+        else:
+            lines.append("<p>" + text(NOMINAL_ENDED, rate=f"{float(rate):.4g}", t0=_seconds(t0), t_end=_seconds(t_end),
+                                      thickness=f"{float(rate) * max(0.0, t_end - (t0 or 0.0)):.3g}") + "</p>")
     else:
         lines.append("<p>" + text("Give the deposition rate (More options) to draw the nominal thickness "
                                   "rate × (t − t0).") + "</p>")
@@ -85,7 +103,7 @@ def _thickness(summary: dict, text, note) -> list:
             "(smaller clusters, embedded metal, a wetting layer) or that the hemisphere condition does not hold.",
             time=_seconds(mass.get("time_s")), teq=f"{float(mass.get('t_eq_nm') or 0):.3g}",
             nominal=f"{float(mass.get('nominal_nm') or 0):.3g}", ratio=f"{float(mass['ratio']):.2g}") + "</p>")
-    notes = [thickness.get(key) for key in ("t_eq_note", "nominal_note", "film_thickness_note")]
+    notes = [thickness.get(key) for key in ("t_eq_note", "nominal_note", "t_end_note", "film_thickness_note")]
     notes = [words for words in notes if isinstance(words, str) and words]
     if notes:
         lines.append("<ul>" + "".join(f"<li>{escape(note(words))}</li>" for words in notes) + "</ul>")  # the model's
@@ -133,4 +151,5 @@ def physical_paragraphs(result, text, note=lambda sentence: sentence) -> list:
     return lines
 
 
-__all__ = ["FILM_NOT_DETERMINED", "REVERSAL_ROWS", "film_onset", "physical_paragraphs", "rotation_period"]
+__all__ = ["FILM_NOT_DETERMINED", "NOMINAL", "NOMINAL_ENDED", "REVERSAL_ROWS", "deposition_end", "film_onset",
+           "physical_paragraphs", "rotation_period"]

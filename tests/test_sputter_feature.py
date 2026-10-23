@@ -67,10 +67,31 @@ def test_the_physical_path_is_read_first_with_its_flags_and_thickness(tmp_path):
         assert words in html, words
 
 
-def test_the_literature_method_is_the_default_once_a_rate_makes_it_possible(tmp_path):
+def test_the_report_says_when_the_deposition_ended(tmp_path):
+    import json
+
+    folder = result_folder(tmp_path, physical=True)
+    summary_file = folder / "structure_physical_summary.json"
+    summary = json.loads(summary_file.read_text(encoding="utf-8"))
+    summary["thickness"].update(t_end_s=1.2, t_end_given=True, t_end_note="invented end note")
+    summary_file.write_text(json.dumps(summary), encoding="utf-8")
+    result = StructureFolderReader().read(folder, "physical")
+    from src.gimap.features.sputter.application import deposition_end
+
+    assert deposition_end(result.summary) == 1.2
+    html = reliability_report(result)
+    assert ("Nominal thickness = rate × (t − t0) with rate 0.2 nm/s and t0 = 0.0 s until the deposition ended at "
+            "t_end = 1.2 s, then constant at 0.24 nm") in html and "invented end note" in html
+    summary["thickness"].update(t_end_s=None, t_end_given=False)
+    summary_file.write_text(json.dumps(summary), encoding="utf-8")
+    result = StructureFolderReader().read(folder, "physical")
+    assert deposition_end(result.summary) is None and "until the deposition ended" not in reliability_report(result)
+
+
+def test_the_physical_path_stays_the_default_and_a_rate_offers_the_literature_method_as_its_check(tmp_path):
     reader = StructureFolderReader()
     folder = literature_folder(tmp_path / "lit")
-    assert reader.available(folder) == ["literature", "physical", "window"]
+    assert reader.available(folder) == ["physical", "literature", "window"]
     result = reader.read(folder, "literature")
     assert [r["R_nm"] for r in result.rows] == [None, 1.84, 2.3, None]
     assert [r["R_grade"] for r in result.rows] == [None, "Lit", "Lit", None] and result.counts("D")["Lit"] == 3
@@ -81,21 +102,27 @@ def test_the_literature_method_is_the_default_once_a_rate_makes_it_possible(tmp_
     assert result.rows[1]["sigma_log"] is None and result.rows[3]["L_TS_nm"] is None  # no network shape values
     assert result.column("R_trend_nm").value == [1.84, 2.3] and result.column("delta_nm").value == [0.1, 0.2, 0.3, 0.4]
     html = reliability_report(result)
-    for words in ("Literature method (mass balance)", "by construction", "Percolation (2R/D = 1) at δ = 0.35 nm, t = "
+    for words in ("Literature method (mass balance), a check of the network", "by construction",
+                  "Percolation (2R/D = 1) at δ = 0.35 nm, t = "
                   "1.75 s (68% interval 0.32–0.38 nm from the scatter of the windows, the rate ±10% and t0 ±2 s",
                   "1 consistent, 1 inconsistent, 1 not testable",
                   "Physical path of the network", "<b>Lit</b> literature method (mass balance)"):
         assert words in html, words
-    # The physical path stays one choice away and keeps the network's values.
+    # The physical path keeps the network's values, and the service opens it by default.
     physical = reader.read(folder, "physical")
     assert physical.counts("R")["P"] == 3 and physical.rows[1]["R_lit_nm"] == 1.84
-    # Without a rate the literature method is not offered; with too few windows it is offered, not as the default.
+    from src.gimap.features.sputter.bootstrap import create_sputter_service
+
+    service = create_sputter_service(reader=reader)
+    assert service.open(folder).variant == "physical" and service.open(folder, "literature").variant == "literature"
+    # Without a rate the literature method is not offered; a result of an older toolkit that still says
+    # default_ready does not change the order.
     assert reader.available(literature_folder(tmp_path / "none", rate=False)) == ["physical", "window"]
-    few = literature_folder(tmp_path / "few")
-    summary = __import__("json").loads((few / "structure_physical_summary.json").read_text(encoding="utf-8"))
-    summary["literature"]["default_ready"] = False
-    (few / "structure_physical_summary.json").write_text(__import__("json").dumps(summary), encoding="utf-8")
-    assert reader.available(few) == ["physical", "literature", "window"]
+    old = literature_folder(tmp_path / "old")
+    summary = __import__("json").loads((old / "structure_physical_summary.json").read_text(encoding="utf-8"))
+    summary["literature"]["default_ready"] = True
+    (old / "structure_physical_summary.json").write_text(__import__("json").dumps(summary), encoding="utf-8")
+    assert reader.available(old) == ["physical", "literature", "window"]
 
 
 def test_the_checks_and_the_references_are_written_for_the_tab(tmp_path):
@@ -248,6 +275,12 @@ def test_request_problems_are_explained(tmp_path):
     assert ok.problems() == []  # Cu is allowed (read with the Ag model)
     assert AnalyzeRequest(scan_folder=tmp_path, sdd_mm=1000., alpha_i_deg=.3, metal="Ag", energy_ev=9000.,
                           rate_nm_s=-1.).problems()
+    # The end of the deposition comes after its start (t0 = 0 when it is not given).
+    for t0, t_end, fine in ((3., 2., False), (3., 3., False), (None, 0., False), (None, 7.5, True), (3., 7.5, True)):
+        request = AnalyzeRequest(scan_folder=tmp_path, sdd_mm=1000., alpha_i_deg=.3, metal="Ag", energy_ev=9000.,
+                                 rate_nm_s=.2, t0_s=t0, t_end_s=t_end)
+        assert (request.problems() == []) is fine, (t0, t_end)
+        assert fine or request.problems() == ["The end of the deposition must be after its start t0 (or empty)."]
 
 
 def test_the_same_request_reuses_its_folder_and_another_geometry_gets_a_new_one(tmp_path):
@@ -257,8 +290,9 @@ def test_the_same_request_reuses_its_folder_and_another_geometry_gets_a_new_one(
     first = results_folder(request, root)
     assert first.parent == root and first.name.startswith("zz_invented_scan-") and len(first.name.split("-")[-1]) == 8
     assert scan_label(scan) == "zz_invented_scan"
-    same = AnalyzeRequest(scan_folder=scan, sdd_mm=1000., alpha_i_deg=.3, metal="Ag", energy_ev=9000., rate_nm_s=.2)
-    assert results_folder(same, root) == first  # a deposition rate does not change the analysis
+    same = AnalyzeRequest(scan_folder=scan, sdd_mm=1000., alpha_i_deg=.3, metal="Ag", energy_ev=9000., rate_nm_s=.2,
+                          t0_s=1., t_end_s=8.)
+    assert results_folder(same, root) == first  # a deposition rate, its start and its end do not change the analysis
     moved = AnalyzeRequest(scan_folder=scan, sdd_mm=1000., alpha_i_deg=.31, metal="Ag", energy_ev=9000.)
     assert results_folder(moved, root) != first
     elsewhere = AnalyzeRequest(scan_folder=scan, sdd_mm=1000., alpha_i_deg=.3, metal="Ag", energy_ev=9000.,
@@ -291,7 +325,7 @@ def test_a_new_model_gets_a_new_results_folder(tmp_path):
 INFO = ScanInfo(Path("C:/invented/zz_scan_a"), frames=3, serial="99-0001", flat_field="FF_x99_E9000_T4500.tif",
                 timestamp="2030-01-05T10:00:00", energy_kev_hint=9.0, energy_hint_source="header")
 GEOMETRY = dict(energy_kind="energy", energy=9.5, sdd=1234.0, alpha=0.3, beam_col=100.5, beam_row=200.5, roll=0.1,
-                metal="Au", polymer="PS", mask="", window=0.5, rate=0.2, t0=1.0)
+                metal="Au", polymer="PS", mask="", window=0.5, rate=0.2, t0=1.0, t_end=8.5)
 
 
 def test_header_energy_and_last_used_values_say_where_they_come_from():
@@ -299,6 +333,7 @@ def test_header_energy_and_last_used_values_say_where_they_come_from():
     assert filled.values["energy"] == 9.0 and filled.sources["xray"].kind == "header"
     assert filled.values["sdd"] == 1234.0 and filled.sources["sdd"].kind == "last"
     assert filled.values["metal"] == "Au" and filled.values["rate"] is None  # a rate belongs to its own folder
+    assert filled.values["t0"] is None and filled.values["t_end"] is None  # and so do its start and its end
     empty = prefill(INFO, {})
     assert empty.sources["sdd"].kind == "missing" and empty.sources["beam"].kind == "auto"
 
@@ -308,7 +343,7 @@ def test_a_folder_keeps_its_own_values_and_the_header_hint_is_shown_beside_them(
     filled = prefill(INFO, memory)
     assert filled.values["energy"] == 9.5 and filled.sources["xray"].kind == "folder"
     assert filled.sources["xray"].hint_kev == 9.0  # differs by more than 0.5 %
-    assert filled.values["rate"] == 0.2 and filled.values["t0"] == 1.0
+    assert filled.values["rate"] == 0.2 and filled.values["t0"] == 1.0 and filled.values["t_end"] == 8.5
 
 
 def test_a_preset_matches_by_serial_flat_field_and_date():
@@ -607,7 +642,7 @@ def test_the_toolkit_gets_the_request_converts_the_beam_centre_and_reports_error
     kit = BundledToolkit(home, sys.executable)
     assert kit.problem() == ""
     request = AnalyzeRequest(scan_folder=tmp_path, sdd_mm=1000., alpha_i_deg=.3, metal="Cu", energy_ev=9000.,
-                             beam_col=100.5, beam_row=200.5, rate_nm_s=.2, t0_s=3.)
+                             beam_col=100.5, beam_row=200.5, rate_nm_s=.2, t0_s=3., t_end_s=9.5)
     lines = []
     out = tmp_path / "out"
     kit.analyze(request, out, lines.append, lambda: False)
@@ -616,15 +651,18 @@ def test_the_toolkit_gets_the_request_converts_the_beam_centre_and_reports_error
     assert args[0] == "analyze" and float(value("--beam-col")) == 100.0 and float(value("--beam-row")) == 200.0
     assert value("--device") == "cpu" and 1 <= int(value("--workers")) <= 8 and value("--metal") == "Cu"
     assert float(value("--rate-nm-s")) == .2 and float(value("--t0-s")) == 3. and value("--out") == str(out)
+    assert float(value("--t-end-s")) == 9.5
     assert lines[0].startswith("SPUTTER_PROGRESS") and "plain line" in lines and not any("FutureWarning" in l for l in lines)
     record = json.loads((out / "gimap_request.json").read_text(encoding="utf-8"))
     assert record["request"]["alpha_i_deg"] == .3 and record["device"] == "cpu"
     assert record["digest"] == request.digest(kit.model_id()) and record["model_id"] == kit.model_id()
-    assert record["scan_folder"] == str(tmp_path)
+    assert record["scan_folder"] == str(tmp_path) and record["request"]["t_end_s"] == 9.5
     kit.physical(out, None, None, lines.append)
     assert json.loads((home / "scripts" / "args.json").read_text()) == ["physical", "--folder", str(out)]
     kit.physical(out, .5, 2., lines.append)
     assert json.loads((home / "scripts" / "args.json").read_text())[-4:] == ["--rate-nm-s", "0.5", "--t0-s", "2.0"]
+    kit.physical(out, .5, 2., lines.append, t_end_s=6.)
+    assert json.loads((home / "scripts" / "args.json").read_text())[-2:] == ["--t-end-s", "6.0"]
     (home / "scripts" / "sputter_struct_v1.py").write_text("import sys\nprint('boom', flush=True)\nsys.exit(2)\n",
                                                           encoding="utf-8")
     with pytest.raises(ToolkitFailed) as failed:

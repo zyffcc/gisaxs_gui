@@ -5,14 +5,16 @@ line, so a single window's jump is visible but does not pull the eye. The other 
 with its simulation-based error bar, coloured by grade. The Metal thickness panel shows the island-volume
 equivalent thickness t_eq as a band (conditional: hemispheres h = R on a hexagonal arrangement), the nominal
 thickness rate·(t − t0) when a deposition rate is given, and shades the film windows: there the thickness is
-not determined. The film onset of the physical path is marked with its interval on every panel.
+not determined. The film onset of the physical path is marked with its interval on every panel. When the end of the
+deposition t_end is given (the shutter is closed by hand; a scan can go on after it) the nominal thickness stays at
+rate·(t_end − t0) after it (a plateau) and t_end is marked on the thickness panel.
 
 The literature explanation draws R and D of the literature method the same way (grade Lit: R from the nominal
 thickness δ and 2π/q* by mass balance); its thickness panel shows δ only (the islands hold it by construction), the
 windows after its percolation are shaded (D = 2π/q* goes on, R is not given) and the percolation is marked with its
 interval (the scatter of the windows and the errors of the rate and t0). A percolation that is not determined is
 shaded from the earliest time it may come at to the end of the peak phase it was looked for in. With a deposition
-rate the top axis also gives δ = rate × (t − t0).
+rate the top axis also gives δ = rate × (t − t0), with ticks only up to the end of the deposition (δ stays there).
 """
 
 from __future__ import annotations
@@ -23,8 +25,8 @@ from PyQt5.QtWidgets import QLabel, QSizePolicy
 
 from src.gimap.app.presentation.i18n import tr
 
-from ..application import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, StructureResult, onset_of, percolation_errors,
-                           percolation_last_time)
+from ..application import (FILM_NOT_DETERMINED, GRADES, LITERATURE_GRADE, StructureResult, deposition_end, onset_of,
+                           percolation_errors, percolation_last_time)
 from .texts import text
 
 COLORS = {"A": "#1f5fa8", "B": "#7fa3d6", "C": "#d07a10", "S": "#2a8a3e", "T": "#c0392b", "L": "#6a3d9a",
@@ -37,11 +39,13 @@ AFTER_PERCOLATION = "after percolation: D = 2π/q* goes on, R is not given (film
 INTERVAL_LABEL = "68% interval of the percolation (scatter, rate ±{rate_error}%, t0 ±{t0_error} s)"
 UNDETERMINED_LABEL = "percolation not determined: from {time} s or later"
 BY_CONSTRUCTION = "literature method: the islands hold δ by construction"
+DEPOSITION_END = "deposition ended {time} s"
 SMOOTHED = ("physical", "literature")
 
 
 def thickness_axis(result):
-    """(rate, t0) of the nominal thickness δ = rate·(t − t0) of a result, or None without a rate."""
+    """(rate, t0, t_end) of the nominal thickness δ = rate·(min(t, t_end) − t0) of a result (t_end None: the
+    deposition lasts to the end of the scan), or None without a rate."""
     thickness = result.summary.get("thickness") if result is not None else None
     if not isinstance(thickness, dict) or result.variant not in SMOOTHED:
         return None
@@ -50,7 +54,7 @@ def thickness_axis(result):
         t0 = float(thickness.get("t0_s") or 0.0)
     except (TypeError, ValueError):
         return None
-    return (rate, t0) if rate > 0 else None
+    return (rate, t0, deposition_end(result.summary)) if rate > 0 else None
 
 
 class TrendPlot:
@@ -99,6 +103,7 @@ class TrendPlot:
         onset, interval, kind = onset_of(result)
         onset_label = "percolation {time} s (literature method)" if kind == "percolation" else "film onset {time} s"
         times = [r.get("time_s") for r in result.rows if r.get("time_s") is not None]
+        ended = deposition_end(result.summary)
         for ax, (name, label, title) in zip(axes, panels):
             for low, high in spans:
                 ax.axvspan(low, high, color=FILM_SHADE, alpha=.13, lw=0, zorder=0)
@@ -113,6 +118,9 @@ class TrendPlot:
                 self._physical(ax, result, name)
             else:
                 self._graded(ax, result, name)
+            if name == "thickness" and ended is not None:  # the nominal thickness stays constant after it
+                ax.axvline(ended, color=TREND_COLORS["nominal"], lw=1, ls="-.",
+                           label=text(DEPOSITION_END, time=f"{ended:.1f}"))
             first = name == panels[0][0]
             if interval is not None and times:
                 end = (percolation_last_time(result.summary) if kind == "percolation" else None) or max(times)
@@ -133,8 +141,10 @@ class TrendPlot:
         axes[-1].set_xlabel(tr("time (s)"))
         axis = thickness_axis(result)
         if axis is not None:
-            rate, t0 = axis
+            rate, t0, t_end = axis
             top = axes[0].secondary_xaxis("top", functions=(lambda t: rate * (t - t0), lambda d: d / rate + t0))
+            if t_end is not None:  # δ stays at rate × (t_end − t0) after the deposition ended
+                _ticks_up_to(top, rate * (t_end - t0))
             top.set_xlabel(tr("δ, nominal thickness (nm)"), fontsize=8)
             top.tick_params(labelsize=7)
 
@@ -232,6 +242,20 @@ def _direct(ax, result: StructureResult) -> None:
         ax.plot(direct.time, direct.value, "x", ms=3, color="0.5", label=tr("2π/q* (direct)"))
 
 
+def _ticks_up_to(axis, limit: float) -> None:
+    """Ticks of the top δ axis only up to ``limit``, the thickness at the end of the deposition: the axis goes on
+    linearly in time, but no more metal was deposited after it."""
+    import numpy as np
+    from matplotlib.ticker import AutoLocator
+
+    class Deposited(AutoLocator):
+        def tick_values(self, vmin, vmax):
+            values = np.asarray(super().tick_values(vmin, vmax))
+            return values[values <= limit + 1e-9 * abs(limit)]
+
+    axis.xaxis.set_major_locator(Deposited())
+
+
 def _padded(spans: list, times: list) -> list:
     """Film runs widened by half a window on each side (a run of one window is still seen)."""
     times = sorted(t for t in times if t is not None)
@@ -259,7 +283,8 @@ def _positive(ax) -> bool:
     return bool(ax.collections)
 
 
-TEMPLATES = (AFTER_PERCOLATION, BY_CONSTRUCTION, INTERVAL_LABEL, UNDETERMINED_LABEL)
+TEMPLATES = (AFTER_PERCOLATION, BY_CONSTRUCTION, DEPOSITION_END, INTERVAL_LABEL, UNDETERMINED_LABEL)
 """Texts the trend says from a name (the interface translates them)."""
 
-__all__ = ["AFTER_PERCOLATION", "BY_CONSTRUCTION", "COLORS", "TEMPLATES", "TrendPlot", "thickness_axis"]
+__all__ = ["AFTER_PERCOLATION", "BY_CONSTRUCTION", "COLORS", "DEPOSITION_END", "TEMPLATES", "TrendPlot",
+           "thickness_axis"]

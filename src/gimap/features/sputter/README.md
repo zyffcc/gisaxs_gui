@@ -25,15 +25,22 @@ stated, window by window, for an in-situ sputter series on a polymer, and how fa
   number + flat field + date range), else (the energy) the header or NeXus hint, else the last values — not the
   sample roll (0, said as assumed) or the mask (`application/scan.py`: `prefill`, `remember`, `matching_preset`);
   each field says its source. Predict waits for the header of the folder in the picker and refuses a folder
-  without frames. A new deposition rate redraws the result shown only when it is of the picker's scan. The beam centre is
-  entered in GIMaP's pixel coordinates and converted to the toolkit's pixel-centre indices in `toolkit.py`.
-- **Explanations** (`StructureFolderReader`): `literature` (default with a deposition rate when the summary's
-  `literature.default_ready`: R_lit/D_lit of `structure_physical.csv` as R/D, grade Lit, film after its percolation
-  (D = 2π/q* goes on, R is not given), a percolation interval with the rate and t0 errors and a *not determined*
-  state; `domain/literature.py`), `physical` (default otherwise: one stage path, network R/D in every island window, grade
-  P, trends, t_eq, nominal thickness, film onset, intensity modulation period), `window`, `selected`, `sequence`. A
-  new deposition rate or t0 calls the toolkit's `physical` command only (a rate given or taken away opens the default
-  explanation); **Add Refined Windows…** calls `table` then `physical`.
+  without frames. A new deposition rate, t0 or deposition end redraws the result shown only when it is of the
+  picker's scan. The beam centre is entered in GIMaP's pixel coordinates and converted to the toolkit's pixel-centre
+  indices in `toolkit.py`.
+- **Explanations** (`StructureFolderReader`): `physical` (always the default: the network's method — one stage path,
+  network R/D in every island window, grade P, trends, t_eq, nominal thickness, film onset, intensity modulation
+  period), `literature` (second, when a deposition rate gives it values: a check of the network, never the default —
+  R_lit/D_lit of `structure_physical.csv` as R/D, grade Lit, film after its percolation (D = 2π/q* goes on, R is not
+  given), a percolation interval with the rate and t0 errors and a *not determined* state; `domain/literature.py`),
+  `window`, `selected`, `sequence`. A new deposition rate, t0 or deposition end calls the toolkit's `physical` command
+  only and keeps the explanation shown (without a rate the literature method gives way to the physical path);
+  **Add Refined Windows…** calls `table` then `physical`.
+- **Deposition end** (More options, optional, remembered per folder like the rate and t0; `AnalyzeRequest.t_end_s`,
+  `--t-end-s`, not part of the results folder's code): the shutter is closed by hand, so a scan can go on after the
+  deposition; the toolkit keeps the nominal thickness (and the literature method's δ) at rate·(t_end − t0) after it.
+  Size Trend draws the plateau, marks the end and puts no δ tick beyond it; the summary records `t_end_s` and
+  `t_end_given` (`deposition_end`).
 - **Literature** tab (`presentation/literature_tab.py`): D, 2R/D, coverage and η = t_eq/δ over δ against the
   published values the toolkit copies into the summary, the checks with verdicts and references, the caveats.
   Without a rate it says how to give one. The toolkit's sentences are translated by matching them against

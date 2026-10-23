@@ -30,9 +30,12 @@ writes one physical reading of the whole series:
   dips per turn give the dip spacing in every scan.
 - thickness substitutes: the island-volume equivalent thickness t_eq of the
   visible particles (flat-based hemispheres h=R on a hexagonal lattice) and,
-  when a deposition rate is given, the nominal thickness rate*(t - t0). The TS
-  film thickness is not identifiable (in simulation the posterior equals the
-  prior), so film windows say so instead of giving a number.
+  when a deposition rate is given, the nominal thickness
+  rate*clip(t - t0, 0, t_end - t0): the shutter is closed by hand and a scan can
+  go on after the deposition, so with a given end t_end the nominal thickness
+  stays at rate*(t_end - t0) after it (without t_end the deposition lasts to the
+  end of the scan). The TS film thickness is not identifiable (in simulation the
+  posterior equals the prior), so film windows say so instead of giving a number.
 - the literature method (sputter_literature): R from the nominal thickness and
   D = 2*pi/q* by mass balance, its percolation (with an interval over the noise
   and the errors of the rate and t0), and checks against published growth
@@ -43,7 +46,7 @@ so a program that shows them can translate each one.
 
 Example:
     from sputtergisaxs.sputter_physical import write_physical
-    write_physical("OUT", rate_nm_s=0.05, t0_s=1.0)
+    write_physical("OUT", rate_nm_s=0.05, t0_s=1.0, t_end_s=120.0)
 """
 from __future__ import annotations
 from pathlib import Path
@@ -86,6 +89,10 @@ NOMINAL_NOTE = ('nominal deposited thickness = rate * (t - t0) from the given de
 T0_ASSUMED_NOTE = (' t0 not given: assumed 0 s = the first frame; the start of the deposition is not known from the '
                    'data (each 1 s of error in t0 shifts the nominal thickness by {rate} nm).')
 NO_RATE_NOTE = 'no deposition rate given: nominal thickness not computed'
+T_END_NOTE = ('deposition ended at t_end = {t_end} s (given): after it the nominal thickness stays at '
+              'rate * (t_end - t0) = {thickness} nm.')
+T_END_ASSUMED_NOTE = ('t_end not given: the deposition is assumed to last to the end of the scan (the shutter is '
+                      'closed by hand, and a scan can go on after it).')
 ONSET_MEANING = ('first window of the TS-network part of the path (rule stage coalescence or coalescence-or-film '
                  'candidate); a connected film is not proven')
 ALT_MISSING = ('the network of the path module was not run on this window in this folder '
@@ -121,9 +128,9 @@ NOTE_DIPS = ('The intensity dips every {period} s with unequal depths; the patte
              'may be one turn of the sample.')
 NOTE_SPAN = ('The smoothing span ({span} s) covers the whole island phase ({start}-{end} s): R_trend_nm / D_trend_nm are '
              'one log-linear fit over it; the per-window R_nm / D_nm (grade P) show more.')
-NOTE_TEMPLATES = (T_EQ_NOTE, NOMINAL_NOTE, NOMINAL_NOTE + T0_ASSUMED_NOTE, NO_RATE_NOTE, FILM_STATUS, ONSET_MEANING,
-                  ALT_MISSING, FILM_REASON, PRE_REASON, UNSTAGED_REASON, NO_DATA_REASON, NO_PEAK_REASON, NO_ESTIMATE,
-                  D_OUTSIDE, NOTE_MONOTONE, NOTE_FILM_STAGE, NOTE_TREND, NOTE_GRADE_P, NOTE_TS_FILM, NOTE_CU, NOTE_IMPUTED,
+NOTE_TEMPLATES = (T_EQ_NOTE, NOMINAL_NOTE, NOMINAL_NOTE + T0_ASSUMED_NOTE, NO_RATE_NOTE, T_END_NOTE,
+                  T_END_ASSUMED_NOTE, FILM_STATUS, ONSET_MEANING, ALT_MISSING, FILM_REASON, PRE_REASON, UNSTAGED_REASON,
+                  NO_DATA_REASON, NO_PEAK_REASON, NO_ESTIMATE, D_OUTSIDE, NOTE_MONOTONE, NOTE_FILM_STAGE, NOTE_TREND, NOTE_GRADE_P, NOTE_TS_FILM, NOTE_CU, NOTE_IMPUTED,
                   NOTE_NO_DATA, NOTE_NOT_ESTABLISHED, NOTE_LATE_ONSET, NOTE_NO_FILM, NOTE_DIPS, NOTE_SPAN)
 """Every note and reason this module writes (filled with str.format; the literature texts are in
 sputter_literature.TEMPLATES)."""
@@ -438,9 +445,11 @@ def polymer_of(frames):
 
 
 def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, reliability=None, polymer_type=None,
-                   rate_error=None, t0_error_s=None):
+                   rate_error=None, t0_error_s=None, t_end_s=None):
     """(rows of new column values per structure row, summary extras) for one series. rate_error (relative) and
-    t0_error_s: errors of the rate and t0 in the literature method's percolation interval (default: the config's)."""
+    t0_error_s: errors of the rate and t0 in the literature method's percolation interval (default: the config's).
+    t_end_s: the end of the deposition (s), after which the nominal thickness stays constant (None: the end of the
+    scan)."""
     if reliability is None:
         from .sputter_struct import reliability as load
         reliability = load()
@@ -514,11 +523,13 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
     eR, eD = math.log1p(errR['typical_rel_scatter']), math.log1p(errD['typical_rel_scatter'])
     factor = math.exp(math.sqrt(9 * eR ** 2 + 4 * eD ** 2))
     t0 = t0_s if t0_s is not None else 0.
+    deposited = t_end_s - t0 if t_end_s is not None else math.inf  # seconds of deposition: rate*clip(t - t0, 0, ...)
     for row, ti, k in zip(out, t, kinds):
         value = t_eq(row['R_nm'], row['D_nm'], row['sigma_log']) if k == 'islands' else None
         row.update(t_eq_nm=value, t_eq_lo_nm=value / factor if value is not None else None,
                    t_eq_hi_nm=value * factor if value is not None else None)
-        row['nominal_thickness_nm'] = rate_nm_s * max(0., ti - t0) if rate_nm_s is not None and ti is not None else None
+        row['nominal_thickness_nm'] = (rate_nm_s * min(max(0., ti - t0), deposited)
+                                       if rate_nm_s is not None and ti is not None else None)
     # TS onset and its interval.
     onset, onset_extras = _onset(module_path, stages, t, n)
     # The literature method and the comparison with published growth.
@@ -528,7 +539,8 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                 for r, nd, k, row, film in zip(srt, no_data, kinds, out, film_net)]
     columns, literature = literature_table(t, lit_rows, metal=metal, polymer=polymer_type or polymer_of(frames),
                                            rate_nm_s=rate_nm_s, t0_s=t0_s, onset=onset_extras, period=period,
-                                           teq_factor=factor, rate_error=rate_error, t0_error_s=t0_error_s)
+                                           teq_factor=factor, rate_error=rate_error, t0_error_s=t0_error_s,
+                                           t_end_s=t_end_s)
     for row, values in zip(out, columns):
         row.update(values)
     # Mass continuity between islands and the nominal thickness.
@@ -567,6 +579,9 @@ def physical_table(structure, frames, alternate, *, rate_nm_s=None, t0_s=None, r
                        t_eq_note=T_EQ_NOTE, t_eq_band_factor=factor,
                        nominal_note=(NO_RATE_NOTE if rate_nm_s is None else
                                      NOMINAL_NOTE + (T0_ASSUMED_NOTE.format(rate=f'{rate_nm_s:g}') if t0_s is None else '')),
+                       t_end_s=t_end_s, t_end_given=t_end_s is not None,
+                       t_end_note=('' if rate_nm_s is None else T_END_ASSUMED_NOTE if t_end_s is None else
+                                   T_END_NOTE.format(t_end=f'{t_end_s:g}', thickness=f'{rate_nm_s * deposited:.3g}')),
                        film_thickness_note=FILM_STATUS, mass_continuity=continuity),
         notes=[NOTE_MONOTONE, NOTE_FILM_STAGE, NOTE_TREND.format(span=f'{span:g}'), NOTE_GRADE_P, NOTE_TS_FILM]
         + ([NOTE_CU] if metal == 'Cu' else []),
@@ -597,22 +612,27 @@ def _cell(v):
 
 
 def write_physical(out, *, binned=None, rate_nm_s=None, t0_s=None, polymer_type=None, rate_error=None,
-                   t0_error_s=None):
+                   t0_error_s=None, t_end_s=None):
     """structure_physical.csv and structure_physical_summary.json from OUT/structure.csv (no frame reading).
 
     polymer_type names the host for the literature band (default: the polymer named in binned/frames.csv);
-    rate_error (relative) and t0_error_s widen the literature percolation interval (default: the config's).
+    rate_error (relative) and t0_error_s widen the literature percolation interval (default: the config's);
+    t_end_s is the end of the deposition (the nominal thickness and delta stay constant after it; default: the
+    end of the scan).
     """
     from .sputter_struct import summary, reliability
     out = Path(out); binned = Path(binned) if binned is not None else out / 'binned'
     if rate_nm_s is not None and not rate_nm_s > 0:
         raise ValueError('deposition rate must be positive (nm/s)')
+    if t_end_s is not None and not t_end_s > (t0_s if t0_s is not None else 0.):
+        raise ValueError('the end of the deposition t_end must be after its start t0 (s)')
     structure = _read_csv(out / 'structure.csv')
     frames = _read_csv(binned / 'frames.csv')
     alternate = _read_csv(binned / 'frames_alt.csv') if (binned / 'frames_alt.csv').exists() else None
     rel = reliability()
     new, extras = physical_table(structure, frames, alternate, rate_nm_s=rate_nm_s, t0_s=t0_s, reliability=rel,
-                                 polymer_type=polymer_type, rate_error=rate_error, t0_error_s=t0_error_s)
+                                 polymer_type=polymer_type, rate_error=rate_error, t0_error_s=t0_error_s,
+                                 t_end_s=t_end_s)
     base = list(structure[0].keys()) if structure else []
     keys = base + [k for k in NEW_COLUMNS if k not in base]
     rows = []

@@ -22,7 +22,7 @@ from .environment import EnvironmentInstaller, EnvironmentStatus, InstallError, 
 from .scan import ScanInfo
 
 METALS = ("Ag", "Au", "Cu")
-VARIANTS = ("literature", "physical", "window", "selected", "sequence")
+VARIANTS = ("physical", "literature", "window", "selected", "sequence")
 PROBLEMS = (
     "Choose the scan folder that holds the CBF frames.",
     "Give the photon energy or the wavelength.",
@@ -31,6 +31,7 @@ PROBLEMS = (
     "Metal must be Ag, Au or Cu.",
     "The time window must be positive.",
     "The deposition rate must be positive (or empty).",
+    "The end of the deposition must be after its start t0 (or empty).",
 )
 TOOLKIT_MISSING = ("The Sputter model is not in this GIMaP folder: {folder} is missing or incomplete. Update GIMaP "
                    "(Update_GIMaP.bat or a new download); the model is part of it.")
@@ -59,6 +60,9 @@ class AnalyzeRequest:
     bin_seconds: float = 0.5
     rate_nm_s: Optional[float] = None
     t0_s: Optional[float] = None
+    t_end_s: Optional[float] = None
+    """The end of the deposition (s; the shutter is closed by hand): the nominal thickness stays constant after it.
+    None: the deposition lasts to the end of the scan."""
     results_root: Optional[Path] = None
     refined_folder: Optional[Path] = None
 
@@ -78,10 +82,13 @@ class AnalyzeRequest:
             out.append(PROBLEMS[5])
         if self.rate_nm_s is not None and self.rate_nm_s <= 0:
             out.append(PROBLEMS[6])
+        if not deposition_end_ok(self.t0_s, self.t_end_s):
+            out.append(PROBLEMS[7])
         return out
 
     def analysis_values(self) -> dict:
-        """What the analysis depends on (the rate and t0 only change the physical files, not the analysis)."""
+        """What the analysis depends on (the rate, t0 and the end of the deposition only change the physical files,
+        not the analysis)."""
         return {"scan_folder": str(Path(self.scan_folder).resolve()), "sdd_mm": self.sdd_mm,
                 "alpha_i_deg": self.alpha_i_deg, "metal": self.metal, "energy_ev": self.energy_ev,
                 "wavelength_nm": self.wavelength_nm, "polymer_type": self.polymer_type, "beam_col": self.beam_col,
@@ -94,6 +101,11 @@ class AnalyzeRequest:
         values = self.analysis_values() | ({"model": model} if model else {})
         payload = json.dumps(values, sort_keys=True, default=str).casefold()
         return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:8]
+
+
+def deposition_end_ok(t0_s: Optional[float], t_end_s: Optional[float]) -> bool:
+    """No end of the deposition, or one after its start (t0 = 0 when it is not given, as the toolkit takes it)."""
+    return t_end_s is None or t_end_s > (t0_s if t0_s is not None else 0.0)
 
 
 def scan_label(folder) -> str:
@@ -150,7 +162,7 @@ class ToolkitRunner(Protocol):
               on_line: Callable[[str], None]) -> Path: ...
 
     def physical(self, out_folder: Path, rate_nm_s: Optional[float], t0_s: Optional[float],
-                 on_line: Callable[[str], None]) -> Path: ...
+                 on_line: Callable[[str], None], *, t_end_s: Optional[float] = None) -> Path: ...
 
 
 class ResultReader(Protocol):
@@ -171,10 +183,11 @@ class SputterService:
 
     # -- reading --------------------------------------------------------------------------------------
     def open(self, folder: Path, variant: Optional[str] = None) -> StructureResult:
-        """The default when ``variant`` is None or absent: ``literature`` (R from the nominal thickness and
-        2π/q*, when a deposition rate was given and enough windows show the metal's peak), else ``physical`` (one
-        stage path, network sizes); also ``window`` (per-window choice), ``selected`` (learned selector) and
-        ``sequence`` (time-consistent path, exploratory)."""
+        """The default when ``variant`` is None or absent: ``physical`` (the network's physical path: one stage
+        path, network sizes), always when the folder has it. Also ``literature`` (a check of the network: R from the
+        nominal thickness and 2π/q*, when a deposition rate was given and enough windows show the metal's peak),
+        ``window`` (per-window choice), ``selected`` (learned selector) and ``sequence`` (time-consistent path,
+        exploratory)."""
         folder = Path(folder)
         available = self.reader.available(folder)
         if not available:
@@ -239,22 +252,25 @@ class SputterService:
 
     def merge_refined(self, folder: Path, refined_folder: Path, metal: str, on_line: Callable[[str], None],
                       rate_nm_s: Optional[float] = None, t0_s: Optional[float] = None,
-                      variant: Optional[str] = None) -> StructureResult:
+                      variant: Optional[str] = None, *, t_end_s: Optional[float] = None) -> StructureResult:
         """Rebuild the tables of an analyzed scan with physical-refinement windows (e.g. from the cluster)."""
         folder = Path(folder)
         self.runner.table(folder, metal, Path(refined_folder), on_line)
-        self.runner.physical(folder, rate_nm_s, t0_s, on_line)
+        self.runner.physical(folder, rate_nm_s, t0_s, on_line, t_end_s=t_end_s)
         return self.open(folder, variant)
 
     def rebuild_physical(self, folder: Path, rate_nm_s: Optional[float], t0_s: Optional[float],
-                         on_line: Callable[[str], None], variant: Optional[str] = None) -> StructureResult:
-        """New deposition rate or t0: only the physical files are written again (no frame is read). ``variant``
-        None opens the default explanation (the literature method once a rate makes it possible)."""
+                         on_line: Callable[[str], None], variant: Optional[str] = None, *,
+                         t_end_s: Optional[float] = None) -> StructureResult:
+        """New deposition rate, t0 or end of the deposition: only the physical files are written again (no frame
+        is read). ``variant`` is kept when the folder still offers it (the literature method needs a rate), else the
+        default explanation (the physical path) is opened."""
         folder = Path(folder)
-        self.runner.physical(folder, rate_nm_s, t0_s, on_line)
+        self.runner.physical(folder, rate_nm_s, t0_s, on_line, t_end_s=t_end_s)
         return self.open(folder, variant)
 
 
 __all__ = ["AnalyzeRequest", "METALS", "NO_TABLE", "PROBLEMS", "PredictStep", "ResultReader", "STEP_ANALYZE", "STEP_ANALYZE_ONLY",
            "STEP_CHECK", "STOPPED", "ScanInspector", "SputterService", "Stopped", "TOOLKIT_FAILED", "TOOLKIT_MISSING",
-           "ToolkitFailed", "ToolkitMissing", "ToolkitRunner", "VARIANTS", "results_folder", "scan_label"]
+           "ToolkitFailed", "ToolkitMissing", "ToolkitRunner", "VARIANTS", "deposition_end_ok", "results_folder",
+           "scan_label"]

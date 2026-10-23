@@ -45,9 +45,9 @@ SPUTTER_LITERATURE_ZH = {
     "Literature": "文献对照",
     "Predict a scan or open a results folder: its comparison with published growth appears here.":
         "预测一个扫描或打开结果文件夹：这里显示它与已发表生长数据的对照。",
-    "The comparison with the literature uses the physical files: choose Literature method or Physical path under More "
+    "The comparison with the literature uses the physical files: choose Physical path or Literature method under More "
     "options ▸ Explanation.":
-        "与文献的对照使用物理文件：在“更多选项 ▸ 解释”中选择“文献方法”或“物理路径”。",
+        "与文献的对照使用物理文件：在“更多选项 ▸ 解释”中选择“物理路径”或“文献方法”。",
     "This result was made before the literature method existed: enter the deposition rate again under More options (or "
     "press Predict) to add it.":
         "这个结果是在有文献方法之前得到的：在“更多选项”中重新输入沉积速率（或按“预测”）即可加上。",
@@ -60,6 +60,8 @@ SPUTTER_LITERATURE_ZH = {
     "nm/s, t0 = {t0} s":
         "<b>{polymer} 上的 {metal}</b> · {host} 的已发表渗流区间：{low}–{high} nm · 沉积速率 {rate} nm/s，t0 = {t0} s",
     " (assumed: the first frame)": "（假定：第一帧）",
+    " · deposition ended at t_end = {t_end} s: later windows stay at δ = {delta} nm":
+        " · 沉积在 t_end = {t_end} s 结束：之后的时间窗停留在 δ = {delta} nm",
     "a polymer of unknown type": "种类未知的聚合物",
     "D = 2π/q* (literature method)": "D = 2π/q*（文献方法）",
     "trend of D (non-decreasing)": "D 的趋势（非减）",
@@ -86,14 +88,16 @@ SPUTTER_LITERATURE_ZH = {
     "percolation (literature method) δ = {delta} nm": "渗流（文献方法）δ = {delta} nm",
     "TS onset of the network path δ = {delta} nm": "网络路径的 TS 起点 δ = {delta} nm",
     # -- the report and the checks table (domain/literature.py) ------------------------------------------------
-    "<b>Literature method (mass balance).</b> As in the P03 in-situ GISAXS studies, R is not fitted: it follows from "
-    "the nominal thickness δ = rate × (t − t0) and the spacing D = 2π/q* of the direct peak by mass balance for "
-    "hemispheres (h = R) on a hexagonal lattice, δ = 2.418·R³/D² (grade <b>Lit</b>). It agrees with the literature by "
+    "<b>Literature method (mass balance), a check of the network.</b> As in the P03 in-situ GISAXS studies, R is not "
+    "fitted: it follows from the nominal thickness δ = rate × (t − t0) (constant after the end of the deposition) and "
+    "the spacing D = 2π/q* of the direct peak by mass balance for hemispheres (h = R) on a hexagonal lattice, "
+    "δ = 2.418·R³/D² (grade <b>Lit</b>). It agrees with the literature by "
     "construction; the Literature tab shows the independent tests (D against δ, the percolation against the published "
     "band, the network's 2R/D and mass balance). The simulation-based typical errors do not apply: D = 2π/q* can "
     "be off by more than 40% for D &gt; 10 nm once coalescence starts, and R follows D as D^(2/3) and the rate as "
     "rate^(1/3).":
-        "<b>文献方法（质量守恒）。</b>与 P03 原位 GISAXS 研究相同，R 不是拟合出来的：它由名义厚度 δ = 速率 × (t − t0) 和直接峰的"
+        "<b>文献方法（质量守恒），对网络的核对。</b>与 P03 原位 GISAXS 研究相同，R 不是拟合出来的：它由名义厚度 "
+        "δ = 速率 × (t − t0)（沉积结束后保持不变）和直接峰的"
         "间距 D = 2π/q* 按六角排列半球（h = R）的质量守恒算出，δ = 2.418·R³/D²（等级 <b>Lit</b>）。它按构造与文献一致；"
         "“文献对照”页给出独立的检验（D 随 δ、渗流与已发表区间、网络的 2R/D 和质量守恒）。基于模拟的典型误差不适用于这些值："
         "聚并开始后、D &gt; 10 nm 时 D = 2π/q* 的误差可超过 40%，R 随 D 按 D^(2/3)、随速率按 rate^(1/3) 变化。",
